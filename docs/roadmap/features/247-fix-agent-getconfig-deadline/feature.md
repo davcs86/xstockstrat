@@ -20,6 +20,7 @@
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-10-28 | re-spec (status retained at `implementation-ready`) | /sdd-execute | Steps 1-6 Evidence/Instructions/Verification anchors re-derived after merging origin/main-dev (respec commit 189edd1c) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute | sequential (sdd-batch-execute); up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | step 1 done (status retained at `in-progress`) | /sdd-execute | Step 1 — `hung_config_server` harness + `HANG_GUARD_S` in conftest; AC-1/AC-5/P-06 client tests (RED pending Step 3) |
 
 ---
 

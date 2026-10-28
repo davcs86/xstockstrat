@@ -259,3 +259,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Step 6 expectation: the Grafana_Cloud MCP server failed to connect in this session (HTTP 424), so the
   spec's own fallback applies. Record "Not measured" with that reason and escalate (P-03) to the operator
   before Step 3 is committed.
+
+### Step 1 — test: hung_config_server harness + client-level RED tests (2026-10-28)
+
+- Files: `services/xstockstrat-agent/tests/conftest.py` (`HANG_GUARD_S = 10`, fixture `hung_config_server`:
+  sync `grpc.server(ThreadPoolExecutor(max_workers=8))`, lock-guarded `entered`, `is_active()` hang loop,
+  `stop(0).wait()` teardown, patches `client.CONFIG_ENDPOINT` + `client.mtls.secure_channel`);
+  `services/xstockstrat-agent/tests/test_client.py` (AC-1, AC-5, three P-06 tests in `TestGetConfigValueClient`).
+- TDD red (pre-Step-3 tree), each for the specified reason:
+  - AC-1 red: `TimeoutError` from the `HANG_GUARD_S` guard (no deadline on `GetConfig`).
+  - `test_getconfig_carries_default_deadline` red: `assert 'timeout' in {'metadata': []}`.
+  - `test_deadline_constant_is_read_at_call_time` red: `KeyError: 'timeout'`.
+  - `test_deadline_exceeded_is_surfaced_and_logged_by_code` red: `'DEADLINE_EXCEEDED' in caplog.text` failed
+    (log is `GetConfig failed for agent.k` with no code).
+  - AC-5: red N/A — FR-3 characterization (passes pre-fix, non-regression guard).
+- Green is Step 3's run. A temporary, reverted probe of the Step 3 change gave 5/5 passed, so the harness is sound.
+- Verification: ruff check + format clean; full suite 4 failed (the RED four) / 518 passed, coverage 81.23% (≥40);
+  harness greps and `from tests.conftest import HANG_GUARD_S` present.
+- Still open: Step 6 (dev `GetConfig` latency baseline) must run before Step 3 is committed; Grafana_Cloud MCP is
+  unavailable in this session, so the spec fallback ("Not measured" + P-03 escalation) applies.

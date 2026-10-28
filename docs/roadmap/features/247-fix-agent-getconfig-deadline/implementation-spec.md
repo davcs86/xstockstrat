@@ -95,7 +95,7 @@ Steps 1-2 test each surface.
 
 ### Step 1 — test: hung_config_server harness + client-level RED tests (AC-1, AC-5, P-06 pins)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -631,3 +631,12 @@ grep -nE "window.*UTC|count|p50|p99|max|Not measured" docs/roadmap/features/247-
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 1 (2026-10-28)** — the three P-06 wiring tests share one in-class helper,
+  `TestGetConfigValueClient._mocked_get_config_call()`, which builds the existing mocked-stub shape
+  (`_channel_cm()` + `patch("app.client.mtls")` + `patch.object(config_pb2_grpc, "ConfigServiceStub", …)`)
+  once, instead of repeating it in each test. Same assertions as the spec; DRY only. **Disposition**: accepted (no scope change).
+- **Step 1 (2026-10-28)** — committed with its four non-AC-5 tests RED by design (spec Step 1 Verification:
+  "Pre-Step-3, the four non-AC-5 tests FAIL"); the full-suite run is 4 failed / 518 passed, coverage 81.23%.
+  The harness was proven GREEN-capable by a temporary, reverted, uncommitted probe of the Step 3 change
+  (5/5 passed). **Disposition**: expected per spec; Step 3 GREEN re-runs these tests.
