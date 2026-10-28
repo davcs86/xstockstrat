@@ -153,8 +153,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, Connect-RPC call safety
 
 **Codebase Evidence**:
-- `e2e/trader/position-detail.spec.ts:655-671` already opens `/trader/positions/AMZN?strategy=strat-live-001`
-  and waits for `getByRole('main').getByTestId('run-backtest')`, using a 30 s timeout during hydration.
+- `e2e/trader/position-detail.spec.ts:688` already opens `/trader/positions/AMZN?strategy=strat-live-001`
+  and (`:693`) waits for `getByRole('main').getByTestId('run-backtest')`, using a 30 s timeout during hydration.
 - `analysisClient` uses `makeBrowserTransport('/insights/api')` (`src/lib/browserClients/analysisClient.ts:5`).
   So a `page.route('**/xstockstrat.analysis.v1.AnalysisService/RunBacktest', …)` glob intercepts the call.
   The same glob style is used at `e2e/trader/orders.spec.ts:99`.
@@ -162,7 +162,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
   definitions"). The mock `runBacktest` is at `e2e/mock-backend.ts:977`.
 - The history half of AC-4 is already pinned server-side by
   `services/xstockstrat-analysis/tests/test_analysis_servicer.py::TestRunBacktestCells::test_registered_own_run_stamps_fingerprint`
-  (`:1968`, equal ids → fingerprinted). Its negative pair `test_id_mismatch_stamps_none` is at `:1999`.
+  (`:2044`, in `TestRunBacktestCells` at `:1991`; equal ids → fingerprinted). Its negative pair
+  `test_id_mismatch_stamps_none` is at `:2075`.
 
 **TDD**: `red-green required`
 
@@ -467,7 +468,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
   | `useManageSignalSource` | `insights/signal-sources/page.tsx:192` | every `manageMutate` call has `onError`: `:226`, `:296`, `:332`, and Step 3 `handleToggle` |
   | `useRunBacktest` | `trader/positions/[symbol]/page.tsx:1109` | inline `{errorMessage && …}` at `:1187` |
   | `useRunBacktest` | `insights/strategies/[id]/page.tsx:66` | inline `runErrorObj` at `:90-92` |
-  | `useScreenSymbols` | `components/trader/SymbolScreening.tsx:42` | inline at `:228` |
+  | `useScreenSymbols` | `components/trader/SymbolScreening.tsx:43` | inline at `:228` |
   | `useScreenSymbols` | `insights/screener/page.tsx:67` | inline at `:485` |
   | `useSetConfig` | `config-ui/[namespace]/NamespaceEditor.tsx:250` | `Save error: {errMessage(saveError)}` at `:358` |
   | `useSetStrategyLive` | `components/trader/LiveStrategiesPanel.tsx:22` | `{setLive.isError && …}` at `:99` |
@@ -646,7 +647,7 @@ grep -rn "errorHandled: true" services/xstockstrat-ui/src/hooks services/xstocks
   called from `positions/page.tsx:110-114`.
 - Request fields carrying `tradingMode` (verified against proto, per `fails.md:358`):
   - `PlaceOrderRequest.trading_mode = 12` and `ListOrdersRequest.trading_mode = 6`, where UNSPECIFIED means all
-    modes (`packages/proto/trading/v1/trading.proto:127`, `:175`).
+    modes (`packages/proto/trading/v1/trading.proto:128`, `:175`).
   - `GetPortfolioRequest.trading_mode = 2`, `GetPositionRequest.trading_mode = 3` and
     `ListPositionsRequest.trading_mode = 3` (`packages/proto/portfolio/v1/portfolio.proto:177-192`).
 - Server handling of UNSPECIFIED:
@@ -877,11 +878,11 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
   - It ends in a silent `catch {}` (`:25-27`) and returns `Record<string, Order>`.
   - Its only consumer is `OrdersTable.tsx:59` (`const liveUpdates = useOrderUpdates();`).
 - `AlertStream.tsx`:
-  - `:67-83` has the same pattern with a silent `catch {}` (`:78-80`).
-  - The merge `setAlerts((prev) => [alert, ...prev].slice(0, 50))` (`:76`) does **not** dedupe. The design's
-    "still dedupes on `alertId` (`:42`, `:96`)" is inaccurate: `alertId` is only the React `key` (`:130`).
-  - The bell `listAlerts` count effect is mount-only (`:52-65`).
-  - The icon-only bell `Button` (`:91`) has no accessible name.
+  - The `streamAlerts` effect (`:33-48`) has the same pattern with a silent `catch {}` (`:44`).
+  - The merge `setAlerts((prev) => [alert, ...prev].slice(0, 50))` (`:42`) does **not** dedupe. The design's
+    "still dedupes on `alertId`" is inaccurate: `alertId` is only the React `key` (`:96`).
+  - The bell `listAlerts` count effect is mount-only (`:18-31`).
+  - The icon-only bell `Button` (`:57`) has no accessible name.
 - Server behavior:
   - Trading `StreamOrderUpdates` (`trading.go:1667-1685`) sends a snapshot and then blocks until the context is
     done. A reconnect therefore replays the snapshot, which is idempotent under keyed state plus
@@ -948,7 +949,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
      Step 11 merge.
    - Under the `QueryStateMessages` at `:202`, render
      `{disconnected && <Alert variant="destructive" role="alert" data-testid="order-stream-disconnected"><AlertDescription>{terminal ? \`Live order updates stopped: ${terminal}\` : 'Live order updates disconnected — reconnecting…'}</AlertDescription></Alert>}`.
-5. **Alerts.** Move `AlertStream.tsx:67-83` onto the hook with key `'alerts'`:
+5. **Alerts.** Move the `AlertStream.tsx:33-48` `streamAlerts` effect onto the hook with key `'alerts'`:
    - `open = (signal) => notifyClient.streamAlerts({ categories: [], severities: [], includeAcknowledged: false }, { signal })`.
    - `onItem` dedupes before prepending: `setAlerts((prev) => prev.some((a) => a.alertId === alert.alertId) ? prev : [alert, ...prev].slice(0, 50))`.
      This is needed because a reconnect may re-deliver an alert, and React keys must stay unique.
@@ -956,7 +957,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
      name (C-17): `aria-label={disconnected ? 'Alerts — live alerts disconnected' : 'Alerts'}`.
    - Add a visible `<span data-testid="alert-stream-disconnected" className="sr-only sm:not-sr-only text-xs text-destructive">Live alerts disconnected</span>`
      beside it.
-   - Keep the mount-only `listAlerts` effect at `:52-65` untouched (PRESERVE `@feature-203`). A reconnect never
+   - Keep the mount-only `listAlerts` effect at `:18-31` untouched (PRESERVE `@feature-203`). A reconnect never
      re-runs it.
 6. **Trace (operator 2026-10-21 decision).** Reconnects call the same `tradingClient` / `notifyClient` (BFF
    `/trader/api`), so `src/middleware.ts` keeps injecting `x-trace-id` and the BFF `backendHeaders` keeps
@@ -994,7 +995,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 - `e2e/mock-backend.ts`:
   - `router.service(TradingService, {…})` (`:269-341`) has **no** `streamOrderUpdates` handler. Under Step 13
     the client would get `Unimplemented`, which is terminal, and the indicator would show permanently on every
-    `/trader/orders` spec.
+    `/trader/orders` spec. (A second `router.service(TradingService, …)` at `:1353` serves the insights mock
+    server with `listBrokerAccounts`/`listPortfolios` only — also no `streamOrderUpdates`; leave it untouched.)
   - `streamAlerts` (`:530-535`) yields `ALERT_STREAM_ALL` and then ends cleanly ("no hang in tests"). Under
     Step 13 that would reconnect every second.
   - `timestampFromDate` is already imported (`:18`).
