@@ -270,7 +270,7 @@ grep -n "snapshot_watcher" tests/conftest.py tests/test_config_watcher.py   # C-
 
 ### Step 3 — service: ingest FR-3 clamps, dead sandbox helpers removed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -1314,3 +1314,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - 2026-10-28 Step 1 (TDD evidence harness, no scope change): the step's paired test lands in Step 2, so the RED/GREEN
   run used an uncommitted scratch test (`tests/test_zz_step1_scratch.py`, deleted before commit) asserting the
   three @AC-1 ingest rows, the @AC-4 unset/mismatched rows and `get_int_present is get_int`. Only `watcher.py` was staged.
+- 2026-10-28 Step 3 (TDD evidence harness, no scope change): the paired test lands in Step 4, so RED/GREEN used an
+  uncommitted scratch test (`tests/test_zz_step3_scratch.py`, deleted before commit): the four FR-3 properties at 0
+  (and `max_concurrent_jobs` at -5), the loop timeout/poll reads at 0, the sandbox helpers gone, and
+  `max_retry_attempts`/`dedup_window_hours` still honouring 0. The docstring range cited as `:157-159` was actually
+  `:156-158` (line drift only).

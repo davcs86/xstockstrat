@@ -155,28 +155,11 @@ class ConfigWatcher:
         )
         return resp.value, resp.found
 
-    # Sandbox config helpers — indicators.sandbox.*
-    @property
-    def sandbox_timeout_ms(self) -> int:
-        return self.get_int("indicators.sandbox.timeout_ms", default=5000)
-
-    @property
-    def sandbox_memory_bytes(self) -> int:
-        return self.get_int("indicators.sandbox.memory_bytes", default=128 * 1024 * 1024)
-
-    @property
-    def sandbox_allowed_imports(self) -> list[str]:
-        raw = self.get_str(
-            "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
-        )
-        return [m.strip() for m in raw.split(",") if m.strip()]
-
     # Backfill config helpers — ingest.backfill.*
     @property
     def backfill_max_concurrent_jobs(self) -> int:
-        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
-        # asyncio.Semaphore(0) at servicer.py:191 and deadlock. Do NOT switch to get_int_present.
-        return self.get_int("ingest.backfill.max_concurrent_jobs", default=3)
+        # >0: Semaphore(0) deadlocks IngestServicer._backfill_sem
+        return int_positive(self, "ingest.backfill.max_concurrent_jobs", 3)
 
     @property
     def backfill_retry_on_failure(self) -> bool:
@@ -189,19 +172,24 @@ class ConfigWatcher:
     # Chunked-backfill config helpers — ingest.backfill.*
     @property
     def backfill_chunk_max_bars(self) -> int:
-        return self.get_int("ingest.backfill.chunk_max_bars", default=200000)
+        return int_positive(self, "ingest.backfill.chunk_max_bars", 200000)
 
     @property
     def backfill_chunk_window_days(self) -> int:
-        return self.get_int("ingest.backfill.chunk_window_days", default=90)
+        return int_positive(self, "ingest.backfill.chunk_window_days", 90)
 
     @property
     def backfill_max_concurrent_chunks(self) -> int:
-        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
-        # asyncio.Semaphore(0) at servicer.py:519 and deadlock. Do NOT switch to get_int_present.
-        return self.get_int("ingest.backfill.max_concurrent_chunks", default=3)
+        # >0: Semaphore(0) deadlocks the per-job chunk semaphore in IngestServicer
+        return int_positive(self, "ingest.backfill.max_concurrent_chunks", 3)
 
     # Signal dedup config helper — ingest.signals.*
     @property
     def dedup_window_hours(self) -> int:
         return self.get_int_present("ingest.signals.dedup_window_hours", default=24)
+
+
+def int_positive(cfg, key: str, default: int) -> int:
+    # >0, not >=0: Semaphore(-1) raises and sleep(-n) busy-loops just like 0 does.
+    v = cfg.get_int(key, default)
+    return v if v > 0 else default

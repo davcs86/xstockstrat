@@ -365,3 +365,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `test_config_watcher.py` 17 passed; full ingest suite 334 passed, coverage 81.61% (≥40); ruff check
   + format clean; `snapshot_watcher` defined once (`tests/conftest.py:71`), used only from `test_config_watcher.py`.
 - Next: Step 3.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 3
+
+### Step 3 — service: ingest FR-3 clamps, dead sandbox helpers removed [done]
+- `app/config/watcher.py` gains module-level `int_positive(cfg, key, default)` (`v if v > 0 else default`).
+  `backfill_max_concurrent_jobs`, `backfill_chunk_max_bars`, `backfill_chunk_window_days` and
+  `backfill_max_concurrent_chunks` read through it with their literal defaults. The stale `servicer.py:191`/`:519`
+  trap comments are now 1-line hazard comments that name the consumer symbol. The dead `sandbox_*` helpers are deleted.
+  `retry_on_failure`, `max_retry_attempts` and `dedup_window_hours` are unchanged.
+  `app/engine/mcp_client_loop.py` reads timeout and poll interval through `int_positive` (outer `max(…, 1)` dropped);
+  docstring now says a stored value ≤ 0 reads as the default. 3 dead-helper tests removed from `test_ingest_servicer.py`.
+- TDD: AC-5/AC-6 (ingest) red on the Step-2 tree, via an uncommitted scratch test (8 failed, 3 passed):
+  - the properties at 0/-5 returned 0/-5;
+  - the timeout was 1.0 (expected 30) and the first poll sleep was 1 (expected 300);
+  - `sandbox_timeout_ms` still existed.
+  Green: 11 passed. The real tests land in Step 4.
+- Verification:
+  - `grep sandbox_ app/config/watcher.py` returns no output.
+  - `int_positive` has 1 def (`watcher.py:192`) and 6 call sites (4 in `watcher.py`, 2 in the loop), plus the import.
+  - `grep "max(" mcp_client_loop.py` returns no output.
+  - Full ingest suite: 331 passed (334 minus the 3 deleted tests), coverage 81.52%. ruff check and format are clean.
+- Not in this step's Files, left for Step 17:
+  - ingest `CLAUDE.md` still says "Clamped to ≥1 at read" for the two `mcp_client` keys, and its header still mentions the `sandbox_*` helpers.
+  - `docs/context-constitution-findings.md:27` still mentions the `sandbox_*` helpers.
+- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`, `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: TDD scratch harness and docstring line drift (`:156-158`, not `:157-159`); see the Deviation Log.
+- Next: Step 4.
