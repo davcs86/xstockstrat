@@ -43,6 +43,8 @@ _setup_gen_path()
 
 from datetime import date  # noqa: E402
 
+from gen.marketdata.v1 import marketdata_pb2  # noqa: E402
+
 from app.services.evaluator import FundamentalPeriod  # noqa: E402
 
 

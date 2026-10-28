@@ -12,7 +12,11 @@ from gen.analysis.v1 import analysis_pb2
 from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.struct_pb2 import Struct
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from app.services import screener as screener_mod
 from app.services.screener import ScreenerEngine, _comparator_passes
 from tests.conftest import snapshot_watcher
 
@@ -694,3 +698,335 @@ async def test_screen_ranking_unchanged_by_concurrent_fanout():
     resp = await engine.screen(req)
 
     assert [r.symbol for r in resp.results] == ["BBB", "CCC", "AAA"]  # 0.9 > 0.5 > 0.1
+
+
+# ── feature 245: per-symbol evaluation isolation ──────────────────────────────────────────────
+# One symbol's non-RPC exception degrades only its own row (status OK, passed=false,
+# score_unavailable=true, empty raws); CancelledError still propagates (FR-2).
+
+_SIG_FROM = datetime(2023, 12, 1, 0, 0, 0)
+_SIG_UNTIL = datetime(2024, 2, 1, 0, 0, 0)
+_BAR_DAYS = [datetime(2024, 1, d, 0, 0, 0) for d in (1, 2, 3)]
+
+
+def _in_window_signal(direction, conviction):
+    sig = ingest_pb2.ExternalSignal(
+        source="fundamentals", direction=direction, conviction=conviction
+    )
+    sig.valid_from.FromDatetime(_SIG_FROM)
+    sig.valid_until.FromDatetime(_SIG_UNTIL)
+    return sig
+
+
+def _isolation_fixture(symbols, bad="BAD"):
+    """Per-symbol data keyed by symbol name (never list position), so a shared symbol gets
+    identical data in the 49- and 50-symbol runs. BAD carries the sentinel last close 999.0."""
+
+    def _index(symbol):
+        return 99 if symbol == bad else int(symbol[1:])
+
+    def _get_bars(req, metadata=None):
+        base = 10.0 + _index(req.symbol)
+        closes = [base, base + 1, 999.0 if req.symbol == bad else base + 2]
+        return SimpleNamespace(bars=[_timed_bar(c, d) for c, d in zip(closes, _BAR_DAYS)])
+
+    def _compute_indicator(req, metadata=None):
+        return SimpleNamespace(result=[SimpleNamespace(value=req.values[-1] / 10.0)])
+
+    def _query_signals(req, metadata=None):
+        conviction = 0.95 if req.symbol == bad else 0.1 + 0.01 * _index(req.symbol)
+        return ingest_pb2.QuerySignalsResponse(signals=[_in_window_signal("buy", conviction)])
+
+    md = AsyncMock()
+    md.GetBars = AsyncMock(side_effect=_get_bars)
+    ind = AsyncMock()
+    ind.ComputeIndicator = AsyncMock(side_effect=_compute_indicator)
+    ingest = AsyncMock()
+    ingest.QuerySignals = AsyncMock(side_effect=_query_signals)
+    sig = analysis_pb2.ScreenCriterion(
+        ref_name="sig",
+        kind=analysis_pb2.SCREEN_KIND_SIGNAL,
+        op=analysis_pb2.COMPARATOR_GT,
+        threshold=0.0,
+    )
+    rsi = analysis_pb2.ScreenCriterion(
+        ref_name="rsi",
+        kind=analysis_pb2.SCREEN_KIND_TECHNICAL_INDICATOR,
+        component=analysis_pb2.StrategyComponent(indicator="RSI"),
+        op=analysis_pb2.COMPARATOR_GT,
+        threshold=0.0,
+    )
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=symbols,
+        criteria=[sig, rsi],
+        signal_sources=["fundamentals"],
+        signal_weight=1.0,
+        technical_weight=1.0,
+        rank_limit=50,
+    )
+    return md, ind, ingest, req
+
+
+def _patch_compute_signal_score_raising_on_sentinel(monkeypatch, exc):
+    original = screener_mod.scoring.compute_signal_score
+
+    def _raising(signals_map, latest_bar, signal_sources, source_weights=None):
+        if latest_bar.close == 999.0:
+            raise exc("boom")
+        return original(signals_map, latest_bar, signal_sources, source_weights)
+
+    monkeypatch.setattr(screener_mod.scoring, "compute_signal_score", _raising)
+
+
+def _patch_technical_value_raising_for(monkeypatch, exc, should_raise):
+    original = ScreenerEngine._technical_value
+
+    async def _raising(self, criterion, symbol, closes, propagation_meta):
+        if should_raise(symbol):
+            raise exc("boom")
+        return await original(self, criterion, symbol, closes, propagation_meta)
+
+    monkeypatch.setattr(ScreenerEngine, "_technical_value", _raising)
+
+
+def _patch_latest_indicator_raising_on_sentinel(monkeypatch, exc):
+    original = ScreenerEngine._latest_indicator
+
+    async def _raising(self, indicator, closes, propagation_meta):
+        if closes and closes[-1] == 999.0:
+            raise exc("boom")
+        return await original(self, indicator, closes, propagation_meta)
+
+    monkeypatch.setattr(ScreenerEngine, "_latest_indicator", _raising)
+
+
+@pytest.mark.parametrize(
+    ("site", "exc"),
+    [
+        ("compute_signal_score", ZeroDivisionError),
+        ("_technical_value", ArithmeticError),
+        ("_latest_indicator", ValueError),
+    ],
+)
+async def test_one_symbol_failure_degrades_only_its_row(caplog, monkeypatch, site, exc):
+    """@AC-1: BAD's evaluation fault degrades only BAD's row; the other 49 rows equal a 49-symbol
+    run without BAD, BAD ranks last, and exactly one WARN line names it."""
+    others = [f"S{i:02d}" for i in range(49)]
+    md, ind, ingest, req_49 = _isolation_fixture(others)
+    baseline = await make_engine(md, ind, ingest=ingest).screen(req_49)
+
+    if site == "compute_signal_score":
+        _patch_compute_signal_score_raising_on_sentinel(monkeypatch, exc)
+    elif site == "_technical_value":
+        _patch_technical_value_raising_for(monkeypatch, exc, lambda s: s == "BAD")
+    else:
+        _patch_latest_indicator_raising_on_sentinel(monkeypatch, exc)
+
+    md, ind, ingest, req_50 = _isolation_fixture(others + ["BAD"])
+    with caplog.at_level(logging.WARNING, logger="app.services.screener"):
+        resp = await make_engine(md, ind, ingest=ingest).screen(req_50)
+
+    assert {r.symbol: r for r in resp.results if r.symbol != "BAD"} == {
+        r.symbol: r for r in baseline.results
+    }
+    bad = next(r for r in resp.results if r.symbol == "BAD")
+    assert bad.status == analysis_pb2.SCREEN_RESULT_STATUS_OK
+    assert bad.passed is False
+    assert bad.score_unavailable is True
+    assert dict(bad.criterion_scores) == {}
+    assert resp.results[-1].symbol == "BAD"
+    assert len(resp.results) == 50
+    recs = [r for r in caplog.records if r.levelno == logging.WARNING and "BAD" in r.getMessage()]
+    assert len(recs) == 1
+    assert f"BAD:{exc.__name__}" in recs[0].getMessage()
+
+
+async def test_cancelled_error_in_symbol_eval_propagates(monkeypatch):
+    """FR-2 (@AC-2, engine level): a CancelledError from one symbol's evaluation is never absorbed
+    into a degraded row; it aborts screen() so the servicer deadline still fires."""
+
+    async def _eval(self, symbol, *args):
+        if symbol == "CXL":
+            raise asyncio.CancelledError()
+        return {"symbol": symbol}
+
+    monkeypatch.setattr(ScreenerEngine, "_eval_symbol", _eval)
+    engine = make_engine(AsyncMock(), AsyncMock())
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["CXL", "OK1"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await engine.screen(req)
+
+
+def _soft_formula_fixture(symbols):
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
+    ind.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=[]))
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=symbols,
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+    )
+    return md, ind, req
+
+
+async def test_degraded_row_soft_only_criteria_is_not_passed(monkeypatch):
+    """A soft-only scan never reports an evaluation-fault row as passed (it must not reach the
+    `passed = True` default in _build_result)."""
+    md, ind, req = _soft_formula_fixture(["AAA", "BAD"])
+    _patch_technical_value_raising_for(monkeypatch, RuntimeError, lambda s: s == "BAD")
+
+    resp = await make_engine(md, ind).screen(req)
+
+    by_symbol = {r.symbol: r for r in resp.results}
+    assert by_symbol["BAD"].passed is False
+    assert by_symbol["BAD"].score_unavailable is True
+    assert by_symbol["AAA"].passed is True
+    assert by_symbol["AAA"].score_unavailable is False
+
+
+async def test_all_symbols_failed_logs_error_not_warning(caplog, monkeypatch):
+    md, ind, req = _soft_formula_fixture(["B1", "B2"])
+    _patch_technical_value_raising_for(monkeypatch, RuntimeError, lambda s: True)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.screener"):
+        resp = await make_engine(md, ind).screen(req)
+
+    assert len(resp.results) == 2
+    for r in resp.results:
+        assert r.passed is False
+        assert r.score_unavailable is True
+    errors = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.ERROR and "2/2 scanned symbols failed evaluation" in r.getMessage()
+    ]
+    assert len(errors) == 1
+    assert not [
+        r
+        for r in caplog.records
+        if r.levelno == logging.WARNING and "failed evaluation" in r.getMessage()
+    ]
+
+
+async def test_degraded_row_sorts_after_feature144_zero_score_row(monkeypatch):
+    """An evaluation-fault row sorts after a feature-144 score-unavailable row although both score
+    exactly 0.0. BAD is listed first, so only the eval_failed sort key can put it last."""
+
+    def _get_bars(req, metadata=None):
+        last = 999.0 if req.symbol == "BAD" else 11.0
+        return SimpleNamespace(
+            bars=[_timed_bar(10.0, _BAR_DAYS[0]), _timed_bar(last, _BAR_DAYS[1])]
+        )
+
+    signals = {
+        "GOOD": _in_window_signal("buy", 0.8),
+        "NODATA": _in_window_signal("sell", 1.0),
+        "BAD": _in_window_signal("buy", 0.5),
+    }
+    md = AsyncMock()
+    md.GetBars = AsyncMock(side_effect=_get_bars)
+    md.GetFundamentalsMulti = AsyncMock(
+        return_value=SimpleNamespace(
+            fundamentals=[
+                marketdata_pb2.Fundamentals(symbol="GOOD", pe_ratio=15.0),
+                marketdata_pb2.Fundamentals(symbol="NODATA", missing_metrics=["pe_ratio"]),
+                marketdata_pb2.Fundamentals(symbol="BAD", pe_ratio=15.0),
+            ]
+        )
+    )
+    ind = AsyncMock()
+    ind.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=[]))
+    ingest = AsyncMock()
+    ingest.QuerySignals = AsyncMock(
+        side_effect=lambda req, metadata=None: ingest_pb2.QuerySignalsResponse(
+            signals=[signals[req.symbol]]
+        )
+    )
+    _patch_compute_signal_score_raising_on_sentinel(monkeypatch, ZeroDivisionError)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["BAD", "NODATA", "GOOD"],
+        criteria=[
+            analysis_pb2.ScreenCriterion(
+                ref_name="cheap",
+                kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                metric_name="pe_ratio",
+                op=analysis_pb2.COMPARATOR_LT,
+                threshold=20.0,
+            )
+        ],
+        signal_sources=["fundamentals"],
+        signal_weight=1.0,
+        technical_weight=0.0,
+    )
+    resp = await make_engine(md, ind, ingest=ingest).screen(req)
+
+    assert [r.symbol for r in resp.results] == ["GOOD", "NODATA", "BAD"]
+    assert resp.results[1].score_unavailable is True
+    assert resp.results[1].score == pytest.approx(0.0)
+
+
+async def test_duplicate_symbol_healthy_copy_ranks_by_score(monkeypatch):
+    closes = {"AAA": [1.0, 2.0, 3.0], "DUP": [1.0, 2.0, 5.0]}
+    md = AsyncMock()
+    md.GetBars = AsyncMock(side_effect=lambda req, metadata=None: bars(closes[req.symbol]))
+    ind = AsyncMock()
+    ind.ComputeIndicator = AsyncMock(
+        side_effect=lambda req, metadata=None: SimpleNamespace(
+            result=[SimpleNamespace(value=req.values[-1] / 10.0)]
+        )
+    )
+    original = ScreenerEngine._eval_symbol
+    dup_calls = 0
+
+    async def _eval(self, symbol, *args):
+        nonlocal dup_calls
+        if symbol == "DUP":
+            dup_calls += 1
+            if dup_calls == 1:
+                raise RuntimeError("boom")
+        return await original(self, symbol, *args)
+
+    monkeypatch.setattr(ScreenerEngine, "_eval_symbol", _eval)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA", "DUP", "DUP"],
+        criteria=[
+            analysis_pb2.ScreenCriterion(
+                ref_name="rsi",
+                kind=analysis_pb2.SCREEN_KIND_TECHNICAL_INDICATOR,
+                component=analysis_pb2.StrategyComponent(indicator="RSI"),
+                op=analysis_pb2.COMPARATOR_GT,
+                threshold=0.0,
+            )
+        ],
+    )
+    resp = await make_engine(md, ind).screen(req)
+
+    dups = [r for r in resp.results if r.symbol == "DUP"]
+    assert [r.score_unavailable for r in dups].count(True) == 1
+    assert resp.results[-1].symbol == "DUP"
+    assert resp.results[-1].score_unavailable is True
+    healthy = list(resp.results[:2])
+    assert all(r.score_unavailable is False for r in healthy)
+    # DUP's higher RSI reading ranks its healthy copy above AAA by -score.
+    assert [r.symbol for r in healthy] == ["DUP", "AAA"]
+    assert healthy[0].score > healthy[1].score
+
+
+async def test_degraded_count_lands_on_current_span(monkeypatch):
+    md, ind, req = _soft_formula_fixture(["AAA", "BAD"])
+    _patch_technical_value_raising_for(monkeypatch, RuntimeError, lambda s: s == "BAD")
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    with provider.get_tracer("t").start_as_current_span("server"):
+        await asyncio.wait_for(make_engine(md, ind).screen(req), timeout=5)
+
+    (span,) = [s for s in exporter.get_finished_spans() if s.name == "server"]
+    assert span.attributes["screener.degraded_count"] == 1
+    assert [e.name for e in span.events] == ["exception"]

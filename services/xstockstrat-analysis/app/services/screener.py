@@ -31,6 +31,7 @@ from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
+from opentelemetry import trace
 
 from app.config.watcher import int_positive
 from app.services import scoring
@@ -113,9 +114,9 @@ class ScreenerEngine:
         # feature 176 FR-4: fan out per-symbol evals concurrently — each _eval_symbol acquires _sem
         # (analysis.screener.max_concurrent_formula_evals) inside _technical_value, so the bound now
         # actually binds (the old serial loop left it inert). gather preserves `symbols` order.
-        per_symbol = await asyncio.gather(
+        pairs = await asyncio.gather(
             *[
-                self._eval_symbol(
+                self._eval_symbol_isolated(
                     symbol,
                     request,
                     criteria,
@@ -126,6 +127,8 @@ class ScreenerEngine:
                 for symbol in symbols
             ]
         )
+        per_symbol = [row for row, _ in pairs]
+        failures = [(row["symbol"], e) for row, e in pairs if e is not None]
 
         # One summarized WARN per scan for insufficient-bars symbols; excludes symbols whose GetBars
         # raised (already logged per-symbol) so an RPC failure is not double-reported.
@@ -145,13 +148,31 @@ class ScreenerEngine:
                 dataless_bars[:10],
             )
 
+        # design.md item 3: one summary line per scan (ERROR when every symbol failed) + span facts.
+        if failures:
+            emit = log.error if len(failures) == len(per_symbol) else log.warning
+            emit(
+                "screener: %d/%d scanned symbols failed evaluation; sample=%s",
+                len(failures),
+                len(per_symbol),
+                [f"{s}:{type(e).__name__}" for s, e in failures][:10],
+                exc_info=failures[0][1],
+            )
+            span = trace.get_current_span()
+            span.set_attribute("screener.degraded_count", len(failures))
+            span.record_exception(failures[0][1])
+
         # feature 176 FR-4: the pure-CPU rank tail (min-max normalize + build + sort) runs off the
         # event loop. A score_unavailable result sorts after every genuinely-scored one.
         def _rank():
             norm = self._normalize_universe(criteria, per_symbol)
-            built = [self._build_result(row, criteria, request, norm) for row in per_symbol]
-            built.sort(key=lambda r: (r.score_unavailable, -r.score))
-            return built
+            ranked = [
+                (self._build_result(row, criteria, request, norm), row["eval_failed"])
+                for row in per_symbol
+            ]
+            # design.md item 2: an evaluation-fault row sorts after a feature-144 unavailable row.
+            ranked.sort(key=lambda p: (p[0].score_unavailable, p[1], -p[0].score))
+            return [r for r, _ in ranked]
 
         if self._compute_executor is not None:
             results = await asyncio.get_running_loop().run_in_executor(
@@ -202,10 +223,9 @@ class ScreenerEngine:
             by_symbol[f.symbol.upper()] = f
         return by_symbol, True
 
-    async def _eval_symbol(
-        self, symbol, request, criteria, fundamentals, fundamentals_available, propagation_meta
-    ):
-        row = {
+    @staticmethod
+    def _seed_row(symbol) -> dict:
+        return {
             "symbol": symbol,
             "raws": {},  # ref_name -> raw numeric value (only for evaluated criteria)
             "passes": {},  # ref_name -> bool (hard-filter gate result)
@@ -214,7 +234,21 @@ class ScreenerEngine:
             "gap": None,
             # True when GetBars raised; kept out of the missing-data summary to avoid a double-log.
             "bars_errored": False,
+            "eval_failed": False,
         }
+
+    async def _eval_symbol_isolated(self, symbol, *args):
+        try:
+            return (await self._eval_symbol(symbol, *args)), None
+        # `except Exception` (not BaseException): CancelledError from the scan deadline must
+        # propagate (FR-2).
+        except Exception as e:
+            return {**self._seed_row(symbol), "eval_failed": True}, e
+
+    async def _eval_symbol(
+        self, symbol, request, criteria, fundamentals, fundamentals_available, propagation_meta
+    ):
+        row = self._seed_row(symbol)
 
         closes = []
         try:
@@ -447,6 +481,15 @@ class ScreenerEngine:
             if row["gap"] is not None:
                 result.gap.CopyFrom(row["gap"])
             return result
+
+        # design.md item 2: fail closed before the `passed = True` default (bef4258 scar).
+        if row["eval_failed"]:
+            return analysis_pb2.ScreenResult(
+                symbol=row["symbol"],
+                status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
+                passed=False,
+                score_unavailable=True,
+            )
 
         criterion_scores = {}
         # Raw readings + pass/fail per criterion, for single-symbol screening where the relative
