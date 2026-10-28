@@ -976,7 +976,7 @@ grep -n "request.author\` \*\*wins\*\*" docs/patterns/header-propagation.md     
 
 ### Step 13 — docs: service context files + teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/*/CLAUDE.md`, `services/*/docs/`
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
@@ -1135,3 +1135,17 @@ _Populated by /sdd-execute as implementation proceeds._
   against the `x-user-id` reader). Rewritten with the paragraph rather than left contradicting it. The
   `config-rollout.md` multi-key replacement for `RolloutConfig` is a sequential-`SetConfig` Python loop; the STALE
   Connect block keeps its bare key (Instruction 3 only drops `"author"` there). **Disposition**: accepted.
+- **2026-10-28 — Step 13 teardown (manual reconciliation; drift recorded, not fixed).** The
+  `/context-forge:context-constitution refresh` skill is not available in this session (only
+  `context-forge:context-scrubber` is listed), so every context file touched in Steps 12-13 was re-read by hand
+  against `configServiceImpl.ts#setConfig` (`:371-415`, INSERT `:515`), `authz.ts` (`:47-56`, `:66`, `:82`, `:114`,
+  `:124`, `:149`), `configUiBff.ts:34-55`, `insightsBff.ts:174-184` and `app/tools.py#set_config`; no further
+  grounded drift in those files. The integration PR body must carry this record. Recorded as drift, not fixed:
+  - the `set_config` per-user-secret docstring is at `services/xstockstrat-agent/app/tools.py:1673-1675` (the spec
+    cites `:1674-1676`); it still contradicts feature 224, as `services/xstockstrat-agent/docs/context-constitution-findings.md:20` records;
+  - the `config-governance.md:102` row: none left. Step 12 rewrote § Author-sentinel conventions (`:92-107`), and its
+    `system` row is now the indicators `Formula.author` sentinel, not a config-write claim.
+  UI-3's rule cell now names the insights per-user secret target row (`userId: claims.user_id`) and the config-ui
+  `environment` fill as the surviving explicit bodies; UI-7 (`:27`) needed no change. The config constitution `:34`
+  cites were re-anchored to `internalCallerAuthorized` `~L379-388`, `callerIdentity` `~L407` and
+  `const author = callerUserId || …` `~L412`. **Disposition**: accepted.

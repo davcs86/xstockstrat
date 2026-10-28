@@ -562,3 +562,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `author`". Noticed, out of scope: the agent `set_config` docstring says secrets are global-scope only, which
   contradicts feature 224 and `mcp-tools.md`.
 - Next: Step 13 (docs: service context files + teardown).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 13
+
+- Step 13 (docs) is done.
+  - Config `CLAUDE.md`: invariant #5 now says a write with no propagated identity is rejected and
+    `request.author` is ignored; #7 says the internal-caller `changed_by` is the grant `callerID`; the INSERT-audit
+    line and § Webhooks no longer mention an author.
+  - Config constitution `:34`: cites re-anchored to `setConfig` `~L379-412`. Config findings `:47` gains
+    `→ fix: feature 241`; the row stays until the report is resolved after merge.
+  - Agent `CLAUDE.md` `set_config` row: no `author` parameter. Agent findings `:42` → **resolved (feature 241)**.
+  - UI-3: author-stamp exception removed. The surviving explicit bodies are the cross-user filters, the insights
+    per-user secret target row and the config-ui `environment` fill.
+- Teardown: the context-forge refresh skill is unavailable here, so Steps 12-13 files were reconciled by hand
+  (Deviation Log). The integration PR body must state both the unavailability and that reconciliation.
+- Drift recorded, not fixed: `app/tools.py:1673-1675` per-user-secret docstring (contradicts feature 224). The
+  `config-governance.md:102` concern is gone after Step 12.
+- TDD: N/A (docs). Verification: config and UI greps return no hits; the agent findings line shows resolved.
+- All 13 steps are done. Next: the integration PR (§5.6).

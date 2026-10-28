@@ -27,6 +27,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 10 done: `/config-ui` and `/insights` BFF SetConfig tests pin `author === ''` and the session `x-user-id` (vitest 238/238, lint 0 errors) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 11 done: follow-up defect filed — `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` (status `open`) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 12 done: config-governance, header-propagation, config-rollout and mcp-tools document header-only attribution; `author` ignored (4 verification greps clean) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 13 done: config/agent/ui service context files updated; teardown reconciled by hand (context-forge refresh unavailable) — all 3 verification greps as expected |
 
 ---
 
@@ -67,4 +68,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 13 (docs: service context files + teardown)
+`/sdd-execute fix-config-audit-author-spoof sequential` — integration PR (all 13 steps done)
