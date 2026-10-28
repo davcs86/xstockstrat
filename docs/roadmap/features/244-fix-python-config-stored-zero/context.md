@@ -415,3 +415,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: there is no `node_modules` in the main worktree to symlink and `core.hooksPath` is
   unset, so no hook ran (same as Steps 1-3; never `--no-verify`).
 - Next: Step 5.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 5
+
+- Step 5 (service: indicators getters honour a stored zero) done. `services/xstockstrat-indicators/app/config/watcher.py`:
+  `get_str`/`get_int`/`get_float` return `v.<x>_val if v.HasField("<x>_val") else default`; the `get_str_present`
+  method (and its docstring) is replaced by the class alias `get_str_present = get_str` (`:98`). Its one caller,
+  `sandbox_allowed_imports`, passes `default=` by keyword and still binds. Sandbox accessors untouched (Step 7).
+- TDD: AC-1 red: 3 indicators rows (`zero_int`/`zero_float`/`zero_string`) returned the default (7/0.5/"x") and the
+  alias assertion failed (4 failed, 1 passed) → green: 5 passed. Harness was an uncommitted scratch test (paired test
+  is Step 6); logged in the Deviation Log.
+- Verification: `grep 'or default'` → no output; `get_str_present = get_str` → 1 hit (`:98`). Full indicators suite
+  294 passed (173 `get_str_present` tests included); ruff check + format clean.
+- Tooling: `uv sync --extra dev --frozen` in indicators (no manifest change).
+- Husky pre-commit did not run: no `node_modules` in the main worktree to symlink and `core.hooksPath` unset (same as
+  Steps 1-4; never `--no-verify`).
+- Next: Step 6.

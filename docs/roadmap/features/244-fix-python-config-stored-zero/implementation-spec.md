@@ -402,7 +402,7 @@ grep -n "def snapshot_watcher\|from tests.conftest\|conftest" tests/*.py   # one
 
 ### Step 5 — service: indicators getters honour a stored zero (HasField)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify
@@ -1325,3 +1325,6 @@ _Populated by /sdd-execute as implementation proceeds._
   `:307`), not `:308-320`; `_backfill_sem` is still at `:323`. Guard shape choices within the instructions:
   `FR3_KEYS`/`HONOUR_KEYS` are frozensets (rule 4 checks one default per key, it does not pin the table's values),
   `ZERO_IS_LEGIT` is a key→reason dict, and `collect(app_dir)` returns `(reads, clamps, errors)`.
+- 2026-10-28 Step 5 (TDD evidence harness, no scope change): the paired test lands in Step 6, so RED/GREEN used an
+  uncommitted scratch test (`tests/test_zz_step5_scratch.py`, deleted before commit) asserting the three @AC-1
+  indicators rows, the @AC-4 unset/mismatched rows and `get_str_present is get_str`. Only `watcher.py` was staged.
