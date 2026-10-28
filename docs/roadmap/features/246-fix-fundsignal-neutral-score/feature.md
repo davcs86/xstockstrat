@@ -22,6 +22,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 1 (test) done: `fundamentals_row` factory, fixture migration, AC-1/AC-2/AC-3 + WARN wiring tests (13 RED as specified) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 2 (service) done: presence-based `_builtin_score`, all-missing skip in both scorers, run-attributed `_warn_unscored` WARN (13 RED → GREEN) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 (docs) done: analysis producer docs (idempotency, unscored symbols), `dry_run` doc drift (agent docstring, `mcp-tools.md`), `analysis.proto:554` findings row, manual teardown (context-constitution refresh unavailable) |
+| 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 3 steps done; C-16 promotion applied per the operator-confirmed plan (AC-1..AC-3 → `services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature`, `@feature-246`); integration PR opened to `main-dev` |
 
 ---
 
