@@ -598,3 +598,24 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - Deviations (Deviation Log):
   - Playwright ran with `CI=1`, because the local `pnpm dev` warmup exceeded its 10s timeout.
   - Vitest (a) asserts a call-count snapshot taken right after the import, because vitest clears mock history before each test.
+
+## Session 2026-10-28 — Step 3 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile` (worktree-local). Chromium came from `/opt/pw-browsers`, so the run used `chromium` only.
+- Step 3 done:
+  - `e2e/fixtures/alerts.ts`: `ALERT_STREAM_HOLD_TRACE_ID`, `ALERT_STREAM_HOLD_MS` (= `DEFAULT_UNARY_TIMEOUT_MS` + 5s) and `ALERT_STREAM_HELD` (title `Held stream alert`).
+  - `e2e/mock-backend.ts`: `streamAlerts(_req, ctx)` holds when `x-trace-id` matches. The hold is abort-aware and yields `ALERT_STREAM_HELD` only if the hold completes; the default loop is unchanged.
+  - The `x-trace-id` sentinel reached the mock through `page.setExtraHTTPHeaders`, middleware and `backendHeaders`. The `categories` fallback was not needed.
+  - `alert-stream.spec.ts`: new AC-5 test. INVENTORY Alerts row extended.
+- TDD, AC-5 (red via mutation — preservation guard; the pre-fix tree has no deadline, so AC-5 is already green):
+  - Mutation: the `stream` wrapper in `connectClients.ts` forwards `timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS`.
+  - Red: `expect(getByText('Held stream alert')).toBeVisible()` timed out (50000ms) in both the run and its retry.
+  - The mutation was reverted; `git status` shows `connectClients.ts` unmodified.
+  - Green on the real tree: passed in 37.4s.
+- Verification:
+  - `CI=1 playwright test e2e/trader/alert-stream.spec.ts --project=chromium`: 7/7 ✓, including setup and the five existing tests.
+  - `lint` exits 0. The `helpers/auth` grep and the `ALERT_STREAM_HOLD_TRACE_ID` grep (INVENTORY, mock-backend) match.
+- Open Threads resolved for Step 3:
+  - "Long wall-clock e2e": **kept as is**. This is one ~37s case on `chromium` only in CI.
+  - "Mutation RED evidence (Steps 2/3)": recorded above and in the Step 2 session. **Closed.**
+- Deviations (Deviation Log): Playwright ran with `CI=1`. `tsc` has 2 pre-existing errors in `e2e/insights/backfills.spec.ts`, which is outside this step.

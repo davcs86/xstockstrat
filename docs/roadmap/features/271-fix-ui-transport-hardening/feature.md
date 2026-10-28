@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-28 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 1 done — leaf `deadlines.ts` + 30s unary transport default |
 | 2026-10-28 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 2 done — vitest transport-deadline cases + real-socket black-hole spec (AC-1, AC-5, AC-6) |
+| 2026-10-28 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — held-open alert stream e2e outlives the 30s unary default (AC-5) |
 
 ---
 

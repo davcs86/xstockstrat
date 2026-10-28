@@ -199,7 +199,7 @@ grep -n "helpers/devCerts\|from './mock-backend'" e2e/transport-deadline.spec.ts
 
 ### Step 3 — test: Held-open alert stream outlives the unary default (e2e)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/alerts.ts` — modify
@@ -647,3 +647,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **What**: vitest clears mock call history before each test, so `expect(createGrpcTransport).not.toHaveBeenCalled()` inside the test was vacuous: an eager-build mutation still passed it. Case (a) instead records `createGrpcTransport.mock.calls.length` right after the dynamic import in `beforeAll` and asserts it is 0, then asserts exactly one build on the first RPC.
 - **Disposition**: same assertion intent as the spec (no transport built at import, built on first RPC); the eager-build mutation now fails (`expected 10 to be +0`).
+
+### Step 3 — Playwright verification run with `CI=1`; `tsc` pre-existing errors (2026-10-28)
+
+- **What**: as in Step 2, the local `pnpm dev` warmup exceeded the 10s local test timeout on first compile, so `alert-stream.spec.ts` was run in the CI shape. The `--project=chromium` filter was added because `/opt/pw-browsers` has no Firefox build (CI runs `chromium` only). Separately, `tsc --noEmit` reports 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`, a file outside Step 3; the Step 3 files compile clean.
+- **Disposition**: CI-equivalent fallback — `CI=1 pnpm exec playwright test e2e/trader/alert-stream.spec.ts --project=chromium`: 7/7 passed, including setup (AC-5 case 37.4s); the five existing alert-stream tests still pass, so the default stream still ends cleanly. `pnpm run lint` exits 0. The pre-existing `INVENTORY.md` prettier drift is unchanged by this step (not CI-enforced).
