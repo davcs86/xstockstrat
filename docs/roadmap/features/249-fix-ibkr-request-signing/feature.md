@@ -17,6 +17,7 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (14 warnings; overlap WARN: file-level, rebase-only vs 240) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
+| 2026-10-28 | `implementation-ready` (no change) | /sdd-execute (re-spec) | Steps 1, 4, 6, 7, 15 re-grounded against the codebase after merging origin/main-dev (line-drift only; substance unchanged) |
 
 ---
 
