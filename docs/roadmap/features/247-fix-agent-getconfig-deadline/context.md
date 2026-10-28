@@ -297,3 +297,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   coverage 81.47% (>= 40); `from tests.conftest import`, `hung_config_server` and `raising=False` greps present.
 - In RED only, AC-4's orphaned worker logs `DCR failed: mtls …` after teardown (Deviation Log); harmless.
 - Still open: Step 6 (dev `GetConfig` latency baseline) must run before Step 3 is committed.
+
+### Step 3 — service: default GetConfig deadline in get_config_value + comment corrections (2026-10-28)
+
+- Files: `services/xstockstrat-agent/app/client.py` (`_CONFIG_READ_TIMEOUT_S = 3.0` after the endpoint block;
+  `timeout=_CONFIG_READ_TIMEOUT_S` on the `GetConfig` stub call; `except grpc.aio.AioRpcError as e` with the warning
+  `GetConfig %s for %s.%s` on `e.code().name`); `app/tools.py` (comment above `_POLICY_READ_TIMEOUT_S` only);
+  `app/oauth_server.py` (allowlist pre-check comment only). `get_config` and `register_oauth_client` untouched.
+- TDD red (pre-change tree): the 4-file suite gave 8 failed / 202 passed (Steps 1-2 RED tests).
+- TDD green: the 4-file suite gave 210 passed; full suite 526 passed, coverage 81.29% (>= 40); ruff check + format clean;
+  `_CONFIG_READ_TIMEOUT_S` 2 hits in client.py, 0 in tools.py/oauth_server.py; `tools.py`/`oauth_server.py` diffs are
+  comment lines only.
+- Ordering deviation: Step 3 committed before Step 6 (Deviation Log). Step 6 must still record the latency baseline or
+  "Not measured" + P-03 escalation before the integration PR.
+

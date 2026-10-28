@@ -338,7 +338,7 @@ All four tests FAIL before Step 3 (RED) and PASS after it; post-Step-3 coverage 
 
 ### Step 3 — service: default GetConfig deadline in get_config_value + comment corrections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -648,3 +648,8 @@ _Populated by /sdd-execute as implementation proceeds._
   outlives the test and, once the fixture stops the server, reaches the real `register_oauth_client`, logging
   `DCR failed: mtls: … must all be set` (no test fails from it). It disappears once Step 3 bounds the reads.
   **Disposition**: accepted (RED-phase only; no scope change).
+- **Step 3 (2026-10-28)** — committed before Step 6 (dev `GetConfig` latency baseline). The spec prefers Step 6 first
+  but allows it to complete "before the integration PR at the latest" (Step Dependencies; Step 6 Instruction 2's
+  "if Step 3 has already landed" branch). Grafana_Cloud MCP is still unreachable (HTTP 424), so Step 6 cannot be
+  measured in this session either way. If the operator's p99 rules out D = 3.0 s, the constant and the `== 3.0`
+  pins change together before the integration PR. **Disposition**: open — P-03 escalation carried to Step 6 / checkpoint.

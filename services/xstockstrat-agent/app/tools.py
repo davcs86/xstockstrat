@@ -2375,8 +2375,8 @@ def _same_origin(a: str, b: str) -> bool:
     return pa.scheme == "http" and pb.scheme == "https"
 
 
-# Fixed bound on the undeadlined GetConfig policy read; looked up at call time (never bound as a
-# default argument) so tests can monkeypatch it.
+# Outer bound keeping list_opportunities inside the MCP client's 60 s budget; looked up at call
+# time so tests can monkeypatch it.
 _POLICY_READ_TIMEOUT_S = 3.0
 
 
