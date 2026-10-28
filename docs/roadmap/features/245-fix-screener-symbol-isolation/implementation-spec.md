@@ -258,7 +258,7 @@ The green run is Step 3's Verification.
 
 ### Step 3 — test: AC-1 outline, FR-2 cancel passthrough, fail-closed, all-failed ERROR, sort tie, duplicate symbol, span attribute (engine)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_screener.py` — modify
@@ -833,3 +833,23 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: `uv` provisioned the worktree venv on CPython 3.12.3 (`requires-python = ">=3.12"`); CI runs 3.13.
   `CancelledError` is a `BaseException` on both, so the FR-2 passthrough is unaffected.
 - **Disposition**: CI-equivalent fallback.
+
+### Step 3 — RED captured against the restored pre-Step-2 engine (2026-10-28)
+- **Spec says**: Step 3's RED run is against the tree before Step 2.
+- **Actual**: Step 2 was already committed (`bfcaadcd`), so RED ran with `app/services/screener.py` temporarily
+  restored from `cfc0047b` (Step 1 commit), then restored to `HEAD` before GREEN; it was never staged.
+- **Disposition**: process-only; no code or scope change.
+
+### Step 3 — interpreter pinned to CPython 3.13 (2026-10-28)
+- **Actual**: `services/xstockstrat-analysis/.python-version` says `3.12`, so a bare `uv run` builds a 3.12.3 venv.
+  Step 3 ran every command with `UV_PYTHON=3.13` (CPython 3.13.17), matching CI (`ci.yml` `python-version: "3.13"`)
+  and the CPython 3.13 premise of mutation (a). No file changed.
+- **Disposition**: CI-equivalent fallback.
+
+### Step 3 — mutation (a) failure mode (2026-10-28)
+- **Spec says**: under `except BaseException`, `test_cancelled_error_in_symbol_eval_propagates` goes red.
+- **Actual**: red as expected, but via `KeyError: 'status'` (the absorbed cancel lets `screen()` reach the
+  `dataless_bars` read of OK1's bare `{"symbol": ...}` literal) rather than `DID NOT RAISE CancelledError`.
+  Either way the test fails whenever the cancel is absorbed. `test_scan_deadline_aborts_deadline_exceeded`
+  stayed green on CPython 3.13.17, confirming the impl-spec review premise.
+- **Disposition**: recorded; no change.

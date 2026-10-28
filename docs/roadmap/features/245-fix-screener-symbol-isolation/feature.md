@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 1 done — AC-2 deadline + AC-3 two-symbol validation preservation guards added to `TestScreenSymbols`; green on the unfixed tree |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 2 done — `ScreenerEngine` per-symbol isolation (`_eval_symbol_isolated`, `except Exception`), fail-closed `eval_failed` degraded row, `(score_unavailable, eval_failed, -score)` sort, summary WARN/ERROR + `screener.degraded_count` span attribute |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — engine tests: AC-1 outline (3 Examples, 49-run oracle), FR-2 cancel passthrough, soft-only fail-closed, all-failed ERROR, feature-144 sort tie, duplicate symbol, span attribute; RED 8 failed / 1 passed on pre-Step-2 engine → GREEN 29 passed; mutations (a)/(b) recorded |
 
 ---
 

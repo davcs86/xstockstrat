@@ -326,3 +326,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `ruff format --check` clean. Regression: full suite `uv run pytest --cov=app --cov-fail-under=40` →
   `1278 passed`, coverage 88.37% (no existing test flipped).
 - Deviations: scratch-test TDD capture; local CPython 3.12.3 venv (CI 3.13). Out-of-scope changes: none.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 3 (sdd-batch-execute)
+
+### Step 3 — test: AC-1 outline, FR-2 cancel passthrough, fail-closed, all-failed ERROR, sort tie, duplicate symbol, span attribute (engine) [done]
+- Added to `services/xstockstrat-analysis/tests/test_screener.py`: module-local `_isolation_fixture` (symbol-keyed
+  bars/RSI/signals, BAD sentinel close 999.0, conviction 0.95) and the patch helpers; parametrized
+  `test_one_symbol_failure_degrades_only_its_row` (@AC-1 Examples: `compute_signal_score`/ZeroDivisionError,
+  `_technical_value`/ArithmeticError, `_latest_indicator`/ValueError; 49-run oracle by ScreenResult equality,
+  BAD row OK/not passed/score_unavailable/empty scores, ranked last of 50, exactly one WARN naming
+  `BAD:<exc>`); `test_cancelled_error_in_symbol_eval_propagates` (FR-2, @AC-2 engine level);
+  `test_degraded_row_soft_only_criteria_is_not_passed`; `test_all_symbols_failed_logs_error_not_warning`;
+  `test_degraded_row_sorts_after_feature144_zero_score_row`; `test_duplicate_symbol_healthy_copy_ranks_by_score`;
+  `test_degraded_count_lands_on_current_span` (local `TracerProvider` + `InMemorySpanExporter`, not global).
+- TDD (AC-1, AC-2): RED with `screener.py` restored from `cfc0047b` (pre-Step-2):
+  `uv run pytest tests/test_screener.py -q` → `8 failed, 21 passed` — the 3 AC-1 Examples, soft-only, all-failed,
+  sort-tie, duplicate and span tests each failed on the injected exception escaping `screen()`
+  (`ZeroDivisionError: boom` / `RuntimeError: boom` / ...); the cancel test passed (as instr 3 predicts).
+  GREEN on `HEAD` engine: `29 passed` (20 pre-existing + 9 new, incl. the `:129 :153 :183 :215 :335 :468 :572
+  :625 :661` guards).
+- Verification: `uv run pytest --cov=app --cov-fail-under=40` → `1287 passed` (1278 + 9; no existing test flipped,
+  incl. `tests/test_screener_enrichment.py`), coverage 88.52%; `ruff check` clean; `ruff format --check` clean;
+  C-13 grep → one inline `def _isolation_fixture` (`:704`), no conftest reference. C-13 verdict: single consumer,
+  stays inline.
+- Mutations (instr 8; scratch, reverted, never staged — "mutations reverted" printed):
+  - (a) `_eval_symbol_isolated` `except BaseException`: `test_cancelled_error_in_symbol_eval_propagates` RED
+    (`KeyError: 'status'` — the absorbed cancel reached `dataless_bars`); `test_scan_deadline_aborts_deadline_exceeded`
+    stayed GREEN on CPython 3.13.17. Open Thread "mutation (a) premise" resolved: the run confirms the premise.
+  - (b) servicer `ScreenSymbols` wrapper swallowing `CancelledError` → `ScreenSymbolsResponse()`:
+    `test_scan_deadline_aborts_deadline_exceeded` RED (`DID NOT RAISE <class 'Exception'>`).
+- Files modified: `services/xstockstrat-analysis/tests/test_screener.py`
+- Deviations: RED against restored pre-Step-2 engine; `UV_PYTHON=3.13` (`.python-version` says 3.12); mutation (a)
+  failure mode is a KeyError — full detail in Deviation Log. Out-of-scope changes: none.
