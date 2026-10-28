@@ -64,4 +64,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 6 (test: trading escalation sends the grant callerID and no author)
+`/sdd-execute fix-config-audit-author-spoof sequential` — Step 7 (service: agent sends no free-text `author` (set_config, manage_signal_source, instantiate_template))

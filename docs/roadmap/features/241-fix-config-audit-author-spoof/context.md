@@ -444,3 +444,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Known red window until Step 6: `trading_reconciliation_test.go:789-790` still pins `req.Author`, so `go test`
   fails and lint raises 2 SA1019. A Deviation Log note was added.
 - Next: Step 6 (test: trading escalation sends the grant callerID and no author).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 6
+
+- Step 6 (test) is done. `fakeConfigSetter` now records `callerIDs`. The escalation test pins
+  `callerIDs[0] == testdata.ReconciliationPollerCallerID` and checks via proto reflection
+  (`Has(ByName("author"))`) that `author` is unset; it no longer reads the SA1019-deprecated `req.Author`.
+- C-13: `internal/testdata/caller_ids.go` declares `ReconciliationPollerCallerID`. The four literals in
+  `internal/config/config_test.go` now use it. Production `trading.go:2168` keeps its literal.
+- TDD: the RED came from a scratch re-insert of `Author` in `escalateSystemic`, which failed with "must not send
+  the deprecated author field". After the revert it was GREEN.
+- Verification:
+  - `TestReconcileTick_` passes with `-race`;
+  - the full `go test ./... -race` with the CI coverpkg set passes (total 72.8% ≥ 40);
+  - golangci-lint v2.14.0 (go1.27.0 rebuild) reports 0 issues;
+  - the literal grep finds only `trading.go:2168` and `testdata/caller_ids.go`.
+- Step 5's red window is now closed.
+- Next: Step 7 (service: the agent sends no free-text `author`).

@@ -452,7 +452,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 
 ### Step 6 — test: trading escalation sends the grant callerID and no author (AC-2 trading half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/testdata/caller_ids.go` — create
@@ -1094,3 +1094,10 @@ _Populated by /sdd-execute as implementation proceeds._
   `golangci-lint --tests=false` reports 0 issues. The provisioned golangci-lint v2.14.0 was built with go1.26 and
   refuses this go1.27 module, so the same version was rebuilt with go1.27.0 in a scratch GOBIN.
   **Disposition**: accepted; Step 6 restores green.
+- **2026-10-28 — Step 6 verification (TDD red source + toolchain fallback).** Step 5 was already committed, so the
+  RED for the `author`-unset assertion was captured by temporarily re-inserting `Author:
+  "system:reconciliation-poller"` into `escalateSystemic` (the pre-Step-5 shape) in an uncommitted scratch edit:
+  `trading_reconciliation_test.go:797: SetConfig must not send the deprecated author field`. The edit was then
+  reverted, and the test passed against the committed tree. golangci-lint v2.14.0 ran from the same go1.27.0
+  rebuild as Step 5 (`run`, with tests): 0 issues, so the two Step 5 SA1019s are cleared. Step 5's red window
+  is closed. **Disposition**: accepted.
