@@ -18,6 +18,7 @@
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-10-28 | (no status change) | /sdd-execute sequential (re-spec) | Steps 1, 2, 3, 4, 6 re-spec'd against `origin/main-dev` @ `fa40c8a4` (#1262 now on main-dev; ci.yml, ci-overview.md, merge-order.md, fails.md anchors shifted) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 
 ---
 
