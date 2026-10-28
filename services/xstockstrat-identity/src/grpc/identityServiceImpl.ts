@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import * as jwt from 'jsonwebtoken';
@@ -233,26 +233,12 @@ export class IdentityServiceImpl {
 
     const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     try {
-      const result = await this.pool.query(
-        `SELECT rt.token_id, rt.user_id, u.email, u.roles
-         FROM identity.refresh_tokens rt
-         JOIN identity.users u ON u.user_id = rt.user_id
-         WHERE rt.token_hash = $1
-           AND rt.revoked_at IS NULL
-           AND rt.expires_at > NOW()
-           AND u.is_active = true`,
-        [tokenHash]
-      );
-      if (result.rows.length === 0) {
+      const rotated = await this.rotateRefreshToken(tokenHash, false);
+      if (!rotated) {
         return callback({ code: 16, message: 'invalid or expired refresh token' });
       }
-      const { token_id, user_id, email, roles } = result.rows[0];
-
-      // Revoke old refresh token (rotation)
-      await this.pool.query(
-        'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE token_id = $1',
-        [token_id]
-      );
+      const { user_id, email, roles } = rotated.row;
+      const newRefreshToken = rotated.refreshToken;
 
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = now + this.accessTtlSeconds;
@@ -261,14 +247,6 @@ export class IdentityServiceImpl {
       const newAccessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
         expiresIn: this.accessTtlSeconds,
       });
-
-      const newRefreshToken = uuidv4();
-      const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
-      await this.pool.query(
-        `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at)
-         VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval)`,
-        [user_id, newRefreshTokenHash, this.refreshTtlSeconds]
-      );
 
       log.info('Token refreshed', { userId: user_id });
       callback(null, {
@@ -340,15 +318,59 @@ export class IdentityServiceImpl {
    * Insert a fresh rotating refresh token; returns the raw token. Optional clientId tags it
    * with the minting OAuth client (NULL for first-party sessions) for authorized-app listing.
    */
-  private async issueRefreshToken(userId: string, clientId?: string): Promise<string> {
+  private async issueRefreshToken(
+    userId: string,
+    clientId?: string,
+    db: Pool | PoolClient = this.pool,
+  ): Promise<string> {
     const refreshToken = uuidv4();
     const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    await this.pool.query(
+    await db.query(
       `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at, client_id)
        VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval, $4)`,
       [userId, refreshTokenHash, this.refreshTtlSeconds, clientId ?? null]
     );
     return refreshToken;
+  }
+
+  /**
+   * Single-use rotation: the conditional claim (`revoked_at IS NULL`) lets exactly one concurrent
+   * caller win, and the successor is inserted in the same transaction so a failure revokes nothing.
+   */
+  private async rotateRefreshToken(
+    tokenHash: string,
+    touchLastUsed: boolean,
+  ): Promise<{ row: any; refreshToken: string } | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const claim = await client.query(
+        `UPDATE identity.refresh_tokens rt
+         SET revoked_at = NOW()${touchLastUsed ? ', last_used_at = NOW()' : ''}
+         FROM identity.users u
+         WHERE u.user_id = rt.user_id
+           AND rt.token_hash = $1
+           AND rt.revoked_at IS NULL
+           AND rt.expires_at > NOW()
+           AND u.is_active = true
+         RETURNING rt.user_id, rt.client_id, u.email, u.roles`,
+        [tokenHash]
+      );
+      if (claim.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const row = claim.rows[0];
+      // Carry the OAuth client_id forward so the rotated token stays listable/revocable.
+      const refreshToken = await this.issueRefreshToken(row.user_id, row.client_id ?? undefined, client);
+      await client.query('COMMIT');
+      return { row, refreshToken };
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -504,32 +526,14 @@ export class IdentityServiceImpl {
     if (!refreshToken) return callback({ code: 3, message: 'refresh_token required' });
     const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     try {
-      const result = await this.pool.query(
-        `SELECT rt.token_id, rt.user_id, rt.client_id, u.email, u.roles
-         FROM identity.refresh_tokens rt
-         JOIN identity.users u ON u.user_id = rt.user_id
-         WHERE rt.token_hash = $1
-           AND rt.revoked_at IS NULL
-           AND rt.expires_at > NOW()
-           AND u.is_active = true`,
-        [tokenHash]
-      );
-      if (result.rows.length === 0) return callback({ code: 16, message: 'invalid_grant' });
-      const { token_id, user_id, client_id, email, roles } = result.rows[0];
       // last_used_at is bumped only on rotation ("last refreshed"), never per-request access.
-      await this.pool.query(
-        'UPDATE identity.refresh_tokens SET last_used_at = NOW() WHERE token_id = $1',
-        [token_id]
-      );
-      await this.pool.query(
-        'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE token_id = $1',
-        [token_id]
-      );
+      const rotated = await this.rotateRefreshToken(tokenHash, true);
+      if (!rotated) return callback({ code: 16, message: 'invalid_grant' });
+      const { user_id, email, roles } = rotated.row;
+      const newRefreshToken = rotated.refreshToken;
       const { accessToken, expiresIn } = this.mintOAuthAccessToken(
         user_id, email, roles ?? [], resource || '',
       );
-      // Carry the OAuth client_id forward so the rotated token stays listable/revocable.
-      const newRefreshToken = await this.issueRefreshToken(user_id, client_id ?? undefined);
       log.info('OAuth token refreshed', { userId: user_id });
       callback(null, { accessToken, tokenType: 'Bearer', expiresIn, refreshToken: newRefreshToken });
     } catch (err: any) {

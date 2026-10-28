@@ -122,8 +122,8 @@ const WRITER_FINAL = {
 }
 
 function approval(slug, gate) {
-  const a = APPROVALS[slug]
-  return a && a.gate === gate ? a.decision : null
+  const a = [].concat(APPROVALS[slug] || []).find((x) => x && x.gate === gate)
+  return a ? a.decision : null
 }
 
 function decisions(f) {
