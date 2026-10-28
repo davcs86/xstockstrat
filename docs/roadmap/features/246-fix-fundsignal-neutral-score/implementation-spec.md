@@ -362,7 +362,7 @@ grep -n "_warn_unscored" app/engine/fundsignal_loop.py    # expect the def and o
 
 ### Step 3 — docs: producer docs, `dry_run` drift, findings row, root teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-analysis/` docs, `services/xstockstrat-agent/` (docstring only), `docs/`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -451,3 +451,12 @@ _Populated by /sdd-execute as implementation proceeds._
   `app` import.
 - **Disposition**: in scope, no behaviour change. The Verification's GREEN half (full suite + coverage) runs after
   Step 2, as the step specifies; Step 1 verified its RED half.
+
+### Step 3 — 2026-10-28 — wrapped agent docstring; ingest dedup cited by path, not line
+
+- **Spec said**: `tools.py:1409` becomes the one-line `dry_run: report what WOULD be scanned (universe size) without
+  scoring, emitting or spending cache calls.`; the analysis Idempotency bullet cites `ingest servicer.py:1041-1056`.
+- **Actual**: the one-line docstring is 112 chars and fails `ruff check` E501 (limit 100), so it wraps onto a second
+  line with the same wording. The Idempotency bullet names `ingest.signal_dedup_claims` and
+  `services/xstockstrat-ingest/app/handlers/servicer.py` without a line range, so the anchor does not drift.
+- **Disposition**: in scope, no behaviour change.

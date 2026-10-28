@@ -543,3 +543,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `_builtin_score` and `_score_via_formula`; `_warn_unscored` def + one call (`:227`, before the `try:` at `:236`).
 - Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
 - Deviations: none.
+
+### Step 3 — docs: producer docs, `dry_run` drift, findings row, root teardown [done]
+- Analysis `CLAUDE.md`: Idempotency bullet rewritten (analysis day guard + ingest per-owner dedup via
+  `ingest.signal_dedup_claims`; same-day re-run re-fetches unscored symbols within `daily_call_budget`); new
+  **Unscored symbols (feature 246)** bullet after Fail-closed scoring. Analysis constitution Feature 144 bullet: "left
+  unfixed" clause replaced with the feature-246 fix. Agent `run_fundamentals_scan` docstring and `mcp-tools.md` `dry_run`
+  cell now say dry_run reports the universe without scoring. Findings: `analysis.proto:554` row appended to
+  § Documentation that lies (proto not edited, per Fix Scope).
+- TDD: N/A (docs; the only code edit is a docstring). RED: the verification greps hit `CLAUDE.md:123`, constitution
+  `:42` "left unfixed", `tools.py:1409` and `mcp-tools.md:836` "score(s) + report(s)"; no "Unscored symbols" or
+  `analysis.proto:554` row. GREEN: all five greps as expected; agent `ruff check .` + `ruff format --check .` clean;
+  `pytest tests/test_tools.py tests/test_list_correlation_parity.py -q` 121 passed.
+- Teardown: `/context-forge:context-constitution refresh` is not available in this session (only `context-scrubber` is
+  installed). Manual reconciliation: re-read the three touched context files against Step 2's `fundsignal_loop.py`.
+  Checked the WARN format string (`_warn_unscored`), the five built-in metrics and six formula inputs (`_builtin_score`,
+  `_score_via_formula`), that `symbols_done=len(fetched)` counts unscored symbols, that only emitted symbols insert
+  `fundsignal_emitted` rows, and that `dry_run` returns before scoring (`:195-199`). No further drift found. The PR body
+  must record both that the plugin was unavailable and this reconciliation (ledger `fails.md:670`).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-analysis/docs/context-constitution.md`,
+  `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `docs/context-constitution-findings.md`
+- Deviations: docstring wrapped for E501; ingest dedup cited by path, not line (see Deviation Log).
+

@@ -1406,7 +1406,8 @@ def register_tools(server: MCPServer) -> None:
     ) -> dict:
         """Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156).
         force: re-emit today's signals even if already emitted (clears the day's idempotency rows).
-        dry_run: score + report what WOULD be scanned without emitting or spending cache calls.
+        dry_run: report what WOULD be scanned (universe size) without scoring, emitting
+        or spending cache calls.
         symbols: optional explicit universe override; omitted = the configured universe.
         Returns the FundamentalsScanSummary: {"run_id", "symbols_processed", "signals_emitted",
             "calls_spent", "deferred_count", "status", "finished_at"}. Admin-scoped — a non-admin
