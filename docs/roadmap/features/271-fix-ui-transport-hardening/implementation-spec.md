@@ -89,9 +89,9 @@ There are no UI page or route additions, so C-10(a) nav registration does not ap
 
 **Codebase Evidence**:
 - `src/lib/connectClients.ts:48-74` `makeTransport`:
-  - The lazy `get()` is at `:49-65`. Its load-bearing comment at `:45-47` explains that `next build` has no `MTLS_*`.
-  - The `unary` wrapper is at `:67-68`: `return get().unary(method, signal, timeoutMs, header, input, contextValues);`.
-  - The `stream` wrapper is at `:70-71` and forwards `timeoutMs` unchanged.
+  - The lazy `get()` is at `:50-65`. Its load-bearing comment at `:45-47` explains that `next build` has no `MTLS_*`.
+  - The `unary` wrapper is at `:67-69`; its return statement is `:68`: `return get().unary(method, signal, timeoutMs, header, input, contextValues);`.
+  - The `stream` wrapper is at `:70-72` and forwards `timeoutMs` unchanged.
 - `connectClients.ts:1-13` imports only packages and `node:tls`, with no `@/` alias. The Step 2 real-socket spec imports this module from Playwright, so the new import must be relative.
 - `src/lib/bffShared.ts:53-55`: `export const FUNDAMENTALS_TIMEOUT_MS = 15_000;`, with its feature-220 comment at `:53-54`.
 - Importers of `FUNDAMENTALS_TIMEOUT_MS` (`grep -rn FUNDAMENTALS_TIMEOUT_MS src e2e`):
@@ -116,8 +116,8 @@ There are no UI page or route additions, so C-10(a) nav registration does not ap
 3. In `insightsBff.ts`, remove `FUNDAMENTALS_TIMEOUT_MS` from the `@/lib/bffShared` import (`:27`) and add `import { FUNDAMENTALS_TIMEOUT_MS } from '@/lib/deadlines';`. Do the same in `traderBff.ts` (`:24`). Leave the call sites at `insightsBff.ts:103`, `:114` and `traderBff.ts:78` unchanged.
 4. In `connectClients.ts`, add `import { DEFAULT_UNARY_TIMEOUT_MS } from './deadlines';` after the package imports. It must be relative, not `@/lib/deadlines`, because the Step 2 Playwright spec imports this module outside Next's alias resolution.
 5. Change only the `unary` body (`:68`) to `return get().unary(method, signal, timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS, header, input, contextValues);`.
-   - Leave the `stream` wrapper (`:70-71`) **byte-for-byte unchanged**. That keeps `streamAlerts`, `streamOrderUpdates` and `exportEvents` unbounded.
-   - Leave the lazy `get()` (`:49-65`) unchanged.
+   - Leave the `stream` wrapper (`:70-72`) **byte-for-byte unchanged**. That keeps `streamAlerts`, `streamOrderUpdates` and `exportEvents` unbounded.
+   - Leave the lazy `get()` (`:50-65`) unchanged.
 6. Leave the literal `timeoutMs: 30_000` at `insightsBff.ts:58` (`@AC-1 @feature-191`) as written.
 
 **Verification**:
@@ -223,7 +223,7 @@ grep -n "helpers/devCerts\|from './mock-backend'" e2e/transport-deadline.spec.ts
   - Its INVENTORY row is `e2e/fixtures/INVENTORY.md:43`.
   - Sentinel precedent: `FUNDAMENTALS_STALL_SYMBOL` (`e2e/fixtures/fundamentals.ts:32-34`, INVENTORY `:19`), whose stall is abort-aware (`mock-backend.ts:643-650`).
 - `'Order rejected'` is both a stream title and a list title (`alerts.ts:21`, `:48`), so it cannot prove stream delivery. The held alert needs a distinct title.
-- Existing spec pattern: `e2e/trader/alert-stream.spec.ts:40-49`. It opens the sheet by clicking the parent of the unread badge (`/^2$/`), then asserts the alert text.
+- Existing spec pattern: `e2e/trader/alert-stream.spec.ts:41-50` ("opening the sheet shows at least one alert title"). It opens the sheet by clicking the parent of the unread badge (`/^2$/`), then asserts the alert text.
 - Request-scoped stateful mock rule (insights.md): keying on a per-test trace id keeps parallel specs unaffected.
 
 **TDD**: `red-green required` (preservation guard: RED via the mutation check in § Step Dependencies)
@@ -246,7 +246,7 @@ grep -n "helpers/devCerts\|from './mock-backend'" e2e/transport-deadline.spec.ts
 3. In `alert-stream.spec.ts`, add a test, "the alert stream survives past the unary default deadline (feature 271 @AC-5)":
    - `test.setTimeout(ALERT_STREAM_HOLD_MS + 45_000)`.
    - `await page.setExtraHTTPHeaders({ 'x-trace-id': ALERT_STREAM_HOLD_TRACE_ID })`, then `addAuthCookie(page)`, then `page.goto('/trader')`.
-   - Record `t0`, then open the sheet the same way as `:43-46`.
+   - Record `t0`, then open the sheet the same way as `:44-47`.
    - `await expect(page.getByText('Held stream alert')).toBeVisible({ timeout: ALERT_STREAM_HOLD_MS + 15_000 })`.
    - Assert `Date.now() - t0 >= DEFAULT_UNARY_TIMEOUT_MS`.
 4. In `INVENTORY.md`, append `ALERT_STREAM_HELD`, `ALERT_STREAM_HOLD_TRACE_ID` and `ALERT_STREAM_HOLD_MS` to the Alerts row (`:43`). Add the `streamAlerts` hold branch to its consumer list.
@@ -431,9 +431,10 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
 
 **Codebase Evidence**:
 - `src/lib/__tests__/insightsBff.test.ts` is the feature-183 `forward()` threading suite:
-  - `vi.mock('@/lib/auth', …)` with `hasAdminScope: vi.fn(() => false)` at `:10-19`.
-  - The `fakeCtx()` stub is at `:26-34`.
-  - Its cases capture `opts.timeoutMs` at `:36-85`.
+  - `vi.mock('@/lib/auth', …)` at `:11-20`, with `hasAdminScope: vi.fn(() => false)` at `:19`.
+  - The `fakeCtx()` stub is at `:27-35`.
+  - Its cases capture `opts.timeoutMs` at `:37-85`.
+  - It currently imports only `forward` from `@/lib/bffShared` (`:22`); `forwardAdmin` and `hasAdminScope` are not imported yet.
 - `src/lib/insightsBff.test.ts:1-46` is the dispatch-level pattern:
   - Mock `@/lib/connectClients` with spies.
   - `await import('@/lib/insightsBff')` to get `dispatchConnect`.
@@ -449,7 +450,7 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
 **Covers**: `AC-6`
 
 **Instructions**:
-1. Add a describe to `src/lib/__tests__/insightsBff.test.ts`: "forwardAdmin() — timeoutMs threading (feature 271)". Import `forwardAdmin` and the mocked `hasAdminScope`.
+1. Add a describe to `src/lib/__tests__/insightsBff.test.ts`: "forwardAdmin() — timeoutMs threading (feature 271)". Add `forwardAdmin` to the `@/lib/bffShared` import and add `import { hasAdminScope } from '@/lib/auth';` (the mocked export).
    - (a) With `vi.mocked(hasAdminScope).mockReturnValueOnce(true)`, `forwardAdmin(mockCall, { timeoutMs: LONG_RPC_TIMEOUT_MS })` passes `timeoutMs === LONG_RPC_TIMEOUT_MS` along with `headers`. RED pre-fix: `undefined`, because the option is ignored.
    - (b) When `hasAdminScope` returns false, the handler rejects with `Code.PermissionDenied` and `mockCall` is never called.
 2. `src/lib/bffDeadlines.test.ts`:
@@ -615,7 +616,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/middleware.test.ts \
    - `forwardAdmin` takes `{ timeoutMs }`.
    - The authoritative home is `src/lib/deadlines.ts`.
    - Re-stamp the evidence pointers.
-3. Leave the open finding `docs/context-constitution-findings.md:36` (the `listOpportunities` literal) open. Design kept the literal (design.md item 1).
+3. Leave the open finding `services/xstockstrat-ui/docs/context-constitution-findings.md:36` (the `listOpportunities` literal; not the root findings file, whose `:36` is an unrelated feature-227 analysis finding) open. Design kept the literal (design.md item 1).
 4. Run `/context-forge:context-constitution refresh` scoped to `services/xstockstrat-ui/` and fix any grounded drift it reports. If the plugin is unavailable, re-read both files against the code by hand and record the manual reconciliation in the PR body.
 
 **Verification**:
