@@ -226,7 +226,13 @@ class TestScreenSymbolsClient:
                     criterion_scores={"pe": 1.0},
                     passed=True,
                     status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
-                )
+                ),
+                analysis_pb2.ScreenResult(
+                    symbol="BAD",
+                    passed=False,
+                    status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
+                    score_unavailable=True,
+                ),
             ],
             coverage_gaps=[
                 analysis_pb2.CoverageGap(
@@ -280,7 +286,13 @@ class TestScreenSymbolsClient:
             "criterion_scores": {"pe": 1.0},
             "passed": True,
             "status": "SCREEN_RESULT_STATUS_OK",
+            "score_unavailable": False,
         }
+        # feature 245 (AC-5): an un-evaluated row reaches the agent with score_unavailable set.
+        assert result["results"][1]["symbol"] == "BAD"
+        assert result["results"][1]["passed"] is False
+        assert result["results"][1]["score_unavailable"] is True
+        assert all(isinstance(r["score_unavailable"], bool) for r in result["results"])
         # feature 090: gap detail is projected (timeframe enum name; int64 bars as JSON strings).
         assert result["coverage_gaps"] == [
             {

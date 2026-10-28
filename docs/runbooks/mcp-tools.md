@@ -446,13 +446,13 @@ see the `status` note below for when they aren't).
 ```json
 {
   "results": [
-    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
+    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "score_unavailable": false, "status": "SCREEN_RESULT_STATUS_OK" }
   ],
   "coverage_gaps": [ { "symbol": "TSLA", "timeframe": "TIMEFRAME_1DAY", "bars_have": "5", "bars_need": "50" } ]
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears. `score_unavailable: true` means the row has no comparable score and is unranked. Three row kinds carry it: an **evaluation fault** (`status` `OK`, `passed: false` — the symbol was not evaluated, which is different from a failed screen; the rest of the scan completes); a data-less row with a hard filter (`passed: false`); and a data-less soft-only row (feature 144, `passed: true`). Filter candidates on `passed`. Un-evaluated rows carry score `0.0`, so `min_conviction > 0` also removes them and `rank_limit` may cut them (they rank last); a dropped or cut row's only trace is then the server log.
 
 **Errors**
 
@@ -462,6 +462,7 @@ see the `status` note below for when they aren't).
 | Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
 | Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ValueError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
+| A per-symbol evaluation fault (non-RPC exception for one symbol) | No call error; that symbol returns `status OK`, `passed: false`, `score_unavailable: true` (the rest of the scan completes) |
 
 ---
 
