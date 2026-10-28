@@ -25,6 +25,7 @@
 | 2026-10-28 | (no status change) | /sdd-execute step 4 | ledger compile-then-test runner landed (`tsc` → `dist/`, config scripts byte-identical); AC-2 and AC-4 green, 45/45 tests, aggregate 73.7% lines |
 | 2026-10-28 | (no status change) | /sdd-execute step 5 | ledger impl suites hard-fail: swallowed `before()` imports and proto try/catch removed, 38 skip guards removed, harness cases added; AC-3/AC-6 ledger rows green, 47/47 tests, aggregate 73.7% lines |
 | 2026-10-28 | (no status change) | /sdd-execute step 6 | Teardown: Node-leaf "40% enforced" claims narrowed (`lang-node.md`, `ci-overview.md`, `spec-template.md`, root `CLAUDE.md`); follow-up defect `2026-10-28-node-leaf-c8-check-coverage-unenforced-defect` filed (SEV-3, `open`) and logged in the four Node-leaf findings logs; merge-order rebase-only note added; manual context audit (plugin unavailable) |
+| 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute, ALL-DONE) | All 6 steps done; C-16 promotion applied (AC-1, AC-2 to the identity/ledger suites; AC-3..AC-6 to `platform.feature`); integration PR opened to `main-dev` |
 
 ---
 
