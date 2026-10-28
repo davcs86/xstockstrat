@@ -468,3 +468,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `merge-order.md:213`.
   - Step 8: `pnpm run test:coverage` is at `.github/workflows/ci.yml:594`.
 - Steps 2, 7, 9, 10 were not in the validation's drift list, so they were not edited.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+- **Up-front confirmation (§5.1b/§5.4):** given by operator standing authorization in the operator chat on
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, and later
+  "start batch 2 in parallel too". The operator's answers were:
+  - checkpoints are unattended, reported only;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred;
+  - DB and prod steps are operator-only: open the PR and hold the merge.
+- Lifecycle: `implementation-ready` → `in-progress`. Severity SEV-2.
+- Consumer surface (C-14): none or internal. All steps are portfolio backend, the config migration, or docs.
+- Open review warnings carried forward: the `[ ]` items in the 2026-10-22 sdd-review impl-spec note.
