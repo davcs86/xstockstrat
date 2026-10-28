@@ -544,3 +544,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `Impact type` was not in the step's field list; set to `forgeable-config-write-attribution` (Deviation Log).
 - TDD: N/A (docs). Verification: both files exist; `head -1` is `open`; 6 template headings; exactly one SEV token.
 - Next: Step 12 (docs: platform patterns and runbooks).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 12
+
+- Step 12 (docs) is done. `config-governance.md` § Author-sentinel conventions: `changed_by` is the propagated
+  `x-user-id` or the authorizing `INTERNAL_CALLER_ALLOWLIST` `callerID`; automated writes are found by
+  `caller_identity IS NOT NULL`; the poller row is `trading-reconciliation-poller` (historical rows keep
+  `system:reconciliation-poller`); the `system` row is re-described as the indicators `Formula.author` sentinel.
+- `header-propagation.md`: indicators `RegisterFormula` and config `SetConfig` take identity from headers only;
+  missing identity rejected; presence, not authenticity. Also dropped the stale feature-049 formula-write admin
+  override (Deviation Log).
+- `config-rollout.md`: snippets use full-dotted keys, `x-user-id: <operator-id>` metadata and no `author`;
+  `RolloutConfig` marked not an RPC (sequential `SetConfig`); MCP note corrected (no `environment`/`trading_mode`,
+  secrets writable). `mcp-tools.md` § `set_config`: `author` row removed, error text "propagated identity required".
+- TDD: N/A (docs). Verification: all four spec greps as expected.
+- Left for Step 13: `services/xstockstrat-config/CLAUDE.md` invariant #5 and § Webhooks still say "explicit
+  `author`". Noticed, out of scope: the agent `set_config` docstring says secrets are global-scope only, which
+  contradicts feature 224 and `mcp-tools.md`.
+- Next: Step 13 (docs: service context files + teardown).

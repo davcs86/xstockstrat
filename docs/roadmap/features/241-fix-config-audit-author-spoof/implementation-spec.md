@@ -873,7 +873,7 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
 
 ### Step 12 — docs: platform patterns and runbooks (config-governance, header-propagation, config-rollout, mcp-tools)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -1129,3 +1129,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **2026-10-28 — Step 11 `Impact type` field (template gap, no spec change).** The step's field list omits the
   defect-filing template's `**Impact type**` header; it was filled as `forgeable-config-write-attribution` in the
   template's kebab-case style. **Disposition**: accepted.
+- **2026-10-28 — Step 12 header-propagation scope (stale-claim fix inside the rewritten paragraph).** The
+  `:34-46` paragraph also claimed a feature-049 admin-scope override for formula writes and an ownership check
+  against `request.user_id`; both are stale (feature 224 removed the write override; `servicer.py:502` compares
+  against the `x-user-id` reader). Rewritten with the paragraph rather than left contradicting it. The
+  `config-rollout.md` multi-key replacement for `RolloutConfig` is a sequential-`SetConfig` Python loop; the STALE
+  Connect block keeps its bare key (Instruction 3 only drops `"author"` there). **Disposition**: accepted.
