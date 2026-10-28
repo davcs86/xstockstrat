@@ -11,14 +11,19 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-23 | `idea` → `draft` | /sdd-story | Product spec generated; follow-up created by the operator when demoting 277-fix-ingest-seeded-config-keys |
+| 2026-10-23 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
+| 2026-10-23 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
+| 2026-10-23 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — approved design, rejected alternatives, open risks
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec enforce-config-key-wiring`_
+- [Implementation Spec](implementation-spec.md) — 18 steps (Step 10 is an operator decision gate)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -29,7 +34,7 @@ A deterministic check, wired into the execution/validation loop and CI, that pro
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry changes.)_
+_Snapshot finalized at /sdd-spec time (2026-10-23) from the distinct per-step reviewers — re-run /sdd-spec if the registry changes._
 
 | Role | Review Focus |
 |---|---|
@@ -38,4 +43,4 @@ _(Auto-populated from docs/runbooks/reviewer-registry.md based on affected servi
 
 ## Next Action
 
-`/sdd-review enforce-config-key-wiring product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review enforce-config-key-wiring impl-spec` — validate implementation spec, then `/sdd-execute enforce-config-key-wiring`

@@ -544,3 +544,10 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - **Identity `RefreshToken` 10s bound: confirmed** (fails closed; a late commit forces re-login).
 - `implementation-spec.md` updated: Step 1 constant, Step 6 `traderBff.ts` wiring (item 3b, verification grep),
   Step 7 `it.each` over the four mutations, Step 10 docs line. The p99 telemetry gate stays an accepted risk.
+
+## 2026-10-27 — downstream consumer note (from feature 279 homelab-compose-deploy; operator-approved)
+
+- homelab-edge Gatus probes `http://<vm>:3000/trader/api/health` with `ignore-redirect`, `[STATUS] == 200` and
+  `[BODY].status == ok`. It relies on `@AC-3`'s `/trader/api/health` row and the handler's `status: 'ok'` JSON.
+  Removing or renaming that path, or changing its body, turns both homelab UI probes red. 279 adds no root
+  `/api/health` and no `PUBLIC_HEALTH_PATHS` entry (merge-order.md "Homelab monitoring ↔ UI health exemption").
