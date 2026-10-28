@@ -229,3 +229,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     - `app/client.py` with 240 (Step 24, `:2245-2271`), 215 and 241 (predictive);
     - `app/tools.py` with 240, 241, 249 and 215;
     - `services/xstockstrat-agent/CLAUDE.md` with 240 (`:83`, `:86-87`).
+
+## Session 2026-10-21 — post-hotfix reconciliation
+
+- Hotfix #1262 (identity refresh rotation) landed on main and was back-merged (bd70ff79). It shifted
+  `identityServiceImpl.ts` by +22 lines before `registerOAuthClient`: the cited `https://`-only check moved from
+  `:363-366` to `:385-388` (implementation-spec.md ×4, design.md ×2). The claim itself is unchanged; the anchor is copied
+  into this feature's defect reports and findings bullet, so it had to be exact.
