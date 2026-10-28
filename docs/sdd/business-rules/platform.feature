@@ -440,3 +440,91 @@ Feature: Platform-wide guarantees
     When the feature's migrations are applied
     Then both "acc-1" orders have fees 0.00 and the "alp-1" order has no fees value
     And "acc-1" lifetime realized P&L is 450.00, fees_since_snapshot is 0.00, and fees_lifetime is 0.00
+
+  @AC-1 @FR-1 @regression @feature-244
+  Scenario Outline: A stored zero is honoured by the Python config getters
+    Given the <service> ConfigWatcher snapshot holds "<key>" as a <type> value <stored>
+    When the watcher's <getter> reads "<key>" with default <default>
+    Then it returns <stored>
+
+    Examples:
+      | service                | key                                     | type   | stored | getter    | default |
+      | xstockstrat-analysis   | analysis.opportunity.signal_rank_weight | float  | 0.0    | get_float | 0.3     |
+      | xstockstrat-analysis   | analysis.engine.alert_throttle_seconds  | int    | 0      | get_int   | 300     |
+      | xstockstrat-analysis   | analysis.test.zero_string               | string | ""     | get_str   | "x"     |
+      | xstockstrat-indicators | indicators.test.zero_int                | int    | 0      | get_int   | 7       |
+      | xstockstrat-indicators | indicators.test.zero_float              | float  | 0.0    | get_float | 0.5     |
+      | xstockstrat-indicators | indicators.test.zero_string             | string | ""     | get_str   | "x"     |
+      | xstockstrat-ingest     | ingest.test.zero_int                    | int    | 0      | get_int   | 7       |
+      | xstockstrat-ingest     | ingest.test.zero_float                  | float  | 0.0    | get_float | 0.5     |
+      | xstockstrat-ingest     | ingest.test.zero_string                 | string | ""     | get_str   | "x"     |
+
+  @AC-4 @FR-2 @regression @feature-244
+  Scenario Outline: An unset or mismatched value still resolves to the coded default
+    Given the <service> ConfigWatcher <state>
+    When the watcher's <getter> reads "<key>" with default <default>
+    Then it returns <default>
+
+    Examples:
+      | service                | state                                         | getter    | key                                      | default |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_float | analysis.backtest.default_commission_pct | 0.001   |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_int   | analysis.engine.alert_throttle_seconds   | 300     |
+      | xstockstrat-analysis   | has received no snapshot                      | get_str   | analysis.test.unset_string               | "x"     |
+      | xstockstrat-indicators | has received no snapshot                      | get_int   | indicators.test.unset_int                | 7       |
+      | xstockstrat-indicators | snapshot holds the key as a string value "5"  | get_float | indicators.test.mismatched_float         | 0.5     |
+      | xstockstrat-indicators | snapshot has no entry for the key             | get_str   | indicators.test.unset_string             | "x"     |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_str   | ingest.test.unset_string                 | "x"     |
+      | xstockstrat-ingest     | snapshot holds the key as a float value 2.5   | get_int   | ingest.test.mismatched_int               | 7       |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_float | ingest.test.unset_float                  | 0.5     |
+
+  @AC-6 @FR-3 @regression @feature-244
+  Scenario Outline: A trap-dependent site keeps the coded default for a stored zero
+    Given "<key>" is stored as the <type> value <stored>
+    When <service> resolves it for <site>
+    Then the effective value is <effective>
+
+    Examples:
+      | service                | key                                              | type   | stored | site                                  | effective                 |
+      | xstockstrat-ingest     | ingest.backfill.max_concurrent_chunks            | int    | 0      | the backfill chunk semaphore capacity | 3                         |
+      | xstockstrat-ingest     | ingest.backfill.chunk_max_bars                   | int    | 0      | the chunk planner's bar cap           | 200000                    |
+      | xstockstrat-ingest     | ingest.backfill.chunk_window_days                | int    | 0      | the chunk planner's window in days    | 90                        |
+      | xstockstrat-ingest     | ingest.mcp_client.poll_interval_seconds          | int    | 0      | the mcp_client poll loop              | 300                       |
+      | xstockstrat-indicators | indicators.sandbox.timeout_ms                    | int    | 0      | ExecuteFormula                        | 5000                      |
+      | xstockstrat-indicators | indicators.sandbox.memory_bytes                  | int    | 0      | ExecuteFormula                        | 134217728                 |
+      | xstockstrat-indicators | indicators.sandbox.max_concurrent                | int    | 0      | the sandbox semaphore capacity        | 4                         |
+      | xstockstrat-analysis   | analysis.engine.eval_interval_seconds            | int    | 0      | the live-loop sleep between cycles    | 60                        |
+      | xstockstrat-analysis   | analysis.engine.max_strategies_per_cycle         | int    | 0      | the live-loop per-cycle pair budget   | 50                        |
+      | xstockstrat-analysis   | analysis.engine.fundamentals_blend_strategy_id   | string | ""     | the blend-governed strategy id        | "fundamentals_macd_blend" |
+      | xstockstrat-analysis   | analysis.strategy.default_cooldown_days          | int    | 0      | the default re-entry cooldown in days | 31                        |
+      | xstockstrat-analysis   | analysis.scoring.shrinkage_days                  | int    | 0      | the headline-grade shrinkage k        | 250                       |
+      | xstockstrat-analysis   | analysis.screener.max_duration_seconds           | int    | 0      | the ScreenSymbols deadline            | 120                       |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_position_weight      | float  | 0.0    | portfolio-mode sizing                 | 0.10                      |
+      | xstockstrat-analysis   | analysis.backtest.detail_retention_per_strategy  | int    | 0      | backtest-detail retention             | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_bars_fetches | int    | 0      | the opportunity bars-fetch semaphore  | 2                         |
+      | xstockstrat-analysis   | analysis.backtest.default_fill_model             | int    | 0      | a RunBacktest without fill_model      | FILL_MODEL_SAME_BAR_CLOSE |
+      | xstockstrat-analysis   | analysis.backtest.max_range_days                 | int    | 0      | the RunBacktest range cap in days     | 730                       |
+      | xstockstrat-analysis   | analysis.snapshot.indicator_timeout_ms           | int    | 0      | the snapshot indicator timeout in ms  | 500                       |
+      | xstockstrat-analysis   | analysis.screener.max_universe_size              | int    | 0      | the ScreenSymbols universe cap        | 100                       |
+      | xstockstrat-analysis   | analysis.opportunity.max_universe_size           | int    | 0      | the opportunity universe cap          | 100                       |
+      | xstockstrat-analysis   | analysis.fundsignal.run_interval_hours           | int    | 0      | the fundsignal loop interval in hours | 24                        |
+      | xstockstrat-analysis   | analysis.fundsignal.daily_call_budget            | int    | 0      | the fundsignal daily call budget      | 200                       |
+      | xstockstrat-ingest     | ingest.mcp_client.request_timeout_seconds        | int    | 0      | the mcp_client per-call timeout       | 30                        |
+      | xstockstrat-analysis   | analysis.strategy.max_concurrent_entry_backfill  | int    | 0      | the entry-backfill semaphore          | 4                         |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_max_concurrent       | int    | 0      | portfolio-mode max open positions     | 9                         |
+      | xstockstrat-analysis   | analysis.series.max_concurrent_components        | int    | 0      | the series component semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_candidates   | int    | 0      | the opportunity candidate semaphore   | 4                         |
+      | xstockstrat-analysis   | analysis.compute.max_worker_threads              | int    | 0      | the compute thread pool size          | 4                         |
+      | xstockstrat-analysis   | analysis.readiness_materializer.max_concurrent_bars_fetches | int | 0 | the materializer bars semaphore | 2                         |
+      | xstockstrat-analysis   | analysis.screener.max_concurrent_formula_evals   | int    | 0      | the screener formula semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.fundsignal.source_slug                  | string | ""     | the fundamentals source slug          | "fundamentals"            |
+      | xstockstrat-analysis   | analysis.fundsignal.max_symbols_per_run          | int    | 0      | the fundsignal per-run symbol cap     | 200                       |
+      | xstockstrat-analysis   | analysis.fundsignal.valid_days                   | int    | 0      | the fundsignal signal validity days   | 90                        |
+      | xstockstrat-analysis   | analysis.snapshot.signal_timeout_ms              | int    | 0      | the snapshot signal timeout in ms     | 500                       |
+      | xstockstrat-analysis   | analysis.patterns.indicator_bucket_count         | int    | 0      | the P&L-pattern indicator buckets     | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_strategies_per_symbol | int | 0      | the per-symbol live attribution cap   | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_only_symbols_per_compute | int | 0   | the live-only symbol cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_held_symbols_per_compute | int | 0   | the held-symbol live cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.valid_window_hours          | int    | 0      | the opportunity validity window hours | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.snooze_default_hours        | int    | 0      | the default snooze hours              | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.read_db_budget_ms           | int    | 0      | the ListOpportunities DB read budget  | 20000                     |
+      | xstockstrat-analysis   | analysis.opportunity.live_enrich_timeout_ms      | int    | 0      | the live-enrich timeout in ms         | 3000                      |
