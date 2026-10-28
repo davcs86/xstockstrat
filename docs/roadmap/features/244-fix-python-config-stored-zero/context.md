@@ -748,3 +748,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `tools.py:715` and `NamespaceEditor.tsx:71-76` still match; every cited surface file exists.
 - Step 18 is an operator-only rollout (DB audit, dev smoke). It needs DB/deploy access, so the operator runs it.
 - Next: Step 18 rollout audit (operator), then the integration PR (merge held).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 18 (deferred to operator)
+
+### Step 18 — docs: rollout audit and consumer-surface verification (C-14) [pending — operator]
+- Deferred to the operator (P-03). This session has no DB access and no dev deploy, so it cannot run the
+  Instruction-1 audit queries or the four Instruction-2 dev smokes. The step **Status** stays `pending`.
+- The integration PR merge is held until the operator records the audit row counts and classification (FR-3 /
+  honour / malformed), the four smoke outcomes and the restored values in this file under
+  `## Session <date> — rollout (dev)`, then `(prod)`, so the step's Verification greps pass. The full list is in the
+  implementation-spec Deviation Log.
+- Code-side, nothing is pending. Re-checked this session: `configServiceImpl.ts:99` (the bounds comment; the registry
+  is at `:100`), `:466-469` (the `create_key` gate), `:582` (`parseInt` → `NaN`), and the `tools.py` `set_config` /
+  `run_backtest` / `list_opportunities` symbols. Every cited UI surface file exists.
+- Not verified here: Step 15's migration on dev, the FR-5 seed audit, and 243's heal status. All three are
+  operator-side.
+- TDD: N/A (rollout).
+- Next: the operator runs the Step 18 rollout; then open the integration PR and hold the merge.
