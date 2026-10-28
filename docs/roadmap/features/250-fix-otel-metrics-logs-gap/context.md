@@ -222,3 +222,37 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `226-fix-otel-trace-export` (launched) on the collector header, `observability.md`, `grafana-cloud.md`,
   `packages/otel/CLAUDE.md:4`, the otel constitution, root findings `:17`/`:18` and the dashboards README attribute
   bullet (rebase-only; the bullet is preserved by Step 5). No config-key, proto-field or migration collision.
+
+## Session 2026-10-23 — P-0 amendment (feature 274 prerequisite)
+
+- Applied before any step started: F-09 re-check passed (`status.md` = `implementation-ready`; all 13
+  `implementation-spec.md` steps `**Status**: pending`).
+- Branch synced with `origin/main-dev` (it carried no unique content; conflicts in `ci.yml`/`CLAUDE.md` took
+  main-dev, ledger files kept both sides).
+- **P-1 retired**: no `trace-derived-alerting` `/sdd-story`. Follow-up is feature
+  `274-otel-metrics-logs-export`. Every citation literal and the Step 10/11 4-site regex now use
+  `docs/roadmap/features/274-otel-metrics-logs-export/`. Step 1 kept (number unchanged, so no renumbering) as a
+  verification marker that the 274 dir is on the branch.
+- **Guard Part 2 annotated** "implement now; retire in 274 PR-B" in `design.md` and `implementation-spec.md`
+  Step 11. 250 still implements it.
+- **C-16 CHANGE sign-off mirrored** from 274 `context.md` (R1 gate, 2026-10-21, operator): approves 274
+  retiring 250's guard Part 2 ("docs list only exported signals"). Verbatim operator answer there: "Amend 250
+  before it runs".
+- `design.md` §6 carries a dated amendment block; its original text is unchanged below it.
+- `merge-order.md` row for 250 → 274 updated on the same branch (250 → 274 PR-B hard on file overlap; PR-A follows
+  250 by operator order).
+- Open Threads: `/sdd-review fix-otel-metrics-logs-gap impl-spec` re-run required (recorded below once run).
+- `/sdd-review impl-spec` re-run (spec-reviewer, 2026-10-23): FAIL on one blocker, fixed in the same P-0 change. The
+  literal `274-otel-metrics-logs-export` contains `metrics-logs`, which the guard's generic Part 2 token
+  `metrics.{0,12}logs` matches, so the cites required by Steps 3/6/8 would fail the guard's own green case. Fix: the
+  guard strips the case-exact 274 path alongside the sanctioned literal (Step 11 item 4); Step 3/6/7 verification
+  greps `sed`-strip it first; Step 10 gains a follow-up-path case (exact green; recased and trailing-prose red).
+  Warnings fixed: stale `## Prerequisite` heading renamed; design.md `:38` and §8 step 1 annotated; 274's number is
+  immutable so Step 10's dir-exists dependency is durable. Re-run of the review after the fix is the gate to push.
+- Second re-review (same day): the OTEL-2 retired marker in `packages/otel/docs/context-constitution.md` (Step 8
+  item 2) was specced to cite the defect basename, whose `metrics-logs` trips the generic token outside the two
+  exempt findings files. Pre-existing in 250's spec, not caused by P-0. Fixed: marker cites feature 250 only. Step 3
+  item 4 gains a wording caution for the cite line.
+- Third re-review (spec-reviewer, 2026-10-23): PASS, 0 blockers, 0 warnings. Non-blocking notes carried to
+  `/sdd-execute`: Step 3 and Step 8 verification lack the sed-stripped generic-token grep (Step 11 is the backstop).
+  P-0 is complete: 250 may now execute; 274 `/sdd-spec` follows 250's merge.

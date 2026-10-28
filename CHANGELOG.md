@@ -3,6 +3,16 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-27
+
+### Features
+- homelab-compose-deploy: Deploy xstockstrat to the homelab VMs (staging and production) through homelab-edge's tailnet and forced-command app-deploy gate, in parallel with the DigitalOcean deploys, with a digest-pinned Compose stack and a gRPC health service on the Go services so the gate's health-gated rollback covers every service.
+
+### Summary
+33 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-22
 
 ### Features

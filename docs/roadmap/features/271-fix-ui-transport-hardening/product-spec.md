@@ -23,6 +23,28 @@
 **Expected.** Every server-side UI gRPC call has a bounded default deadline (overridable per call), including
 `refreshSession`; the eight segment health routes are reachable without a session.
 
+## Functional Requirements
+
+- **FR-1.** Every server-side unary gRPC call made through the UI transport (`src/lib/connectClients.ts`) is bounded
+  by a default deadline when the caller passes no `timeoutMs`; a per-call `timeoutMs` still overrides it. This
+  includes `refreshSession` (`src/lib/identity.ts`), so an unresponsive identity backend ends in the middleware's
+  existing refresh-failed branch (redirect to `/auth/login` with session cookies cleared) instead of a hang.
+  Long-lived server streams (`notifyClient.streamAlerts`, proxied by `traderBff.ts` and consumed by
+  `AlertStream.tsx`) are not cut off by this default.
+- **FR-2.** The eight segment health routes (`/trader/health`, `/trader/api/health`, `/insights/health`,
+  `/insights/api/health`, `/config-ui/health`, `/config-ui/api/health`, `/accounts/api/health`,
+  `/accounts/api/agent-health`) reach their route handlers without a session (no redirect to `/auth/login`).
+- **FR-3.** Every other route under those segments stays gated by auth. The health exclusion matches the exact
+  health paths only, not any path that merely starts with or contains `health`.
+
+## Consumer Surface(s)
+
+- **Probes and uptime checks** (DO App Platform health checks, external uptime monitors): the eight segment health
+  routes return their handler response instead of a redirect (FR-2).
+- **Signed-in users of every segment** (`/trader`, `/insights`, `/config-ui`, `/accounts`): a user with an expired
+  access token gets redirected to `/auth/login` within the default deadline when identity is unreachable, instead
+  of a hung navigation (FR-1). No visible change when identity is healthy.
+
 ## Reproduction Steps
 
 1. D-37: point `IDENTITY_ENDPOINT` at a listener that never responds; load a protected page with an expired access
@@ -51,6 +73,17 @@ D-37: the mTLS transport wrapper never set a default deadline. D-38: health rout
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
 after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on
 dev.
+
+## Open Questions
+
+1. **Default deadline value.** Proposed: 10s (the transport default; per-call `timeoutMs` overrides keep their
+   current values). To confirm in `/sdd-design`; AC-1/AC-2 assert against whatever value is chosen.
+2. **Constant vs `ui.*` config key.** Proposed: a code constant (no config change). If it becomes a key it must
+   follow C-05 naming (`ui.<category>.<key>`), the Fix Scope config box flips, and the feature escalates to quick
+   design with config-team approval. Note that the `ui` namespace is currently read only via a one-shot `GetConfig`
+   in `insightsBff.ts`, so a live-updating key would need new wiring.
+3. **Streaming calls.** FR-1 exempts long-lived server streams from the default. Design must pick how (unary-only
+   default, or an explicit per-stream opt-out) and keep `streamAlerts` open past the default deadline (AC-5).
 
 ## Out of Scope
 
