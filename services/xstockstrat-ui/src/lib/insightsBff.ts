@@ -24,8 +24,8 @@ import {
   backendHeaders,
   forward,
   forwardAdmin,
-  FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
+import { FUNDAMENTALS_TIMEOUT_MS } from '@/lib/deadlines';
 import { nativeConfigEnvironment } from '@/lib/deploymentEnv';
 
 const router = createBffRouter();

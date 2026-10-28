@@ -563,3 +563,11 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   changes an existing `@AC` rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps: open the PR and
   hold the merge.
 - Plan: Steps 1-10 in order as one commit per step on `feature/fix-ui-transport-hardening`, then a single integration PR to `main-dev`.
+
+## Session 2026-10-28 — Step 1 (sdd-execute sequential)
+
+- Tooling setup (steps 1–10): node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` ⬇ (worktree-local; the main worktree has no `node_modules` to symlink) · Chromium pre-provisioned (Steps 2/3/5/9).
+- Step 1 done: created `src/lib/deadlines.ts` (leaf, no imports: `DEFAULT_UNARY_TIMEOUT_MS` 30_000, `REFRESH_TIMEOUT_MS` 10_000, `LONG_RPC_TIMEOUT_MS` 300_000, `ORDER_MUTATION_TIMEOUT_MS` 60_000, `FUNDAMENTALS_TIMEOUT_MS` 15_000 moved from `bffShared.ts` with its feature-220 comment). `connectClients.ts` unary wrapper forwards `timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS` (relative import); `stream` wrapper and lazy `get()` unchanged. `insightsBff.ts` / `traderBff.ts` import `FUNDAMENTALS_TIMEOUT_MS` from `@/lib/deadlines`; no re-export from `bffShared.ts`.
+- TDD (AC-1): a temporary probe of Step 2 vitest case (b) (mocked `createGrpcTransport`, `identityClient.revokeToken`) — red: `expected undefined to be 30000` → green: passed. The probe was deleted (Step 2 owns the committed `connectClients.test.ts`).
+- Verification: greps pass, `DEFAULT_UNARY_TIMEOUT_MS` count = 2, `pnpm run lint` ✓ (pre-existing warnings only), `pnpm run build` ✓ (`@AC-6 @feature-128`), `pnpm run test:unit` 46 files / 237 tests ✓. `git diff -U0` shows no `stream(` change.
+- Deviation: `pnpm run format:check` fails on 10 pre-existing unformatted files outside Step 1 — scoped prettier check on the Step 1 files passes (Deviation Log).

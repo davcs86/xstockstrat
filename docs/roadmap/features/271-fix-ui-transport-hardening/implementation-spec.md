@@ -76,7 +76,7 @@ There are no UI page or route additions, so C-10(a) nav registration does not ap
 
 ### Step 1 — service: Leaf `deadlines.ts` + unary transport default
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/deadlines.ts` — create
@@ -631,3 +631,9 @@ grep -n "deadlines.ts" services/xstockstrat-ui/docs/context-constitution.md
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — `pnpm run format:check` fails on pre-existing drift (2026-10-28)
+
+- **What**: Step 1 **Verification** chains `pnpm run format:check`, which exits 1 on 10 files this step does not touch (`src/app/config-ui/users/page.tsx`, `src/app/insights/pnl-patterns/page.tsx`, `src/components/insights/PerformanceDashboard.tsx`, `src/components/trader/CredentialStatusBadge.tsx`, `src/hooks/{useAccountPortfolios,useOrders,useOrderUpdates,useSignalAttribution}.ts`, `src/lib/performanceMetrics{,.test}.ts`).
+- **Why not fixed here**: reformatting unrelated files is outside Step 1 **Files** (F-08). CI does not run `format:check` (`.github/workflows/ci.yml`); the pre-commit hook formats staged files only.
+- **Disposition**: CI-equivalent fallback — `prettier --check` scoped to the five Step 1 files passes; every other Verification clause (greps, count = 2, `lint`, `build`) passes, and the `stream(` wrapper shows no diff.

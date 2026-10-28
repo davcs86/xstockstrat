@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ui-transport-hardening-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1, 3, 7, 10 re-specced against current codebase (line drift only; Step 10 findings path disambiguated) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 1 done — leaf `deadlines.ts` + 30s unary transport default |
 
 ---
 

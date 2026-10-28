@@ -21,8 +21,8 @@ import {
   backendHeaders,
   forward,
   forwardAdmin,
-  FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
+import { FUNDAMENTALS_TIMEOUT_MS } from '@/lib/deadlines';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
 const router = createBffRouter();
