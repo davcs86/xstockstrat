@@ -185,7 +185,6 @@ ambiguity is logged here).
   verify the **writer** guarantees that state — deriving from a column nothing canonicalizes is how
   this defect existed in the first place.
 
-
 ### 2026-07-29 — 081-qa-capability — assumption
 - **Mistake**: A capability was asserted from **advertised metadata** rather than from the producer's
   behavior, and a feature was designed on top of it. The GitHub API reports `has_issues: true` for
