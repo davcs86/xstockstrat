@@ -24,7 +24,7 @@ from app.engine.pnl_pattern_consumer import SnapshotComposer
 from app.handlers import servicer as servicer_mod
 from app.handlers.servicer import _row_to_strategy_definition
 from app.services.evaluator import StrategyEvaluator
-from tests.conftest import RecordingStub, ctx_with
+from tests.conftest import RecordingStub, ctx_with, fundamentals_row
 from tests.test_analysis_servicer import make_servicer
 from tests.test_get_attribution import _FakePositionsRepo, _FakeSnapshotsRepo, _sig
 from tests.test_pnl_pattern_consumer import ORDER_PAYLOAD, make_consumer, make_event
@@ -218,7 +218,7 @@ def _fundsignal_loop(ingest, indicators):
     loop._db.fetchrow = AsyncMock(return_value={"symbol": "AAPL"})
     loop._marketdata.GetFundamentalsMulti = AsyncMock(
         side_effect=lambda req, metadata=(): SimpleNamespace(
-            fundamentals=[SimpleNamespace(symbol=s, **_FUND_VALUES) for s in req.symbols]
+            fundamentals=[fundamentals_row(s, **_FUND_VALUES) for s in req.symbols]
         )
     )
     return loop

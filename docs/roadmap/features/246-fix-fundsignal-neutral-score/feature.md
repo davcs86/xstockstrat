@@ -19,6 +19,7 @@
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (8 rounds, full; cap lifted to 8 by operator override) and approved by the operator 2026-10-21; recon.md + design.md written; B.1 spec amendments applied; B.2/B.3 defect reports filed |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f); origin/main-dev merged into the branch |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 1 (test) done: `fundamentals_row` factory, fixture migration, AC-1/AC-2/AC-3 + WARN wiring tests (13 RED as specified) |
 
 ---
 

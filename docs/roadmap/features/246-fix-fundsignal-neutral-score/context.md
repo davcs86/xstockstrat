@@ -514,3 +514,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Status: `implementation-ready` → `in-progress` (status.md, feature.md history row).
 - Carried open threads: release gate (b) needs DO dev log access for `_warn_unscored`; overlap with 241/252/240
   to be re-checked against the merged tree before Step 1 anchors are trusted.
+
+### Step 1 — test: `fundamentals_row` factory, fixture migration, AC-1/AC-2/AC-3 regression and WARN wiring tests [done]
+- Added `fundamentals_row` to `tests/conftest.py` (real `marketdata_pb2.Fundamentals`, `missing` passed verbatim) and
+  moved `_fund`, `test_owner_header_guard.py` `_FUND_VALUES` rows and `_snapshot_resp` onto it (behaviour-neutral:
+  74 pre-existing tests in the three files still pass). Added `BUILTIN_SCORER_METRICS` and `TestUnscoredSymbols`
+  (13 cases) to `test_fundsignal_loop.py`. Discovery: every Step 1 anchor matched the spec on the merged tree, so the
+  241/252/240 overlap concern did not affect Step 1.
+- TDD red (pre-Step-2 tree): AC-1 `assert 6 == 1` (six IngestSignal calls); AC-2 conviction `0.6 == 0.3`; AC-3
+  `2 == 1` ExecuteFormula calls; abort/formula-exception WARN tests `0 == 1`; all-dataless `signals_emitted 2 == 0`;
+  zero-value table 0.5 for all five; all-missing `0.5 is None`; `_warn_unscored` AttributeError. Full suite:
+  13 failed (only the new tests), 1276 passed. `ruff check .` and `ruff format --check .` clean. Green → Step 2.
+- Files modified: `services/xstockstrat-analysis/tests/conftest.py`, `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`,
+  `services/xstockstrat-analysis/tests/test_owner_header_guard.py`, `services/xstockstrat-analysis/tests/test_fundamentals_formula_servicer.py`
+- Deviations: module-local `_serve_rows` / `_unscored_warns` helpers (see Deviation Log).

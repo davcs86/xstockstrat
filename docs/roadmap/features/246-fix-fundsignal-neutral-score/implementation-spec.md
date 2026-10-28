@@ -136,7 +136,7 @@ Every file design.md § Docs names is in exactly one step's **Files**:
 
 ### Step 1 — test: `fundamentals_row` factory, fixture migration, AC-1/AC-2/AC-3 regression and WARN wiring tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify
@@ -440,3 +440,14 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — 2026-10-28 — module-local test helpers in `test_fundsignal_loop.py`
+
+- **Spec said**: each `TestUnscoredSymbols` cycle overrides `GetFundamentalsMulti` with an `AsyncMock` serving a
+  per-test `rows` dict, and asserts on the unscored WARN record.
+- **Actual**: the override and the WARN filter are two module-local helpers (`_serve_rows`, `_unscored_warns`,
+  keyed on the `"unscored (no fundamentals)"` marker) shared by the class's tests; same behaviour, one file
+  (C-13 compliant). `ruff check --fix` (I001) placed the new conftest `gen` import in its own group above the
+  `app` import.
+- **Disposition**: in scope, no behaviour change. The Verification's GREEN half (full suite + coverage) runs after
+  Step 2, as the step specifies; Step 1 verified its RED half.
