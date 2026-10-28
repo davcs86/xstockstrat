@@ -13,10 +13,10 @@
 The fix narrows to traces, as design.md § Chosen Approach requires. No runtime, proto, migration, config-key
 or collector-pipeline change (recon.md:86-90). The order follows design.md §8:
 
-1. **Prerequisite P-1** (outside `/sdd-execute`, § Prerequisite below) lands the follow-up
-   `/sdd-story trace-derived-alerting` (`idea`) on main-dev first, so its number is reserved before any 250 file
-   cites it. Step 1 is a verification-only marker: it confirms the dir reached the 250 branch and records the
-   resolved `NNN`. No step PR targets main-dev (F-03, `docs/sdd/constitution.md:79`).
+1. **Prerequisite P-1 is retired** (P-0 amendment, 2026-10-23). The follow-up is feature
+   `274-otel-metrics-logs-export` (already on main-dev, `design-approved`), not a `trace-derived-alerting` story.
+   Step 1 is a verification-only marker: it confirms that dir is on the 250 branch. No step PR targets main-dev
+   (F-03, `docs/sdd/constitution.md:79`).
 2. Steps 2-8 edit the Grafana assets, the docs and the constitution/findings files. They are `config`/`docs`
    steps, so TDD is N/A. Each one self-checks with the guard's own token regexes (grep), so the guard step does
    not hit residual drift late.
@@ -47,7 +47,7 @@ recon.md:64). No UI segment or Agent tool step is needed. This is a recorded dec
 |---|---|---|
 | `@AC-1` alert rules query only produced series | 10, 11 | 2 |
 | `@AC-2` dashboard queries target only produced series | 10, 11 | 4 |
-| `@AC-3` observability docs list only exported signals | 10, 11 | 3, 5, 6, 7, 8 (and P-1 / Step 1 for the cited follow-up) |
+| `@AC-3` observability docs list only exported signals | 10, 11 | 3, 5, 6, 7, 8 (and Step 1 for the cited follow-up) |
 
 Business rules (C-16):
 - `@AC-3 @feature-171` (`docs/sdd/business-rules/platform.feature:144-149`) is preserved by Step 5 and asserted by
@@ -56,53 +56,21 @@ Business rules (C-16):
 - At integration, `/sdd-execute` promotes `@AC-1..3 @feature-250` into `docs/sdd/business-rules/platform.feature`.
   `.feature` files stay outside the guard glob (design.md §4).
 
-## Prerequisite (outside `/sdd-execute`)
+## Prerequisite (retired)
 
-### P-1 — Land the follow-up `/sdd-story trace-derived-alerting` on main-dev
+### P-1 — Retired (P-0 amendment, 2026-10-23)
 
-Not a numbered step and not a step PR: F-03 (`docs/sdd/constitution.md:79`;
-`.claude/skills/sdd-execute/SKILL.md:470`) forbids a step PR to main-dev. It runs as its own `/sdd-story`
-session with its own docs-only PR to main-dev (F-02), before `/sdd-execute` starts Step 1.
-
-**Files** (created by `/sdd-story` on a branch off `origin/main-dev`; `<NNN>` = `max(existing NNN) + 1` across
-main-dev and in-flight branches at creation time, root `CLAUDE.md` § Feature Roadmap):
-- `docs/roadmap/features/<NNN>-trace-derived-alerting/status.md`
-- `docs/roadmap/features/<NNN>-trace-derived-alerting/feature.md`
-- `docs/roadmap/features/<NNN>-trace-derived-alerting/product-spec.md`
-- `docs/roadmap/features/<NNN>-trace-derived-alerting/acceptance.feature`
-- `docs/roadmap/features/<NNN>-trace-derived-alerting/context.md`
-
-**Codebase Evidence**:
-- The dir does not exist yet: `git ls-tree -r --name-only origin/main-dev docs/roadmap/features | grep -i
-  trace-derived` returns nothing (2026-10-21).
-- 253 is already taken on main-dev: `git ls-tree -d --name-only origin/main-dev docs/roadmap/features/` lists
-  `253-fix-edgar-companyfacts-decode` as the highest prefix (re-verified 2026-10-21). design.md §6's "253 today"
-  is stale, so `<NNN>` ≥ 254.
-- The caveat source is `packages/proto/analysis/v1/analysis.proto:13-14`: `RunBacktest` and `ScoreStrategy`
-  are unary RPCs that clients invoke, not a scheduled producer.
-- The removed assets are in `packages/otel/alerts/alert-rules.yaml:26`, `:71` and `:116`, and in
-  `packages/otel/alerts/mute-timings.yaml:18`.
-
-**Instructions**:
-1. Run `/sdd-story trace-derived-alerting` and leave it at status `idea`. The story text must contain:
-   - the removed rule UIDs `xstk-error-rate-high`, `xstk-p99-latency-high` and `xstk-analysis-no-scoring`,
-     plus the mute timing `outside-us-market-hours`;
-   - the caveat that `RunBacktest`/`ScoreStrategy` are client-invoked (`analysis.proto:13-14`), so the stall
-     definition must be re-derived, not restored as written;
-   - the candidates to verify first: TraceQL-metrics alerting, Grafana span-metrics, and fix (b) metric/log
-     export with operator sign-off (C-11);
-   - the note that `scripts/check-otel-produced-signals.sh` Part 1 and P3-count must be relaxed when rules
-     return.
-2. Open a docs-only PR to `main-dev` (F-02) and merge it. The operator owns this merge.
-
-**Done when**: `git ls-tree -d --name-only origin/main-dev docs/roadmap/features/ | grep -E
-'/[0-9]{3}-trace-derived-alerting$'` prints one dir. `/sdd-execute` BRANCH SYNC then brings it onto the 250
-branch (`git merge -X ours origin/main-dev`, `.claude/skills/sdd-execute/templates/branch-sync.md:35`).
+The `trace-derived-alerting` `/sdd-story` is not created. Feature 274 (`otel-metrics-logs-export`, operator
+decision recorded in its `context.md` R1 gate) restores the removed alerts and dashboards by exporting metrics
+and logs, so every follow-up citation in this spec points at
+`docs/roadmap/features/274-otel-metrics-logs-export/`. 274's own story text carries the removed rule UIDs, the
+`RunBacktest`/`ScoreStrategy` client-invoked caveat (`analysis.proto:13-14`) and the guard-relaxation note
+(274 FR-3, FR-6).
 
 ## Step Dependencies
 
-- P-1 must be merged to main-dev before Step 1 runs. Step 1 gates Steps 3, 6 and 8, which cite the follow-up
-  dir, and Step 10, which asserts the dir exists on the branch.
+- Step 1 gates Steps 3, 6 and 8, which cite the follow-up dir (274), and Step 10, which asserts the dir exists
+  on the branch. No operator prerequisite remains (P-1 retired).
 - Step 3 requires Step 2: the README describes the new `alert-rules.yaml` and the deleted `mute-timings.yaml`.
 - Step 5 requires Step 4: the README describes the outcome of the dashboard gate. On the fallback, the
   fence also lists `service-health.json`.
@@ -119,43 +87,42 @@ branch (`git merge -X ours origin/main-dev`, `.claude/skills/sdd-execute/templat
   `context.md:150`; collector header comment, 226 `implementation-spec.md:570`). Steps 5-8 re-edit that wording on top of it; BRANCH SYNC's main-dev merge keeps line cites
   current. Step 5 keeps the attribute bullet 226 preserved (226 `design.md:76`).
 - Deferred capability: there is no paging for error rate, latency or analysis scoring until
-  `trace-derived-alerting` (P-1) lands. That is acceptable only because the dir is reserved and cited (C-14 /
+  feature 274 restores them. That is acceptable only because 274 is reserved and cited (C-14 /
   design.md Open Risks).
 
 ---
 
-### Step 1 — docs: Verify the P-1 follow-up dir is on the 250 branch and record its `NNN` (marker)
+### Step 1 — docs: Verify the 274 follow-up dir is on the 250 branch (marker)
 
 **Status**: `pending`
 **Service**: `docs/roadmap/features/` (read-only check on `feature/fix-otel-metrics-logs-gap`)
 **Files**:
-- None. Verification only. The resolved `<NNN>` goes into 250's `context.md`, which F-08 always allows.
+- None. Verification only.
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- P-1 (§ Prerequisite) creates the dir on main-dev through its own PR. No step of this spec opens a main-dev PR
-  (F-03, `docs/sdd/constitution.md:79`; `.claude/skills/sdd-execute/SKILL.md:470`).
+- The follow-up is feature `274-otel-metrics-logs-export`, already on main-dev (P-1 retired by the P-0
+  amendment). No step of this spec opens a main-dev PR (F-03, `docs/sdd/constitution.md:79`;
+  `.claude/skills/sdd-execute/SKILL.md:470`).
 - BRANCH SYNC merges `origin/main-dev` into the dev branch before each step (default modes) or once per feature
-  (sequential): `.claude/skills/sdd-execute/templates/branch-sync.md:35`. After P-1 merges, the dir is on the
-  250 branch with no step commit.
+  (sequential): `.claude/skills/sdd-execute/templates/branch-sync.md:35`, so the dir is on the 250 branch with no
+  step commit.
 
 **TDD**: N/A (docs, verification-only marker)
 
 **Covers**: —
 
 **Instructions**:
-1. If the Verification's first command prints nothing, P-1 has not landed. Block the step and ask the operator
-   to run P-1 (P-03). Do not create the dir on the 250 branch: its number would not be reserved (design.md §6,
-   Rejected Alternatives).
-2. Record the resolved `<NNN>` in 250's `context.md`. Steps 3, 6 and 8 cite
-   `docs/roadmap/features/<NNN>-trace-derived-alerting/` verbatim.
+1. If the Verification's commands print nothing, BRANCH SYNC has not brought the dir onto the 250 branch. Re-run
+   BRANCH SYNC. Do not create the dir on the 250 branch.
+2. Steps 3, 6 and 8 cite `docs/roadmap/features/274-otel-metrics-logs-export/` verbatim.
 
 **Verification**:
 ```bash
 git fetch origin
-git ls-tree -d --name-only origin/main-dev docs/roadmap/features/ | grep -E '/[0-9]{3}-trace-derived-alerting$'   # → one dir
-cat docs/roadmap/features/[0-9][0-9][0-9]-trace-derived-alerting/status.md   # → idea (on the 250 branch, after BRANCH SYNC)
+git ls-tree -d --name-only origin/main-dev docs/roadmap/features/ | grep -E '/274-otel-metrics-logs-export$'   # → one dir
+test -f docs/roadmap/features/274-otel-metrics-logs-export/status.md && echo ok   # → ok (on the 250 branch, after BRANCH SYNC)
 ```
 
 ---
@@ -214,7 +181,7 @@ cat docs/roadmap/features/[0-9][0-9][0-9]-trace-derived-alerting/status.md   # �
 **Instructions**:
 1. Rewrite `packages/otel/alerts/alert-rules.yaml` so it contains, in order:
    - A comment of 2 lines at most, with no Part 1 token, for example: `# No rule may target a metric or log
-     datasource until a produced path is recorded.` / `# Follow-up: trace-derived-alerting (see README.md).`
+     datasource until a produced path is recorded.` / `# Follow-up: feature 274 (see README.md).`
    - `apiVersion: 1`.
    - `deleteRules:` with one `- orgId: 1` / `uid: <uid>` item each for `xstk-error-rate-high`,
      `xstk-p99-latency-high` and `xstk-analysis-no-scoring`.
@@ -289,8 +256,8 @@ uv run --no-project --with pyyaml python3 -I -c "import yaml;d=yaml.safe_load(op
    <!-- /otel-guard:removed-assets -->
    ```
 
-4. Cite the follow-up by path: `docs/roadmap/features/<NNN>-trace-derived-alerting/` (from Step 1). It restores
-   error-rate, latency and analysis-scoring detection.
+4. Cite the follow-up by path: `docs/roadmap/features/274-otel-metrics-logs-export/` (Step 1 confirms the dir). It restores
+   error-rate, latency and analysis-scoring detection. Keep that line free of generic Part 2 tokens (never write "metrics and logs" on it).
 5. Keep `## Notification routing` (`:48-53`) unchanged.
 6. Wording rule (design.md §3): never state a removed count in prose. Never name an xstk UID, the mute timing
    or a deleted file outside the fence.
@@ -302,7 +269,7 @@ f=packages/otel/alerts/README.md
 ! grep -n -E 'DS_LOKI|DS_PROMETHEUS|rpc_server_duration|service_name[[:space:]]*=|P99' "$f"
 ! grep -n -i -E '(one|two|three|four|five|six|[0-9]+)[[:space:]]+(V1[[:space:]]+)?(dashboards?|alert rules?)' "$f"
 grep -c -F 'Metrics and logs are not exported (feature 226).' "$f"   # → 1
-grep -n -E 'docs/roadmap/features/[0-9]{3}-trace-derived-alerting/' "$f"
+grep -n -E 'docs/roadmap/features/274-otel-metrics-logs-export/' "$f"
 awk '/<!-- otel-guard:removed-assets -->/{i=1;next}/<!-- \/otel-guard:removed-assets -->/{i=0;next}!i' "$f" | grep -n -E 'xstk-|outside-us-market-hours|mute-timings\.yaml' && exit 1 || true
 ```
 
@@ -454,7 +421,7 @@ Plus the dev-import gate outcome recorded in `context.md`.
 **Verification**:
 ```bash
 f=packages/otel/dashboards/README.md
-! grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|log error|error logs' "$f" | grep -v -F 'Metrics and logs are not exported (feature 226).'
+! sed 's#docs/roadmap/features/274-otel-metrics-logs-export/##g' "$f" | grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|log error|error logs' | grep -v -F 'Metrics and logs are not exported (feature 226).'
 ! grep -n -E 'DS_LOKI|DS_PROMETHEUS|rpc_server_duration|service_name|P99|trading_mode' "$f"
 ! grep -n -i -E '(one|two|three|four|five|six|[0-9]+)[[:space:]]+(V1[[:space:]]+)?(dashboards?|alert rules?)' "$f"
 grep -c -E 'service\.name' "$f" && grep -c 'deployment.environment' "$f" && grep -c 'platform' "$f"
@@ -528,7 +495,7 @@ grep -c -E 'service\.name' "$f" && grep -c 'deployment.environment' "$f" && grep
    - Fence the alert UIDs, `outside-us-market-hours` — mute timing, and `mute-timings.yaml` — file, exactly as
      in Step 3.
    - Delete the DS-UID substitution and mute-timing attach text (`:261-265`).
-   - Cite `docs/roadmap/features/<NNN>-trace-derived-alerting/` as the restoration path.
+   - Cite `docs/roadmap/features/274-otel-metrics-logs-export/` as the restoration path.
    - Keep the routing paragraph `:267-268`.
 8. Step 8 `:274`: "querying by `resource.service.name` in Tempo".
 9. Troubleshooting: delete `### Traces not correlating with logs` (`:313-319`).
@@ -539,10 +506,10 @@ grep -c -E 'service\.name' "$f" && grep -c 'deployment.environment' "$f" && grep
 f=docs/setup/grafana-cloud.md
 ! grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal' "$f"
 ! grep -n -E 'DS_LOKI|DS_PROMETHEUS|rpc_server_duration|service_name[[:space:]]*=|P99' "$f"
-! grep -n -i -E 'metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' "$f" | grep -v -F 'Metrics and logs are not exported (feature 226).'
+! sed 's#docs/roadmap/features/274-otel-metrics-logs-export/##g' "$f" | grep -n -i -E 'metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' | grep -v -F 'Metrics and logs are not exported (feature 226).'
 ! grep -n -i -E '(one|two|three|four|five|six|[0-9]+)[[:space:]]+(V1[[:space:]]+)?(dashboards?|alert rules?)' "$f"
 grep -c -F 'Metrics and logs are not exported (feature 226).' "$f"   # → 1
-grep -n -E 'docs/roadmap/features/[0-9]{3}-trace-derived-alerting/' "$f"
+grep -n -E 'docs/roadmap/features/274-otel-metrics-logs-export/' "$f"
 grep -n -F '.*/PlaceOrder' "$f"
 ```
 
@@ -631,7 +598,7 @@ grep -n -F '.*/PlaceOrder' "$f"
 **Verification**:
 ```bash
 for f in docs/patterns/observability.md docs/setup/CLAUDE.md docs/launch-pdfs/product-features.md packages/otel/CLAUDE.md packages/otel/otel-collector-config.yaml; do
-  grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' "$f" | grep -v -F 'Metrics and logs are not exported (feature 226).' && echo "HIT $f"
+  sed 's#docs/roadmap/features/274-otel-metrics-logs-export/##g' "$f" | grep -n -i -E 'loki|mimir|prometheus|promql|logql|all three signal|metrics.{0,12}logs|logs.{0,12}metrics|(traces|spans)[^.]{0,15}metrics|\*\*(metrics|logs)\*\*|log error|error logs' | grep -v -F 'Metrics and logs are not exported (feature 226).' && echo "HIT $f"
   grep -n -E 'DS_LOKI|DS_PROMETHEUS|rpc_server_duration|service_name[[:space:]]*=|P99' "$f" && echo "HIT $f"
 done   # → no HIT lines
 git diff -U0 06faaeb5 -- packages/otel/otel-collector-config.yaml | grep -E '^[-+]' | grep -v -E '^(---|\+\+\+) ' | grep -v -E '^[-+][[:space:]]*(#|$)' && echo "NON-COMMENT CHANGE" || true   # → nothing (YAML list items like `- otlp` still count as non-comment)
@@ -687,9 +654,9 @@ shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh
    - Evidence and example: `dashboards/service-health.json#resource.service.name = "analysis"` (panel (c),
      Step 4).
    - **Fallback branch** (no dashboard): retire OTEL-1, the same way as OTEL-2.
-2. OTEL-2 (`:17`): retire it. Replace the row with a one-line retired marker that cites feature 250 and the
-   basename `otel-metrics-logs-never-exported-defect`. The marker text must not contain
-   `rpc_server_duration`; the guard exemption covers only the findings files.
+2. OTEL-2 (`:17`): retire it. Replace the row with a one-line retired marker that cites feature 250 only. The
+   marker text must not contain `rpc_server_duration` or the defect basename: that basename contains `metrics-logs`
+   (generic Part 2 token), and the guard exemption covers only the two findings files (P-0 review fix, 2026-10-23).
 3. `:29`: repoint to `alerts/README.md`, `dashboards/README.md`. Drop `alerts/mute-timings.yaml`.
 4. `:9`: drop "chiefly the alert/dashboard metric contracts", in favor of "the short-`service.name` addressing
    rule".
@@ -698,10 +665,10 @@ shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh
      carries `otel-metrics-logs-never-exported-defect`, with resolution "narrowed to traces by feature 250".
    - Move the `:28` row out of "Filed as defect reports" into `## Resolved`, keeping the basename, per that
      file's `:22-23` rule.
-   - Cite `docs/roadmap/features/<NNN>-trace-derived-alerting/` in the narrowed `:13` text.
+   - Cite `docs/roadmap/features/274-otel-metrics-logs-export/` in the narrowed `:13` text.
 6. Root `docs/context-constitution-findings.md:18`: NARROW in place. Mark it **NARROWED (feature 250)**, carry
    the basename `otel-metrics-logs-never-exported-defect`, state "alerts/dashboards narrowed to traces; docs
-   corrected", and cite `docs/roadmap/features/<NNN>-trace-derived-alerting/`. These are the 4 follow-up cites
+   corrected", and cite `docs/roadmap/features/274-otel-metrics-logs-export/`. These are the 4 follow-up cites
    design.md §6 requires: alerts/README, grafana-cloud Step 7, and the root and otel findings.
 7. Wording rule (design.md §3), in every file this step edits, including the NARROWed findings text: never
    state a removed count in prose, and never name an xstk UID, `outside-us-market-hours` or a deleted file
@@ -718,7 +685,7 @@ for f in packages/otel/docs/context-constitution-findings.md docs/context-consti
   grep -c 'otel-metrics-logs-never-exported-defect' "$f"
 done   # → no UNEXEMPT lines; each count ≥ 1
 ! grep -n -E 'xstk-(error-rate-high|p99-latency-high|analysis-no-scoring|signal-pipeline|infrastructure|trading-service)|outside-us-market-hours|mute-timings\.yaml' "$c" packages/otel/docs/context-constitution-findings.md docs/context-constitution-findings.md   # wording rule
-grep -l -E 'docs/roadmap/features/[0-9]{3}-trace-derived-alerting/' packages/otel/alerts/README.md docs/setup/grafana-cloud.md packages/otel/docs/context-constitution-findings.md docs/context-constitution-findings.md | wc -l   # → 4
+grep -l -E 'docs/roadmap/features/274-otel-metrics-logs-export/' packages/otel/alerts/README.md docs/setup/grafana-cloud.md packages/otel/docs/context-constitution-findings.md docs/context-constitution-findings.md | wc -l   # → 4
 ```
 
 ---
@@ -856,6 +823,10 @@ GREEN comes at Step 11.
      guard must not stop at the first tag.
    - **Strip case**: an appended recased copy, `metrics and logs are not exported (feature 226).`, trips
      `P2-generic`. The exact literal does not.
+   - **Follow-up path strip (P-0 amendment)**: a line carrying the exact `docs/roadmap/features/274-otel-metrics-logs-export/`
+     is green in `alerts/README.md` and `grafana-cloud.md`; a recased copy
+     (`docs/roadmap/features/274-OTEL-metrics-logs-export/`) and a path with trailing prose such as
+     `... 274-otel-metrics-logs-export/ restores metrics and logs` still trip `AC-3 P2-generic`.
    - **Fence cases**:
      - a fenced `` - `xstk-error-rate-high` — alert rule `` passes, and the same line unfenced trips `P3-name`;
      - prose inside a fence trips `P3-fence`;
@@ -870,9 +841,9 @@ GREEN comes at Step 11.
      `dashboards/README.md`, the tree is green. With the fence lines removed, it trips `P3-name`.
    - **C-16**: `packages/otel/dashboards/README.md` contains `service.name`, `deployment.environment` and
      `platform`, and does not contain `trading_mode`.
-   - **Follow-up citation**: extract `docs/roadmap/features/[0-9]{3}-trace-derived-alerting/` from
+   - **Follow-up citation**: extract `docs/roadmap/features/274-otel-metrics-logs-export/` from
      `packages/otel/alerts/README.md`, `docs/setup/grafana-cloud.md` and both findings files. All 4 must be
-     present and identical, and `"$REPO_ROOT/<that dir>"` must exist.
+     present and identical, and `"$REPO_ROOT/<that dir>"` must exist. Feature 274's number is immutable (root `CLAUDE.md` § Feature Roadmap) and `/sdd-archiver` keeps the dir, so this dependency is durable.
    - **Defect report independence**: delete `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md`
      from a copy, if it was copied. The tree stays green.
    - **`.feature` exclusion**: `platform.feature` containing "Loki" does not trip.
@@ -925,7 +896,8 @@ No coverage threshold applies to bash. The fixture-backed cases are the coverage
 3. **Part 1**: scan `packages/otel/alerts/*.yaml` → `AC-1 P1`, and `packages/otel/dashboards/*.json` →
    `AC-2 P1`. Case-insensitive `prometheus|mimir|loki|promql|logql`, plus case-sensitive
    `rpc_server_duration|service_name[[:space:]]*=`.
-4. **Part 2**:
+4. **Part 2** (implement as specified; scheduled for retirement in feature 274 PR-B, operator C-16 CHANGE
+   sign-off in 274 `context.md` R1 gate):
    - SCOPE is `*.md`, `*.yaml` and `*.yml` under `docs/` and `packages/otel/`. It excludes `docs/roadmap/`,
      `docs/reports/`, the Part 1 files and `*.feature`.
    - GEN_SCOPE is the intersection of SCOPE with these files: `docs/setup/grafana-cloud.md`,
@@ -939,7 +911,9 @@ No coverage threshold applies to bash. The fixture-backed cases are the coverage
      plus case-sensitive `P99`.
    - Allowlist:
      - before matching, strip the case-exact sanctioned literal with
-       `line=${line//"Metrics and logs are not exported (feature 226)."/}`;
+       `line=${line//"Metrics and logs are not exported (feature 226)."/}`, and the case-exact follow-up path with
+       `line=${line//"docs/roadmap/features/274-otel-metrics-logs-export/"/}` (its `metrics-logs` would otherwise
+       match the generic token; P-0 amendment 2026-10-23);
      - exempt whole lines carrying `otel-metrics-logs-never-exported-defect`, only in
        `docs/context-constitution-findings.md` and `packages/otel/docs/context-constitution-findings.md`.
 5. **Part 3** (C-10):

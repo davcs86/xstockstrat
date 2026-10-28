@@ -305,3 +305,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   the source report `ref:`, and 242/243/245 cross-references on main-dev. Historical session entries above keep the old slug.
 - References to 173 (its dir and the `fix-python-config-zero-trap.feature` acceptance suites) are unchanged.
 - Next: `/sdd-execute fix-python-config-stored-zero`.
+
+## Session 2026-10-21 — post-hotfix reconciliation
+
+- Hotfix #1263 (ExecuteFormula override clamp) landed on main and was back-merged (b7e2aa94). Reconciled:
+  - Step 7 evidence anchors in indicators `servicer.py`: `:88/102/277-278/303` → `:93/107/282-285/310`.
+  - The request `or` fallback no longer exists: `_clamp_override(request.*_override, self._cfg.sandbox_*)` replaced it.
+    Step 7 leaves it unchanged; the accessor clamp guarantees its ceiling is ≥ 1, which closes the configured-≤0 hole #1263
+    leaves open. The out-of-scope example in product-spec.md is now generic.
+  - Step 17 must keep #1263's `_clamp_override` sentence in indicators `CLAUDE.md:100` and only append the FR-3 text.

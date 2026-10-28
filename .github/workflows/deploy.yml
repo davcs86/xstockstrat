@@ -97,8 +97,7 @@ jobs:
             exit 0
           fi
           certs_dir="$RUNNER_TEMP/mtls"
-          mkdir -p "$certs_dir/_ca"
-          MTLS_CA="$MTLS_CA" CERTS_DIR="$certs_dir" python3 -c 'import base64, json, os; d = json.loads(base64.b64decode(os.environ["MTLS_CA"])); ca = os.path.join(os.environ["CERTS_DIR"], "_ca"); open(os.path.join(ca, "ca.pem"), "w").write(d["ca_cert"]); open(os.path.join(ca, "ca-key.pem"), "w").write(d["ca_key"])'
+          bash scripts/mtls-provision.sh decode-ca "$certs_dir"
           CERTS_DIR="$certs_dir" bash scripts/gen-dev-certs.sh >/dev/null
           echo "MTLS_CERTS_DIR=$certs_dir" >> "$GITHUB_ENV"
           echo "Minted 12 mTLS leaves off the provided CA into $certs_dir"

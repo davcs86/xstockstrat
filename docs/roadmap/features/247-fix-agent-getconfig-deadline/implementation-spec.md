@@ -361,7 +361,7 @@ All four tests FAIL before Step 3 (RED) and PASS after it; post-Step-3 coverage 
   - DCR: `app/oauth_server.py:84` / `:87`, `:104` / `:107`.
 - Excluded paths: `client.get_config` (`app/client.py:2034-2046`) and `register_oauth_client` (`:1355`). They are left undeadlined (design.md §4(c)).
 - The comment at `app/tools.py:2365-2366` reads "Fixed bound on the undeadlined GetConfig policy read; looked up at call time (never bound as a default argument) so tests can monkeypatch it." It is false after this step.
-- The comment at `app/oauth_server.py:102` reads "identity enforces the same allowlist / https rule server-side; this is the pre-check." It is false today: identity enforces only `https://` (`services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:363-366`, design.md §4(b)).
+- The comment at `app/oauth_server.py:102` reads "identity enforces the same allowlist / https rule server-side; this is the pre-check." It is false today: identity enforces only `https://` (`services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:385-388`, design.md §4(b)).
 - Header propagation (step-constraints §B): no new outbound call. The existing `GetConfig` call keeps `metadata=_metadata()` and `mtls.secure_channel`, which preserves `@AC-5 @feature-210` (`docs/sdd/business-rules/platform.feature:238`).
 
 **TDD**: `red-green required` (GREEN for Steps 1-2; the two comment edits carry no behaviour)
@@ -471,7 +471,7 @@ Steps 1-2 are GREEN, the 227 suite still passes, and coverage is at least 40%.
      with the callers unchanged.
    - Add a second § Resolved bullet, as found-and-fixed: the `app/oauth_server.py:102` comment wrongly
      claimed that identity enforces the redirect allowlist. Identity enforces only `https://`
-     (`identityServiceImpl.ts:363-366`), and the comment was corrected in feature 247.
+     (`identityServiceImpl.ts:385-388`), and the comment was corrected in feature 247.
 4. Make these edits to `docs/context-constitution-findings.md`.
    - Move the `:33` row out of § Latent bugs into the § Resolved table (`:52-55` format:
      Finding | Resolved | How confirmed). Use Resolved = feature 247 and How confirmed =
@@ -524,7 +524,7 @@ Seven files exceeds the 5-file advisory; they are three report/sidecar pairs plu
   - `app/tools.py:541-543` (email per-URL `_fetch_url`) and `:2397-2400` (four serial reads);
   - `packages/proto/config/v1/config.proto:49` (`ConfigSnapshot`, the whole namespace);
   - `app/oauth_server.py:87-89`, `:107-110`;
-  - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:363-366`;
+  - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:385-388`;
   - `app/client.py:2034-2046` (`get_config`), `:1355` (`register_oauth_client`).
 - Teardown: the root `CLAUDE.md` § Teardown requires `/context-forge:context-constitution refresh` scoped
   to the files touched. If the plugin is unavailable, a manual reconciliation must be recorded in the PR body.
@@ -547,7 +547,7 @@ Seven files exceeds the 5-file advisory; they are three report/sidecar pairs plu
    - **`agent-dcr-fail-closed`**. Label it SECURITY POSTURE.
      - Observed: on a config stall of D or more, `/oauth/register` registers anyway. It bypasses
        `registration_enabled=false` and the allowlist (`oauth_server.py:87-89`, `:107-110`), and identity
-       checks only `https://` (`identityServiceImpl.ts:363-366`).
+       checks only `https://` (`identityServiceImpl.ts:385-388`).
      - Expected: a decision on fail-closed (503) DCR.
      - Write "FR-2 / AC-4 of feature 247 sanctioned fail-open".
    - **`agent-rpc-deadlines`**.
