@@ -204,7 +204,7 @@ grep -rln 'OfflineStateUnavailable' packages/proto/gen/go/portfolio/v1/ | head -
    (`@AC-7`/`@AC-8`/`@AC-15 @feature-163`, `@AC-43 @feature-240` PRESERVE).
 7. `deriveOfflineStatus` is unchanged; its `default → FILLED` is now unreachable for NaN/Inf.
 8. Order type, broker coverage and fill-state handling are unaffected beyond the guard: only
-   `BROKER_TYPE_OFFLINE` orders reach the confirm write (gate at `:910-912`); PARTIALLY_FILLED/FILLED derivation
+   `BROKER_TYPE_OFFLINE` orders reach the confirm write (gate at `:909-911`); PARTIALLY_FILLED/FILLED derivation
    is unchanged (FR-7). No trading-mode gate is involved (confirm never submits to a broker).
 
 **Verification**:
@@ -287,7 +287,7 @@ behavioural proof, and the coverage command guards the threshold.
   `grep -n 'emitLedgerEvent(' internal/service/*.go` (non-test) → 28 lines = definition + 27 call sites; only
   the `:1067` site changes (fails.md:2092 shared-helper trap).
 - `recomputeAndEmitOfflinePositions` (`:962`, doc comment `:960-961`) emits at `:1067` and ends with an
-  unconditional `return nil` (`:1077`); query failures already return errors (`:964-978`).
+  unconditional `return nil` (`:1078`); query failures already return errors (`:964-978`).
 - ConfirmOrder swallow `trading.go:951-954`
   (`slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted", ...)` then `return resp, nil`);
   lock `lock := s.confirmLock(order.AccountId)` (`:918`).
@@ -346,7 +346,7 @@ behavioural proof, and the coverage command guards the threshold.
    and, on error, keep the Warn and append `"positions not published; re-snapshot to retry"` to `warnings`
    (the response literal already sets `Warnings: warnings`, `:1233`). No error return there (design §2).
 7. Frozen-window confirm (`@AC-46 @feature-240`) still recomputes and emits — there is no no-op path in
-   `:962-1077`; it fails only if the ledger append fails.
+   `:962-1078`; it fails only if the ledger append fails.
 8. Fill-state completeness: PARTIALLY_FILLED and FILLED both go through the same persist → recompute → emit path;
    order type handling and broker coverage are unaffected (offline-only path).
 
@@ -442,7 +442,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 - `DeleteOfflineRealized` uses `r.pool.Exec` (`portfolio_repo.go:535`), unlike its siblings on `r.db`
   (`DeletePositionsNotInSync` `:351-367`); `NewPortfolioRepo` sets `db: pool` (`:45`) so prod behaviour is
   identical, and `NewPortfolioRepoWithDB` leaves `pool` nil (`:49-51`) — a mocked delete would nil-panic.
-- Clock seam: `func (s *PortfolioService) clock() time.Time` (`offline_valuation.go:51-56`, uses `s.now`).
+- Clock seam: `func (s *PortfolioService) clock() time.Time` (`offline_valuation.go:54`, uses `s.now`).
 - `github.com/jackc/pgx/v5 v5.9.2` (`go.mod:8`); `pgconn` already imported in service tests
   (`portfolio_offline_test.go:11`).
 - `LedgerEvent` fields `event_id = 1`, `sequence = 9`, `stream_key = 10` (`packages/proto/ledger/v1/ledger.proto`).
@@ -492,7 +492,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
    event, unchanged `consumeEventStream` behaviour).
 6. Wire it: `ConsumePositionSyncs` → `s.boundedRetry("position sync", s.processPositionSync)`;
    `ConsumeAccountDeregistrations` → `s.boundedRetry("account deregistration", s.processAccountDeregistered)`.
-   `ConsumeOrderFills` (`:168`), `:1249` and `:1297` are unchanged.
+   `ConsumeOrderFills` (`:167`), `:1249` and `:1297` are unchanged.
 7. Repo: change `DeleteOfflineRealized` (`portfolio_repo.go:535`) from `r.pool.Exec` to `r.db.Exec` (same pool
    in prod) so Step 8 can fail it through pgxmock.
 8. Comments stay ≤ 2 lines and state constraints only (root CLAUDE.md How to Act #5); the self-heal and
@@ -587,7 +587,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
   (`portfolio_repo.go:499`): Query error `:507-509`, Scan error `:516-518`, whole-call
   `return nil, fmt.Errorf("decode recent fills for %s: %w", id, err)` (`:521-523`), `rows.Err` `:527-529`.
   Single production caller: `offline_valuation.go:99` (`grep -rn GetOfflineStates --include=*.go`, non-test).
-- `type readValuation struct { states ...; accounts ... }` (`offline_valuation.go:27-30`); `valueRead`
+- `type readValuation struct { states ...; accounts ... }` (`offline_valuation.go:28-31`); `valueRead`
   (`:75`) builds `ids` from explicit ids plus offline-sourced positions (`:76-92`), returns early when empty
   (`:93-97`), then `states, err := s.repo.GetOfflineStates(...)` with the Warn + empty-map substitution
   (`:99-103`).
@@ -681,8 +681,8 @@ behavioural proof.
   (`:1351-1358`), `if st == nil { return }` (`:1359-1361`) — the unrealized-only total that D-48 leaks — then the
   offline fields (`:1362-1370`).
 - Callers: `GetPortfolio` scoped `:645`, aggregate loop `:654`; `buildAccountPortfolio` (`:1326`, calls
-  `applyAccountPnL` at `:1333`) from `ListPortfolios` single-account `:1428` and all-accounts `:1478`.
-- GetPortfolio aggregate (`:651-677`): `allOffline := len(scope) > 0` (`:652`), per-account sums of
+  `applyAccountPnL` at `:1333`) from `ListPortfolios` single-account `:1420` and all-accounts `:1472`.
+- GetPortfolio aggregate (`:650-677`): `allOffline := len(scope) > 0` (`:650`), per-account sums of
   `dayPnl`/`totalPnl` (`:655-656`), `prior`/`absCost` switch (`:657-666`), `equity` over all positions
   (`:668-670`), `TotalPnlPct` only when `allOffline` (`:675-677`).
 - `enrichPositions` (`:445-448`) discards `valueRead`'s result; `GetPosition` (`:682`, call `:688`),
@@ -700,7 +700,7 @@ behavioural proof.
 
 **Instructions**:
 1. Add a `degraded bool` parameter to `applyAccountPnL` and `buildAccountPortfolio`; pass
-   `val.degraded(id)` at every caller (`:645`, `:654`, `:1428`, `:1478`). When `degraded`:
+   `val.degraded(id)` at every caller (`:645`, `:654`, `:1420`, `:1472`). When `degraded`:
    set `p.OfflineStateUnavailable = true`; keep `p.Equity = positionsValue`; set `TotalPnl`, `DayPnl`,
    `DayPnlPct` to 0; leave `TotalPnlPct`, `RealizedPnl`, `RealizedPnlLifetime`, `FeesSinceSnapshot`,
    `FeesLifetime` nil; return before the broker/offline branches. (A degraded id is never a broker id —
@@ -742,7 +742,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 - `TestAccountPnL_OfflineStatesErrorIsNonFatal` (`offline_account_pnl_test.go:230-247`) asserts the old
   behaviour (`expectStates(mock, "u1", nil).WillReturnError(errors.New("db down"))`, `GetPortfolio` succeeds,
   Warn `"offline state unavailable"`). It becomes the GetPortfolio AC-3 marker test.
-- Helpers: `acctScenario` (`:34-50`), `expectStates` `:52`, `expectBalanceList` `:71`, `expectOfflineIDList`
+- Helpers: `acctScenario` (`:27-50`), `expectStates` `:52`, `expectBalanceList` `:71`, `expectOfflineIDList`
   `:79`, `acctSvc` `:94`, `getPortfolioAcc` `:102`, `listPortfoliosAcc` `:116`, `bothReads` `:131`,
   `TestAC29_OfflineReadParity` `:328`, `TestGetPortfolio_AC39_BrokerOfflineAndAggregate` `:377`,
   `TestGetPortfolio_AC52_NoRowsRevealsNothing` `:423`.
@@ -750,7 +750,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
   sdd-design session of context.md, inside the design the operator approved at the r3 gate. It is a recorded
   240 decision (`240-offline-account-full-pnl/context.md:399`, `:771`), not a durable `@AC-*` business rule:
   `grep -rni 'non-fatal\|GetOfflineStates' docs/sdd/business-rules/` → no hit, so no C-16 CHANGE applies.
-- `portfolio_quote_deadline_test.go:114-115`: "GetOfflineStates is left unexpected (its error is non-fatal)" in
+- `portfolio_quote_deadline_test.go:113-114`: "GetOfflineStates is left unexpected (its error is non-fatal)" in
   `expectAllAccounts` — an unexpected pgxmock query now marks the offline ids degraded instead of being
   silently ignored, so callers asserting offline P&L under this helper must be swept.
 - Fixture homes: `internal/testdata/` exists (`marks.go`, `offline_pnl.go`; `testdata.Aapl`, `testdata.AaplMid`,
@@ -778,7 +778,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
    `Equity` still includes the offline market value.
 6. Sweep: run the whole package; any test that relied on an unexpected `GetOfflineStates` being non-fatal gets
    an explicit `expectStates`/`expectOfflineStates`, or asserts the marker if degradation is the point. Update
-   the `portfolio_quote_deadline_test.go:114-115` comment to the new contract. `TestAC29_OfflineReadParity`,
+   the `portfolio_quote_deadline_test.go:113-114` comment to the new contract. `TestAC29_OfflineReadParity`,
    `..._AC39_...` and `..._AC52_...` must stay green unchanged (PRESERVE).
 7. C-13: the 500.00/100.00/200.00/120.00 values are scenario literals in one file; reuse
    `internal/testdata` symbols for symbols/quotes; a second-consumer literal moves to `internal/testdata/offline_pnl.go`
@@ -901,7 +901,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
   with the dialog placeholders `Filled quantity` / `Average fill price`; no ConfirmOrder error case exists
   (recon.md).
 - Fixtures: `PORTFOLIO_OFFLINE_FULL_PNL` (`e2e/fixtures/portfolios.ts:59`), `PORTFOLIO_ALPACA_AC30`,
-  `POSITION_OFFLINE_AAPL` (`e2e/fixtures/positions.ts:59`); catalog rows `INVENTORY.md:16-17`, `:41`.
+  `POSITION_OFFLINE_AAPL` (`e2e/fixtures/positions.ts:59`); catalog rows `INVENTORY.md:17`, `:41`.
 
 **TDD**: `red-green required`
 
@@ -953,11 +953,11 @@ grep -n 'PORTFOLIO_OFFLINE_DEGRADED\|POSITION_OFFLINE_AAPL_DEGRADED' services/xs
 - `_grpc_error_message` (`services/xstockstrat-agent/app/tools.py:223-240`): `INVALID_ARGUMENT` →
   `exc.details() or "invalid argument"` (`:238-239`); any other code incl. `UNAVAILABLE` →
   `exc.details() or str(code)` (`:240`).
-- `list_positions` (`app/client.py:2356`) returns
+- `list_positions` (`app/client.py:2357`) returns
   `MessageToDict(p, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)` per position
   (`:2377-2381`), so `offline_state_unavailable` appears as a key after Step 2.
-- `stub.ConfirmOrder` (`app/client.py:2276`) passes errors through; `manage_offline_account` catches
-  `grpc.aio.AioRpcError` (`app/tools.py:2138`).
+- `stub.ConfirmOrder` (`app/client.py:2277`) passes errors through; `manage_offline_account` catches
+  `grpc.aio.AioRpcError` (`app/tools.py:2147`).
 - Existing tests: `test_confirm_offline_order_forwards_user_and_returns_derived_status` (`tests/test_offline_client.py:31`),
   `test_list_account_positions_forwards_user_id_via_header` (`:136`).
 
