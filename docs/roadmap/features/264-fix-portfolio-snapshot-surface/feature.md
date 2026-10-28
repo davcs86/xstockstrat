@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator sign-off on @AC-4 deletion and @AC-5 change (branch b, migration 034) |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge: steps 1,3,4,5,6,8 line refs aligned; Step 6 evidence records 031 (243) / 032 (244) now committed; 034 reservation unchanged |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 
 ---
 
