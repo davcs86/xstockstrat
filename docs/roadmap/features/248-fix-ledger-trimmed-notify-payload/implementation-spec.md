@@ -99,7 +99,7 @@ surfaces. No `xstockstrat-ui` or `xstockstrat-agent` step is needed. This is a r
 
 ### Step 1 — docs: Record the hard merge-order dependencies on 252, 243 and 244
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/merge-order.md` — modify

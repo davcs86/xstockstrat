@@ -358,3 +358,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open items carried from the impl-spec review (still unaddressed): the C-18 dual bound mechanism, no queue-depth
   cap, the Step 9 RED mutation outside Files, and the Step 10 re-grep of `portfolio_service.go`. The Step 1
   merge-order confirmation is covered by standing authorization.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- Step 1 done: three rows appended to `merge-order.md` § Blocking Dependencies after the `fix-etf-flag-fill` (230)
+  row (located by content; it sat at `:92` as the spec said), so the new rows are `:93-95`: 248 after 252 (hard,
+  runner/de-guarded suites), 248 after 243 (config `031`), 248 after 244 (config `032`). The 266 → 248 row and
+  252's rebase-only note were not edited.
+- Migration claims were re-checked with `git ls-tree` against the branches. `031_heal_indicators_sandbox_keys_full_dotted` is on
+  `origin/feature/fix-sandbox-seed-keys`, and `032_analysis_zero_trap_descriptions` is on
+  `origin/feature/fix-python-config-stored-zero`. The local config tip is `030`.
+- TDD: N/A (docs). Verification: each of the three greps returned 1 hit, and `git status` showed only merge-order.md
+  plus the feature docs.
+- The task prompt titled this step "252 and 243". The re-spec'd implementation-spec.md (authoritative) also requires
+  the 244 row, and that row was added.

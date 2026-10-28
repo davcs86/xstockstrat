@@ -19,6 +19,7 @@
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps. Product spec amended per design.md § Chosen Approach 7 (FR-2 → LISTEN-connection PK read; Fix Scope → one config key `ledger.stream.resolve_timeout_ms`); AC-9 appended to acceptance.feature (C-15) |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential | Re-spec §5.3 on merged-up tree `fe047901`: config migration renumbered `032` → `033` (244 holds `032`, 243 `031`, 264 reserves `034`); Step 1 adds a 248-after-244 row; Step 9 CI anchors re-grepped; 252 precondition re-checked and still NOT met (Steps 3-11 blocked) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started under operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f); Step 3 onward held on the unmet 252 precondition |
+| 2026-10-28 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | Step 1: three Blocking Dependencies rows appended to `merge-order.md` (248 after 252, 243, 244); Steps 3-11 still held on the unmet 252 precondition |
 
 ---
 
@@ -56,4 +57,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-review fix-ledger-trimmed-notify-payload impl-spec` — validate implementation spec, then `/sdd-execute fix-ledger-trimmed-notify-payload` (after 252 `fix-identity-ledger-test-suites` merges to `main-dev`; see implementation-spec.md § Step Dependencies)
+`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 2 (config `033` seed) next; Step 3 onward only (after 252 `fix-identity-ledger-test-suites` merges to `main-dev`; see implementation-spec.md § Step Dependencies)
