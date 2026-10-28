@@ -750,7 +750,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 10 — test: UI BFF setConfig sends the session identity as `x-user-id` and no author
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.test.ts` — create
@@ -1120,3 +1120,9 @@ _Populated by /sdd-execute as implementation proceeds._
   `insightsBff.test.ts` "forces isSecret, createKey, …" fails at `:69` (`expected 'user-mallory' to be
   'user-alice'`): with the stamp gone, the `:59` fixture `author` passes through `...req`. That is exactly
   Step 10's break-list (delete `:59`, replace `:69`). **Disposition**: accepted; Step 10 restores green.
+- **2026-10-28 — Step 10 TDD red source (process note, no spec change).** Step 9 was already committed, so RED was
+  captured by temporarily restoring the pre-Step-9 `configUiBff.ts` and `insightsBff.ts` (from `HEAD~1`) in an
+  uncommitted scratch edit. Both new `author === ''` assertions failed as the step's **TDD** predicts
+  (`expected 'test-user-001' to be ''`, `expected 'user-alice' to be ''`); the `x-user-id` pins passed. The edit
+  was reverted. The C-12 `e2e/helpers/auth` import resolved under vitest, so the inline-`SignJWT` fallback was not
+  needed. Step 9's `insightsBff.test.ts:69` red window is closed. **Disposition**: accepted.

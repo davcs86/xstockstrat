@@ -24,6 +24,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 2 done: stubs regenerated (Go/Python/TS, config-only diff; freshness re-run clean; trading + config builds pass) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 3 done: config `SetConfig` credits only `x-user-id` or the authorized `x-internal-caller`; body `author` ignored (build + lint pass) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 4 done: config tests pin AC-1/AC-2/AC-3 attribution and rejection; admin fixtures send `x-user-id` (182/182 pass, c8 86.77% lines, lint 0 errors) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 10 done: `/config-ui` and `/insights` BFF SetConfig tests pin `author === ''` and the session `x-user-id` (vitest 238/238, lint 0 errors) |
 
 ---
 
@@ -64,4 +65,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 10 (test: UI BFF setConfig sends the session identity as `x-user-id` and no author)
+`/sdd-execute fix-config-audit-author-spoof sequential` — Step 11 (docs: file the SetConfig internal-caller peerSan follow-up defect)

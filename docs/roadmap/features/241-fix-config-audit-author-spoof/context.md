@@ -519,3 +519,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Out of scope, not touched: `tsc --noEmit` reports 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`
   (not in this step's verification).
 - Next: Step 10 (test: UI BFF setConfig sends the session identity as `x-user-id` and no author).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 10
+
+- Step 10 (test) is done.
+  - `insightsBff.test.ts`: the `author: 'user-mallory'` fixture is gone; the test asserts `sent.author === ''` and
+    the `setConfig` call's `x-user-id` header is `SESSION_USER`.
+  - New `configUiBff.test.ts`: admin JWT from `signTestJwt(['admin'])` / `TEST_JWT_SECRET` (`e2e/helpers/auth`, C-12),
+    POST SetConfig with no environment; asserts 200, `author === ''`, `x-user-id === TEST_USER_ID`.
+- TDD: no `@AC-*` scenario (UI guard). Red: scratch restore of the pre-Step-9 BFFs; 2/2 `author` assertions failed
+  (`expected 'test-user-001' to be ''`, `expected 'user-alice' to be ''`); reverted. Green: 5/5 in the two files.
+- Verification: `pnpm run test:coverage` 47 files / 238 tests pass (All files 71.73% lines, thresholds met);
+  `pnpm run lint` exits 0 (pre-existing warnings only); the C-12 grep hits `:3` and `:4`.
+- Step 9's `insightsBff.test.ts:69` red window is closed.
+- Next: Step 11 (docs: file the SetConfig internal-caller peerSan follow-up defect).
+
