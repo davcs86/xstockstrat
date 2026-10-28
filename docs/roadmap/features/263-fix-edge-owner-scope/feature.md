@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | Steps 2, 5, 6, 7, 8, 9, 10, 11 and 12 re-aligned with the codebase after the main-dev merge (line drift; Step 2 grpcio-tools setup; Step 12 item 6 is now verify-only because the 257-after-263 row already exists) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 
 ---
 
