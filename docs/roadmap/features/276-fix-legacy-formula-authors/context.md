@@ -238,3 +238,16 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 
 - Step 7 `ListFormulas` DB-path test gap (see above).
 - Merge-order with 244/268/243 for `tests/conftest.py` and indicators `CLAUDE.md`.
+
+---
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-legacy-formula-authors` (`-X ours`).
+- Re-spec of Steps 1-9 against the current codebase (implementation-spec.md Deviation Log, 2026-10-28):
+  - Line drift fixed: Step 1 (`manage-users.py` `WHERE is_active = TRUE` :287, `ORDER BY created_at` :288), Step 2 (`_mock_conn` :61, `FAKE_UUID`/`FAKE_NOW` :51-52), Step 4 (`OWNER_HEADERS`/`OTHER_HEADERS` :17-18), Step 9 (Migrations list :84-90).
+  - Step 2: no CI job runs `scripts/tests/`; verified locally only.
+  - Step 4: corrected the stale "no real-Postgres harness" claim (analysis `local_pg`, `ci.yml:400-404`). Decision: indicators keeps the `FakeFormulasTable` approach; reusing `local_pg` would add a CI install step and a cross-service fixture copy outside this bug fix's scope.
+  - Step 7: `ctx_with` makes `abort` raise, so assertions expect `grpc.RpcError` rather than "abort not awaited".
+  - Step 8: the runbook must state explicitly that the CLI's pooled `:25061` port deliberately deviates from `operator-db-access.md`'s direct-port guidance (F-06); index row goes in alphabetical position.
+  - Steps 3, 5, 6: evidence held; no change.
