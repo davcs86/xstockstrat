@@ -611,3 +611,23 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
 - `implementation-spec.md` updated: the decisions bullet, Step 13 item 6b, the Step 13 verification grep and the
   Step 15 CLAUDE.md limitation text. **Step 14 must add a test:** a fake pool whose `acquire()` never returns makes
   the attempt fail with `TimeoutError` within the bound and reach the replay path (no silent stall).
+
+## Session 2026-10-28 (sdd-execute sequential (sdd-batch-execute))
+
+- **Up-front confirmation:** the operator approved the up-front plan by standing authorization — operator chat
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; answers:
+  unattended checkpoints (`report`), auto-confirm C-16 promotion unless it changes an existing `@AC` rule,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; "start batch 2 in
+  parallel too".
+- Branch setup (§5.3): `git merge -X ours origin/main-dev` into the detached `origin/feature/fix-python-loop-supervision`
+  checkout (merge 4140f349).
+- **Re-spec (steps 4, 15) — line drift only, no substantive mismatch:**
+  - Step 4: `tests/test_fundsignal_loop.py` anchors moved — `class _StopLoop(Exception)` `:377` (was `:375`),
+    `_sched_loop` `:381`, `_make_loop` `:47`, `_make_cfg` `:23`, `fundsignal_module.asyncio` sleep patches `:496`/`:513`,
+    `_tick` `side_effect=_StopLoop` patches `:501`/`:516`. `fundsignal_loop.py` `_tick` `:128`, `run_forever` `:158`,
+    `:155`/`:165` raise points unchanged. Every named symbol still exists.
+  - Step 15: `merge-order.md` now has one hit for 259 at `:83`, inside the 262 row ("262 also reuses 259's
+    task-retention helper for the main.py:174 task"); 259 still has no entry of its own, so the add-entry instruction
+    stands (verification now greps the slug). Analysis `CLAUDE.md` sections drifted +1 (`:130`, `:143`, `:549`);
+    `config-startup.md:87` still says "on `AioRpcError`".
+- Status: `implementation-ready` → `in-progress`.
