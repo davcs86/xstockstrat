@@ -22,6 +22,7 @@
 | 2026-10-28 | (no status change) | /sdd-execute step 1 | Requirement amendment (C-15) applied: AC-1/AC-4/AC-5 reworded, AC-6 appended, FR-4 narrowed |
 | 2026-10-28 | (no status change) | /sdd-execute step 2 | identity compile-then-test runner landed (`tsc` → `dist/`, config scripts byte-identical); AC-1 and AC-4 green, 78/78 tests, aggregate 81.88% lines |
 | 2026-10-28 | (no status change) | /sdd-execute step 3 | identity impl suite hard-fails: swallowed `before()` import and proto try/catch removed, 67 skip guards removed, harness case added; AC-3/AC-6 identity rows green, 79/79 tests, aggregate 81.88% lines |
+| 2026-10-28 | (no status change) | /sdd-execute step 4 | ledger compile-then-test runner landed (`tsc` → `dist/`, config scripts byte-identical); AC-2 and AC-4 green, 45/45 tests, aggregate 73.7% lines |
 
 ---
 

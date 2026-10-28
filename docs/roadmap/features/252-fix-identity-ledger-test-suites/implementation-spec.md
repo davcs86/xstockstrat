@@ -484,7 +484,7 @@ git status --short                                # only this file (+ feature/co
 
 ### Step 4 — service: ledger — compile-then-test runner (scripts, tsconfig, non-impl test imports)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/package.json` — modify
