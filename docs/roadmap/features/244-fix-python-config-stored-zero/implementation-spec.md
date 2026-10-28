@@ -1263,9 +1263,10 @@ grep -n "CF-N10" docs/context-constitution-findings.md
   (product-spec Fix Scope; design §13).
 - A malformed int becomes `parseInt` → `NaN` → a present member (`configServiceImpl.ts:582`).
 - Unseeded FR-4 keys need `create_key=true` with the matching `value_type` (`configServiceImpl.ts:466-469`; agent
-  `set_config` `services/xstockstrat-agent/app/tools.py:1642,1655-1662`).
+  `set_config` `services/xstockstrat-agent/app/tools.py:1651`, `value_type`/`create_key` params `:1655-1660`,
+  docstring `:1662`).
 - Surfaces:
-  - agent `run_backtest` `tools.py:715`, `list_opportunities` `tools.py:1518`
+  - agent `run_backtest` `tools.py:715`, `list_opportunities` `tools.py:1527`
   - `/insights` backtest view `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`
   - `/trader` `src/components/trader/AlertStream.tsx`, `/accounts/notifications` `src/app/accounts/notifications/AlertInbox.tsx`
   - `/config-ui` `src/app/config-ui/[namespace]/NamespaceEditor.tsx:71-76`
