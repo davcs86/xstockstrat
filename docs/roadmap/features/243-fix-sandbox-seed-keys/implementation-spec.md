@@ -163,7 +163,7 @@ Coverage threshold: N/A, SQL harness, no coverage metric; gate = `migration-reru
 
 ### Step 2 — migration: `031_heal_indicators_sandbox_keys_full_dotted` (twin-wins heal, forward-only down)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.up.sql` — create
@@ -443,3 +443,21 @@ _Populated by /sdd-execute as implementation proceeds._
   not captured in CI.
 - **Disposition**: CI-equivalent fallback. GREEN (and RED b, if a draft 031 is pushed in Step 2) comes from the
   integration PR's `migration-rerun` job.
+
+### Step 2 — RED b not pushed as a draft; captured statically (2026-10-28)
+- **Expected**: Step 2 **TDD** says to commit and push a draft up-file without S1, then capture the
+  `config_values_scope_uniq` violation from the step PR's `migration-rerun` log.
+- **Actual**: sequential mode has no step PR, and committing a draft would be a commit before verification
+  passes (SKILL.md HARD CONSTRAINT). No draft was pushed. RED b is static: without S1, the S2 rename hits
+  `config_values_scope_uniq` (`017:101-102`) on Step 1 fixture (i) (production bare `sandbox.timeout_ms`
+  beside its global twin) and fixture (ii) (`u-243` bare `sandbox.memory_bytes` beside its per-user twin).
+- **Disposition**: CI-equivalent fallback. GREEN comes from the integration PR's `migration-rerun` job. Offline
+  check: the step's **Verification** greps pass, `pglast` 7.21 parses the up-file (5 statements, S0-S4) and the
+  down-file (1 statement), and no other `031*` exists on `origin/main-dev`.
+
+### Step 2 — S0 constraint comment names the column indirectly (2026-10-28)
+- **Expected**: Instruction 1 S0 asks for a comment saying the snapshot "excludes `value_encrypted`".
+  **Verification** requires `grep -c "value_encrypted"` = 0 on the up-file.
+- **Actual**: the two conflict. The comment says "omits the secret ciphertext column", which keeps the
+  constraint and passes the grep.
+- **Disposition**: wording only; no behaviour change.

@@ -352,3 +352,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - The live GREEN is the integration PR's `migration-rerun` job, after Step 2.
 - Files modified: `scripts/migration-assertions/config-031.sql`
 - Deviations: RED/GREEN capture moves from the step PR to the integration PR, with a static RED a (Deviation Log).
+
+### Step 2 — migration: `031_heal_indicators_sandbox_keys_full_dotted` (twin-wins heal, forward-only down) [done]
+- Created the 031 up-file with statements S0-S4 in order:
+  - S0: `CREATE TABLE IF NOT EXISTS config.config_values_premigration_031` with the explicit column list (no ciphertext column);
+  - S1: twin-wins DELETE matched on the full `config_values_scope_uniq` tuple;
+  - S2: rename plus literal values for global rows only, with the sentinel and `caller_identity = NULL`;
+  - S3: six-row global insert with `ON CONFLICT … DO NOTHING`;
+  - S4: headroom/VmData description on every `indicators.sandbox.memory_bytes` row, attributed.
+- Created the down-file: a forward-only `SELECT 1;` that keeps `premigration_031`.
+- TDD: N/A (migration). RED b is static, not a pushed draft (Deviation Log). GREEN is the integration PR's
+  `migration-rerun` job running `config-031.sql`.
+- Verification (offline): both files exist; 030 then 031, with no other `031*` on `origin/main-dev`. Grep results:
+  - premigration_031 = 1, value_encrypted = 0, `COALESCE(t.user_id` = 1, ON CONFLICT = 1;
+  - sentinel = 8, `value_type =` = 0, pg_notify/BEGIN/COMMIT/headers = 0;
+  - down `SELECT 1;` = 1.
+- `pglast` 7.21 parses 5 statements (up) and 1 statement (down). It ran in a scratch venv and was not added to the repo. The down is forward-only by design, with no inverse.
+- Files modified: `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.up.sql`,
+  `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.down.sql`
+- Deviations: RED b is captured statically; the S0 comment wording avoids the literal column name to satisfy the
+  `value_encrypted` = 0 grep (Deviation Log).
