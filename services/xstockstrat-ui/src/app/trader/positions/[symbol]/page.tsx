@@ -1148,6 +1148,7 @@ function BacktestsSection({
     };
     runBacktest(
       {
+        strategyId: strategyId,
         strategyIdRef: strategyId,
         symbols: [symbol],
         initialCapital: 100000,

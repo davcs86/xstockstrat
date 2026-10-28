@@ -512,3 +512,18 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - Carried-forward open threads from the impl-spec review (Step 7/14 file-count, Step 14 held-open stream variant,
   Step 7 banner/double-report trade-offs, Step 13 5-minute idle observation) remain to be announced at their
   steps.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1 (sdd-batch-execute)
+
+- Step 1 done: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx:1151` adds `strategyId: strategyId,`
+  directly above `strategyIdRef`, mirroring `insights/strategies/[id]/page.tsx:101-103`. No other change; analysis
+  untouched.
+- TDD (AC-4, via a throwaway probe of Step 2's assertions, deleted before commit): red — `expect.poll(() =>
+  body?.strategyId).toBe('strat-live-001')` failed, received `undefined` (strategyIdRef already present) →
+  green — probe passed, and all 41 existing `position-detail.spec.ts` tests passed (prebuilt app, `CI=1
+  E2E_PREBUILT=1`).
+- Verification: grep finds one hit at `:1151`; `pnpm run lint` has no errors (only pre-existing warnings);
+  `tsc --noEmit` fails only on the pre-existing, untouched `e2e/insights/backfills.spec.ts:135-136` (see the
+  Deviation Log). This is a defect candidate for `/sdd-qa defect`.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree (the main worktree has no `node_modules` to symlink) and
+  Playwright Chromium headless shell 1.62.1.

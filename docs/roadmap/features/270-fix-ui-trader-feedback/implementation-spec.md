@@ -101,7 +101,7 @@ integration, `/sdd-execute` promotes AC-1..AC-12 into `services/xstockstrat-ui/a
 
 ### Step 1 — service: D-45 symbol-page backtest sends `strategyId` with `strategyIdRef`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -1085,3 +1085,15 @@ grep -n "ORDER_WORKING_FILLED_AT" services/xstockstrat-ui/e2e/fixtures/INVENTORY
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — 2026-10-28
+
+- **TDD RED harness (not a code deviation).** Step 1's paired test lives in Step 2's **Files**, so the RED/GREEN
+  cycle ran a throwaway probe spec (`e2e/trader/zz-tdd-probe-step1.spec.ts`, Step 2's AC-4 assertions verbatim)
+  that was deleted before commit; Step 2 authors the real test. The probe ran under `CI=1 E2E_PREBUILT=1`
+  against a `pnpm build` because the local `pnpm dev` harness timed out in `warmup.setup.ts` (10 s cold compile).
+  **Disposition**: CI-equivalent fallback.
+- **Pre-existing `tsc --noEmit` failure, out of scope.** The Verification's `pnpm exec tsc --noEmit` exits 1 on
+  `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type 'never'`),
+  a file this step does not touch (last changed by feature 198). The `src/` tree type-checks clean and
+  `pnpm build` (Next type-check) passes. **Disposition**: not fixed here; handed to `/sdd-qa defect`.
