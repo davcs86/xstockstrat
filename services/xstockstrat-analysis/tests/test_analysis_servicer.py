@@ -30,7 +30,7 @@ from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer, _InsufficientData, _row_to_opportunity
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
-from tests.conftest import OWNER_HEADERS, ctx_with
+from tests.conftest import OWNER_HEADERS, ctx_with, snapshot_watcher
 
 
 def make_servicer() -> AnalysisServicer:
@@ -584,14 +584,46 @@ class TestConfigWatcherGetters:
         assert w.get_float_present("k", 24.0) == 12.5
 
     def test_get_float_present_explicit_zero_is_not_trapped(self):
-        # FR-3 rollback contract: a configured 0.0 disables decay and must survive the read;
-        # get_float would collapse it to the default 24.0 (the zero-trap this method fixes).
+        # HasField contract: a set float_val is returned even when 0.0; the default applies only
+        # to an absent key or a different oneof member (feature 244).
         w = _StubWatcher()
         snap = config_pb2.ConfigSnapshot()
         snap.values["k"].CopyFrom(config_pb2.ConfigValue(float_val=0.0))
         w._snapshot = snap
         assert w.get_float_present("k", 24.0) == 0.0
-        assert w.get_float("k", 24.0) == 24.0  # contrast: the old zero-trap
+        assert w.get_float("k", 24.0) == 0.0
+
+    # feature 244 @AC-1 — a stored zero is honoured by every typed getter.
+    @pytest.mark.parametrize(
+        ("key", "stored", "getter", "default"),
+        [
+            ("analysis.opportunity.signal_rank_weight", 0.0, "get_float", 0.3),
+            ("analysis.engine.alert_throttle_seconds", 0, "get_int", 300),
+            ("analysis.test.zero_string", "", "get_str", "x"),
+        ],
+    )
+    def test_getters_honour_stored_zero(self, key, stored, getter, default):
+        w = snapshot_watcher(**{key: stored})
+        got = getattr(w, getter)(key, default)
+        assert got == stored
+        assert type(got) is type(stored)
+
+    # feature 244 @AC-4 — an absent key or no snapshot still returns the default.
+    @pytest.mark.parametrize(
+        ("key", "getter", "default"),
+        [
+            ("analysis.backtest.default_commission_pct", "get_float", 0.001),
+            ("analysis.engine.alert_throttle_seconds", "get_int", 300),
+        ],
+    )
+    def test_getters_default_when_key_absent(self, key, getter, default):
+        w = snapshot_watcher()
+        assert getattr(w, getter)(key, default) == default
+
+    def test_get_str_default_when_no_snapshot(self):
+        w = snapshot_watcher()
+        w._snapshot = None
+        assert w.get_str("analysis.test.unset_string", "x") == "x"
 
     def test_sandbox_timeout_default(self):
         w = _StubWatcher()

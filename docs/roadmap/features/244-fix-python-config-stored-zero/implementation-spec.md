@@ -623,7 +623,7 @@ Green run is Step 10's Verification.
 
 ### Step 10 — test: analysis getter rows, FR-4 behaviours and zero-honour sites (@AC-1, @AC-2, @AC-3, @AC-4, @AC-9, @AC-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify
@@ -1352,3 +1352,15 @@ _Populated by /sdd-execute as implementation proceeds._
   `test_get_float_present_explicit_zero_is_not_trapped` (`:594`). It asserts the old `get_float` zero-trap, and
   Step 10 rewrites it. The same `ConfigWatcher` class serves the `marketdata` namespace watcher (`main.py:48`).
   Its only read, `fundsignal_loop.py:97`, uses default `""`, so it behaves the same either way.
+- 2026-10-28 Step 10 (TDD evidence method + test shape, no scope change): Step 9 had already landed, so RED ran the new
+  tests against the Step-8 `app/config/watcher.py` (`git checkout e2b41e19 --`, restored to HEAD before GREEN; never
+  committed). Shape choices within the instructions:
+  - The AC-2 seam builds the servicer with the two lines of `_svc_req` (`_wire_evaluated(make_servicer(),
+    _series_bars(6, 12))`, `_windowed_req(_sma_def())`) in a new class rather than calling the method on
+    `TestRunBacktestFillModelRouting`. It records the `commission=`/`slippage=` keywords of every call.
+  - The AC-9 rows use strategy id `s1` (lower case), matching the existing `_last_alert_ts` keys in
+    `test_live_loop.py`; the instructions wrote `S1`. The AC-9 seam replaces `loop._cfg`, so `_run_cycle` reads every
+    other key through the real getter (absent → default).
+  - The @AC-4 `_snapshot = None` row is a separate test (`test_get_str_default_when_no_snapshot`), as in Step 6.
+  - The AC-3 order rows run under `real_pg` via `local_pg` (the project's own throwaway-PostgreSQL harness named by the
+    step); no service database or migration was started.

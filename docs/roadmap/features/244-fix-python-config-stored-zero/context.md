@@ -522,3 +522,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-8; never
   `--no-verify`).
 - Next: Step 10.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 10
+
+### Step 10 — test: analysis getter rows, FR-4 behaviours and zero-honour sites [done]
+- `tests/conftest.py`: `snapshot_watcher(**values)` (typed-arm rules as ingest/indicators; `ConfigWatcher.__new__`
+  carrying `endpoint`, `namespace="analysis"`, `_snapshot_event`). Sole definition (C-13); Step 12 is the other consumer.
+- `test_analysis_servicer.py`: `:594` now asserts `get_float("k", 24.0) == 0.0` and the comment states the HasField
+  contract. New `TestConfigWatcherGetters` rows: @AC-1 (`signal_rank_weight` 0.0, `alert_throttle_seconds` 0,
+  `analysis.test.zero_string` ""), @AC-4 (`default_commission_pct` / `alert_throttle_seconds` absent, `unset_string`
+  with `_snapshot = None`).
+- `test_fill_model.py` (@AC-2): the seam records `commission`/`slippage` 0.0 reaching `_backtest_symbol_evaluated`
+  from `RunBacktest`; the effect row fills at close 100 → 110 with `pnl == qty * 10`.
+- `test_opportunities_repo.py` (@AC-3): the seam asserts `opps.read` gets weight 0.0; the `real_pg` rows run
+  `_SORT_ORDER_BY[0]` (rebound `$1::float8`) over a VALUES subquery: 0.0 → `[AAA, BBB]`, 0.3 → `[BBB, AAA]`.
+- `test_live_loop.py` (@AC-9): `_run_cycle` passes throttle 0 to `_eval_pair`; an exit transition 10s after the last
+  alert emits `EmitAlert` at throttle 0.
+- `test_screener.py` / `test_query_pnl_patterns.py` (@AC-12): `default_rank_limit` 0 returns all 51 results;
+  `min_sample_count` 0 reaches `bucket_pnl_factors`.
+- TDD: RED against the Step-8 `watcher.py` (`git checkout e2b41e19 --`, restored before GREEN): 9 failed, 28 passed —
+  the `:594` row (24.0), the three @AC-1 rows (0.3 / 300 / "x"), AC-2 seam (0.001/0.0005), AC-3 seam (0.3), AC-9 seam
+  ([300]), AC-12 screener (50) and patterns ([5]). The effect rows (zero-cost fill, alert at throttle 0, SQL order)
+  are green on both trees by design. GREEN: all pass.
+- Verification: the six named files gave 533 passed; full analysis suite 1291 passed, coverage 88.36% (≥40);
+  `ruff check` and `ruff format --check` clean (one import-sort fix applied); `grep "def snapshot_watcher"` → only
+  `tests/conftest.py:54`. The `real_pg` rows ran (not skipped) on the local `local_pg` harness.
+- Files modified: `services/xstockstrat-analysis/tests/{conftest.py,test_analysis_servicer.py,test_fill_model.py,
+  test_opportunities_repo.py,test_live_loop.py,test_screener.py,test_query_pnl_patterns.py}`
+- Deviations: TDD evidence method; test-shape choices (inline `_svc_req`, `s1` id). See the Deviation Log.
+- Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-9; never
+  `--no-verify`).
+- Next: Step 11.

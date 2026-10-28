@@ -14,6 +14,7 @@ from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.struct_pb2 import Struct
 
 from app.services.screener import ScreenerEngine, _comparator_passes
+from tests.conftest import snapshot_watcher
 
 
 def make_cfg(**overrides):
@@ -414,6 +415,22 @@ async def test_rank_limit_caps_results():
     )
     resp = await engine.screen(req)
     assert len(resp.results) == 2
+
+
+async def test_stored_zero_default_rank_limit_returns_every_result():
+    """Feature 244 @AC-12: a stored default_rank_limit of 0 disables the cap (was: 50)."""
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0]))
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
+    cfg = snapshot_watcher(**{"analysis.screener.default_rank_limit": 0})
+    engine = make_engine(md, ind, cfg=cfg)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=[f"S{i:02d}" for i in range(51)],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+    )
+    resp = await engine.screen(req)
+    assert len(resp.results) == 51
 
 
 # ── feature 090 (AC-2): min_conviction is a hard floor ────────────────────────

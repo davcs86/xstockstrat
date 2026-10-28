@@ -30,6 +30,7 @@
 | 2026-10-28 | `in-progress` (step 7 done) | /sdd-execute sequential | Step 7: indicators module-level `int_positive` clamps `sandbox_timeout_ms` / `sandbox_memory_bytes` / `sandbox_max_concurrent()`; `servicer.py` semaphore `max(1, …)` dropped (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 8 done) | /sdd-execute sequential | Step 8: indicators @AC-6 accessor rows (0 / -1 → defaults), servicer rows (semaphore `_value == 4`; sandbox receives `max_concurrent` 4, `timeout_ms` 5000, `memory_bytes` 134217728) and the AST read-classification guard `tests/test_config_read_classification.py` (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 9 done) | /sdd-execute sequential | Step 9: analysis `get_str`/`get_int`/`get_float` use `HasField`; `get_int_present = get_int` and `get_float_present = get_float` aliases (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 10 done) | /sdd-execute sequential | Step 10: analysis conftest `snapshot_watcher`; @AC-1/@AC-4 getter rows, the `:594` contrast flipped to `0.0`; @AC-2 commission/slippage seam + zero-cost fill; @AC-3 rank-weight seam + real-SQL sort-0 order; @AC-9 throttle seam + alert at throttle 0; @AC-12 screener rank cap and patterns `min_sample` (TDD red → green) |
 
 ---
 
@@ -66,4 +67,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-execute fix-python-config-stored-zero sequential` — Step 10 (test: analysis getter rows, FR-4 behaviours and zero-honour sites)
+`/sdd-execute fix-python-config-stored-zero sequential` — Step 11 (service: analysis FR-3 clamps, named readers, `max(1, …)` and inline-clamp conversion)
