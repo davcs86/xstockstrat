@@ -753,7 +753,7 @@ grep -H "" docs/reports/2026-10-21-analysis-*-gather-no-per-symbol-isolation-def
 
 ### Step 10 — docs: resolve the findings row, constitution sort key, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` docs
 **Files**:
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
@@ -952,3 +952,23 @@ _Populated by /sdd-execute as implementation proceeds._
   P-04 confirmation is covered by the operator standing authorization for this sequential run. Reproductions were not
   run (code read only), and each report says so.
 - **Disposition**: process-only; severity SEV-2 for both.
+
+### Step 10 — teardown done by hand, context-forge `context-constitution` unavailable (2026-10-28)
+- **Spec says**: run `/context-constitution refresh` scoped to the files touched by Steps 2-10; if unavailable,
+  reconcile by hand and record both facts in the PR body.
+- **Actual**: only `context-forge:context-scrubber` is loaded in this session; no `context-constitution` skill.
+  Manual reconcile: grepped every `CLAUDE.md` and `context-constitution*.md` for `score_unavailable`,
+  `scoreUnavailable`, `ScreenSymbols`, `screen_symbols` and the isolation row, and re-read each hit against the code.
+  Grounded drift found and fixed: (1) analysis findings row `:20` (resolved), (2) analysis constitution `:42` sort key,
+  (3) UI constitution UI-6 (`services/xstockstrat-ui/docs/context-constitution.md:26`): trader-consumer anchor
+  `SymbolScreening.tsx:64` → `:65` (Step 7 added an import) and `score_unavailable` now also covers the status-OK
+  evaluation-fault row. No drift in `services/xstockstrat-agent/CLAUDE.md:59`, `services/xstockstrat-analysis/CLAUDE.md`
+  (`:336`, `:496`) or the UI-6 `page.tsx` anchors (`:122`, `:128`, `:184`, `:241`, `:258` still resolve).
+- **Disposition**: the integration PR body must state both that the plugin was unavailable and this reconciliation
+  (root `CLAUDE.md` § Teardown).
+
+### Step 10 — UI constitution edited outside the step's **Files** (2026-10-28)
+- **Spec says**: **Files** lists only the two analysis docs; instruction 3 says to fix the grounded drift the teardown reports.
+- **Actual**: the UI-6 drift above was fixed in `services/xstockstrat-ui/docs/context-constitution.md` (one row) and
+  staged with this step, under instruction 3.
+- **Disposition**: docs-only; sanctioned by the step's own teardown instruction.

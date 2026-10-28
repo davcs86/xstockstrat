@@ -478,3 +478,29 @@ Tooling setup (step 9): none needed (docs-only).
 - Deviations: `**Recorded**` 2026-10-28 vs spec-pinned 2026-10-21 filename date; written directly against the
   `defect-filing.md` template rather than an interactive `/sdd-qa defect` run — see Deviation Log.
   Out-of-scope changes: none.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 10 (sdd-batch-execute)
+
+Tooling setup (step 10): none needed (docs-only).
+
+### Step 10 — docs: resolve the findings row, constitution sort key, teardown [done]
+- `services/xstockstrat-analysis/docs/context-constitution-findings.md:20`: title struck, `**RESOLVED (feature 245)**`;
+  names `_eval_symbol_isolated` (`except Exception`, so `CancelledError` passes), the `eval_failed` degraded row
+  (`status OK`, `passed=false`, `score_unavailable=true`, empty raws), the sort, the summary WARN/ERROR and the
+  `screener.degraded_count` span attribute. Anchors re-stamped against the code: `screen` `:92`, gather `:115`,
+  `_eval_symbol_isolated` `:239`, `_build_result` fail-closed branch `:485`.
+- `services/xstockstrat-analysis/docs/context-constitution.md:42`: sort key → `(score_unavailable, eval_failed, -score)`
+  plus one clause (evaluation-fault row sorts after a feature-144 row, feature 245). Code: `screener.py:173`
+  `ranked.sort(key=lambda p: (p[0].score_unavailable, p[1], -p[0].score))`, `p[1]` = `row["eval_failed"]`.
+- Teardown: context-forge `context-constitution` not loaded in this session (only `context-scrubber`), so reconciled by
+  hand; fixed UI-6 drift in `services/xstockstrat-ui/docs/context-constitution.md:26` (anchor `:64` → `:65`, evaluation-fault
+  clause). See Deviation Log. The integration PR body must record both the unavailability and this reconciliation.
+- TDD: N/A (docs).
+- Verification: `grep "RESOLVED (feature 245)"` → findings `:20`; `grep eval_failed` → constitution `:42`.
+- Files modified: the two analysis docs above + `services/xstockstrat-ui/docs/context-constitution.md`.
+- Deviations: manual teardown; UI constitution outside **Files** — see Deviation Log. Out-of-scope changes: none beyond
+  that sanctioned teardown fix.
+- All 10 steps done → status `code-completed` (separate commit). Open: defect report
+  `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.status` stays `triaged` until launch;
+  completion obligations (feature-250 alerting handoff, C-16 promotion, dev smoke test) are the integration session's.
+
