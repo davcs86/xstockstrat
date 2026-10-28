@@ -212,7 +212,7 @@ all of them PASS and coverage is at least 40%.
 
 ### Step 2 — test: tool and endpoint stalled-config RED tests (AC-2, AC-3, AC-4, extract_email_content)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -640,3 +640,11 @@ _Populated by /sdd-execute as implementation proceeds._
   "Pre-Step-3, the four non-AC-5 tests FAIL"); the full-suite run is 4 failed / 518 passed, coverage 81.23%.
   The harness was proven GREEN-capable by a temporary, reverted, uncommitted probe of the Step 3 change
   (5/5 passed). **Disposition**: expected per spec; Step 3 GREEN re-runs these tests.
+- **Step 2 (2026-10-28)** — committed with its four stalled-config tests RED by design (spec Step 2 Verification:
+  "All four tests FAIL before Step 3"); the full-suite run is 8 failed (Step 1's four + Step 2's four) / 518 passed,
+  coverage 81.47%. A temporary, reverted, uncommitted probe of the Step 3 change gave 4/4 passed.
+  **Disposition**: expected per spec; Step 3 GREEN re-runs these tests.
+- **Step 2 (2026-10-28)** — RED-only side effect of AC-4: after the guard fires, the hung `TestClient` worker
+  outlives the test and, once the fixture stops the server, reaches the real `register_oauth_client`, logging
+  `DCR failed: mtls: … must all be set` (no test fails from it). It disappears once Step 3 bounds the reads.
+  **Disposition**: accepted (RED-phase only; no scope change).

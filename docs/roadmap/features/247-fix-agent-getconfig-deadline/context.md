@@ -278,3 +278,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   harness greps and `from tests.conftest import HANG_GUARD_S` present.
 - Still open: Step 6 (dev `GetConfig` latency baseline) must run before Step 3 is committed; Grafana_Cloud MCP is
   unavailable in this session, so the spec fallback ("Not measured" + P-03 escalation) applies.
+
+### Step 2 — test: tool and endpoint stalled-config RED tests (2026-10-28)
+
+- Files: `services/xstockstrat-agent/tests/test_tools.py` (imports `asyncio`, `time`, `tools`, `HANG_GUARD_S`;
+  `test_ac2_extract_website_content_proceeds_on_stalled_config` with the `egress.build_pinned_client` spy and the
+  `_agent_policy` recorder, `test_extract_email_content_urls_proceeds_on_stalled_config`,
+  `test_ac3_ingest_signal_alerts_at_default_threshold_on_stalled_config`);
+  `services/xstockstrat-agent/tests/test_oauth.py` (`test_ac4_register_does_not_hang_on_stalled_config`, worker-thread
+  guard with `executor.shutdown(wait=False)`). All set D = 0.3 via `monkeypatch.setattr(..., raising=False)`.
+- TDD red (pre-Step-3 tree):
+  - AC-2 red: `TimeoutError` from the `HANG_GUARD_S` guard (the first policy read never returns).
+  - `extract_email_content` urls red: `TimeoutError` from the `HANG_GUARD_S` guard.
+  - AC-3 red: `TimeoutError` from the `HANG_GUARD_S` guard (the threshold read never returns).
+  - AC-4 red: `concurrent.futures.TimeoutError` from `result(timeout=HANG_GUARD_S)`.
+- Green is Step 3's run. A temporary, reverted probe of the Step 3 change gave 4/4 passed in 4.5 s.
+- Verification: ruff check + format clean; full suite 8 failed (Step 1 + Step 2 RED tests) / 518 passed,
+  coverage 81.47% (>= 40); `from tests.conftest import`, `hung_config_server` and `raising=False` greps present.
+- In RED only, AC-4's orphaned worker logs `DCR failed: mtls …` after teardown (Deviation Log); harmless.
+- Still open: Step 6 (dev `GetConfig` latency baseline) must run before Step 3 is committed.
