@@ -20,6 +20,7 @@
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 | 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | After `git merge -X ours origin/main-dev`: steps 3, 8, 10, 11, 14, 16 re-specced to current line anchors; Step 10 C-13 premise/grep restated; Step 16 names the out-of-scope systemic escalation alert (`trading.go:2183-2189`) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential | Step 1 done — `IdentityService.ListAdminUserIds` rpc + request/response messages added to `identity.proto`; `buf lint` + `buf breaking` (vs main-dev and origin/main-dev) pass |
 
 ---
 
@@ -59,4 +60,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 1 (proto) onward
+`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 2 (proto-gen) onward

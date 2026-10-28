@@ -332,3 +332,14 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   auto-confirm does not apply to it; that CHANGE is covered by the binding operator decision recorded 2026-10-21
   (§ Operator decisions, sdd-design session).
 - Open Threads from the impl-spec review session remain open (announce at each checkpoint, P-03).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1 (proto)
+
+- Step 1 done: `packages/proto/identity/v1/identity.proto` gains `rpc ListAdminUserIds(ListAdminUserIdsRequest)
+  returns (ListAdminUserIdsResponse)` after `SetUserActive` (2-line SAN-only constraint comment) and the two messages
+  appended after `SetUserActiveResponse` (`repeated string user_ids = 1`). No other proto change.
+- TDD: N/A (proto, non-code-bearing). Verification: `buf lint` exit 0; `buf breaking` exit 0 against both local
+  `main-dev` (0fc13c41) and `origin/main-dev` (fa40c8a4), via archive extracts (Deviation Log: the guard refused
+  the `<git-common-dir>#branch=` form). Open Thread "Step 1 needs local refs/heads/main-dev" is resolved: it exists.
+- Stubs not regenerated here; Step 2 owns them, so `proto-freshness` is red on this branch until Step 2 commits.
+- C-09 reminder: identity-owner proto approval must be recorded in this file before Step 2 commits; not yet recorded.
