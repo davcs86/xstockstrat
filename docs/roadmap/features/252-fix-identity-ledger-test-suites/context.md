@@ -236,3 +236,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - AC-2 and AC-3 are unchanged (`design.md:169`). The open AC-2 rewording thread still needs operator sign-off.
 - Scenario Coverage (C-15) re-checked: `grep -n '@AC-'` shows AC-1..AC-6. Every ID maps to a row in the impl-spec table, so no table change is needed.
 - TDD: N/A (docs, scenario text only).
+
+## Session 2026-10-28 — sdd-execute sequential: Step 2 (identity compile-then-test runner)
+
+- Tooling: Node v24.20.0 ✓ (/opt/node24) · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` (proto + identity filters, no lockfile change). Base: `origin/feature/fix-identity-ledger-test-suites` @ `beb7778d`; `grep -c "private async rotateRefreshToken"` = 1 (#1262 base).
+- Pre/post `tests` count: 78 → 78 (fail/cancelled/skipped/todo 0 both). Per-file assert counts unchanged: identityServiceImpl 150, mtls 9, telemetry.export 6, telemetry 4.
+- AC-4 RED: pre-change c8 table had only `mtls.ts` and `telemetry.ts` rows (All files 97.97%), no `identityServiceImpl`/`authz` row.
+- AC-1 RED: with the `rotateRefreshToken` claim line `:353` `AND rt.revoked_at IS NULL` deleted, `test:coverage` exited 0 and `rotates the refresh token and mints a new aud-bound access JWT` reported ✔.
+- AC-3 RED (identity, for Step 3): specifier `:30` → `'../grpc/identityServiceImpl.missing'`, `test:coverage` exited 0 with the file's suites reported passed.
+- Runner probe: `tsc` exit 0 with tests compiled (no type errors); `node --test --test-timeout=60000` under a 900s alarm exited 0, 78/78 in ~2.5s; no hang, no force-exit needed, no bcrypt binding failure.
+- AC-4 GREEN: `test:coverage` exit 0, `c8 check-coverage --lines 40` exit 0, aggregate 81.88% lines (check-coverage and table agree); rows `authz.js` 100% and `identityServiceImpl.js` 85.02% lines. Lint: 0 errors.
+- AC-1 GREEN: mutation re-applied → `test:coverage` exit 1; TAP shows exactly one `not ok 1 - rotates the refresh token and mints a new aud-bound access JWT`. Restored.
+- AC-6 RED (for Step 3): positive control `# pass 70`, exit 0; after `rm dist/grpc/identityServiceImpl.js` still `# pass 70`, exit 0 (the kept `before()` catch swallows the failure). `dist/` rebuilt.
+- c8 row naming: rows are `dist/…/*.js` (no source maps), so AC-4 matches by module name.
+- Post-Step-2 AC-3 bogus import: rejected at compile time by `tsc` (TS2307 at `identityServiceImpl.test.ts(30,30)`), exit 2, before the runner starts. Context only.
+- Deviations: none. The spec preamble's `ci.yml:572` is stale (Node 24 is at `ci.yml:582`); it is outside the step body and was left alone.
+

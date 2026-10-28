@@ -178,7 +178,7 @@ git diff --stat -- "$F"                                                  # only 
 
 ### Step 2 — service: identity — compile-then-test runner (scripts, tsconfig, non-impl test imports)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/package.json` — modify
