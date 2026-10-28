@@ -430,3 +430,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `pnpm run test:coverage` exit 0 (c8 lines 86.77% ≥ 40); `pnpm run lint` 0 errors (158 pre-existing
   warnings); AC-3 and AC-2 greps hit; `__tests__/fixtures` grep no hits (C-13 inline).
 - Next: Step 5 (service: trading reconciliation poller stops sending `Author`).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 5
+
+- Step 5 (service) done: deleted `Author: "system:reconciliation-poller"` from the `SetConfigRequest` that
+  `escalateSystemic` builds (`trading.go`). The callerID `trading-reconciliation-poller` and the alert are
+  unchanged, and gofmt shifted no alignment.
+- TDD: an uncommitted scratch reflection test failed first ("author is set"), then passed; it was deleted.
+- Verification:
+  - the `Author` grep on `trading.go` has no hits;
+  - `GOWORK=off go build ./...` passes;
+  - golangci-lint v2.14.0, rebuilt with go1.27.0, reports 0 issues with `--tests=false`.
+- Known red window until Step 6: `trading_reconciliation_test.go:789-790` still pins `req.Author`, so `go test`
+  fails and lint raises 2 SA1019. A Deviation Log note was added.
+- Next: Step 6 (test: trading escalation sends the grant callerID and no author).

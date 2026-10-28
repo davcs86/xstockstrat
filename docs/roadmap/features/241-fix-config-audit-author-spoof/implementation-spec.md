@@ -409,7 +409,7 @@ grep -n "__tests__/fixtures" src/__tests__/*.test.ts   # C-13: expect no hits (n
 
 ### Step 5 — service: trading reconciliation poller stops sending `Author`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1085,3 +1085,12 @@ _Populated by /sdd-execute as implementation proceeds._
   4/4 passed post-change; the scratch file was deleted. Between Step 3 and Step 4 the config `pnpm test` suite is
   red (75/180, every failure the new `propagated identity required` rejection on admin-scope fixtures with no
   `x-user-id`) — exactly the fixtures Step 4 Instruction 3 updates. **Disposition**: accepted; Step 4 restores green.
+- **2026-10-28 — Step 5 verification (red window + toolchain fallback).** RED→GREEN used an uncommitted scratch
+  test calling `escalateSystemic` with `fakeConfigSetter` and asserting `author` unset via proto reflection: it
+  failed before the change, passed after it, and was then deleted. Two failures remain until Step 6, both from the
+  `req.Author` pin at `trading_reconciliation_test.go:789-790`, which is Step 6's rewrite target:
+  - the full `golangci-lint run` reports 2 SA1019 there (the field has been deprecated since Steps 1-2);
+  - `go test` fails on that pin (`author = ""`).
+  `golangci-lint --tests=false` reports 0 issues. The provisioned golangci-lint v2.14.0 was built with go1.26 and
+  refuses this go1.27 module, so the same version was rebuilt with go1.27.0 in a scratch GOBIN.
+  **Disposition**: accepted; Step 6 restores green.
