@@ -270,3 +270,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   line anchor changed. The other Step 5 anchors were re-checked and still hold:
   `class TestScreenSymbolsClient` `tests/test_client.py:215`, `test_screen_symbols_sends_grpc_call` `:217`,
   the exact-equality assert `:277`. Instructions, Files and Verification are unchanged.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`. Severity SEV-2.
+- Up-front confirmation (sequential mode entry): operator approved the up-front plan by standing
+  authorization — operator chat 2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features
+  241-276" via batch-execute. Answers: unattended checkpoints (checkpoint mode `report`); C-16 promotion
+  auto-confirmed unless it changes an existing @AC rule; merge-train authorized; 255/275 deferred.
+- Plan: Steps 1-10 in order, one commit per step on `feature/fix-screener-symbol-isolation`, each committed
+  only after its Verification passes. Step 5 was re-anchored (see the re-spec entry above); no other step changed.
+- Open Threads carried from the impl-spec review entry remain open (Step 3 mutation (a) run result,
+  feature 246 overlap, feature-250 handoff and dev smoke test).
