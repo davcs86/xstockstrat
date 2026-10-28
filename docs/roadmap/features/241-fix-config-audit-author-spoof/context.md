@@ -580,3 +580,96 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `config-governance.md:102` concern is gone after Step 12.
 - TDD: N/A (docs). Verification: config and UI greps return no hits; the agent findings line shows resolved.
 - All 13 steps are done. Next: the integration PR (§5.6).
+
+## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-config-audit-author-spoof (feature 241)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | config_values.updated_by and config_audit.changed_by come from the propagated x-user-id. Observable subject is config tables. |
+| AC-2 | services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | Internal-caller attribution (changed_by and caller_identity). |
+| AC-3 | services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | Free-text author with no x-user-id is rejected INVALID_ARGUMENT. |
+| AC-4 | services/xstockstrat-agent/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | Asserts only the outbound SetConfigRequest and x-user-id from agent tools. The Then outcome lives in agent code, so it goes to agent, not config. |
+
+Dedup: grepped all services/*/acceptance/*.feature for updated_by, changed_by, caller_identity and SetConfigRequest. There were no hits, so there is no DUP or OVERLAP. The config suites contain nothing about audit attribution. platform.feature has nothing relevant.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature (CREATE) ---
+# Promoted from docs/roadmap/features/241-fix-config-audit-author-spoof/acceptance.feature
+# Source: @AC-1, @AC-2, @AC-3 - config service scenarios. @feature-241 marks provenance. Do not hand-author or rewrite.
+Feature: fix-config-audit-author-spoof (config)
+  "Identity" means the platform-propagated x-user-id or an allowlist-authorized x-internal-caller:
+  propagated, not authenticated. x-access-scope is an integer bitmap (ADMIN_SCOPE = 4).
+  The UPDATE audit trigger fires only when value_data changes, so each scenario pins a prior value that differs from the written one.
+  user_id "" (a blank <target>) is the global row (user_id NULL); a prior of "absent" means no row exists at that scope, so the write is an INSERT.
+
+  @AC-1 @FR-1 @regression @feature-241
+  Scenario Outline: A human SetConfig write is attributed to the propagated x-user-id, not the request author
+    Given a caller with x-user-id "<caller>" and x-access-scope "<scope>"
+    And the "notify.push.min_severity" row in environment "staging" with user_id "<target>" holds "<prior>"
+    When SetConfig writes "notify.push.min_severity" = 3 in environment "staging" with user_id "<target>" and author "someone-else@example.com"
+    Then the write succeeds
+    And the config.config_values row's updated_by is "<caller>"
+    And the newest config.config_audit row for "notify.push.min_severity" has changed_by "<caller>"
+    And no config.config_audit row for that write has changed_by "someone-else@example.com"
+
+    Examples:
+      | caller      | scope | target      | prior  |
+      | admin-7     | 4     |             | 2      |
+      | user-42     | 1     | user-42     | absent |
+
+  @AC-2 @FR-2 @regression @feature-241
+  Scenario: An automated internal-caller write is attributed to its x-internal-caller identity
+    Given a caller with no x-user-id and x-internal-caller "trading-reconciliation-poller"
+    And the "platform.trading_state" row in environment "staging" with user_id "" holds "ACTIVE"
+    When SetConfig writes "platform.trading_state" = "REDUCE_ONLY" in environment "staging" with author "someone-else@example.com"
+    Then the write succeeds
+    And the newest config.config_audit row for "platform.trading_state" has changed_by "trading-reconciliation-poller"
+    And its caller_identity is "trading-reconciliation-poller"
+
+  @AC-3 @FR-3 @FR-2 @regression @feature-241
+  Scenario Outline: A write with a free-text author but no propagated identity is rejected
+    Given a caller with no x-user-id, x-access-scope "4" and x-internal-caller "<internal_caller>"
+    And the "notify.push.min_severity" row in environment "staging" with user_id "" holds "2"
+    When SetConfig writes "notify.push.min_severity" = 3 in environment "staging" with user_id "" and author "someone-else@example.com"
+    Then the write fails with INVALID_ARGUMENT
+    And the "notify.push.min_severity" row in environment "staging" with user_id "" still holds "2"
+    And no config.config_audit row has changed_by "someone-else@example.com"
+
+    Examples:
+      | internal_caller               |
+      | absent                        |
+      | trading-reconciliation-poller |
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-config-audit-author-spoof.feature (CREATE) ---
+# Promoted from docs/roadmap/features/241-fix-config-audit-author-spoof/acceptance.feature
+# Source: @AC-4 - agent scenario. @feature-241 marks provenance. Do not hand-author or rewrite.
+Feature: fix-config-audit-author-spoof (agent)
+  AC-4 asserts only the outbound request; the set_config input shape is product-spec Open Question Q2.
+
+  @AC-4 @FR-4 @regression @feature-241
+  Scenario Outline: An agent tool's SetConfig carries no free-text author and forwards the caller as x-user-id
+    Given an MCP session whose verified claims carry user_id "u-1" and role "admin"
+    When the agent tool "<tool>" issues its SetConfig for <write>
+    Then the outbound SetConfigRequest.author is ""
+    And the outbound x-user-id metadata is "u-1"
+
+    Examples:
+      | tool                 | write                                                   |
+      | set_config           | the global "notify.push.min_severity" value 3           |
+      | manage_signal_source | the registered source's bearer secret                   |
+      | instantiate_template | the instantiated signal_source template's bearer secret |
+
+### Notes / ambiguities / conflicts
+- Routing: AC-1..3 go to config (the Then asserts on config.config_values / config_audit). AC-4 goes to agent (outbound request shape). The acceptance/ dir already exists for both services, so only the new files are created.
+- No CONFLICT with any promoted @AC-* rule (no existing suite mentions these tables or SetConfigRequest).
+- Behavior note, not a promoted-rule conflict: services/xstockstrat-config/CLAUDE.md Critical Invariant #5 says SetConfig rejects only when a write has neither an explicit author nor an x-user-id. AC-3 tightens this: an explicit author without a propagated identity is now also rejected. The implementation should update that invariant text. No existing @AC rule is changed.
+- Header comment lines in the CREATE blocks follow the existing convention in config/surface-signal-weight-decay-config.feature. The Feature description lines are condensed from the source's preamble, and the scenario bodies are verbatim.
+- The @regression tag from the source is kept alongside the added @feature-241.
+
+### Coverage check
+- Source scenarios: 4 (AC-1, AC-2, AC-3, AC-4). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped.
+```
