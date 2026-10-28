@@ -408,3 +408,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `docs/runbooks/indicator-builder.md`, `services/xstockstrat-indicators/docs/context-constitution-findings.md`,
   `docs/patterns/config-governance.md`
 - Deviations: none.
+
+## Session 2026-10-28 — re-spec Step 5 (sdd-execute sequential, sdd-batch-execute)
+
+- Authorization: operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute). Checkpoints are unattended (`report`), C-16 promotion is
+  auto-confirmed unless it changes an existing @AC rule, merge-train is authorized, and 255/275 are deferred.
+  DB and prod steps stay operator-only: open the PR, hold the merge.
+- Branch setup: detached at `origin/feature/fix-sandbox-seed-keys`, `git merge -X ours origin/main-dev` (3de34155).
+- Status was already `in-progress`, so no status change.
+- Re-spec of Step 5 only (the single pending step). Its Files path and every evidence cite still resolve
+  (`operator-db-access.md:42-49,57,58`, `001:62-64`, `002:61-63`, `017:38`, `recon.md:30`, `design.md:165,175`,
+  `fails.md:642-644,2909-2912`). `origin/main-dev` still ends at `030_marketdata_edgar_snapshot_keys`.
+- Stale fact: `origin/feature/fix-python-config-stored-zero` (244, `d2002841`) adds config migration
+  `032_analysis_zero_trap_descriptions`. If 244 merges first, environments at 032 skip 031 silently
+  (`fails.md:2909-2912`). Instruction 1 now also scans every remote branch, and 243 must merge before 244
+  (otherwise 031 is renumbered). This supersedes the Step Dependencies line "Neither needs a `merge-order.md` row".
+  The operator still has to decide on the 243 → 244 `merge-order.md` row; this run does not add it.
