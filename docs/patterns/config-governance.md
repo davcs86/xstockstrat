@@ -101,6 +101,7 @@ without this convention, both look identical (fails.md 2026-07-01).
 |---|---|---|
 | `system` | `xstockstrat-indicators` | The seeded fundamentals-scoring formula (`app/formulas/fundamentals_value_quality.py`), documented here retroactively per feature 102 |
 | `system:reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102) — paired with the structural `x-internal-caller`/`caller_identity` mechanism (see `services/xstockstrat-config/CLAUDE.md`), not a free-text convention alone |
+| `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 
 ## Per-Feature Registered Keys
 

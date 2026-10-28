@@ -320,7 +320,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_config_watcher.py  
 
 ### Step 4 — docs: headroom wording, full-dotted key, findings row, sentinel convention, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `services/xstockstrat-indicators/` (docs only)
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify

@@ -385,3 +385,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `ruff check .` clean; `ruff format --check .` 40 files formatted; `_str_watcher` grep and conftest grep empty.
 - Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
 - Deviations: none.
+
+### Step 4 — docs: headroom wording, full-dotted key, findings row, sentinel convention, teardown [done]
+- `services/xstockstrat-indicators/CLAUDE.md:12` and `docs/runbooks/indicator-builder.md:167`: "memory cap" → "memory headroom".
+- `docs/runbooks/config-rollout.md:180`: example read uses `'indicators.sandbox.timeout_ms'` (241's `:76-100` hunks untouched).
+- Module findings "Inert indicators seeds" row: status **resolved (feature 243)**; names migration 031 (5000 / 134217728 /
+  seed imports, headroom descriptions) and keeps 001/002 untouched (F-01). Row "Unclamped override" untouched.
+- `docs/patterns/config-governance.md` Author-sentinel table: added `system:config-migration-<NNN>` (pre-241 table on
+  this branch; if 241 lands first, rebase the row into its rewritten section).
+- TDD: N/A (docs). Verification: both "memory cap" greps empty; full-dotted `snap.values.get` = 1 hit (`:180`);
+  findings row shows resolved; `system:config-migration-` = 1 hit (`config-governance.md:104`).
+- Teardown: the `/context-forge:context-constitution refresh` skill is not available in this session (only
+  `context-scrubber` is listed). Manual reconciliation of every touched file against code: watcher getters
+  (`watcher.py:133-145`) read full-dotted keys with defaults 5000 / 128 MiB / seed imports, matching the CLAUDE.md
+  Config Keys table and indicator-builder table; 031 up-file sets `updated_by = 'system:config-migration-031'` and
+  `caller_identity = NULL` (`:41-43`) and writes the headroom description (`:59,63`), matching the new sentinel row and
+  findings text. `scrubberExtraTargets` (README.md, ui-ux-governance.md) not touched. Drift noticed but out of scope:
+  findings row "Unclamped override" still reads "fixed on `hotfix/fix-sandbox-overrides-unclamped`" although
+  `servicer.py:66,282-283` already carries `_clamp_override` — left for the hotfix #1263 back-merge (spec forbids touching it).
+  The integration PR body must record both the plugin unavailability and this manual reconciliation.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/config-rollout.md`,
+  `docs/runbooks/indicator-builder.md`, `services/xstockstrat-indicators/docs/context-constitution-findings.md`,
+  `docs/patterns/config-governance.md`
+- Deviations: none.

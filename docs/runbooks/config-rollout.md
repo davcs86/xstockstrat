@@ -177,7 +177,7 @@ stream = stub.WatchConfig(config_pb2.WatchConfigRequest(
 for snap in stream:
     if snap.update_type == config_pb2.CONFIG_UPDATE_TYPE_DELTA:
         print(f"Delta received. Changed keys: {list(snap.changed_keys)}")
-        print(f"New value: {snap.values.get('sandbox.timeout_ms')}")
+        print(f"New value: {snap.values.get('indicators.sandbox.timeout_ms')}")
         break
 ```
 
