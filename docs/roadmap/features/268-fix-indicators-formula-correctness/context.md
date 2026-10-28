@@ -701,3 +701,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `PERMISSION_DENIED` != `NOT_FOUND` → green: 4 passed after the change.
 - Verification grep: exactly 2 hits (`:491`, `:594`). Full indicators suite 294 passed; `ruff check app` clean.
 - No deviations.
+
+### Step 2 — test: D-54 guard-branch tests — done (2026-10-28)
+
+- Added `class TestPendingHiddenMutation` after `TestPendingAndCache` in `tests/test_private_formulas.py`,
+  reusing `_row`/`_servicer`/`_admin` (C-13: no conftest builder; single `_row`). 8 cases: AC-6 own pending
+  Update (no `repo.update`, row dict unchanged); AC-7 own pending Delete (no `repo.delete`,
+  `deleted_at` None); pending `SYSTEM_AUTHOR` row Update/Delete → NOT_FOUND; pending foreign row by ADMIN
+  Update/Delete → NOT_FOUND; missing id Update/Delete → NOT_FOUND (not covered anywhere before).
+- Existing branches cited in the class docstring, not duplicated: system row → PERMISSION_DENIED
+  (`test_formulas.py` `TestSystemFormulaReadOnly`, `test_private_formulas.py` `test_ac23_*`); foreign row by
+  ADMIN → PERMISSION_DENIED (`test_ac28_admin_mutation_and_execute_denied`); deleted row on Update →
+  FAILED_PRECONDITION (`test_formulas.py` `test_update_soft_deleted_formula_rejected`, in
+  `TestFormulaPartialUpdate`, not the `TestFormulaDeletedFlag` class the spec named as a candidate).
+- TDD: AC-6/AC-7 red (servicer.py temporarily restored to its pre-Step-1 version): 6 failed, 2 passed
+  (the missing-id cases) — own pending Update/Delete DID NOT RAISE, pending system/foreign-admin
+  `PERMISSION_DENIED` != `NOT_FOUND` → green: 8 passed after restoring Step 1.
+- Verification: `-k PendingHiddenMutation` 8 passed; full suite 302 passed, coverage 85.61% (≥50%);
+  `ruff check .` and `ruff format --check .` clean; C-13 grep shows the single `_row` builder.
+- No deviations.

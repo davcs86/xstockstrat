@@ -20,6 +20,7 @@
 | 2026-10-28 | `implementation-ready` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec: steps 2, 3, 7, 10 aligned with current codebase after merging origin/main-dev (line drift only; no file or symbol missing) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-28 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | D-54 guard: pending-hidden rows → NOT_FOUND on UpdateFormula/DeleteFormula |
+| 2026-10-28 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | D-54 guard-branch tests (`TestPendingHiddenMutation`, AC-6/AC-7) |
 
 ---
 
@@ -55,4 +56,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 2
+`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 3

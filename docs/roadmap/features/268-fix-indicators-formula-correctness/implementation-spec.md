@@ -132,7 +132,7 @@ Expect exactly 2 hits, one in `UpdateFormula` and one in `DeleteFormula`. Lint i
 
 ### Step 2 — test: D-54 guard-branch tests for UpdateFormula/DeleteFormula
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_private_formulas.py` — modify
