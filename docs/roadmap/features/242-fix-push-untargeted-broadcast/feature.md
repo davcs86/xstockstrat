@@ -19,6 +19,7 @@
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 | 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | After `git merge -X ours origin/main-dev`: steps 3, 8, 10, 11, 14, 16 re-specced to current line anchors; Step 10 C-13 premise/grep restated; Step 16 names the out-of-scope systemic escalation alert (`trading.go:2183-2189`) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f) |
 
 ---
 
@@ -58,4 +59,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-review fix-push-untargeted-broadcast impl-spec` — validate implementation spec, then `/sdd-execute fix-push-untargeted-broadcast`
+`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 1 (proto) onward
