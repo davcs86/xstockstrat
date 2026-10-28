@@ -146,13 +146,17 @@ call safety (inherited from Step 1)
   imports `LedgerServiceService` from `@xstockstrat/proto/ledger/v1/ledger`.
 - The UI consumes protobuf-es output: `services/xstockstrat-ui/src/lib/traderBff.ts:6` imports
   `LedgerService` from `@xstockstrat/proto/ledger/v1/ledger_pb`.
+- `scripts/buf-gen.sh` generates the Python stubs with `python3 -m grpc_tools.protoc`, so the host needs
+  `grpcio-tools`. Re-spec 2026-10-28: it is not installed on the execution host yet. PyPI is reachable,
+  so this is a setup step, not a blocker.
 
 **TDD**: N/A (generated code)
 
 **Covers**: —
 
 **Instructions**:
-1. Run `./scripts/buf-gen.sh` from the repo root.
+1. If `python3 -c "import grpc_tools"` fails, install it first with `python3 -m pip install grpcio-tools`
+   (or through `uv`). Then run `./scripts/buf-gen.sh` from the repo root.
 2. Do not hand-edit anything under `packages/proto/gen/`. Never Read or Grep the generated stubs (root
    `CLAUDE.md` § Key File Paths).
 3. If Docker or GitHub-releases egress is unavailable, follow
@@ -314,6 +318,10 @@ position lineage / reconciliation status; Security — a caller reads only their
 - There is no existing `'account:'` constant in `services/xstockstrat-ui/src` (the only hit is the hook's
   template literal).
 - fails.md:1652-1654: `traderBff.ts` is a server bundle. Add no client-only import.
+- Re-verified 2026-10-28 after the main-dev merge: `queryEvents` `:118-127` (handler comment `:116-117`),
+  `listBrokerAccounts` `:53`, `appendEvent` `:130`, ConfigService block `:144-147`; `backendHeaders`
+  `bffShared.ts:38`; `COPILOT_STREAM_PREFIX`/`copilotStreamKey` `copilot.ts:9`/`:27`; `trading.go:1930`;
+  `account_repo.go` `WHERE user_id = $1`. `dispatchConnect` is exported at `traderBff.ts:151`.
 
 **TDD**: `red-green required`
 
@@ -370,11 +378,12 @@ grep -n "backendHeaders(claims, ctx)" services/xstockstrat-ui/src/lib/traderBff.
 **Codebase Evidence**:
 - No `traderBff` or `bffShared` unit test exists (recon.md Not found). The model is
   `src/lib/__tests__/insightsBff.test.ts`:
-  - `vi.mock('@/lib/auth', …)` stubs `verifyAccessToken`, `rolesToAccessScope`, `generateTraceId` and
-    `hasAdminScope` (`:11-20`)
-  - `fakeCtx()` (`:27-35`)
-- `traderBff.ts:153` exports `dispatchConnect = createDispatch(router, '/trader/api')`, and
-  `bffShared.ts:115-133` dispatches a `Request` by pathname.
+  - `vi.mock('@/lib/auth', …)` (starting `:11`) stubs `verifyAccessToken`, `rolesToAccessScope`,
+    `generateTraceId` and `hasAdminScope`
+  - `fakeCtx()` (`:27`)
+- `traderBff.ts:151` exports `dispatchConnect = createDispatch(router, '/trader/api')`, and
+  `bffShared.ts:115` (`createDispatch`) dispatches a `Request` by pathname.
+- `src/lib/__tests__/traderBff.test.ts` does not exist yet (re-verified 2026-10-28), so it is a create.
 - `vitest.config.ts`: node environment, `include: ['src/**/*.test.ts']`, `@` alias. Coverage excludes
   `src/lib/*Bff.ts`, so this test adds no threshold pressure.
 
@@ -435,9 +444,9 @@ position lineage / reconciliation status
 **Codebase Evidence**:
 - `e2e/mock-backend.ts:393-470`: `LedgerService.queryEvents` has these branches:
   - `portfolio.position.closed` (`:399`)
-  - copilot (`:418`), keyed by `req.streamKey` in `copilotThreads`
+  - copilot (`:418`; `copilotThreads.get` at `:419`), keyed by `req.streamKey` in `copilotThreads`
   - `account:` (`:435`), which returns one `reconciliation.mismatch_found`
-  - a default `order.filled` row (`:450-468`), with inline `userId` absent and `sourceService: 'trading'`
+  - a default `order.filled` row (`:449-469`), with no top-level `userId` and `sourceService: 'trading'`
   It has no owner or `ownerOnly` branch.
 - `mock-backend.ts:321-323`: `listBrokerAccounts` returns `BROKER_ACCOUNTS`. That is
   `[BROKER_ACCOUNT_ALPACA ('alpaca-default'), BROKER_ACCOUNT_IBKR ('ibkr-001')]`
@@ -463,7 +472,7 @@ position lineage / reconciliation status
    - one with an empty `userId` (NULL-owned legacy), symbol `TSLA`, stream `account:acct-legacy`
    Add one catalog row for it to `INVENTORY.md`, and update the `:81` row: the `order.filled` default
    branch now comes from this fixture.
-2. **Mock.** In `mock-backend.ts`, replace the default `order.filled` branch (`:450-468`) so it returns
+2. **Mock.** In `mock-backend.ts`, replace the default `order.filled` branch (`:449-469`) so it returns
    the rows from `OWNER_SCOPE_ORDER_FILLED_EVENTS`. When `req.ownerOnly` is true, it returns only the
    rows whose `userId === TEST_USER_ID`; otherwise it returns all three.
    - This mirrors the ledger predicate and lets the spec fail RED against today's BFF.
@@ -516,7 +525,7 @@ stability; Security — a caller reads only their own per-user data, explicit ad
   - `:20-24` `hasAdminAccessScope(md?)`, which fails closed on an absent or unparseable scope
   - `:27-29` `userIdFrom(md?)`, which returns `first(md, HEADER_USER_ID)`
 - `configServiceImpl.ts`:
-  - `:77-79` `requestUserId(req)` reads the body `userId ?? user_id ?? ''`
+  - `:78` `requestUserId(req)` reads the body `userId ?? user_id ?? ''`
   - `getConfig` `:315`, with `const userId = requestUserId(call.request);` at `:317`, feeding
     `resolveOverlayValues` (`:229-243`, `WHERE … user_id = $3`)
   - `listKeys` `:525`, with `requestUserId` at `:527` feeding the SQL
@@ -524,8 +533,9 @@ stability; Security — a caller reads only their own per-user data, explicit ad
   - the `authz` import block is `:3-14`
 - `setConfig` (`:371-376`) is the reference header-derived pattern
   (`const callerUserId = userIdFrom(call.metadata);`).
-- `watchConfig` (`:280-283`) and `getSecret` (`:335-343`) must stay untouched. That preserves invariant
-  #5 (`services/xstockstrat-config/CLAUDE.md:36`), `@AC-13 @feature-147` and NC-B.
+- `watchConfig` (its `requestUserId` call is at `:283`) and `getSecret` (`:335-343`) must stay
+  untouched. That preserves invariant #5 (`services/xstockstrat-config/CLAUDE.md:36`, with the
+  "deliberately **open**" text at `:40`), `@AC-13 @feature-147` and NC-B.
 - The config-ui admin view stays exempt:
   - `configUiBff.ts:33` `listKeys: forward(...)` sends `backendHeaders`
   - `rolesToAccessScope` sets `ADMIN_SCOPE` for `admin` (`ui src/lib/auth.ts:78`, `:89`)
@@ -576,11 +586,11 @@ grep -n "boundReadUserId" services/xstockstrat-config/src/grpc/authz.ts services
     `new ConfigServiceImpl(pool)`
   - its capturing `pool.query` routes on SQL text (`DISTINCT ON (key)` → `listParams`)
   - its client is `ConfigServiceClient` from `@xstockstrat/proto/config/v1/config`
-- `setConfigAuthz.test.ts:42-46` has the `md(pairs)` Metadata builder, and `:139-149` passes explicit
+- `setConfigAuthz.test.ts:42` declares the `md(pairs)` Metadata builder, and `:139-149` passes explicit
   `metadata` to a unary call.
 - `HEADER_ACCESS_SCOPE` and `HEADER_USER_ID` are exported from `authz.ts:10-11`.
-- The test runner is `tsc && node --test dist/__tests__/*.test.js` (`package.json:12-13`), so it
-  compiles first and does not fall into the vacuous strip-only trap.
+- The test runner is `tsc && node --test dist/__tests__/*.test.js`, and `test:coverage` is
+  `tsc && c8 --lines 40 …` (`package.json:13`), so it compiles first and does not fall into the vacuous strip-only trap.
 
 **TDD**: `red-green required`
 
@@ -642,14 +652,14 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/readUserB
 - `client.py:34-38`: `_Caller = tuple[str, int, str]  # (user_id, access_scope, trace_id)`, and
   `_CALLER: contextvars.ContextVar[_Caller | None]` defaults to `None`, so stdio and pre-token paths
   carry no caller.
-- `client.py:2034` is `async def get_config(namespace, environment, user_id="")`. It echoes
-  `"user_id": user_id` at `:2059`.
-- `client.py:2064` is `async def list_config_keys(...)`. It echoes at `:2080`.
+- `client.py:2035` is `async def get_config(namespace, environment, user_id="")`. It echoes
+  `"user_id": user_id` at `:2060`.
+- `client.py:2065` is `async def list_config_keys(...)`. It echoes at `:2081`.
 - `app/scopes.py:35`: `_ADMIN = 0x04`. `scopes.py` imports only `os` (`:14`), so `client.py` importing
   from it creates no import cycle.
 - Tool docstrings:
-  - `tools.py:1593-1596` (`get_config`): "pass a user id to see that user's per-user overrides…"
-  - `tools.py:1620-1624` (`list_config_keys`): same wording
+  - `tools.py:1601-1605` (`get_config`): "pass a user id to see that user's per-user overrides…"
+  - `tools.py:1629-1633` (`list_config_keys`): same wording
 - The tools stay ctx-less, so `tests/test_config_tools.py:78/:320/:328` and
   `test_config_tools_expose_no_environment_parameter` are unaffected.
 
@@ -665,7 +675,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/readUserB
      and differs from `caller[0]`, return `caller[0]`. Otherwise return `user_id`.
    - Give it a comment of at most 2 lines saying it mirrors config `boundReadUserId`
      (`services/xstockstrat-config/src/grpc/authz.ts`) and must change with it.
-3. At `:2059` and `:2080`, echo `"user_id": _effective_config_user_id(user_id)`.
+3. At `:2060` and `:2081`, echo `"user_id": _effective_config_user_id(user_id)`.
 4. Leave the request `user_id` sent to config unchanged (the agent-to-config wire stays the same), and
    leave the metadata via `_metadata()` unchanged.
 5. In `tools.py`, reword both docstrings' `user_id:` lines in no more than the same line budget:
@@ -690,8 +700,8 @@ and expect one definition plus two uses.
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, return shape
 
 **Codebase Evidence**:
-- The stub-capture harness is at `test_config_tools.py:267-297` (`TestSetConfigRequestParity`). It
-  patches `app.client.mtls` with a `secure_channel` async-context-manager mock, and patches
+- The stub-capture harness is `TestSetConfigRequestParity` (`test_config_tools.py:261`; the
+  `mtls`/`ConfigServiceStub` patches are at `:283-284`). It patches `app.client.mtls` with a `secure_channel` async-context-manager mock, and patches
   `config_pb2_grpc.ConfigServiceStub` to return an `AsyncMock` stub.
 - `client.set_caller(user_id, access_scope, trace_id)` returns a token, and `client.reset_caller(token)`
   releases it (`client.py:41`; usage in `tests/test_header_propagation.py:40-45` and
@@ -742,7 +752,7 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
 - `services/xstockstrat-agent/CLAUDE.md` — modify
 - `docs/runbooks/mcp-tools.md` — modify
 - `docs/context-constitution-findings.md` — modify
-- `docs/roadmap/features/merge-order.md` — modify (only after the operator confirms the direction; item 6)
+- `docs/roadmap/features/merge-order.md` — verify only (the row already exists; item 6)
 - `services/xstockstrat-ui/CLAUDE.md` — modify (Copilot rail paragraph `:164-170`; item 7)
 - Likely teardown targets (item 8). Record each one in the Deviation Log if it is touched:
   `docs/context-constitution.md` and `services/xstockstrat-{ledger,config,agent,ui}/docs/context-constitution{,-findings}.md`
@@ -754,23 +764,23 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
   - Critical Invariants `:30-35`, with `#3` on stream_key
   - the `## Stream Key Conventions` table at `:97-106`, which lists `order:`, `portfolio:`, `backfill:`,
     `formula:`, `alert:` and `config:`, but has no `account:{id}` or `copilot:{user}:default` row
-- `services/xstockstrat-config/CLAUDE.md:36`, invariant #5: "`GetConfig`/`ListKeys`/`WatchConfig` are
-  deliberately **open**…"
+- `services/xstockstrat-config/CLAUDE.md:36`, invariant #5, whose text at `:40` reads
+  "`GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**…"
 - `services/xstockstrat-agent/CLAUDE.md`:
   - `:28-30`: "Body `user_id` is still sent where it is a **target/scope selector**… the config tools
     (per-user scope)"
   - `:74` `get_config` row: "scoped by an optional per-user `user_id`"
   - `:75` `list_config_keys` row
-- `docs/runbooks/mcp-tools.md`: `### get_config` at `:1051`, `user_id` row at `:1058`; `### list_config_keys`
-  at `:1076`, `user_id` row at `:1084`
-- `docs/context-constitution-findings.md`: a `## Latent bugs` table at `:28` and `## Open questions` at
-  `:45`. It is the root log for cross-module defects.
-- `docs/roadmap/features/merge-order.md`: `## Blocking Dependencies` table. Its coverage note says it
-  lists only **hard** constraints (proto field-number collision qualifies; ordinary textual overlap does
-  not).
-- `257-fix-ledger-query-pagination/context.md` is **Not found** on this branch. The feature directory
-  exists only on main-dev and `feature/fix-ledger-query-pagination`, so 257's side is recorded through
-  merge-order.md and picked up by `/sdd-sync`.
+- `docs/runbooks/mcp-tools.md`: `### get_config` at `:1052`, `user_id` row at `:1059`; `### list_config_keys`
+  at `:1077`, `user_id` row at `:1085`
+- `docs/context-constitution-findings.md`: a `## Latent bugs` table at `:29` and `## Open questions` at
+  `:46`. It is the root log for cross-module defects.
+- `docs/roadmap/features/merge-order.md:78` **already** holds the operator-ordered row
+  "`fix-ledger-query-pagination` (257) waits for `fix-edge-owner-scope` (263)" (2026-10-22). It arrived
+  through the 2026-10-28 main-dev merge.
+- After that merge, `docs/roadmap/features/257-fix-ledger-query-pagination/` exists on this branch
+  (status `implementation-ready`). Its implementation spec already plans to rebase onto 263's
+  `owner_only = 7`.
 
 **TDD**: N/A (docs)
 
@@ -803,14 +813,11 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
    - the `order:<id>` NULL-owned `order_intent.*` rows are hidden by branch 3 (`trading.go:2247`,
      `:2278`)
    - `owner_only` fails open by default
-6. **`merge-order.md`.** This item is gated on the operator confirming the direction, which is still
-   open after impl-spec review. If the operator reverses it or declines a hard row, record that in the
-   Deviation Log and skip this item. Otherwise add a row: `fix-ledger-query-pagination` must wait for `fix-edge-owner-scope`,
-   because both edit `QueryEventsRequest` (field 7 now claimed by 263) and the same `queryEvents` WHERE
-   builder. 257 rebases its keyset predicate onto the `owner_only` condition.
-   - Confirm the direction at `/sdd-review impl-spec`.
+6. **`merge-order.md`: verify, do not add.** The operator confirmed the direction on 2026-10-22, and
+   the row "257 waits for 263" is already at `merge-order.md:78`. Do not add a duplicate row. Only
+   confirm it with `grep -n "fix-edge-owner-scope" docs/roadmap/features/merge-order.md`.
    - The 241, 242, 247 and 273 overlaps are textual only, so per the file's coverage note they are
-     recorded in this feature's `context.md`, not here.
+     recorded in this feature's `context.md`, not in `merge-order.md`.
 7. **UI `CLAUDE.md` Copilot rail paragraph (`:164-170`).** It describes the "copilot-aware
    `queryEvents`". Add at most one sentence: `account:` keys are ownership-checked via trading
    `ListBrokerAccounts`, and every other key is forced to `owner_only` server-side.
@@ -827,7 +834,8 @@ grep -n "bound to the caller\|bound to their own" services/xstockstrat-agent/CLA
 grep -n "263" docs/context-constitution-findings.md docs/roadmap/features/merge-order.md
 grep -n "ListBrokerAccounts" services/xstockstrat-ui/CLAUDE.md
 ```
-Each grep must return at least one line. The exception is `merge-order.md` when item 6 was skipped.
+Each grep must return at least one line. `merge-order.md` must have exactly one `fix-edge-owner-scope`
+row (no duplicate).
 
 ---
 
