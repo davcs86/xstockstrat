@@ -181,7 +181,7 @@ grep -rn "Subscribe(\"t\")\|Subscribe(subID)$" --include=*.go . ; test $? -eq 1 
 
 ### Step 2 — test: Owner isolation at the producer (@AC-1, @AC-3 producer half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_snapshot_scope_test.go` — create
@@ -730,3 +730,10 @@ _Populated by /sdd-execute as implementation proceeds._
   Step 1 commit to its own **Files**; Step 2 creates and commits that file.
 - **Disposition**: no behavior change. The gRPC `Sprintf` hoist sits at `portfolio_handler.go:293` (spec text says `:292`, the
   signature line); line drift only.
+
+### 2026-10-28 — Step 2: lint binary rebuilt at the CI pin
+- **Spec said**: `GOWORK=off golangci-lint run --modules-download-mode=mod`.
+- **Done**: the provisioned `~/go/bin/golangci-lint` is v2.5.0, built with go1.25, and it refuses this `go 1.27.0`
+  module. The CI-pinned v2.14.0 was built from proxy.golang.org with `GOTOOLCHAIN=go1.27.0` into the session
+  scratchpad. The same command then reported `0 issues.`
+- **Disposition**: CI-equivalent fallback. Same version and flags as `golangci-lint-action@v9`; no repo change.

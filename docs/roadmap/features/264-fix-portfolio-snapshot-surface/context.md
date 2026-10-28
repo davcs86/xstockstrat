@@ -504,3 +504,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: RED probe file not committed with Step 1; `:292`→`:293` line drift (Deviation Log).
 - Open: `golangci-lint` in `~/go/bin` refuses this module (`built with go1.25 < go 1.27.0`), so Step 2's lint
   verification needs a lint binary built with Go ≥ 1.27, or a CI-equivalent fallback.
+
+### Step 2 — test: Owner isolation at the producer (@AC-1, @AC-3 producer half) [done]
+- Created `portfolio_snapshot_scope_test.go` with two tests:
+  - `TestBroadcastSnapshot_AC1_OnlyOwnerReceives`: the u-1 stream gets one snapshot (`PortfolioId u-1`,
+    `Equity 1000`), the u-2 stream stays empty, and `ledger.calls == 1`.
+  - `TestBroadcastSnapshot_EmptyOwnerSubscriberReceivesNothing`: the fail-closed case.
+  - Both share a file-local mock setup (`newScopedSnapshotSvc`) built on `newQuoteSvc`. They reuse `testdata.Aapl` and
+    add no new testdata symbol (C-13).
+- TDD, AC-1/AC-3 RED: the Step-1 owner skip was disabled in the working tree only, never committed. Output:
+  - `portfolio_snapshot_scope_test.go:39: other user's stream received 1 of u-1's snapshots` (FAIL);
+  - `portfolio_snapshot_scope_test.go:56: empty-owner stream received 1 snapshots` (FAIL).
+- GREEN, with the skip restored: all five `TestBroadcastSnapshot_*` pass under `-race`.
+- Verification:
+  - `go test ./... -race` is ok across all packages;
+  - CI-scoped coverage total is 68.6% (threshold 40%);
+  - golangci-lint v2.14.0 reports `0 issues` (rebuilt with go1.27; see the Deviation Log);
+  - the C-13 grep finds exactly one declaration.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_snapshot_scope_test.go` (new).
+- Deviations: lint binary rebuilt at the CI pin (Deviation Log). Out-of-scope changes: none.
