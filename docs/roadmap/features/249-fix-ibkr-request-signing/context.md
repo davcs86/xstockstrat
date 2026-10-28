@@ -270,3 +270,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     func declaration).
   - Step 15: `tools.py` anchors shifted ~+14: `manage_account` `:2153`, IBKR docstring `:2175-2177`,
     update_credentials sentence `:2179-2181`, non-empty checks `:2191-2214`; runbook row `mcp-tools.md:1392`.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`. Mode: sequential (one commit per step on
+  `feature/fix-ibkr-request-signing`, single integration PR at the end). Severity SEV-2.
+- Up-front confirmation: the operator approved the up-front plan by standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Answers: unattended
+  checkpoints (checkpoints = `report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
+  merge-train authorized; 255/275 deferred. Operator-only DB/prod steps: open the PR, hold the merge.
+- Branch setup (§5.3): `origin/main-dev` merged with `-X ours` (40de843c); step bodies 1, 4, 6, 7, 15 re-spec'd
+  (session entry above).
+- Still owed (carried): the FR-3 operator ruling at the Step 2 checkpoint, or a recorded deferral to the
+  integration-PR merge.
