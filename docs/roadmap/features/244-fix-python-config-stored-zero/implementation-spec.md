@@ -1178,7 +1178,7 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # te
 
 ### Step 17 — docs: config-key rows, constitutions, findings, governance; context-forge teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, service `CLAUDE.md`s
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -1404,3 +1404,12 @@ _Populated by /sdd-execute as implementation proceeds._
   files open with a comment header) and collapses whitespace outside literals before the anchored regex; the test
   also asserts four statements per direction with distinct keys and no up/down statement whose SET equals its WHERE,
   so an empty or no-op file cannot pass vacuously.
+- 2026-10-28 Step 17 (scope detail + teardown method, no spec change):
+  - Beyond the cited lines, the same edit was applied to rows in the step's own files that described a now-removed
+    mechanism: ingest `CLAUDE.md` FR-3 rows `:128-129` and indicators `:100-101`; governance `:263-277` signal-rank row,
+    `:298`, `:314`, `:344-345`, `:542`, `:553`; the analysis findings dead `sandbox_*` row `:21` (Step 11 deleted those
+    helpers too); the analysis constitution Pointer `:52`, whose "zero-trap note" target no longer exists in root `CLAUDE.md`.
+  - Rows that still name `get_int_present`/`get_float_present` as a literal call (the names survive as aliases) were left as-is.
+  - The context-forge `context-constitution` skill is not available in this session (only `context-scrubber` is
+    listed). The teardown was a manual re-read of every touched file against the code (getters, clamps, guard sets,
+    the remaining `max(1, …)` sites, ingest INGEST-9 anchors). The integration PR body must record both facts.

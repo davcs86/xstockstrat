@@ -701,3 +701,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-config/src/__tests__/zeroTrapDescriptionMigration.test.ts` (new)
 - Deviations: evidence method + test shape only. See the Deviation Log.
 - Next: Step 17.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 17
+
+### Step 17 — docs: config-key rows, constitutions, findings, governance; context-forge teardown [done]
+- Config-key rows now state shipped behaviour: FR-3 keys "a stored ≤ 0 reads as the default" (`int_positive` /
+  `float_positive` / `str_nonempty`), honour and FR-4 keys "a configured `0` is honoured"; `default_fill_model` keeps
+  "0 = legacy, stored or absent". The "never `get_*`" and "`get_int` zero-trap" mechanisms are gone from the analysis,
+  ingest and indicators `CLAUDE.md` rows and from `config-governance.md`. The governance lower-bound rule is now
+  "legitimate 0 → lower 0; reader clamps ≤ 0 → lower 1", and the `signal_rank_weight` zero-trap note is deleted.
+- Constitutions: the root PLAT gotcha is rewritten to the HasField + clamp + AST-guard model; CONFIG-11 now follows
+  the clamp model and the Node-`getInt` gotcha is reworded; the analysis constitution line 37 is rewritten; INGEST-9
+  line hints are re-stamped (`get_str` ~L104, `get_int` ~L112, alias ~L120, `get_bool` ~L122, `get_float` ~L130).
+- Findings: CF-N10 is struck through as RESOLVED (feature 244) and has a `## Resolved` row. The ingest and analysis
+  dead `sandbox_*` rows are resolved, both preambles now say the zero-trap was resolved by 244, and a config
+  `sparkline_bars` drift row is added (028 description and `[1,500]` bounds, no analysis reader).
+- TDD: N/A (docs).
+- Verification: the `zero-trap` grep over the three CLAUDE.md files, governance, and the root and service
+  constitutions returns only the root constitution's refresh-history header (lines 10 and 14). `CF-N10` appears at
+  findings `:32` (struck through, RESOLVED) and `:55` (`## Resolved`).
+- Teardown: `/context-forge:context-constitution` is unavailable (only `context-scrubber` is listed), so every touched
+  context file was re-read by hand against the code. The integration PR body must record both facts (root CLAUDE.md § Teardown).
+- Open items (outside this step's Files):
+  - `services/xstockstrat-indicators/docs/context-constitution-findings.md:15` still cites
+    `Semaphore(max(1, config_watcher.sandbox_max_concurrent()))`. Step 7 removed that `max(1, …)`. Feature 243 also edits the indicators docs.
+  - The root findings report index row `2026-10-19-python-config-zero-trap-defect` (sidecar `triaged`) stays until the
+    report is resolved at launch.
+  - `docs/patterns/config-governance.md:405-407` (the feature-095 log) still describes a live `sparkline_bars` read.
+    It is covered by the new config findings row.
+- Files modified: `services/xstockstrat-{analysis,ingest,indicators}/CLAUDE.md`, `docs/patterns/config-governance.md`,
+  `docs/context-constitution{,-findings}.md`, `services/xstockstrat-{analysis,config,ingest}/docs/context-constitution{,-findings}.md`
+- Deviations: scope detail + teardown method only. See the Deviation Log.
+- Next: Step 18.
