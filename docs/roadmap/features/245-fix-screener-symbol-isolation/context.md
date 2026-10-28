@@ -410,3 +410,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `grep -n "evaluation fault"` → `mcp-tools.md:455,465` and `app/tools.py:851`.
 - Files modified: `docs/runbooks/mcp-tools.md`
 - Deviations: none. Out-of-scope changes: none.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 7 (sdd-batch-execute)
+
+Tooling setup (steps 7): node v22.22.0 ✓ (CLAUDE.md pins 24) · pnpm ✓ 9.15.9 · `pnpm install --frozen-lockfile` ⬇ (worktree) · chromium ✓ `/opt/pw-browsers`
+
+### Step 7 — service: `SymbolScreening` "Not evaluated" branch; screener tooltip copy (UI) [done]
+- `SymbolScreening.tsx`: imports `EmptyState` (`@/components/shared/EmptyState`); `const unevaluated =
+  result?.scoreUnavailable === true;` after `insufficient`; the result branch is three-way — `insufficient` (unchanged)
+  → `unevaluated` (`<div data-testid="symbol-screen-unevaluated"><EmptyState title="Not evaluated" description=…/></div>`)
+  → `DataTable` (unchanged). No colour classes added (C-17).
+- `insights/screener/page.tsx`: `no-criteria-data` badge `title` copy only → "No criteria data could be used for this
+  candidate (missing data or an evaluation fault) — its score is not a real result." Test id, label, logic unchanged.
+- TDD (AC-4 shape, scratch spec mirroring Step 8): RED on the pre-Step-7 tree → `1 failed`, `expect(locator).toBeVisible()`
+  on `symbol-screen-unevaluated` (element not found; the page snapshot shows the criterion `DataTable` instead);
+  GREEN after the edit → scratch passed, plus `position-detail.spec.ts` + `insights/screener.spec.ts` 60 passed /
+  3 failed (`:15`, `:44`, `:447`, pre-existing — same 3 fail on the baseline tree).
+- Verification: grep → `SymbolScreening.tsx:18` (import), `:66` (`scoreUnavailable === true`), `:252`
+  (`symbol-screen-unevaluated`); `no-criteria-data` → 1 hit (`page.tsx:262`); `pnpm run lint` exit 0;
+  `format:check` red only on 10 untouched files; `tsc --noEmit` red only on untouched `e2e/insights/backfills.spec.ts:135-136`.
+- Files modified: `services/xstockstrat-ui/src/components/trader/SymbolScreening.tsx`,
+  `services/xstockstrat-ui/src/app/insights/screener/page.tsx`
+- Deviations: scratch RED/GREEN spec; host harness flags; pre-existing format/tsc/e2e reds — see Deviation Log.
+  Out-of-scope changes: none.

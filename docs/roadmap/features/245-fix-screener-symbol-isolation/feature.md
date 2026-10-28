@@ -25,6 +25,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — agent `screen_symbols` forwards `score_unavailable` (`app/client.py`); docstring lists the key, the three `score_unavailable=true` row kinds and the `min_conviction`/`rank_limit` caveat, false "never reported OK/passed" clause removed (`app/tools.py`) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — `test_screen_symbols_sends_grpc_call` asserts the `score_unavailable` key on an OK row (`False`) and an un-evaluated BAD row (`True`, `passed=False`) (AC-5) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — `docs/runbooks/mcp-tools.md` `screen_symbols` parity (C-10): Return JSON gains `"score_unavailable": false`, aside lists the three `score_unavailable=true` row kinds + `min_conviction`/`rank_limit` caveat, Errors table gains the per-symbol evaluation-fault row |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — `SymbolScreening` renders a "Not evaluated" `EmptyState` (wrapper `symbol-screen-unevaluated`) for a `scoreUnavailable` row, INSUFFICIENT_DATA keeps priority; `/insights/screener` `no-criteria-data` tooltip copy covers missing data or an evaluation fault |
 
 ---
 

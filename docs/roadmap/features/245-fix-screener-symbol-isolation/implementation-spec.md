@@ -599,7 +599,7 @@ grep -n "evaluation fault" docs/runbooks/mcp-tools.md services/xstockstrat-agent
 
 ### Step 7 — service: `SymbolScreening` "Not evaluated" branch; screener tooltip copy (UI)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/SymbolScreening.tsx` — modify
@@ -881,3 +881,33 @@ _Populated by /sdd-execute as implementation proceeds._
   `Right contains 1 more item: {'score_unavailable': False}`), which runs before the `KeyError`-bearing asserts.
   Commands ran with `UV_PYTHON=3.13`, as in Steps 3 and 4.
 - **Disposition**: process-only; no code or scope change.
+
+### Step 7 — TDD RED/GREEN captured with a scratch Playwright spec (2026-10-28)
+- **Spec says**: Step 7 is `red-green required`; its paired test is Step 8's (`e2e/trader/position-detail.spec.ts`),
+  and Step 7's commit stages only `SymbolScreening.tsx` + `insights/screener/page.tsx`.
+- **Actual**: RED/GREEN ran against an untracked scratch spec `e2e/trader/zz-step7-scratch.spec.ts` mirroring Step 8
+  instruction 2 (`page.route` ScreenSymbols → `noCriteriaDataRow('AAPL')`; asserts `symbol-screen-unevaluated`
+  visible with "Not evaluated", `symbol-screen-results`/`symbol-screen-insufficient` count 0). Deleted before commit,
+  never staged. Step 8 still authors the durable AC-4 test.
+- **Disposition**: process-only; no code or scope change.
+
+### Step 7 — host Playwright harness flags (2026-10-28)
+- **Actual**: host-native single-spec runs used `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers --project=chromium --no-deps
+  --timeout=240000`; the `warmup.setup.ts` setup project times out at its 10s budget on a cold `next dev` compile.
+  Node is v22.22.0 on this host (root CLAUDE.md pins 24); pnpm 9.15.9 matches.
+- **Disposition**: CI-equivalent fallback.
+
+### Step 7 — Verification `format:check` / `tsc --noEmit` red on untouched files (2026-10-28)
+- **Spec says**: `pnpm run lint && pnpm run format:check && pnpm exec tsc --noEmit`.
+- **Actual**: `lint` exits 0. `format:check` (prettier 3.8.3 from the worktree install) flags 10 files, none touched by
+  this step (e.g. `src/hooks/useOrders.ts`, `src/lib/performanceMetrics.ts`); both Step 7 files pass. `tsc --noEmit`
+  reports 2 errors, both in untouched `e2e/insights/backfills.spec.ts:135-136`; no error in `src/`. Pre-existing,
+  not fixed here (F-08).
+- **Disposition**: recorded; out of scope for this step.
+
+### Step 7 — three pre-existing `position-detail.spec.ts` failures on the host harness (2026-10-28)
+- **Actual**: `:15` (risk-framed header), `:44` (no-stop fallbacks), `:447` (indicator overlay panels) fail on the
+  host with and without the Step 7 diff (baseline re-run with the diff removed: same 3 failures). They assert the
+  position header/chart, not the Screening section. The FR-8 Screening test `:194` and all of
+  `e2e/insights/screener.spec.ts` pass with the diff applied (60 passed, 3 failed).
+- **Disposition**: recorded; Step 8 owns the durable e2e run (Docker runner `./scripts/run-e2e.sh` preferred there).
