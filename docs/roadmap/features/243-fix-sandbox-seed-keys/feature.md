@@ -18,6 +18,7 @@
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps; @AC-5 appended (design.md § 4) |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1-5 re-verified against main-dev; Step 1 ci.yml / migration-rerun.sh line drift and Step 2 fails.md cite fixed; Steps 3-5 unchanged |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f) |
 
 ---
 
@@ -52,4 +53,4 @@ Operator decision: fix in code plus a config migration.
 
 ## Next Action
 
-`/sdd-review fix-sandbox-seed-keys impl-spec` — validate implementation spec, then `/sdd-execute fix-sandbox-seed-keys`
+`/sdd-execute fix-sandbox-seed-keys sequential` — Step 1 next
