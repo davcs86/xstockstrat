@@ -608,3 +608,32 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - Deviations: D2-1 (`-run _AC`), D2-2 (golangci-lint v2.14.0 rebuilt with go1.27 into scratchpad). Closes the
   Step 1 open item on the lint binary for this session.
 
+### Step 3 — test: RED — reactive reclaims are audited and their failures logged (AC-4, AC-5, AC-7, AC-8, AC-9) [done]
+- Extended `trading_order_state_audit_test.go` with test-local fakes `staleIntentRepo` (stale PENDING record
+  with the exact request hash; it records the CAS ctx's trace id and `ctx.Err()`) and `traceCapturingLedger`
+  (runs the real `middleware.UnaryClientInterceptor` through a fake invoker). Helpers: `reclaimCase`, which has
+  place/cancel/replace builders, `reclaimSvc`, `assertReachedReclaim` (the reclaim was called and the full
+  "still pending" message matches) and `waitForLedgerEventType` (2s/10ms).
+- Tests added:
+  - AC-4/8/9 (`*_StaleIntent_ReclaimAudited_*`) cover the emit, its payload, the RFC3339 `was_pending_since`
+    and the trace id, and check that the CAS and the emit run on an uncancelled ctx.
+  - AC-5/7 (`*_StaleIntent_ReclaimFailureLogged_*`) check the "order intent reclaim failed" log and that no
+    event is emitted.
+  - `TestSweepOrderIntents_PayloadPopulated` and `TestReclaimedUnknownPayload` cover the sweeper payload
+    and the payload builder.
+- TDD RED, from the specced Verification command against the unmodified tree:
+  - Before `TestReclaimedUnknownPayload` was added:
+    - AC-4/8/9 FAILED with `reclaim CAS ctx: traceID = "t-267", ctx.Err() = context canceled` and with
+      `no "order_intent.reclaimed_unknown" ledger event within 2s (events: [])`.
+    - AC-5/7 FAILED with `want exactly one "order intent reclaim failed" record, got 0`.
+    - The sweeper test FAILED with `payload is nil`.
+    - Every guard passed, so each test reached the reclaim branch for the right reason.
+  - After it was added, the build fails with `undefined: reclaimedUnknownPayload`.
+- GREEN feasibility: the Step 4 instructions were applied to scratch copies of `order_intent.go` and
+  `trading.go`. All 7 tests passed at `-count=3`, and the full `internal/service` package passed with
+  `-race`. That scratch edit was reverted and not committed; Step 4 owns it.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go`
+- Deviations D3-1 to D3-4 (ledger injection via `reclaimSvc`, AC-5/7 ctx, package-wide build failure until
+  Step 4, no husky hook installed in this environment) are detailed in the Deviation Log.
+- The pipe-regex `-run` was accepted this session, so the D1-3/D2-1 fallback was not needed.
+

@@ -231,7 +231,7 @@ grep -n "_ = s.repo.UpsertOrder" services/xstockstrat-trading/internal/service/t
 
 ### Step 3 — test: RED — reactive reclaims are audited and their failures logged (AC-4, AC-5, AC-7, AC-8, AC-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify (created by Step 1; absent until then)
@@ -624,3 +624,21 @@ _Populated by /sdd-execute as implementation proceeds._
   Go 1.27 module. Rebuilt the same pinned v2.14.0 with `GOTOOLCHAIN=go1.27.0 go install` (proxy.golang.org)
   into the session scratchpad and ran the specced command: `0 issues.` **Disposition**: CI-equivalent
   fallback (same version as `golangci-lint-action@v9` pin; toolchain only).
+
+### 2026-10-28 — Step 3
+
+- **D3-1 (ledger injection):** Step 1's `auditSvc` takes a `*recordingLedgerClient`, so the reclaim tests
+  build the service through it and then set `svc.ledger = &traceCapturingLedger{}` and
+  `svc.orderIntentRepo = staleIntentRepo` (helper `reclaimSvc`). No Step 1 test changed.
+  **Disposition**: applied in-step, test-local.
+- **D3-2 (AC-5/AC-7 ctx):** Instruction 5 names no ctx, so the failure-log tests use `ctxAsUser("u-1")`
+  (no cancellation needed, since no emit is expected). AC-4/8/9 use `tracedCancelledCtx("u-1")` as specced.
+  **Disposition**: applied in-step.
+- **D3-3 (package-wide build failure until Step 4):** `TestReclaimedUnknownPayload` references the Step 4
+  symbol, so the whole `internal/service` test binary fails to build on the branch between Steps 3 and 4.
+  This is the specced RED evidence (Instruction 7); Step 4 must land before the integration PR's CI runs.
+  The per-test RED was captured first, before that test was added (see context.md).
+  **Disposition**: accepted by spec.
+- **D3-4 (pre-commit hook):** the worktree has no `node_modules` and the main worktree has none to link;
+  `core.hooksPath` points at `.husky/_`, which is not installed, so git ran no hook. The commit did not use
+  `--no-verify`. `gofmt -l` and `go vet` were run by hand and are clean. **Disposition**: environment only.

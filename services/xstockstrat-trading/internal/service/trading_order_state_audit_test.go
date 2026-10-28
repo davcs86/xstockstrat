@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -9,9 +10,15 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
+	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
@@ -275,4 +282,326 @@ func TestOrderStateWriteCtx_ReplaceFinal_AC6(t *testing.T) {
 	}
 	waitForLedgerEvents(t, ledger, 1)
 	assertWriteCtx(t, db)
+}
+
+type reclaimCall struct {
+	traceID string
+	ctxErr  error
+}
+
+// staleIntentRepo reports an existing stale PENDING intent, so every handler takes the reactive reclaim branch.
+type staleIntentRepo struct {
+	fakeOrderIntentRepo
+	requestHash  string
+	pendingSince time.Time
+	reclaimed    bool
+	out          *repository.OrderIntentRecord
+	err          error
+	sweep        []*repository.OrderIntentRecord
+
+	mu      sync.Mutex
+	called  bool
+	reclaim reclaimCall
+}
+
+func newStaleIntentRepo(requestHash string) *staleIntentRepo {
+	return &staleIntentRepo{requestHash: requestHash, pendingSince: time.Now().Add(-time.Hour), reclaimed: true}
+}
+
+func (r *staleIntentRepo) InsertIntent(context.Context, *repository.OrderIntentRecord) (bool, error) {
+	return false, nil
+}
+
+func (r *staleIntentRepo) GetIntentByID(_ context.Context, id string) (*repository.OrderIntentRecord, error) {
+	return &repository.OrderIntentRecord{
+		IntentID: id, OrderID: "o-1", RequestHash: r.requestHash,
+		State: repository.IntentStatePending, UpdatedAt: r.pendingSince,
+	}, nil
+}
+
+func (r *staleIntentRepo) ReclaimOrphanIntent(ctx context.Context, id string, _ time.Time) (bool, *repository.OrderIntentRecord, error) {
+	r.mu.Lock()
+	r.called = true
+	r.reclaim = reclaimCall{traceID: middleware.FromContext(ctx).TraceID, ctxErr: ctx.Err()}
+	r.mu.Unlock()
+	if r.err != nil {
+		return false, nil, r.err
+	}
+	out := r.out
+	if out == nil {
+		out = &repository.OrderIntentRecord{IntentID: id, OrderID: "o-1", UpdatedAt: time.Now()}
+	}
+	return r.reclaimed, out, nil
+}
+
+func (r *staleIntentRepo) SweepStalePending(context.Context, time.Time, int) ([]*repository.OrderIntentRecord, error) {
+	return r.sweep, nil
+}
+
+func (r *staleIntentRepo) snapshot() (bool, reclaimCall) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.called, r.reclaim
+}
+
+type ledgerCall struct {
+	req     *ledgerv1.AppendEventRequest
+	traceID string
+	ctxErr  error
+}
+
+// traceCapturingLedger runs the real client interceptor, so it sees the x-trace-id a real AppendEvent would send.
+type traceCapturingLedger struct {
+	recordingLedgerClient
+	calls []ledgerCall
+}
+
+func (l *traceCapturingLedger) AppendEvent(ctx context.Context, req *ledgerv1.AppendEventRequest, opts ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
+	ctxErr := ctx.Err()
+	var traceID string
+	invoker := func(ctx context.Context, _ string, _, _ interface{}, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+		md, _ := metadata.FromOutgoingContext(ctx)
+		if v := md.Get("x-trace-id"); len(v) > 0 {
+			traceID = v[0]
+		}
+		return nil
+	}
+	_ = middleware.UnaryClientInterceptor(ctx, "/ledger.v1.LedgerService/AppendEvent", req, nil, nil, invoker, opts...)
+	l.mu.Lock()
+	l.events = append(l.events, req)
+	l.calls = append(l.calls, ledgerCall{req: req, traceID: traceID, ctxErr: ctxErr})
+	l.mu.Unlock()
+	return &ledgerv1.AppendEventResponse{}, nil
+}
+
+func (l *traceCapturingLedger) callsOf(eventType string) []ledgerCall {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []ledgerCall
+	for _, c := range l.calls {
+		if c.req.EventType == eventType {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func waitForLedgerEventType(t *testing.T, l *traceCapturingLedger, eventType string) ledgerCall {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := l.callsOf(eventType); len(got) > 0 {
+			return got[0]
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no %q ledger event within 2s (events: %v)", eventType, l.eventTypes())
+	return ledgerCall{}
+}
+
+const reclaimedUnknownEvent = "order_intent.reclaimed_unknown"
+
+// reclaimCase drives one RPC into its stale-PENDING reclaim branch.
+type reclaimCase struct {
+	orders   map[string]*tradingv1.Order
+	broker   broker.Broker
+	hash     string
+	intentID string
+	wantMsg  string
+	trigger  string
+	call     func(*TradingService, context.Context) error
+}
+
+func placeReclaimCase(t *testing.T) reclaimCase {
+	t.Helper()
+	sum, err := placeOrderRequestHash(placeReq())
+	if err != nil {
+		t.Fatalf("placeOrderRequestHash: %v", err)
+	}
+	return reclaimCase{
+		orders: map[string]*tradingv1.Order{}, broker: timeoutBroker(), hash: hex.EncodeToString(sum),
+		intentID: "c-1", wantMsg: `order intent "c-1" is still pending`, trigger: "reactive_place",
+		call: func(s *TradingService, ctx context.Context) error {
+			_, err := s.PlaceOrder(ctx, placeReq())
+			return err
+		},
+	}
+}
+
+func cancelReclaimCase(t *testing.T) reclaimCase {
+	t.Helper()
+	req := &tradingv1.CancelOrderRequest{OrderId: "o-1"}
+	id, hash, err := deriveReplaceCancelIntentID(req)
+	if err != nil {
+		t.Fatalf("deriveReplaceCancelIntentID: %v", err)
+	}
+	return reclaimCase{
+		orders: workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW), broker: &fakeBroker{}, hash: hash,
+		intentID: id, wantMsg: "cancel on order o-1 is still pending", trigger: "reactive_cancel",
+		call: func(s *TradingService, ctx context.Context) error { _, err := s.CancelOrder(ctx, req); return err },
+	}
+}
+
+func replaceReclaimCase(t *testing.T) reclaimCase {
+	t.Helper()
+	req := &tradingv1.ReplaceOrderRequest{OrderId: "o-1", LimitPrice: 101.00}
+	id, hash, err := deriveReplaceCancelIntentID(req)
+	if err != nil {
+		t.Fatalf("deriveReplaceCancelIntentID: %v", err)
+	}
+	return reclaimCase{
+		orders: workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW), broker: replaceOKBroker{&fakeBroker{}}, hash: hash,
+		intentID: id, wantMsg: "replace on order o-1 is still pending", trigger: "reactive_replace",
+		call: func(s *TradingService, ctx context.Context) error { _, err := s.ReplaceOrder(ctx, req); return err },
+	}
+}
+
+func reclaimSvc(c reclaimCase, repo *staleIntentRepo, ledger *traceCapturingLedger) *TradingService {
+	svc := auditSvc(&ctxCapturingDB{}, c.broker, &recordingLedgerClient{}, c.orders)
+	svc.orderIntentRepo = repo
+	svc.ledger = ledger
+	return svc
+}
+
+// assertReachedReclaim fails unless the RPC took the stale-PENDING reclaim branch, not a gate or hash mismatch.
+func assertReachedReclaim(t *testing.T, err error, repo *staleIntentRepo, wantMsg string) {
+	t.Helper()
+	if called, _ := repo.snapshot(); !called {
+		t.Fatalf("ReclaimOrphanIntent not called; RPC returned %v", err)
+	}
+	if grpcstatus.Code(err) != codes.FailedPrecondition || grpcstatus.Convert(err).Message() != wantMsg {
+		t.Fatalf("err = %v, want FailedPrecondition %q", err, wantMsg)
+	}
+}
+
+func runReclaimAudited(t *testing.T, c reclaimCase) {
+	repo, ledger := newStaleIntentRepo(c.hash), &traceCapturingLedger{}
+	err := c.call(reclaimSvc(c, repo, ledger), tracedCancelledCtx("u-1"))
+	assertReachedReclaim(t, err, repo, c.wantMsg)
+
+	if _, cas := repo.snapshot(); cas.traceID != "t-267" || cas.ctxErr != nil {
+		t.Errorf("reclaim CAS ctx: traceID = %q, ctx.Err() = %v; want t-267 and nil", cas.traceID, cas.ctxErr)
+	}
+	ev := waitForLedgerEventType(t, ledger, reclaimedUnknownEvent)
+	if ev.req.StreamKey != "order:o-1" || ev.req.UserId != "u-1" {
+		t.Errorf("stream_key = %q, user_id = %q; want order:o-1 and u-1", ev.req.StreamKey, ev.req.UserId)
+	}
+	if ev.traceID != "t-267" || ev.ctxErr != nil {
+		t.Errorf("emit ctx: x-trace-id = %q, ctx.Err() = %v; want t-267 and nil", ev.traceID, ev.ctxErr)
+	}
+	if ev.req.Payload == nil {
+		t.Fatal("payload is nil")
+	}
+	want := map[string]interface{}{
+		"trigger": c.trigger, "order_id": "o-1", "intent_id": c.intentID,
+		"was_pending_since": repo.pendingSince.UTC().Format(time.RFC3339Nano),
+	}
+	got := ev.req.Payload.AsMap()
+	if len(got) != len(want) {
+		t.Errorf("payload = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("payload[%s] = %v, want %v", k, got[k], v)
+		}
+	}
+}
+
+func TestPlaceOrder_StaleIntent_ReclaimAudited_AC4(t *testing.T) {
+	runReclaimAudited(t, placeReclaimCase(t))
+}
+
+func TestCancelOrder_StaleIntent_ReclaimAudited_AC8(t *testing.T) {
+	runReclaimAudited(t, cancelReclaimCase(t))
+}
+
+func TestReplaceOrder_StaleIntent_ReclaimAudited_AC9(t *testing.T) {
+	runReclaimAudited(t, replaceReclaimCase(t))
+}
+
+func runReclaimFailureLogged(t *testing.T, c reclaimCase) {
+	records := captureLogs(t)
+	repo, ledger := newStaleIntentRepo(c.hash), &traceCapturingLedger{}
+	repo.err = errors.New("db unavailable")
+	err := c.call(reclaimSvc(c, repo, ledger), ctxAsUser("u-1"))
+	assertReachedReclaim(t, err, repo, c.wantMsg)
+
+	var got []map[string]any
+	for _, r := range records() {
+		if r["msg"] == "order intent reclaim failed" {
+			got = append(got, r)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("want exactly one %q record, got %d (records: %v)", "order intent reclaim failed", len(got), records())
+	}
+	if got[0]["intent_id"] != c.intentID || got[0]["trigger"] != c.trigger {
+		t.Errorf("intent_id = %v, trigger = %v; want %s and %s", got[0]["intent_id"], got[0]["trigger"], c.intentID, c.trigger)
+	}
+	if e, _ := got[0]["error"].(string); !strings.Contains(e, "db unavailable") {
+		t.Errorf("error = %v, want it to contain %q", got[0]["error"], "db unavailable")
+	}
+	if evs := ledger.callsOf(reclaimedUnknownEvent); len(evs) != 0 {
+		t.Errorf("got %d %s events on a failed reclaim, want 0", len(evs), reclaimedUnknownEvent)
+	}
+}
+
+func TestCancelOrder_StaleIntent_ReclaimFailureLogged_AC5(t *testing.T) {
+	runReclaimFailureLogged(t, cancelReclaimCase(t))
+}
+
+func TestReplaceOrder_StaleIntent_ReclaimFailureLogged_AC7(t *testing.T) {
+	runReclaimFailureLogged(t, replaceReclaimCase(t))
+}
+
+func TestSweepOrderIntents_PayloadPopulated(t *testing.T) {
+	t0, t1 := time.Now().Add(-time.Hour), time.Now()
+	repo := &staleIntentRepo{
+		reclaimed: true,
+		out:       &repository.OrderIntentRecord{IntentID: "i-1", OrderID: "o-1", UpdatedAt: t1},
+		sweep:     []*repository.OrderIntentRecord{{IntentID: "i-1", OrderID: "o-1", UpdatedAt: t0}},
+	}
+	ledger := &traceCapturingLedger{}
+	svc := &TradingService{cfgW: activeSnapshot(), orderIntentRepo: repo, ledger: ledger}
+
+	svc.sweepOrderIntents(context.Background())
+
+	evs := ledger.callsOf(reclaimedUnknownEvent)
+	if len(evs) != 1 {
+		t.Fatalf("got %d %s events, want 1", len(evs), reclaimedUnknownEvent)
+	}
+	req := evs[0].req
+	if req.UserId != "" || req.StreamKey != "order:o-1" {
+		t.Errorf(`user_id = %q, stream_key = %q; want "" and order:o-1`, req.UserId, req.StreamKey)
+	}
+	if req.Payload == nil {
+		t.Fatal("payload is nil")
+	}
+	got, wantSince := req.Payload.AsMap(), t0.UTC().Format(time.RFC3339Nano)
+	if got["trigger"] != "sweep" || got["was_pending_since"] != wantSince {
+		t.Errorf("payload = %v, want trigger sweep and was_pending_since %s", got, wantSince)
+	}
+}
+
+func TestReclaimedUnknownPayload(t *testing.T) {
+	t0 := time.Date(2026, 10, 28, 9, 30, 0, 123456789, time.FixedZone("EST", -5*3600))
+	out := &repository.OrderIntentRecord{IntentID: "i-1", OrderID: "o-1", UpdatedAt: time.Now()}
+
+	m := reclaimedUnknownPayload("sweep", out, t0)
+
+	if _, err := structpb.NewStruct(m); err != nil {
+		t.Fatalf("structpb.NewStruct: %v", err)
+	}
+	want := map[string]interface{}{
+		"trigger": "sweep", "order_id": "o-1", "intent_id": "i-1",
+		"was_pending_since": t0.UTC().Format(time.RFC3339Nano),
+	}
+	if len(m) != len(want) {
+		t.Errorf("payload = %v, want exactly %v", m, want)
+	}
+	for k, v := range want {
+		if m[k] != v {
+			t.Errorf("payload[%s] = %v, want %v", k, m[k], v)
+		}
+	}
 }
