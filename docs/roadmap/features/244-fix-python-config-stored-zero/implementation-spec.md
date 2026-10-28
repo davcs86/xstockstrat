@@ -533,7 +533,7 @@ Green run is Step 8's Verification.
 
 ### Step 8 — test: indicators @AC-6 rows and the read-classification guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify
@@ -1340,3 +1340,8 @@ _Populated by /sdd-execute as implementation proceeds._
   The `int_positive` comment names the indicators hazards (Semaphore(-1), `memory_bytes=-1` skips `RLIMIT_DATA`)
   rather than Step 3's ingest `sleep(-n)` wording; the body is identical. The Codebase Evidence cites `sandbox.py`;
   the file is `app/services/sandbox.py` (not edited).
+- 2026-10-28 Step 8 (TDD evidence method, no scope change): Step 7 had already landed, so RED ran the new tests against
+  the Step-6 `app/config/watcher.py` and `app/handlers/servicer.py` (`git checkout e796238a --`, restored to HEAD
+  before GREEN; never committed). Instruction 4's "Step-5 tree" has the same `app/` as the Step-6 tree (Step 6 is
+  test-only). On that tree the semaphore row read `_value == 1` (the pre-Step-7 `max(1, …)`), not 0. The guard file
+  is the Step-4 ingest guard with the indicators key sets swapped in (`ZERO_IS_LEGIT` an empty dict).

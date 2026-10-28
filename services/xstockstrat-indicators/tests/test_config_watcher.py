@@ -115,3 +115,22 @@ def _no_snapshot_watcher() -> ConfigWatcher:
 )
 def test_getters_default_when_unset_or_mismatched(make, getter, key, default):
     assert getattr(make(), getter)(key, default) == default
+
+
+# ---------------------------------------------------------------------------
+# Feature 244 @AC-6 — the sandbox int accessors read a stored value <= 0 as the coded
+# default (FR-3), so a stored 0 cannot reach Semaphore(0), RLIMIT_NPROC=0 or a 0 timeout.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "key,stored,read,expected",
+    [
+        ("indicators.sandbox.timeout_ms", 0, lambda w: w.sandbox_timeout_ms, 5000),
+        ("indicators.sandbox.memory_bytes", 0, lambda w: w.sandbox_memory_bytes, 134217728),
+        ("indicators.sandbox.memory_bytes", -1, lambda w: w.sandbox_memory_bytes, 134217728),
+        ("indicators.sandbox.max_concurrent", 0, lambda w: w.sandbox_max_concurrent(), 4),
+    ],
+)
+def test_sandbox_accessors_clamp_stored_non_positive(key, stored, read, expected):
+    assert read(snapshot_watcher(**{key: stored})) == expected

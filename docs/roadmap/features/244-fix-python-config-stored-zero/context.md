@@ -471,3 +471,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: no `node_modules` in the main worktree to symlink and `core.hooksPath` unset (same as
   Steps 1-6; never `--no-verify`).
 - Next: Step 8.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 8
+
+### Step 8 — test: indicators @AC-6 rows and the read-classification guard [done]
+- `tests/test_config_watcher.py`: parametrized `test_sandbox_accessors_clamp_stored_non_positive` over a real
+  `snapshot_watcher`: `timeout_ms` 0 → 5000, `memory_bytes` 0 and -1 → 134217728, `max_concurrent` 0 → 4.
+- `tests/test_execute_formula_concurrency.py`: with `max_concurrent` 0 and `allowed_imports` `""`,
+  `IndicatorsServicer(...)._sandbox_sem._value == 4`. A recorder `sandbox.execute_formula` double sees
+  `max_concurrent` 4, `timeout_ms` 5000 and `memory_bytes` 134217728 on one `ExecuteFormula`.
+- `tests/test_config_read_classification.py` (new): the Step-4 ingest guard with `FR3_KEYS` = the three sandbox int
+  keys, `HONOUR_KEYS = {"indicators.sandbox.allowed_imports"}`, `ZERO_IS_LEGIT = {}`. It exposes `collect(app_dir)`.
+  The keyword-default `get_str_present` call binds. The `int_positive` body is skipped by name.
+- TDD: RED against the Step-6 `app/` (`git checkout e796238a --`, restored before GREEN): 7 failed, 24 passed. The
+  failures were guard rule 2, the 4 accessor rows (0 / -1 returned as-is), the semaphore row (`_value` 1 via the old
+  `max(1, …)`) and the recorder row (`max_concurrent` 0). GREEN: 31 passed.
+- Verification: the full indicators suite gave 312 passed, coverage 85.61% (≥50). `ruff check` and
+  `ruff format --check` were clean.
+- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`,
+  `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py`,
+  `services/xstockstrat-indicators/tests/test_config_read_classification.py` (created)
+- Deviations: the TDD evidence method and the RED-tree note. See the Deviation Log.
+- Husky pre-commit did not run. The main worktree has no `node_modules` to symlink, and `core.hooksPath` points at a
+  missing `.husky/_` (same as Steps 1-7; never `--no-verify`).
+- Next: Step 9.

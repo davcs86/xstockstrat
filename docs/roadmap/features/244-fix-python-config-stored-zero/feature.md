@@ -28,6 +28,7 @@
 | 2026-10-28 | `in-progress` (step 5 done) | /sdd-execute sequential | Step 5: indicators `get_str`/`get_int`/`get_float` use `HasField`; `get_str_present = get_str` alias (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 6 done) | /sdd-execute sequential | Step 6: indicators conftest `snapshot_watcher` (C-13 home), `_str_watcher` delegates to it; @AC-1/@AC-4 getter rows in `test_config_watcher.py` (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 7 done) | /sdd-execute sequential | Step 7: indicators module-level `int_positive` clamps `sandbox_timeout_ms` / `sandbox_memory_bytes` / `sandbox_max_concurrent()`; `servicer.py` semaphore `max(1, …)` dropped (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 8 done) | /sdd-execute sequential | Step 8: indicators @AC-6 accessor rows (0 / -1 → defaults), servicer rows (semaphore `_value == 4`; sandbox receives `max_concurrent` 4, `timeout_ms` 5000, `memory_bytes` 134217728) and the AST read-classification guard `tests/test_config_read_classification.py` (TDD red → green) |
 
 ---
 
@@ -64,4 +65,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-execute fix-python-config-stored-zero sequential` — Step 8 (test: indicators @AC-6 rows and the read-classification guard)
+`/sdd-execute fix-python-config-stored-zero sequential` — Step 9 (service: analysis getters honour a stored zero (HasField))
