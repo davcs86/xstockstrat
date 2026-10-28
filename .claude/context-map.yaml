@@ -57,6 +57,11 @@ workflows:
     path: .claude/workflows/sdd-batch-execute.js
     runs: "sdd-execute <slug> sequential, per feature in parallel worktrees, halting at every operator gate"
     tests: scripts/workflow-tests/sdd-batch-execute.test.mjs
+  - name: merge-train
+    path: .claude/workflows/merge-train.js
+    runs: "progressive PR merges: update from base, allowlisted conflict resolution, CI wait, branch-policy merge, stacked retarget"
+    helper: scripts/merge-train-resolve.mjs
+    tests: scripts/workflow-tests/merge-train.test.mjs scripts/workflow-tests/merge-train-resolve.test.mjs
 
 # --- Skills: lean SKILL.md routers + on-demand reference/ files ---
 skills:

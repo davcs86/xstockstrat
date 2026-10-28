@@ -15,6 +15,9 @@ import pytest
 
 import app.engine.fundsignal_loop as fundsignal_module
 from app.engine.fundsignal_loop import FundamentalsSignalLoop
+from tests.conftest import fundamentals_row
+
+BUILTIN_SCORER_METRICS = (*fundsignal_module._BUILTIN_BANDS, "eps")
 
 
 def _make_cfg(overrides=None):
@@ -30,7 +33,6 @@ def _make_cfg(overrides=None):
 
 def _fund(symbol, **kw):
     base = dict(
-        symbol=symbol,
         pe_ratio=15.0,
         pb_ratio=2.0,
         roe=0.15,
@@ -39,7 +41,7 @@ def _fund(symbol, **kw):
         dividend_yield=0.02,
     )
     base.update(kw)
-    return SimpleNamespace(**base)
+    return fundamentals_row(symbol, **base)
 
 
 def _make_loop(overrides=None):
@@ -733,3 +735,188 @@ class TestSystemWriteRejected:
             notify_pb2.AlertSeverity.ALERT_SEVERITY_ERROR
         ]
         assert "fundamentals" in alerts[0].args[0].body
+
+
+# ── Feature 246 — data-less symbols are unscored, real zeros are scored (AC-1/AC-2/AC-3) ────────
+
+_UNSCORED_MARK = "unscored (no fundamentals)"
+
+
+def _serve_rows(loop, rows):
+    async def _get_multi(request, metadata=()):
+        return SimpleNamespace(fundamentals=[rows[s] for s in request.symbols if s in rows])
+
+    loop._marketdata.GetFundamentalsMulti = AsyncMock(side_effect=_get_multi)
+
+
+def _unscored_warns(caplog):
+    return [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelname == "WARNING" and _UNSCORED_MARK in r.getMessage()
+    ]
+
+
+class TestUnscoredSymbols:
+    @pytest.mark.asyncio
+    async def test_ac1_dataless_symbols_not_scored_ranked_or_emitted(self, monkeypatch, caplog):
+        loop = _identity_loop()
+        etfs = ["SPY", "QQQ", "IWM", "DIA", "VOO"]
+        rows = {s: fundamentals_row(s, missing=BUILTIN_SCORER_METRICS) for s in etfs}
+        rows["MSFT"] = fundamentals_row(
+            "MSFT", pe_ratio=20.0, roe=0.30, eps=10.0, missing=("pb_ratio", "debt_to_equity")
+        )
+        _serve_rows(loop, rows)
+        spy = MagicMock(wraps=loop._map_directions)
+        monkeypatch.setattr(loop, "_map_directions", spy)
+        with caplog.at_level("WARNING"):
+            summary = await loop.run_once(override_symbols=[*etfs, "MSFT"])
+
+        ingested = loop._ingest.of("IngestSignal")
+        assert len(ingested) == 1
+        assert ingested[0][1].signal.symbol == "MSFT"
+        assert [c.args[1] for c in _emitted_inserts(loop)] == ["MSFT"]
+        (scores, *_), _kw = spy.call_args
+        assert set(scores) == {"MSFT"}
+        assert scores["MSFT"] == pytest.approx((0.6 + 1.0 + 1.0) / 3, abs=1e-9)
+        warns = _unscored_warns(caplog)
+        assert len(warns) == 1
+        assert summary.run_id in warns[0]
+        assert "5 of 6" in warns[0]
+        assert "DIA,IWM,QQQ,SPY,VOO" in warns[0]
+
+    @pytest.mark.asyncio
+    async def test_ac2_zero_metric_scored_not_absent(self):
+        loop = _identity_loop()
+        rows = {
+            "ZRO": fundamentals_row(
+                "ZRO", pe_ratio=20.0, roe=0.0, missing=("pb_ratio", "debt_to_equity", "eps")
+            )
+        }
+        _serve_rows(loop, rows)
+        await loop.run_once(override_symbols=["ZRO"])
+
+        (_m, req, _meta), *rest = loop._ingest.of("IngestSignal")
+        assert rest == []
+        assert req.signal.conviction == pytest.approx(0.30, abs=1e-9)
+        (insert,) = _emitted_inserts(loop)
+        assert insert.args[4] == pytest.approx(0.30, abs=1e-9)
+
+    @pytest.mark.asyncio
+    async def test_ac3_formula_all_missing_skipped_partial_scored(self):
+        loop = _identity_loop({"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        rows = {
+            "NODATA": fundamentals_row(
+                "NODATA", missing=(*BUILTIN_SCORER_METRICS, "dividend_yield")
+            ),
+            "DIVONLY": fundamentals_row(
+                "DIVONLY", dividend_yield=0.013, missing=BUILTIN_SCORER_METRICS
+            ),
+        }
+        _serve_rows(loop, rows)
+        await loop.run_once(override_symbols=["NODATA", "DIVONLY"])
+
+        executed = loop._indicators.of("ExecuteFormula")
+        assert len(executed) == 1
+        _m, req, meta = executed[0]
+        inputs = dict(req.input_data)
+        assert inputs["dividend_yield"] == pytest.approx(0.013)
+        assert inputs["pe_ratio"] == 0.0
+        _assert_system_identity(meta)
+        ingested = loop._ingest.of("IngestSignal")
+        assert [r.signal.symbol for _m, r, _meta in ingested] == ["DIVONLY"]
+        inserts = _emitted_inserts(loop)
+        assert [c.args[1] for c in inserts] == ["DIVONLY"]
+        assert inserts[0].args[4] == pytest.approx(0.7)
+
+    @pytest.mark.asyncio
+    async def test_formula_exception_skip_not_counted_unscored(self, caplog):
+        import grpc
+
+        loop = _identity_loop({"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        loop._indicators._responses["ExecuteFormula"] = _rpc_error(grpc.StatusCode.INTERNAL)
+        rows = {
+            "NODATA": fundamentals_row(
+                "NODATA", missing=(*BUILTIN_SCORER_METRICS, "dividend_yield")
+            ),
+            "AAPL": _fund("AAPL"),
+        }
+        _serve_rows(loop, rows)
+        with caplog.at_level("WARNING"):
+            await loop.run_once(override_symbols=["NODATA", "AAPL"])
+
+        warns = _unscored_warns(caplog)
+        assert len(warns) == 1
+        assert "1 of 2" in warns[0]
+        assert "NODATA" in warns[0]
+        assert "AAPL" not in warns[0]
+        assert any("formula scoring failed for AAPL" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_unscored_warn_logged_on_abort_path(self, caplog):
+        import grpc
+
+        loop = _identity_loop(
+            ingest_responses={"ManageSignalSource": _rpc_error(grpc.StatusCode.FAILED_PRECONDITION)}
+        )
+        rows = {
+            "SPY": fundamentals_row("SPY", missing=BUILTIN_SCORER_METRICS),
+            "MSFT": _fund("MSFT"),
+        }
+        _serve_rows(loop, rows)
+        with caplog.at_level("WARNING"):
+            summary = await loop.run_once(override_symbols=["SPY", "MSFT"])
+
+        assert summary.status == "failed"
+        assert loop._ingest.of("IngestSignal") == []
+        warns = _unscored_warns(caplog)
+        assert len(warns) == 1
+        assert summary.run_id in warns[0]
+        assert "1 of 2" in warns[0]
+        assert "SPY" in warns[0]
+
+    @pytest.mark.asyncio
+    async def test_all_dataless_cycle_completes(self):
+        loop = _identity_loop()
+        rows = {s: fundamentals_row(s, missing=BUILTIN_SCORER_METRICS) for s in ("SPY", "VOO")}
+        _serve_rows(loop, rows)
+        summary = await loop.run_once(override_symbols=["SPY", "VOO"])
+
+        assert summary.status == "completed"
+        assert summary.signals_emitted == 0
+        assert summary.symbols_processed == 2
+        assert len(loop._ingest.of("ManageSignalSource")) == 1
+
+    @pytest.mark.parametrize(
+        ("metric", "value", "expected"),
+        [
+            ("pe_ratio", 0.0, 0.0),
+            ("pb_ratio", 0.0, 0.0),
+            ("roe", 0.0, 0.0),
+            ("debt_to_equity", 0.0, 1.0),
+            ("eps", 0.0, 0.0),
+        ],
+    )
+    def test_builtin_score_zero_values(self, metric, value, expected):
+        row = fundamentals_row(
+            "Z", **{metric: value}, missing=[m for m in BUILTIN_SCORER_METRICS if m != metric]
+        )
+        assert FundamentalsSignalLoop._builtin_score(row) == pytest.approx(expected)
+
+    def test_builtin_score_all_missing_is_none(self):
+        row = fundamentals_row("SPY", missing=BUILTIN_SCORER_METRICS)
+        assert FundamentalsSignalLoop._builtin_score(row) is None
+
+    def test_warn_unscored_unit(self, caplog):
+        with caplog.at_level("WARNING"):
+            FundamentalsSignalLoop._warn_unscored("r-1", ["VOO", "SPY"], 3)
+        warns = _unscored_warns(caplog)
+        assert len(warns) == 1
+        assert "r-1" in warns[0]
+        assert "2 of 3" in warns[0]
+        assert "SPY,VOO" in warns[0]
+
+        caplog.clear()
+        with caplog.at_level("WARNING"):
+            FundamentalsSignalLoop._warn_unscored("r-1", [], 3)
+        assert _unscored_warns(caplog) == []

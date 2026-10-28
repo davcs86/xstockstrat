@@ -416,7 +416,7 @@ Run `/sdd-status` for a live, computed view across all features, or `/sdd-status
 2. Read `docs/roadmap/features/<NNN-slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon + design debate) → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev) | `/sdd-distill` (compact a long-running feature's context.md mid-lifecycle) | `/sdd-archiver` (distil + prune completed features and resolved defect reports into durable memory) | **many features at once:** saved workflows `/sdd-batch` (review → design → spec → impl-review in parallel) and `/sdd-batch-execute` (sequential execute in parallel worktrees) — gates halt by default; contract in `docs/patterns/context-engineering.md` §4
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon + design debate) → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev) | `/sdd-distill` (compact a long-running feature's context.md mid-lifecycle) | `/sdd-archiver` (distil + prune completed features and resolved defect reports into durable memory) | **many features at once:** saved workflows `/sdd-batch` (review → design → spec → impl-review in parallel) and `/sdd-batch-execute` (sequential execute in parallel worktrees), plus `/merge-train` (progressive PR merges) — gates halt by default; contract in `docs/patterns/context-engineering.md` §4
 
 ---
 
