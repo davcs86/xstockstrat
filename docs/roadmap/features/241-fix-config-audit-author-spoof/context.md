@@ -373,3 +373,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   merge-train authorized; defer 255/275; operator-only DB/prod steps — open the PR, hold the merge.
 - Mode: sequential, one commit per step on `feature/fix-config-audit-author-spoof`; single integration PR at the end.
 - Steps 1-13 pending; next: Step 1.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- Step 1 (proto) done: `config.proto` `SetConfigRequest.author = 4` now `[deprecated = true]` with the feature-241
+  deprecation comment; name and number kept, no `reserved` (PROTO-2). TDD: N/A (proto).
+- Verification: `buf lint` exit 0; `buf breaking` exit 0 against a `git archive` export of
+  `origin/feature/fix-config-audit-author-spoof:packages/proto` (CI-equivalent fallback — the spec's
+  `.git#branch=…` input does not resolve in a detached worktree; Deviation Log entry added).
+- Stubs not regenerated in this step (Step 2 owns `packages/proto/gen/**`).
+- Next: Step 2 (proto-gen).

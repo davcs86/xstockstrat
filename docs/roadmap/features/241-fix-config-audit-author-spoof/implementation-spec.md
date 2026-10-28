@@ -82,7 +82,7 @@ grant has no `peerSan` (`services/xstockstrat-config/src/grpc/authz.ts:66-76`). 
 
 ### Step 1 — proto: Deprecate `SetConfigRequest.author` in place
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/config/v1/config.proto` — modify
@@ -1066,3 +1066,9 @@ _Populated by /sdd-execute as implementation proceeds._
   `"trading-reconciliation-poller"` literal already lives in `internal/config/config_test.go`, so Step 6 would
   make it a second consumer file — it is centralized as `testdata.ReconciliationPollerCallerID`, and Step 6's
   Files gain `internal/testdata/caller_ids.go` (create) and `internal/config/config_test.go` (modify).
+- **2026-10-28 — Step 1 verification (CI-equivalent fallback).** The spec's `buf breaking --against
+  "$(git rev-parse --show-toplevel)/.git#branch=feature/fix-config-audit-author-spoof,subdir=packages/proto"`
+  cannot resolve here: no local `feature/fix-config-audit-author-spoof` branch (detached checkout at `origin/…`)
+  and the worktree's `.git` is a file. Ran `buf breaking --against <dir>` on a `git archive` export of
+  `origin/feature/fix-config-audit-author-spoof:packages/proto` instead — same baseline and module config.
+  `buf lint` exit 0, `buf breaking` exit 0 (buf 1.72.0). **Disposition**: CI-equivalent fallback.
