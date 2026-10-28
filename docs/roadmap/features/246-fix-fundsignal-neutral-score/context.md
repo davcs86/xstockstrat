@@ -528,3 +528,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-analysis/tests/conftest.py`, `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`,
   `services/xstockstrat-analysis/tests/test_owner_header_guard.py`, `services/xstockstrat-analysis/tests/test_fundamentals_formula_servicer.py`
 - Deviations: module-local `_serve_rows` / `_unscored_warns` helpers (see Deviation Log).
+
+### Step 2 — service: presence-based built-in scorer, all-missing skip in both scorers, run-attributed unscored WARN [done]
+- `fundsignal_loop.py`: `_builtin_score` reads absence from `f.missing_metrics` (screener `:402` membership pattern;
+  244 has not landed a presence helper, so no reuse deviation) and returns `None` when no metric is usable; pb branch
+  `< 0` → `<= 0` (pb comment updated; PR body must call this out with the pb=0 + de=0 → 0.5 residual). `_score` and
+  `_score_via_formula` return `(scores, unscored)`; the formula path skips a row whose `missing_metrics` covers all six
+  inputs, the exception path is unchanged and not counted. `_warn_unscored` (staticmethod) is called right after
+  `_score` in `run_once`, before `_map_directions` and the source-registration `try`, with `total = len(fetched)`.
+- TDD: AC-1 red `assert 6 == 1` → green; AC-2 red conviction `0.6 == 0.3` → green; AC-3 red `2 == 1` ExecuteFormula
+  calls → green; `_warn_unscored` AttributeError → green. RED run on the pre-Step-2 tree: `-k TestUnscoredSymbols`
+  13 failed. GREEN: the three files 87 passed; full suite `pytest --cov=app --cov-fail-under=40` 1289 passed, total
+  coverage 88.43%; `ruff check .` and `ruff format --check .` clean. Greps: no `else 0.5`; `missing_metrics` at
+  `_builtin_score` and `_score_via_formula`; `_warn_unscored` def + one call (`:227`, before the `try:` at `:236`).
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- Deviations: none.

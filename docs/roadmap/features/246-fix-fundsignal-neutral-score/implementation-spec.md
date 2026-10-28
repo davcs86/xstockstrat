@@ -274,7 +274,7 @@ grep -n "fundamentals_row" tests/test_fundsignal_loop.py tests/test_owner_header
 
 ### Step 2 — service: presence-based built-in scorer, all-missing skip in both scorers, run-attributed unscored WARN
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
