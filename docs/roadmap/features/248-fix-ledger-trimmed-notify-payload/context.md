@@ -317,3 +317,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Step 1 writes two merge-order rows (252, 243). Confirm with the user before writing (context.md:61-63).
   - [ ] Step 10 greps assume `portfolio_service.go:185-233` is stable; 240 and 251 edit that file. Re-grep by
     content at execute time.
+
+## Session 2026-10-28 — sdd-execute sequential §5.3 re-spec (sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload`, `git merge -X ours origin/main-dev`
+  → `fe047901`, pushed. Re-spec directive: conditional.
+- Re-spec'd (implementation-spec.md, commit `1838cba2`):
+  - § Step Dependencies: the 252 precondition was re-checked and is **NOT met**. 252 is still
+    `implementation-ready`. `package.json:13` still runs `--experimental-strip-types` on `src/`,
+    `tsconfig.json:19-22` still excludes tests, and there are still 7 skip guards. Steps 3-11 stay blocked until
+    252 is in `main-dev`. Steps 1-2 do not depend on it.
+  - Config migration renumbered `032` → `033`. 244 holds `032_analysis_zero_trap_descriptions` (commit `d2002841`
+    on its branch), 243 holds `031`, and 264 reserves `034`. 277's planned `033` is void (`demoted/canceled`).
+    Steps 1, 2 and 11 follow, and the change is in the Deviation Log.
+  - Step 1 adds a third row (248 after 244), notes that the existing 266 → 248 row stays as it is, and moves the
+    last-row anchor to `:92`.
+  - Step 2: down-template anchor `:4-6`. The `migration-rerun` evidence now cites `scripts/migration-rerun.sh:89-102`,
+    which replays only the 224/225 files.
+  - Steps 4, 6, 8, 9: the 252-runner gate is noted, and the `dist/` commands must not be adapted to the old
+    runner. Step 9 CI anchors were re-grepped (`node-test` toolchain `:574-590`, `migration-rerun` `:643-679`,
+    `ci-gate` `:799-835`), along with `db-migrate.sh` `:89`/`:152`/`:155`.
+  - Steps 3, 5, 7, 10: evidence still matches, so they were not edited.
+- product-spec.md still says `032` (`:61-63`). This re-spec supersedes that number and does not edit the product
+  spec.
