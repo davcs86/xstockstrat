@@ -589,3 +589,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-10; never
   `--no-verify`).
 - Next: Step 12.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 12
+
+### Step 12 — test: analysis @AC-6 / @AC-7, the guard, and the retention flip [done]
+- `tests/test_config_read_classification.py` (new): the Step-4 AST guard with the analysis sets — clamp names
+  `int_positive` / `float_positive` / `str_nonempty`, 34 `FR3_KEYS`, 36 `HONOUR_KEYS`, 8-entry `ZERO_IS_LEGIT`;
+  `collect(app_dir)` returns per key the set of `(module_dotted_path, default_source)` plus the rule-1 errors.
+- `tests/test_config_zero_clamps.py` (new):
+  - @AC-6 table: 34 rows `(key, type, effective)` from `acceptance.feature`; each default resolved from `collect()`
+    and `eval`'d in its module (covers `_DEFAULT_OPP_*` constants); a `-5` row for `portfolio_max_concurrent`; a
+    table-equals-`FR3_KEYS` check.
+  - @AC-6 seams on one all-zero real watcher: `AnalysisServicer.__init__` sems/pool (4/2/4/4/2), `blend_strategy_id`
+    / `default_cooldown_days` / `fundsignal_source_slug`, `ScreenerEngine._sem` 4, fundsignal disabled `_tick()` 86400,
+    `default_fill_model` 0 → `FILL_MODEL_SAME_BAR_CLOSE`.
+  - @AC-7: both `refresh_hour_utc` seams return 0; `min_conviction_to_emit` 0.0, `scoring_formula_id` "",
+    `explicit_symbols` "" read back as stored; all five keys in `HONOUR_KEYS`, never clamped.
+- `tests/test_analysis_servicer.py`: `test_retention_clamped_to_at_least_one` → `test_retention_non_positive_reads_as_default`
+  parametrized `-5` / `0`, both asserting `retention == 20`.
+- TDD: RED against the Step-10 `app/` (`git checkout e16c0fff --`, restored before GREEN): 43 failed, 19 passed —
+  guard rule 2, all 34 table rows (`KeyError` at `collect()`), the -5 row, every seam (sems 1, named readers missing,
+  screener 1, `_tick` 3600, RunBacktest aborted by `max_range_days` 0), both retention rows (1). AC-7 rows green on
+  both trees by design. GREEN: all pass.
+- Verification: the five named files gave 500 passed; full analysis suite 1345 passed, coverage 88.37% (≥40);
+  `ruff check` / `ruff format --check` clean; `def snapshot_watcher` only at `tests/conftest.py:54`.
+- Files modified: `services/xstockstrat-analysis/tests/{test_config_read_classification.py (new),
+  test_config_zero_clamps.py (new), test_analysis_servicer.py}`
+- Deviations: TDD evidence method; guard/test shape choices. See the Deviation Log.
+- Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-11; never
+  `--no-verify`).
+- Next: Step 13.

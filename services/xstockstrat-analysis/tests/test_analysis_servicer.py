@@ -2542,12 +2542,13 @@ class TestBacktestDetailPersistence:
         assert kwargs["retention"] == 20  # MagicMock cfg returns the call-site default
 
     @pytest.mark.asyncio
-    async def test_retention_clamped_to_at_least_one(self):
-        """A negative configured retention is clamped to 1, never passed to SQL raw."""
+    @pytest.mark.parametrize("stored", [-5, 0])
+    async def test_retention_non_positive_reads_as_default(self, stored):
+        """@AC-6: a stored retention <= 0 reads as the default 20, never passed to SQL raw."""
         svc = make_servicer()
         svc._cfg.get_int = MagicMock(
             side_effect=lambda key, default=0: (
-                -5 if key == "analysis.backtest.detail_retention_per_strategy" else default
+                stored if key == "analysis.backtest.detail_retention_per_strategy" else default
             )
         )
         svc._ledger = MagicMock()
@@ -2556,7 +2557,7 @@ class TestBacktestDetailPersistence:
 
         await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
-        assert svc._backtest_details_repo.insert.await_args.kwargs["retention"] == 1
+        assert svc._backtest_details_repo.insert.await_args.kwargs["retention"] == 20
 
     @pytest.mark.asyncio
     async def test_insufficient_run_persists_no_detail(self):

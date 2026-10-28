@@ -882,7 +882,7 @@ Green run is Step 12's Verification.
 
 ### Step 12 — test: analysis @AC-6 / @AC-7, the guard, and the retention flip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_config_read_classification.py` — create
@@ -1372,3 +1372,15 @@ _Populated by /sdd-execute as implementation proceeds._
   prefix-matches the kept present-aware `retry_seconds` wrappers (`get_int_present`: the two opportunity retry sites
   in `servicer.py` and the fundsignal retry), which Instruction 8 says not to touch. The anchored form (`get_int(`)
   returns no output. The three helpers share one 2-line constraint comment above `int_positive`.
+- 2026-10-28 Step 12 (TDD evidence method + guard/test shape, no scope change): Step 11 had already landed, so RED ran
+  the new tests against the Step-10 `app/` tree (`git checkout e16c0fff --`, restored to HEAD before GREEN; never
+  committed): 43 failed, 19 passed. Shape choices within the instructions:
+  - `collect(app_dir)` returns a `Scan(reads, clamps, errors)` named tuple whose `reads`/`clamps` map each key to its
+    set of `(module_dotted_path, default_source)` (the ingest/indicators copies return flat lists); the rules are the
+    Step-4 rules unchanged. Analysis `ZERO_IS_LEGIT` reasons cite symbols, not line numbers.
+  - The AC-6 seams share one real `snapshot_watcher` with all 34 FR-3 keys (plus `default_fill_model`) at 0. On the
+    Step-10 tree the `default_fill_model` seam fails at the `max_range_days` 0 range check (RunBacktest aborts), not at
+    the fill-model read, which is an honour read on both trees.
+  - The table rows import the clamps lazily and add `test_ac6_table_covers_every_fr3_key` (table keys == `FR3_KEYS`).
+  - The fundsignal `_tick` seam reuses `_make_loop` from `tests/test_fundsignal_loop.py` and replaces `loop._cfg`.
+  - AC-7 fundsignal rows read through the getter with the site default resolved from `collect()`.
