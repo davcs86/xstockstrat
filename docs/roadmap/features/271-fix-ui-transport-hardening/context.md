@@ -553,3 +553,13 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   - Step 3: `alert-stream.spec.ts` "opening the sheet" test `:41-50`, badge-open click sequence `:44-47`.
   - Step 7: `__tests__/insightsBff.test.ts` `vi.mock('@/lib/auth')` `:11-20` (`hasAdminScope` `:19`), `fakeCtx()` `:27-35`, cases `:37-85`. The file imports only `forward` (`:22`), so the new describe adds the `forwardAdmin` and `hasAdminScope` imports.
   - Step 10: the open `listOpportunities`-literal finding is `services/xstockstrat-ui/docs/context-constitution-findings.md:36`, not the root findings file (whose `:36` is an unrelated feature-227 finding). The instruction (leave it open) is unchanged.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`. Severity SEV-3.
+- **Up-front confirmation (sequential mode entry):** operator approved the plan by standing authorization in operator chat
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, and "start batch 2 in
+  parallel too". Recorded answers: unattended checkpoints (checkpoint mode `report`); C-16 promotion auto-confirmed unless it
+  changes an existing `@AC` rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps: open the PR and
+  hold the merge.
+- Plan: Steps 1-10 in order as one commit per step on `feature/fix-ui-transport-hardening`, then a single integration PR to `main-dev`.
