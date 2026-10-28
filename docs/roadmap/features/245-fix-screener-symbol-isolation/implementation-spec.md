@@ -534,7 +534,7 @@ The green run is Step 5's Verification.
   Its response holds one `ScreenResult(symbol="NVDA", score=0.91, criterion_scores={"pe": 1.0}, passed=True, status=SCREEN_RESULT_STATUS_OK)`
   (`:221-229`).
 - Exact-equality assert `assert result["results"][0] == {...}` `:277-283`.
-- Agent CI threshold is 40% (`.github/workflows/ci.yml:358-359`).
+- Agent CI threshold is 40% (`.github/workflows/ci.yml:368-369`, the `xstockstrat-agent` matrix row; re-anchored 2026-10-28).
 
 **TDD**: `red-green required`
 
