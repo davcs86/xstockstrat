@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-07-31 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, 2 factually corrected) |
+| 2026-10-24 | `spec-ready` → `demoted/canceled` | /sdd-review (279 overlap) | Superseded by `279-homelab-compose-deploy` (operator decision) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design droplet-compose-deploy` — full mode recommended (not `quick`), given the cross-cutting infra scope
+None — superseded by `279-homelab-compose-deploy`.

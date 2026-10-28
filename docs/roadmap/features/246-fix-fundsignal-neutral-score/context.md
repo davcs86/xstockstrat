@@ -500,3 +500,140 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `_emit_warning`). Operator to confirm dev DO log access before integration.
 - Overlap scan did not verify 241 and 252 (no read-only checkout); 240 overlap is conditional on whether it has
   landed. Re-check at execute.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode entry: `/sdd-execute fix-fundsignal-neutral-score sequential`, run as one unit of `/sdd-batch-execute`
+  (features 241-276) in an isolated worktree on a detached checkout of `origin/feature/fix-fundsignal-neutral-score`.
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute). Recorded answers: unattended checkpoints (checkpoint
+  mode `report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train authorized;
+  255 and 275 deferred (not this feature).
+- §5.3 branch setup: `git merge -X ours origin/main-dev` into the branch (merge commit `343fd615`), pushed.
+- No re-spec needed (implementation-spec.md unchanged).
+- Status: `implementation-ready` → `in-progress` (status.md, feature.md history row).
+- Carried open threads: release gate (b) needs DO dev log access for `_warn_unscored`; overlap with 241/252/240
+  to be re-checked against the merged tree before Step 1 anchors are trusted.
+
+### Step 1 — test: `fundamentals_row` factory, fixture migration, AC-1/AC-2/AC-3 regression and WARN wiring tests [done]
+- Added `fundamentals_row` to `tests/conftest.py` (real `marketdata_pb2.Fundamentals`, `missing` passed verbatim) and
+  moved `_fund`, `test_owner_header_guard.py` `_FUND_VALUES` rows and `_snapshot_resp` onto it (behaviour-neutral:
+  74 pre-existing tests in the three files still pass). Added `BUILTIN_SCORER_METRICS` and `TestUnscoredSymbols`
+  (13 cases) to `test_fundsignal_loop.py`. Discovery: every Step 1 anchor matched the spec on the merged tree, so the
+  241/252/240 overlap concern did not affect Step 1.
+- TDD red (pre-Step-2 tree): AC-1 `assert 6 == 1` (six IngestSignal calls); AC-2 conviction `0.6 == 0.3`; AC-3
+  `2 == 1` ExecuteFormula calls; abort/formula-exception WARN tests `0 == 1`; all-dataless `signals_emitted 2 == 0`;
+  zero-value table 0.5 for all five; all-missing `0.5 is None`; `_warn_unscored` AttributeError. Full suite:
+  13 failed (only the new tests), 1276 passed. `ruff check .` and `ruff format --check .` clean. Green → Step 2.
+- Files modified: `services/xstockstrat-analysis/tests/conftest.py`, `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`,
+  `services/xstockstrat-analysis/tests/test_owner_header_guard.py`, `services/xstockstrat-analysis/tests/test_fundamentals_formula_servicer.py`
+- Deviations: module-local `_serve_rows` / `_unscored_warns` helpers (see Deviation Log).
+
+### Step 2 — service: presence-based built-in scorer, all-missing skip in both scorers, run-attributed unscored WARN [done]
+- `fundsignal_loop.py`: `_builtin_score` reads absence from `f.missing_metrics` (screener `:402` membership pattern;
+  244 has not landed a presence helper, so no reuse deviation) and returns `None` when no metric is usable; pb branch
+  `< 0` → `<= 0` (pb comment updated; PR body must call this out with the pb=0 + de=0 → 0.5 residual). `_score` and
+  `_score_via_formula` return `(scores, unscored)`; the formula path skips a row whose `missing_metrics` covers all six
+  inputs, the exception path is unchanged and not counted. `_warn_unscored` (staticmethod) is called right after
+  `_score` in `run_once`, before `_map_directions` and the source-registration `try`, with `total = len(fetched)`.
+- TDD: AC-1 red `assert 6 == 1` → green; AC-2 red conviction `0.6 == 0.3` → green; AC-3 red `2 == 1` ExecuteFormula
+  calls → green; `_warn_unscored` AttributeError → green. RED run on the pre-Step-2 tree: `-k TestUnscoredSymbols`
+  13 failed. GREEN: the three files 87 passed; full suite `pytest --cov=app --cov-fail-under=40` 1289 passed, total
+  coverage 88.43%; `ruff check .` and `ruff format --check .` clean. Greps: no `else 0.5`; `missing_metrics` at
+  `_builtin_score` and `_score_via_formula`; `_warn_unscored` def + one call (`:227`, before the `try:` at `:236`).
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- Deviations: none.
+
+### Step 3 — docs: producer docs, `dry_run` drift, findings row, root teardown [done]
+- Analysis `CLAUDE.md`: Idempotency bullet rewritten (analysis day guard + ingest per-owner dedup via
+  `ingest.signal_dedup_claims`; same-day re-run re-fetches unscored symbols within `daily_call_budget`); new
+  **Unscored symbols (feature 246)** bullet after Fail-closed scoring. Analysis constitution Feature 144 bullet: "left
+  unfixed" clause replaced with the feature-246 fix. Agent `run_fundamentals_scan` docstring and `mcp-tools.md` `dry_run`
+  cell now say dry_run reports the universe without scoring. Findings: `analysis.proto:554` row appended to
+  § Documentation that lies (proto not edited, per Fix Scope).
+- TDD: N/A (docs; the only code edit is a docstring). RED: the verification greps hit `CLAUDE.md:123`, constitution
+  `:42` "left unfixed", `tools.py:1409` and `mcp-tools.md:836` "score(s) + report(s)"; no "Unscored symbols" or
+  `analysis.proto:554` row. GREEN: all five greps as expected; agent `ruff check .` + `ruff format --check .` clean;
+  `pytest tests/test_tools.py tests/test_list_correlation_parity.py -q` 121 passed.
+- Teardown: `/context-forge:context-constitution refresh` is not available in this session (only `context-scrubber` is
+  installed). Manual reconciliation: re-read the three touched context files against Step 2's `fundsignal_loop.py`.
+  Checked the WARN format string (`_warn_unscored`), the five built-in metrics and six formula inputs (`_builtin_score`,
+  `_score_via_formula`), that `symbols_done=len(fetched)` counts unscored symbols, that only emitted symbols insert
+  `fundsignal_emitted` rows, and that `dry_run` returns before scoring (`:195-199`). No further drift found. The PR body
+  must record both that the plugin was unavailable and this reconciliation (ledger `fails.md:670`).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-analysis/docs/context-constitution.md`,
+  `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `docs/context-constitution-findings.md`
+- Deviations: docstring wrapped for E501; ingest dedup cited by path, not line (see Deviation Log).
+
+## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-fundsignal-neutral-score (feature 246)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature | CREATE | NEW | Observable subject is the ExternalSignal sent to ingest and the analysis.fundsignal_emitted row, both owned by analysis's producer. |
+| AC-2 | same | CREATE | NEW | A metric reported as 0 is scored, not dropped. This is a new guarantee. |
+| AC-3 | same | CREATE | NEW | The ExecuteFormula call and the emitted row are both in analysis. See Notes for the platform @AC-6 relationship. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature (CREATE) ---
+# Durable business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 246's
+# acceptance.feature on code-completion; @feature-246 marks provenance. These are the guarantees a
+# future feature must not regress: the fundamentals producer never fabricates a score for a symbol
+# with no usable data, and never treats a real zero as absent.
+
+Feature: fix-fundsignal-neutral-score (bug fix)
+  Regression guard for docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md:
+  the fundamentals producer emits fabricated 0.5 scores for symbols with no data.
+
+  Background:
+    Given analysis.fundsignal.min_conviction_to_emit is 0.0
+    And analysis.fundsignal.buy_quantile is 0.80 and analysis.fundsignal.sell_quantile is 0.20
+
+  @AC-1 @FR-1 @regression @feature-246
+  Scenario: Symbols with no usable fundamentals are not scored, ranked or emitted
+    Given analysis.fundsignal.scoring_formula_id is "" (built-in scorer)
+    And analysis.fundsignal.universe_source is "explicit" with explicit_symbols "SPY,QQQ,IWM,DIA,VOO,MSFT"
+    And "SPY", "QQQ", "IWM", "DIA" and "VOO" each list "pe_ratio", "pb_ratio", "roe", "debt_to_equity" and "eps" in missing_metrics
+    And "MSFT" has pe_ratio 20.0, roe 0.30 and eps 10.0
+    And "MSFT" lists "pb_ratio" and "debt_to_equity" in missing_metrics, and not "pe_ratio", "roe" or "eps"
+    When a non-dry-run fundamentals producer cycle runs
+    Then exactly one ExternalSignal is sent to ingest, for "MSFT"
+    And no score, direction or analysis.fundsignal_emitted row exists for "SPY", "QQQ", "IWM", "DIA" or "VOO"
+    And exactly one analysis.fundsignal_emitted row exists, for "MSFT"
+
+  @AC-2 @FR-2 @regression @feature-246
+  Scenario: A metric reported as zero is scored, not treated as absent
+    Given analysis.fundsignal.scoring_formula_id is "" (built-in scorer)
+    And analysis.fundsignal.universe_source is "explicit" with explicit_symbols "ZRO"
+    And "ZRO" has pe_ratio 20.0 and roe 0.0
+    And "ZRO" lists "pb_ratio", "debt_to_equity" and "eps" in missing_metrics, and not "pe_ratio" or "roe"
+    When a non-dry-run fundamentals producer cycle runs
+    Then the ExternalSignal sent to ingest for "ZRO" has conviction 0.30 within 1e-9
+    And the analysis.fundsignal_emitted row for "ZRO" has score 0.30 within 1e-9
+
+  @AC-3 @FR-3 @regression @feature-246
+  Scenario: Under a scoring formula, an all-missing row is skipped and a partial row is still scored
+    Given analysis.fundsignal.scoring_formula_id is set to a system-authored formula
+    And "NODATA" has every formula input in missing_metrics
+    And "DIVONLY" has only dividend_yield 0.013 present
+    When a fundamentals scan runs
+    Then ExecuteFormula is called exactly once, as the system identity, with dividend_yield 0.013 and pe_ratio 0.0
+    And exactly one analysis.fundsignal_emitted row exists, for "DIVONLY"
+    And no ExternalSignal is sent for "NODATA"
+
+### Notes / ambiguities / conflicts
+- Attribution: all three scenarios route to analysis, where the producer lives (app/engine/fundsignal_loop.py). The Then clauses assert on the ExternalSignal sent to ingest, the analysis.fundsignal_emitted row and the ExecuteFormula call. Ingest only receives the signal, so there is no ingest-side promotion. No cross-cutting scenario is promoted to platform.feature.
+- File naming: the source slug is fix-fundsignal-neutral-score. Analysis already has fix-fundamentals-signal-producer.feature (feature 156, scheduling only) and fundsignal-watchlist-universe.feature (universe). Neither asserts anything about scoring or neutral values, so there is no OVERLAP.
+- AC-3 relationship (no CONFLICT): /home/user/xstockstrat/docs/sdd/business-rules/platform.feature @AC-6 @feature-224 (line 258) asserts that the system scoring formula succeeds as x-user-id "system" with x-internal-caller "analysis-fundsignal". AC-3 extends it by adding the all-missing skip and the partial-row scoring. It preserves the system identity.
+- AC-3 also fits /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature line 53 (feature 200/215), where a partial row still evaluates and a symbol with no usable fundamentals is refused. This is consistent: the producer now skips an all-missing row instead of fabricating a neutral value.
+- No existing promoted scenario asserts a neutral 0.5 emission, so nothing is changed or contradicted. The 0.5 hits in the grep were unrelated EB-shrinkage prior text in CLAUDE.md. changesExistingRule=false.
+- The acceptance/ directory already exists for analysis, so no lazy directory creation is needed. Only the new file is created.
+- The path in the task text (docs/roadmap/features/docs/roadmap/features/246-...) was doubled. I read the real file at /home/user/xstockstrat/docs/roadmap/features/246-fix-fundsignal-neutral-score/acceptance.feature from the working tree, not from origin/feature/fix-fundsignal-neutral-score. I did not verify that the working-tree copy matches the branch.
+- The scenario text is verbatim. I appended @feature-246 after the existing @regression tag, and added a provenance header comment and the Background.
+
+### Coverage check
+- Source scenarios: 3 (AC-1, AC-2, AC-3). Planned: 3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for and none was skipped.
+```

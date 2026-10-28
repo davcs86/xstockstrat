@@ -37,6 +37,7 @@ jobs:
     with:
       image_tag: ${{ needs.prepare.outputs.short_sha }}
       latest_tag: latest
+      build_migrator: ${{ vars.HOMELAB_PRODUCTION_ENABLED == 'true' }}
 
   deploy:
     name: Deploy to prod
@@ -59,4 +60,14 @@ jobs:
       MTLS_CA: ${{ secrets.PROD_MTLS_CA }}
     with:
       app_spec: .do/app.yaml
+      image_tag: ${{ needs.prepare.outputs.short_sha }}
+
+  deploy-homelab:
+    name: Deploy to homelab production
+    needs: [prepare, build-images]
+    if: vars.HOMELAB_PRODUCTION_ENABLED == 'true'
+    uses: ./.github/workflows/deploy-homelab.yml
+    secrets: inherit
+    with:
+      environment: production
       image_tag: ${{ needs.prepare.outputs.short_sha }}

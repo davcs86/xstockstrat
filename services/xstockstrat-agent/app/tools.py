@@ -832,18 +832,26 @@ def register_tools(server: MCPServer) -> None:
         signal_sources/signal_weight/technical_weight: optional signal-blend params.
         min_conviction: honored as a hard floor (feature 090) — candidates whose relative
             conviction score is below the entry threshold for this min_conviction are dropped from
-            results (coverage_gaps are unaffected).
-        rank_limit: cap on returned results (0 = analysis default). Read-only, no admin scope.
+            results (coverage_gaps are unaffected). Un-evaluated rows (score 0.0, see
+            score_unavailable below) are also removed when min_conviction > 0.
+        rank_limit: cap on returned results (0 = analysis default); un-evaluated rows rank last
+            and may be cut. A dropped or cut row's only trace is then the server log.
+            Read-only, no admin scope.
         Returns {"results": [{"symbol", "score", "criterion_scores" (per-ref_name map), "passed"
-            (bool), "status"}], "coverage_gaps": [{"symbol", "timeframe", "bars_have",
+            (bool), "score_unavailable" (bool), "status"}], "coverage_gaps": [{"symbol",
+            "timeframe", "bars_have",
             "bars_need"}]}. coverage_gaps now carries the full gap detail (bars_have/bars_need as
             JSON strings — int64) and is computed BEFORE rank truncation, so an under-covered
             symbol ranked below the cut still surfaces (bars gaps only — see next line for
             fundamentals). A result is "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA" (passed=false, no
             score, its ref_name absent from criterion_scores) whenever a requested criterion
             couldn't be evaluated for lack of data — too few bars, or the fundamentals source
-            (FMP) unavailable while a fundamental criterion was requested; it is never reported
-            OK/passed just because a criterion had no data. Filter candidates on `passed`."""
+            (FMP) unavailable while a fundamental criterion was requested.
+            score_unavailable=true means the row has no comparable score and is unranked. Three
+            row kinds carry it: an evaluation fault (status OK, passed=false — the symbol was not
+            evaluated, which is different from a failed screen; the rest of the scan completes);
+            a data-less row with a hard filter (passed=false); a data-less soft-only row
+            (feature 144, passed=true). Filter candidates on `passed`."""
         return await client.screen_symbols(
             symbols=symbols,
             criteria=criteria,
@@ -1406,7 +1414,8 @@ def register_tools(server: MCPServer) -> None:
     ) -> dict:
         """Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156).
         force: re-emit today's signals even if already emitted (clears the day's idempotency rows).
-        dry_run: score + report what WOULD be scanned without emitting or spending cache calls.
+        dry_run: report what WOULD be scanned (universe size) without scoring, emitting
+        or spending cache calls.
         symbols: optional explicit universe override; omitted = the configured universe.
         Returns the FundamentalsScanSummary: {"run_id", "symbols_processed", "signals_emitted",
             "calls_spent", "deferred_count", "status", "finished_at"}. Admin-scoped — a non-admin
