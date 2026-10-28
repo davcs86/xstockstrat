@@ -733,3 +733,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `docs/context-constitution{,-findings}.md`, `services/xstockstrat-{analysis,config,ingest}/docs/context-constitution{,-findings}.md`
 - Deviations: scope detail + teardown method only. See the Deviation Log.
 - Next: Step 18.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: operator approved the plan by standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints
+  ("report"), C-16 promotion auto-confirmed unless it changes an existing @AC rule, merge-train authorized, 255/275
+  deferred; operator-only DB/prod steps: open PR, hold merge).
+- Status already `in-progress` (no transition). Branch setup: `git merge -X ours origin/main-dev` into the detached
+  checkout of `origin/feature/fix-python-config-stored-zero` (merge 7c21021d).
+- Re-spec, Step 18 only (the only pending step), line drift only, no semantic change: agent `list_opportunities`
+  is at `tools.py:1527` (was `:1518`), `set_config` def at `:1651` (was `:1642`, now `list_config_keys`'
+  `_resolve_scope`), params `:1655-1660`, docstring `:1662`. `configServiceImpl.ts:99`, `:466-469`, `:582`,
+  `tools.py:715` and `NamespaceEditor.tsx:71-76` still match; every cited surface file exists.
+- Step 18 is an operator-only rollout (DB audit, dev smoke). It needs DB/deploy access, so the operator runs it.
+- Next: Step 18 rollout audit (operator), then the integration PR (merge held).
