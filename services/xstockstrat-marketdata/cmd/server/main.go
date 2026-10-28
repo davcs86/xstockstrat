@@ -13,6 +13,8 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
@@ -32,6 +34,11 @@ import (
 )
 
 func main() {
+	// Container healthcheck (distroless has no shell): `service healthcheck` probes this process over mTLS.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
@@ -185,6 +192,8 @@ func main() {
 		}),
 	)
 	marketdatav1.RegisterMarketDataServiceServer(grpcServer, hdl.GRPCHandler())
+	hs := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, hs)
 	reflection.Register(grpcServer)
 
 	slog.Info("marketdata service starting", "grpc_port", cfg.GRPCPort)
@@ -194,6 +203,7 @@ func main() {
 	go func() {
 		<-quit
 		slog.Info("shutting down marketdata service")
+		hs.Shutdown()
 		grpcServer.GracefulStop()
 		cancel()
 	}()
@@ -249,4 +259,14 @@ func newFMPClient(cfgWatcher *config.Watcher, apiKey string) *fmp.Client {
 				int(cfgWatcher.GetInt("marketdata.fmp.daily_request_cap", 250))
 		},
 	})
+}
+
+func healthcheck() int {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := mtls.Probe(ctx, "127.0.0.1:"+config.LoadFromEnv().GRPCPort, "xstockstrat-marketdata"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
 }
