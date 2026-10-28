@@ -568,3 +568,9 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
   - Steps 1/3/5: CI coverage exclusion is the `COVERPKGS` regex at `.github/workflows/ci.yml:266` (`:259` is the comment block). The 2026-10-21 impl-spec review entry above still says `:259`; this line supersedes it.
   - Step 3: `classifyIntentLookup` PENDING return is `order_intent.go:83-85`; `:98-106` is `staleThreshold`. `UnaryClientInterceptor` starts at `propagation.go:45`. The `reclaimed_unknown` grep also hits trading `docs/context-constitution-findings.md` (the Step 7 drift row, a doc) — "no downstream code reader" still holds. Step 3's test file is created by Step 1.
   - Steps 4, 5 (36 `context.Background()` hits, unchanged), 6, 7: no drift.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`. Mode: sequential (one commit per step on `feature/fix-trading-order-state-audit`, single integration PR at the end).
+- **Up-front confirmation (P-03):** given by operator standing authorization — operator chat 2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, plus "start batch 2 in parallel too". Recorded answers: checkpoints unattended (`report`); C-16 promotion auto-confirmed unless it changes an existing @AC rule; merge-train authorized; 255/275 deferred; operator-only DB/prod steps — open the PR, hold the merge.
+- Carried-forward open items (announce at checkpoints): sweeper payload nil → populated (Step 4, call out in PR body); `trading.go` overlap with 241/242/249/256 (sequence via `merge-order.md`); reclaim CAS has no timeout under `WithoutCancel`.
