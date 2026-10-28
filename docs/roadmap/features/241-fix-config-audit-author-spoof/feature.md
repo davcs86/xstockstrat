@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-reviewed, PASS WITH WARNINGS (8 warnings); FR-1..FR-4, AC-4, Open Questions Q1-Q5 added |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
+| 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec: steps 6,7,8,10,12,13 aligned with current codebase (line drift; mcp 2.3.0; Step 6 C-13 literal centralized in `internal/testdata`) |
 
 ---
 
