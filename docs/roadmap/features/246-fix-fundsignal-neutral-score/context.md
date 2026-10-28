@@ -500,3 +500,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `_emit_warning`). Operator to confirm dev DO log access before integration.
 - Overlap scan did not verify 241 and 252 (no read-only checkout); 240 overlap is conditional on whether it has
   landed. Re-check at execute.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode entry: `/sdd-execute fix-fundsignal-neutral-score sequential`, run as one unit of `/sdd-batch-execute`
+  (features 241-276) in an isolated worktree on a detached checkout of `origin/feature/fix-fundsignal-neutral-score`.
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute). Recorded answers: unattended checkpoints (checkpoint
+  mode `report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train authorized;
+  255 and 275 deferred (not this feature).
+- §5.3 branch setup: `git merge -X ours origin/main-dev` into the branch (merge commit `343fd615`), pushed.
+- No re-spec needed (implementation-spec.md unchanged).
+- Status: `implementation-ready` → `in-progress` (status.md, feature.md history row).
+- Carried open threads: release gate (b) needs DO dev log access for `_warn_unscored`; overlap with 241/252/240
+  to be re-checked against the merged tree before Step 1 anchors are trusted.
