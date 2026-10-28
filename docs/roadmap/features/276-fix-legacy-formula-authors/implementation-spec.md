@@ -55,7 +55,7 @@ Out of scope: feature 275 reporting surfaces; `_can_read_formula`; `UpdateFormul
 
 ### Step 1 — service: `manage-users.py list-users --json` users export
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (operator tooling; identity data export)
 **Files**:
 - `scripts/manage-users.py` — modify
