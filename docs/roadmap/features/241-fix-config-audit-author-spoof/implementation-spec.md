@@ -598,7 +598,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ### Step 8 — test: agent outbound SetConfig carries no author, the parameter is gone, the probe holds (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -1108,3 +1108,9 @@ _Populated by /sdd-execute as implementation proceeds._
   onto two lines (ruff E501, 100 cols). Until Step 8, 7 tests in `tests/test_config_tools.py` fail with
   `unexpected keyword argument 'author'` — exactly Step 8's break-list (`:110,133,152,171,237,255,297`).
   **Disposition**: accepted; Step 8 restores green.
+- **2026-10-28 — Step 8 TDD red source (process note, no spec change).** Step 7 was already committed, so RED was
+  captured by temporarily restoring the pre-Step-7 `app/client.py` and `app/tools.py` (from `0b1a737d`) in an
+  uncommitted scratch edit. The four new Step 8 assertions failed exactly as the step's **TDD** predicts:
+  `author` in props; `TypeError` missing `author`; `req.author == 'manage_signal_source'` /
+  `'instantiate_template'`; `author` in `mock_set.await_args.kwargs`. The edit was reverted. GREEN: 521 passed,
+  coverage 81.29%. Step 7's 7-test red window is closed. **Disposition**: accepted.

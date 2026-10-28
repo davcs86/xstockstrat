@@ -482,3 +482,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `test_streamable_http_auth.py` passes, which matches Q2.
 - Known red window until Step 8; a Deviation Log entry was added.
 - Next: Step 8 (test: agent outbound SetConfig carries no author, the parameter is gone, the probe holds).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 8
+
+- Step 8 (test) is done (AC-4).
+  - `tests/conftest.py` gains the `bound_admin` fixture (C-13 canonical home; consumed by `test_config_tools.py`
+    and `test_template_tools.py`).
+  - `test_config_tools.py`: the 7 `author=` call sites are removed; the parity exclusion is
+    `{"trading_mode", "author"}`; `test_set_config_exposes_no_author_parameter` sits next to the environment
+    test; `TestSetConfigCarriesNoAuthor` pins `req.author == ""` and `x-user-id == [ADMIN]` at the stub for
+    `set_config` and the `manage_signal_source` bearer write.
+  - `test_template_tools.py`: `test_instantiate_template_set_config_carries_no_author` does the same for the
+    `instantiate_template` bearer write (called directly, not via `_run`, which forces `TRADER`).
+  - `test_streamable_http_auth.py`: the `"author": "a@b.c"` undeclared-argument probe is kept on purpose; it now
+    also asserts `author` is not forwarded. It passes with `isError is False` on mcp 2.3.0, the behavioural
+    confirmation of Q2.
+- TDD: RED from a scratch restore of the pre-Step-7 `app/` files (4/4 new assertions failed as predicted);
+  reverted; GREEN.
+- Verification: the three files pass (43); full `pytest --cov` 521 passed at 81.29%; `ruff check` and
+  `ruff format --check` clean; one `bound_admin` home; probe grep 1 hit. Step 7's red window is closed.
+- Next: Step 9 (service: UI BFFs drop the `author` stamp).

@@ -64,4 +64,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 8 (test: agent outbound SetConfig carries no author, the parameter is gone, the probe holds (AC-4))
+`/sdd-execute fix-config-audit-author-spoof sequential` — Step 9 (service: UI BFFs drop the `author` stamp (/config-ui, /insights))
