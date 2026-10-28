@@ -340,3 +340,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Steps 3, 5, 7, 10: evidence still matches, so they were not edited.
 - product-spec.md still says `032` (`:61-63`). This re-spec supersedes that number and does not edit the product
   spec.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan by standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). The answers given:
+  - checkpoints run unattended, in `report` mode;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - the merge-train is authorized;
+  - 255 and 275 are deferred;
+  - operator-only DB/prod steps: open the PR and hold the merge.
+- Status: `implementation-ready` → `in-progress` (commit `723375ad`).
+- **Blocker for the step loop:** the hard 252 precondition is unmet (see the re-spec entry above). Steps 3-11 must
+  not start until 252 `fix-identity-ledger-test-suites` is merged into `main-dev` and this branch is merged up
+  again. Steps 1-2 (merge-order rows; config `033` seed) are not executed in this session. Resume with
+  `/sdd-execute fix-ledger-trimmed-notify-payload sequential` after 252 lands.
+- Open items carried from the impl-spec review (still unaddressed): the C-18 dual bound mechanism, no queue-depth
+  cap, the Step 9 RED mutation outside Files, and the Step 10 re-grep of `portfolio_service.go`. The Step 1
+  merge-order confirmation is covered by standing authorization.
