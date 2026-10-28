@@ -559,3 +559,12 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - **Decided:** convert `validateAndRecordCredential` → `accountRepo.UpdateCredentialStatus(context.Background(), …)` (`trading.go:2617`) in this feature, under the standing x-trace-id rule (request-derived writes use `context.WithoutCancel(ctx)`). It is request-reachable (`RegisterBrokerAccount` `:2528`, `UpdateBrokerAccountCredentials` `:2575`). On the poller path (`:2690`), `WithoutCancel` behaves the same as `Background()`.
 - **implementation-spec.md:** Step 5 gains row 32 (`:2617`) with a ctx-capturing `accountRepo` test. "Left as-is" is reduced to `:2859`/`:2907`. Step 6 instruction 3 and the end-state grep now expect only `:2859`/`:2907`.
 - **Open Thread resolved:** the earlier "Operator decision needed on `trading.go:2617`" items (sdd-spec Open Threads and the impl-spec carry-over list) are closed by this entry.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: `git merge -X ours origin/main-dev` into the detached checkout of `origin/feature/fix-trading-order-state-audit` (4e752827), pushed.
+- Re-verified Steps 1, 3, 4, 5, 6, 7 against the merged tree; no blocking mismatch. Citation drift corrected in implementation-spec.md:
+  - Step 1: default-HALTED read is `currentTradingState` at `trading.go:3494-3497` (was `:3496-3498`); `FromContext` `propagation.go:20`, `WithPropagationData` `:27` (were `:19-22`/`:24-28`).
+  - Steps 1/3/5: CI coverage exclusion is the `COVERPKGS` regex at `.github/workflows/ci.yml:266` (`:259` is the comment block). The 2026-10-21 impl-spec review entry above still says `:259`; this line supersedes it.
+  - Step 3: `classifyIntentLookup` PENDING return is `order_intent.go:83-85`; `:98-106` is `staleThreshold`. `UnaryClientInterceptor` starts at `propagation.go:45`. The `reclaimed_unknown` grep also hits trading `docs/context-constitution-findings.md` (the Step 7 drift row, a doc) — "no downstream code reader" still holds. Step 3's test file is created by Step 1.
+  - Steps 4, 5 (36 `context.Background()` hits, unchanged), 6, 7: no drift.
