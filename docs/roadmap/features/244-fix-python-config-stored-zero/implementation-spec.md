@@ -224,7 +224,7 @@ Green run is Step 2's Verification.
 
 ### Step 2 — test: ingest getter rows for @AC-1 / @AC-4
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/conftest.py` — modify

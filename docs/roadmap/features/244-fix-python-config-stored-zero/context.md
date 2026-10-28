@@ -351,3 +351,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   328 passed (173 alias tests included); ruff check + format clean.
 - Tooling: `uv sync --extra dev --frozen` in ingest (no manifest change).
 - Next: Step 2.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+- Step 2 (test: ingest getter rows for @AC-1 / @AC-4) done. `services/xstockstrat-ingest/tests/conftest.py` gains
+  `snapshot_watcher(**values)` (dial-free `ConfigWatcher.__new__`; `bool` → `bool_val` checked before `int` →
+  `int_val`, `float` → `float_val`, `str` → `string_val`; lazy imports so `_setup_gen_path()` runs first).
+  `test_config_watcher.py`: `_int_watcher` keeps its name and now delegates to `snapshot_watcher` (imported via
+  `from tests.conftest import snapshot_watcher`, the existing `_ctx` pattern); new
+  `test_getters_honour_stored_zero` (3 @AC-1 rows) and `test_getters_default_when_unset_or_mismatched` (3 @AC-4 rows).
+- TDD: AC-1 red (tests run against the pre-Step-1 `watcher.py` from `HEAD~1`, restored after): 3 failed
+  (`zero_int` → 7, `zero_float` → 0.5, `zero_string` → "x"), 14 passed → green on the Step-1 tree: 17 passed.
+- Verification: `test_config_watcher.py` 17 passed; full ingest suite 334 passed, coverage 81.61% (≥40); ruff check
+  + format clean; `snapshot_watcher` defined once (`tests/conftest.py:71`), used only from `test_config_watcher.py`.
+- Next: Step 3.
