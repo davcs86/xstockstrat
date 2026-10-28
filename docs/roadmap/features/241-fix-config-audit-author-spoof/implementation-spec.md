@@ -698,7 +698,7 @@ grep -n '"author": "a@b.c"' tests/test_streamable_http_auth.py   # probe kept: 1
 
 ### Step 9 — service: UI BFFs drop the `author` stamp (/config-ui, /insights)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
@@ -1114,3 +1114,9 @@ _Populated by /sdd-execute as implementation proceeds._
   `author` in props; `TypeError` missing `author`; `req.author == 'manage_signal_source'` /
   `'instantiate_template'`; `author` in `mock_set.await_args.kwargs`. The edit was reverted. GREEN: 521 passed,
   coverage 81.29%. Step 7's 7-test red window is closed. **Disposition**: accepted.
+- **2026-10-28 — Step 9 verification (red window).** RED→GREEN used an uncommitted scratch vitest file
+  (`configUiBff` and `insightsBff` SetConfig, `author === ''` plus the `x-user-id` pin): 2/2 failed before the
+  change (`expected 'test-user-001' to be ''`), 2/2 passed after it; the scratch file was deleted. Until Step 10,
+  `insightsBff.test.ts` "forces isSecret, createKey, …" fails at `:69` (`expected 'user-mallory' to be
+  'user-alice'`): with the stamp gone, the `:59` fixture `author` passes through `...req`. That is exactly
+  Step 10's break-list (delete `:59`, replace `:69`). **Disposition**: accepted; Step 10 restores green.

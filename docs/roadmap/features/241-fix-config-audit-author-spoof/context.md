@@ -502,3 +502,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: the three files pass (43); full `pytest --cov` 521 passed at 81.29%; `ruff check` and
   `ruff format --check` clean; one `bound_admin` home; probe grep 1 hit. Step 7's red window is closed.
 - Next: Step 9 (service: UI BFFs drop the `author` stamp).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 9
+
+- Step 9 (service) is done.
+  - `configUiBff.setConfig` sends `{ ...req, environment }`; the `:36-37` comment now says the explicit body
+    exists for the environment fill/reject.
+  - `insightsBff.setConfig` no longer stamps `author: claims.user_id`. Identity reaches config only through
+    `backendHeaders` (`x-user-id`), unchanged.
+- TDD: red came from an uncommitted scratch vitest file. It failed 2/2 (`author` was `'test-user-001'`, not
+  `''`, for `/config-ui` and `/insights`), then passed 2/2 green, and was deleted.
+- Verification: the `author` grep (minus "authoring") has no hits; `pnpm run lint` exits 0 (pre-existing
+  warnings only, none in the two files).
+- Known red window until Step 10: `insightsBff.test.ts:69` fails (`'user-mallory'` passes through `...req` from
+  the `:59` fixture). A Deviation Log entry was added.
+- Out of scope, not touched: `tsc --noEmit` reports 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`
+  (not in this step's verification).
+- Next: Step 10 (test: UI BFF setConfig sends the session identity as `x-user-id` and no author).

@@ -64,4 +64,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 9 (service: UI BFFs drop the `author` stamp (/config-ui, /insights))
+`/sdd-execute fix-config-audit-author-spoof sequential` — Step 10 (test: UI BFF setConfig sends the session identity as `x-user-id` and no author)
