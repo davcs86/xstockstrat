@@ -302,3 +302,20 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
     rebase-only.
   - [ ] Re-run Mode B overlap once 241/243-252 reach `implementation-ready` (this scan saw them only at
     product-spec/context depth).
+
+## Session 2026-10-28 — sdd-execute re-spec (§5.3, post main-dev merge)
+
+- Branch setup: detached checkout of `origin/feature/fix-push-untargeted-broadcast`, `git merge -X ours origin/main-dev`
+  (merge commit `90ad4051`), pushed.
+- Re-specced step bodies only (Instructions / Codebase Evidence / Files / Verification) to the current tree:
+  - Step 3: identity anchors moved +4 by the refresh-token fix (`5bd271d8`): admin predicate `:855` (copy `:897`),
+    `adminGate` `:739-749`, error echo `:788` (15 occurrences), `setUserActive` `:882`, class closes `:935`;
+    `bffShared.ts:40` is `[HEADER_USER_ID]: claims.user_id`.
+  - Step 8: unauthenticated-caller pin is comment `:219-225` + `it(...)` `:226`.
+  - Step 10: AC3/AC9 funcs at `:441`/`:461`. C-13 premise restated — `"user-42"`/`"acct-1"` already appear inline as
+    scenario sentinels in other portfolio tests; verification grep scoped to `portfolio_quote_deadline_test.go`.
+  - Step 11: `fundsignal_loop._emit_warning` now `:642` (callers `:283`, `:632`).
+  - Step 14: `inter-service-mtls.md` is 90 lines (still no peer-SAN section).
+  - Step 16: systemic escalation alert `trading.go:2183-2189` (system-wide, `reconciliation`) named explicitly as
+    out of scope — admin-only is intended; not to be confused with the per-account alert `:1938-1944`.
+- No scope, step count, or @AC coverage change.
