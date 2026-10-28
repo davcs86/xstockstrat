@@ -1414,3 +1414,20 @@ _Populated by /sdd-execute as implementation proceeds._
   - The context-forge `context-constitution` skill is not available in this session (only `context-scrubber` is
     listed). The teardown was a manual re-read of every touched file against the code (getters, clamps, guard sets,
     the remaining `max(1, …)` sites, ingest INGEST-9 anchors). The integration PR body must record both facts.
+- 2026-10-28 Step 18 deferred to operator — integration PR merge held until the operator:
+  1. Runs both Instruction-1 audit queries against `config.config_values` on dev (and again before prod). These are
+     the zero/empty rows for `analysis`/`indicators`/`ingest` and `value_type='int' AND value_data !~ '^-?[0-9]+$'`.
+     Classify each row against § Guard classification (FR-3 → clamped; honour → takes effect).
+  2. Re-runs the FR-5 seed audit after 243's heal lands.
+  3. Deploys the integration PR to dev and runs the four Instruction-2 smokes as a staging admin:
+     - `signal_rank_weight=0` → conviction order;
+     - `default_commission_pct`/`default_slippage_pct=0` (float, `create_key=true`) → `run_backtest` fills at the bar
+       close with no cost, and the same run is shown in `/insights`;
+     - `alert_throttle_seconds=0` (int, `create_key=true`) → a repeat transition reaches the `/trader` AlertStream and
+       the `/accounts/notifications` inbox;
+     - `/config-ui` analysis namespace shows the four Step-15 descriptions.
+  4. Restores every value and records the results in `context.md` under `## Session <date> — rollout (dev)`, then
+     `(prod)`, until the step's Verification greps pass.
+
+  Code-side, nothing is pending: the step's only File is `context.md`, and the cited symbols were re-confirmed.
+  `configServiceImpl.ts:99` is the bounds comment; the registry starts at `:100`.
