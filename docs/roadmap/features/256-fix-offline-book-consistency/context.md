@@ -763,3 +763,17 @@ Each item names the step where it is resolved.
   - `golangci-lint` v2.14.0, rebuilt under go1.27.0 because the host binary is go1.26 (Deviation Log), reported 0 issues.
 - Next: Step 4, the durable ConfirmOrder validation tests in `trading_offline_test.go`.
 
+## Session 2026-10-28 — Step 4 (test, D-49 / FR-7)
+
+- `trading_offline_test.go` adds three tests next to the `@AC-9` fees template:
+  - `TestConfirmOrder_AC4_NonFiniteOrNegativeFillRejectedBeforeLoad`: NaN/150, +Inf/150, -1/150, 10/NaN, 10/-5 and 10/+Inf each return InvalidArgument. No `account.positions.synced` is recorded, and the mock expectations are met (no GetOrder or UpsertOrder).
+  - `TestConfirmOrder_AC7_ValidFillsKeepStatusAndEmit`: 4/150 gives PARTIALLY_FILLED and 10/150 gives FILLED. Each records exactly one `account.positions.synced` (the ledger is reset between confirms).
+  - `TestConfirmOrder_AC10_UnconfirmZeroQtyNoPriceValid`: 10/150, then 0/0, gives NEW with no error and one `account.positions.synced`.
+- The `positions.synced` path through `h.ledger` is confirmed: `emitLedgerEvent` calls `recordingLedger.AppendEvent` synchronously.
+- TDD: Step 3 had already landed, so RED ran with the pre-Step-3 `trading.go` restored temporarily. All 5 `@AC-4` value rows failed with `Internal "load order: ... Query() was not expected"`, while the -1 qty row already passed. AC7 and AC10 passed on both trees (non-regression guards). GREEN: all targeted tests pass.
+- Broker-order sweep re-run. The one new hit, `trading_offline_test.go:1966`, is `TestSnapshotOfflinePositions_AC44_NonLatestAsOfChangeRejected`. It is a snapshot test, not a confirm with a bad value, so nothing moves to InvalidArgument.
+- Verification:
+  - Targeted `-run` set passed.
+  - The full `go test ./... -race` passed, with coverage total 72.8% (≥ 40%).
+  - `golangci-lint` v2.14.0, rebuilt under go1.27.0, reported 0 issues.
+- Next: Step 5 (D-63 `appendLedgerEvent` + ConfirmOrder UNAVAILABLE).

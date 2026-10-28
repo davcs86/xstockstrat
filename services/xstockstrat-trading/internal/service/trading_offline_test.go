@@ -1722,6 +1722,61 @@ func TestConfirmOrder_AC9_NegativeFeesRejectedBeforeLoad(t *testing.T) {
 	}
 }
 
+func TestConfirmOrder_AC4_NonFiniteOrNegativeFillRejectedBeforeLoad(t *testing.T) {
+	h := newConfirmHarness(t)
+	for _, c := range []struct{ qty, price float64 }{
+		{math.NaN(), 150}, {math.Inf(1), 150}, {-1, 150}, {10, math.NaN()}, {10, -5}, {10, math.Inf(1)},
+	} {
+		_, err := h.svc.ConfirmOrder(ctxAsUser(testdata.S1UserID), &tradingv1.ConfirmOrderRequest{
+			OrderId: "ord-x", FilledQty: c.qty, FilledAvgPrice: c.price,
+		})
+		if grpcstatus.Code(err) != codes.InvalidArgument {
+			t.Errorf("qty %v price %v: err = %v, want InvalidArgument", c.qty, c.price, err)
+		}
+	}
+	if n := len(h.ledger.requestsByType("account.positions.synced")); n != 0 {
+		t.Errorf("account.positions.synced emitted %d times, want 0", n)
+	}
+	if err := h.mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("GetOrder/UpsertOrder must not run: %v", err)
+	}
+}
+
+func TestConfirmOrder_AC7_ValidFillsKeepStatusAndEmit(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	for _, c := range []struct {
+		qty  float64
+		want tradingv1.OrderStatus
+	}{
+		{4, tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED},
+		{10, tradingv1.OrderStatus_ORDER_STATUS_FILLED},
+	} {
+		h.ledger.reset()
+		resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: c.qty, FilledAvgPrice: 150})
+		if resp.Status != c.want {
+			t.Errorf("qty %v: status = %v, want %v", c.qty, resp.Status, c.want)
+		}
+		if n := len(h.ledger.requestsByType("account.positions.synced")); n != 1 {
+			t.Errorf("qty %v: account.positions.synced emitted %d times, want 1", c.qty, n)
+		}
+	}
+}
+
+func TestConfirmOrder_AC10_UnconfirmZeroQtyNoPriceValid(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150})
+	h.ledger.reset()
+	resp := h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 0, FilledAvgPrice: 0})
+	if resp.Status != tradingv1.OrderStatus_ORDER_STATUS_NEW {
+		t.Errorf("status = %v, want NEW", resp.Status)
+	}
+	if n := len(h.ledger.requestsByType("account.positions.synced")); n != 1 {
+		t.Errorf("account.positions.synced emitted %d times, want 1", n)
+	}
+}
+
 func TestConfirmOrder_AC8_ReconfirmReplacesFees(t *testing.T) {
 	h := newConfirmHarness(t)
 	h.seed(newOfflineOrder("ord-1", 10))

@@ -217,7 +217,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 
 ### Step 4 — test: D-49 ConfirmOrder validation and FR-7 / un-confirm non-regression
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
@@ -1078,3 +1078,8 @@ _Populated by /sdd-execute as implementation proceeds._
   pinned version under `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, matching CI's Go 1.27, and reported 0 issues.
   **Disposition**: CI-equivalent fallback. The RED/GREEN run used a throwaway test file that was not committed;
   Step 4 owns the durable tests in `trading_offline_test.go`.
+- Step 4 (2026-10-28, verification method only, no spec change): `golangci-lint` v2.14.0 was rebuilt under
+  `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, as in Step 3, and reported 0 issues. **Disposition**: CI-equivalent
+  fallback. Step 3 had already landed, so RED was captured by temporarily restoring the pre-Step-3 `trading.go`
+  (`12a29f1b`) under the new tests, then restoring it (not committed). `@AC-7` and `@AC-10` pass on both trees by
+  design: they are non-regression guards. `TestDeriveOfflineStatus` was not extended (instruction 4: "only if needed").
