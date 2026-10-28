@@ -834,7 +834,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `force` | `bool` | No | `false` default; `true` re-emits today's signals (clears the day's `fundsignal_emitted` idempotency rows first) |
-| `dry_run` | `bool` | No | `false` default; `true` scores + reports what *would* be scanned without emitting or spending cache calls |
+| `dry_run` | `bool` | No | `false` default; `true` reports what *would* be scanned without scoring, emitting or spending cache calls |
 | `symbols` | `string[]` | No | Optional explicit universe override; omitted = the configured `analysis.fundsignal.universe_source` |
 
 **Return** — the `FundamentalsScanSummary`:
