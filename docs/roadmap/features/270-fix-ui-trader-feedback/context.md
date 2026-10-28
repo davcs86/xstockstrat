@@ -527,3 +527,19 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   Deviation Log). This is a defect candidate for `/sdd-qa defect`.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree (the main worktree has no `node_modules` to symlink) and
   Playwright Chromium headless shell 1.62.1.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2 (sdd-batch-execute)
+
+- Step 2 done: `e2e/trader/position-detail.spec.ts` adds `@AC-4 symbol-page RunBacktest sends strategyId and
+  strategyIdRef`. It intercepts `**/xstockstrat.analysis.v1.AnalysisService/RunBacktest`, captures the body,
+  `route.continue()`s to the mock, and polls `toMatchObject({ strategyId, strategyIdRef })`. The id comes from
+  `STRATEGY_DEF_LIVE` (C-12); no inline literal.
+- TDD (AC-4): red — with `page.tsx` temporarily reverted to the pre-Step-1 tree, `toMatchObject` failed with
+  `- "strategyId": "strat-live-001"` missing and `"strategyIdRef": "strat-live-001"` present → green — passed
+  after restoring Step 1. All 43 `position-detail.spec.ts` tests pass (prebuilt app, `CI=1 E2E_PREBUILT=1`).
+- Verification: `pnpm run lint` exit 0 (pre-existing warnings only). The grep shows the `helpers/auth` and
+  `'../fixtures'` imports. Analysis `pytest -k "stamps_fingerprint or id_mismatch_stamps_none"`: 2 passed, which
+  covers the "reaches history" half of AC-4.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree; `uv sync --extra dev --frozen` in
+  `services/xstockstrat-analysis`.
+

@@ -20,6 +20,7 @@
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Merged `origin/main-dev` (`-X ours`); re-spec of Steps 2, 7, 9, 13, 14 for line drift only (no semantic change) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front plan confirmed by operator standing authorization (see context.md) |
 | 2026-10-28 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | Step 1 — D-45 symbol-page `runBacktest` now sends `strategyId` with `strategyIdRef` |
+| 2026-10-28 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2 — `@AC-4` e2e pins that the symbol-page `RunBacktest` carries both `strategyId` and `strategyIdRef` |
 
 ---
 

@@ -145,7 +145,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 2 — test: AC-4 symbol-page RunBacktest carries both ids, and the run reaches history
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -1097,3 +1097,15 @@ _Populated by /sdd-execute as implementation proceeds._
   `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type 'never'`),
   a file this step does not touch (last changed by feature 198). The `src/` tree type-checks clean and
   `pnpm build` (Next type-check) passes. **Disposition**: not fixed here; handed to `/sdd-qa defect`.
+
+### Step 2 — 2026-10-28
+
+- **Verification run against a prebuilt app.** The Playwright command ran as `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Step 1 used (local `pnpm dev` cold compile times out in `warmup.setup.ts`).
+  **Disposition**: CI-equivalent fallback.
+- **One `expect.poll(...).toMatchObject({ strategyId, strategyIdRef })` instead of two field asserts.** Same
+  assertion, but the RED output now prints the captured body. That proves the request was intercepted and only
+  `strategyId` was missing. **Disposition**: test-shape refinement inside the step's **Files**; no scope change.
+- **Evidence citation drift (no code impact).** `e2e/trader/orders.spec.ts:99` is a TradingService glob, not
+  AnalysisService. The AnalysisService `RunBacktest` glob precedent is `e2e/insights/sector-overrides.spec.ts:76`.
+  **Disposition**: noted only; step body not edited (F-09).
