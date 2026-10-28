@@ -19,6 +19,7 @@
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-10-28 | (no status change) | /sdd-execute sequential (re-spec) | Steps 1, 2, 3, 4, 6 re-spec'd against `origin/main-dev` @ `fa40c8a4` (#1262 now on main-dev; ci.yml, ci-overview.md, merge-order.md, fails.md anchors shifted) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | (no status change) | /sdd-execute step 1 | Requirement amendment (C-15) applied: AC-1/AC-4/AC-5 reworded, AC-6 appended, FR-4 narrowed |
 
 ---
 

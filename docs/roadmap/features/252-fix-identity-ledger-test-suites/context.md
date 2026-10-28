@@ -224,3 +224,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - 255 and 275 are deferred;
   - operator-only DB/prod steps: open the PR and hold the merge.
 - Mode: one commit per step on `feature/fix-identity-ledger-test-suites`, with no per-step PRs. A single integration PR opens at the end and its merge is held for the operator.
+
+## Session 2026-10-28 — sdd-execute sequential: Step 1 (docs)
+
+- Requirement amendment (C-15) applied per `design.md:116-169` to the feature-branch `acceptance.feature` and `product-spec.md` (the spec's first step owns the edit, `design.md:122`):
+  - AC-1's last line is reworded by behaviour (the `identityServiceImpl.ts:524-527` anchor is dropped).
+  - AC-4's Given and third Then now name `c8 check-coverage --lines 40` run after `test:coverage`.
+  - AC-5's Then is reporter-neutral ("the test summary reports 0 failed tests").
+  - AC-6 (`@AC-6 @FR-3 @regression`, 3 Examples rows) is appended. AC-1..AC-5 keep their IDs.
+  - FR-4 is narrowed to the `design.md:138` text, and the AC line now lists "AC-6 (FR-3)".
+- AC-2 and AC-3 are unchanged (`design.md:169`). The open AC-2 rewording thread still needs operator sign-off.
+- Scenario Coverage (C-15) re-checked: `grep -n '@AC-'` shows AC-1..AC-6. Every ID maps to a row in the impl-spec table, so no table change is needed.
+- TDD: N/A (docs, scenario text only).

@@ -102,7 +102,7 @@ Two repo defaults point the wrong way for this feature's gates: `.nvmrc:1` is `2
 
 ### Step 1 — docs: Apply the design's requirement amendment (C-15) to acceptance.feature and product-spec.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/252-fix-identity-ledger-test-suites/`
 **Files**:
 - `docs/roadmap/features/252-fix-identity-ledger-test-suites/acceptance.feature` — modify
