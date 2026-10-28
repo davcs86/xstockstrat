@@ -495,3 +495,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run. The main worktree has no `node_modules` to symlink, and `core.hooksPath` points at a
   missing `.husky/_` (same as Steps 1-7; never `--no-verify`).
 - Next: Step 9.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 9
+
+### Step 9 — service: analysis getters honour a stored zero (HasField) [done]
+- `services/xstockstrat-analysis/app/config/watcher.py`: `get_str`/`get_int`/`get_float` return
+  `v.<x>_val if v.HasField("<x>_val") else default`. The `get_int_present` and `get_float_present` bodies and
+  docstrings are replaced by the class aliases `get_int_present = get_int` (`:107`) and
+  `get_float_present = get_float` (`:125`). Positional and `default=` callers still bind. The dead sandbox helpers are
+  left for Step 11. The FR-4 sites (`servicer.py:787-788`, `:4615`, `:4859`, `live_loop.py:351`) are fixed through
+  the getter, with no edit to those files.
+- TDD: AC-1 red via an uncommitted scratch test (4 failed, 1 passed). The three analysis rows
+  (`zero_int`/`zero_float`/`zero_string`) returned the defaults 7 / 0.5 / "x", and the alias assertion failed.
+  Green: 5 passed. The paired test is Step 10.
+- Verification: `grep 'or default'` gives no output. `grep '_present = get_'` gives 2 hits (`:107`, `:125`).
+  `ruff check` and `ruff format --check` are clean.
+- Full analysis suite: 1 failed, 1275 passed (baseline 1276 passed). The one failure is the expected
+  `TestConfigWatcherGetters::test_get_float_present_explicit_zero_is_not_trapped`. Its `:594` line asserts the old
+  `get_float` zero-trap, and Step 10 rewrites it. The green run is Step 10's Verification.
+- Tooling: `uv sync --extra dev --frozen` in analysis (no manifest change).
+- Open for Step 17 (outside this step's Files): the analysis `CLAUDE.md` config table still describes intentional
+  `get_int`/`get_float` zero-traps. Affected rows: `default_fill_model`, `portfolio_position_weight`,
+  `portfolio_max_concurrent`, `shrinkage_days`, `default_cooldown_days` and the `max_concurrent_*` rows.
+- Files modified: `services/xstockstrat-analysis/app/config/watcher.py`
+- Deviations: TDD scratch harness, and the expected inter-step test failure. See the Deviation Log.
+- Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-8; never
+  `--no-verify`).
+- Next: Step 10.

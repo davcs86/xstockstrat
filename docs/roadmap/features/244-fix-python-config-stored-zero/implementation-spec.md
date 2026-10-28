@@ -582,7 +582,7 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 
 ### Step 9 — service: analysis getters honour a stored zero (HasField)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/config/watcher.py` — modify
@@ -1345,3 +1345,10 @@ _Populated by /sdd-execute as implementation proceeds._
   before GREEN; never committed). Instruction 4's "Step-5 tree" has the same `app/` as the Step-6 tree (Step 6 is
   test-only). On that tree the semaphore row read `_value == 1` (the pre-Step-7 `max(1, …)`), not 0. The guard file
   is the Step-4 ingest guard with the indicators key sets swapped in (`ZERO_IS_LEGIT` an empty dict).
+- 2026-10-28 Step 9 (TDD evidence harness, no scope change): the paired test lands in Step 10, so RED/GREEN used an
+  uncommitted scratch test (`tests/test_zz_step9_scratch.py`, deleted before commit) asserting the three @AC-1
+  analysis rows, the @AC-4 unset/mismatched rows, and `get_int_present is get_int` / `get_float_present is get_float`.
+  Between Steps 9 and 10 the analysis suite has one expected failure,
+  `test_get_float_present_explicit_zero_is_not_trapped` (`:594`). It asserts the old `get_float` zero-trap, and
+  Step 10 rewrites it. The same `ConfigWatcher` class serves the `marketdata` namespace watcher (`main.py:48`).
+  Its only read, `fundsignal_loop.py:97`, uses default `""`, so it behaves the same either way.
