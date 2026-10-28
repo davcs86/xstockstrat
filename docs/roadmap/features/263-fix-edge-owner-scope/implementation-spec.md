@@ -81,7 +81,7 @@ edit (design.md D-31 "One site closes four edges").
 
 ### Step 1 — proto: add `owner_only` to `QueryEventsRequest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ledger/v1/ledger.proto` — modify

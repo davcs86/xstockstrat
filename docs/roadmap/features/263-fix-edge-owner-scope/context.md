@@ -461,3 +461,15 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   - operator-only DB/prod steps: open the PR and hold the merge
 - Execution mode: one commit per step on `feature/fix-edge-owner-scope`, detached worktree, pushed
   after each commit; a step's commit is made only after its verification passes.
+
+### Step 1 — proto: add `owner_only` to `QueryEventsRequest` (2026-10-28)
+
+- Added `bool owner_only = 7;` to `QueryEventsRequest` (`packages/proto/ledger/v1/ledger.proto:69`) with the
+  spec's 2-line constraint comment. TDD: N/A (proto contract; behaviour is tested in Steps 4/6/7).
+- Verification: `buf lint` passed; `buf breaking --against "<git-common-dir>#branch=origin/main-dev,subdir=packages/proto"`
+  passed (additive field); `grep -n "owner_only = 7"` returns one line.
+- Stubs are not regenerated in this commit, so the `proto-freshness` gate stays red until Step 2. This is expected.
+- The C-09 proto approval gate (Proto Reviewer plus the ledger and ui owners) is still open. It goes in the integration PR description.
+- Hook: `node_modules` is symlinked from the main worktree. `core.hooksPath` points at
+  `/home/user/xstockstrat/.husky/_`, which does not exist (`.husky/` holds only `pre-commit`), so the husky
+  pre-commit hook does not run. No `--no-verify` was used.
