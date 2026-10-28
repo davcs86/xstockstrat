@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 3 notes; overlap WARN) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-10-28 | (no status change) | /sdd-execute sequential (re-spec) | Steps 1, 2, 3, 4, 6 re-spec'd against `origin/main-dev` @ `fa40c8a4` (#1262 now on main-dev; ci.yml, ci-overview.md, merge-order.md, fails.md anchors shifted) |
 
 ---
 
