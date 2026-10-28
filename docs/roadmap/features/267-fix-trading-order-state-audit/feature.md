@@ -18,6 +18,7 @@
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1, 3, 4, 5, 6, 7 re-verified against main-dev; line-drift citations corrected in Steps 1/3/5 (no blocking mismatch) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f); executing Steps 1–7 sequentially |
 
 ---
 
@@ -51,4 +52,4 @@ reactive intent reclaims leave no `order_intent.reclaimed_unknown` audit event.
 
 ## Next Action
 
-`/sdd-review fix-trading-order-state-audit impl-spec` — validate implementation spec, then `/sdd-execute fix-trading-order-state-audit`
+`/sdd-execute fix-trading-order-state-audit sequential` — in progress (Step 1 next)
