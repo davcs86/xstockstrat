@@ -29,6 +29,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done — Playwright AC-4: a `scoreUnavailable` single-symbol ScreenSymbols row (`noCriteriaDataRow`) shows "Not evaluated" in the position-detail Screening section, with no results table or Insufficient-data notice; INVENTORY.md consumer list updated |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 9 done — sibling defect reports filed (`open`): `EvaluateReadiness` gather `servicer.py:3983`; `_compute_opportunities` `_row_for` gather `servicer.py:5776` (catches only `RpcError` `:5693`; feature 185's deliberate `FormulaExecutionError` propagation `:5694-5698` and the screener-only `Exception` divergence recorded) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 10 done — analysis findings row `:20` marked RESOLVED (feature 245); constitution `:42` sort key → `(score_unavailable, eval_failed, -score)`; teardown reconciled by hand (context-forge `context-constitution` unavailable), UI-6 anchor/wording fixed |
+| 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; next: merge-order check, then the integration PR → `main-dev` (PR body records the manual context-constitution teardown) |
 
 ---
 
