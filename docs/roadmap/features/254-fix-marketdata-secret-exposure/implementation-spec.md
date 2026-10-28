@@ -96,7 +96,7 @@ Constitution Rules Touched).
 
 ### Step 1 — service: D-39 redact `*url.Error` at the vendor clients' transport and build-request sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify
@@ -613,3 +613,10 @@ doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolv
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-28, Step 1 (TDD ordering).** Step Dependencies says to author Steps 2 and 3 first and run them RED before
+  Step 1. Sequential mode executes Step 1 as its own unit, so RED was captured with throwaway, uncommitted probe tests
+  (`internal/fmp/zz_red_probe_test.go`, `internal/finnhub/zz_red_probe_test.go`) that dial `http://127.0.0.1:1` and
+  `http://127.0.0.1:1\x7f` with key `k-secret`. They failed on the pre-Step-1 tree (both transport and build-request
+  errors contained `apikey=k-secret` / `token=k-secret` and a `*url.Error`) and passed after the edit; then they were
+  deleted. Steps 2 and 3 still add the committed regression tests. No scope or Files change.

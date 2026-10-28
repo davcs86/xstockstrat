@@ -352,3 +352,20 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   changes an existing @AC rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps — open the
   integration PR and hold the merge.
 - Branch base: `origin/main-dev` merged in (`-X ours`); Steps 1, 5, 7, 8, 9 re-spec'd for line drift (entry above).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- Step 1 done (D-39). Both vendor `getJSON` functions now unwrap `*url.Error` and `%w`-wrap only `ue.Err`, with a
+  cause-free fallback, at the build-request and transport sites (`fmp_client.go`, `finnhub_client.go`; `"errors"`
+  import added to finnhub). `reserve()`, `counted` and the refund `defer` are untouched (217 @AC-4).
+- TDD: AC-1/AC-2 red: throwaway probes failed with
+  `fmp: /stable/quote request failed: Get "http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL": dial tcp ...`
+  and `finnhub: build request: parse "http://127.0.0.1:1\x7f/stock/metric?...&token=k-secret": ...` → green:
+  `fmp: /stable/quote request failed: dial tcp 127.0.0.1:1: connect: connection refused`,
+  `finnhub: /stock/metric build request: net/url: invalid control character in URL`. Probes were not committed;
+  Steps 2-3 add the committed tests (Deviation Log).
+- Verification: `go build ./...`, `go vet` (fmp, finnhub) OK; the leak grep returns nothing; `golangci-lint run` 0 issues;
+  `go test -race` on fmp/finnhub/service green.
+- Tooling note: the provisioned `~/go/bin/golangci-lint` v2.14.0 was built with go1.26 and refuses the go1.27 module.
+  It was rebuilt at the same pin with `GOTOOLCHAIN=go1.27.0 go install .../golangci-lint@v2.14.0` into the session
+  scratchpad. No repo change.

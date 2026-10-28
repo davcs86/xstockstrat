@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-28 | `implementation-ready` (no change) | /sdd-execute (re-spec) | Steps 1, 5, 7, 8, 9 re-aligned to the codebase after merging `origin/main-dev` (line drift only; Step 7 pre-merge gate grep moved to `deploy.yml:101`) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front plan confirmed by operator standing authorization (see context.md) |
+| 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: D-39 `*url.Error` redaction at the FMP and Finnhub transport and build-request sites |
 
 ---
 
