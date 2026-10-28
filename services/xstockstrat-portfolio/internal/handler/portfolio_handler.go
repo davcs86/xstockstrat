@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	portfoliov1connect "github.com/xstockstrat/contracts/gen/go/portfolio/v1/portfoliov1connect"
 	"github.com/xstockstrat/portfolio/internal/middleware"
@@ -39,15 +40,45 @@ func streamUserID(ctx context.Context) string {
 
 var _ portfoliov1connect.PortfolioServiceHandler = (*PortfolioHandler)(nil)
 
+type snapshotHub interface {
+	Subscribe(id, userID string) chan *portfoliov1.PortfolioSnapshot
+	Unsubscribe(id string)
+}
+
+var _ snapshotHub = (*service.PortfolioService)(nil)
+
 // PortfolioHandler implements the Connect-RPC PortfolioServiceHandler interface.
 type PortfolioHandler struct {
 	portfoliov1connect.UnimplementedPortfolioServiceHandler
 	svc *service.PortfolioService
+	hub snapshotHub
 }
 
 // NewPortfolioHandler constructs the handler.
 func NewPortfolioHandler(svc *service.PortfolioService) *PortfolioHandler {
-	return &PortfolioHandler{svc: svc}
+	return &PortfolioHandler{svc: svc, hub: svc}
+}
+
+// streamSnapshots never checks userID: both callers must reject an empty caller before calling it.
+func streamSnapshots(ctx context.Context, hub snapshotHub, userID, subID string, mode commonv1.TradingMode, send func(*portfoliov1.PortfolioSnapshot) error) error {
+	ch := hub.Subscribe(subID, userID)
+	defer hub.Unsubscribe(subID)
+	for {
+		select {
+		case snap, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if mode != 0 && snap.TradingMode != mode {
+				continue
+			}
+			if err := send(snap); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // GetPortfolio returns the full portfolio with positions and live prices.
@@ -117,25 +148,7 @@ func (h *PortfolioHandler) StreamPortfolioUpdates(ctx context.Context, req *conn
 		return connect.NewError(connect.CodeInvalidArgument, errorf("user_id required"))
 	}
 	subID := fmt.Sprintf("portfolio-%s-%p", userID, stream)
-	ch := h.svc.Subscribe(subID, userID)
-	defer h.svc.Unsubscribe(subID)
-
-	for {
-		select {
-		case snap, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			if req.Msg.TradingMode != 0 && snap.TradingMode != req.Msg.TradingMode {
-				continue
-			}
-			if err := stream.Send(snap); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.Send)
 }
 
 // ListPortfolios returns portfolios grouped by broker account.
@@ -290,26 +303,13 @@ func (a *grpcPortfolioAdapter) GetSnapshot(ctx context.Context, req *portfoliov1
 }
 
 func (a *grpcPortfolioAdapter) StreamPortfolioUpdates(req *portfoliov1.StreamPortfolioUpdatesRequest, grpcStream portfoliov1.PortfolioService_StreamPortfolioUpdatesServer) error {
-	userID := streamUserID(grpcStream.Context())
-	subID := fmt.Sprintf("portfolio-%s-%p", userID, grpcStream)
-	ch := a.h.svc.Subscribe(subID, userID)
-	defer a.h.svc.Unsubscribe(subID)
-	for {
-		select {
-		case snap, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			if req.TradingMode != 0 && snap.TradingMode != req.TradingMode {
-				continue
-			}
-			if err := grpcStream.Send(snap); err != nil {
-				return err
-			}
-		case <-grpcStream.Context().Done():
-			return grpcStream.Context().Err()
-		}
+	ctx := grpcStream.Context()
+	userID := streamUserID(ctx)
+	if userID == "" {
+		return status.Error(codes.InvalidArgument, "user_id required")
 	}
+	subID := fmt.Sprintf("portfolio-%s-%p", userID, grpcStream)
+	return streamSnapshots(ctx, a.h.hub, userID, subID, req.TradingMode, grpcStream.Send)
 }
 
 func (a *grpcPortfolioAdapter) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {

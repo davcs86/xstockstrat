@@ -523,3 +523,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - the C-13 grep finds exactly one declaration.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_snapshot_scope_test.go` (new).
 - Deviations: lint binary rebuilt at the CI pin (Deviation Log). Out-of-scope changes: none.
+
+### Step 3 — service: Shared `streamSnapshots` helper, `snapshotHub` seam, gRPC empty-caller rejection [done]
+- `portfolio_handler.go`:
+  - unexported `snapshotHub` interface, plus the `*service.PortfolioService` compile-time assertion;
+  - `hub` field, set in `NewPortfolioHandler`;
+  - `streamSnapshots` holds the single subscribe/send loop and the unchanged TradingMode filter, and both
+    `StreamPortfolioUpdates` paths call it;
+  - the gRPC adapter now returns `InvalidArgument "user_id required"` before it builds `subID` or subscribes;
+  - `req.UserId` stays unread.
+- TDD, @AC-2 RED (Part A only, using a probe test). Output (FAIL):
+  - `want InvalidArgument, got context deadline exceeded`;
+  - `anonymous stream must never subscribe; recorded 1 Subscribe calls`.
+- GREEN after Part B: PASS.
+- Verification:
+  - `go build` and `go vet` are clean;
+  - the four greps match: helper, `hub: svc` and the gRPC check found; loop count 1; Connect wiring count 1;
+  - `go test ./... -race` is ok;
+  - golangci-lint v2.14.0 reports `0 issues`.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`.
+- Deviations: RED probe not committed (Deviation Log). Out-of-scope changes: none.

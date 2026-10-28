@@ -243,7 +243,7 @@ applies to it. The suite-wide total must still meet the threshold.
 
 ### Step 3 — service: Shared `streamSnapshots` helper, `snapshotHub` seam, gRPC empty-caller rejection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — modify
@@ -737,3 +737,10 @@ _Populated by /sdd-execute as implementation proceeds._
   module. The CI-pinned v2.14.0 was built from proxy.golang.org with `GOTOOLCHAIN=go1.27.0` into the session
   scratchpad. The same command then reported `0 issues.`
 - **Disposition**: CI-equivalent fallback. Same version and flags as `golangci-lint-action@v9`; no repo change.
+
+### 2026-10-28 — Step 3: RED probe file not committed with Step 3
+- **Spec said**: the Step 3 STOP block writes Step 4's test file to capture RED between Part A and Part B.
+- **Done**: a probe holding the fakes and `TestStreamPortfolioUpdates_GRPC_AC2_RejectsEmptyCaller` was written, run
+  for RED (fail) and GREEN (pass), then removed from the Step 3 commit (F-08: Step 3's **Files** is the handler only).
+  Step 4 creates and commits `portfolio_stream_test.go`. Lint used the same CI-pinned v2.14.0 rebuild as Step 2.
+- **Disposition**: no behavior change. The gRPC adapter range was `:292-312` (spec says `:291-311`); line drift only.
