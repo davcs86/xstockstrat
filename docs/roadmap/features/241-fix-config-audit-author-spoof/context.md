@@ -340,3 +340,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     (which must re-anchor its stale `:1861/:2106/:2674` cites to `:1943/:2188/:2756`) and the agent files
     against 215/247 before the integration PR.
 - Ledger: no new line.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, pre-execution)
+
+- Branch setup (§5.3): `git merge -X ours origin/main-dev` into the detached `origin/feature/fix-config-audit-author-spoof`
+  checkout, pushed as e5a36f3e.
+- Re-spec, implementation-spec.md only (Instructions / Codebase Evidence / Files / Verification of steps 6, 7, 8,
+  10, 12, 13), each cite re-grepped against the merged tree:
+  - Step 6: **C-13 verdict re-decided.** `services/xstockstrat-trading/internal/testdata/` now exists (feature 240)
+    and `"trading-reconciliation-poller"` already appears as a test literal in `internal/config/config_test.go:232,
+    238,239,255`, so Step 6 would make it a second consumer file. Chosen: centralize as
+    `testdata.ReconciliationPollerCallerID` in a new `internal/testdata/caller_ids.go`, used by both test files
+    (Files gain `caller_ids.go` create + `config_test.go` modify). Rejected: recorded inline exception — C-13's
+    second-consumer rule applies and the home exists. Production `trading.go:2168` keeps its literal.
+  - Step 7: tools.py line drift (+9: `set_config` :1651, `author` :1657, docstring :1672-1673, scope :1692,
+    forward :1703; `_write_source_bearer` callers :1230/:1317; precedent :1121); client.py `set_config` :2095,
+    `author` :2101/:2143, `_metadata` :2150. Note: the directive cited `set_caller` :40 / `reset_caller` :51; the
+    tree shows `client.py:41` and `:49` (spec's original cites), so those were left unchanged.
+  - Step 8: mcp pin is 2.3.0 (uv.lock, both branches); `ArgModelBase` still has no `extra` setting, Q2 holds.
+  - Step 10: `post()` :39-48, `SET_CONFIG` :49; `configUiBff.test.ts` is created by the step.
+  - Step 12: indicators comment `servicer.py:398`; mcp-tools.md +1 (:1097/:1108/:1109/:1152/:1156); config-rollout
+    grounding `tools.py:1651-1660`.
+  - Step 13: per-user-secret docstring drift now `tools.py:1674-1676`.
+- Deviation Log entry added to implementation-spec.md.
