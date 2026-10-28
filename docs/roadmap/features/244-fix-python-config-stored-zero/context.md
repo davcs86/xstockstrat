@@ -431,3 +431,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: no `node_modules` in the main worktree to symlink and `core.hooksPath` unset (same as
   Steps 1-4; never `--no-verify`).
 - Next: Step 6.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 6
+
+- Step 6 (test: indicators getter rows for @AC-1 / @AC-4) done. `services/xstockstrat-indicators/tests/conftest.py`
+  gains `snapshot_watcher(**values)` (same builder as ingest Step 2; typed arms only, bool before int). 243 has not
+  landed, so `_str_watcher(key, val)` keeps its name and returns `snapshot_watcher(**{key: val})`; no `ConfigValue`
+  arm. New in `test_config_watcher.py`: `test_getters_honour_stored_zero` (zero_int 0/7, zero_float 0.0/0.5,
+  zero_string ""/"x") and `test_getters_default_when_unset_or_mismatched` (unset_int `_snapshot=None` → 7,
+  mismatched_float `string_val="5"` via `get_float` → 0.5, unset_string absent → "x").
+- TDD: AC-1 red on the Step-4 watcher (`git checkout 52b55fee --`, restored before green): 3 failed, 13 passed
+  (rows returned 7 / 0.5 / "x") → green on HEAD: 16 passed. The 173 `get_str_present` tests stayed green on both.
+- Verification: `tests/test_config_watcher.py` 16 passed; full indicators suite 300 passed, coverage 85.61% (≥50);
+  ruff check and format clean.
+- Files modified: `services/xstockstrat-indicators/tests/conftest.py`, `services/xstockstrat-indicators/tests/test_config_watcher.py`
+- Deviations: RED via temporary Step-4 watcher; @AC-4 rows parametrized over factories. See the Deviation Log.
+- Husky pre-commit did not run: no `node_modules` in the main worktree to symlink and `core.hooksPath` unset (same as
+  Steps 1-5; never `--no-verify`).
+- Next: Step 7.

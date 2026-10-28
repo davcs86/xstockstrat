@@ -26,6 +26,7 @@
 | 2026-10-28 | `in-progress` (step 3 done) | /sdd-execute sequential | Step 3: module-level `int_positive` clamps the four FR-3 backfill properties and both `mcp_client` loop reads (`max(…, 1)` dropped); dead `sandbox_*` helpers and their 3 tests removed (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 4 done) | /sdd-execute sequential | Step 4: ingest @AC-5 (`_backfill_sem` at 0 → 3) and @AC-6 rows (backfill properties, loop timeout/poll interval) plus the AST read-classification guard `tests/test_config_read_classification.py` (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 5 done) | /sdd-execute sequential | Step 5: indicators `get_str`/`get_int`/`get_float` use `HasField`; `get_str_present = get_str` alias (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 6 done) | /sdd-execute sequential | Step 6: indicators conftest `snapshot_watcher` (C-13 home), `_str_watcher` delegates to it; @AC-1/@AC-4 getter rows in `test_config_watcher.py` (TDD red → green) |
 
 ---
 

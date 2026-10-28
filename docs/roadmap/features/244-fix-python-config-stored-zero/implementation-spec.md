@@ -436,7 +436,7 @@ Green run is Step 6's Verification.
 
 ### Step 6 — test: indicators getter rows for @AC-1 / @AC-4
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify
@@ -1328,3 +1328,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - 2026-10-28 Step 5 (TDD evidence harness, no scope change): the paired test lands in Step 6, so RED/GREEN used an
   uncommitted scratch test (`tests/test_zz_step5_scratch.py`, deleted before commit) asserting the three @AC-1
   indicators rows, the @AC-4 unset/mismatched rows and `get_str_present is get_str`. Only `watcher.py` was staged.
+- 2026-10-28 Step 6 (TDD evidence method + test shape, no scope change): Step 5 had already landed, so RED ran the new
+  rows against the Step-4 `app/config/watcher.py` (`git checkout 52b55fee --`, restored to HEAD before GREEN; never
+  committed). 243 has not landed, so `_str_watcher` keeps its name and delegates to `snapshot_watcher` (no
+  `ConfigValue` arm). The @AC-4 rows are one parametrized test over watcher factories, because the `unset_int` row
+  needs `_snapshot = None`, which `snapshot_watcher(**values)` cannot express.
