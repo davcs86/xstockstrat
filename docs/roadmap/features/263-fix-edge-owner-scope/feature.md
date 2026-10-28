@@ -63,4 +63,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-review fix-edge-owner-scope impl-spec` — validate implementation spec, then `/sdd-execute fix-edge-owner-scope`
+`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–2 done; continue at Step 3 (ledger owner predicate)

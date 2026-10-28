@@ -122,7 +122,7 @@ cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --path-
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/ledger/v1/ledger.pb.go` — modify (generated)
@@ -842,3 +842,16 @@ row (no duplicate).
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### DEV-1 — Step 2: host-native codegen with go1.27-built Go plugins (2026-10-28)
+
+- **What**: Stubs were generated host-native (`./scripts/buf-gen.sh`), not via the `Dockerfile.codegen`
+  image. The first run with the pre-installed `~/go/bin` plugins (pinned versions, but built with
+  go1.24.7) also rewrote comment indentation in `gen/go/analysis/v1/analysis.pb.go` — a non-ledger
+  change, so it was reverted. The three Go plugins were reinstalled at the CI pins
+  (`protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`) with
+  `GOTOOLCHAIN=go1.27.0` (CI `setup-go` 1.27) into a session-local `GOBIN` placed first on `PATH`.
+  The re-run changed ledger files only, and a second run left the diff unchanged.
+- **Disposition**: CI-equivalent fallback (sequential-mode verification fallbacks — proto codegen).
+- **Spec change**: none. `ledger_grpc.pb.go`, `ledgerv1connect/`, `ledger_connect.ts`,
+  `ledger_pb2_grpc.py` were unchanged, as expected.

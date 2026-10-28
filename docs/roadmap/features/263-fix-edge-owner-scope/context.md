@@ -473,3 +473,18 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 - Hook: `node_modules` is symlinked from the main worktree. `core.hooksPath` points at
   `/home/user/xstockstrat/.husky/_`, which does not exist (`.husky/` holds only `pre-commit`), so the husky
   pre-commit hook does not run. No `--no-verify` was used.
+
+### Step 2 — proto-gen: regenerate stubs (2026-10-28)
+
+- Ran `./scripts/buf-gen.sh` host-native (buf 1.72.0, grpcio-tools 1.80.0, Node 24.20.0 TS plugins;
+  `pnpm install --frozen-lockfile --filter @xstockstrat/proto` for `tsc`). TDD: N/A (generated code).
+- Pin drift found: the `~/go/bin` Go plugins are at the CI versions but were built with go1.24.7, and
+  their gofmt pass re-indented comments in `gen/go/analysis/v1/analysis.pb.go`. Reverted that file and
+  rebuilt the three plugins with go1.27.0 (CI `setup-go`) into a session-local `GOBIN`; the re-run touched
+  ledger files only (DEV-1). Future codegen on this host must use go1.27-built plugins or it will
+  produce the same non-ledger diff.
+- Verification: changed files are `ledger.pb.go`, `ledger_pb2.py`, `ledger.ts`, `ledger_pb.ts` and the
+  four `dist/ledger/v1/ledger{,_pb}.{js,d.ts}`; `buf lint` and `buf breaking` (against local `main-dev`)
+  passed inside the script; a second run left `git diff --stat packages/proto/gen/` identical (fresh).
+- Hook: `core.hooksPath` still points at the missing `/home/user/xstockstrat/.husky/_`, and the main
+  worktree has no `node_modules` to symlink, so the pre-commit hook does not run. No `--no-verify`.
