@@ -522,7 +522,7 @@ The green run is Step 5's Verification.
 
 ### Step 5 — test: agent row shape carries `score_unavailable` (AC-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -873,3 +873,11 @@ _Populated by /sdd-execute as implementation proceeds._
   exact-equality dict at `tests/test_client.py:277-283` lacks `"score_unavailable": False`. This is the RED Step 5
   instruction 4 predicts; Step 5 adds the key. Not edited here (outside Step 4's **Files**).
 - **Disposition**: expected; closed by Step 5.
+
+### Step 5 — RED captured against the restored pre-Step-4 `client.py` (2026-10-28)
+- **Spec says**: RED before Step 4 is a `KeyError` on `"score_unavailable"` plus the equality-dict mismatch.
+- **Actual**: Step 4 had already landed, so RED ran with `app/client.py` temporarily restored from `308eb7ae` (restored
+  to `HEAD` before staging, never committed). The first failure is the exact-equality assert (`tests/test_client.py:283`,
+  `Right contains 1 more item: {'score_unavailable': False}`), which runs before the `KeyError`-bearing asserts.
+  Commands ran with `UV_PYTHON=3.13`, as in Steps 3 and 4.
+- **Disposition**: process-only; no code or scope change.

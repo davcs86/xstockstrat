@@ -381,3 +381,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: scratch-test TDD capture; strengthened clause grep; interim red until Step 5 — see Deviation Log.
   Out-of-scope changes: none. Open item: Step 6 must mirror this docstring in `docs/runbooks/mcp-tools.md` (C-10).
 
+## Session 2026-10-28 — sdd-execute sequential, Step 5 (sdd-batch-execute)
+
+### Step 5 — test: agent row shape carries `score_unavailable` (AC-5) [done]
+- `services/xstockstrat-agent/tests/test_client.py` `test_screen_symbols_sends_grpc_call`: mocked response gains a
+  second row `ScreenResult(symbol="BAD", passed=False, status=OK, score_unavailable=True)`; the NVDA exact-equality
+  dict gains `"score_unavailable": False`; new asserts on `results[1]` (symbol BAD, `passed is False`,
+  `score_unavailable is True`) and that every row's `score_unavailable` is a `bool`.
+- TDD (AC-5): RED with `app/client.py` restored from `308eb7ae` (pre-Step-4) → `1 failed`, `AssertionError` at
+  `tests/test_client.py:283` (`Right contains 1 more item: {'score_unavailable': False}`); GREEN on `HEAD` →
+  `1 passed, 61 deselected`.
+- Verification: `uv run pytest --cov=app --cov-fail-under=40` → `517 passed`, coverage 81.23% (Step 4's interim red
+  closed; the 518 there included the deleted scratch test); `ruff check` clean; `ruff format --check` clean (58 files);
+  C-13 grep → no output (BAD literal has one consumer, stays inline).
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`
+- Deviations: RED against restored pre-Step-4 `client.py` — see Deviation Log. Out-of-scope changes: none.
+
