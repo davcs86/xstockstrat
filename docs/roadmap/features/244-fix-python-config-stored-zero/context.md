@@ -324,3 +324,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     config-governance.md rule is now :251-258.
   - Step 14: no evidence drift. Tooling note: run `pnpm install` in the config service first, and record the Node version (the host
     has Node 22, while CI pins 24).
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute fix-python-config-stored-zero sequential`, run by the sdd-batch-execute workflow in an isolated worktree
+  (single writer, P-01). Each step is one commit on `feature/fix-python-config-stored-zero`, with no per-step PRs.
+- Up-front confirmation: approved by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f:
+  'Start executing features 241-276' via batch-execute). Answers recorded:
+  - checkpoints are unattended and reported (`report`);
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255/275 are deferred (not this feature).
+- Open advisory from impl-spec review: Steps 10, 11 and 17 exceed 5 files. Under the standing authorization they stay unsplit, so the step numbering and the C-15 trace are unchanged.
+- Status: `implementation-ready` → `in-progress`. Next: Step 1.
