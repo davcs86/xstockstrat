@@ -121,7 +121,7 @@ grep -n 'offline_state_unavailable = 17\|offline_state_unavailable = 26' portfol
 
 ### Step 2 — proto-gen: regenerate Go/TS/Python stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/portfolio/v1/portfolio.pb.go` — modify (generated)
@@ -1064,3 +1064,12 @@ _Populated by /sdd-execute as implementation proceeds._
   snapshots of `origin/feature/fix-offline-book-consistency` and `origin/main-dev` (`packages/proto`) instead of
   the `.git#branch=` inputs, which cannot be resolved from an isolated worktree. Both passed; the main-dev check
   also passed without the CI `--exclude-path trading/v1/trading.proto`.
+- Step 2 (2026-10-28, Files list gap, no spec change): `buf-gen.sh` also regenerated the ts-proto outputs
+  `gen/ts/portfolio/v1/portfolio.ts`, `gen/ts/dist/portfolio/v1/portfolio.js` and `.../portfolio.d.ts`. The
+  step's **Files** does not list them. They are committed with the step, as Instruction 2 directs (stage every
+  regenerated `portfolio/v1` file). As the spec expects, the gRPC/Connect stubs did not change.
+- Step 2 (2026-10-28, toolchain, no spec change): the host `~/go/bin/protoc-gen-go` v1.36.11 was built with
+  go1.24.7. It reformatted doc comments in `gen/go/analysis/v1/analysis.pb.go`, which is outside `portfolio/v1`.
+  Following the runbook, the pinned plugins (protoc-gen-go v1.36.11, -go-grpc v1.6.2, -connect-go v1.19.2) were
+  rebuilt under `GOTOOLCHAIN=go1.27.0`, the toolchain CI and `Dockerfile.codegen` use. After the rebuild the
+  diff touches only `portfolio/v1`.

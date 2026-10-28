@@ -736,3 +736,14 @@ Each item names the step where it is resolved.
 - TDD: N/A (proto). Pre-change `grep offline_state_unavailable` found 0 hits; afterwards it finds 2 (lines 70 and 124).
 - Verification: `buf lint` (buf 1.72.0) passed. `buf breaking` passed against snapshots of the feature-branch and `origin/main-dev` baselines. The `.git#branch=` inputs cannot be resolved from an isolated worktree, so `git archive` snapshots replaced them (Deviation Log).
 - Next: Step 2 regenerates the stubs. Until it lands, `proto-freshness` is red on this branch.
+
+## Session 2026-10-28 — Step 2 (proto-gen)
+
+- Ran `./scripts/buf-gen.sh` with buf 1.72.0, grpcio-tools 1.80.0 and the pnpm workspace `tsc`. It changed 8 files, all under `portfolio/v1`:
+  - Go `.pb.go` and Python `_pb2.py`.
+  - TS `portfolio_pb.ts` and `portfolio.ts` (ts-proto).
+  - The 4 matching files under `dist/`.
+- The gRPC/Connect stubs did not change.
+- The host `protoc-gen-go` had been built with go1.24.7 and produced comment-only drift in `analysis.pb.go`. Rebuilding the pinned plugins under go1.27.0 (matching CI) in a scratch GOBIN removed it (Deviation Log).
+- TDD: N/A (proto-gen). Before the change, `grep OfflineStateUnavailable gen/go/portfolio/v1/` found nothing. After it, the grep matches `portfolio.pb.go`, and `go build ./portfolio/...` passes in `gen/go`.
+- Next: Step 3 (service, D-49 ConfirmOrder validation).
