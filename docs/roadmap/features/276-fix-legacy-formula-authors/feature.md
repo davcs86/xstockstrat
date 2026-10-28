@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute (sdd-batch-execute) | Re-spec: Steps 1-9 evidence aligned with current codebase after merging main-dev |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 
 ---
 
@@ -46,4 +47,4 @@ Six staging formulas store the legacy username `davcs86` as `author` instead of 
 
 ## Next Action
 
-`/sdd-review fix-legacy-formula-authors impl-spec` — validate implementation spec, then `/sdd-execute fix-legacy-formula-authors`
+`/sdd-execute fix-legacy-formula-authors sequential` — Steps 1-9 in progress
