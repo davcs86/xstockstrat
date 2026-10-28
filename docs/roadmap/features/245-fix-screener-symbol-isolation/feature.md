@@ -24,6 +24,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — engine tests: AC-1 outline (3 Examples, 49-run oracle), FR-2 cancel passthrough, soft-only fail-closed, all-failed ERROR, feature-144 sort tie, duplicate symbol, span attribute; RED 8 failed / 1 passed on pre-Step-2 engine → GREEN 29 passed; mutations (a)/(b) recorded |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — agent `screen_symbols` forwards `score_unavailable` (`app/client.py`); docstring lists the key, the three `score_unavailable=true` row kinds and the `min_conviction`/`rank_limit` caveat, false "never reported OK/passed" clause removed (`app/tools.py`) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — `test_screen_symbols_sends_grpc_call` asserts the `score_unavailable` key on an OK row (`False`) and an un-evaluated BAD row (`True`, `passed=False`) (AC-5) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — `docs/runbooks/mcp-tools.md` `screen_symbols` parity (C-10): Return JSON gains `"score_unavailable": false`, aside lists the three `score_unavailable=true` row kinds + `min_conviction`/`rank_limit` caveat, Errors table gains the per-symbol evaluation-fault row |
 
 ---
 

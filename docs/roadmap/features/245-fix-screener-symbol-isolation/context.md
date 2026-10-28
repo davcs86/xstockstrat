@@ -397,3 +397,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-agent/tests/test_client.py`
 - Deviations: RED against restored pre-Step-4 `client.py` — see Deviation Log. Out-of-scope changes: none.
 
+## Session 2026-10-28 — sdd-execute sequential, Step 6 (sdd-batch-execute)
+
+### Step 6 — docs: `docs/runbooks/mcp-tools.md` `screen_symbols` parity (C-10) [done]
+- Return JSON NVDA row gains `"score_unavailable": false`; the `status` aside (same paragraph) gains the three
+  `score_unavailable=true` row kinds (evaluation fault: status OK, `passed: false`; data-less hard-filter row:
+  `passed: false`; data-less soft-only row, feature 144: `passed: true`), keeps "Filter candidates on `passed`", and
+  adds the `min_conviction > 0` / `rank_limit` caveat (server log is the only trace); Errors table gains the
+  per-symbol evaluation-fault row. Wording mirrors the Step 4 docstring (`app/tools.py:850-854`).
+- TDD: N/A (docs). Pre-edit baseline: `grep score_unavailable docs/runbooks/mcp-tools.md` → no output (exit 1).
+- Verification: `grep -n score_unavailable` → hits at `:449` (Return JSON), `:455` (aside), `:465` (Errors);
+  `grep -n "evaluation fault"` → `mcp-tools.md:455,465` and `app/tools.py:851`.
+- Files modified: `docs/runbooks/mcp-tools.md`
+- Deviations: none. Out-of-scope changes: none.

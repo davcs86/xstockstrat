@@ -563,7 +563,7 @@ grep -n "__tests__/fixtures\|conftest" tests/test_client.py | head -3   # C-13: 
 
 ### Step 6 — docs: `docs/runbooks/mcp-tools.md` `screen_symbols` parity (C-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
