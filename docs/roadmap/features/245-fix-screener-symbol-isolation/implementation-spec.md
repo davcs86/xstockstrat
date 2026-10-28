@@ -708,7 +708,7 @@ pnpm run lint
 
 ### Step 9 — docs: sibling defect reports (readiness, opportunities gathers)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`
 **Files**:
 - `docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.md` — create
@@ -937,3 +937,18 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: `prettier --check e2e/fixtures/INVENTORY.md` warns on both the edited file and the `HEAD` copy. `.md` is not
   in the lint-staged glob, so no hook or CI gate covers it. The edited line follows the row's existing format.
 - **Disposition**: recorded; not reformatted (behavior #3).
+
+### Step 9 — report `**Recorded**` date differs from the filename date (2026-10-28)
+- **Spec says**: create `docs/reports/2026-10-21-analysis-{readiness,opportunities-row}-gather-no-per-symbol-isolation-defect.{md,status}`;
+  `defect-filing.md` names a report `<ISO-date>-<slug>-defect.md`, with `**Recorded**` as the ISO date.
+- **Actual**: the spec-pinned filenames (2026-10-21, the design date) were kept so the step's Verification globs
+  and later references resolve; each report's `**Recorded**` field is the actual write date, 2026-10-28.
+- **Disposition**: docs-only; no scope change.
+
+### Step 9 — written directly, not via an interactive `/sdd-qa defect` run (2026-10-28)
+- **Spec says**: write the two reports with `/sdd-qa defect`, which confirms the composed report with the user (P-04).
+- **Actual**: composed in the sequential execute session against the `defect-filing.md` template and checked with its
+  format gates (exactly one `SEV-N` token per report, `**Severity**` field present, sidecar `head -1` = `open`). The
+  P-04 confirmation is covered by the operator standing authorization for this sequential run. Reproductions were not
+  run (code read only), and each report says so.
+- **Disposition**: process-only; severity SEV-2 for both.

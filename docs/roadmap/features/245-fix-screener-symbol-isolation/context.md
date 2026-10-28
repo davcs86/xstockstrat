@@ -454,3 +454,27 @@ Tooling setup (steps 8): node v22.22.0 ✓ (CLAUDE.md pins 24) · pnpm ✓ 9.15.
   `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: RED via restored pre-Step-7 file; host harness (Docker 429); pre-existing e2e failures; pre-existing
   INVENTORY.md prettier warning — see Deviation Log. Out-of-scope changes: none.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 9 (sdd-batch-execute)
+
+Tooling setup (step 9): none needed (docs-only).
+
+### Step 9 — docs: sibling defect reports (readiness, opportunities gathers) [done]
+- `docs/reports/2026-10-21-analysis-readiness-gather-no-per-symbol-isolation-defect.md` (+ `.status` = `open`): SEV-2,
+  request-failure-amplification. `EvaluateReadiness` gathers `_readiness_for` with no `return_exceptions` and no
+  per-symbol guard (`servicer.py:3983`, `:3911`, `:3939`); one raising symbol fails the RPC and drops the healthy
+  symbols' `readiness_cache` upsert.
+- `docs/reports/2026-10-21-analysis-opportunities-row-gather-no-per-symbol-isolation-defect.md` (+ `.status` = `open`):
+  SEV-2. `_compute_opportunities` gathers `_row_for` (`:5776`), which catches only `grpc.RpcError` (`:5693`). It quotes
+  feature 185's deliberate `FormulaExecutionError` propagation (`:5694-5698`) and records that feature 245 isolates
+  `Exception` for the screener only; both callers (`:4807` kick, `:5897` daily refresh) swallow the abort, so one bad
+  candidate leaves the user's whole queue stale/empty. Triage decides whether the 185 contract stands.
+- Anchors read on the branch tip; `servicer.py` is identical to `origin/main-dev` @ 971983e2 (empty diff), so
+  Environment cites that sha.
+- TDD: N/A (docs).
+- Verification: `ls` → all 4 files; `grep servicer.py:3983|:5776` → readiness `:31`, opportunities `:45`;
+  sidecars → `open` ×2; `grep -oE 'SEV-[123]' | sort -u` → one `SEV-2` per report.
+- Files modified: the 4 `docs/reports/2026-10-21-analysis-*-gather-no-per-symbol-isolation-defect.{md,status}` files.
+- Deviations: `**Recorded**` 2026-10-28 vs spec-pinned 2026-10-21 filename date; written directly against the
+  `defect-filing.md` template rather than an interactive `/sdd-qa defect` run — see Deviation Log.
+  Out-of-scope changes: none.
