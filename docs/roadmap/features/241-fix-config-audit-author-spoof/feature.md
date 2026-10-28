@@ -28,6 +28,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 11 done: follow-up defect filed — `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` (status `open`) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 12 done: config-governance, header-propagation, config-rollout and mcp-tools document header-only attribution; `author` ignored (4 verification greps clean) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 13 done: config/agent/ui service context files updated; teardown reconciled by hand (context-forge refresh unavailable) — all 3 verification greps as expected |
+| 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done; C-16 promotion applied (AC-1..AC-3 → config suite, AC-4 → agent suite); integration PR opened |
 
 ---
 
