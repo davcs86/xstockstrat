@@ -322,3 +322,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     entry) to `fails.md:2969-2975` (`:2972`). 031 is still free: origin/main-dev ends at `030_marketdata_edgar_snapshot_keys`.
   - Steps 3-5: re-verified, no mismatch. Hotfix #1263 has landed on main-dev (`_clamp_override`). It does not touch
     `tests/test_config_watcher.py`. Feature 241 has not landed, so `config-governance.md:95-103` is unchanged.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: implementation-ready → in-progress.
+- Up-front confirmation: the operator approved the plan under standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Recorded answers:
+  - checkpoints are unattended (mode `report`);
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred.
+- Mode: sequential, one commit per step on `feature/fix-sandbox-seed-keys`, single integration PR at the end.
+  Step 5 (operator G1 staging gate plus the prod read-back) still needs the operator's pasted output.
+  Standing authorization does not stand in for that output (`operator-db-access.md:58`).
+- Next: Step 1.
