@@ -58,3 +58,13 @@
   droplet's `docker-compose.yml`/secrets mechanism.
 - Outcome: **PASS**. Status: `draft` → `spec-ready`.
 - Next step: `/sdd-design droplet-compose-deploy` (full mode).
+
+## Session 2026-10-24 — demoted (superseded by 279)
+
+- The operator demoted this feature when `/sdd-review 279-homelab-compose-deploy product-spec`'s overlap scan found both
+  claimed the dev/staging compose deploy path (`deploy-dev.yml`). 279 deploys through homelab-edge (tailnet + Caddy edge +
+  forced-command gate on app VMs) instead of a DO droplet with its own Caddy; it keeps the DO deploys and the root
+  `docker-compose.yml` unchanged.
+- Open questions answered there: Go readiness → `grpc.health.v1` + exec-form `/app/service healthcheck` (279 FR-5);
+  secrets → GitHub environment secrets or 1Password into a 0600 `.env`; migration gate → one-shot `db-migrator` with
+  `service_completed_successfully`; rollback → the gate's automatic switch back to the previous release.
