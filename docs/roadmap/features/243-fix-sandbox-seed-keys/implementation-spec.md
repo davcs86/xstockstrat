@@ -473,3 +473,23 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: the two conflict. The comment says "omits the secret ciphertext column", which keeps the
   constraint and passes the grep.
 - **Disposition**: wording only; no behaviour change.
+
+### Step 5 deferred to operator — integration PR merge held until G1 staging output and 243→244 ordering are recorded (2026-10-28)
+- **Expected**: Step 5 ends with the operator's G1 staging output and a PASS verdict (or a recorded operator
+  decision) in context.md, plus the 243-before-244 ordering decision.
+- **Actual**: the code-side NNN re-check ran (instruction 1). `origin/main-dev` still ends at
+  `030_marketdata_edgar_snapshot_keys`; on other remotes, `031_heal_indicators_sandbox_keys_full_dotted` (this
+  branch) and `032_analysis_zero_trap_descriptions` (244, `d2002841`). No renumber is needed. The executor holds
+  no DB access (`operator-db-access.md:58`), so the staging query and the ordering decision are operator-only.
+- **Disposition**: Step 5 **Status** stays `pending`. Integration PR merge held until the operator:
+  1. runs, read-only against staging,
+     `psql "<staging-connection-uri>?sslmode=require" -v ON_ERROR_STOP=1 -c "SELECT namespace, key, environment, user_id, is_secret, value_type, value_data, default_value, updated_by, updated_at FROM config.config_values WHERE namespace = 'indicators' AND key LIKE '%sandbox.%' ORDER BY key, environment, user_id;"`
+     and pastes the output into context.md under `G1 staging` with a verdict. Pass: only the 3 bare global rows
+     with the `001:62-64` seeds (5000 / 134217728 / `numpy,pandas,math,statistics`), `is_secret = false`, no
+     full-dotted twin, no `user_id` row. Anything else (twin, per-user, secret, or a bare value differing from
+     its seed, including `""` for `allowed_imports`) escalates and blocks the merge;
+  2. records the 243-before-244 merge ordering (and the `merge-order.md` row) in context.md, or chooses to
+     renumber/hold 244;
+  3. re-runs `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`
+     right before merging and confirms no `031`+/`032`+ config migration has reached `main-dev`.
+  The production advisory read-back (instruction 3) follows the promotion deploy and does not gate `done`.
