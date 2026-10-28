@@ -17,6 +17,7 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, 4 notes; overlap PASS) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec/acceptance amended per design (AC-1 reworded, FR-4, AC-4, AC-5) |
+| 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Re-spec: Step 5 Codebase Evidence re-anchored agent CI threshold `ci.yml:358-359` → `:368-369` (value still 40); main-dev merged into branch |
 
 ---
 
