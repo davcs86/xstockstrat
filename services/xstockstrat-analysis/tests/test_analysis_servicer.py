@@ -1293,6 +1293,82 @@ class TestScreenSymbols:
             await svc.ScreenSymbols(req, ctx)
         assert ctx.abort.await_args.args[0].name == "INVALID_ARGUMENT"
 
+    @pytest.mark.asyncio
+    async def test_scan_deadline_aborts_deadline_exceeded(self):
+        """feature 245 AC-2: a symbol hanging past the scan deadline aborts DEADLINE_EXCEEDED."""
+        from gen.analysis.v1 import analysis_pb2
+
+        svc = self._svc()
+        svc._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                1 if key == "analysis.screener.max_duration_seconds" else default
+            )
+        )
+        symbols = [f"S{i:02d}" for i in range(50)]
+
+        async def _get_bars(req, **_kwargs):
+            if req.symbol == "S00":
+                await asyncio.Event().wait()
+            return self._bars([1.0, 2.0, 3.0])
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_get_bars)
+        ctx = self._ctx()
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        req = analysis_pb2.ScreenSymbolsRequest(
+            symbols=symbols,
+            criteria=[
+                analysis_pb2.ScreenCriterion(
+                    ref_name="rsi",
+                    kind=analysis_pb2.SCREEN_KIND_TECHNICAL_INDICATOR,
+                    component=analysis_pb2.StrategyComponent(indicator="RSI"),
+                    op=analysis_pb2.COMPARATOR_GT,
+                    threshold=0.0,
+                )
+            ],
+        )
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ScreenSymbols(req, ctx)
+        assert ctx.abort.await_args.args == (
+            grpc.StatusCode.DEADLINE_EXCEEDED,
+            "screen exceeded 1s deadline",
+        )
+
+    @pytest.mark.asyncio
+    async def test_unknown_metric_two_symbols_aborts_invalid_argument(self):
+        """feature 245 AC-3: an unknown metric_name still aborts the whole multi-symbol scan."""
+        from gen.analysis.v1 import analysis_pb2
+        from gen.marketdata.v1 import marketdata_pb2
+
+        svc = self._svc()
+        svc._marketdata.GetBars = AsyncMock(return_value=self._bars([1.0, 2.0, 3.0]))
+        svc._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(
+                fundamentals=[
+                    marketdata_pb2.Fundamentals(symbol="AAPL", pe_ratio=15.0),
+                    marketdata_pb2.Fundamentals(symbol="MSFT", pe_ratio=15.0),
+                ]
+            )
+        )
+        ctx = self._ctx()
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        req = analysis_pb2.ScreenSymbolsRequest(
+            symbols=["AAPL", "MSFT"],
+            criteria=[
+                analysis_pb2.ScreenCriterion(
+                    ref_name="bogus",
+                    kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                    metric_name="not_a_metric",
+                    op=analysis_pb2.COMPARATOR_LT,
+                    threshold=20.0,
+                )
+            ],
+        )
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ScreenSymbols(req, ctx)
+        assert ctx.abort.await_args.args[0].name == "INVALID_ARGUMENT"
+
 
 # ---------------------------------------------------------------------------
 # RunFundamentalsScan (feature 062)

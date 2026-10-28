@@ -43,12 +43,19 @@ _setup_gen_path()
 
 from datetime import date  # noqa: E402
 
+from gen.marketdata.v1 import marketdata_pb2  # noqa: E402
+
 from app.services.evaluator import FundamentalPeriod  # noqa: E402
 
 
 def fund_period(filed_date, **values):
     """One evaluator PIT filing (feature 215 fixtures)."""
     return FundamentalPeriod(filed_date=filed_date, values=dict(values))
+
+
+def fundamentals_row(symbol, missing=(), **metrics):
+    """A real ``marketdata.v1.Fundamentals`` row; ``missing`` is passed through verbatim."""
+    return marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
 
 
 # Feature 215 PIT fixtures: SCHD (an ETF) has no SEC filings; AAPL has quarterly filings carrying

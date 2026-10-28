@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 import { FUNDAMENTALS_STALL_SYMBOL } from '../fixtures';
+import { noCriteriaDataRow } from '../fixtures/screenResults';
 
 /**
  * Single-Position page (feature 096) — the dedicated `/trader/positions/[symbol]` view built from
@@ -216,6 +217,31 @@ test.describe('Single Position page', () => {
     // The universe-collapsed composite score must NEVER surface in this section (FR-8): no Score
     // column, no score readout anywhere in the section's DOM subtree.
     await expect(screening.getByText('Score', { exact: false })).toHaveCount(0);
+  });
+
+  test('a scoreUnavailable single-symbol result shows "Not evaluated" (bug fix, feature 245)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ results: [noCriteriaDataRow('AAPL')], coverageGaps: [] }),
+      }),
+    );
+    await page.goto('/trader/positions/AAPL');
+
+    const screening = page.getByTestId('symbol-screening');
+    await expect(screening).toBeVisible({ timeout: 30000 });
+    await screening.getByTestId('run-symbol-screen').click();
+
+    // Scoped to the section wrapper, never the bare shared `empty-state` id.
+    const unevaluated = screening.getByTestId('symbol-screen-unevaluated');
+    await expect(unevaluated).toBeVisible({ timeout: 10000 });
+    await expect(unevaluated).toContainText('Not evaluated');
+    await expect(screening.getByTestId('symbol-screen-results')).toHaveCount(0);
+    await expect(screening.getByTestId('symbol-screen-insufficient')).toHaveCount(0);
   });
 
   test('the Backtests section lists the resolved strategy runs for this symbol, excluding others (FR-9)', async ({
