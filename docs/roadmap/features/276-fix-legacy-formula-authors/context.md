@@ -251,3 +251,12 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
   - Step 7: `ctx_with` makes `abort` raise, so assertions expect `grpc.RpcError` rather than "abort not awaited".
   - Step 8: the runbook must state explicitly that the CLI's pooled `:25061` port deliberately deviates from `operator-db-access.md`'s direct-port guidance (F-06); index row goes in alphabetical position.
   - Steps 3, 5, 6: evidence held; no change.
+
+---
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`.
+- Up-front confirmation (mode entry): operator standing authorization, operator chat 2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, and "start batch 2 in parallel too". Answers recorded: checkpoints unattended (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps: open the PR, hold the merge.
+- This feature's apply against staging/prod data remains an operator-only DB step (runbook, Step 8); execution here writes code, tests and docs only and never touches a database.
+- Plan: Steps 1-9 in order, one commit per step on `feature/fix-legacy-formula-authors`, single integration PR at the end.
