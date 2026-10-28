@@ -229,3 +229,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     - `app/client.py` with 240 (Step 24, `:2245-2271`), 215 and 241 (predictive);
     - `app/tools.py` with 240, 241, 249 and 215;
     - `services/xstockstrat-agent/CLAUDE.md` with 240 (`:83`, `:86-87`).
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode entry: `/sdd-execute fix-agent-getconfig-deadline sequential`, run by `/sdd-batch-execute` in an isolated worktree.
+  The up-front plan was confirmed by the operator's standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276"). Answers recorded:
+  - checkpoints are unattended, with mode `report`;
+  - C-16 promotion is auto-confirmed unless it changes an existing `@AC` rule;
+  - merge-train is authorized; 255 and 275 are deferred;
+  - operator-only DB/prod steps: open the PR and hold the merge.
+- Branch setup (§5.3): `git merge -X ours origin/main-dev` into the detached checkout (merge 1f08ebf8, pushed).
+- Status: `implementation-ready` → `in-progress`.
+- Re-spec (commit 189edd1c, "respec(fix-agent-getconfig-deadline): align steps 1,2,3,4,5,6 with current codebase"):
+  every Files path exists and every cited symbol resolves. `_CONFIG_READ_TIMEOUT_S` and `hung_config_server`
+  are still absent. Only line anchors drifted after the main-dev merge:
+  - `app/client.py` +1: `get_config_value` `:1730`, `GetConfig(` `:1752`, `except` `:1756`, warning `:1758`,
+    `get_config` `:2035-2047`, `register_oauth_client` `:1356`, `list_opportunities` `timeout` `:854`/`:873`.
+  - `tests/test_client.py` +12: `TestGetConfigValueClient` `:815`, stub patches `:833-835`, asserts `:856-861`,
+    transport-error model `:878`.
+  - `app/tools.py` +13: comment `:2378-2379`, `_POLICY_READ_TIMEOUT_S` `:2380`, `_agent_policy` `:2383`,
+    `_fetch_url` `:2399`, four reads `:2410-2413`, `build_pinned_client` `:2421`; `ingest_signal` read `:627-637`;
+    227 `wait_for` about `:1560-1563`.
+  - `identityServiceImpl.ts` https-only check `:385-388`; root findings latent row `:34`, Resolved `:51`,
+    Filed rule `:61`, index `:65`; `mcp-tools.md` threshold row `:1698`; CI coverage gate is now the
+    `pytest with coverage` step (`ci.yml` about `:406-411`, agent matrix `:368-369`).
+  - The Step Dependencies "Anchor base" note (@ 0da14ffc) is outside the re-spec scope; the step bodies now
+    carry the 2026-10-28 anchors.
+- Step 6 expectation: the Grafana_Cloud MCP server failed to connect in this session (HTTP 424), so the
+  spec's own fallback applies. Record "Not measured" with that reason and escalate (P-03) to the operator
+  before Step 3 is committed.
