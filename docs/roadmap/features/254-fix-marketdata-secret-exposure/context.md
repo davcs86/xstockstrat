@@ -333,3 +333,12 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   The router decides the order and owns the write. Whichever feature lands second rebases. Target: the /sdd-execute
   checkpoint before Step 1 (marketdata) and before Step 7 (authz.ts).
 - [ ] Re-run the overlap scan once 256-260 get implementation specs (no concrete clash today). Target: /sdd-execute start.
+
+## Session 2026-10-28 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-marketdata-secret-exposure` (`-X ours`).
+- Re-spec, line drift only (no Instruction change): Step 7 pre-merge gate grep now targets `deploy.yml:101`
+  (the `:102` grep failed after the merge and would have blocked P-03 falsely), and its Instruction 4 WARN cite moves
+  to `main.go:77-78`. Step 9 WARN moves to `main.go:77-78`, Step 1 FMP `fetchQuotes`/`fetchRatios`/`FetchSector`/
+  `FetchIsEtf` to `:263`/`:273`/`:364`/`:374`, Step 5 `ci.yml:594`, Step 8 `fails.md:671` (rule `:673`).
+  The Step 7 SAN-material grep passes against the current tree.
