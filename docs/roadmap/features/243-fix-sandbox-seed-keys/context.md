@@ -425,3 +425,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (`fails.md:2909-2912`). Instruction 1 now also scans every remote branch, and 243 must merge before 244
   (otherwise 031 is renumbered). This supersedes the Step Dependencies line "Neither needs a `merge-order.md` row".
   The operator still has to decide on the 243 → 244 `merge-order.md` row; this run does not add it.
+
+### Step 5 — config: G1 staging gate before the `main-dev` merge; production advisory read-back [pending — operator]
+- NNN re-check (instruction 1), 2026-10-28: `origin/main-dev` ends at `030_marketdata_edgar_snapshot_keys`, so no
+  renumber. Other remotes hold `031_heal_indicators_sandbox_keys_full_dotted` (this branch) and
+  `032_analysis_zero_trap_descriptions` (244, `d2002841`). 243 must merge into `main-dev` before 244, or 032
+  reaching an environment first makes golang-migrate skip 031 (`fails.md:2909-2912`). The 243→244 ordering and
+  its `merge-order.md` row await an operator decision.
+- G1 staging: not run. The executor holds no DB access (`operator-db-access.md:58`); the operator pastes the
+  query output and a verdict here. Exact commands are in the Deviation Log entry "Step 5 deferred to operator".
+- Production advisory read-back: after the promotion deploy; does not gate `done`.
+- Integration PR merge is held until both entries above are recorded.
