@@ -319,3 +319,16 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   - Step 16: systemic escalation alert `trading.go:2183-2189` (system-wide, `reconciliation`) named explicitly as
     out of scope — admin-only is intended; not to be confused with the per-account alert `:1938-1944`.
 - No scope, step count, or @AC coverage change.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`.
+- Up-front confirmation (sequential mode entry): the plan was approved under the operator's standing authorization
+  (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute).
+  Answers recorded: checkpoints unattended (checkpoint mode `report`); C-16 promotion auto-confirmed unless it
+  changes an existing @AC rule; merge-train authorized; 255/275 deferred; operator-only DB/prod steps — open the
+  integration PR, hold the merge.
+- Note: this feature's C-16 promotion CHANGES an existing rule (feature-165 FR-3 broadcast, `design.md:290`), so the
+  auto-confirm does not apply to it; that CHANGE is covered by the binding operator decision recorded 2026-10-21
+  (§ Operator decisions, sdd-design session).
+- Open Threads from the impl-spec review session remain open (announce at each checkpoint, P-03).
