@@ -765,3 +765,236 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   operator-side.
 - TDD: N/A (rollout).
 - Next: the operator runs the Step 18 rollout; then open the integration PR and hold the merge.
+
+## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-python-config-stored-zero (feature 244)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | getter contract spans analysis, indicators and ingest |
+| AC-2 | services/xstockstrat-analysis/acceptance/fix-python-config-stored-zero.feature | CREATE | NEW | RunBacktest zero-cost |
+| AC-3 | same analysis file | CREATE | NEW | ListOpportunities default sort |
+| AC-4 | platform.feature | APPEND | NEW | defaults for unset or mismatched values, three services |
+| AC-5 | services/xstockstrat-ingest/acceptance/fix-python-config-stored-zero.feature | CREATE | NEW | ingest backfill semaphore clamp |
+| AC-6 | platform.feature | APPEND | NEW | 41 rows across ingest, indicators and analysis, so cross-service. Kept whole to stay verbatim. |
+| AC-7 | analysis file | CREATE | NEW | zero-default keys |
+| AC-8 | services/xstockstrat-config/acceptance/fix-python-config-stored-zero.feature | CREATE | NEW | SetConfig bound |
+| AC-9 | analysis file | CREATE | NEW | live-loop alert throttle |
+| AC-10 | config file | CREATE | NEW | WatchConfig wire |
+| AC-11 | config file | CREATE | NEW | description-only migration; the seed rows live in the config migrations |
+| AC-12 | analysis file | CREATE | NEW | no-limit zero |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  @AC-1 @FR-1 @regression @feature-244
+  Scenario Outline: A stored zero is honoured by the Python config getters
+    Given the <service> ConfigWatcher snapshot holds "<key>" as a <type> value <stored>
+    When the watcher's <getter> reads "<key>" with default <default>
+    Then it returns <stored>
+
+    Examples:
+      | service                | key                                     | type   | stored | getter    | default |
+      | xstockstrat-analysis   | analysis.opportunity.signal_rank_weight | float  | 0.0    | get_float | 0.3     |
+      | xstockstrat-analysis   | analysis.engine.alert_throttle_seconds  | int    | 0      | get_int   | 300     |
+      | xstockstrat-analysis   | analysis.test.zero_string               | string | ""     | get_str   | "x"     |
+      | xstockstrat-indicators | indicators.test.zero_int                | int    | 0      | get_int   | 7       |
+      | xstockstrat-indicators | indicators.test.zero_float              | float  | 0.0    | get_float | 0.5     |
+      | xstockstrat-indicators | indicators.test.zero_string             | string | ""     | get_str   | "x"     |
+      | xstockstrat-ingest     | ingest.test.zero_int                    | int    | 0      | get_int   | 7       |
+      | xstockstrat-ingest     | ingest.test.zero_float                  | float  | 0.0    | get_float | 0.5     |
+      | xstockstrat-ingest     | ingest.test.zero_string                 | string | ""     | get_str   | "x"     |
+
+  @AC-4 @FR-2 @regression @feature-244
+  Scenario Outline: An unset or mismatched value still resolves to the coded default
+    Given the <service> ConfigWatcher <state>
+    When the watcher's <getter> reads "<key>" with default <default>
+    Then it returns <default>
+
+    Examples:
+      | service                | state                                         | getter    | key                                      | default |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_float | analysis.backtest.default_commission_pct | 0.001   |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_int   | analysis.engine.alert_throttle_seconds   | 300     |
+      | xstockstrat-analysis   | has received no snapshot                      | get_str   | analysis.test.unset_string               | "x"     |
+      | xstockstrat-indicators | has received no snapshot                      | get_int   | indicators.test.unset_int                | 7       |
+      | xstockstrat-indicators | snapshot holds the key as a string value "5"  | get_float | indicators.test.mismatched_float         | 0.5     |
+      | xstockstrat-indicators | snapshot has no entry for the key             | get_str   | indicators.test.unset_string             | "x"     |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_str   | ingest.test.unset_string                 | "x"     |
+      | xstockstrat-ingest     | snapshot holds the key as a float value 2.5   | get_int   | ingest.test.mismatched_int               | 7       |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_float | ingest.test.unset_float                  | 0.5     |
+
+  @AC-6 @FR-3 @regression @feature-244
+  Scenario Outline: A trap-dependent site keeps the coded default for a stored zero
+    Given "<key>" is stored as the <type> value <stored>
+    When <service> resolves it for <site>
+    Then the effective value is <effective>
+
+    Examples:
+      | service                | key                                              | type   | stored | site                                  | effective                 |
+      | xstockstrat-ingest     | ingest.backfill.max_concurrent_chunks            | int    | 0      | the backfill chunk semaphore capacity | 3                         |
+      | xstockstrat-ingest     | ingest.backfill.chunk_max_bars                   | int    | 0      | the chunk planner's bar cap           | 200000                    |
+      | xstockstrat-ingest     | ingest.backfill.chunk_window_days                | int    | 0      | the chunk planner's window in days    | 90                        |
+      | xstockstrat-ingest     | ingest.mcp_client.poll_interval_seconds          | int    | 0      | the mcp_client poll loop              | 300                       |
+      | xstockstrat-indicators | indicators.sandbox.timeout_ms                    | int    | 0      | ExecuteFormula                        | 5000                      |
+      | xstockstrat-indicators | indicators.sandbox.memory_bytes                  | int    | 0      | ExecuteFormula                        | 134217728                 |
+      | xstockstrat-indicators | indicators.sandbox.max_concurrent                | int    | 0      | the sandbox semaphore capacity        | 4                         |
+      | xstockstrat-analysis   | analysis.engine.eval_interval_seconds            | int    | 0      | the live-loop sleep between cycles    | 60                        |
+      | xstockstrat-analysis   | analysis.engine.max_strategies_per_cycle         | int    | 0      | the live-loop per-cycle pair budget   | 50                        |
+      | xstockstrat-analysis   | analysis.engine.fundamentals_blend_strategy_id   | string | ""     | the blend-governed strategy id        | "fundamentals_macd_blend" |
+      | xstockstrat-analysis   | analysis.strategy.default_cooldown_days          | int    | 0      | the default re-entry cooldown in days | 31                        |
+      | xstockstrat-analysis   | analysis.scoring.shrinkage_days                  | int    | 0      | the headline-grade shrinkage k        | 250                       |
+      | xstockstrat-analysis   | analysis.screener.max_duration_seconds           | int    | 0      | the ScreenSymbols deadline            | 120                       |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_position_weight      | float  | 0.0    | portfolio-mode sizing                 | 0.10                      |
+      | xstockstrat-analysis   | analysis.backtest.detail_retention_per_strategy  | int    | 0      | backtest-detail retention             | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_bars_fetches | int    | 0      | the opportunity bars-fetch semaphore  | 2                         |
+      | xstockstrat-analysis   | analysis.backtest.default_fill_model             | int    | 0      | a RunBacktest without fill_model      | FILL_MODEL_SAME_BAR_CLOSE |
+      | xstockstrat-analysis   | analysis.backtest.max_range_days                 | int    | 0      | the RunBacktest range cap in days     | 730                       |
+      | xstockstrat-analysis   | analysis.snapshot.indicator_timeout_ms           | int    | 0      | the snapshot indicator timeout in ms  | 500                       |
+      | xstockstrat-analysis   | analysis.screener.max_universe_size              | int    | 0      | the ScreenSymbols universe cap        | 100                       |
+      | xstockstrat-analysis   | analysis.opportunity.max_universe_size           | int    | 0      | the opportunity universe cap          | 100                       |
+      | xstockstrat-analysis   | analysis.fundsignal.run_interval_hours           | int    | 0      | the fundsignal loop interval in hours | 24                        |
+      | xstockstrat-analysis   | analysis.fundsignal.daily_call_budget            | int    | 0      | the fundsignal daily call budget      | 200                       |
+      | xstockstrat-ingest     | ingest.mcp_client.request_timeout_seconds        | int    | 0      | the mcp_client per-call timeout       | 30                        |
+      | xstockstrat-analysis   | analysis.strategy.max_concurrent_entry_backfill  | int    | 0      | the entry-backfill semaphore          | 4                         |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_max_concurrent       | int    | 0      | portfolio-mode max open positions     | 9                         |
+      | xstockstrat-analysis   | analysis.series.max_concurrent_components        | int    | 0      | the series component semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_candidates   | int    | 0      | the opportunity candidate semaphore   | 4                         |
+      | xstockstrat-analysis   | analysis.compute.max_worker_threads              | int    | 0      | the compute thread pool size          | 4                         |
+      | xstockstrat-analysis   | analysis.readiness_materializer.max_concurrent_bars_fetches | int | 0 | the materializer bars semaphore | 2                         |
+      | xstockstrat-analysis   | analysis.screener.max_concurrent_formula_evals   | int    | 0      | the screener formula semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.fundsignal.source_slug                  | string | ""     | the fundamentals source slug          | "fundamentals"            |
+      | xstockstrat-analysis   | analysis.fundsignal.max_symbols_per_run          | int    | 0      | the fundsignal per-run symbol cap     | 200                       |
+      | xstockstrat-analysis   | analysis.fundsignal.valid_days                   | int    | 0      | the fundsignal signal validity days   | 90                        |
+      | xstockstrat-analysis   | analysis.snapshot.signal_timeout_ms              | int    | 0      | the snapshot signal timeout in ms     | 500                       |
+      | xstockstrat-analysis   | analysis.patterns.indicator_bucket_count         | int    | 0      | the P&L-pattern indicator buckets     | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_strategies_per_symbol | int | 0      | the per-symbol live attribution cap   | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_only_symbols_per_compute | int | 0   | the live-only symbol cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_held_symbols_per_compute | int | 0   | the held-symbol live cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.valid_window_hours          | int    | 0      | the opportunity validity window hours | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.snooze_default_hours        | int    | 0      | the default snooze hours              | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.read_db_budget_ms           | int    | 0      | the ListOpportunities DB read budget  | 20000                     |
+      | xstockstrat-analysis   | analysis.opportunity.live_enrich_timeout_ms      | int    | 0      | the live-enrich timeout in ms         | 3000                      |
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-python-config-stored-zero.feature (CREATE) ---
+# Promoted from docs/roadmap/features/244-fix-python-config-stored-zero/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-244` tag.
+# Durable business rules xstockstrat-analysis guarantees for stored-zero config values.
+
+Feature: xstockstrat-analysis - a stored zero is a value, not "unset"
+  What xstockstrat-analysis guarantees when an operator stores 0 / 0.0 / "" for a config key.
+
+  @AC-2 @FR-4 @regression @feature-244
+  Scenario: A zero-cost backtest is configurable
+    Given "analysis.backtest.default_commission_pct" is stored as 0.0
+    And "analysis.backtest.default_slippage_pct" is stored as 0.0
+    And the snapshot has no "analysis.backtest.default_fill_model" entry, so fills use the same bar's close
+    And a RunBacktest whose single trade enters on a bar closing at 100.00 and exits on a bar closing at 110.00
+    When RunBacktest runs
+    Then the trade's entry_price is 100.00 and its exit_price is 110.00
+    And the trade's pnl equals qty * 10.00, with no commission deducted
+
+  @AC-3 @FR-4 @regression @feature-244
+  Scenario: A zero signal-rank weight orders the default queue by conviction alone
+    Given "analysis.opportunity.signal_rank_weight" is stored as 0.0
+    And one user's live opportunities are "AAA" with conviction 0.90 and signal_axis 0.00, and "BBB" with conviction 0.50 and signal_axis 1.00
+    When ListOpportunities returns the queue with the default sort
+    Then "AAA" is ranked before "BBB"
+
+  @AC-7 @FR-5 @regression @feature-244
+  Scenario Outline: A stored zero whose coded default is also zero keeps its effective value
+    Given "<key>" holds the <type> value <stored> (<origin>)
+    When xstockstrat-analysis reads it for <site>
+    Then the effective value is <effective>
+
+    Examples:
+      | key                                              | type   | stored | origin              | site                           | effective |
+      | analysis.opportunity.refresh_hour_utc            | int    | 0      | seeded by 028:51,54 | the opportunity refresh hour   | 0         |
+      | analysis.readiness_materializer.refresh_hour_utc | int    | 0      | seeded by 027:37,40 | the readiness re-warm hour     | 0         |
+      | analysis.fundsignal.min_conviction_to_emit       | float  | 0.0    | operator-set        | the fundsignal emit floor      | 0.0       |
+      | analysis.fundsignal.scoring_formula_id           | string | ""     | operator-set        | the fundsignal scoring formula | ""        |
+      | analysis.fundsignal.explicit_symbols             | string | ""     | operator-set        | the explicit symbol universe   | ""        |
+
+  @AC-9 @FR-4 @regression @feature-244
+  Scenario: A zero alert throttle lets a repeat live transition alert
+    Given "analysis.engine.alert_throttle_seconds" is stored as 0
+    And the live loop emitted an alert for user "u1", strategy "S1" on "AAPL" 10 seconds ago
+    When the next live-loop evaluation of that pair yields an ungated exit transition
+    Then a second alert is emitted for user "u1", strategy "S1" on "AAPL"
+
+  @AC-12 @FR-1 @regression @feature-244
+  Scenario Outline: A key whose zero means "no limit" honours a stored zero
+    Given "<key>" is stored as the int value 0
+    When xstockstrat-analysis resolves it for <site>
+    Then the effective value is 0, so <effect>
+
+    Examples:
+      | key                                  | site                         | effect                                  |
+      | analysis.screener.default_rank_limit | the ScreenSymbols rank cap   | the result list is not truncated        |
+      | analysis.patterns.min_sample_count   | the P&L-pattern sample floor | no bucket is dropped for a small sample |
+
+--- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-python-config-stored-zero.feature (CREATE) ---
+# Promoted from docs/roadmap/features/244-fix-python-config-stored-zero/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-244` tag.
+# Durable business rule xstockstrat-ingest guarantees for a stored-zero backfill concurrency.
+
+Feature: xstockstrat-ingest - backfill concurrency keeps its zero clamp
+  What xstockstrat-ingest guarantees when ingest.backfill.max_concurrent_jobs is stored as 0.
+
+  @AC-5 @FR-3 @regression @feature-244
+  Scenario: Ingest's backfill job concurrency keeps its zero clamp
+    Given "ingest.backfill.max_concurrent_jobs" is stored as the int value 0
+    When the ingest servicer builds its backfill job semaphore
+    Then the semaphore admits 3 concurrent jobs
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-python-config-stored-zero.feature (CREATE) ---
+# Promoted from docs/roadmap/features/244-fix-python-config-stored-zero/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-244` tag.
+# Durable business rules xstockstrat-config guarantees for explicit-zero config values.
+
+Feature: xstockstrat-config - explicit zero values on the write edge and the wire
+  What xstockstrat-config guarantees for zero-valued rows: bounds still apply, the WatchConfig wire preserves a zero member, and the corrective migration is description-only.
+
+  @AC-8 @FR-6 @regression @feature-244
+  Scenario: SetConfig still rejects 0 for a minValue-1 key read by a Python service
+    Given an ADMIN caller
+    And "analysis.opportunity.max_concurrent_bars_fetches" exists as an int config row (seeded by 028:87,90)
+    When SetConfig writes "analysis.opportunity.max_concurrent_bars_fetches" = 0
+    Then it fails with INVALID_ARGUMENT naming the bounds [1, 5]
+
+  @AC-10 @FR-1 @regression @feature-244
+  Scenario Outline: An explicit zero survives the WatchConfig wire
+    Given config rows hold "<key>" as the <type> value <stored>
+    When a WatchConfig <update> payload is serialized and deserialized through ConfigServiceService
+    Then the decoded ConfigValue for "<key>" holds its <type> member set to <stored>
+
+    Examples:
+      | key                       | type   | stored | update   |
+      | analysis.test.zero_int    | int    | 0      | SNAPSHOT |
+      | analysis.test.zero_float  | float  | 0.0    | SNAPSHOT |
+      | analysis.test.zero_string | string | ""     | SNAPSHOT |
+      | analysis.test.zero_int    | int    | 0      | DELTA    |
+
+  @AC-11 @FR-6 @regression @feature-244
+  Scenario: The corrective description migration changes descriptions only and reverses cleanly
+    Given the 027 and 028 seeded rows whose descriptions name the zero-trap
+    When the description-only migration is applied
+    Then only the description column of those rows changes, matched on their exact old text
+    And no value_data, value_type or key changes and no row is inserted or deleted
+    And the down migration restores each old description text exactly
+
+### Notes / ambiguities / conflicts
+- Routing: AC-1, AC-4 and AC-6 are placed in platform.feature because the getter contract spans analysis, indicators and ingest, and no single service owns it. The platform.feature @AC-1 and @AC-4 tags are disambiguated by @feature-244, as with the existing @feature-127 and @feature-147 entries.
+- AC-11 is attributed to config, because the 027 and 028 seed rows are config rows. AC-11 is a one-time migration property. A human may later judge it unfit as a durable rule, but promotion is verbatim.
+- OVERLAP (no write skipped): the 173 suites services/xstockstrat-ingest/acceptance/fix-python-config-zero-trap.feature and services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature use get_int_present or get_str_present for max_retry_attempts, dedup_window_hours and allowed_imports. They assert different keys and outcomes, so the verdict is NEW. A human could consolidate with the new platform AC-1.
+- Consistent with, not contradicting: services/xstockstrat-config/acceptance/opportunity-config-operability.feature @AC-8 (feature 184) accepts refresh_hour_utc=0 and signal_rank_weight=0. services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature and the same file's @AC-4 keep the [1,5] bound on max_concurrent_bars_fetches, which matches 244 AC-8. 244 AC-8 adds the specific 0 rejection, so it is NEW rather than an overlap.
+- The ingest CLAUDE.md note that poll_interval_seconds and request_timeout_seconds are "clamped to >=1" is consistent with AC-6 only if a stored 0 resolves to the default (300 and 30). No promoted scenario asserts the old clamp, so there is no conflict.
+- The acceptance.feature was read from the local working tree. The caller said origin/feature/..., which I did not diff against.
+
+### Coverage check
+- Source scenarios: 12 (AC-1 to AC-12). Planned (NEW+DUP+OVERLAP): 12 (12 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). None were skipped.
+- Target counts: platform 3, analysis 5, ingest 1, config 3 = 12.
+- Target-suite dedup was done only by grepping on config keys and rule themes. The list of services/*/acceptance files was truncated at 100 entries, so a few later-sorted suites may be unchecked. The analysis, ingest and config targets are new files, and the 173 and 184 suites were checked.
+```
