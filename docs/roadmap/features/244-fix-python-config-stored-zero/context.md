@@ -998,3 +998,13 @@ Feature: xstockstrat-config - explicit zero values on the write edge and the wir
 - Target counts: platform 3, analysis 5, ingest 1, config 3 = 12.
 - Target-suite dedup was done only by grepping on config keys and rule themes. The list of services/*/acceptance files was truncated at 100 entries, so a few later-sorted suites may be unchecked. The analysis, ingest and config targets are new files, and the 173 and 184 suites were checked.
 ```
+
+## Session 2026-10-28 — sdd-execute ALL-DONE PATH (C-16 promotion applied, integration PR)
+
+- Operator confirmed the `sdd-batch-promotion-plan` above by standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: 'Start executing features 241-276'; C-16 promotion auto-confirmed). Applied verbatim:
+  AC-1/AC-4/AC-6 appended to `docs/sdd/business-rules/platform.feature`; AC-2/3/7/9/12 → new
+  `services/xstockstrat-analysis/acceptance/fix-python-config-stored-zero.feature`; AC-5 → new ingest suite;
+  AC-8/10/11 → new config suite. 12/12 scenarios promoted, none skipped.
+- status.md stays `in-progress`: Step 18 (rollout audit + consumer-surface smokes, C-14) is operator-deferred.
+  Integration PR opened against main-dev with an "Operator gates before merge" section; merge held.
