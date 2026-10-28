@@ -309,3 +309,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Trunk drift: the root checkout (`ccr-f537be2d-6mwmqf`) and main-dev hold only the 2026-10-20 triage state of
     243 (status draft, AC-1 3000, no AC-4/AC-5). All progress through implementation-ready is on
     `feature/fix-sandbox-seed-keys`; run `/sdd-sync` before promotion.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-sandbox-seed-keys`, `git merge -X ours origin/main-dev` (30465a2f).
+- Re-spec of Steps 1-5 against the current codebase (implementation-spec.md only; step bodies):
+  - Step 1: `ci.yml` job `migration-rerun` `:633` → `:643`, `/repo` mount `:668` → `:678`. `migration-rerun.sh`
+    pass 3 is `:111-181` (was cited `:173-181`, the tail of its recovery check); pass 2 at `:91` now cited.
+    main-dev added pass 4 (`:192+`), which runs after the assertion loop (`:183-190`) and touches only
+    marketdata, so it does not affect `config-031.sql`. The header text changes from "after all passes" to "after passes 0-3".
+  - Step 2: the ledger cite for "029 rename is not conflict-safe" moves from `fails.md:2953-2957` (now the 242
+    entry) to `fails.md:2969-2975` (`:2972`). 031 is still free: origin/main-dev ends at `030_marketdata_edgar_snapshot_keys`.
+  - Steps 3-5: re-verified, no mismatch. Hotfix #1263 has landed on main-dev (`_clamp_override`). It does not touch
+    `tests/test_config_watcher.py`. Feature 241 has not landed, so `config-governance.md:95-103` is unchanged.
