@@ -27,6 +27,7 @@ from gen.ledger.v1 import ledger_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.json_format import MessageToDict
 
+from app.config.watcher import int_positive
 from app.identity import owner_metadata
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
@@ -361,8 +362,10 @@ class PnLPatternConsumer:
         """Returns (bar, closes, indicators, signals, degraded). Each gRPC group is bounded by its
         config timeout; a timeout/error degrades to an empty map/list (partial snapshot), never
         raising out of here (FR-6)."""
-        ind_timeout = self._cfg.get_int("analysis.snapshot.indicator_timeout_ms", 500) / 1000.0
-        sig_timeout = self._cfg.get_int("analysis.snapshot.signal_timeout_ms", 500) / 1000.0
+        ind_timeout = (
+            int_positive(self._cfg, "analysis.snapshot.indicator_timeout_ms", 500) / 1000.0
+        )
+        sig_timeout = int_positive(self._cfg, "analysis.snapshot.signal_timeout_ms", 500) / 1000.0
         degraded = False
         meta = owner_metadata(owner) if owner else ()
         bar, closes = None, []

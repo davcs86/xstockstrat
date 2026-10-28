@@ -124,17 +124,19 @@ class ConfigWatcher:
 
     get_float_present = get_float
 
-    @property
-    def sandbox_timeout_ms(self) -> int:
-        return self.get_int("indicators.sandbox.timeout_ms", default=5000)
 
-    @property
-    def sandbox_memory_bytes(self) -> int:
-        return self.get_int("indicators.sandbox.memory_bytes", default=128 * 1024 * 1024)
+# >0, not >=0: these keys size semaphores, pools, intervals and caps, where 0 or a negative
+# deadlocks, raises, busy-loops or empties the result just as an unset key never should.
+def int_positive(cfg, key: str, default: int) -> int:
+    v = cfg.get_int(key, default)
+    return v if v > 0 else default
 
-    @property
-    def sandbox_allowed_imports(self) -> list[str]:
-        raw = self.get_str(
-            "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
-        )
-        return [m.strip() for m in raw.split(",") if m.strip()]
+
+def float_positive(cfg, key: str, default: float) -> float:
+    v = cfg.get_float(key, default)
+    return v if v > 0 else default
+
+
+def str_nonempty(cfg, key: str, default: str) -> str:
+    v = cfg.get_str(key, default)
+    return v if v else default

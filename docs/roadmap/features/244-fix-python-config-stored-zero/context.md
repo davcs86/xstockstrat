@@ -553,3 +553,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-9; never
   `--no-verify`).
 - Next: Step 11.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 11
+
+### Step 11 — service: analysis FR-3 clamps, named readers, `max(1, …)` and inline-clamp conversion [done]
+- `app/config/watcher.py`: module-level `int_positive` / `float_positive` / `str_nonempty` (each calls `cfg.get_*`,
+  so `MagicMock` overrides still reach the read); dead `sandbox_*` properties deleted with their 3 tests in
+  `tests/test_analysis_servicer.py`.
+- Named readers: `default_cooldown_days(cfg)` next to `blend_strategy_id` in `servicer.py` (both RunBacktest cooldown
+  sites + `live_loop.py`); `fundsignal_source_slug(cfg)` in `fundsignal_loop.py` (`run_once` + `live_loop.py`'s
+  fundamentals universe). `blend_strategy_id` now uses `str_nonempty`. `live_loop` → `fundsignal_loop` import adds no
+  cycle (fundsignal_loop imports only `durable_schedule` / `identity` from `app`).
+- All 34 analysis FR-3 sites read through a clamp with the same default (F-07). Removed the read-site `max(1, …)`
+  wrappers (`__init__` ×5, portfolio_max_concurrent, detail retention, entry_backfill, screener sem, fundsignal
+  `run_interval_hours` ×2) and the two inline `<= 0` blocks (`read_db_budget_ms`, `live_enrich_timeout_ms`). Kept:
+  the `retry_seconds` wrappers, `empty_recompute_ttl_seconds`, `bucket_pnl_factors` floor, `min_sample_count` honour,
+  `readiness_materializer.valid_window_hours` (HONOUR), `default_fill_model` honour read.
+- Comments rewritten to state the `>0` clamp (`__init__`, portfolio sizing, retention), the `default_fill_model`
+  0 = legacy constraint, and the exit-cooldown "configured 0 is legitimate" constraint (mechanism clause dropped in
+  `servicer.py` and `live_loop.py`).
+- TDD: RED via an uncommitted scratch test (5 failed: helpers ImportError, semaphore `_value == 1`, named readers
+  ImportError, screener sem 1, fundsignal `_tick` 3600). GREEN: 5 passed. Paired test is Step 12.
+- Verification: anchored `max(1, …get_int(` grep → no output (spec pattern also prefix-matches the kept
+  `get_int_present` retry wrappers — see Deviation Log); helper grep → 45 hits; `sandbox_` in watcher → none; both named
+  readers found. `ruff check` / `ruff format --check` clean. Full suite with coverage: 1 failed, 1287 passed, coverage
+  88.37%. The one failure is the expected `test_retention_clamped_to_at_least_one` (asserts 1; Step 12 flips it).
+- Open for Step 17: analysis `CLAUDE.md` Config Keys rows still describe the `get_int` zero-trap / `max(1, …)` clamp
+  (`portfolio_position_weight`, `portfolio_max_concurrent`, `default_fill_model`, `shrinkage_days`,
+  `default_cooldown_days`, `series.max_concurrent_components`, the `max_concurrent_*` / `max_worker_threads` rows,
+  `readiness_materializer.max_concurrent_bars_fetches`).
+- Files modified: `services/xstockstrat-analysis/app/{config/watcher.py,handlers/servicer.py,engine/live_loop.py,
+  engine/fundsignal_loop.py,engine/entry_backfill.py,engine/pnl_pattern_consumer.py,services/screener.py}`,
+  `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: TDD scratch harness; verification grep prefix-match. See the Deviation Log.
+- Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-10; never
+  `--no-verify`).
+- Next: Step 12.

@@ -625,20 +625,6 @@ class TestConfigWatcherGetters:
         w._snapshot = None
         assert w.get_str("analysis.test.unset_string", "x") == "x"
 
-    def test_sandbox_timeout_default(self):
-        w = _StubWatcher()
-        assert w.sandbox_timeout_ms == 5000
-
-    def test_sandbox_memory_default(self):
-        w = _StubWatcher()
-        assert w.sandbox_memory_bytes == 128 * 1024 * 1024
-
-    def test_sandbox_allowed_imports_default(self):
-        w = _StubWatcher()
-        imports = w.sandbox_allowed_imports
-        assert "numpy" in imports
-        assert "pandas" in imports
-
     @pytest.mark.asyncio
     async def test_wait_for_snapshot_succeeds(self):
         w = _StubWatcher()

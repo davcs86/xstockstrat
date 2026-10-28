@@ -753,7 +753,7 @@ grep -n "def snapshot_watcher" tests/*.py   # exactly one hit, tests/conftest.py
 
 ### Step 11 — service: analysis FR-3 clamps, named readers, `max(1, …)` and inline-clamp conversion
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/config/watcher.py` — modify
@@ -1364,3 +1364,11 @@ _Populated by /sdd-execute as implementation proceeds._
   - The @AC-4 `_snapshot = None` row is a separate test (`test_get_str_default_when_no_snapshot`), as in Step 6.
   - The AC-3 order rows run under `real_pg` via `local_pg` (the project's own throwaway-PostgreSQL harness named by the
     step); no service database or migration was started.
+- 2026-10-28 Step 11 (TDD evidence harness + verification grep, no scope change): the paired test lands in Step 12, so
+  RED/GREEN used an uncommitted scratch test (`tests/test_zz_step11_scratch.py`, deleted before commit). It asserted
+  the three helpers (0 / -5 / 0.0 / "" → default, 7 passes through), the five `AnalysisServicer.__init__` semaphore and
+  pool sizes at 0, `blend_strategy_id` / `default_cooldown_days` / `fundsignal_source_slug`, `ScreenerEngine._sem`,
+  and fundsignal `_tick() == 86400`. The Verification's first grep pattern `max(1, self._cfg.get_int` also
+  prefix-matches the kept present-aware `retry_seconds` wrappers (`get_int_present`: the two opportunity retry sites
+  in `servicer.py` and the fundsignal retry), which Instruction 8 says not to touch. The anchored form (`get_int(`)
+  returns no output. The three helpers share one 2-line constraint comment above `int_positive`.
