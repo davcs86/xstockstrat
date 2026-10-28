@@ -784,7 +784,7 @@ git status --short                                # only these 2 files (+ featur
 
 ### Step 6 — docs: Teardown — narrow the coverage-enforcement claims, file the follow-up defect, add the merge-order note, run the context audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `.claude/skills/sdd-qa/`, `.claude/skills/sdd-spec/`, root `CLAUDE.md`, the Node-leaf findings logs
 **Files**:
 - `.claude/skills/sdd-qa/reference/lang-node.md` — modify
@@ -932,3 +932,6 @@ _Populated by /sdd-execute as implementation proceeds._
 - **2026-10-28 — Step 3, Verification `grep -n 'catch' "$F"`.** One hit remains: `:13`, the item 3 constraint comment ("never wrap it in try/catch"), which is the spec's own verbatim text. No `catch` clause remains in the file, so the line's stated intent (no catch wraps a subject/proto import) holds.
 - **2026-10-28 — Step 5, item 2 (proto import form).** The spec keeps `let LedgerEvent: any;` (`:729`) and the `({ LedgerEvent } = await import(…))` assignment (`:731`). With the try/catch gone both sit in one scope, and eslint `prefer-const` fails the Verification `pnpm run lint` (`error 'LedgerEvent' is never reassigned`). Collapsed to `const { LedgerEvent } = await import('@xstockstrat/proto/ledger/v1/ledger');`, as in Step 3. Same file, same specifier, no assertion change.
 - **2026-10-28 — Step 5, Verification `grep -n 'catch' "$F"`.** One hit remains in each file (`ledgerServiceImpl.test.ts:8`, `eventNotifier.test.ts:7`): the item 3 constraint comment ("never wrap it in try/catch"), which is the spec's own verbatim text. No `catch` clause remains in either file, as in Step 3.
+- **2026-10-28 — Step 6, item 2 (TS5097 citation).** The spec cites `fails.md:2239` for TS5097; the hit is `fails.md:2238`, inside the 2026-09-09 / feature 171 entry. `lang-node.md` cites it by entry (`fails.md` 2026-09-09, feature 171) rather than by line, so it survives ledger growth. No scope change.
+- **2026-10-28 — Step 6, item 1 (defect report fields).** Added a `**Source**` line (filed by feature 252 Step 6), as the parent report `2026-10-20-node-impl-test-suites-never-load-impl-defect.md:9` does. It holds no severity token; the format check still prints exactly `SEV-3`.
+- **2026-10-28 — Step 6, item 7 (context audit).** `/context-forge:context-constitution refresh` is not available in this session (only `context-forge:context-scrubber` is installed). Manual reconciliation performed instead; recorded in `context.md` for the integration PR body.
