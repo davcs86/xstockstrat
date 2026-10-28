@@ -454,3 +454,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     Consider a debt-radar note or deleting the Connect stream arm in a later feature.
   - [ ] **Same-file rebase with 242/251/256/257.** Re-grep the cited lines at execute time (unchanged guidance).
 - Ledger: no new line. The existing entries already cover these traps (fails.md:613, :2909).
+
+## Session 2026-10-28 — sdd-execute re-spec gate (§5.3)
+- Branch setup: detached at `origin/feature/fix-portfolio-snapshot-surface`, merged `origin/main-dev` with
+  `-X ours` (e786d2b5), pushed.
+- Directive: conditional. Re-spec'd step bodies 1, 3, 4, 5, 6, 8 only (line-ref drift; no behavior change).
+  - Steps 1/3/4: the gRPC `StreamPortfolioUpdates` signature is at `portfolio_handler.go:292` (`Sprintf` `:293`).
+    `cmd/server/main.go` refs moved: `NewPortfolioHandler` `:78`, `RegisterPortfolioServiceServer` `:101`.
+  - Step 5: consumer goroutines at `main.go:71-76`; `s.cfg.FactorMap` at `:492`.
+  - Step 6: `031_heal_indicators_sandbox_keys_full_dotted` (243, d8b7a8df) and `032_analysis_zero_trap_descriptions`
+    (244, d2002841) are now committed on their feature branches. They match the claims, so reserving 034 still holds.
+    No 033_/034_ file exists on any remote ref. 277's 033 mention is moot (demoted/canceled). The blockquote is at
+    `merge-order.md:213`.
+  - Step 8: `pnpm run test:coverage` is at `.github/workflows/ci.yml:594`.
+- Steps 2, 7, 9, 10 were not in the validation's drift list, so they were not edited.
