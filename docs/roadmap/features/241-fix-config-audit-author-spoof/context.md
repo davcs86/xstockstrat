@@ -394,3 +394,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   with go1.27 — the go1.24 build reformats an analysis doc comment and would fail `proto-freshness`.
 - Next: Step 3 (service: config `SetConfig`).
 
+## Session 2026-10-28 — sdd-execute sequential, Step 3
+
+- Step 3 (service) done: `setConfig` hoists `rawValue` + `internalCallerAuthorized` (`userIdParam === null &&
+  hasInternalCallerAuthority(...)`) above the scope branch; the `:386` gate expression is unchanged. `author` is now
+  `callerUserId || (internalCallerAuthorized ? (callerIdentity ?? '') : '')` — `call.request.author` is no longer
+  read. `MISSING_AUTHOR_ERROR` keeps name/code; message → `propagated identity required: send x-user-id or an
+  authorized x-internal-caller`.
+- TDD: AC-1/AC-2/AC-3 red: scratch loopback test (uncommitted, deleted) failed 4/4 (`params[6]` =
+  `'someone-else@example.com'`; AC-3 writes accepted) → green: 4/4 passed. Durable tests land in Step 4.
+- Verification: `request.author` grep — no hits; `const internalCallerAuthorized` (:379) and `const author =
+  callerUserId` (:412) both precede `callback(MISSING_AUTHOR_ERROR)` (:414); `pnpm run build` pass; `pnpm run lint`
+  0 errors; prettier-wrapped the hoisted `hasInternalCallerAuthority(...)` call (same expression).
+- Known red window: config `pnpm test` 75/180 fail until Step 4 (admin-scope fixtures without `x-user-id` now hit
+  the identity rejection). Deviation Log note added.
+- Next: Step 4 (test: config attribution, rejection and fixture identity).
+

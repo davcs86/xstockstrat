@@ -22,6 +22,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (sdd-batch-execute); up-front plan confirmed by operator standing authorization |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 1 done: `SetConfigRequest.author` deprecated in place (`buf lint` / `buf breaking` pass) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 2 done: stubs regenerated (Go/Python/TS, config-only diff; freshness re-run clean; trading + config builds pass) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 3 done: config `SetConfig` credits only `x-user-id` or the authorized `x-internal-caller`; body `author` ignored (build + lint pass) |
 
 ---
 

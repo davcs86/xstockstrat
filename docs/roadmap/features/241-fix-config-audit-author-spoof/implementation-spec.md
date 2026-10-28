@@ -170,7 +170,7 @@ Both commands must exit 0.
 
 ### Step 3 — service: config `SetConfig` attributes only propagated identity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -1079,3 +1079,9 @@ _Populated by /sdd-execute as implementation proceeds._
   and rewrote an unrelated doc comment in `gen/go/analysis/v1/analysis.pb.go`; it was rebuilt with go1.27.0 (the
   CI Go) and the regen re-run, after which the gen diff is config-only (7 files). A second run left the diff
   byte-identical (proto-freshness). **Disposition**: CI-equivalent fallback.
+- **2026-10-28 — Step 3 TDD red/green (process note, no spec change).** The paired test is Step 4, so RED→GREEN
+  was captured with an uncommitted scratch test in the `internalCallerSetConfig.test.ts` loopback harness (AC-1,
+  AC-2, AC-3 ×2): 4/4 failed pre-change (`params[6]` was `'someone-else@example.com'`; AC-3 writes succeeded),
+  4/4 passed post-change; the scratch file was deleted. Between Step 3 and Step 4 the config `pnpm test` suite is
+  red (75/180, every failure the new `propagated identity required` rejection on admin-scope fixtures with no
+  `x-user-id`) — exactly the fixtures Step 4 Instruction 3 updates. **Disposition**: accepted; Step 4 restores green.
