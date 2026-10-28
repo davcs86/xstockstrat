@@ -255,3 +255,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `./scripts/buf-gen.sh`); trading `CLAUDE.md` vs 240 (other sections); `tools.py`/`mcp-tools.md` vs 215 (other
     regions); `config-governance.md` vs 240/243 (Step 10 note).
 - Overlap findings: WARN, file-level only. No migration, proto field-number or config-key collision.
+
+## Session 2026-10-28 — re-spec (sdd-batch-execute pre-flight)
+
+- Merged `origin/main-dev` into the feature branch (`-X ours`, 40de843c). Re-spec of step bodies 1, 4, 6, 7, 15 only;
+  line drift, substance unchanged. Commit `respec(fix-ibkr-request-signing): align steps 1,4,6,7,15 with current codebase`.
+  - Step 1: `gitleaks-action@v3` now `ci.yml:767`; trufflehog `:750`, `--only-verified` `extra_args` `:762`.
+    gitleaks is installed at `~/go/bin/gitleaks`, so the two mandatory gitleaks commands can run on this host.
+    `.gitleaks.toml:33-40` unchanged; `internal/testdata/` unchanged; `ibkr/` fixtures still absent.
+  - Step 4: PEM-parse precedent is now `load()` at `internal/mtls/mtls.go:22-41`. Other anchors verified.
+  - Step 6: the `DeadlineExceeded\|Timeout()` grep also hits `trading.go:1973`, `:2377`, `:2440`
+    (`brokerCallTimeout()`) and `alpaca.go:67`; only `:684`/`:1521` classify errors, so the conclusion holds.
+  - Step 7: `TestReplaceOrder_IBKR`'s header assertion is `if gotAuth == ""` at `ibkr_test.go:323` (`:285` is the
+    func declaration).
+  - Step 15: `tools.py` anchors shifted ~+14: `manage_account` `:2153`, IBKR docstring `:2175-2177`,
+    update_credentials sentence `:2179-2181`, non-empty checks `:2191-2214`; runbook row `mcp-tools.md:1392`.
