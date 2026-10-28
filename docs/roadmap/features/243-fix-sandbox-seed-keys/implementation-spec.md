@@ -394,15 +394,26 @@ grep -n "system:config-migration-" docs/patterns/config-governance.md           
 - Snapshot table `config.config_values_premigration_031` (Step 2) records the production pre-state.
 - Ledger `fails.md:642-644`: a flagged manual AC was never run before promotion. Hence the human confirms this
   gate before the merge, and the rejected manual prod gate with a freeze is not used (design.md:165).
+- NNN collision (re-spec 2026-10-28): `origin/main-dev` still ends at `030_marketdata_edgar_snapshot_keys`, but
+  `origin/feature/fix-python-config-stored-zero` (244, commit `d2002841`) adds
+  `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.{up,down}.sql`. If 032 reaches
+  an environment before 031, golang-migrate there skips 031 silently (`fails.md:2909-2912`). This supersedes the
+  Step Dependencies claim that the 243/244 soft ordering needs no `merge-order.md` row.
 
 **TDD**: `N/A (operational read-only gate)`
 
 **Covers**: —
 
 **Instructions**:
-1. **Re-verify the NNN.** Run `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`.
-   If anything at or above `031` exists, stop and renumber Step 2's files to the next free number
-   (`fails.md:2909-2912`). Renaming them is a deviation, recorded in the Deviation Log.
+1. **Re-verify the NNN, on `main-dev` and on every remote branch.** Run
+   `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`
+   and `git log --remotes --name-only --format= -- 'services/xstockstrat-config/migrations/03[1-9]*' | sort -u`.
+   - If `origin/main-dev` holds anything at or above `031`, stop and renumber Step 2's files to the next free
+     number (`fails.md:2909-2912`). Renaming them is a deviation, recorded in the Deviation Log.
+   - If another branch holds a higher config migration that is not yet on `main-dev` (today: 244's `032`), 243
+     must merge into `main-dev` first. Before the integration PR merges, confirm that no `032`+ config migration
+     has reached `main-dev`; otherwise this is a blocker for the operator: renumber 031 above it, or hold 244.
+     The ordering 243 → 244 needs a `merge-order.md` row (an operator decision; record it in context.md).
 2. **Staging G1**, just before the integration PR merges. The operator runs this read-only query (the executor
    holds no DB access; `operator-db-access.md:58`: no credentials in an agent prompt) and pastes the output into
    context.md under `G1 staging`:
@@ -425,7 +436,8 @@ grep -n "system:config-migration-" docs/patterns/config-governance.md           
 Pass condition: the operator's pasted staging output is in context.md and
 `grep -n "G1 staging" docs/roadmap/features/243-fix-sandbox-seed-keys/context.md` shows it with a PASS verdict, or a
 recorded operator decision. The NNN check prints `030_…` as the highest config migration on
-`origin/main-dev`.
+`origin/main-dev`, and any higher config migration on another remote branch (244's `032`) is recorded in
+context.md together with the operator's 243-before-244 ordering decision.
 
 ---
 
