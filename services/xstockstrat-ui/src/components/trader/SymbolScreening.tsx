@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { useScreenSymbols, type ScreenSymbolsInput } from '@/hooks/useScreenSymbols';
 import {
   BUILTIN_INDICATORS,
@@ -62,6 +63,7 @@ export function SymbolScreening({ symbol }: { symbol: string }) {
 
   const result = screen.data?.results?.[0];
   const insufficient = result?.status === ScreenResultStatus.INSUFFICIENT_DATA;
+  const unevaluated = result?.scoreUnavailable === true;
   const errorMessage =
     screen.error instanceof ConnectError
       ? screen.error.rawMessage
@@ -245,6 +247,13 @@ export function SymbolScreening({ symbol }: { symbol: string }) {
                   ? ` — needs ${result.gap.barsNeed} bars, has ${result.gap.barsHave}.`
                   : '.'}
               </span>
+            </div>
+          ) : unevaluated ? (
+            <div data-testid="symbol-screen-unevaluated">
+              <EmptyState
+                title="Not evaluated"
+                description={`No screening criteria could be evaluated for ${symbol} — this is not a pass or a fail.`}
+              />
             </div>
           ) : (
             <DataTable
