@@ -704,3 +704,17 @@ Each item names the step where it is resolved.
   no-retry alternative is rejected.
 - **Product-spec drift resolved:** Fix Scope now records the two additive proto markers, and OQ-1/OQ-2 are marked
   resolved with the design decisions.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-offline-book-consistency`, merged `origin/main-dev` with `-X ours` (8f874bde).
+- Re-verified all 16 steps against the current codebase. No blocker; line drift only, corrected in implementation-spec.md:
+  - Step 3: ConfirmOrder offline-only gate `trading.go:909-911` (was :910-912).
+  - Step 5: `recomputeAndEmitOfflinePositions` final `return nil` at `:1078` (was :1077).
+  - Step 7: `ConsumeOrderFills` at `portfolio_service.go:167` (was :168); `clock()` at `offline_valuation.go:54`.
+  - Step 9: `type readValuation` at `offline_valuation.go:28-31` (was :27-30).
+  - Step 11: ListPortfolios `buildAccountPortfolio` callers `:1420`/`:1472` (were :1428/:1478); `allOffline` at `:650` (was :652).
+  - Step 12: `acctScenario` starts at `offline_account_pnl_test.go:27`; quote-deadline non-fatal comment at `:113-114`.
+  - Step 14: INVENTORY.md catalog rows at `:17`, `:41`.
+  - Step 15: `list_positions` `client.py:2357`, `stub.ConfirmOrder` `:2277`, `tools.py` `except grpc.aio.AioRpcError` `:2147`.
+  - Steps 1, 2, 4, 6, 8, 10, 13, 16: all evidence matches, unchanged.
