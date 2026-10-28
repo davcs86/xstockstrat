@@ -81,7 +81,7 @@ not an omission.
 
 ### Step 1 — service: D-54 — pending-hidden rows return NOT_FOUND on UpdateFormula/DeleteFormula
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify

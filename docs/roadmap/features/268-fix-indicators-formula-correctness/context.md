@@ -691,3 +691,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (open the PR, hold the merge); "start batch 2 in parallel too".
 - Plan: steps 1-10 in order, one commit per step on `feature/fix-indicators-formula-correctness`, then a
   single integration PR to `main-dev`.
+
+### Step 1 — service: D-54 — done (2026-10-28)
+
+- `servicer.py:491` (`UpdateFormula`) and `:594` (`DeleteFormula`): `if row is None:` →
+  `if row is None or row.get("pending_intent_id") is not None:`. Abort message and `return` unchanged.
+- TDD (AC-6/AC-7, throwaway probe — Step 2 owns `tests/test_private_formulas.py`, so the probe was not
+  committed): red: 4 failed — pending `u-1` Update/Delete not refused, pending `SYSTEM_AUTHOR` Update/Delete
+  `PERMISSION_DENIED` != `NOT_FOUND` → green: 4 passed after the change.
+- Verification grep: exactly 2 hits (`:491`, `:594`). Full indicators suite 294 passed; `ruff check app` clean.
+- No deviations.
