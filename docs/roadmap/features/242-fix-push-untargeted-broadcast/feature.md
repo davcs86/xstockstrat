@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-review: PASS WITH WARNINGS (6 warnings, 4 notes; no Floor breach); overlap WARN ×4 (215 same-function, 244, 240, 251), no FAIL. Low-cost warnings fixed in product-spec.md + acceptance.feature |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
+| 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | After `git merge -X ours origin/main-dev`: steps 3, 8, 10, 11, 14, 16 re-specced to current line anchors; Step 10 C-13 premise/grep restated; Step 16 names the out-of-scope systemic escalation alert (`trading.go:2183-2189`) |
 
 ---
 
