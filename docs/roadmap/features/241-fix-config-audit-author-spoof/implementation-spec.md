@@ -455,7 +455,9 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 **Status**: `pending`
 **Service**: `xstockstrat-trading`
 **Files**:
+- `services/xstockstrat-trading/internal/testdata/caller_ids.go` — create
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify
+- `services/xstockstrat-trading/internal/config/config_test.go` — modify
 
 **Reviewers**:
 - `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only
@@ -469,8 +471,14 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
   if req.Author != "system:reconciliation-poller" {
   ```
 - `TestReconcileTick_BelowThreshold_NoEscalation` reuses the fake (`:805-811`).
-- `TestWatcher_SetConfig_AttachesMetadata` (`internal/config/config_test.go:211-244`) already pins the transport
-  header (recon.md:123-126).
+- `TestWatcher_SetConfig_AttachesMetadata` (`internal/config/config_test.go:211`) already pins the transport
+  header (recon.md:123-126). It and the test after it already use the literal `"trading-reconciliation-poller"`
+  as a test value at `config_test.go:232`, `:238`, `:239` and `:255` (`package config`, internal test).
+- The production value is `trading.go:2168` `s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", ...)`.
+- C-13 Go home `services/xstockstrat-trading/internal/testdata/` exists (`package testdata`; `order_rows.go`,
+  `offline_history.go`, feature 240). Precedent consumer in this package: `trading_offline_test.go:27` imports
+  `"github.com/xstockstrat/trading/internal/testdata"`. `testdata` imports only `time`, protobuf and the
+  `commonv1`/`tradingv1` gen packages, so importing it from `internal/config` tests creates no cycle.
 - Reading `req.Author` after Step 1 would trip SA1019. The proto-reflection read below names no deprecated Go
   symbol, so the test needs no nolint (recon.md:118-122: trading has no `nolint:staticcheck` today).
 
@@ -487,8 +495,14 @@ both trees.
    - **Mandatory pin.** `setter.callerIDs[0] != "trading-reconciliation-poller"` → `t.Errorf(...)`.
    - **RED.** `fd := req.ProtoReflect().Descriptor().Fields().ByName("author")`, and
      `if req.ProtoReflect().Has(fd) { t.Errorf("SetConfig must not send the deprecated author field") }`.
-3. C-13: `"trading-reconciliation-poller"` already appears as a test literal only here, and `internal/testdata/`
-   does not exist. The literal stays inline as a single consumer.
+3. C-13 (second consumer file → centralize; re-decided 2026-10-28, see Deviation Log):
+   - Create `internal/testdata/caller_ids.go` (`package testdata`) declaring
+     `const ReconciliationPollerCallerID = "trading-reconciliation-poller"`, with a ≤2-line comment that it must
+     equal the config `INTERNAL_CALLER_ALLOWLIST` grant the poller authenticates as.
+   - Use `testdata.ReconciliationPollerCallerID` in the new Step 6 assertion (import
+     `"github.com/xstockstrat/trading/internal/testdata"` in `trading_reconciliation_test.go`).
+   - Replace the four literals at `config_test.go:232`, `:238`, `:239`, `:255` with the constant (add the same
+     import). No production code changes: `trading.go:2168` keeps its literal.
 
 **Verification**:
 ```bash
@@ -497,7 +511,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
   GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && \
   GOWORK=off go tool cover -func=coverage.out | grep "^total:" && \
   GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include="*_test.go"   # ≤1 declaration site per file
+grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include="*.go"   # expect: trading.go:2168 and internal/testdata/caller_ids.go only
 ```
 - The new logic is in `internal/service/`, which is excluded from CI coverage measurement. No threshold applies
   to it; confirm only that the total stays ≥ 40%.
@@ -520,28 +534,30 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
 
 **Codebase Evidence**:
 - `set_config` tool:
-  - `tools.py:1642` `async def set_config(`, with param `:1648` `author: str,`;
-  - docstring `:1663` `author: who is making the change — required, and recorded in config.config_audit.`
-    and `:1664` `reason: why — required, and recorded alongside author.`;
-  - `:1683` `access_scope = _caller_access_scope(ctx, "set_config")`;
-  - forward `:1694` `author=author,`.
+  - `tools.py:1651` `async def set_config(`, with param `:1657` `author: str,`;
+  - docstring `:1672` `author: who is making the change — required, and recorded in config.config_audit.`
+    and `:1673` `reason: why — required, and recorded alongside author.`;
+  - `:1692` `access_scope = _caller_access_scope(ctx, "set_config")`;
+  - forward `:1703` `author=author,`.
 - `_write_source_bearer`:
   - `tools.py:341` `async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token: str) -> str:`;
   - `:353` `author=tool,`;
   - `:354` `reason=f"bearer for signal source {slug}",`;
   - `:357` `user_id=_caller_user_id(ctx, tool),`.
-  - Callers: `instantiate_template` (`:1222`) and `manage_signal_source` (`:1309`).
-- `client.py:2094` `async def set_config(`, with param `:2100` `author: str,` and the request field `:2142`
-  `author=author,`. Metadata `:2149` `_metadata(("x-access-scope", str(access_scope)))`. `x-user-id` comes from
-  the bound caller (`client.py:59-80`, appended when non-empty at `:75-76`).
+  - Callers: `instantiate_template` (`:1230`) and `manage_signal_source` (`:1317`).
+- `client.py:2095` `async def set_config(`, with param `:2101` `author: str,` and the request field `:2143`
+  `author=author,`. Metadata `:2150` `_metadata(("x-access-scope", str(access_scope)))`. `x-user-id` comes from
+  the bound caller (`_metadata`, `client.py:59`, appended when non-empty at `:76-77`).
 - Edge binding: `CallerPropagationMiddleware` (`tools.py:190-220`) calls `client.set_caller(...)`
   (`:211-215`; AGENT-4).
 - Fail-fast helper: `_caller_user_id` (`tools.py:155-170`) raises `RuntimeError` on empty claims `user_id`
   (AGENT-3b).
 - Precedent: feature 111 `manage_formula` has no `author` param and derives `"author": user_id`
-  (`tools.py:1109-1113`).
-- Q2 (design.md): the pinned mcp 2.2.0 `ArgModelBase` has no `extra` setting, so an undeclared transport
-  argument is dropped silently. Removal is safe.
+  (`tools.py:1121`).
+- Q2 (design.md): the pinned mcp 2.3.0 (`services/xstockstrat-agent/uv.lock`, feature branch and main-dev)
+  `ArgModelBase` (`mcp/server/mcpserver/utilities/func_metadata.py`) has only
+  `ConfigDict(arbitrary_types_allowed=True)` and no `extra` setting, so an undeclared transport argument is
+  dropped silently. Removal is safe.
 - Header propagation: no new outbound call. `client.set_config` keeps `_metadata(...)`.
 
 **TDD**: `red-green required` (Step 8 is the paired test)
@@ -550,14 +566,14 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
 
 **Instructions**:
 1. **`client.py` `set_config`.**
-   - Remove the `author: str` parameter (`:2100`) and `author=author,` (`:2142`).
+   - Remove the `author: str` parameter (`:2101`) and `author=author,` (`:2143`).
    - Add one docstring line: attribution is the caller's `x-user-id`, never a body field (feature 241).
 2. **`tools.py` `set_config`.**
-   - a. Remove the `author: str` parameter (`:1648`) and the forward at `:1694`.
+   - a. Remove the `author: str` parameter (`:1657`) and the forward at `:1703`.
    - b. Docstring:
-     - delete the `:1663` `author:` line;
-     - reword `:1664` to `reason: why — required, recorded in config.config_audit; the change is attributed to your verified user id.`
-   - c. Directly after `:1683`, add a fail-fast call with a comment of at most 2 lines (C-18, Q5):
+     - delete the `:1672` `author:` line;
+     - reword `:1673` to `reason: why — required, recorded in config.config_audit; the change is attributed to your verified user id.`
+   - c. Directly after `:1692`, add a fail-fast call with a comment of at most 2 lines (C-18, Q5):
      ```python
      # Fail fast at the edge: config attributes the write to x-user-id and rejects an empty one.
      _caller_user_id(ctx, "set_config")
@@ -568,7 +584,7 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
    - Delete `author=tool,` (`:353`).
    - Change `:354` to `reason=f"{tool}: bearer for signal source {slug}",`. That keeps the tool provenance that
      `changed_by` no longer carries (design.md item 4).
-4. Do not touch the `:1665-1667` per-user-secret docstring drift. It is adjacent and out of scope (design.md §
+4. Do not touch the `:1674-1676` per-user-secret docstring drift. It is adjacent and out of scope (design.md §
    Open Risks); Step 13 records it.
 
 **Verification**:
@@ -676,7 +692,7 @@ grep -n "def bound_admin\|from tests.conftest\|conftest" tests/test_config_tools
 grep -n '"author": "a@b.c"' tests/test_streamable_http_auth.py   # probe kept: 1 hit
 ```
 - `test_set_config_receives_the_real_callers_scope_over_the_real_transport` must pass with `isError is False`
-  against the frozen mcp 2.2.0 lock. That pass is the behavioural confirmation of Q2 (design.md § Open Risks).
+  against the frozen mcp 2.3.0 lock. That pass is the behavioural confirmation of Q2 (design.md § Open Risks).
 
 ---
 
@@ -747,7 +763,7 @@ cd services/xstockstrat-ui && pnpm run lint
 - `insightsBff.test.ts` harness:
   - `vi.mock('@/lib/connectClients', ...)` (`:9-18`) and `dispatchConnect` import (`:20`);
   - `SignJWT` cookie in `beforeAll` (`:26-33`);
-  - `post(method, body)` (`:40-48`) and `SET_CONFIG` (`:50`);
+  - `post(method, body)` (`:39-48`, `dispatchConnect(` at `:40`) and `SET_CONFIG` (`:49`);
   - the fixture `author: 'user-mallory'` (`:59`) and the assertion `expect(sent.author).toBe(SESSION_USER)` (`:69`);
   - the header-assertion pattern `opts.headers.get(HEADER_USER_ID)` (`:91-92`), with `HEADER_USER_ID` imported
     from `@/lib/headers` (`:4`).
@@ -780,9 +796,10 @@ both trees.
      - `expect(sent.author).toBe('')` (RED);
      - `expect((setConfig.mock.calls[0][1] as { headers: Headers }).headers.get(HEADER_USER_ID)).toBe(SESSION_USER)`
        (mandatory pin).
-2. **Create `configUiBff.test.ts`**, mirroring the `insightsBff.test.ts:1-48` structure:
+2. **Create `configUiBff.test.ts`**, mirroring the `insightsBff.test.ts:1-49` structure:
    - `vi.mock('@/lib/connectClients', () => ({ configClient: { setConfig }, ingestClient: {}, analysisClient: {}, identityClient: {}, indicatorsClient: {} }))`.
-   - `const { dispatchConnect } = await import('@/lib/configUiBff')`.
+   - `const { dispatchConnect } = await import('@/lib/configUiBff')` (the test file does not exist yet; this
+     step creates it).
    - In `beforeAll`, set `process.env.JWT_SECRET = TEST_JWT_SECRET` and
      `cookie = \`access_token=${await signTestJwt(['admin'])}\``. Both helpers are imported from
      `../../e2e/helpers/auth` (C-12).
@@ -870,20 +887,20 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
 - `config-governance.md:93` is `## Author-sentinel conventions`.
   - The `:95-98` prose says automated writers use a `system:<process>` `SetConfigRequest.author`.
   - Row `:102` `system` / indicators. Its body author is already ignored:
-    `services/xstockstrat-indicators/app/handlers/servicer.py:391` reads "The author is the x-user-id header
+    `services/xstockstrat-indicators/app/handlers/servicer.py:398` reads "The author is the x-user-id header
     only; the deprecated body author is ignored."
   - Row `:103` `system:reconciliation-poller`.
 - `header-propagation.md:34-46` `### Documented exception: indicators formula author-ownership`.
   - `:38-44` claims "an explicit `request.author` **wins** … `xstockstrat-config`'s `SetConfig` follows the
     same precedence (feature 074)".
-  - The indicators half is already stale (`servicer.py:391`). The config half is fixed by Step 3.
+  - The indicators half is already stale (`servicer.py:398`). The config half is fixed by Step 3.
 - `config-rollout.md`:
   - `:76-80`, the rule text ("either an explicit `author` field … or a propagated `x-user-id`");
   - `:93` bare `key="approval.require_above_notional"`, `:95` `author="platform-team"`, `:100`
     `("x-user-id", "platform-team")`;
   - `:117-119`, the MCP example with `author="platform-team"`;
   - `:122-124`, which claims `environment`/`trading_mode` parameters and "refuses `is_secret` keys", both
-    contradicted by `tools.py:1642-1651` and AGENT CLAUDE.md;
+    contradicted by `tools.py:1651-1660` and AGENT CLAUDE.md;
   - `:139-141`, the STALE Connect block;
   - `:150-163`, the `RolloutConfig` endpoint. `config.proto:20-35` declares only `WatchConfig`, `GetConfig`,
     `SetConfig`, `ListKeys` and `GetSecret`;
@@ -892,11 +909,11 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
 - Migration `029_heal_config_keys_full_dotted.up.sql:24-28` renamed bare keys in the `platform` and `trading`
   namespaces to full-dotted form. As written, the procedures above fail `NOT_FOUND` at the existence gate
   (`configServiceImpl.ts:466-471`).
-- `mcp-tools.md:1096` `### \`set_config\``.
-  - `:1107` is the `| \`author\` | string | yes | Recorded in \`config.config_audit\` |` row.
-  - `:1108` is "Recorded alongside `author`".
-  - `:1151` "row (author + value, `old_value` NULL)".
-  - `:1155` `INVALID_ARGUMENT` → missing author.
+- `mcp-tools.md:1097` `### \`set_config\``.
+  - `:1108` is the `| \`author\` | string | yes | Recorded in \`config.config_audit\` |` row.
+  - `:1109` is "Recorded alongside `author`".
+  - `:1152` "row (author + value, `old_value` NULL)".
+  - `:1156` `INVALID_ARGUMENT` → missing author.
 - Parity rule: platform `@AC-32 @feature-224` (`docs/sdd/business-rules/platform.feature:300`). `plugins/` has
   no `set_config` reference (recon.md:185).
 
@@ -916,7 +933,7 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
      column shows both spellings (design.md § Open Risks).
    - Fix the `:102` `system` row: it is an indicators `Formula.author` ownership sentinel, not a SetConfig
      author. It is set from the formula module's `AUTHOR` constant, not the request body
-     (`servicer.py:391`). If this rewrite cannot be grounded in one read, leave the row and list it in the PR
+     (`servicer.py:398`). If this rewrite cannot be grounded in one read, leave the row and list it in the PR
      body as teardown drift.
 2. **`header-propagation.md:34-46`.** Rewrite the paragraph:
    - Both indicators `RegisterFormula` and config `SetConfig` take identity from headers only. The body
@@ -934,17 +951,17 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
        `platform.maintenance_mode` at `:228`).
    - `:100`: `"platform-team"` → `<operator-id>`.
    - `:117-119`: drop `author=` from the MCP example.
-   - `:122-124`, grounded in `tools.py:1642-1651`: say there are no `environment`/`trading_mode` parameters,
+   - `:122-124`, grounded in `tools.py:1651-1660`: say there are no `environment`/`trading_mode` parameters,
      and that `is_secret` keys are writable.
    - `:139-141` STALE block: drop `"author"`.
    - `:150-163`: mark `RolloutConfig` as **not an RPC**. Cite `config.proto:20-35` and point to sequential
      `SetConfig` calls.
 4. **`mcp-tools.md` § `set_config`**
-   - Delete the `:1107` `author` row.
-   - `:1108` `reason` → "Recorded in `config.config_audit` (`update_reason`); the change is attributed to your
+   - Delete the `:1108` `author` row.
+   - `:1109` `reason` → "Recorded in `config.config_audit` (`update_reason`); the change is attributed to your
      verified user id (`x-user-id`), never a parameter (feature 241)".
-   - `:1151` "(author + value" → "(caller identity + value".
-   - `:1155`: `INVALID_ARGUMENT` → "propagated identity required" (claims carry no `user_id`; the tool also
+   - `:1152` "(author + value" → "(caller identity + value".
+   - `:1156`: `INVALID_ARGUMENT` → "propagated identity required" (claims carry no `user_id`; the tool also
      fails fast at the edge).
 
 **Verification**:
@@ -1025,7 +1042,7 @@ grep -n "request.author\` \*\*wins\*\*" docs/patterns/header-propagation.md     
    - If the plugin is unavailable, re-read each touched file against the code by hand, and record both the
      unavailability and the reconciliation in the PR body.
    - Record as drift, not fixed:
-     - `services/xstockstrat-agent/app/tools.py:1665-1667` (the per-user-secret docstring that contradicts
+     - `services/xstockstrat-agent/app/tools.py:1674-1676` (the per-user-secret docstring that contradicts
        feature 224, `services/xstockstrat-agent/docs/context-constitution-findings.md:20`);
      - the `config-governance.md:102` row, if Step 12 left it.
 
@@ -1042,3 +1059,10 @@ The PR body must carry the teardown record.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-28 — re-spec (sdd-execute sequential, pre-execution).** Steps 6, 7, 8, 10, 12, 13 re-grounded
+  against the merged `origin/main-dev` tree. Line drift only in 7, 10, 12, 13; Step 8's mcp pin is 2.3.0 (Q2
+  conclusion unchanged). Step 6 C-13 verdict re-decided: `internal/testdata/` now exists (feature 240) and the
+  `"trading-reconciliation-poller"` literal already lives in `internal/config/config_test.go`, so Step 6 would
+  make it a second consumer file — it is centralized as `testdata.ReconciliationPollerCallerID`, and Step 6's
+  Files gain `internal/testdata/caller_ids.go` (create) and `internal/config/config_test.go` (modify).
