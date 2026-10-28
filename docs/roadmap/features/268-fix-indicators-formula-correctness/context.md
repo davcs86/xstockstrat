@@ -667,3 +667,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Target: the /sdd-execute integration PR.
 - [ ] Re-scan the `servicer.py` overlap with 269 once its implementation-spec exists.
   - Target: the /sdd-execute checkpoint before Step 1.
+
+## Session 2026-10-28 — re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-indicators-formula-correctness` with `-X ours`
+  (merge commit 8c38a675).
+- Re-spec of steps 2, 3, 7, 10 against the merged codebase. Line drift only, no file or symbol missing:
+  - Step 2: `SYSTEM_AUTHOR` import `test_private_formulas.py:9` → `:10`; `_admin` `:63-67` → `:62-66`;
+    `ctx.abort` side effect `conftest.py:33` → `:32`. All other citations re-verified.
+  - Step 3: the wrapper output block is `sandbox.py:310-312` with `:310` the comment and the code on
+    `:311-312`. All other citations re-verified.
+  - Step 7: the `strategyCatalog` consumer list now includes `src/lib/screenPresets.test.ts`. It reads only
+    `.name` (`:7`) and asserts no description, so "no consumer needs a change" holds.
+  - Step 10: the `_output = _formula_globals.get('result', {{}})` citation `sandbox.py:310` → `:311`.
