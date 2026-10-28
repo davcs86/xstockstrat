@@ -23,6 +23,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 1 done: `SetConfigRequest.author` deprecated in place (`buf lint` / `buf breaking` pass) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 2 done: stubs regenerated (Go/Python/TS, config-only diff; freshness re-run clean; trading + config builds pass) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 3 done: config `SetConfig` credits only `x-user-id` or the authorized `x-internal-caller`; body `author` ignored (build + lint pass) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 4 done: config tests pin AC-1/AC-2/AC-3 attribution and rejection; admin fixtures send `x-user-id` (182/182 pass, c8 86.77% lines, lint 0 errors) |
 
 ---
 
@@ -63,4 +64,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 3 (service: config `SetConfig` attributes only propagated identity)
+`/sdd-execute fix-config-audit-author-spoof sequential` — Step 5 (service: trading reconciliation poller stops sending `Author`)

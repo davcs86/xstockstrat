@@ -410,3 +410,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   the identity rejection). Deviation Log note added.
 - Next: Step 4 (test: config attribution, rejection and fixture identity).
 
+
+## Session 2026-10-28 — sdd-execute sequential, Step 4
+
+- Step 4 (test) done across the 8 config test files. `setConfigAuthz`: helper default author
+  `someone-else@example.com`; `@AC-1` global update (`params[6]` `admin-7`, body author absent from params) and
+  per-user INSERT (`params[6]`/`[9]` `user-42`); `@AC-3` ×2 (admin scope only / + ungranted
+  `trading-reconciliation-poller`) → `INVALID_ARGUMENT`, `/propagated identity required/`, zero queries.
+  `internalCallerSetConfig`: helper author removed; `@AC-2` pins `params[6]` and `params[10]` to
+  `trading-reconciliation-poller` with body author `someone-else@example.com`.
+- Fixture identity: admin-scope fixtures now send `x-user-id: tester` (ScalarBounds, tradingState ×2,
+  secretsAndScope, perUserSecrets, configValueRoundtrip, scopeResolution). Four vacuous rejection cases gain
+  `assert.match` on their messages; the stale roundtrip params comment lists the 11-param order.
+- `setConfigAuthz` `:264` (per-user write, scope 7, no `x-user-id`) left unchanged — it deliberately asserts the
+  per-user owner gate's `PERMISSION_DENIED`, not the existence gate.
+- TDD: AC-1/AC-2/AC-3 red (config impl swapped back to the pre-Step-3 `79aeb858` files, uncommitted): 7/182 failed
+  (`params[6]` `'someone-else@example.com'` ≠ `admin-7`/`user-42`/`trading-reconciliation-poller`; AC-3 writes
+  accepted) → green on HEAD: 182/182 pass. Closes the Step 3 red window.
+- Verification: `pnpm run test:coverage` exit 0 (c8 lines 86.77% ≥ 40); `pnpm run lint` 0 errors (158 pre-existing
+  warnings); AC-3 and AC-2 greps hit; `__tests__/fixtures` grep no hits (C-13 inline).
+- Next: Step 5 (service: trading reconciliation poller stops sending `Author`).

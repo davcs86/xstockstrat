@@ -272,7 +272,7 @@ cd services/xstockstrat-config && pnpm run build && pnpm run lint
 
 ### Step 4 — test: config attribution, rejection and fixture identity (AC-1, AC-2, AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigAuthz.test.ts` — modify
