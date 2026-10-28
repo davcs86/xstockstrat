@@ -729,3 +729,10 @@ Each item names the step where it is resolved.
   - 255 and 275 are deferred;
   - DB and prod steps stay with the operator: open the PR, then hold the merge.
 - Status: `implementation-ready` → `in-progress`. The prior execute-checkpoint decisions still apply (session 2026-10-22): deregistration option (a) and the Step 5 retry for all callers.
+
+## Session 2026-10-28 — Step 1 (proto)
+
+- Added `bool offline_state_unavailable = 17` to `Portfolio` and `= 26` to `Position` in `packages/proto/portfolio/v1/portfolio.proto`, each with a 2-line constraint comment. No other proto change.
+- TDD: N/A (proto). Pre-change `grep offline_state_unavailable` found 0 hits; afterwards it finds 2 (lines 70 and 124).
+- Verification: `buf lint` (buf 1.72.0) passed. `buf breaking` passed against snapshots of the feature-branch and `origin/main-dev` baselines. The `.git#branch=` inputs cannot be resolved from an isolated worktree, so `git archive` snapshots replaced them (Deviation Log).
+- Next: Step 2 regenerates the stubs. Until it lands, `proto-freshness` is red on this branch.

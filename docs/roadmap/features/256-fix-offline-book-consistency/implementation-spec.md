@@ -79,7 +79,7 @@ service change for GREEN.
 
 ### Step 1 — proto: additive `offline_state_unavailable` markers on Portfolio (17) and Position (26)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -1060,3 +1060,7 @@ _Populated by /sdd-execute as implementation proceeds._
 - Pre-entered at impl-spec review (2026-10-22): Step 7 — deregistration retry option (a) covers broker
   accounts too, a scope extension beyond the product spec's offline-only Trading-Domain Scope. Needs explicit
   operator sign-off before Step 7 runs (C-16/P-03); option (b) means a Step 7 re-spec.
+- Step 1 (2026-10-28, verification method only, no spec change): `buf breaking` ran against `git archive`
+  snapshots of `origin/feature/fix-offline-book-consistency` and `origin/main-dev` (`packages/proto`) instead of
+  the `.git#branch=` inputs, which cannot be resolved from an isolated worktree. Both passed; the main-dev check
+  also passed without the CI `--exclude-path trading/v1/trading.proto`.

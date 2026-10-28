@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1-16 re-verified against current codebase after merging origin/main-dev; line-drift-only corrections in Steps 3,5,7,9,11,12,14,15 |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` (step 1 done) | /sdd-execute sequential (sdd-batch-execute) | Step 1: additive `offline_state_unavailable` on Portfolio (17) and Position (26); buf lint + buf breaking pass |
 
 ---
 
