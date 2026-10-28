@@ -1140,7 +1140,7 @@ Then read both files and confirm each `.down` statement inverts one `.up` statem
 
 ### Step 16 — test: the description migration is description-only and reversible (@AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/zeroTrapDescriptionMigration.test.ts` — create
@@ -1397,3 +1397,10 @@ _Populated by /sdd-execute as implementation proceeds._
   @AC-8 `it`. The @AC-8 case went into the existing `:214` `it` (Instruction 1's first option). Node 22.22.0 was used
   (CI pins 24). The new file is prettier-clean; `setConfigScalarBounds.test.ts` was already non-prettier at HEAD and
   was not reformatted.
+- 2026-10-28 Step 16 (TDD evidence method + test shape, no scope change): Step 15 had already landed, so RED ran the
+  new test with the two `032_analysis_zero_trap_descriptions.*.sql` files moved to the session scratchpad (restored
+  before GREEN; never committed): the suite failed on "expected exactly one *_analysis_zero_trap_descriptions.up.sql,
+  got []". Shape choices within the instructions: the splitter also drops `--` comments outside literals (the 032
+  files open with a comment header) and collapses whitespace outside literals before the anchored regex; the test
+  also asserts four statements per direction with distinct keys and no up/down statement whose SET equals its WHERE,
+  so an empty or no-op file cannot pass vacuously.

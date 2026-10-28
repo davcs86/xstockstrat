@@ -683,3 +683,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `docs/roadmap/features/merge-order.md`
 - Deviations: none.
 - Next: Step 16.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 16
+
+### Step 16 — test: the description migration is description-only and reversible (@AC-11) [done]
+- `services/xstockstrat-config/src/__tests__/zeroTrapDescriptionMigration.test.ts` (new): globs exactly one
+  `*_analysis_zero_trap_descriptions.{up,down}.sql` under `path.resolve(__dirname, '../../migrations')`. A quote-aware
+  splitter (drops `--` comments, collapses whitespace outside literals) yields statements that must each match the
+  anchored description-only `UPDATE` regex. No statement contains INSERT/DELETE/value_data/value_type/`SET key`; 4
+  statements per direction, distinct keys, no SET == WHERE; each up WHERE literal (SQL-escaped, incl. `loop''s`)
+  appears verbatim in 027/028; down SET/WHERE = up WHERE/SET for the same key. Inline expectations (C-13).
+- TDD: AC-11 red: with the 032 pair moved aside (Step 15 already landed) the suite failed "expected exactly one
+  *_analysis_zero_trap_descriptions.up.sql, got []" → green: 4/4 pass, full suite 185/185.
+- Verification: `pnpm install --frozen-lockfile --filter . --filter "xstockstrat-config..."` (no lockfile change);
+  `pnpm run test:coverage` exit 0, 185 pass, lines 88.03% (≥40); `pnpm run lint` 0 errors (166 pre-existing
+  `no-explicit-any` warnings, none in the new file); the new file is prettier-clean. Node 22.22.0 (CI pins 24).
+- Files modified: `services/xstockstrat-config/src/__tests__/zeroTrapDescriptionMigration.test.ts` (new)
+- Deviations: evidence method + test shape only. See the Deviation Log.
+- Next: Step 17.
