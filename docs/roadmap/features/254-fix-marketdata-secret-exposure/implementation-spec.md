@@ -121,9 +121,9 @@ Constitution Rules Touched).
   - **`:116-119`** is the transport site: `return fmt.Errorf("finnhub: %s request failed: %w", path, err)`.
   - `:124-126` has the "Never include the URL (it carries the token)" rule.
   - Imports (`:5-16`) include `"net/url"` but **not** `"errors"`.
-- `getJSON` is the single HTTP chokepoint. FMP routes `fetchQuotes` (`:262`, `/stable/quote`), `fetchRatios`
-  (`:272`) and `fetchProfile` (`:286`, `/stable/profile`) through it, and so do `FetchSector` (`:365`) and
-  `FetchIsEtf` (`:375`). Finnhub routes `fetchMetric` (`:135`, `/stock/metric`) through it.
+- `getJSON` is the single HTTP chokepoint. FMP routes `fetchQuotes` (`:263`, `/stable/quote`), `fetchRatios`
+  (`:273`) and `fetchProfile` (`:286`, `/stable/profile`) through it, and so do `FetchSector` (`:364`) and
+  `FetchIsEtf` (`:374`). Finnhub routes `fetchMetric` (`:135`, `/stock/metric`) through it.
 - Service sentinels are unaffected. Only `errors.Is(err, fmp.ErrFMPDailyCapExceeded)` and
   `errors.Is(err, source.ErrNoFundamentals)` are tested, at `marketdata_service.go:1697`, `:1750` and `:1756`
   (recon.md:37). Neither is in the transport chain.
@@ -364,7 +364,7 @@ bash scripts/check-duplication.sh 2>/dev/null || (cd ../.. && bash scripts/check
   - `clientCredentials()` (`:28`) and `targetOverride(targetService)` (`:35`) give `grpc.ssl_target_name_override`.
 - Precedent for a client with SAN pinning: `peerSanSpike.test.ts:93`,
   `new grpc.Client(\`127.0.0.1:${port}\`, mtls.clientCredentials(), mtls.targetOverride(SVC))`.
-- openssl already runs in the same CI job: `ci.yml:587`, `pnpm run test:coverage`.
+- openssl already runs in the same CI job: `ci.yml:594`, `pnpm run test:coverage`.
 
 **TDD**: `N/A (red N/A — transport change with no behavior change; the five existing GetSecret tests are the characterization and must stay green under the still header-only grant, which de-risks the harness before the red AC-3 in Step 6)`
 
@@ -466,7 +466,7 @@ pair. The `c8 lines >= 40` gate applies at Step 7's Verification (F-05, P-06).
   - `secretCallerAuthz.test.ts:57-62` holds `it('preserves the marketdata exact-keys grant (feature 147 regression)', …)`
     with `callWith('marketdata')` and no SAN. The helper is `callWith(callerID, subjectaltname?)` (`:17-24`).
 - Deploy SAN material: `scripts/gen-dev-certs.sh:28` (`SERVICES="… xstockstrat-marketdata …`), `:50`
-  (`subjectAltName = DNS:${svc}`) and `.github/workflows/deploy.yml:102`
+  (`subjectAltName = DNS:${svc}`) and `.github/workflows/deploy.yml:101`
   (`CERTS_DIR="$certs_dir" bash scripts/gen-dev-certs.sh`).
 - The marketdata client presents its leaf: `internal/config/config.go:70` (`mtls.ClientConfig("xstockstrat-config")`),
   sends `x-internal-caller` at `:115`, and `InternalCallerID = "marketdata"` is at `:109`. No other caller sends
@@ -497,14 +497,14 @@ run before the `authz.ts` edit.
 3. Re-run. Step 5's wire AC-4 / AC-5 / AC-16 stay green, and Step 6's wire AC-3 turns green. In the wire suite, only
    AC-3 changes state.
 4. **Pre-merge gate.** The grep in Verification must still show the three SAN-material lines unchanged. If it does
-   not, block the step (P-03): a leaf without the SAN fails FR-5 soft at boot (`cmd/server/main.go:69-71` WARN).
+   not, block the step (P-03): a leaf without the SAN fails FR-5 soft at boot (`cmd/server/main.go:77-78` WARN).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-config && pnpm run test:coverage   # all green incl. secretsAndScope AC-3 (254); c8 lines >= 40
 cd services/xstockstrat-config && pnpm run lint
 grep -n "peerSan: 'xstockstrat-marketdata'" src/grpc/authz.ts
-cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdata' && sed -n 50p scripts/gen-dev-certs.sh | grep -q 'subjectAltName = DNS:\${svc}' && sed -n 102p .github/workflows/deploy.yml | grep -q 'gen-dev-certs.sh' && echo "SAN material unchanged"
+cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdata' && sed -n 50p scripts/gen-dev-certs.sh | grep -q 'subjectAltName = DNS:\${svc}' && sed -n 101p .github/workflows/deploy.yml | grep -q 'gen-dev-certs.sh' && echo "SAN material unchanged"
 ```
 
 ---
@@ -563,7 +563,7 @@ cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdat
 6. `context.md`: record residual (a) as accepted with no test, pointing to the report.
 7. **Teardown (root `CLAUDE.md` § Teardown).** Run `/context-forge:context-constitution refresh`, scoped to the files
    above, and fix any grounded drift. If the plugin is unavailable, re-read each touched context file against the code
-   by hand, and record both the unavailability and the reconciliation in the PR body (`fails.md:670`).
+   by hand, and record both the unavailability and the reconciliation in the PR body (`fails.md:671`, rule at `:673`).
 
 **Verification**:
 ```bash
@@ -585,7 +585,7 @@ head -1 docs/reports/*-marketdata-vendor-key-url-residuals-defect.status   # →
 
 **Codebase Evidence**:
 - The boot WARN is `slog.Warn("resolving vendor credential from config failed — treating as unset", "key", key, "error", err)`
-  (`services/xstockstrat-marketdata/cmd/server/main.go:70-71`). Grep for the ASCII prefix, never the em-dash
+  (`services/xstockstrat-marketdata/cmd/server/main.go:77-78`). Grep for the ASCII prefix, never the em-dash
   (design.md, Rejected Alternatives).
 - The DO dev app spec is `.do/app.dev.yaml`. `main-dev` pushes deploy to the dev app (root `CLAUDE.md` § CI/CD).
 
