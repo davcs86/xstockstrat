@@ -284,11 +284,14 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Sentinel `class _StopLoop(Exception)` `tests/test_fundsignal_loop.py:375`, used by the `@AC-7 @feature-156` jitter
-  tests at `:499-501` and `:514-516` with `_tick` patched to `AsyncMock(side_effect=_StopLoop)`. Under Step 3 that
+- Sentinel `class _StopLoop(Exception)` `tests/test_fundsignal_loop.py:377`, used by the `@AC-7 @feature-156` jitter
+  tests at `:496-501` and `:513-516` with `_tick` patched to `AsyncMock(side_effect=_StopLoop)`. Under Step 3 that
   sentinel is raised inside `run_supervised`'s `try`, swallowed, and the mocked sleep spins forever — it must become
   a `BaseException` (design.md Open Risks).
-- Helpers `_sched_loop` `:379`, `_make_loop` `:45`, `_make_cfg` `:20`; `fundsignal_module.asyncio` patched at `:494`.
+- Helpers `_sched_loop` `:381`, `_make_loop` `:47`, `_make_cfg` `:23`; `fundsignal_module.asyncio` sleep patched at `:496`
+  and `:513`; `_tick` patched with `side_effect=_StopLoop` at `:501` and `:516` (re-grep these anchors before editing).
+- `app/engine/fundsignal_loop.py`: `_tick` `:128` (the `_advance_schedule(retry)` raise path `:155`), `run_forever`
+  `:158` (`await asyncio.sleep(await self._tick())` `:165`).
 - `tests/test_opportunity_refresh.py:109` `class _Stop(Exception)` is raised from the patched sleep, which Step 1
   places outside the `try`, so `test_startup_jitter_bounded` (`:93`) stays valid unchanged.
 - Servicer builder `make_servicer` imported from `tests.test_analysis_servicer` (`tests/test_opportunity_refresh.py:15`).
@@ -833,14 +836,16 @@ grep -n "conftest" tests/test_pnl_pattern_consumer.py   # expect none (single co
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Analysis `CLAUDE.md` § "Shared durable scheduler (feature 158)" `:129-140`, § "P&L pattern consumer (feature 042)"
-  `:142-171`, § "Ledger Events Emitted" `:548-558` (no `analysis.pnl.*` row today); fixed-invariant wording precedent
+- Analysis `CLAUDE.md` § "Shared durable scheduler (feature 158)" `:130-141`, § "P&L pattern consumer (feature 042)"
+  `:143-172`, § "Ledger Events Emitted" `:549-559` (no `analysis.pnl.*` row today); fixed-invariant wording precedent
   `:64` ("fixed invariants, not config keys").
 - `docs/patterns/config-startup.md:87` says the Python watcher "retries the WatchConfig stream every 2 s on
   `AioRpcError`" — becomes drift after Steps 5/7/9; `:16` and `:149` say "on error" (still true).
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md:23` "Boot recompute task is unreferenced"
   (REFUTED, hygiene only) — Step 1 retains every boot task.
-- `docs/roadmap/features/merge-order.md` has no 259 entry (`grep -n "259\|loop-supervision"` → none).
+- `docs/roadmap/features/merge-order.md` has no 259 entry of its own: `grep -n "259\|loop-supervision"` returns only
+  `:83`, inside the 262 (`fix-analysis-owner-scope`) row ("262 also reuses 259's task-retention helper for the
+  main.py:174 task"). The 259 entry is still to be added.
 - `.agents/context-forge.json` `scrubberExtraTargets`: `README.md`, `docs/patterns/ui-ux-governance.md` (not touched).
 
 **TDD**: `N/A (docs)`
@@ -868,7 +873,7 @@ grep -n "conftest" tests/test_pnl_pattern_consumer.py   # expect none (single co
    propagates)", and mention the retained `_watch_task` whose unexpected exit logs ERROR.
 3. `context-constitution-findings.md:23`: append "Addressed by feature 259 — boot tasks are retained via
    `app/supervision.py#spawn`."
-4. `merge-order.md`: add the 259 entry with the peer rebases from § Step Dependencies (248 first on
+4. `merge-order.md`: add the 259 entry (its own row/section; leave the 262 row's `:83` reference to 259 intact) with the peer rebases from § Step Dependencies (248 first on
    `pnl_pattern_consumer.py:147-162`; 244/246/260 rebases; 262 reuses `spawn`; 268 indicators test file; replay
    amplification note vs `fix-ledger-query-pagination`).
 5. Teardown (root `CLAUDE.md` § Teardown): run `/context-forge:context-constitution refresh` scoped to the touched
@@ -881,7 +886,8 @@ grep -n "conftest" tests/test_pnl_pattern_consumer.py   # expect none (single co
 grep -n "analysis.pnl.event_parked" services/xstockstrat-analysis/CLAUDE.md
 grep -n "_PROBE_TIMEOUT_SECONDS\|_LOOP_ERROR_BACKOFF_SECONDS\|supervision" services/xstockstrat-analysis/CLAUDE.md
 grep -n "AioRpcError" docs/patterns/config-startup.md   # expect none
-grep -n "259" docs/roadmap/features/merge-order.md services/xstockstrat-analysis/docs/context-constitution-findings.md
+grep -n "fix-python-loop-supervision" docs/roadmap/features/merge-order.md   # expect the new 259 entry (the :83 262-row hit does not count)
+grep -n "259" services/xstockstrat-analysis/docs/context-constitution-findings.md
 ```
 
 ---
