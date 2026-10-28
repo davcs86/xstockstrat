@@ -544,3 +544,12 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - **Identity `RefreshToken` 10s bound: confirmed** (fails closed; a late commit forces re-login).
 - `implementation-spec.md` updated: Step 1 constant, Step 6 `traderBff.ts` wiring (item 3b, verification grep),
   Step 7 `it.each` over the four mutations, Step 10 docs line. The p99 telemetry gate stays an accepted risk.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-ui-transport-hardening` with `-X ours`.
+- Re-specced Steps 1, 3, 7 and 10 against the current codebase. Only line pointers drifted; every claim still holds:
+  - Step 1: `connectClients.ts` lazy `get()` `:50-65`, `unary` wrapper `:67-69` (edit target `:68` unchanged), `stream` wrapper `:70-72`.
+  - Step 3: `alert-stream.spec.ts` "opening the sheet" test `:41-50`, badge-open click sequence `:44-47`.
+  - Step 7: `__tests__/insightsBff.test.ts` `vi.mock('@/lib/auth')` `:11-20` (`hasAdminScope` `:19`), `fakeCtx()` `:27-35`, cases `:37-85`. The file imports only `forward` (`:22`), so the new describe adds the `forwardAdmin` and `hasAdminScope` imports.
+  - Step 10: the open `listOpportunities`-literal finding is `services/xstockstrat-ui/docs/context-constitution-findings.md:36`, not the root findings file (whose `:36` is an unrelated feature-227 finding). The instruction (leave it open) is unchanged.
