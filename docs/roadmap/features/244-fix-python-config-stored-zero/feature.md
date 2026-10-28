@@ -38,6 +38,7 @@
 | 2026-10-28 | `in-progress` (step 15 done) | /sdd-execute sequential | Step 15: config migration `032_analysis_zero_trap_descriptions.{up,down}.sql`, four description-guarded `UPDATE`s that restate the 027/028 zero-trap descriptions for `signal_rank_weight`, both `opportunity.max_concurrent_*` keys and `readiness_materializer.max_concurrent_bars_fetches`; `.down` restores the verbatim text; merge-order row 244 ↔ 243 added (migration, TDD N/A) |
 | 2026-10-28 | `in-progress` (step 16 done) | /sdd-execute sequential | Step 16: config `zeroTrapDescriptionMigration.test.ts` (@AC-11) — globs the `*_analysis_zero_trap_descriptions` pair, asserts description-only UPDATEs, every up WHERE text verbatim in 027/028, and down = exact inverse (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 17 done) | /sdd-execute sequential | Step 17: config-key rows (analysis/ingest/indicators `CLAUDE.md`, `config-governance.md`) restated as "0 is honoured" / "a stored ≤ 0 reads as the default"; root PLAT gotcha, CONFIG-11, INGEST-9 rewritten; CF-N10 and the dead `sandbox_*` rows resolved; config `sparkline_bars` drift row added; manual context-forge teardown (docs, TDD N/A) |
+| 2026-10-28 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of pending Step 18 against current codebase after merging `origin/main-dev` (`-X ours`): line drift only — agent `list_opportunities` `tools.py:1518`→`:1527`, `set_config` def `:1642`→`:1651` (params `:1655-1660`, docstring `:1662`); all other evidence still matches |
 
 ---
 
