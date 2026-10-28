@@ -372,3 +372,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.down.sql`
 - Deviations: RED b is captured statically; the S0 comment wording avoids the literal column name to satisfy the
   `value_encrypted` = 0 grep (Deviation Log).
+
+### Step 3 — test: AC-2 indicators watcher getter-contract test [done]
+- `tests/test_config_watcher.py`: `_str_watcher(key, val)` generalized to `_watcher(key, field, val)` (`setattr` on the
+  oneof field, dial-free comment kept); both callers now pass `"string_val", ""`. Added `import pytest` and the
+  parametrized `test_sandbox_getters_resolve_full_dotted_rows` over the three `@AC-2` Examples rows
+  (3000 / 100663296 / "numpy,math" → ["numpy", "math"]). No `_int_watcher`, no conftest move (C-18, C-13).
+- TDD: red N/A — no behavior change; characterization test added (tdd-gate.md escape; the getters already read the
+  full-dotted keys). Sensitivity check, not committed: with `watcher.py:134,138,143` temporarily pointed at bare
+  `sandbox.*` keys, all 3 new cases FAILED; the file was then restored with `git checkout`.
+- GREEN: `pytest tests/test_config_watcher.py -q` 13 passed; full suite 297 passed, coverage 85.61% (≥ 50%);
+  `ruff check .` clean; `ruff format --check .` 40 files formatted; `_str_watcher` grep and conftest grep empty.
+- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
+- Deviations: none.

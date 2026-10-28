@@ -271,7 +271,7 @@ CI GREEN.
 
 ### Step 3 — test: AC-2 indicators watcher getter-contract test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify
