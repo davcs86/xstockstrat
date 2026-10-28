@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -18,6 +18,8 @@
 | 2026-10-20 | re-review (status retained at `spec-ready`) | /sdd-review | Product-spec re-run: PASS WITH WARNINGS (8 warnings, 3 notes). 7 already resolved by the prior pass; persona added to the Problem Statement. Overlap WARN (file-level only) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-10-28 | re-spec (status retained at `implementation-ready`) | /sdd-execute | Steps 1-6 Evidence/Instructions/Verification anchors re-derived after merging origin/main-dev (respec commit 189edd1c) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute | sequential (sdd-batch-execute); up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 
 ---
 
@@ -51,4 +53,4 @@ read and OAuth dynamic client registration until the MCP client times out.
 
 ## Next Action
 
-`/sdd-review fix-agent-getconfig-deadline impl-spec` — validate implementation spec, then `/sdd-execute fix-agent-getconfig-deadline`
+`/sdd-execute fix-agent-getconfig-deadline sequential` — continue execution (Step 6 baseline before Step 3 is committed)
