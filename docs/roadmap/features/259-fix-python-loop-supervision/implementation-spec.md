@@ -101,7 +101,7 @@ and consumer keep producing. This is a recorded decision, not an omission. No co
 
 ### Step 1 — service: analysis supervision helper + retained boot tasks (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/supervision.py` — create
@@ -895,3 +895,16 @@ grep -n "259" services/xstockstrat-analysis/docs/context-constitution-findings.m
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-10-28 — Step 1: stale comment wording in `main.py`
+- **Spec said**: replace the eight `create_task` boot calls; no comment changes named.
+- **Done**: the readiness-materializer comment "an unconditional create_task is safe" now reads "spawn is safe"
+  (the call it describes changed). It still has no `(`, so the Step 1 `grep -c "create_task("` = 1 holds.
+- **Disposition**: in-scope orphan cleanup (same file, same edit); no behaviour change.
+
+### 2026-10-28 — Step 1: TDD red/green run with Step 2's test, uncommitted
+- **Spec said**: Step 2 [test] covers Step 1 (red-before-green, P-06).
+- **Done**: `tests/test_supervision.py` was authored per Step 2's instructions, run RED against the pre-Step-1 tree
+  (`ImportError: cannot import name 'supervision' from 'app'`) and GREEN after (6 passed), then removed from the
+  Step 1 commit (F-08: only the step's **Files** are staged). Step 2 commits it.
+- **Disposition**: process note; no spec change.

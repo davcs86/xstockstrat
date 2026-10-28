@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-python-loop-supervision-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 | 2026-10-28 | `implementation-ready` (no change) | /sdd-execute | Re-spec after merging main-dev: steps 4, 15 re-anchored (line drift only; merge-order 262-row :83 reference to 259 noted) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done — `app/supervision.py` + eight `main.py` boot tasks routed through `spawn` |
 
 ---
 
@@ -55,4 +56,4 @@ consumer skips a failed event and its monotonic cursor moves past it.
 
 ## Next Action
 
-`/sdd-execute fix-python-loop-supervision sequential` — Step 1
+`/sdd-execute fix-python-loop-supervision sequential` — Step 2

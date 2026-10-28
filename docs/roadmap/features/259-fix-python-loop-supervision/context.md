@@ -631,3 +631,16 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
     stands (verification now greps the slug). Analysis `CLAUDE.md` sections drifted +1 (`:130`, `:143`, `:549`);
     `config-startup.md:87` still says "on `AioRpcError`".
 - Status: `implementation-ready` → `in-progress`.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- **Step 1 done** (service, FR-2): created `services/xstockstrat-analysis/app/supervision.py` (`spawn`, `_on_done`,
+  `retry_until_ok`, `run_supervised`, `_BACKGROUND_TASKS`, `_LOOP_ERROR_BACKOFF_SECONDS = 30`; stdlib only) and
+  routed the eight `main.py` boot tasks through `spawn` with the spec's names/`forever` flags. The `:120` shutdown
+  task is unchanged; `grep -c "create_task(" app/main.py` = 1, `spawn(` = 8 sites.
+- TDD (red-green, Step 2's `tests/test_supervision.py` written per Step 2 instructions, not committed in Step 1):
+  @AC-4 red: `ImportError: cannot import name 'supervision' from 'app'` → green: `6 passed`. Full suite 1306 passed;
+  `ruff check .` / `ruff format --check .` clean.
+- Deviation: the readiness-materializer comment's "create_task is safe" now reads "spawn is safe" (see Deviation Log).
+- Peer `262-fix-analysis-owner-scope` must reuse `supervision.spawn` for the `entry-backfill` task (now `main.py:175`).
+
