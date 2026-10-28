@@ -202,3 +202,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Step size (advisory): Step 6 lists 11 files (>5), and the preamble is longer than the template's summary. Not split: it is one docs-only teardown sharing a single `<filing-date>` basename. The operator may ask for a split before Step 6.
   - [ ] Not evaluable by the reviewer (branch-only evidence): design.md/recon.md citations, #1262 `e69e953d` anchors and counts (67 guards / 150 asserts / 79 tests), and 248 `ddc18f6e`. `fails.md:2953-2966` exists on this branch (file is 2966 lines). Re-grep at Step 2/3/5 boot as already instructed.
 - Overlap findings: #1262 hotfix ↔ `identityServiceImpl.test.ts` (rebase-only, already planned); 248 ↔ ledger tests (conditional; AC-2 anchors re-grep after 248); 084 ↔ root `CLAUDE.md:304` + `ci-overview.md:18,:56` (added to note); 250 ↔ telemetry tests (conditional, added to note); 251 read-only, none; no migration/proto/config-key collision.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute): re-spec
+
+- Branch setup: merged `origin/main-dev` @ `fa40c8a4` into the feature branch (`-X ours`), commit `0e2a27f7`.
+- Re-spec'd steps 1, 2, 3, 4, 6 (Codebase Evidence / Instructions / Verification only) against the merged tree:
+  - Step 1: the AC-5 ledger citation is now `fails.md:2991-3004`. `:2953-2966` is the 242 entry.
+  - Step 2: #1262 is now on main-dev (`grep -c 'private async rotateRefreshToken'` = 1). Only the #1262 AC-1 mutation applies: delete the `rotateRefreshToken` claim line `:353` (`:340-372`; not `:565`). The test is `:481`, with its regex at `:495`. The main-dev `:524-527` anchors are gone. `ci.yml` moved +10: Node 24 is at `:582`, the proto build at `:589-590`, and `test:coverage` at `:592-594`.
+  - Step 3: there are 67 guards (31 impl / 27 IdentityServiceImpl / 4 `return null` at `:56/:275/:770/:970` / `:129` / userIdFrom `:726/:732` / first `:738/:744`). The assert count is 150 and the expected test count is 79. The `typeof` rule is at `fails.md:2225`.
+  - Step 4: the `node-test` job is now at `ci.yml:544-601`. The other CI anchors moved as in Step 2, and the ledger anchors are unchanged.
+  - Step 6: the `ci-overview.md` tooling-artefact line is at `:68`. The `node-test` matrix is at `ci.yml:562-572`, the threshold readers at `:276/:411`, and the ui vitest entry at `:569-572`. The merge-order note format is at `:137-154`; insert after `:155`, before the `---` at `:156`. The overlaps changed: 084 is `demoted/canceled`, 250 put fix (b) out of scope (`250 product-spec.md:64`, `:129`), and #1262 has landed. The merge-order note text was updated to match. 248 is still `implementation-ready` and still overlaps the ledger tests.
+- Lines outside the step bodies, such as the preamble's `ci.yml:572` and the #1262 `e69e953d` reference, were left alone because the re-spec scope covered step bodies only.
