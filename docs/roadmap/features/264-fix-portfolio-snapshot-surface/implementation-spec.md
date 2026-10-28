@@ -116,7 +116,8 @@ context.md, Session 2026-10-22 — sdd-spec.
   arm (design.md § Rejected Alternatives).
 - Call sites, from `grep -rn "Subscribe(\|subs:" --include=*.go services/xstockstrat-portfolio`:
   - `internal/handler/portfolio_handler.go:120` `ch := h.svc.Subscribe(subID)` (Connect; `userID` is in scope from `:115`);
-  - `:294` `ch := a.h.svc.Subscribe(subID)` (gRPC; the id comes from `streamUserID(grpcStream.Context())` at `:292`);
+  - `:294` `ch := a.h.svc.Subscribe(subID)` (gRPC; the adapter signature is at `:292`, and the id comes from
+    `streamUserID(grpcStream.Context())` inside the `Sprintf` at `:293`);
   - `internal/service/portfolio_quote_deadline_test.go:106` (literal `subs: map[string]chan *portfoliov1.PortfolioSnapshot{}`
     inside `newQuoteSvc`);
   - `:321`, `:396`, `:424` `svc.Subscribe("t")`. Each test then calls `svc.broadcastSnapshot(ctxWithUser(t, "u1"), "u1", …)`
@@ -146,7 +147,7 @@ context.md, Session 2026-10-22 — sdd-spec.
 5. Update the loop at `:937` to range over `sub` and send on `sub.ch`. Do not filter yet.
 6. In `portfolio_handler.go`:
    - Connect `:120` → `h.svc.Subscribe(subID, userID)`.
-   - gRPC: hoist `userID := streamUserID(grpcStream.Context())` above `:292`, use it in the existing `Sprintf`, and
+   - gRPC: hoist `userID := streamUserID(grpcStream.Context())` above the `Sprintf` at `:293`, use it there, and
      call `a.h.svc.Subscribe(subID, userID)`. Step 3 replaces both bodies; this is only the minimum needed to compile.
 7. In `portfolio_quote_deadline_test.go`:
    - `:106` → `subs: map[string]snapshotSubscriber{}`;
@@ -251,7 +252,7 @@ applies to it. The suite-wide total must still meet the threshold.
 
 **Codebase Evidence**:
 - `PortfolioHandler` struct at `:43-46`: `UnimplementedPortfolioServiceHandler` plus `svc *service.PortfolioService`.
-  `NewPortfolioHandler` at `:49-51` returns `&PortfolioHandler{svc: svc}`. `cmd/server/main.go:71` calls
+  `NewPortfolioHandler` at `:49-51` returns `&PortfolioHandler{svc: svc}`. `cmd/server/main.go:78` calls
   `handler.NewPortfolioHandler(svc)`.
 - `streamUserID(ctx)` at `:28-38` reads `x-user-id` from incoming metadata and returns `""` if it is absent.
 - Connect `StreamPortfolioUpdates` (`:113-138`):
@@ -259,9 +260,9 @@ applies to it. The suite-wide total must still meet the threshold.
   - `subID := fmt.Sprintf("portfolio-%s-%p", userID, stream)` at `:119`;
   - the subscribe / defer-unsubscribe / select loop at `:120-138`, with the TradingMode filter
     `req.Msg.TradingMode != 0 && snap.TradingMode != req.Msg.TradingMode` at `:129`.
-- gRPC `(a *grpcPortfolioAdapter) StreamPortfolioUpdates` (`:291-311`): no empty-caller check, the same loop shape,
+- gRPC `(a *grpcPortfolioAdapter) StreamPortfolioUpdates` (signature `:292`, body through `:311`): no empty-caller check, the same loop shape,
   filter `req.TradingMode` at `:302`, and `grpcStream.Context()` used for `Done()`/`Err()`.
-- Only the gRPC adapter is mounted: `cmd/server/main.go:94` `portfoliov1.RegisterPortfolioServiceServer(grpcServer, hdl.GRPCHandler())`.
+- Only the gRPC adapter is mounted: `cmd/server/main.go:101` `portfoliov1.RegisterPortfolioServiceServer(grpcServer, hdl.GRPCHandler())`.
 - Imports already present: `codes`, `status`, `fmt`, `connect` (`:3-18`). `commonv1` is **not** imported. Its path
   is `commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"` (`internal/service/portfolio_service.go:26`).
 - Body `user_id` is `[deprecated = true]` and "body value ignored" (`packages/proto/portfolio/v1/portfolio.proto:215`).
@@ -337,7 +338,7 @@ grep -c "streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.
   package. The nil-service, header-gate test shape is at `:27-35`, including the
   `//nolint:staticcheck` deprecated-body pattern at `:29`.
 - The generated server-stream interface is `portfoliov1.PortfolioService_StreamPortfolioUpdatesServer` (used at
-  `portfolio_handler.go:291`). It embeds `grpc.ServerStream` and adds `Send(*PortfolioSnapshot) error`.
+  `portfolio_handler.go:292`). It embeds `grpc.ServerStream` and adds `Send(*PortfolioSnapshot) error`.
 - No `StreamPortfolioUpdates` handler test exists (recon.md § Risks: **Not found**). These are the first fakes for
   this RPC.
 
@@ -388,7 +389,7 @@ isolation RED is in Step 2).
    - `hub.push("u-1", …)`: `sA` records one snapshot with `PortfolioId == "u-1"` within 1s; `sB` records none within
      100ms. Cancel both; each call returns `context.Canceled` and both subIDs are unsubscribed.
    - **The Connect arm cannot be driven the same way.** `connect.ServerStream` has no exported constructor
-     (`go doc connectrpc.com/connect.ServerStream`, v1.16.2), and the Connect route is unmounted (`main.go:94`). Its
+     (`go doc connectrpc.com/connect.ServerStream`, v1.16.2), and the Connect route is unmounted (`main.go:101`). Its
      wiring is pinned by the Step 3 grep for `streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.Send)`,
      plus case 4, which runs the helper exactly as that line calls it.
 5. **`TestStreamSnapshots_TradingModeFilterPreserved`** (non-regression for the moved filter):
@@ -419,9 +420,9 @@ applies to it. The suite-wide total must still meet the threshold.
 **Codebase Evidence**:
 - `grep -rn StartSnapshotWriter --include=*.go services/xstockstrat-portfolio` finds only the definition: comment
   `:893`, func `:894-906`.
-- `cmd/server/main.go:64-69` starts only `ConsumeOrderFills`, `ConsumePositionSyncs`, `ConsumeBalanceSyncs`,
+- `cmd/server/main.go:71-76` starts only `ConsumeOrderFills`, `ConsumePositionSyncs`, `ConsumeBalanceSyncs`,
   `ConsumeBracketUpdates`, `ConsumeAccountDeregistrations` and `HydrateStops`.
-- The only reader of `portfolio.snapshot.interval_minutes` is `:895`. `s.cfg` stays in use (`:491-492`, `:965-966`),
+- The only reader of `portfolio.snapshot.interval_minutes` is `:895`. `s.cfg` stays in use (`:492`, `:965-966`),
   and `"time"` stays imported (11 other `time.` uses), so no import or field becomes orphaned.
 
 **TDD**: `N/A (red N/A — dead-code deletion with no caller, no behavior change; tdd-gate escape stated)`. The
@@ -453,14 +454,17 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 **Codebase Evidence**:
 - `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/` shows that the tip is
   `030_marketdata_edgar_snapshot_keys`. `git log --remotes --name-only -- services/xstockstrat-config/migrations/`
-  shows no `031`+ file on any remote ref (re-run 2026-10-22).
+  (re-run 2026-10-28) shows `031_heal_indicators_sandbox_keys_full_dotted` committed on
+  `origin/feature/fix-sandbox-seed-keys` (d8b7a8df) and `032_analysis_zero_trap_descriptions` committed on
+  `origin/feature/fix-python-config-stored-zero` (d2002841). No `033_` or `034_` file exists on any remote ref.
+  Feature 277's context.md mentions a 033 claim, but 277 is `demoted/canceled`, so it is moot.
 - Claims:
   - `031_heal_indicators_sandbox_keys_full_dotted` belongs to 243 (`243-fix-sandbox-seed-keys/design.md:13`);
   - `032_analysis_zero_trap_descriptions` belongs to 244 (`implementation-spec.md:1067`);
   - `032_ledger_stream_resolve_timeout` belongs to 248 (`implementation-spec.md:133`).
 
   None of the eight batch peers' branches (`git grep` on each `origin/feature/<peer>`) claims a config migration.
-- Pre-assignment precedent: the "Config-service seed-migration NNN pre-assignment" blockquote at `merge-order.md:197`.
+- Pre-assignment precedent: the "Config-service seed-migration NNN pre-assignment" blockquote at `merge-order.md:213`.
   The table rows use the form `| <later> | <earlier> | **reason** | Resolved |` (e.g. the 223↔217 row at `:74`).
 
 **TDD**: `N/A (docs)`
@@ -558,7 +562,7 @@ grep -c "'portfolio', 'portfolio.snapshot.interval_minutes'" services/xstockstra
 
 **Codebase Evidence**:
 - `services/xstockstrat-config/package.json:12` `"test": "tsc && node --test dist/__tests__/*.test.js"`; `:13`
-  `test:coverage` (`c8 … --lines 40`). The CI job runs `pnpm run test:coverage` (`.github/workflows/ci.yml:587`).
+  `test:coverage` (`c8 … --lines 40`). The CI job runs `pnpm run test:coverage` (`.github/workflows/ci.yml:594`).
 - `tsconfig.json`: `rootDir: ./src`, `outDir: ./dist`, `module: commonjs`. The compiled test lives in
   `dist/__tests__/`, so `join(__dirname, '..', '..', 'migrations')` resolves to `services/xstockstrat-config/migrations`.
 - Import style: `import { describe, it } from 'node:test'; import assert from 'node:assert/strict';`
