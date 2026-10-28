@@ -20,6 +20,7 @@
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps; acceptance.feature extended (20 @AC-6 rows, @AC-10..@AC-12) |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential | Merged origin/main-dev (`-X ours`); re-specced Steps 7, 8, 10, 12, 14, 15, 17 (evidence and Instructions/Verification) to the current codebase — indicators servicer line drift and `_clamp_override`, ci.yml real_pg step, `_sched_loop` line, 029 line, CLAUDE.md/governance grep lines, config Node/pnpm tooling note |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f: 'Start executing features 241-276'; unattended checkpoints = report; C-16 promotion auto-confirmed unless it changes an existing @AC rule) |
 
 ---
 
@@ -56,4 +57,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-review fix-python-config-stored-zero impl-spec` — validate implementation spec, then `/sdd-execute fix-python-config-stored-zero`
+`/sdd-execute fix-python-config-stored-zero sequential` — Step 1 (ingest getters honour a stored zero)
