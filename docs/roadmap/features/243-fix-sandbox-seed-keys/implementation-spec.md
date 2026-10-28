@@ -71,12 +71,13 @@ Order of work:
 
 **Codebase Evidence**:
 - Runner: `scripts/migration-rerun.sh:183-190` runs every non-`fixtures-*` file in `scripts/migration-assertions/`
-  with `psql -v ON_ERROR_STOP=1` (no `-1`), after pass 0 (`:46-83`), pass 1 (`:85-87`) and pass 3 (`:173-181`).
+  with `psql -v ON_ERROR_STOP=1` (no `-1`), after pass 0 (`:46-83`), pass 1 (`:85-87`), pass 2 (`:91`) and pass 3 (`:111-181`). Pass 4 (`:192+`) runs after
+  the assertion loop and touches only marketdata, so it does not affect this file.
 - Config takes the catch-all `*) migrate … up` at `migration-rerun.sh:78`, so 031 is already applied when the
   assertions run. No script edit is needed (design.md § 4; the `goto 30` option is rejected).
-- CI: job `migration-rerun` (`.github/workflows/ci.yml:633`). Path filter `migrations` includes
+- CI: job `migration-rerun` (`.github/workflows/ci.yml:643`). Path filter `migrations` includes
   `scripts/migration-assertions/**` and `services/*/migrations/**` (`ci.yml:70-77`). The repo is mounted at
-  `/repo` (`ci.yml:668`). CI runs on every `pull_request` (`ci.yml:3-4`).
+  `/repo` (`ci.yml:678`). CI runs on every `pull_request` (`ci.yml:3-4`).
 - Template: `scripts/migration-assertions/indicators-007.sql:3-23`, `DO $$ … RAISE EXCEPTION 'AC-N: …' $$` blocks.
 - **Not found**: no existing assertion file uses `\ir`. psql `\ir` resolves relative to the including file, so
   `../../services/…` from `scripts/migration-assertions/` reaches the repo root.
@@ -98,7 +99,7 @@ RED and GREEN come from the `migration-rerun` job log of the step PR.
 **Covers**: `AC-1, AC-3, AC-4, AC-5`
 
 **Instructions**:
-1. Header: one line, `-- config 031 (AC-1, AC-3, AC-4, AC-5): run by migration-rerun.sh after all passes.`
+1. Header: one line, `-- config 031 (AC-1, AC-3, AC-4, AC-5): run by migration-rerun.sh after passes 0-3.`
    Add one constraint line: the file replays the historical 031 up-file, so a later migration that changes these
    rows or the `config_values` columns must update or retire it (design confirmation (iii)).
 2. **Block 1 — AC-1.** A `DO $$` block that raises `'AC-1: …'` when any of these hold:
@@ -179,7 +180,7 @@ Coverage threshold: N/A, SQL harness, no coverage metric; gate = `migration-reru
   - `002_config_environment.up.sql:61-63`: production 3000 / `67108864` "Formula memory cap bytes (64MB)" /
     imports, with `default_value` mirroring.
 - Rename shape: `029_heal_config_keys_full_dotted.up.sql:24-28` (`SET key = namespace || '.' || key`, `is_secret = false`).
-  As written it is not conflict-safe (ledger `fails.md:2953-2957`).
+  As written it is not conflict-safe (ledger `fails.md:2969-2975`, `:2972`).
 - Snapshot precedent: `017:31-33` (`CREATE TABLE config.config_values_premigration_017 AS SELECT *`). 031 uses
   `IF NOT EXISTS` and an explicit column list instead (design.md § 1 step 0).
 - Insert idiom: `030_…up.sql:22-23,55` (also `017:121`), including `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
