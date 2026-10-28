@@ -4,7 +4,7 @@
 
 - **Local dev**: Every service exports traces over OTLP/HTTP to `http://otel-collector:4318` (Docker Compose). Config: `packages/otel/otel-collector-config.yaml`.
 - **Production**: Services push OTLP directly to Grafana Cloud OTLP gateway (no collector needed on DO App Platform).
-- **Toggle**: `OTEL_ENABLED=true` env var on each service. Config key `platform.otel.enabled` provides a live switch without restart.
+- **Toggle**: `OTEL_ENABLED=true` env var on each service, read once at init — changing it needs a restart. There is no live switch: `platform.otel.enabled` is not a config key and no code reads it.
 - **Non-fatal**: OTel init errors must never prevent service startup.
 - **Env-only exporters**: every runtime constructs its OTLP/HTTP trace exporter with **no** endpoint/url/insecure argument, so the SDK appends `/v1/traces` to `OTEL_EXPORTER_OTLP_ENDPOINT`, derives TLS from the scheme, and reads `OTEL_EXPORTER_OTLP_HEADERS` itself. Export failures are logged (Go/Python logging; Node/Next via a WARN `diag` logger).
 
