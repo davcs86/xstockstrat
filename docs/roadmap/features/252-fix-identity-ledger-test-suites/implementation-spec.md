@@ -639,7 +639,7 @@ git status --short                                # only the 5 Files (+ feature/
 
 ### Step 5 — test: ledger — hard-fail subject imports, remove skip guards, add harness cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -930,3 +930,5 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **2026-10-28 — Step 3, item 2 (proto import form).** The spec keeps `let TokenClaims: any;` (`:227`) and the `({ TokenClaims } = await import(…))` assignment (`:229`). With the try/catch gone both sit in one scope, and eslint `prefer-const` fails the Verification `pnpm run lint` (`error 'TokenClaims' is never reassigned`). Collapsed to `const { TokenClaims } = await import('@xstockstrat/proto/identity/v1/identity');`. Same file, same specifier, no assertion change.
 - **2026-10-28 — Step 3, Verification `grep -n 'catch' "$F"`.** One hit remains: `:13`, the item 3 constraint comment ("never wrap it in try/catch"), which is the spec's own verbatim text. No `catch` clause remains in the file, so the line's stated intent (no catch wraps a subject/proto import) holds.
+- **2026-10-28 — Step 5, item 2 (proto import form).** The spec keeps `let LedgerEvent: any;` (`:729`) and the `({ LedgerEvent } = await import(…))` assignment (`:731`). With the try/catch gone both sit in one scope, and eslint `prefer-const` fails the Verification `pnpm run lint` (`error 'LedgerEvent' is never reassigned`). Collapsed to `const { LedgerEvent } = await import('@xstockstrat/proto/ledger/v1/ledger');`, as in Step 3. Same file, same specifier, no assertion change.
+- **2026-10-28 — Step 5, Verification `grep -n 'catch' "$F"`.** One hit remains in each file (`ledgerServiceImpl.test.ts:8`, `eventNotifier.test.ts:7`): the item 3 constraint comment ("never wrap it in try/catch"), which is the spec's own verbatim text. No `catch` clause remains in either file, as in Step 3.
