@@ -363,3 +363,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     grounding `tools.py:1651-1660`.
   - Step 13: per-user-secret docstring drift now `tools.py:1674-1676`.
 - Deviation Log entry added to implementation-spec.md.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`.
+- Up-front confirmation: the operator approved the plan by standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Answers recorded:
+  unattended checkpoints (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
+  merge-train authorized; defer 255/275; operator-only DB/prod steps — open the PR, hold the merge.
+- Mode: sequential, one commit per step on `feature/fix-config-audit-author-spoof`; single integration PR at the end.
+- Steps 1-13 pending; next: Step 1.
