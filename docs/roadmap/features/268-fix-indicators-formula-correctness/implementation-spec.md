@@ -207,7 +207,7 @@ DeleteFormula soft-deletes.
 
 ### Step 3 — service: D-10 — a sandbox run with no parseable output line fails
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify

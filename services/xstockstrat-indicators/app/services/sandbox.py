@@ -309,7 +309,7 @@ exec({source!r}, _formula_globals)
 
 # Output must be assigned to `result` variable
 _output = _formula_globals.get('result', {{}})
-print("__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))
+print("\\n__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))
 """)
 
 
@@ -391,20 +391,7 @@ def execute_formula(
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
-        output = {}
-        for line in stdout.splitlines():
-            if line.startswith("__OUTPUT__:"):
-                try:
-                    output = json.loads(line[len("__OUTPUT__:") :])
-                except json.JSONDecodeError:
-                    pass
-
-        if proc.returncode != 0:
-            exit_reason = "runtime_error"
-            if "is not allowed in sandbox" in stderr:
-                exit_reason = "import_blocked"
-            elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
-                exit_reason = "memory_exceeded"
+        def _fail(error: str, exit_reason: str) -> SandboxResult:
             return SandboxResult(
                 success=False,
                 output={},
@@ -412,9 +399,33 @@ def execute_formula(
                 stderr=stderr,
                 execution_ms=elapsed_ms,
                 memory_used_bytes=0,
-                error=stderr.strip()[-500:],
+                error=error,
                 exit_reason=exit_reason,
             )
+
+        marker = None
+        for line in stdout.splitlines():
+            if line.startswith("__OUTPUT__:"):
+                marker = line[len("__OUTPUT__:") :]
+
+        if proc.returncode != 0:
+            exit_reason = "runtime_error"
+            if "is not allowed in sandbox" in stderr:
+                exit_reason = "import_blocked"
+            elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
+                exit_reason = "memory_exceeded"
+            return _fail(
+                stderr.strip()[-500:]
+                or f"formula exited with code {proc.returncode} before producing output",
+                exit_reason,
+            )
+
+        if marker is None:
+            return _fail("formula produced no output", "runtime_error")
+        try:
+            output = json.loads(marker)
+        except json.JSONDecodeError as e:
+            return _fail(f"formula output could not be parsed: {e}", "runtime_error")
 
         return SandboxResult(
             success=True,

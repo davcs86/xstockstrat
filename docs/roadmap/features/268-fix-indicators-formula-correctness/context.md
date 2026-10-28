@@ -720,3 +720,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `-k PendingHiddenMutation` 8 passed; full suite 302 passed, coverage 85.61% (≥50%);
   `ruff check .` and `ruff format --check .` clean; C-13 grep shows the single `_row` builder.
 - No deviations.
+
+### Step 3 — service: D-10 — a sandbox run with no parseable output line fails — done (2026-10-28)
+
+- `app/services/sandbox.py`: wrapper prints `"\\n__OUTPUT__:"` in source (child receives `"\n__OUTPUT__:"`);
+  the parse loop keeps the raw payload of the last marker line; a local `_fail(error, exit_reason)` closure
+  (C-18) builds every non-timeout failure; rc≠0 keeps its classification and falls back to
+  `formula exited with code N before producing output` on empty stderr; rc==0 with no marker →
+  `formula produced no output`, unparseable marker → `formula output could not be parsed: …`, both
+  `runtime_error`. Timeout branch, `:252` builtins, stderr markers and `memory_used_bytes` untouched.
+- TDD: Step 4's six sandbox cases run as an uncommitted scratch file (Step 3 owns only `sandbox.py`) →
+  red: 5 failed, 1 passed (AC-1/AC-2/os._exit `True is False`, SystemExit(1) `error == ''`, framing guard
+  `output == {}`) → green: 6 passed.
+- Note for Step 4: the marker-framing guard is RED before Step 3 too (a trailing `print("x", end="")`
+  glued the marker mid-line, so the run "succeeded" with `output == {}`); the spec's RED proof calls it a
+  pass-both guard. Only AC-3 passes on both sides.
+- Note: the spec's evidence `servicer.py:313-319` means `app/handlers/servicer.py` (`:317` maps
+  `runtime_error`); path typo only, read-only for this step.
+- Verification: `__OUTPUT__` grep shows the `\\n` print (`:312`) and the `startswith` parse; `_fail` grep
+  4 lines (def + 3 call sites); `except json.JSONDecodeError:$` no hit. Full suite 302 passed, coverage
+  85.55%; `ruff check .` / `ruff format --check .` clean.
+- No deviations.
