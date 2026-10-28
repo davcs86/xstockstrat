@@ -305,3 +305,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   the source report `ref:`, and 242/243/245 cross-references on main-dev. Historical session entries above keep the old slug.
 - References to 173 (its dir and the `fix-python-config-zero-trap.feature` acceptance suites) are unchanged.
 - Next: `/sdd-execute fix-python-config-stored-zero`.
+
+## Session 2026-10-28 — re-spec before sdd-execute sequential (sdd-batch-execute)
+
+- Branch setup (§5.3): detached checkout of `origin/feature/fix-python-config-stored-zero`, then `git merge -X ours origin/main-dev`
+  (brings in the indicators override-clamp change and `tests/test_execute_formula_override_clamp.py`).
+- Re-specced Step bodies (Codebase Evidence / Instructions / Verification only; no scope change):
+  - Step 7: indicators `servicer.py` drift. `__init__` :93, semaphore :107, `max_concurrent=` :310. The old `:277-278` `or` read is
+    now `_clamp_override(...)` at :282-285 (`_clamp_override` :66-68, `min(override, configured) if override > 0 else configured`).
+    The accessor clamp still covers it, because `configured` comes from the accessor. The stale "request `or` is out of scope" note was removed.
+    The new override-clamp test's `_cfg()` double (:20-26) bypasses the accessor and should stay green.
+  - Step 8: `__init__` :93, semaphore :107, RLIMIT_NPROC path :310.
+  - Step 10: the real_pg postgresql install step is `ci.yml:400-404`. `_SORT_ORDER_BY[0]` is the feature-200 windowed symbol roll-up and still
+    references only `$3`, so the `$3 → $1::float8` rebind plan holds.
+  - Step 12: `_make_loop` is at :45 and `_sched_loop` at :379.
+  - Step 15: the 029 no-BEGIN/COMMIT line is :15. 032 still holds (main-dev tip is 030 and 243 claims 031).
+  - Step 17: the analysis CLAUDE.md grep was re-run (`:521` added; `:494` no longer matches but is still worth reviewing). Indicators `:100` was rewritten by main-dev and must be kept.
+    config-governance.md rule is now :251-258.
+  - Step 14: no evidence drift. Tooling note: run `pnpm install` in the config service first, and record the Node version (the host
+    has Node 22, while CI pins 24).
