@@ -342,3 +342,13 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   to `main.go:77-78`. Step 9 WARN moves to `main.go:77-78`, Step 1 FMP `fetchQuotes`/`fetchRatios`/`FetchSector`/
   `FetchIsEtf` to `:263`/`:273`/`:364`/`:374`, Step 5 `ci.yml:594`, Step 8 `fails.md:671` (rule `:673`).
   The Step 7 SAN-material grep passes against the current tree.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`.
+- Up-front confirmation (sequential mode entry): given by operator standing authorization, operator chat 2026-10-28
+  (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, then "start batch 2 in
+  parallel too". Answers: unattended checkpoints (checkpoints = report); C-16 promotion auto-confirmed unless it
+  changes an existing @AC rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps — open the
+  integration PR and hold the merge.
+- Branch base: `origin/main-dev` merged in (`-X ours`); Steps 1, 5, 7, 8, 9 re-spec'd for line drift (entry above).
