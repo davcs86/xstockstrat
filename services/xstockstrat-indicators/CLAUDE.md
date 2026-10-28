@@ -97,7 +97,7 @@ Namespace: `indicators`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms |
+| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms. `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value |
 | `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228) |
 | `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. Read via `get_str_present` (never `get_str`): a configured `""` denies all imports rather than reverting to this permissive default (feature 173) |
 | `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via a new `ConfigWatcher.sandbox_max_concurrent()` accessor with a `max(1, …)` clamp. |

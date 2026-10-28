@@ -31,7 +31,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (2026-10-15) chose a 128 MiB default headroom over 64 MiB, so the production `memory_bytes` value needs an
   explicit operator call. AC-2 uses a fixture value (100663296) to test key resolution independent of that choice.
 - Overlaps:
-  - 244-fix-python-config-zero-trap also touches `services/xstockstrat-indicators/app/config/watcher.py`
+  - 244-fix-python-config-stored-zero also touches `services/xstockstrat-indicators/app/config/watcher.py`
     (`get_int` zero-trap); soft ordering, whichever lands second reconciles.
   - hotfix `fix-sandbox-overrides-unclamped` (PR #1263, `origin/hotfix/fix-sandbox-overrides-unclamped`) clamps
     `ExecuteFormula` overrides to the configured limits, so once production rows resolve the clamp ceiling tightens
@@ -74,7 +74,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - migration NNN: 031 claimed here; 241-fix-config-audit-author-spoof may take 031 if its design adopts a config
     migration (`241/product-spec.md:49`). Second to merge renumbers to 032. 031 still free on origin/main-dev
     (a8e0f58d) 2026-10-20; re-check at impl-spec review.
-  - `services/xstockstrat-indicators/app/config/watcher.py`: 244-fix-python-config-zero-trap edits `get_int`
+  - `services/xstockstrat-indicators/app/config/watcher.py`: 244-fix-python-config-stored-zero edits `get_int`
     bodies (`:96,114,130`); sandbox getters call `get_int` (`:134,138`). Shared test home
     `tests/test_config_watcher.py`. Soft ordering; second lander reconciles.
   - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` `SCALAR_BOUNDS_REGISTRY` (`:100-146`): conditional
