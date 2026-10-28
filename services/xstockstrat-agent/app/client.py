@@ -762,6 +762,7 @@ async def screen_symbols(
                 "score": r.score,
                 "criterion_scores": dict(r.criterion_scores),
                 "passed": r.passed,
+                "score_unavailable": r.score_unavailable,
                 "status": analysis_pb2.ScreenResultStatus.Name(r.status),
             }
             for r in resp.results
