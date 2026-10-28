@@ -259,3 +259,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     246 `/sdd-design`, and re-run impl-spec Mode B if 244 or 246 moves to in-progress.
   - Feature-250 alerting handoff and the dev smoke test are still owed. Each now has an owner and a
     verification check. Target: completion / integration session.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup (§5.3): detached checkout of `origin/feature/fix-screener-symbol-isolation`, then
+  `git merge -X ours origin/main-dev` (merge `9fea9fcd`), pushed.
+- Re-spec, Step 5 only: Codebase Evidence cited the agent CI threshold at `.github/workflows/ci.yml:358-359`,
+  which is now the `xstockstrat-indicators` row (threshold 50). The `xstockstrat-agent` matrix row is at
+  `ci.yml:368-369`; its value is still 40, so the step's `--cov-fail-under=40` verification holds. Only the
+  line anchor changed. The other Step 5 anchors were re-checked and still hold:
+  `class TestScreenSymbolsClient` `tests/test_client.py:215`, `test_screen_symbols_sends_grpc_call` `:217`,
+  the exact-equality assert `:277`. Instructions, Files and Verification are unchanged.
