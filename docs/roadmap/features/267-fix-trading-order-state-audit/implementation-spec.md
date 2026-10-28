@@ -94,7 +94,7 @@ messages are unchanged.
 - The precedent log it must be told apart from: `trading.go:646` `slog.Warn("db upsert order failed", "order_id", orderID, "error", err)`. It fires first under an always-failing DB (recon.md:129-130).
 - DB fake to embed: `execOnlyDB` at `trading_flatten_rejection_test.go:27`. Its `Exec` always succeeds. Repo constructor: `repository.NewTradingRepoWithDB(db dbQuerier)` at `internal/repository/trading_repo.go:41`.
 - Log capture: `captureLogs(t)` at `trading_sync_test.go:16`. It swaps `slog.Default`, so tests that use it must not call `t.Parallel`.
-- Ctx seam: `middleware.WithPropagationData` at `internal/middleware/propagation.go:24-28`, and `middleware.FromContext` at `:19-22`.
+- Ctx seam: `middleware.WithPropagationData` at `internal/middleware/propagation.go:27`, and `middleware.FromContext` at `:20` (re-verified 2026-10-28).
 - Fakes: `fakeBroker` at `trading_bracket_test.go:26` (`submitOrderFn`, `cancelOrderFn`; `ReplaceOrder` at `:53`). `fakeOrderIntentRepo` at `:496` (`InsertIntent`→true, `FinalizeIntent`→nil). `fakeLedgerClient` at `:201`. `fakeNotifyClient` at `:176`. `fakeBracketRepo` at `:95`.
 - PlaceOrder gate table:
   - `platform.maintenance_mode` at `trading.go:401`
@@ -103,7 +103,7 @@ messages are unchanged.
   - ownership at `:433`
   - the `s.accountRepo != nil` guard at `:440` (leave it nil)
   - `isAccountHalted` at `:460`
-  - `checkTradingStateForPlaceOrder` at `:466`, which reads `platform.trading_state` and defaults to `HALTED` (`trading.go:3496-3498`); inject it with `config.NewSnapshotWatcher` (`internal/config/config.go:249`), as `trading_state_gate_test.go:156` does
+  - `checkTradingStateForPlaceOrder` at `:466`, which reads `platform.trading_state` and defaults to `HALTED` (`currentTradingState`, `trading.go:3494-3497`); inject it with `config.NewSnapshotWatcher` (`internal/config/config.go:249`), as `trading_state_gate_test.go:156` does
   - `validateTIF` at `:472`, where TIF is required (`tif_validation.go:61-64`)
   - `needRiskCheck` at `:494`, controlled by `trading.risk.max_position_pct`; set it to `0`
 - ReplaceOrder gate table:
@@ -166,7 +166,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
 # RED (pre-Step-2): FAIL — no "order state write failed" record; trace/ctxErr assertions fail
 ```
 Coverage threshold: N/A for this step. The new tests live in `internal/service/`, which the CI coverage
-gate excludes (`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
+gate excludes (`COVERPKGS` regex at `.github/workflows/ci.yml:266`); the `>= 40%` gate is run in Step 6.
 
 ---
 
@@ -234,7 +234,7 @@ grep -n "_ = s.repo.UpsertOrder" services/xstockstrat-trading/internal/service/t
 **Status**: `pending`
 **Service**: `xstockstrat-trading`
 **Files**:
-- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify
+- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify (created by Step 1; absent until then)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
@@ -252,10 +252,10 @@ grep -n "_ = s.repo.UpsertOrder" services/xstockstrat-trading/internal/service/t
 - Hash helpers:
   - `placeOrderRequestHash` (used at `trading.go:478`; tested at `order_intent_test.go:38`);
   - `deriveReplaceCancelIntentID(req)` (`trading.go:1269`, `:1465`; tested at `order_intent_test.go:63`).
-- `classifyIntentLookup` is at `order_intent.go:74`. It returns `intentActionRejectPending, isStale` when the state is PENDING and older than `staleThreshold`, which is 15s at the defaults (`order_intent.go:98-106`).
-- The real interceptor is `middleware.UnaryClientInterceptor` (`propagation.go:46-56`). It writes `x-trace-id` into outgoing metadata from the ctx value.
+- `classifyIntentLookup` is at `order_intent.go:74`. It returns `intentActionRejectPending, isStale` when the state is PENDING and older than `staleThreshold` (`order_intent.go:83-85`); `staleThreshold`, 15s at the defaults, is at `order_intent.go:98-106`.
+- The real interceptor is `middleware.UnaryClientInterceptor` (`propagation.go:45`). It writes `x-trace-id` into outgoing metadata from the ctx value.
 - `recordingLedgerClient` is at `trading_reconciliation_test.go:136`. It has a `mu` and `events`.
-- Downstream readers of `order_intent.reclaimed_unknown`: none. `grep -rln reclaimed_unknown services packages/proto` (excluding `gen/`) returns only `order_intent.go`. This closes design.md Open Risk 1: nothing reads the sweeper payload.
+- Downstream readers of `order_intent.reclaimed_unknown`: none. `grep -rln reclaimed_unknown services packages/proto` (excluding `gen/`) returns `order_intent.go` plus `services/xstockstrat-trading/docs/context-constitution-findings.md` (the drift row Step 7 resolves — a doc, not a code reader). This closes design.md Open Risk 1: nothing reads the sweeper payload.
 
 **TDD**: `red-green required`
 
@@ -313,7 +313,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
 # RED (pre-Step-4): FAIL / build failure (reclaimedUnknownPayload undefined); no reclaimed_unknown event; no reclaim-failure log
 ```
 Coverage threshold: N/A for this step (`internal/service/` is excluded from the CI coverage gate,
-`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
+`COVERPKGS` regex at `.github/workflows/ci.yml:266`); the `>= 40%` gate is run in Step 6.
 
 ---
 
@@ -402,7 +402,7 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 **Status**: `pending`
 **Service**: `xstockstrat-trading`
 **Files**:
-- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify
+- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify (created by Step 1; absent until then)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
@@ -502,7 +502,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
 # RED (pre-Step-6): FAIL — traceID "" at every row
 ```
 Coverage threshold: N/A for this step (`internal/service/` is excluded from the CI coverage gate,
-`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
+`COVERPKGS` regex at `.github/workflows/ci.yml:266`); the `>= 40%` gate is run in Step 6.
 
 ---
 
