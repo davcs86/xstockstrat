@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-marketdata-secret-exposure-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator signed off the config @AC-4 CHANGE (header → header+SAN) and folded the `build request: %w` sites into Step 1 |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-28 | `implementation-ready` (no change) | /sdd-execute (re-spec) | Steps 1, 5, 7, 8, 9 re-aligned to the codebase after merging `origin/main-dev` (line drift only; Step 7 pre-merge gate grep moved to `deploy.yml:101`) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front plan confirmed by operator standing authorization (see context.md) |
 
 ---
 
