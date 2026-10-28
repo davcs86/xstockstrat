@@ -162,7 +162,7 @@ grep -rln 'OfflineStateUnavailable' packages/proto/gen/go/portfolio/v1/ | head -
 
 ### Step 3 — service: D-49 shared `isFinite` guard; ConfirmOrder rejects non-finite / negative fill before the load
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1073,3 +1073,8 @@ _Populated by /sdd-execute as implementation proceeds._
   Following the runbook, the pinned plugins (protoc-gen-go v1.36.11, -go-grpc v1.6.2, -connect-go v1.19.2) were
   rebuilt under `GOTOOLCHAIN=go1.27.0`, the toolchain CI and `Dockerfile.codegen` use. After the rebuild the
   diff touches only `portfolio/v1`.
+- Step 3 (2026-10-28, verification method only, no spec change): the host `~/go/bin/golangci-lint` v2.14.0 was
+  built with go1.26 and refuses the module's `go 1.27.0` target ("can't load config"). It was rebuilt at the same
+  pinned version under `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, matching CI's Go 1.27, and reported 0 issues.
+  **Disposition**: CI-equivalent fallback. The RED/GREEN run used a throwaway test file that was not committed;
+  Step 4 owns the durable tests in `trading_offline_test.go`.

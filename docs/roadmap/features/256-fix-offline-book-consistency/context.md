@@ -747,3 +747,19 @@ Each item names the step where it is resolved.
 - The host `protoc-gen-go` had been built with go1.24.7 and produced comment-only drift in `analysis.pb.go`. Rebuilding the pinned plugins under go1.27.0 (matching CI) in a scratch GOBIN removed it (Deviation Log).
 - TDD: N/A (proto-gen). Before the change, `grep OfflineStateUnavailable gen/go/portfolio/v1/` found nothing. After it, the grep matches `portfolio.pb.go`, and `go build ./portfolio/...` passes in `gen/go`.
 - Next: Step 3 (service, D-49 ConfirmOrder validation).
+
+## Session 2026-10-28 — Step 3 (service, D-49)
+
+- `trading.go`: added `isFinite` next to `deriveOfflineStatus`. ConfirmOrder now runs three guards, all before `GetOrder`:
+  - `filled_qty`: rejected if non-finite or < 0, with "filled_qty must be a finite number >= 0".
+  - `filled_avg_price`: rejected if non-finite or < 0, only when `filled_qty > 0`. A qty of 0 (un-confirm) skips this check.
+  - fees: rewritten onto the helper. The message "fees must be >= 0" and the guard's position are unchanged.
+- `SnapshotOfflinePositions` rows at qty and avg-cost now use `!isFinite(...)`. Reasons and ordering are unchanged.
+- Consequence (design §1): a bad value on a broker order now returns INVALID_ARGUMENT instead of FailedPrecondition. The order is not modified in either case.
+- TDD: @AC-4 red. A throwaway test (not committed; Step 4 owns the durable test) sent qty NaN/+Inf and price NaN/+Inf/-1 against an empty sqlmock. All 5 cases failed with `Internal "load order: ... call to method Query() was not expected"`, meaning the load ran. Green: all 5 returned InvalidArgument and the mock expectations were met.
+- Verification:
+  - The spec grep matched 5 lines (861, 897, 900, 1161, 1165).
+  - `go build ./...` passed, and the full `go test ./...` passed.
+  - `golangci-lint` v2.14.0, rebuilt under go1.27.0 because the host binary is go1.26 (Deviation Log), reported 0 issues.
+- Next: Step 4, the durable ConfirmOrder validation tests in `trading_offline_test.go`.
+

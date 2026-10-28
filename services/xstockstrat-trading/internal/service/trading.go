@@ -858,6 +858,8 @@ func (s *TradingService) confirmLock(accountID string) *sync.Mutex {
 	return lk
 }
 
+func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
+
 // deriveOfflineStatus maps a confirmed fill quantity to an order status server-side (never
 // client-supplied): 0 → NEW, 0 < filled < qty → PARTIALLY_FILLED, filled >= qty → FILLED.
 func deriveOfflineStatus(filledQty, qty float64) tradingv1.OrderStatus {
@@ -891,10 +893,13 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if req.OrderId == "" {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "order_id is required")
 	}
-	if req.FilledQty < 0 {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be >= 0")
+	if !isFinite(req.FilledQty) || req.FilledQty < 0 {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be a finite number >= 0")
 	}
-	if req.Fees != nil && (*req.Fees < 0 || math.IsNaN(*req.Fees) || math.IsInf(*req.Fees, 0)) {
+	if req.FilledQty > 0 && (!isFinite(req.FilledAvgPrice) || req.FilledAvgPrice < 0) {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_avg_price must be a finite number >= 0 when filling")
+	}
+	if req.Fees != nil && (*req.Fees < 0 || !isFinite(*req.Fees)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "fees must be >= 0")
 	}
 
@@ -1153,11 +1158,11 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: "empty symbol",
 			})
-		case math.IsInf(pos.Qty, 0) || math.IsNaN(pos.Qty):
+		case !isFinite(pos.Qty):
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite qty for %s", pos.Symbol),
 			})
-		case math.IsInf(pos.AvgCostPerShare, 0) || math.IsNaN(pos.AvgCostPerShare):
+		case !isFinite(pos.AvgCostPerShare):
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite avg_cost_per_share for %s", pos.Symbol),
 			})
