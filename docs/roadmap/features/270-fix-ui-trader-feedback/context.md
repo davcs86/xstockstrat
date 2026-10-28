@@ -479,3 +479,21 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   - [ ] Merge-order: no blocking row is needed. Optional coordination: 270 rebases after 215 (in-progress) on the
     shared UI page, e2e mock and INVENTORY files. The `merge-order.md` row was not written, because this run may
     only edit files under the feature directory.
+
+---
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup (§5.3): merged `origin/main-dev` into `feature/fix-ui-trader-feedback` with `-X ours` (brings in
+  launched 245/246 among others). All `**Files**` paths re-verified against the merged tree.
+- Re-spec, line drift only; no step semantics, files or verification changed:
+  - Step 2: AMZN?strategy=strat-live-001 test now at `position-detail.spec.ts:688` (goto) / `:693` (run-backtest
+    visible); analysis `TestRunBacktestCells` `:1991`, `test_registered_own_run_stamps_fingerprint` `:2044`,
+    `test_id_mismatch_stamps_none` `:2075`. (feature.md Reviewers row still cites the old `:1968,1999`; stale but
+    not a step body.)
+  - Step 7: `useScreenSymbols` in `SymbolScreening.tsx` at `:43`.
+  - Step 9: `PlaceOrderRequest.trading_mode = 12` at `trading.proto:128`.
+  - Step 13: `AlertStream.tsx` (115 lines) — `listAlerts` effect `:18-31`, `streamAlerts` effect `:33-48`, merge
+    `:42`, silent catch `:44`, bell `Button` `:57`, `key={a.alertId}` `:96`.
+  - Step 14: noted the second `router.service(TradingService, …)` at `mock-backend.ts:1353` (insights mock; no
+    `streamOrderUpdates`), left untouched.
