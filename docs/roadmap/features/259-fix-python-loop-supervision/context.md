@@ -644,3 +644,15 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
 - Deviation: the readiness-materializer comment's "create_task is safe" now reads "spawn is safe" (see Deviation Log).
 - Peer `262-fix-analysis-owner-scope` must reuse `supervision.spawn` for the `entry-backfill` task (now `main.py:175`).
 
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+### Step 2 — test: supervision helper and boot retention (@AC-4) [done]
+- Created `services/xstockstrat-analysis/tests/test_supervision.py`: @AC-4 crash-logged/sibling-retained/cancel-silent,
+  one-shot vs `forever` normal return, `_on_done` never raises, `run_supervised` backoff `[30, 0.0]` with a
+  `BaseException` sentinel, `retry_until_ok` `[30, 30]`, and the `main.py` wiring guard (one `create_task(`, eight
+  `spawn(` names). Inline literals only (C-13, no conftest).
+- TDD: AC-4 red: `ImportError: cannot import name 'supervision' from 'app'` (pre-Step-1 tree: `main.py` checked out from `94a152c9~1`,
+  `supervision.py` moved aside, then both restored to HEAD) → green: `6 passed`. Full suite
+  1306 passed, coverage 88.67% (≥40); `ruff check .` / `ruff format --check .` clean; no `conftest` reference.
+- Files modified: `services/xstockstrat-analysis/tests/test_supervision.py`
+- Deviations: none

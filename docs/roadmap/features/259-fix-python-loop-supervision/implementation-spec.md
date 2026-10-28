@@ -172,7 +172,7 @@ ruff check . && ruff format --check .
 
 ### Step 2 — test: supervision helper and boot retention (@AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_supervision.py` — create
