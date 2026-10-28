@@ -174,7 +174,7 @@ call safety (inherited from Step 1)
 
 ### Step 3 — service: ledger shared caller-owner helper + opt-in `queryEvents` owner predicate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -855,3 +855,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: CI-equivalent fallback (sequential-mode verification fallbacks — proto codegen).
 - **Spec change**: none. `ledger_grpc.pb.go`, `ledgerv1connect/`, `ledger_connect.ts`,
   `ledger_pb2_grpc.py` were unchanged, as expected.
+
+### DEV-2 — Step 3: red/green evidence run against the compiled `dist/` module (2026-10-28)
+
+- **What**: Step 3's verification defers to Step 4, which has not landed, and the in-repo suite is
+  vacuous for the impl (its `../grpc/ledgerServiceImpl.js` import fails under both strip- and
+  transform-types — fails.md feature 021 trap). RED/GREEN was captured with an uncommitted scratch test
+  importing `dist/grpc/ledgerServiceImpl.js` after `pnpm run build`; the existing
+  `ledgerServiceImpl.test.ts` cases were also re-run, non-vacuously, against `dist/` (29/29 pass).
+- **Disposition**: CI-equivalent fallback (no spec change). Step 4 owns the committed tests.
+- **Open for Step 4**: `tsconfig.json` does not emit `src/__tests__/` into `dist/`, so Step 4's
+  `node --test dist/__tests__/ledgerServiceImpl.test.js` verification command finds no file as written.

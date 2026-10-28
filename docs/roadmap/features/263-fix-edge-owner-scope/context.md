@@ -488,3 +488,22 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   passed inside the script; a second run left `git diff --stat packages/proto/gen/` identical (fresh).
 - Hook: `core.hooksPath` still points at the missing `/home/user/xstockstrat/.husky/_`, and the main
   worktree has no `node_modules` to symlink, so the pre-commit hook does not run. No `--no-verify`.
+
+### Step 3 — service: ledger shared caller-owner helper + opt-in `queryEvents` owner predicate (2026-10-28)
+
+- Added exported `callerUserId(call)` beside `toValidDate` (carries the empty-caller/NULL-row constraint
+  comment); `exportEvents` now uses it (no behaviour change); `queryEvents` appends
+  `user_id = $n` bound to the caller only when `req.ownerOnly` — flag absent leaves SQL/params unchanged.
+  `streamEvents`/`getEvent` untouched.
+- Tooling setup (step 3): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`.
+- TDD (AC-2/AC-7, scratch test vs `dist/`, DEV-2): red — 4/5 fail (`callerUserId` undefined; params
+  `[101]` lacked `''`/`'u-a'`; SQL lacked `AND user_id = $2`), baseline flag-absent case passed →
+  green — 5/5 pass. Existing `ledgerServiceImpl.test.ts` re-run against `dist/`: 29/29 pass
+  (exportEvents cases guard the helper extraction).
+- Verification: `pnpm run build` ok; `test:coverage` ok (in-repo run is vacuous for the impl, fails.md
+  feature 021); `lint` 0 errors; `grep callerUserId` → definition + one use each in `queryEvents` and
+  `exportEvents`.
+- Open for Step 4: `dist/__tests__/` is not emitted by `tsconfig.json`, so its verification command
+  needs adjusting (DEV-2).
+- Hook: ran via `git -c core.hooksPath=.husky/_` (worktree-local husky dir); shared config still points
+  at the missing main-worktree path. No `--no-verify`.
