@@ -125,7 +125,7 @@ Both commands must exit 0.
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/` — modify (generated)
@@ -1072,3 +1072,10 @@ _Populated by /sdd-execute as implementation proceeds._
   and the worktree's `.git` is a file. Ran `buf breaking --against <dir>` on a `git archive` export of
   `origin/feature/fix-config-audit-author-spoof:packages/proto` instead — same baseline and module config.
   `buf lint` exit 0, `buf breaking` exit 0 (buf 1.72.0). **Disposition**: CI-equivalent fallback.
+- **2026-10-28 — Step 2 codegen (CI-equivalent fallback).** Ran `./scripts/buf-gen.sh` host-natively rather than
+  via the Docker `Dockerfile.codegen` image, with the CI `proto-freshness` pins: buf 1.72.0, protoc-gen-go v1.36.11,
+  protoc-gen-go-grpc 1.6.2, protoc-gen-connect-go 1.19.2, grpcio-tools 1.80.0 (scratch venv), TS plugins from the
+  committed lockfile (`pnpm install --frozen-lockfile`). The preinstalled `protoc-gen-go` was built with go1.24.7
+  and rewrote an unrelated doc comment in `gen/go/analysis/v1/analysis.pb.go`; it was rebuilt with go1.27.0 (the
+  CI Go) and the regen re-run, after which the gen diff is config-only (7 files). A second run left the diff
+  byte-identical (proto-freshness). **Disposition**: CI-equivalent fallback.

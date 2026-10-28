@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute | Re-spec: steps 6,7,8,10,12,13 aligned with current codebase (line drift; mcp 2.3.0; Step 6 C-13 literal centralized in `internal/testdata`) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (sdd-batch-execute); up-front plan confirmed by operator standing authorization |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 1 done: `SetConfigRequest.author` deprecated in place (`buf lint` / `buf breaking` pass) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 2 done: stubs regenerated (Go/Python/TS, config-only diff; freshness re-run clean; trading + config builds pass) |
 
 ---
 
@@ -61,4 +62,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 2 (proto-gen: regenerate stubs)
+`/sdd-execute fix-config-audit-author-spoof sequential` — Step 3 (service: config `SetConfig` attributes only propagated identity)

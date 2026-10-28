@@ -383,3 +383,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `.git#branch=…` input does not resolve in a detached worktree; Deviation Log entry added).
 - Stubs not regenerated in this step (Step 2 owns `packages/proto/gen/**`).
 - Next: Step 2 (proto-gen).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+- Step 2 (proto-gen) done: `./scripts/buf-gen.sh` regenerated `packages/proto/gen/**`; the diff is limited to
+  `config/v1` (Go, Python, TS source + `dist/`). TDD: N/A (proto-gen).
+- Verification: second `buf-gen.sh` run left the gen diff byte-identical; `GOWORK=off go build ./...` in trading
+  and `pnpm run build` in config both pass.
+- Codegen ran host-natively with CI `proto-freshness` pins (Deviation Log entry). `protoc-gen-go` must be built
+  with go1.27 — the go1.24 build reformats an analysis doc comment and would fail `proto-freshness`.
+- Next: Step 3 (service: config `SetConfig`).
+
