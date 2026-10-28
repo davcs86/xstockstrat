@@ -9,22 +9,44 @@
 
 ## Problem Statement
 
+**Who is affected.** Traders and agents who act on fundamentals-sourced opportunities
+(`/insights/opportunities`, MCP `list_opportunities`), operators running `RunFundamentalsScan`, and the
+live fundamentals blend strategy, whose universe is every symbol carrying a fundamentals-source signal
+(`services/xstockstrat-analysis/app/engine/live_loop.py:149-192`).
+
 **Observed.** `_builtin_score` returns `0.5` when no metric is usable
 (`services/xstockstrat-analysis/app/engine/fundsignal_loop.py:432`). An ETF with no P/E, P/B, ROE, D/E or EPS
 is one example. Three things follow:
 
 - The 0.5 enters the cross-sectional quantile mapping (`_map_directions`, `:479`).
-- With the default `analysis.fundsignal.min_conviction_to_emit` of 0.0 (`:240`), the 0.5 is emitted to ingest
-  `IngestSignal` as a real `ExternalSignal` with conviction 0.5.
+- With the default `analysis.fundsignal.min_conviction_to_emit` of 0.0 (read at `:229`, filtered at `:240`),
+  the 0.5 is emitted to ingest `IngestSignal` as a real `ExternalSignal` with conviction 0.5.
 - When most of the universe has no data, `buy_cut` equals 0.5 and every data-less symbol is emitted as `buy`.
 
 Separately, every metric check tests truthiness (`if pe:`, `if f.roe:` …), so a legitimately reported 0
 (e.g. `roe` 0.0) is dropped as if absent.
 
-**Expected.** A symbol with no usable fundamentals is never given a neutral score that looks real. It is
-skipped or flagged unavailable, never scored, ranked or emitted, following the feature 144 `score_unavailable`
-pattern. A metric's absence is read from `Fundamentals.missing_metrics` (proto field 18), not from a zero
-value.
+**Expected.** A symbol with no usable fundamentals is never given a neutral score that looks real: it is
+never scored, ranked or emitted. This is stricter than feature 144's `score_unavailable`, which still ranks
+the flagged candidate, sorted last (`services/xstockstrat-analysis/docs/context-constitution.md:42`). A
+metric's absence is read from `Fundamentals.missing_metrics` (proto field 18), not from a zero value.
+
+## Functional Requirements
+
+- **FR-1**: Under the built-in scorer (`analysis.fundsignal.scoring_formula_id` empty), a symbol whose
+  `Fundamentals.missing_metrics` lists every metric the scorer reads (`pe_ratio`, `pb_ratio`, `roe`,
+  `debt_to_equity`, `eps`) gets no score. It is left out of the `_map_directions` quantile, gets no
+  `analysis.fundsignal_emitted` row, and is not sent to ingest `IngestSignal`.
+- **FR-2**: The built-in scorer reads a metric's absence from `Fundamentals.missing_metrics`, never from a
+  zero value. A metric not listed there is scored at its reported value, including 0.0. A partial row is
+  scored from its present metrics only.
+- **FR-3**: Under a configured `analysis.fundsignal.scoring_formula_id`, the formula path skips a row only
+  when `Fundamentals.missing_metrics` lists all six keys it feeds the formula (`pe_ratio`, `pb_ratio`,
+  `dividend_yield`, `roe`, `debt_to_equity`, `eps`; `fundsignal_loop.py:452-459`). That row gets no
+  `ExecuteFormula` call, no `analysis.fundsignal_emitted` row and no `IngestSignal`. A partial row is still
+  scored with absent metrics on the wire as 0.0 (durable `@AC-8 @feature-201`, PRESERVE). Residual: an ETF
+  reporting only `dividend_yield` stays an `@AC-8` partial row; owned by
+  `docs/reports/2026-10-21-analysis-fundsignal-formula-partial-row-wire-zero-defect.md`.
 
 ## Reproduction Steps
 
@@ -50,8 +72,13 @@ presence; `missing_metrics` is the existing presence signal.
 
 ## Consumer Surface(s)
 
-- ingest signals under the `analysis.fundsignal.source_slug` source (default `fundamentals`). These are read by
-  `ListOpportunities`, the live loop's fundamentals blend universe, and MCP `list_opportunities`.
+- ingest signals under the `analysis.fundsignal.source_slug` source (default `fundamentals`). Readers:
+  - `ListOpportunities`, rendered at `/insights/opportunities`
+    (`services/xstockstrat-ui/src/app/insights/opportunities/page.tsx`) and MCP `list_opportunities`
+    (`services/xstockstrat-agent/app/tools.py`): fabricated fundamentals-source signal rows for data-less
+    symbols no longer appear.
+  - the live loop's fundamentals blend universe (`live_loop.py:149-192`, signals ∩ symbols with a
+    fundamentals row): data-less symbols drop out, because they no longer carry a fundamentals-source signal.
 - `RunFundamentalsScan` (admin, MCP `run_fundamentals_scan`): data-less symbols are no longer emitted.
 
 ## Fix Scope
@@ -59,6 +86,21 @@ presence; `missing_metrics` is the existing presence signal.
 - [x] No proto changes anticipated: absence uses the existing `Fundamentals.missing_metrics` (field 18)
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
+
+## Open for Design
+
+- **Formula path (`_score_via_formula`).** It is not exempt. `fundsignal_loop.py:452-459` passes the raw
+  wire values and ignores `missing_metrics` (which `marketdata.proto:218` requires consumers to check), so
+  under a configured `scoring_formula_id` a data-less ETF is scored from wire-default zeros, then ranked and
+  emitted. The path is opt-in: config migration `008_analysis_fundsignal_keys.up.sql:34-35` seeds the id
+  empty. Resolved by design (2026-10-21): the FR-1 all-missing skip is extended to this path by FR-3.
+  Durable `@feature-201 @AC-8` (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature:47-53`)
+  fixes this path's partial-row behaviour and is PRESERVE; an all-missing skip does not change it.
+- **Already-stored fabricated signals (C-14).** The fix stops new ones only. Each stored signal stays live
+  until `valid_until` = run date + `analysis.fundsignal.valid_days` (default 90, read at
+  `fundsignal_loop.py:232`), so it keeps feeding `ListOpportunities`, MCP `list_opportunities` and the blend
+  universe for up to 90 days after ship. Resolved by design (2026-10-21): operator remediation, see
+  `docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`.
 
 ## Acceptance Criteria
 
@@ -68,6 +110,6 @@ fix (Constitution **C-15**). Also, existing tests pass and the affected service 
 ## Out of Scope
 
 - Retracting or repairing fundamentals signals that ingest has already stored with the fabricated 0.5
-- The formula-scoring path (`_score_via_formula`); it already skips a failed symbol
+  (owner: `docs/reports/2026-10-21-ingest-fundsignal-fabricated-signals-not-retracted-defect.md`)
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix

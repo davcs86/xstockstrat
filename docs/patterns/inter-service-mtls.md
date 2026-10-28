@@ -84,3 +84,7 @@ CA on every deploy (stable CA, auto-rotating leaves) and fills the `MTLS_*` plac
 `.do/app*.yaml` (fail-closed — a missing CA aborts the deploy). The CA signing key therefore lives in
 CI; see the runbook §0.1 for that trade-off. Rollout, rotation, rollback, and the deploy-secret
 provisioning steps → `docs/runbooks/inter-service-mtls-rollout.md`.
+
+The homelab deploy (`.github/workflows/deploy-homelab.yml`) does the same from its own per-environment `MTLS_CA`
+(GitHub environment secret or 1Password `mtls-ca`; a separate CA from DO's) and writes the leaves into the release `.env`
+via `scripts/homelab-mtls-env.py`.

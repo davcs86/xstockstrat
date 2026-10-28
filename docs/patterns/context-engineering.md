@@ -160,22 +160,27 @@ SDD phases must run for **many features in parallel** — a job no single skill 
 and `/sdd-design`'s P-02 rule needs the proposer and adversary in separate windows, mediated by an
 orchestrator. In a workflow **the script is that orchestrator**: it spawns the read-only roles as
 their `agentType`, passes only its own synthesis between proposer and adversary, and gives each
-feature exactly one writer per stage (P-01), each in its own git worktree.
+feature exactly one writer per stage (P-01), each in its own git worktree. The same applies to a
+multi-PR job whose order matters: `/merge-train` re-inspects the queue after every merge, because each
+merge can change what the next PR conflicts with.
 
 | Workflow | Runs | Stops at |
 |---|---|---|
 | `/sdd-batch` (`.claude/workflows/sdd-batch.js`) | per feature, in parallel: preflight → `/sdd-review product-spec` → `/sdd-design` Phase 0 + full debate (2–5 rounds) → `/sdd-spec` → `/sdd-review impl-spec` | each design gate (default) · a demoted-duplicate match · any preflight problem |
 | `/sdd-batch-execute` (`.claude/workflows/sdd-batch-execute.js`) | per feature, in parallel: `/sdd-execute <slug> sequential` — re-spec validation, one commit per step on the feature branch (discovery → TDD gate → verification), C-16 promotion, integration PR | the up-front confirm · every smart checkpoint (default) · every blocker · merge-order · the promotion confirm |
+| `/merge-train` (`.claude/workflows/merge-train.js`) | per round: inspect the queue → take the first PR whose dependencies merged → retarget it if stacked, merge its base into it (merge commit), resolve allowlisted conflicts with `scripts/merge-train-resolve.mjs`, push, wait for CI on the new head, merge with the branch-policy method | per PR (the rest continue): red CI · an off-allowlist conflict · changes requested · a failing Claude Approvals check · a `main` target without `allowMain` · no CI on a current head · CI timeout; a halted PR also halts every PR that depends on it |
 
-**Invocation contract** (both take structured `args`; required fields throw if missing):
+**Invocation contract** (all take structured `args`; required fields throw if missing):
 
 - `date` (ISO), `trailer` (the calling session's commit attribution lines, verbatim) and
   `features: [{slug, decisions?}]` (`decisions` = binding operator constraints, recorded in
   `context.md`). `/sdd-batch-execute` also needs `prFooter` (PR-body attribution) and
   `modeEntryConfirmed: true` — the sequential mode-entry confirmation (`sequential-mode.md` §5.1b) is
   asked in the main session before launch, never inside the script.
-- `approvals: {<slug>: {gate, decision}}` — how a halted gate is answered: relaunch the same
-  workflow with the operator's answer and each feature resumes from its lifecycle status (`draft` →
+- `approvals: {<slug>: {gate, decision} | [{gate, decision}, …]}` — how a halted gate is answered:
+  relaunch the same workflow with the operator's answer (an array when one slug answers several
+  gates, e.g. `demoted-duplicate` and `design`, since preflight re-asks every gate on each run) and
+  each feature resumes from its lifecycle status (`draft` →
   … → `implementation-ready`; spec step statuses for execution), so finished phases are never
   re-run. The design debate's state survives between runs in a `sdd-batch-design-state` block in
   `context.md`; the approved C-16 plan in a `sdd-batch-promotion-plan` block.
@@ -184,6 +189,19 @@ feature exactly one writer per stage (P-01), each in its own git worktree.
   authorization is recorded). `auto` never approves with an unresolved Floor breach (F-11), a
   blocking objection, or a CHANGE to an existing `@AC-*` rule no operator decision covers (C-16).
 - `baseBranch` (default `main-dev`) — where a not-yet-branched feature directory must exist.
+- `/merge-train` takes `{date, trailer, repo, mergeAuthorized: true, authorizationRef, prs: [{number,
+  dependsOn?}], allowMain?, ciTimeoutMin? (30)}` instead of `features`. Merges are outward actions, so
+  it refuses to start without the authorization pair; a PR stacked on another queued PR (its base is
+  that PR's head) waits for it and is retargeted to the trunk it merged into. Methods follow the root
+  `CLAUDE.md` § Merge Strategy: squash into `main-dev`; a merge commit into `main`, and only from
+  `hotfix/*` or `main-dev`. The conflict allowlist, enforced by the resolver rather than by an agent's
+  judgment: `docs/roadmap/ledger/{fails,insights}.md` keep both sides (base first);
+  `docs/runbooks/hotfix-log.md` keeps both entries newest-first; the PR's own feature dir
+  (`feature/<slug>` → `NNN-<slug>`) keeps the branch side; other feature dirs and
+  `docs/reports/*.status` take the base side. Every kept text must contain both sides' non-blank lines
+  in order, or the PR halts. A branch built on a squash-merged parent still carries that parent's
+  files, so a path the base later deleted comes back with no conflict: the resolver drops it again when
+  it is a base-side path and halts the PR otherwise.
 
 **Preflight guards** run before any write: a slug must resolve to exactly one
 `docs/roadmap/features/*-<slug>` directory (skills resolve features by suffix — a reused slug of a
@@ -201,7 +219,8 @@ short (e.g. by the session usage limit) resumes with `Workflow({scriptPath, resu
 the preflight passes branch-only artifacts to them inline; launch from an up-to-date checkout.
 
 **Tests.** `scripts/workflow-tests/` runs each script against scripted agent replies (no tokens) and
-asserts every gate path — `node --test scripts/workflow-tests/*.test.mjs`, also in CI's
+asserts every gate path (the merge-train resolver against real conflicted merges in temporary repos) —
+`node --test scripts/workflow-tests/*.test.mjs`, also in CI's
 `context-map` job. Change a gate rule → change its test first.
 
 ---
