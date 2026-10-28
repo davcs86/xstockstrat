@@ -29,6 +29,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.engine.durable_schedule import DurableSchedule
 from app.identity import SYSTEM_IDENTITY
+from app.supervision import retry_until_ok, run_supervised
 
 log = logging.getLogger(__name__)
 
@@ -157,12 +158,11 @@ class FundamentalsSignalLoop:
 
     async def run_forever(self):
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
-        await self._seed_schedule()
+        await retry_until_ok(self._seed_schedule, "fundsignal seed")
         # One-shot startup jitter to stagger concurrent redeploys off the schedule row / marketdata.
         jitter = self._cfg.get_int_present("analysis.fundsignal.startup_jitter_seconds", default=30)
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
-        while True:
-            await asyncio.sleep(await self._tick())
+        await run_supervised(self._tick, "fundsignal")
 
     # ── single run (shared by the loop and the RPC) ──────────────────────────
 

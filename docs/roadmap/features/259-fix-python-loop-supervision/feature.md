@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done — `app/supervision.py` + eight `main.py` boot tasks routed through `spawn` |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 2 done — `tests/test_supervision.py` (@AC-4 supervision helper + boot-retention guard) |
+| 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 3 done — fundsignal + three servicer `*_forever` loops seed via `retry_until_ok` and tick via `run_supervised` |
 
 ---
 
@@ -57,4 +58,4 @@ consumer skips a failed event and its monotonic cursor moves past it.
 
 ## Next Action
 
-`/sdd-execute fix-python-loop-supervision sequential` — Step 3
+`/sdd-execute fix-python-loop-supervision sequential` — Step 4

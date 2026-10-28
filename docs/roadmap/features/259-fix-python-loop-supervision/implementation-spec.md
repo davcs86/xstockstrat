@@ -222,7 +222,7 @@ grep -n "conftest" tests/test_supervision.py   # expect none (single-consumer in
 
 ### Step 3 — service: analysis `*_forever` loops run under supervision (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -908,3 +908,12 @@ _Populated by /sdd-execute as implementation proceeds._
   (`ImportError: cannot import name 'supervision' from 'app'`) and GREEN after (6 passed), then removed from the
   Step 1 commit (F-08: only the step's **Files** are staged). Step 2 commits it.
 - **Disposition**: process note; no spec change.
+
+### 2026-10-28 — Step 3: TDD red/green run with a scratch test, uncommitted
+- **Spec said**: Step 4 [test] covers Step 3 (red-before-green, P-06); Step 3 **Covers** is `—`.
+- **Done**: a scratch test (fundsignal tick error + seed error; the three servicer loops' seed and tick errors, all with
+  `asyncpg.PostgresConnectionError` and a `BaseException` sleep sentinel) ran RED against the pre-Step-3 tree (5 failed,
+  the error escaping each loop) and GREEN after (5 passed), then was deleted (F-08). Step 4 authors the durable tests.
+- **Disposition**: process note; no spec change. Between Step 3 and Step 4 the two `@AC-7 @feature-156` jitter tests
+  (`tests/test_fundsignal_loop.py`, `_StopLoop(Exception)`) spin instead of exiting, as design.md Open Risks predicts;
+  Step 4 item 1 fixes them.

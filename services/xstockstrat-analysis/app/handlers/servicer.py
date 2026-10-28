@@ -87,6 +87,7 @@ from app.services.readiness import (
     readiness_valid_until,
 )
 from app.services.screener import ScreenerEngine
+from app.supervision import retry_until_ok, run_supervised
 
 # Back-compat alias: existing imports of _compute_signal_score from this module must stay valid.
 _compute_signal_score = scoring.compute_signal_score
@@ -5922,12 +5923,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             "wallclock",
             anchor_hour=self._opportunity_refresh_hour,
         )
-        await schedule.seed()
+        await retry_until_ok(schedule.seed, "opportunity-refresh seed")
         # One-shot bounded startup jitter to stagger concurrent redeploys (mirror fundsignal_loop).
         jitter = self._cfg.get_int_present("analysis.opportunity.startup_jitter_seconds", 30)
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
-        while True:
-            await asyncio.sleep(await self._opportunity_refresh_tick(schedule))
+        await run_supervised(
+            functools.partial(self._opportunity_refresh_tick, schedule), "opportunity-refresh"
+        )
 
     # ── Readiness materializer (feature 180) ────────────────────────────────────
 
@@ -6097,13 +6099,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             "wallclock",
             anchor_hour=self._readiness_materializer_hour,
         )
-        await schedule.seed()
+        await retry_until_ok(schedule.seed, "readiness-materializer seed")
         # One-shot bounded startup jitter (reuse the opportunity operational knob — not the daily
         # anchor, which is the dedicated key above).
         jitter = self._cfg.get_int_present("analysis.opportunity.startup_jitter_seconds", 30)
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
-        while True:
-            await asyncio.sleep(await self._readiness_materializer_tick(schedule))
+        await run_supervised(
+            functools.partial(self._readiness_materializer_tick, schedule), "readiness-materializer"
+        )
 
     # ── Template intent reconcile sweep (feature 224) ───────────────────────────────────────────
 
@@ -6141,9 +6144,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._template_intents_repo is None or self._db_pool is None:
             return
         schedule = DurableSchedule(self._db_pool, "template_intent_sweep", "interval")
-        await schedule.seed()
-        while True:
-            await asyncio.sleep(await self._template_intent_sweep_tick(schedule))
+        await retry_until_ok(schedule.seed, "template-intent-sweep seed")
+        await run_supervised(
+            functools.partial(self._template_intent_sweep_tick, schedule), "template-intent-sweep"
+        )
 
     @owner_scoped
     async def SetOpportunityAction(self, request, context):

@@ -656,3 +656,23 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   1306 passed, coverage 88.67% (≥40); `ruff check .` / `ruff format --check .` clean; no `conftest` reference.
 - Files modified: `services/xstockstrat-analysis/tests/test_supervision.py`
 - Deviations: none
+
+## Session 2026-10-28 — sdd-execute sequential, Step 3
+
+### Step 3 — service: analysis `*_forever` loops run under supervision (FR-1) [done]
+- `app/engine/fundsignal_loop.py`: `run_forever` = `retry_until_ok(self._seed_schedule, "fundsignal seed")` → unchanged
+  jitter → `run_supervised(self._tick, "fundsignal")`; `_tick` untouched (no inner `try`).
+- `app/handlers/servicer.py`: the opportunity-refresh, readiness-materializer and template-intent-sweep loops seed via
+  `retry_until_ok(schedule.seed, "<loop> seed")` and tick via `run_supervised(functools.partial(self.<tick>, schedule),
+  "<loop>")`. Early returns, jitter, anchors, `advance(...)` calls and `retry_seconds` reads unchanged.
+- TDD (scratch test, deleted; Step 4 authors the durable ones): red: `5 failed` (`PostgresConnectionError: down/seed`
+  escaped each loop) → green: `5 passed`. Verification: 4 `run_supervised` + 4 `retry_until_ok` call sites, no
+  `while True` in `fundsignal_loop.py`, `ruff check .` / `ruff format --check .` clean. Full suite: 1304 passed,
+  coverage 88.64%, with the two `@AC-7 @feature-156` jitter tests deselected.
+- **Open until Step 4:** those two jitter tests (`_StopLoop(Exception)` raised from a patched `_tick`) now spin
+  forever: the sentinel is swallowed by `run_supervised`. Step 4 item 1 (`_StopLoop(BaseException)`) fixes it. Do not
+  run the full suite without that fix or deselecting them.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`,
+  `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none (process note in the Deviation Log)
+
