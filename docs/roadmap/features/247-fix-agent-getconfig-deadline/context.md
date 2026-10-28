@@ -311,3 +311,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Ordering deviation: Step 3 committed before Step 6 (Deviation Log). Step 6 must still record the latency baseline or
   "Not measured" + P-03 escalation before the integration PR.
 
+### Step 4 — docs: agent CLAUDE.md, context-constitution and findings reconciliation (2026-10-28)
+
+- Files: `services/xstockstrat-agent/CLAUDE.md` (one sentence under `## Config Keys Consumed` naming the fixed
+  `_CONFIG_READ_TIMEOUT_S` = 3.0 s deadline; the `agent.opportunities.read_timeout_seconds` row now names both the client
+  deadline and the outer `_POLICY_READ_TIMEOUT_S` bound); `services/xstockstrat-agent/docs/context-constitution.md`
+  (evidence re-pointed to `app/client.py#_CONFIG_READ_TIMEOUT_S` + `app/tools.py#_POLICY_READ_TIMEOUT_S`, `~L2360` dropped);
+  `services/xstockstrat-agent/docs/context-constitution-findings.md` (open `_fetch_url` no-deadline row removed; two
+  § Resolved bullets: the deadline fix and the `oauth_server.py` allowlist-comment correction);
+  `docs/context-constitution-findings.md` (the `get_config_value` no-deadline row moved to the § Resolved table; the
+  2026-10-19 index row kept until the report resolves at launch — sidecar is `triaged` / `ref: feature:247-…`).
+- TDD: N/A (docs).
+- Verification: `_CONFIG_READ_TIMEOUT_S` present in all four files; "move the cap inside" 0 hits; "has no gRPC deadline"
+  only at root findings `:55` (§ Resolved starts `:50`); `~L2360` 0 hits.
+- `docs/runbooks/mcp-tools.md` checked, unchanged (tool contracts unchanged).
+- Deviation: design.md §6 table-row wording → sentence + existing row (Deviation Log).

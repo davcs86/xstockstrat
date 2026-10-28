@@ -413,7 +413,7 @@ Steps 1-2 are GREEN, the 227 suite still passes, and coverage is at least 40%.
 
 ### Step 4 — docs: agent CLAUDE.md, context-constitution and findings reconciliation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-agent/` docs + root findings)
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
@@ -653,3 +653,9 @@ _Populated by /sdd-execute as implementation proceeds._
   "if Step 3 has already landed" branch). Grafana_Cloud MCP is still unreachable (HTTP 424), so Step 6 cannot be
   measured in this session either way. If the operator's p99 rules out D = 3.0 s, the constant and the `== 3.0`
   pins change together before the integration PR. **Disposition**: open — P-03 escalation carried to Step 6 / checkpoint.
+- **Step 4 (2026-10-28)** — design.md §6 asked for a `_CONFIG_READ_TIMEOUT_S` "row next to `_POLICY_READ_TIMEOUT_S`" in the
+  agent `CLAUDE.md`; the `## Config Keys Consumed` table lists config keys only, so (as the spec's Step 4 Evidence prescribes)
+  the constant is named in one sentence under the section heading plus the `agent.opportunities.read_timeout_seconds` row.
+  The `oauth_server.py` resolved bullet cites the identity check by symbol/message (`identityServiceImpl.ts#redirect_uris must
+  use https`) instead of `:385-388`, per the findings docs' cite-symbols convention. `docs/runbooks/mcp-tools.md` checked,
+  unchanged (`:209`, `:1698` describe the threshold and default only). **Disposition**: accepted (same intent, no scope change).
