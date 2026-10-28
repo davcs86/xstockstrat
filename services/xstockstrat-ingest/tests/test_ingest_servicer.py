@@ -25,7 +25,10 @@ from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer, job_row_to_proto
 from tests._helpers import job_row as _job_row
 from tests._helpers import transaction_conn
-from tests.conftest import _ctx  # feature 092 (C-13): centralized admin/no-admin context builder
+from tests.conftest import (  # feature 092 (C-13): centralized admin/no-admin context builder
+    _ctx,
+    snapshot_watcher,
+)
 
 
 def make_servicer(
@@ -79,6 +82,19 @@ def test_effective_max_attempts_honors_stored_zero():
     svc = make_servicer()  # channels/db mocked
     svc._cfg = w  # exercise get_int_present + property + seam
     assert svc._effective_max_attempts() == 0
+
+
+# ---------------------------------------------------------------------------
+# Feature 244 @AC-5 — a stored max_concurrent_jobs=0 must not build Semaphore(0),
+# which queues every backfill forever. The semaphore is built in __init__, so the
+# real watcher goes through the constructor (a later svc._cfg swap cannot see it).
+# ---------------------------------------------------------------------------
+
+
+def test_backfill_semaphore_stored_zero_reads_as_default():
+    w = snapshot_watcher(**{"ingest.backfill.max_concurrent_jobs": 0})
+    svc = IngestServicer(w, MagicMock(), MagicMock(), db_pool=None)
+    assert svc._backfill_sem._value == 3
 
 
 # ---------------------------------------------------------------------------

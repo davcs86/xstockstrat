@@ -330,7 +330,7 @@ Green run is Step 4's Verification.
 
 ### Step 4 — test: ingest @AC-5 / @AC-6 rows and the read-classification guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_config_watcher.py` — modify
@@ -1319,3 +1319,9 @@ _Populated by /sdd-execute as implementation proceeds._
   (and `max_concurrent_jobs` at -5), the loop timeout/poll reads at 0, the sandbox helpers gone, and
   `max_retry_attempts`/`dedup_window_hours` still honouring 0. The docstring range cited as `:157-159` was actually
   `:156-158` (line drift only).
+- 2026-10-28 Step 4 (TDD evidence method + line drift, no scope change): Step 3 had already landed, so RED ran the new
+  tests against the Step-2 `app/config/watcher.py` and `app/engine/mcp_client_loop.py` (`git checkout 62972c4f --`,
+  restored to HEAD before GREEN; never committed). `IngestServicer.__init__` spans `servicer.py:308-316` (class at
+  `:307`), not `:308-320`; `_backfill_sem` is still at `:323`. Guard shape choices within the instructions:
+  `FR3_KEYS`/`HONOUR_KEYS` are frozensets (rule 4 checks one default per key, it does not pin the table's values),
+  `ZERO_IS_LEGIT` is a key→reason dict, and `collect(app_dir)` returns `(reads, clamps, errors)`.

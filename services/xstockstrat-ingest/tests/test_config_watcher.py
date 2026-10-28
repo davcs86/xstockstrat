@@ -105,3 +105,23 @@ def test_getters_honour_stored_zero(key, stored, getter, default):
 def test_getters_default_when_unset_or_mismatched(values, getter, key, default):
     w = snapshot_watcher(**values)
     assert getattr(w, getter)(key, default) == default
+
+
+# ---------------------------------------------------------------------------
+# Feature 244 @AC-6 — an FR-3 property (semaphore bound, planner input) reads a
+# stored 0 or negative as its default instead of deadlocking or busy-looping.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prop,key,stored,expected",
+    [
+        ("backfill_max_concurrent_chunks", "ingest.backfill.max_concurrent_chunks", 0, 3),
+        ("backfill_chunk_max_bars", "ingest.backfill.chunk_max_bars", 0, 200000),
+        ("backfill_chunk_window_days", "ingest.backfill.chunk_window_days", 0, 90),
+        ("backfill_max_concurrent_jobs", "ingest.backfill.max_concurrent_jobs", -5, 3),
+    ],
+)
+def test_fr3_properties_read_non_positive_as_default(prop, key, stored, expected):
+    w = snapshot_watcher(**{key: stored})
+    assert getattr(w, prop) == expected

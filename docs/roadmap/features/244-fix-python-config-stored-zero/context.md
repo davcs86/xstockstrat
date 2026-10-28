@@ -392,3 +392,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-ingest/app/config/watcher.py`, `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
 - Deviations: TDD scratch harness and docstring line drift (`:156-158`, not `:157-159`); see the Deviation Log.
 - Next: Step 4.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 4
+
+### Step 4 — test: ingest @AC-5 / @AC-6 rows and the read-classification guard [done]
+- AC-5: `test_backfill_semaphore_stored_zero_reads_as_default` (`test_ingest_servicer.py`) passes a real
+  `snapshot_watcher` (max_concurrent_jobs 0) through the `IngestServicer` constructor and asserts `_backfill_sem._value == 3`.
+  AC-6: `test_fr3_properties_read_non_positive_as_default` (`test_config_watcher.py`, chunks/max_bars/window_days at 0,
+  jobs at -5); loop rows `test_cycle_request_timeout_stored_zero_reads_as_default` (30.0) and
+  `test_poll_interval_stored_zero_reads_as_default` (patched `asyncio.sleep`, first sleep 300) in `test_mcp_client_loop.py`.
+  New guard `tests/test_config_read_classification.py`: module-level `collect(app_dir)` AST scan, rules 1-6 as
+  separate tests, ingest `FR3_KEYS` (6) / `HONOUR_KEYS` (2) / `ZERO_IS_LEGIT` (2) from the classification table.
+- TDD: AC-5/AC-6 red on the Step-2 app tree (`git checkout 62972c4f --` the two app files, restored before green):
+  8 failed, 133 passed — sem `_value` 0; properties 0/0/0/-5; timeout 1.0; first sleep 1; guard rule 2 (the reads
+  included the FR-3 and dead `indicators.sandbox.*` keys, the clamp set was empty) → green on HEAD: 141 passed.
+- Verification: the four step files 141 passed; full ingest suite 344 passed, coverage 82.02% (≥40); ruff check and
+  format clean (the guard's regex line was wrapped by `ruff format`); `snapshot_watcher` defined once
+  (`tests/conftest.py:71`), imported by `test_config_watcher.py` and `test_ingest_servicer.py`. `.jscpd.json:27`
+  ignores `**/tests/**` (confirmed).
+- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`, `services/xstockstrat-ingest/tests/test_config_read_classification.py`
+- Deviations: RED via temporary Step-2 app files; `__init__` line drift; guard data shapes. See the Deviation Log.
+- Husky pre-commit did not run: there is no `node_modules` in the main worktree to symlink and `core.hooksPath` is
+  unset, so no hook ran (same as Steps 1-3; never `--no-verify`).
+- Next: Step 5.

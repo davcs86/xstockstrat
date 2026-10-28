@@ -24,6 +24,7 @@
 | 2026-10-28 | `in-progress` (step 1 done) | /sdd-execute sequential | Step 1: ingest `get_str`/`get_int`/`get_float` use `HasField`; `get_int_present = get_int` alias (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 2 done) | /sdd-execute sequential | Step 2: conftest `snapshot_watcher` (C-13 home); ingest @AC-1/@AC-4 getter rows in `test_config_watcher.py` (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 3 done) | /sdd-execute sequential | Step 3: module-level `int_positive` clamps the four FR-3 backfill properties and both `mcp_client` loop reads (`max(…, 1)` dropped); dead `sandbox_*` helpers and their 3 tests removed (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 4 done) | /sdd-execute sequential | Step 4: ingest @AC-5 (`_backfill_sem` at 0 → 3) and @AC-6 rows (backfill properties, loop timeout/poll interval) plus the AST read-classification guard `tests/test_config_read_classification.py` (TDD red → green) |
 
 ---
 
@@ -60,4 +61,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-execute fix-python-config-stored-zero sequential` — Step 4 (test: ingest @AC-5 / @AC-6 rows and the read-classification guard)
+`/sdd-execute fix-python-config-stored-zero sequential` — Step 5 (service: indicators getters honour a stored zero (HasField))
