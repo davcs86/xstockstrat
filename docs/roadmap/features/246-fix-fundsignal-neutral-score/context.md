@@ -565,3 +565,75 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `docs/context-constitution-findings.md`
 - Deviations: docstring wrapped for E501; ingest dedup cited by path, not line (see Deviation Log).
 
+## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-fundsignal-neutral-score (feature 246)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature | CREATE | NEW | Observable subject is the ExternalSignal sent to ingest and the analysis.fundsignal_emitted row, both owned by analysis's producer. |
+| AC-2 | same | CREATE | NEW | A metric reported as 0 is scored, not dropped. This is a new guarantee. |
+| AC-3 | same | CREATE | NEW | The ExecuteFormula call and the emitted row are both in analysis. See Notes for the platform @AC-6 relationship. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature (CREATE) ---
+# Durable business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 246's
+# acceptance.feature on code-completion; @feature-246 marks provenance. These are the guarantees a
+# future feature must not regress: the fundamentals producer never fabricates a score for a symbol
+# with no usable data, and never treats a real zero as absent.
+
+Feature: fix-fundsignal-neutral-score (bug fix)
+  Regression guard for docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md:
+  the fundamentals producer emits fabricated 0.5 scores for symbols with no data.
+
+  Background:
+    Given analysis.fundsignal.min_conviction_to_emit is 0.0
+    And analysis.fundsignal.buy_quantile is 0.80 and analysis.fundsignal.sell_quantile is 0.20
+
+  @AC-1 @FR-1 @regression @feature-246
+  Scenario: Symbols with no usable fundamentals are not scored, ranked or emitted
+    Given analysis.fundsignal.scoring_formula_id is "" (built-in scorer)
+    And analysis.fundsignal.universe_source is "explicit" with explicit_symbols "SPY,QQQ,IWM,DIA,VOO,MSFT"
+    And "SPY", "QQQ", "IWM", "DIA" and "VOO" each list "pe_ratio", "pb_ratio", "roe", "debt_to_equity" and "eps" in missing_metrics
+    And "MSFT" has pe_ratio 20.0, roe 0.30 and eps 10.0
+    And "MSFT" lists "pb_ratio" and "debt_to_equity" in missing_metrics, and not "pe_ratio", "roe" or "eps"
+    When a non-dry-run fundamentals producer cycle runs
+    Then exactly one ExternalSignal is sent to ingest, for "MSFT"
+    And no score, direction or analysis.fundsignal_emitted row exists for "SPY", "QQQ", "IWM", "DIA" or "VOO"
+    And exactly one analysis.fundsignal_emitted row exists, for "MSFT"
+
+  @AC-2 @FR-2 @regression @feature-246
+  Scenario: A metric reported as zero is scored, not treated as absent
+    Given analysis.fundsignal.scoring_formula_id is "" (built-in scorer)
+    And analysis.fundsignal.universe_source is "explicit" with explicit_symbols "ZRO"
+    And "ZRO" has pe_ratio 20.0 and roe 0.0
+    And "ZRO" lists "pb_ratio", "debt_to_equity" and "eps" in missing_metrics, and not "pe_ratio" or "roe"
+    When a non-dry-run fundamentals producer cycle runs
+    Then the ExternalSignal sent to ingest for "ZRO" has conviction 0.30 within 1e-9
+    And the analysis.fundsignal_emitted row for "ZRO" has score 0.30 within 1e-9
+
+  @AC-3 @FR-3 @regression @feature-246
+  Scenario: Under a scoring formula, an all-missing row is skipped and a partial row is still scored
+    Given analysis.fundsignal.scoring_formula_id is set to a system-authored formula
+    And "NODATA" has every formula input in missing_metrics
+    And "DIVONLY" has only dividend_yield 0.013 present
+    When a fundamentals scan runs
+    Then ExecuteFormula is called exactly once, as the system identity, with dividend_yield 0.013 and pe_ratio 0.0
+    And exactly one analysis.fundsignal_emitted row exists, for "DIVONLY"
+    And no ExternalSignal is sent for "NODATA"
+
+### Notes / ambiguities / conflicts
+- Attribution: all three scenarios route to analysis, where the producer lives (app/engine/fundsignal_loop.py). The Then clauses assert on the ExternalSignal sent to ingest, the analysis.fundsignal_emitted row and the ExecuteFormula call. Ingest only receives the signal, so there is no ingest-side promotion. No cross-cutting scenario is promoted to platform.feature.
+- File naming: the source slug is fix-fundsignal-neutral-score. Analysis already has fix-fundamentals-signal-producer.feature (feature 156, scheduling only) and fundsignal-watchlist-universe.feature (universe). Neither asserts anything about scoring or neutral values, so there is no OVERLAP.
+- AC-3 relationship (no CONFLICT): /home/user/xstockstrat/docs/sdd/business-rules/platform.feature @AC-6 @feature-224 (line 258) asserts that the system scoring formula succeeds as x-user-id "system" with x-internal-caller "analysis-fundsignal". AC-3 extends it by adding the all-missing skip and the partial-row scoring. It preserves the system identity.
+- AC-3 also fits /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature line 53 (feature 200/215), where a partial row still evaluates and a symbol with no usable fundamentals is refused. This is consistent: the producer now skips an all-missing row instead of fabricating a neutral value.
+- No existing promoted scenario asserts a neutral 0.5 emission, so nothing is changed or contradicted. The 0.5 hits in the grep were unrelated EB-shrinkage prior text in CLAUDE.md. changesExistingRule=false.
+- The acceptance/ directory already exists for analysis, so no lazy directory creation is needed. Only the new file is created.
+- The path in the task text (docs/roadmap/features/docs/roadmap/features/246-...) was doubled. I read the real file at /home/user/xstockstrat/docs/roadmap/features/246-fix-fundsignal-neutral-score/acceptance.feature from the working tree, not from origin/feature/fix-fundsignal-neutral-score. I did not verify that the working-tree copy matches the branch.
+- The scenario text is verbatim. I appended @feature-246 after the existing @regression tag, and added a provenance header comment and the Background.
+
+### Coverage check
+- Source scenarios: 3 (AC-1, AC-2, AC-3). Planned: 3 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for and none was skipped.
+```
