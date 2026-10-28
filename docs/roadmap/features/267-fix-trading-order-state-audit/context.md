@@ -593,3 +593,18 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - Open item: the local `golangci-lint` v2.14.0 binary was built with go1.26 and refuses Go 1.27 modules
   (`can't load config`). Step 1's Verification does not need it. Step 2 does, so Step 2 must use a
   go1.27-built binary or record a CI-lint fallback. `gofmt` and `go vet` are clean.
+
+### Step 2 — service: persistOrderBestEffort and the four D-04 sites (FR-1..FR-4) [done]
+- Added `persistOrderBestEffort(ctx, order, path)` above `emitLedgerEvent` in `trading.go`: writes on
+  `WithTimeout(WithoutCancel(ctx), ledgerEmitTimeout)` and logs `slog.Error("order state write failed", order_id,
+  user_id, status, path, error)`. Replaced the four discarded writes: `broker_timeout` (`:688`),
+  `broker_reject` (`:703`), `cancel_final` (`:1367`), `replace_final` (`:1550`). Checked writes `:645`/`:744`
+  untouched.
+- TDD: RED (pre-change, `go test ./internal/service/ -run _AC -race -count=1 -v`) — the 10 Step 1 tests FAILED
+  (no "order state write failed" record; traceID ""; ctx.Err() canceled). GREEN after — all 10 PASS; full
+  `go test ./... -race -count=1` passes; `go vet` clean; `golangci-lint run` 0 issues; `grep "_ = s.repo.UpsertOrder"`
+  empty.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: D2-1 (`-run _AC`), D2-2 (golangci-lint v2.14.0 rebuilt with go1.27 into scratchpad). Closes the
+  Step 1 open item on the lint binary for this session.
+

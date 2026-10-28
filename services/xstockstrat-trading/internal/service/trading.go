@@ -685,7 +685,7 @@ func (s *TradingService) submitOrder(
 		if isTimeout {
 			// Uncertain outcome: leave order.Status pre-call and the intent PENDING for reclaim —
 			// don't mark REJECTED, which conflates "definitely rejected" with "unknown".
-			_ = s.repo.UpsertOrder(context.Background(), order)
+			s.persistOrderBestEffort(ctx, order, "broker_timeout")
 			go s.emitLedgerEvent(context.Background(), "order.broker_call_uncertain", orderID, order.UserId, map[string]interface{}{
 				"order_id": orderID, "intent_id": intentID, "error": err.Error(),
 			})
@@ -700,7 +700,7 @@ func (s *TradingService) submitOrder(
 		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, order.UserId, map[string]interface{}{
 			"order_id": orderID, "error": err.Error(), "trading_mode": mode.String(),
 		})
-		_ = s.repo.UpsertOrder(context.Background(), order)
+		s.persistOrderBestEffort(ctx, order, "broker_reject")
 		if ownsIntent {
 			if marshaled, mErr := proto.Marshal(order); mErr == nil {
 				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, orderID, repository.IntentStateRejected, marshaled); fErr != nil {
@@ -1364,7 +1364,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		}
 	})
 
-	_ = s.repo.UpsertOrder(ctx, order)
+	s.persistOrderBestEffort(ctx, order, "cancel_final")
 	s.finalizeCancelIntent(intentID, order, finalIntentState)
 
 	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, order.UserId, map[string]interface{}{
@@ -1547,7 +1547,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
 	})
 
-	_ = s.repo.UpsertOrder(ctx, order)
+	s.persistOrderBestEffort(ctx, order, "replace_final")
 	if ownsIntent {
 		if marshaled, mErr := proto.Marshal(order); mErr == nil {
 			if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateCompleted, marshaled); fErr != nil {
@@ -3655,6 +3655,16 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 // ledgerEmitTimeout bounds a single AppendEvent so a half-open connection or a server stalled
 // mid-RPC surfaces as a logged error instead of silently wedging the calling goroutine.
 const ledgerEmitTimeout = 10 * time.Second
+
+// persistOrderBestEffort writes order state after a broker side effect; log-only, never surfaced.
+func (s *TradingService) persistOrderBestEffort(ctx context.Context, order *tradingv1.Order, path string) {
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ledgerEmitTimeout)
+	defer cancel()
+	if err := s.repo.UpsertOrder(wctx, order); err != nil {
+		slog.Error("order state write failed", "order_id", order.OrderId, "user_id", order.UserId,
+			"status", order.Status.String(), "path", path, "error", err)
+	}
+}
 
 // emitLedgerEvent appends an event to the ledger. Pass the order/account owner as userID for
 // user-owned events (background pollers have no inbound x-user-id); pass "" for platform-scoped events.

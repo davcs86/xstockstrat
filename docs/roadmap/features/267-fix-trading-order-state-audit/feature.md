@@ -52,4 +52,4 @@ reactive intent reclaims leave no `order_intent.reclaimed_unknown` audit event.
 
 ## Next Action
 
-`/sdd-execute fix-trading-order-state-audit sequential` — in progress (Step 2 next)
+`/sdd-execute fix-trading-order-state-audit sequential` — in progress (Step 3 next)

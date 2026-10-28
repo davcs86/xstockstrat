@@ -172,7 +172,7 @@ gate excludes (`COVERPKGS` regex at `.github/workflows/ci.yml:266`); the `>= 40%
 
 ### Step 2 — service: `persistOrderBestEffort` and the four D-04 sites (FR-1..FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -614,3 +614,13 @@ _Populated by /sdd-execute as implementation proceeds._
   (`TestOrderStateWriteCtx_{BrokerTimeout_AC1,BrokerReject_AC2,CancelFinal_AC3,ReplaceFinal_AC6}`) so the
   AC regex selects them. Instruction 1's fallback (cancel-after-return) was **not** needed: no path aborts
   on the pre-cancelled ctx before the D-04 site.
+
+### 2026-10-28 — Step 2
+
+- **D2-1 (verification command shape):** as in D1-3, ran `-run _AC` instead of the piped
+  `-run 'AC1|AC2|AC3|AC6'` regex (a superset; all passed). **Disposition**: verification fallback, same
+  package and flags.
+- **D2-2 (lint binary):** the provisioned `golangci-lint` v2.14.0 was built with go1.26 and refuses the
+  Go 1.27 module. Rebuilt the same pinned v2.14.0 with `GOTOOLCHAIN=go1.27.0 go install` (proxy.golang.org)
+  into the session scratchpad and ran the specced command: `0 issues.` **Disposition**: CI-equivalent
+  fallback (same version as `golangci-lint-action@v9` pin; toolchain only).
