@@ -433,3 +433,24 @@ Tooling setup (steps 7): node v22.22.0 ✓ (CLAUDE.md pins 24) · pnpm ✓ 9.15.
   `services/xstockstrat-ui/src/app/insights/screener/page.tsx`
 - Deviations: scratch RED/GREEN spec; host harness flags; pre-existing format/tsc/e2e reds — see Deviation Log.
   Out-of-scope changes: none.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 8 (sdd-batch-execute)
+
+Tooling setup (steps 8): node v22.22.0 ✓ (CLAUDE.md pins 24) · pnpm ✓ 9.15.9 · `pnpm install --frozen-lockfile` ⬇ (worktree) · chromium ✓ `/opt/pw-browsers` · Docker e2e runner ✗ (Docker Hub 429 → host harness)
+
+### Step 8 — test: Playwright AC-4 on the position-detail Screening section; fixture catalog (UI) [done]
+- `position-detail.spec.ts`: imports `noCriteriaDataRow` from `'../fixtures/screenResults'` (C-12); new test
+  `a scoreUnavailable single-symbol result shows "Not evaluated" (bug fix, feature 245)` (`:222`) routes
+  `**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols` → `{ results: [noCriteriaDataRow('AAPL')], coverageGaps: [] }`
+  before `goto('/trader/positions/AAPL')`, clicks `run-symbol-screen`, asserts `symbol-screen-unevaluated` visible with
+  "Not evaluated", `symbol-screen-results` / `symbol-screen-insufficient` count 0 (all scoped to `symbol-screening`).
+- `INVENTORY.md:47`: consumer list gains the feature 245 `noCriteriaDataRow` "Not evaluated" case. No new fixture.
+- TDD: RED with `SymbolScreening.tsx` restored from `47c2becf` → `1 failed`, `toBeVisible()` on
+  `symbol-screen-unevaluated` (element not found). GREEN on `HEAD` → the new test passes.
+- Verification: the two specs → 59 passed / 4 failed (`:16`, `:45`, `:324`, `:473`; all pre-existing, `:324` confirmed
+  on the baseline spec); C-12 import grep → `:2` (`helpers/auth`), `:4` (`fixtures/screenResults`); `feature 245` →
+  `INVENTORY.md:47`; `pnpm run lint` exit 0.
+- Files modified: `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: RED via restored pre-Step-7 file; host harness (Docker 429); pre-existing e2e failures; pre-existing
+  INVENTORY.md prettier warning — see Deviation Log. Out-of-scope changes: none.

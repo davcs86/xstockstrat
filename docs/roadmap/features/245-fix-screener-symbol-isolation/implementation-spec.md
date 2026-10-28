@@ -651,7 +651,7 @@ The green run is Step 8's Verification.
 
 ### Step 8 — test: Playwright AC-4 on the position-detail Screening section; fixture catalog (UI)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -911,3 +911,29 @@ _Populated by /sdd-execute as implementation proceeds._
   position header/chart, not the Screening section. The FR-8 Screening test `:194` and all of
   `e2e/insights/screener.spec.ts` pass with the diff applied (60 passed, 3 failed).
 - **Disposition**: recorded; Step 8 owns the durable e2e run (Docker runner `./scripts/run-e2e.sh` preferred there).
+
+### Step 8 — RED captured against the restored pre-Step-7 `SymbolScreening.tsx` (2026-10-28)
+- **Spec says**: RED before Step 7: the row falls through to `DataTable`, so `symbol-screen-unevaluated` is absent.
+- **Actual**: Step 7 had already landed (`c53ab6b3`), so RED ran with `SymbolScreening.tsx` temporarily restored from
+  `47c2becf` (Step 6 commit), then restored to `HEAD` before GREEN; it was never staged.
+- **Disposition**: process-only; no code or scope change.
+
+### Step 8 — e2e ran on the host harness, Docker runner unavailable (2026-10-28)
+- **Spec says**: `pnpm test:e2e e2e/trader/position-detail.spec.ts e2e/insights/screener.spec.ts`; Step 7's log
+  preferred the Docker runner `./scripts/run-e2e.sh` here.
+- **Actual**: `./scripts/run-e2e.sh` failed at image build: Docker Hub returned `429 Too Many Requests` for
+  `node:24-bookworm-slim`. The two specs ran host-native with the Step 7 flags (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+  --project=chromium --no-deps --timeout=240000`; Node v22.22.0).
+- **Disposition**: CI-equivalent fallback.
+
+### Step 8 — four pre-existing `position-detail.spec.ts` failures on the host harness (2026-10-28)
+- **Actual**: 59 passed, 4 failed. The new AC-4 test (`:222`) and the FR-8 Screening test (`:194`) pass, as does all of
+  `e2e/insights/screener.spec.ts`. The failures are `:16`, `:45`, `:473` (Step 7's `:15`, `:44`, `:447`, shifted by the
+  26 added lines) and `:324` (baseline `:298`, backtest INSUFFICIENT_DATA notice). `:298` also fails on the baseline
+  spec with this step's diff removed, so it is pre-existing (it passed in Step 7's run, so it is likely flaky on the host).
+- **Disposition**: recorded; not in this step's scope (F-08).
+
+### Step 8 — `INVENTORY.md` prettier warning is pre-existing (2026-10-28)
+- **Actual**: `prettier --check e2e/fixtures/INVENTORY.md` warns on both the edited file and the `HEAD` copy. `.md` is not
+  in the lint-staged glob, so no hook or CI gate covers it. The edited line follows the row's existing format.
+- **Disposition**: recorded; not reformatted (behavior #3).
