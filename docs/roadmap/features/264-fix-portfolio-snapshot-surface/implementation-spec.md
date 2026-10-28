@@ -80,7 +80,7 @@ context.md, Session 2026-10-22 — sdd-spec.
 
 ### Step 1 — service: Owner-scope the snapshot subscriber map and fan-out (fail-closed)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -723,3 +723,10 @@ git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-10-28 — Step 1: RED probe file not committed with Step 1
+- **Spec said**: the Step 1 STOP block writes Step 2's `portfolio_snapshot_scope_test.go` to capture RED between Part A and Part B.
+- **Done**: the file was written and run for RED (fail) and GREEN (pass), then removed from the Step 1 commit. F-08 limits the
+  Step 1 commit to its own **Files**; Step 2 creates and commits that file.
+- **Disposition**: no behavior change. The gRPC `Sprintf` hoist sits at `portfolio_handler.go:293` (spec text says `:292`, the
+  signature line); line drift only.

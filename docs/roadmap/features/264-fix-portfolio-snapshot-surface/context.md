@@ -481,3 +481,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Lifecycle: `implementation-ready` → `in-progress`. Severity SEV-2.
 - Consumer surface (C-14): none or internal. All steps are portfolio backend, the config migration, or docs.
 - Open review warnings carried forward: the `[ ]` items in the 2026-10-22 sdd-review impl-spec note.
+
+### Step 1 — service: Owner-scope the snapshot subscriber map and fan-out (fail-closed) [done]
+- Added `snapshotSubscriber{ch, userID}`; `subs` is now `map[string]snapshotSubscriber`; `Subscribe(id, userID)`;
+  `Unsubscribe` closes `sub.ch`; `broadcastSnapshot` skips any subscriber with `sub.userID != userID` (strict, so an
+  empty owner receives nothing). Valuation, the unpriced skip, `InsertSnapshot` and `emitEvent` are unchanged and stay
+  before the loop on the fill `ctx`. Both handler call sites pass the caller id; the gRPC adapter hoists `userID`.
+  The three feature-231 tests subscribe as `"u1"`.
+- TDD (Step 2 RED evidence, @AC-1/@AC-3 producer): with Part A only,
+  `GOWORK=off go test ./internal/service/ -run 'TestBroadcastSnapshot_' -count=1 -v` →
+  `portfolio_snapshot_scope_test.go:38: other user's stream received 1 of u-1's snapshots` /
+  `--- FAIL: TestBroadcastSnapshot_AC1_OnlyOwnerReceives` and
+  `portfolio_snapshot_scope_test.go:56: empty-owner stream received 1 snapshots` /
+  `--- FAIL: TestBroadcastSnapshot_EmptyOwnerSubscriberReceivesNothing`. After Part B (`-race`): all five
+  `TestBroadcastSnapshot_*` PASS, including the 231 `SkipsWhenUnpriced`/`AC2_BrokerFirstEquity`/`AC8_AnyUnpricedSkips`.
+  The probe test file is not committed here; Step 2 creates it.
+- Verification: `go build ./...` + `go vet ./...` clean; the grep shows the struct, map and skip; the old-signature
+  grep exits 1; `GOWORK=off go test ./... -race -count=1` all packages ok.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`,
+  `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`,
+  `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go`
+- Deviations: RED probe file not committed with Step 1; `:292`→`:293` line drift (Deviation Log).
+- Open: `golangci-lint` in `~/go/bin` refuses this module (`built with go1.25 < go 1.27.0`), so Step 2's lint
+  verification needs a lint binary built with Go ≥ 1.27, or a CI-equivalent fallback.

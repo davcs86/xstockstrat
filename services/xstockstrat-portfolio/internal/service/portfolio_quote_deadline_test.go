@@ -103,7 +103,7 @@ func newQuoteSvc(t *testing.T, stub *stubMarketData, timeoutMs int64) (*Portfoli
 		repo:       repository.NewPortfolioRepoWithDB(mock),
 		marketdata: stub,
 		ledger:     ledger,
-		subs:       map[string]chan *portfoliov1.PortfolioSnapshot{},
+		subs:       map[string]snapshotSubscriber{},
 	}
 	if timeoutMs > 0 {
 		svc.quoteCfg = &fakeConfig{vals: map[string]int64{"portfolio.marketdata.quote_timeout_ms": timeoutMs}}
@@ -318,7 +318,7 @@ func TestBroadcastSnapshot_SkipsWhenUnpriced(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, mock, ledger := newQuoteSvc(t, tc.stub, 0)
-			ch := svc.Subscribe("t")
+			ch := svc.Subscribe("t", "u1")
 			mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).
 				WillReturnRows(posRow(mock.NewRows(positionCols), "AAPL", "acc-1", 1, 100, 0))
 			if tc.insert {
@@ -393,7 +393,7 @@ func sameSet(got, want []string) bool {
 func TestBroadcastSnapshot_AC2_BrokerFirstEquity(t *testing.T) {
 	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote()}}
 	svc, mock, ledger := newQuoteSvc(t, stub, 0)
-	ch := svc.Subscribe("t")
+	ch := svc.Subscribe("t", "u1")
 	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-off", testdata.LyftQty, testdata.LyftAvgEntry, 0)
 	rows = posRow(rows, testdata.Msft, "brk-1", testdata.MsftQty, 500, testdata.MsftBrokerPrice)
 	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
@@ -421,7 +421,7 @@ func TestBroadcastSnapshot_AC8_AnyUnpricedSkips(t *testing.T) {
 	rec := recordWarns(t)
 	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote(), elwtOneSidedQuote()}}
 	svc, mock, ledger := newQuoteSvc(t, stub, 0)
-	ch := svc.Subscribe("t")
+	ch := svc.Subscribe("t", "u1")
 	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-off", testdata.LyftQty, testdata.LyftAvgEntry, 0)
 	rows = posRow(rows, testdata.Elwt, "acc-off", testdata.ElwtQty, 6.00, 0)
 	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)

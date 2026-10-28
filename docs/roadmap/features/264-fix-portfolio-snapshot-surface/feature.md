@@ -54,4 +54,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-`/sdd-review fix-portfolio-snapshot-surface impl-spec` — validate implementation spec, then `/sdd-execute fix-portfolio-snapshot-surface`
+`/sdd-execute fix-portfolio-snapshot-surface sequential` — Step 1 done; continue with Step 2

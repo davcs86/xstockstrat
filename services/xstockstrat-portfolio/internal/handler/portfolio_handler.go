@@ -117,7 +117,7 @@ func (h *PortfolioHandler) StreamPortfolioUpdates(ctx context.Context, req *conn
 		return connect.NewError(connect.CodeInvalidArgument, errorf("user_id required"))
 	}
 	subID := fmt.Sprintf("portfolio-%s-%p", userID, stream)
-	ch := h.svc.Subscribe(subID)
+	ch := h.svc.Subscribe(subID, userID)
 	defer h.svc.Unsubscribe(subID)
 
 	for {
@@ -290,8 +290,9 @@ func (a *grpcPortfolioAdapter) GetSnapshot(ctx context.Context, req *portfoliov1
 }
 
 func (a *grpcPortfolioAdapter) StreamPortfolioUpdates(req *portfoliov1.StreamPortfolioUpdatesRequest, grpcStream portfoliov1.PortfolioService_StreamPortfolioUpdatesServer) error {
-	subID := fmt.Sprintf("portfolio-%s-%p", streamUserID(grpcStream.Context()), grpcStream)
-	ch := a.h.svc.Subscribe(subID)
+	userID := streamUserID(grpcStream.Context())
+	subID := fmt.Sprintf("portfolio-%s-%p", userID, grpcStream)
+	ch := a.h.svc.Subscribe(subID, userID)
 	defer a.h.svc.Unsubscribe(subID)
 	for {
 		select {
