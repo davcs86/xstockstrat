@@ -965,7 +965,7 @@ grep -n "def snapshot_watcher\|from tests.conftest" tests/*.py   # one definitio
 
 ### Step 13 — service: config bounds comments match the new getter semantics (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify (comments only)
@@ -1384,3 +1384,9 @@ _Populated by /sdd-execute as implementation proceeds._
   - The table rows import the clamps lazily and add `test_ac6_table_covers_every_fr3_key` (table keys == `FR3_KEYS`).
   - The fundsignal `_tick` seam reuses `_make_loop` from `tests/test_fundsignal_loop.py` and replaces `loop._cfg`.
   - AC-7 fundsignal rows read through the getter with the site default resolved from `collect()`.
+- 2026-10-28 Step 13 (layout + evidence harness, no scope change): the Instruction-2 rewrite is 2 lines; the kept
+  "max_concurrent_bars_fetches ceiling = marketdata PgBouncer pool" clause moved to its own third line rather than
+  being dropped, so the block stays 3 lines as before. TDD red is N/A (comment-only, per the step's **TDD**); the
+  Verification grep returned no output and the diff is 4/4 comment lines. `prettier --check` and `tsc --noEmit` were
+  not usable as a gate here: the config service has no `node_modules` in this worktree, and `prettier --check` warns
+  on the unedited HEAD file too.

@@ -619,3 +619,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: the main worktree has no `node_modules` to symlink (same as Steps 1-11; never
   `--no-verify`).
 - Next: Step 13.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 13
+
+### Step 13 — service: config bounds comments match the new getter semantics (FR-6) [done]
+- `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, comments only:
+  - the `max_concurrent_bars_fetches` block now ends "min 1 — a Python reader clamps ≤ 0 to the default, so 0 is
+    never 'unlimited'";
+  - the feature-184 block now says lower 0 where 0 is a legitimate value (`refresh_hour_utc` = midnight,
+    `signal_rank_weight`), lower 1 where the Python reader clamps ≤ 0 to the default. The PgBouncer-ceiling clause is
+    kept on its own line.
+  - No `SCALAR_BOUNDS_REGISTRY` entry changed.
+- TDD: red N/A (comment-only, per the step's **TDD** field). Step 14 adds the characterization tests; state this
+  tdd-gate escape in the PR body.
+- Verification: `grep -n "zero-trap\|would collapse"` returned no output; `git diff --stat` shows 4 insertions and 4
+  deletions, all comment lines. `prettier --check` / `tsc` could not gate: the config service has no `node_modules`
+  here, and prettier warns on the unedited HEAD file as well.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: comment layout and evidence harness. See the Deviation Log.
+- Next: Step 14.

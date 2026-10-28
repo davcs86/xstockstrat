@@ -33,6 +33,7 @@
 | 2026-10-28 | `in-progress` (step 10 done) | /sdd-execute sequential | Step 10: analysis conftest `snapshot_watcher`; @AC-1/@AC-4 getter rows, the `:594` contrast flipped to `0.0`; @AC-2 commission/slippage seam + zero-cost fill; @AC-3 rank-weight seam + real-SQL sort-0 order; @AC-9 throttle seam + alert at throttle 0; @AC-12 screener rank cap and patterns `min_sample` (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 11 done) | /sdd-execute sequential | Step 11: analysis module-level `int_positive` / `float_positive` / `str_nonempty`; all 34 FR-3 sites clamped; named readers `default_cooldown_days` (servicer) and `fundsignal_source_slug` (fundsignal_loop); read-site `max(1, …)` wrappers and the two inline `<= 0` clamps removed; dead `sandbox_*` helpers and their 3 tests deleted (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 12 done) | /sdd-execute sequential | Step 12: analysis AST read-classification guard (34 `FR3_KEYS`, 36 `HONOUR_KEYS`, 8 `ZERO_IS_LEGIT`, `collect()` exposed); @AC-6 table (34 rows, defaults resolved via `collect()`, -5 row) and site seams (`__init__` semaphores/pool, named readers, screener sem, fundsignal `_tick`, `default_fill_model` legacy); @AC-7 honour rows + over-clamp tripwire; retention test flipped to `test_retention_non_positive_reads_as_default` (-5, 0 → 20) (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 13 done) | /sdd-execute sequential | Step 13: config `SCALAR_BOUNDS_REGISTRY` comments (`configServiceImpl.ts`) restated for the new getter semantics — min 1 because a Python reader clamps ≤ 0 to the default; lower 0 only where 0 is a legitimate value; no registry row changed (comment-only, TDD red N/A) |
 
 ---
 
@@ -69,4 +70,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-execute fix-python-config-stored-zero sequential` — Step 13 (service: config bounds comments match the new getter semantics (FR-6))
+`/sdd-execute fix-python-config-stored-zero sequential` — Step 14 (test: config bounds still reject 0 (@AC-8) and a zero survives the WatchConfig wire (@AC-10))
