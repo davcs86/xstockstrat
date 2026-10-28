@@ -369,3 +369,21 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Tooling note: the provisioned `~/go/bin/golangci-lint` v2.14.0 was built with go1.26 and refuses the go1.27 module.
   It was rebuilt at the same pin with `GOTOOLCHAIN=go1.27.0 go install .../golangci-lint@v2.14.0` into the session
   scratchpad. No repo change.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+- Step 2 done (D-39 client tests, AC-1/AC-2). Added `assertNoKeyLeak` and `newLeakClient` (file-local) plus
+  `TestTransportError_DoesNotLeakAPIKey_AC1`/`_AC2`, `TestBuildRequestError_DoesNotLeakAPIKey` and
+  `TestTransportError_PreservesDeadlineCause` to `fmp_client_test.go` and `finnhub_client_test.go`, and
+  `TestGateway_BudgetRefundOnTransportError_AC4` to `fmp_gateway_test.go`.
+- TDD, RED (pre-Step-1 client files from `ba303400^`, restored afterwards):
+  - FMP AC-1: `error leaked api key: "fmp: /stable/quote request failed: Get \"http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL\": dial tcp 127.0.0.1:1: connect: connection refused"`.
+  - FMP build request: `error leaked api key: "fmp: build request: parse \"http://127.0.0.1:1\\x7f/stable/quote?apikey=k-secret&symbol=AAPL\": net/url: invalid control character in URL"`.
+  - Finnhub AC-2 and build request failed the same way with `token=k-secret`.
+  - Both deadline tests failed on `error chain still holds a *url.Error` (not "N/A — characterization" as the
+    spec predicted; Deviation Log).
+  - `TestGateway_BudgetRefundOnTransportError_AC4` passed (characterization guard for 217 @AC-4, as specified).
+- GREEN after restoring Step 1: all 7 new tests (plus the existing 403 and 503 tests) pass with `-race`.
+- Verification: full `go test ./... -race` green; coverage total 71.4% (>= 40%); `golangci-lint` v2.14.0 (go1.27
+  build in the session scratchpad) 0 issues.
+

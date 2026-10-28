@@ -168,7 +168,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 2 — test: D-39 client tests (transport, build-request, deadline, budget refund)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
@@ -620,3 +620,11 @@ _Populated by /sdd-execute as implementation proceeds._
   `http://127.0.0.1:1\x7f` with key `k-secret`. They failed on the pre-Step-1 tree (both transport and build-request
   errors contained `apikey=k-secret` / `token=k-secret` and a `*url.Error`) and passed after the edit; then they were
   deleted. Steps 2 and 3 still add the committed regression tests. No scope or Files change.
+- **2026-10-28, Step 2 (TDD ordering and deadline red).** Step 1 was already committed, so RED was captured by
+  checking out the pre-Step-1 `fmp_client.go` / `finnhub_client.go` (`ba303400^`) in the working tree, running the
+  new tests, then restoring `HEAD`. Instruction 4 expected `TestTransportError_PreservesDeadlineCause` to pass before
+  Step 1 ("N/A — characterization"). It failed instead, on its "no `*url.Error` in the chain" assertion, which
+  Instruction 1 also requires. Its `errors.Is(context.DeadlineExceeded)` half held before and after Step 1, as
+  expected. `TestGateway_BudgetRefundOnTransportError_AC4` passed before and after Step 1, as specified. A file-local
+  `newLeakClient(baseURL)` constructor was added beside `assertNoKeyLeak` in each test file. Finnhub's
+  `ClientConfig` has no `Metrics` field, so its client omits it. No scope or Files change.
