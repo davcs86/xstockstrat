@@ -436,3 +436,91 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   query output and a verdict here. Exact commands are in the Deviation Log entry "Step 5 deferred to operator".
 - Production advisory read-back: after the promotion deploy; does not gate `done`.
 - Integration PR merge is held until both entries above are recorded.
+
+## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-sandbox-seed-keys (feature 243)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | config.config_values state after the corrective migration; config owns the table and migrations |
+| AC-2 | services/xstockstrat-indicators/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | The Then asserts on the indicators watcher properties |
+| AC-3 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | Asserts on config row descriptions |
+| AC-4 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | Asserts on migration behaviour and config_values_scope_uniq |
+| AC-5 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | Asserts on migration behaviour; value preserved |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature (CREATE) ---
+# Promoted from docs/roadmap/features/243-fix-sandbox-seed-keys/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
+Feature: fix-sandbox-seed-keys (config migration guarantees)
+
+  @AC-1 @FR-1 @regression @feature-243
+  Scenario: After the corrective migration no bare sandbox keys remain and the full-dotted rows exist
+    Given config migrations up to the corrective migration have run
+    When config.config_values is queried for namespace "indicators"
+    Then no row has key "sandbox.timeout_ms", "sandbox.memory_bytes" or "sandbox.allowed_imports"
+    And rows "indicators.sandbox.timeout_ms", "indicators.sandbox.memory_bytes" and "indicators.sandbox.allowed_imports" exist for environment "production"
+    And the same three full-dotted rows exist for environment "staging"
+    And in environments "production" and "staging" the "indicators.sandbox.timeout_ms" row has value 5000
+    And in environments "production" and "staging" the "indicators.sandbox.memory_bytes" row has value 134217728
+    And in environments "production" and "staging" the "indicators.sandbox.allowed_imports" row has value "numpy,pandas,math,statistics"
+    And in both environments the "indicators.sandbox.timeout_ms", "indicators.sandbox.memory_bytes" and "indicators.sandbox.allowed_imports" rows have value_type "int", "int" and "string"
+
+  @AC-3 @FR-3 @regression @feature-243
+  Scenario: The memory_bytes row describes headroom, not an absolute cap
+    Given config migrations up to the corrective migration have run
+    When the "indicators.sandbox.memory_bytes" rows are read
+    Then one row is returned for each of environments "production" and "staging"
+    And each row's description names headroom above the measured VmData baseline
+    And no row's description contains "memory cap"
+    And no row's description contains "64MB"
+
+  @AC-4 @FR-4 @regression @feature-243
+  Scenario: The heal does not abort when a full-dotted row already exists in the same scope
+    Given config migrations up to 030 have run
+    And a global row "indicators.sandbox.timeout_ms" with value 4000 exists for environment "production" alongside the bare "sandbox.timeout_ms" row
+    When the corrective migration runs
+    Then the migration completes with no unique violation on config_values_scope_uniq
+    And exactly one global "indicators.sandbox.timeout_ms" row exists for environment "production"
+    And no "sandbox.timeout_ms" row exists for environment "production"
+
+  @AC-5 @FR-4 @regression @feature-243
+  Scenario: A pre-existing full-dotted row keeps its value and the bare row is removed
+    Given config migrations up to 030 have run
+    And a global row "indicators.sandbox.timeout_ms" with value 4000 exists for environment "production" alongside the bare "sandbox.timeout_ms" row
+    When the corrective migration runs
+    Then the global "indicators.sandbox.timeout_ms" row for environment "production" has value 4000
+    And no "sandbox.timeout_ms" row exists for environment "production"
+
+--- /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-sandbox-seed-keys.feature (CREATE) ---
+# Promoted from docs/roadmap/features/243-fix-sandbox-seed-keys/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
+Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
+
+  @AC-2 @FR-2 @regression @feature-243
+  Scenario Outline: The indicators watcher resolves the stored full-dotted sandbox row, not the code default
+    Getter-contract guard: passes on pre-fix code; the red-first proof is @AC-1, @AC-3 and @AC-4.
+    Fixture values differ from the code defaults so a default cannot satisfy the Then.
+    Given the WatchConfig snapshot for environment "production" carries row "<key>" with fixture value <stored>
+    When xstockstrat-indicators receives its WatchConfig snapshot for namespace "indicators"
+    Then the watcher property <property> returns <resolved>
+
+    Examples:
+      | key                                | stored       | property                | resolved          |
+      | indicators.sandbox.timeout_ms      | 3000         | sandbox_timeout_ms      | 3000              |
+      | indicators.sandbox.memory_bytes    | 100663296    | sandbox_memory_bytes    | 100663296         |
+      | indicators.sandbox.allowed_imports | "numpy,math" | sandbox_allowed_imports | ["numpy", "math"] |
+
+### Notes / ambiguities / conflicts
+- Routing: AC-1, AC-3, AC-4 and AC-5 go to config because they assert on config.config_values and the config migrations. AC-2 goes to indicators because it asserts on the watcher. I did not check where the migration files physically live.
+- No OVERLAP or CONFLICT. I grepped all `services/*/acceptance` suites and `docs/sdd/business-rules/platform.feature` for the three `sandbox.*` keys, and no `@feature-243` tag exists in any suite.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature uses `indicators.sandbox.memory_bytes` only as a sandbox-enforcement input (lines 17, 24, 31). It does not assert seeded rows or watcher resolution.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature covers the empty allow-list being honored. This is compatible with AC-2.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/analysis-concurrency-offload.feature line 15 only mentions the timeout.
+- AC-4 and AC-5 reference "migration 030" and "the corrective migration" (031 per feature.md). The text is promoted verbatim.
+- The `Feature:` header descriptions in the two new files are mine. All scenario text is verbatim from the source.
+
+### Coverage check
+- Source scenarios: 5 (AC-1 to AC-5). Planned: 5 NEW, 0 DUP, 0 OVERLAP. Nothing was skipped.
+```
