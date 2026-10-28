@@ -571,3 +571,30 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - TDD (AC-1): a temporary probe of Step 2 vitest case (b) (mocked `createGrpcTransport`, `identityClient.revokeToken`) — red: `expected undefined to be 30000` → green: passed. The probe was deleted (Step 2 owns the committed `connectClients.test.ts`).
 - Verification: greps pass, `DEFAULT_UNARY_TIMEOUT_MS` count = 2, `pnpm run lint` ✓ (pre-existing warnings only), `pnpm run build` ✓ (`@AC-6 @feature-128`), `pnpm run test:unit` 46 files / 237 tests ✓. `git diff -U0` shows no `stream(` change.
 - Deviation: `pnpm run format:check` fails on 10 pre-existing unformatted files outside Step 1 — scoped prettier check on the Step 1 files passes (Deviation Log).
+
+## Session 2026-10-28 — Step 2 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile` (worktree-local). Chromium came from `/opt/pw-browsers`, which has no Firefox build, so the spec ran on `chromium` only.
+- Step 2 done:
+  - `src/lib/connectClients.test.ts`: 4 cases, with `createGrpcTransport` mocked.
+  - `e2e/transport-deadline.spec.ts`: a browserless black-hole h2 server over `tlsOptions()`/`devCerts()`. `CONFIG_ENDPOINT` is set before the dynamic import.
+- TDD evidence. Step 1 had already landed, so each RED was produced by temporarily mutating `connectClients.ts`. Every mutation was reverted (byte-compared to the committed file).
+  - (b) AC-1 vitest: forward `timeoutMs` unchanged, which is the pre-fix tree. Red `expected undefined to be 30000` → green.
+  - (c) AC-6 vitest, red via mutation (preservation guard): always forward the default. `expected 30000 to be 2000`.
+  - (d) AC-5 vitest, red via mutation (preservation guard): apply the default in `stream`. `expected 30000 to be undefined`.
+  - (a) AC-6 @feature-128 vitest, red via mutation (preservation guard): call `get()` eagerly in `makeTransport`. `expected 10 to be +0`.
+  - Playwright AC-1, pre-fix unary: red `Test timeout of 60000ms exceeded` (the call hangs) → green, DeadlineExceeded at 30.0s.
+  - Playwright AC-6, red via mutation (preservation guard): always forward the default. `Expected: <= 5000, Received: 30001` → green at 2.0s.
+- Verification:
+  - vitest: 4/4 ✓.
+  - `CI=1 playwright test e2e/transport-deadline.spec.ts`: 2/2 ✓, plus setup.
+  - `test:coverage`: 47 files / 241 tests ✓, thresholds met.
+  - `lint` ✓. Prettier and `tsc --noEmit` are clean on both new files.
+  - The devCerts/mock-backend import grep matches.
+- Open Thread "Long wall-clock e2e (Steps 2/3/5)", resolved for Step 2 only: **kept as is**.
+  - CI runs `chromium` only (`includeFirefox` is false under CI), so the ~30s AC-1 case runs once per CI run.
+  - `fullyParallel` puts the two cases in separate workers.
+  - Steps 3 and 5 decide for their own specs.
+- Deviations (Deviation Log):
+  - Playwright ran with `CI=1`, because the local `pnpm dev` warmup exceeded its 10s timeout.
+  - Vitest (a) asserts a call-count snapshot taken right after the import, because vitest clears mock history before each test.

@@ -136,7 +136,7 @@ cd services/xstockstrat-ui && grep -n "timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS" sr
 
 ### Step 2 — test: Unary default + per-call override (vitest + real-socket black hole)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.test.ts` — create
@@ -637,3 +637,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **What**: Step 1 **Verification** chains `pnpm run format:check`, which exits 1 on 10 files this step does not touch (`src/app/config-ui/users/page.tsx`, `src/app/insights/pnl-patterns/page.tsx`, `src/components/insights/PerformanceDashboard.tsx`, `src/components/trader/CredentialStatusBadge.tsx`, `src/hooks/{useAccountPortfolios,useOrders,useOrderUpdates,useSignalAttribution}.ts`, `src/lib/performanceMetrics{,.test}.ts`).
 - **Why not fixed here**: reformatting unrelated files is outside Step 1 **Files** (F-08). CI does not run `format:check` (`.github/workflows/ci.yml`); the pre-commit hook formats staged files only.
 - **Disposition**: CI-equivalent fallback — `prettier --check` scoped to the five Step 1 files passes; every other Verification clause (greps, count = 2, `lint`, `build`) passes, and the `stream(` wrapper shows no diff.
+
+### Step 2 — Playwright verification run with `CI=1` (2026-10-28)
+
+- **What**: the local (non-CI) Playwright mode starts `pnpm dev`, and the `setup` warmup project exceeded the 10s local test timeout on first compile, so `transport-deadline.spec.ts` never ran.
+- **Disposition**: CI-equivalent fallback — ran `CI=1 pnpm exec playwright test e2e/transport-deadline.spec.ts` (the CI shape: `pnpm build && pnpm start`, CI timeouts). Both cases passed (AC-6 2.0s, AC-1 30.0s); `pnpm build` also re-ran lint over the new files.
+
+### Step 2 — vitest case (a) asserts a post-import call-count snapshot (2026-10-28)
+
+- **What**: vitest clears mock call history before each test, so `expect(createGrpcTransport).not.toHaveBeenCalled()` inside the test was vacuous: an eager-build mutation still passed it. Case (a) instead records `createGrpcTransport.mock.calls.length` right after the dynamic import in `beforeAll` and asserts it is 0, then asserts exactly one build on the first RPC.
+- **Disposition**: same assertion intent as the spec (no transport built at import, built on first RPC); the eager-build mutation now fails (`expected 10 to be +0`).
