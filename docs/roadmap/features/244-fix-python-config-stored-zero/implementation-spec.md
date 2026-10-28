@@ -185,7 +185,7 @@ Indicators: `ZERO_IS_LEGIT = {}` (its one honour key matches no pattern).
 
 ### Step 1 — service: ingest getters honour a stored zero (HasField)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -1310,3 +1310,7 @@ grep -niE "restored" "$f"                                                       
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- 2026-10-28 Step 1 (TDD evidence harness, no scope change): the step's paired test lands in Step 2, so the RED/GREEN
+  run used an uncommitted scratch test (`tests/test_zz_step1_scratch.py`, deleted before commit) asserting the
+  three @AC-1 ingest rows, the @AC-4 unset/mismatched rows and `get_int_present is get_int`. Only `watcher.py` was staged.

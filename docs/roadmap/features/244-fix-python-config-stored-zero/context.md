@@ -337,3 +337,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - 255/275 are deferred (not this feature).
 - Open advisory from impl-spec review: Steps 10, 11 and 17 exceed 5 files. Under the standing authorization they stay unsplit, so the step numbering and the C-15 trace are unchanged.
 - Status: `implementation-ready` → `in-progress`. Next: Step 1.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- Step 1 (service: ingest getters honour a stored zero) done. `services/xstockstrat-ingest/app/config/watcher.py`:
+  `get_str`/`get_int`/`get_float` return `v.<x>_val if v.HasField("<x>_val") else default`; the `get_int_present`
+  method is replaced by the class alias `get_int_present = get_int` (callers at `dedup_window_hours`/`max_retry_attempts`
+  pass `default=` by keyword and still bind). Properties untouched (Step 3 owns them).
+- TDD: AC-1 red: 3 ingest rows (`zero_int`/`zero_float`/`zero_string`) returned the default (7/0.5/"x") and the alias
+  assertion failed (4 failed, 1 passed) → green: 5 passed. Harness was an uncommitted scratch test (paired test is
+  Step 2); logged in the Deviation Log.
+- Verification: `grep 'or default'` → no output; `get_int_present = get_int` → 1 hit (`:120`). Full ingest suite
+  328 passed (173 alias tests included); ruff check + format clean.
+- Tooling: `uv sync --extra dev --frozen` in ingest (no manifest change).
+- Next: Step 2.
