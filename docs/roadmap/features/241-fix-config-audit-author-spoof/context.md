@@ -461,3 +461,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - the literal grep finds only `trading.go:2168` and `testdata/caller_ids.go`.
 - Step 5's red window is now closed.
 - Next: Step 7 (service: the agent sends no free-text `author`).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 7
+
+- Step 7 (service) is done.
+  - `client.set_config` drops the `author` parameter and request field; its docstring notes attribution is the
+    caller's `x-user-id` (feature 241).
+  - The `set_config` tool drops `author`, rewords the `reason` docstring, and calls `_caller_user_id(ctx,
+    "set_config")` fail-fast after `_caller_access_scope`.
+  - `_write_source_bearer` drops `author=tool` and records the tool in `reason`
+    (`f"{tool}: bearer for signal source {slug}"`).
+  - The per-user-secret docstring drift next to `set_config` was left alone (Step 13 records it).
+- TDD: AC-4 red came from an uncommitted scratch test. It failed 3/3 (`author` still a parameter; `TypeError`
+  missing `author`; `req.author == 'manage_signal_source'`), then passed 3/3 green, and was deleted.
+- Verification:
+  - both Step 7 greps have no hits;
+  - `ruff check` and `ruff format --check` are clean (the `reason:` docstring line was wrapped for E501);
+  - the full `pytest` run has 510 passed and 7 failed. All 7 are `test_config_tools.py` call sites still passing
+    `author=`, which is Step 8's break-list. The undeclared-`author` transport probe in
+    `test_streamable_http_auth.py` passes, which matches Q2.
+- Known red window until Step 8; a Deviation Log entry was added.
+- Next: Step 8 (test: agent outbound SetConfig carries no author, the parameter is gone, the probe holds).

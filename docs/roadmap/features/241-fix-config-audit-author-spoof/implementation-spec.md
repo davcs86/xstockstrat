@@ -521,7 +521,7 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
 
 ### Step 7 — service: agent sends no free-text `author` (set_config, manage_signal_source, instantiate_template)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -1101,3 +1101,10 @@ _Populated by /sdd-execute as implementation proceeds._
   reverted, and the test passed against the committed tree. golangci-lint v2.14.0 ran from the same go1.27.0
   rebuild as Step 5 (`run`, with tests): 0 issues, so the two Step 5 SA1019s are cleared. Step 5's red window
   is closed. **Disposition**: accepted.
+- **2026-10-28 — Step 7 verification (red window + docstring wrap).** RED→GREEN used an uncommitted scratch test
+  (removed-parameter, AC-4 `set_config` and `manage_signal_source` capture): 3/3 failed before the change
+  (`author` in props; `TypeError` on the missing `author`; `req.author == 'manage_signal_source'`), 3/3 passed
+  after it; the scratch file was deleted. The Instruction 2b `reason:` docstring text is unchanged but wrapped
+  onto two lines (ruff E501, 100 cols). Until Step 8, 7 tests in `tests/test_config_tools.py` fail with
+  `unexpected keyword argument 'author'` — exactly Step 8's break-list (`:110,133,152,171,237,255,297`).
+  **Disposition**: accepted; Step 8 restores green.
