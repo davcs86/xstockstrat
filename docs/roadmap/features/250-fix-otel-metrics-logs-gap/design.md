@@ -33,9 +33,9 @@ config, migration or collector-pipeline change (recon.md:36, recon.md:65, recon.
 - Rewrite `packages/otel/alerts/README.md` (recon.md:33) to say:
   - no rules are provisioned, and why (226 OD-3 + 250);
   - the manual Grafana Cloud delete steps, with the removed UIDs in a fenced list (§4);
-  - the follow-up `/sdd-story` dir, cited by path (§6).
+  - the follow-up feature dir (274), cited by path (§6).
 - Coverage loss is made explicit, as recon.md:102-105 requires. Error-rate, p99 and scoring-stall stay undetected
-  until the follow-up lands. For every removed rule, the named follow-up is `trace-derived-alerting` (§6).
+  until the follow-up lands. For every removed rule, the named follow-up is feature 274 `otel-metrics-logs-export` (§6, Amendment 2026-10-23).
 
 ### 2. Dashboards: rewrite one as Tempo-only, delete the rest
 
@@ -104,7 +104,7 @@ in the repo.
   prints `AC-n <tag> path:line: text` to stderr, and the script exits 1.
 - **Part 1 (AC-1/AC-2):** `prometheus|mimir|loki|promql|logql|rpc_server_duration|service_name[[:space:]]*=` over
   `alerts/*.yaml` and `dashboards/*.json`.
-- **Part 2 (AC-3):**
+- **Part 2 (AC-3)** (implement now; scheduled for retirement in feature 274 PR-B, see Amendment 2026-10-23 under §6):
   - SCOPE = `*.md`/`*.yaml`/`*.yml` under `docs/` and `packages/otel/`, minus `docs/roadmap/`, `docs/reports/`
     and the Part 1 files.
   - GEN_SCOPE = (the 9 AC-3 Given files ∪ `packages/otel/**`) ∩ SCOPE.
@@ -176,12 +176,19 @@ in the repo.
   - fallback tree with no dashboard JSON: count 0; green when `xstk-service-health` is fenced, red when it is not;
   - C-16: `dashboards/README.md` lists `service.name`, `deployment.environment` and `platform`, and has no
     `trading_mode`;
-  - follow-up citation: extract `docs/roadmap/features/[0-9]{3}-trace-derived-alerting/` from each of the 4
+  - follow-up citation: extract `docs/roadmap/features/274-otel-metrics-logs-export/` from each of the 4
     citing files, and assert all 4 are identical and the dir exists on the real tree.
 - Trade-off (C-18): about 60 permanent lines of verbatim pre-fix text, kept as the regression proof in case the
   denylist is ever narrowed.
 
 ### 6. Follow-up story (C-11)
+
+> **Amendment 2026-10-23 (P-0 of feature 274, applied before any 250 step started; F-09 re-check passed).**
+> The `trace-derived-alerting` story below is **not created**. The follow-up is feature
+> `274-otel-metrics-logs-export` (already on main-dev), which restores the removed rules and panels by exporting
+> metrics and logs. All 4 citations point at `docs/roadmap/features/274-otel-metrics-logs-export/`. Guard Part 2
+> is still implemented by 250; 274 PR-B retires it (C-16 CHANGE, operator sign-off 2026-10-21 R1 gate, mirrored
+> in this feature's `context.md`). The body below is the original 2026-10-21 text.
 
 - Created with `/sdd-story` at status `idea`, slug `trace-derived-alerting`. NNN = max+1 at creation time (253
   today; 251 and 252 exist).
@@ -208,7 +215,7 @@ in the repo.
 
 ### 8. Order
 
-1. Land the follow-up `/sdd-story` dir on main-dev.
+1. ~~Land the follow-up `/sdd-story` dir on main-dev.~~ Retired (§6 Amendment 2026-10-23): feature 274 is the follow-up and is already on main-dev.
 2. Asset, doc and constitution edits.
 3. Teardown: `/context-constitution refresh` (root CLAUDE.md § Teardown; fails.md:670).
 4. The guard and `.test.sh` run last, as the final verification, so a Teardown rewording cannot leave CI red.

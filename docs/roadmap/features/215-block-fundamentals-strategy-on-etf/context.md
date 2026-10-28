@@ -486,7 +486,7 @@
 - `platform.feature` is unchanged: @AC-4, the only cross-service scenario, is deferred.
 - Ledger: one `fails.md` entry (2026-10-14, assumption: the e2e sentinel status masked the INSUFFICIENT_DATA render gate twice).
 
-### Step 26 — test: Staging measurement (pre-merge) + real-ETF proof (post-deploy) [pending]
+### Step 26 — test: Staging measurement (pre-merge) + real-ETF proof (post-deploy) [blocked]
 
 - Left `pending`. The step's only file is this `context.md`, which records MCP observations, so the step has no code or docs part. Staging MCP calls and deploys were out of bounds for this session (operator instruction).
 - **Open item — the operator must measure on staging and record verbatim here**, under a `## Session … — staging verification` heading:
@@ -542,3 +542,112 @@ Each file below was re-read against the current code; the reconciliation is list
 **Progress**: 25 done / 26 total
 **Stopped at**: Step 26. It needs staging MCP measurement and a post-deploy proof, which were out of bounds for this session.
 **Next**: the operator runs the Step 26 measurements (open item above) and opens the integration PR; then `/sdd-execute block-fundamentals-strategy-on-etf 26` records the results.
+
+## Session 2026-10-15 — staging verification
+
+Step 26, run read-only through the `xstockstrat_staging` MCP tools (`query_fundamentals`, `run_backtest`, `list_opportunities`, `get_config`). The only non-read calls were `run_backtest`.
+- The first pass ran on deployment `a5da677f` (image `4fa2998`).
+- The SCHD reruns ran on deployment `63d315a4` (image `a8a3cfd`, ACTIVE 2026-10-15T16:04:57Z).
+
+Instruction 1 was meant to run pre-merge. It ran after the integration PR merged (see Deviation Log).
+
+### 1. Measurement
+
+>50 periods: 0 ()
+
+- **Symbols covered:**
+  - Every symbol on both staging watchlists: "Signals" (system-managed, ~262 symbols) and "Random from internet" (COIN, USAR, WSM).
+  - Plus every symbol with a `fundamentals_macd_blend` row in `list_opportunities` (AAPL, AMAT, AMD, AXP, BABA, BX, GOOG, JPM, KKR, LRCX, LULU, LYFT, MSFT, NVDA), plus SCHD.
+  - That list stands in for the evidence symbols: `get_strategy`/`list_strategies` expose no grade or `evidence_symbols`.
+- **Method:** `query_fundamentals(symbol, mode="historical", limit=50)`. No symbol filled a 50-row page.
+
+| symbol | periods |
+|---|---|
+| AAPL | 40 (FY2016 – Q3-2026) |
+| MSFT | 40 (Q1-2017 – FY2026) |
+| AXP | 40 (Q3-2016 – Q2-2026) |
+| JPM | 15 (FY2021 – Q2-2025) |
+| NVDA | 14 (FY2022 – Q1-2026) |
+| BABA | 11 (FY2017 – FY2026, incl. one Q2-2020 row) |
+| SCHD | 0 (`{"periods":[],"next_page_token":"","last_refreshed":null}`) |
+| every other symbol | 0 (incl. AMAT, AMD, BX, GOOG, KKR, LRCX, LULU, LYFT) |
+
+The max is 40, so the PIT-pagination EXTEND changes no stored result. The first three `query_fundamentals` calls timed out at the MCP client's 60s; later calls succeeded.
+
+### 2. Post-deploy
+
+Runs without `start`/`end` use the rolling default window. All runs were `SIZING_MODE_LEGACY` / `FILL_MODEL_SAME_BAR_CLOSE`.
+
+**(a) `run_backtest(fundamentals_macd_blend, ["SCHD"])`: refusal PASS, `fundamentals_gap` MISMATCH**
+
+| backtest_id | window | completed_at | status | no_trade_reason | fundamentals_gap |
+|---|---|---|---|---|---|
+| `ce419ccc-e280-4570-9a0b-72e653a56cd0` | default | ~15:5x (deploy `a5da677f`) | `BACKTEST_STATUS_INSUFFICIENT_DATA` | `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` | `FUNDAMENTALS_GAP_UNSPECIFIED` |
+| (MCP client timeout at 60s, no result) | default | ~16:06 | — | — | — |
+| `8c164af5-ecee-4cc9-9e31-97c34ed502b1` | 2026-01-01 – 2026-09-30 | 2026-10-15T16:07:07.522059Z | `BACKTEST_STATUS_INSUFFICIENT_DATA` | `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` | `FUNDAMENTALS_GAP_UNSPECIFIED` |
+| `88b11ccc-8232-4309-9ee0-69c4faeaa99a` | 2026-01-01 – 2026-09-30 | 2026-10-15T16:08:01.748222Z | `BACKTEST_STATUS_INSUFFICIENT_DATA` | `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` | `FUNDAMENTALS_GAP_UNSPECIFIED` |
+
+- All three runs returned `bars_total` 0, `warmup_bars` 0, `total_trades` 0, `coverage_gaps` [] and `warnings` [].
+- A control run on SPY timed out at the MCP client's 60s.
+- **ETF-label investigation (code on `main-dev` `a8a3cfdc`):**
+  - **Why a first miss is UNSPECIFIED.** `GetEtfFlags` is cache-only: in-memory, 30-day TTL (`marketdata internal/service/etf_flags.go`). A miss returns `is_etf` unset and enqueues a background `fillEtfFlag`. Analysis maps unset to `FUNDAMENTALS_GAP_UNSPECIFIED` (`analysis app/handlers/servicer.py` `_fundamentals_gap_labels`). So the first miss after every restart is UNSPECIFIED by design. The 16:04:57Z redeploy reset the cache.
+  - **The cold-cache explanation is ruled out.** The 16:07 and 16:08 runs came after at least one earlier miss on the same process, and an FMP profile fetch takes seconds. The fill therefore did not populate SCHD.
+  - **Three code paths leave it unset:**
+    1. **The gate is closed.** `etfFillAllowed` requires `marketdata.fmp.enabled`, a cap > 0, and used < 80% of the cap. Staging has cap 250, so the gate closes at 200 used. The boot seed `CountFundamentalsFetchedToday` is an unfiltered `count(*)` over `marketdata.fundamentals` rows fetched today. Staging runs `snapshot_source=edgar` and `fundamentals.provider=finnhub`, so the Finnhub and EDGAR-derived snapshot rows (`source` `finnhub`/`edgar`) are counted as FMP calls. Whether today's count reached 200 is unverified.
+    2. **`FetchIsEtf` errored.** That is logged only at `slog.DebugContext` (`etf flag fill failed`), below the service's Info level.
+    3. **FMP returned an empty profile.** It is negative-cached as unset for 30 days.
+  - None of the three is observable at Info level, and the gate drop is silent.
+- **Logs:** reading the run logs would tell these apart. The DO log URL carries an access token, and fetching it was denied in this session (credential materialization). DO Insights log search returned no App Platform lines.
+- Staging config is consistent with the code. `get_config("marketdata")` shows `marketdata.fmp.enabled=true` and `marketdata.fmp.daily_request_cap=250`. The secret rows `fmp.api_key`/`finnhub.api_key`/`alpaca.api_key` match `cmd/server/main.go` `resolveSecret` key strings, so this is not a CONFIG-9 mismatch.
+- **Defect filed:** `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, triaged to feature `230-fix-etf-flag-fill`.
+
+**(b) `run_backtest(fundamentals_macd_blend, ["AAPL"])`: guard PASS, "trades" MISMATCH**
+- `backtest_id` `922516e2-8aa8-448c-bb30-6785820c733f`
+- `status` `BACKTEST_STATUS_OK`, `no_trade_reason` `NO_TRADE_REASON_ENTRY_NEVER_TRUE`, `fundamentals_gap` `FUNDAMENTALS_GAP_UNSPECIFIED`
+- `bars_total` 501 (from 2024-10-16), `total_trades` 0
+- The guard did not refuse AAPL: no reason 5.
+- `fscore.composite` resolves on every bar but stays between 0.333 and 0.393, below the 0.5 entry, so the strategy never enters. MACD crossed above signal 20 times. The no-trade comes from the strategy and its data, not the guard.
+
+**(c) `run_backtest(squeeze_breakout_trend, ["SCHD"])`: not refused, evaluation UNCONFIRMED**
+- `backtest_id` `3e90baba-bd40-43e5-b755-946754b017aa`
+- `status` `BACKTEST_STATUS_OK`, `total_trades` 0, `diagnostics` `[]`, no attachment
+- There is no per-symbol row, so it is not confirmed that SCHD bars were evaluated.
+- A retry with the explicit window 2024-10-15 – 2026-10-14 timed out at 60s.
+
+**(d) `list_opportunities`: guard NOT EXERCISED**
+- Two pages (200 + 88 = 288 rows), `computing` false, `compute_failed` false.
+- SCHD's only row is holding-seeded:
+  `{symbol: "SCHD", action: "OPPORTUNITY_ACTION_TAG_ADD", conviction: 0.0, strategy_id: "", source: "", provenance: ["position"], muted: false, data_unavailable: false, fundamentals_unavailable: false, fundamentals_gap: "FUNDAMENTALS_GAP_UNSPECIFIED", live_price: 34.22, valid_until: "2026-09-26T04:00:00+00:00"}`
+- No `fundamentals_macd_blend` row exists for SCHD, because SCHD is not in that strategy's universe. No row in the queue has `fundamentals_unavailable: true`.
+
+**(e) `ScoreStrategy` manual refresh: NOT REACHABLE**
+- No staging MCP tool exposes `ScoreStrategy`, a grade, or `evidence_symbols`.
+
+**UI banner check:** not performed (no browser access to staging in this session).
+
+### Outcome
+
+`launched` is blocked (instruction 3). Mismatches (a)–(e) are logged in the Deviation Log. Step 26 stays `blocked` until the operator accepts or resolves each one.
+
+### Follow-up 2026-10-15 — operator dispositions and (c)/(e) investigation
+
+**Operator dispositions:**
+- (b) and (d) accepted as environmental.
+- (c) and (e) to be addressed.
+- The ETF-label defect was triaged to feature `230-fix-etf-flag-fill`.
+
+**(c) investigation:**
+
+| backtest_id | strategy | symbol | window | status | diagnostics |
+|---|---|---|---|---|---|
+| `d7892362-deb7-4c2b-88a9-abf679b7dfb1` | `squeeze_breakout_trend` | SCHD | 2026-01-01 – 2026-09-30 | `BACKTEST_STATUS_OK` | `[]` (0 trades, no gaps, no warnings) |
+| `df5d966f-f9cb-4e77-b095-6af56908f36a` | `squeeze_breakout_trend` | AAPL | 2026-01-01 – 2026-09-30 | `BACKTEST_STATUS_OK` | `[]` (0 trades, no gaps, no warnings) |
+
+- `query_bars("SCHD")` returns 3 bars (2026-10-13..15) and an empty `next_page_token`.
+- Both custom formulas succeed standalone via `test_formula`; the squeeze percentile returned `SANDBOX_EXIT_REASON_SUCCESS` in 2495 ms.
+- **Conclusion:** the empty diagnostics are a strategy-wide analysis defect, not a 215 guard issue. `servicer.py:1127-1132` drops symbols on any RPC error or exception, and the status gate reports `OK` regardless. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (SEV-2, open).
+
+**(e) investigation:**
+- `StrategyScore.evidence_symbols` is an `int32` count (`packages/proto/analysis/v1/analysis.proto:255`), not a symbol list. The step's wording ("excludes SCHD from `evidence_symbols`") cannot be checked as written.
+- No UI page invokes `ScoreStrategy`. Only the BFF forwarder exists (`services/xstockstrat-ui/src/lib/insightsBff.ts:40`). The strategy page shows only the count.
+- The operator's choice of how to verify is pending.
