@@ -534,3 +534,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Step 9's `insightsBff.test.ts:69` red window is closed.
 - Next: Step 11 (docs: file the SetConfig internal-caller peerSan follow-up defect).
 
+## Session 2026-10-28 — sdd-execute sequential, Step 11
+
+- Step 11 (docs) is done: `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` plus its
+  `.status` sidecar (`open`). It records that the SetConfig `trading-reconciliation-poller` grant (`authz.ts:66-76`)
+  has no `peerSan`, so a forged `x-internal-caller` is both authorized and, since Step 3, credited as `changed_by`;
+  the expected fix binds the grant to peer SAN `xstockstrat-trading` (`authz.ts:131-162`). Route it with
+  `/sdd-triage --from-report`.
+- `Impact type` was not in the step's field list; set to `forgeable-config-write-attribution` (Deviation Log).
+- TDD: N/A (docs). Verification: both files exist; `head -1` is `open`; 6 template headings; exactly one SEV token.
+- Next: Step 12 (docs: platform patterns and runbooks).

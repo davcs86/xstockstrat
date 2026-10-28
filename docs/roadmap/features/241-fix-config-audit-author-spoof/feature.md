@@ -25,6 +25,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 3 done: config `SetConfig` credits only `x-user-id` or the authorized `x-internal-caller`; body `author` ignored (build + lint pass) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 4 done: config tests pin AC-1/AC-2/AC-3 attribution and rejection; admin fixtures send `x-user-id` (182/182 pass, c8 86.77% lines, lint 0 errors) |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 10 done: `/config-ui` and `/insights` BFF SetConfig tests pin `author === ''` and the session `x-user-id` (vitest 238/238, lint 0 errors) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 11 done: follow-up defect filed — `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` (status `open`) |
 
 ---
 
@@ -65,4 +66,4 @@ attribute a write to someone else. The MCP `set_config` tool passes `author` str
 
 ## Next Action
 
-`/sdd-execute fix-config-audit-author-spoof sequential` — Step 11 (docs: file the SetConfig internal-caller peerSan follow-up defect)
+`/sdd-execute fix-config-audit-author-spoof sequential` — Step 12 (docs: platform patterns and runbooks (config-governance, header-propagation, config-rollout, mcp-tools))

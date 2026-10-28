@@ -825,7 +825,7 @@ grep -n "helpers/auth\|e2e/fixtures" src/lib/configUiBff.test.ts   # C-12: canon
 
 ### Step 11 — docs: file the SetConfig internal-caller peerSan follow-up defect
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`
 **Files**:
 - `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` — create
@@ -1126,3 +1126,6 @@ _Populated by /sdd-execute as implementation proceeds._
   (`expected 'test-user-001' to be ''`, `expected 'user-alice' to be ''`); the `x-user-id` pins passed. The edit
   was reverted. The C-12 `e2e/helpers/auth` import resolved under vitest, so the inline-`SignJWT` fallback was not
   needed. Step 9's `insightsBff.test.ts:69` red window is closed. **Disposition**: accepted.
+- **2026-10-28 — Step 11 `Impact type` field (template gap, no spec change).** The step's field list omits the
+  defect-filing template's `**Impact type**` header; it was filled as `forgeable-config-write-attribution` in the
+  template's kebab-case style. **Disposition**: accepted.
