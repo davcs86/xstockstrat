@@ -462,7 +462,7 @@ git diff --quiet HEAD -- app/services/screener.py app/handlers/servicer.py && ec
 
 ### Step 4 — service: agent `screen_symbols` forwards `score_unavailable`; docstring describes the row kinds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -853,3 +853,23 @@ _Populated by /sdd-execute as implementation proceeds._
   Either way the test fails whenever the cancel is absorbed. `test_scan_deadline_aborts_deadline_exceeded`
   stayed green on CPython 3.13.17, confirming the impl-spec review premise.
 - **Disposition**: recorded; no change.
+
+### Step 4 — TDD RED/GREEN captured with a scratch test (2026-10-28)
+- **Spec says**: Step 4 is `red-green required`; its paired test is Step 5's (`tests/test_client.py`), and Step 4's
+  commit stages only `app/client.py` + `app/tools.py`.
+- **Actual**: RED/GREEN ran against an untracked scratch file `tests/test_zz_step4_scratch.py` (asserts
+  `score_unavailable` is forwarded as `False`/`True` on two rows). Deleted before commit, never staged. Step 5 still
+  authors the durable AC-5 test. Commands ran with `UV_PYTHON=3.13` (CPython 3.13.17), as in Step 3.
+- **Disposition**: process-only; no code or scope change.
+
+### Step 4 — Verification grep for the deleted clause passes trivially (2026-10-28)
+- **Spec says**: `grep -n "never reported OK/passed" app/tools.py` → no output.
+- **Actual**: that phrase spanned two lines (`:845-846`) before the edit, so the grep could not match even then. The
+  check was strengthened locally to `grep -n "never reported\|just because a criterion had no data"` → no output.
+- **Disposition**: verification strengthened, not weakened; no scope change.
+
+### Step 4 — interim red in `test_screen_symbols_sends_grpc_call` until Step 5 (2026-10-28)
+- **Actual**: after Step 4 the full agent suite is `1 failed, 517 passed` (scratch included): the pre-existing
+  exact-equality dict at `tests/test_client.py:277-283` lacks `"score_unavailable": False`. This is the RED Step 5
+  instruction 4 predicts; Step 5 adds the key. Not edited here (outside Step 4's **Files**).
+- **Disposition**: expected; closed by Step 5.

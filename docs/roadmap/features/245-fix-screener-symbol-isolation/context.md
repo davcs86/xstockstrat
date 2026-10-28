@@ -358,3 +358,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-analysis/tests/test_screener.py`
 - Deviations: RED against restored pre-Step-2 engine; `UV_PYTHON=3.13` (`.python-version` says 3.12); mutation (a)
   failure mode is a KeyError — full detail in Deviation Log. Out-of-scope changes: none.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 4 (sdd-batch-execute)
+
+### Step 4 — service: agent `screen_symbols` forwards `score_unavailable`; docstring describes the row kinds [done]
+- `services/xstockstrat-agent/app/client.py`: `"score_unavailable": r.score_unavailable,` added after `"passed"` in
+  the `screen_symbols` result projection (`:765`). Additive return key; tool name and parameters unchanged.
+- `services/xstockstrat-agent/app/tools.py` `screen_symbols` docstring (design.md item 4): Returns lists
+  `"score_unavailable" (bool)`; the false clause "it is never reported OK/passed just because a criterion had no
+  data" is deleted; the three `score_unavailable=true` row kinds are described (evaluation fault: status OK,
+  passed=false, not evaluated ≠ failed screen; data-less hard-filter: passed=false; data-less soft-only, feature
+  144: passed=true); `min_conviction > 0` also drops un-evaluated rows and `rank_limit` may cut them (server log is
+  then their only trace); "Filter candidates on `passed`." kept.
+- TDD (scratch, pre-AC-5): RED `uv run pytest tests/test_zz_step4_scratch.py` → `KeyError: 'score_unavailable'`;
+  GREEN after the change → `1 passed`. Scratch deleted, never staged; Step 5 owns the durable AC-5 test.
+- Verification: `"score_unavailable": r.score_unavailable` grep → `app/client.py:765`; `never reported` /
+  `just because a criterion had no data` grep → no output; ``Filter candidates on `passed` `` grep → 1 hit
+  (`app/tools.py:854`); `ruff check` clean; `ruff format --check` clean (59 files). Full suite: `1 failed, 517
+  passed` — the one failure is `test_screen_symbols_sends_grpc_call`'s exact-equality dict (`tests/test_client.py:277`),
+  the RED Step 5 predicts.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`
+- Deviations: scratch-test TDD capture; strengthened clause grep; interim red until Step 5 — see Deviation Log.
+  Out-of-scope changes: none. Open item: Step 6 must mirror this docstring in `docs/runbooks/mcp-tools.md` (C-10).
+

@@ -22,6 +22,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 1 done — AC-2 deadline + AC-3 two-symbol validation preservation guards added to `TestScreenSymbols`; green on the unfixed tree |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 2 done — `ScreenerEngine` per-symbol isolation (`_eval_symbol_isolated`, `except Exception`), fail-closed `eval_failed` degraded row, `(score_unavailable, eval_failed, -score)` sort, summary WARN/ERROR + `screener.degraded_count` span attribute |
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — engine tests: AC-1 outline (3 Examples, 49-run oracle), FR-2 cancel passthrough, soft-only fail-closed, all-failed ERROR, feature-144 sort tie, duplicate symbol, span attribute; RED 8 failed / 1 passed on pre-Step-2 engine → GREEN 29 passed; mutations (a)/(b) recorded |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — agent `screen_symbols` forwards `score_unavailable` (`app/client.py`); docstring lists the key, the three `score_unavailable=true` row kinds and the `min_conviction`/`rank_limit` caveat, false "never reported OK/passed" clause removed (`app/tools.py`) |
 
 ---
 
