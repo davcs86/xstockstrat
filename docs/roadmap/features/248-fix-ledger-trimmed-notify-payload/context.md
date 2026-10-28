@@ -372,3 +372,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   plus the feature docs.
 - The task prompt titled this step "252 and 243". The re-spec'd implementation-spec.md (authoritative) also requires
   the 244 row, and that row was added.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+- Step 2 done: created `services/xstockstrat-config/migrations/033_ledger_stream_resolve_timeout.{up,down}.sql`,
+  copied from the `022_ledger_export_keys` pair. The up file inserts two global rows (`staging`, `production`):
+  namespace `ledger`, full dotted key `ledger.stream.resolve_timeout_ms`, `value_type` `int`, value and default
+  `2000`, consumer `xstockstrat-ledger`, with the 022 `ON CONFLICT … DO NOTHING` clause. The down file deletes that
+  key.
+- Number re-checked with `git ls-tree`: `origin/main-dev` and the local tip end at `030`. `031` is on
+  `origin/feature/fix-sandbox-seed-keys`, and `032` is on `origin/feature/fix-python-config-stored-zero`. `033`
+  stands, and the merge-order rows from Step 1 cover the order.
+- Reader cross-check: `ConfigWatcher.getInt` returns `snapshot.values[key]?.intVal ?? def`
+  (`configWatcher.ts:112-115`), so the `int` type and the full dotted key are the ones it needs.
+- TDD: N/A (migration). No database was started. Verification: both files exist, `^033_` count is 2, the key/type/value
+  tuple appears 2 times, `staging`/`production` appear 2 times, the `ON CONFLICT` clause is present, and the down
+  names the key. By inspection the down removes exactly the rows the up inserts.
+- The task prompt titled this step "config `032`". The re-spec'd implementation-spec.md (authoritative) says `033`
+  (Deviation Log 2026-10-28), and `033` was used, including in the commit subject.

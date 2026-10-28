@@ -142,7 +142,7 @@ git status --short   # only merge-order.md (+ feature docs)
 
 ### Step 2 — migration: Seed `ledger.stream.resolve_timeout_ms` (config `033`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/033_ledger_stream_resolve_timeout.up.sql` — create
