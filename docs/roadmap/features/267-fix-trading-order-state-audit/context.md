@@ -574,3 +574,22 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - Status: `implementation-ready` → `in-progress`. Mode: sequential (one commit per step on `feature/fix-trading-order-state-audit`, single integration PR at the end).
 - **Up-front confirmation (P-03):** given by operator standing authorization — operator chat 2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, plus "start batch 2 in parallel too". Recorded answers: checkpoints unattended (`report`); C-16 promotion auto-confirmed unless it changes an existing @AC rule; merge-train authorized; 255/275 deferred; operator-only DB/prod steps — open the PR, hold the merge.
 - Carried-forward open items (announce at checkpoints): sweeper payload nil → populated (Step 4, call out in PR body); `trading.go` overlap with 241/242/249/256 (sequence via `merge-order.md`); reclaim CAS has no timeout under `WithoutCancel`.
+
+### Step 1 — test: RED — D-04 order-state write failures are logged (AC-1, AC-2, AC-3, AC-6) [done]
+- Created `trading_order_state_audit_test.go`. It holds test-local fakes (`ctxCapturingDB`, `failingExecDB()`,
+  `replaceOKBroker`) and the helpers `tracedCancelledCtx`, `findLog` and `waitForLedgerEvents`. It also has
+  6 log-assertion tests (AC-1, AC-2, AC-3 plus PARTIALLY_FILLED, AC-6 plus PARTIALLY_FILLED) and 4 ctx
+  tests (trace id kept, `ctx.Err()==nil`).
+- TDD: RED captured against the unmodified tree (`go test ./internal/service/ -run _AC -race -count=1 -v`).
+  - AC-1, AC-2, AC-3 and AC-6: each asserted `want exactly one "order state write failed" record ... got 0` and FAILED.
+  - ctx AC-1/AC-2: FAILED with `traceID = "", want t-267` (`Background()`).
+  - ctx AC-3/AC-6: FAILED with `ctx.Err() = context canceled`.
+  - Every pre-existing `_AC*` test passed.
+- GREEN feasibility: the tests were also run against a scratch copy of Step 2's `persistOrderBestEffort`.
+  All 10 passed, and `-count=5` was stable. That scratch edit was reverted and not committed; Step 2 owns it.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go`
+- Deviations: D1-1 to D1-4 (test-local `replaceOKBroker`, `recordingLedgerClient` instead of `fakeLedgerClient`,
+  `-run _AC` instead of the pipe regex, ctx tests split per AC). Full detail is in the Deviation Log.
+- Open item: the local `golangci-lint` v2.14.0 binary was built with go1.26 and refuses Go 1.27 modules
+  (`can't load config`). Step 1's Verification does not need it. Step 2 does, so Step 2 must use a
+  go1.27-built binary or record a CI-lint fallback. `gofmt` and `go vet` are clean.

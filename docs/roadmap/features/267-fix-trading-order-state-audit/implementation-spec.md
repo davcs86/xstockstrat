@@ -1,6 +1,6 @@
 # Implementation Spec: fix-trading-order-state-audit
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/267-fix-trading-order-state-audit/feature.md`
 **Total Steps**: 7
@@ -78,7 +78,7 @@ messages are unchanged.
 
 ### Step 1 — test: RED — D-04 order-state write failures are logged (AC-1, AC-2, AC-3, AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — create
@@ -595,3 +595,22 @@ grep -n "reactive_place\|was_pending_since" services/xstockstrat-trading/CLAUDE.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-10-28 — Step 1
+
+- **D1-1 (test-local fake, in-file):** Instruction 5 says the broker `ReplaceOrder` succeeds via
+  `trading_bracket_test.go:53`, but that `fakeBroker.ReplaceOrder` panics ("not implemented"). The test
+  file adds `replaceOKBroker{*fakeBroker}`, overriding only `ReplaceOrder` to succeed. Stays inside Step 1's
+  **Files** (C-13: single consumer, test-local). **Disposition**: applied in-step, no production change.
+- **D1-2 (ledger fake):** Instruction 2 names `fakeLedgerClient`, which records nothing, so Instruction 7's
+  bounded poll on the ledger event count is impossible with it. The tests use the existing
+  `recordingLedgerClient` (`trading_reconciliation_test.go:136`) instead, polled 2s/10ms.
+  **Disposition**: applied in-step.
+- **D1-3 (verification command shape):** this session's sandbox refused the literal
+  `-run 'AC1|AC2|AC3|AC6'` (a `|` inside the argument). Ran `-run _AC` instead, a superset that covers every
+  new test plus the pre-existing offline `_AC*` tests (all passed). The RED result is unchanged.
+  **Disposition**: verification fallback, same package, same `-race -count=1 -v` flags.
+- **D1-4 (ctx-test naming):** the Instruction 6 ctx repeats are separate tests
+  (`TestOrderStateWriteCtx_{BrokerTimeout_AC1,BrokerReject_AC2,CancelFinal_AC3,ReplaceFinal_AC6}`) so the
+  AC regex selects them. Instruction 1's fallback (cancel-after-return) was **not** needed: no path aborts
+  on the pre-cancelled ctx before the D-04 site.
