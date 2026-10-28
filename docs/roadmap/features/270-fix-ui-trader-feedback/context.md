@@ -497,3 +497,18 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
     `:42`, silent catch `:44`, bell `Button` `:57`, `key={a.alertId}` `:96`.
   - Step 14: noted the second `router.service(TradingService, …)` at `mock-backend.ts:1353` (insights mock; no
     `streamOrderUpdates`), left untouched.
+
+---
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`. Mode: `sequential` (one commit per step on
+  `feature/fix-ui-trader-feedback`, single integration PR at the end). Severity SEV-2.
+- **Up-front confirmation (mode entry):** operator approved the plan by standing authorization — operator chat
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; answers:
+  unattended checkpoints (checkpoints `report`), C-16 promotion auto-confirmed unless it changes an existing
+  `@AC` rule, merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; "start
+  batch 2 in parallel too".
+- Carried-forward open threads from the impl-spec review (Step 7/14 file-count, Step 14 held-open stream variant,
+  Step 7 banner/double-report trade-offs, Step 13 5-minute idle observation) remain to be announced at their
+  steps.
