@@ -126,7 +126,7 @@ Two repo defaults point the wrong way for this feature's gates: `.nvmrc:1` is `2
   - `acceptance.feature:52` is the last line (`| xstockstrat-ledger   |`);
   - `product-spec.md:66` is FR-4;
   - `product-spec.md:85` is the AC line ending "AC-4 (FR-4).".
-- Ledger rationale for the reporter-neutral AC-5: `docs/roadmap/ledger/fails.md:2953-2966`.
+- Ledger rationale for the reporter-neutral AC-5: `docs/roadmap/ledger/fails.md:2991-3004` (re-spec 2026-10-28; `:2953-2966` is the 242 entry).
 
 **TDD**: `N/A (docs — scenario text only)`
 
@@ -189,7 +189,7 @@ git diff --stat -- "$F"                                                  # only 
 
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation, API key scoping, secret store integration (never plaintext secrets in config)
 
-**Codebase Evidence** (re-grepped at `ca8b9236`; the merge base with `origin/main-dev` @ `51e3cc9b` is `45356952`, and nothing under `services/xstockstrat-identity/src` or `ci.yml` differs):
+**Codebase Evidence** (re-spec 2026-10-28, re-grepped after merging `origin/main-dev` @ `fa40c8a4`, which now carries the #1262 refresh-rotation change: `grep -c 'private async rotateRefreshToken'` is 1, so only the #1262 anchors below apply):
 - **Scripts.**
   - `services/xstockstrat-identity/package.json:12` is `"test": "node --experimental-strip-types --test src/__tests__/*.test.ts"`.
   - `:13` is `"test:coverage": "c8 --reporter=text --reporter=lcov --lines 40 node --experimental-strip-types --test src/__tests__/*.test.ts"`.
@@ -217,10 +217,10 @@ git diff --stat -- "$F"                                                  # only 
   - `import.meta` is invalid under `module: commonjs` (`recon.md:205`).
 - **Impl `before()` try/catch.** It stays in this step (`design.md:39`): `src/__tests__/identityServiceImpl.test.ts:28-40`, with the import `:30` `'../grpc/identityServiceImpl.js'`, `:34` `'../grpc/authz.js'` and the catch `:37-39`.
 - **AC-1 mutation anchors** (`design.md:94-99`, re-grepped):
-  - main-dev base: the revoke statement `src/grpc/identityServiceImpl.ts:524-527` (`await this.pool.query('UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE token_id = $1', [token_id]);`) inside `refreshOAuthToken` `:502`. Test `identityServiceImpl.test.ts:403` asserts `/UPDATE identity\.refresh_tokens SET revoked_at/` at `:417`. The `last_used_at` UPDATE `:520-523` does not match that regex.
-  - #1262 base `e69e953d`: `rotateRefreshToken` `:340-372`, claim line `:353` `AND rt.revoked_at IS NULL`, called from `refreshOAuthToken` at `:530`. The test regex at `:495` is `/SET revoked_at = NOW\(\)[\s\S]*revoked_at IS NULL/`. Re-grepped at spec time, unchanged. `grep -c "private async rotateRefreshToken"` is 1 on #1262 and 0 on main-dev.
+  - The pre-#1262 anchors (`identityServiceImpl.ts:524-527` revoke UPDATE in `refreshOAuthToken` `:502`, test `:403`/`:417`) no longer exist: `:524` is now the `async refreshOAuthToken` declaration.
+  - Current (#1262) anchors: `rotateRefreshToken` `:340-372`, claim line `:353` `AND rt.revoked_at IS NULL` (the second hit at `:565` is outside `rotateRefreshToken`), called from `refreshOAuthToken` at `:530`. The test `rotates the refresh token and mints a new aud-bound access JWT` is at `identityServiceImpl.test.ts:481`; its regex at `:495` is `/SET revoked_at = NOW\(\)[\s\S]*revoked_at IS NULL/`.
 - **Build/CI.**
-  - CI `node-test` runs on Node `"24"` (`ci.yml:572`), with proto build `ci.yml:579-580` and `pnpm run test:coverage` at `ci.yml:582-584`.
+  - CI `node-test` runs on Node `"24"` (`ci.yml:582`), with proto build `ci.yml:589-590` and `pnpm run test:coverage` at `ci.yml:592-594`.
   - The identity impl needs proto `dist` at load time (`ledgerAudit.ts:8` → `LedgerServiceClient`; `recon.md:31-34`).
   - `dist/` and `coverage/` are git-ignored (`.gitignore:15`, `:20`, `:25`).
 - **c8.**
@@ -242,14 +242,12 @@ git diff --stat -- "$F"                                                  # only 
 
 1. Record the base, the Node version, and the baseline counts:
    - `node --version` must print `v24.*`.
-   - `grep -c "private async rotateRefreshToken" services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` gives 0 for main-dev or 1 for #1262.
+   - `grep -c "private async rotateRefreshToken" services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` gives 1 (#1262 is on main-dev since the 2026-10-28 merge). A 0 means the base regressed: stop and ask.
    - Run `pnpm --filter @xstockstrat/proto run build`, then `cd services/xstockstrat-identity && pnpm run test:coverage`. Record the reporter's `tests` count (pre-step count), `fail`/`cancelled`/`skipped`/`todo`, and the c8 text table. On a correct capture the table has **no** `identityServiceImpl` and **no** `authz` row: this is the **AC-4 RED**.
    - For each `src/__tests__/*.test.ts`, record the per-file assert count: `grep -o 'assert\.[A-Za-z]*(' <file> | wc -l`.
 
 2. **AC-1 RED.**
-   - Apply the base's mutation:
-     - main-dev: delete the 4-line statement `src/grpc/identityServiceImpl.ts:524-527`.
-     - #1262: delete the `AND rt.revoked_at IS NULL` line of the `rotateRefreshToken` claim (`e69e953d:…:353`). Re-grep it first: `grep -n "AND rt.revoked_at IS NULL" src/grpc/identityServiceImpl.ts` and pick the hit inside `rotateRefreshToken`.
+   - Apply the mutation: delete the `AND rt.revoked_at IS NULL` line of the `rotateRefreshToken` claim (`:353`). Re-grep it first: `grep -n "AND rt.revoked_at IS NULL" src/grpc/identityServiceImpl.ts` and pick the hit inside `rotateRefreshToken` `:340-372` (not `:565`).
    - Run `pnpm run test:coverage; echo "exit=$?"`. On the buggy runner it exits 0 and `rotates the refresh token and mints a new aud-bound access JWT` is reported passed. That is the RED: AC-1's mutation Then fails today.
    - Restore with `git checkout -- src/grpc/identityServiceImpl.ts`.
    - **If the mutated run already fails that test, the RED is absent.** Record it and stop and ask. `docs/roadmap/ledger/fails.md:2224` claims Node 24 strip-types loads these suites, and `product-spec.md:12-22` says it does not.
@@ -297,7 +295,7 @@ git diff --stat -- "$F"                                                  # only 
 **D. Gate and GREEN.** Run the **Verification** below in full.
 
 11. **AC-1 GREEN.**
-    - Re-apply the same base mutation as in item 2.
+    - Re-apply the item 2 mutation (`:353` claim line).
     - `pnpm run test:coverage` must exit non-zero.
     - Then `node --test --test-reporter=tap dist/__tests__/identityServiceImpl.test.js | grep -n "not ok .*rotates the refresh token and mints a new aud-bound access JWT"` must give exactly one hit.
     - Restore with `git checkout -- src/grpc/identityServiceImpl.ts && pnpm exec tsc`.
@@ -322,7 +320,7 @@ git diff --stat -- "$F"                                                  # only 
 
 **Verification**:
 ```bash
-node --version                                    # v24.* (CI ci.yml:572); record it
+node --version                                    # v24.* (CI ci.yml:582); record it
 pnpm --filter @xstockstrat/proto run build
 cd services/xstockstrat-identity
 pnpm build                                        # tsc incl. tests; exit 0 (feature 175 @AC-2/@AC-3)
@@ -353,7 +351,7 @@ git status --short                                # only the 5 Files (+ feature/
 
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation, API key scoping, secret store integration (never plaintext secrets in config)
 
-**Codebase Evidence** (re-grepped at `ca8b9236`):
+**Codebase Evidence** (re-spec 2026-10-28, re-grepped after merging `origin/main-dev` @ `fa40c8a4`, which carries #1262):
 - **Header and banner.**
   - The file header is the JSDoc `:1-12`, which includes the skip rationale `:7-9` and `Run: node --experimental-strip-types …` `:11`.
   - The banner `:18-20` reads `// Lazy imports — guard against strip-only TypeScript syntax errors`.
@@ -364,24 +362,23 @@ git status --short                                # only the 5 Files (+ feature/
   - `isBlockedDefaultAdmin`
   - `SEED_ADMIN_PASSWORD_HASH`
 - **Swallowed import.** `before(async () => {` `:28`, `try {` `:29`, body `:30-36`, `} catch {` `:37`, comment `:38`, `}` `:39`, `});` `:40`.
-- **Guards.** `grep -c "if (!"` returns 65. All 65 are subject-missing guards:
-  - 29 × `if (!impl) return;`;
+- **Guards.** `grep -c "if (!"` returns 67. All 67 are subject-missing guards:
+  - 31 × `if (!impl) return;` (includes the 2 #1262 guards in `${method} rotation is single-use`);
   - 27 × `if (!IdentityServiceImpl) return;`;
-  - 4 × `if (!IdentityServiceImpl) return null;` (`:56`, `:272`, `:692`, `:892`);
+  - 4 × `if (!IdentityServiceImpl) return null;` (`:56`, `:275`, `:770`, `:970`);
   - `if (!isBlockedDefaultAdmin) return;` `:129`;
-  - `if (!userIdFrom) return;` `:648`, `:654`;
-  - `if (!first) return;` `:660`, `:666`.
-  - On #1262 `e69e953d` the count is 67. Every non-matching line was filtered and none remained.
+  - `if (!userIdFrom) return;` `:726`, `:732`;
+  - `if (!first) return;` `:738`, `:744`.
+  - No other `if (!` line exists.
 - **Second silent skip** (proto regression test `:222-232`, `recon.md:46`, `:199-202`): `let TokenClaims: any;` `:227`, `try {` `:228`, `({ TokenClaims } = await import('@xstockstrat/proto/identity/v1/identity.js'));` `:229`, `} catch {` `:230`, `return; // proto package unavailable…` `:231`, `}` `:232`.
   - Exports map: `packages/proto/gen/ts/package.json:5-7` `"./*": "./dist/*.js"`. The `.js` specifier resolves at runtime to `…/identity.js.js`, so it fails.
   - Reuse: the extensionless form at `services/xstockstrat-identity/src/index.ts:6` (`'@xstockstrat/proto/identity/v1/identity'`).
 - **`catch` / `try` inventory.**
-  - main-dev: `catch` at `:37` and `:230` only (both subject/proto); `try {` at `:29`, `:143` (the `APPLICATION_ENV` try/finally in the seed-admin lockout test) and `:228`.
-  - #1262 base: the same shape (`:29`, `:143`, `:228`).
+  - `catch` at `:37` and `:230` only (both subject/proto); `try {` at `:29`, `:143` (the `APPLICATION_ENV` try/finally in the seed-admin lockout test) and `:228`.
 - **Hard-fail precedent (mandatory reuse, `recon.md:107`).**
   - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts:15-17` (rationale comment), `:18-21` (bare `before()` import, no try/catch) and `:23-27` (`describe('test harness')`).
-  - The `typeof Impl === 'function'` check comes from `docs/roadmap/ledger/fails.md:2226`.
-- **Baselines.** Assert count is `grep -o 'assert\.[A-Za-z]*(' … | wc -l`: 145 on main-dev, 150 on #1262.
+  - The `typeof Impl === 'function'` check comes from `docs/roadmap/ledger/fails.md:2225`.
+- **Baselines.** Assert count is `grep -o 'assert\.[A-Za-z]*(' … | wc -l`: 150 (main-dev now includes #1262).
 - **authz exports** (`src/grpc/authz.ts`): `first` `:14`, `userIdFrom` `:20`.
 - **C-13.** The harness case adds no domain data. No fixture home is created.
 
@@ -429,8 +426,7 @@ git status --short                                # only the 5 Files (+ feature/
    ```
 
 5. **Remove every subject-missing guard** (`design.md:65`).
-   - main-dev base: all 65 `if (!…)` lines above, which leaves the 4 helpers returning their impl unconditionally.
-   - #1262 base: also the 2 guards inside `${method} rotation is single-use`, so 67 in total, and keep its `:495` assertion.
+   - All 67 `if (!…)` lines above, which leaves the 4 helpers returning their impl unconditionally. This includes the 2 guards inside `${method} rotation is single-use`; keep its `:495` assertion.
    - No other line in any test body changes.
 
 6. **Header** (`design.md:66`). Replace the JSDoc `:1-12` with this one line:
@@ -458,7 +454,7 @@ git status --short                                # only the 5 Files (+ feature/
 11. Record in `context.md`:
     - the proto RED/GREEN;
     - the AC-6, AC-3 and AC-1 results. Label the AC-3 GREEN by mechanism. If `tsc` (TS2307) rejected the `.missing` specifier, mark it "non-discriminating for the `before()` hard-fail". AC-6 is then the discriminating FR-3 evidence;
-    - the counts (expected absolute counts, context only: 75 on main-dev, 79 on #1262; `design.md:89`).
+    - the counts (expected absolute count, context only: 79, the #1262 figure, since #1262 is on main-dev; `design.md:89`).
 
 **Verification**:
 ```bash
@@ -499,7 +495,7 @@ git status --short                                # only this file (+ feature/co
 
 **Reviewers**: `xstockstrat-ledger` owner — Append-only invariant (no deletes or updates), event ordering, hypertable partition safety
 
-**Codebase Evidence** (re-grepped at `ca8b9236`; nothing under `services/xstockstrat-ledger/src` differs from `origin/main-dev`):
+**Codebase Evidence** (re-spec 2026-10-28, re-grepped after merging `origin/main-dev` @ `fa40c8a4`; ledger anchors unchanged, only `ci.yml` lines shifted):
 - **Scripts.**
   - `services/xstockstrat-ledger/package.json:13` is `"test": "node --experimental-strip-types --test src/__tests__/*.test.ts"`.
   - `:14` is `"test:coverage": "c8 --reporter=text --reporter=lcov --lines 40 node --experimental-strip-types --test src/__tests__/*.test.ts"`.
@@ -523,8 +519,8 @@ git status --short                                # only this file (+ feature/co
   - `src/services/eventNotifier.ts:132` is `sub.onEvent(row);` inside `dispatch` `:119`. The target test is `eventNotifier.test.ts:82` `fans out an event to a matching subscriber`, which asserts `got.length === 1`.
 - **Timing risk.**
   - The reconnect test `eventNotifier.test.ts:151-176` uses `reconnectDelayMs = 1` and `n.stop()`; the timer is at `eventNotifier.ts:113`.
-  - CI `node-test` has no `timeout-minutes` (`ci.yml:534-591`; `design.md:232`).
-- **Build/CI/c8.** The same anchors as Step 2 (`ci.yml:572`, `:579-580`, `:582-584`; c8 `parse-args.js:85-86`, `:103-104`, `:169-170`; `report.js:43`; `check-coverage.js:56-59`).
+  - CI `node-test` has no `timeout-minutes` (`ci.yml:544-601`; `design.md:232`).
+- **Build/CI/c8.** The same anchors as Step 2 (`ci.yml:582`, `:589-590`, `:592-594`; c8 `parse-args.js:85-86`, `:103-104`, `:169-170`; `report.js:43`; `check-coverage.js:56-59`).
 - **C-13.** No new domain literal and no fixture home (`recon.md:118`).
 
 **TDD**: `red-green required`
@@ -814,14 +810,14 @@ git status --short                                # only these 2 files (+ featur
   - `:54` is the `test:coverage` command line and `:58` reads "Threshold is 40% lines for all four".
 - **`docs/patterns/ci-overview.md`.**
   - `:18` is the `` `node-test` (×4) `` row with `40%`.
-  - `:56` reads "Node.js: `0%` shown in c8 table is a known TypeScript tooling artefact — tests do pass.".
-  - `xstockstrat-ui`'s vitest threshold is enforced (`services/xstockstrat-ui/vitest.config.ts:29-33`; `ci.yml:559-562`). It is excluded from the narrowing (`design.md:186`).
+  - `:68` reads "Node.js: `0%` shown in c8 table is a known TypeScript tooling artefact — tests do pass." (re-spec 2026-10-28; `:56` is now a HOMELAB deploy line).
+  - `xstockstrat-ui`'s vitest threshold is enforced (`services/xstockstrat-ui/vitest.config.ts:29-33`; `ci.yml:569-572`). It is excluded from the narrowing (`design.md:186`).
 - **`.claude/skills/sdd-spec/reference/spec-template.md:148`.** The Node-leaf row of the coverage table reads `` `cd services/<name> && pnpm run test:coverage` — confirm threshold passes ``. It is another "40% enforced" instance (C-10, impl-spec review 2026-10-20). It is the only `confirm threshold passes` hit in the file.
 - **Root `CLAUDE.md:304`.** "Coverage thresholds: Go/Python/Node.js ≥40% (indicators ≥50%)." It is narrowed, not deleted (`design.md:188`).
 - **Enforcement facts.**
   - No Node-leaf script passes `--check-coverage` (Step 2/4 scripts; `recon.md:194-195`).
   - c8 checks thresholds only with it (`report.js:43`, `parse-args.js:85-86`).
-  - `node-test` never reads `matrix.coverage_threshold`; its entries are `ci.yml:552-562`, and only `:266` and `:401` (other jobs) read it.
+  - `node-test` never reads `matrix.coverage_threshold`; its entries are `ci.yml:562-572`, and only `:276` and `:411` (other jobs) read it.
 - **Findings logs.**
   - The 252 report rows are at identity `:57` and ledger `:50`. Their tables carry the rule "A row stays here until its report is resolved" (identity `:49-50`). The 252 report is `triaged` (`docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.status`) and counts as resolved once `252` is `launched` (`.claude/skills/sdd-qa/reference/defect-filing.md`, `ref:` kinds), so its rows stay.
   - The tables to append to are:
@@ -832,8 +828,8 @@ git status --short                                # only these 2 files (+ featur
   - Precedent: recording a report adds one row per affected service's findings log. Commit `0027fa17` added the 252 rows. The multi-service `2026-10-19-orphaned-code-defect` row appears in config `:51`, notify `:58` and ledger `:49`.
   - **Spec-time addition, not in `design.md:189`.** The follow-up defect affects all four Node leaves, so config and notify get the row too (C-10).
 - **Defect format.** `.claude/skills/sdd-qa/reference/defect-filing.md` gives the template headings, the `.status` sidecar `open`, the "exactly one severity token" rule and the format check (`grep -oE 'SEV-[123]' … | sort -u`). Parent report severity: `SEV-3` (`product-spec.md:5`).
-- **Overlap (impl-spec review 2026-10-20).** `084-droplet-compose-deploy` (`spec-ready`) FR-8 (`084 product-spec.md:63-64`) edits `docs/patterns/ci-overview.md` and root `CLAUDE.md`. `250-fix-otel-metrics-logs-gap` (`draft`) changes all 12 runtimes' telemetry only under fix (b) (`250 product-spec.md:40-41`).
-- **`docs/roadmap/features/merge-order.md:121-138`.** The rebase-only note format (`> **Note on … — rebase-only, no hard ordering row.**` plus `> - **A ↔ B on <file>.**` bullets). Insertion point: after `:138`, before the `---` at `:140`.
+- **Overlap (re-spec 2026-10-28).** #1262 is on `main-dev`, so its two guards are just part of the 67 Step 3 removes. `084-droplet-compose-deploy` is `demoted/canceled`, so its FR-8 edits to `ci-overview.md` / root `CLAUDE.md` no longer overlap. `250-fix-otel-metrics-logs-gap` is `implementation-ready` and its product-spec puts fix (b) out of scope (`250 product-spec.md:64`, `:129`), so it no longer touches the telemetry tests. `248-fix-ledger-trimmed-notify-payload` is `implementation-ready` and still overlaps on the ledger tests.
+- **`docs/roadmap/features/merge-order.md:137-154`.** The rebase-only note format (`> **Note on … — rebase-only, no hard ordering row.**` plus `> - **A ↔ B on <file>.**` bullets). Insertion point: after `:155`, before the `---` at `:156`.
 - **Context audit.**
   - Root `CLAUDE.md` § Teardown requires `/context-forge:context-constitution refresh`, or a manual reconciliation recorded in the PR body.
   - `.agents/context-forge.json:6` `scrubberExtraTargets`: `README.md`, `docs/patterns/ui-ux-governance.md`. Neither is touched.
@@ -853,7 +849,7 @@ git status --short                                # only these 2 files (+ featur
      - `**Affected service(s)**: xstockstrat-config, xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify`;
      - `**Config-only fix possible**: no`.
    - Sections:
-     - **Observed:** each leaf's `test:coverage` passes `--lines 40` with no `--check-coverage`, so c8 never checks it. Cite the four `package.json` script lines as they stand after Steps 2 and 4, plus `report.js:43` and `parse-args.js:85-86`. `node-test` ignores `matrix.coverage_threshold` (`ci.yml:552-562` vs `:266`, `:401`).
+     - **Observed:** each leaf's `test:coverage` passes `--lines 40` with no `--check-coverage`, so c8 never checks it. Cite the four `package.json` script lines as they stand after Steps 2 and 4, plus `report.js:43` and `parse-args.js:85-86`. `node-test` ignores `matrix.coverage_threshold` (`ci.yml:562-572` vs `:276`, `:411`).
      - **Expected:** CI fails a Node leaf below 40% lines.
      - **Reproduction:** run `pnpm run test:coverage` then `pnpm exec c8 check-coverage --lines 40` in one leaf, and compare the exit codes on a sub-40 tree.
      - **Evidence:** the `path:line` citations above.
@@ -870,7 +866,7 @@ git status --short                                # only these 2 files (+ featur
 
 3. **`ci-overview.md`.**
    - `:18`: change the threshold cell `40%` to `40% declared, not enforced (no \`--check-coverage\`; follow-up defect)`. Leave the other cells.
-   - `:56`: becomes "Node.js leaves (config, ledger, identity, notify): tests run compiled (`tsc && c8 … node --test dist/__tests__/*.test.js`), and the c8 table has a non-zero row per impl module. `--lines 40` is unenforced without `--check-coverage`; verify with `pnpm exec c8 check-coverage --lines 40` after `test:coverage` (follow-up defect `docs/reports/<filing-date>-node-leaf-c8-check-coverage-unenforced-defect.md`)." Do not narrow the `xstockstrat-ui` vitest gate.
+   - `:68`: becomes "Node.js leaves (config, ledger, identity, notify): tests run compiled (`tsc && c8 … node --test dist/__tests__/*.test.js`), and the c8 table has a non-zero row per impl module. `--lines 40` is unenforced without `--check-coverage`; verify with `pnpm exec c8 check-coverage --lines 40` after `test:coverage` (follow-up defect `docs/reports/<filing-date>-node-leaf-c8-check-coverage-unenforced-defect.md`)." Do not narrow the `xstockstrat-ui` vitest gate.
 
 3a. **`spec-template.md:148`.** In the Node-leaf row, change the command cell to `` `cd services/<name> && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40` — `--lines 40` in the script alone is not enforced (follow-up defect) ``. Leave the `40%` cell and the other rows unchanged.
 
@@ -882,25 +878,19 @@ git status --short                                # only these 2 files (+ featur
    ```
    The files are identity (after `:57`), ledger (after `:50`), config (after `:51`) and notify (after `:58`). Leave the 252 rows at identity `:57` and ledger `:50` unchanged.
 
-6. **`merge-order.md`.** After `:138`, insert one blank line and then this blockquote:
+6. **`merge-order.md`.** After `:155`, insert one blank line and then this blockquote:
    ```
-   > **Note on 252 `fix-identity-ledger-test-suites` ↔ hotfix #1262 / 248 / 084 / 250 / 241 — rebase-only, no hard ordering row.**
+   > **Note on 252 `fix-identity-ledger-test-suites` ↔ 248 (and #1262 / 084 / 250 / 241) — rebase-only, no hard ordering row.**
    > 252 makes the identity and ledger impl suites execute (compile-then-test) and deletes every
    > `if (!<subject>) return;` skip guard. None of the overlaps is a field-number / migration / config-key collision:
    >
-   > - **#1262 `hotfix/fix-refresh-token-rotation` ↔ 252 on `identityServiceImpl.test.ts`.** #1262 adds two
-   >   `if (!impl) return;` guards in `${method} rotation is single-use`; whoever lands second deletes them and
-   >   keeps the conditional-claim regex assertion.
+   > - **#1262 `hotfix/fix-refresh-token-rotation`** — already on `main-dev`; 252 deletes its two
+   >   `if (!impl) return;` guards in `${method} rotation is single-use` and keeps the conditional-claim regex assertion.
    > - **248 `fix-ledger-trimmed-notify-payload` ↔ 252 on `ledgerServiceImpl.test.ts` / `eventNotifier.test.ts`.**
    >   248 writes its tests unguarded (a guarded case is a silent pass once 252 lands); whoever lands second
    >   de-guards and merges the other's test changes.
-   > - **084 `droplet-compose-deploy` ↔ 252 on root `CLAUDE.md` and `docs/patterns/ci-overview.md`.** 084 FR-8
-   >   rewrites both for the deploy topology; 252 narrows only the coverage sentence (`CLAUDE.md` CI/CD Overview)
-   >   and the `node-test` row + Node.js tooling bullet (`ci-overview.md`). Different sections; whoever lands
-   >   second rebases.
-   > - **250 `fix-otel-metrics-logs-gap` ↔ 252 on identity/ledger `telemetry*.test.ts` (conditional).** Only under
-   >   250's fix (b), which changes every runtime's telemetry module. 252 changes only those tests' import specifiers
-   >   and the strip-types shim; whoever lands second keeps 252's extensionless imports.
+   > - **084 `droplet-compose-deploy`** — `demoted/canceled`; no overlap.
+   > - **250 `fix-otel-metrics-logs-gap`** — fix (b) is out of scope in its product-spec; no overlap on the telemetry tests.
    > - **241 `fix-config-audit-author-spoof`** — no overlap (config + agent only).
    ```
 
