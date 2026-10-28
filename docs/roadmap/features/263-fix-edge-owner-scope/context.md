@@ -429,3 +429,22 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 ## Session 2026-10-22 (operator decision — merge order vs 257)
 
 - **Decided:** 263 merges **first**. `257-fix-ledger-query-pagination` rebases onto 263's ledger `QueryEvents` owner filter, builds its page token on top of it, and takes the next free `QueryEventsRequest` field number (no field-7 collision). This resolves the impl-spec Open Thread "merge-order direction (257 waits for 263)". Step 12 item 6 may now write the `merge-order.md` row `263 → 257`.
+
+## Session 2026-10-28 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup (§5.3): `git merge -X ours origin/main-dev` into a detached checkout of
+  `origin/feature/fix-edge-owner-scope` (merge commit `e664e030`, pushed).
+- Re-spec of Steps 2, 5, 6, 7, 8, 9, 10, 11 and 12 (Instructions / Codebase Evidence / Files /
+  Verification only). No step's scope, order or acceptance mapping changed.
+  - Step 2: `scripts/buf-gen.sh` needs `grpcio-tools` (`python3 -m grpc_tools.protoc`), which is not on
+    the host. Added an install-if-missing instruction (PyPI is reachable). Not a blocker.
+  - Steps 5–11: line drift only (`dispatchConnect` `traderBff.ts:151`; mock default branch `:449-469`;
+    config `requestUserId` `:78`, invariant text `:40`; agent `client.py` `:2035/:2060/:2065/:2081`,
+    `tools.py` `:1601-1605/:1629-1633`; `TestSetConfigRequestParity` `:261`).
+  - Step 12: line drift (findings `:29`/`:46`, mcp-tools `:1052/:1059/:1077/:1085`). Item 6 is now
+    **verify-only**: the "257 waits for 263" row is already at `merge-order.md:78` (via main-dev), so no
+    duplicate is added. The 257 directory now exists on this branch (`implementation-ready`), and its
+    spec already rebases onto `owner_only = 7`. This resolves the Open Thread on merge-order direction.
+- Hook note: `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, and the
+  main worktree has no `node_modules` to symlink, so the husky pre-commit hook cannot run on this host.
+  No `--no-verify` was used.
