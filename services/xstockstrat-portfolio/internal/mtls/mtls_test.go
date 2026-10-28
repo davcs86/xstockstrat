@@ -238,3 +238,62 @@ func TestWrongSANRejected(t *testing.T) {
 		t.Error("negative matrix (wrong-SAN): a valid-CA cert with the wrong pinned SAN must be rejected")
 	}
 }
+
+// --- container healthcheck: Probe presents the service's own leaf to its own server ---
+
+func probeServer(t *testing.T, status healthpb.HealthCheckResponse_ServingStatus) string {
+	t.Helper()
+	creds, err := ServerConfig()
+	if err != nil {
+		t.Fatalf("ServerConfig: %v", err)
+	}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	hs := health.NewServer()
+	hs.SetServingStatus("", status)
+	s := grpc.NewServer(grpc.Creds(creds))
+	healthpb.RegisterHealthServer(s, hs)
+	go func() { _ = s.Serve(lis) }()
+	t.Cleanup(s.Stop)
+	return lis.Addr().String()
+}
+
+func TestProbeServing(t *testing.T) {
+	root := newCA(t)
+	cert, key := root.leaf(t, svcName)
+	setEnv(t, cert, key, root.pem)
+	addr := probeServer(t, healthpb.HealthCheckResponse_SERVING)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := Probe(ctx, addr, svcName); err != nil {
+		t.Fatalf("Probe on a SERVING server: %v", err)
+	}
+}
+
+func TestProbeNotServing(t *testing.T) {
+	root := newCA(t)
+	cert, key := root.leaf(t, svcName)
+	setEnv(t, cert, key, root.pem)
+	addr := probeServer(t, healthpb.HealthCheckResponse_NOT_SERVING)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := Probe(ctx, addr, svcName); err == nil {
+		t.Error("Probe must fail when the server reports NOT_SERVING")
+	}
+}
+
+func TestProbeNothingListening(t *testing.T) {
+	root := newCA(t)
+	cert, key := root.leaf(t, svcName)
+	setEnv(t, cert, key, root.pem)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := Probe(ctx, "127.0.0.1:1", svcName); err == nil {
+		t.Error("Probe must fail when nothing listens")
+	}
+}

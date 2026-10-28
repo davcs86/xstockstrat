@@ -65,7 +65,9 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
   `013`/`014`, analysis `026`/`027`) a second time and asserts the N-1 trigger count is 0. It then
   proves the contract downs are refused and leave the state dirty, that the dirty guard blocks
   `db-migrate.sh up` until `migrate force <n-1>`, runs `scripts/migration-assertions/*.sql`, and
-  executes the indicators write SQL against a schema without `is_public` (feature 225 AC-11).
+  executes the indicators write SQL against a schema without `is_public` (feature 225 AC-11). Pass 4
+  (feature 279) runs an older copy of the tree whose marketdata dir lacks its newest file and proves
+  the clean-ahead skip and the dirty-ahead refusal (§ Contract migration recovery, *Ahead rule*).
   Older up-files are not replayed — many are not idempotent (defect report
   `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`).
 - `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.sh` against the base
@@ -86,6 +88,15 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
   `db-migrate.sh force` (it forces every service to its highest version). `db-migrate.sh` has no
   `down`, so a contract down — which always raises (`irreversible contract`) and leaves the state
   dirty — is reachable only via a raw `migrate goto`.
+- **Ahead rule (feature 279).** Before the guard, `db-migrate.sh up` runs
+  `scripts/migration-ahead-check.sh` (also in the migrator image, so DO's PRE_DEPLOY job and the homelab
+  migrator behave the same). A **clean** service whose database version is newer than the image's
+  highest up-file is skipped (`[ahead]`) — the rollback case, where an older release's migrator runs
+  against a schema a newer release already migrated. A **dirty** one is refused before any `force 0`
+  (the older image cannot see the newer file's contract header); recover with the newer release's files
+  (the printed `force <n-1>`), then fix forward. An unparsable version, an unparsable filename, or a
+  numeric version with no up-files fails closed. Migrations must therefore stay backward-compatible with
+  the previous release: a rollback restores images, not schema.
 - **Adjacency convention.** A contract migration directly follows its expand file (analysis `027`
   contracts `026`, ingest `014` contracts `013`). Otherwise a refused down lands dirty at a
   non-expand version, and `force <n-1>` replays a file nobody has proven replay-safe.

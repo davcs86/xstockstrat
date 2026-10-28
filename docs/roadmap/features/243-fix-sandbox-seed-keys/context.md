@@ -31,7 +31,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (2026-10-15) chose a 128 MiB default headroom over 64 MiB, so the production `memory_bytes` value needs an
   explicit operator call. AC-2 uses a fixture value (100663296) to test key resolution independent of that choice.
 - Overlaps:
-  - 244-fix-python-config-zero-trap also touches `services/xstockstrat-indicators/app/config/watcher.py`
+  - 244-fix-python-config-stored-zero also touches `services/xstockstrat-indicators/app/config/watcher.py`
     (`get_int` zero-trap); soft ordering, whichever lands second reconciles.
   - hotfix `fix-sandbox-overrides-unclamped` (PR #1263, `origin/hotfix/fix-sandbox-overrides-unclamped`) clamps
     `ExecuteFormula` overrides to the configured limits, so once production rows resolve the clamp ceiling tightens
