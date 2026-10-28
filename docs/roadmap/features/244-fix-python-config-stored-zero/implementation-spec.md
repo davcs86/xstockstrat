@@ -497,14 +497,18 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 - Accessors: `sandbox_timeout_ms` `watcher.py:132-134`, `sandbox_memory_bytes` `:136-138`,
   `sandbox_max_concurrent()` `:147-148`.
 - Consumers:
-  - `servicer.py:102` (`asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))`)
-  - `:277-278` (`request.timeout_ms_override or self._cfg.sandbox_timeout_ms` — the request `or` is out of scope)
-  - `:303` (`max_concurrent=self._cfg.sandbox_max_concurrent()`, unclamped → `sandbox.py:346` `rlimit_nproc = max_concurrent * 16`)
+  - `servicer.py:107` (`asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))`)
+  - `:282` (`timeout_ms = _clamp_override(request.timeout_ms_override, self._cfg.sandbox_timeout_ms)`) and `:283-285`
+    (`_clamp_override(request.memory_bytes_override, self._cfg.sandbox_memory_bytes)`). `_clamp_override` `:66-68` is
+    `min(override, configured) if override > 0 else configured`, so a stored-zero `configured` still reaches the
+    sandbox (and pins any override to 0). It takes `configured` from the accessor, so the accessor clamp covers it.
+  - `:310` (`max_concurrent=self._cfg.sandbox_max_concurrent()`, unclamped → `sandbox.py:346` `rlimit_nproc = max_concurrent * 16`)
   - `sandbox.py:282` (`if {memory_bytes} > 0:` skips `RLIMIT_DATA`)
-- Clamp in the accessor so `:303` is covered without a third copy of the defaults (`sandbox.py:332-335` already holds
+- Clamp in the accessor so `:310` and `_clamp_override` are covered without a third copy of the defaults (`sandbox.py:332-335` already holds
   one; recon.md:180-181, 328-330; design §3).
 - Every servicer test double sets these attributes directly (e.g. `tests/test_execute_formula_concurrency.py:31-37`,
-  `tests/test_formulas.py:19-22`), so it bypasses the accessor. Dry run: 290 passed.
+  `tests/test_formulas.py:19-22`, `tests/test_execute_formula_override_clamp.py` `_cfg()` `:20-26`), so it bypasses the
+  accessor and stays green. Dry run: 290 passed (before main-dev added the override-clamp test file).
 
 **TDD**: `red-green required`
 
@@ -513,7 +517,8 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 **Instructions**:
 1. Add the module-level `int_positive(cfg, key, default)` to `watcher.py` (same body as Step 3).
 2. `:134`, `:138` and `:148` → `return int_positive(self, "<same key>", <same default>)`.
-3. `servicer.py:102` → `asyncio.Semaphore(config_watcher.sandbox_max_concurrent())`. The `max(1, …)` is subsumed
+3. `servicer.py:107` → `asyncio.Semaphore(config_watcher.sandbox_max_concurrent())`. `_clamp_override` (`:66-68`) stays
+   unchanged. The `max(1, …)` is subsumed
    (design §4).
 4. `sandbox_allowed_imports` (`:140-145`) stays `get_str_present`, which honours `""` (feature-173 @AC-4).
 
@@ -538,8 +543,8 @@ Green run is Step 8's Verification.
 **Reviewers**: `xstockstrat-indicators` owner — Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution
 
 **Codebase Evidence**:
-- `IndicatorsServicer.__init__(self, config_watcher, db_pool=None, ledger_channel=None)` `servicer.py:88`. The
-  semaphore is built at `:102`.
+- `IndicatorsServicer.__init__(self, config_watcher, db_pool=None, ledger_channel=None)` `servicer.py:93`. The
+  semaphore is built at `:107`.
 - Capture double: `_blocking_execute_double` `tests/test_execute_formula_concurrency.py:40-63`. Semaphore-bound
   pattern: `test_semaphore_gates_at_configured_bound` `:93-106` (recon.md:190-191). It calls
   `monkeypatch.setattr(sandbox, "execute_formula", …)` and passes `_exec_req()` / `ctx_with(OWNER_HEADERS)`.
@@ -559,7 +564,8 @@ Green run is Step 8's Verification.
    `w = snapshot_watcher(**{"indicators.sandbox.max_concurrent": 0, "indicators.sandbox.allowed_imports": ""})`:
    - `IndicatorsServicer(config_watcher=w)._sandbox_sem._value == 4`.
    - With `sandbox.execute_formula` monkeypatched to a recorder, one `ExecuteFormula` passes `max_concurrent == 4`,
-     `timeout_ms == 5000` and `memory_bytes == 134217728`. This is the `:303` / `RLIMIT_NPROC` path.
+     `timeout_ms == 5000` and `memory_bytes == 134217728`. This is the `:310` / `RLIMIT_NPROC` path, plus `:282-285`
+     through `_clamp_override` with no override set.
 3. Guard file: the same structure as Step 4, with `FR3_KEYS` = the three sandbox int keys,
    `HONOUR_KEYS = {"indicators.sandbox.allowed_imports"}` and `ZERO_IS_LEGIT = {}`. The dry-run scan found the
    keyword-default call at `watcher.py:142-144` bindable.
@@ -652,10 +658,12 @@ Green run is Step 10's Verification.
 - AC-3:
   - `_read_opportunity_queue(self, opps, state_repo, user_id, request, offset, q)` `servicer.py:4612` reads `w` at
     `:4615` and passes it to `opps.read(…, w, …)` at `:4619-4622`.
-  - The sort-0 ORDER BY text `_SORT_ORDER_BY[0]` `app/repositories/opportunities.py:35-40` uses
-    `(1 - $3) * o.conviction + $3 * o.signal_axis`, and the repo clamps w to `[0,1]` at `:224`.
+  - The sort-0 ORDER BY text `_SORT_ORDER_BY[0]` `app/repositories/opportunities.py:35-40` is the feature-200 symbol
+    roll-up `MAX(((1 - $3) * o.conviction + $3 * o.signal_axis)) OVER (PARTITION BY o.symbol) DESC, o.symbol ASC, ...`.
+    It references only `$3`; the window function is valid in ORDER BY over the VALUES subquery, and with distinct
+    symbols the expected AAA/BBB orders hold. The repo clamps w to `[0,1]` at `:224`.
   - Real-SQL harness: the `local_pg` session fixture `tests/conftest.py:367-` (marker `real_pg`, `pyproject.toml:33`;
-    CI installs PostgreSQL `.github/workflows/ci.yml:390-392`).
+    CI installs PostgreSQL in the `install postgresql (analysis real_pg tests)` step, `.github/workflows/ci.yml:400-404`).
   - Existing SQL-text tests: `tests/test_opportunities_repo.py:149-164`.
 - AC-9:
   - `_run_cycle` reads `throttle` at `live_loop.py:351` and passes it to `_eval_pair(definition, symbol, throttle, …)`
@@ -890,8 +898,8 @@ Green run is Step 12's Verification.
 - `AnalysisServicer(cfg, marketdata_channel=, indicators_channel=, ingest_channel=, ledger_channel=)`
   `tests/test_analysis_servicer.py:54-60`. Its semaphores are attributes (`servicer.py:537-587`).
 - Fundsignal: `FundamentalsSignalLoop._tick` `fundsignal_loop.py:128-156` returns the sleep seconds; when disabled it
-  returns `interval_hours * 3600` (`:136-138`). Harness: `_sched_loop` / `_make_loop` `tests/test_fundsignal_loop.py:45-58`,
-  `:393-402`.
+  returns `interval_hours * 3600` (`:136-138`). Harness: `_make_loop` `tests/test_fundsignal_loop.py:45` and `_sched_loop` `:379`
+  (a usage at `:393-402`).
 - Screener: `ScreenerEngine(marketdata, indicators, ingest, cfg, source_weights, compute_executor=None)`
   `services/screener.py:78-86`; semaphore `self._sem` `:84-86`.
 - AC-7 seams: `_opportunity_refresh_hour` `servicer.py:5869-5872` and `_readiness_materializer_hour` `:5934-5938`.
@@ -1051,9 +1059,13 @@ change; Step 13 is comments). This is the tdd-gate escape, recorded in the PR bo
      - `stringVal === ''`
    - Single-consumer inline rows (C-13).
 
+Tooling (re-spec 2026-10-28): config `node_modules` is not installed in a fresh worktree, so run `pnpm install` first.
+The root CLAUDE.md and CI pin Node 24; a host with only Node 22 can run the suite (no `engines` field forbids it),
+but record the Node version used in `context.md`.
+
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # test:coverage enforces c8 --lines 40 (package.json:13)
+cd services/xstockstrat-config && pnpm install && pnpm run test:coverage && pnpm run lint   # test:coverage enforces c8 --lines 40 (package.json:13)
 grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an intVal: 0 case
 ```
 
@@ -1087,7 +1099,7 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
     the default 2)." at `:50`/`:53`; it contains the SQL-escaped `loop''s`)
 - The staging and production rows carry identical text, so one `UPDATE` per key covers both environments.
 - Pattern: the `UPDATE config.config_values SET … WHERE …` shape of `029_heal_config_keys_full_dotted.up.sql`
-  (design §12). There is no explicit BEGIN/COMMIT (`029:14`).
+  (design §12). There is no explicit BEGIN/COMMIT (`029_heal_config_keys_full_dotted.up.sql:15`).
 - Excluded: `028:100,103` (`sparkline_bars`), which has no analysis reader (recon.md:377). It is logged in Step 17.
 
 **TDD**: N/A (migration)
@@ -1186,13 +1198,15 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # te
 
 **Codebase Evidence**:
 - Analysis `CLAUDE.md` rows that name the trap, `max(1, …)` or `get_*_present`: `:472-474`, `:479`, `:482-489`,
-  `:494`, `:500`, `:513`, `:519-520`, `:525-531`, `:535-537` (grep of `zero-trap\|max(1, …)\|get_int_present\|get_float_present`,
-  2026-10-21).
+  `:500`, `:513`, `:519-521`, `:525-531`, `:535-537` (grep of `zero-trap\|max(1, …)\|get_int_present\|get_float_present`,
+  re-run 2026-10-28; `:521` `opportunity.retry_seconds` is new). `:494` (`fundamentals_blend_strategy_id`) no longer
+  matches the grep but still mentions `get_str`; review it too.
 - Ingest `CLAUDE.md:124,127,130-133` (`:127` and `:131` say "Read via `get_int_present` (never `get_int`)").
-- Indicators `CLAUDE.md:100-103` (`:102` "never `get_str`"; `:103` claims a `max(1, …)` clamp, which is now in the
-  accessor). 243 rewrites the same rows; the second to land rebases.
-- `docs/patterns/config-governance.md:251-269` (lower-bound rule and the `signal_rank_weight zero-trap` note at
-  `:257-258`), plus product-spec Fix Scope `:458-461,705,713,721`. The same doc also has `:319` ("must not be
+- Indicators `CLAUDE.md:100-103` (`:100` was rewritten on main-dev with the override-clamp text — keep it; `:102`
+  "never `get_str`"; `:103` claims a `max(1, …)` clamp, which is now in the accessor). 243 rewrites the same rows;
+  the second to land rebases.
+- `docs/patterns/config-governance.md:251-258` (lower-bound rule at `:252` and the `signal_rank_weight zero-trap` note
+  at `:257-258`, inside a table that runs to `:273`), plus product-spec Fix Scope `:458-461,705,713,721`. The same doc also has `:319` ("must not be
   swallowed by the `get_int` zero-trap") and `:688` (`refresh_hour_utc`: "never `get_int` … the zero-trap would
   swallow it"), grep 2026-10-21.
 - Module findings preambles that point the zero-trap at the root: `services/xstockstrat-analysis/docs/context-constitution-findings.md:5`
