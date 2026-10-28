@@ -485,7 +485,7 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 
 ### Step 7 — service: indicators sandbox accessors clamp a stored zero
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify
@@ -1333,3 +1333,10 @@ _Populated by /sdd-execute as implementation proceeds._
   committed). 243 has not landed, so `_str_watcher` keeps its name and delegates to `snapshot_watcher` (no
   `ConfigValue` arm). The @AC-4 rows are one parametrized test over watcher factories, because the `unset_int` row
   needs `_snapshot = None`, which `snapshot_watcher(**values)` cannot express.
+- 2026-10-28 Step 7 (TDD evidence harness + path citation, no scope change): the paired test lands in Step 8, so
+  RED/GREEN used an uncommitted scratch test (`tests/test_scratch_step7.py`, deleted before commit): `int_positive`
+  exists, the three sandbox int accessors at 0 and -1 read 5000 / 134217728 / 4, a positive `max_concurrent` passes
+  through, `sandbox_allowed_imports` at `""` stays `[]`, and `IndicatorsServicer._sandbox_sem._value == 4` at 0.
+  The `int_positive` comment names the indicators hazards (Semaphore(-1), `memory_bytes=-1` skips `RLIMIT_DATA`)
+  rather than Step 3's ingest `sleep(-n)` wording; the body is identical. The Codebase Evidence cites `sandbox.py`;
+  the file is `app/services/sandbox.py` (not edited).

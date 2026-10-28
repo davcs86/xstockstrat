@@ -123,11 +123,11 @@ class ConfigWatcher:
 
     @property
     def sandbox_timeout_ms(self) -> int:
-        return self.get_int("indicators.sandbox.timeout_ms", default=5000)
+        return int_positive(self, "indicators.sandbox.timeout_ms", 5000)
 
     @property
     def sandbox_memory_bytes(self) -> int:
-        return self.get_int("indicators.sandbox.memory_bytes", default=128 * 1024 * 1024)
+        return int_positive(self, "indicators.sandbox.memory_bytes", 128 * 1024 * 1024)
 
     @property
     def sandbox_allowed_imports(self) -> list[str]:
@@ -137,4 +137,10 @@ class ConfigWatcher:
         return [m.strip() for m in raw.split(",") if m.strip()]
 
     def sandbox_max_concurrent(self) -> int:
-        return self.get_int("indicators.sandbox.max_concurrent", default=4)
+        return int_positive(self, "indicators.sandbox.max_concurrent", 4)
+
+
+def int_positive(cfg, key: str, default: int) -> int:
+    # >0, not >=0: Semaphore(-1) raises and memory_bytes=-1 skips RLIMIT_DATA just like 0 does.
+    v = cfg.get_int(key, default)
+    return v if v > 0 else default

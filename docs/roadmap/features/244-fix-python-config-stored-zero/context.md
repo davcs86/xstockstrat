@@ -449,3 +449,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Husky pre-commit did not run: no `node_modules` in the main worktree to symlink and `core.hooksPath` unset (same as
   Steps 1-5; never `--no-verify`).
 - Next: Step 7.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 7
+
+### Step 7 — service: indicators sandbox accessors clamp a stored zero [done]
+- `app/config/watcher.py` gains module-level `int_positive(cfg, key, default)` (`v if v > 0 else default`, same body
+  as ingest Step 3). `sandbox_timeout_ms`, `sandbox_memory_bytes` and `sandbox_max_concurrent()` read through it with
+  their literal defaults (5000 / `128 * 1024 * 1024` / 4). `servicer.py` builds `asyncio.Semaphore(
+  config_watcher.sandbox_max_concurrent())` (the `max(1, …)` is subsumed). `_clamp_override` and
+  `sandbox_allowed_imports` (`get_str_present`) are unchanged.
+- TDD: AC-6 (indicators) red on the Step-6 tree via an uncommitted scratch test (4 failed, 1 passed):
+  `int_positive` missing; accessors at 0/-1 returned 0/-1 (expected 5000); semaphore `_value` 1 (expected 4) →
+  green: 5 passed. The real tests land in Step 8.
+- Verification: `grep int_positive app/config/watcher.py` → 1 def (`:143`) + 3 calls (`:126`, `:130`, `:140`);
+  `grep "max(1" app/handlers/servicer.py` → no output. Full indicators suite 300 passed, coverage 85.61% (≥50);
+  ruff check + format clean.
+- Not in this step's Files, left for Step 17: indicators `CLAUDE.md` `max_concurrent` row still says the accessor
+  has a `max(1, …)` clamp.
+- Files modified: `services/xstockstrat-indicators/app/config/watcher.py`, `services/xstockstrat-indicators/app/handlers/servicer.py`
+- Deviations: TDD scratch harness; comment wording; `sandbox.py` path citation. See the Deviation Log.
+- Husky pre-commit did not run: no `node_modules` in the main worktree to symlink and `core.hooksPath` unset (same as
+  Steps 1-6; never `--no-verify`).
+- Next: Step 8.
