@@ -680,3 +680,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 7: the `strategyCatalog` consumer list now includes `src/lib/screenPresets.test.ts`. It reads only
     `.name` (`:7`) and asserts no description, so "no consumer needs a change" holds.
   - Step 10: the `_output = _formula_globals.get('result', {{}})` citation `sandbox.py:310` → `:311`.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`.
+- Mode-entry (up-front) confirmation: operator approved the plan by standing authorization, operator chat
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute.
+  Answers recorded: unattended checkpoints (checkpoint mode `report`); C-16 promotion auto-confirmed unless
+  it changes an existing @AC rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps
+  (open the PR, hold the merge); "start batch 2 in parallel too".
+- Plan: steps 1-10 in order, one commit per step on `feature/fix-indicators-formula-correctness`, then a
+  single integration PR to `main-dev`.
