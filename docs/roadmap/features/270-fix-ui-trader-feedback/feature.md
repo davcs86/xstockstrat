@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ui-trader-feedback-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; 5 resolved by adding AC-9..AC-12, splitting AC-7 and removing the Fix Scope template note) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps |
+| 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Merged `origin/main-dev` (`-X ours`); re-spec of Steps 2, 7, 9, 13, 14 for line drift only (no semantic change) |
 
 ---
 
