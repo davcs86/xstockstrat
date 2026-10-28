@@ -282,3 +282,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   only after its Verification passes. Step 5 was re-anchored (see the re-spec entry above); no other step changed.
 - Open Threads carried from the impl-spec review entry remain open (Step 3 mutation (a) run result,
   feature 246 overlap, feature-250 handoff and dev smoke test).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1 (sdd-batch-execute)
+
+- Step 1 — test: AC-2 deadline and AC-3 validation preservation guards (servicer). Status `pending` → `done`.
+- Files: `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — added
+  `TestScreenSymbols.test_scan_deadline_aborts_deadline_exceeded` (@AC-2: `get_int` → 1 for
+  `analysis.screener.max_duration_seconds`, 50 symbols `S00`..`S49`, `S00` GetBars hangs on
+  `asyncio.Event().wait()`, one RSI `SCREEN_KIND_TECHNICAL_INDICATOR` criterion; asserts abort args
+  `(DEADLINE_EXCEEDED, "screen exceeded 1s deadline")`) and
+  `test_unknown_metric_two_symbols_aborts_invalid_argument` (@AC-3: `AAPL`/`MSFT`, metric `not_a_metric`,
+  abort code `INVALID_ARGUMENT`). `test_unknown_metric_aborts_invalid_argument` left untouched.
+- TDD: N/A per spec (preservation guard). Preservation proof on the UNFIXED tree (pre-Step-2):
+  `uv run pytest tests/test_analysis_servicer.py -q -k "scan_deadline_aborts_deadline_exceeded or unknown_metric_two_symbols or unknown_metric_aborts_invalid_argument"`
+  → `3 passed, 380 deselected in 2.78s`.
+- Verification: full suite `uv run pytest --cov=app --cov-fail-under=40` → `1278 passed`, coverage 88.45%;
+  `ruff check` clean; `ruff format --check` clean. C-13: the only `conftest` reference in the file is the
+  pre-existing import at `:33`; the new symbol lists and fundamentals literals stay inline (one consumer each).
+- Deviations: none. Out-of-scope changes: none.

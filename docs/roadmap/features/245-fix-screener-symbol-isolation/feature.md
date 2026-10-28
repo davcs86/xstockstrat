@@ -19,6 +19,7 @@
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec/acceptance amended per design (AC-1 reworded, FR-4, AC-4, AC-5) |
 | 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Re-spec: Step 5 Codebase Evidence re-anchored agent CI threshold `ci.yml:358-359` → `:368-369` (value still 40); main-dev merged into branch |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 1 done — AC-2 deadline + AC-3 two-symbol validation preservation guards added to `TestScreenSymbols`; green on the unfixed tree |
 
 ---
 

@@ -92,7 +92,7 @@ step planning, in commit `7e4a2335` (C-15, append-only IDs). Review against
 
 ### Step 1 — test: AC-2 deadline and AC-3 validation preservation guards (servicer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
