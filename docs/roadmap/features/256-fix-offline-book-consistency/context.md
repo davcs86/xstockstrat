@@ -718,3 +718,14 @@ Each item names the step where it is resolved.
   - Step 14: INVENTORY.md catalog rows at `:17`, `:41`.
   - Step 15: `list_positions` `client.py:2357`, `stub.ConfirmOrder` `:2277`, `tools.py` `except grpc.aio.AioRpcError` `:2147`.
   - Steps 1, 2, 4, 6, 8, 10, 13, 16: all evidence matches, unchanged.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute fix-offline-book-consistency sequential`. Every step is one commit on `feature/fix-offline-book-consistency`, with no per-step PRs, and one integration PR at the end.
+- Up-front confirmation: the operator approved the plan through a standing authorization. Source: operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f, quoting "Start executing features 241-276" via batch-execute and "start batch 2 in parallel too". The terms are:
+  - checkpoints run unattended and are reported ('report'), not held;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred;
+  - DB and prod steps stay with the operator: open the PR, then hold the merge.
+- Status: `implementation-ready` → `in-progress`. The prior execute-checkpoint decisions still apply (session 2026-10-22): deregistration option (a) and the Step 5 retry for all callers.
