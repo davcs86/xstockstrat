@@ -44,7 +44,7 @@ class _SystemWriteRejected(Exception):
 # Lower-is-better when good < bad; higher-is-better when good > bad.
 _BUILTIN_BANDS = {
     "pe_ratio": (10.0, 35.0),  # lower better; <=0 handled specially
-    "pb_ratio": (1.0, 5.0),  # lower better; <0 handled specially
+    "pb_ratio": (1.0, 5.0),  # lower better; <=0 handled specially
     "roe": (0.25, 0.05),  # higher better
     "debt_to_equity": (0.3, 2.0),  # lower better; <0 handled specially
 }
@@ -223,7 +223,8 @@ class FundamentalsSignalLoop:
         fetched, deferred, calls_spent = await self._paced_fetch(to_process, budget, metadata)
 
         # Score → cross-sectional direction → drop below min conviction.
-        scores = await self._score(fetched, sys_meta)
+        scores, unscored = await self._score(fetched, sys_meta)
+        self._warn_unscored(run_id, unscored, len(fetched))
         buy_q = self._cfg.get_float("analysis.fundsignal.buy_quantile", default=0.80)
         sell_q = self._cfg.get_float("analysis.fundsignal.sell_quantile", default=0.20)
         min_conv = self._cfg.get_float("analysis.fundsignal.min_conviction_to_emit", default=0.0)
@@ -356,6 +357,18 @@ class FundamentalsSignalLoop:
         return kept
 
     @staticmethod
+    def _warn_unscored(run_id, unscored, total):
+        if not unscored:
+            return
+        log.warning(
+            "fundsignal run %s: %d of %d symbols unscored (no fundamentals): %s",
+            run_id,
+            len(unscored),
+            total,
+            ",".join(sorted(unscored)),
+        )
+
+    @staticmethod
     def _parse_csv(raw):
         return [s.strip().upper() for s in (raw or "").split(",") if s.strip()]
 
@@ -407,29 +420,40 @@ class FundamentalsSignalLoop:
         return fetched, deferred, calls
 
     async def _score(self, fundamentals_by_symbol, metadata):
-        """Map each symbol's fundamentals to a score in [0,1]. Deterministic, run-local."""
+        """Return (scores, unscored): scores in [0,1], deterministic and run-local.
+
+        An unscored symbol (no usable fundamentals) is absent from scores.
+        """
         formula_id = self._cfg.get_str("analysis.fundsignal.scoring_formula_id", "")
         if formula_id and self._indicators is not None:
             return await self._score_via_formula(formula_id, fundamentals_by_symbol, metadata)
-        return {sym: self._builtin_score(f) for sym, f in fundamentals_by_symbol.items()}
+        scores, unscored = {}, []
+        for sym, f in fundamentals_by_symbol.items():
+            s = self._builtin_score(f)
+            if s is None:
+                unscored.append(sym)
+            else:
+                scores[sym] = s
+        return scores, unscored
 
     @staticmethod
     def _builtin_score(f):
+        missing = set(f.missing_metrics)
         parts = []
         pe = f.pe_ratio
-        if pe:
+        if "pe_ratio" not in missing:
             parts.append(0.0 if pe <= 0 else _lin(pe, *_BUILTIN_BANDS["pe_ratio"]))
         pb = f.pb_ratio
-        if pb:
-            parts.append(0.0 if pb < 0 else _lin(pb, *_BUILTIN_BANDS["pb_ratio"]))
-        if f.roe:
+        if "pb_ratio" not in missing:
+            parts.append(0.0 if pb <= 0 else _lin(pb, *_BUILTIN_BANDS["pb_ratio"]))
+        if "roe" not in missing:
             parts.append(_lin(f.roe, *_BUILTIN_BANDS["roe"]))
         de = f.debt_to_equity
-        if de:
+        if "debt_to_equity" not in missing:
             parts.append(0.0 if de < 0 else _lin(de, *_BUILTIN_BANDS["debt_to_equity"]))
-        if f.eps:
+        if "eps" not in missing:
             parts.append(1.0 if f.eps > 0 else 0.0)
-        return sum(parts) / len(parts) if parts else 0.5
+        return sum(parts) / len(parts) if parts else None
 
     async def _scoring_formula_is_system(self, formula_id, sys_meta):
         """Pre-flight (AC-37): only a `system`-authored scoring formula may score the scan."""
@@ -448,6 +472,7 @@ class FundamentalsSignalLoop:
         from app.services.fundamentals_scoring import score_fundamentals
 
         out = {}
+        unscored = []
         for sym, f in fundamentals_by_symbol.items():
             fundamentals = {
                 "pe_ratio": f.pe_ratio,
@@ -457,6 +482,9 @@ class FundamentalsSignalLoop:
                 "debt_to_equity": f.debt_to_equity,
                 "eps": f.eps,
             }
+            if set(f.missing_metrics).issuperset(fundamentals):
+                unscored.append(sym)
+                continue
             try:
                 scores = await score_fundamentals(
                     self._indicators, formula_id, fundamentals, metadata
@@ -464,7 +492,7 @@ class FundamentalsSignalLoop:
                 out[sym] = float(scores.get("composite", 0.0))
             except Exception as e:  # noqa: BLE001 - skip the symbol; never a built-in fallback
                 log.warning("fundsignal: formula scoring failed for %s: %s", sym, e)
-        return out
+        return out, unscored
 
     @staticmethod
     def _map_directions(scores, buy_quantile, sell_quantile):
