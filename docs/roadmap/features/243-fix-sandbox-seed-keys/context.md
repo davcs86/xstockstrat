@@ -336,3 +336,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Step 5 (operator G1 staging gate plus the prod read-back) still needs the operator's pasted output.
   Standing authorization does not stand in for that output (`operator-db-access.md:58`).
 - Next: Step 1.
+
+### Step 1 — test: DB assertions for migration 031 (`config-031.sql`) [done]
+- Created `scripts/migration-assertions/config-031.sql`. It has three blocks:
+  - block 1: AC-1, no bare `sandbox.*` rows, and exactly one global full-dotted row per env with 5000 / 134217728 / seed imports and int/int/string;
+  - block 2: AC-3, the headroom/VmData description, with no "memory cap" and no "64MB";
+  - block 3: inside `BEGIN;`…`ROLLBACK;`, fixtures (i) and (ii), the `b031` baseline, a `\ir` replay of the 031 up-file, then the AC-4/AC-5 asserts. These include an `EXCEPT` both ways against `b031`, outside the indicators `sandbox.*` rows.
+- No psql `:var` is used, so the runner's `-v seed_user_id` is inert.
+- TDD (AC-1): RED a is static. Sequential mode has no step PR and no DB. With 031 absent, the bare seeds remain, so block 1 raises `AC-1:` before reaching the `\ir`.
+- GREEN (offline): the Verification greps pass:
+  - AC-1 RAISE=2, AC-3 RAISE=1, `AC-4:`=5, `AC-5:`=2;
+  - the `\ir` line is at `:96`;
+  - `BEGIN;`=1 and `ROLLBACK;`=1.
+- `pglast` 7.x, run in a scratch venv and not added to the repo, parses 10 statements and 3 PL/pgSQL bodies.
+- The live GREEN is the integration PR's `migration-rerun` job, after Step 2.
+- Files modified: `scripts/migration-assertions/config-031.sql`
+- Deviations: RED/GREEN capture moves from the step PR to the integration PR, with a static RED a (Deviation Log).

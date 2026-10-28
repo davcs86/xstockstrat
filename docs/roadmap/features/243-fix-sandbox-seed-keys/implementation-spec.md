@@ -62,7 +62,7 @@ Order of work:
 
 ### Step 1 — test: DB assertions for migration 031 (`config-031.sql`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (harness `scripts/migration-assertions/`)
 **Files**:
 - `scripts/migration-assertions/config-031.sql` — create
@@ -432,3 +432,14 @@ recorded operator decision. The NNN check prints `030_…` as the highest config
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — RED/GREEN capture moved from a step PR to the integration PR (2026-10-28)
+- **Expected**: Step 1 **TDD** takes RED a and GREEN from "the `migration-rerun` job log of the step PR".
+- **Actual**: sequential mode opens no per-step PR (sequential-mode.md §5.5), and the executor never starts a
+  database. Step 1 was verified offline: the spec's **Verification** greps all pass, and `pglast` 7.x parses the
+  file (10 statements, 3 PL/pgSQL `DO` bodies; the `\ir` line is stripped for parsing).
+  RED a is static: the 031 up-file is absent and the bare seeds at `001:62-64` / `002:61-63` remain, so block 1
+  raises `AC-1:` first. Steps 1-2 both land before the integration PR, so CI shows only GREEN. The live RED is
+  not captured in CI.
+- **Disposition**: CI-equivalent fallback. GREEN (and RED b, if a draft 031 is pushed in Step 2) comes from the
+  integration PR's `migration-rerun` job.

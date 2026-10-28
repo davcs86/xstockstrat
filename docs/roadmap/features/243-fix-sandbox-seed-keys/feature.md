@@ -53,4 +53,4 @@ Operator decision: fix in code plus a config migration.
 
 ## Next Action
 
-`/sdd-execute fix-sandbox-seed-keys sequential` — Step 1 next
+`/sdd-execute fix-sandbox-seed-keys sequential` — Step 2 next (Step 1 done 2026-10-28)
