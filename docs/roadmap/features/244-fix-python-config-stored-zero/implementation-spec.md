@@ -1003,7 +1003,7 @@ git diff --stat -- src/grpc/configServiceImpl.ts   # comment lines only
 
 ### Step 14 — test: config bounds still reject 0 (@AC-8) and a zero survives the WatchConfig wire (@AC-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -1390,3 +1390,10 @@ _Populated by /sdd-execute as implementation proceeds._
   Verification grep returned no output and the diff is 4/4 comment lines. `prettier --check` and `tsc --noEmit` were
   not usable as a gate here: the config service has no `node_modules` in this worktree, and `prettier --check` warns
   on the unedited HEAD file too.
+- 2026-10-28 Step 14 (evidence harness, no scope change): TDD red is N/A (characterization, per the step's **TDD**);
+  both new assertions passed on the unchanged tree. To show they can fail, two throwaway mutants were applied to the
+  compiled `dist/grpc/configServiceImpl.js` only (rebuilt from `src` before the gate): truthiness arms in
+  `toProtoSnapPayload` failed @AC-10 ("SNAPSHOT: zero_int must carry intVal"), and OPP_CONC `minValue: 0` failed the
+  @AC-8 `it`. The @AC-8 case went into the existing `:214` `it` (Instruction 1's first option). Node 22.22.0 was used
+  (CI pins 24). The new file is prettier-clean; `setConfigScalarBounds.test.ts` was already non-prettier at HEAD and
+  was not reformatted.

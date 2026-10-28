@@ -638,3 +638,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: comment layout and evidence harness. See the Deviation Log.
 - Next: Step 14.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 14
+
+### Step 14 — test: config bounds still reject 0 (@AC-8) and a zero survives the WatchConfig wire (@AC-10) [done]
+- `setConfigScalarBounds.test.ts`: the AC-4 `it` gains `setConfig({ intVal: 0 }, OPP_CONC)` → `INVALID_ARGUMENT`,
+  `/\[1, 5\]/`, no INSERT (@AC-8).
+- `watchConfigWireZero.test.ts` (new): inline pool with three `analysis.test.zero_*` rows (int `'0'`, float `'0'`,
+  string `''`); `reloadNamespace` → `watchConfig(fakeCall)` (env 2, global) → 20 ms wait → `writes.length === 1` →
+  `broadcastToSubscribers` → `writes.length === 2`; each payload round-trips through the `watchConfig`
+  `responseSerialize`/`responseDeserialize`, and both legs carry `intVal` 0, `floatVal` 0 and `stringVal` '' (@AC-10).
+- TDD: red N/A — no behavior change; characterization test added (state this in the PR body). Mutants on the compiled
+  `dist/` only (truthiness arms in `toProtoSnapPayload`; OPP_CONC `minValue: 0`) each failed the new tests, then `tsc`
+  rebuilt `dist/` from the untouched `src/`. GREEN: 181/181 pass.
+- Verification: `pnpm install` (frozen lockfile, no lockfile change); `pnpm run test:coverage` exit 0, 181 pass,
+  lines 88.03% (≥40); `pnpm run lint` 0 errors (166 pre-existing `no-explicit-any` warnings); the `OPP_CONC` grep
+  shows the `intVal: 0` case at `:221`. Node 22.22.0 (CI pins 24).
+- Files modified: `services/xstockstrat-config/src/__tests__/{setConfigScalarBounds.test.ts,watchConfigWireZero.test.ts (new)}`
+- Deviations: evidence harness only. See the Deviation Log.
+- Husky pre-commit: `pnpm install` created the worktree's root `node_modules`, so the hook runs (never `--no-verify`).
+- Next: Step 15.

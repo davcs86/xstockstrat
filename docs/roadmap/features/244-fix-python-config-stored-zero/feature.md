@@ -34,6 +34,7 @@
 | 2026-10-28 | `in-progress` (step 11 done) | /sdd-execute sequential | Step 11: analysis module-level `int_positive` / `float_positive` / `str_nonempty`; all 34 FR-3 sites clamped; named readers `default_cooldown_days` (servicer) and `fundsignal_source_slug` (fundsignal_loop); read-site `max(1, …)` wrappers and the two inline `<= 0` clamps removed; dead `sandbox_*` helpers and their 3 tests deleted (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 12 done) | /sdd-execute sequential | Step 12: analysis AST read-classification guard (34 `FR3_KEYS`, 36 `HONOUR_KEYS`, 8 `ZERO_IS_LEGIT`, `collect()` exposed); @AC-6 table (34 rows, defaults resolved via `collect()`, -5 row) and site seams (`__init__` semaphores/pool, named readers, screener sem, fundsignal `_tick`, `default_fill_model` legacy); @AC-7 honour rows + over-clamp tripwire; retention test flipped to `test_retention_non_positive_reads_as_default` (-5, 0 → 20) (TDD red → green) |
 | 2026-10-28 | `in-progress` (step 13 done) | /sdd-execute sequential | Step 13: config `SCALAR_BOUNDS_REGISTRY` comments (`configServiceImpl.ts`) restated for the new getter semantics — min 1 because a Python reader clamps ≤ 0 to the default; lower 0 only where 0 is a legitimate value; no registry row changed (comment-only, TDD red N/A) |
+| 2026-10-28 | `in-progress` (step 14 done) | /sdd-execute sequential | Step 14: config @AC-8 `intVal: 0` → `INVALID_ARGUMENT` `[1, 5]` for `analysis.opportunity.max_concurrent_bars_fetches`, no INSERT; new `watchConfigWireZero.test.ts` proves a stored 0 / 0.0 / "" survives `responseSerialize`→`responseDeserialize` on SNAPSHOT and DELTA (characterization, TDD red N/A) |
 
 ---
 
@@ -70,4 +71,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-execute fix-python-config-stored-zero sequential` — Step 14 (test: config bounds still reject 0 (@AC-8) and a zero survives the WatchConfig wire (@AC-10))
+`/sdd-execute fix-python-config-stored-zero sequential` — Step 15 (migration: description-only correction of the 027/028 zero-trap descriptions)

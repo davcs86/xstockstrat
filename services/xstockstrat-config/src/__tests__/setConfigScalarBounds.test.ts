@@ -218,6 +218,11 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.match(r.err.details ?? r.err.message, /\[1, 5\]/);
     assert.equal(insertQuery(), undefined, 'no INSERT for an out-of-range value');
     queries = [];
+    r = await setConfig({ intVal: 0 }, OPP_CONC); // feature 244 @AC-8: the reader honours 0, so the write edge must reject it
+    assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT, 'max_concurrent_bars_fetches 0 is below min');
+    assert.match(r.err.details ?? r.err.message, /\[1, 5\]/);
+    assert.equal(insertQuery(), undefined);
+    queries = [];
     r = await setConfig({ intVal: 99 }, OPP_REFRESH);
     assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT, 'refresh_hour_utc 99 is out of [0,23]');
     assert.match(r.err.details ?? r.err.message, /\[0, 23\]/);
