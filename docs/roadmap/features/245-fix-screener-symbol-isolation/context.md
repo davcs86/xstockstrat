@@ -504,3 +504,94 @@ Tooling setup (step 10): none needed (docs-only).
   `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.status` stays `triaged` until launch;
   completion obligations (feature-250 alerting handoff, C-16 promotion, dev smoke test) are the integration session's.
 
+## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-screener-symbol-isolation (feature 245)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-screener-symbol-isolation.feature | CREATE | NEW | The Then asserts on ScreenSymbols rows, so analysis owns it. Related to 160 AC-1 but not the same outcome. |
+| AC-2 | same analysis file | CREATE (same block) | NEW | Scan deadline is analysis behavior (analysis.screener.max_duration_seconds). |
+| AC-3 | same analysis file | CREATE (same block) | NEW | INVALID_ARGUMENT for an unknown fundamental metric is analysis behavior. |
+| AC-4 | /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-screener-symbol-isolation.feature | CREATE | NEW | The Then asserts on the /trader/positions/AAPL Screening section. No existing ui suite covers "Not evaluated". |
+| AC-5 | /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-screener-symbol-isolation.feature | CREATE | NEW | The Then asserts on the agent screen_symbols tool result shape. |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-screener-symbol-isolation.feature (CREATE) ---
+Feature: ScreenSymbols isolates per-symbol failures (feature 245)
+  Regression guard promoted from feature 245's acceptance scenarios: ScreenSymbols failed
+  entirely when one symbol raised a non-RpcError. These guarantees must never silently regress.
+
+  @AC-1 @FR-1 @regression @feature-245
+  Scenario Outline: One symbol's non-RPC failure degrades only that symbol's row
+    Given a ScreenSymbols request over 50 symbols with signal_sources ["fundamentals"], signal_weight 1, technical_weight 1, and rank_limit 50
+    And its criteria are a SCREEN_KIND_SIGNAL criterion "sig" and a SCREEN_KIND_TECHNICAL_INDICATOR criterion "rsi" with component indicator "RSI", neither a hard filter
+    And every symbol has at least 2 daily bars and at least one active "fundamentals" signal
+    And the symbols' signal convictions and RSI readings differ, and "BAD" holds the highest signal conviction
+    And <failure_site> raises <exception> for symbol "BAD" only
+    When the caller invokes ScreenSymbols
+    Then the RPC returns OK
+    And the response contains a result row for each of the other 49 symbols, each equal to that symbol's row when the same request runs over those 49 symbols without "BAD"
+    And "BAD"'s row is present with status SCREEN_RESULT_STATUS_OK, passed false, score_unavailable true and no criterion_scores
+    And "BAD" ranks after every one of the other 49 symbols
+    And exactly one WARN log line names "BAD" with its exception type
+
+    Examples:
+      | failure_site                     | exception         |
+      | scoring.compute_signal_score     | ZeroDivisionError |
+      | ScreenerEngine._technical_value  | ArithmeticError   |
+      | ScreenerEngine._latest_indicator | ValueError        |
+
+  @AC-2 @FR-2 @regression @feature-245
+  Scenario: The scan deadline still cancels the whole scan
+    Given analysis.screener.max_duration_seconds is 1
+    And the marketdata GetBars call for one symbol never returns
+    When the caller invokes ScreenSymbols over 50 symbols
+    Then ScreenSymbols fails with gRPC status DEADLINE_EXCEEDED and message "screen exceeded 1s deadline"
+    And no ScreenResult rows are returned
+
+  @AC-3 @FR-3 @regression @feature-245
+  Scenario: An unknown fundamental metric is still rejected for the whole request
+    Given a ScreenSymbols request over symbols ["AAPL", "MSFT"] with a SCREEN_KIND_FUNDAMENTAL criterion whose metric_name is "not_a_metric"
+    And fundamentals are available for "AAPL" and "MSFT", and neither carries an extra_metrics key "not_a_metric"
+    When the caller invokes ScreenSymbols
+    Then ScreenSymbols fails with gRPC status INVALID_ARGUMENT
+    And no ScreenResult rows are returned
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-screener-symbol-isolation.feature (CREATE) ---
+Feature: Single-symbol Screening section handles score-unavailable rows (feature 245)
+  Regression guard promoted from feature 245's acceptance scenarios.
+
+  @AC-4 @FR-4 @regression @feature-245
+  Scenario: The single-symbol Screening section shows "Not evaluated" for a score-unavailable row
+    Given a trader opens /trader/positions/AAPL and AAPL is not on any watchlist, so the Screening section renders
+    And ScreenSymbols returns one row for "AAPL" with status SCREEN_RESULT_STATUS_OK, passed false and score_unavailable true
+    When the trader runs the screen
+    Then the Screening section shows the "Not evaluated" notice
+    And it shows neither the per-criterion results table nor the "Insufficient data" notice
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-screener-symbol-isolation.feature (CREATE) ---
+Feature: Agent screen_symbols exposes score_unavailable (feature 245)
+  Regression guard promoted from feature 245's acceptance scenarios.
+
+  @AC-5 @FR-1 @regression @feature-245
+  Scenario: The agent screen_symbols result carries score_unavailable on every row
+    Given ScreenSymbols returns a row for "NVDA" with passed true and score_unavailable false
+    And a row for "BAD" with status SCREEN_RESULT_STATUS_OK, passed false and score_unavailable true
+    When the agent calls screen_symbols
+    Then every result dict carries a boolean "score_unavailable"
+    And the "BAD" result has "passed" false and "score_unavailable" true
+
+### Notes / ambiguities / conflicts
+- No CONFLICT. Feature 160's analysis suite (/home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-signal-screen-crash.feature) guarantees that a healthy signal-weighted screen returns OK rows and that compute_signal_score reads bar.time. Feature 245 adds per-symbol isolation on top of that. It does not change or contradict either rule.
+- No OVERLAP. No other suite, and not platform.feature, mentions score_unavailable, "Not evaluated", screen_symbols, or the screener deadline. services/xstockstrat-analysis/acceptance/private-by-default-templates.feature only mentions ScreenSymbols incidentally, for access control.
+- Routing calls: AC-4 goes to ui and AC-5 to agent because of their observable subjects. AC-2 and AC-3 stay in analysis, since the deadline and the metric validation both live in the analysis screener. No scenario is cross-cutting, so platform.feature is untouched.
+- The acceptance.feature was read from the working tree, not from origin/feature/fix-screener-symbol-isolation. The scenarios are copied verbatim, with only `@feature-245` added. `@regression` is kept, matching the convention in the 160 promoted suite.
+- Whether the three target files exist for 245 is assumed from the globs. The first glob was truncated at 100 results, but no 245 file appeared in the ui or agent screen* globs.
+
+### Coverage check
+- Source scenarios: 5 (AC-1 is an outline with 3 examples). Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for, and none are skipped.
+```
