@@ -161,7 +161,7 @@ grep -n "conftest" tests/test_analysis_servicer.py | head -3   # C-13: no new co
 
 ### Step 2 — service: per-symbol isolation, fail-closed degraded row, sort, summary log and span (engine)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/screener.py` — modify
@@ -820,3 +820,16 @@ grep -n "eval_failed" services/xstockstrat-analysis/docs/context-constitution.md
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 2 — TDD RED/GREEN captured with a scratch test (2026-10-28)
+- **Spec says**: Step 2 is `red-green required`; its paired tests are Step 3's (`tests/test_screener.py`), and
+  Step 2's commit stages only `app/services/screener.py`.
+- **Actual**: RED/GREEN ran against an untracked scratch file `tests/test_zz_step2_scratch.py` (4 cases mirroring
+  Step 3 instructions 2/3/4a/7: one-failure degraded row + single WARN, all-failed ERROR, CancelledError
+  passthrough, span attribute). It was deleted before commit, never staged. Step 3 still authors the durable tests.
+- **Disposition**: process-only; no code or scope change (design.md items 1-3 implemented as specced).
+
+### Step 2 — local interpreter (2026-10-28)
+- **Actual**: `uv` provisioned the worktree venv on CPython 3.12.3 (`requires-python = ">=3.12"`); CI runs 3.13.
+  `CancelledError` is a `BaseException` on both, so the FR-2 passthrough is unaffected.
+- **Disposition**: CI-equivalent fallback.

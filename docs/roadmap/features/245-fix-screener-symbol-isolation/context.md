@@ -300,3 +300,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `ruff check` clean; `ruff format --check` clean. C-13: the only `conftest` reference in the file is the
   pre-existing import at `:33`; the new symbol lists and fundamentals literals stay inline (one consumer each).
 - Deviations: none. Out-of-scope changes: none.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2 (sdd-batch-execute)
+
+- Step 2 — service: per-symbol isolation, fail-closed degraded row, sort, summary log and span (engine).
+  Status `pending` → `done`. Discovery: every Codebase Evidence anchor in `app/services/screener.py` matched.
+- Files: `services/xstockstrat-analysis/app/services/screener.py` only (design.md items 1-3):
+  - item 1: `@staticmethod _seed_row(symbol)` (seed literal extracted, + `"eval_failed": False`);
+    `_eval_symbol_isolated(symbol, *args)` returns `(row, None)` or `({**seed, "eval_failed": True}, e)` under
+    `except Exception` only (CancelledError propagates, FR-2); `screen()` gathers the wrapper, splits
+    `per_symbol` / `failures`. Validation `_validate_fundamental_metrics` stays before the fan-out (FR-3).
+  - item 2: `_build_result` returns `ScreenResult(symbol, status OK, passed=False, score_unavailable=True)` for
+    `row["eval_failed"]` right after the INSUFFICIENT_DATA return, before `passed = True`. `_rank` sorts on
+    `(score_unavailable, eval_failed, -score)` via a local `ranked` list; executor dispatch unchanged.
+  - item 3: top-level `from opentelemetry import trace`; after the `dataless_bars` block one
+    `"screener: %d/%d scanned symbols failed evaluation; sample=%s"` line (`log.error` when all failed, else
+    `log.warning`, `exc_info` = first failure) plus `screener.degraded_count` + `record_exception` on the
+    current span. No `set_status`, no per-symbol WARN.
+- TDD red → green (scratch test `tests/test_zz_step2_scratch.py`, deleted before commit — see Deviation Log):
+  RED on the pre-Step-2 tree: `3 failed, 1 passed` — one-failure degraded row, all-failed ERROR, span attribute
+  each failed with `RuntimeError: boom` escaping `screen()`; the CancelledError passthrough case passed (as
+  Step 3 instr 3 predicts). GREEN after the change: `4 passed`.
+- Verification: the five-symbol grep hits (`:34`, `:118`, `:161`, `:169`, `:226`, `:236`, `:239`, `:245`,
+  `:250`, `:485`); `eval_failed", False)` → no output; `except BaseException` → no output; `ruff check` clean,
+  `ruff format --check` clean. Regression: full suite `uv run pytest --cov=app --cov-fail-under=40` →
+  `1278 passed`, coverage 88.37% (no existing test flipped).
+- Deviations: scratch-test TDD capture; local CPython 3.12.3 venv (CI 3.13). Out-of-scope changes: none.
