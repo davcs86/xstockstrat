@@ -387,3 +387,15 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: full `go test ./... -race` green; coverage total 71.4% (>= 40%); `golangci-lint` v2.14.0 (go1.27
   build in the session scratchpad) 0 issues.
 
+## Session 2026-10-28 — sdd-execute sequential, Step 3
+
+- Step 3 done (D-39 service edge, AC-5/AC-7). Added `TestFundamentals_TransportErrorStatusIsKeyFree_feature254` to
+  `marketdata_service_test.go` (plus the `internal/fmp` import): a real `fmp.Client` on `http://127.0.0.1:1` with
+  key `k-secret` behind `newFundSvc(enabledCfg("fmp"), ...)`; subtests `single (AC-5)` and `batch (AC-7)` assert
+  `CodeUnavailable`, `"fmp"` present, and no `k-secret` / `apikey=`. `marketdata_service.go` unchanged (FR-3).
+- TDD, RED (pre-Step-1 `fmp_client.go` from `ba303400^`, restored afterwards): both subtests failed with
+  `status leaked api key: "unavailable: fmp fetch: fmp: /stable/quote request failed: Get \"http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL\": dial tcp 127.0.0.1:1: connect: connection refused"`.
+  GREEN on `HEAD`: both subtests and `VendorNoFundamentalsIsNotFound_feature215` pass with `-race`.
+- Verification: full `go test ./... -race` green; coverage total 71.5% (>= 40%); `golangci-lint` v2.14.0 (go1.27
+  build in the session scratchpad) 0 issues.
+

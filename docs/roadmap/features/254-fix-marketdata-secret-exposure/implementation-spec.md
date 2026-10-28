@@ -248,7 +248,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 3 — test: D-39 service-edge Unavailable status is key-free (single + batch)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -628,3 +628,8 @@ _Populated by /sdd-execute as implementation proceeds._
   expected. `TestGateway_BudgetRefundOnTransportError_AC4` passed before and after Step 1, as specified. A file-local
   `newLeakClient(baseURL)` constructor was added beside `assertNoKeyLeak` in each test file. Finnhub's
   `ClientConfig` has no `Metrics` field, so its client omits it. No scope or Files change.
+- **2026-10-28, Step 3 (TDD ordering).** Step 1 was already committed, so RED was captured as in Step 2: the
+  pre-Step-1 `fmp_client.go` (`ba303400^`) was swapped into the working tree, the new test was run, then `HEAD`'s file
+  was restored. Both subtests failed on the leak assertion
+  (`unavailable: fmp fetch: fmp: /stable/quote request failed: Get "http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL": ...`).
+  The assertions sit in a test-local `assertKeyFree` closure shared by the two subtests. No scope or Files change.

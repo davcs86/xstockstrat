@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front plan confirmed by operator standing authorization (see context.md) |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: D-39 `*url.Error` redaction at the FMP and Finnhub transport and build-request sites |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 2 done: D-39 client tests (transport, build-request, deadline, budget refund) for FMP and Finnhub |
+| 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 3 done: D-39 service-edge test, `Unavailable` status is key-free on `GetFundamentals` and `GetFundamentalsMulti` |
 
 ---
 
