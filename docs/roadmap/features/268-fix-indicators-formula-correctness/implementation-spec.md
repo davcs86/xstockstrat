@@ -144,7 +144,7 @@ Expect exactly 2 hits, one in `UpdateFormula` and one in `DeleteFormula`. Lint i
   at `tests/test_private_formulas.py:29-45`. It already carries `pending_intent_id` and `deleted_at`.
 - The existing servicer factory is `def _servicer(rows=(), audit_error=None)` at `:48-60`, with
   `repo.update = AsyncMock(...)` at `:54` and `repo.delete = AsyncMock(return_value=True)` at `:55`.
-- The admin context helper is `def _admin(peer_sans=())` at `:63-67`, and `ADMIN_SCOPE = "7"` is
+- The admin context helper is `def _admin(peer_sans=())` at `:62-66`, and `ADMIN_SCOPE = "7"` is
   at `:16`.
 - The pending-read precedent is `class TestPendingAndCache` at `:276`, with
   `test_pending_intent_row_is_not_found_and_never_cached` at `:278` using the pending id
@@ -153,8 +153,9 @@ Expect exactly 2 hits, one in `UpdateFormula` and one in `DeleteFormula`. Lint i
   and `indicators_pb2.DeleteFormulaRequest(formula_id=...)` (precedent `tests/test_formulas.py:544`,
   `:575`).
 - `ctx_with` is at `tests/conftest.py:21`. It makes `ctx.abort` an `AsyncMock` that raises
-  `grpc.RpcError` (`:33`).
-- `SYSTEM_AUTHOR` is imported at `test_private_formulas.py:9`.
+  `grpc.RpcError` (`:32`).
+- `SYSTEM_AUTHOR` is imported at `test_private_formulas.py:10`
+  (`from app.formulas import SYSTEM_AUTHOR`).
 - Ledger traps:
   - `fails.md:75` (063): add a test per guard branch.
   - `fails.md:726-728`: use real pb2 messages, never MagicMock proto stand-ins.
@@ -217,7 +218,7 @@ DeleteFormula soft-deletes.
 - `_SANDBOX_WRAPPER = textwrap.dedent("""` at `sandbox.py:206`.
   - It is a **non-raw** string filled by `.format(` (`:348`), so braces are doubled (`{{}}`) and any
     `\n` written in the source becomes a real newline in the child's code.
-- The wrapper output is at `:310-312`:
+- The wrapper output block is at `:310-312` (`:310` is the comment `# Output must be assigned to result variable`; the code is on `:311-312`):
   `_output = _formula_globals.get('result', {{}})` then
   `print("__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))`.
 - The user `exec` is at `:307`.
@@ -483,8 +484,10 @@ they guard that the numbers are unchanged.
 - The VWAP entry is `name: 'VWAP'` at `:103`, with `description: 'Volume Weighted Average Price'`
   at `:104`.
 - The consumers are `SymbolScreening.tsx`, `ComponentEditor.tsx`, `StrategyWizard.tsx`,
-  `RuleEditor.tsx`, `app/insights/screener/page.tsx`, `ruleSummary.ts` and `screenCriteria.ts`.
-  They are found by `grep -rln strategyCatalog src`, and none of them needs a change.
+  `RuleEditor.tsx`, `app/insights/screener/page.tsx`, `ruleSummary.ts`, `screenCriteria.ts` and
+  `src/lib/screenPresets.test.ts`. They are found by `grep -rln strategyCatalog src`, and none of
+  them needs a change: `screenPresets.test.ts` imports `BUILTIN_INDICATORS` but reads only `.name`
+  (`:7`) and asserts no description string.
 - A repo-wide grep finds no test or spec that asserts the old strings.
 
 **TDD**: `red-green required`
@@ -629,7 +632,7 @@ grep -n "wilderATR\|Wilder" services/xstockstrat-indicators/docs/context-constit
 
 **Codebase Evidence**:
 - The wrapper defaults a missing `result` to `{}`: `_output = _formula_globals.get('result', {{}})`
-  at `sandbox.py:310`. That run still prints a parseable marker, so it succeeds with `{}` even after
+  at `sandbox.py:311`. That run still prints a parseable marker, so it succeeds with `{}` even after
   Step 3.
 - The report format precedent is `docs/reports/2026-10-21-indicators-formula-correctness-defect.md:1-9`
   (the `**Recorded**`, `**Severity**`, `**Impact type**`, `**Environment**`, `**Affected service(s)**`,
@@ -644,7 +647,7 @@ grep -n "wilderATR\|Wilder" services/xstockstrat-indicators/docs/context-constit
 
 **Instructions**:
 1. Create the report, following the header shape of the 2026-10-21 precedent and `defect-filing.md`.
-   - Observed: a formula that never assigns `result` returns `success=true, output={}` (`sandbox.py:310`).
+   - Observed: a formula that never assigns `result` returns `success=true, output={}` (`sandbox.py:311`).
    - Expected: undecided; triage decides.
    - Source: feature 268 design.md § Open Risks.
    - Severity: `SEV-2`, provisional. `/sdd-triage` confirms or re-rates it.
