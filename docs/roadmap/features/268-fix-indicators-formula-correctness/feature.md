@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-indicators-formula-correctness-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. OQ-1 = Option A; @option-B AC-8/AC-9 deleted |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
+| 2026-10-28 | `implementation-ready` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec: steps 2, 3, 7, 10 aligned with current codebase after merging origin/main-dev (line drift only; no file or symbol missing) |
 
 ---
 
