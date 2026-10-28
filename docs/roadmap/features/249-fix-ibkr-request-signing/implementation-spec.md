@@ -149,8 +149,9 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
 - No in-repo vectors or RSA test keys exist (recon.md:252-256). `zz_sigrepro_test.go` was ephemeral.
 - `.gitleaks.toml:33-40` is a single `[allowlist]` table, `regexTarget = "line"`, with four exact-literal
   `regexes`. Each one is documented by a comment block above it (`:6-32`).
-- gitleaks runs in CI via `gitleaks/gitleaks-action@v3` (`.github/workflows/ci.yml:754`). trufflehog runs
-  `--only-verified` (`ci.yml:737`, args `:749`). `which gitleaks` → not installed on this host.
+- gitleaks runs in CI via `gitleaks/gitleaks-action@v3` (`.github/workflows/ci.yml:767`). trufflehog runs
+  `--only-verified` (`ci.yml:750`, `extra_args` `:762`). gitleaks is installed on this host at
+  `~/go/bin/gitleaks` (re-spec 2026-10-28), so both mandatory gitleaks commands below can run here.
 - Reference: ibind @ `759ec3a1` (Execution Summary pins).
 
 **TDD**: `N/A (fixture data only — consumed by the red assertions of Steps 3, 5, 7, 9)`
@@ -216,7 +217,7 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
 cd services/xstockstrat-trading && GOWORK=off go vet ./internal/testdata/ && \
   GOWORK=off go test ./internal/testdata/ -count=1   # package compiles; vectors.json decodes
 python3 -c "import json;d=json.load(open('internal/testdata/ibkr/vectors.json'));print(sorted(d))"
-cd ../.. && gitleaks dir services/xstockstrat-trading/internal/testdata/ibkr --config .gitleaks.toml  # brew install gitleaks → "no leaks found"
+cd ../.. && gitleaks dir services/xstockstrat-trading/internal/testdata/ibkr --config .gitleaks.toml  # ~/go/bin/gitleaks (brew install gitleaks) → "no leaks found"
 openssl genrsa 2048 > /tmp/probe.pem && gitleaks dir /tmp/probe.pem --config .gitleaks.toml  # a NEW key is still detected (exit 1)
 ```
 
@@ -346,8 +347,8 @@ grep -rn "nonceAAAAAAAAAAA" --include="*_test.go" internal | wc -l   # literals 
   precedent is `services/xstockstrat-marketdata/internal/service/marketdata_service.go:15,60` (recon.md:111-114).
 - `IBKRConfig` (`ibkr.go:24-31`) holds no key material. Instantiate failures are logged with `err`
   (`trading.go:268`, `:2521`, `:2570`), so parse errors must not echo PEM bytes (recon.md:301-303).
-- PEM parse precedent: `internal/mtls/mtls.go:21-37` wraps errors without echoing material (weak precedent,
-  recon.md:119-121).
+- PEM parse precedent: `load()` at `internal/mtls/mtls.go:22-41` wraps errors without echoing material (weak
+  precedent, recon.md:119-121).
 - The TRADING-3 switch to reuse is `ibkr.go:568-576` (401/403 → `ErrInvalidCredentials`, `broker.go:10`).
 - `validateAndRecordCredential`'s 5s `valCtx` is at `trading.go:2603`. The reconcile per-call bound is
   `brokerCallTimeout()` at `trading.go:2440-2446` (5000ms).
@@ -519,8 +520,9 @@ grep -rn "func ibkrAuthServer\|live_session_token" --include="*_test.go" interna
 - `confirmReply` keeps `%w` on transport errors (`:118-119`, `:130`).
 - The duplicate 401/403 branch is `:568-576`.
 - `ErrInvalidCredentials` doc comment is at `broker.go:8-9`.
-- Only two uncertain classifiers exist: `grep -rn "DeadlineExceeded\|Timeout()" internal/ cmd/` →
-  `trading.go:684`, `:1521` (non-test). `alpaca.go:67` is an unrelated method name.
+- Only two uncertain classifiers exist. `grep -rn "DeadlineExceeded\|Timeout()" internal/ cmd/` (non-test) →
+  `trading.go:684`, `:1521`, `:1973`, `:2377`, `:2440`, plus `alpaca.go:67`. Only `:684` and `:1521` classify
+  errors: `:1973`/`:2377`/`:2440` match `brokerCallTimeout()`, and `alpaca.go:67` is the `HTTPTimeout()` method.
 - Lapsed-session reply pinned: HTTP 400 with body containing `no bridge` (ibind `ibkr_client.py:139-143`).
 
 **TDD**: `red-green required`
@@ -605,7 +607,8 @@ grep -n "TRADING_MODE\|TradingMode" internal/broker/ibkr.go   # expect none (no 
 **Codebase Evidence**:
 - Existing IBKR tests build clients with empty creds and no handshake (recon.md:297-300): `ibkr_test.go:52`, `:101`,
   `:151`, `:220`, `:247`, `:269`, `:305`, `:352`, `:373`, `:397` and `ibkr_reply_test.go:80`, `:102`, `:116`,
-  `:126`, `:139`, `:163`. `TestReplaceOrder_IBKR` asserts only `gotAuth != ""` (`ibkr_test.go:285`, recon.md:300).
+  `:126`, `:139`, `:163`. `TestReplaceOrder_IBKR` (declared `ibkr_test.go:285`) asserts only that the header is
+  non-empty: `if gotAuth == ""` at `ibkr_test.go:323` (recon.md:300).
 - Fill-state tests already exist: `TestGetOrder_IBKRAvgPrice` (`ibkr_test.go:254`) and
   `TestIBKRListOrders_ParsesMultipleOrders` (`:361`).
 
@@ -1031,10 +1034,12 @@ grep -n "IBKR_TEST_CREDENTIALS_INPUT" e2e/fixtures/INVENTORY.md
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, `mcp-tools.md` parity, no secret values in tool output
 
 **Codebase Evidence**:
-- `manage_account` is at `tools.py:2138-2147`. The IBKR shape in its docstring is at `:2161-2163`, and the
-  update_credentials error line is at `:2166-2168`. Checks are non-empty only (`:2183-2200`).
-- Passthrough: `client.py:2392-2440` (recon.md:73), unchanged. `_grpc_error_message` is at `tools.py:223`.
-- Runbook row: `docs/runbooks/mcp-tools.md:1391`.
+- `async def manage_account` is at `tools.py:2153` (signature `:2153-2161`). The IBKR shape in its docstring is
+  at `:2175-2177`, and the update_credentials error sentence is at `:2179-2181`. Checks are non-empty only
+  (`:2191-2214`).
+- Passthrough: `client.py` `register_broker_account` `:2393`, `update_broker_account_credentials` `:2421`,
+  `deregister_broker_account` `:2444` (recon.md:73), unchanged. `_grpc_error_message` is at `tools.py:223`.
+- Runbook row: `docs/runbooks/mcp-tools.md:1392`.
 - The tool count is unchanged, so the `fails.md:2068-2085` inventory traps do not trigger (recon.md:319-321).
 
 **TDD**: `red-green required` (paired Step 16)
@@ -1042,9 +1047,9 @@ grep -n "IBKR_TEST_CREDENTIALS_INPUT" e2e/fixtures/INVENTORY.md
 **Covers**: `—`
 
 **Instructions**:
-1. Docstring `:2161-2163`: the IBKR shape lists the 7 keys (the 3 new ones are PEM strings).
-2. `:2166-2168`: add "and an IBKR blob missing any required field (INVALID_ARGUMENT)".
-3. `mcp-tools.md:1391`: the same 7-key IBKR shape. Edit only that row; do not touch the `@AC-32 @feature-224` /
+1. Docstring `:2175-2177`: the IBKR shape lists the 7 keys (the 3 new ones are PEM strings).
+2. `:2179-2181`: add "and an IBKR blob missing any required field (INVALID_ARGUMENT)".
+3. `mcp-tools.md:1392`: the same 7-key IBKR shape. Edit only that row; do not touch the `@AC-32 @feature-224` /
    `@AC-5 @feature-149` sections (recon.md:201).
 4. Tool name, parameters, validation and return shape are unchanged. Trading stays the only validator (C-10).
 
