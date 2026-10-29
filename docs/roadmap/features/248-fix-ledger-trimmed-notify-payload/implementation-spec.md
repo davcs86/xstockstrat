@@ -489,13 +489,22 @@ grep -n "pool" src/services/eventNotifier.ts || echo "OK: notifier holds no pool
 - `ledgerServiceImpl.test.ts` (re-grepped 2026-10-29 at `b6e518a7`):
   - `makePool` `:26`;
   - `makeRow` `:78-93` (snake_case DB row);
-  - `makeStreamCall` `:514-534`, with `write()` push-only, `destroy(err)` recording and `on()` a no-op (locate by
-    symbol).
-  - Its only consumer today is `exportEvents`.
+  - `makeStreamCall(req: any, userId?: string)` `:514-534` (userId is **positional**), with `write()` push-only,
+    `destroy(err)` recording and `on()` a no-op (locate by symbol).
+  - Its only consumer today is `exportEvents`: 7 call sites (`:595`, `:604`, `:616`, `:629`, `:640`, `:650`, `:662`,
+    re-grepped 2026-10-29 post-Step-5 merge-up), each passing `'u_42'` as the 2nd positional argument. The
+    caller-scope assertions read it back (e.g. `h.captured.params[0] === 'u_42'`), so the moved double must keep
+    accepting a positional string.
 - No `streamEvents` unit test exists (recon.md § Not found).
-- `LedgerServiceImpl(pool, config, notifier?)` (`src/grpc/ledgerServiceImpl.ts:20-25`).
-- Replay is `this.pool.query(SELECT … ORDER BY sequence ASC)` (`:235-242`). The buffer push while `!live` is at
-  `:205-208`, and the flush at `:255-259`.
+- `LedgerServiceImpl(pool, config, notifier?)` (`src/grpc/ledgerServiceImpl.ts:18-25`, constructor `:19`).
+- Re-grepped 2026-10-29 after Step 5 and the main-dev merge-up (lines drifted; locate by content): replay is
+  `this.pool.query(SELECT … ORDER BY sequence ASC)` (`:244-249`, followed by the `if (cleaned) return;` guard
+  `:251`). The buffer push while `!live` is at `:206`, and the flush loop at `:260-266` (`if (cleaned) return;`
+  `:260`, `writeRow` `:265`). `getEvent`'s `rowToEvent` call is `:281`.
+- `eventRowResolver.test.ts` declares an inline `STUB` (`:19-22`) with only `event_id` and `recorded_at`; its
+  assertions reference `STUB.event_id` symbolically, so swapping in `toTrimmedStub(makeEventRow())` changes no
+  assertion.
+- `src/__tests__/fixtures/` does not exist yet (create).
 - C-13 (`docs/sdd/constitution.md` C-13; `docs/patterns/test-data-inventory.md:69-83`): the snake_case event row
   (`makeRow`, `ledgerServiceImpl.test.ts:78-93`), the 8000-char payload and the trimmed stub get a second
   consumer in this step (`eventRowResolver.test.ts`, `streamResolveWired.test.ts`, `ledgerServiceImpl.test.ts`,
@@ -539,8 +548,10 @@ binding, never the assertion.
    - `TRIMMED_RECORDED_AT = '2026-10-21T12:00:00.123456+00:00'`;
    - `toTrimmedStub(row)`: picks exactly the trigger stub keys (`001_…up.sql:73-79`) and sets `recorded_at` to
      `TRIMMED_RECORDED_AT` unless overridden. No `payload` key.
-2. `src/__tests__/fixtures/streamCall.ts`: `makeRecordingCall(req, opts?: { userId?: string; writeReturns?: boolean })`,
-   the `makeStreamCall` double (`ledgerServiceImpl.test.ts:514-534`) moved here and extended:
+2. `src/__tests__/fixtures/streamCall.ts`:
+   `makeRecordingCall(req, opts?: string | { userId?: string; writeReturns?: boolean })`, the `makeStreamCall`
+   double (`ledgerServiceImpl.test.ts:514-534`) moved here and extended. A string `opts` is normalised to
+   `{ userId: opts }`, so the existing positional `makeStreamCall(req, 'u_42')` calls keep their caller scope:
    - `on(event, cb)` records handlers;
    - `write()` records and returns `opts.writeReturns ?? true`;
    - `end()` / `destroy(err)` record as today.
@@ -549,7 +560,9 @@ binding, never the assertion.
    (call).
 4. In `ledgerServiceImpl.test.ts`, replace the local `makeRow` and `makeStreamCall` with imports from `./fixtures/…`
    (keep the local names by aliasing, so the existing `exportEvents` and `rowToEvent` cases change no line other
-   than the import). In `eventRowResolver.test.ts`, replace the inline stub with `toTrimmedStub(makeEventRow())`;
+   than the import). The alias is safe only because of item 2's string-`opts` normalisation: the 7 `exportEvents`
+   sites pass `'u_42'` positionally, and an object-only `opts` would drop it and fail the caller-scope
+   assertions. In `eventRowResolver.test.ts`, replace the inline stub with `toTrimmedStub(makeEventRow())`;
    no assertion change.
 
 **A. `eventNotifier.test.ts` (tier i).**
@@ -601,7 +614,7 @@ Subjects are `any`-bound dynamic imports. Sequences are JS numbers here; string 
    - `occurredAt` is a valid Date equal to the appended one.
    - `sourceService 'xstockstrat-trading'`, `correlationId 'corr-42'`, `metadata {broker:'alpaca'}` and
      `userId 'user-7'`.
-   - It deep-equals `rowToEvent(fullRow)`, the `getEvent` mapping (`ledgerServiceImpl.ts:272`).
+   - It deep-equals `rowToEvent(fullRow)`, the `getEvent` mapping (`ledgerServiceImpl.ts:281`).
 2. **AC-4**:
    - Set the pool to max-1 semantics: the fake pool's `connect` throws if a second checkout is outstanding.
    - Use a call whose `write()` returns `false` and never emits `'drain'`.
@@ -644,6 +657,7 @@ grep -c "new EventNotifier(() => client)" src/__tests__/eventNotifier.test.ts   
 grep -n "if (!\|catch {" src/__tests__/streamResolveWired.test.ts || echo "OK: unguarded"
 grep -ln "from './fixtures/" src/__tests__/*.test.ts      # 4: eventNotifier, eventRowResolver, streamResolveWired, ledgerServiceImpl
 grep -n "^function makeRow\|^function makeStreamCall" src/__tests__/ledgerServiceImpl.test.ts || echo "C-13: moved to fixtures"
+grep -n "typeof opts === 'string'" src/__tests__/fixtures/streamCall.ts   # positional userId still honoured
 grep -nE "from '(c8|typescript|eslint|ts-node|@types/)" src/__tests__/fixtures/*.ts || echo "OK: fixtures import runtime deps only"
 ls src/__tests__/fixtures/INVENTORY.md
 ```
@@ -664,13 +678,15 @@ ls src/__tests__/fixtures/INVENTORY.md
   - `:191` `let maxSeq = req.fromSequence ? req.fromSequence - 1 : 0;`;
   - `:196` `if (row.sequence > maxSeq) maxSeq = row.sequence;`;
   - `:210` `if (row.sequence > maxSeq) writeRow(row);`;
-  - `:256` `if (row.sequence > maxSeq) writeRow(row);`.
-  - Lines re-checked 2026-10-29 at `b6e518a7` (unchanged). Step 5's post-await guard shifts `:251` and `:256` down
-    by one; locate by content.
+  - `:265` `if (row.sequence > maxSeq) writeRow(row);` (the flush loop).
+  - Re-grepped 2026-10-29 after Step 5 and the main-dev merge-up: `:191`, `:196` and `:210` are unchanged; the
+    flush site moved to `:265`. The `cleaned` guards are now at `:251` (post-replay) and `:260` (pre-flush).
+    Locate by content.
 - pg returns `BIGINT` as a string for replay and resolved rows, and `setTypeParser` has no hit in `src/`. NOTIFY JSON
   carries a number. String-vs-string `>` is lexicographic, so a replayed `"99"` followed by a resolved `"100"` drops
   100.
-- `rowToEvent` passes `sequence: row.sequence` (`:375`) and is unchanged (single mapper).
+- `rowToEvent` passes `sequence: row.sequence` (`:384`) and is unchanged (single mapper).
+- `streamEvents` holds exactly 1 `await` (the replay `pool.query`), and `setTypeParser` has 0 hits in `src/`.
 
 **TDD**: `red-green required`
 
@@ -679,9 +695,9 @@ ls src/__tests__/fixtures/INVENTORY.md
 **Instructions**:
 1. `:191` → `let maxSeq = req.fromSequence ? Number(req.fromSequence) - 1 : 0;`.
 2. `:196` → `const seq = Number(row.sequence); if (seq > maxSeq) maxSeq = seq;`.
-3. `:210` and `:256` → `if (Number(row.sequence) > maxSeq) writeRow(row);`.
+3. `:210` and `:265` → `if (Number(row.sequence) > maxSeq) writeRow(row);`.
 4. Do not touch `rowToEvent`, the replay SQL, the flush's synchronous structure (LEDGER-2: no `await` enters
-   `streamEvents`) or the `cleaned` guard at `:251`.
+   `streamEvents`) or the `cleaned` guards at `:251` and `:260`.
 
 **Verification**:
 ```bash
@@ -770,15 +786,17 @@ grep -n "^function makeRow\|^function makeStreamCall" src/__tests__/ledgerServic
 - The `tsconfig.json` test exclude is gone (`:19-22` excludes only `node_modules` and `dist`), so production `tsc`
   emits `src/__tests__/db/**` (design § Open Risks). The DB test must import only runtime dependencies (`pg`,
   `node:*`) and `src` modules, never a devDependency. `src/__tests__/db/` does not exist yet (create).
-- CI anchors (`.github/workflows/ci.yml`, re-grepped 2026-10-29 at `b6e518a7`):
+- CI anchors (`.github/workflows/ci.yml`, re-grepped 2026-10-29 after the main-dev merge-up; locate by content):
   - filters: `ci` `:40-41`, `proto` `:42-44`, `node-shared` `:48-51`, `xstockstrat-ledger` `:60`, `migrations` `:70-79`;
-  - Node toolchain steps in `node-test` `:574-590` (checkout `:574`, `pnpm/action-setup@v6` 9.15.9 `:576-578`,
-    `setup-node@v7` "24" `:580-584`, `pnpm install` `:586-587`, proto build `:589-590`);
-  - `migration-rerun` job `:643-679`: TimescaleDB service block `:650-663`, migrator build `:667-668`, the run step
-    `:673-679` (`--network host`, `DATABASE_URL`, `SEED_USER_ID`; it overrides the entrypoint to run
+  - Node toolchain steps in `node-test` `:577-593` (checkout `:577`, `pnpm/action-setup@v6` 9.15.9 `:579-581`,
+    `setup-node@v7` "24" `:583-587`, `pnpm install` `:589-590`, proto build `:592-593`);
+  - `migration-rerun` job `:646-682`: TimescaleDB service block `:654-667`, migrator build `:670-671`, the run step
+    `:676-682` (`--network host`, `DATABASE_URL`, `SEED_USER_ID`; it overrides the entrypoint to run
     `scripts/migration-rerun.sh`, which this job does not need);
-  - `ci-gate.needs` `:799-815`;
-  - evaluate echoes `:820-835`.
+  - a new `migration-contract-gate` job (`:686`, preceded by its 2-line comment `:684-685`) now sits directly after
+    `migration-rerun`;
+  - `ci-gate.needs` `:822-841` (now includes `migration-contract-gate` `:834`);
+  - evaluate echoes `:845-861` (now include `migration-contract-gate` `:855`).
 - `scripts/Dockerfile.migrate` has `ENTRYPOINT ["/repo/scripts/db-migrate.sh"]` (`:18`), and `db-migrate.sh`
   applies config then ledger first (`:152`, `:155`). It requires `SEED_USER_ID` (`:89`).
 - `docs/patterns/ci-overview.md:7-20` is the job table (docs row in Step 11).
@@ -827,17 +845,20 @@ grep -n "^function makeRow\|^function makeStreamCall" src/__tests__/ledgerServic
         - Scope limit (design 5): this proves the listener session honours `statement_timeout`; the real
           `resolveEventRow` is proven by case 1. The `query_timeout` backstop and teardown are unit-only (Step 6
           A.3.5). Record both in the Deviation Log, not in `**Covers**`.
-3. **`ci.yml`.** Add a job `ledger-db-test` (name `Ledger DB test (TimescaleDB)`) after `migration-rerun`.
+3. **`ci.yml`.** Add a job `ledger-db-test` (name `Ledger DB test (TimescaleDB)`) after the `migration-contract-gate`
+   job (which now follows `migration-rerun`; place it by content, not line), so the two migration jobs stay
+   adjacent.
    - `needs: changes`.
    - `if:` true when any of `xstockstrat-ledger`, `migrations`, `proto`, `ci` or `node-shared` matches.
-   - `services.timescaledb` is copied from `:650-663`.
+   - `services.timescaledb` is copied from `migration-rerun` (`:654-667`).
    - Steps:
-     - the Node toolchain, copied from `:574-590`;
+     - the Node toolchain, copied from `node-test` (`:577-593`);
      - `docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .`;
      - `docker run --rm --network host -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" -e SEED_USER_ID="00000000-0000-4000-8000-0000000000c1" xstockstrat-migrate-ci`;
      - `pnpm run test:db` in `services/xstockstrat-ledger` with
        `LEDGER_DB_TEST_URL: postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable`.
-   - Add `ledger-db-test` to `ci-gate.needs`, and an `echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"` line.
+   - Add `ledger-db-test` to `ci-gate.needs` after `migration-contract-gate`, and an
+     `echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"` line after the `migration-contract-gate` echo.
 4. **RED.**
    - If `LEDGER_DB_TEST_URL` reaches a TimescaleDB in the executor environment, apply a fast-path mutation in
      `src/services/eventNotifier.ts`: make the stub test always false, so stubs fan out unresolved. Then run
@@ -950,9 +971,9 @@ git status --short   # no service changes
   - § Config Keys Consumed `:62-72`.
 - Config `CLAUDE.md:104` "New keys require PR to `packages/proto/`" is drift: 022 and 248 seed keys without a proto
   PR (design 4).
-- `docs/patterns/config-governance.md:56-61` (registration steps) and the Per-Feature Registered Keys header `:108`
-  (append-only, newest-first log). The newest entry is feature 240 (`:112` at `b6e518a7`, 2026-10-29); lines drift,
-  so locate by content.
+- `docs/patterns/config-governance.md:56-61` (registration steps) and the Per-Feature Registered Keys header `:109`
+  (append-only, newest-first log). The newest entry is feature 240 (`:113`, re-grepped 2026-10-29 after the main-dev
+  merge-up); lines drift, so locate by content.
 - `docs/patterns/ci-overview.md:7-20` is the job table (`node-test` row `:18`).
 - `docs/patterns/test-data-inventory.md:73-74` ("config/ledger at two … no new home") and the Node row `:83`
   ("Not materialized") go stale once Step 6 creates the ledger home.
@@ -994,7 +1015,7 @@ git status --short   # no service changes
 4. **Config `CLAUDE.md:104`** (locate by content). Replace it with "New keys are seeded by a config migration and registered in
    `docs/patterns/config-governance.md` § Per-Feature Registered Keys. A `packages/proto/` PR is needed only for a
    new RPC or field."
-5. **`config-governance.md`.** Insert the newest-first entry before the feature 240 entry (`:112` today): `### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)`.
+5. **`config-governance.md`.** Insert the newest-first entry before the feature 240 entry (`:113` today): `### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)`.
    Give it a one-line purpose and a table row (key, `int`, `2000`, clamp ≤0/non-finite → 2000, seeded staging +
    production by `033_ledger_stream_resolve_timeout`).
    - Locate the insert point by content (newest entry), not by line: 243's sentinel row shifts the lines.
@@ -1083,3 +1104,17 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Grep note**: `grep -n "pool" eventNotifier.ts` hits only the pre-existing class JSDoc (`:24`, `:26`, "separate
   from the query pool"); the notifier holds no Pool and no SQL.
 - **Disposition**: no spec change. Step 6 must turn the 7 cases green with its construction migration.
+
+### 2026-10-29 — Re-spec (sdd-execute sequential §5.3, after Step 5 + main-dev merge-up): Steps 6, 7, 9, 11
+
+- **Step 6 (correctness)**: `makeStreamCall(req, userId?)` takes userId positionally and all 7 `exportEvents` sites
+  pass `'u_42'` that way. Section 0.2's object-only `opts` would have silently dropped it under section 0.4's plain
+  alias and broken the caller-scope assertions. `makeRecordingCall`'s `opts` now accepts a string (normalised to
+  `{ userId }`); a verification grep was added. Anchors refreshed: replay `:244-249`, flush `:260-266`, `getEvent`
+  `rowToEvent` `:281`, inline `STUB` in `eventRowResolver.test.ts:19-22`.
+- **Step 7**: the flush sequence site is `:265` (was `:256`); `cleaned` guards are `:251` and `:260`; `rowToEvent`
+  `sequence` is `:384`. Instructions unchanged in substance.
+- **Step 9**: `ci.yml` anchors refreshed (node-test toolchain `:577-593`, migration-rerun `:646-682`, ci-gate needs
+  `:822-841`, echoes `:845-861`). A new `migration-contract-gate` job now follows `migration-rerun`; `ledger-db-test`
+  is placed after it, and its `needs`/echo lines after its entries.
+- **Step 11**: `config-governance.md` header `:109`, feature 240 entry `:113`. Other anchors matched.
