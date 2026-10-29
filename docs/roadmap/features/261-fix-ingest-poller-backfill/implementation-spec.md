@@ -232,7 +232,7 @@ cd services/xstockstrat-ingest && grep -n "item skipped\|polled ingested=\|items
 
 ### Step 4 — test: FR-1 isolation and all-fail (AC-1, AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — modify

@@ -334,9 +334,10 @@ def _item(symbol="AAPL", **over):
     return {"symbol": symbol, "direction": "buy", "conviction": 0.7, **over}
 
 
-async def _run_cycle_with(monkeypatch, result):
+async def _run_cycle_with(monkeypatch, result, *, source=None, ingest=None):
     """One cycle over a single source returning `result`; yields (ingest mock, captured errors)."""
-    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=[_mcp_source()]))
+    src = source or _mcp_source()
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=[src]))
     errors = []
 
     async def fake_mark_error(db, user_id, slug, error):
@@ -345,7 +346,7 @@ async def _run_cycle_with(monkeypatch, result):
     monkeypatch.setattr(loop, "mark_source_error", AsyncMock(side_effect=fake_mark_error))
     servicer = MagicMock()
     servicer._db = MagicMock()
-    servicer._ingest_external_signal = AsyncMock(return_value=(1, False))
+    servicer._ingest_external_signal = ingest or AsyncMock(return_value=(1, False))
     await loop.run_one_cycle(servicer, _FakeCfgWatcher(), _FakeMcpClient(result=result))
     return servicer._ingest_external_signal, errors
 
@@ -415,3 +416,38 @@ async def test_text_fallback_signals_envelope(monkeypatch):
     ingest.assert_awaited_once()
     assert ingest.await_args.args[0].symbol == "AAPL"
     assert errors == []
+
+
+async def test_ac1_one_failing_item_does_not_drop_batch(monkeypatch, caplog):
+    # AC-1 @FR-1: one failing item is skipped; the rest of the batch still ingests as the owner.
+    caplog.set_level("INFO", logger=loop.__name__)
+    ingest, errors = await _run_cycle_with(
+        monkeypatch,
+        _FakeResult([_item("AAPL"), _item("MSFT"), _item("TSLA")]),
+        source=_mcp_source(slug="src-a", user_id="u-1"),
+        ingest=AsyncMock(side_effect=[(1, False), RuntimeError("boom"), (3, False)]),
+    )
+
+    assert ingest.await_count == 3
+    calls = ingest.await_args_list
+    assert [calls[0].args[0].symbol, calls[2].args[0].symbol] == ["AAPL", "TSLA"]
+    assert all(c.kwargs["owner"] == "u-1" for c in calls)
+    assert errors == []
+    assert any("src-a" in r.getMessage() and "skipped=1" in r.getMessage() for r in caplog.records)
+
+
+async def test_ac8_all_items_failed_records_last_error(monkeypatch, caplog):
+    # AC-8 @FR-1: an all-fail batch is recorded as a source error, after the summary record.
+    caplog.set_level("INFO", logger=loop.__name__)
+    ingest, errors = await _run_cycle_with(
+        monkeypatch,
+        _FakeResult([_item("AAPL")]),
+        source=_mcp_source(slug="src-a", user_id="u-1"),
+        ingest=AsyncMock(side_effect=RuntimeError("boom")),
+    )
+
+    assert any(slug == "src-a" and "all 1 items failed" in err for slug, err in errors)
+    msgs = [r.getMessage() for r in caplog.records]
+    summary = next(i for i, m in enumerate(msgs) if "src-a" in m and "skipped=1" in m)
+    failed = next(i for i, m in enumerate(msgs) if "source src-a failed" in m)
+    assert summary < failed

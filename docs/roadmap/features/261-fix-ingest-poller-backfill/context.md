@@ -657,3 +657,16 @@ halt). design.md is not written and status stays `spec-ready`.
 - Verification: grep hits at `:149`/`:153`/`:155`; `ruff check` + `ruff format --check` clean; full suite 353 passed,
   coverage 83.83% (≥40%).
 - Deviations: none.
+
+### Step 4 — test: FR-1 isolation and all-fail (done 2026-10-29)
+
+- Added to `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`: `test_ac1_one_failing_item_does_not_drop_batch`
+  and `test_ac8_all_items_failed_records_last_error` (source `src-a`, owner `u-1`, `caplog` on `app.engine.mcp_client_loop`
+  at INFO). `_run_cycle_with` gained optional `source=` / `ingest=` kwargs so both reuse the Step 2 helper (C-13:
+  single consumer, data inline).
+- TDD: AC-1 red: `assert 2 == 3` awaits (batch aborted at the failing item); AC-8 red: `all 1 items failed` not
+  recorded (`last_error` was `boom`) → 2 failed / 17 passed against the pre-Step-3 `mcp_client_loop.py` (`f847487f`,
+  swapped in temporarily, then restored) → green: 19 passed.
+- Verification: module 19 passed; full suite 355 passed, coverage 84.24% (≥40%); `ruff check` + `ruff format --check`
+  clean. `test_source_failure_records_health_and_continues` and `test_second_identical_cycle_deduplicates` stay green.
+- Deviations: none.
