@@ -579,3 +579,28 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   `tools.py:694`, `mcp-tools.md:246`, `:256`.
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`.
 - Out of scope: none.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 14 (platform docs)
+
+- Step 14 done. Edits:
+  - Root `CLAUDE.md` § Header Propagation now names identity (ledgerAudit) and notify (notify → identity
+    `ListAdminUserIds`, `adminDirectory.ts`) as the Node outbound per-request callers. Each forwards the trio through
+    an inline `PROPAGATED_HEADERS` const. No "recorded exception" was added, and the feature-224 exception text is
+    unchanged.
+  - The dependency diagram gains `xstockstrat-notify → xstockstrat-identity (ListAdminUserIds, untargeted push
+    audience)`.
+  - PLAT-4 (`docs/context-constitution.md:38`) gets the same correction plus the evidence
+    `adminDirectory.ts#PROPAGATED_HEADERS` (~L11, loop ~L43).
+  - `docs/patterns/header-propagation.md`: the false "none currently does" is replaced by explicit inbound-metadata
+    threading as an accepted Node form, with identity and notify as references. A notify → identity bullet
+    (header-blind, SAN-gated) is added under "Request-scoped outbound edges".
+  - `docs/patterns/inter-service-mtls.md` gains a "Peer-SAN authorization" section. It lists config `GetSecret` ←
+    ingest, identity `ListAdminUserIds` ← notify, and the feature-224 ingest/indicators `system` grants ← analysis.
+    That last one is a deviation, recorded in the spec Deviation Log.
+- TDD: N/A (docs). Pre-edit: greps 2 and 3 showed no `ListAdminUserIds` hits and `none currently does` at `:124`.
+  Post-edit: grep 1 hits `CLAUDE.md:327` (new edge), grep 2 hits all three docs, grep 3 finds nothing.
+- Files modified: `CLAUDE.md`, `docs/context-constitution.md`, `docs/patterns/header-propagation.md`,
+  `docs/patterns/inter-service-mtls.md`.
+- Out of scope: none. Teardown (`/context-forge:context-constitution refresh`) for these files is owned by Step 15
+  instruction 6.
+

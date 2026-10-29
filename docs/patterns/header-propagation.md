@@ -120,8 +120,17 @@ async def _background_task(self, arg, propagation_meta=()):
 Backend Node.js services are **gRPC-only** (`@grpc/grpc-js`). Use `AsyncLocalStorage` to carry
 the three headers from the inbound gRPC call's metadata to any outbound gRPC clients.
 
-The pattern below is the template a Node leaf would use if it made outbound per-request gRPC
-calls; none currently does, so there is no live reference store (the former per-leaf
+Two Node leaves make outbound per-request gRPC calls, and both use **explicit inbound-metadata
+threading** instead of the store: the handler passes `call.metadata` down, and the client copies the
+trio into a fresh `grpc.Metadata` through an inline `PROPAGATED_HEADERS` const. This is an accepted
+Node form beside the AsyncLocalStorage template below:
+
+- identity → ledger admin-audit writes: `services/xstockstrat-identity/src/grpc/ledgerAudit.ts`
+  (`PROPAGATED_HEADERS` `:14`, copy loop `:40-44`);
+- notify → identity `ListAdminUserIds`: `services/xstockstrat-notify/src/services/adminDirectory.ts`
+  (`PROPAGATED_HEADERS` `:11`, copy loop `:42-46`; feature 242).
+
+No Node leaf runs the AsyncLocalStorage store, so it has no live reference (the former per-leaf
 `src/middleware/propagation.ts` copies were unused and removed in feature 175).
 
 ```typescript
@@ -167,3 +176,8 @@ propagation path. Recent additions:
   analysis→trading edge; it forwards `x-user-id`/`x-access-scope`/`x-trace-id` through the analysis
   servicer's per-method forwarding (feature 049), so no new wiring was needed — the edge is
   non-cyclic (trading never calls analysis).
+- **`xstockstrat-notify` → `xstockstrat-identity`** (feature 242): an untargeted alert's Web Push
+  resolves its audience with `ListAdminUserIds` (`IDENTITY_ENDPOINT`). notify forwards the emitting
+  producer's trio, but the RPC is **header-blind**: identity authorizes it by the exact mTLS peer SAN
+  `xstockstrat-notify` alone (`services/xstockstrat-identity/src/grpc/adminDirectory.ts`), so a
+  forwarded `x-access-scope` confers nothing. The edge is non-cyclic (identity never calls notify).

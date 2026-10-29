@@ -32,6 +32,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done — analysis live loop sets `target_user_id=definition.user_id` on the strategy-trigger and fundamentals-unavailable alerts; `fundsignal_loop` stays a broadcast; ruff green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 12 done — analysis tests pin `target_user_id` to the owner on the strategy-trigger (`@AC-4`) and fundamentals-unavailable (`@AC-7`, `@AC-6 @feature-215` extended) alerts; red→green, coverage 88.6%, ruff green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 13 done — agent `emit_alert` docstring and `docs/runbooks/mcp-tools.md` (intro + `broadcast` row) state a broadcast's Web Push reaches admin-role users only; ruff + agent tool tests green |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 14 done — root `CLAUDE.md` (Node outbound callers + notify → identity diagram edge), PLAT-4, `header-propagation.md` (explicit-threading Node form + notify → identity edge) and `inter-service-mtls.md` (Peer-SAN authorization) document the `ListAdminUserIds` edge; verification greps green |
 
 ---
 
@@ -71,4 +72,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 14 (docs: platform docs) onward
+`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 15 (docs: service docs + Teardown) onward

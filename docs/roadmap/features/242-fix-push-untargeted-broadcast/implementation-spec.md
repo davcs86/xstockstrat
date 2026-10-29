@@ -655,7 +655,7 @@ grep -n "admin" services/xstockstrat-agent/app/tools.py docs/runbooks/mcp-tools.
 
 ### Step 14 — docs: platform docs (root CLAUDE.md, PLAT-4, header-propagation, mTLS SAN gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `CLAUDE.md` — modify
@@ -864,3 +864,13 @@ _Populated by /sdd-execute as implementation proceeds._
   `:689-691` / `:698` (off by one); the text matched as quoted. The new docstring clause is a separate sentence on
   two lines so the Verification grep (`admin` and `push` on one line) hits `tools.py`. The agent venv lacked
   `httpcore`/`starlette`, so `uv sync --extra dev --frozen` was run before the pytest Verification (no lockfile change).
+- **Step 14 (2026-10-29) — doc scope and line cites only, no behaviour deviation.** (a) Instruction 4 says "the two
+  SAN-gated grants". The tree has a third: ingest and indicators accept `x-user-id: system` grants only from peer
+  SAN `xstockstrat-analysis` (feature 224, `_SYSTEM_GRANT_SAN` / `_ANALYSIS_SAN`). The new "Peer-SAN
+  authorization" note in `inter-service-mtls.md` lists all three so it is not wrong by omission. Config still has
+  exactly one `peerSan` grant (`authz.ts:124`, ingest). A discovery note that claimed a second marketdata
+  `peerSan` was wrong, because the marketdata grant has none. (b) `header-propagation.md`'s stale text sat at
+  `:123-125` → `:124-126` and the edges list at `:162-171` (the spec cites are off by 1-2). (c) The "none currently
+  does" paragraph was replaced with the explicit-threading form and its two live references. The AsyncLocalStorage
+  template is unchanged. (d) Verification 1 already matched before the edit, through the pre-existing `:336` and
+  `:435` lines that name notify and identity in one sentence. The new diagram edge at `:327` is the intended hit.
