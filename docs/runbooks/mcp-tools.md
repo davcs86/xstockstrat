@@ -65,7 +65,9 @@ The end-to-end connect flow:
    MCP endpoint returns `401` with
    `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which
    triggers discovery. (`GET /sse` returns **404**, not 401 — it is a removed path, not an
-   unauthenticated one, and it never reaches the auth gate.)
+   unauthenticated one, and it never reaches the auth gate.) If identity cannot be reached in time
+   during token validation, the endpoint returns `503` **without** `WWW-Authenticate`, so the client
+   retries instead of re-authorizing; an invalid token still returns `401` with the pointer.
 2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
    returns a `client_id`, no secret.
 3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
@@ -80,6 +82,19 @@ The end-to-end connect flow:
    not match.
 
 ---
+
+### Backend deadlines
+
+Every backend gRPC call the tools make carries a fixed deadline: **10 s** by default, and **45 s** for
+`run_backtest`, `screen_symbols`, `trigger_backfill` and `run_fundamentals_scan`. `list_opportunities`
+keeps its own config-driven deadline (see that tool). These are code constants, not config keys.
+
+On expiry a **read** tool raises `upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A **write** tool raises
+`upstream did not respond within Ns (deadline exceeded); outcome unknown, verify before retrying` —
+the write may have landed, so confirm with the matching read (`get_backfill_status`,
+`get_watchlist`, or the relevant `list_*` tool) before retrying. When the server returned its own
+deadline detail, that detail is passed through instead.
 
 ## Tools
 

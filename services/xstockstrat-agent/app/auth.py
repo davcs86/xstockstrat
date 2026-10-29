@@ -12,7 +12,7 @@ import os
 import grpc
 from gen.identity.v1 import identity_pb2, identity_pb2_grpc
 
-from app import mtls
+from app import client, mtls
 
 log = logging.getLogger(__name__)
 
@@ -20,8 +20,12 @@ IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
 
 
-def _metadata() -> list[tuple[str, str]]:
-    return []
+# "Cannot verify" (identity stalled or unreachable), never "invalid": callers must not answer 401.
+IDENTITY_UNAVAILABLE = object()
+
+
+def _metadata(trace_id: str = "") -> list[tuple[str, str]]:
+    return [("x-trace-id", trace_id)] if trace_id else []
 
 
 async def validate_bearer_jwt(token: str) -> bool:
@@ -37,7 +41,9 @@ async def validate_bearer_jwt(token: str) -> bool:
         async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
             stub = identity_pb2_grpc.IdentityServiceStub(channel)
             claims = await stub.ValidateToken(
-                identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
+                identity_pb2.ValidateTokenRequest(token=token),
+                metadata=_metadata(),
+                timeout=client._RPC_TIMEOUT_S,
             )
             return claims.aud == AGENT_PUBLIC_URL
     except grpc.aio.AioRpcError as e:
@@ -48,7 +54,7 @@ async def validate_bearer_jwt(token: str) -> bool:
         return False
 
 
-async def validate_bearer_claims(token: str) -> dict | None:
+async def validate_bearer_claims(token: str, trace_id: str = "") -> dict | object | None:
     """Validate the token and return the caller's claims, or None.
 
     Same contract as ``validate_bearer_jwt`` — audience-bound, never raises — but it returns the
@@ -60,8 +66,9 @@ async def validate_bearer_claims(token: str) -> dict | None:
     never-raises contract is what keeps an expired token a 401 (with the WWW-Authenticate
     discovery pointer) instead of a 500.
 
-    Returns a dict with user_id / email / roles / aud, or None when the token is missing,
-    invalid, or bound to a different audience.
+    Three outcomes, never raises: a dict with user_id / email / roles / aud; ``None`` when the
+    token is missing, invalid, or bound to a different audience; or ``IDENTITY_UNAVAILABLE`` when
+    identity missed the deadline or was unreachable, so the token could not be judged at all.
     """
     if not token:
         return None
@@ -69,7 +76,9 @@ async def validate_bearer_claims(token: str) -> dict | None:
         async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
             stub = identity_pb2_grpc.IdentityServiceStub(channel)
             claims = await stub.ValidateToken(
-                identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
+                identity_pb2.ValidateTokenRequest(token=token),
+                metadata=_metadata(trace_id),
+                timeout=client._RPC_TIMEOUT_S,
             )
             if claims.aud != AGENT_PUBLIC_URL:
                 return None
@@ -80,6 +89,9 @@ async def validate_bearer_claims(token: str) -> dict | None:
                 "aud": claims.aud,
             }
     except grpc.aio.AioRpcError as e:
+        if e.code() in (grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.UNAVAILABLE):
+            log.warning("JWT claims validation unavailable: %s", e.code().name)
+            return IDENTITY_UNAVAILABLE
         log.info("JWT claims validation failed: %s", e.details())
         return None
     except Exception as e:
