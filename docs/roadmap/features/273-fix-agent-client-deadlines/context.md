@@ -1029,3 +1029,21 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
   so the husky hook does not run (as in Steps 1-8); no `--no-verify` was used.
 - Deviation: return annotations and the comment wrap only. See the Deviation Log.
 
+## Session 2026-10-29 — Step 10 — docs: mcp-tools.md, oauth.md and strat-lab backtest skill (same PR)
+
+- Files:
+  - `docs/runbooks/mcp-tools.md`: new `### Backend deadlines` subsection directly before `## Tools`; the
+    503-without-WWW-Authenticate sentence appended to the Discovery list item.
+  - `services/xstockstrat-agent/docs/oauth.md`: the same 503 sentence after the 401 discovery-pointer text.
+  - `plugins/strat-lab/skills/backtest/SKILL.md`: Phase 1 bullet (`trigger_backfill` "outcome unknown" → check
+    `get_backfill_status` first); Phase 2 bullet (`run_backtest` 45 s budget, retry after narrowing).
+- Grounding: wording checked against `app/client.py` `_RPC_TIMEOUT_S`/`_LONG_RPC_TIMEOUT_S` (10.0/45.0),
+  `app/tools.py` `_grpc_error_message` (read/write tails, server-detail pass-through) and `app/main.py`
+  `_send_identity_unavailable` (503 text/plain, no WWW-Authenticate).
+- TDD: N/A (docs).
+- Verification: the four greps hit `Backend deadlines`, the write-message literal and `503` in mcp-tools.md;
+  `503` in oauth.md; `45 s`/`45s`/`outcome unknown` in SKILL.md; zero `is_public`/`include_public` hits.
+  `list_templates`/`instantiate_template` and the `ingest_signal` watchlist text are untouched (C-16).
+- Same-PR constraint: Steps 3 and 7 are already on this branch; the single integration PR carries all three.
+- Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
+  Steps 1-9); no `--no-verify` was used.

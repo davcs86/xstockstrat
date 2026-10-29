@@ -788,7 +788,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 10 — docs: mcp-tools.md, oauth.md and strat-lab backtest skill (same PR)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `plugins/strat-lab/`, `services/xstockstrat-agent/docs/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -1034,3 +1034,8 @@ _Populated by /sdd-execute as implementation proceeds._
   - The `_send_identity_unavailable` constraint comment wraps to two lines (ruff E501, 100 columns).
   `_new_trace_id` is imported into `app.main`'s module namespace, as the Step 8 note requires. **Disposition**:
   accepted (no scope change).
+- **Step 10 (2026-10-29)** — implemented as specified. The write-tool message sits on its own line in
+  `mcp-tools.md` so the Verification grep for `outcome unknown, verify before retrying` matches the unwrapped
+  literal. The 503 sentence continues the Discovery list item rather than starting a new paragraph. Anchors
+  had drifted by one or two lines (`list_opportunities` deadline wording is at `:1046-1047`, not `:1044-1046`);
+  that text is unchanged. **Disposition**: accepted (no scope change).
