@@ -121,7 +121,7 @@ The change is additive, so it needs no C-16 sign-off.
 
 ### Step 2 — service: owner-scoped `ListOrders` in the entry-backfill (FR-1/FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/entry_backfill.py` — modify
@@ -691,3 +691,9 @@ grep -n "ListOrders(strategy_id, symbol)" services/xstockstrat-analysis/CLAUDE.m
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 2 (2026-10-29), comment wording.** Instruction 3's first comment line, verbatim, is
+  102 chars at its 8-space indent and fails ruff E501 (limit 100), which the step's own
+  Verification runs. Committed as
+  `# Key must match live_loop's (user_id, strategy_id, symbol) key or the slot is never read.`;
+  same constraint, no behaviour change. The second line is verbatim.

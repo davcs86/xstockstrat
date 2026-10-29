@@ -13,6 +13,7 @@ touches the trading write surface. Imported ONLY by main.py, never by live_loop.
 
 import asyncio
 import logging
+import uuid
 from datetime import UTC
 
 from gen.trading.v1 import trading_pb2
@@ -20,6 +21,7 @@ from gen.trading.v1 import trading_pb2
 from app.config.watcher import int_positive
 from app.engine.live_loop import resolve_universe
 from app.handlers.servicer import _row_to_strategy_definition, blend_strategy_id
+from app.identity import owner_metadata
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     matching the FR-8 per-pair isolation the live loop itself already guarantees."""
     if trading_stub is None:
         return
+    pass_trace_id = uuid.uuid4().hex
     sem = asyncio.Semaphore(
         int_positive(cfg_watcher, "analysis.strategy.max_concurrent_entry_backfill", 4)
     )
@@ -62,18 +65,29 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     )
 
     async def _backfill_pair(user_id, strategy_id, symbol):
-        # Key must match live_loop's 3-tuple (user_id, strategy_id, symbol) or the seeded slot is
-        # never read by the loop. ListOrders stays owner-implicit via the order's own user_id.
+        # Key must match live_loop's (user_id, strategy_id, symbol) key or the slot is never read.
+        # Body user_id is load-bearing: trading treats an empty user_id as all users.
         key = (user_id, strategy_id, symbol)
         if live_loop._last_entry_at.get(key) is not None:
             return
         async with sem:
             try:
+                md = owner_metadata(user_id) + [("x-trace-id", pass_trace_id)]
                 resp = await trading_stub.ListOrders(
-                    trading_pb2.ListOrdersRequest(strategy_id=strategy_id, symbol=symbol)
+                    trading_pb2.ListOrdersRequest(
+                        user_id=user_id, strategy_id=strategy_id, symbol=symbol
+                    ),
+                    metadata=md,
                 )
             except Exception as e:
-                log.warning("entry_backfill: (%s,%s) ListOrders failed: %s", strategy_id, symbol, e)
+                log.warning(
+                    "entry_backfill: (%s,%s,%s) ListOrders failed [trace %s]: %s",
+                    user_id,
+                    strategy_id,
+                    symbol,
+                    pass_trace_id,
+                    e,
+                )
                 return
         entry_time = _infer_open_entry_time(list(resp.orders))
         if entry_time is None:
@@ -121,4 +135,8 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
         for symbol in resolved.union:
             tasks.append(_backfill_pair(owner, definition.strategy_id, symbol))
     await asyncio.gather(*tasks, return_exceptions=True)
-    log.info("entry_backfill: boot pass complete (%d pairs considered)", len(tasks))
+    log.info(
+        "entry_backfill: boot pass complete (%d pairs considered) [trace %s]",
+        len(tasks),
+        pass_trace_id,
+    )

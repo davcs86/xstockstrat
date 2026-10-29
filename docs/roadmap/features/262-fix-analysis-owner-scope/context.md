@@ -546,3 +546,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Checkpoints: `report`.
 - Mode: sequential, one commit per step on `feature/fix-analysis-owner-scope`; single integration
   PR at the end. Steps 2–8 pending (Step 1 done at /sdd-spec).
+- Step 2 done (service, `app/engine/entry_backfill.py`): `run_once` mints `pass_trace_id`
+  once per pass; `_backfill_pair` sends `ListOrdersRequest(user_id=…, strategy_id=…, symbol=…)`
+  with `metadata=owner_metadata(user_id) + [("x-trace-id", pass_trace_id)]`; the failure warning
+  and completion log carry the trace id. A `ValueError` from `owner_metadata` stays pair-local.
+  - TDD (AC-1 shape, scratch test not committed — Step 3 owns the real tests): red:
+    `assert req.user_id == "u1"` failed (`'' == 'u1'`) → green: passed after the change.
+  - Verification: grep hits for body `user_id`, `metadata=md`, `owner_metadata(user_id)` and
+    `pass_trace_id`; `ruff check .` + `ruff format --check .` clean.
+  - Deviation: the first comment line was reworded to fit ruff's 100-char limit (Deviation Log).
+  - Expected interim breakage until Step 3: `test_run_once_swallows_per_pair_rpc_failure` and
+    `test_blend_backfill_restricted_to_fundamentals_universe` fail because their `_list_orders(req)`
+    fakes reject `metadata=`; Step 3 instruction 1 changes both signatures.
