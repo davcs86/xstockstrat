@@ -39,10 +39,11 @@ Feature: xstockstrat-config — encrypted secrets and environment/user scoping
     Then neither response contains "fmp-live-abc123"
     And the "marketdata.fmp.api_key" entry is marked is_secret=true with a redacted value
 
-  @AC-4 @FR-3 @feature-147
+  @AC-4 @FR-3 @feature-147 @feature-254
   Scenario: An allow-listed internal caller resolves a secret via GetSecret
     Given "marketdata.fmp.api_key" is stored as an encrypted secret with plaintext "fmp-live-abc123"
     And the GetSecret allow-list grants caller "marketdata" the key "marketdata.fmp.api_key"
+    And the caller presents an mTLS peer certificate whose DNS SAN is "xstockstrat-marketdata"
     When "marketdata" calls GetSecret for "marketdata.fmp.api_key" in environment "production" with x-internal-caller="marketdata"
     Then the response plaintext equals "fmp-live-abc123"
 
