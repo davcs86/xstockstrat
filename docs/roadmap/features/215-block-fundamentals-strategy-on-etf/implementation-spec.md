@@ -1466,7 +1466,7 @@ grep -n "RESOURCE_EXHAUSTED" services/xstockstrat-analysis/CLAUDE.md
 
 ### Step 26 — test: Staging measurement (pre-merge) + real-ETF proof (post-deploy)
 
-**Status**: `pending`
+**Status**: `blocked`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md` — modify (record measurements and results)
@@ -1630,3 +1630,51 @@ The scenario's other Thens are fully covered (Steps 22/24).
 **Actual**: Not edited. The §8 coverage-audit table (a `scrubberExtraTargets` doc) still lists "insights · signal detail (`market/[symbol]`)", a route that no longer exists, and says the UI durable suite "holds only **two** files". `services/xstockstrat-ui/acceptance/` now has 40 files, including this feature's.
 **Reason**: The drift predates 215 and covers the whole table. A one-cell route fix would leave the rest wrong, so a correct fix is a full re-audit of §8, outside 215's scope (F-08).
 **Disposition**: deferred to a follow-up §8 re-audit (`/sdd-qa audit xstockstrat-ui` or a docs-only PR).
+
+### Deviation: Step 26 — measurement ran post-merge
+**Spec said**: Instruction 1 runs before the integration PR merges.
+**Actual**: It ran on 2026-10-15, after the merge: `>50 periods: 0 ()`, max 40 (AAPL, MSFT, AXP).
+**Reason**: Staging MCP access was out of bounds in the execute session. The count is 0, so the PIT-pagination EXTEND changed no stored result and the late measurement had no consequence.
+**Disposition**: accepted as recorded; no action.
+
+### Deviation: Step 26 (a) — SCHD `fundamentals_gap` stays `FUNDAMENTALS_GAP_UNSPECIFIED`
+**Spec said**: `fundamentals_gap` is set.
+**Actual**: The refusal and status match. The gap was UNSPECIFIED on 3 runs, including 2 on one process after an earlier miss (`8c164af5…`, `88b11ccc…`).
+**Reason**: The background ETF fill did not label SCHD. Candidates:
+- the 80% gate is closed by the boot-seed over-count (Finnhub/EDGAR snapshot rows counted as FMP calls);
+- a Debug-only fill error;
+- an empty FMP profile.
+
+The cause is unverified: run logs were not readable from the session.
+**Disposition**: BLOCKS `launched`. Defect `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, triaged to feature `230-fix-etf-flag-fill` (operator, 2026-10-15). Re-run (a) after 230 deploys.
+
+### Deviation: Step 26 (b) — AAPL does not trade
+**Spec said**: AAPL trades and gets no reason 5.
+**Actual**: `NO_TRADE_REASON_ENTRY_NEVER_TRUE` with 0 trades. `fscore.composite` is 0.333–0.393, below the 0.5 entry.
+**Reason**: Environmental. This is the strategy's entry threshold against staging data; the guard behaved correctly.
+**Disposition**: ACCEPTED as environmental by the operator (2026-10-15). The guard half (no reason 5) is the 215 proof; the no-trade is strategy calibration, out of scope.
+
+### Deviation: Step 26 (c) — `squeeze_breakout_trend` on SCHD has no diagnostics
+**Spec said**: The run evaluates normally.
+**Actual**: `BACKTEST_STATUS_OK` with 0 trades and `diagnostics: []`. An explicit-window retry timed out.
+**Reason**: Not refused, which satisfies the guard side. Normal evaluation is unconfirmed.
+**Investigation (2026-10-15, operator asked to address)**:
+- **Rerun.** On an explicit 2026-01-01..09-30 window the result is the same: `d7892362-deb7-4c2b-88a9-abf679b7dfb1` is `OK` with `diagnostics: []`.
+- **AAPL control.** `squeeze_breakout_trend` on AAPL (`df5d966f-f9cb-4e77-b095-6af56908f36a`) gives the same `OK` with `diagnostics: []`, even though AAPL has ≥ 501 bars. The symptom is strategy-wide, not SCHD-specific, and unrelated to 215's guard.
+- **Bars.** SCHD has only 3 stored daily bars (2026-10-13..15).
+- **Formulas.** Both custom formulas succeed standalone in the staging sandbox.
+- **Root contract defect.** `servicer.py:1127-1132` drops a symbol on any `grpc.RpcError`/`Exception` with no row, and the status gate (`:1235-1242`) cannot see it. Some upstream RPC failure is hidden behind a false `OK`. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (SEV-2, open).
+
+**Disposition**: 215's guard side holds: SCHD is not refused by a technical-only strategy. The "evaluates normally" half cannot be shown until that defect is fixed. Proposed: accept (c) as not-215, with the defect tracked separately.
+
+### Deviation: Step 26 (d) — SCHD not in `fundamentals_macd_blend` universe
+**Spec said**: The SCHD opportunity row shows `fundamentals_unavailable: true`.
+**Actual**: SCHD's only row is position-seeded with `fundamentals_unavailable: false`. No queue row has the flag.
+**Reason**: Environmental. Exercising the guard requires watchlisting SCHD against the strategy, a staging mutation not made in this session.
+**Disposition**: ACCEPTED as environmental by the operator (2026-10-15). The skip-row behavior is covered by the Step 22 tests and the Step 24 e2e.
+
+### Deviation: Step 26 (e) — `ScoreStrategy` not reachable via MCP
+**Spec said**: A manual refresh excludes SCHD from `evidence_symbols`.
+**Actual**: Not performed. No MCP tool exposes `ScoreStrategy` or `evidence_symbols`.
+**Reason**: Tooling gap.
+**Disposition**: BLOCKS `launched` pending operator choice: verify via the UI or gRPC, or accept on the Step 18 tests.

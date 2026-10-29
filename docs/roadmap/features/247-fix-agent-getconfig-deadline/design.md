@@ -63,7 +63,7 @@ Each caller's existing `except Exception` already yields its FR-2 fallback, and 
 
 **(b) DCR — SECURITY POSTURE CHANGE.**
 - Before this fix, a stalled config hung `/oauth/register`, so it failed closed by accident.
-- After it, a stall of D or more registers the client anyway. Two controls are skipped: `registration_enabled=false` (`oauth_server.py:87-89`) and the operator allowlist (`:107-110`). Identity enforces only `https://` (`services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:385-388`).
+- After it, a stall of D or more registers the client anyway. Two controls are skipped: `registration_enabled=false` (`oauth_server.py:87-89`) and the operator allowlist (`:107-110`). Identity enforces only `https://` (`services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:363-366`).
 - FR-2 and AC-4 (201) sanction this, so it is labelled here, not reversed.
 - [r2] Materialize `agent-dcr-fail-closed` as a `docs/reports/` defect report plus `.status` sidecar. Whether to return 503 on a read failure is that report's decision.
 - [r2] Correct the false comment at `oauth_server.py:102` ("identity enforces the same allowlist / https rule server-side") in this diff, to: "Pre-check only: identity enforces https:// alone, not this allowlist."
@@ -73,7 +73,7 @@ Each caller's existing `except Exception` already yields its FR-2 fallback, and 
 
 **(c) `client.get_config` is excluded.**
 - It is a caller with a different shape: an operator-supplied namespace and `user_id`, and it surfaces its error (recon.md:140; ledger `fails.md:2936-2951`).
-- The follow-up `agent-rpc-deadlines` covers `client.get_config` and `register_oauth_client` (recon.md:46-47).
+- The follow-up for `client.get_config` and `register_oauth_client` (recon.md:46-47) is feature `273-fix-agent-client-deadlines` (report `docs/reports/2026-10-21-agent-client-deadlines-defect.md`); the planned `agent-rpc-deadlines` report was dropped as a duplicate (operator decision 2026-10-29).
 - [r2] Materialize it as a defect report plus `.status` sidecar, consistent with C-14. All three follow-up reports may land in one docs commit.
 
 **(d) `@AC-8 @feature-207` disclosure.**
@@ -171,7 +171,7 @@ Then run `/context-forge:context-constitution refresh` scoped to what was touche
   - it overlaps the snapshot follow-up;
   - email stays unbounded for large N.
 - **A single snapshot read per tool call, in this feature.** It is the right remedy, but it adds a client helper, changes the AC-2 bound, and is Out of Scope (performance). Deferred to `agent-config-snapshot-read`.
-- **Adding a deadline to `client.get_config` too.** Rejected: it is a caller with a different shape that surfaces its error (fails.md:2936-2951), and it is Out of Scope. Deferred to `agent-rpc-deadlines`.
+- **Adding a deadline to `client.get_config` too.** Rejected: it is a caller with a different shape that surfaces its error (fails.md:2936-2951), and it is Out of Scope. Deferred to feature `273-fix-agent-client-deadlines` (operator decision 2026-10-29; replaces `agent-rpc-deadlines`).
 - **Fail-closed DCR (503 on a config read failure).** Rejected: it contradicts FR-2 and AC-4 (201). Deferred to `agent-dcr-fail-closed`.
 - **Leaving the false comment at `oauth_server.py:102` and logging it in the findings only.** Rejected: it leaves a false security invariant on a widened path, and a one-line correction is cheaper and honest.
 - **Reusing `tools._grpc_error_message` for the client warning.** Rejected: client.py would import tools.py, which is an import cycle. `e.code().name` is enough.
@@ -184,7 +184,7 @@ Then run `/context-forge:context-constitution refresh` scoped to what was touche
 - [ ] **`extract_email_content` stays over the MCP 60 s limit during a stall when N >= 5 URLs.** The cost is N×4×D, i.e. 12 s per URL, and no AC covers it. To be addressed by the materialized `agent-config-snapshot-read` report, written at the docs step.
 - [ ] **DCR fails open on every config stall of D or more.**
   - `registration_enabled=false` and the allowlist are bypassed.
-  - Any `https` redirect URI registers (`identityServiceImpl.ts:385-388`).
+  - Any `https` redirect URI registers (`identityServiceImpl.ts:363-366`).
   - FR-2 sanctions this.
   - To be addressed by the materialized `agent-dcr-fail-closed` report (docs step) and the `oauth_server.py:102` comment correction (service step).
 - [ ] **D = 3.0 s is not sized against a measured healthy `GetConfig` p99**, and it must cover per-call DNS, TCP and the mTLS handshake. A slow but healthy config falls back with only a warning:
@@ -193,7 +193,7 @@ Then run `/context-forge:context-constitution refresh` scoped to what was touche
   - DCR fails open.
 
   To be addressed at the docs/smoke step: the status-code log plus a dev `GetConfig` latency capture before promotion.
-- [ ] **`client.get_config` (`client.py:2034-2046`) and `register_oauth_client` still hang on a config or identity stall.** This is a deliberate exclusion. To be addressed by the materialized `agent-rpc-deadlines` report, written at the docs step.
+- [ ] **`client.get_config` (`client.py:2034-2046`) and `register_oauth_client` still hang on a config or identity stall.** This is a deliberate exclusion. To be addressed by feature `273-fix-agent-client-deadlines` (report `docs/reports/2026-10-21-agent-client-deadlines-defect.md`, cross-referenced at the docs step; operator decision 2026-10-29 replaces the planned `agent-rpc-deadlines` report).
 - [ ] **At D = 3.0 s, the RPC deadline and the 227 outer `wait_for` (3.0 s) race.** The outcome is identical but the log line differs, so any test pinning which timer fires will flake. To be addressed in the test step: no such assertion.
 - [ ] **The threaded harness can leak workers or the port, or pass vacuously**, unless all four of these are implemented: the `is_active()` loop, `max_workers=8`, the lock-guarded `entered` count, and `stop(0).wait()`. To be addressed in the harness step.
 - [ ] **Timing bounds at D = 0.3 s can flake on loaded CI runners** (D + 1 s, 2×D + 1 s, 4×D + 1 s). AC-1 at the real D also adds about 3 s to the suite. To be addressed in the test step; watch CI.
