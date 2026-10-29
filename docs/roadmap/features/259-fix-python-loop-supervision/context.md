@@ -894,3 +894,29 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   Summary's `:205,268,400` and Step 14's `_handle_close_event :256` citations still carry the old numbers; they are
   outside this re-spec's scope (Step 13 bodies only).
 - Status already `in-progress`; no status change.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec of steps 13-15
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; per-feature blocker
+  decisions 2026-10-29 given by the operator through the session's question tool; checkpoints "report"; C-16
+  promotion auto-confirmed unless it changes an existing @AC rule).
+- `git merge origin/main-dev`: already up to date. `ledger-guard --fix`: clean. Status already `in-progress`.
+- Re-spec, Steps 13-15 bodies only:
+  - Step 13: instruction 6b claimed `execute`/`fetch` calls "inside `process_event`", but the consumer's only direct
+    queries are `fetchval :141` and `execute :406`; the rest are in `order_snapshots.py :34/:59/:65`,
+    `pnl_positions.py :27/:63`, `pnl_pattern_samples.py :16` (and `count_for_position` at `:292` runs on the pool,
+    outside any `acquire`). The operator's 2026-10-22 decision binds per-query `timeout=` on the whole attempt path,
+    so the three repositories were added to Files with a keyword-only `timeout: float | None = None` pass-through
+    (default = asyncpg's, servicer callers unchanged) instead of narrowing 6b. Verification gains a grep for the
+    six pass-throughs and the consumer test run.
+  - Step 14: citations re-pointed (`FakeLedger :141`, `FakePool :62-80` with `fetchval :66`/`acquire :71`/`execute
+    :77`, `_handle_close_event :257`); new item 0 extends the fakes to accept `timeout=` (`FakePool.acquire/fetchval/
+    execute`, `FakeSnapshots.count_for_position/list_for_position`, `FakeSamples.insert_many`); 6c also asserts the
+    repository pass-through.
+  - Step 15: `config-startup.md:87` also carries pre-existing drift (`_watch_loop`; all three watchers name it
+    `_watch`, analysis `:78`, indicators `:70`, ingest `:91`) — instruction 2 and its grep now fix it; `:197` added as a
+    fixed-invariant precedent. Other Step 15 evidence re-verified unchanged.
+- Asyncpg exception names still rely on the 2026-10-22 wheel check (no `.venv` present to re-verify); asyncpg stays
+  0.31.0 in `uv.lock:44-45`.
