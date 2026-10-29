@@ -390,3 +390,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   names the key. By inspection the down removes exactly the rows the up inserts.
 - The task prompt titled this step "config `032`". The re-spec'd implementation-spec.md (authoritative) says `033`
   (Deviation Log 2026-10-28), and `033` was used, including in the commit subject.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec §5.3
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, C-16 promotion auto-confirmed unless
+  it changes an existing @AC rule, merge-train authorized, 255/275 deferred; operator-only DB/prod steps: open the PR,
+  hold the merge; checkpoints "report"). Status was already `in-progress` (flipped 2026-10-28), so no status change.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` `b6e518a7`. `git merge --no-edit
+  origin/main-dev` reported "Already up to date" (`8082157a` is already contained). `ledger-guard.py --own-slug
+  fix-ledger-trimmed-notify-payload --base origin/main-dev --fix` reported clean, so there was no merge commit and
+  no repair.
+- Re-spec (implementation-spec.md, Steps 3-11 bodies only):
+  - **The 252 precondition is now met.** 252 is `code-completed`. `package.json:13-14` runs `tsc && node --test
+    dist/__tests__/*.test.js` (and the c8 `--lines 40` variant). `tsconfig.json` excludes only `node_modules` and
+    `dist`. The `if (!EventNotifier) return;` count is `0`. The "NOT met"/"blocked" notes were removed from Steps 3,
+    4, 6, 8 and 9. Step 3 says that this supersedes the 2026-10-28 note in § Step Dependencies, which was left as
+    written because this re-spec only touches step bodies.
+  - Anchors that moved after 252: in `eventNotifier.test.ts`, FakeClient `:22-50`, `row()` `:52-61`, `tick` `:63`,
+    constructions `:68/:78/:90/:105/:118/:130` + `:142-151`, and the `any` binding `:5`/`:10`. In
+    `ledgerServiceImpl.test.ts`, `makePool :26`, `makeIdempotentPool :46`, `makeRow :78-93`,
+    `makeStreamCall :514-534`, and the rowToEvent regression describe `:686` with its import already extensionless
+    at `:688`.
+  - Step 5: in `index.ts`, ConfigWatcher is at `:22` and dbUrl/sslOption at `:27-39`. Step 6: since the exclude is
+    gone, test files and fixtures both compile into the production `dist/`. Step 9: the Node toolchain is at
+    `:574-590`, and `test:db` and `src/__tests__/db/` are still absent, as expected.
+  - Step 11: config `CLAUDE.md` drift line is `:104`. In `config-governance.md`, the log header is at `:108` and
+    the feature 240 entry at `:112`. The insert point is located by content.
+  - Steps 7 and 10: anchors unchanged, noted as re-checked.
+- Not re-checked: the pg-internal line numbers in Step 3 (`client.js`, `connection-parameters.js`, `index.d.ts`),
+  because `node_modules` is not installed in this worktree. They need `pnpm install`, which does not block. Step 3
+  records this.
+- Next: Step 3 (`eventRowResolver.ts`), with Step 4's RED captured first.
