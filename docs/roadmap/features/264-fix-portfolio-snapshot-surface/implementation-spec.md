@@ -567,7 +567,7 @@ grep -c "'portfolio', 'portfolio.snapshot.interval_minutes'" services/xstockstra
 
 ### Step 8 — test: @AC-5 static scan of the config migration set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts` — create
@@ -777,3 +777,10 @@ _Populated by /sdd-execute as implementation proceeds._
   `main.go:64-69` reference was already corrected to `:71-76` by the re-spec. Lint used the same CI-pinned v2.14.0
   go1.27 rebuild as Steps 2-4, because `~/go/bin/golangci-lint` is built with go1.26.
 - **Disposition**: no behavior change; CI-equivalent lint fallback.
+
+### 2026-10-29 — Step 8: RED captured by moving the 034 files aside in the working tree
+- **Spec said**: write and run Step 8 before Step 7's files exist (RED: the highest match is the 002 INSERT).
+- **Done**: Step 7 was already committed (ebdb0209), so both 034 files were moved to the session scratchpad, RED was
+  captured (`002_config_environment.up.sql: highest-numbered match must DELETE …`), and the files were moved back
+  unchanged (clean `git status` apart from the new test) before GREEN. Nothing from the move was committed.
+- **Disposition**: no behavior change; same RED as specified.

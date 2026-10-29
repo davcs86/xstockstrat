@@ -626,3 +626,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open: the Step 8 @AC-5 scan is the paired test. Its RED (the highest match being the 002 INSERT) can no longer be
   captured on this tree; Step 8 must re-capture it by moving the 034 files aside in the working tree only. The Step 10
   two-sided gate is still owed before merge.
+
+### Step 8 — test: @AC-5 static scan of the config migration set [done]
+- Created `retiredPortfolioSnapshotInterval.test.ts`. It reads `migrations/*.up.sql`, sorts by numeric prefix, splits
+  on `;` (comment lines dropped, whitespace normalised, lower-cased) and asserts: (i) some up file names either quoted
+  key form; (ii) the highest match has a `DELETE FROM config.config_values` statement that itself holds
+  `namespace = 'portfolio'` and a key literal; (iii) no `INSERT INTO config.config_values` naming either form at or
+  after that file. File names are in every assertion message; no runner-output assertions; no fixture (C-13 N/A).
+- TDD: RED with the 034 pair moved aside in the working tree only — fails on (ii) at `002_config_environment.up.sql`.
+  GREEN with 034 restored — the highest match is `034_…up.sql`.
+- Verification: the single test file passes (1/1, not skipped); `pnpm run test:coverage` 183/183 pass, c8 lines
+  86.77% (≥40); `pnpm run lint` 0 errors (158 pre-existing warnings, none in the new file).
+- Files modified: `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts` (new).
+- Deviations: RED re-capture method (Deviation Log). Out-of-scope changes: none.
+- Open: Step 10 still owes the dev-smoke `ListKeys` check (applied state) and the two-sided migration-number gate.
