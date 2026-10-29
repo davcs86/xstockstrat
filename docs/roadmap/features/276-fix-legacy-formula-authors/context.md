@@ -484,3 +484,9 @@ Feature: fix-legacy-formula-authors (indicators)
 ### Coverage check
 - Source scenarios: 9. Planned (NEW+DUP+OVERLAP): 9 (8 NEW, 0 DUP, 1 OVERLAP). Written scenarios: 8. Skipped deliberately: @AC-6 (OVERLAP with 224 @AC-1). Every @AC-* is accounted for.
 ```
+
+## Session 2026-10-29 — sdd-execute ALL-DONE PATH (C-16 promotion applied)
+
+- The promotion plan above was confirmed under the operator's standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, auto-confirm C-16 promotion) and applied exactly as written. It created `services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature` with 8 scenarios. @AC-6 was skipped as an OVERLAP with feature 224 @AC-1.
+- `merge-order.md` has no entry for this feature, so no merge-order gate applies.
+- `status.md`: `in-progress` → `code-completed`, with a feature.md history row. The integration PR `feature/fix-legacy-formula-authors` → `main-dev` was opened. Merge is held for the operator, because the DB repair is an operator-only step.
