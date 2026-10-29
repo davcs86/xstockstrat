@@ -8,10 +8,12 @@ defer path (FR-4 / Acceptance #4), and deterministic score→direction mapping (
 
 import asyncio
 import inspect
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import asyncpg
 import pytest
 
 import app.engine.fundsignal_loop as fundsignal_module
@@ -429,7 +431,7 @@ class TestWatchlistUniverse:
 # ── Durable crash-safe scheduler (feature 156: AC-1..AC-7) ──────────────────────
 
 
-class _StopLoop(Exception):
+class _StopLoop(BaseException):
     """Sentinel to break run_forever's infinite loop in a test after N iterations."""
 
 
@@ -572,6 +574,62 @@ class TestScheduler:
         with pytest.raises(_StopLoop):
             await loop.run_forever()
         assert captured["v"] == (0, 0)
+
+    @staticmethod
+    def _sleep_recorder(monkeypatch, stop_on_call=4):
+        sleeps = []
+
+        async def _sleep(s):
+            sleeps.append(s)
+            if len(sleeps) >= stop_on_call:
+                raise _StopLoop
+
+        monkeypatch.setattr(fundsignal_module.asyncio, "sleep", _sleep)
+        monkeypatch.setattr(fundsignal_module.random, "uniform", lambda a, b: 0)
+        return sleeps
+
+    @pytest.mark.asyncio
+    async def test_supervised_loop_survives_schedule_read_error(self, monkeypatch, caplog):
+        """@AC-1: a failing schedule read never ends run_forever; the next tick runs."""
+        caplog.set_level(logging.ERROR)
+        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=0)
+        next_sleep = AsyncMock(side_effect=[asyncpg.PostgresConnectionError("down"), 0.0, 3600.0])
+        monkeypatch.setattr(loop._schedule, "next_sleep_seconds", next_sleep)
+        run_once = AsyncMock()
+        monkeypatch.setattr(loop, "run_once", run_once)
+        monkeypatch.setattr(loop, "_seed_schedule", AsyncMock())
+        sleeps = self._sleep_recorder(monkeypatch)
+        with pytest.raises(_StopLoop):
+            await loop.run_forever()
+        assert next_sleep.await_count >= 2
+        run_once.assert_awaited()
+        assert 30 in sleeps
+        assert any(r.levelno == logging.ERROR and "down" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_supervised_loop_survives_error_path_advance_failure(self, monkeypatch, caplog):
+        """@AC-2: a cycle error whose retry advance also fails is absorbed; a further tick runs."""
+        caplog.set_level(logging.ERROR)
+        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=0)
+        monkeypatch.setattr(
+            loop._schedule, "next_sleep_seconds", AsyncMock(side_effect=[0.0, 0.0, 3600.0])
+        )
+        run_once = AsyncMock(side_effect=asyncpg.PostgresConnectionError("down"))
+        monkeypatch.setattr(loop, "run_once", run_once)
+        monkeypatch.setattr(
+            loop,
+            "_advance_schedule",
+            AsyncMock(side_effect=[asyncpg.PostgresConnectionError("adv"), None]),
+        )
+        monkeypatch.setattr(loop, "_seed_schedule", AsyncMock())
+        sleeps = self._sleep_recorder(monkeypatch)
+        with pytest.raises(_StopLoop):
+            await loop.run_forever()
+        assert run_once.await_count >= 2
+        assert 30 in sleeps
+        errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+        assert any("down" in m for m in errors)
+        assert any("adv" in m for m in errors)
 
 
 # ── Feature 224 — reserved `system` identity, scoring fail-closed (AC-6/AC-36/AC-37) ────────────
