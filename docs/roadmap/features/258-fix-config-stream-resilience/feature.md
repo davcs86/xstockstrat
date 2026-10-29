@@ -55,4 +55,4 @@ that never reconnect).
 
 ## Next Action
 
-`/sdd-execute fix-config-stream-resilience sequential` — continue from Step 8 (Step 1 stays `pending` on the operator-only pg_terminate_backend check)
+`/sdd-execute fix-config-stream-resilience sequential` — continue from Step 9 (Step 1 stays `pending` on the operator-only pg_terminate_backend check)

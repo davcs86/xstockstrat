@@ -666,7 +666,7 @@ grep -n "client?.release(failure" src/grpc/ledgerServiceImpl.ts              # o
 
 ### Step 8 — test: idempotent AppendEvent connect and mid-transaction failures (AC-5, AC-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -921,5 +921,18 @@ against the compiled `dist/grpc/ledgerServiceImpl.js`. Pre-change, AC-5 failed (
 3/3 passed, including a success-path pin of `release(undefined)`. tsc narrows `client` after
 `client = await this.pool.connect()`, so the try body uses `client.` unchanged, with no `!` and no local alias.
 Step 8 still owns the committed red→green proof.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced in substance (procedure note).
+
+### Deviation: Step 8 — RED captured against the pre-Step-7 source; success pins assert `releases`
+**Spec said**: "**TDD**: `red-green required`… Against the pre-Step-7 tree" and "Success pin. The existing first-time
+and duplicate idempotent cases still pass. Their release is called with `undefined`."
+**Actual**: Step 7 had already landed (a9197ef2), so RED was run by temporarily swapping in `ledgerServiceImpl.ts`
+from a9197ef2~1, compiling, and running the TAP command: `not ok … @AC-5` (`timeout exceeded when trying to connect`
+rejected from the handler) and `not ok … @AC-10` (`release must receive the caught Error`), `# pass 30 / # fail 2`.
+The file was restored (no diff) and GREEN run: `# pass 32 / # fail 0`, both `@AC-*` cases `ok`. The two existing
+idempotent cases gained `assert.deepStrictEqual(releases, [undefined])` to pin the success-path release. The two new
+cases share a describe-local `appendIdempotent(pool, key)` helper. Lint warnings rose 97 → 100, all
+`no-explicit-any` in the new helper's `any` signatures, matching the file's existing style (0 errors).
 **Reason**: the paired test step follows its service step in the spec's order.
 **Disposition**: as specced in substance (procedure note).

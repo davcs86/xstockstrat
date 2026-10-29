@@ -596,3 +596,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   teardown.
 - Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`
 - Next: Step 8.
+
+### Step 8 — test: idempotent AppendEvent connect and mid-transaction failures (AC-5, AC-10) [done]
+- `ledgerServiceImpl.test.ts`:
+  - `makeIdempotentPool` gained `connectThrows?` and `throwOn?` options and returns a `releases` array; existing
+    callers pass neither option.
+  - The two existing idempotent cases now pin `releases` to `[undefined]`.
+  - New `describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)')` with `@AC-5` and `@AC-10`, each
+    opening with the `never skip silently` import assertion. The 252 `before()` block and runner are untouched.
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓. `pnpm install --frozen-lockfile --filter xstockstrat-ledger...` ran in this
+  worktree (the main worktree has no `node_modules`).
+- TDD: RED against the pre-Step-7 source (a9197ef2~1, swapped in temporarily): `# pass 30 / # fail 2`, both `@AC-*`
+  `not ok` for the predicted reasons. GREEN: `# pass 32 / # fail 0`, exactly 2 `ok … @AC-(5|10)` hits.
+- Verification: precondition grep hit `package.json:14`; `pnpm run test:coverage` 49/49 pass, c8 lines 74.51%;
+  `pnpm run lint` 0 errors, 100 warnings (97 → 100, new `no-explicit-any` in the test helper).
+- Files modified: `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`
+- Next: Step 9.
