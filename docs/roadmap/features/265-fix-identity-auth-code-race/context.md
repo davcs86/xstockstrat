@@ -366,3 +366,15 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
   pre-252 compiled-run guard; the Step 2/4 bodies supersede it.
 - Open Thread "Step 2: RED/GREEN depends on the scratch tsc compile until feature 252 lands" — addressed by this
   re-spec (252 landed). Overlap thread with 252 — addressed (merged; guards gone).
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `sequential` (one commit per step on `feature/fix-identity-auth-code-race`, single integration PR at end).
+- Up-front confirmation: operator approved the up-front plan by standing authorization — operator chat
+  2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute;
+  unattended checkpoints, auto-confirm C-16 promotion, merge-train authorized, defer 255/275; operator-only
+  DB/prod steps: open PR, hold merge; blocker decisions 2026-10-29 recorded per feature; checkpoints "report",
+  C-16 promotion auto-confirmed unless it changes an existing @AC rule.
+- Lifecycle: `implementation-ready` → `in-progress`.
+- Known operator-only item: Step 5 (real-Postgres AC-1 repro) needs a local Postgres, which this run may not start;
+  it goes to the operator per the spec's stop-and-ask path.
