@@ -432,3 +432,14 @@ Still open (surface at the /sdd-execute checkpoint):
   blocker decision (2026-10-29, the operator's own words via the session question tool): "Move it into CI real-DB
   tier" — applied to Step 8 in the re-spec above.
 - Branch setup done: `origin/main-dev` merged, ledger guard clean, Steps 1–9 re-spec'd. Next: Step 1.
+
+### Step 1 — docs: merge-order rows + rolling-deploy note (2026-10-29)
+
+- `docs/roadmap/features/merge-order.md`: row 257 ← 263 (actually at `:79`, spec cited `:78` — one-line shift, no
+  content impact) now says 257 adds no `QueryEventsRequest` field (token rides `PageRequest.page_token`; 263's
+  `owner_only = 7` stays last). Rows 257 ← 252 and 251 ← 257 and all Resolved cells unchanged.
+- Added a 3-line "257 rolling-deploy note" directly under the Blocking Dependencies table: old-build `event_id` token or
+  a repeated page → `GetPnL` `UNAVAILABLE` until every ledger instance runs 257; realized P&L changes on purpose once
+  251 lands (announce as a correction, insights.md:176-188).
+- TDD: N/A (docs). Verification: `grep -c fix-ledger-query-pagination` = 4 (>= 3); "field number after 263" no hit;
+  `UNAVAILABLE` 1 hit (`:101`).

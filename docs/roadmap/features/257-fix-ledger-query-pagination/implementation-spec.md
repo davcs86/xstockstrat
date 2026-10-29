@@ -67,7 +67,7 @@ at the code level. The user-visible effect is the corrected realized P&L that `G
 
 ### Step 1 — docs: Reconcile the 257 merge-order rows and add the rolling-deploy note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/merge-order.md` — modify
