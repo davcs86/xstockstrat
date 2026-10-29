@@ -197,7 +197,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py -k "s
 
 ### Step 3 — service: D-64 per-call error handlers on opportunities and signal-sources, plus the `errMessage` hoist
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/errMessage.ts` — create
@@ -1109,3 +1109,15 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Evidence citation drift (no code impact).** `e2e/trader/orders.spec.ts:99` is a TradingService glob, not
   AnalysisService. The AnalysisService `RunBacktest` glob precedent is `e2e/insights/sector-overrides.spec.ts:76`.
   **Disposition**: noted only; step body not edited (F-09).
+
+### Step 3 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 3's paired test lives in Step 4's **Files**. The RED/GREEN
+  cycle therefore ran throwaway probes, appended to `e2e/insights/opportunities.spec.ts` and
+  `e2e/insights/signal-sources.spec.ts`. They contain Step 4's `@AC-5`/`@AC-6` 503-route plus
+  `getByRole('alert').filter({ hasText })` assertions verbatim, and were reverted before commit (`git checkout`).
+  Step 4 authors the real tests. The probes ran under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the same
+  harness Steps 1-2 used. **Disposition**: CI-equivalent fallback.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`, and `src/` type-checks clean (`pnpm build` passes).
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.

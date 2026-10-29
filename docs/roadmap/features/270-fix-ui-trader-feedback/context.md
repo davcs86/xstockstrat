@@ -560,3 +560,32 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   - Step 13: the disconnect `Alert` goes under the `QueryStateMessages` at `OrdersTable.tsx:203` (was `:202`).
     Trading `StreamOrderUpdates` is `trading.go:1667-1686` (its closing brace was mis-cited as `:1685`). The
     rest re-verified unchanged.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 3 (sdd-batch-execute)
+
+- Step 3 done (D-64):
+  - **Hoist.** Created `services/xstockstrat-ui/src/lib/errMessage.ts`. The local copies in
+    `signal-sources/page.tsx` and `NamespaceEditor.tsx` were deleted, along with their now-unused `ConnectError`
+    imports. `grep "function errMessage"` now returns one hit, the new file.
+  - **Signal-sources.** Added a dedicated `toggleError` state, because `saveError` is invisible outside the edit
+    card. `handleToggle` now passes per-call `onSuccess`/`onError`. A
+    `<CardNotice variant="error">{toggleError}</CardNotice>` renders right after the page `QueryStateMessages`.
+  - **Opportunities.** Added an `actionError` state. `act` now passes per-call `onSuccess`/`onError`. One shared
+    `CardNotice variant="error"` sits between the filter row and the `sm:hidden` mobile block, so the mobile and
+    desktop layouts share it.
+  - No `meta.errorHandled` was added; that is Step 7's job.
+- TDD (AC-5/AC-6, via throwaway probes of Step 4's assertions, reverted before commit; prebuilt app,
+  `CI=1 E2E_PREBUILT=1`):
+  - **Red:** `getByRole('alert').filter({ hasText: 'opportunity action unavailable' })` and
+    `… 'deactivate unavailable'` both failed with "element(s) not found" after a 503 `unavailable`
+    SetOpportunityAction / ManageSignalSource.
+  - **Green:** both probes passed, and all 50 existing `opportunities.spec.ts` + `signal-sources.spec.ts` tests
+    passed (52/52).
+- Verification:
+  - The `function errMessage` grep returns exactly one hit (`src/lib/errMessage.ts:3`).
+  - The `setToggleError`/`setActionError` grep has hits in both pages.
+  - `pnpm run lint` exits 0. `pnpm run lint:dup` finds 0 clones. `pnpm build` passes.
+  - `tsc --noEmit` fails only on the pre-existing, untouched `e2e/insights/backfills.spec.ts:135-136` (see the
+    Deviation Log).
+- Tooling: `pnpm install --frozen-lockfile` in the worktree. The main worktree has no `node_modules`, so a symlink
+  would dangle. Playwright Chromium comes from the preinstalled `/opt/pw-browsers`.
