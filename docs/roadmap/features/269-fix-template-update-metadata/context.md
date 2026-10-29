@@ -426,3 +426,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     (and the 262/268/272 file-level overlap the impl-spec review asked about). Appending would duplicate it.
     The open thread "Add the merge-order entry for 244/245" is resolved by that row.
   - Step 8: stale `local_pg` citation :367-368 → :402-403. D-41 header (:407) unchanged.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`. Mode: `sequential` (one commit per step on `feature/fix-template-update-metadata`, single integration PR at the end).
+- Up-front confirmation: given by the operator's standing authorization in operator chat 2026-10-28/29
+  (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via /sdd-batch-execute. Checkpoints run
+  unattended (`report`). C-16 promotion is auto-confirmed unless it changes an existing @AC rule; Step 9 promotes into
+  a new per-feature suite and leaves `private-by-default-templates.feature` untouched, so it qualifies. Merge-train is
+  authorized. Operator-only DB/prod steps: open the PR and hold the merge. The operator recorded the per-feature blocker
+  decisions on 2026-10-29 through the session's question tool.
+- Severity: SEV-2. Remaining steps: 1–6, 8, 9 (Step 7 is already done, see the re-spec entry above).
