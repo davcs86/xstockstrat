@@ -628,3 +628,18 @@ halt). design.md is not written and status stays `spec-ready`.
   envelope → 6 failed / 4 passed on the pre-implementation tree → green: 10 passed. Scratch file removed.
 - Verification: grep hits; `ruff check` + `ruff format --check` clean; full suite 346 passed, coverage 82.57% (≥40%).
 - Deviations: none.
+
+### Step 2 — test: FR-6 selection rule (done 2026-10-29)
+
+- Added to `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`: `test_ac5_signals_key_selected_alongside_other_list`,
+  `test_ac7_two_candidate_lists_records_ambiguous_error`, `test_single_signal_object_with_tags_is_wrapped` (parametrized
+  `["ai"]` / `[]` — the `@AC-4 @feature-166` EXTEND), `test_all_empty_envelope_returns_no_items_silently` (O-2, `caplog`),
+  `test_sole_dict_list_selected`, `test_text_fallback_signals_envelope`; shared via inline `_item` / `_run_cycle_with`
+  helpers (C-13: single consumer, no fixture home).
+- TDD: AC-5 red: one ingest expected, none awaited; AC-7 red: `ambiguous result` not recorded (alerts ingested); tags
+  wrap red (both variants); text-fallback red → 5 failed / 12 passed against the pre-Step-1 `mcp_client_loop.py`
+  (`0c6aae42`, swapped in temporarily) → green: 17 passed. All-empty envelope and sole dict list are characterization
+  (already green on the old first-list rule).
+- Verification: module 17 passed; full suite 353 passed, coverage 84.10% (≥40%); `ruff check` + `ruff format --check`
+  clean. Run with `uv run --extra dev` (plain `uv run` re-syncs without the dev extra and falls back to a global pytest).
+- Deviations: none.

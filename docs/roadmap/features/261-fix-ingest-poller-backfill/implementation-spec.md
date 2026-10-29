@@ -135,7 +135,7 @@ cd services/xstockstrat-ingest && grep -n "_select_signal_list\|ambiguous result
 
 ### Step 2 — test: FR-6 selection rule (AC-5, AC-7, `@AC-4 @feature-166` EXTEND)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — modify
