@@ -27,6 +27,7 @@ construct a local-dev connection string.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -275,14 +276,19 @@ def list_users(
         "-a",
         help="Show only active users",
     ),
+    json_out: bool = typer.Option(
+        False,
+        "--json",
+        help="Print a JSON array of {user_id, email_local, is_active} to stdout",
+    ),
 ) -> None:
     """List all identity service users."""
     db_url = _load_db_url()
 
-    query = (
-        "SELECT email, roles, is_active, created_at "
-        "FROM identity.users "
-    )
+    if json_out:
+        query = "SELECT user_id, email, is_active FROM identity.users "
+    else:
+        query = "SELECT email, roles, is_active, created_at FROM identity.users "
     if active_only:
         query += "WHERE is_active = TRUE "
     query += "ORDER BY created_at"
@@ -299,6 +305,19 @@ def list_users(
             )
         )
         raise typer.Exit(1) from exc
+
+    if json_out:
+        # PII minimisation: only the email local part, never the full email or roles.
+        users = [
+            {
+                "user_id": str(user_id),
+                "email_local": email.split("@", 1)[0],
+                "is_active": bool(is_active),
+            }
+            for user_id, email, is_active in rows
+        ]
+        typer.echo(json.dumps(users))
+        return
 
     if not rows:
         err.print("[dim]No users found.[/]")

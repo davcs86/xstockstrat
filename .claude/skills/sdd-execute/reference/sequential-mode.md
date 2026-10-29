@@ -46,7 +46,8 @@ For each feature in the sequence, in order:
 
 ### 5.3 Re-spec gate (read-only validation first; the sole sanctioned spec edit)
 1. Merge current `origin/main-dev` into `<dev-branch>` so the feature branch reflects reality
-   (`git merge -X ours origin/main-dev` per BRANCH SYNC step 5; push `<dev-branch>`).
+   (normal merge, conflicts resolved by hand, then `scripts/ledger-guard.py` — per BRANCH SYNC step 5; push
+   `<dev-branch>`).
 2. **Validate** the spec against the live codebase: for each step, re-run its `**Codebase Evidence**`
    greps/ls and confirm each `**Files**` path exists.
 3. Apply the directive:
