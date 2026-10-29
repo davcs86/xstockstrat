@@ -663,3 +663,28 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
   should resolve them by symbol, not line.
 - Hook note: no `node_modules` in the main worktree and `core.hooksPath` points at a missing `.husky/_`, so the
   husky pre-commit hook does not run in this environment (same as D3-4); doc-only commits here.
+
+---
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 4
+
+### Step 4 — service: `reclaimStaleIntent`, `reclaimedUnknownPayload`, the three reactive sites, and the sweeper payload swap (FR-5, FR-6) [done]
+- `order_intent.go`: added `reclaimedUnknownEventType`, `reclaimedUnknownPayload` (RFC3339Nano
+  `was_pending_since`, structpb-safe) and `reclaimStaleIntent` (CAS on `context.WithoutCancel(ctx)`, WARN
+  `order intent reclaim failed` on error, async emit with the owner) directly above `sweepOrderIntents`. The
+  sweeper now emits `reclaimedUnknownPayload("sweep", out, rec.UpdatedAt)`; its ctx, sync emit, `""` user,
+  log and `continue`s are unchanged. `trading.go`: the three discarded reclaims (`:603` place, `:1301`
+  cancel, `:1498` replace) now call `reclaimStaleIntent` with `reactive_place`/`reactive_cancel`/
+  `reactive_replace` and `accountEntry.userID`/`order.UserId`; guards and `FailedPrecondition` returns unchanged.
+- TDD: AC-4/5/7/8/9 + sweeper/payload red: build failed `trading_order_state_audit_test.go:590:7: undefined:
+  reclaimedUnknownPayload` → green: all 7 named tests PASS (27 matched tests, `ok … internal/service 1.162s`,
+  `-race -count=1`). Full `internal/service` package with `-race` also passes.
+- Verification: `golangci-lint run --modules-download-mode=mod` → `0 issues.` (D4-1 rebuilt binary);
+  `grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" trading.go` → no output; `gofmt -l` clean.
+- Sweeper payload nil → populated is the operator-accepted change (round-3 gate); the integration PR body must
+  call it out and note Step 3 found no downstream reader.
+- Files modified: `services/xstockstrat-trading/internal/service/order_intent.go`,
+  `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: D4-1 (lint binary rebuilt), D4-2 (line drift past `:2173`, no effect), D4-3 (no husky hook).
+- Review carry-over: the Step 4 trade-off item (no timeout on the `WithoutCancel` CAS; flatten reclaims
+  labelled `reactive_place`, no trace id, possibly empty owner) stays `[ ]` until Step 7 documents it.

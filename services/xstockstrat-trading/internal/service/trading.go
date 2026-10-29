@@ -600,7 +600,7 @@ func (s *TradingService) submitOrder(
 			default: // intentActionRejectPending
 				if isStale {
 					// Best-effort — the caller need not distinguish "not yet stale" from "just reclaimed".
-					_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+					s.reclaimStaleIntent(ctx, intentID, existing.UpdatedAt, existing.UpdatedAt.Add(staleThreshold(s.cfgW)), "reactive_place", accountEntry.userID)
 				}
 				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 					"order intent %q is still pending", intentID)
@@ -1298,7 +1298,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 				"cancel intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
 		default: // intentActionRejectPending
 			if isStale {
-				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+				s.reclaimStaleIntent(ctx, intentID, existing.UpdatedAt, existing.UpdatedAt.Add(staleThreshold(s.cfgW)), "reactive_cancel", order.UserId)
 			}
 			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 				"cancel on order %s is still pending", req.OrderId)
@@ -1495,7 +1495,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 				"replace intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
 		default: // intentActionRejectPending
 			if isStale {
-				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+				s.reclaimStaleIntent(ctx, intentID, existing.UpdatedAt, existing.UpdatedAt.Add(staleThreshold(s.cfgW)), "reactive_replace", order.UserId)
 			}
 			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 				"replace on order %s is still pending", req.OrderId)

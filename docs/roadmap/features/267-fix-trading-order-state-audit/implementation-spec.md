@@ -319,7 +319,7 @@ Coverage threshold: N/A for this step (`internal/service/` is excluded from the 
 
 ### Step 4 — service: `reclaimStaleIntent`, `reclaimedUnknownPayload`, the three reactive sites, and the sweeper payload swap (FR-5, FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/order_intent.go` — modify
@@ -643,3 +643,15 @@ _Populated by /sdd-execute as implementation proceeds._
 - **D3-4 (pre-commit hook):** the worktree has no `node_modules` and the main worktree has none to link;
   `core.hooksPath` points at `.husky/_`, which is not installed, so git ran no hook. The commit did not use
   `--no-verify`. `gofmt -l` and `go vet` were run by hand and are clean. **Disposition**: environment only.
+
+### 2026-10-29 — Step 4
+
+- **D4-1 (lint binary):** as in D2-2, the provisioned `golangci-lint` v2.14.0 (built with go1.26) refuses the
+  Go 1.27 module, so the same pinned v2.14.0 was rebuilt with `GOTOOLCHAIN=go1.27.0 go install` into the
+  session scratchpad and the specced command was run: `0 issues.` **Disposition**: CI-equivalent fallback.
+- **D4-2 (line drift, resolved by symbol):** the 2026-10-29 main-dev merge shifted `trading.go` lines after
+  `:2173` by -1 (flatten's `submitOrder` call is now `:2837`). Step 4 edits only `:603`/`:1301`/`:1498` (before
+  `:2173`, unchanged); the cited later lines are evidence only. **Disposition**: none needed.
+- **D4-3 (pre-commit hook):** same as D3-4: the main worktree has no `node_modules` to link and `.husky/_` is
+  not installed, so git ran no hook (no `--no-verify`). `gofmt -l` is clean and `golangci-lint` reports
+  0 issues. **Disposition**: environment only.
