@@ -1,6 +1,6 @@
 # Implementation Spec: fix-config-stream-resilience
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/258-fix-config-stream-resilience/feature.md`
 **Total Steps**: 9
@@ -97,7 +97,7 @@ request, logs without a trace id.
 
 ### Step 1 — service: config LISTEN lifecycle (reconnect with backoff, serial chain, guarded notifications)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -812,6 +812,19 @@ cd services/xstockstrat-config && grep -n "private async reloadNamespace\|change
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — forced-drop check becomes post-merge verification (operator decision, 2026-10-29)
+**Spec said**: "Step 1 cannot be marked `done` until this check has passed, locally or on the dev app."
+**Actual**: the operator has no way to run SQL against the dev database, and this session may not start a database.
+Asked how to satisfy the gate, the operator chose "B: Post-merge, unit-tested". Step 1 is marked `done` on the
+strength of Step 2's committed suite (AC-1/AC-2/AC-9: reconnect with 1 s→30 s backoff, retry, re-snapshot and
+re-broadcast, guarded notifications, against a fake pool that emits `error`/`end`). Following the 254 Step 9 and 265
+Step 5 precedent, the operator's session runs a post-deploy check on dev after the merge, using Grafana logs and the
+staging MCP: config logs `listening for config_changed` at boot, and a `set_config` change propagates to a consumer.
+**Reason**: the only actor with database access is unavailable; the reconnect logic is covered by committed tests.
+**Disposition**: residual risk accepted by the operator. The forced `pg_terminate_backend` socket drop is never
+exercised against a real Postgres backend, so a pooled client that fails to emit `error`/`end` on a half-open socket
+(the design's dedicated-client fallback trigger) would go unnoticed until a real drop. Superseded the entry below.
 
 ### Deviation: Step 1 — config LISTEN lifecycle (deferred to operator)
 **Spec said**: "If Docker is unavailable in the executing session, the step is **blocked** on this check. … The check

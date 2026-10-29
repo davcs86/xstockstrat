@@ -20,6 +20,7 @@
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 3, 4, 5, 8, 2, 1, 9 re-aligned with the codebase after the main-dev merge (setConfig anchors +2; feature 252 runner landed, so the Step 8 precondition passes) |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started under the operator's standing up-front authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1, 4, 5, 6, 9 re-aligned with the codebase after the second main-dev merge (configServiceImpl.ts anchors shifted about 85 lines by Steps 1–3; Step 1 evidence now describes the implemented tree) |
+| 2026-10-29 | `in-progress` → `code-completed` | operator decision (session_01NpS3HShZK6pSnogA7CFo2f) | Step 1's pg_terminate_backend gate converted to post-merge verification ("B: Post-merge, unit-tested"); all 9 steps done |
 
 ---
 
@@ -55,4 +56,4 @@ that never reconnect).
 
 ## Next Action
 
-Steps 2–9 done. Step 1 stays `pending` on the operator-only pg_terminate_backend check (dev app or an operator-started local stack). Then open the integration PR via `/sdd-execute fix-config-stream-resilience sequential`, holding the merge until that check passes.
+All 9 steps done. Merge integration PR #1357, then run the post-deploy dev check (config boot logs `listening for config_changed`; a `set_config` change propagates) and record it in context.md.

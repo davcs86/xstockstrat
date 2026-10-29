@@ -776,3 +776,15 @@ Feature: xstockstrat-ledger - idempotent AppendEvent surfaces DB failures
 ### Coverage check
 - Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW (9 config, 2 ledger), 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
 ```
+
+## Session 2026-10-29 — operator decision: Step 1 gate becomes post-merge verification
+
+- The operator said: "I don't have a way to run DB queries". This session may not start a database either, so the
+  Step 1 `pg_terminate_backend` forced-drop check has no one to run it.
+- Options offered: (A) a real-TimescaleDB CI integration test copying the `Ledger DB test (TimescaleDB)` job,
+  (B) post-merge, unit-tested, (C) keep holding. The operator chose **"B: Post-merge, unit-tested"**.
+- Step 1 is `done` and status is `code-completed`, recorded in the Deviation Log. The merge hold on #1357 is lifted.
+- Accepted residual risk: the real half-open-socket path, where the pooled client might not emit `error`/`end`, is
+  never exercised. Option A remains the remedy if a production config freeze is ever observed.
+- Post-merge (operator's session): check Grafana for the config `listening for config_changed` boot log on dev, and a
+  staging `set_config` change propagating.
