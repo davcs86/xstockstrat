@@ -21,6 +21,7 @@
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by the operator's standing authorization (2026-10-28/29) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 1 done: RED tests for @AC-4/@AC-6 (`TestFailedChunk`) and the 4-tuple `_paced_fetch` unpack |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 2 done: `_paced_fetch` returns a `failed` bucket; a run with a failed chunk ends `partial` with one combined warning |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute (re-spec, sdd-batch-execute) | `origin/main-dev` merged into the branch (clean; ledger-guard clean). Steps 3-6 re-aligned to the current codebase: `fundsignal_loop.py` and test-harness line drift only (+3..+8 in the loop, about +52 in tests); no change to scope, predicates or SQL |
 
 ---
 
