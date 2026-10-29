@@ -264,7 +264,7 @@ class TestSetConfigRequestParity:
 
         captured = {}
 
-        async def _capture(req, metadata=None):
+        async def _capture(req, metadata=None, timeout=None):
             captured["req"] = req
             return config_pb2.SetConfigResponse(version="1")
 
@@ -347,7 +347,7 @@ class TestSetConfigCarriesNoAuthor:
     def _capturing_stub(captured: dict):
         from gen.config.v1 import config_pb2  # noqa: PLC0415
 
-        async def _capture(req, metadata=None):
+        async def _capture(req, metadata=None, timeout=None):
             captured["req"] = req
             captured["metadata"] = metadata
             return config_pb2.SetConfigResponse(version="1")

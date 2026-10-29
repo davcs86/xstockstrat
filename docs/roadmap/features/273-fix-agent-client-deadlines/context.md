@@ -892,3 +892,22 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
 - Scope expansion, same decision: Step 3's **Files** gain `tests/test_config_tools.py`,
   `tests/test_signal_source_reliability_weight.py` and `tests/test_template_tools.py`. Only each capture stub's
   signature widens, to `(req, metadata=None, timeout=None)`. See the Deviation Log.
+
+## Session 2026-10-29 — Step 3 — service: Deadline constants and `timeout=` on every agent → backend unary call
+
+- Files: `services/xstockstrat-agent/app/client.py`: `_RPC_TIMEOUT_S = 10.0` and `_LONG_RPC_TIMEOUT_S = 45.0`
+  below 247's `_CONFIG_READ_TIMEOUT_S`; `timeout=` added as the last keyword on 71 awaited stub calls, applied
+  by an AST walk keyed on RPC name and then `ruff format`. LONG goes on RunBacktest, ScreenSymbols,
+  RunFundamentalsScan and TriggerBackfill. `ListOpportunities` and `get_config_value`'s GetConfig are untouched.
+  No function parameter, channel option or helper was added. The only other diff lines are ruff's re-wraps of
+  the edited calls.
+- Tests: the capture stubs in `tests/test_config_tools.py` (×2), `tests/test_signal_source_reliability_weight.py`
+  and `tests/test_template_tools.py` are widened to `(req, metadata=None, timeout=None)`. This is the operator
+  scope expansion.
+- TDD: RED on the pre-Step-3 tree gave `tests/test_client_deadlines.py` 20 failed (92.9 s, hang-guard
+  timeouts plus missing-kwarg/constant/AST failures). GREEN gives 20 passed in 2.87 s.
+- Verification: grep counts are `timeout=_RPC_TIMEOUT_S` 67, `timeout=_LONG_RPC_TIMEOUT_S` 4 and
+  `metadata=_metadata|metadata=meta` 73. ruff check and format are clean. The full suite passed 550, coverage
+  81.80% (≥40). Before the stub widening it showed 6 `TypeError` failures in the three files above.
+- R1 risk accepted by the operator (session entry above): runs longer than 45 s on the LONG RPCs are now cancelled
+  client-side.
