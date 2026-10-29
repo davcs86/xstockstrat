@@ -37,7 +37,7 @@ startup; the Docker healthcheck probes `50060` directly.
    - **Global write** (`user_id` empty): rejected `PERMISSION_DENIED` ("admin scope required") unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`) **or** an internal-caller write is authorized (invariant #7).
    - **Per-user write** (`user_id` set): **self-service** — allowed only when the propagated `x-user-id` **equals** the target `user_id`, otherwise `PERMISSION_DENIED` ("per-user config is self-service…", `PER_USER_SCOPE_ERROR`). An ADMIN bit grants **no** override here: admins reach only globals and their own per-user rows, never another user's (operator decision, PR #994). No admin bit is required for an owner's own per-user write. Secrets **may be per-user** (feature 224, an operator override of feature 147, which allowed global secrets only): an owner may write their own `is_secret` row under the same self-service gate, and it is encrypted exactly like a global secret (the `is_secret` flag falls back to the global row's when no exact-scope row exists).
 
-   Either branch also rejects `INVALID_ARGUMENT` when a write has neither an explicit `author` nor a propagated `x-user-id`. `GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**: every service boots by subscribing to `WatchConfig` unauthenticated, and its first message is a full namespace snapshot, so gating reads would break platform startup without hiding anything `WatchConfig` doesn't already serve.
+   Either branch also rejects `INVALID_ARGUMENT` when a write has no propagated identity — no `x-user-id` and no authorized `x-internal-caller`; `request.author` is ignored (feature 241). Identity is propagated, not authenticated. `GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**: every service boots by subscribing to `WatchConfig` unauthenticated, and its first message is a full namespace snapshot, so gating reads would break platform startup without hiding anything `WatchConfig` doesn't already serve.
 6. **Secrets are encrypted at rest (feature 147).** A secret row uses `is_secret = true` and stores AES-256-GCM ciphertext in the `value_encrypted BYTEA` column (master key: the `CONFIG_SECRETS_ENCRYPTION_KEY` env var, hex 32 bytes — the service **fails to boot** without it); `value_data` holds the literal `[redacted]` sentinel, never the plaintext or a `secret://` reference. Plaintext is **redacted at every read/broadcast edge** — `buildConfigValue` returns `[redacted]` for secret rows on `WatchConfig`/`GetConfig`/`ListKeys`. Plaintext is returned **only** by the new **`GetSecret`** RPC, which decrypts server-side and is gated by `SECRET_CALLER_ALLOWLIST` (an `x-internal-caller` allow-list in `src/grpc/authz.ts`, mirroring the feature-102 internal-caller mechanism — a caller may decrypt only the specific keys it is granted; grants: `marketdata` → the four vendor keys, and `ingest` → `keyPrefixes: ['mcp_credential.']`, which also requires the mTLS peer certificate to carry DNS SAN `xstockstrat-ingest` (`peerSan`, checked by `hasSecretCallerAuthority(call, …)` via `getAuthContext()`). `GetSecretRequest.user_id` selects the **exact** scope (feature 224): empty reads only the global row, a `user_id` only that user's row — never a cross-scope fallback). `is_secret` is **row-authoritative on write** — read from the stored row, never trusted from the request — so an admin `SetConfig` update can never land plaintext into a secret key. The `secret.*` name prefix is retired; secret-ness is the `is_secret` flag alone.
 7. **`SetConfig` also accepts an internal-caller write, additive to the admin-scope gate** (feature
    102): a background/automated process (e.g. `xstockstrat-trading`'s reconciliation poller) may
@@ -52,7 +52,8 @@ startup; the Docker healthcheck probes `50060` directly.
    human-set halt. Every internal-caller write also persists `caller_identity` (the propagated
    `x-internal-caller` value) on both `config.config_values` and `config.config_audit` — `NULL` for
    every ordinary human/admin write — so an investigator can `WHERE`-filter "an automated process
-   wrote this" instead of grepping free-text `author`/`reason` (see the Author-sentinel conventions
+   wrote this" instead of grepping `reason`; with no propagated `x-user-id`, the audit `changed_by` is
+   the grant `callerID` (feature 241) (see the Author-sentinel conventions
    table in `docs/patterns/config-governance.md`).
 
 ## Dependencies
@@ -81,7 +82,7 @@ Config change (via SetConfig RPC)
         └── audit trigger fires → config.config_audit row written
               ├── UPDATE: config_value_audit (BEFORE UPDATE, on a value change) — old→new
               └── CREATE: config_value_audit_insert (AFTER INSERT, migration 010, feature 091)
-                    — one row with author + value, old_value NULL
+                    — one row with the caller identity + value, old_value NULL
         └── pg_notify('config_changed', {namespace, key, environment, trading_mode})
               └── ConfigServiceImpl receives LISTEN notification
                     └── Reloads namespace from DB
@@ -94,7 +95,7 @@ See `migrations/001_config_tables.up.sql` for the canonical seed list and full p
 
 ## Webhooks
 
-_No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060 — which requires the ADMIN scope bit and an attributable author (see Critical Invariants #5)._
+_No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060 — which requires the ADMIN scope bit (or an authorized internal caller) and a propagated identity (see Critical Invariants #5)._
 
 ## Config Governance
 
