@@ -734,3 +734,22 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   suite gives 1315 passed with coverage at 88.79% (≥40).
 - Files modified: `services/xstockstrat-analysis/app/config/watcher.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 6
+
+### Step 6 — test: analysis watcher reconnect and exit log (@AC-5, @AC-8 analysis rows) [done]
+- `tests/test_config_watcher.py`: added `test_watch_reconnects_after_non_grpc_exception` (@AC-5). It builds the watcher
+  dial-free via `ConfigWatcher.__new__` with an inline `_FakeStub`: call 1 raises `RuntimeError("boom")`, call 2 yields
+  `ConfigSnapshot(version="v2")` and then a `_Done(BaseException)`. `asyncio.sleep` is patched with `AsyncMock`. The test
+  asserts two `WatchConfig` calls, `sleep` awaited once with 2, `_snapshot.version == "v2"`, and the `analysis-`
+  client_id on both requests. Also added `test_watch_task_retained_and_exit_logged` (@AC-8). It patches
+  `grpc.aio.secure_channel`, `mtls.channel_credentials`/`target_override`, `ConfigServiceStub` and a failing `_watch`,
+  then asserts `_watch_task` is done and an ERROR record names `config-watch-analysis` and `boom`. The doubles are inline
+  and single-consumer (C-13).
+- TDD: red came from a scratch revert of `app/config/watcher.py` to `affc979e~1`, not committed. Result: 2 failed
+  (`RuntimeError: boom` escaped `_watch`; `AttributeError` because `_watch_task` was missing). Green against the Step-5
+  file: 9 passed.
+- Verification: `uv run pytest tests/test_config_watcher.py -q` gives 9 passed. The full suite gives 1317 passed with
+  coverage at 89.19% (≥40). `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_config_watcher.py`
+- Deviations: none

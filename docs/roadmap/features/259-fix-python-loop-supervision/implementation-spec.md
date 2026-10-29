@@ -392,7 +392,7 @@ ruff check . && ruff format --check .
 
 ### Step 6 — test: analysis watcher reconnect and exit log (@AC-5, @AC-8 analysis rows)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_config_watcher.py` — modify
