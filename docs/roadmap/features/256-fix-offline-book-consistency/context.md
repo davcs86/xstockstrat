@@ -822,3 +822,24 @@ Each item names the step where it is resolved.
 - Next: Step 6 (D-63 durable tests). Its `TestOfflineRecomputeTimeout_CoversRetryBudget` is the test the constant's
   comment cites.
 
+## Session 2026-10-29 — Step 6 (test, D-63)
+
+- `trading_offline_test.go`:
+  - `recordingLedger` has an optional `failFn` hook, plus a `setFailFn` setter that swaps it under the mutex. A nil
+    hook keeps the old always-succeed behaviour, so existing tests are unaffected.
+  - New tests: `TestConfirmOrder_AC5_EmitFailureIsNotSuccess` (partial 4/10 and full 10/10; a re-confirm after the
+    hook is cleared succeeds and records one more positions.synced), `TestConfirmOrder_AC5_RecomputeQueryFailureIsNotSuccess`,
+    `TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey`, `TestOfflineRecomputeTimeout_CoversRetryBudget`,
+    `TestRecomputeEmit_PayloadKeepsUserID` and `TestSnapshotOfflinePositions_EmitFailureAddsWarning`.
+  - All helpers and literals stay in this file (single consumer, C-13).
+- TDD:
+  - AC-5 RED, on the pre-Step-5 `trading.go` restored temporarily: ConfirmOrder returned `err=<nil>` where
+    Unavailable was wanted, for partial, full and the baseline-query failure. Snapshot returned `warnings = []`.
+    The retry and timeout tests failed to compile (undefined `appendLedgerEvent`, `appendMaxAttempts`, ...).
+  - GREEN on the Step 5 tree: all targeted tests pass, and the AC46/AC47 PRESERVE guards stay green.
+  - AC-7 (`user_id` in payload) passes on both trees: it is a non-regression guard.
+- Verification: the targeted run passed; the full `go test ./... -race` passed with 72.8% coverage on the CI coverpkg
+  set (≥ 40%); `golangci-lint` v2.14.0 (go1.27.0 build) reported 0 issues.
+- Next: Step 7 (D-47 `boundedRetry`). It still needs the pre-entered operator sign-off on deregistration retry
+  option (a) versus (b).
+

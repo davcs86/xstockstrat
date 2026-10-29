@@ -25,6 +25,7 @@
 | 2026-10-28 | `in-progress` (step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4: durable ConfirmOrder tests for `@AC-4` (non-finite/negative fill rejected before the load, no emit), `@AC-7` (PARTIALLY_FILLED/FILLED + one positions.synced each) and `@AC-10` (0/0 un-confirm → NEW + emit) |
 | 2026-10-29 | `in-progress` (step 4 done) | /sdd-execute sequential (sdd-batch-execute) — re-spec | Merged `origin/main-dev` (`-X ours`); re-specced Steps 5, 6, 12 line citations to the current tree (trading.go +5 from Steps 3-4 above :2178, +4 below it after main-dev dropped one line; test drift from Step 4; portfolio comment :114-115). No instruction or scope change |
 | 2026-10-29 | `in-progress` (step 5 done) | /sdd-execute sequential (sdd-batch-execute) | Step 5: `appendLedgerEvent` (idempotency key, one `Unavailable` retry) with `emitLedgerEvent` as its void wrapper; ConfirmOrder returns UNAVAILABLE when positions.synced is not published; Snapshot adds a Warnings line; `ledger_emit_mtls_test.go` updated to the bounded retry (operator Option A) |
+| 2026-10-29 | `in-progress` (step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6: durable D-63 tests in `trading_offline_test.go` (`recordingLedger.failFn` hook; ConfirmOrder UNAVAILABLE on emit and query failure, partial and full fill, re-confirm recovers; one-`Unavailable`-retry under one idempotency key; timeout-budget rule; `user_id` in payload; Snapshot warning) |
 
 ---
 

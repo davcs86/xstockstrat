@@ -62,14 +62,26 @@ type recordingLedger struct {
 	mu       sync.Mutex
 	events   []string
 	requests []*ledgerv1.AppendEventRequest
+	failFn   func(*ledgerv1.AppendEventRequest) error // nil, or returning nil, means the append succeeds
 }
 
 func (r *recordingLedger) AppendEvent(_ context.Context, req *ledgerv1.AppendEventRequest, _ ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.events = append(r.events, req.EventType)
 	r.requests = append(r.requests, req)
-	r.mu.Unlock()
+	if r.failFn != nil {
+		if err := r.failFn(req); err != nil {
+			return nil, err
+		}
+	}
 	return &ledgerv1.AppendEventResponse{}, nil
+}
+
+func (r *recordingLedger) setFailFn(fn func(*ledgerv1.AppendEventRequest) error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failFn = fn
 }
 
 func (r *recordingLedger) eventTypes() []string {
@@ -2113,4 +2125,131 @@ func TestSnapshotOfflinePositions_CarryLoadErrorFailsWithoutWrite(t *testing.T) 
 	if grpcstatus.Code(err) != codes.Internal || len(baseline.headers) != 0 {
 		t.Errorf("err=%v headers=%d, want Internal and nothing written", err, len(baseline.headers))
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Feature 256 — D-63: an unpublished recompute is not success
+// ---------------------------------------------------------------------------
+
+func failSynced(code codes.Code) func(*ledgerv1.AppendEventRequest) error {
+	return func(req *ledgerv1.AppendEventRequest) error {
+		if req.EventType == "account.positions.synced" {
+			return grpcstatus.Error(code, "ledger down")
+		}
+		return nil
+	}
+}
+
+// confirmErr is h.confirm without the success assertion: the order row persists even when the emit fails.
+func (h *confirmHarness) confirmErr(req *tradingv1.ConfirmOrderRequest) error {
+	h.t.Helper()
+	h.mock.ExpectQuery(`FROM trading\.orders`).WithArgs(req.OrderId).
+		WillReturnRows(pgxmock.NewRows(testdata.OrderRowColumns).AddRow(h.persisted()...))
+	h.expectUpsert()
+	_, err := h.svc.ConfirmOrder(ctxAsUser(testdata.S1UserID), req)
+	return err
+}
+
+func TestConfirmOrder_AC5_EmitFailureIsNotSuccess(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		qty  float64
+	}{{"partial", 4}, {"full", 10}} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newConfirmHarness(t)
+			h.seed(newOfflineOrder("ord-1", 10))
+			req := &tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: c.qty, FilledAvgPrice: 150}
+
+			h.ledger.setFailFn(failSynced(codes.Internal))
+			err := h.confirmErr(req)
+			if grpcstatus.Code(err) != codes.Unavailable || grpcstatus.Convert(err).Message() != "positions not published; re-confirm to retry" {
+				t.Fatalf("err = %v, want Unavailable \"positions not published; re-confirm to retry\"", err)
+			}
+			failed := len(h.ledger.requestsByType("account.positions.synced"))
+
+			h.ledger.setFailFn(nil)
+			h.confirm(req)
+			if n := len(h.ledger.requestsByType("account.positions.synced")); n != failed+1 {
+				t.Errorf("re-confirm recorded %d positions.synced requests, want %d", n, failed+1)
+			}
+		})
+	}
+}
+
+func TestConfirmOrder_AC5_RecomputeQueryFailureIsNotSuccess(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.baseline.baselineErr = errors.New("baseline query failed")
+	err := h.confirmErr(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150})
+	if grpcstatus.Code(err) != codes.Unavailable {
+		t.Errorf("err = %v, want Unavailable", err)
+	}
+	if n := len(h.ledger.requestsByType("account.positions.synced")); n != 0 {
+		t.Errorf("account.positions.synced recorded %d times, want 0", n)
+	}
+}
+
+func TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey(t *testing.T) {
+	ledger := &recordingLedger{}
+	svc := newSnapshotTestService(&fakeBaselineStore{}, ledger)
+	calls := 0
+	ledger.setFailFn(func(*ledgerv1.AppendEventRequest) error {
+		calls++
+		if calls == 1 {
+			return grpcstatus.Error(codes.Unavailable, "transient")
+		}
+		return nil
+	})
+	if err := svc.appendLedgerEvent(context.Background(), "account.positions.synced", "account:acc-1", "user-1", map[string]interface{}{}); err != nil {
+		t.Fatalf("appendLedgerEvent: %v", err)
+	}
+	reqs := ledger.requestsByType("account.positions.synced")
+	if len(reqs) != 2 {
+		t.Fatalf("recorded %d requests, want 2 (one Unavailable retry)", len(reqs))
+	}
+	if k := reqs[0].IdempotencyKey; k == "" || reqs[1].IdempotencyKey != k {
+		t.Errorf("idempotency keys = %q, %q, want one non-empty key reused", k, reqs[1].IdempotencyKey)
+	}
+
+	ledger.reset()
+	ledger.setFailFn(failSynced(codes.Internal))
+	if err := svc.appendLedgerEvent(context.Background(), "account.positions.synced", "account:acc-1", "user-1", map[string]interface{}{}); grpcstatus.Code(err) != codes.Internal {
+		t.Errorf("err = %v, want Internal", err)
+	}
+	if n := len(ledger.requestsByType("account.positions.synced")); n != 1 {
+		t.Errorf("Internal failure recorded %d requests, want 1 (not retried)", n)
+	}
+}
+
+func TestOfflineRecomputeTimeout_CoversRetryBudget(t *testing.T) {
+	budget := appendMaxAttempts*ledgerEmitTimeout + appendRetryBackoff + offlineRecomputeQueryBudget
+	if offlineRecomputeTimeout <= budget {
+		t.Errorf("offlineRecomputeTimeout = %v, want > %v (attempts x emit timeout + backoff + query budget)", offlineRecomputeTimeout, budget)
+	}
+}
+
+func TestRecomputeEmit_PayloadKeepsUserID(t *testing.T) {
+	h := newConfirmHarness(t)
+	h.seed(newOfflineOrder("ord-1", 10))
+	h.confirm(&tradingv1.ConfirmOrderRequest{OrderId: "ord-1", FilledQty: 10, FilledAvgPrice: 150})
+	if got := parseSyncedPayload(t, h.ledger).UserID; got != testdata.S1UserID {
+		t.Errorf("payload user_id = %q, want %q", got, testdata.S1UserID)
+	}
+}
+
+func TestSnapshotOfflinePositions_EmitFailureAddsWarning(t *testing.T) {
+	ledger := &recordingLedger{}
+	svc := newSnapshotTestService(&fakeBaselineStore{}, ledger)
+	ledger.setFailFn(failSynced(codes.Internal))
+	resp, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq(
+		"acc-1", "user-1", "snap-1", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), posBaseline("AAPL", 100, 150)))
+	if err != nil {
+		t.Fatalf("SnapshotOfflinePositions: %v", err)
+	}
+	for _, w := range resp.Warnings {
+		if w == "positions not published; re-snapshot to retry" {
+			return
+		}
+	}
+	t.Errorf("warnings = %q, want \"positions not published; re-snapshot to retry\"", resp.Warnings)
 }

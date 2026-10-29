@@ -363,7 +363,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 
 ### Step 6 — test: D-63 emit failure, re-confirm, idempotency-key retry, timeout rule, `user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
@@ -1101,3 +1101,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - Step 5 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 was rebuilt under
   `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, as in Steps 3-4, and reported 0 issues. **Disposition**: CI-equivalent
   fallback. RED was captured with a throwaway ConfirmOrder test that was not committed (Step 6 owns the durable tests).
+- Step 6 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, as in Steps 3-5, reported 0 issues. **Disposition**: CI-equivalent
+  fallback. Step 5 had already landed, so RED was captured by temporarily restoring the pre-Step-5 `trading.go` and
+  `ledger_emit_mtls_test.go` (`ff62180f~1`) under the new tests, then restoring them (not committed). On that tree
+  `TestAppendLedgerEvent_*` and `TestOfflineRecomputeTimeout_*` fail to compile (the symbols do not exist), so the
+  behavioural RED ran with those two removed. `TestRecomputeEmit_PayloadKeepsUserID` passes on both trees by design
+  (non-regression guard, fails.md:2054). The test file adds one helper beyond the instructions, a `setFailFn` setter,
+  so the hook is swapped under the ledger mutex.
