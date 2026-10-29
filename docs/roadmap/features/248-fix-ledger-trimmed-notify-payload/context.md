@@ -729,3 +729,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: none (verification only).
 - Deviations: Deviation Log 2026-10-29 "Step 10 execution" (analysis `real_pg` deselected; docs-only commit).
 - Next: Step 11.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+- Authorization: the same operator standing authorization as Steps 9-10. Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`69845c87`). The launcher's digest
+  said Steps 1-10 were missing because it read a stale tree; on the branch they are present and `done`. Root
+  `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90` (the main worktree has none).
+
+### Step 11 — docs: Teardown — invariants, CLAUDE.md, findings, config log, CI table [done]
+- Ledger constitution: LEDGER-2 extended (resolve-before-fan-out, serial FIFO, `!draining` fast-path; cites
+  `eventNotifier.ts#dispatch`/`#drain`); LEDGER-8 added (LISTEN client = single-statement PK read + session SET only,
+  cites `eventRowResolver.ts#resolveEventRow`); the trimmed-row gotcha rewritten as resolved (13/14 + client replay);
+  the split-pool pointer names the resolve.
+- Ledger findings: latent-bug row and the open question marked **RESOLVED (feature 248)**; the "three" row's
+  subscription half resolved, `TRADING_MODE` left open.
+- Ledger `CLAUDE.md`: **five** subscriptions listed plus analysis's unfiltered P&L stream; 3 lines on the PK resolve
+  and 13/14 ending; `ledger.stream.resolve_timeout_ms` row (migration 033); the constitution pointer no longer lists
+  the NOTIFY-trim defect (closes the router carry item "three → five").
+- Config `CLAUDE.md`: the `packages/proto/` PR drift line replaced. `config-governance.md`: feature 248 entry inserted
+  before feature 240. `ci-overview.md`: `ledger-db-test` row after `node-test`. `test-data-inventory.md`: Node row
+  "Materialized in ledger (feature 248)", Exemptions sentence no longer predicts no ledger home.
+- Teardown audit: `/context-forge:context-constitution refresh` is not available in this session (only
+  `context-scrubber` is listed). Manual reconciliation: every touched file re-read against the code; the ledger
+  constitution/findings `~Lnn` hints that this feature moved were re-stamped (Deviation Log "Step 11 execution").
+  The integration PR body must record "plugin unavailable" plus this reconciliation (fails.md:670).
+- TDD: N/A (docs).
+- Verification: all 8 greps hit as specified (`**three**` count 0; proto drift line absent); `check-context-map.sh`
+  exit 0.
+- Open: the defect report sidecar `docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.status` is
+  still `triaged` (outside **Files**; resolve at launch or via `/sdd-archiver`); the findings "Filed as defect
+  reports" row stays until then.
+- Files modified: `services/xstockstrat-ledger/docs/context-constitution.md`,
+  `services/xstockstrat-ledger/docs/context-constitution-findings.md`, `services/xstockstrat-ledger/CLAUDE.md`,
+  `services/xstockstrat-config/CLAUDE.md`, `docs/patterns/config-governance.md`, `docs/patterns/ci-overview.md`,
+  `docs/patterns/test-data-inventory.md`
+- Deviations: Deviation Log 2026-10-29 "Step 11 execution".
+- Next: all steps done — `status.md` → `code-completed`, then the integration PR.
+

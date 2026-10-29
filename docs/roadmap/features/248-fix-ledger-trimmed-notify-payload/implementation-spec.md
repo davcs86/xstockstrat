@@ -942,7 +942,7 @@ git status --short   # no service changes
 
 ### Step 11 — docs: Teardown — invariants, CLAUDE.md, findings, config log, CI table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-ledger/`, `services/xstockstrat-config/`, `docs/patterns/`
 **Files**:
 - `services/xstockstrat-ledger/docs/context-constitution.md` — modify
@@ -1228,3 +1228,21 @@ _Populated by /sdd-execute as implementation proceeds._
   - The consumer sources are unchanged since `b6e518a7`: the only diff on either service is
     `xstockstrat-analysis/uv.lock`, a lockfile change from the main-dev merge.
 - **Disposition**: no spec change.
+
+### 2026-10-29 — Step 11 execution
+
+- **Step**: 11
+- **Anchor re-stamp (teardown audit)**: the `/context-forge:context-constitution refresh` skill is not loaded in this
+  session; the manual reconciliation re-grepped every `~Lnn` hint in the ledger constitution and findings. Lines that
+  this feature's code moved were re-stamped (LEDGER-2/3/5/6, `toValidDate`, `rowToEvent`, the ledger `CLAUDE.md`
+  section anchors). This goes beyond Instructions 1-2's text but stays inside the step's **Files**.
+- **`test-data-inventory.md` Exemptions**: the old sentence's "config/ledger at two" count is also stale for config
+  (22 `src/__tests__` entries today), so the replacement drops per-service counts instead of re-stating them.
+- **`config-governance.md` entry**: a "Bounds" column was kept for consistency with the neighbouring entries; it holds
+  the clamp rule (`≤ 0`/non-finite → `2000`), not a `SCALAR_BOUNDS_REGISTRY` range (the key is not registered there).
+- **Not edited (outside **Files**)**: the defect-report sidecar
+  `docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.status` (`triaged`) and the findings "Filed as
+  defect reports" row (it stays until the report is resolved); `config-governance.md` § Registering a new config key
+  step 1 wording.
+- **Disposition**: no spec change.
+

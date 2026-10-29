@@ -101,7 +101,7 @@ _No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060 — which
 
 All config changes must comply with the governance rules in the root `CLAUDE.md`. Key rules:
 
-- New keys require PR to `packages/proto/` (for type documentation)
+- New keys are seeded by a config migration and registered in `docs/patterns/config-governance.md` § Per-Feature Registered Keys. A `packages/proto/` PR is needed only for a new RPC or field.
 - Sensitive keys (`is_secret=true`) are stored as AES-256-GCM ciphertext in `value_encrypted` (never plaintext), redacted at every read edge, and readable only via `GetSecret` under the `SECRET_CALLER_ALLOWLIST` (feature 147)
 - All changes are written to `config.config_audit` automatically
 
