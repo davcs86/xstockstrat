@@ -18,7 +18,7 @@ from typing import Any
 from gen.ingest.v1 import ingest_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from app.config.watcher import split_credentials_ref
+from app.config.watcher import int_positive, split_credentials_ref
 from app.extractors.base import McpClientInput
 from app.extractors.mcp_client import McpClientExtractor
 from app.handlers.servicer import _cfg_to_dict
@@ -130,11 +130,8 @@ async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) ->
     cycle deterministically (Step 11) without the sleep loop."""
     extractor = McpClientExtractor()
     sources = await list_all_sources(servicer._db, include_inactive=False)
-    timeout = max(
-        cfg_watcher.get_int(
-            "ingest.mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS
-        ),
-        1,
+    timeout = int_positive(
+        cfg_watcher, "ingest.mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS
     )
     for src in sources:
         if src.get("source_type") != "mcp_client":
@@ -153,17 +150,14 @@ async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) ->
 
 
 async def run_mcp_client_loop(servicer, cfg_watcher, mcp_client: McpClientProtocol) -> None:
-    """The paced background loop. Sleeps `ingest.mcp_client.poll_interval_seconds` (clamped ≥ 1 so a
-    settable 0 cannot busy-loop) between cycles; a cycle-level failure is logged and retried next
-    tick — the loop never exits."""
+    """The paced background loop. Sleeps `ingest.mcp_client.poll_interval_seconds` (a stored value
+    ≤ 0 reads as the default, so it cannot busy-loop) between cycles; a cycle-level failure is
+    logged and retried next tick — the loop never exits."""
     import asyncio
 
     while True:
-        interval = max(
-            cfg_watcher.get_int(
-                "ingest.mcp_client.poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS
-            ),
-            1,
+        interval = int_positive(
+            cfg_watcher, "ingest.mcp_client.poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS
         )
         await asyncio.sleep(interval)
         try:

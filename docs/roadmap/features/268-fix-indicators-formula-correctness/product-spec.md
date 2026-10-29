@@ -29,11 +29,51 @@
 reason); `ATR`/`VWAP` either compute the true indicators or are renamed/re-described to match what they
 compute; `UpdateFormula`/`DeleteFormula` return `NOT_FOUND` for pending-hidden rows.
 
+## Functional Requirements
+
+- **FR-1 (D-10).** An `ExecuteFormula` run whose child never emits a parseable `__OUTPUT__:` line
+  (it exits early, including via `SystemExit`, or the line is malformed) returns `success=false`, a
+  non-empty `error` naming the cause, an empty `output`, and an `exit_reason` other than
+  `SANDBOX_EXIT_REASON_SUCCESS`.
+- **FR-2 (D-10 guard).** A formula that assigns `result` and exits normally still returns
+  `success=true` with that `result` as `output`.
+- **FR-3 (D-18).** The `ATR` built-in's advertised name/description (`ListIndicators`) matches what
+  `ComputeIndicator("ATR")` computes. The registry key `ATR` stays, so analysis consumers and stored
+  strategies that reference it by name keep resolving.
+- **FR-4 (D-18).** The `VWAP` built-in's advertised name/description matches what
+  `ComputeIndicator("VWAP")` computes, under the same key-stability rule as FR-3.
+- **FR-5 (D-54).** `UpdateFormula` and `DeleteFormula` on a row with `pending_intent_id` set return
+  `NOT_FOUND` (as `_load_formula`/`GetFormula` do) and leave the row unchanged.
+
+FR-3/FR-4 have two allowed fix paths (Option A: re-describe; Option B: true OHLCV indicators). Design
+picks one (OQ-1). `acceptance.feature` carries one deterministic scenario per option. Design deletes
+the scenarios for the losing option and records the choice in `context.md`.
+
+## Consumer Surface(s)
+
+- [x] Agent MCP tools (`xstockstrat-agent`): `test_formula` (FR-1/FR-2: `ExecuteFormula` now reports
+  failure), `manage_formula` update/delete (FR-5: `NOT_FOUND`), `run_backtest` and `screen_symbols`
+  (FR-3/FR-4: ATR/VWAP-based scores change under Option B; descriptions only under Option A).
+- [x] UI `/insights`: the formula workspace run result (`FormulaRunResult` Passed/Failed badge, FR-1)
+  and backtest/strategy results that use ATR/VWAP (FR-3/FR-4).
+- [ ] `/trader`, `/config-ui`: not affected.
+
+## Open Questions
+
+- **OQ-1 (design decision, C-11).** Should D-18 use Option A (keep the close-only math and re-describe
+  `ATR`/`VWAP` honestly; no proto change; numeric output unchanged) or Option B (add OHLCV input to
+  `ComputeIndicatorRequest` and compute the true indicators; this changes numeric output for every
+  ATR/VWAP strategy and backtest)?
+- **OQ-2 (Option B only).** How is the change in historical backtest numbers communicated, and are
+  stored grades recomputed?
+
 ## Reproduction Steps
 
 1. D-10: `ExecuteFormula` with source `raise SystemExit(0)` → `success=True`, `output={}`.
-2. D-18: `ComputeIndicator("ATR", values=[10, 12, 11, 13], period=2)` → `[None, None, 1.5, 1.5]`;
-   `ComputeIndicator("VWAP", values=[10, 20, 30])` → `[10, 15, 20]`.
+2. D-18: `ComputeIndicator("ATR", values=[10, 12, 11, 13], period=2)` → engine series `[None, None, 1.5, 1.5]`,
+   so `ComputeIndicatorResponse.result` holds 2 `IndicatorPoint`s with `value` 1.5 and 1.5 (the servicer drops
+   `None` warm-up positions, `servicer.py:215-218`); `ComputeIndicator("VWAP", values=[10, 20, 30])` → `result`
+   values `[10, 15, 20]`.
 3. D-54: a formula row with `pending_intent_id` set: `GetFormula` → `NOT_FOUND`, but its author's
    `UpdateFormula` succeeds and `DeleteFormula` soft-deletes it.
 
@@ -46,20 +86,20 @@ mutating RPCs bypass the pending-hidden read helper.
 ## Affected Services
 
 - xstockstrat-indicators (fix site for all three)
-- xstockstrat-analysis (consumer of `ATR`/`VWAP`; changes if D-18 renames indicators or adds OHLCV input)
-- packages/proto (only if design adds OHLCV fields to `ComputeIndicatorRequest`)
+- xstockstrat-ui (`src/lib/strategyCatalog.ts` repeats the ATR/VWAP descriptions; added at /sdd-design, C-10)
+- xstockstrat-analysis (consumer, unchanged: Option A keeps the `ATR`/`VWAP` keys and math)
+- packages/proto (consumer, unchanged: Option A needs no proto change)
 
 ## Fix Scope
 
-- [ ] Proto change possible — D-18 true ATR/VWAP needs OHLCV input on `ComputeIndicatorRequest`; a rename avoids it
+- [x] No proto change (OQ-1 = Option A, /sdd-design 2026-10-22). The Option B additive-field plan is rejected.
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed)
 
-**Behavior-change note (D-18):** either fix path changes the numeric output for every strategy and backtest
-that uses `ATR` or `VWAP`. Historical backtest runs and grades computed with the approximations will not
-reproduce. Design must state how this is communicated and whether stored grades are recomputed.
+**Behavior-change note (D-18):** Option B changes the numeric output for every strategy and backtest that
+uses `ATR` or `VWAP`. Historical backtest runs and grades computed with the approximations will not
+reproduce (OQ-2). Option A changes only the advertised descriptions.
 
 **Behavior-change note (D-10):** formulas that relied on implicit empty success will start failing.
 

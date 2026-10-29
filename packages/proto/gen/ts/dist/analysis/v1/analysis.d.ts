@@ -756,7 +756,7 @@ export interface FundamentalsScanSummary {
     signalsEmitted: number;
     callsSpent: number;
     deferredCount: number;
-    /** "completed" | "budget_deferred" | "failed" */
+    /** "completed" | "budget_deferred" | "partial" | "failed" */
     status: string;
     finishedAt?: Date | undefined;
 }

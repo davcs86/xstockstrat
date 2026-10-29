@@ -328,6 +328,9 @@ type QueryEventsRequest struct {
 	TimeRange     *v1.TimeRange          `protobuf:"bytes,4,opt,name=time_range,json=timeRange,proto3" json:"time_range,omitempty"`
 	Page          *v1.PageRequest        `protobuf:"bytes,5,opt,name=page,proto3" json:"page,omitempty"`
 	FromSequence  int64                  `protobuf:"varint,6,opt,name=from_sequence,json=fromSequence,proto3" json:"from_sequence,omitempty"` // replay from sequence
+	// When true, only rows whose user_id equals the caller's x-user-id (never NULL rows).
+	// Every user-facing edge MUST set it; internal callers leave it false.
+	OwnerOnly     bool `protobuf:"varint,7,opt,name=owner_only,json=ownerOnly,proto3" json:"owner_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -402,6 +405,13 @@ func (x *QueryEventsRequest) GetFromSequence() int64 {
 		return x.FromSequence
 	}
 	return 0
+}
+
+func (x *QueryEventsRequest) GetOwnerOnly() bool {
+	if x != nil {
+		return x.OwnerOnly
+	}
+	return false
 }
 
 type QueryEventsResponse struct {
@@ -713,7 +723,7 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x03R\bsequence\x12;\n" +
 	"\vrecorded_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"recordedAt\"\x97\x02\n" +
+	"recordedAt\"\xb6\x02\n" +
 	"\x12QueryEventsRequest\x12\x1d\n" +
 	"\n" +
 	"stream_key\x18\x01 \x01(\tR\tstreamKey\x12\x1d\n" +
@@ -723,7 +733,9 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\n" +
 	"time_range\x18\x04 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\ttimeRange\x126\n" +
 	"\x04page\x18\x05 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x12#\n" +
-	"\rfrom_sequence\x18\x06 \x01(\x03R\ffromSequence\"\x8a\x01\n" +
+	"\rfrom_sequence\x18\x06 \x01(\x03R\ffromSequence\x12\x1d\n" +
+	"\n" +
+	"owner_only\x18\a \x01(\bR\townerOnly\"\x8a\x01\n" +
 	"\x13QueryEventsResponse\x12:\n" +
 	"\x06events\x18\x01 \x03(\v2\".xstockstrat.ledger.v1.LedgerEventR\x06events\x127\n" +
 	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"x\n" +

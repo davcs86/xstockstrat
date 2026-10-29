@@ -72,10 +72,20 @@ jobs:
               - 'scripts/db-migrate.sh'
               - 'scripts/render-migrations.sh'
               - 'scripts/migration-dirty-guard.sh'
+              - 'scripts/migration-ahead-check.sh'
               - 'scripts/migration-rerun.sh'
               - 'scripts/migration-assertions/**'
               - 'scripts/Dockerfile.migrate'
               - 'services/xstockstrat-indicators/app/services/formulas_repository.py'
+            homelab:
+              - 'deploy/homelab/**'
+              - 'scripts/homelab-*'
+              - 'scripts/gen-dev-certs.sh'
+              - 'scripts/mtls-provision.sh'
+              - '.github/workflows/deploy-homelab.yml'
+            ledger:
+              - 'docs/roadmap/ledger/**'
+              - 'scripts/ledger-guard.py'
             claude-md:
               - '**/CLAUDE.md'
               - '.markdownlint.yaml'
@@ -629,7 +639,7 @@ jobs:
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
       - name: Migration tooling structural tests
-        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh
 
   # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
   # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
@@ -660,8 +670,8 @@ jobs:
       - name: Build migrator image (migrate + psql + envsubst)
         run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
 
-      - name: Migrator image ships the dirty guard (no bind mount)
-        run: docker run --rm --entrypoint test xstockstrat-migrate-ci -x /repo/scripts/migration-dirty-guard.sh
+      - name: Migrator image ships the dirty guard and the ahead check (no bind mount)
+        run: docker run --rm --entrypoint sh xstockstrat-migrate-ci -c 'test -x /repo/scripts/migration-dirty-guard.sh && test -f /repo/scripts/migration-ahead-check.sh'
 
       - name: Apply, replay and assert
         run: |
@@ -690,6 +700,66 @@ jobs:
         run: |
           git fetch --no-tags origin main "${{ github.base_ref }}"
           scripts/check-migration-contract.sh "origin/${{ github.base_ref }}"
+
+  # Needs a migrated TimescaleDB; test:db stays outside the node-test c8 coverage gate.
+  ledger-db-test:
+    name: Ledger DB test (TimescaleDB)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'migrations') ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci') ||
+      contains(fromJson(needs.changes.outputs.matched), 'node-shared')
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: xstockstrat
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: xstockstrat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xstockstrat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: build proto stubs
+        run: pnpm --filter @xstockstrat/proto run build
+
+      - name: Build migrator image (migrate + psql + envsubst)
+        run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
+
+      - name: Apply migrations
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
+            -e SEED_USER_ID="00000000-0000-4000-8000-0000000000c1" \
+            xstockstrat-migrate-ci
+
+      - name: test:db
+        working-directory: services/xstockstrat-ledger
+        env:
+          LEDGER_DB_TEST_URL: postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable
+        run: pnpm run test:db
 
   markdown-lint:
     name: CLAUDE.md lint (markdownlint)
@@ -722,6 +792,26 @@ jobs:
 
       - name: Saved-workflow gate tests (no agents, no tokens)
         run: node --test scripts/workflow-tests/*.test.mjs
+
+  ledger-guard:
+    name: Ledger guard (other features' entries kept)
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && (
+      contains(fromJson(needs.changes.outputs.matched), 'ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # HEAD is the PR's merge commit, i.e. what a merge would land on the base branch.
+      - name: Check no other feature's ledger entry is deleted or altered
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: python3 scripts/ledger-guard.py --own-slug "${HEAD_REF#feature/}" --base "origin/${BASE_REF}" --head HEAD
 
   secret-scan:
     name: Secret scan (trufflehog + gitleaks)
@@ -773,6 +863,19 @@ jobs:
   # and fails only when an upstream job truly failed or was cancelled.
   # Skipped jobs are treated as passing (no relevant paths changed).
   # ──────────────────────────────────────────────────────────────────────
+  homelab-render:
+    name: Homelab release .env + render check
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'homelab') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and render staging/production, override, mTLS and broken-render cases
+        run: bash scripts/homelab-render.test.sh
+
   ci-gate:
     name: CI Gate
     if: always()
@@ -789,8 +892,11 @@ jobs:
       - shell-lint
       - migration-rerun
       - migration-contract-gate
+      - ledger-db-test
+      - homelab-render
       - markdown-lint
       - context-map
+      - ledger-guard
       - secret-scan
     runs-on: ubuntu-latest
     steps:
@@ -808,8 +914,11 @@ jobs:
           echo "shell-lint:      ${{ needs.shell-lint.result }}"
           echo "migration-rerun: ${{ needs.migration-rerun.result }}"
           echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
+          echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"
+          echo "homelab-render:  ${{ needs.homelab-render.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
+          echo "ledger-guard:    ${{ needs.ledger-guard.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
 
       - name: Fail on upstream failure or cancellation
