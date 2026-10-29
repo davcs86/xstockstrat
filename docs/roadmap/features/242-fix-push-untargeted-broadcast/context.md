@@ -825,3 +825,14 @@ Feature: xstockstrat-identity - ListAdminUserIds is an admin-ID lookup for the n
 ### Coverage check
 - Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. All are accounted for and none were skipped. Per file: notify 5, portfolio 2, analysis 2, identity 2.
 ```
+
+## Session 2026-10-29 — sdd-batch-execute ALL-DONE path (C-16 promotion + integration PR)
+
+- C-16 promotion plan above applied verbatim under the operator's standing authorization (auto-confirm C-16
+  promotion, operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f). Four suites CREATEd:
+  `services/xstockstrat-{notify,portfolio,analysis,identity}/acceptance/fix-push-untargeted-broadcast.feature`
+  (5/2/2/2 scenarios, 11 NEW).
+- `status.md` `in-progress` → `code-completed`; feature.md history row added.
+- Integration PR opened to `main-dev` (merge held for the operator). The C-14 follow-up
+  (`/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`) and the
+  manual Teardown note are recorded in the PR body.
