@@ -857,3 +857,27 @@ Once the operator rules on the three gated items, the design is approvable witho
   committed until that sign-off is recorded or a re-measurement with spans present gives PASS.
 
 Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/TriggerBackfill not measured (0 dev spans in 24 h); ValidateToken p99 ≤134 ms passes R5
+
+## Session 2026-10-29 — Step 2 — test: Generic hung-backend fixture and client-level deadline RED tests
+
+- Files: `services/xstockstrat-agent/tests/conftest.py` (fixture `hung_backend`: sync
+  `grpc.server(ThreadPoolExecutor(max_workers=8))` with one `GenericRpcHandler` serving any method as raw bytes;
+  records `(method, metadata)` under a lock; `answers` → answer `(delay_s, msg)` or abort `(delay_s, StatusCode)`,
+  absent → 247's `is_active()` hang loop; redirects `module.<endpoint_attr>` and `client.mtls.secure_channel`;
+  `stop.set()` + `server.stop(0).wait()` teardown). 247's `hung_config_server` is untouched.
+  `services/xstockstrat-agent/tests/test_client_deadlines.py` (new): @AC-5 live (9 rows; GetConfig row on
+  `hung_config_server`), @AC-5 production-kwarg (9 rows), constant pins, @AC-10 AST guard (≥73 calls,
+  allow-list `ListOpportunities`→`timeout`, `get_config_value.GetConfig`→`_CONFIG_READ_TIMEOUT_S`, LONG set ==
+  the four long RPCs).
+- TDD red (pre-Step-3 tree), each for the specified reason:
+  - AC-5 live red (9/9): `TimeoutError` from the `HANG_GUARD_S` guard — no deadline on the call.
+  - AC-5 kwarg red (9/9): `AssertionError: <RPC> is issued without a deadline`.
+  - `test_deadline_constants_are_pinned` red: `AttributeError: module 'app.client' has no attribute '_RPC_TIMEOUT_S'`.
+  - AC-10 red: `stub calls without timeout: [...]` listing the 71 untimed calls.
+- Green is Step 3's run. A temporary, reverted probe of the Step 3 change gave 20/20 passed, so the harness is sound.
+- Verification: ruff check + format clean; full suite 20 failed (the RED file) / 530 passed, coverage 81.78%
+  (≥40); `def hung_backend` / `def hung_config_server` / `HANG_GUARD_S` greps and
+  `from tests.conftest import HANG_GUARD_S` present.
+- Deviations (see Deviation Log): generic mocked-channel shape for the kwarg test; method name bound in
+  `service(details)`.
+- Still open: `Baseline verdict: HALT` (Step 1) gates Step 3's commit until an operator sign-off is recorded.

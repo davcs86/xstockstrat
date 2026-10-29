@@ -147,7 +147,7 @@ grep -n "^Baseline verdict: " docs/roadmap/features/273-fix-agent-client-deadlin
 
 ### Step 2 — test: Generic hung-backend fixture and client-level deadline RED tests (@AC-5, @AC-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -957,3 +957,19 @@ grep -n "teardown" docs/roadmap/features/273-fix-agent-client-deadlines/context.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 2 (2026-10-29)** — `test_ac5_listed_rpcs_pass_the_production_budget_kwarg` does not patch each
+  service's stub class with an `AsyncMock` stub (the `tests/test_auth.py:21-28` shape). It patches
+  `app.client.mtls.secure_channel` to yield one `MagicMock` channel whose `unary_unary` returns a per-method
+  `AsyncMock(side_effect=_Recorded)`, so the real generated stub is built and the call is recorded by RPC name
+  with no per-row stub class or response message. Same assertion (`kwargs["timeout"] == getattr(client,
+  budget_attr)`), plus a check that the channel targets the row's endpoint. **Disposition**: accepted (no scope
+  change).
+- **Step 2 (2026-10-29)** — `hung_backend` reads the method name from `GenericRpcHandler.service(details)` and
+  binds it into the handler closure (the unary handler's `context` exposes no public method name). Behaviour is
+  as specified. **Disposition**: accepted.
+- **Step 2 (2026-10-29)** — committed with all 20 new tests RED by design (spec Verification: "RED before
+  Step 3"). The full suite is 20 failed (the new file) / 530 passed, coverage 81.78% (≥40). A temporary,
+  reverted, uncommitted probe of the Step 3 change (constants plus `timeout=` on the 71 untimed stub calls) gave
+  20/20 passed in 2.94 s, so the harness is GREEN-capable. Precedent: 247 Step 1. **Disposition**: expected per
+  spec; Step 3 GREEN re-runs these tests.
