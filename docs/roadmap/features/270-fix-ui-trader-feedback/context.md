@@ -543,3 +543,20 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree; `uv sync --extra dev --frozen` in
   `services/xstockstrat-analysis`.
 
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup (§5.3): merged `origin/main-dev` into `feature/fix-ui-trader-feedback` with `-X ours` (brings in
+  241 among others; the only UI files it touched are `configUiBff`/`insightsBff` and the UI constitution).
+- Status was already `in-progress` (flipped 2026-10-28), so there was no status change. The run continues under the
+  operator's standing authorization: operator chat 2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f), "Start
+  executing features 241-276" via batch-execute; unattended checkpoints (`report`), C-16 promotion auto-confirmed
+  unless it changes an existing `@AC` rule, merge-train authorized, defer 255/275; operator-only DB/prod steps:
+  open PR, hold merge; blocker decisions 2026-10-29 recorded per feature.
+- Re-spec, line drift only; no step semantics, files or verification changed:
+  - Step 7: mount point is `QueryProviders.tsx:15-17` (the file is 20 lines; was cited `:32-34`). The
+    `SymbolScreening` inline `symbol-screen-error` is at `:230-234` (was `:228`). Every other Step 7 evidence item
+    re-verified unchanged.
+  - Step 13: the disconnect `Alert` goes under the `QueryStateMessages` at `OrdersTable.tsx:203` (was `:202`).
+    Trading `StreamOrderUpdates` is now `trading.go:1667-1686` (the merge shifted its closing brace by one line). The
+    rest re-verified unchanged.
