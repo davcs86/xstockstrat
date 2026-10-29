@@ -224,7 +224,7 @@ git diff --stat src/grpc/authz.ts src/index.ts   # empty
 
 ### Step 4 — test: identity `ListAdminUserIds` deny matrix + real-socket case
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/adminDirectory.test.ts` — create
@@ -797,3 +797,12 @@ _Populated by /sdd-execute as implementation proceeds._
   (7 cases mirroring Step 4 (i)-(vii)) that imports `src/grpc/adminDirectory.ts`. Step 4 still owns the committed
   tests. (d) `pnpm run lint` exits 0 with 186 warnings, all pre-existing `no-explicit-any` warnings plus the two the
   spec-mandated `any` delegate adds (`identityServiceImpl.ts:937`). `adminDirectory.ts` is warning-free.
+- **Step 4 (2026-10-29) — test mechanics only, no behaviour deviation.** (a) RED was captured by moving the
+  already-landed `src/grpc/adminDirectory.ts` (Step 3) out of the tree for one run and restoring it: both test files
+  fail with `ERR_MODULE_NOT_FOUND ... src/grpc/adminDirectory.ts`. (b) Case (vii) (DB failure → generic INTERNAL)
+  carries no `@AC-*` tag because the spec assigns it none. (c) `mtls.test.ts` keeps its own one-line fake pool
+  (`queries` recorder) instead of importing the one in `adminDirectory.test.ts`; each has one consumer (C-13
+  inline). (d) `mtls.test.ts` is not run through prettier: it already fails `prettier --check` at HEAD, and a
+  reformat would touch unrelated lines. `adminDirectory.test.ts` is prettier-clean. (e) The P-06 load check found
+  that the guarded `identityServiceImpl.test.ts` skips vacuously on Node 24.20.0 (see context.md). Per Instruction
+  5 the `fails.md:2222` claim is corrected by an appended ledger entry (append-only rule), in its own commit.

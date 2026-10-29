@@ -386,3 +386,36 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
 - Toolchain: Node v24.20.0, pnpm 9.15.9, `pnpm install --frozen-lockfile` at the worktree root.
 - Deviation Log entry added for formatting and TDD mechanics; there is no behaviour deviation.
 - Still pending: the Step 15 docs note (the `grpc.status` use is a second IDENTITY-3 exception).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4 (identity tests)
+
+- Step 4 done. Created `services/xstockstrat-identity/src/__tests__/adminDirectory.test.ts`: static import of
+  `../grpc/adminDirectory.ts` (no skip guard), a harness `typeof` case, and cases (i)-(vii) with an inline fake
+  pool and `callWith` helper. (i) and (vi-b) are `@AC-9`; (ii)-(vi) are `@AC-10` and assert zero queries; (vii) is
+  untagged.
+- `mtls.test.ts`: `mintPki` mints an `xstockstrat-notify` leaf (`notifyCert`/`notifyKey`). A new `describe` serves
+  the generated `IdentityServiceService` with `mtls.serverCredentials()` and dials with `IdentityServiceClient` +
+  `mtls.targetOverride(SVC)`. The `xstockstrat-client` leaf gets PERMISSION_DENIED with zero pool queries (AC-10).
+  The `xstockstrat-notify` leaf gets `['user-99']` (AC-9). Proto import has no `.js` suffix.
+- TDD (P-06). AC-9/AC-10 red: with `src/grpc/adminDirectory.ts` moved aside, both files fail with
+  `ERR_MODULE_NOT_FOUND ... src/grpc/adminDirectory.ts`. Green: 9 + 2 new cases pass. Identity suite went from
+  78 to 89 pass, with 0 fail and 0 skipped.
+- Verification:
+  - `node --version`: v24.20.0.
+  - `pnpm run test:coverage`: exit 0, all files 98.64% lines, threshold 40.
+  - `pnpm run build`: exit 0.
+  - `pnpm run lint`: 0 errors, 186 warnings. These are the same pre-existing warnings recorded at Step 3, none new.
+  - `@AC-9`/`@AC-10` grep: hits in both files.
+  - `__tests__/fixtures` grep: none.
+- P-06 load check (Instruction 5) finds the guarded suite is vacuous on Node 24.20.0. Under
+  `--experimental-strip-types`:
+  - `import('./src/grpc/identityServiceImpl.ts')` throws `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` (parameter property).
+  - `import('./src/grpc/identityServiceImpl.js')` throws `ERR_MODULE_NOT_FOUND`.
+  - As a result, `identityServiceImpl.test.ts`'s `before()` try/catch swallows the failure.
+  - Its `IdentityServiceImpl`/`authz`-dependent cases return early. The suite reports 70 pass while executing none
+    of those assertions.
+  - `fails.md:2222` claims Node 24 handles both; that claim is false. It is corrected by an appended ledger entry.
+- Out of scope (pre-existing defect, not fixed here): the vacuous `identityServiceImpl.test.ts`, which CI also runs
+  on Node 24. This means the Step 3 `listAdminUserIds` delegate in `identityServiceImpl.ts` has no executing test.
+  The handler itself is covered directly. Hand this to `/sdd-qa defect`.
+

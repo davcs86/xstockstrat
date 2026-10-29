@@ -23,6 +23,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential | Step 1 done — `IdentityService.ListAdminUserIds` rpc + request/response messages added to `identity.proto`; `buf lint` + `buf breaking` (vs main-dev and origin/main-dev) pass |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 2 done — Go/Python/TS identity stubs regenerated for `ListAdminUserIds` via `./scripts/buf-gen.sh`; identity-only drift, second run empty diff (proto-freshness) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 3 done — identity `ListAdminUserIds` handler (`src/grpc/adminDirectory.ts`, exact peer-SAN `xstockstrat-notify`, header-blind, IDs-only, generic INTERNAL) + `IdentityServiceImpl` delegate; build/lint/test green |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 4 done — identity `ListAdminUserIds` deny matrix (`adminDirectory.test.ts`, AC-9/AC-10) + real-socket mTLS case (`mtls.test.ts`, notify vs client leaf); identity suite 78 → 89 pass, build/lint green |
 
 ---
 
@@ -62,4 +63,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 4 (identity `ListAdminUserIds` deny matrix + real-socket test) onward
+`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 5 (notify `AdminDirectory` client + `IDENTITY_ENDPOINT` wiring) onward

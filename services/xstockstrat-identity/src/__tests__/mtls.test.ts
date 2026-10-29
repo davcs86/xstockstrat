@@ -10,7 +10,10 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
+import type { Pool } from 'pg';
+import { IdentityServiceClient, IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity';
 import * as mtls from '../mtls.ts';
+import { listAdminUserIds } from '../grpc/adminDirectory.ts';
 
 const SVC = 'xstockstrat-test';
 const METHOD = '/test.Echo/Call';
@@ -28,6 +31,8 @@ interface Pki {
   clientKey: string;
   foreignCert: string;
   foreignKey: string;
+  notifyCert: string;
+  notifyKey: string;
 }
 
 function mintLeaf(dir: string, name: string, ca: string, caKey: string): [string, string] {
@@ -45,11 +50,12 @@ function mintPki(): Pki {
   sh('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', caKey, '-out', ca, '-days', '1', '-subj', '/CN=test-ca');
   const [serverCert, serverKey] = mintLeaf(dir, SVC, ca, caKey);
   const [clientCert, clientKey] = mintLeaf(dir, 'xstockstrat-client', ca, caKey);
+  const [notifyCert, notifyKey] = mintLeaf(dir, 'xstockstrat-notify', ca, caKey);
   const fca = join(dir, 'fca.pem');
   const fcaKey = join(dir, 'fca-key.pem');
   sh('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', fcaKey, '-out', fca, '-days', '1', '-subj', '/CN=foreign-ca');
   const [foreignCert, foreignKey] = mintLeaf(dir, 'xstockstrat-client', fca, fcaKey);
-  return { ca: readFileSync(ca, 'utf8'), serverCert, serverKey, clientCert, clientKey, foreignCert, foreignKey };
+  return { ca: readFileSync(ca, 'utf8'), serverCert, serverKey, clientCert, clientKey, foreignCert, foreignKey, notifyCert, notifyKey };
 }
 
 function setEnv(cert: string, key: string, ca: string): void {
@@ -140,5 +146,62 @@ describe('inter-service mTLS', () => {
 
   it('negative matrix (wrong-SAN): a valid-CA cert pinned to the wrong name is rejected', async () => {
     await assert.rejects(call(mtls.clientCredentials(), mtls.targetOverride('xstockstrat-wrong'), new grpc.Metadata()));
+  });
+});
+
+describe('ListAdminUserIds over a real mTLS socket (peer SAN gate)', () => {
+  let pki: Pki;
+  let server: grpc.Server;
+  let port: number;
+  const queries: string[] = [];
+  const fakePool = {
+    query: async (sql: string) => {
+      queries.push(sql);
+      return { rows: [{ user_id: 'user-99' }] };
+    },
+  } as unknown as Pool;
+
+  before(async () => {
+    pki = mintPki();
+    setEnv(pki.serverCert, pki.serverKey, pki.ca);
+    server = new grpc.Server();
+    server.addService(IdentityServiceService, {
+      listAdminUserIds: (call: grpc.ServerUnaryCall<unknown, unknown>, cb: grpc.sendUnaryData<{ userIds: string[] }>) =>
+        listAdminUserIds(fakePool, call, cb),
+    } as unknown as grpc.UntypedServiceImplementation);
+    port = await new Promise<number>((resolve, reject) => {
+      server.bindAsync('127.0.0.1:0', mtls.serverCredentials(), (err, p) => (err ? reject(err) : resolve(p)));
+    });
+  });
+
+  after(() => {
+    server?.forceShutdown();
+  });
+
+  function dial(cert: string, key: string): Promise<{ userIds: string[] }> {
+    setEnv(cert, key, pki.ca);
+    const client = new IdentityServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride(SVC));
+    return new Promise((resolve, reject) => {
+      client.listAdminUserIds({}, (err, resp) => {
+        client.close();
+        return err ? reject(err) : resolve(resp);
+      });
+    });
+  }
+
+  it('@AC-10: a valid-CA peer with a non-notify SAN is denied before any DB access', async () => {
+    queries.length = 0;
+    await assert.rejects(dial(pki.clientCert, pki.clientKey), (err: grpc.ServiceError) => {
+      assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+      return true;
+    });
+    assert.equal(queries.length, 0);
+  });
+
+  it('@AC-9: the xstockstrat-notify peer receives the active admin user IDs', async () => {
+    queries.length = 0;
+    const resp = await dial(pki.notifyCert, pki.notifyKey);
+    assert.deepEqual(resp.userIds, ['user-99']);
+    assert.equal(queries.length, 1);
   });
 });
