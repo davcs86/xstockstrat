@@ -34,16 +34,18 @@ re-authenticate — at most they perform a **role check** on the propagated `x-a
 ### Documented exception: indicators formula author-ownership
 
 `xstockstrat-indicators` formula management (`UpdateFormula` / `DeleteFormula`) keeps a distinct
-**author-ownership** check (`row.author == request.user_id`) as its primary authorization model — a
-deliberate, documented exception to the pure role-check model. Feature 049 added an **admin-scope
-override** (`x-access-scope & 0x04`) so platform admins can manage any formula, and closed the
-`RegisterFormula` gap — no silent `"dev-user"` default. Note the actual precedence, which an earlier
-version of this line stated backwards: an explicit `request.author` **wins**, the propagated
-`x-user-id` is the **fallback**, and the call is rejected only when both are empty
-(`services/xstockstrat-indicators/app/handlers/servicer.py`). `xstockstrat-config`'s `SetConfig`
-follows the same precedence (feature 074). This is a *presence* guarantee — no anonymous writes —
-not an authenticity guarantee: a caller that can assert `x-access-scope` can equally assert
-`x-user-id`.
+**author-ownership** check (stored `author` == the caller's `x-user-id`) as its primary authorization
+model — a deliberate, documented exception to the pure role-check model. There is no admin override
+for formula writes (feature 224), and `RegisterFormula` has no silent `"dev-user"` default.
+
+Write attribution comes from headers only, in both services: indicators `RegisterFormula` stamps
+`author` from `x-user-id` and ignores the body `author`
+(`services/xstockstrat-indicators/app/handlers/servicer.py`), and `xstockstrat-config`'s `SetConfig`
+credits `x-user-id` (or the `callerID` of an authorized `x-internal-caller` grant) and ignores the
+deprecated `SetConfigRequest.author` (feature 241). A missing identity is rejected (indicators
+`UNAUTHENTICATED`, config `INVALID_ARGUMENT`). This is a *presence* guarantee — no anonymous writes —
+not an authenticity guarantee: identity is propagated, not authenticated, so a caller that can assert
+`x-access-scope` can equally assert `x-user-id`.
 
 ## Go services
 

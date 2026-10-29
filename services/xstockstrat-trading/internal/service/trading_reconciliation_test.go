@@ -18,6 +18,7 @@ import (
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/repository"
+	"github.com/xstockstrat/trading/internal/testdata"
 )
 
 // TestRecordToProtoAccount_MapsHaltFields proves recordToProtoAccount (feature 030) now also
@@ -744,13 +745,15 @@ func TestReconcileTick_ListOrdersError_SkipsAccount_CountsTowardSystemic(t *test
 // configSetter field doc comment for why: config.Watcher has no exported way to construct one
 // around a fake gRPC client from outside package config).
 type fakeConfigSetter struct {
-	mu    sync.Mutex
-	calls []*configv1.SetConfigRequest
+	mu        sync.Mutex
+	calls     []*configv1.SetConfigRequest
+	callerIDs []string
 }
 
 func (f *fakeConfigSetter) SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, req)
+	f.callerIDs = append(f.callerIDs, callerID)
 	f.mu.Unlock()
 	return &configv1.SetConfigResponse{}, nil
 }
@@ -786,8 +789,12 @@ func TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly(t *testing
 	if req.Value.GetStringVal() != "REDUCE_ONLY" {
 		t.Errorf("SetConfig value = %q, want REDUCE_ONLY", req.Value.GetStringVal())
 	}
-	if req.Author != "system:reconciliation-poller" {
-		t.Errorf("SetConfig author = %q, want system:reconciliation-poller", req.Author)
+	if setter.callerIDs[0] != testdata.ReconciliationPollerCallerID {
+		t.Errorf("SetConfig callerID = %q, want %q", setter.callerIDs[0], testdata.ReconciliationPollerCallerID)
+	}
+	fd := req.ProtoReflect().Descriptor().Fields().ByName("author")
+	if req.ProtoReflect().Has(fd) {
+		t.Errorf("SetConfig must not send the deprecated author field")
 	}
 }
 
