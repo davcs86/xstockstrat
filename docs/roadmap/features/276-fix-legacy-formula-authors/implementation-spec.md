@@ -84,7 +84,7 @@ Out of scope: feature 275 reporting surfaces; `_can_read_formula`; `UpdateFormul
 
 ### Step 2 — test: `list-users --json` output contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/tests/`
 **Files**:
 - `scripts/tests/test_manage_users.py` — modify (add a class `TestListUsersJson`)
@@ -369,3 +369,4 @@ Add to `docs/runbooks/CLAUDE.md` (alphabetical position, before `mcp-tools.md`) 
 _Populated by /sdd-execute as implementation proceeds._
 
 - 2026-10-28 (re-spec, sdd-batch-execute): Steps 1-9 Codebase Evidence re-verified after merging `origin/main-dev`. Line drift corrected (Steps 1, 2, 4, 9); Step 4 stale "no real-Postgres harness" claim corrected (analysis `local_pg` exists; indicators keeps the fake, rationale recorded); Step 7 abort-assertion note aligned with `ctx_with` raising `grpc.RpcError`; Step 8 runbook must state the pooled-port deviation from `operator-db-access.md` and insert the index row alphabetically. Steps 3, 5, 6 evidence held unchanged.
+- 2026-10-29 (Step 2, sdd-execute sequential): Verification narrowed per operator decision (Option C, binding operator note on the Step 2 blocker). The specced `ruff check scripts/ && ruff format --check scripts/manage-users.py scripts/tests/test_manage_users.py` fails on pre-existing findings on lines this feature did not touch (`ruff check scripts/`: 9 findings across `build-launch-pdfs.py`, `do-inject-prod-secrets.py`, `manage-users.py`, `test_manage_users.py`; `ruff format --check`: 4 of 5 `scripts/` files would be reformatted). Step 2 is verified as clean on its own lines instead: no `ruff check` finding and no `ruff format --diff` hunk falls on the added lines (`import json`, `TestListUsersJson`). The cited CI line `.github/workflows/ci.yml:324-327` is stale (real `:331-335`), and that ruff job runs only per Python service (`working-directory: services/${{ matrix.service }}`), so no CI job lints `scripts/`. Cleanup and a CI ruff job for `scripts/` are filed as `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md`. The spec's fourth case (`test_table_path_unchanged`) is satisfied by the unedited `TestListUsersCmd::test_lists_users`, so no new test was added for it.

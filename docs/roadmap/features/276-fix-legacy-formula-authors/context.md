@@ -266,3 +266,13 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 - TDD (red → green, scratch test mirroring Step 2's cases, not committed; Step 2 owns the committed tests): red `list-users --json` → exit 2 "No such option: --json" (3 failed); green 3 passed + existing `scripts/tests/test_manage_users.py` 41 passed (44 total). Verification: `uv run scripts/manage-users.py list-users --help` lists `--json`.
 - Files modified: `scripts/manage-users.py`
 - Deviations: none. Lint note: `ruff check`/`ruff format --check` on `scripts/manage-users.py` still report pre-existing findings on untouched lines (unused `import sys`, five formatter diffs); the step's own lines are clean. Step 2's Verification runs `ruff format --check` on this file and will fail on those pre-existing lines.
+
+---
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 2 — test: `list-users --json` output contract [done]
+- Added `TestListUsersJson` (3 tests) to `scripts/tests/test_manage_users.py` plus `import json`: only `{user_id, email_local, is_active}` emitted (no `@`, no `roles`); `--json --active-only` query selects `user_id` and filters `WHERE is_active = TRUE`; empty result prints `[]`, exit 0. The spec's 4th case (table path unchanged) is the unedited `test_lists_users`.
+- TDD: AC-5 (partial) red: run against the pre-Step-1 `manage-users.py` (`91c25c3c~1`, scratch copy) → 3 failed, `assert 2 == 0` (typer "No such option: --json"); green: `uv run --with pytest ... pytest scripts/tests/test_manage_users.py -v` → 44 passed.
+- Files modified: `scripts/tests/test_manage_users.py`
+- Deviation (operator decision, Option C): the specced ruff gate over `scripts/` fails on pre-existing findings; narrowed to "clean on the added lines" (no `ruff check` finding or `ruff format --diff` hunk on them). Logged in implementation-spec.md Deviation Log; cleanup + CI ruff job for `scripts/` filed as `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md`.
