@@ -508,3 +508,19 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   `src/__tests__/webPush.test.ts`, `src/__tests__/notifyServiceImpl.test.ts`.
 - Out of scope: none. The notify `CLAUDE.md` Web Push paragraph still says empty target ⇒ broadcast. Step 15 owns
   that doc fix.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 9 (portfolio risk alerts target the owner)
+
+- Step 9 done. In `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `emitRiskAlert` is now
+  `(ctx, userID, msg string)` and sets `TargetUserId: userID`. Both call sites in `checkRiskLimits` (concentration
+  and drawdown) pass the `checkRiskLimits` owner. The ledger event is unchanged. There is no empty-owner guard
+  (`design.md:262`).
+- TDD (P-06), on an uncommitted scratch test that Step 10 replaces. RED: `want 1 risk alert targeted at u1, got
+  [... category:"risk" ... source_service:"portfolio"]` (no `target_user_id`). GREEN: `--- PASS`. Existing
+  `TestCheckRiskLimits_AC3`/`_AC9` still pass.
+- Verification: `GOWORK=off go build ./...` OK. `golangci-lint run` reports `0 issues.` using a go1.27 rebuild of
+  v2.14.0, because the provisioned binary is go1.26 (see the Deviation Log). `go test ./internal/service/...` ok.
+  The greps find `TargetUserId:  userID` at `:1014` and the 2 call sites at `:991` and `:999`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`.
+- Out of scope: none. The trading precedent citation is `trading.go:3347`, not `:3348` (citation drift only).
+

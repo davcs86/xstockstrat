@@ -482,7 +482,7 @@ grep -n "__tests__/fixtures" src/__tests__/webPush.test.ts src/__tests__/notifyS
 
 ### Step 9 — service: portfolio risk alerts target the account owner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -838,3 +838,10 @@ _Populated by /sdd-execute as implementation proceeds._
   call. (e) None of the five files is prettier-clean at HEAD, so only the added lines follow prettier style; there is
   no whole-file reformat. (f) `pnpm run lint` has 0 errors. Warnings went from 211 to 233, and all 22 new ones are
   `no-explicit-any` (the spec's `catch (e: any)` and `e: any`, plus the test fakes).
+- **Step 9 (2026-10-29) — verification tooling and TDD-evidence mechanics only, no code deviation.** (a) The
+  provisioned `~/go/bin/golangci-lint` (v2.14.0) was built with go1.26 and refuses the module's `go 1.27.0`
+  ("can't load config"). It was rebuilt at the same pin with `GOTOOLCHAIN=go1.27.0` into the session scratchpad;
+  that build reports `0 issues.` (b) The spec puts every `@AC-*` portfolio test in Step 10, so the step-9 RED→GREEN
+  gate ran on an uncommitted scratch test (drawdown alert for owner `u1` must carry `TargetUserId == "u1"`), deleted
+  before commit. Step 10 still owns the committed tests. (c) Codebase Evidence cites the trading precedent at
+  `trading.go:3348`; it is at `:3347` (also `:3693`, `:3709`). Citation drift only.
