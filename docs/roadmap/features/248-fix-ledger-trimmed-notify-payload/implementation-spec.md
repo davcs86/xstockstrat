@@ -496,10 +496,10 @@ grep -n "pool" src/services/eventNotifier.ts || echo "OK: notifier holds no pool
     caller-scope assertions read it back (e.g. `h.captured.params[0] === 'u_42'`), so the moved double must keep
     accepting a positional string.
 - No `streamEvents` unit test exists (recon.md § Not found).
-- `LedgerServiceImpl(pool, config, notifier?)` (`src/grpc/ledgerServiceImpl.ts:18-25`, constructor `:19`).
+- `LedgerServiceImpl(pool, config, notifier?)` (`src/grpc/ledgerServiceImpl.ts:19` class, constructor `:20`, params `:20-25`).
 - Re-grepped 2026-10-29 after Step 5 and the main-dev merge-up (lines drifted; locate by content): replay is
   `this.pool.query(SELECT … ORDER BY sequence ASC)` (`:244-249`, followed by the `if (cleaned) return;` guard
-  `:251`). The buffer push while `!live` is at `:206`, and the flush loop at `:260-266` (`if (cleaned) return;`
+  `:251`). The `if (!live)` guard is `:206` and its `buffer.push(row)` is `:207`, and the flush loop at `:260-266` (`if (cleaned) return;`
   `:260`, `writeRow` `:265`). `getEvent`'s `rowToEvent` call is `:281`.
 - `eventRowResolver.test.ts` declares an inline `STUB` (`:19-22`) with only `event_id` and `recorded_at`; its
   assertions reference `STUB.event_id` symbolically, so swapping in `toTrimmedStub(makeEventRow())` changes no
@@ -975,7 +975,7 @@ git status --short   # no service changes
   (append-only, newest-first log). The newest entry is feature 240 (`:113`, re-grepped 2026-10-29 after the main-dev
   merge-up); lines drift, so locate by content.
 - `docs/patterns/ci-overview.md:7-20` is the job table (`node-test` row `:18`).
-- `docs/patterns/test-data-inventory.md:73-74` ("config/ledger at two … no new home") and the Node row `:83`
+- `docs/patterns/test-data-inventory.md:74-75` ("config/ledger at two" `:74` … "home is created at all" `:75`) and the Node row `:83`
   ("Not materialized") go stale once Step 6 creates the ledger home.
 - Overlap: 243 `fix-sandbox-seed-keys` also edits `config-governance.md` (its `implementation-spec.md:329`, :359): one
   row in the Author-sentinel table, adjacent to this step's log insert (before the feature 240 entry). Expect a rebase
@@ -1023,7 +1023,7 @@ git status --short   # no service changes
    `| \`ledger-db-test\` | Applies all migrations to TimescaleDB, runs ledger \`pnpm run test:db\` (trigger-stub resolve, replay recovery, resolve bound) | — |`
    after the `node-test` row.
 7. **`test-data-inventory.md`.** Node row (`:83`) → "Materialized in ledger (feature 248):
-   `src/__tests__/fixtures/` + `INVENTORY.md`". Amend `:73-74` so it no longer predicts no ledger home.
+   `src/__tests__/fixtures/` + `INVENTORY.md`". Amend `:74-75` so it no longer predicts no ledger home.
 8. **Teardown audit.**
    - Run `/context-forge:context-constitution refresh`, scoped to the files above, and fix grounded drift.
    - If the plugin is unavailable, re-read each touched file against the code. Record "plugin unavailable" plus the
@@ -1118,3 +1118,10 @@ _Populated by /sdd-execute as implementation proceeds._
   `:822-841`, echoes `:845-861`). A new `migration-contract-gate` job now follows `migration-rerun`; `ledger-db-test`
   is placed after it, and its `needs`/echo lines after its entries.
 - **Step 11**: `config-governance.md` header `:109`, feature 240 entry `:113`. Other anchors matched.
+
+### 2026-10-29 — Re-spec (sdd-batch-execute resume): Steps 6, 11 line drift
+
+- **Step 6**: `LedgerServiceImpl` class `:19`, constructor `:20` (params `:20-25`); the `!live` buffer push is
+  `buffer.push(row)` `:207` (guard `:206`). Instructions unchanged.
+- **Step 11**: `test-data-inventory.md` "config/ledger at two … home is created at all" is `:74-75` (was `:73-74`).
+  Instructions unchanged.
