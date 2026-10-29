@@ -836,3 +836,23 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   coverage at 82.92% (≥40). `ruff check .` and `ruff format --check .` are clean.
 - Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 11
+
+### Step 11 — service: P&L consumer `_emit` keywords; existing emits carry the event trace (C-03) [done]
+- `app/engine/pnl_pattern_consumer.py`: `_emit` gains keyword-only `correlation_id=""`, `idempotency_key=""` and
+  `timeout=None`; both IDs go on the `AppendEventRequest`, and the call passes
+  `metadata=(("x-trace-id", correlation_id),)` when `correlation_id` is non-empty (else `()`) and `timeout=timeout`.
+  The existing best-effort `except` is unchanged. The snapshot captured/degraded emit and the `analysis.pattern.sealed`
+  emit pass `correlation_id=event.correlation_id`; their `timeout` stays `None`.
+- TDD (the C-08 pair is Step 12; RED/GREEN ran via an uncommitted scratch test whose ledger fake accepts `timeout`):
+  RED: `_emit(..., correlation_id=, idempotency_key=, timeout=)` raised `TypeError: unexpected keyword argument`, and
+  the order/close emits carried `correlation_id=''` with no metadata (2 failed). GREEN: 2 passed. Scratch file deleted.
+- Verification: `grep -n "correlation_id=event.correlation_id"` gives 2 hits (`:252`, `:308`); `grep -n "x-trace-id"`
+  gives `:447`; `ruff check .` and `ruff format --check .` are clean.
+- Interim, expected (spec Step 12 evidence): the full suite is 1311 passed, 6 failed until Step 12 widens the test
+  `FakeLedger.AppendEvent` to accept `timeout`. The 6 (`test_pnl_pattern_consumer.py` ac1, ac2, ac6 x2, ac7 and
+  `test_owner_header_guard.py::test_ac17_ownerless_order_event_issues_no_owner_scoped_call`, which imports the same
+  `make_consumer`) fail only because `_emit` swallows that `TypeError`, leaving `ledger.appended` empty.
+- Files modified: `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`
+- Deviations: none

@@ -572,7 +572,7 @@ ruff check . && ruff format --check .
 
 ### Step 11 — service: P&L consumer `_emit` keywords; existing emits carry the event trace (C-03)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py` — modify

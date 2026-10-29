@@ -249,6 +249,7 @@ class PnLPatternConsumer:
                 "event_type": event_type,
                 "degraded": degraded,
             },
+            correlation_id=event.correlation_id,
         )
 
     # ── portfolio.position.closed → seal window, write samples, advance cursor ─────
@@ -304,6 +305,7 @@ class PnLPatternConsumer:
                     "realized_pnl": realized_pnl,
                     "position_id": sealed["position_id"],
                 },
+                correlation_id=event.correlation_id,
             )
 
     async def _build_samples(self, sealed, realized_pnl, closed_at, close_event_id) -> list[dict]:
@@ -412,7 +414,16 @@ class PnLPatternConsumer:
             int(sequence),
         )
 
-    async def _emit(self, event_type, stream_key, payload) -> None:
+    async def _emit(
+        self,
+        event_type,
+        stream_key,
+        payload,
+        *,
+        correlation_id: str = "",
+        idempotency_key: str = "",
+        timeout: float | None = None,
+    ) -> None:
         try:
             from google.protobuf.struct_pb2 import Struct
 
@@ -423,13 +434,18 @@ class PnLPatternConsumer:
                     for k, v in payload.items()
                 }
             )
+            req = ledger_pb2.AppendEventRequest(
+                event_type=event_type,
+                source_service="xstockstrat-analysis",
+                stream_key=stream_key,
+                payload=p,
+                correlation_id=correlation_id,
+                idempotency_key=idempotency_key,
+            )
             await self._ledger.AppendEvent(
-                ledger_pb2.AppendEventRequest(
-                    event_type=event_type,
-                    source_service="xstockstrat-analysis",
-                    stream_key=stream_key,
-                    payload=p,
-                )
+                req,
+                metadata=(("x-trace-id", correlation_id),) if correlation_id else (),
+                timeout=timeout,
             )
         except Exception as e:  # noqa: BLE001 — audit is best-effort
             log.warning("pnl consumer: ledger emit %s failed: %s", event_type, e)
