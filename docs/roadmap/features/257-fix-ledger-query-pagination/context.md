@@ -396,3 +396,27 @@ Still open (surface at the /sdd-execute checkpoint):
 - `implementation-spec.md` Step 7 drops the "Recorded C-15 divergence" note; test and scenario now agree.
 - No `/sdd-qa defect` is filed for the fill-payload side/sign question (operator chose the reword). The adjacent
   observation that `order.filled`/`order.partially_filled` payloads carry no side remains recorded above for context.
+
+## Session 2026-10-29 — re-spec at branch setup (sdd-execute sequential)
+
+- Merged `origin/main-dev` into the feature branch (normal merge; one conflict in `docs/roadmap/ledger/fails.md`,
+  resolved keeping both sides — the branch side added nothing beyond base there). `ledger-guard.py --fix`: clean.
+- Re-spec'd the bodies of Steps 1–9 against the merged tree (263, 252 and 248 are now in `main-dev`); details in
+  implementation-spec.md § Deviation Log. Highlights:
+  - Step 1: the three merge-order rows already exist (`:78`, `:79`, `:80`). Remaining work: fix row `:78`'s
+    "next free `QueryEventsRequest` field number" clause (257 adds no field) and add the rolling-deploy note.
+  - Steps 2/3/6/7: line citations re-grounded; 263's owner tests and `makeStreamCall(req, 'u-a')` are reused for the
+    owner+token compose case.
+  - Steps 4/5: 248's `Number(...)` forms are replaced by `toSeq`. The new `MAX(sequence)` bound query breaks 248's
+    `makePool`-based `streamEvents` tests, so Step 5 adapts those fakes (no impl fallback for a missing bound),
+    extends `fixtures/streamCall.ts#makeRecordingCall` with `once`/`removeListener`/`emit` (+ `INVENTORY.md`) for
+    `waitForDrain`, and reuses `makeFakeNotifier`.
+  - Step 9: the new invariant is `LEDGER-9` (248 holds `LEDGER-8`); Step 8's timings now live in the CI log.
+- **Operator decision (2026-10-29, own words via the session question tool): "Move it into CI real-DB tier".**
+  Step 8 is no longer a manual real-TimescaleDB run. It is now
+  `services/xstockstrat-ledger/src/__tests__/db/queryPagination.db.test.ts`, run by `pnpm run test:db` in CI job
+  `Ledger DB test (TimescaleDB)` (`.github/workflows/ci.yml:706-762`), and is verified by that job going green, so
+  it is not an operator-only or tooling blocker. No database is started locally; local verification is compile-only,
+  because the tier fails loudly without `LEDGER_DB_TEST_URL` (no-silent-skip convention). This supersedes the r2
+  manual-run evidence plan and design.md's "CI TimescaleDB job" rejected alternative. The `p100_ms` /
+  `token_walk_count` / `per_page_ms` context.md lines are dropped.
