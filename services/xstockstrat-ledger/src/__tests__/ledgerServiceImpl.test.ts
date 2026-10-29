@@ -671,21 +671,21 @@ describe('rowToEvent serialization (regression)', () => {
 // streamEvents — onGap ends the call non-OK (feature 248)
 // ---------------------------------------------------------------------------
 
-describe('streamEvents onGap', () => {
-  function makeFakeNotifier() {
-    const n = {
-      captured: null as any,
-      unsubscribed: false,
-      subscribe(sub: any) {
-        n.captured = sub;
-        return () => {
-          n.unsubscribed = true;
-        };
-      },
-    };
-    return n;
-  }
+function makeFakeNotifier() {
+  const n = {
+    captured: null as any,
+    unsubscribed: false,
+    subscribe(sub: any) {
+      n.captured = sub;
+      return () => {
+        n.unsubscribed = true;
+      };
+    },
+  };
+  return n;
+}
 
+describe('streamEvents onGap', () => {
   for (const [label, notFound, code] of [
     ['AC-7: no row → INTERNAL (13)', true, 13],
     ['AC-6: read error → UNAVAILABLE (14)', false, 14],
@@ -738,5 +738,58 @@ describe('streamEvents onGap', () => {
     assert.deepStrictEqual(call.destroyed, { code: 14, message: 'm' });
     assert.strictEqual(notifier.unsubscribed, true);
     assert.deepStrictEqual(call.writes, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// streamEvents — sequence normalisation (feature 248): pg returns BIGINT as a string
+// ---------------------------------------------------------------------------
+
+describe('streamEvents sequence normalisation', () => {
+  const seqs = (call: any) => call.writes.map((w: any) => Number(w.sequence));
+
+  it('AC-2: a resolved "100" after replayed "98"/"99" is delivered, and NOTIFY 100 is not duplicated', async () => {
+    const rows = ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
+    const notifier = makeFakeNotifier();
+    const impl = new LedgerServiceImpl(makePool(rows), {}, notifier);
+    const call = makeStreamCall({ fromSequence: 98 });
+    await impl.streamEvents(call);
+    assert.deepStrictEqual(seqs(call), [98, 99]);
+
+    notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: '100', payload: { n: 100 } }));
+    assert.deepStrictEqual(seqs(call), [98, 99, 100], 'string "100" must not compare lexicographically below "99"');
+    assert.deepStrictEqual(call.writes[2].payload, { n: 100 });
+
+    notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: 100 }));
+    assert.deepStrictEqual(seqs(call), [98, 99, 100], 'no duplicate for the NOTIFY number form');
+  });
+
+  it('AC-5: a resolved "100" buffered during replay is flushed exactly once', async () => {
+    let release: (r: any) => void = () => {};
+    const pool = {
+      query: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    };
+    const notifier = makeFakeNotifier();
+    const impl = new LedgerServiceImpl(pool, {}, notifier);
+    const call = makeStreamCall({ fromSequence: 98 });
+    const done = impl.streamEvents(call);
+    notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: '100' }));
+    release({ rows: ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s })) });
+    await done;
+    assert.deepStrictEqual(seqs(call), [98, 99, 100]);
+    assert.strictEqual(call.destroyed, null);
+  });
+
+  it('encodes a string int64 sequence from a pg row without throwing', async () => {
+    const { LedgerEvent } = await import('@xstockstrat/proto/ledger/v1/ledger');
+    const event = rowToEvent(makeRow({ sequence: '100' }));
+    let bytes: Uint8Array = new Uint8Array();
+    assert.doesNotThrow(() => {
+      bytes = LedgerEvent.encode(event).finish();
+    });
+    assert.strictEqual(Number(LedgerEvent.decode(bytes).sequence), 100);
   });
 });

@@ -621,3 +621,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   numerically (Deviation Log).
 - Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`
 - Next: Step 8.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 8
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f,
+  'Start executing features 241-276' via batch-execute). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`db8633e1`). The launcher's digest
+  said Steps 5-7 were pending; it had read a stale tree. On the branch they are `done`.
+- Tooling: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90`. No install.
+
+### Step 8 — test: `streamEvents` sequence normalisation and string-`sequence` encoding (tier iii) [done]
+- New `describe('streamEvents sequence normalisation')` in `ledgerServiceImpl.test.ts`, built on `makeRow` /
+  `makeStreamCall` fixtures and the shared `makeFakeNotifier` (hoisted to module scope):
+  - AC-2: replayed `"98"`/`"99"` then a resolved `"100"` gives `[98, 99, 100]` immediately; a NOTIFY number `100`
+    adds no duplicate.
+  - AC-5: a resolved `"100"` buffered during a held replay is flushed exactly once.
+  - Encoding: `LedgerEvent.encode(rowToEvent({sequence: '100'}))` does not throw and decodes to `100`.
+- TDD (AC-2, AC-5): RED with pre-Step-7 source from `db8633e1^`: 35 pass / 2 fail, both `actual [98, 99]` vs
+  `[98, 99, 100]` → GREEN: 37/37. The encoding case is a characterization (passes either way; ts-proto accepts a
+  string int64), so no `rowToEvent` change was needed.
+- Verification: `pnpm run lint` exit 0 (176 warnings, 0 errors); `pnpm run test:coverage` exit 0, 82/82 pass,
+  0 fail/cancelled/skipped/todo, All files 86.39% lines; tap `ledgerServiceImpl` 37/0; C-13 grep clean.
+- Files modified: `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`
+- Deviations: Deviation Log 2026-10-29 "Step 8 execution" (RED order, characterization, helper hoist, lint count).
+- Next: Step 9.

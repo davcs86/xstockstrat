@@ -712,7 +712,7 @@ awk '/async streamEvents\(/{f=1} /async getEvent\(/{f=0} f' src/grpc/ledgerServi
 
 ### Step 8 — test: `streamEvents` sequence normalisation and string-`sequence` encoding (tier iii)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -1170,3 +1170,19 @@ _Populated by /sdd-execute as implementation proceeds._
   xstockstrat-ledger...` (pnpm 9.15.9) therefore ran in this worktree. The lockfile is unchanged.
 - **Disposition**: no spec change.
 
+### 2026-10-29 — Step 8 execution (sdd-batch-execute)
+
+- **Step**: 8
+- **RED order**: Step 7 had already landed (`db8633e1`), so RED ran with the pre-Step-7 `ledgerServiceImpl.ts`
+  restored from `db8633e1^` (uncommitted, restored before GREEN). Cases 1 and 2 failed at runtime with
+  `actual [98, 99]` against `[98, 99, 100]`; `tsc` was clean. Case 1 checks the writes right after the string
+  `"100"`, as the Step 7 finding required.
+- **Encoding case is a characterization**: it passes both before and after Step 7. ts-proto accepts a string
+  `int64` `sequence` and decodes it to `100`, so the "stop and ask" branch did not trigger and `rowToEvent` is unchanged.
+- **Helper hoist**: `makeFakeNotifier` moved from inside `describe('streamEvents onGap')` to module scope so both
+  describes share it (DRY); its body is unchanged.
+- **Lint**: 176 warnings (was 173), 0 errors. The 3 new ones are `any` warnings in the new cases, matching the
+  file's existing style.
+- **Tooling**: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90` (Step 7's
+  install). No install, no lockfile change.
+- **Disposition**: no spec change.
