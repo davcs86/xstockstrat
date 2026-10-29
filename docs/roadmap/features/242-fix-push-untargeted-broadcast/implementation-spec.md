@@ -378,7 +378,7 @@ grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: sing
 
 ### Step 7 — service: notify untargeted push resolves admin audience
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/webPush.ts` — modify
@@ -435,7 +435,7 @@ grep -n "dispatch(alert, call.metadata)" src/grpc/notifyServiceImpl.ts
 
 ### Step 8 — test: notify push audience (deliberate rewrite of feature-165 broadcast case)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/webPush.test.ts` — modify
@@ -825,3 +825,16 @@ _Populated by /sdd-execute as implementation proceeds._
   `adminDirectory.test.ts` is prettier-clean. (e) The worktree had no `node_modules`, and the main worktree has none
   to symlink, so `pnpm install --frozen-lockfile --filter xstockstrat-notify... --filter xstockstrat` was run at the
   worktree root. That run installs husky, so the pre-commit hook runs.
+- **Steps 7 + 8 (2026-10-29) — merged into one commit (operator decision, Option B).** Step 7 makes `admins:
+  AdminDirectory` a required 3rd constructor argument, and `tsc` compiles the tests, so Step 7 alone cannot pass its
+  own `pnpm run build` without Step 8's edits to every `new StubbedDispatcher`/`ExposedDispatcher` site. The operator
+  chose to land Step 7's three files and Step 8's two test files together, with one red→green cycle on Step 8's
+  tests, and to mark both steps done in that commit. Other notes, mechanics only: (a) RED was `tsc` TS2554 ×17
+  ("Expected 2 arguments, but got 3/4"), and running the emitted `dist` gave `tests 61, pass 53, fail 8`; GREEN is
+  `tests 88, pass 88, fail 0, skipped 0`. (b) The feature-165 targeted case keeps its `AC-4` title and gains `@AC-2`,
+  and it switches from `capturingPool(SUBS)` to `sqlPool(GIVENS)`; `capturingPool` and `SUBS` stay for the other
+  feature-165 cases. (c) `StubbedDispatcher` also overrides `logAdminLookupError` to record each call, so every
+  `@AC-11` case counts escalations through the same subclass. (d) `reportAdminLookupError` reads the clock once per
+  call. (e) None of the five files is prettier-clean at HEAD, so only the added lines follow prettier style; there is
+  no whole-file reformat. (f) `pnpm run lint` has 0 errors. Warnings went from 211 to 233, and all 22 new ones are
+  `no-explicit-any` (the spec's `catch (e: any)` and `e: any`, plus the test fakes).

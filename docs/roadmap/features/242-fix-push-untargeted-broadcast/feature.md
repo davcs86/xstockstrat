@@ -26,6 +26,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 4 done — identity `ListAdminUserIds` deny matrix (`adminDirectory.test.ts`, AC-9/AC-10) + real-socket mTLS case (`mtls.test.ts`, notify vs client leaf); identity suite 78 → 89 pass, build/lint green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 5 done — notify `AdminDirectory` client (`src/services/adminDirectory.ts`: single-flight, no cache, 2000 ms deadline, trio relayed, fail-closed on unset `IDENTITY_ENDPOINT`) + `IDENTITY_ENDPOINT` in the notify block of compose and both DO specs; build/lint/test green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 6 done — notify `AdminDirectory` tests (`adminDirectory.test.ts`: AC-8 freshness, single-flight, deadline/no `waitForReady`, trio-only relay, AC-11 failure + missing endpoint) + real-socket mTLS case to an `xstockstrat-identity` leaf (`mtls.test.ts`); notify suite 70 → 79 pass, coverage/lint green |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 7 + 8 done in one commit (operator Option B) — untargeted Web Push resolves the admin audience (`listAdminUserIds(md)` → `WHERE user_id = ANY($1::text[])`, lookup failure → ERROR once per 60s, no push); `dispatch(alert, call.metadata)`; `createAdminDirectory()` wired in `index.ts`; feature-165 broadcast test rewritten (AC-1/2/5/8/11); notify suite 79 → 88 pass, coverage/lint green |
 
 ---
 

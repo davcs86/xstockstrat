@@ -466,3 +466,45 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   - `@AC-8` / `@AC-11` grep: hits at `:54`, `:117`, `:142`.
   - `__tests__/fixtures` grep: none.
 - Deviation Log: test mechanics only (see implementation-spec.md). No out-of-scope changes.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 7 + 8 (notify admin push audience + tests)
+
+- Operator decision (binding, 2026-10-29), Option B on the Step 7 blocker: Steps 7 and 8 merge into ONE commit with
+  one red→green cycle on Step 8's tests, and both are marked done. Step 7's required 3rd constructor argument breaks
+  `tsc` on every existing test site until Step 8 lands. This is recorded in the Deviation Log.
+- Step 7 done:
+  - `webPush.ts`: constructor `(pool, config, admins: AdminDirectory, now = Date.now)`; `dispatch(alert, md?)`.
+  - The targeted SQL and params are unchanged.
+  - The untargeted branch calls `admins.listAdminUserIds(md)`. An empty list returns with no query. Otherwise it
+    runs `SELECT … WHERE user_id = ANY($1::text[])`.
+  - A lookup failure of any code calls `reportAdminLookupError`, which logs one ERROR per 60s through the protected
+    `logAdminLookupError` seam (`ADMIN_LOOKUP_ERROR_INTERVAL_MS`, F-07 constant). It then returns without pushing.
+  - The VAPID and severity gates still run before the lookup. Other push errors stay WARN. Comments `:29` and the
+    branch comment are rewritten.
+  - `notifyServiceImpl.ts`: `dispatch(alert, call.metadata)`; nothing else changes.
+  - `index.ts`: `new WebPushDispatcher(pool, configWatcher, createAdminDirectory())`.
+- Step 8 done:
+  - `webPush.test.ts` adds the inline `stubAdmins`, `sqlPool` (an unfiltered SELECT throws), `GIVENS` and `RISK`
+    helpers (C-13, single consumer).
+  - The feature-165 "broadcast queries all subscriptions" case is replaced by `@AC-5` (admin only, `ANY` params
+    `[['user-99']]`), `@AC-1` (no non-admin endpoint) and an empty-list case (no query).
+  - The targeted case gains `@AC-2`: exactly `/one` and `/two`, and admins are not called.
+  - It adds `@AC-8` (re-resolved per alert), `@AC-11` for codes 14 and 13 and for the 60s clock window (0/30s/59s →
+    1, 60s → 2), a gates-before-lookup case, and md pass-through.
+  - `notifyServiceImpl.test.ts`: `recordingWebPush` records the 2nd argument, and an `@AC-1` EmitAlert case checks
+    that an `alertId` comes back, the subscriber receives 1, and push receives `(alert, md)`.
+  - The `:219-226` pin and the push-isolation case are unchanged and green.
+- TDD (P-06). RED: `tsc` reports TS2554 ×17, and the emitted `dist` gives `tests 61, pass 53, fail 8`. GREEN:
+  `tests 88, pass 88, fail 0, skipped 0`.
+- Verification:
+  - `pnpm run test:coverage`: exit 0, 90.56% lines, `webPush.js` 95.68%.
+  - `pnpm run build`: exit 0.
+  - `pnpm run lint`: 0 errors, 233 warnings, all `no-explicit-any`.
+  - The unfiltered-SELECT grep finds nothing. `WHERE user_id = $1` is at `:101` and `ANY($1::text[])` at `:116`.
+  - `dispatch(alert, call.metadata)` is at `:109`.
+  - The old broadcast test title is gone.
+  - `@AC-*` greps: 7 hits in webPush and 1 in notifyServiceImpl. The fixtures grep finds nothing.
+- Files modified: `services/xstockstrat-notify/src/fanout/webPush.ts`, `src/grpc/notifyServiceImpl.ts`, `src/index.ts`,
+  `src/__tests__/webPush.test.ts`, `src/__tests__/notifyServiceImpl.test.ts`.
+- Out of scope: none. The notify `CLAUDE.md` Web Push paragraph still says empty target ⇒ broadcast. Step 15 owns
+  that doc fix.
