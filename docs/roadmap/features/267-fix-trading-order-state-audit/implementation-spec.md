@@ -399,7 +399,7 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 
 ### Step 5 — test: RED — every request-reachable `Background()` emit/finalize carries the inbound x-trace-id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify (created by Step 1; absent until then)
@@ -655,3 +655,25 @@ _Populated by /sdd-execute as implementation proceeds._
 - **D4-3 (pre-commit hook):** same as D3-4: the main worktree has no `node_modules` to link and `.husky/_` is
   not installed, so git ran no hook (no `--no-verify`). `gofmt -l` is clean and `golangci-lint` reports
   0 issues. **Disposition**: environment only.
+
+### 2026-10-29 — Step 5
+
+- **D5-1 (row #32 driver added):** Instruction 2's driver list has no test for row #32, but the Codebase
+  Evidence paragraph under the table requires one. Added `TestTrace_ValidateAndRecordCredential` with a
+  test-local `ctxCapturingAccountRepo` (C-13: single consumer, inline). **Disposition**: applied in-step,
+  inside Step 5's **Files**.
+- **D5-2 (#30/#31 split):** "`partially_filled` with an ACTIVE IBKR bracket covers rows #22, #23, #30-fail and
+  #31" cannot run as one call, because #30 (resize failure alert) and #31 (resize success emit) are
+  alternative branches of `resizeBracket`. `TestTrace_ApplyBrokerOrderStatus` has two sub-cases: "resizes"
+  (#22, #23 via #31) and "resize fails" (#22, #23 via #30). **Disposition**: applied in-step.
+- **D5-3 (bracket-call rows asserted transitively):** `fakeBracketRepo` ignores ctx, so the
+  `maybeSubmitBracket` call rows #8, #21 and #23 are asserted through their downstream emit or alert (#27,
+  #31, #30). Each such assertion stays RED until both the caller row and the downstream site are converted.
+  **Disposition**: test design. No fake was changed.
+- **D5-4 (shared interceptor helper):** the interceptor-through-fake-invoker body of
+  `traceCapturingLedger.AppendEvent` (Step 3) was extracted to `outgoingTraceID`, so `traceCapturingNotify`
+  reuses it under the DRY guard rail. Step 3's tests are unchanged in behaviour and the full package still passes.
+  **Disposition**: in-file refactor, test-only.
+- **D5-5 (environment):** as in D2-2/D4-1, `golangci-lint` v2.14.0 was rebuilt with go1.27 (`0 issues.`). As
+  in D3-4/D4-3, no husky hook is installed (no `node_modules`), so git ran no hook; `--no-verify` was not
+  used. **Disposition**: environment only.

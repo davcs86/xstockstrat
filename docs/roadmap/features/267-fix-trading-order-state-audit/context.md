@@ -688,3 +688,36 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - Deviations: D4-1 (lint binary rebuilt), D4-2 (line drift past `:2173`, no effect), D4-3 (no husky hook).
 - Review carry-over: the Step 4 trade-off item (no timeout on the `WithoutCancel` CAS; flatten reclaims
   labelled `reactive_place`, no trace id, possibly empty owner) stays `[ ]` until Step 7 documents it.
+
+---
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 5
+
+### Step 5 — test: RED — every request-reachable `Background()` emit/finalize carries the inbound x-trace-id [done]
+- Discovery note: the workflow's discovery digest reported `trading_order_state_audit_test.go` and its helpers
+  missing. It had read the main worktree, not `origin/feature/fix-trading-order-state-audit`. On the feature
+  branch the file and `ctxCapturingDB`/`tracedCancelledCtx`/`traceCapturingLedger` exist (Steps 1 and 3), so
+  this was not a blocker. All 34 `context.Background()` hits in `trading.go` match the re-spec'd table.
+- Added to `trading_order_state_audit_test.go` (all test-local, C-13 single consumer):
+  - fakes: `ctxCapturingIntentRepo`, `traceCapturingNotify`, `ctxCapturingAccountRepo`, `replaceFailBroker`;
+  - helpers: the `traceHarness`/`newTraceHarness` harness, `assertTraced` and `assertLedgerTraced`;
+  - `outgoingTraceID`, shared with `traceCapturingLedger` (D5-4);
+  - 11 `TestTrace_*` drivers covering rows #1-#32.
+- Every driver runs on `tracedCancelledCtx("u-1")` and polls async emits and alerts for up to 2s on a 10ms tick.
+- TDD red: `go test ./internal/service/ -run 'TestTrace_' -race -count=1 -v` → `FAIL`.
+  - Every row fails as `x-trace-id = ""` (or `order-state write traceID = ""` for #9), with `ctx.Err()` nil.
+  - There were no panics, races or build errors, and no non-`TestTrace_` test in the package fails.
+- GREEN feasibility: Step 6 was applied to a scratch copy of `trading.go`, with every site except `:2858`/`:2906`
+  set to `WithoutCancel(ctx)` and `finalizeCancelIntent` given a ctx param.
+  - `TestTrace_*` passed at `-race -count=3`, and the full `internal/service` package passed with `-race`.
+  - The scratch edit was reverted and not committed; Step 6 owns it.
+- Verification: `gofmt -l` is clean; `go vet` is clean; `golangci-lint run --modules-download-mode=mod` → `0 issues.`
+- Files modified: `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go`
+- Deviations D5-1..D5-5 are in the Deviation Log:
+  - D5-1: row #32 driver added per the evidence paragraph;
+  - D5-2: the #30/#31 sub-case split;
+  - D5-3: the bracket-call rows are asserted transitively;
+  - D5-4: the shared interceptor helper;
+  - D5-5: environment.
+- `internal/service` tests fail on this branch until Step 6 lands, because the `TestTrace_*` RED suite is in place. Step 6 must land before the
+  integration PR's CI runs.

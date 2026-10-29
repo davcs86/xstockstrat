@@ -19,6 +19,7 @@ import (
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
+	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
@@ -356,8 +357,8 @@ type traceCapturingLedger struct {
 	calls []ledgerCall
 }
 
-func (l *traceCapturingLedger) AppendEvent(ctx context.Context, req *ledgerv1.AppendEventRequest, opts ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
-	ctxErr := ctx.Err()
+// outgoingTraceID returns the x-trace-id the real client interceptor would put on the wire for ctx.
+func outgoingTraceID(ctx context.Context, method string, req interface{}, opts ...grpc.CallOption) string {
 	var traceID string
 	invoker := func(ctx context.Context, _ string, _, _ interface{}, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
 		md, _ := metadata.FromOutgoingContext(ctx)
@@ -366,7 +367,13 @@ func (l *traceCapturingLedger) AppendEvent(ctx context.Context, req *ledgerv1.Ap
 		}
 		return nil
 	}
-	_ = middleware.UnaryClientInterceptor(ctx, "/ledger.v1.LedgerService/AppendEvent", req, nil, nil, invoker, opts...)
+	_ = middleware.UnaryClientInterceptor(ctx, method, req, nil, nil, invoker, opts...)
+	return traceID
+}
+
+func (l *traceCapturingLedger) AppendEvent(ctx context.Context, req *ledgerv1.AppendEventRequest, opts ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
+	ctxErr := ctx.Err()
+	traceID := outgoingTraceID(ctx, "/ledger.v1.LedgerService/AppendEvent", req, opts...)
 	l.mu.Lock()
 	l.events = append(l.events, req)
 	l.calls = append(l.calls, ledgerCall{req: req, traceID: traceID, ctxErr: ctxErr})
@@ -604,4 +611,364 @@ func TestReclaimedUnknownPayload(t *testing.T) {
 			t.Errorf("payload[%s] = %v, want %v", k, m[k], v)
 		}
 	}
+}
+
+// Scope widening (feature 267 Step 5): every request-reachable ledger emit, alert, finalize and
+// bracket call keeps the inbound x-trace-id and survives a cancelled caller.
+
+// ctxCapturingIntentRepo records the trace and ctx error of each FinalizeIntent, keyed by final state.
+type ctxCapturingIntentRepo struct {
+	fakeOrderIntentRepo
+	mu        sync.Mutex
+	finalized map[int16]execCall
+}
+
+func (r *ctxCapturingIntentRepo) FinalizeIntent(ctx context.Context, _, _ string, state int16, _ []byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.finalized == nil {
+		r.finalized = map[int16]execCall{}
+	}
+	r.finalized[state] = execCall{traceID: middleware.FromContext(ctx).TraceID, ctxErr: ctx.Err()}
+	return nil
+}
+
+func (r *ctxCapturingIntentRepo) assertFinalizeTraced(t *testing.T, state int16) {
+	t.Helper()
+	r.mu.Lock()
+	c, ok := r.finalized[state]
+	r.mu.Unlock()
+	if !ok {
+		t.Fatalf("FinalizeIntent(state %d) not called", state)
+	}
+	assertTraced(t, "FinalizeIntent", c.traceID, c.ctxErr)
+}
+
+type alertCall struct {
+	req     *notifyv1.EmitAlertRequest
+	traceID string
+	ctxErr  error
+}
+
+// traceCapturingNotify runs the real client interceptor, so it sees the x-trace-id a real EmitAlert would send.
+type traceCapturingNotify struct {
+	fakeNotifyClient
+	alerts []alertCall
+}
+
+func (n *traceCapturingNotify) EmitAlert(ctx context.Context, req *notifyv1.EmitAlertRequest, opts ...grpc.CallOption) (*notifyv1.EmitAlertResponse, error) {
+	ctxErr := ctx.Err()
+	traceID := outgoingTraceID(ctx, "/notify.v1.NotifyService/EmitAlert", req, opts...)
+	n.mu.Lock()
+	n.calls = append(n.calls, req)
+	n.alerts = append(n.alerts, alertCall{req: req, traceID: traceID, ctxErr: ctxErr})
+	n.mu.Unlock()
+	return &notifyv1.EmitAlertResponse{}, nil
+}
+
+func (n *traceCapturingNotify) assertAlertTraced(t *testing.T, category string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		n.mu.Lock()
+		for _, a := range n.alerts {
+			if a.req.Category == category {
+				n.mu.Unlock()
+				assertTraced(t, "alert "+category, a.traceID, a.ctxErr)
+				return
+			}
+		}
+		n.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no %q alert within 2s", category)
+}
+
+// ctxCapturingAccountRepo records the trace and ctx error of each UpdateCredentialStatus.
+type ctxCapturingAccountRepo struct {
+	repository.AccountRepository
+	mu    sync.Mutex
+	calls []execCall
+}
+
+func (r *ctxCapturingAccountRepo) UpdateCredentialStatus(ctx context.Context, _ string, _ int32, _ time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, execCall{traceID: middleware.FromContext(ctx).TraceID, ctxErr: ctx.Err()})
+	return nil
+}
+
+// replaceFailBroker definitively refuses ReplaceOrder (a non-timeout broker error).
+type replaceFailBroker struct{ *fakeBroker }
+
+func (replaceFailBroker) ReplaceOrder(context.Context, string, broker.OrderRequest) (*broker.BrokerOrder, error) {
+	return nil, errors.New("broker refused replace")
+}
+
+func assertTraced(t *testing.T, site, traceID string, ctxErr error) {
+	t.Helper()
+	if traceID != "t-267" || ctxErr != nil {
+		t.Errorf("%s: x-trace-id = %q, ctx.Err() = %v; want t-267 and nil", site, traceID, ctxErr)
+	}
+}
+
+func assertLedgerTraced(t *testing.T, l *traceCapturingLedger, eventTypes ...string) {
+	t.Helper()
+	for _, et := range eventTypes {
+		c := waitForLedgerEventType(t, l, et)
+		assertTraced(t, "emit "+et, c.traceID, c.ctxErr)
+	}
+}
+
+type traceHarness struct {
+	svc     *TradingService
+	db      *ctxCapturingDB
+	ledger  *traceCapturingLedger
+	notify  *traceCapturingNotify
+	intents *ctxCapturingIntentRepo
+	bracket *fakeBracketRepo
+}
+
+func newTraceHarness(fb broker.Broker, brokerType commonv1.BrokerType, orders map[string]*tradingv1.Order) *traceHarness {
+	h := &traceHarness{
+		db: &ctxCapturingDB{}, ledger: &traceCapturingLedger{}, notify: &traceCapturingNotify{},
+		intents: &ctxCapturingIntentRepo{}, bracket: &fakeBracketRepo{},
+	}
+	h.svc = auditSvc(h.db, fb, &recordingLedgerClient{}, orders)
+	h.svc.ledger, h.svc.notify, h.svc.orderIntentRepo, h.svc.bracketRepo = h.ledger, h.notify, h.intents, h.bracket
+	entry := h.svc.brokers["acct-1"]
+	entry.brokerType = int32(brokerType)
+	h.svc.brokers["acct-1"] = entry
+	return h
+}
+
+func (h *traceHarness) entry() brokerPoolEntry { return h.svc.brokers["acct-1"] }
+
+func (h *traceHarness) activeBracket(t *testing.T, orderID string) {
+	t.Helper()
+	rec := &repository.OrderBracketRecord{OrderID: orderID, AccountID: "acct-1", Status: bracketStatusSubmitting}
+	if err := h.bracket.CreateBracket(context.Background(), rec); err != nil {
+		t.Fatalf("CreateBracket: %v", err)
+	}
+	if err := h.bracket.UpdateBracketStatus(context.Background(), rec.ID, bracketStatusActive, "leg-stop", "leg-tp", ""); err != nil {
+		t.Fatalf("UpdateBracketStatus: %v", err)
+	}
+}
+
+func (h *traceHarness) submit(t *testing.T, req *tradingv1.PlaceOrderRequest, requiresApproval bool) error {
+	t.Helper()
+	sum, err := placeOrderRequestHash(req)
+	if err != nil {
+		t.Fatalf("placeOrderRequestHash: %v", err)
+	}
+	_, err = h.svc.submitOrder(tracedCancelledCtx("u-1"), req, h.entry(), commonv1.TradingMode_TRADING_MODE_PAPER,
+		"acct-1", "o-1", requiresApproval, hex.EncodeToString(sum), false, 0, 0)
+	return err
+}
+
+func TestTrace_SubmitOrder_HappyPath(t *testing.T) {
+	fb := &fakeBroker{submitOrderFn: func(context.Context, broker.OrderRequest) (*broker.BrokerOrder, error) {
+		return &broker.BrokerOrder{BrokerOrderID: "brk-1", Status: "filled", FilledQty: 10, FilledAvgPrice: 148,
+			StopLegOrderID: "s", TakeProfitLegOrderID: "t"}, nil
+	}}
+	h := newTraceHarness(fb, commonv1.BrokerType_BROKER_TYPE_ALPACA, map[string]*tradingv1.Order{})
+	req := placeReq()
+	req.StopPrice = 145
+
+	if err := h.submit(t, req, false); err != nil {
+		t.Fatalf("submitOrder: %v", err)
+	}
+	// #1, #4, #8 (via #27), #11
+	assertLedgerTraced(t, h.ledger, "order.created", "order.submitted", "order.bracket_updated", "order.broker_submitted")
+	assertWriteCtx(t, h.db)                                            // #9
+	h.intents.assertFinalizeTraced(t, repository.IntentStateCompleted) // #10
+}
+
+func TestTrace_SubmitOrder_Approval(t *testing.T) {
+	h := newTraceHarness(&fakeBroker{}, commonv1.BrokerType_BROKER_TYPE_ALPACA, map[string]*tradingv1.Order{})
+	if err := h.submit(t, placeReq(), true); err != nil {
+		t.Fatalf("submitOrder: %v", err)
+	}
+	assertLedgerTraced(t, h.ledger, "order.created", "order.approval_requested") // #1, #2
+	h.notify.assertAlertTraced(t, "approval")                                    // #3
+}
+
+func TestTrace_SubmitOrder_Timeout(t *testing.T) {
+	h := newTraceHarness(timeoutBroker(), commonv1.BrokerType_BROKER_TYPE_ALPACA, map[string]*tradingv1.Order{})
+	if err := h.submit(t, placeReq(), false); err == nil {
+		t.Fatal("want the broker timeout surfaced as an error")
+	}
+	assertLedgerTraced(t, h.ledger, "order.broker_call_uncertain") // #5
+}
+
+func TestTrace_SubmitOrder_Reject(t *testing.T) {
+	h := newTraceHarness(rejectBroker(), commonv1.BrokerType_BROKER_TYPE_ALPACA, map[string]*tradingv1.Order{})
+	if err := h.submit(t, placeReq(), false); err == nil {
+		t.Fatal("want the broker rejection surfaced as an error")
+	}
+	assertLedgerTraced(t, h.ledger, "order.broker_rejected")          // #6
+	h.intents.assertFinalizeTraced(t, repository.IntentStateRejected) // #7
+}
+
+func TestTrace_RecordOfflineOrder(t *testing.T) {
+	h := newTraceHarness(&fakeBroker{}, commonv1.BrokerType_BROKER_TYPE_OFFLINE, map[string]*tradingv1.Order{})
+	if _, err := h.svc.recordOfflineOrder(tracedCancelledCtx("u-1"), placeReq(), "acct-1", "u-1"); err != nil {
+		t.Fatalf("recordOfflineOrder: %v", err)
+	}
+	assertLedgerTraced(t, h.ledger, "order.created") // #12
+}
+
+func TestTrace_CancelOrder(t *testing.T) {
+	h := newTraceHarness(&fakeBroker{}, commonv1.BrokerType_BROKER_TYPE_ALPACA, workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW))
+	h.activeBracket(t, "o-1")
+
+	if _, err := h.svc.CancelOrder(tracedCancelledCtx("u-1"), &tradingv1.CancelOrderRequest{OrderId: "o-1"}); err != nil {
+		t.Fatalf("CancelOrder: %v", err)
+	}
+	assertLedgerTraced(t, h.ledger, "order.bracket_updated", "order.canceled") // #13, #14
+	h.intents.assertFinalizeTraced(t, repository.IntentStateCompleted)         // #15 (CancelOrder caller)
+}
+
+func TestTrace_CancelOrder_NotCancelable_ReReadFails(t *testing.T) {
+	fb := &fakeBroker{cancelOrderFn: notCancelable, getOrderFn: func(context.Context, string) (*broker.BrokerOrder, error) {
+		return nil, errors.New("broker unreachable")
+	}}
+	h := newTraceHarness(fb, commonv1.BrokerType_BROKER_TYPE_ALPACA, workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW))
+
+	_, err := h.svc.CancelOrder(tracedCancelledCtx("u-1"), &tradingv1.CancelOrderRequest{OrderId: "o-1"})
+	if grpcstatus.Code(err) != codes.Unavailable {
+		t.Fatalf("err = %v, want Unavailable", err)
+	}
+	h.intents.assertFinalizeTraced(t, repository.IntentStateUnknown) // #15 (re-read failure caller)
+}
+
+func TestTrace_CancelOrder_NotCancelable_BrokerFilled(t *testing.T) {
+	orders := workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW)
+	orders["o-1"].StopPrice = 145
+	fb := &fakeBroker{cancelOrderFn: notCancelable, getOrderFn: func(context.Context, string) (*broker.BrokerOrder, error) {
+		return &broker.BrokerOrder{BrokerOrderID: "brk-1", Status: "filled", FilledQty: 10, FilledAvgPrice: 148}, nil
+	}}
+	h := newTraceHarness(fb, commonv1.BrokerType_BROKER_TYPE_ALPACA, orders)
+
+	resp, err := h.svc.CancelOrder(tracedCancelledCtx("u-1"), &tradingv1.CancelOrderRequest{OrderId: "o-1"})
+	if err != nil || resp.Success {
+		t.Fatalf("resp = %+v, err = %v; want Success=false (the order filled)", resp, err)
+	}
+	assertLedgerTraced(t, h.ledger, "order.filled", "order.bracket_updated") // #19, #21 (via #27)
+	h.notify.assertAlertTraced(t, "trade")                                   // #20
+	h.intents.assertFinalizeTraced(t, repository.IntentStateCompleted)       // #15 (adopted-status caller)
+}
+
+func TestTrace_ReplaceOrder(t *testing.T) {
+	req := &tradingv1.ReplaceOrderRequest{OrderId: "o-1", LimitPrice: 101.00}
+
+	t.Run("success", func(t *testing.T) {
+		h := newTraceHarness(replaceOKBroker{&fakeBroker{}}, commonv1.BrokerType_BROKER_TYPE_ALPACA, workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW))
+		if _, err := h.svc.ReplaceOrder(tracedCancelledCtx("u-1"), req); err != nil {
+			t.Fatalf("ReplaceOrder: %v", err)
+		}
+		h.intents.assertFinalizeTraced(t, repository.IntentStateCompleted) // #17
+		assertLedgerTraced(t, h.ledger, "order.replaced")                  // #18
+	})
+
+	t.Run("broker error", func(t *testing.T) {
+		h := newTraceHarness(replaceFailBroker{&fakeBroker{}}, commonv1.BrokerType_BROKER_TYPE_ALPACA, workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW))
+		if _, err := h.svc.ReplaceOrder(tracedCancelledCtx("u-1"), req); grpcstatus.Code(err) != codes.Internal {
+			t.Fatalf("err = %v, want Internal", err)
+		}
+		h.intents.assertFinalizeTraced(t, repository.IntentStateRejected) // #16
+	})
+}
+
+func TestTrace_ApplyBrokerOrderStatus(t *testing.T) {
+	cases := []struct {
+		name         string
+		brokerStatus string
+		legsErr      error
+		withBracket  bool
+		wantEvents   []string
+		wantAlert    bool
+	}{
+		{name: "partially_filled resizes", brokerStatus: "partially_filled", withBracket: true,
+			wantEvents: []string{"order.partially_filled", "order.bracket_updated"}}, // #22, #23 (via #31)
+		{name: "partially_filled resize fails", brokerStatus: "partially_filled", withBracket: true, legsErr: errors.New("ibkr down"),
+			wantEvents: []string{"order.partially_filled"}, wantAlert: true}, // #22, #23 (via #30)
+		{name: "canceled", brokerStatus: "canceled", wantEvents: []string{"order.canceled"}}, // #24
+		{name: "rejected", brokerStatus: "rejected", wantEvents: []string{"order.rejected"}}, // #25
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fb := &fakeBroker{submitBracketLegsFn: func(context.Context, string, string, broker.BracketLegsRequest) (*broker.BracketLegsResponse, error) {
+				if tc.legsErr != nil {
+					return nil, tc.legsErr
+				}
+				return &broker.BracketLegsResponse{StopLegOrderID: "s2", TakeProfitLegOrderID: "t2"}, nil
+			}}
+			orders := workingOrder(tradingv1.OrderStatus_ORDER_STATUS_NEW)
+			order := orders["o-1"]
+			order.BrokerType, order.StopPrice = commonv1.BrokerType_BROKER_TYPE_IBKR, 145
+			h := newTraceHarness(fb, commonv1.BrokerType_BROKER_TYPE_IBKR, orders)
+			if tc.withBracket {
+				h.activeBracket(t, "o-1")
+			}
+
+			h.svc.applyBrokerOrderStatus(tracedCancelledCtx("u-1"), order, h.entry(),
+				&broker.BrokerOrder{BrokerOrderID: "brk-1", Status: tc.brokerStatus, FilledQty: 4, FilledAvgPrice: 148})
+
+			assertLedgerTraced(t, h.ledger, tc.wantEvents...)
+			if tc.wantAlert {
+				h.notify.assertAlertTraced(t, "bracket")
+			}
+		})
+	}
+}
+
+func TestTrace_CreateBracket(t *testing.T) {
+	cases := []struct {
+		name       string
+		brokerType commonv1.BrokerType
+		createErr  error
+		legsErr    error
+		wantEvent  string
+	}{
+		{name: "row creation fails", brokerType: commonv1.BrokerType_BROKER_TYPE_ALPACA, createErr: errors.New("db unavailable")}, // #26
+		{name: "IBKR legs fail", brokerType: commonv1.BrokerType_BROKER_TYPE_IBKR, legsErr: errors.New("ibkr down")},              // #28
+		{name: "IBKR success", brokerType: commonv1.BrokerType_BROKER_TYPE_IBKR, wantEvent: "order.bracket_updated"},              // #29
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fb := &fakeBroker{submitBracketLegsFn: func(context.Context, string, string, broker.BracketLegsRequest) (*broker.BracketLegsResponse, error) {
+				if tc.legsErr != nil {
+					return nil, tc.legsErr
+				}
+				return &broker.BracketLegsResponse{StopLegOrderID: "s1", TakeProfitLegOrderID: "t1"}, nil
+			}}
+			h := newTraceHarness(fb, tc.brokerType, map[string]*tradingv1.Order{})
+			h.bracket.createErr = tc.createErr
+			order := newTestBracketOrder("o-1", tradingv1.OrderSide_ORDER_SIDE_BUY, tc.brokerType)
+			order.UserId = "u-1"
+
+			h.svc.maybeSubmitBracket(tracedCancelledCtx("u-1"), order, h.entry(), &broker.BrokerOrder{}, 145, 148, true)
+
+			if tc.wantEvent != "" {
+				assertLedgerTraced(t, h.ledger, tc.wantEvent)
+			} else {
+				h.notify.assertAlertTraced(t, "bracket")
+			}
+		})
+	}
+}
+
+func TestTrace_ValidateAndRecordCredential(t *testing.T) {
+	repo := &ctxCapturingAccountRepo{}
+	svc := &TradingService{accountRepo: repo, credStatus: map[string]int32{}}
+
+	svc.validateAndRecordCredential(tracedCancelledCtx("u-1"), "acct-1", &fakeBroker{})
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.calls) != 1 {
+		t.Fatalf("UpdateCredentialStatus calls = %d, want 1", len(repo.calls))
+	}
+	assertTraced(t, "UpdateCredentialStatus", repo.calls[0].traceID, repo.calls[0].ctxErr) // #32
 }
