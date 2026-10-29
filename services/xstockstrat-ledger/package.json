@@ -12,6 +12,7 @@
     "proto:gen": "cd ../../packages/proto && buf generate",
     "test": "tsc && node --test dist/__tests__/*.test.js",
     "test:coverage": "tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js",
+    "test:db": "tsc && node --test dist/__tests__/db/*.test.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write src",

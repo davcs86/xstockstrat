@@ -96,7 +96,7 @@ Constitution Rules Touched).
 
 ### Step 1 — service: D-39 redact `*url.Error` at the vendor clients' transport and build-request sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify
@@ -121,9 +121,9 @@ Constitution Rules Touched).
   - **`:116-119`** is the transport site: `return fmt.Errorf("finnhub: %s request failed: %w", path, err)`.
   - `:124-126` has the "Never include the URL (it carries the token)" rule.
   - Imports (`:5-16`) include `"net/url"` but **not** `"errors"`.
-- `getJSON` is the single HTTP chokepoint. FMP routes `fetchQuotes` (`:262`, `/stable/quote`), `fetchRatios`
-  (`:272`) and `fetchProfile` (`:286`, `/stable/profile`) through it, and so do `FetchSector` (`:365`) and
-  `FetchIsEtf` (`:375`). Finnhub routes `fetchMetric` (`:135`, `/stock/metric`) through it.
+- `getJSON` is the single HTTP chokepoint. FMP routes `fetchQuotes` (`:263`, `/stable/quote`), `fetchRatios`
+  (`:273`) and `fetchProfile` (`:286`, `/stable/profile`) through it, and so do `FetchSector` (`:364`) and
+  `FetchIsEtf` (`:374`). Finnhub routes `fetchMetric` (`:135`, `/stock/metric`) through it.
 - Service sentinels are unaffected. Only `errors.Is(err, fmp.ErrFMPDailyCapExceeded)` and
   `errors.Is(err, source.ErrNoFundamentals)` are tested, at `marketdata_service.go:1697`, `:1750` and `:1756`
   (recon.md:37). Neither is in the transport chain.
@@ -168,7 +168,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 2 — test: D-39 client tests (transport, build-request, deadline, budget refund)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
@@ -248,7 +248,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 3 — test: D-39 service-edge Unavailable status is key-free (single + batch)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -299,7 +299,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 4 — test: extract the shared mTLS PKI test helper (config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/mtlsTestPki.ts` — create
@@ -344,7 +344,7 @@ bash scripts/check-duplication.sh 2>/dev/null || (cd ../.. && bash scripts/check
 
 ### Step 5 — test: move the GetSecret describe of `secretsAndScope.test.ts` onto an mTLS wire harness
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts` — modify
@@ -364,7 +364,7 @@ bash scripts/check-duplication.sh 2>/dev/null || (cd ../.. && bash scripts/check
   - `clientCredentials()` (`:28`) and `targetOverride(targetService)` (`:35`) give `grpc.ssl_target_name_override`.
 - Precedent for a client with SAN pinning: `peerSanSpike.test.ts:93`,
   `new grpc.Client(\`127.0.0.1:${port}\`, mtls.clientCredentials(), mtls.targetOverride(SVC))`.
-- openssl already runs in the same CI job: `ci.yml:587`, `pnpm run test:coverage`.
+- openssl already runs in the same CI job: `ci.yml:594`, `pnpm run test:coverage`.
 
 **TDD**: `N/A (red N/A — transport change with no behavior change; the five existing GetSecret tests are the characterization and must stay green under the still header-only grant, which de-risks the harness before the red AC-3 in Step 6)`
 
@@ -376,11 +376,14 @@ bash scripts/check-duplication.sh 2>/dev/null || (cd ../.. && bash scripts/check
    - Mint the test CA inline with one `sh('req','-x509','-newkey','rsa:2048','-nodes','-keyout',caKey,'-out',ca,'-days','1','-subj','/CN=test-ca')`.
    - Mint three leaves with `mintLeaf`: `xstockstrat-config` (server), `xstockstrat-marketdata` and
      `xstockstrat-ingest`.
-2. Set the env to the server leaf with `setEnv(serverCert, serverKey, caPem)`, then bind with
-   `mtls.serverCredentials()` in place of `createInsecure()` at `:75`.
-3. Build `client` (the marketdata client) by calling `setEnv(<marketdata leaf>, caPem)` and then
+2. `sh`/openssl writes the CA to a path, so read it once with `const caPem = readFileSync(ca, 'utf8')`. `mintLeaf`
+   returns a `[certPem, keyPem]` tuple and `setEnv(cert, key, ca)` takes three PEM strings. Set the env to the server
+   leaf with `setEnv(...serverLeaf, caPem)`, then bind with `mtls.serverCredentials()` in place of `createInsecure()`
+   at `:75`.
+3. Build `client` (the marketdata client) by calling `setEnv(...marketdataLeaf, caPem)` and then
    `new ConfigServiceClient(\`127.0.0.1:${port}\`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'))`.
-   Build a second `ingestClient` the same way after `setEnv(<ingest leaf>)`. Step 6 uses it; close both in `after`.
+   Build a second `ingestClient` the same way after `setEnv(...ingestLeaf, caPem)`. Step 6 uses it; close both in
+   `after`.
 4. Keep the five existing `it` blocks unchanged. They now run on the wire through the marketdata leaf.
 5. Import `* as mtls from '../mtls'` and `{ sh, mintLeaf, setEnv } from './mtlsTestPki'`, plus the needed `node:*`
    imports. Update the header comment's covered list only if needed, and keep it within the 2-line comment cap for
@@ -397,7 +400,7 @@ git diff --quiet -- src/grpc/authz.ts && echo "authz.ts untouched"
 
 ### Step 6 — test: wire wrong-SAN negative for the marketdata grant (red evidence)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts` — modify
@@ -436,7 +439,7 @@ pair. The `c8 lines >= 40` gate applies at Step 7's Verification (F-05, P-06).
 
 ### Step 7 — service: D-40 bind the marketdata GetSecret grant to DNS SAN `xstockstrat-marketdata` (+ unit deny matrix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -466,7 +469,7 @@ pair. The `c8 lines >= 40` gate applies at Step 7's Verification (F-05, P-06).
   - `secretCallerAuthz.test.ts:57-62` holds `it('preserves the marketdata exact-keys grant (feature 147 regression)', …)`
     with `callWith('marketdata')` and no SAN. The helper is `callWith(callerID, subjectaltname?)` (`:17-24`).
 - Deploy SAN material: `scripts/gen-dev-certs.sh:28` (`SERVICES="… xstockstrat-marketdata …`), `:50`
-  (`subjectAltName = DNS:${svc}`) and `.github/workflows/deploy.yml:102`
+  (`subjectAltName = DNS:${svc}`) and `.github/workflows/deploy.yml:101`
   (`CERTS_DIR="$certs_dir" bash scripts/gen-dev-certs.sh`).
 - The marketdata client presents its leaf: `internal/config/config.go:70` (`mtls.ClientConfig("xstockstrat-config")`),
   sends `x-internal-caller` at `:115`, and `InternalCallerID = "marketdata"` is at `:109`. No other caller sends
@@ -497,21 +500,21 @@ run before the `authz.ts` edit.
 3. Re-run. Step 5's wire AC-4 / AC-5 / AC-16 stay green, and Step 6's wire AC-3 turns green. In the wire suite, only
    AC-3 changes state.
 4. **Pre-merge gate.** The grep in Verification must still show the three SAN-material lines unchanged. If it does
-   not, block the step (P-03): a leaf without the SAN fails FR-5 soft at boot (`cmd/server/main.go:69-71` WARN).
+   not, block the step (P-03): a leaf without the SAN fails FR-5 soft at boot (`cmd/server/main.go:77-78` WARN).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-config && pnpm run test:coverage   # all green incl. secretsAndScope AC-3 (254); c8 lines >= 40
 cd services/xstockstrat-config && pnpm run lint
 grep -n "peerSan: 'xstockstrat-marketdata'" src/grpc/authz.ts
-cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdata' && sed -n 50p scripts/gen-dev-certs.sh | grep -q 'subjectAltName = DNS:\${svc}' && sed -n 102p .github/workflows/deploy.yml | grep -q 'gen-dev-certs.sh' && echo "SAN material unchanged"
+cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdata' && sed -n 50p scripts/gen-dev-certs.sh | grep -q 'subjectAltName = DNS:\${svc}' && sed -n 101p .github/workflows/deploy.yml | grep -q 'gen-dev-certs.sh' && echo "SAN material unchanged"
 ```
 
 ---
 
 ### Step 8 — docs: config/marketdata invariants, root config-governance line, residuals defect report
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-marketdata` (docs only; also root `CLAUDE.md` and `docs/reports/`)
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
@@ -563,7 +566,7 @@ cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdat
 6. `context.md`: record residual (a) as accepted with no test, pointing to the report.
 7. **Teardown (root `CLAUDE.md` § Teardown).** Run `/context-forge:context-constitution refresh`, scoped to the files
    above, and fix any grounded drift. If the plugin is unavailable, re-read each touched context file against the code
-   by hand, and record both the unavailability and the reconciliation in the PR body (`fails.md:670`).
+   by hand, and record both the unavailability and the reconciliation in the PR body (`fails.md:671`, rule at `:673`).
 
 **Verification**:
 ```bash
@@ -576,7 +579,7 @@ head -1 docs/reports/*-marketdata-vendor-key-url-residuals-defect.status   # →
 
 ### Step 9 — docs: dev smoke check of marketdata credential resolution (post-merge)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata` (dev deploy, observation only)
 **Files**:
 - `docs/roadmap/features/254-fix-marketdata-secret-exposure/context.md` — modify (record the evidence)
@@ -585,7 +588,7 @@ head -1 docs/reports/*-marketdata-vendor-key-url-residuals-defect.status   # →
 
 **Codebase Evidence**:
 - The boot WARN is `slog.Warn("resolving vendor credential from config failed — treating as unset", "key", key, "error", err)`
-  (`services/xstockstrat-marketdata/cmd/server/main.go:70-71`). Grep for the ASCII prefix, never the em-dash
+  (`services/xstockstrat-marketdata/cmd/server/main.go:77-78`). Grep for the ASCII prefix, never the em-dash
   (design.md, Rejected Alternatives).
 - The DO dev app spec is `.do/app.dev.yaml`. `main-dev` pushes deploy to the dev app (root `CLAUDE.md` § CI/CD).
 
@@ -604,7 +607,8 @@ head -1 docs/reports/*-marketdata-vendor-key-url-residuals-defect.status   # →
 
 **Verification**:
 ```bash
-# e.g. via the DO apps logs tool / doctl for the dev app, component xstockstrat-marketdata, run log of the chosen boot:
+# doctl is not installed in the agent sandbox: fetch the run log with the DigitalOcean apps MCP tool `apps-get-logs`
+# (dev app, component xstockstrat-marketdata, type RUN) and count matches; with doctl on an operator host:
 doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolving vendor credential from config failed'   # → 0
 ```
 
@@ -613,3 +617,70 @@ doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolv
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29, Step 9 marked `done` by operator decision; the smoke itself runs post-merge.** Operator decision
+  2026-10-29: Step 9 is post-merge verification, cannot precede the merge, and so does not hold the integration PR.
+  This supersedes the "deferred to operator" entry below for the Status field and the merge hold. **The smoke has not
+  been performed yet:** after the integration PR merges to `main-dev` and deploys to dev, the operator's session runs
+  it (Grafana logs/traces of marketdata `GetSecret` at startup, or the log grep in this step's Verification, expecting
+  0 matches of `resolving vendor credential from config failed` on a post-config-healthy boot) and records the boot
+  timestamp and match count in `context.md`. Any match still means reverting the Step 7 `authz.ts` `peerSan` line
+  alone. No Files change.
+
+- **2026-10-29, Step 9 deferred to operator — integration PR merge held until the post-merge dev smoke passes.** The
+  step's precondition is unmet: Step 7 (`d3f6780b`) is only on `origin/feature/fix-marketdata-secret-exposure`, not
+  `origin/main-dev`, so no dev deploy carries the fix and a log grep now would test the old code. Operator checks,
+  after the integration PR merges to `main-dev` and the dev deploy finishes: (1) pick an `xstockstrat-marketdata` boot
+  timestamped after the new `xstockstrat-config` instance became healthy, or force a marketdata restart; (2) run
+  `doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolving vendor credential from config failed'`
+  (or the DO apps MCP `apps-get-logs`, component `xstockstrat-marketdata`, type RUN) and expect `0`; (3) any match
+  means revert the Step 7 `authz.ts:119` `peerSan` line alone (Steps 1-3 stay); (4) record the boot timestamp and
+  match count in `context.md` and set Step 9 **Status** to `done`. Step 9 **Status** stays `pending`.
+
+- **2026-10-29, Step 8 (report date, residual cite, teardown).** The residuals report is dated by execution, as the
+  Files note allows: `docs/reports/2026-10-29-marketdata-vendor-key-url-residuals-defect.md` + `.status` (`open`).
+  Residual (a) is cited by function and quoted text (`Client.do`), not `client.go:665`: on this go1.27.0 install the
+  line is `:648`, so a line number would go stale. Teardown: `/context-forge:context-constitution` is not available in
+  this session, so each touched context file was re-read against the code by hand. That reconciliation also fixed
+  grounded drift outside **Files**: `docs/patterns/config-governance.md:25` named only the `ingest` grant as
+  SAN-bound (now also `marketdata`, feature 254), and the config `docs/context-constitution.md` cites on the two
+  edited lines were refreshed (`peerSan` ~L119/~L125, `hasSecretCallerAuthority` ~L150, `buildConfigValue`
+  ~L576-582, `getSecret` ~L335-369). The integration PR body must record the plugin's unavailability and this manual
+  reconciliation.
+
+- **2026-10-29, re-spec of Steps 4-9 (after merging `origin/main-dev`).** Every path, symbol and line cite in Steps
+  4-9 was re-checked against the merged tree and still resolves; no Files change. Step 5 Instructions 2-3 now spell
+  out the `setEnv(...leaf, caPem)` spread (3-arg `setEnv`, `mintLeaf` tuple) and read the CA PEM with
+  `readFileSync`. Step 9 Verification names the DigitalOcean apps MCP `apps-get-logs` tool, since `doctl` is absent.
+
+- **2026-10-29, Step 6 (verification grep).** The config suite prints the node:test spec reporter, not TAP, so the
+  Verification grep's `not ok` / `# fail` alternatives never match. The equivalent spec-reporter markers were used:
+  `grep -E "AC-3 \(254\)|✖|ℹ fail"`. That showed exactly one failing test, `AC-3 (254)`, with `ℹ fail 1` and
+  182/183 passing. The wire `getSecret` helper now delegates to a sibling `getSecretAs(c, metadata, req)`, the first
+  option the Codebase Evidence names. No scope or Files change.
+- **2026-10-29, Step 4 (duplication check).** Verification line 4 (`bash scripts/check-duplication.sh`) could not be
+  run as a script in this sandbox (the worktree guard refuses it), so its jscpd call was run directly with the same
+  config: `node node_modules/jscpd/bin/jscpd --config .jscpd.json --threshold 0`. Scoped to
+  `services/xstockstrat-config` it found 0 clones. The repo-wide default scope (`services packages`) found 46 clones
+  and exits 1, but none is in a file this step touches. `.jscpd.json` ignores `**/__tests__/**`, so the three
+  touched test files are never scanned. The pre-commit hook runs this scan report-only. **Disposition**:
+  CI-equivalent fallback. No scope or Files change.
+- **2026-10-28, Step 1 (TDD ordering).** Step Dependencies says to author Steps 2 and 3 first and run them RED before
+  Step 1. Sequential mode executes Step 1 as its own unit, so RED was captured with throwaway, uncommitted probe tests
+  (`internal/fmp/zz_red_probe_test.go`, `internal/finnhub/zz_red_probe_test.go`) that dial `http://127.0.0.1:1` and
+  `http://127.0.0.1:1\x7f` with key `k-secret`. They failed on the pre-Step-1 tree (both transport and build-request
+  errors contained `apikey=k-secret` / `token=k-secret` and a `*url.Error`) and passed after the edit; then they were
+  deleted. Steps 2 and 3 still add the committed regression tests. No scope or Files change.
+- **2026-10-28, Step 2 (TDD ordering and deadline red).** Step 1 was already committed, so RED was captured by
+  checking out the pre-Step-1 `fmp_client.go` / `finnhub_client.go` (`ba303400^`) in the working tree, running the
+  new tests, then restoring `HEAD`. Instruction 4 expected `TestTransportError_PreservesDeadlineCause` to pass before
+  Step 1 ("N/A — characterization"). It failed instead, on its "no `*url.Error` in the chain" assertion, which
+  Instruction 1 also requires. Its `errors.Is(context.DeadlineExceeded)` half held before and after Step 1, as
+  expected. `TestGateway_BudgetRefundOnTransportError_AC4` passed before and after Step 1, as specified. A file-local
+  `newLeakClient(baseURL)` constructor was added beside `assertNoKeyLeak` in each test file. Finnhub's
+  `ClientConfig` has no `Metrics` field, so its client omits it. No scope or Files change.
+- **2026-10-28, Step 3 (TDD ordering).** Step 1 was already committed, so RED was captured as in Step 2: the
+  pre-Step-1 `fmp_client.go` (`ba303400^`) was swapped into the working tree, the new test was run, then `HEAD`'s file
+  was restored. Both subtests failed on the leak assertion
+  (`unavailable: fmp fetch: fmp: /stable/quote request failed: Get "http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL": ...`).
+  The assertions sit in a test-local `assertKeyFree` closure shared by the two subtests. No scope or Files change.

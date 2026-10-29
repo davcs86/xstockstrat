@@ -301,6 +301,67 @@ class TestSetConfigRequestParity:
         assert built == expected
 
 
+class TestConfigReadEchoesEffectiveUserId:
+    """@AC-4/@AC-5/@AC-6/@AC-8 (feature 263): get_config / list_config_keys echo the user_id scope
+    config actually reads (a non-admin's foreign id is bound to their own), while the request sent
+    to config still carries the caller-supplied user_id."""
+
+    @staticmethod
+    async def _read(fn_name: str, user_id: str, caller: tuple[str, int] | None):
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+        captured = {}
+
+        async def _get(req, metadata=None):
+            captured["req"] = req
+            return config_pb2.ConfigSnapshot(namespace="analysis", version="1")
+
+        async def _list(req, metadata=None):
+            captured["req"] = req
+            return config_pb2.ListKeysResponse()
+
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        stub = MagicMock()
+        stub.GetConfig = AsyncMock(side_effect=_get)
+        stub.ListKeys = AsyncMock(side_effect=_list)
+        token = client.set_caller(caller[0], caller[1], "t") if caller else None
+        try:
+            with (
+                patch("app.client.mtls") as mock_grpc,
+                patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=stub),
+            ):
+                mock_grpc.secure_channel.return_value = cm
+                result = await getattr(client, fn_name)(
+                    namespace="analysis", environment="staging", user_id=user_id
+                )
+        finally:
+            if token is not None:
+                client.reset_caller(token)
+        return result, captured["req"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fn_name", ["get_config", "list_config_keys"])
+    @pytest.mark.parametrize(
+        ("user_id", "caller", "expected_echo"),
+        [
+            ("u-b", (TRADER["user_id"], 11), TRADER["user_id"]),  # AC-4 / AC-5: bound
+            (TRADER["user_id"], (TRADER["user_id"], 11), TRADER["user_id"]),  # AC-6: own
+            ("u-b", (ADMIN["user_id"], 15), "u-b"),  # AC-8: admin reads foreign
+            ("u-b", None, "u-b"),  # stdio: no caller bound
+            ("", (TRADER["user_id"], 11), ""),  # non-admin global read
+        ],
+        ids=["non-admin-foreign", "own", "admin-foreign", "no-caller", "empty"],
+    )
+    async def test_echo_is_effective_scope_and_wire_unchanged(
+        self, fn_name, user_id, caller, expected_echo
+    ):
+        result, req = await self._read(fn_name, user_id, caller)
+        assert result["user_id"] == expected_echo
+        assert req.user_id == user_id
+
+
 class TestScopeIsDeploymentBound:
     """Feature 147 (PR #994 review): the config environment is ALWAYS this agent deployment's own
     environment (APPLICATION_ENV) — there is no caller-facing `environment` parameter to override
