@@ -28,8 +28,10 @@ and `promote.yml` carries a manual "smoke-tested on dev" checkbox.
 
 ## Anti-goals (failure even if it "works")
 
-- A check that mutates staging data.
-- A leaked key that yields data exfiltration or code execution.
+- A check that mutates staging data, in the DB or through any service RPC.
+- A leaked key that yields data exfiltration or code execution. With cross-service reads in scope, the key
+  also gates read access to every internal service, so catalog-only execution, the read-RPC allowlist, mTLS
+  and no public listener are all load-bearing.
 - A green result not attributable to the commit actually deployed.
 - A skipped or errored check reported as a pass.
 
@@ -41,6 +43,12 @@ and `promote.yml` carries a manual "smoke-tested on dev" checkbox.
 - Inter-service mTLS is fail-closed (`MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`); DB connection pool budget in
   root `CLAUDE.md` must be re-checked.
 - Homelab staging is tailnet-only; Claude cloud sessions cannot join the tailnet.
+- DO dev (app `xstockstrat-staging`, `.do/app.dev.yaml`): every backend is `internal_ports` only; only
+  `xstockstrat-agent` (9000) and `xstockstrat-ui` (3000) have HTTP ingress. GitHub Actions cannot reach an
+  internal-only component directly.
+- Calling other services requires, per target service: an mTLS peer identity for the smoke service, an
+  `x-internal-caller` allow-list grant, and a decision on `x-user-id` (the reserved `system` identity is
+  currently honoured only for analysis's fundamentals producer). Each target service's owner approves.
 
 ## Approaches considered
 
@@ -61,6 +69,9 @@ and `promote.yml` carries a manual "smoke-tested on dev" checkbox.
 - Triggers: GitHub Actions, Claude, post-deploy jobs. Claude reaches the service through a **tool on the
   staging MCP (`xstockstrat-agent`) that calls the new service**.
 - Features needing intermediate checks are split into parts so the checks can run between them (Project B).
+- Checks may **read the DB and call any internal service** (read-only, per the anti-goals above).
+- Environments in scope: **homelab staging and DO dev (`xstockstrat-staging`)**. Not production. Pending
+  state is tracked per environment.
 
 ## Proposals (my calls — not yet agreed)
 
@@ -84,6 +95,25 @@ and `promote.yml` carries a manual "smoke-tested on dev" checkbox.
   failure is feature-level information).
 - **Claude path:** staging-instance agent tools `run_smoke_checks` / `get_smoke_results` call the service
   over HTTP with the same key, so there is one contract. The tools must not register on a prod agent.
+
+## Calls made after the builder check (mine; veto any)
+
+- **Service calls are allowlisted, not free-form.** A check declares the RPCs it uses; the runner's client
+  wrapper permits only RPCs on a reviewed read-only allowlist (explicit method list, not a `Get*`/`List*`
+  name heuristic). Mutating RPCs are unreachable from check code.
+- **Release SHA:** one short-SHA tag covers all images in a release. The smoke image is built from the same
+  commit, receives the SHA at build, and runs after the health gate. DO path to be verified in recon.
+- **Store:** ledger first; fallback is a smoke-owned write schema under a role separate from the read-only
+  check role. Resolved in recon before implementation planning.
+- **Pending keyed on `(check_id, check_hash, env)`.** An edited check is pending again; a FAIL clears only
+  via a later PASS of the same key. A PASS stays green on later commits — regression detection is out of
+  scope (CI and permanent suites own it).
+- **Reachability:** no public listener on the smoke service in either environment.
+  - Homelab: GitHub Actions and post-deploy jobs join the tailnet as `deploy-homelab.yml` already does.
+  - DO dev: the service is `internal_ports` only; it is triggered by a `POST_DEPLOY` job inside the app
+    and by Claude through the agent's public route. GitHub Actions on-demand runs against DO dev go through
+    the agent tool or a redeploy, not a direct call.
+  - Claude: one agent tool per environment's agent; never registered on a prod agent.
 
 ## Left to the builder
 
