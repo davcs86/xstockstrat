@@ -415,3 +415,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     starting a database is barred. It takes the spec's own fallback (dev app, integration-PR blocker).
   - Step 9: CONFIG-1's line hints are already stale (`reloadNamespace` `:203`, `changedKeys` `:220`).
     Instruction 2's re-stamp covers this.
+
+---
+
+## Session 2026-10-29 (sdd-execute sequential (sdd-batch-execute))
+
+- Up-front confirmation (sequential mode): the operator approved the plan by standing authorization in operator
+  chat 2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f). The authorization covers:
+  - "Start executing features 241-276" via batch-execute;
+  - unattended checkpoints with `report`, and merge-train authorized; 255 and 275 deferred;
+  - C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
+  - operator-only DB/prod steps: open the PR and hold the merge;
+  - the blocker decisions of 2026-10-29, recorded per feature.
+- Status `implementation-ready` → `in-progress`.
+- Carry-forward: the Step 1 pg_terminate_backend check is pending, and goes to the dev app as an integration-PR
+  blocker unless a session can run it. The merge-order rows (258↔241/263/248) are still owed at integration.
