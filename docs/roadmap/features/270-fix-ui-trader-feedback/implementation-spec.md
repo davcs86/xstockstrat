@@ -371,7 +371,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 6 — test: AC-7 and AC-11 failed and rejected ledger export show an error with no unhandled rejection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/ledger-export.spec.ts` — modify
@@ -1150,3 +1150,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
   `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean and `pnpm build` passes.
   **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 6 — 2026-10-29
+
+- **Verification run against a prebuilt app.** The Playwright command ran as `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Steps 1-5 used. **Disposition**: CI-equivalent fallback.
+- **TDD RED ran against the pre-Step-5 tree.** Step 5 had already landed, so `portfolio/page.tsx` was temporarily
+  checked out from `HEAD~1` for the RED build, then restored from `HEAD` before GREEN. **Disposition**:
+  CI-equivalent fallback.
+- **AC-11 RED failed on the alert assertion, before the `pageerror` check.** The missing alert (`element(s) not
+  found`) is the first failing assertion, so the RED output does not separately show the unhandled-rejection
+  `pageerror` the step predicted. **Disposition**: noted only; GREEN asserts the `pageerror` array is empty.

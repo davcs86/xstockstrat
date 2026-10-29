@@ -631,3 +631,17 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   `tsc --noEmit` fails only on the pre-existing `e2e/insights/backfills.spec.ts:135-136`.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 6 (sdd-batch-execute)
+
+- Step 6 done (AC-7, AC-11) in `services/xstockstrat-ui/e2e/trader/ledger-export.spec.ts`. Two tests were added
+  inside the feature-021 `describe`:
+  - `@AC-7`: routes `**/trader/api/ledger/export**` to a 500, clicks "Export events", and expects
+    `getByRole('alert').filter({ hasText: 'Export failed (HTTP 500)' })`.
+  - `@AC-11`: the same glob with `route.abort('failed')`, expecting `… 'Export failed'`.
+  - Both collect `page.on('pageerror')` and assert it ends empty. No new fixtures or imports (C-12 exempt).
+- TDD (prebuilt app, `CI=1 E2E_PREBUILT=1`; RED built with `portfolio/page.tsx` from `HEAD~1`):
+  - **Red:** both new tests failed with "element(s) not found"; the 8 existing tests passed.
+  - **Green:** 10/10 passed after restoring Step 5's `page.tsx`.
+- Verification: `pnpm run lint` exits 0 (only pre-existing warnings). The ledger-export spec passes 10/10.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
+

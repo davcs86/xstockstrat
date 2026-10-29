@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3 — D-64 per-call `onError` on opportunity actions and the signal-source toggle (`CardNotice` error), `errMessage` hoisted to `src/lib/errMessage.ts` |
 | 2026-10-29 | `in-progress` (Step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4 — `@AC-5`/`@AC-6` e2e (503 SetOpportunityAction / ManageSignalSource → `role=alert` error) plus the `errMessage` unit test |
 | 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | Step 5 — D-64 ledger export (`/trader/portfolio`) shows a `CardNotice` error on a non-OK response or a rejected `fetch`; success download path unchanged |
+| 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6 — `@AC-7`/`@AC-11` e2e on `/trader/portfolio` (500 / aborted ledger export → `role=alert` "Export failed", no `pageerror`) |
 
 ---
 
