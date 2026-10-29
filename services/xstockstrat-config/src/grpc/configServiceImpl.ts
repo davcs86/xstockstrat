@@ -401,7 +401,14 @@ export class ConfigServiceImpl {
     const env = resolveEnv(call.request.environment);
     const userId = requestUserId(call.request);
     const namespace = call.request.namespace;
-    const values = await this.resolveOverlayValues(namespace, env, userId);
+    let values: Record<string, any>;
+    try {
+      values = await this.resolveOverlayValues(namespace, env, userId);
+    } catch (err: any) {
+      log.error('getConfig failed', { namespace, env, userId, error: err.message });
+      callback({ code: 13, message: err.message });
+      return;
+    }
     const global = this.snapshots.get(snapKey(namespace, env));
     callback(null, toProtoSnapPayload({
       namespace,
@@ -531,22 +538,29 @@ export class ConfigServiceImpl {
     // Existence gate + row-authoritative is_secret: encryption is decided by the STORED flag, never
     // a request field, so a secret key can never land plaintext in value_data.
     const createKey = call.request.createKey ?? call.request.create_key ?? false;
-    const existing = await this.pool.query(
-      `SELECT is_secret FROM config.config_values
-       WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
-      [namespace, key, env, userIdParam]
-    );
-
-    // A first per-user override of an already-registered GLOBAL key is legitimate: when no exact per-user
-    // row exists, fall back to the global (user_id IS NULL) row; create_key covers a key absent at BOTH.
+    let existing: any;
     let globalRow: any = null;
-    if (existing.rows.length === 0 && userIdParam !== null) {
-      const globalExisting = await this.pool.query(
+    try {
+      existing = await this.pool.query(
         `SELECT is_secret FROM config.config_values
-         WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
-        [namespace, key, env]
+         WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
+        [namespace, key, env, userIdParam]
       );
-      globalRow = globalExisting.rows[0] ?? null;
+
+      // A first per-user override of an already-registered GLOBAL key is legitimate: when no exact per-user
+      // row exists, fall back to the global (user_id IS NULL) row; create_key covers a key absent at BOTH.
+      if (existing.rows.length === 0 && userIdParam !== null) {
+        const globalExisting = await this.pool.query(
+          `SELECT is_secret FROM config.config_values
+           WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
+          [namespace, key, env]
+        );
+        globalRow = globalExisting.rows[0] ?? null;
+      }
+    } catch (err: any) {
+      log.error('setConfig existence gate failed', { namespace, key, env, error: err.message });
+      callback({ code: 13, message: err.message });
+      return;
     }
 
     const keyRegistered = existing.rows.length > 0 || globalRow !== null;

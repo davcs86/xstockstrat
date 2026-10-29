@@ -361,7 +361,7 @@ grep -rn "__tests__/fixtures" src/__tests__/configServiceImpl.test.ts           
 
 ### Step 3 — service: config `getConfig` / `setConfig` gate queries return a gRPC error on DB rejection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -843,5 +843,19 @@ written. Step 6 reuses this capture.
 cases failed for the predicted reasons (boot order `false`; unhandled `error` event on the drop; AC-2's
 `connection terminated` escaping as a test failure; the malformed payload's `JSON.parse` throw). The file was then
 restored with `git checkout` (no diff) and GREEN run.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced (procedure note).
+
+### Deviation: Step 3 — RED captured with a throwaway probe; anchors drifted after Step 1
+**Spec said**: "**TDD**: `red-green required` (Step 4 is the paired test)"; anchors `getConfig` `:319`, `setConfig`
+gates `:449-465`.
+**Actual**: Step 4's cases do not exist yet, so RED/GREEN were captured with an uncommitted fake-pool probe against
+the compiled `dist/grpc/configServiceImpl.js`. RED: `getConfig` (overlay SELECT rejects), the `setConfig` exact-scope
+gate and the per-user global-row gate each rejected from the handler with `connection terminated` and never invoked
+the callback; the write-try pin already returned code 13. GREEN: all four invoke the callback with code 13, and no
+INSERT is issued after a gate failure. Step 1 had shifted the anchors (now `getConfig` `:400`, gates `:534-550`
+pre-edit), so the edits were applied by symbol as the spec allows. Lint warnings rose 168 → 172, all
+`no-explicit-any` from the spec-mandated `Record<string, any>`, `let existing: any` and two `err: any` catches
+(0 errors). Step 4 owns the committed red→green proof.
 **Reason**: the paired test step follows its service step in the spec's order.
 **Disposition**: as specced (procedure note).

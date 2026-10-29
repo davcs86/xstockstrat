@@ -473,3 +473,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   the fixtures grep has no hits.
 - Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
 
+### Step 3 — service: config getConfig / setConfig gate queries return a gRPC error on DB rejection [done]
+- `getConfig`: `resolveOverlayValues` wrapped; a rejection logs `getConfig failed` and calls back code 13.
+- `setConfig`: `existing`/`globalRow` declared above one try that holds only the two existence-gate queries; a
+  rejection logs `setConfig existence gate failed` and calls back code 13. PERMISSION_DENIED, MISSING_AUTHOR,
+  INVALID_ARGUMENT, NOT_FOUND, the encryption catch and the write try are unchanged and outside the new try.
+- TDD (throwaway probe; Step 4 owns the committed proof). RED: three handlers rejected `connection terminated`
+  with no callback. GREEN: callback code 13 for all, no INSERT after a gate failure; write-try pin code 13 both runs.
+- Verification: build exit 0; lint exit 0 (0 errors, 172 warnings = 168 + 4 spec-mandated `any`); one hit each for
+  both log strings (`:408`, `:561`); existing suite 190/190 pass, c8 lines 91.44%.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Environment note: the host disk was at 100% (about 40 MB free) during this step; one Edit failed with ENOSPC and
+  was retried with no partial write.
+
