@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-identity-auth-code-race-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 252) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 2, 4, 5, 6 re-anchored to the current codebase after the main-dev merge (feature 252 test-file rewrite); Steps 1, 3 unchanged |
 
 ---
 
