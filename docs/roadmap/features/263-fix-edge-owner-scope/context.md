@@ -637,3 +637,6 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   - The copilot foreign seed lives in the mock store, and the spec asserts "present", not "exactly one".
   - The harness ran with `--no-deps`.
   - `lint-staged` reformats the existing `CLOSED_POSITION_ROWS` rows (whitespace only).
+- Correction (2026-10-29, after commit `1ad6b0bd`): the `lint-staged` pass did **not** reformat the
+  `CLOSED_POSITION_ROWS` rows. A standalone `prettier --check` flags them, but that is pre-existing, and
+  the step diff contains only the added lines. DEV-6 has been amended to match.
