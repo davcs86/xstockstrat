@@ -507,3 +507,21 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   needs adjusting (DEV-2).
 - Hook: ran via `git -c core.hooksPath=.husky/_` (worktree-local husky dir); shared config still points
   at the missing main-worktree path. No `--no-verify`.
+
+## Session 2026-10-29 (sdd-execute sequential (sdd-batch-execute) — re-spec)
+
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended
+  checkpoints ("report"), C-16 promotion auto-confirmed unless it changes an existing @AC rule,
+  merge-train authorized, 255/275 deferred; operator-only DB/prod steps: open PR, hold merge; blocker
+  decisions 2026-10-29 recorded per feature. Status already `in-progress` (no transition).
+- Branch setup: `git merge -X ours origin/main-dev` (brought in 241 and 252) — merge commit `cbf94534`.
+- Re-spec (line drift only, every Files path unchanged):
+  - Step 7: mock `queryEvents` `:394-471`, default `order.filled` return `:450-470`; INVENTORY policy cite
+    is `:73` (not `:22-23`); noted the unrelated second `listBrokerAccounts` at `mock-backend.ts:1354` and
+    that no existing spec depends on the default AAPL `mock-order-001` row.
+  - Step 8: UI `ADMIN_SCOPE` at `auth.ts:79`; after the 241 merge config `listKeys` moved to `:527`
+    (`requestUserId` `:529`, SQL `:536`); `setConfig` header read at `:376`.
+  - Step 10: `_Caller`/`_CALLER` at `client.py:35-38`.
+  - Step 12: findings evidence now `ledgerServiceImpl.ts:186` / `:266` (post Step 3), `client.py:35-38`,
+    `trading.go:2246` / `:2277`.
