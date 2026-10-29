@@ -731,13 +731,13 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, environment scope correctness
 
 **Codebase Evidence**:
-- The mock `getTradingEnvironment` returns `{ tradingMode: 1 }`, which is PAPER (`e2e/mock-backend.ts:333-335`).
+- The mock `getTradingEnvironment` returns `{ tradingMode: 1 }`, which is PAPER (`e2e/mock-backend.ts:345-347`).
   A per-page `page.route('**/xstockstrat.trading.v1.TradingService/GetTradingEnvironment', …)` 503 makes the
   mode unknown.
 - `e2e/trader/order-form.spec.ts:83-122` already captures the PlaceOrder body (`:87`) and asserts a
   NAME-string `timeInForce` (`@feature-202` AC-5, PRESERVE).
-- `TradingModeBadge` renders the literal mode text (`TradingModeBadge.tsx:20`, uppercase), so the "no Paper
-  label" assertion is `page.getByText(/^paper$/i)` with count 0.
+- `TradingModeBadge` renders the literal mode text (`src/components/shared/TradingModeBadge.tsx:20`, `uppercase`
+  class at `:17`), so the "no Paper label" assertion is `page.getByText(/^paper$/i)` with count 0.
 - Proto3 JSON omits zero-valued enum fields by default. On the wire, `TRADING_MODE_UNSPECIFIED` is therefore
   absent or the NAME-string `TRADING_MODE_UNSPECIFIED`, never the old `TRADING_MODE_PAPER`. This sharpens the
   design's "UNSPECIFIED serializes as TRADING_MODE_UNSPECIFIED".
@@ -790,7 +790,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/order-form.sp
 - `timestampToMillis(ts: ProtoTimestamp | undefined): number | undefined` is at `src/lib/protoTime.ts:11-14`.
   It returns `undefined` for an absent timestamp.
 - `Order.updated_at` is field 14 (`packages/proto/trading/v1/trading.proto:60`). The server stamps it on every
-  mutation (`trading.go:632, :698, :722, :825, :941, :1359, :1546`).
+  mutation (`services/xstockstrat-trading/internal/service/trading.go:632, :698, :722, :825, :941, :1359, :1546, :1787`).
 - `insights.md:1551` says an absent Timestamp takes a neutral fallback, never epoch arithmetic.
 
 **TDD**: `red-green required`
@@ -963,6 +963,9 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
    `/trader/api`), so `src/middleware.ts` keeps injecting `x-trace-id` and the BFF `backendHeaders` keeps
    forwarding it. No side channel is added. The step adds no new outbound gRPC call, so the header-propagation
    constraint is satisfied by reuse.
+8. **Stale e2e comments.** `e2e/trader/order-parity.spec.ts:118` and the `e2e/trader/orders.spec.ts:11` file
+   header carry the same "stops silently" wording as `orders.spec.ts:128`. They are test files, so Step 14
+   updates all three (comment-only); this step leaves them alone.
 7. **Edge idle timeout (Open Risk).** A quiet stream closed by Cloudflare reconnects through the clean-end path
    and replays the snapshot. This is harmless given keyed orders, alert dedupe and freshness. The step PR must
    record a dev-environment observation: watch `/trader/orders` idle for 5 minutes and note any reconnect churn.
@@ -988,28 +991,36 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
 - `services/xstockstrat-ui/e2e/trader/stream-reconnect.spec.ts` — create
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/trader/order-parity.spec.ts` — modify (comment only)
 
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, Connect-RPC call safety
 
 **Codebase Evidence**:
 - `e2e/mock-backend.ts`:
-  - `router.service(TradingService, {…})` (`:269-341`) has **no** `streamOrderUpdates` handler. Under Step 13
+  - `router.service(TradingService, {…})` (`:281`) has **no** `streamOrderUpdates` handler. Under Step 13
     the client would get `Unimplemented`, which is terminal, and the indicator would show permanently on every
-    `/trader/orders` spec. (A second `router.service(TradingService, …)` at `:1353` serves the insights mock
+    `/trader/orders` spec. (A second `router.service(TradingService, …)` at `:1377` serves the insights mock
     server with `listBrokerAccounts`/`listPortfolios` only — also no `streamOrderUpdates`; leave it untouched.)
-  - `streamAlerts` (`:530-535`) yields `ALERT_STREAM_ALL` and then ends cleanly ("no hang in tests"). Under
-    Step 13 that would reconnect every second.
+  - `streamAlerts` (`:541-559`) yields `ALERT_STREAM_ALL` and then ends cleanly ("Stream ends cleanly — no hang
+    in tests", `:558`). Under Step 13 that would reconnect every second.
+  - Feature 271 added a hold-open branch at the top of `streamAlerts` (`:543-554`, PRESERVE `@feature-271`
+    `@AC-5`): when `x-trace-id` equals `ALERT_STREAM_HOLD_TRACE_ID` it waits `ALERT_STREAM_HOLD_MS`
+    (abort-aware), yields `ALERT_STREAM_HELD`, then returns. Under Step 13 that timed return is a clean end
+    and triggers a reconnect after backoff; the feature-271 spec asserts only the held item, so this is
+    tolerated, not changed.
   - `timestampFromDate` is already imported (`:18`).
 - `e2e/trader/orders.spec.ts:127-137` fulfils `StreamOrderUpdates` with a 400 `unavailable` body. Its comment
   "Fail the live stream fast so useOrderUpdates stops silently" goes stale under Step 13: the hook now retries
-  with backoff and shows the indicator. No existing test asserts the indicator is absent.
+  with backoff and shows the indicator. No existing test asserts the indicator is absent. The same wording
+  sits at `e2e/trader/order-parity.spec.ts:118` and in the `orders.spec.ts:11` file header.
 - The `application/connect+json` stream fulfil precedent is `orders.spec.ts:134` and `order-parity.spec.ts:124`.
 - Connect streaming framing: each frame is a 1-byte flag (`0x00` message, `0x02` end-stream), a 4-byte
   big-endian length, then a JSON payload. The end-stream payload is `{"error":{"code":"unavailable","message":…}}`.
   `createConnectTransport` uses JSON by default (`transport.ts:57` sets no `useBinaryFormat`).
 - Fixtures: `ORDERS` and `ORDER_WORKING` (`mock-order-002`, `status: 1`, no `updatedAt`; `e2e/fixtures/orders.ts:36-80`),
-  and `ALERT_STREAM_001..003` (`e2e/fixtures/alerts.ts:9-33`). INVENTORY rows are "Orders (shared mock set)" and
-  "Alerts (feature 203)".
+  and `ALERT_STREAM_001..003` (`e2e/fixtures/alerts.ts:11-35`; feature 271 added `ALERT_STREAM_HOLD_TRACE_ID`,
+  `ALERT_STREAM_HOLD_MS`, `ALERT_STREAM_HELD` at `:39-41`). INVENTORY rows are "Orders (shared mock set)"
+  (`INVENTORY.md:42`) and "Alerts (feature 203)" (`:43`, which already lists the feature-271 symbols).
 - `insights.md:1160` says the stateful mocks must be per-page `page.route`.
 
 **TDD**: `red-green required`
@@ -1026,9 +1037,9 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
    - Add a `streamOrderUpdates` to the trader `TradingService` that yields nothing and holds open until
      `ctx.signal` aborts:
      `await new Promise<void>((r) => ctx.signal.addEventListener('abort', () => r(), { once: true }))`.
-   - Change `streamAlerts(_req, ctx)` to hold open the same way after yielding `ALERT_STREAM_ALL`, replacing the
-     clean end.
-   - Update the `:534` comment to say the stream stays open until the client aborts.
+   - In `streamAlerts(_req, ctx)`, hold open the same way after yielding `ALERT_STREAM_ALL`, replacing the clean
+     end of the default path only. Leave the feature-271 hold branch (`:543-554`) intact.
+   - Update the `:558` comment to say the stream stays open until the client aborts.
 3. **Order fixture (C-12).**
    - In `e2e/fixtures/orders.ts`, add `ORDER_WORKING_STREAMED_AT = '2026-10-21T10:00:00Z'` and
      `ORDER_WORKING_FILLED_AT = '2026-10-21T10:00:05Z'`. These are the AC timestamps for `mock-order-002`.
@@ -1062,10 +1073,12 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
    - Release the gate and assert the name returns to `Alerts`.
    - Open the sheet and assert `ALERT_STREAM_002.title` is visible, and `ALERT_STREAM_001.title` appears exactly
      once (dedupe), with no reload.
-7. **Existing orders spec.** In `orders.spec.ts:127-137`, update only the stale comment so it says the stream
-   failure now retries with backoff behind the disconnected indicator. The stub stays.
+7. **Existing orders specs.** Update only the stale "stops silently" comments so they say the stream failure
+   now retries with backoff behind the disconnected indicator: `orders.spec.ts:128` (in the `:127-137` stub),
+   the `orders.spec.ts:11` file header, and `order-parity.spec.ts:118`. The stubs stay.
 8. **Regression run.** Run the existing `e2e/trader/alert-stream.spec.ts` unchanged. It must stay green with the
-   held-open mock: the badge count and `Clear all` are PRESERVE `@feature-203`.
+   held-open mock: the badge count and `Clear all` are PRESERVE `@feature-203`, and the feature-271 `@AC-5`
+   held-stream scenario is PRESERVE.
 9. **Fallback (Open Risk).** If `page.route` cannot hold a fulfilled stream open, keep attempt 2 a complete body
    (frame and no error). The client then sees a clean end and reconnects after the backoff. The indicator
    assertions still hold because they target the first item. Record whichever variant ran in the Deviation Log.
