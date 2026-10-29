@@ -411,3 +411,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Indicators and ingest have SQL-text and bind proof only, with no real-DB proof. This trade-off was accepted (C-18). It is recorded durably by Step 8 (D-41).
 - [ ] The analysis real-PG red proof (Step 4) runs only under `CI=true` and skips locally. Confirm it in CI and do not rely on a local run.
 - Accepted as-is, no action: Steps 7-9 are docs steps with grep-only verification, so no coverage or lint gate applies to them.
+
+## Session 2026-10-29 — re-spec (sdd-batch-execute branch setup)
+
+- Branch setup: merged `origin/main-dev` into the feature branch (normal merge, no `-X`). One conflict in
+  `docs/roadmap/ledger/fails.md` (append-only): kept both sides, base first; `ledger-guard --fix` reported clean.
+- Re-spec, Steps 3, 4, 6, 7, 8 (bodies only, re-verified against the merged tree):
+  - Step 3: analysis `servicer.py` drift. `meta = request.template.meta` :3542 → :3550, guard :3543-3552 → :3551-3559,
+    UPDATE call :3581 → :3588, `_row_to_strategy_template` :7138-7150 → :7146-7158. `strategy_templates.py` evidence unchanged.
+  - Step 4: `local_pg` `tests/conftest.py:367-368` → :402-403; its `CI=true` fail path is `_unavailable` :407-410;
+    `ci.yml` postgresql install step :393-397 → :405-407. Other evidence unchanged.
+  - Step 6: `_ctx` import :17 → :18.
+  - Step 7: marked `done` with no edit. `merge-order.md:91` already holds a soft, non-blocking 269 row naming 244/245
+    (and the 262/268/272 file-level overlap the impl-spec review asked about). Appending would duplicate it.
+    The open thread "Add the merge-order entry for 244/245" is resolved by that row.
+  - Step 8: stale `local_pg` citation :367-368 → :402-403. D-41 header (:407) unchanged.
