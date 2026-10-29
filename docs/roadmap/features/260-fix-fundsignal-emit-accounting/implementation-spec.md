@@ -221,7 +221,7 @@ grep -n '"partial"' services/xstockstrat-analysis/app/engine/fundsignal_loop.py
 
 ### Step 3 — test: claim release, accepted-only count, abort cleanup, and real SQL (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
@@ -758,3 +758,14 @@ _Populated by /sdd-execute as implementation proceeds._
   as `uv run --no-sync pytest --cov=app --cov-fail-under=40 -q -m "not real_pg"`. The 4 `real_pg` tests start a
   throwaway PostgreSQL through `tests/conftest.py` `local_pg`, and starting a database is forbidden here (HARD
   CONSTRAINT); CI runs them. **Disposition**: CI-equivalent fallback. Result: 1298 passed, 4 deselected, 88.63%.
+- **2026-10-29, Step 3 (minor, no scope change):** three test-harness notes. (a) In
+  `test_confirm_does_not_overwrite_a_foreign_run_claim` the ingest stub is
+  `loop._ingest.IngestSignal = AsyncMock(side_effect=...)`, not a `RecordingStub` response function. `RecordingStub`
+  calls a response function synchronously (`tests/conftest.py:108-109`), and this one has to `await` the pool's
+  `UPDATE`. (b) Three small inline helpers support the spec's tests and live in `test_fundsignal_loop.py` (C-13,
+  single consumer): `_EmittedTable.seed`, `_ingest_by_symbol` (a per-symbol IngestSignal response) and
+  `_ingested_symbols`. (c) The `real_pg` file was collected (3 tests) but not run: `local_pg` starts a throwaway
+  PostgreSQL, and starting a database is forbidden here (HARD CONSTRAINT). CI runs it under `CI=true` and it is RED
+  until Step 4. **Disposition**: CI-equivalent fallback, as in Step 2. Before committing, the fake was checked against
+  the post-fix SQL by applying Step 4's specced change temporarily, which gave 68 passed. That change was reverted and
+  is not part of this commit.

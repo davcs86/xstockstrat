@@ -6,8 +6,9 @@ guard (FR-5 / Acceptance #1), symbol dedup (FR-3 / Acceptance #3), the daily-cal
 defer path (FR-4 / Acceptance #4), and deterministic score→direction mapping (FR-6).
 """
 
+import asyncio
 import inspect
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -99,7 +100,9 @@ class TestIdempotency:
     async def test_already_emitted_skips_fetch_and_emit(self):
         loop = _make_loop()
         # Both symbols already emitted today → zero cache calls, zero emits.
-        loop._db.fetch = AsyncMock(return_value=[{"symbol": "AAPL"}, {"symbol": "MSFT"}])
+        loop._db.fetch = AsyncMock(
+            return_value=[{"symbol": "AAPL", "score": 0.5}, {"symbol": "MSFT", "score": 0.5}]
+        )
         summary = await loop.run_once(override_symbols=["AAPL", "MSFT"])
         loop._marketdata.GetFundamentalsMulti.assert_not_called()
         loop._ingest.IngestSignal.assert_not_called()
@@ -972,3 +975,241 @@ class TestUnscoredSymbols:
         with caplog.at_level("WARNING"):
             FundamentalsSignalLoop._warn_unscored("r-1", [], 3)
         assert _unscored_warns(caplog) == []
+
+
+# ── Feature 260 — claim release, accepted-only count, abort cleanup (AC-1/2/3/5/7) ─────────────
+
+
+class _EmittedTable:
+    """Stateful fake of ``analysis.fundsignal_emitted``; each statement honours only the predicates
+    present in its SQL text, so it tracks both the pre-fix and the post-fix statements."""
+
+    def __init__(self, fail_delete=False):
+        self.rows = {}
+        self.runs = []
+        self.fail_delete = fail_delete
+
+    def seed(self, symbol, as_of_date, signal_id=None, run_id="seed-run", score=0.5):
+        self.rows[(symbol, "fundamentals", as_of_date)] = {
+            "score": score,
+            "direction": "buy",
+            "run_id": run_id,
+            "signal_id": signal_id,
+        }
+
+    async def fetchrow(self, sql, *args):
+        if "INSERT INTO analysis.fundsignal_emitted" not in sql:
+            raise AssertionError(f"unexpected fetchrow: {sql}")
+        symbol, source, as_of_date, score, direction, run_id = args
+        key = (symbol, source, as_of_date)
+        if key in self.rows:
+            return None
+        self.rows[key] = {
+            "score": score,
+            "direction": direction,
+            "run_id": run_id,
+            "signal_id": None,
+        }
+        return {"symbol": symbol}
+
+    async def fetch(self, sql, *args):
+        if "FROM analysis.fundsignal_emitted" not in sql:
+            raise AssertionError(f"unexpected fetch: {sql}")
+        source, as_of_date = args[:2]
+        return [
+            {"symbol": s, "score": r["score"]}
+            for (s, src, d), r in self.rows.items()
+            if src == source and d == as_of_date
+        ]
+
+    async def execute(self, sql, *args):
+        if "UPDATE analysis.fundsignal_emitted" in sql:
+            row = self.rows.get(args[:3])
+            if row is None:
+                return "UPDATE 0"
+            if "run_id=$5" in sql and row["run_id"] != args[4]:
+                return "UPDATE 0"
+            if "signal_id IS NULL" in sql and row["signal_id"] is not None:
+                return "UPDATE 0"
+            row["signal_id"] = args[3]
+            return "UPDATE 1"
+        if "DELETE FROM analysis.fundsignal_emitted" in sql:
+            if "symbol=$1" not in sql:
+                source, as_of_date = args[:2]
+                for key in [k for k in self.rows if k[1] == source and k[2] == as_of_date]:
+                    del self.rows[key]
+                return "DELETE"
+            if self.fail_delete:
+                raise RuntimeError("release DELETE failed")
+            row = self.rows.get(args[:3])
+            if row is None:
+                return "DELETE 0"
+            if "signal_id IS NULL" in sql and row["signal_id"] is not None:
+                return "DELETE 0"
+            if "run_id=$4" in sql and row["run_id"] != args[3]:
+                return "DELETE 0"
+            del self.rows[args[:3]]
+            return "DELETE 1"
+        self.runs.append((sql, args))
+        return "OK"
+
+
+def _fake_loop(scores, ingest, table=None, overrides=None):
+    loop = _identity_loop(overrides, ingest_responses={"IngestSignal": ingest})
+    loop._db = table if table is not None else _EmittedTable()
+    loop._score = AsyncMock(return_value=(scores, []))
+    return loop
+
+
+def _ingest_by_symbol(responses):
+    """IngestSignal response per symbol: a value, an exception to raise, or a callable."""
+
+    def _respond(request):
+        resp = responses[request.signal.symbol]
+        if isinstance(resp, BaseException):
+            raise resp
+        return resp() if callable(resp) else resp
+
+    return _respond
+
+
+def _ingested_symbols(loop):
+    return [c[1].signal.symbol for c in loop._ingest.of("IngestSignal")]
+
+
+class TestEmitAccounting:
+    @staticmethod
+    def _today():
+        return datetime.now(UTC).date()
+
+    @pytest.mark.asyncio
+    async def test_ac1_failed_emit_is_retried_same_day(self):
+        import grpc
+
+        table = _EmittedTable()
+        first = _fake_loop({"AAPL": 0.85}, _rpc_error(grpc.StatusCode.UNAVAILABLE), table)
+        await first.run_once(override_symbols=["AAPL"])
+
+        second = _fake_loop({"AAPL": 0.85}, SimpleNamespace(signal_id=777), table)
+        await second.run_once(override_symbols=["AAPL"])
+        assert _ingested_symbols(second) == ["AAPL"]
+        assert table.rows[("AAPL", "fundamentals", self._today())]["signal_id"] == 777
+
+    @pytest.mark.asyncio
+    async def test_ac2_signals_emitted_counts_accepted_only(self):
+        import grpc
+
+        ingest = _ingest_by_symbol(
+            {
+                "AAPL": _rpc_error(grpc.StatusCode.UNAVAILABLE),
+                "MSFT": SimpleNamespace(signal_id=5),
+            }
+        )
+        loop = _fake_loop({"AAPL": 0.85, "MSFT": 0.90}, ingest)
+        summary = await loop.run_once(override_symbols=["AAPL", "MSFT"])
+        assert summary.signals_emitted == 1
+        assert ("AAPL", "fundamentals", self._today()) not in loop._db.rows
+        assert loop._db.rows[("MSFT", "fundamentals", self._today())]["signal_id"] == 5
+
+    @pytest.mark.asyncio
+    async def test_ac3_abort_leaves_no_orphan_claim(self):
+        import grpc
+
+        loop = _fake_loop({"AAPL": 0.85}, _rpc_error(grpc.StatusCode.NOT_FOUND))
+        summary = await loop.run_once(override_symbols=["AAPL"])
+        assert summary.status == "failed"
+        assert not [
+            k for k, r in loop._db.rows.items() if k[0] == "AAPL" and r["signal_id"] is None
+        ]
+
+    @pytest.mark.asyncio
+    async def test_ac5_abort_keeps_confirmed_rows(self):
+        import grpc
+
+        ingest = _ingest_by_symbol(
+            {
+                "AAPL": SimpleNamespace(signal_id=501),
+                "MSFT": _rpc_error(grpc.StatusCode.NOT_FOUND),
+            }
+        )
+        loop = _fake_loop({"AAPL": 0.85, "MSFT": 0.90}, ingest)
+        summary = await loop.run_once(override_symbols=["AAPL", "MSFT"])
+        assert summary.status == "failed"
+        assert summary.signals_emitted == 1
+        assert loop._db.rows[("AAPL", "fundamentals", self._today())]["signal_id"] == 501
+        assert ("MSFT", "fundamentals", self._today()) not in loop._db.rows
+
+    @pytest.mark.asyncio
+    async def test_ac7_confirmed_rows_skip_fetch(self):
+        table = _EmittedTable()
+        table.seed("AAPL", self._today(), signal_id=11)
+        table.seed("MSFT", self._today(), signal_id=12)
+        loop = _fake_loop({"AAPL": 0.85, "MSFT": 0.90}, SimpleNamespace(signal_id=1), table)
+        summary = await loop.run_once(override_symbols=["AAPL", "MSFT"])
+        loop._marketdata.GetFundamentalsMulti.assert_not_called()
+        assert loop._ingest.of("IngestSignal") == []
+        assert summary.signals_emitted == 0
+
+    @pytest.mark.asyncio
+    async def test_confirm_is_scoped_to_own_run_id(self):
+        table = _EmittedTable()
+        key = ("AAPL", "fundamentals", self._today())
+
+        def _reclaimed_then_accepted():
+            table.rows[key]["run_id"] = "other-run"
+            return SimpleNamespace(signal_id=9)
+
+        loop = _fake_loop(
+            {"AAPL": 0.85}, _ingest_by_symbol({"AAPL": _reclaimed_then_accepted}), table
+        )
+        summary = await loop.run_once(override_symbols=["AAPL"])
+        assert table.rows[key]["signal_id"] is None
+        assert table.rows[key]["run_id"] == "other-run"
+        assert summary.signals_emitted == 1
+
+    @pytest.mark.asyncio
+    async def test_release_failure_is_swallowed_and_abort_still_reported(self):
+        import grpc
+        from gen.notify.v1 import notify_pb2
+
+        loop = _fake_loop(
+            {"AAPL": 0.85},
+            _rpc_error(grpc.StatusCode.NOT_FOUND),
+            _EmittedTable(fail_delete=True),
+        )
+        summary = await loop.run_once(override_symbols=["AAPL"])
+        assert summary.status == "failed"
+        assert _alert_severities(loop) == [notify_pb2.AlertSeverity.ALERT_SEVERITY_ERROR]
+
+    @pytest.mark.asyncio
+    async def test_cancelled_emit_releases_claim(self):
+        loop = _fake_loop({"AAPL": 0.85}, asyncio.CancelledError())
+        with pytest.raises(asyncio.CancelledError):
+            await loop.run_once(override_symbols=["AAPL"])
+        assert ("AAPL", "fundamentals", self._today()) not in loop._db.rows
+
+    @pytest.mark.asyncio
+    async def test_crash_orphan_skipped_then_recovered(self):
+        today = self._today()
+        key = ("AAPL", "fundamentals", today)
+        table = _EmittedTable()
+        table.seed("AAPL", today, run_id="crashed-run")
+
+        skipped = _fake_loop({"AAPL": 0.85}, SimpleNamespace(signal_id=31), table)
+        await skipped.run_once(override_symbols=["AAPL"])
+        assert skipped._ingest.of("IngestSignal") == []
+        assert table.rows[key]["run_id"] == "crashed-run"
+        assert table.rows[key]["signal_id"] is None
+
+        forced = _fake_loop({"AAPL": 0.85}, SimpleNamespace(signal_id=32), table)
+        summary = await forced.run_once(force=True, override_symbols=["AAPL"])
+        assert _ingested_symbols(forced) == ["AAPL"]
+        assert table.rows[key]["signal_id"] == 32
+        assert table.rows[key]["run_id"] == summary.run_id
+
+        yesterday_only = _EmittedTable()
+        yesterday_only.seed("AAPL", today - timedelta(days=1), run_id="crashed-run")
+        fresh = _fake_loop({"AAPL": 0.85}, SimpleNamespace(signal_id=33), yesterday_only)
+        await fresh.run_once(override_symbols=["AAPL"])
+        assert _ingested_symbols(fresh) == ["AAPL"]
+        assert yesterday_only.rows[key]["signal_id"] == 33

@@ -478,3 +478,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - No change to scope, SQL, predicates, TDD gates or Covers. `test_fundsignal_emitted_real_pg.py` is still absent; Step 3
   creates it.
 - Next: Step 3 (test: claim release, accepted-only count, abort cleanup, and real SQL — RED).
+
+### Step 3 — test: claim release, accepted-only count, abort cleanup, and real SQL (RED) — done (2026-10-29)
+
+- Files:
+  - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`. Adds the `asyncio` and `timedelta` imports. The
+    `test_already_emitted_skips_fetch_and_emit` rows now carry `score`. Adds the inline `_EmittedTable` fake, which
+    honours only the predicates present in each SQL text, plus `_fake_loop` (its `_score` mock returns
+    `(scores, [])`), `_ingest_by_symbol`, `_ingested_symbols` and `class TestEmitAccounting` with 9 tests.
+  - `services/xstockstrat-analysis/tests/test_fundsignal_emitted_real_pg.py`, new. Applies migrations 003/004 to a
+    `local_pg` pool and imports `_identity_loop`/`_rpc_error` (C-13, no copy). Its 3 tests are failed-emit
+    release + reclaim, the foreign-run confirm guard, and the abort deleting only the unconfirmed claim.
+- TDD: the RED captures matched the spec's prediction.
+  - Failed (6): AC-1 `[] == ['AAPL']` (run 2 skips AAPL). AC-2 `2 == 1`. AC-3 orphan NULL AAPL row. AC-5 NULL MSFT
+    row remains. Scoped confirm `9 is None`. Cancelled emit leaves the claim.
+  - Passed as guards (4): AC-7, the crash-orphan carve-out, release-failure and `test_already_emitted`.
+  - Full suite without `real_pg`: 6 failed, 1301 passed, 7 deselected.
+  - ruff check and format are clean. The C-13 import grep matches `:12`.
+- Fake validation: Step 4's specced change was applied temporarily, the file then gave 68 passed, and the change
+  was reverted. GREEN is reachable with the specced SQL.
+- Not run: the `real_pg` file (3 tests collected). `local_pg` starts a database, which is forbidden here. CI runs it,
+  and it stays RED until Step 4.
+- Deviations: the foreign-run real-PG test stubs `IngestSignal` with an async `AsyncMock` side effect, because a
+  `RecordingStub` response function is called synchronously. Three small helpers were added. Both are in the
+  Deviation Log.
+- Open Thread (Step 3 size): the real_pg file is not split into its own step. It is committed with this step, because
+  the step's **Files** list names both files.
+- Commit hook: `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, and the main
+  worktree has no `node_modules` to symlink. So the commit ran with no pre-commit hook. `--no-verify` was not used.
+- Next: Step 4 (service: release the claim on any unconfirmed exit, scope the confirm, count accepted only).

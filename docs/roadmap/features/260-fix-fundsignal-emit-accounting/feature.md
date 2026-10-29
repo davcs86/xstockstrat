@@ -22,6 +22,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 1 done: RED tests for @AC-4/@AC-6 (`TestFailedChunk`) and the 4-tuple `_paced_fetch` unpack |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 2 done: `_paced_fetch` returns a `failed` bucket; a run with a failed chunk ends `partial` with one combined warning |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute (re-spec, sdd-batch-execute) | `origin/main-dev` merged into the branch (clean; ledger-guard clean). Steps 3-6 re-aligned to the current codebase: `fundsignal_loop.py` and test-harness line drift only (+3..+8 in the loop, about +52 in tests); no change to scope, predicates or SQL |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 3 done: RED tests for @AC-1/2/3/5/7, the stateful `_EmittedTable` fake (`TestEmitAccounting`) and the `real_pg` claim/confirm/release file |
 
 ---
 
@@ -58,4 +59,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 3 (RED test)
+`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 4 (service: release the claim, scope the confirm, count accepted only)
