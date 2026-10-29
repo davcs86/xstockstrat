@@ -536,7 +536,7 @@ cd services/xstockstrat-ui && grep -n "PUBLIC_HEALTH_PATHS" src/middleware.ts \
 
 ### Step 9 — test: Health routes public, everything else gated (vitest + e2e)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.test.ts` — modify
@@ -678,3 +678,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **What**: deleting `api/health|` from the matcher makes the existing `src/middleware.test.ts:58-62` case ("still excludes the sibling auth/health paths") fail on `expect(matches('/api/health')).toBe(false)`. The Step 8 **Files** list holds only `middleware.ts`, and Step 9 instruction 1 already renames that case and drops the `/api/health` line, so the fix stays in Step 9. Between the Step 8 and Step 9 commits, `vitest run src/middleware.test.ts` has 1 known failure. Separately, `pnpm run format:check` exits 1 on the same 10 pre-existing files recorded under Step 1. `middleware.ts` is not among them.
 - **Disposition**: no scope change. The Step 8 **Verification** greps all pass and `pnpm run lint` exits 0. The integration PR runs CI after Step 9, so the intermediate red never reaches `main-dev`.
+
+### Step 9 — e2e run in CI shape, chromium only; RED via a pre-Step-8 `middleware.ts` (2026-10-29)
+
+- **What**: Step 8 had already landed, so RED was captured by checking `src/middleware.ts` out from `a5103815~1` (pre-Step-8), running both suites, then restoring it with `git checkout HEAD --`. As in Steps 2–5, `e2e/auth.spec.ts` was run in the CI shape (`CI=1`, `pnpm build && pnpm start`), chromium only, because `/opt/pw-browsers` has no Firefox build. The `vitest` health describe adds `/trader/health/x` to the gated table; the e2e AC-4 table follows the `acceptance.feature` Examples exactly.
+- **Disposition**: no scope change. RED (pre-Step-8): vitest 9 failed / 19 passed (the lookalike case `expected false to be true`; all 8 health paths `expected 307 to be 200`); e2e 10 failed (8 health rows received 307; `/healthcheck-x` and `/health/anything` received 404). GREEN on `HEAD`: vitest 28/28, the full `auth.spec.ts` passes 38/38 (setup + 22 existing + 15 new), `test:coverage` 50 files / 274 tests with thresholds met, `lint` exits 0, prettier clean on both files.

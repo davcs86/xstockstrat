@@ -725,3 +725,16 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - Deviations (Deviation Log):
   - The `:60` red carries over to Step 9.
   - `format:check` still fails on the 10 pre-existing files. `middleware.ts` is clean.
+
+## Session 2026-10-29 — Step 9 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only.
+- Step 9 done:
+  - `src/middleware.test.ts`: the `:58` case is renamed "still excludes the sibling auth paths" and loses its `/api/health` line. New case "no longer prefix-excludes root health lookalikes (feature 271 FR-3)". New describe "segment health exemption (feature 271 @AC-3/@AC-4)": the 8 health paths pass through with no session (200, no `location`, `refreshSession` not called); 6 non-health/lookalike paths redirect 307 to `/auth/login`.
+  - `e2e/auth.spec.ts`: new describes for `@AC-3` (7 rows 200 with `status: 'ok'`, `agent-health` 401 with `error: 'Unauthorized'`, no `location`) and `@AC-4` (the 7 Examples redirect to `/auth/login`).
+- TDD, AC-3/AC-4 (red via a pre-Step-8 `middleware.ts`, since Step 8 had landed): checked out from `a5103815~1`, then restored with `git checkout HEAD --`.
+  - Red: vitest 9 failed / 19 passed; e2e 10 failed (8 health rows got 307; `/healthcheck-x` and `/health/anything` got 404).
+  - Green: vitest 28/28; `auth.spec.ts` 38/38 (`CI=1`, chromium).
+- Verification: `test:coverage` 50 files / 274 tests, thresholds met (`src/lib/**` 72% lines); `lint` exits 0; prettier clean on both files. The Step 8 carry-over red (`middleware.test.ts:60`) is gone.
+- Note: another worktree's e2e run held port 3000; the GREEN e2e run waited for the port to free (the e2e harness has fixed ports).
+
