@@ -302,3 +302,21 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 - Verification: `uv run pytest --cov=app --cov-fail-under=50` → 305 passed, 83.62% total (`legacy_authors.py` 75%; apply/main land in Steps 5-6); `ruff check .` and `ruff format --check .` clean.
 - Files modified: `services/xstockstrat-indicators/tests/conftest.py`, `services/xstockstrat-indicators/tests/test_legacy_authors.py`
 - Deviations: none.
+
+### Step 5 — service: apply mode (pre-flight refusals, DB re-derivation, guarded rewrite, result file) [done]
+- `legacy_authors.py` additions:
+  - `APPLY_STATUSES` and `ApplyRefused` (`exit_code = 2`).
+  - `validate_for_apply`, which returns a list of refusal reasons. It refuses on a missing or mismatched digest, any status outside confirmed/unmappable/ambiguous (a leftover `suggested` aborts the run), a confirmed `old_author` that is `system`, a UUID or missing, and a confirmed `new_author` that is not a UUID, is not in the users file, or is inactive.
+  - `run_apply`. It validates before any write, then re-derives the write set as confirmed ∩ live `detect`. Any other confirmed entry counts as `skipped_not_detected`. Each target gets one autocommit `REWRITE_SQL`, with no transaction and no lock; an empty `RETURNING` counts as `skipped_concurrent`.
+  - The result file holds `run_id`, target, counts and the rewritten rows, and it is the undo record. Its default path is `<plan stem>.result.json`.
+  - `main` is wired for `--apply --plan --users --confirm-digest`. A refusal logs each reason and exits 2.
+  - Nothing touches `UpdateFormula`/`DeleteFormula`, `is_public` or `updated_at`.
+- TDD (red → green): a scratch test mirrored Step 6's cases. It is not committed, because Step 6 owns the committed tests. The cases were rewrite plus result file plus idempotent second run, 8 refusals, concurrent skip, hand-widened entry, and `main` refusal exit 2.
+  - Red: 12 failed (`AttributeError: module 'app.maintenance.legacy_authors' has no attribute 'run_apply'` / `'ApplyRefused'`, and `main` exited via the argparse error "--apply is not available in this build").
+  - Green: 12 passed.
+- Verification:
+  - `uv run python -m app.maintenance.legacy_authors --help` shows `--apply` (exit 0).
+  - `uv run pytest --cov=app --cov-fail-under=50`: 305 passed at 73.69% total. `legacy_authors.py` is at 45% until Step 6.
+  - `ruff check .` and `ruff format --check .` are clean, and `uv lock --check` is OK (no dependency added).
+- Files modified: `services/xstockstrat-indicators/app/maintenance/legacy_authors.py`
+- Deviations: keyword-only `run_id`/`target` on `run_apply`, and the result-path naming. Both are logged in the implementation-spec.md Deviation Log. Open item for Step 8 (runbook): apply does not compare the plan's recorded `target` with the connected host/db. The write set is still bounded by live detection and the users file, so the runbook should tell the operator to check the printed target line.

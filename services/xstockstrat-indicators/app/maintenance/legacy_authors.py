@@ -1,4 +1,4 @@
-"""Operator CLI: report (and later repair) indicators formulas whose author is a legacy username.
+"""Operator CLI: report and repair indicators formulas whose author is a legacy username.
 
 Run: uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json
 """
@@ -148,6 +148,114 @@ async def run_report(conn, users, out_path, *, run_id=None, target=None) -> dict
     return plan
 
 
+APPLY_STATUSES = {"confirmed", "unmappable", "ambiguous"}
+
+
+class ApplyRefused(Exception):
+    exit_code = 2
+
+    def __init__(self, reasons: list[str]):
+        super().__init__("; ".join(reasons))
+        self.reasons = reasons
+
+
+def validate_for_apply(plan, users, plan_path, digest) -> list[str]:
+    reasons = []
+    if not digest:
+        reasons.append("--confirm-digest is required")
+    elif plan_digest(plan_path) != digest:
+        reasons.append("--confirm-digest does not match the sha256 of the plan file")
+    entries = plan.get("entries") if isinstance(plan, dict) else None
+    if not isinstance(entries, list):
+        return [*reasons, "plan has no entries list"]
+    for e in entries:
+        fid = e.get("formula_id") if isinstance(e, dict) else None
+        status = e.get("status") if isinstance(e, dict) else None
+        if status not in APPLY_STATUSES:
+            reasons.append(
+                f"formula_id={fid}: status {status!r} is not confirmed/unmappable/ambiguous"
+            )
+            continue
+        if status != "confirmed":
+            continue
+        old, new = e.get("old_author"), e.get("new_author")
+        if not isinstance(old, str) or old == SYSTEM_AUTHOR or is_uuid(old):
+            reasons.append(f"formula_id={fid}: old_author {old!r} is system, a user id or missing")
+        if not is_uuid(new):
+            reasons.append(f"formula_id={fid}: new_author {new!r} is not a user id")
+        elif new not in users:
+            reasons.append(f"formula_id={fid}: new_author {new} is not in the users file")
+        elif not users[new]["is_active"]:
+            reasons.append(f"formula_id={fid}: new_author {new} is an inactive user")
+    return reasons
+
+
+async def run_apply(
+    conn, users, plan_path, digest, result_path=None, *, run_id=None, target=None
+) -> dict:
+    run_id = run_id or str(uuid.uuid4())
+    try:
+        plan = json.loads(Path(plan_path).read_text())
+    except (OSError, ValueError) as exc:
+        raise ApplyRefused([f"cannot read plan file {plan_path}: {exc}"]) from exc
+    reasons = validate_for_apply(plan, users, plan_path, digest)
+    if reasons:
+        raise ApplyRefused(reasons)
+
+    entries = plan["entries"]
+    live = {(r["formula_id"], r["author"]) for r in await detect(conn)}
+    counts = {
+        "rewritten": 0,
+        "skipped_concurrent": 0,
+        "skipped_not_detected": 0,
+        "unmappable": sum(1 for e in entries if e["status"] == "unmappable"),
+        "ambiguous": sum(1 for e in entries if e["status"] == "ambiguous"),
+    }
+    rewritten = []
+    for e in entries:
+        if e["status"] != "confirmed":
+            continue
+        fid, old, new = e["formula_id"], e["old_author"], e["new_author"]
+        # Write set = confirmed ∩ live detection, so a hand edit can never widen it.
+        if (fid, old) not in live:
+            counts["skipped_not_detected"] += 1
+            log(run_id, f"skipped_not_detected: formula_id={fid} author={old}")
+            continue
+        row = await conn.fetchrow(REWRITE_SQL, new, fid, old, SYSTEM_AUTHOR, UUID_RE)
+        if row is None:
+            counts["skipped_concurrent"] += 1
+            log(run_id, f"skipped_concurrent: formula_id={fid} author={old}")
+            continue
+        counts["rewritten"] += 1
+        rewritten.append({"formula_id": fid, "old_author": old, "new_author": new})
+
+    result_path = Path(result_path) if result_path else Path(plan_path).with_suffix(".result.json")
+    result = {
+        "run_id": run_id,
+        "target": {"host": target[0], "db": target[1]} if target else {"host": "", "db": ""},
+        "counts": counts,
+        "rewritten": rewritten,
+    }
+    result_path.write_text(json.dumps(result, indent=2) + "\n")
+    log(run_id, f"counts {json.dumps(counts)}")
+    log(run_id, f"result {result_path}")
+    return result
+
+
+async def _apply(args, run_id: str) -> int:
+    users = load_users(args.users)
+    conn, target = await connect(run_id=run_id)
+    try:
+        await run_apply(conn, users, args.plan, args.confirm_digest, run_id=run_id, target=target)
+    except ApplyRefused as exc:
+        for reason in exc.reasons:
+            log(run_id, f"refused: {reason}")
+        return ApplyRefused.exit_code
+    finally:
+        await conn.close()
+    return 0
+
+
 async def _report(args, run_id: str) -> int:
     users = load_users(args.users)
     conn, target = await connect(run_id=run_id)
@@ -169,11 +277,14 @@ def main(argv=None) -> int:
     parser.add_argument("--plan", help="apply mode: path to the confirmed plan JSON")
     parser.add_argument("--confirm-digest", help="apply mode: sha256 of the plan file")
     args = parser.parse_args(argv)
+    run_id = str(uuid.uuid4())
     if args.apply:
-        parser.error("--apply is not available in this build")
+        if not args.plan:
+            parser.error("--apply requires --plan")
+        log(run_id, "mode=apply")
+        return asyncio.run(_apply(args, run_id))
     if not args.out:
         parser.error("report mode requires --out")
-    run_id = str(uuid.uuid4())
     log(run_id, "mode=report")
     return asyncio.run(_report(args, run_id))
 
