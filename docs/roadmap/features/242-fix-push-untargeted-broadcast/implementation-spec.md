@@ -692,7 +692,7 @@ grep -n "none currently does" docs/patterns/header-propagation.md   # none
 
 ### Step 15 — docs: service docs (notify/identity CLAUDE.md + per-module constitution) and Teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-notify/`, `services/xstockstrat-identity/`
 **Files**:
 - `services/xstockstrat-notify/CLAUDE.md` — modify
@@ -874,3 +874,18 @@ _Populated by /sdd-execute as implementation proceeds._
   does" paragraph was replaced with the explicit-threading form and its two live references. The AsyncLocalStorage
   template is unchanged. (d) Verification 1 already matched before the edit, through the pre-existing `:336` and
   `:435` lines that name notify and identity in one sentence. The new diagram edge at `:327` is the intended hit.
+- **Step 15 (2026-10-29) — Teardown mechanism and doc scope only, no behaviour deviation.** (a) The
+  `/context-forge:context-constitution` skill is not available in this session (only `context-forge:context-scrubber`
+  is loaded), so the Teardown for Steps 14 and 15 was done by hand. Each touched context file was re-read against
+  the code, and every new citation was checked against the code. The integration PR body must record both
+  "plugin unavailable" and this manual reconciliation (root CLAUDE.md § Teardown). (b) The notify constitution's
+  `webPush.ts` line hints had drifted by 7-185 lines because of this feature's admin-lookup change. They were
+  re-stamped: NOTIFY-6 prune ~L175, severity gate ~L87-92, VAPID ~L66-77, TTL constants ~L17-18, `#deliver`
+  ~L159-162, TTL regression test ~L386. Anchors were unchanged. (c) The identity constitution's other `~L`
+  hints drift by about 1-5 lines (Step 3 added one import line, on top of earlier drift). Every `#anchor` still
+  resolves, so they were left as approximate hints. (d) The new rules are numbered NOTIFY-8 and IDENTITY-12 (next
+  free IDs). Identity `CLAUDE.md` names `ListAdminUserIds` in its own sentence that cross-references IDENTITY-12,
+  instead of extending the method list. The rest of the stale list stays with the open
+  `2026-10-19-identity-claude-md-drift-defect`. (e) The notify findings "Filed as defect reports" row for
+  `2026-10-19-notify-untargeted-push-broadcasts-all-users-defect` stays, because its sidecar is `triaged`, not
+  `resolved` (the table rule: a row stays until its report is resolved).

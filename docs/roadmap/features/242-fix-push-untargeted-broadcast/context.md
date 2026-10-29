@@ -604,3 +604,49 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
 - Out of scope: none. Teardown (`/context-forge:context-constitution refresh`) for these files is owned by Step 15
   instruction 6.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 15 (service docs + Teardown)
+
+- Step 15 done. Steps 3, 5 and 7 were confirmed on `origin/feature/fix-push-untargeted-broadcast` (`345195fe`,
+  `918eb5e7`, `ea99d6e0`) before any docs were edited. The discovery digest's "not found" items came from a stale
+  main-worktree checkout.
+- Edits:
+  - Notify `CLAUDE.md` gains a Dependencies row for `xstockstrat-identity` (`ListAdminUserIds`). The Web Push
+    paragraph now says untargeted pushes reach admin-role users only, through a live, uncached lookup
+    (single-flight, 2s deadline, trio relayed); on lookup failure the push is skipped, with an ERROR at most once
+    per 60s. It also adds `IDENTITY_ENDPOINT` to the env block.
+  - Notify constitution: new NOTIFY-8. The untargeted audience is admins only, the lookup is live and uncached,
+    and on failure the push is skipped, never widened. A TTL cache or an all-subscriptions fallback reopens
+    defect 242. The Pointers mTLS row now lists the `targetOverride('xstockstrat-identity')` dial and
+    `adminDirectory.ts#PROPAGATED_HEADERS`. The drifted `webPush.ts` hints are re-stamped.
+  - Notify findings: the ⚠ broadcast bullet moves to `## Resolved` as "resolved by feature 242 (admin-only
+    untargeted audience)".
+  - Identity `CLAUDE.md`: "all eleven methods" becomes "every `IdentityService` method, including:" (no count).
+    A new sentence names `ListAdminUserIds` (SAN `xstockstrat-notify` only, header-blind, IDENTITY-12).
+    Dependencies are unchanged.
+  - Identity constitution: new IDENTITY-12. `ListAdminUserIds` checks only the exact SAN, ignores headers and is
+    not `adminGate`d; adding `adminGate` or a header read breaks notify. IDENTITY-3 now names `adminDirectory.ts`
+    as a second `status`-enum site beside `authz.ts`.
+- Teardown (Steps 14 and 15): `/context-forge:context-constitution` is **unavailable** in this session, so it was
+  done by hand.
+  - Re-read every touched context file against the code:
+    - root `CLAUDE.md` § Header Propagation and the diagram;
+    - PLAT-4;
+    - `header-propagation.md` (`ledgerAudit.ts:14,40-44`, `adminDirectory.ts:11,42-46` both resolve);
+    - `inter-service-mtls.md` Peer-SAN section (config `authz.ts:124` ingest `peerSan` +
+      `mcp_credential.` prefix; ingest `_SYSTEM_GRANT_SAN`, indicators `_ANALYSIS_SAN` resolve);
+    - the five Step 15 files.
+  - Grounded drift fixed: the notify `webPush.ts` line hints (see spec Deviation Log Step 15 (b)). No other
+    grounded drift was found in the touched lines.
+  - **Open item:** the integration PR body must record "context-forge plugin unavailable" plus this manual
+    reconciliation.
+- TDD: N/A (docs). Before the edits: grep 1 found no `ListAdminUserIds` hit, grep 2 hit notify `CLAUDE.md:90`,
+  grep 3 hit identity `CLAUDE.md:26`, and grep 4 found nothing. After the edits: grep 1 hits all four files,
+  greps 2 and 3 find nothing, and grep 4 hits findings `:41`. Prettier: lint-staged scopes formatting to
+  `xstockstrat-ui` only, so the `.md` files are not prettier-gated (the constitution tables were already non-prettier
+  at HEAD).
+- Files modified: `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution.md`,
+  `services/xstockstrat-notify/docs/context-constitution-findings.md`, `services/xstockstrat-identity/CLAUDE.md`,
+  `services/xstockstrat-identity/docs/context-constitution.md`.
+- Out of scope: the notify `CLAUDE.md` banner drift ("config-as-startup-gate-only", "fictional ledger dep") and the
+  rest of the stale identity method list stay with the open defects `2026-10-19-notify-claude-md-drift-defect` and
+  `2026-10-19-identity-claude-md-drift-defect`.
