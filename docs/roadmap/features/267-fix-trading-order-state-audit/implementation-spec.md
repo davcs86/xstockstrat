@@ -407,15 +407,16 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
 **Codebase Evidence**:
-- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` this session. This is 36 hits (re-verified at impl-spec review): the 32 converted rows below (row 32 is `:2617`, by operator decision 2026-10-21), the two Step 2 sites `:688`/`:703`, and the two left-as-is sites. Every hit is classified, so design.md Open Risk 8 is discharged for the enumeration.
+- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` (re-verified 2026-10-29 re-spec, after the `origin/main-dev` merge). This is 34 hits: the 32 converted rows below (row 32 is `:2616`, by operator decision 2026-10-21) and the two left-as-is sites. The impl-spec-review count was 36; the two Step 2 sites (`:688`/`:703`) now call `persistOrderBestEffort` (`trading.go:3659`) and no longer appear. Every hit is classified, so design.md Open Risk 8 is discharged for the enumeration.
+- Line numbers at or after `trading.go:2173` are one lower than at impl-spec review: the main-dev merge removed one line in `escalateSystemic` (`Author: "system:reconciliation-poller"`). Rows #1-#25 are unchanged.
 - `grep -rn "context.Background()" internal/service/*.go`, excluding `_test` and `trading.go`, returned nothing else.
-- Each hit is classified by its reachable callers below. Sites already owned by Steps 2 and 4 are `:688`, `:703`, `:1367`, `:1550`, `:603`, `:1301` and `:1498`; `:688` and `:703` are in the grep list and appear here only as owned elsewhere.
+- Each hit is classified by its reachable callers below. Sites already owned by Steps 2 and 4 are `:688`, `:703`, `:1367`, `:1550`, `:603`, `:1301` and `:1498`; `:688` and `:703` (Step 2, done) are no longer `Background()` hits.
 
 **Converted in Step 6 (request-reachable):**
 
 | # | Site | Enclosing fn | Call | Request-path caller(s) | Background caller(s) |
 |---|---|---|---|---|---|
-| 1 | `:649` | `submitOrder` | emit `order.created` | `PlaceOrder` `:544` | flatten `:2838` |
+| 1 | `:649` | `submitOrder` | emit `order.created` | `PlaceOrder` `:544` | flatten `:2837` |
 | 2 | `:655` | `submitOrder` | emit `order.approval_requested` | `PlaceOrder` | — |
 | 3 | `:659` | `submitOrder` | `emitApprovalAlert` (notify) | `PlaceOrder` | — |
 | 4 | `:665` | `submitOrder` | emit `order.submitted` | `PlaceOrder` | flatten |
@@ -440,18 +441,18 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 | 23 | `:1832` | `applyBrokerOrderStatus` | `maybeSubmitBracket` (PARTIAL) | same | same |
 | 24 | `:1836` | `applyBrokerOrderStatus` | emit `order.canceled` | function shared with a request path (the CANCELED branch is unreachable from `reconcileNotCancelable`, which returns early on CANCELED at `:1390`) | same |
 | 25 | `:1841` | `applyBrokerOrderStatus` | emit `order.rejected` | same as #19 | same |
-| 26 | `:3397` | `createBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #8 / #21 | via #21 / #23 from `pollFills` |
-| 27 | `:3408` | `createBracket` | emit `order.bracket_updated` (Alpaca) | same | same |
-| 28 | `:3419` | `createBracket` | `emitBracketFailureAlert` (IBKR) | same | same |
-| 29 | `:3425` | `createBracket` | emit `order.bracket_updated` (IBKR) | same | same |
-| 30 | `:3461` | `resizeBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #21 / #23 | same |
-| 31 | `:3467` | `resizeBracket` | emit `order.bracket_updated` | same | same |
-| 32 | `:2617` | `validateAndRecordCredential` | `accountRepo.UpdateCredentialStatus` | `RegisterBrokerAccount` `:2528`, `UpdateBrokerAccountCredentials` `:2575` | credential poller `:2690` |
+| 26 | `:3396` | `createBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #8 / #21 | via #21 / #23 from `pollFills` |
+| 27 | `:3407` | `createBracket` | emit `order.bracket_updated` (Alpaca) | same | same |
+| 28 | `:3418` | `createBracket` | `emitBracketFailureAlert` (IBKR) | same | same |
+| 29 | `:3424` | `createBracket` | emit `order.bracket_updated` (IBKR) | same | same |
+| 30 | `:3460` | `resizeBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #21 / #23 | same |
+| 31 | `:3466` | `resizeBracket` | emit `order.bracket_updated` | same | same |
+| 32 | `:2616` | `validateAndRecordCredential` | `accountRepo.UpdateCredentialStatus` | `RegisterBrokerAccount` `:2527`, `UpdateBrokerAccountCredentials` `:2574` | credential poller `:2689` |
 
 Row 32 was converted by operator decision on 2026-10-21 (context.md): the standing rule covers request-derived writes. Its test asserts that the repo write receives a ctx carrying the inbound `PropagationData` trace id, using a ctx-capturing `accountRepo` fake, and that the write still lands after the request ctx is cancelled.
 
 **Left as-is:**
-- `:2859` `haltAccount` in `flattenAndHalt`, and `:2907` `flattenAndHalt`. Their only caller chain is `StartBracketProtectionWatchdog` (`:2866`) → `checkBracketProtection` (`:2884`), which is background-only per the operator decision.
+- `:2858` `haltAccount` in `flattenAndHalt`, and `:2906` `flattenAndHalt`. Their only caller chain is `StartBracketProtectionWatchdog` (`:2865`) → `checkBracketProtection` (`:2883`), which is background-only per the operator decision.
 
 For shared functions (#19-#31), `WithoutCancel(ctx)` on a background caller's ctx behaves the same as
 today's `Background()`. The poller ctx carries no `PropagationData`, and `WithoutCancel` strips only its
@@ -568,7 +569,7 @@ cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./..
 - The "Ledger Events Emitted" table is at `services/xstockstrat-trading/CLAUDE.md:139-159`. It has no `order_intent.reclaimed_unknown` row, and it lists lifecycle streams as `order:{order_id}`.
 - The code emits lifecycle events on a bare `orderID` stream key (`trading.go:649`, `:689`, `:700`, `:1370`, all passing `orderID`/`req.OrderId` as `streamKey`), while the reclaim emits use `"order:"+OrderID`.
 - The drift row at `docs/context-constitution-findings.md:13` reads "omits `order_intent.reclaimed_unknown`".
-- `emitLedgerEvent` swallows the `NewStruct` error (`p, _ :=`, `trading.go:3662`).
+- `emitLedgerEvent` (`trading.go:3670`) swallows the `NewStruct` error (`p, _ :=`, `trading.go:3671`; re-verified 2026-10-29 after the Step 2 helper and the `origin/main-dev` merge).
 
 **TDD**: `N/A (docs)`
 
