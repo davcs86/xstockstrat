@@ -659,3 +659,22 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   - The spec grep finds one definition and two call sites (`getConfig:318`, `listKeys:530`).
 - Bind-not-refuse (operator decision of 2026-10-22): a non-admin's foreign body id is rebound to the
   header caller, with no error. Admin callers, header-less callers and an empty body id are passed through.
+
+## Session 2026-10-29 (sdd-execute sequential (sdd-batch-execute) — re-spec, second merge)
+
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended
+  checkpoints ("report"), C-16 promotion auto-confirmed unless it changes an existing @AC rule,
+  merge-train authorized, 255/275 deferred; operator-only DB/prod steps: open PR, hold merge; blocker
+  decisions 2026-10-29 recorded per feature. Status already `in-progress` (no transition).
+- Branch setup: plain `git merge --no-edit origin/main-dev` (no conflicts) — merge commit `1ae2437b`;
+  `ledger-guard --own-slug fix-edge-owner-scope --base origin/main-dev --fix` reported clean.
+- Re-spec (line drift only, every Files path unchanged):
+  - Step 9: `md(pairs)` builder at `setConfigAuthz.test.ts:43`.
+  - Step 10: `_Caller`/`_CALLER` at `client.py:39-42`; `get_config` `:2040` echo `:2065`;
+    `list_config_keys` `:2070` echo `:2086`; docstring `user_id` lines `tools.py:1603-1604`/`:1631-1632`.
+  - Step 11: `TestSetConfigRequestParity` at `test_config_tools.py:255` (patches `:277-278`);
+    `set_caller` `client.py:45`, `reset_caller` `:53`; conftest ADMIN/TRADER `:14-15`; conftest import
+    already at `test_config_tools.py:22`.
+  - Step 12: agent CLAUDE.md scope-selector text `:29-30`; findings `## Open questions` `:45`;
+    `watchConfig` `requestUserId` `configServiceImpl.ts:284`; accepted-gap cite `client.py:39-42`.
