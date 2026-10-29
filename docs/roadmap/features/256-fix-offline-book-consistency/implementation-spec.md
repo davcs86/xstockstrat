@@ -273,10 +273,11 @@ behavioural proof, and the coverage command guards the threshold.
 
 ### Step 5 — service: D-63 an unpublished recompute is not success (`appendLedgerEvent` sibling + ConfirmOrder UNAVAILABLE)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
+- `services/xstockstrat-trading/internal/service/ledger_emit_mtls_test.go` — modify (added 2026-10-29, operator Option A: `TestEmitLedgerEventFailSoftOneShot` → `TestEmitLedgerEventFailSoftBoundedRetry`, expects `appendMaxAttempts` attempts)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, fill detection
 
@@ -1084,3 +1085,19 @@ _Populated by /sdd-execute as implementation proceeds._
   fallback. Step 3 had already landed, so RED was captured by temporarily restoring the pre-Step-3 `trading.go`
   (`12a29f1b`) under the new tests, then restoring it (not committed). `@AC-7` and `@AC-10` pass on both trees by
   design: they are non-regression guards. `TestDeriveOfflineStatus` was not extended (instruction 4: "only if needed").
+- Step 5 (2026-10-29, scope expansion, operator Option A): `ledger_emit_mtls_test.go` added to the step's **Files**.
+  `TestEmitLedgerEventFailSoftOneShot` asserted feature 210's one-shot emit and contradicted the void-wrapper retry.
+  It is renamed `TestEmitLedgerEventFailSoftBoundedRetry` and now expects `appendMaxAttempts` attempts (still
+  fail-soft and bounded). This supersedes feature 210's one-shot note for `emitLedgerEvent`; the 2026-10-22
+  "retry for all callers" decision stands, closing the pre-entered Step 5 item above.
+- Step 5 (2026-10-29, side effect, flagged for the operator): `appendLedgerEvent` returns the `structpb.NewStruct`
+  error (Instruction 2), so the void wrapper now Warns and skips the append when a payload cannot be encoded.
+  `order_intent.go:156` puts a `time.Time` (`out.UpdatedAt`) in the `order_intent.reclaimed_unknown` payload, which
+  `NewStruct` rejects. Before this step that event was appended with an empty payload; now it is not appended. No
+  code consumes the event. A one-line follow-up (`out.UpdatedAt.Format(time.RFC3339Nano)`) is outside this step's
+  **Files** and is carried as an open item.
+- Step 5 (2026-10-29, implementation detail, no spec change): the retry backoff waits on `ctx.Done()` as well as the
+  timer, so a cancelled caller stops retrying early.
+- Step 5 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 was rebuilt under
+  `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, as in Steps 3-4, and reported 0 issues. **Disposition**: CI-equivalent
+  fallback. RED was captured with a throwaway ConfirmOrder test that was not committed (Step 6 owns the durable tests).

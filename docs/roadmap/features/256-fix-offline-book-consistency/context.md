@@ -788,3 +788,37 @@ Each item names the step where it is resolved.
   - Step 6: AC46 test :2058, AC47 test :2071.
   - Step 12: the `portfolio_quote_deadline_test.go` "non-fatal" comment is at :115, inside the `expectAllAccounts` doc comment :114-115.
 - Next: Step 5 (D-63 `appendLedgerEvent` + ConfirmOrder UNAVAILABLE).
+
+## Session 2026-10-29 — Step 5 (service, D-63)
+
+- Operator decision (2026-10-29, Option A on the Step 5 blocker): retry wins. `ledger_emit_mtls_test.go` joined the
+  step. `TestEmitLedgerEventFailSoftOneShot` is now `TestEmitLedgerEventFailSoftBoundedRetry` and expects
+  `appendMaxAttempts` attempts. This **supersedes feature 210's one-shot note for `emitLedgerEvent`**. The 2026-10-22
+  "retry for all callers" decision stands.
+- `trading.go`:
+  - New constants: `appendMaxAttempts=2`, `appendRetryBackoff=100ms`, `offlineRecomputeQueryBudget=5s`,
+    `offlineRecomputeTimeout=30s`.
+  - `appendLedgerEvent` returns the NewStruct error. It uses one `IdempotencyKey` across attempts, runs each attempt
+    under `ledgerEmitTimeout`, and retries only `codes.Unavailable`. The backoff also ends on `ctx.Done()`.
+  - `emitLedgerEvent` is now its void wrapper and keeps the "ledger emit failed" Warn.
+  - `recomputeAndEmitOfflinePositions` returns the append error. Only the offline emit changed; the broker-sync
+    `account.positions.synced` emit stays void. The payload is unchanged, `user_id` included.
+  - ConfirmOrder runs the recompute under `WithTimeout(WithoutCancel(ctx), offlineRecomputeTimeout)`. On failure it
+    returns `UNAVAILABLE "positions not published; re-confirm to retry"`. The order row is already persisted.
+  - SnapshotOfflinePositions uses the same ctx and, on failure, appends "positions not published; re-snapshot to retry"
+    to `warnings`. It returns no error.
+- Side effect (open item): `order_intent.reclaimed_unknown` (`order_intent.go:156`) carries a `time.Time`, so
+  `NewStruct` fails. It used to be appended with an empty payload and is now skipped with a Warn. No consumer exists.
+  The fix is a one-line `Format(time.RFC3339Nano)`, outside this step's Files; it needs the operator's call.
+- TDD:
+  - RED: the updated mtls test saw 1 attempt where it wanted 2. A throwaway ConfirmOrder test with a failing ledger got
+    `err=nil` where it wanted UNAVAILABLE.
+  - GREEN: both pass, the throwaway test made 2 AppendEvent calls, and the throwaway file was deleted.
+- Verification:
+  - The spec greps match (appendLedgerEvent, `IdempotencyKey: uuid.NewString()`, `offlineRecomputeTimeout`, both
+    "positions not published" strings, both `WithoutCancel` sites).
+  - `go build ./...` passed, and the full `go test ./... -race` passed.
+  - `golangci-lint` v2.14.0, rebuilt under go1.27.0, reported 0 issues.
+- Next: Step 6 (D-63 durable tests). Its `TestOfflineRecomputeTimeout_CoversRetryBudget` is the test the constant's
+  comment cites.
+
