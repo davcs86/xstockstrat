@@ -331,7 +331,7 @@ grep -n "from '../fixtures'\|helpers/auth" services/xstockstrat-ui/e2e/insights/
 
 ### Step 5 — service: D-64 ledger export shows an error on a non-OK response or a rejected request
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx` — modify
@@ -1137,3 +1137,16 @@ _Populated by /sdd-execute as implementation proceeds._
   same harness Steps 1-3 used. **Disposition**: CI-equivalent fallback.
 - **The `-g "@AC-5|@AC-6"` filter also matches two pre-existing tests** (feature 185 `@AC-6` and feature 161
   `@AC-5`). They passed both in RED and GREEN. **Disposition**: noted only. GREEN ran both spec files in full.
+
+### Step 5 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 5's paired test lives in Step 6's **Files**. The RED/GREEN
+  cycle therefore ran a throwaway probe spec (`e2e/trader/zz-tdd-probe-step5.spec.ts`) holding Step 6's `@AC-7`
+  (500 fulfill) and `@AC-11` (`route.abort('failed')`) assertions verbatim, plus the `pageerror` collection. It
+  was deleted before commit; Step 6 authors the real tests. The probe ran under `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Steps 1-4 used. **Disposition**: CI-equivalent fallback.
+- **Evidence line drift (no code impact).** `onExportEvents` sat at `portfolio/page.tsx:108-123` (cited `:106-122`;
+  the comment starts at `:106`). **Disposition**: noted only; step body not edited (F-09).
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean and `pnpm build` passes.
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.

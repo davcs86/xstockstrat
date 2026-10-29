@@ -613,3 +613,21 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
     which is the pre-existing import.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 5 (sdd-batch-execute)
+
+- Step 5 done (D-64, ledger export) in `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx`:
+  - Added `useState` and an `exportError` state.
+  - `onExportEvents` now resets the error, then runs inside `try/catch`. A non-OK response sets
+    `Export failed (HTTP <status>)`; a rejected `fetch` sets `Export failed: <message>`, so there is no unhandled
+    rejection.
+  - The blob → anchor download success path is unchanged (PRESERVE `@feature-021` AC-1/2/7/9).
+  - `{exportError && <CardNotice variant="error">…}` renders right after the `Portfolio unavailable` notice.
+- TDD (AC-7/AC-11, via a throwaway probe of Step 6's assertions, deleted before commit; prebuilt app,
+  `CI=1 E2E_PREBUILT=1`):
+  - **Red:** `getByRole('alert').filter({ hasText: 'Export failed (HTTP 500)' })` and `… 'Export failed'` (abort)
+    both failed with "element(s) not found".
+  - **Green:** both probes passed, and all 8 existing `ledger-export.spec.ts` tests passed (10/10).
+- Verification: the `setExportError` grep has 4 hits. `pnpm run lint` exits 0 and `lint:dup` finds 0 clones.
+  `tsc --noEmit` fails only on the pre-existing `e2e/insights/backfills.spec.ts:135-136`.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
+
