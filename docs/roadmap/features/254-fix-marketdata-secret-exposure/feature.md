@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-marketdata-secret-exposure-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-28
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -22,6 +22,7 @@
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: D-39 `*url.Error` redaction at the FMP and Finnhub transport and build-request sites |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 2 done: D-39 client tests (transport, build-request, deadline, budget refund) for FMP and Finnhub |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 3 done: D-39 service-edge test, `Unavailable` status is key-free on `GetFundamentals` and `GetFundamentalsMulti` |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute (re-spec) | Steps 4-9 re-checked against the codebase after merging `origin/main-dev`: all cites resolve; Step 5 `setEnv(...leaf, caPem)` arity clarified, Step 9 log check via DO apps MCP `apps-get-logs` |
 
 ---
 
