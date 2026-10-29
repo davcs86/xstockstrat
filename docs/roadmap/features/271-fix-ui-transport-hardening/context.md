@@ -644,3 +644,28 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   - `vitest run`: 48 files / 242 tests pass.
 - Deviation: `pnpm run format:check` still fails on the 10 pre-existing files recorded under Step 1. See the Deviation Log.
 
+## Session 2026-10-29 — Step 5 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only. Chromium came from `/opt/pw-browsers`.
+- Step 5 done:
+  - `src/lib/identity.test.ts` (new): mocks `@/lib/connectClients`. Case (a) checks that `refreshToken` gets `({ refreshToken: 'rt' }, { timeoutMs: REFRESH_TIMEOUT_MS })`. Case (b) checks that a `DeadlineExceeded` rejection makes it resolve `null`.
+  - `e2e/helpers/auth.ts`: adds `REFRESH_STALL_TOKEN` and `signExpiredTestJwt()`.
+  - `e2e/mock-backend.ts`: `refreshToken(req, ctx)` stalls on the sentinel until abort, then throws `Canceled`, mirroring `getFundamentals`. Every other token gets the unchanged response.
+  - `e2e/auth.spec.ts`: new describe, "Session refresh against a stalled identity (feature 271 @AC-2)".
+  - INVENTORY: adds a sentinel row and notes `signExpiredTestJwt` in the auth-helper row.
+- TDD, AC-2 (red via mutation, because Step 4 had already landed):
+  - Mutation: `identity.ts` reverted to the one-argument `refreshToken({ refreshToken })`.
+  - Vitest red: `toHaveBeenCalledWith({ refreshToken: 'rt' }, { timeoutMs: 10000 })` failed, because the call had one argument. Case (b) passed, since the `catch` → `null` path predates this feature.
+  - e2e red: both cases hit `apiRequestContext.get/post: Timeout 25000ms exceeded`, in both the run and its retry. The 30s transport default from Step 1 outlasts the 25s request bound.
+  - The mutation was restored from backup. `git status` shows `identity.ts` unmodified.
+  - Green on the real tree: vitest 2/2. `CI=1 playwright test e2e/auth.spec.ts --project=chromium` passed 23/23, with the AC-2 cases at 10.2s and 10.0s.
+- Verification:
+  - `test:coverage`: 49 files / 244 tests pass, and thresholds are met.
+  - `lint` exits 0.
+  - The `helpers/auth` grep (auth.spec, mock-backend) and the INVENTORY `REFRESH_STALL_TOKEN` grep both match.
+- Open Thread "Long wall-clock e2e", resolved for Step 5: **kept as is**. These are two ~10s cases on chromium only in CI.
+- Deviations (Deviation Log):
+  - Playwright ran with `CI=1 --project=chromium`.
+  - Case (b) has an explicit request timeout.
+  - `INVENTORY.md` prettier drift and the 2 `backfills.spec.ts` `tsc` errors are both pre-existing.
+

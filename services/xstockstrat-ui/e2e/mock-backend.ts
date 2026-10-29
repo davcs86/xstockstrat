@@ -35,7 +35,7 @@ import {
 } from './fixtures/alerts';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { signTestJwt } from './helpers/auth';
+import { REFRESH_STALL_TOKEN, signTestJwt } from './helpers/auth';
 import { HEADER_ACCESS_SCOPE, HEADER_TRACE_ID, HEADER_USER_ID } from '../src/lib/headers';
 import { ADMIN_SCOPE } from '../src/lib/auth';
 import {
@@ -188,7 +188,12 @@ export async function startMockBackend(): Promise<void> {
         claims: { userId: TEST_USER_ID, email: TEST_USER_EMAIL, roles: [] },
       };
     },
-    async refreshToken() {
+    async refreshToken(req: { refreshToken: string }, ctx: { signal: AbortSignal }) {
+      // feature 271: a stalled identity — never answers until the caller's deadline aborts it.
+      if (req.refreshToken === REFRESH_STALL_TOKEN) {
+        await new Promise<void>((resolve) => ctx.signal.addEventListener('abort', () => resolve()));
+        throw new ConnectError('aborted by caller', Code.Canceled);
+      }
       return {
         accessToken: testAccessToken,
         refreshToken: 'test-refresh-token',

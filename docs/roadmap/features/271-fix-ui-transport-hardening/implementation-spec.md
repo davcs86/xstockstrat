@@ -300,7 +300,7 @@ cd services/xstockstrat-ui && grep -n "timeoutMs: REFRESH_TIMEOUT_MS" src/lib/id
 
 ### Step 5 — test: Refresh deadline fails closed (vitest + e2e stalled identity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/identity.test.ts` — create
@@ -658,3 +658,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **What**: the Step 4 **Verification** chain ends with `pnpm run format:check`, which exits 1 on the same 10 pre-existing files recorded under Step 1. `src/lib/identity.ts` is not among them.
 - **Disposition**: CI-equivalent fallback, as in Step 1. `prettier --check src/lib/identity.ts` passes, the `timeoutMs: REFRESH_TIMEOUT_MS` grep matches (`identity.ts:17`), and `pnpm run lint` exits 0. Prettier wrapped the call across lines, but the grep still matches on its own line.
+
+### Step 5 — Playwright run with `CI=1 --project=chromium`; explicit timeout on case (b); pre-existing drift (2026-10-29)
+
+- **What**: as in Steps 2–3, `auth.spec.ts` was run in the CI shape (`CI=1`, `pnpm build && pnpm start`), chromium only, because `/opt/pw-browsers` has no Firefox build. Case (b) `request.post('/api/auth/refresh', …)` also passes `timeout: REFRESH_TIMEOUT_MS + 15_000`, the same bound case (a) specs, so the RED run fails at a fixed 25s rather than at Playwright's 30s default. Separately, `prettier --check e2e/fixtures/INVENTORY.md` fails on drift already present at `HEAD` (confirmed on the pre-step file; recorded under Step 3), and `tsc --noEmit` still reports the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` errors.
+- **Disposition**: CI-equivalent fallback. All 23 `auth.spec.ts` tests pass (setup + 22), including both new AC-2 cases (10.0s / 10.2s). The vitest file passes 2/2, `test:coverage` passes 49 files / 244 tests with thresholds met, `lint` exits 0, and prettier is clean on the four code files.
