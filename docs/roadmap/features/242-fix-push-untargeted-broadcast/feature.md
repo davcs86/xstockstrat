@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 3 done — identity `ListAdminUserIds` handler (`src/grpc/adminDirectory.ts`, exact peer-SAN `xstockstrat-notify`, header-blind, IDs-only, generic INTERNAL) + `IdentityServiceImpl` delegate; build/lint/test green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 4 done — identity `ListAdminUserIds` deny matrix (`adminDirectory.test.ts`, AC-9/AC-10) + real-socket mTLS case (`mtls.test.ts`, notify vs client leaf); identity suite 78 → 89 pass, build/lint green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 5 done — notify `AdminDirectory` client (`src/services/adminDirectory.ts`: single-flight, no cache, 2000 ms deadline, trio relayed, fail-closed on unset `IDENTITY_ENDPOINT`) + `IDENTITY_ENDPOINT` in the notify block of compose and both DO specs; build/lint/test green |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 6 done — notify `AdminDirectory` tests (`adminDirectory.test.ts`: AC-8 freshness, single-flight, deadline/no `waitForReady`, trio-only relay, AC-11 failure + missing endpoint) + real-socket mTLS case to an `xstockstrat-identity` leaf (`mtls.test.ts`); notify suite 70 → 79 pass, coverage/lint green |
 
 ---
 
@@ -64,4 +65,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 6 (notify `AdminDirectory` tests: single-flight, freshness, deadline, trio on the wire) onward
+`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 7 (notify untargeted push resolves admin audience) onward

@@ -339,7 +339,7 @@ ls services/xstockstrat-notify/src/middleware 2>/dev/null   # absent (@AC-2 @fea
 
 ### Step 6 — test: notify `AdminDirectory` (single-flight, freshness, deadline, trio on the wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/adminDirectory.test.ts` — create
@@ -813,3 +813,15 @@ _Populated by /sdd-execute as implementation proceeds._
   `node_modules`; `pnpm install --frozen-lockfile` was run at the worktree root (as Steps 2-4) instead of symlinking
   the main worktree's, so pnpm never writes into the shared checkout. (c) `adminDirectory.ts` was run through
   prettier (new file); the `IdentityServiceClient` construction and the `listAdminUserIds` call wrap across lines.
+- **Step 6 (2026-10-29) — test mechanics only, no behaviour deviation.** (a) Step 5 had already landed the code under
+  test, so RED was captured twice against `src/services/adminDirectory.ts`: moved aside (`tsc` → `TS2307 Cannot find
+  module '../services/adminDirectory.js'`), then mutated (single-flight guard removed + `waitForReady: true` added) →
+  `tests 79, pass 77, fail 2` (single-flight, deadline). The file was restored byte-identical (`cmp`). (b) One extra
+  case beyond the spec list, "relays only the header trio from inbound metadata", asserts an inbound `authorization`
+  header is not relayed. It is in Step 6's own file and adds no production code. (c) `grpc.CallOptions` has no
+  `waitForReady` member, so the deadline case reads it through a `Record<string, unknown>` cast. (d) The new
+  `mtls.test.ts` case carries no `@AC-*` tag: that file's `@AC-*` tags belong to feature 210. The file already fails
+  `prettier --check` at HEAD, so only the added lines are prettier-formatted (no whole-file reformat).
+  `adminDirectory.test.ts` is prettier-clean. (e) The worktree had no `node_modules`, and the main worktree has none
+  to symlink, so `pnpm install --frozen-lockfile --filter xstockstrat-notify... --filter xstockstrat` was run at the
+  worktree root. That run installs husky, so the pre-commit hook runs.

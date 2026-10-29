@@ -441,3 +441,28 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   - Trio grep hits `:11` and `:44`; `waitForReady` / default-host grep: none; `src/middleware`: absent.
   - Existing notify suite: `pnpm test` gives 70 pass, 0 fail, 0 skipped.
 - Toolchain: Node v24.20.0, pnpm 9.15.9, `pnpm install --frozen-lockfile` at the worktree root.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 6 (notify AdminDirectory tests)
+
+- Step 6 done.
+  - Created `services/xstockstrat-notify/src/__tests__/adminDirectory.test.ts`. It uses a static import, a harness
+    assertion, and an inline fake `AdminLookupClient` (single consumer, C-13). Its cases are:
+    - `@AC-8` freshness (two lookups → two client calls, `['user-99']` then `[]`);
+    - single-flight (one call for two concurrent callers, the same array; a new call after settle);
+    - deadline within `ADMIN_LOOKUP_DEADLINE_MS` and no `waitForReady`;
+    - trio-only relay;
+    - `@AC-11` UNAVAILABLE rejects and clears the slot;
+    - get-less or `undefined` metadata;
+    - `@AC-11` `createAdminDirectory('')` rejects `IDENTITY_ENDPOINT unset`.
+  - `mtls.test.ts` gains an `xstockstrat-identity` leaf in `mintPki` and a new describe. It serves the generated
+    `IdentityServiceService` over `mtls.serverCredentials()` and dials it through `createAdminDirectory('127.0.0.1:<port>')`
+    with the notify-side client leaf. The trio arrives on the wire, and the result is `['user-99']`.
+- TDD (P-06). AC-8/AC-11 red. Moving `adminDirectory.ts` aside gives `TS2307`. A mutation (single-flight removed +
+  `waitForReady` added) gives `tests 79, pass 77, fail 2`. Green: `tests 79, pass 79, fail 0, skipped 0`. The restored
+  file is byte-identical.
+- Verification:
+  - `pnpm run test:coverage`: exit 0, all files 90.39% lines, threshold 40.
+  - `pnpm run lint`: 0 errors (211 pre-existing warnings); eslint on both touched files is clean.
+  - `@AC-8` / `@AC-11` grep: hits at `:54`, `:117`, `:142`.
+  - `__tests__/fixtures` grep: none.
+- Deviation Log: test mechanics only (see implementation-spec.md). No out-of-scope changes.
