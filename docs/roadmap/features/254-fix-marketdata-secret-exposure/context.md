@@ -499,3 +499,14 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: the three spec greps pass (config SAN lines at `CLAUDE.md:41` and `context-constitution.md:35`/`:51`;
   `DNS SAN` at marketdata `CLAUDE.md:218` and root `CLAUDE.md:176`; sidecar `head -1` → `open`). The report has
   exactly one severity token.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 9
+
+- Step 9 (post-merge dev smoke) **deferred to operator**; Status stays `pending`. Precondition unmet: Step 7
+  (`d3f6780b`) is only on `origin/feature/fix-marketdata-secret-exposure`, not on `origin/main-dev`, so the dev app
+  still runs pre-fix code and no smoke evidence exists yet. The exact operator checks are in the implementation-spec
+  Deviation Log (2026-10-29, Step 9): after merge + dev deploy, grep a post-config-healthy marketdata boot for the
+  ASCII prefix `resolving vendor credential from config failed` and expect 0; any match → revert `authz.ts:119`
+  alone. Record boot timestamp + match count here when done.
+- Line drift noted: the WARN is at `services/xstockstrat-marketdata/cmd/server/main.go:77-78` (Step 9 Codebase
+  Evidence already cites this; older planning notes cite `:70-71`).
