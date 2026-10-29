@@ -1,7 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { tradingClient } from '@/lib/browserClients/tradingClient';
-import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
-import type { OrderSide as PbOrderSide, OrderType as PbOrderType, OrderStatus as PbOrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import type { EnvironmentMode } from '@/context/AccountContext';
+import { toPbTradingMode } from '@/lib/tradingMode';
+import type {
+  OrderSide as PbOrderSide,
+  OrderType as PbOrderType,
+  OrderStatus as PbOrderStatus,
+} from '@xstockstrat/proto/trading/v1/trading_pb';
 import type { ListOrdersResponse } from '@xstockstrat/proto/trading/v1/trading_pb';
 
 type ListOrdersInput = Parameters<typeof tradingClient.listOrders>[0];
@@ -20,7 +25,7 @@ export interface OrderFilters {
 }
 
 export function useOrders(
-  mode: 'paper' | 'live',
+  mode: EnvironmentMode | null,
   selectedAccountId: string | null,
   filters?: OrderFilters,
 ): {
@@ -28,13 +33,11 @@ export function useOrders(
   isLoading: boolean;
   error: Error | null;
 } {
-  const toPbMode = (m: 'paper' | 'live') =>
-    m === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER;
   return useQuery({
     queryKey: ['orders', mode, selectedAccountId, filters],
     queryFn: () =>
       tradingClient.listOrders({
-        tradingMode: toPbMode(mode),
+        tradingMode: toPbTradingMode(mode),
         page: { pageSize: filters?.pageSize ?? 50, pageToken: filters?.pageToken ?? '' },
         ...(filters?.symbol ? { symbol: filters.symbol } : {}),
         ...(filters?.side !== undefined ? { side: filters.side } : {}),
