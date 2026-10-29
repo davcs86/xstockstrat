@@ -1008,3 +1008,25 @@ Feature: xstockstrat-config - explicit zero values on the write edge and the wir
   AC-8/10/11 → new config suite. 12/12 scenarios promoted, none skipped.
 - status.md stays `in-progress`: Step 18 (rollout audit + consumer-surface smokes, C-14) is operator-deferred.
   Integration PR opened against main-dev with an "Operator gates before merge" section; merge held.
+
+## Session 2026-10-29 — rollout (dev)
+
+**Pre-deploy audit (Step 18 Instruction 1), run by the operator's session through the staging agent MCP.** The operator has
+no SQL access to the cluster (P-03), so the audit used `get_config` (read-only; environment `staging` = the dev
+deployment) per namespace, at global scope and for every user from `list_users` (one user, `80880990-…`).
+`get_config` returns each row's typed `value`/`value_type`, which carries what the two SQL queries select.
+
+- Zero/empty audit rows, `analysis`/`indicators`/`ingest`, 3 rows per scope (global and the one user):
+  `analysis.opportunity.refresh_hour_utc = 0` (int), `analysis.readiness_materializer.refresh_hour_utc = 0` (int),
+  `analysis.fundsignal.explicit_symbols = ""` (string). Classification: all 3 honour (`HONOUR_KEYS`), so the stored
+  value takes effect (0 = midnight; `""` unused while `universe_source = watchlists`). FR-3 clamped rows: 0.
+- Malformed-int audit rows: 0 (every `value_type=int` row holds an integer).
+- FR-5 seed audit after 243's heal: `indicators.sandbox.{timeout_ms,memory_bytes,allowed_imports}` are stored
+  full-dotted. No FR-3 key is stored as 0/`""`, so no seeded row changes effective value.
+- Pre-existing, not a 244 regression: the per-user row `analysis.fundsignal.min_conviction_to_emit = "0.6"` is
+  `value_type=string`. analysis subscribes at global scope (float `0.2`), and a string-typed row resolves to the
+  default both before (`float_val or default`) and after (`HasField`) this fix.
+- Operator decision 2026-10-29 (own words, session question tool): "Record audit, merge, I smoke". The integration PR
+  merges, and the four Instruction-2 smokes plus restores run post-deploy through the staging MCP set_config/
+  list_opportunities/run_backtest tools and Tempo, recorded in a follow-up `rollout (dev)` entry. UI-only checks
+  are verified through the API and traces, not visually. The prod audit is due before the prod promotion.

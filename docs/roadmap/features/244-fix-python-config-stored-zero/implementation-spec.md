@@ -1251,7 +1251,7 @@ grep -n "CF-N10" docs/context-constitution-findings.md
 
 ### Step 18 — docs: rollout audit and consumer-surface verification (C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: rollout (dev, then prod) — results recorded in `docs/roadmap/features/244-fix-python-config-stored-zero/context.md`
 **Files**:
 - `docs/roadmap/features/244-fix-python-config-stored-zero/context.md` — modify (audit and smoke results)
@@ -1431,3 +1431,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
   Code-side, nothing is pending: the step's only File is `context.md`, and the cited symbols were re-confirmed.
   `configServiceImpl.ts:99` is the bounds comment; the registry starts at `:100`.
+- 2026-10-29 Step 18 (operator decision "Record audit, merge, I smoke"): Instruction 1 (dev) ran through the staging
+  agent MCP `get_config` instead of SQL (the operator has no DB access). Results are in context.md
+  `## Session 2026-10-29 — rollout (dev)`. Instruction 2's smokes need the deployed fix, so they run post-merge from
+  the operator's session and are recorded in a later context.md entry. The step is marked `done` so the integration
+  PR can merge. Still open: the post-deploy smoke + restore, and the prod audit before promotion.
