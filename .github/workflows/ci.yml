@@ -83,6 +83,9 @@ jobs:
               - 'scripts/gen-dev-certs.sh'
               - 'scripts/mtls-provision.sh'
               - '.github/workflows/deploy-homelab.yml'
+            ledger:
+              - 'docs/roadmap/ledger/**'
+              - 'scripts/ledger-guard.py'
             claude-md:
               - '**/CLAUDE.md'
               - '.markdownlint.yaml'
@@ -730,6 +733,26 @@ jobs:
       - name: Saved-workflow gate tests (no agents, no tokens)
         run: node --test scripts/workflow-tests/*.test.mjs
 
+  ledger-guard:
+    name: Ledger guard (other features' entries kept)
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && (
+      contains(fromJson(needs.changes.outputs.matched), 'ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # HEAD is the PR's merge commit, i.e. what a merge would land on the base branch.
+      - name: Check no other feature's ledger entry is deleted or altered
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: python3 scripts/ledger-guard.py --own-slug "${HEAD_REF#feature/}" --base "origin/${BASE_REF}" --head HEAD
+
   secret-scan:
     name: Secret scan (trufflehog + gitleaks)
     runs-on: ubuntu-latest
@@ -812,6 +835,7 @@ jobs:
       - homelab-render
       - markdown-lint
       - context-map
+      - ledger-guard
       - secret-scan
     runs-on: ubuntu-latest
     steps:
@@ -832,6 +856,7 @@ jobs:
           echo "homelab-render:  ${{ needs.homelab-render.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
+          echo "ledger-guard:    ${{ needs.ledger-guard.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
 
       - name: Fail on upstream failure or cancellation
