@@ -345,3 +345,24 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
 - `#1262 hotfix/fix-refresh-token-rotation` also touches both identity files. Before Step 1, check whether
   `rotateRefreshToken` (:340-374, hotfix 5bd271d) is on `main-dev`, and re-anchor the line hints if it is not.
   — [ ] unaddressed
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-identity-auth-code-race` (normal merge). One conflict,
+  `docs/roadmap/ledger/insights.md`, resolved by keeping both sides (base first). `ledger-guard --fix`: clean.
+- Re-spec of step bodies against the current codebase:
+  - Steps 1 and 3: no mismatch; every `identityServiceImpl.ts` anchor resolves as cited. Left unchanged.
+  - Steps 2 and 4: feature 252 rewrote `src/__tests__/identityServiceImpl.test.ts`. All test-file anchors
+    re-pointed (`makeTokenDb` :374-409, `describe('exchangeAuthCode')` :282, `makeSpyPool` :235-247,
+    `describe('refreshOAuthToken')` :445-471, `APPLICATION_ENV` precedent :125-140, seed-hash import :11/:19).
+    Step 2 Instruction 4 inverted: the file has no `if (!impl) return;` guards now, so the new tests add none.
+    Verification switched from the scratch `.verify` tsc route to `pnpm test` (`package.json:12`), which is now
+    real RED/GREEN evidence. Step 4 Evidence notes `routePool` (:701-712) records params but has no `connect()`,
+    so extending `makeSpyPool` stays the choice.
+  - Step 5: `issueAuthCode` :439. No Postgres on `localhost:5432` here and this run may not start one, so the
+    BEFORE/AFTER repro goes to the operator (the spec's stop-and-ask path).
+  - Step 6: identity `CLAUDE.md` anchor is :37-38.
+- Not edited (outside step bodies): the Execution Summary at `implementation-spec.md:36` still describes the
+  pre-252 compiled-run guard; the Step 2/4 bodies supersede it.
+- Open Thread "Step 2: RED/GREEN depends on the scratch tsc compile until feature 252 lands" — addressed by this
+  re-spec (252 landed). Overlap thread with 252 — addressed (merged; guards gone).
