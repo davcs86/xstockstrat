@@ -479,3 +479,23 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   warnings only). `grep peerSan: 'xstockstrat-marketdata'` → `authz.ts:119`. Pre-merge gate (P-03): the three SAN
   material lines (`gen-dev-certs.sh:28`, `:50`, `deploy.yml:101`) are unchanged.
 - Rollback for D-40 is reverting the `authz.ts:119` line alone (D-39 stays).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 8
+
+- Tooling setup (step 8): none needed (docs only).
+- Step 8 done (docs). The `marketdata` GetSecret grant's DNS SAN `xstockstrat-marketdata` is now stated in config
+  `CLAUDE.md` invariant #6, config `docs/context-constitution.md` (Gotcha at `:35` and invariant row at `:51`: both
+  grants carry `peerSan`), marketdata `CLAUDE.md:218` (header plus leaf SAN; a SAN-less leaf gets
+  `PERMISSION_DENIED`, which surfaces as the boot WARN `resolving vendor credential from config failed`), and the
+  root `CLAUDE.md` § Config Governance Rules parenthetical.
+- Residual (a), the redirect `Location`-parse error whose inner cause can quote a vendor-sent URL, is **accepted with
+  no test** (design.md). It is tracked with residual (b), query-string keys in proxy/vendor access logs, in
+  `docs/reports/2026-10-29-marketdata-vendor-key-url-residuals-defect.md` (sidecar `open`), which recommends
+  key-in-header (vendor support unverified) plus a shared `redactURLError` helper.
+- Teardown: `/context-forge:context-constitution` is unavailable in this session, so it was done by hand (see the
+  Deviation Log). That includes the out-of-Files fix of `docs/patterns/config-governance.md:25`. The integration PR
+  body must record both.
+- TDD: N/A (docs).
+- Verification: the three spec greps pass (config SAN lines at `CLAUDE.md:41` and `context-constitution.md:35`/`:51`;
+  `DNS SAN` at marketdata `CLAUDE.md:218` and root `CLAUDE.md:176`; sidecar `head -1` → `open`). The report has
+  exactly one severity token.

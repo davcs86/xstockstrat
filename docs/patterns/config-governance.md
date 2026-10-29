@@ -23,7 +23,7 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
    and hands the value to an **allow-listed internal service caller** (the `x-internal-caller`
    metadata channel, mirroring feature 102). A grant may additionally require the caller's mTLS peer
    certificate to carry an exact DNS SAN (`peerSan`; the `ingest` grant requires
-   `xstockstrat-ingest`, feature 224). `GetSecret` resolves the **exact** scope named by
+   `xstockstrat-ingest`, feature 224, and the `marketdata` grant `xstockstrat-marketdata`, feature 254). `GetSecret` resolves the **exact** scope named by
    `GetSecretRequest.user_id` (empty = the global row only; a `user_id` = only that user's row — never
    a cross-scope fallback, feature 224). `is_secret` is **row-authoritative on write** (read
    from the stored row, never trusted from the request), so an admin update can never land

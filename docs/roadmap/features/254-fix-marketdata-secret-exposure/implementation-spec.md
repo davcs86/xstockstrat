@@ -514,7 +514,7 @@ cd ../.. && sed -n 28p scripts/gen-dev-certs.sh | grep -q 'xstockstrat-marketdat
 
 ### Step 8 — docs: config/marketdata invariants, root config-governance line, residuals defect report
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-marketdata` (docs only; also root `CLAUDE.md` and `docs/reports/`)
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
@@ -617,6 +617,17 @@ doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolv
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29, Step 8 (report date, residual cite, teardown).** The residuals report is dated by execution, as the
+  Files note allows: `docs/reports/2026-10-29-marketdata-vendor-key-url-residuals-defect.md` + `.status` (`open`).
+  Residual (a) is cited by function and quoted text (`Client.do`), not `client.go:665`: on this go1.27.0 install the
+  line is `:648`, so a line number would go stale. Teardown: `/context-forge:context-constitution` is not available in
+  this session, so each touched context file was re-read against the code by hand. That reconciliation also fixed
+  grounded drift outside **Files**: `docs/patterns/config-governance.md:25` named only the `ingest` grant as
+  SAN-bound (now also `marketdata`, feature 254), and the config `docs/context-constitution.md` cites on the two
+  edited lines were refreshed (`peerSan` ~L119/~L125, `hasSecretCallerAuthority` ~L150, `buildConfigValue`
+  ~L576-582, `getSecret` ~L335-369). The integration PR body must record the plugin's unavailability and this manual
+  reconciliation.
 
 - **2026-10-29, re-spec of Steps 4-9 (after merging `origin/main-dev`).** Every path, symbol and line cite in Steps
   4-9 was re-checked against the merged tree and still resolves; no Files change. Step 5 Instructions 2-3 now spell
