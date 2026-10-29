@@ -53,6 +53,11 @@ def fund_period(filed_date, **values):
     return FundamentalPeriod(filed_date=filed_date, values=dict(values))
 
 
+def fundamentals_row(symbol, missing=(), **metrics):
+    """A real ``marketdata.v1.Fundamentals`` row; ``missing`` is passed through verbatim."""
+    return marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
+
+
 def snapshot_watcher(**values):
     """A dial-free ConfigWatcher; each value lands in the oneof member matching its Python type."""
     from gen.config.v1 import config_pb2
