@@ -313,17 +313,17 @@ cd services/xstockstrat-ui && grep -n "timeoutMs: REFRESH_TIMEOUT_MS" src/lib/id
 
 **Codebase Evidence**:
 - Mock pattern for `@/lib/connectClients`: `src/lib/insightsBff.test.ts:9-18` (`vi.mock('@/lib/connectClients', () => ({ … }))`).
-- The identity mock's `refreshToken()` is at `e2e/mock-backend.ts:184-190`. It takes no args today and always returns `refreshToken: 'test-refresh-token'`. `ConnectError` and `Code` are already imported (`:16`).
-- The abort-aware stall precedent is at `:643-650`.
+- The identity mock's `refreshToken()` is at `e2e/mock-backend.ts:191-196` (`:184-190` is `authenticateUser`). It takes no args today and always returns `refreshToken: 'test-refresh-token'`. `ConnectError` and `Code` are already imported (`:16`).
+- The abort-aware stall precedent is `getFundamentals` at `:662-668` (`FUNDAMENTALS_STALL_SYMBOL`: wait for `ctx.signal` abort, then `ConnectError` `Code.Canceled`).
 - `e2e/helpers/auth.ts`:
   - It is the canonical home for test JWT signing (`:14-17`: "specs must not re-implement SignJWT").
   - `signTestJwt` (`:29-44`) always signs `expires_at: now + 3600`.
-  - `mock-backend.ts:31` already imports from it.
+  - `mock-backend.ts:38` already imports `signTestJwt` from it.
 - `e2e/auth.spec.ts:70-89` is the existing `POST /api/auth/refresh` pattern: `request.post(..., { headers: { cookie: 'refresh_token=…' } })`, with Set-Cookie inspection via `headersArray()`.
-- Redirect assertion pattern: `auth.spec.ts:189-193` (`page.request.get(path, { maxRedirects: 0 })`, status in `[302, 307]`, `location` contains `/auth/login`).
+- Redirect assertion pattern: the loop at `auth.spec.ts:183-195` (`page.request.get(path, { maxRedirects: 0 })` at `:190`, status in `[302, 307]`, `location` contains `/auth/login`).
 - `middleware.ts:60`: `redirect` = `pathname + search`, so `/trader` → `redirect=%2Ftrader`. The cookie-clear shape is `Max-Age=0` (`src/middleware.test.ts:171-172`).
 - `IDENTITY_ENDPOINT: '127.0.0.1:9091'` is the shared mock (`playwright.config.ts:152`). A sentinel token keeps the stall request-scoped, so no new env var or port is needed.
-- Sentinel table: `e2e/fixtures/INVENTORY.md:53-58` (§ Recurring sentinel ids).
+- Sentinel table: `e2e/fixtures/INVENTORY.md:53` (§ Recurring sentinel ids), table header at `:58`.
 
 **TDD**: `red-green required`
 
@@ -338,7 +338,7 @@ cd services/xstockstrat-ui && grep -n "timeoutMs: REFRESH_TIMEOUT_MS" src/lib/id
    - Export `REFRESH_STALL_TOKEN = 'refresh-stall-token'`.
    - Export `signExpiredTestJwt()`. It mirrors `signTestJwt` with `issued_at: now - 1800`, `expires_at: now - 900` and `setExpirationTime(now - 900)`, and stays in this canonical SignJWT home.
 3. `mock-backend.ts` `refreshToken(req, ctx)`:
-   - If `req.refreshToken === REFRESH_STALL_TOKEN`, wait for `ctx.signal` abort and then `throw new ConnectError('aborted by caller', Code.Canceled)`. This mirrors `:643-650`.
+   - If `req.refreshToken === REFRESH_STALL_TOKEN`, wait for `ctx.signal` abort and then `throw new ConnectError('aborted by caller', Code.Canceled)`. This mirrors `:662-668`.
    - Otherwise return the existing response unchanged.
    - Import `REFRESH_STALL_TOKEN` from `./helpers/auth`.
 4. `e2e/auth.spec.ts`: new describe, "Session refresh against a stalled identity (feature 271 @AC-2)". Import `REFRESH_TIMEOUT_MS` from `../src/lib/deadlines` and use `test.setTimeout(REFRESH_TIMEOUT_MS + 20_000)`.
@@ -378,8 +378,8 @@ grep -n "REFRESH_STALL_TOKEN" e2e/fixtures/INVENTORY.md
 
 **Codebase Evidence**:
 - `src/lib/traderBff.ts:33` `placeOrder`, `:42` `cancelOrder`, `:43` `replaceOrder`, `:45` `confirmOrder` are bare `forward(...)`.
-- `src/lib/bffShared.ts:80-84`: `forwardAdmin(call: (req, opts: { headers: Headers }) => Promise<Res>)` → `forward(call, { admin: true })`.
-- `forward()` (`:64-77`) applies `options.admin` at `:70` and sets `callOpts.timeoutMs` only when it is defined (`:74`).
+- `src/lib/bffShared.ts:76-80` (JSDoc at `:75`): `forwardAdmin(call: (req, opts: { headers: Headers }) => Promise<Res>)` → `forward(call, { admin: true })`.
+- `forward()` (`:60-73`) applies `options.admin` at `:66` and sets `callOpts.timeoutMs` only when it is defined (`:70`).
 - `src/lib/insightsBff.ts`:
   - `:40` `scoreStrategy`, `:41` `runBacktest` and `:42` `screenSymbols` are all bare `forward(...)`.
   - `:80` `triggerBackfill` is `forward(...)`.
@@ -398,7 +398,7 @@ grep -n "REFRESH_STALL_TOKEN" e2e/fixtures/INVENTORY.md
    - Widen `call` to `(req: Req, opts: { headers: Headers; timeoutMs?: number }) => Promise<Res>`.
    - Add a second parameter, `options: { timeoutMs?: number } = {}`.
    - The body becomes `return forward(call, { ...options, admin: true });`. `admin` is spread last, so a caller cannot unset it.
-   - Update its JSDoc (`:79`) in one line.
+   - Update its JSDoc (`:75`) in one line.
 2. `insightsBff.ts`:
    - Add `LONG_RPC_TIMEOUT_MS` to the `@/lib/deadlines` import created in Step 1.
    - Pass `{ timeoutMs: LONG_RPC_TIMEOUT_MS }` as the `forward` options for `scoreStrategy` (`:40`), `runBacktest` (`:41`), `screenSymbols` (`:42`) and `triggerBackfill` (`:80`).
@@ -442,6 +442,7 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
   - POST JSON to `http://localhost/insights/api/<service>/<Method>`.
 - `configUiBff.ts:101`: `export const dispatchConnect = createDispatch(router, '/config-ui/api');`. It imports `configClient`, `ingestClient`, `analysisClient`, `identityClient` and `indicatorsClient` (`:8-14`).
 - `insightsBff.ts` imports its clients at `:10-19`.
+- `dispatchConnect` exports: `insightsBff.ts:209`, `traderBff.ts:151`. `traderBff.ts` imports its clients at `:9-16`.
 - Admin gate: `requireAdminScope` (`bffShared.ts:47-51`) calls `hasAdminScope(claims.roles)`. Admin JWT roles are `['admin']`, as in `e2e/helpers/auth.ts` `addAdminCookie`.
 - C-12 does not apply: there are no domain fixtures. The request bodies are `{}`, which are scenario one-offs.
 
@@ -454,7 +455,7 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
    - (a) With `vi.mocked(hasAdminScope).mockReturnValueOnce(true)`, `forwardAdmin(mockCall, { timeoutMs: LONG_RPC_TIMEOUT_MS })` passes `timeoutMs === LONG_RPC_TIMEOUT_MS` along with `headers`. RED pre-fix: `undefined`, because the option is ignored.
    - (b) When `hasAdminScope` returns false, the handler rejects with `Code.PermissionDenied` and `mockCall` is never called.
 2. `src/lib/bffDeadlines.test.ts`:
-   - Mock `@/lib/connectClients` with every client both BFFs import. Give spies resolving `{}` to:
+   - Mock `@/lib/connectClients` with the union of every client the three BFFs import (`configUiBff.ts:8-14`, `insightsBff.ts:10-19`, `traderBff.ts:9-16` — the latter adds `tradingClient`, `portfolioClient`, `notifyClient`, `ledgerClient`, `configClient`); unexercised clients may be empty objects. Give spies resolving `{}` to:
      - `analysisClient.{scoreStrategy, runBacktest, screenSymbols, listOpportunities, runFundamentalsScan}`
      - `ingestClient.triggerBackfill`
      - `marketDataClient.{deleteBackfilledData, getBars, getFundamentals}`
