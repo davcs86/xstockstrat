@@ -570,4 +570,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `ruff check .` + `ruff format --check .` clean. The Step 2 interim breakage is resolved.
   - Deviation: the `@AC-2` fake mirrors trading's empty-`user_id` fail-open so RED is real
     (Deviation Log).
-
+- Step 4 done (service, `app/engine/entry_backfill.py`): `run_once` guards the strategies read
+  (warn + return), the blend-universe resolve and system drain (warn + empty set), the row parse
+  and `resolve_universe` (warn + skip row), the held/watch pair (locals committed together; a
+  failure records the owner in `failed_owners` and skips its later rows, one summary warning per
+  owner), and the owner-signal drain (warn + `own_cache[owner] = set()`, owner not poisoned). The
+  blend skip stays ahead of `resolve_universe`; gather results are logged per failed task. All
+  warnings carry `pass_trace_id`; only `Exception` is caught. Docstring rewritten.
+  - TDD (scratch tests, not committed — Step 5 owns the real tests): red, 5 failed —
+    `@AC-4` `RuntimeError: db down`, `@AC-5` `RuntimeError: x`, `@AC-8` `RuntimeError: portfolio
+    rpc`, malformed row `KeyError: 'display_name'`, `@AC-9` `RuntimeError: fund` → green: all 5
+    passed (with `test_entry_backfill.py` + `test_owner_header_guard.py`: 43 passed).
+  - Verification: grep hits for `failed_owners`/`except Exception`/`pass_trace_id`/
+    `return_exceptions=True`; no `except BaseException`/bare `except:`; `ruff check .` +
+    `ruff format --check .` clean; full suite 1446 passed, coverage 89.48% (≥40).
+  - No deviations. The pre-commit hook is inert in this worktree (`core.hooksPath` points at
+    `/home/user/xstockstrat/.husky/_`, which does not exist, and the main worktree has no
+    `node_modules` to link); nothing was bypassed with `--no-verify`.

@@ -52,17 +52,23 @@ def _infer_open_entry_time(orders):
 async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     """One-shot boot pass: for every live (strategy, symbol) pair still missing a durable
     last_entry_at, infer it from real Order history and seed live_loop's in-memory state
-    (+ best-effort durable write). Never raises — a per-pair failure is logged and skipped,
-    matching the FR-8 per-pair isolation the live loop itself already guarantees."""
+    (+ best-effort durable write). Never raises: a failed strategies read ends the pass; a failed
+    blend-universe resolve or system drain falls back to an empty set; a malformed row or failed
+    resolve skips that row; a held/watchlist drain failure skips that owner's rows. Every failure
+    is logged with the pass trace id."""
     if trading_stub is None:
         return
     pass_trace_id = uuid.uuid4().hex
     sem = asyncio.Semaphore(
         int_positive(cfg_watcher, "analysis.strategy.max_concurrent_entry_backfill", 4)
     )
-    rows = await db_pool.fetch(
-        "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"
-    )
+    try:
+        rows = await db_pool.fetch(
+            "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"
+        )
+    except Exception as e:
+        log.warning("entry_backfill: live-strategies read failed [trace %s]: %s", pass_trace_id, e)
+        return
 
     async def _backfill_pair(user_id, strategy_id, symbol):
         # Key must match live_loop's (user_id, strategy_id, symbol) key or the slot is never read.
@@ -101,40 +107,105 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     blend_id = blend_strategy_id(cfg_watcher)
     blend_enabled = cfg_watcher.get_bool("analysis.engine.fundamentals_blend_enabled", True)
     blend_active = blend_enabled and any(dict(r).get("strategy_id") == blend_id for r in rows)
-    fundamentals_universe = (
-        await live_loop._resolve_fundamentals_universe() if blend_active else set()
-    )
+    fundamentals_universe = set()
+    if blend_active:
+        try:
+            fundamentals_universe = await live_loop._resolve_fundamentals_universe()
+        except Exception as e:
+            log.warning(
+                "entry_backfill: fundamentals-universe resolve failed [trace %s]: %s",
+                pass_trace_id,
+                e,
+            )
     # Use resolved.union, NOT .universe — deny is entry-only, so a held-denied position still
     # needs its entry anchor here (a cold-boot portfolio outage misses held pairs; self-heals).
-    system_signals = await live_loop._drain_system_signals()
+    try:
+        system_signals = await live_loop._drain_system_signals()
+    except Exception as e:
+        log.warning("entry_backfill: system-signal drain failed [trace %s]: %s", pass_trace_id, e)
+        system_signals = set()
     own_cache: dict[str, set] = {}
     held_cache: dict[str, set] = {}
     watch_cache: dict[str, set] = {}
+    failed_owners: dict[str, list[str]] = {}
     tasks = []
     for row in rows:
-        definition = _row_to_strategy_definition(dict(row))
+        try:
+            definition = _row_to_strategy_definition(dict(row))
+        except Exception as e:
+            log.warning(
+                "entry_backfill: strategy %s (owner %s) skipped — unparseable row [trace %s]: %s",
+                dict(row).get("strategy_id"),
+                dict(row).get("user_id"),
+                pass_trace_id,
+                e,
+            )
+            continue
         owner = definition.user_id
+        if owner in failed_owners:
+            failed_owners[owner].append(definition.strategy_id)
+            continue
         if owner not in held_cache:
-            held_cache[owner] = await live_loop._drain_held(owner)
-            watch_cache[owner] = await live_loop._drain_watchlist(owner)
+            try:
+                held = await live_loop._drain_held(owner)
+                watch = await live_loop._drain_watchlist(owner)
+            except Exception as e:
+                log.warning(
+                    "entry_backfill: strategy %s owner %s skipped [trace %s]: %s",
+                    definition.strategy_id,
+                    owner,
+                    pass_trace_id,
+                    e,
+                )
+                failed_owners[owner] = [definition.strategy_id]
+                continue
+            held_cache[owner] = held
+            watch_cache[owner] = watch
         signal_symbols = system_signals
         if definition.signal_eligible and definition.strategy_id != blend_id:
             if owner not in own_cache:
-                own_cache[owner] = await live_loop._drain_owner_signals(owner)
+                try:
+                    own_cache[owner] = await live_loop._drain_owner_signals(owner)
+                except Exception as e:
+                    log.warning(
+                        "entry_backfill: owner-signal drain failed for owner %s [trace %s]: %s",
+                        owner,
+                        pass_trace_id,
+                        e,
+                    )
+                    own_cache[owner] = set()
             signal_symbols = own_cache[owner] | system_signals
         if definition.strategy_id == blend_id and not (blend_active and fundamentals_universe):
             continue  # blend inactive/empty → nothing to anchor (loop-skip parity)
-        resolved = resolve_universe(
-            definition,
-            watch_cache[owner],
-            held_cache[owner],
-            signal_symbols,
-            blend_id=blend_id,
-            fundamentals_universe=fundamentals_universe,
-        )
+        try:
+            resolved = resolve_universe(
+                definition,
+                watch_cache[owner],
+                held_cache[owner],
+                signal_symbols,
+                blend_id=blend_id,
+                fundamentals_universe=fundamentals_universe,
+            )
+        except Exception as e:
+            log.warning(
+                "entry_backfill: strategy %s (owner %s) skipped — universe resolve failed "
+                "[trace %s]: %s",
+                definition.strategy_id,
+                owner,
+                pass_trace_id,
+                e,
+            )
+            continue
         for symbol in resolved.union:
             tasks.append(_backfill_pair(owner, definition.strategy_id, symbol))
-    await asyncio.gather(*tasks, return_exceptions=True)
+    for owner, sids in failed_owners.items():
+        log.warning(
+            "entry_backfill: owner %s skipped strategies %s [trace %s]", owner, sids, pass_trace_id
+        )
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for r in results:
+        if isinstance(r, Exception):
+            log.warning("entry_backfill: pair task failed [trace %s]: %s", pass_trace_id, r)
     log.info(
         "entry_backfill: boot pass complete (%d pairs considered) [trace %s]",
         len(tasks),

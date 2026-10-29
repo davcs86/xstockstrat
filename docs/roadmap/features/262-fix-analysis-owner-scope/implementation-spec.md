@@ -278,7 +278,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 4 — service: failure isolation in `run_once` (FR-3/FR-4, `@AC-9`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/entry_backfill.py` — modify
