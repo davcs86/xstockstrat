@@ -678,3 +678,18 @@ _Populated by /sdd-execute as implementation proceeds._
   - Step 5 **Verification** is changed to check 2 reports (operator-authorized exception to step-body immutability),
     and the deferred-slug mapping (Step Dependencies above, `design.md`, `context.md`) now points at feature 273.
   **Disposition**: accepted by operator (Option A).
+- **Step 6 (2026-10-29)** — Step 6 deferred to operator — integration PR merge held until the operator restores agent
+  trace export on dev and records the baseline. Grafana Cloud traces were reachable this session (datasource
+  `grafanacloud-traces`), but there is nothing to measure: over 2026-10-28T00:00Z–2026-10-29T00:00Z,
+  `{ } | count_over_time() by (resource.service.name, resource.deployment.environment)` lists ten dev services and
+  no `agent`; `{ name =~ ".*GetConfig.*" } | count_over_time()` returns no series; and
+  `{ resource.service.name =~ ".*agent.*" }` over 2026-10-28T02:00Z–2026-10-29T02:00Z returns 0 traces.
+  `.do/app.dev.yaml:32-36` still holds the placeholder `YOUR_DEV_OTEL_EXPORTER_OTLP_ENDPOINT`/`_HEADERS` values.
+  The operator must do three things:
+  1. Confirm `xstockstrat-agent` is running on dev with `OTEL_ENABLED=true` and a real OTLP endpoint and headers.
+  2. Run `{ resource.service.name = "agent" && name = "/xstockstrat.config.v1.ConfigService/GetConfig" } | quantile_over_time(span:duration, .5, .99)`
+     plus `count_over_time()` and `max_over_time(span:duration)` over a window of at least 24 h. Tempo caps a
+     metrics query at 25 h, so a longer window is split into ≤ 25 h queries.
+  3. Record count, p50, p99, max and the margin against D = 3.0 s in `context.md` under `GetConfig latency baseline`.
+  If p99 is not comfortably below 3.0 s, `_CONFIG_READ_TIMEOUT_S` and its `== 3.0` pins change before the
+  integration PR (design change). Step **Status** stays `pending`. **Disposition**: open — P-03 operator escalation.
