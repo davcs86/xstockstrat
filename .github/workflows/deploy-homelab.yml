@@ -1,0 +1,246 @@
+# Homelab deploy over homelab-edge's tailnet + app-deploy gate (homelab-edge docs/runbooks/deploy-compose-app.md).
+# Secrets: 1Password when the environment has OP_SERVICE_ACCOUNT_TOKEN (vault vars.OP_VAULT), else same-named GitHub secrets.
+name: Deploy homelab
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'staging or production (the GitHub environment and the target VM)'
+        required: true
+        type: string
+      image_tag:
+        description: 'Short SHA tag that docker-build.yml pushed'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (production runs only from main, for a commit on main, and needs the environment's reviewers)
+        type: choice
+        options: [staging, production]
+        default: staging
+      image_tag:
+        description: 'Short SHA of already-built images (default: this ref); that commit''s compose file and scripts are deployed'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: xstockstrat
+  REGISTRY: ghcr.io/davcs86/xstockstrat
+  # Keep in step with tailscale_package_version / tailscale_tgz_amd64_sha256 in homelab-edge's versions.yml.
+  TAILSCALE_VERSION: "1.98.10"
+  TAILSCALE_SHA256: 52490ce0832b245857e2afef7426d6ae5a4b49fb391412833cc95729bd23f7de
+  # Keep in step with homelab-edge templates/app-deploy/deploy.yml (GPG-verified there).
+  OP_CLI_VERSION: "2.40.0"
+  OP_CLI_SHA256: 74277219e8da60958c00f9aee9d2023225e98fdda8bfd2156a5d9e85e0edaab3
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-homelab-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      TARGET_ENV: ${{ inputs.environment }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      LOGIN_SERVER: ${{ vars.TAILNET_LOGIN_SERVER }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check out the images' own commit (production only from main)
+        env:
+          TAG: ${{ inputs.image_tag || '' }}
+        run: |
+          [ "$TARGET_ENV" = staging ] || [ "$TARGET_ENV" = production ] || { echo "::error::environment must be staging or production"; exit 1; }
+          [ "$GITHUB_RUN_ATTEMPT" -lt 100 ] || { echo "::error::run attempt $GITHUB_RUN_ATTEMPT would collide with another run's release name"; exit 1; }
+          tag="${TAG:-${GITHUB_SHA::7}}"
+          [[ "$tag" =~ ^[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be a 7-40 character lowercase hex git SHA"; exit 1; }
+          src=$(git rev-parse --verify --quiet "$tag^{commit}") || { echo "::error::$tag is not a unique commit in this repository"; exit 1; }
+          if [ "$TARGET_ENV" = production ]; then
+            [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::production deploys run only from main (this run: $GITHUB_REF)"; exit 1; }
+            git merge-base --is-ancestor "$src" origin/main || { echo "::error::$tag is not on main"; exit 1; }
+          fi
+          git checkout --quiet --detach "$src"
+          [ -f deploy/homelab/compose.yml ] && [ -f scripts/homelab-release-env.sh ] \
+            || { echo "::error::$tag predates the homelab deploy; it has no deploy/homelab/compose.yml"; exit 1; }
+          { echo "IMAGE_TAG=$tag"; echo "SRC_SHA=$src"; } >>"$GITHUB_ENV"
+
+      - name: Resolve every image tag to its digest; the VM pulls by digest only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$IMAGE_TAG"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          out="$RUNNER_TEMP/images.env"
+          : >"$out"
+          while read -r var; do
+            svc="$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')"
+            ref="$REGISTRY/xstockstrat-$svc:$tag"
+            digest=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest) \
+              || { echo "::error::$ref not found; was docker-build.yml run for $tag?"; exit 1; }
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$ref resolved to '$digest'"; exit 1; }
+            printf '%s=%s@%s\n' "$var" "$REGISTRY/xstockstrat-$svc" "$digest" >>"$out"
+          done < <(grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u)
+          [ "$(wc -l <"$out")" -ge 13 ] || { echo "::error::deploy/homelab/compose.yml names only $(wc -l <"$out") images"; exit 1; }
+          { echo "### Images ($tag)"; echo; sed 's/^/- /' "$out"; } >>"$GITHUB_STEP_SUMMARY"
+          echo "IMAGES_ENV=$out" >>"$GITHUB_ENV"
+
+      - name: Choose the secret source (1Password when its token is usable, else GitHub secrets)
+        id: src
+        env:
+          OP_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          OP_EXPIRES: ${{ vars.OP_TOKEN_EXPIRES }}
+        run: |
+          use=false
+          if [ -n "$OP_TOKEN" ]; then
+            use=true
+            if [ -n "$OP_EXPIRES" ]; then
+              expires_at=$(date -d "$OP_EXPIRES" +%s) || { echo "::error::OP_TOKEN_EXPIRES is not a date: $OP_EXPIRES"; exit 1; }
+              left=$(( (expires_at - $(date +%s)) / 86400 ))
+              if [ "$left" -lt 0 ]; then
+                use=false
+                echo "::warning::The 1Password service account token expired; using GitHub secrets"
+              elif [ "$left" -lt 14 ]; then
+                echo "::warning::The 1Password service account token expires in $left days"
+              fi
+            fi
+          fi
+          echo "op=$use" >>"$GITHUB_OUTPUT"
+
+      - name: 1Password CLI (pinned, checksum-verified)
+        id: opcli
+        if: steps.src.outputs.op == 'true'
+        continue-on-error: true
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://cache.agilebits.com/dist/1P/op2/pkg/v${OP_CLI_VERSION}/op_linux_amd64_v${OP_CLI_VERSION}.zip"
+          echo "${OP_CLI_SHA256}  op_linux_amd64_v${OP_CLI_VERSION}.zip" | sha256sum -c -
+          unzip -q -o "op_linux_amd64_v${OP_CLI_VERSION}.zip" op -d op-bin
+          sudo install -m 0755 op-bin/op /usr/local/bin/op
+          op --version
+
+      - name: Load secrets from 1Password
+        id: op
+        if: steps.src.outputs.op == 'true' && steps.opcli.outcome == 'success'
+        continue-on-error: true
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2  # v5.0.1
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          TS_AUTHKEY: "op://${{ vars.OP_VAULT }}/tailnet-authkey/authkey"
+          TS_AUTHKEY_EXPIRES: "op://${{ vars.OP_VAULT }}/tailnet-authkey/expires"
+          DEPLOY_SSH_KEY: "op://${{ vars.OP_VAULT }}/deploy-ssh-key/private key?ssh-format=openssh"
+          DEPLOY_KNOWN_HOSTS: "op://${{ vars.OP_VAULT }}/deploy-known-hosts/known_hosts"
+          APP_ENV: "op://${{ vars.OP_VAULT }}/app-env/notesPlain"
+          MTLS_CA: "op://${{ vars.OP_VAULT }}/mtls-ca/notesPlain"
+
+      - name: Report where each secret came from
+        env:
+          OP_WANTED: ${{ steps.src.outputs.op }}
+          OP_OUTCOME: ${{ steps.op.outcome }}
+          S_TS_AUTHKEY: ${{ steps.op.outputs.TS_AUTHKEY != '' && '1password' || (secrets.TS_AUTHKEY != '' && 'github' || 'MISSING') }}
+          S_DEPLOY_SSH_KEY: ${{ steps.op.outputs.DEPLOY_SSH_KEY != '' && '1password' || (secrets.DEPLOY_SSH_KEY != '' && 'github' || 'MISSING') }}
+          S_DEPLOY_KNOWN_HOSTS: ${{ steps.op.outputs.DEPLOY_KNOWN_HOSTS != '' && '1password' || (secrets.DEPLOY_KNOWN_HOSTS != '' && 'github' || 'MISSING') }}
+          S_APP_ENV: ${{ steps.op.outputs.APP_ENV != '' && '1password' || (secrets.APP_ENV != '' && 'github' || 'MISSING') }}
+          S_MTLS_CA: ${{ steps.op.outputs.MTLS_CA != '' && '1password' || (secrets.MTLS_CA != '' && 'github' || 'MISSING') }}
+        run: |
+          if [ "$OP_WANTED" = true ] && [ "$OP_OUTCOME" != success ]; then
+            echo "::warning::1Password was configured but the load did not succeed; using GitHub secrets where set"
+          fi
+          echo "### Secret sources" >>"$GITHUB_STEP_SUMMARY"
+          missing=0
+          for n in TS_AUTHKEY DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS APP_ENV MTLS_CA; do
+            v="S_$n"
+            src="${!v}"
+            echo "- $n: $src" >>"$GITHUB_STEP_SUMMARY"
+            [ "$src" != MISSING ] || { echo "::error::$n is in neither 1Password nor the GitHub secrets"; missing=1; }
+            if [ "$OP_WANTED" = true ] && [ "$src" = github ]; then echo "::warning::$n came from the GitHub secret, not 1Password"; fi
+          done
+          exit "$missing"
+
+      - name: Tailnet key must not be about to expire
+        env:
+          EXPIRES: ${{ steps.op.outputs.TS_AUTHKEY_EXPIRES || vars.TS_AUTHKEY_EXPIRES }}
+        run: |
+          : "${EXPIRES:?TS_AUTHKEY_EXPIRES is required}"
+          exp=$(date -d "$EXPIRES" +%s) || { echo "::error::TS_AUTHKEY_EXPIRES is not a date"; exit 1; }
+          left=$(( (exp - $(date +%s)) / 86400 ))
+          [ "$left" -ge 0 ] || { echo "::error::TS_AUTHKEY expired; mint a new tag:ci key (homelab-edge runbook)"; exit 1; }
+          [ "$left" -ge 14 ] || echo "::warning::TS_AUTHKEY expires in $left days"
+
+      - name: Build the release .env (pipeline-owned keys replace any APP_ENV copy)
+        env:
+          APP_ENV: ${{ steps.op.outputs.APP_ENV || secrets.APP_ENV }}
+          MTLS_CA: ${{ steps.op.outputs.MTLS_CA || secrets.MTLS_CA }}
+        run: |
+          bash scripts/homelab-release-env.sh "$IMAGES_ENV" "$RUNNER_TEMP/release.env"
+          echo "RELEASE_ENV=$RUNNER_TEMP/release.env" >>"$GITHUB_ENV"
+
+      - name: Compose file must render, and the render must match the target
+        run: bash scripts/homelab-render-check.sh "$RELEASE_ENV" "$TARGET_ENV"
+
+      - name: Tailscale (pinned, checksum-verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_amd64.tgz"
+          echo "${TAILSCALE_SHA256}  tailscale_${TAILSCALE_VERSION}_amd64.tgz" | sha256sum -c -
+          tar xzf "tailscale_${TAILSCALE_VERSION}_amd64.tgz"
+          sudo install -m 0755 "tailscale_${TAILSCALE_VERSION}_amd64/tailscale" "tailscale_${TAILSCALE_VERSION}_amd64/tailscaled" /usr/local/bin/
+
+      - name: Join the tailnet as an ephemeral tag:ci node
+        env:
+          TS_AUTHKEY: ${{ steps.op.outputs.TS_AUTHKEY || secrets.TS_AUTHKEY }}
+        run: |
+          sudo mkdir -p /run/tailscale
+          # shellcheck disable=SC2024  # the runner user owns the log on purpose
+          sudo tailscaled --state=mem: --socket=/run/tailscale/tailscaled.sock >"$RUNNER_TEMP/tailscaled.log" 2>&1 &
+          for _ in $(seq 1 20); do sudo tailscale status >/dev/null 2>&1 && break; sleep 1; done
+          sudo tailscale up --login-server "$LOGIN_SERVER" --auth-key "$TS_AUTHKEY" \
+            --hostname "gha-${APP_NAME}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --accept-dns=false --timeout 60s
+
+      - name: SSH credentials (files only, host key pinned)
+        env:
+          DEPLOY_SSH_KEY: ${{ steps.op.outputs.DEPLOY_SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ steps.op.outputs.DEPLOY_KNOWN_HOSTS || secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
+          ip=$(sudo tailscale ip -4 "$DEPLOY_HOST") && [ -n "$ip" ] \
+            || { echo "::error::$DEPLOY_HOST is not on the tailnet (check DEPLOY_HOST and the VM)"; exit 1; }
+          echo "VM_IP=$ip" >>"$GITHUB_ENV"
+
+      - name: Ship the release and deploy it; the VM rolls back if it is not healthy
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          rel="${SRC_SHA::12}-$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))"
+          gate() { ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o HostKeyAlias="$DEPLOY_HOST" "app@$VM_IP" "$@"; }
+          gate put "$rel" compose.yml <deploy/homelab/compose.yml
+          gate put "$rel" .env <"$RELEASE_ENV"
+          rm -f "$RELEASE_ENV"
+          printf '%s\n' "$GHCR_TOKEN" | gate deploy "$rel" "$GITHUB_ACTOR"
+          { echo "### Deployed $TARGET_ENV"; echo; echo "- release \`$rel\`"; } >>"$GITHUB_STEP_SUMMARY"
+          gate status
+
+      - name: Leave the tailnet
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/release.env" ~/.ssh/deploy
+          sudo tailscale logout 2>/dev/null || true
+          sudo pkill tailscaled 2>/dev/null || true

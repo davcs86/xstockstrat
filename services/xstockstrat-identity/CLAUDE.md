@@ -22,12 +22,15 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 |---|---|---|
 | gRPC | `50058` | Internal service-to-service (protobuf) |
 
-This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing all
-eleven methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
+This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing every
+`IdentityService` method, including: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
 the OAuth 2.1 backend RPCs (feature 049 Part B)
 `RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`,
 and the per-user authorized-app RPCs (feature 051) `ListAuthorizedApps`, `RevokeAuthorizedApp`).
 The frontends validate tokens over gRPC `50058`.
+`ListAdminUserIds` (feature 242, `src/grpc/adminDirectory.ts`) returns active admin user IDs for
+notify's untargeted Web Push audience. It is authorized by the exact mTLS peer SAN
+`xstockstrat-notify` only and is header-blind (IDENTITY-12).
 The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect router) was removed.
 
 ### OAuth 2.1 backend (feature 049 Part B)

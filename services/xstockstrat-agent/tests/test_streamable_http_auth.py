@@ -99,3 +99,5 @@ def test_set_config_receives_the_real_callers_scope_over_the_real_transport():
     # ("x-access-scope", "7") tuple, so every management tool now forwards the caller's real scope
     # end-to-end exactly like this.
     assert mock_set.await_args.kwargs["access_scope"] == 15
+    # Feature 241: the undeclared "author" argument is dropped at the transport, never forwarded.
+    assert "author" not in mock_set.await_args.kwargs

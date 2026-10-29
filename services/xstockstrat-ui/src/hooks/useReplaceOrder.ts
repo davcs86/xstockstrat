@@ -8,5 +8,6 @@ export function useReplaceOrder() {
   return useInvalidatingMutation<ReplaceOrderInput, Order>(
     (req) => tradingClient.replaceOrder(req),
     (req) => (req.orderId ? [['orders'], ['order', req.orderId]] : [['orders']]),
+    { meta: { errorHandled: true } },
   );
 }

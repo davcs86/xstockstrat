@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: identity/v1/identity.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IdentityServiceClient = exports.IdentityServiceService = exports.SetUserActiveResponse = exports.SetUserActiveRequest = exports.SetUserRolesResponse = exports.SetUserRolesRequest = exports.UpdatePasswordResponse = exports.UpdatePasswordRequest = exports.GetUserResponse = exports.GetUserRequest = exports.ListUsersResponse = exports.ListUsersRequest = exports.CreateUserResponse = exports.CreateUserRequest = exports.User = exports.AdminUpdateUserMetadataRequest = exports.AdminGetUserMetadataRequest = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.Role = exports.protobufPackage = void 0;
+exports.IdentityServiceClient = exports.IdentityServiceService = exports.ListAdminUserIdsResponse = exports.ListAdminUserIdsRequest = exports.SetUserActiveResponse = exports.SetUserActiveRequest = exports.SetUserRolesResponse = exports.SetUserRolesRequest = exports.UpdatePasswordResponse = exports.UpdatePasswordRequest = exports.GetUserResponse = exports.GetUserRequest = exports.ListUsersResponse = exports.ListUsersRequest = exports.CreateUserResponse = exports.CreateUserRequest = exports.User = exports.AdminUpdateUserMetadataRequest = exports.AdminGetUserMetadataRequest = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.Role = exports.protobufPackage = void 0;
 exports.roleFromJSON = roleFromJSON;
 exports.roleToJSON = roleToJSON;
 exports.roleToNumber = roleToNumber;
@@ -3109,6 +3109,100 @@ exports.SetUserActiveResponse = {
         return message;
     },
 };
+function createBaseListAdminUserIdsRequest() {
+    return {};
+}
+exports.ListAdminUserIdsRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListAdminUserIdsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.ListAdminUserIdsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseListAdminUserIdsRequest();
+        return message;
+    },
+};
+function createBaseListAdminUserIdsResponse() {
+    return { userIds: [] };
+}
+exports.ListAdminUserIdsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.userIds) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListAdminUserIdsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userIds.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userIds: globalThis.Array.isArray(object?.userIds)
+                ? object.userIds.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.user_ids)
+                    ? object.user_ids.map((e) => globalThis.String(e))
+                    : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userIds?.length) {
+            obj.userIds = message.userIds;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListAdminUserIdsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListAdminUserIdsResponse();
+        message.userIds = object.userIds?.map((e) => e) || [];
+        return message;
+    },
+};
 exports.IdentityServiceService = {
     authenticateUser: {
         path: "/xstockstrat.identity.v1.IdentityService/AuthenticateUser",
@@ -3315,6 +3409,19 @@ exports.IdentityServiceService = {
         requestDeserialize: (value) => exports.SetUserActiveRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.SetUserActiveResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.SetUserActiveResponse.decode(value),
+    },
+    /**
+     * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+     * xstockstrat-notify only; every request header is ignored.
+     */
+    listAdminUserIds: {
+        path: "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListAdminUserIdsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListAdminUserIdsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListAdminUserIdsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListAdminUserIdsResponse.decode(value),
     },
 };
 exports.IdentityServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IdentityServiceService, "xstockstrat.identity.v1.IdentityService");

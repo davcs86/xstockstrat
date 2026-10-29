@@ -35,6 +35,8 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry import metrics
 
+from app.config.watcher import int_positive
+from app.engine.fundsignal_loop import fundsignal_source_slug
 from app.handlers.servicer import (
     _fetch_historical_fundamentals_paged,
     _normalize_symbol,
@@ -43,6 +45,7 @@ from app.handlers.servicer import (
     _row_to_strategy_definition,
     _snapshot_periods,
     blend_strategy_id,
+    default_cooldown_days,
 )
 from app.identity import SYSTEM_IDENTITY, owner_metadata
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
@@ -159,7 +162,7 @@ async def resolve_fundamentals_universe(ingest, marketdata, cfg) -> set:
         if ingest is None or marketdata is None:
             return set()
         # The fundamentals source slug is config-driven, never hardcoded.
-        slug = cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
+        slug = fundsignal_source_slug(cfg)
         # Signals set S: active signals filtered to the fundamentals source, paginated.
         now = Timestamp()
         now.GetCurrentTime()
@@ -326,7 +329,7 @@ class LiveEvaluationLoop:
     async def run_forever(self):
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
         while True:
-            interval = self._cfg.get_int("analysis.engine.eval_interval_seconds", default=60)
+            interval = int_positive(self._cfg, "analysis.engine.eval_interval_seconds", 60)
             await asyncio.sleep(interval)
             if self._lock.locked():
                 log.info("live_loop: previous cycle still running — skipping")
@@ -347,7 +350,7 @@ class LiveEvaluationLoop:
         a rotating cursor evaluates at most ``max_strategies_per_cycle`` of them per cycle — so a
         large fleet is covered fairly across cycles instead of the first N always winning.
         """
-        max_pairs = self._cfg.get_int("analysis.engine.max_strategies_per_cycle", default=50)
+        max_pairs = int_positive(self._cfg, "analysis.engine.max_strategies_per_cycle", 50)
         throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
         # Fundamentals-universe force-run: blend_id names the governed strategy; blend_enabled is
         # the operator kill-switch (get_bool honors an explicit false via HasField).
@@ -745,10 +748,9 @@ class LiveEvaluationLoop:
         current_bar_dt = bars[-1].time.ToDatetime(tzinfo=UTC)
         cooldown_days = effective_cooldown_days(
             definition.cooldown_days if definition.HasField("cooldown_days") else None,
-            self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+            default_cooldown_days(self._cfg),
         )
-        # get_int_present (not get_int) — a configured 0 is a legitimate exit-cooldown default and
-        # must not be zero-trapped.
+        # A configured 0 is a legitimate exit-cooldown default (no minimum hold).
         exit_cooldown_days = effective_cooldown_days(
             definition.exit_cooldown_days if definition.HasField("exit_cooldown_days") else None,
             self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
@@ -841,6 +843,7 @@ class LiveEvaluationLoop:
                 source_service="xstockstrat-analysis",
                 tags=[f"strategy_id:{definition.strategy_id}"],
                 context=ctx,
+                target_user_id=definition.user_id,
             )
         )
 
@@ -857,6 +860,7 @@ class LiveEvaluationLoop:
                 source_service="xstockstrat-analysis",
                 tags=[f"strategy_id:{definition.strategy_id}"],
                 context=ctx,
+                target_user_id=definition.user_id,
             )
         )
 

@@ -75,8 +75,12 @@ export default function UsersPage() {
   const users = useMemo(() => data?.users ?? [], [data]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: USERS_KEY });
-  const onError = (err: unknown) =>
-    setActionError(err instanceof ConnectError ? err.rawMessage : 'Action failed');
+  // Every mutation here shows its error in the page's CardNotice, so it opts out of the global fallback.
+  const errorOptions = {
+    onError: (err: unknown) =>
+      setActionError(err instanceof ConnectError ? err.rawMessage : 'Action failed'),
+    meta: { errorHandled: true },
+  };
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
@@ -103,7 +107,7 @@ export default function UsersPage() {
       setActionError(null);
       invalidate();
     },
-    onError,
+    ...errorOptions,
   });
 
   const passwordMut = useMutation({
@@ -114,7 +118,7 @@ export default function UsersPage() {
       setPwValue('');
       setActionError(null);
     },
-    onError,
+    ...errorOptions,
   });
 
   const rolesMut = useMutation({
@@ -125,7 +129,7 @@ export default function UsersPage() {
       setActionError(null);
       invalidate();
     },
-    onError,
+    ...errorOptions,
   });
 
   const activeMut = useMutation({
@@ -135,7 +139,7 @@ export default function UsersPage() {
       setActionError(null);
       invalidate();
     },
-    onError,
+    ...errorOptions,
   });
 
   const columns = useMemo<ColumnDef<User>[]>(
@@ -324,9 +328,7 @@ export default function UsersPage() {
         <div className="space-y-4">
           {/* Prevent self-demotion: lock admin when editing your own roles */}
           {rolesUser?.userId === currentUserId && rolesUser.roles.includes(Role.ADMIN) && (
-            <p className="text-xs text-muted-foreground">
-              You cannot remove your own admin role.
-            </p>
+            <p className="text-xs text-muted-foreground">You cannot remove your own admin role.</p>
           )}
           <RoleCheckboxes
             selected={rolesDraft}

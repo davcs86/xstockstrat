@@ -5,9 +5,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/xstockstrat/marketdata/internal/source"
 )
@@ -188,5 +191,58 @@ func TestGetFundamentals_EmptyQuoteIsNoFundamentals(t *testing.T) {
 	_, err := c.GetFundamentals(context.Background(), "VOO")
 	if !errors.Is(err, source.ErrNoFundamentals) {
 		t.Fatalf("err = %v, want errors.Is(source.ErrNoFundamentals)", err)
+	}
+}
+
+// assertNoKeyLeak fails unless err names the vendor and path while carrying neither the key nor a *url.Error.
+func assertNoKeyLeak(t *testing.T, err error, wantPath string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "fmp") || !strings.Contains(msg, wantPath) {
+		t.Fatalf("error %q does not name fmp and %s", msg, wantPath)
+	}
+	if strings.Contains(msg, "k-secret") || strings.Contains(msg, "apikey=") {
+		t.Fatalf("error leaked api key: %q", msg)
+	}
+	if errors.As(err, new(*url.Error)) {
+		t.Fatalf("error chain still holds a *url.Error: %q", msg)
+	}
+}
+
+func newLeakClient(baseURL string) *Client {
+	return NewClient(ClientConfig{BaseURL: baseURL, APIKey: "k-secret", Metrics: []string{"core"}})
+}
+
+// Feature 254 @AC-1: a transport failure (connection refused) never reveals the API key.
+func TestTransportError_DoesNotLeakAPIKey_AC1(t *testing.T) {
+	c := newLeakClient("http://127.0.0.1:1")
+	_, err := c.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
+	assertNoKeyLeak(t, err, "/stable/quote")
+	_, err = c.FetchSector(context.Background(), "AAPL")
+	assertNoKeyLeak(t, err, "/stable/profile")
+}
+
+// Feature 254: a URL that fails to parse never reveals the API key.
+func TestBuildRequestError_DoesNotLeakAPIKey(t *testing.T) {
+	c := newLeakClient("http://127.0.0.1:1\x7f")
+	_, err := c.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
+	assertNoKeyLeak(t, err, "/stable/quote")
+}
+
+// Feature 254: redaction keeps the deadline cause reachable via errors.Is.
+func TestTransportError_PreservesDeadlineCause(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := newLeakClient(srv.URL).GetFundamentalsMulti(ctx, []string{"AAPL"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want errors.Is(context.DeadlineExceeded)", err)
+	}
+	if errors.As(err, new(*url.Error)) {
+		t.Fatalf("error chain still holds a *url.Error: %v", err)
 	}
 }

@@ -20,6 +20,7 @@ from gen.marketdata.v1 import marketdata_pb2
 import app.engine.live_loop as live_loop_module
 from app.engine.live_loop import LiveEvaluationLoop
 from app.services.evaluator import FormulaExecutionError
+from tests.conftest import snapshot_watcher
 
 # Fixed default bar time; feature 069 made _eval_pair read bars[-1].time, so the mock bar must
 # carry a real, tz-aware protobuf Timestamp (an object() stub has no .time).
@@ -81,6 +82,21 @@ class TestLiveEvaluationLoopStateTracking:
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
         await loop._eval_pair(defn, "AAPL", throttle=0)
         assert loop._notify.EmitAlert.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_242_ac4_trigger_alert_targets_owner(self):
+        """@AC-4: a live-loop strategy trigger alert is pushed to the strategy owner only."""
+        loop = _make_loop()
+        defn = analysis_pb2.StrategyDefinition(
+            strategy_id="strat-1", user_id="user-42", display_name="S1"
+        )
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        req = loop._notify.EmitAlert.await_args.args[0]
+        assert req.target_user_id == "user-42"
+        assert req.category == "strategy"
+        assert req.severity == live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING
+        assert req.title == "Strategy strat-1 entry on AAPL"
 
     @pytest.mark.asyncio
     async def test_no_bars_no_alert(self):
@@ -1411,6 +1427,24 @@ class TestLiveLoopFundamentalsDenyEntry_feature215:
         assert req.severity == live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING
         assert req.category == "strategy"
         assert f"strategy_id:{self._SID}" in req.tags
+        assert req.target_user_id == "u1"
+
+    @pytest.mark.asyncio
+    async def test_242_ac7_fundamentals_alert_targets_owner(self):
+        """@AC-7: the fundamentals-unavailable alert is pushed to the strategy owner only."""
+        loop = self._loop(self._not_found)
+        defn = self._blend()
+        defn.user_id = "user-42"
+        defn.strategy_id = "strat-2"
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(defn, "MSFT", throttle=0)
+        alerts = self._fund_alerts(loop)
+        assert len(alerts) == 1
+        req = alerts[0].args[0]
+        assert req.target_user_id == "user-42"
+        assert req.category == "strategy"
+        assert req.severity == live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING
+        assert req.title == "Strategy strat-2: fundamentals unavailable for MSFT"
 
     @pytest.mark.asyncio
     async def test_held_exit_still_fires(self):
@@ -1535,3 +1569,44 @@ class TestLiveLoopFundamentalsDenyEntry_feature215:
         assert len(fed) == len(old) + len(AAPL_PIT_PERIODS)
         assert loop._fund_unavailable == set()
         assert loop._last_state[("u1", "dy_gate", "AAPL")] is True
+
+
+class TestStoredZeroAlertThrottle:
+    """Feature 244 @AC-9: a stored alert_throttle_seconds of 0 reaches _eval_pair and disables
+    the throttle."""
+
+    @pytest.mark.asyncio
+    async def test_stored_zero_throttle_reaches_eval_pair(self):
+        loop = _make_loop()
+        loop._cfg = snapshot_watcher(**{"analysis.engine.alert_throttle_seconds": 0})
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "user_id": "u1",
+                    "display_name": "S1",
+                    "active": True,
+                    "live_enabled": True,
+                    "definition_json": {"signal_params": {"symbols": ["AAPL"]}},
+                }
+            ]
+        )
+        loop._eval_pair = AsyncMock()
+        await loop._run_cycle()
+        loop._eval_pair.assert_awaited()
+        assert [call.args[2] for call in loop._eval_pair.await_args_list] == [0]
+
+    @pytest.mark.asyncio
+    async def test_zero_throttle_emits_an_alert_inside_the_old_window(self):
+        loop = _make_loop()
+        key = ("u1", "s1", "AAPL")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
+        bar_dt = datetime(2026, 4, 1, tzinfo=UTC)
+        loop._last_state[key] = True
+        loop._replayed.add(key)  # bypass replay so the exit transition is exercised directly
+        loop._last_entry_at[key] = bar_dt - timedelta(days=1)
+        loop._last_alert_ts[key] = time.monotonic() - 10
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
+        loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        loop._notify.EmitAlert.assert_awaited_once()

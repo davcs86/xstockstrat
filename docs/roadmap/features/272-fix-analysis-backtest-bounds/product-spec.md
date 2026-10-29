@@ -44,13 +44,54 @@ no implementation. See the report.
 - xstockstrat-analysis (fix site)
 - xstockstrat-config (owns the seeded key; a migration only if design retires it)
 
+## Functional Requirements
+
+- **FR-1 (D-28).** When `_fetch_bars_paged` requests a page with a non-empty `page_token` and the response adds no
+  bar strictly newer than the last bar already collected, it raises `_BarFetchError` ("refusing to return a truncated
+  series") and returns no series. Every caller listed above inherits the error instead of a first-page-only series.
+  The existing `tests/test_warmup.py::test_identical_page_with_identical_token_terminates` (`:236`) is inverted to
+  expect the error. That is a deliberate test change, not a regression (C-18).
+- **FR-2 (D-28).** A genuine end of data still returns the full collected series without error: an empty first page,
+  or a response whose `next_page_token` is empty.
+- **FR-3 (D-29, enforce, the proposed default under OQ-1).** `RunBacktest` reads
+  `analysis.backtest.max_duration_seconds` (an integer number of seconds) at call time and bounds the backtest's
+  wall-clock run by it. When the run exceeds it, the RPC aborts with gRPC `DEADLINE_EXCEEDED` and a message naming
+  the limit, matching the screener's existing deadline (`analysis.screener.max_duration_seconds`, `servicer.py:3786`).
+  The read is presence-aware per feature 244: a stored value is honored, and only an absent key falls back to the
+  documented default `300`. Design fixes how a value ≤ 0 is treated (reject, or "no limit") and records that choice.
+  If design instead picks "retire", FR-3 and @AC-3 are rewritten before `/sdd-spec`. See OQ-1.
+
+## Consumer Surface(s)
+
+Behavior visible to traders and operators changes, so C-14 applies:
+
+- **Backtest callers:** the `/insights` backtest view, the symbol-page backtest, the agent `run_backtest` MCP tool,
+  and the `strat-lab` plugin's `backtest` skill. A re-served page now fails the backtest loudly instead of producing
+  results on truncated data (FR-1). A run that exceeds the limit now ends with `DEADLINE_EXCEEDED` (FR-3). Per root
+  `CLAUDE.md` and `docs/patterns/strat-lab-plugin.md`, the `backtest` skill must document both new failure modes in
+  the same PR.
+- **Operators:** setting `analysis.backtest.max_duration_seconds` through `/config-ui` or the agent `set_config` tool
+  now changes backtest behavior. Before the production value of 120 s takes effect, design must check current dev
+  backtest durations against it.
+
 ## Fix Scope
 
-- [x] No proto changes anticipated
-- [ ] No database migrations anticipated — retiring D-29's key needs a new config migration; wiring it needs none
-- [ ] No config key changes anticipated — D-29 either starts reading `analysis.backtest.max_duration_seconds` or retires it
+- [x] No proto changes
+- [x] No database migrations under the proposed default (enforce). Retiring the key (the OQ-1 alternative) would
+  require a new `services/xstockstrat-config/migrations/NNN_*.up.sql`/`.down.sql` pair. The next free number is 033:
+  the trunk tip is 030, 031 is claimed by feature 243, and 032 is claimed by feature 248.
+- [x] No new config keys. The existing `analysis.backtest.max_duration_seconds` gains its first reader (FR-3). Its
+  name, type and seeded values are unchanged.
 
-(Update after investigation — remove or replace each item as needed)
+## Open Questions
+
+- **OQ-1 (owner: `/sdd-design`, due before `design-approved`). Should D-29 enforce the key or retire it?** The spec
+  proposes **enforce**. The key is seeded in both environments and documented as a live limit, the screener already
+  enforces the same pattern, and enforcing needs no migration. The **retire** alternative would remove the key with
+  config migration 033 (up and down files, run after 031 and 032) and drop it from the analysis `CLAUDE.md` key
+  table, which also keeps it out of `docs/reports/2026-10-19-dead-config-keys-defect.md`. If design chooses retire,
+  FR-3 and @AC-3 must be rewritten to a single retirement outcome, and the change recorded in `context.md`. The
+  question is not left unresolved by default: absent a design decision to the contrary, FR-3 stands as written.
 
 ## Acceptance Criteria
 
@@ -63,4 +104,8 @@ dev.
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
 - Marketdata's `cursor = start` fallback on an unparseable page token (the server-side cause of a re-served page)
-- The zero-value getter trap for this key (feature 244); if D-29 wires the key, read it presence-aware
+- The getter-wide zero-value trap (feature 244). This feature only reads its one key presence-aware (FR-3) and rebases
+  on 244.
+- The screener deadline (`analysis.screener.max_duration_seconds`) and its behavior; FR-3 aligns with it but does not
+  change it
+- Per-caller retry or fallback logic in the `_fetch_bars_paged` callers; they only inherit FR-1's error

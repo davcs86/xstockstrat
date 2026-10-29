@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { ConnectError } from '@connectrpc/connect';
 import type { JsonObject } from '@bufbuild/protobuf';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,6 +19,8 @@ import {
 import { AppShell } from '@/components/insights/AppShell';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
+import { CardNotice } from '@/components/shared/CardNotice';
+import { errMessage } from '@/lib/errMessage';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { RowActionsMenu } from '@/components/shared/RowActionsMenu';
 import { SYSTEM_SOURCE_OWNER, useOwnSignalSources } from '@/hooks/useOwnSignalSources';
@@ -134,10 +135,6 @@ function splitPatterns(s: string): string[] {
     .filter(Boolean);
 }
 
-function errMessage(err: unknown): string {
-  return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
-}
-
 function buildConfigJson(form: FormState): JsonObject {
   if (isEmailType(form.sourceType)) {
     const cfg: JsonObject = {
@@ -195,6 +192,7 @@ export default function SignalSourcesPage() {
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   // Inline reliability-weight cell editing (separate from the full edit modal).
   const [editingWeightSlug, setEditingWeightSlug] = useState<string | null>(null);
@@ -254,10 +252,16 @@ export default function SignalSourcesPage() {
   const handleToggle = useCallback(
     (src: SignalSource) => {
       // Reactivation and deactivation are distinct verbs; update does not touch `active`.
-      manageMutate({
-        source: { slug: src.slug },
-        operation: src.active ? 'deactivate' : 'reactivate',
-      });
+      manageMutate(
+        {
+          source: { slug: src.slug },
+          operation: src.active ? 'deactivate' : 'reactivate',
+        },
+        {
+          onSuccess: () => setToggleError(null),
+          onError: (e) => setToggleError(errMessage(e)),
+        },
+      );
     },
     [manageMutate],
   );
@@ -526,6 +530,7 @@ export default function SignalSourcesPage() {
           loadingText="Loading sources…"
           errorText={`Signal sources unavailable${error ? `: ${errMessage(error)}` : ''}`}
         />
+        {toggleError && <CardNotice variant="error">{toggleError}</CardNotice>}
         {!loading && !error && (
           <Card>
             <CardContent className="p-0">
