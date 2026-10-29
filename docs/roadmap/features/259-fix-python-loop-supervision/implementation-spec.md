@@ -1,6 +1,6 @@
 # Implementation Spec: fix-python-loop-supervision
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/259-fix-python-loop-supervision/feature.md`
 **Total Steps**: 15
@@ -867,7 +867,7 @@ grep -n "conftest" tests/test_pnl_pattern_consumer.py   # expect none (single co
 
 ### Step 15 — docs: analysis CLAUDE.md, config-startup pattern, findings, merge order; teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/`, `docs/roadmap/features/`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -978,3 +978,20 @@ _Populated by /sdd-execute as implementation proceeds._
   passed across the consumer, query, owner-header-guard and scratch tests.
 - **Disposition**: verification fallback; no spec change. The 13 interim failures are cleared by Step 14 item 0 (the
   Step 11 → Step 12 precedent). Step 14 must land before the integration PR.
+
+### 2026-10-29 — Step 15: teardown by hand (context-forge `context-constitution` unavailable)
+- **Spec said**: run `/context-forge:context-constitution refresh` scoped to the touched context files, or re-read
+  them by hand if the plugin is unavailable.
+- **Done**: only `context-forge:context-scrubber` is loaded in this session, so the touched files (analysis
+  `CLAUDE.md`, analysis `docs/context-constitution.md` + `-findings.md`, `docs/patterns/config-startup.md`) were
+  re-read against the Step 1-14 code. One grounded drift fixed in the row this step already edits: the
+  findings:23 evidence column `(~L136; `create_task` ~L143)` → `(~L137; `spawn` ~L144)`. No other drift found
+  (`config-startup.md:16`/`:149` "on error" still true; no `AioRpcError`/`_watch_loop`/boot `create_task` claims left).
+- **Disposition**: manual reconciliation; the integration PR body must record both the plugin's absence and this
+  reconciliation (root `CLAUDE.md` § Teardown).
+
+### 2026-10-29 — Step 15: merge-order row reflects peers already merged
+- **Spec said**: list 244/246/260 rebases and the 268 indicators test file.
+- **Done**: 246 and 268 already landed on `main-dev` and are merged into this branch, so the 259 row says so instead
+  of listing them as pending rebases; 248 stays the "Must wait for" column (soft, `sleep(2)` kept byte-identical).
+- **Disposition**: wording only; no spec change.

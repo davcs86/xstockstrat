@@ -984,3 +984,25 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   The 2 interim `tests/test_owner_header_guard.py` failures from Step 13 are fixed by the widened fakes.
 - Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
 - Deviations: none.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 15
+
+### Step 15 — docs: analysis CLAUDE.md, config-startup pattern, findings, merge order; teardown [done]
+- Analysis `CLAUDE.md`: § Shared durable scheduler gains the feature-259 supervision paragraph (`retry_until_ok` /
+  `run_supervised`, `_LOOP_ERROR_BACKOFF_SECONDS` = 30, `spawn` for every boot task, peers reuse it); § P&L pattern
+  consumer gains the per-event retry/park bullet (six fixed invariants, `_is_poison` allow-list and why not
+  `is_transient_db_error`, replay reset rule, probe at 5, stream-fail escalation, log → emit → advance) and the
+  accepted-limitations bullet; § Ledger Events Emitted gains `analysis.pnl.event_parked`.
+- `docs/patterns/config-startup.md:87`: `_watch_loop` → `_watch`, "on `AioRpcError`" → any exception
+  (`CancelledError` propagates), retained `_watch_task` with ERROR exit log.
+- Findings:23: "Addressed by feature 259" note; evidence column re-pointed to `spawn` ~L144.
+- `merge-order.md:84`: new 259 row (248 first, soft; 244/260 rebases; 262 reuses `spawn`; 246 and 268 already
+  merged; replay amplification vs 257).
+- TDD: N/A (docs). Baseline (pre-edit) verification: no `event_parked`/`supervision` hits, `config-startup.md:87`
+  `AioRpcError` hit, no merge-order or findings 259 hit. After: all five greps hold (`AioRpcError|_watch_loop` none).
+- Teardown: `context-forge:context-constitution` is not loaded in this session (only `context-scrubber`); manual
+  reconciliation done (Deviation Log 2026-10-29 — Step 15). The integration PR body must record both facts.
+- Open Threads closed: the merge-order 259 entry and the Step 15 limitations documentation (sdd-spec session).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-startup.md`,
+  `services/xstockstrat-analysis/docs/context-constitution-findings.md`, `docs/roadmap/features/merge-order.md`
+- Progress: 15 done / 15 total. Status → `code-completed`. Next: merge-order gate (248 soft-first) and integration PR.
