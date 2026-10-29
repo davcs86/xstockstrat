@@ -389,3 +389,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Batch peers with no feature directory on this checkout (fix-marketdata-secret-exposure,
     fix-offline-book-consistency, fix-python-loop-supervision, fix-fundsignal-emit-accounting), and 257/263/266,
     were not overlap-scanned. Re-scan them when they reach implementation-ready.
+
+---
+
+## Session 2026-10-29 (/sdd-execute sequential — branch setup + re-spec)
+
+- Branch setup (§5.3): merged `origin/main-dev` into `feature/fix-config-stream-resilience` (normal merge, no
+  conflicts). The ledger-guard check (`--own-slug fix-config-stream-resilience --base origin/main-dev --fix`)
+  reported clean, so the merge commit needed no repair.
+- Re-spec of Steps 3, 4, 5, 8, 2, 1 and 9 (bodies only) against the merged tree:
+  - Steps 3/4: the `setConfig` anchors moved +2 because main-dev added the `platform.trading_state`
+    INVALID_ARGUMENT block (`configServiceImpl.ts:418-430`). The gates are now `:449-465`, NOT_FOUND `:468-474`,
+    and the write try `:502-524`. Symbols and code shapes are unchanged. `getConfig` `:315-328` / `:319` and
+    `getSecret` `:335-369` match.
+  - Step 5: no mismatch; it is marked re-verified. Step 6's ledger fake-call anchors were re-stamped as well
+    (`:597-598`, `:609`).
+  - Step 8: feature 252 has landed on this branch. Ledger `test:coverage` is `tsc && c8 … node --test
+    dist/__tests__/*.test.js` (`package.json:14`), the `before()` import is unguarded (`:10-12`, asserted at
+    `:18`), and no `if (!impl) return;` skip remains. So the Step 8 precondition gate now passes. The
+    § Step Dependencies "Step 8 hard dependency" paragraph and the open item "Step 8 blocked until 252…" above
+    are therefore satisfied. They were left as written, because this re-spec covers step bodies only.
+  - Step 2: ledger `FakeClient` anchors re-stamped (`eventNotifier.test.ts:22/27/47`). The log-sink spike still
+    needs `pnpm install` first.
+  - Step 1: all anchors match. The pg_terminate_backend check cannot run in this worktree session, because
+    starting a database is barred. It takes the spec's own fallback (dev app, integration-PR blocker).
+  - Step 9: CONFIG-1's line hints are already stale (`reloadNamespace` `:203`, `changedKeys` `:220`).
+    Instruction 2's re-stamp covers this.
