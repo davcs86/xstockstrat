@@ -29,6 +29,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 7 + 8 done in one commit (operator Option B) — untargeted Web Push resolves the admin audience (`listAdminUserIds(md)` → `WHERE user_id = ANY($1::text[])`, lookup failure → ERROR once per 60s, no push); `dispatch(alert, call.metadata)`; `createAdminDirectory()` wired in `index.ts`; feature-165 broadcast test rewritten (AC-1/2/5/8/11); notify suite 79 → 88 pass, coverage/lint green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done — portfolio `emitRiskAlert(ctx, userID, msg)` sets `TargetUserId: userID` on both risk alerts (concentration + drawdown); build/lint/service tests green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done — portfolio tests pin `TargetUserId` to the owner on concentration (`@AC-3`) and drawdown (`@AC-9`, new `@AC-6`) risk alerts; red→green, coverage, lint green |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done — analysis live loop sets `target_user_id=definition.user_id` on the strategy-trigger and fundamentals-unavailable alerts; `fundsignal_loop` stays a broadcast; ruff green |
 
 ---
 
@@ -68,4 +69,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 11 (service: analysis live-loop alerts target the strategy owner) onward
+`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 12 (test: analysis owner targeting) onward

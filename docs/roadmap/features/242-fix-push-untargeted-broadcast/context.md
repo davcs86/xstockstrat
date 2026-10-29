@@ -540,3 +540,15 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   are inside the new test (C-13 inline sentinel).
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go`.
 - Out of scope: none.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 11 (analysis live-loop alerts target the owner)
+
+- Step 11 done. In `services/xstockstrat-analysis/app/engine/live_loop.py`, both `EmitAlertRequest` builders
+  (`_emit_alert`, `_emit_fundamentals_unavailable_alert`) now set `target_user_id=definition.user_id` (`:844`, `:861`).
+  Titles, bodies, tags and dedup are unchanged. `fundsignal_loop._emit_warning` is untouched and stays a broadcast.
+- TDD (P-06), on an uncommitted scratch test that Step 12 replaces. RED: `assert '' == 'user-42'` (trigger) and
+  `assert '' == 'u1'` (fundamentals-unavailable). GREEN: both pass; `tests/test_live_loop.py` still passes.
+- Verification: `ruff check .` all passed; `ruff format --check .` 113 files already formatted; the grep finds 2
+  `target_user_id=definition.user_id` hits; `fundsignal_loop.py` has no `target_user_id`.
+- Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`.
+- Out of scope: none.

@@ -556,7 +556,7 @@ New logic is in an excluded package (`internal/service/`) — no coverage thresh
 
 ### Step 11 — service: analysis live-loop alerts target the strategy owner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -850,3 +850,7 @@ _Populated by /sdd-execute as implementation proceeds._
   reports `0 issues.` (b) Step 9's production change was already on the branch, so RED was captured by running the
   new tests against the pre-Step-9 `portfolio_service.go` (`574dc1cf~1`), swapped in temporarily and restored
   before GREEN. That file is not part of this commit.
+- **Step 11 (2026-10-29) — TDD-evidence mechanics only, no code deviation.** The spec puts the `@AC-4`/`@AC-7`
+  analysis tests in Step 12, so the step-11 RED→GREEN gate ran on an uncommitted scratch test (trigger alert for
+  owner `user-42` and fundamentals-unavailable alert for owner `u1` must carry `target_user_id`), deleted before
+  commit. Step 12 still owns the committed tests. Spec line cites (`:835-844`, `:851-860`) matched the tree.
