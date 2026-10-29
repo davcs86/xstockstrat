@@ -738,3 +738,13 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - Verification: `test:coverage` 50 files / 274 tests, thresholds met (`src/lib/**` 72% lines); `lint` exits 0; prettier clean on both files. The Step 8 carry-over red (`middleware.test.ts:60`) is gone.
 - Note: another worktree's e2e run held port 3000; the GREEN e2e run waited for the port to free (the e2e harness has fixed ports).
 
+## Session 2026-10-29 — Step 10 (sdd-execute sequential)
+
+- Step 10 done (docs only, TDD N/A):
+  - `services/xstockstrat-ui/CLAUDE.md:235`: the middleware row now says the eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check, and that `agent-health` keeps its own 401.
+  - `services/xstockstrat-ui/docs/context-constitution.md:40`: the "opt-in and per-handler" gotcha is replaced. The new text covers the 30s `DEFAULT_UNARY_TIMEOUT_MS` unary default, unbounded streams, the per-call overrides (300s / 60s / 15s / 10s / `listOpportunities` `30_000`) and `forwardAdmin`'s `{ timeoutMs }`. `src/lib/deadlines.ts` is cited as authoritative.
+- Verification before the edit: the `deadlines.ts` grep had no match, and the "`forwardAdmin` takes no options" grep matched. After the edit, all three Verification greps pass.
+- Teardown: the context-forge `context-constitution` skill is not available in this session, so the reconciliation was done by hand (see the Deviation Log). The only extra drift was UI-3's `forward`/`forwardAdmin` `~L` hints, which were re-stamped. The integration PR body must record that the plugin was unavailable and describe the manual reconciliation.
+- `services/xstockstrat-ui/docs/context-constitution-findings.md:36` (`listOpportunities` literal) is left open (design item 1).
+- All 10 steps are done. Next: the §5.6 integration PR.
+

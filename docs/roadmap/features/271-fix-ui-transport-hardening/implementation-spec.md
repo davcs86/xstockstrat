@@ -587,7 +587,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/middleware.test.ts \
 
 ### Step 10 — docs: UI context docs + teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-ui/` docs
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify
@@ -683,3 +683,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **What**: Step 8 had already landed, so RED was captured by checking `src/middleware.ts` out from `a5103815~1` (pre-Step-8), running both suites, then restoring it with `git checkout HEAD --`. As in Steps 2–5, `e2e/auth.spec.ts` was run in the CI shape (`CI=1`, `pnpm build && pnpm start`), chromium only, because `/opt/pw-browsers` has no Firefox build. The `vitest` health describe adds `/trader/health/x` to the gated table; the e2e AC-4 table follows the `acceptance.feature` Examples exactly.
 - **Disposition**: no scope change. RED (pre-Step-8): vitest 9 failed / 19 passed (the lookalike case `expected false to be true`; all 8 health paths `expected 307 to be 200`); e2e 10 failed (8 health rows received 307; `/healthcheck-x` and `/health/anything` received 404). GREEN on `HEAD`: vitest 28/28, the full `auth.spec.ts` passes 38/38 (setup + 22 existing + 15 new), `test:coverage` 50 files / 274 tests with thresholds met, `lint` exits 0, prettier clean on both files.
+
+### Step 10 — teardown audit done by hand; UI-3 line hints re-stamped (2026-10-29)
+
+- **What**: Instruction 4 names `/context-forge:context-constitution refresh`, but this session exposes only `context-forge:context-scrubber`, so the `context-constitution` skill is unavailable. The teardown was reconciled by hand: every `path#symbol` anchor in `services/xstockstrat-ui/docs/context-constitution.md` was resolved against the tree by script (all resolve), and the `PUBLIC_HEALTH_PATHS`, `deadlines.ts`, `forward`/`forwardAdmin`, `connectClients.ts#unary`/`#stream`, `identity.ts#refreshSession` and BFF registration pointers were re-read. The only grounded drift found outside the gotcha was UI-3's `~L` hints (`#forward` ~L64 → ~L60, `#forwardAdmin` ~L80 → ~L76, shifted by Steps 1 and 6); they were re-stamped in the same file, and the file header got a 2026-10-29 refresh note.
+- **Disposition**: no scope change (both edits are inside the step's **Files**). The integration PR body must record that the plugin was unavailable and describe this manual reconciliation (root `CLAUDE.md` § Teardown). `services/xstockstrat-ui/docs/context-constitution-findings.md:36` (`listOpportunities` literal) stays open, per instruction 3.
