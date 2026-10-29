@@ -344,7 +344,7 @@ bash scripts/check-duplication.sh 2>/dev/null || (cd ../.. && bash scripts/check
 
 ### Step 5 — test: move the GetSecret describe of `secretsAndScope.test.ts` onto an mTLS wire harness
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts` — modify

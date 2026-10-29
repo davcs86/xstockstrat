@@ -429,3 +429,18 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: `pnpm run lint` exit 0 (warnings only, none in the touched files). The grep finds `function sh|mintLeaf|setEnv`
   only in `mtlsTestPki.ts`. jscpd was run directly instead of through the script (Deviation Log): 0 clones in config.
   The 46 repo-wide clones are all in files this step does not touch.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 5
+
+- Tooling setup (step 5): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter "xstockstrat-config..."`).
+- Step 5 done (D-40 prep). The `GetSecret allow-list + failure modes` describe in `secretsAndScope.test.ts` now mints a
+  test CA plus `xstockstrat-config` / `xstockstrat-marketdata` / `xstockstrat-ingest` leaves (`mtlsTestPki.ts`), binds
+  with `mtls.serverCredentials()`, and dials `client` (marketdata leaf) and `ingestClient` (ingest leaf) with
+  `mtls.clientCredentials()` + `mtls.targetOverride('xstockstrat-config')`. `ingestClient` is unused until Step 6
+  (accepted impl-spec review note). The five `it` blocks and the SetConfig describe are unchanged. The header comment
+  now says "GetSecret (over mTLS)".
+- TDD: N/A (transport change, no behavior change). Characterization before and after: 182/182 pass, and the five
+  GetSecret tests (AC-4, AC-5 x2, AC-16 x2) stay green under the still header-only marketdata grant. c8 all-files
+  lines are 86.77% both times (>= 40).
+- Verification: `pnpm run test:coverage` exit 0; `pnpm run lint` 0 errors (warnings only; the new `ingestClient: any`
+  mirrors the existing `client: any`); `git diff --quiet -- src/grpc/authz.ts` → untouched.

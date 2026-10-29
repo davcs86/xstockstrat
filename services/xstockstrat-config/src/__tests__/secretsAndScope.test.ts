@@ -5,14 +5,17 @@
  * GetConfig/ListKeys), AC-4/AC-5/AC-16 (GetSecret allow-list + distinct failure modes),
  * AC-11/AC-13/AC-14 (per-user overlay on GetConfig and WatchConfig, secrets stay redacted).
  *
- * GetSecret and setConfig-encrypt are exercised over a REAL loopback gRPC connection so metadata
- * delivery (the x-internal-caller gate) and the ts-proto wire shape are proven, not assumed
+ * GetSecret (over mTLS) and setConfig-encrypt are exercised over a REAL loopback gRPC connection so
+ * metadata delivery (the x-internal-caller gate) and the ts-proto wire shape are proven, not assumed
  * (docs/roadmap/ledger/fails.md 2026-07-27). Redaction/overlay read paths are driven by direct
  * handler calls with a mock pool.
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const TEST_KEY = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 process.env.CONFIG_SECRETS_ENCRYPTION_KEY = TEST_KEY;
@@ -21,6 +24,8 @@ import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 import { HEADER_ACCESS_SCOPE, HEADER_INTERNAL_CALLER, HEADER_USER_ID } from '../grpc/authz';
 import { encryptSecret } from '../crypto';
+import * as mtls from '../mtls';
+import { sh, mintLeaf, setEnv } from './mtlsTestPki';
 
 interface Handlers {
   existenceIsSecret?: boolean | null; // SELECT is_secret gate; null = not registered
@@ -63,21 +68,35 @@ function md(pairs: Record<string, string>): grpc.Metadata {
 describe('GetSecret allow-list + failure modes', () => {
   let server: grpc.Server;
   let client: any;
+  let ingestClient: any;
   const state: Handlers = {};
 
   before(async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'getsecret-mtls-'));
+    const ca = join(dir, 'ca.pem');
+    const caKey = join(dir, 'ca-key.pem');
+    sh('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', caKey, '-out', ca, '-days', '1', '-subj', '/CN=test-ca');
+    const caPem = readFileSync(ca, 'utf8');
+    const serverLeaf = mintLeaf(dir, 'xstockstrat-config', ca, caKey);
+    const marketdataLeaf = mintLeaf(dir, 'xstockstrat-marketdata', ca, caKey);
+    const ingestLeaf = mintLeaf(dir, 'xstockstrat-ingest', ca, caKey);
+
+    setEnv(...serverLeaf, caPem);
     server = new grpc.Server();
     server.addService(
       createConfigServiceDefinition(),
       new ConfigServiceImpl(makePool(state)) as unknown as grpc.UntypedServiceImplementation,
     );
     const port: number = await new Promise((resolve, reject) =>
-      server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (e, p) => (e ? reject(e) : resolve(p))),
+      server.bindAsync('127.0.0.1:0', mtls.serverCredentials(), (e, p) => (e ? reject(e) : resolve(p))),
     );
     const { ConfigServiceClient } = await import('@xstockstrat/proto/config/v1/config');
-    client = new ConfigServiceClient(`127.0.0.1:${port}`, grpc.credentials.createInsecure());
+    setEnv(...marketdataLeaf, caPem);
+    client = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
+    setEnv(...ingestLeaf, caPem);
+    ingestClient = new ConfigServiceClient(`127.0.0.1:${port}`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'));
   });
-  after(() => { client?.close(); server?.forceShutdown(); });
+  after(() => { client?.close(); ingestClient?.close(); server?.forceShutdown(); });
 
   function getSecret(metadata: grpc.Metadata, req: Record<string, unknown>) {
     return new Promise<{ err: any; res: any }>((resolve) =>
