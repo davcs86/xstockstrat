@@ -332,7 +332,7 @@ grep -rn "nonceAAAAAAAAAAA" --include="*_test.go" internal | wc -l   # literals 
 
 ### Step 4 — service: LST session — key material, coalesced handshake, `ssodh/init`, negative cache
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -432,7 +432,7 @@ grep -nE 'Errorf\(.*(PEM|pem)\b.*%s.*(Key|key)\)' internal/broker/ibkr*.go   # n
 
 ### Step 5 — test: session handshake, classification, coalescing, negative cache (AC-3/4/5/10 broker half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/testdata/ibkr.go` — modify (add `IBKRAuthHandler`)
@@ -1226,3 +1226,41 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Verification fallback: golangci-lint rebuilt.** The provisioned `~/go/bin/golangci-lint` v2.14.0 was built with
   go1.26 and refuses to load a `go 1.27.0` module. The same pinned v2.14.0 was rebuilt with go1.27.0 into a scratch
   `GOBIN`, then run: 0 issues. The pinned version is unchanged.
+
+### Steps 4 + 5 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 4 and 5 land in one commit (standing operator rule).** Operator decision for the Step 4 blocker, in their
+  own words (session question tool, 2026-10-29): "Merge pairs + standing rule". The rule reads: "if this step's
+  Verification fails ONLY because the consumers or tests of its new code live in the immediately following step
+  … Execute this step and the next one together as ONE commit with one red→green cycle on the next step's tests,
+  mark BOTH steps done". Step 4's new unexported symbols have no consumer before Step 5's in-package tests, so
+  `unused` would fail Step 4's lint alone. Step 5's tests and `testdata.IBKRAuthHandler` were written first. RED
+  was a compile failure (`IBKRTiming`, `SignatureKey`/`EncryptionKey`/`DHPrime`/`Timing`, `ensureSession`
+  undefined). GREEN: all ten session tests pass, `-race`, stable over `-count=20`.
+- **`invalidate`/`reinit` get their own tests in Step 5's file.** Their only production consumer is Step 6's
+  `c.do`, so `TestInvalidate_GenerationGuardAndThrottle` and `TestReinit_RerunsInitOnly` were added to
+  `ibkr_session_internal_test.go`. They keep `unused` green and cover Step 4 instruction 6. They test only Step 4
+  behavior and add no new surface.
+- **`testdata` gains small helpers next to `IBKRAuthHandler`:** `IBKRLSTPath`/`IBKRInitPath`,
+  `IBKRLSTReplyJSON(sig)`, `IBKRInitReplyJSON(auth, competing)` and `IBKRHeaderParam`. The AC-4 rows script
+  replies through them, so no test redeclares the reply shape (C-13). Overrides are set through `SetOverride`, and
+  `Requests`/`Count` read the log under the handler's lock (race-safe for the coalescing test).
+- **Strict replay uses the vector base URL.** The strict handler compares signatures computed over
+  `https://api.ibkr.com/v1/api/...`, so the in-package tests keep `BaseURL` at the vector value and swap
+  `c.httpClient` for a transport that rewrites only scheme+host to the `httptest` server. The handler matches the
+  auth routes by path suffix, so the `/v1/api` prefix is tolerated. Step 7 (`package broker_test`) cannot replace
+  `httpClient` and will need its own way to reach a strict handler; carried as an open item.
+- **`competing:true` row uses `{"authenticated":false,"competing":true}`.** Instruction 5.6 classifies only
+  "2xx lacking `authenticated:true`" as INVALID (with `competing` logged), and the AC-4 row is realized by that
+  reply. An `authenticated:true, competing:true` reply is still treated as established; not changed here.
+- **Empty decrypt plaintext fails closed** (carried from Step 1): `mintLST` returns `ErrInvalidCredentials` for a
+  decrypt error or an empty plaintext.
+- **`ibkrSessionState` is embedded in `IBKRClient`.** The session fields (`sessMu`, `sess`, `negUntil`/`negErr`,
+  the invalidation timestamp, the flight sequence and `flight`) live in `ibkr_session.go`. The joiner re-call rule
+  compares a per-flight sequence number with the one observed at call entry instead of a wall-clock timestamp, so
+  it is independent of the `Now` seam.
+- **DH params must be a `DH PARAMETERS` PEM block** with no trailing ASN.1 bytes; any other block is a `dh_prime`
+  credential error (covered by the `dh_prime_wrong_pem` case).
+- `go mod tidy` also touched the root `go.work.sum`. That change was reverted as out of scope; `go.sum` was
+  unchanged.
+- Verification fallback (as in Steps 2+3): golangci-lint v2.14.0 rebuilt with go1.27; 0 issues.

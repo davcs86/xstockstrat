@@ -31,6 +31,10 @@ type IBKRConfig struct {
 	AccessTokenSecret string
 	IBKRAccountID     string // e.g. "U1234567"
 	IsPaper           bool
+	SignatureKey      string // PEM RSA private key (PKCS#1 or PKCS#8)
+	EncryptionKey     string // PEM RSA private key (PKCS#1 or PKCS#8)
+	DHPrime           string // PEM "DH PARAMETERS"
+	Timing            func() IBKRTiming
 
 	// Optional test seams; nil selects the production default.
 	Now      func() time.Time
@@ -50,6 +54,12 @@ type IBKRClient struct {
 	now               func() time.Time
 	nonce             func() string
 	dhRandom          func() *big.Int
+	timingFn          func() IBKRTiming
+	signatureKey      *rsa.PrivateKey
+	encryptionKey     *rsa.PrivateKey
+	dhP, dhG          *big.Int
+	credErr           error // non-nil: every session attempt fails locally with no HTTP call
+	ibkrSessionState
 }
 
 const ibkrRealm = "limited_poa"
@@ -75,7 +85,9 @@ func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 		now:               cfg.Now,
 		nonce:             cfg.Nonce,
 		dhRandom:          cfg.DHRandom,
+		timingFn:          cfg.Timing,
 	}
+	c.credErr = c.loadKeyMaterial(cfg)
 	if c.now == nil {
 		c.now = time.Now
 	}

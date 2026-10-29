@@ -323,3 +323,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Log). `go test ./... -race` passes with COVERPKGS total coverage 73.1%. `oauth_version` appears only in
   `signRequest`. No vector nonce literal appears in any `_test.go`.
 - Carried to Step 4: the Go decrypt must fail closed on an empty plaintext (from Step 1).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 4 + 5
+
+- Steps 4 and 5 done in **one commit** under the standing operator rule (session question tool, 2026-10-29: "Merge
+  pairs + standing rule"). Step 4's unexported session symbols have no consumer before Step 5's tests. Recorded in
+  the spec's Deviation Log.
+- `ibkr.go`: `IBKRConfig` gains `SignatureKey`, `EncryptionKey`, `DHPrime` (PEM) and `Timing func() IBKRTiming`.
+  `NewIBKRClient` parses them once (PKCS#1 then PKCS#8 RSA; a `DH PARAMETERS` block via `asn1`) and retains
+  `credErr` naming the field only. The constructor signature is unchanged.
+- `ibkr_session.go` holds `IBKRTiming` (nil `Timing` defaults to 60s/10s/30s), the embedded `ibkrSessionState`,
+  and these functions:
+  - `ensureSession` uses `singleflight.DoChan("lst")` with a detached leader ctx, a negative cache and the joiner
+    re-call rule;
+  - `handshake`, `mintLST` (PKCS#1 v1.5 decrypt with a scoped `//nolint:staticcheck`; an empty plaintext fails
+    closed) and `computeLST` (Java `toByteArray`);
+  - `initBrokerage` (`{"publish":true,"compete":false}`), `invalidate(gen)` and `reinit(ctx, gen)` (flight key
+    `"init"`).
+  `golang.org/x/sync` is now a direct requirement.
+- `internal/testdata/ibkr.go` adds `IBKRAuthHandler` (vector replay, `Strict`, `SetOverride`, `Requests`/`Count`,
+  `Next`), plus `IBKRLSTPath`/`IBKRInitPath`, `IBKRLSTReplyJSON`, `IBKRInitReplyJSON` and `IBKRHeaderParam`.
+- `ibkr_session_internal_test.go` covers all eight Step 5 tests plus `TestInvalidate_GenerationGuardAndThrottle` and
+  `TestReinit_RerunsInitOnly`. AC-3 red: compile failure (`ensureSession` undefined); green: the strict LST header
+  equals vector (a) and the LST equals vector (b). AC-4, AC-5 and AC-10 red: compile failure; green: all rows pass.
+- Verification: `go build`/`go vet` clean; golangci-lint v2.14.0 (rebuilt with go1.27) reports 0 issues. `go test
+  ./... -race` passes with COVERPKGS total 76.1%, and the session tests are stable at `-count=20`. The `x/sync`
+  grep shows no `// indirect`. `compete` appears only as `compete:false` and `limited_poa` only as the realm
+  constant. The PEM-interpolation grep and the inline-fake grep both find nothing.
+- Open item for Step 7: the strict handler matches signatures over the vector base URL. `package broker_test`
+  cannot swap `httpClient`, so Step 7 needs a way to route `https://api.ibkr.com/v1/api` to the test server, for
+  example an exported transport seam. Decide at Step 6/7.

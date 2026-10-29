@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: IBKR reference fixtures (ibind vectors, test keys, DH params) + gitleaks scope incl. the operator-approved `vectors.json` path allowlist |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 2+3 done in one commit (operator decision): LST signer `authorize`/`authorizeLST`/`buildBaseString` + ibind known-answer tests; FR-3 ruled include query params |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 4+5 done in one commit (standing operator rule "Merge pairs + standing rule"): coalesced LST session (`ensureSession`, handshake, `ssodh/init`, negative cache, `invalidate`/`reinit`) + `testdata.IBKRAuthHandler` and session tests (AC-3/4/5/10 broker half) |
 
 ---
 
