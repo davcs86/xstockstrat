@@ -228,7 +228,7 @@ and expect the definition, one use in `exportEvents` and one in `queryEvents`.
 
 ### Step 4 — test: ledger owner-predicate SQL capture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -871,3 +871,15 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: CI-equivalent fallback (no spec change). Step 4 owns the committed tests.
 - **Open for Step 4**: `tsconfig.json` does not emit `src/__tests__/` into `dist/`, so Step 4's
   `node --test dist/__tests__/ledgerServiceImpl.test.js` verification command finds no file as written.
+
+### DEV-3 — Step 4: RED captured against the pre-Step-3 impl; DEV-2 open item resolved by feature 252 (2026-10-29)
+
+- **What**: Step 3 had already landed, so RED was captured by temporarily restoring
+  `ledgerServiceImpl.ts` from `5d81b32e` (pre-Step-3), building, and running the compiled suite; the
+  file was then restored from the index (not committed). The DEV-2 open item no longer applies: the
+  feature 252 merge (`816593e8`) made `build`/`test`/`test:coverage` compile `src/__tests__/` into
+  `dist/` with a throwing import, so the spec's `node --test dist/__tests__/ledgerServiceImpl.test.js`
+  runs as written and `test:coverage` is no longer vacuous (fails.md feature 021 trap closed).
+- **Line drift** (no spec edit, F-09): `makePool` `:26`, `describe('queryEvents')` `:141`,
+  `makeStreamCall` `:577`, `describe('exportEvents')` `:655` after this step.
+- **Disposition**: no spec change; Step 4's verification ran unmodified.

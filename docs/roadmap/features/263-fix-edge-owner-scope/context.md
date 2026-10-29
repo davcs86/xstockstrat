@@ -525,3 +525,23 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   - Step 10: `_Caller`/`_CALLER` at `client.py:35-38`.
   - Step 12: findings evidence now `ledgerServiceImpl.ts:186` / `:266` (post Step 3), `client.py:35-38`,
     `trading.go:2246` / `:2277`.
+
+### Step 4 — test: ledger owner-predicate SQL capture (2026-10-29)
+
+- Added `captureQuery` (inline single-consumer capturing pool, C-13) beside `makeImpl`, and four
+  `describe('queryEvents')` cases reusing `makeStreamCall` for `x-user-id` (no re-declaration): (a)
+  `ownerOnly` + `u-a` → `WHERE user_id = $1 … LIMIT $2`, params `['u-a', 101]`; (b) `ownerOnly` with no
+  caller binds `''`; (c) flag absent is byte-identical to the pre-change `stream_key = $1 AND
+  event_type = $2 … LIMIT $3` with no `user_id`; (d) `ownerOnly` + `eventType` → `event_type = $1 AND
+  user_id = $2 … LIMIT $3`.
+- Tooling setup (step 4): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile
+  --filter xstockstrat-ledger...`; husky hooks installed with `pnpm exec husky` (worktree `.husky/_`).
+- TDD (AC-2/AC-7): red — against the pre-Step-3 impl (`5d81b32e`, restored temporarily, DEV-3) cases
+  a/b/d failed (`SELECT * FROM ledger.events  ORDER BY recorded_at ASC LIMIT $1` lacked `WHERE user_id = $1`;
+  `event_type = $1` lacked `AND user_id = $2`), case c passed as the baseline pin → green — 34/34 pass on
+  the compiled `node --test dist/__tests__/ledgerServiceImpl.test.js`.
+- Verification: `pnpm run build` ok; `test:coverage` 51/51 pass, 74.52% lines (≥40%), non-vacuous since
+  feature 252; `lint` 0 errors (warnings only); one `makeStreamCall` declaration.
+- Prettier: the pre-existing file is not prettier-clean; only the added hunks were formatted, the rest
+  left untouched (surgical diff).
+

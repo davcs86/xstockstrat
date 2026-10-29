@@ -64,4 +64,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–3 done; continue at Step 4 (ledger owner-predicate SQL-capture tests)
+`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–4 done; continue at Step 5 (trader BFF `queryEvents` three-branch owner scoping)
