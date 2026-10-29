@@ -54,4 +54,4 @@ empty-id CREATE semantics also differ across the three template repositories.
 
 ## Next Action
 
-`/sdd-execute fix-template-update-metadata sequential` — continue with Step 9 at integration (Steps 1–8 done 2026-10-29)
+`/sdd-execute fix-template-update-metadata sequential` — open the integration PR (§5.6); Steps 1–9 done 2026-10-29

@@ -501,3 +501,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Line drift only (no deviation): `local_pg` is at analysis `tests/conftest.py:403`; the bullet cites no line numbers.
 - Out of scope: none. Remaining: Step 9 (C-16 promotion at integration).
 
+## Session 2026-10-29 — sdd-execute sequential, Step 9 (C-16 promotion)
+
+- Files: `services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature` created.
+  Each holds `@AC-1..3` verbatim from `acceptance.feature` with only that service's `Examples:` row, `@feature-269`
+  appended to every tag line, and the feature-173 provenance header.
+- Promotion rule applied: the (feature, AC) pair is the identity; no renumbering, and the indicators
+  `private-by-default-templates.feature` `@AC-1..3` (`@feature-224`) are untouched in all three services.
+- TDD: N/A (docs). Verification: `@feature-269` count is 4 per file (3 tag lines + the mandated header line);
+  recorded in the Deviation Log. `git diff --stat` on `private-by-default-templates.feature` is empty.
+- Out of scope: none. Remaining: integration PR (§5.6).
+

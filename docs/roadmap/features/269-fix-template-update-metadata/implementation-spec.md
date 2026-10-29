@@ -529,7 +529,7 @@ grep -n "Residual proof gap (accepted, follow-up)" docs/repo-surveyor/debt-radar
 
 ### Step 9 — docs: Promote @AC-1..3 into per-service durable suites (C-16) at integration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-{indicators,analysis,ingest}/acceptance/`
 **Files**:
 - `services/xstockstrat-indicators/acceptance/fix-template-update-metadata.feature` — create
@@ -607,3 +607,12 @@ _Populated by /sdd-execute as implementation proceeds._
   - **Disposition**: no behavior deviation. Two cosmetic deviations: the Step 5 docstring text is wrapped onto two
     lines (the single line breaks ruff E501), and the three empty-id tests (b), (c), (e) share a file-local
     `_empty_id_create(source_type)` builder over `_template_msg` (C-13: same single consumer file, no conftest change).
+- **2026-10-29 — Step 9 verification count is 4, not 3, per file** (`/sdd-execute` sequential, Step 9 run).
+  - **What**: `grep -c "@feature-269"` returns 4 for each new `fix-template-update-metadata.feature`, not the 3 the
+    **Verification** comment expects.
+  - **Why**: Instruction 1 mandates a header line that itself names `@feature-269` (the feature-173 precedent's
+    wording), so the count is 3 scenario tag lines plus that header. `grep -c "^  @AC-.*@feature-269"` returns 3 per
+    file; `git diff --stat` on `private-by-default-templates.feature` is empty.
+  - **Disposition**: verification arithmetic slip in the spec, no content deviation. The blocks were written directly
+    from `acceptance.feature` per the `scenario-promoter` contract (verbatim steps, one `Examples:` row per service),
+    because the subagent is read-only and the plan is fully determined by Instructions 1–3.
