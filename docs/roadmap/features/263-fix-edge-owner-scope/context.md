@@ -696,3 +696,16 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   - `pnpm run lint`: 0 errors.
   - `grep "__tests__/fixtures"` → none: `md()` stays an inline single-file helper (C-13 verdict in the spec).
 
+### Step 10 — service: agent echoes the effective `user_id`; docstrings state the bind (2026-10-29)
+
+- Files: `services/xstockstrat-agent/app/client.py` — imports `_ADMIN` from `app.scopes`; new private
+  `_effective_config_user_id(user_id)` (mirrors config `boundReadUserId`: a non-admin bound caller's foreign
+  non-empty id echoes as the caller's id); `get_config` / `list_config_keys` echo it. The request `user_id`
+  and `_metadata()` sent to config are unchanged. `services/xstockstrat-agent/app/tools.py` — both tools'
+  `user_id:` docstring lines state the bind (two lines each).
+- Discovery: Step 8's `boundReadUserId` is at `authz.ts:33` (the discovery digest's "not implemented" was stale).
+- Tooling setup (step 10): `uv sync --extra dev` (worktree-local, from `uv.lock`).
+- TDD (DEV-9): AC-4/AC-5 red: echo `'u-b'` where `'u-2'` expected (uncommitted Step 11 draft) → green: 10/10.
+- Verification: `uv run pytest --cov=app --cov-fail-under=40` 530 passed, 81.20%; `ruff check .` clean;
+  `ruff format --check .` clean; `grep _effective_config_user_id app/client.py` → 1 definition + 2 uses.
+

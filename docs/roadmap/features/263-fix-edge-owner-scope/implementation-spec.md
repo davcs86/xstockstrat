@@ -644,7 +644,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/readUserB
 
 ### Step 10 — service: agent echoes the effective `user_id`; docstrings state the bind
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -952,3 +952,14 @@ _Populated by /sdd-execute as implementation proceeds._
   `xstockstrat-ui`). It adds 12 `no-explicit-any` lint warnings (0 errors), the same harness typing as
   `scopeResolution.test.ts`.
 - **Disposition**: CI-equivalent fallback for the RED evidence (same pattern as DEV-3/DEV-5); no spec change.
+
+### DEV-9 — Step 10: RED/GREEN via an uncommitted draft of the Step 11 test; docstring wrap (2026-10-29)
+
+- **What**: Step 10's verification defers to Step 11. A draft of the Step 11 cases (parametrized over
+  `get_config`/`list_config_keys`: non-admin foreign id, own id, admin foreign id, no caller bound, empty id;
+  asserting the echo and that the wire `user_id` is unchanged) was run RED against the pre-Step-10 client
+  (2/10 fail: the non-admin foreign-id echo is `'u-b'`, not `'u-2'`), then GREEN (10/10). It was deleted
+  before commit so Step 11 owns and commits the test (F-08), the same pattern as DEV-4/DEV-7.
+- **Docstrings / comment**: the reworded `user_id:` lines stay at two lines each but needed different
+  wording to fit ruff's 100-column limit (E501); the helper's mirror comment wraps to two lines.
+- **Disposition**: CI-equivalent fallback for the RED evidence; no spec change.
