@@ -23,6 +23,7 @@
 | 2026-10-28 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2: config `033_ledger_stream_resolve_timeout.{up,down}.sql` seeds `ledger.stream.resolve_timeout_ms` (int, 2000, staging + production); Steps 3-11 still held on the unmet 252 precondition |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec §5.3 on merged-up tree `b6e518a7` (merge with `origin/main-dev` `8082157a`: already up to date; ledger-guard clean): Steps 3-11 aligned with the current codebase; the 252 precondition is now met (252 `code-completed`, `tsc && node --test dist/` runner, test exclude gone, 0 skip guards), so Steps 3-9 are unblocked; drifted test-file, `index.ts`, `ci.yml` and docs anchors re-grepped |
 | 2026-10-29 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3: `services/xstockstrat-ledger/src/services/eventRowResolver.ts` created (`RESOLVE_TIMEOUT_KEY`, `streamResolveTimeoutMs`, `resolveEventRow`, `makeListenerClient`, `makeResolveRow`); not wired yet (Step 5) |
+| 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | Step 5: `EventNotifier` resolve-once FIFO (`queue`/`drain`/`gen`, `{ resolveRow }` opts, required `onGap`, wedged-listener teardown); `streamEvents` `onGap` → `call.destroy({code: 13\|14})` plus post-replay `cleaned` guard; `index.ts` wired via `makeListenerClient`/`makeResolveRow`. 7 legacy `eventNotifier.test.ts` cases red until Step 6 migrates them |
 
 ---
 
@@ -60,4 +61,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 5 next (`EventNotifier` resolve-once FIFO, `onGap`, wiring)
+`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 6 next (notifier tier (i), wired tier (ii), `streamEvents` `onGap` tier (iii))

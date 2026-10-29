@@ -460,3 +460,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-ledger/src/__tests__/eventRowResolver.test.ts`
 - Deviations: RED captured by withholding the already-landed Step 3 module (Deviation Log 2026-10-29).
 
+### Step 5 — service: `EventNotifier` resolve-once FIFO, `onGap`, wiring [done]
+- `eventNotifier.ts`:
+  - `NotifySubscription` gains a required `onGap({ notFound, message })`.
+  - The constructor is `(makeClient, { resolveRow, channel?, reconnectDelayMs? })`.
+  - `dispatch` takes the fast path only iff `!draining && queue.length === 0 && row.payload !== undefined`.
+    Otherwise it enqueues `{ row, subs: matching(row) }` (snapshot at enqueue) and starts `drain()`.
+  - `drain()` is serial and never rejects. It fans out a full head to `subs ∩ live`, skips a stub with no matching
+    subs without a read, and resolves a stub on `this.client` (a null client counts as an error).
+  - After the await, a `gen` change discards the result and `finally` restarts the drain. On `null` or an error,
+    each live sub is deleted and then `onGap`'d, and `log.warn('trimmed row resolve failed', {…})` is emitted with
+    reason `not_found`/`timeout` (`'Query read timeout'` or `57014`)/`error`.
+  - On `'Query read timeout'` the client that ran the query is `end()`ed. The existing `'end'` → reconnect →
+    `onReconnect` path then resyncs.
+  - `gen++; queue = []` runs in `connect()` before the `onReconnect` loop and in `stop()` before `subscribers.clear()`.
+- `ledgerServiceImpl.ts#streamEvents`: `onGap` calls `cleanup()`, then `call.destroy({ code: notFound ? 13 : 14,
+  message })` (never `end()`). A new `if (cleaned) return;` sits right after the replay `await`, before the replay
+  loop. No new `await` (LEDGER-2 holds); `Number()` is left to Step 7.
+- `index.ts`: `new EventNotifier(makeListenerClient(dbUrl, sslOption, configWatcher), { resolveRow:
+  makeResolveRow(configWatcher) })`. The now-unused `Client` import was dropped and the pool is unchanged (F-06).
+- Tooling: the worktree has no `node_modules` (and neither has the main checkout). A `pnpm install` filled the disk
+  (41 MB free), so the partial install was removed and the root and ledger `node_modules` were symlinked from the
+  sibling worktree `wf_5c0abdf9-d94-123`. That tree has the same lockfile and pg 8.20.0. No lockfile changed.
+- TDD (probe, Deviation Log 2026-10-29): red: 0/3 pass on runtime assertions. Green: 3/3 pass. The probe was then
+  deleted.
+- Verification:
+  - `pnpm build` exit 0. `pnpm run lint` exit 0 (0 errors, 147 `no-explicit-any` warnings).
+  - The new code is prettier-clean. The prettier drift in `ledgerServiceImpl.ts`/`index.ts` is pre-existing and was
+    left untouched.
+  - Fast-path grep: 1 hit. `onGap` greps hit. `code: notFound ? 13 : 14`: 1 hit. `if (cleaned) return;` count in
+    `streamEvents`: 3. The wiring grep hits, and the `DB_POOL_MAX` line is unchanged.
+  - The `pool` grep hits only the class JSDoc.
+- Open (Step 6): with the committed tree the suite is 55 pass / 7 fail. The 7 legacy `eventNotifier.test.ts` cases
+  use the old constructor, and `row()` has no `payload`. Step 6 A.1 migrates them. Unit-only items for Step 6 are
+  the backstop teardown (AC-9 notifier side) and the stale-drain guard.
+- Files modified: `services/xstockstrat-ledger/src/services/eventNotifier.ts`,
+  `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`, `services/xstockstrat-ledger/src/index.ts`
+- Deviations: probe-based RED, interim red legacy cases, and the `pool` grep note (Deviation Log 2026-10-29).
+

@@ -356,7 +356,7 @@ ls src/__tests__/fixtures 2>/dev/null || echo "C-13: single-consumer inline stub
 
 ### Step 5 — service: `EventNotifier` resolve-once FIFO, `onGap`, wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/services/eventNotifier.ts` — modify
@@ -1064,3 +1064,22 @@ _Populated by /sdd-execute as implementation proceeds._
   "Cannot find module '../services/eventRowResolver.js'" (exit 2). The module was restored unchanged and GREEN was
   then taken on the committed tree.
 - **Disposition**: no spec change; the RED reason matches the planned one.
+
+### 2026-10-29 — Step 5: RED/GREEN via an uncommitted probe; existing notifier cases red until Step 6
+
+- **Step**: 5
+- **Planned**: "Capture Step 6's RED on the post-Step-4 tree before any edit here"; Verification is build, lint and
+  greps only.
+- **Actual**: Step 6's files are outside Step 5's **Files**, so RED/GREEN was captured with a temporary probe,
+  `src/__tests__/step5probe.test.ts` (3 cases: stub resolved in order behind a held resolve, `null` →
+  `onGap({notFound:true})` once with the sub removed, `streamEvents` `onGap` → `destroy({code:13})` with zero replay
+  writes). RED was 0 pass / 3 fail on runtime assertions (`[1,2,3]` vs `[1]`, 0 gaps vs 1, `captured.onGap is not a
+  function`). GREEN was 3 pass / 0 fail. The probe was deleted before commit.
+- **Interim red**: on the committed Step 5 tree the 7 pre-existing `eventNotifier.test.ts` cases fail: 6 with
+  `TypeError: Cannot read properties of undefined (reading 'resolveRow')` from the old `new EventNotifier(() =>
+  client)` construction, and the reconnect case because the positional `'ledger_stream_all', 1` is no longer read as
+  `reconnectDelayMs`. Step 6 A.1 already owns this migration (all 7 constructions plus the `row()` default
+  `payload`). The suite is 55 pass / 7 fail until Step 6 lands; no assertion was changed here.
+- **Grep note**: `grep -n "pool" eventNotifier.ts` hits only the pre-existing class JSDoc (`:24`, `:26`, "separate
+  from the query pool"); the notifier holds no Pool and no SQL.
+- **Disposition**: no spec change. Step 6 must turn the 7 cases green with its construction migration.

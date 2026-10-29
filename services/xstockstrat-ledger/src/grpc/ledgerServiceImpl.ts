@@ -217,6 +217,14 @@ export class LedgerServiceImpl {
           /* already closing */
         }
       },
+      onGap: ({ notFound, message }) => {
+        cleanup();
+        try {
+          call.destroy({ code: notFound ? 13 : 14, message });
+        } catch {
+          /* already closing */
+        }
+      },
     });
 
     // Release the subscription on every termination path so a dropped/closed/errored stream can't leak it.
@@ -240,6 +248,7 @@ export class LedgerServiceImpl {
          ORDER BY sequence ASC`,
         [req.streamKey || null, req.eventType || null, req.fromSequence || 0],
       );
+      if (cleaned) return;
       for (const row of result.rows) writeRow(row);
     } catch (err: any) {
       cleanup();
