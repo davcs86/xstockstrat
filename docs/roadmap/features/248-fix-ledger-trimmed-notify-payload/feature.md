@@ -29,6 +29,7 @@
 | 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6: tier (i) notifier cases (AC-2/3/6/7/8/9, late/removed subscriber, queue clear on reconnect/stop, stale-drain guard, warn + no unhandled rejection), tier (ii) `streamResolveWired.test.ts` (AC-1/4/5) and tier (iii) `streamEvents` `onGap` cases; C-13 fixture home `src/__tests__/fixtures/` (`ledgerEvents.ts`, `streamCall.ts`, `INVENTORY.md`). Suite 79/79 pass, coverage 86.38% lines |
 | 2026-10-29 | `in-progress` (Step 7 done) | /sdd-execute sequential (sdd-batch-execute) | Step 7: `streamEvents` normalises `sequence` with `Number()` (the `maxSeq` seed, `writeRow`, live `onEvent`, buffer flush), so pg-string `BIGINT` sequences compare numerically. The RED/GREEN probe was uncommitted. Suite 79/79 pass, coverage 86.39% lines |
 | 2026-10-29 | `in-progress` (Step 8 done) | /sdd-execute sequential (sdd-batch-execute) | Step 8: tier (iii) `streamEvents` sequence-normalisation cases (AC-2 replayed `"98"`/`"99"` then resolved `"100"` with no NOTIFY duplicate; AC-5 buffered `"100"` flushed once) and a string-`int64` encode/decode case. RED against pre-Step-7 source. Suite 82/82 pass, coverage 86.39% lines |
+| 2026-10-29 | `in-progress` (Step 9 done) | /sdd-execute sequential (sdd-batch-execute) | Step 9: real-TimescaleDB tier (iv). Adds the `test:db` script, `src/__tests__/db/streamResolve.db.test.ts` (AC-1 trigger round-trip plus one chunk and one row, AC-6/AC-7 replay recovery, AC-9 `statement_timeout`), and the `ledger-db-test` CI job, which is also in `ci-gate`. The RED was not captured because the DB is CI-only. The GREEN is owed on the integration PR's `ledger-db-test` run. Unit suite 82/82, coverage 86.39% lines |
 
 ---
 
@@ -66,4 +67,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 9 next (real-TimescaleDB tier iv: `test:db` script, DB tests, `ledger-db-test` CI job)
+`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 10 next (consumer verification: analysis and portfolio, no code change)

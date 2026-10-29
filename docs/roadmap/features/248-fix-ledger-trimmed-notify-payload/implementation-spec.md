@@ -767,7 +767,7 @@ grep -n "^function makeRow\|^function makeStreamCall" src/__tests__/ledgerServic
 
 ### Step 9 — test: Real-TimescaleDB tier (iv) — `test:db` script, DB tests, `ledger-db-test` CI job
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/package.json` — modify
@@ -1186,3 +1186,30 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Tooling**: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90` (Step 7's
   install). No install, no lockfile change.
 - **Disposition**: no spec change.
+
+### 2026-10-29 — Step 9 execution (sdd-batch-execute)
+
+- **Step**: 9
+- **RED not captured**: tier (iv) RED not captured: CI-only DB. `LEDGER_DB_TEST_URL` is unset in the executor and
+  no container may be started, so the item-4 fast-path mutation of `eventNotifier.ts` was not applied (that file is
+  untouched). The unit-tier REDs of Steps 4, 6 and 8 stand for AC-1, AC-6, AC-7 and AC-9 (fails.md:2839-2842).
+- **GREEN is CI-only and has no step PR**: sequential mode opens no step PR, so the `ledger-db-test` GREEN comes from
+  the integration PR's CI run (the `ci` and `xstockstrat-ledger` filters both match it). Its run URL is owed in the
+  integration PR body and context.md. Locally: build and lint pass, `test:coverage` gives 82/82 with All files at
+  86.39% lines and no `streamResolve.db` output, and the DB suite with no URL exits 1 with
+  "LEDGER_DB_TEST_URL is required" (fails, never skips).
+- **AC-9 scope limit (design 5)**: case 4 proves the listener session honours `statement_timeout` (B = 200, a
+  `pg_sleep(1)` wrapper, code 14 within 2B). The real `resolveEventRow` is proven by case 1. The `query_timeout`
+  backstop and the listener teardown are unit-only (Step 6 A.3.5).
+- **One-chunk check**: `EXPLAIN (FORMAT JSON)` without `VERBOSE` emits no `"Schema"` key, so chunk scans are counted
+  by `Relation Name` `_hyper_<h>_<c>_chunk`. A fresh CI database holds only today's chunk, so this assertion would
+  also pass without plan-time exclusion. The row-count half (exactly 1 row from the stub `recorded_at` text) is the
+  load-bearing check.
+- **Stream start point**: live streams open at `fromSequence = max(sequence) + 1`, not 0, so the shared database's
+  history (seed rows and earlier cases) is not replayed into the assertions. Each case uses a fresh
+  `order:<uuid>` stream key. The AC-6/AC-7/AC-9 recovery streams are unfiltered from seq 11, as specified.
+- **AC-9 timing**: the 2B clock starts just before event 11 is appended, after event 10 is delivered.
+- **Lint**: `pnpm run lint` exit 0 with 195 warnings (was 176), 0 errors. The 19 new ones are `no-explicit-any`
+  warnings in the new suite.
+- **Disposition**: no spec change.
+

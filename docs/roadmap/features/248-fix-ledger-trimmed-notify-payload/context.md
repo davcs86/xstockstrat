@@ -645,3 +645,52 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`
 - Deviations: Deviation Log 2026-10-29 "Step 8 execution" (RED order, characterization, helper hoist, lint count).
 - Next: Step 9.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 9
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f,
+  'Start executing features 241-276' via batch-execute). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`af225990`). The launcher's digest
+  said Steps 3-8 and the fixture home were missing because it had read a stale tree. On the branch, all of them are
+  present and `done`.
+- Tooling: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90` (identical
+  `pnpm-lock.yaml`). No install, no lockfile change.
+
+### Step 9 — test: Real-TimescaleDB tier (iv) — `test:db` script, DB tests, `ledger-db-test` CI job [done]
+- `package.json`: `"test:db": "tsc && node --test dist/__tests__/db/*.test.js"` after `test:coverage`; no other
+  script changed.
+- `src/__tests__/db/streamResolve.db.test.ts` imports only `node:*`, `pg`, `src` modules and the C-13 fixtures
+  (`LARGE_PAYLOAD`, `makeRecordingCall`; both INVENTORY rows now list it). Its `before()` throws
+  `LEDGER_DB_TEST_URL is required` when the URL is unset. It runs on a real `EventNotifier` built from
+  `makeListenerClient(url, false, cfg)` and `makeResolveRow(cfg)`, with `LedgerServiceImpl` over `pg.Pool({max: 1})`.
+  - AC-1: the live write deep-equals `GetEvent`. The raw `LISTEN ledger_stream_all` body has exactly the 5 stub keys
+    and no `payload`. `EXPLAIN` of the PK read shows one chunk scan, and the stub `recorded_at` text returns exactly
+    1 row.
+  - AC-6 / AC-7: a rejecting or `null` first resolve gives `destroy({code: 14 | 13})`, no `end()`, and writes
+    `[10]` only. A stream from seq 11 replays 11 and 12, with 11 in full.
+  - AC-9: with B = 200, a `pg_sleep(1)` wrapper ends the unfiltered stream with code 14 in under 2B, with no write for
+    11 or 12. The `account.balance.synced` stream stays open. A replay from 11 recovers both rows.
+- `ci.yml`: job `ledger-db-test` placed after `migration-contract-gate`.
+  - `if:` matches any of the `xstockstrat-ledger`, `migrations`, `proto`, `ci` and `node-shared` filters.
+  - Its TimescaleDB service is copied from `migration-rerun`, and its Node toolchain from `node-test`.
+  - Steps: build the migrator image, run `docker run` on the default `db-migrate.sh` entrypoint, then run
+    `pnpm run test:db` with `LEDGER_DB_TEST_URL`.
+  - It is listed in `ci-gate.needs` with an echo.
+- TDD:
+  - RED was not captured: the DB is CI-only. `LEDGER_DB_TEST_URL` is unset here, and no container may be started.
+  - The item-4 mutation of `src/services/eventNotifier.ts` was not applied, and `git status` shows that file
+    unmodified. The unit REDs of Steps 4, 6 and 8 stand for these ACs.
+  - GREEN is owed on the integration PR's `ledger-db-test` run (sequential mode opens no step PR).
+- Verification:
+  - `pnpm build` exit 0; `pnpm run lint` exit 0 (195 warnings, 0 errors).
+  - `dist/__tests__/db/streamResolve.db.test.js` is emitted, and the `test:db` grep matches.
+  - With no URL, `node --test dist/__tests__/db/*.test.js` exits 1 and names `LEDGER_DB_TEST_URL`.
+  - `pnpm run test:coverage` exit 0: 82/82 pass, 0 fail, All files 86.39% lines, 0 `streamResolve.db` lines.
+  - The runtime-deps grep reports OK, and the three `ci.yml` greps hit at `:705`, `:895` and `:917`.
+- Open: paste the `ledger-db-test` run URL and its summary into the integration PR body and here. If it fails, the
+  real-DB assumptions in the Deviation Log (chunk naming, stream start point, AC-9 timing) are the first suspects.
+- Files modified: `services/xstockstrat-ledger/package.json`,
+  `services/xstockstrat-ledger/src/__tests__/db/streamResolve.db.test.ts` (new),
+  `services/xstockstrat-ledger/src/__tests__/fixtures/INVENTORY.md`, `.github/workflows/ci.yml`
+- Deviations: Deviation Log 2026-10-29 "Step 9 execution".
+- Next: Step 10.
