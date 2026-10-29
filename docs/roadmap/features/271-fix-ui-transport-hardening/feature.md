@@ -30,6 +30,7 @@
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 8 done — middleware exempts exactly the eight segment health paths (`PUBLIC_HEALTH_PATHS`); dead root `api/health` and `health` matcher prefixes dropped |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 9 done — vitest + e2e: the eight segment health routes answer without a session (agent-health 401), lookalike and non-health routes still redirect to login (AC-3, AC-4) |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 10 done — UI `CLAUDE.md` middleware row documents `PUBLIC_HEALTH_PATHS`; UI constitution deadline gotcha rewritten around `deadlines.ts` (30s unary default); teardown reconciled by hand (context-forge `context-constitution` unavailable) |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; AC-1–AC-6 promoted (C-16) to `services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature`; integration PR opened |
 
 ---
 
