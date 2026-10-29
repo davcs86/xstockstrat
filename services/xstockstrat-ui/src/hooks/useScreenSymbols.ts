@@ -1,6 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
-import { ConnectError } from '@connectrpc/connect';
 import { ScreenResultStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 export type ScreenSymbolsInput = Parameters<typeof analysisClient.screenSymbols>[0];
@@ -10,10 +9,7 @@ export type ScreenSymbolsResult = Awaited<ReturnType<typeof analysisClient.scree
 export function useScreenSymbols() {
   return useMutation<ScreenSymbolsResult, Error, ScreenSymbolsInput>({
     mutationFn: (req) => analysisClient.screenSymbols(req),
-    onError: (err) => {
-      if (err instanceof ConnectError) return err;
-      return err;
-    },
+    meta: { errorHandled: true },
   });
 }
 

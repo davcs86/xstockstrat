@@ -645,3 +645,38 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - Verification: `pnpm run lint` exits 0 (only pre-existing warnings). The ledger-export spec passes 10/10.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 7 (sdd-batch-execute)
+
+- Step 7 done (D-64, global mutation error fallback) in `services/xstockstrat-ui`:
+  - `src/lib/mutationErrorStore.ts` (new, no React): a single slot plus listeners, the `report`/`clear`/`get`
+    functions, `getServerMutationError` (always `null`) and `subscribe`. `shouldReportMutationError(meta)` is
+    `meta?.errorHandled !== true`, the only opt-out.
+  - `createQueryClient()` now has a `MutationCache` whose `onError` reports `errMessage(error)` unless the
+    mutation is flagged. `defaultOptions.queries` is unchanged.
+  - `src/components/shared/MutationErrorFallback.tsx` (new): it reads the slot through `useSyncExternalStore`,
+    clears it when the pathname changes, and renders a fixed `Alert variant="destructive"` at `bottom-24`
+    (`sm:bottom-4`) with a "Dismiss error" button. It is mounted after `{children}` in
+    `trader/providers.tsx` (inside `AccountProvider`) and in `QueryProviders.tsx`.
+  - `useInvalidatingMutation` gains `options.meta`, passed through to `useMutation`.
+  - `meta: { errorHandled: true }` is set on 9 hooks:
+    - through the factory: `useSetOpportunityAction`, `useManageSignalSource`, `usePlaceOrder`, `useReplaceOrder`
+      and `useConfirmOrder`;
+    - as plain `useMutation`: `useRunBacktest`, `useScreenSymbols`, `useSetConfig` and `useSetStrategyLive`.
+  - The no-op `onError` blocks and their `ConnectError` imports were deleted from `useBacktest.ts`,
+    `useScreenSymbols.ts` and `useSetConfig.ts`. No toast library was added.
+- TDD (throwaway Vitest probe of Step 8's `queryClient.test.ts` cases (a) and (b), deleted before commit):
+  - **Red:** an unflagged `ConnectError('down')` mutation left `getMutationError()?.message` as `undefined`
+    (expected `'down'`); the flagged case passed.
+  - **Green:** both passed.
+- Verification:
+  - The `errorHandled: true` grep has exactly 9 hits, and `return err;` has 0.
+  - The `MutationCache`/`shouldReportMutationError` and `MutationErrorFallback` greps hit.
+  - `pnpm run lint` exits 0, `lint:dup` finds 0 clones, and Vitest passes 240/240.
+  - `tsc --noEmit` fails only on the pre-existing `e2e/insights/backfills.spec.ts:135-136`.
+  - `pnpm build` passes.
+  - Regression check (prebuilt app, `CI=1 E2E_PREBUILT=1`): `orders`, `opportunities` and `signal-sources` e2e
+    pass 58/58. The flagged hooks raise no second alert next to the Step 3 inline errors.
+- PR-body trade-off (Instruction 9): after a successful retry, the banner stays until it is dismissed or the user
+  navigates.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
+

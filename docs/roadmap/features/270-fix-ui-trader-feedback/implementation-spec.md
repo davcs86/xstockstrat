@@ -410,7 +410,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
 
 ### Step 7 — service: D-64 global mutation error fallback (MutationCache + single-slot store + meta-only opt-out)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/mutationErrorStore.ts` — create
@@ -1161,3 +1161,19 @@ _Populated by /sdd-execute as implementation proceeds._
 - **AC-11 RED failed on the alert assertion, before the `pageerror` check.** The missing alert (`element(s) not
   found`) is the first failing assertion, so the RED output does not separately show the unhandled-rejection
   `pageerror` the step predicted. **Disposition**: noted only; GREEN asserts the `pageerror` array is empty.
+
+### Step 7 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 7's paired test lives in Step 8's **Files**, so the RED/GREEN
+  cycle ran a throwaway Vitest probe (`src/lib/zzProbeStep7.test.ts`, Step 8's `queryClient.test.ts` cases (a) and
+  (b) through `MutationObserver`). It was deleted before commit; Step 8 authors the real tests. `mutationErrorStore.ts`
+  was written first so that RED failed on the assertion (`getMutationError()?.message` was `undefined`), not on a
+  missing import. **Disposition**: CI-equivalent fallback.
+- **The `useInvalidatingMutation` JSDoc names the opt-out as `meta.errorHandled === true`.** Writing the literal
+  `{ errorHandled: true }` would add a tenth hit to the Verification grep, which must count exactly the 9 flagged
+  hooks (Step 8 pins the same count). **Disposition**: wording choice inside the step's **Files**.
+- **Prettier wrapped the `MutationCache` `onError` body onto two lines.** Behavior is unchanged.
+  **Disposition**: formatting only.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean and `pnpm build` passes.
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
