@@ -24,6 +24,7 @@
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 3 done — fundsignal + three servicer `*_forever` loops seed via `retry_until_ok` and tick via `run_supervised` |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after merging main-dev: steps 4, 6, 15 re-anchored (fundsignal_loop.py +1 drift and post-Step-3 `run_supervised` evidence; test_config_watcher.py tests :14-38; CLAUDE.md P&L section :143-177) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — @AC-1/@AC-2 fundsignal survival tests, `tests/test_loop_supervision.py` (@AC-3, three servicer loops + fundsignal seed), `_StopLoop` now a `BaseException` |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — analysis `ConfigWatcher._watch` reconnects after any `Exception`; watch task retained as `_watch_task` with an `_on_watch_done` exit log |
 
 ---
 
@@ -60,4 +61,4 @@ consumer skips a failed event and its monotonic cursor moves past it.
 
 ## Next Action
 
-`/sdd-execute fix-python-loop-supervision sequential` — Step 5
+`/sdd-execute fix-python-loop-supervision sequential` — Step 6

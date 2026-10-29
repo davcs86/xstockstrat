@@ -347,7 +347,7 @@ grep -n "class _StopLoop(BaseException)" tests/test_fundsignal_loop.py
 
 ### Step 5 — service: analysis ConfigWatcher reconnects after any exception; watch task retained (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/config/watcher.py` — modify

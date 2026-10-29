@@ -715,3 +715,22 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
 - Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`,
   `services/xstockstrat-analysis/tests/test_loop_supervision.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 5
+
+### Step 5 — service: analysis ConfigWatcher reconnects after any exception; watch task retained (FR-3) [done]
+- `app/config/watcher.py`: `__init__` keeps the task as `self._watch_task` (`name=f"config-watch-{namespace}"`) with
+  `add_done_callback(self._on_watch_done)`. `_on_watch_done` returns on cancel and otherwise logs ERROR
+  `config watch task %s exited unexpectedly: %r`. Its body is wrapped in `try/except Exception`, so it never raises.
+  `_watch` now catches `Exception` (not only `AioRpcError`), logs `config stream error (%s): %s, reconnecting in 2s`
+  with the type name, and keeps the single `while True`, the 2s sleep and `_build_watch_request()` per reconnect.
+  `_snapshot` is not reset on error (zero-trap). One edit covers both analysis watchers (`main.py:42,48`).
+- TDD: a scratch test written to Step 6's instructions (@AC-5 reconnect after `RuntimeError`; @AC-8 retained task plus
+  ERROR log naming `config-watch-analysis`) failed RED against the pre-step file: 2 failed (`RuntimeError` escaped
+  `_watch`; `AttributeError` because `_watch_task` was missing). It passed GREEN after the edit (2 passed) and was then
+  deleted (F-08). Step 6 authors the durable tests.
+- Verification: `grep "except grpc.aio.AioRpcError"` finds nothing. The `_watch_task` / `_on_watch_done` /
+  `_build_watch_request()` grep hits `:56,59,61,81`. `ruff check .` and `ruff format --check .` are clean. The full
+  suite gives 1315 passed with coverage at 88.79% (≥40).
+- Files modified: `services/xstockstrat-analysis/app/config/watcher.py`
+- Deviations: none
