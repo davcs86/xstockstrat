@@ -265,7 +265,14 @@ export interface GetSecretResponse {
 export interface SetConfigRequest {
   namespace: string;
   key: string;
-  value?: ConfigValue | undefined;
+  value?:
+    | ConfigValue
+    | undefined;
+  /**
+   * deprecated (feature 241): ignored; attribution is the propagated x-user-id or authorized x-internal-caller
+   *
+   * @deprecated
+   */
   author: string;
   reason: string;
   environment: Environment;

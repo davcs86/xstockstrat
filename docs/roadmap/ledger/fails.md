@@ -3065,7 +3065,6 @@ ambiguity is logged here).
 - **Mistake**: Two design rounds treated the sweeper's `order_intent.reclaimed_unknown` payload as a known-good template to copy into three new emit sites. That payload holds a `time.Time`, which `structpb.NewStruct` rejects, and `emitLedgerEvent` discards that error (`p, _ :=`), so the event already reaches the ledger with a nil payload. The r3 adversary caught it, not a test.
 - **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:3662`; `internal/repository/order_intent_repo.go:31`; `docs/roadmap/features/267-fix-trading-order-state-audit/design.md` § D-62 (b).
 - **Rule it implies**: a ledger payload built for `structpb.NewStruct` uses only JSON-native values (timestamps as RFC3339 strings), and every new emit test asserts `req.Payload != nil` plus the field values, not just the event type.
-
 ### 2026-10-22 — fix-ui-trader-feedback — assumption
 - **Mistake**: A design round proposed a global TanStack `MutationCache.onError` fallback that skipped any mutation whose options set `onError`, treating that as "handled".
   - The no-op hook-level `onError`s (`return err`) in `useBacktest.ts:12-15` and `useScreenSymbols.ts:13-16` would have silently suppressed the fallback.
