@@ -572,3 +572,34 @@ halt). design.md is not written and status stays `spec-ready`.
 - [ ] Step 8: record the O-3 RED run.
 - Ledger: no new line.
 - Next: `/sdd-execute fix-ingest-poller-backfill`.
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: `git merge --no-edit origin/main-dev` into the detached checkout merged cleanly (no conflicts);
+  `ledger-guard --own-slug fix-ingest-poller-backfill --base origin/main-dev --fix` reported clean, so no repair.
+- Re-spec of Steps 1–9 step bodies only (Evidence / Files / Instructions / Verification), re-grepped 2026-10-29:
+  - Steps 1, 3: `run_one_cycle` per-source catch is now `:140-150` (`except` `:142`, `mark_source_error` `:145`).
+    `_extract_result_items` `:34-52`, loop `:124-125`, `_build_external_signal` `:72-74`, `log` `:28` unchanged.
+  - Steps 2, 4, 6: `test_mcp_client_loop.py` anchors drifted (+3 for the fakes; `test_source_failure_...` `:208`,
+    `_PerOwnerCfgWatcher.resolve_secret` `:247`, `test_resolve_secret_sends_exact_user_scope` `:320`); the
+    `_watcher_with` import is `:19`; the inline `AioRpcError` builder is `test_ingest_servicer.py:552`.
+  - Step 5: `resolve_secret` `watcher.py:150`, `GetSecret` call `:159-167`, return `:168`. `grpc.aio.AioRpcError`
+    is no longer caught anywhere in `watcher.py` (259 made `_watch` catch `Exception`); `import grpc` `:10` still
+    covers the new catch. **Feature 244 is merged** (code-completed): `run_one_cycle` reads the timeout via
+    `int_positive(...)` at `:133-135`, so Step 5 takes the "pass 244's clamped value" branch.
+  - Step 7: all `servicer.py` evidence matched exactly; only the cited test line moved (`:640`).
+  - Step 8: `test_ingest_servicer.py` helper anchors drifted; `job_row` is already imported as `_job_row` (`:26`),
+    so the step reuses that alias.
+  - Step 9: dropped the planned `2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.md/.status` create. The
+    defect is already filed as `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` (sidecar
+    `wont-fix`, `ref: feature:277-fix-ingest-seeded-config-keys`; 277 demoted/canceled by the operator 2026-10-23).
+    Step 9 now cites that report in the findings entry instead. Cited dotted read moved to `mcp_client_loop.py:134`.
+- § Step Dependencies (outside the re-spec scope, left as written) is now stale on two points, both resolved: the
+  `int_positive` "Not found" claim (244 merged) and the "not written" merge-order row (it exists at
+  `merge-order.md:82`).
+
+### Open Threads
+
+- [x] Add the `merge-order.md` row 244 → 261 (WARN) — exists at `merge-order.md:82`.
+- [x] Confirm 244 merge state before Step 5 — merged into main-dev; Step 5 re-specced onto `int_positive`.
+- [ ] Step 8: record the O-3 RED run.
