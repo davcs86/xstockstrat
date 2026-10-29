@@ -671,7 +671,7 @@ grep -rn '"budget_deferred" | "partial" | "failed"' packages/proto/gen | wc -l  
 
 ### Step 9 — docs: analysis CLAUDE.md, MCP runbook, merge order, teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-analysis/CLAUDE.md`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -817,3 +817,15 @@ _Populated by /sdd-execute as implementation proceeds._
   three Go plugins were rebuilt at their pinned versions with `GOTOOLCHAIN=go1.27.0` into a scratch `GOBIN`, and
   codegen was re-run. The final diff is exactly the five specced comment lines, and the grep count is 5. Codegen's
   internal `buf breaking` was skipped because the worktree has no local `main-dev` ref; Step 7 already covered it.
+- **2026-10-29, Step 9 (minor, no scope change):** line drift and a teardown fallback. (a) The `valid_days` row is at
+  `CLAUDE.md:513`, `mcp-tools.md` status line at `:846`, and the UI `deferredCount` render at `page.tsx:106`; each site
+  was found by text. The `valid_days` row needs no edit (correct for non-force runs). (b) The 260 additions to the
+  Idempotency bullet are written as nested sub-bullets under 246's unchanged text, and the `override_symbols` clause
+  names the RPC/MCP `symbols` override. (c) `merge-order.md:81` is present and left unchanged, as item 4 directs.
+  (d) Teardown: `/context-forge:context-constitution refresh` is not available in this session (only
+  `context-scrubber` is listed), so both touched docs were re-read by hand against `fundsignal_loop.py`
+  (`run_once` status/warning, `_paced_fetch` failed bucket, `_release_claim`, the run_id-scoped confirm UPDATE,
+  `valid_anchor`, `_map_directions(reference_scores=)`) and ingest `servicer.py` dedup claim (key
+  `(user_id, source, symbol, direction)`, conviction/`valid_until`/`dedup_window_hours` predicate). No further
+  drift found; no other doc or consumer docstring enumerates the scan statuses. **Disposition**: the integration PR
+  body must record that the plugin was unavailable and this manual reconciliation.

@@ -594,3 +594,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Deviation Log.
 - Next: Step 9 (docs: analysis CLAUDE.md, MCP runbook, merge order, teardown audit).
 
+### Step 9 — docs: analysis CLAUDE.md, MCP runbook, merge order, teardown audit — done (2026-10-29)
+
+- Files: `services/xstockstrat-analysis/CLAUDE.md` (cache-only FMP bullet gains the `partial` rule; Idempotency bullet
+  keeps 246's text and gains five 260 sub-bullets) and `docs/runbooks/mcp-tools.md` (status list adds `"partial"` plus
+  one sentence). `docs/roadmap/features/merge-order.md:81` verified present, unchanged.
+- TDD: N/A (docs). Baseline: the `signal_id IS NULL|run_id-scoped|00:00 UTC` grep had no match and neither doc listed a
+  `"partial"` scan status; after the edit every Step 9 verification grep matches as specced (the `does **not** dedup`
+  grep stays empty), and the C-14 pass-through sites (`client.py:1729`, `page.tsx:101`) are intact.
+- Teardown: the context-forge `context-constitution` skill is not available in this session, so the reconciliation
+  was manual against `fundsignal_loop.py` and ingest `servicer.py`; no further drift. The integration PR body must say
+  so (Deviation Log, Step 9).
+- All 9 steps done → `status.md` `code-completed` (separate commit). No ledger insight appended.
+- Next: merge `origin/main-dev` into the branch (Step 7 deviation), then the §5.6 integration PR.

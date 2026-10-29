@@ -28,6 +28,8 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 6 done: direction cuts include the day's stored scores (`_already_emitted` returns `symbol → score`, `_map_directions(reference_scores=…)`), and `valid_until` is anchored to the run date at midnight UTC except under `force`, which stays now-anchored |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 7 done: the `FundamentalsScanSummary.status` comment lists `"partial"` (comment only, no wire change; `buf lint`/`buf breaking` clean) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 8 done: stubs regenerated with `./scripts/buf-gen.sh`; the Go and TS stubs plus the compiled `.d.ts` files carry the `"partial"` status comment (5 files, comment lines only) |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done: analysis `CLAUDE.md` documents the `partial` status and the claim/release, accepted-only count, date-anchored `valid_until` and day-wide direction-cut rules; the MCP runbook lists `"partial"`; merge-order row confirmed |
+| 2026-10-29 | `code-completed` | /sdd-execute sequential | All 9 steps done |
 
 ---
 
@@ -64,4 +66,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 8 (proto-gen: regenerate stubs)
+Merge `origin/main-dev` into `feature/fix-fundsignal-emit-accounting` (Step 7 deviation), then open the integration PR (`/sdd-execute fix-fundsignal-emit-accounting sequential` §5.6); the PR body records the manual teardown reconciliation (Step 9 deviation).
