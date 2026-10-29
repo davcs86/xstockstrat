@@ -239,7 +239,7 @@ docker compose logs --since 1m xstockstrat-config | grep -E "config LISTEN conne
 
 ### Step 2 — test: LISTEN reconnect, retry, resync and notification-failure cases (AC-1, AC-2, AC-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
@@ -823,3 +823,25 @@ SELECT; a second connect and a second LISTEN follow `error`+`end`; exactly one `
 namespace-less payload causes no unhandled rejection; and such a payload issues no namespace query. Step 2 still owns
 the committed red→green proof against the pre-Step-1 tree.
 **Reason**: the paired test step follows the service step in the spec's order.
+
+### Deviation: Step 2 — log sink recorded (Instruction 0)
+**Spec said**: "read the installed `node_modules/winston/lib/winston/transports/console.js` and note which writer its
+`log()` calls for `error`-level records. Record that writer in the Deviation Log before any case is written; Step 6
+reuses it."
+**Actual**: winston 3.19.0 `Console` transport (`console.js:52-89`): `stderrLevels` and `consoleWarnLevels` are empty
+by default (`logger.ts` passes no options), so every level, `error` included, goes to `console._stdout.write(...)`,
+which Node maps to `process.stdout`. The tests mock `process.stdout.write` with `t.mock.method` and pass each chunk
+through to the original. A throwaway probe (`getLogger('t').error('probe')`) passed and was deleted before AC-2 was
+written. Step 6 reuses this capture.
+**Reason**: the spec required the sink to be confirmed against the installed package; it matched the spec's default.
+**Disposition**: as specced (recorded per Instruction 0).
+
+### Deviation: Step 2 — RED captured against the pre-Step-1 source
+**Spec said**: "**TDD**: `red-green required`. Against the pre-Step-1 tree".
+**Actual**: Step 1 had already landed (907fa340), so RED was run by temporarily restoring
+`configServiceImpl.ts` from a482eae2 (the pre-Step-1 commit), compiling, and running the new suite: 8 of 8 new
+cases failed for the predicted reasons (boot order `false`; unhandled `error` event on the drop; AC-2's
+`connection terminated` escaping as a test failure; the malformed payload's `JSON.parse` throw). The file was then
+restored with `git checkout` (no diff) and GREEN run.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced (procedure note).

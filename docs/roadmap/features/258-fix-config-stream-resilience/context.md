@@ -457,3 +457,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   paired test is Step 2. Full detail is in the Deviation Log.
 - Two constraint comments were added beyond the spec text: the `chain` field (it serializes reloads) and the
   LISTEN-before-reload line.
+
+### Step 2 — test: LISTEN reconnect, retry, resync and notification-failure cases (AC-1, AC-2, AC-9) [done]
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` (config + root) ⬇.
+- Log sink (Instruction 0): winston 3.19.0 Console writes every level to `console._stdout` = `process.stdout`;
+  the probe passed and was deleted. Step 6 reuses the `process.stdout.write` capture (Deviation Log).
+- Added `describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)')` with 8 cases: boot order, @AC-1, @AC-9,
+  connect rejects twice (backoff 1 s → 2 s → 4 s, then reset to 1 s), reloadAll rejects once, interleave (chain
+  order 300 then 600), @AC-2, malformed payload. Local `FakeClient`/routing pool/`fakeCall` helpers (C-13 inline;
+  no fixtures home).
+- TDD: RED against the pre-Step-1 `configServiceImpl.ts` (a482eae2, restored temporarily): 8/8 new cases fail as
+  predicted. GREEN on the Step 1 code: 11/11 in the file, 5 repeated runs with 0 failures.
+- Verification: `pnpm run test:coverage` exit 0 (190/190 pass, c8 lines 92.04% ≥ 40); `pnpm run lint` exit 0 with
+  0 errors (168 warnings: 158 pre-existing plus 10 `no-explicit-any` in the new test helpers); the AC greps hit;
+  the fixtures grep has no hits.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
+
