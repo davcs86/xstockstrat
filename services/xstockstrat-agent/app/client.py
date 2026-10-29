@@ -2098,7 +2098,6 @@ async def set_config(
     value_type: str,
     value: str,
     environment: str,
-    author: str,
     reason: str,
     access_scope: int,
     create_key: bool = False,
@@ -2116,6 +2115,8 @@ async def set_config(
     tool (the hardcoded-admin ``_admin_metadata()`` was removed), so this is no longer an exception.
     The server-side ADMIN-bit gate (feature 074) is what enforces it, so a non-admin caller gets
     PERMISSION_DENIED here rather than a silent success.
+
+    Attribution is the caller's ``x-user-id``, never a body field (feature 241).
     """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
@@ -2140,7 +2141,6 @@ async def set_config(
                 namespace=namespace,
                 key=key,
                 value=cv,
-                author=author,
                 reason=reason,
                 environment=env,
                 create_key=create_key,
