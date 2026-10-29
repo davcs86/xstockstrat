@@ -28,6 +28,10 @@ PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio
 TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 
+# Fixed, not a config key: a config read cannot bound itself. Read at call time so tests can
+# monkeypatch it.
+_CONFIG_READ_TIMEOUT_S = 3.0
+
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
 # Edge propagation: set per tool-request by `set_caller`, read by `_metadata()`. Defaults to None
@@ -1752,10 +1756,11 @@ async def get_config_value(
             snapshot = await stub.GetConfig(
                 config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id),
                 metadata=_metadata(),
+                timeout=_CONFIG_READ_TIMEOUT_S,
             )
-    except grpc.aio.AioRpcError:
+    except grpc.aio.AioRpcError as e:
         # Surface a transport failure — never swallow to None (reserved for an absent key).
-        log.warning("get_config_value: GetConfig failed for %s.%s", namespace, key)
+        log.warning("get_config_value: GetConfig %s for %s.%s", e.code().name, namespace, key)
         raise
     cv = snapshot.values.get(key)
     if cv is None:
@@ -2098,7 +2103,6 @@ async def set_config(
     value_type: str,
     value: str,
     environment: str,
-    author: str,
     reason: str,
     access_scope: int,
     create_key: bool = False,
@@ -2116,6 +2120,8 @@ async def set_config(
     tool (the hardcoded-admin ``_admin_metadata()`` was removed), so this is no longer an exception.
     The server-side ADMIN-bit gate (feature 074) is what enforces it, so a non-admin caller gets
     PERMISSION_DENIED here rather than a silent success.
+
+    Attribution is the caller's ``x-user-id``, never a body field (feature 241).
     """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
@@ -2140,7 +2146,6 @@ async def set_config(
                 namespace=namespace,
                 key=key,
                 value=cv,
-                author=author,
                 reason=reason,
                 environment=env,
                 create_key=create_key,

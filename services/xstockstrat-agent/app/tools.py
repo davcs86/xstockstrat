@@ -350,8 +350,7 @@ async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token:
         value_type="string",
         value=bearer_token,
         environment=resolve_scope(""),
-        author=tool,
-        reason=f"bearer for signal source {slug}",
+        reason=f"{tool}: bearer for signal source {slug}",
         access_scope=_caller_access_scope(ctx, tool),
         create_key=True,
         user_id=_caller_user_id(ctx, tool),
@@ -1654,7 +1653,6 @@ def register_tools(server: MCPServer) -> None:
         key: str,
         value_type: Literal["string", "int", "float", "bool"],
         value: str,
-        author: str,
         reason: str,
         user_id: str = "",
         create_key: bool = False,
@@ -1669,8 +1667,8 @@ def register_tools(server: MCPServer) -> None:
           that is byte-identical to what the server stores. NOTE value_type is only honored when
           CREATING a new key; for an existing key the stored type wins and this is ignored.
         value: the new value, as a string; it is converted according to value_type.
-        author: who is making the change — required, and recorded in config.config_audit.
-        reason: why — required, and recorded alongside author.
+        reason: why — required, recorded in config.config_audit; the change is attributed to your
+          verified user id.
         user_id: optional per-user scope. Omit (empty) to write the global value; pass a user id to
           set that user's per-user override. Secret keys are global-scope only — a per-user write to
           a secret key is rejected INVALID_ARGUMENT by the backend.
@@ -1690,6 +1688,8 @@ def register_tools(server: MCPServer) -> None:
         serves since feature 079 removed the legacy SSE one."""
         # Fails fast when no verified claims are present; the backend admin gate authorizes writes.
         access_scope = _caller_access_scope(ctx, "set_config")
+        # Fail fast at the edge: config attributes the write to x-user-id and rejects an empty one.
+        _caller_user_id(ctx, "set_config")
 
         env = _resolve_scope("")
 
@@ -1700,7 +1700,6 @@ def register_tools(server: MCPServer) -> None:
                 value_type=value_type,
                 value=value,
                 environment=env,
-                author=author,
                 reason=reason,
                 access_scope=access_scope,
                 create_key=create_key,
@@ -2375,8 +2374,8 @@ def _same_origin(a: str, b: str) -> bool:
     return pa.scheme == "http" and pb.scheme == "https"
 
 
-# Fixed bound on the undeadlined GetConfig policy read; looked up at call time (never bound as a
-# default argument) so tests can monkeypatch it.
+# Outer bound keeping list_opportunities inside the MCP client's 60 s budget; looked up at call
+# time so tests can monkeypatch it.
 _POLICY_READ_TIMEOUT_S = 3.0
 
 
