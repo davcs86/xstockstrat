@@ -849,7 +849,7 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 
 ### Step 11 — docs: Report sidecar, merge-order rows and follow-up defect reports
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`, `docs/roadmap/features/`
 **Files**:
 - `docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.status` — modify
@@ -1039,3 +1039,11 @@ _Populated by /sdd-execute as implementation proceeds._
   literal. The 503 sentence continues the Discovery list item rather than starting a new paragraph. Anchors
   had drifted by one or two lines (`list_opportunities` deadline wording is at `:1046-1047`, not `:1044-1046`);
   that text is unchanged. **Disposition**: accepted (no scope change).
+- **Step 11 (2026-10-29)** — follow-up report severity: Instruction 3 asks for the lowest severity tier, but this run's execution
+  constraint allows only the SEV-2 token. Both new reports use SEV-2, with impact type `mcp-budget-exceeded`, which
+  matches the precedent `docs/reports/2026-10-29-agent-config-snapshot-read-defect.md` (also SEV-2, also over the
+  60 s MCP budget). `/sdd-triage` can lower either one. The 272 row's 45 s is named as the `run_backtest`
+  deadline. Evidence anchors in this branch differ from the spec: `_fetch_url` is at `tools.py:2548`, the
+  `list_opportunities` policy read is at `:1642-1645`, and the extract loop is at `:564-567`. The R10 report
+  points to the existing config-snapshot report for the config-stall part and does not repeat it.
+  **Disposition**: accepted (no scope change).

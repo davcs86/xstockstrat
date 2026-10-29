@@ -1047,3 +1047,24 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
 - Same-PR constraint: Steps 3 and 7 are already on this branch; the single integration PR carries all three.
 - Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
   Steps 1-9); no `--no-verify` was used.
+
+## Session 2026-10-29 — Step 11 — docs: Report sidecar, merge-order rows and follow-up defect reports
+
+- Files:
+  - `docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.status`: now `triaged` with
+    `ref: feature:273-fix-agent-client-deadlines`. The report body is unchanged.
+  - `docs/roadmap/features/merge-order.md`: the 272 row now states the widened pass-through and the PLAT-13
+    nesting note (about 40 s, under the agent's 45 s). The 273 → 247 row is unchanged. No row was added.
+  - Follow-up defect reports, each with an `open` sidecar:
+    - R4: `docs/reports/2026-10-29-agent-list-opportunities-over-mcp-timeout-defect.md`
+    - R10, plus the R7 residual: `docs/reports/2026-10-29-agent-extract-tools-no-mcp-cap-defect.md`
+- Deviation: both reports use SEV-2, not the lowest tier the spec asks for, under this run's severity-token constraint. See the
+  Deviation Log.
+- TDD: N/A (docs).
+- Verification:
+  - Spec greps: the sidecar reads `triaged` and `ref:`; each row grep counts 1; the old pass-through phrase has
+    no hits; `about 40 s` hits the 272 row; `ls` lists both reports.
+  - The defect-filing format check gives one severity token per report and `open` on each sidecar.
+- Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
+  Steps 1-10). No `--no-verify` was used.
+
