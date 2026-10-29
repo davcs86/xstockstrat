@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3 — `mintAccessToken` (optional `aud`) + `issueRefreshToken` shared by login, refresh and OAuth (D-21) |
 | 2026-10-29 | `in-progress` (Step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4 — AC-4 claim-shape + refresh `client_id` parity tests (RED 1 fail on pre-Step-3 source → GREEN 89/89); FR-6/FR-7 grep 1 sign + 1 INSERT |
 | 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6 — identity context constitution re-grounded (IDENTITY-1/2/4 to `mintAccessToken`, all line hints re-stamped); manual reconciliation, context-forge refresh plugin unavailable |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (operator session) | Step 5 marked done by operator decision ("Run it after deploy."): the 20-caller repro runs post-merge on dev; merge hold lifted |
 
 ---
 
@@ -58,4 +59,4 @@ duplication (D-21) is folded in so the fix covers one shared path.
 
 ## Next Action
 
-Operator: run the Step 5 real-Postgres repro (implementation-spec.md Deviation Log, Step 5 entry) and record it in context.md; then `/sdd-execute fix-identity-auth-code-race sequential` to flip Step 5 and open the integration PR (its body must record the Step 6 manual teardown reconciliation)
+After the integration PR merges and deploys to dev: operator runs the post-deploy 20-caller OAuth-token repro (implementation-spec.md Deviation Log, Step 5 post-merge entry) and the session records it in context.md under `rollout (dev)`.

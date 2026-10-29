@@ -444,7 +444,7 @@ pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40, i.e. line 
 
 ### Step 5 — test: real-Postgres 20-caller repro of AC-1 (manual, local, recorded)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `docs/roadmap/features/265-fix-identity-auth-code-race/context.md` — modify (repro script verbatim, the command,
@@ -586,6 +586,17 @@ _Populated by /sdd-execute as implementation proceeds._
   `describe('exchangeAuthCode')` to reuse `storedRow`/`exchangeCall` (the spec's offered option), so
   `describe('token claim-shape parity (AC-4)')` holds the login and first-party refresh cases; the shared
   assertions live in module-level helpers `assertSharedClaims`, `refreshInsertClientId` and `withAppEnvUnset`.
+- **2026-10-29 — Step 5 marked `done` by operator decision; the repro itself runs post-merge on dev.** Operator
+  decision 2026-10-29, in their own words: "Run it after deploy." This supersedes the "deferred to operator" entry
+  below for the Status field and the merge hold. The local BEFORE/AFTER run is replaced by an AFTER-only run against the
+  deployed dev stack (real managed Postgres via the `:25060` direct pool), driven through the agent's public OAuth
+  endpoints. It registers a client (`POST /agent/oauth/register`), completes `/oauth/authorize` with an operator browser
+  login, then fires 20 concurrent `POST /agent/oauth/token` (`authorization_code`) with the one code inside its
+  60-second TTL. Expected: exactly 1 HTTP 200 and 19 `invalid_grant`; the 20 `ExchangeAuthCode` spans are confirmed in
+  Tempo. The operator runs the script locally (the code is a live credential with a 60 s TTL and never passes through
+  the session), and the result is recorded in context.md under a `rollout (dev)` session. **Not yet performed.** The
+  BEFORE leg is dropped, because the pre-fix race is already evidenced by the RED unit tests (Step 2) and hotfix
+  `5bd271d`'s identical refresh repro. AC-1's mocked-DB tests remain the merge-time evidence.
 - **2026-10-29 — Step 5 deferred to operator — integration PR merge held until** the operator runs the recorded
   repro against a local TimescaleDB with identity migrations applied (`./scripts/bootstrap.sh`; no Postgres answers on
   `localhost:5432` here — `pg_isready` "no response" — and the execute loop may not start one). Exact checks:

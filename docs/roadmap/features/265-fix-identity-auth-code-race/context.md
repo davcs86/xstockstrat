@@ -642,3 +642,16 @@ Feature: xstockstrat-identity - authorization code single-use and token issuance
 ### Coverage check
 - Source scenarios: 6 (AC-1 to AC-6). Planned (NEW+DUP+OVERLAP): 6 (6 NEW). None skipped.
 ```
+
+## Session 2026-10-29 — operator decision: Step 5 runs post-deploy
+
+- Operator choice (own words, chat 2026-10-29): "Run it after deploy." The options offered were: operator runs the local
+  repro; waive Step 5; or run it on dev after deploy.
+- Feasibility checked on main-dev: DCR at `/agent/oauth/register` is open (agent-namespace `oauth.registration_enabled` unset)
+  and `oauth.allowed_redirect_uris` is unset, so any `https://` redirect registers. `issueAuthCode` sets
+  `expires_at = NOW() + 60 s`, and `/oauth/callback` needs a logged-in UI session cookie, so the browser leg is the
+  operator's. The 20 concurrent token POSTs run from a local operator script within the TTL; no code or token passes
+  through the session.
+- Step 5 → `done` (post-merge), status → `code-completed`, merge hold lifted; Deviation Log entry added.
+- Merged origin/main-dev (normal merge, clean); the PR diff is unchanged (8 files).
+
