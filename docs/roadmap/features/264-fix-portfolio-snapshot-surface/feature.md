@@ -20,6 +20,7 @@
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge: steps 1,3,4,5,6,8 line refs aligned; Step 6 evidence records 031 (243) / 032 (244) now committed; 034 reservation unchanged |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge: steps 4,5,6,7,8,9,10 aligned (line drift; Step 6 records 248 at `033_`, so 031/032/033 = 243/244/248; 034 reservation unchanged) |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge `f01acaa`: Step 10 aligned (fails.md:2911 rule citation, `list_config_keys(namespace, user_id="")` at tools.py:1628, post-deploy smoke marked operator action); gate (a) passes, (b) still unmet |
 
 ---
 
