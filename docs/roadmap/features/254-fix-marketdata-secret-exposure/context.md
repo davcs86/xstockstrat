@@ -399,3 +399,19 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: full `go test ./... -race` green; coverage total 71.5% (>= 40%); `golangci-lint` v2.14.0 (go1.27
   build in the session scratchpad) 0 issues.
 
+
+## Session 2026-10-29 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-marketdata-secret-exposure` (`-X ours`, merge `12dc255b`).
+- Operator approval: standing authorization, operator chat 2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f):
+  "Start executing features 241-276" via batch-execute. Answers: unattended checkpoints (checkpoints = report); C-16
+  promotion auto-confirmed unless it changes an existing @AC rule; merge-train authorized; 255 and 275 deferred;
+  operator-only DB/prod steps — open the integration PR and hold the merge; blocker decisions 2026-10-29 recorded per
+  feature.
+- Status already `in-progress` (flipped 2026-10-28); no status change this session.
+- Re-spec of Steps 4-9 against the merged tree: every path, symbol and line cite still resolves (config `authz.ts`
+  grant `:114-126`, `secretsAndScope.test.ts` GetSecret describe `:63`, `perUserSecrets.test.ts:236-248`,
+  `secretCallerAuthz.test.ts:57-62`, marketdata `config.go:70/:109/:115`, `main.go:77-78`). Changes: Step 5
+  Instructions 2-3 spell out `setEnv(...leaf, caPem)` (3-arg `setEnv`, `mintLeaf` returns `[certPem, keyPem]`, CA PEM
+  read with `readFileSync` since openssl writes it to a path); Step 9 Verification names the DO apps MCP
+  `apps-get-logs` tool because `doctl` is not installed in the sandbox. Steps 4, 6, 7, 8 unchanged.
