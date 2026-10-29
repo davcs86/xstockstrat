@@ -592,3 +592,36 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
     conflict only), analysis `CLAUDE.md` (246, 244, 215; different sections) and `mcp-tools.md` (249; different
     row). Re-grep anchors at every rebase.
   - Router note, not 272's: peers 244 and 248 both claim config migration `032`.
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-analysis-backtest-bounds`, normal merge of `origin/main-dev`
+  (`b8b8bac2`, no conflicts); ledger-guard `--fix` reported clean (no repair).
+- Re-spec of step bodies 1, 3, 4, 5, 6, 7, 8 and 9 only (implementation-spec.md), each claim re-grepped:
+  - Steps 1, 3, 4, 7, 8: line drift only (e.g. `_fetch_bars_paged` `:1401`, `RunBacktest` `:792`, loop handlers
+    `:1134-1139`, disarm anchor `:1274`, `_windowed_req` `:3685`, analysis CLAUDE.md row `:509`, mcp-tools Errors
+    `:421`). Content matches.
+  - Step 5: feature 244 landed on main-dev. `get_int` (`watcher.py:111-117`) is now presence-aware and
+    `get_int_present = get_int` (`:119`), so the call keeps its semantics. `int_positive` (`:142`) is not usable
+    (0 must mean no limit; a negative must WARN). The screener read is now `int_positive(..., 120)` at `:3793`, and
+    the verification text says so. The `default_fill_model` note is no longer called a zero-trap.
+  - Step 6 (C-13): reuse the existing `tests/conftest.py:61` `snapshot_watcher` instead of adding `config_watcher`.
+    `tests/conftest.py` and `test_list_opportunities_deadlines.py` are dropped from Files. Migrating that file's
+    local `_watcher` onto `snapshot_watcher` is a separate decision, out of scope here.
+  - Step 9: the prior evidence was wrong. `029` heals only platform/trading/portfolio/marketdata. The analysis rows
+    are still the bare `backtest.max_duration_seconds` (001:69 `'300'`, 002:71 `'120'` production), so the dotted read
+    gets the 300 s code default everywhere unless an operator creates dotted rows. Step 9 now carries an
+    **operator-decision blocker** (A: reword G-1 / set dotted rows via set_config; B: heal migration — a new DB gate
+    and a re-spec; C: other). No choice was made on the operator's behalf.
+  - Step 8 docs rows no longer name "prod 120 s, staging 300 s". They say "default 300 s; 0 = no limit", which is
+    true under any Step 9 decision.
+- Not re-specced (outside the directive's step-body scope, non-normative): the Execution Summary's "first-enforced
+  prod value of 120 s" sentence and the Step Dependencies line hints (244 / 245 anchors). The step bodies above
+  supersede them.
+
+### Open Threads (carried)
+
+- [ ] **Step 9 operator decision (A/B/C) on the bare-vs-dotted key.** Needed before G-1 runs. Does not block
+  Steps 1-8.
+- [ ] C-10 merge-order pin (273 before 272) and I-1..I-3 in 273's context.md: still outside this writer's scope.
+- [ ] G-1 measurements and the operator threshold, after Step 5 is on dev.
