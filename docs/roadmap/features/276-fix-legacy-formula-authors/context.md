@@ -338,3 +338,15 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
   - `ruff check .` and `ruff format --check .` are clean.
 - Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors.py`
 - Deviations: the AC-8 interleaving point (Deviation Log).
+
+### Step 7 — test: servicer read path after repair (cold cache) and stale-cache negative [done]
+- `tests/test_legacy_authors_read_path.py` (new) drives the real `IndicatorsServicer` read path (`_load_formula` → `FormulasRepository.get_by_id`) over a test-local `_FakePool(FakeFormulasTable)` that serves `get_by_id`'s `fetchrow`. It reuses `USERS`, `make_formula_row`, `FakeFormulasTable` and `ctx_with` from `conftest.py` (C-13). The repair runs the real `run_report`, then the operator confirm, then `run_apply`.
+  - `test_owner_reads_after_repair_cold_cache` (AC-1): before apply, the owner `GetFormula` gets NOT_FOUND. After apply, a fresh servicer returns `author == 80880990-…`, and the owner `ExecuteFormula` succeeds (sandbox stubbed).
+  - `test_non_owner_still_not_found_after_repair` (AC-6): bob gets NOT_FOUND on `ExecuteFormula` and `GetFormula`. An admin (scope 4) `ExecuteFormula` gets PERMISSION_DENIED.
+  - `test_stale_cache_requires_restart`: a servicer whose cache was filled by an admin `GetFormula` before apply still gives the owner NOT_FOUND after apply, and a new servicer serves the repaired author. This is the restart requirement Step 8's runbook must state.
+- TDD (red → green). AC-1/AC-6:
+  - Red: `legacy_authors.py` reverted to its Step 4 version (`67360c3f`). 3 failed, each `AttributeError: module 'app.maintenance.legacy_authors' has no attribute 'run_apply'`. The owner pre-apply NOT_FOUND assertion passed before the failure, which reproduces the defect.
+  - Green: `uv run pytest tests/test_legacy_authors_read_path.py tests/test_formula_read_authz.py -v`, 15 passed.
+- Verification: `uv run pytest --cov=app --cov-fail-under=50` gave 322 passed at 83.17%. `ruff check .` and `ruff format --check .` are clean. The suite ran on both the service's `.python-version` (CPython 3.12.3) and 3.13.17 (`uv run --python 3.13`), with the same results.
+- Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors_read_path.py`
+- Deviations: test-local fake pool, sandbox stub, admin-filled warm cache and the RED reason (Deviation Log).
