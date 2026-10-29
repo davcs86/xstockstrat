@@ -161,28 +161,34 @@ grep -n "^Baseline verdict: " docs/roadmap/features/273-fix-agent-client-deadlin
   - `monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", f"127.0.0.1:{port}")` (`:48`).
   - `monkeypatch.setattr(client.mtls, "secure_channel", lambda ep, _svc: grpc.aio.insecure_channel(ep))` (`:49-51`).
   - `asyncio.wait_for(..., _HANG_GUARD_S)` (`:60`).
-- 247 (merged by precondition) adds `HANG_GUARD_S = 10` and the `hung_config_server(monkeypatch)` fixture to `tests/conftest.py`. That fixture is a sync threaded `grpc.server(ThreadPoolExecutor(max_workers=8))`, because "`TestClient`'s portal loop cannot serve a pytest-loop-bound aio server". Its hang handler loops `while context.is_active() and not stop.is_set(): stop.wait(0.05)`, and teardown is `stop.set()` then `server.stop(0).wait()` (247 implementation-spec.md lines 140-160).
+- 247 is merged (precondition met; re-spec 2026-10-29). `tests/conftest.py` now has `HANG_GUARD_S = 10` (`:19`) and the `hung_config_server(monkeypatch)` fixture (`:82-143`, `def` at `:83`). Its value is `start(*, answer_after_s=None, values=None)`. It is a sync threaded `grpc.server(ThreadPoolExecutor(max_workers=8))` (`:117`), because "`TestClient`'s portal loop cannot serve a pytest-loop-bound aio server" (docstring `:84-91`). Its hang handler loops `while context.is_active() and not stop.is_set(): stop.wait(0.05)` (`:108-110`). Teardown is `stop.set()` then `server.stop(0).wait()` (`:140-142`). It patches `client.CONFIG_ENDPOINT` and `client.mtls.secure_channel` (`:123-126`).
 - `app.auth` and `app.client` share one `mtls` module object (`app/client.py:17`, `app/auth.py:15`, both `from app import mtls`), so a single `client.mtls.secure_channel` patch redirects both.
-- Enumeration of all 73 unary call expressions, by an AST walk over `app/client.py` that matches `await stub.X(` and `await stub_cls(channel).X(`: only `list_opportunities`'s `ListOpportunities` (`:866`, `timeout=timeout` at `:872`) carries `timeout` today. The two `stub_cls(channel)` shapes are `list_templates` `:1318` and `instantiate_template` `:1342`.
+- 247's constant: `_CONFIG_READ_TIMEOUT_S = 3.0` at `client.py:33`, after a two-line comment (`:31-32`).
+- Enumeration of all 73 unary call expressions, by an AST walk over `app/client.py` that matches `await stub.X(` and `await stub_cls(channel).X(`. Exactly two carry `timeout` today, which is the @AC-10 allow-list:
+  - `list_opportunities`'s `ListOpportunities` (`:871`, `timeout=timeout` at `:877`);
+  - `get_config_value`'s `GetConfig` (`:1756`, `timeout=_CONFIG_READ_TIMEOUT_S`, from 247).
+
+  The two `stub_cls(channel)` shapes are `list_templates` `:1323` and `instantiate_template` `:1347`.
 - Client entry points and endpoints for the @AC-5 table:
-  - `ingest_signal(source, symbol, direction, valid_from, ...)` (`client.py:209`) → `INGEST_ENDPOINT` `:240`
-  - `emit_alert(severity, category, title, body, ...)` (`:249`) → `NOTIFY_ENDPOINT` `:280`
-  - `list_positions(user_id, account_id="", limit=0, page_token="")` (`:2356`) → `PORTFOLIO_ENDPOINT` `:2372`
-  - `get_config(namespace, environment, user_id="")` (`:2034`) → `CONFIG_ENDPOINT` `:2041`
-  - `register_oauth_client(redirect_uris, client_name)` (`:1355`) → `IDENTITY_ENDPOINT` `:1359`
-  - `run_backtest(user_id, strategy_id, symbols, ...)` (`:561`) → `ANALYSIS_ENDPOINT` `:632`
-  - `screen_symbols(symbols, ...)` (`:698`) → `ANALYSIS_ENDPOINT` `:744`
-  - `run_fundamentals_scan(force=False, dry_run=False, symbols=None, access_scope=0)` (`:1695`) → `ANALYSIS_ENDPOINT` `:1710`
-  - `trigger_backfill(symbols, timeframe="1d", ...)` (`:1876`) → `INGEST_ENDPOINT` `:1947`
-- Autouse env fixture: `tests/conftest.py:51` (`set_env`), which sets dummy `MTLS_*` (`:64-66`).
-- No AC-10-style static test exists. `grep -rn "ast.parse" services/xstockstrat-agent/tests` finds none, so it is **Not found** and created here.
+  - `ingest_signal(source, symbol, direction, valid_from, ...)` (`client.py:213`) → `INGEST_ENDPOINT` `:244`
+  - `emit_alert(severity, category, title, body, ...)` (`:253`) → `NOTIFY_ENDPOINT` `:284`
+  - `list_positions(user_id, account_id="", limit=0, page_token="")` (`:2362`) → `PORTFOLIO_ENDPOINT` `:2378`
+  - `get_config(namespace, environment, user_id="")` (`:2040`) → `CONFIG_ENDPOINT` `:2047`
+  - `register_oauth_client(redirect_uris, client_name)` (`:1360`) → `IDENTITY_ENDPOINT` `:1364`
+  - `run_backtest(user_id, strategy_id, symbols, ...)` (`:565`) → `ANALYSIS_ENDPOINT` `:636`
+  - `screen_symbols(symbols, ...)` (`:702`) → `ANALYSIS_ENDPOINT` `:748`
+  - `run_fundamentals_scan(force=False, dry_run=False, symbols=None, access_scope=0)` (`:1700`) → `ANALYSIS_ENDPOINT` `:1715`
+  - `trigger_backfill(symbols, timeframe="1d", ...)` (`:1882`) → `INGEST_ENDPOINT` `:1953`
+- Autouse env fixture: `tests/conftest.py:57` (`set_env`), which sets dummy `MTLS_*` (`:69-71`).
+- No AC-10-style static test exists. `grep -rn "ast.parse" services/xstockstrat-agent/tests` finds none, so it is **Not found** and created here. `tests/test_client_deadlines.py` does not exist yet (create).
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-5, AC-10`
 
 **Instructions**:
-1. In `tests/conftest.py`, add the fixture `hung_backend(monkeypatch)` next to 247's `hung_config_server`. Its value
+1. In `tests/conftest.py`, add the fixture `hung_backend(monkeypatch)` directly after 247's `hung_config_server`
+   (which ends at `:142`). Its value
    is `start(endpoint_attr: str, *, module=None, answers: dict | None = None)`. `module` defaults to `app.client`.
    `start` returns a handle exposing `port`, `calls` (a list of `(method, metadata_dict)`) and `entered`
    (`len(calls)`).
@@ -253,50 +259,52 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
 
 **Codebase Evidence**:
-- Endpoint block `client.py:21-29`. 247 inserts `_CONFIG_READ_TIMEOUT_S = 3.0` directly after `:29`, with a
-  two-line comment (247 implementation-spec.md lines 370-376).
-- Constant style precedent: `_POLICY_READ_TIMEOUT_S = 3.0` (`app/tools.py:2369-2371`), "looked up at call time
-  (never bound as a default argument) so tests can monkeypatch it".
-- Kwarg precedent: `timeout=timeout,` after `metadata=` (`client.py:871-872`).
-- Header trio unchanged: `_metadata()` (`client.py:59-87`) already carries `x-user-id` / `x-access-scope` /
+- Endpoint block `client.py:21-29`. 247 (merged) added `_CONFIG_READ_TIMEOUT_S = 3.0` at `client.py:33`, after
+  a two-line comment at `:31-32`.
+- Constant style precedent: `_POLICY_READ_TIMEOUT_S = 3.0` (`app/tools.py:2377-2379`), "looked up at call time
+  so tests can monkeypatch it".
+- Kwarg precedent: `timeout=timeout,` after `metadata=` (`client.py:876-877`).
+- Header trio unchanged: `_metadata()` (`client.py:63-91`) already carries `x-user-id` / `x-access-scope` /
   `x-trace-id` on every call (C-03, 210 @AC-2/@AC-5). This step adds no new outbound call.
 - Channel factory untouched: `mtls.secure_channel` (`app/mtls.py:37-43`), per AGENT-1.
-- Full call-site inventory (AST walk, pre-247 lines):
+- Full call-site inventory (AST walk at the post-247 merge, 2026-10-29). Anchor each site by its **function
+  name**; the line is the awaited call's line:
 
   | Function | RPC @ line | Constant |
   |---|---|---|
-  | `list_signal_sources` | ListSignalSources @174 | RPC |
-  | `ingest_signal` | IngestSignal @242 | RPC |
-  | `emit_alert` | EmitAlert @282 | RPC |
-  | `ensure_signal_watchlist` | EnsureSignalWatchlist @296 | RPC |
-  | `add_watchlist_symbol` | AddWatchlistSymbols @314 | RPC |
-  | `list_watchlists` / `get_watchlist` / `create_watchlist` | ListWatchlists @364, GetWatchlist @377, CreateWatchlist @409 | RPC |
-  | `update_watchlist` | UpdateWatchlist @464 (masked), GetWatchlist @474, UpdateWatchlist @484 | RPC |
-  | `delete_watchlist` / `add_watchlist_symbols` / `remove_watchlist_symbols` | DeleteWatchlist @497, AddWatchlistSymbols @521, RemoveWatchlistSymbols @534 | RPC |
-  | `update_watchlist_bindings` | UpdateWatchlistBindings @554, GetWatchlist @555 | RPC |
-  | `run_backtest` | RunBacktest @634 | **LONG** |
-  | `screen_symbols` | ScreenSymbols @746 | **LONG** |
-  | `list_opportunities` | ListOpportunities @866 | untouched (`timeout=timeout`) |
-  | `manage_strategy` / `get_strategy` / `list_strategy_definitions` | ManageStrategy @947, GetStrategy @967, ListStrategyDefinitions @984 | RPC |
-  | `execute_formula` / `cancel_backfill` | ExecuteFormula @1022, CancelBackfill @1043 | RPC |
-  | `manage_formula` | RegisterFormula @1101, UpdateFormula @1133, DeleteFormula @1137 | RPC |
-  | `list_formulas` / `get_formula` / `list_fundamental_metrics` | ListFormulas @1154, GetFormula @1178, ListFundamentalMetrics @1194 | RPC |
-  | `manage_signal_source` | ManageSignalSource @1255 | RPC |
-  | `list_templates` / `instantiate_template` | `stub_cls(channel).ListTemplates` @1318, `.InstantiateTemplate` @1342 | RPC |
-  | OAuth: `register_oauth_client`, `get_oauth_client`, `issue_auth_code`, `validate_token`, `exchange_auth_code`, `refresh_oauth_token` | RegisterOAuthClient @1361, GetOAuthClient @1376, IssueAuthCode @1390, ValidateToken @1413, ExchangeAuthCode @1432, RefreshOAuthToken @1456 | RPC |
-  | users: `get_user_metadata`, `update_user_metadata`, `create_user`, `list_users`, `get_user`, `set_user_roles`, `set_user_active`, `reset_password`, `admin_get_user_metadata`, `admin_update_user_metadata` | @1474, @1513, @1571, @1581, @1591, @1606, @1617, @1628, @1638, @1665 | RPC |
-  | `set_strategy_live` | SetStrategyLive @1682 | RPC |
-  | `run_fundamentals_scan` | RunFundamentalsScan @1712 | **LONG** |
-  | `get_config_value` | GetConfig @1751 | untouched (247) |
-  | `get_bars` / `get_fundamentals` / `get_historical_fundamentals` | GetBars @1811, GetFundamentals @1825, GetHistoricalFundamentals @1859 | RPC |
-  | `trigger_backfill` | TriggerBackfill @1949 | **LONG** |
-  | `get_backfill_status` | GetBackfillStatus @1973, ListBackfillJobs @2003 | RPC |
-  | `get_config` / `list_config_keys` / `set_config` | GetConfig @2043, ListKeys @2073, SetConfig @2137 | RPC |
-  | offline: `register_offline_account`, `record_offline_order`, `confirm_offline_order`, `snapshot_offline_positions`, `get_order`, `list_account_orders` | RegisterBrokerAccount @2195, PlaceOrder @2231, ConfirmOrder @2276, SnapshotOfflinePositions @2326, GetOrder @2336, ListOrders @2349 | RPC |
-  | `list_positions` | ListPositions @2374 | RPC |
-  | broker: `register_broker_account`, `update_broker_account_credentials`, `deregister_broker_account`, `resume_broker_account`, `list_broker_accounts` | @2409, @2433, @2453, @2470, @2488 | RPC |
+  | `list_signal_sources` | ListSignalSources @178 | RPC |
+  | `ingest_signal` | IngestSignal @246 | RPC |
+  | `emit_alert` | EmitAlert @286 | RPC |
+  | `ensure_signal_watchlist` | EnsureSignalWatchlist @300 | RPC |
+  | `add_watchlist_symbol` | AddWatchlistSymbols @318 | RPC |
+  | `list_watchlists` / `get_watchlist` / `create_watchlist` | ListWatchlists @368, GetWatchlist @381, CreateWatchlist @413 | RPC |
+  | `update_watchlist` | UpdateWatchlist @468 (masked), GetWatchlist @478, UpdateWatchlist @488 | RPC |
+  | `delete_watchlist` / `add_watchlist_symbols` / `remove_watchlist_symbols` | DeleteWatchlist @501, AddWatchlistSymbols @525, RemoveWatchlistSymbols @538 | RPC |
+  | `update_watchlist_bindings` | UpdateWatchlistBindings @558, GetWatchlist @559 | RPC |
+  | `run_backtest` | RunBacktest @638 | **LONG** |
+  | `screen_symbols` | ScreenSymbols @750 | **LONG** |
+  | `list_opportunities` | ListOpportunities @871 | untouched (`timeout=timeout`) |
+  | `manage_strategy` / `get_strategy` / `list_strategy_definitions` | ManageStrategy @952, GetStrategy @972, ListStrategyDefinitions @989 | RPC |
+  | `execute_formula` / `cancel_backfill` | ExecuteFormula @1027, CancelBackfill @1048 | RPC |
+  | `manage_formula` | RegisterFormula @1106, UpdateFormula @1138, DeleteFormula @1142 | RPC |
+  | `list_formulas` / `get_formula` / `list_fundamental_metrics` | ListFormulas @1159, GetFormula @1183, ListFundamentalMetrics @1199 | RPC |
+  | `manage_signal_source` | ManageSignalSource @1260 | RPC |
+  | `list_templates` / `instantiate_template` | `stub_cls(channel).ListTemplates` @1323, `.InstantiateTemplate` @1347 | RPC |
+  | OAuth: `register_oauth_client`, `get_oauth_client`, `issue_auth_code`, `validate_token`, `exchange_auth_code`, `refresh_oauth_token` | RegisterOAuthClient @1366, GetOAuthClient @1381, IssueAuthCode @1395, ValidateToken @1418, ExchangeAuthCode @1437, RefreshOAuthToken @1461 | RPC |
+  | users: `get_user_metadata`, `update_user_metadata`, `create_user`, `list_users`, `get_user`, `set_user_roles`, `set_user_active`, `reset_password`, `admin_get_user_metadata`, `admin_update_user_metadata` | @1479, @1518, @1576, @1586, @1596, @1611, @1622, @1633, @1643, @1670 | RPC |
+  | `set_strategy_live` | SetStrategyLive @1687 | RPC |
+  | `run_fundamentals_scan` | RunFundamentalsScan @1717 | **LONG** |
+  | `get_config_value` | GetConfig @1756 | untouched (247, `timeout=_CONFIG_READ_TIMEOUT_S`) |
+  | `get_bars` / `get_fundamentals` / `get_historical_fundamentals` | GetBars @1817, GetFundamentals @1831, GetHistoricalFundamentals @1865 | RPC |
+  | `trigger_backfill` | TriggerBackfill @1955 | **LONG** |
+  | `get_backfill_status` | GetBackfillStatus @1979, ListBackfillJobs @2009 | RPC |
+  | `get_config` / `list_config_keys` / `set_config` | GetConfig @2049, ListKeys @2079, SetConfig @2144 | RPC |
+  | offline: `register_offline_account`, `record_offline_order`, `confirm_offline_order`, `snapshot_offline_positions`, `get_order`, `list_account_orders` | RegisterBrokerAccount @2201, PlaceOrder @2237, ConfirmOrder @2282, SnapshotOfflinePositions @2332, GetOrder @2342, ListOrders @2355 | RPC |
+  | `list_positions` | ListPositions @2380 | RPC |
+  | broker: `register_broker_account`, `update_broker_account_credentials`, `deregister_broker_account`, `resume_broker_account`, `list_broker_accounts` | @2415, @2439, @2459, @2476, @2494 | RPC |
 
-  That is 73 expressions in total: 71 edited, 2 untouched.
+  That is 73 expressions in total: 71 edited, 2 untouched. `grep -c "metadata=_metadata\|metadata=meta"
+  app/client.py` is 73 at the post-247 merge.
 
 **TDD**: `red-green required`
 
@@ -313,7 +321,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 2. For every row above marked RPC or LONG, add `timeout=_RPC_TIMEOUT_S` (or `timeout=_LONG_RPC_TIMEOUT_S` on the
    four LONG rows) as the last keyword of the awaited stub call, after the existing `metadata=` keyword.
    - Read the constant in the body. Never add a `timeout` parameter or a default argument (C-18).
-   - Do not touch `ListOpportunities` (`:872`) or 247's `get_config_value` site.
+   - Do not touch `ListOpportunities` (`:877`) or 247's `get_config_value` site (`:1756`).
 3. Change nothing else: no channel options, no helper, no reformatting of untouched lines.
 
 **Verification**:
@@ -322,7 +330,7 @@ cd services/xstockstrat-agent && uv run --no-sync pytest tests/test_client_deadl
 grep -c "timeout=_RPC_TIMEOUT_S" services/xstockstrat-agent/app/client.py      # expect 67
 grep -c "timeout=_LONG_RPC_TIMEOUT_S" services/xstockstrat-agent/app/client.py # expect 4
 # grep -c counts lines; valid because each kwarg sits on its own line in these multi-line calls. Step 2's AST guard is authoritative.
-grep -c "metadata=_metadata\|metadata=meta" services/xstockstrat-agent/app/client.py   # expect 73 (baseline at 9f99103b; re-capture after the 247 rebase if 247 changed it) — header trio untouched
+grep -c "metadata=_metadata\|metadata=meta" services/xstockstrat-agent/app/client.py   # expect 73 (re-captured after the 247 merge, 2026-10-29) — header trio untouched
 cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run --no-sync pytest --cov=app --cov-fail-under=40
 ```
 
@@ -431,25 +439,30 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 **Codebase Evidence**:
 - Tool-fn access pattern: `server = MCPServer("test-agent"); tools.register_tools(server); server._tool_manager.get_tool(name).fn` (`tests/test_list_opportunities_deadline.py:20-23`).
-- Claims ctx: `from tests.conftest import ADMIN, _ctx` (`tests/conftest.py:12`, `:17`).
-- Fixtures: `hung_backend` (Step 2) and 247's `hung_config_server` (its `answer_after_s` / `values` params, 247
-  implementation-spec.md lines 147-150).
-- Tool bodies:
-  - `get_positions` → `client.list_positions` (`tools.py:2264-2267`)
-  - `get_config` tool (`:1592`, catch `:1611`) → `client.get_config` (`client.py:2034`)
-  - `ingest_signal` (`:581`). The primary call is at `:612-622`. The best-effort follow-ups run in their own
-    `except Exception` blocks: config `:626-635`, EmitAlert `:641-657`, watchlist add `:660-668`.
-  - `run_backtest` (`:715`) makes one `client.run_backtest` call (`:782-794`). Its summary block at `:799-802` is
-    presentation-only.
-  - `instantiate_template` (`:1197`): `_write_source_bearer` runs at `:1221-1224`, outside the `try`, before
-    `client.instantiate_template` (`:1225-1234`).
+- Claims ctx: `from tests.conftest import ADMIN, _ctx` (`ADMIN` at `tests/conftest.py:14`, `_ctx` at `:22`).
+- Fixtures: `hung_backend` (Step 2) and 247's merged `hung_config_server` (`tests/conftest.py:83`). Its
+  `start(*, answer_after_s=None, values=None)` hangs `GetConfig` by default and answers a snapshot otherwise
+  (`:101`, `:108-115`). `HANG_GUARD_S` is at `:19`.
+- Tool bodies (`app/tools.py`, post-247 merge; anchor by function name):
+  - `get_positions` (`:2256`) → `client.list_positions` (`:2273`, catch `:2274-2275`)
+  - `get_config` tool (`:1600`, catch `:1619`) → `client.get_config` (`client.py:2040`)
+  - `ingest_signal` (`:580`). The primary call is at `:611-621`. The best-effort follow-ups run in their own
+    `except Exception` blocks: config `:625-633`, EmitAlert `:640-657`, watchlist add `:659-668`.
+  - `run_backtest` (`:714`) makes one `client.run_backtest` call (`:782-791`, catch `:792-793`). Its
+    attachment block at `:797-807` is presentation-only.
+  - `instantiate_template` (`:1204`): `_write_source_bearer` runs at `:1229-1231`, outside the `try`, before
+    `client.instantiate_template` (`:1233-1239`).
 - Protos for answered responses:
   - `portfolio_pb2.ListPositionsResponse(positions=[...])` (`packages/proto/portfolio/v1/portfolio.proto:198-201`)
   - `ingest_pb2.IngestSignalResponse(signal_id=...)` (`ingest.proto:138-139`)
-  - `analysis_pb2.BacktestResult` (`analysis.proto:13`)
+  - `analysis_pb2.BacktestResult` (message at `analysis.proto:123`; `RunBacktest` returns it, `:13`)
 - Preserved rules: 127 @AC-4 (`services/xstockstrat-agent/acceptance/consolidate-watchlist-signal.feature`), and
   224 @AC-18/@AC-19 (`docs/sdd/business-rules/platform.feature`).
-- Catch sites: 40 `except grpc.aio.AioRpcError` blocks in `tools.py` (`grep -n "except grpc.aio.AioRpcError" app/tools.py`). The only one passing `deadline_s` today is `list_opportunities` `:1564-1565`.
+- Catch sites: 40 `except grpc.aio.AioRpcError` blocks in `tools.py` (`grep -n "except grpc.aio.AioRpcError" app/tools.py`). The only one passing `deadline_s` today is `list_opportunities` (`:1572-1573`, `deadline_s=timeout_s`).
+- The six target functions have no `AioRpcError` catch today: `list_signal_sources` (`:473`), `_get_source`
+  (`:2329`), `ingest_signal` (`:580`), `emit_alert` (`:671`), `screen_symbols` (`:811`) and
+  `_write_source_bearer` (`:341`).
+- `tests/test_tool_deadlines.py` does not exist yet (create).
 
 **TDD**: `red-green required`
 
@@ -553,45 +566,46 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
 
 **Codebase Evidence**:
-- Wrap idiom: `except grpc.aio.AioRpcError as e: raise RuntimeError(_grpc_error_message(e)) from e` (`tools.py:2266-2267`).
-- Verb literals: `manage_watchlist` `operation == "create"` / `"update"` / `"delete"` (`:1951`, `:1962`, `:1974`).
-  `manage_offline_account` reads are `"get_order"` / `"list_orders"` / `"list_positions"` (`:2113`, `:2117`,
-  `:2121`). Its writes are `create_account` / `record_order` / `confirm_order` / `snapshot_positions` (`:2092`,
-  `:2096`, `:2107`, `:2127`).
+- Wrap idiom: `except grpc.aio.AioRpcError as e: raise RuntimeError(_grpc_error_message(e)) from e` (`tools.py:2274-2275`).
+- Verb literals: `manage_watchlist` `operation == "create"` / `"update"` / `"delete"` (`:1959`, `:1970`, `:1982`).
+  `manage_offline_account` reads are `"get_order"` / `"list_orders"` / `"list_positions"` (`:2121`, `:2125`,
+  `:2129`). Its writes are `create_account` / `record_order` / `confirm_order` / `snapshot_positions` (`:2100`,
+  `:2104`, `:2115`, `:2135`).
 - `manage_watchlist` update is idempotent (I): replace-all `UpdateWatchlist` in a single transaction (design.md §2
   table, `watchlist_repo.go:199-210`).
-- Existing catch sites (pre-247 lines) and their edits:
+- Existing catch sites and their edits. Lines are the `except` line at the post-247 merge (2026-10-29); anchor by
+  the enclosing function name. The set is exactly 40 sites: 36 RPC + 3 LONG + `list_opportunities`.
 
   | Tool (catch line) | `deadline_s=` | `write=` |
   |---|---|---|
-  | `query_bars` 390; `query_fundamentals` 425, 450 | `client._RPC_TIMEOUT_S` | — |
-  | `run_backtest` 793 | `client._LONG_RPC_TIMEOUT_S` | — |
-  | `manage_strategy` 1039; `manage_formula` 1140 | RPC | `True` |
-  | `get_formula` 1154; `list_formulas` 1166; `list_fundamental_metrics` 1179; `list_templates` 1193 | RPC | — |
-  | `instantiate_template` 1233; `manage_signal_source` 1320; `set_strategy_live` 1353 | RPC | `True` |
-  | `trigger_backfill` 1397; `run_fundamentals_scan` 1419 | LONG | `True` |
-  | `get_backfill_status` 1450 | RPC | — |
-  | `cancel_backfill` 1463 | RPC | `True` |
-  | `test_formula` 1496; `list_strategies` 1514 | RPC | — |
-  | `list_opportunities` 1564 | unchanged (`timeout_s`) | — |
-  | `get_strategy` 1582; `get_config` 1611; `list_config_keys` 1638 | RPC | — |
-  | `set_config` 1700; `set_user_metadata` 1737; `manage_user` 1805 | RPC | `True` |
-  | `get_user_metadata` 1710; `list_users` 1815; `get_user` 1827; `admin_get_user_metadata` 1840 | RPC | — |
-  | `admin_set_user_metadata` 1866 | RPC | `True` |
-  | `list_watchlists` 1886; `get_watchlist` 1902 | RPC | — |
-  | `manage_watchlist` 1979 | RPC | `operation != "update"` |
-  | `manage_watchlist_symbols` 2031 | RPC | `True` |
-  | `manage_offline_account` 2138 | RPC | `operation not in ("get_order", "list_orders", "list_positions")` |
-  | `manage_account` 2221 | RPC | `True` |
-  | `list_accounts` 2239; `get_positions` 2266; `get_positions_by_account_id` 2295 | RPC | — |
+  | `query_bars` 389; `query_fundamentals` 424, 449 | `client._RPC_TIMEOUT_S` | — |
+  | `run_backtest` 792 | `client._LONG_RPC_TIMEOUT_S` | — |
+  | `manage_strategy` 1046; `manage_formula` 1147 | RPC | `True` |
+  | `get_formula` 1161; `list_formulas` 1173; `list_fundamental_metrics` 1186; `list_templates` 1200 | RPC | — |
+  | `instantiate_template` 1240; `manage_signal_source` 1327; `set_strategy_live` 1360 | RPC | `True` |
+  | `trigger_backfill` 1404; `run_fundamentals_scan` 1427 | LONG | `True` |
+  | `get_backfill_status` 1458 | RPC | — |
+  | `cancel_backfill` 1471 | RPC | `True` |
+  | `test_formula` 1504; `list_strategies` 1522 | RPC | — |
+  | `list_opportunities` 1572 | unchanged (`timeout_s`) | — |
+  | `get_strategy` 1590; `get_config` 1619; `list_config_keys` 1646 | RPC | — |
+  | `set_config` 1708; `set_user_metadata` 1745; `manage_user` 1813 | RPC | `True` |
+  | `get_user_metadata` 1718; `list_users` 1823; `get_user` 1835; `admin_get_user_metadata` 1848 | RPC | — |
+  | `admin_set_user_metadata` 1874 | RPC | `True` |
+  | `list_watchlists` 1894; `get_watchlist` 1910 | RPC | — |
+  | `manage_watchlist` 1987 | RPC | `operation != "update"` |
+  | `manage_watchlist_symbols` 2039 | RPC | `True` |
+  | `manage_offline_account` 2146 | RPC | `operation not in ("get_order", "list_orders", "list_positions")` |
+  | `manage_account` 2229 | RPC | `True` |
+  | `list_accounts` 2247; `get_positions` 2274; `get_positions_by_account_id` 2303 | RPC | — |
 
 - New wraps (no `AioRpcError` mapping today):
-  - `list_signal_sources` at `:486`;
-  - `_get_source` at `:2324`, which covers both `extract_email_content` and `extract_website_content`;
-  - `ingest_signal` primary at `:612-622`;
-  - `emit_alert` at `:700-710`;
-  - `screen_symbols` at `:847-855`;
-  - `_write_source_bearer`'s `client.set_config` at `:347-359`.
+  - `list_signal_sources` at `:485`;
+  - `_get_source` at `:2332`, which covers both `extract_email_content` and `extract_website_content`;
+  - `ingest_signal` primary at `:611-621`;
+  - `emit_alert` at `:699-708`;
+  - `screen_symbols` at `:854-862`;
+  - `_write_source_bearer`'s `client.set_config` at `:347-358`.
 
   These match `docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.md` § Observed.
 
@@ -610,9 +624,9 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
    - `emit_alert`: `deadline_s=client._RPC_TIMEOUT_S, write=True`.
    - `_write_source_bearer`: wrap only the `client.set_config(...)` call, with
      `deadline_s=client._RPC_TIMEOUT_S, write=True`.
-   - **`ingest_signal`: wrap ONLY the primary `client.ingest_signal(...)` call** (`:612-622`), with
+   - **`ingest_signal`: wrap ONLY the primary `client.ingest_signal(...)` call** (`:611-621`), with
      `deadline_s=client._RPC_TIMEOUT_S, write=True`.
-     - The follow-ups at `:623-668` (alert-threshold read, auto-`emit_alert`, watchlist auto-add) stay exactly
+     - The follow-ups at `:622-668` (alert-threshold read, auto-`emit_alert`, watchlist auto-add) stay exactly
        where they are, inside their existing `except Exception` blocks. This preserves 127 @AC-4 (design §2).
      - Posture (R6): a stall in a follow-up now reaches its fallback silently: the 0.6 default threshold, or a
        skipped auto-alert or auto-add logged at WARN. None of these opens a security gate (insights.md:3695-3705).
@@ -647,17 +661,18 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 - `_metadata()` returns `[]` (`auth.py:23-24`). `validate_bearer_jwt` has the same call at `:39-41`.
 - The mocked-stub pattern is `tests/test_auth.py:21-28`: patch `app.auth.mtls.secure_channel` and
   `app.auth.identity_pb2_grpc.IdentityServiceStub`.
-- ASGI tests use `TestClient(build_http_app())` (`tests/test_oauth.py:16-19`). The existing 401 assertion is
-  `test_streamable_root_unauthenticated_401_with_www_authenticate` (`:94-99`), and session-manager interception
-  is shown at `:102-125`.
+- ASGI tests use `TestClient(build_http_app())` via `_app()` (`tests/test_oauth.py:18-21`). The existing 401
+  assertion is `test_streamable_root_unauthenticated_401_with_www_authenticate` (`:97-102`), and session-manager
+  interception (`StreamableHTTPSessionManager.handle_request` patch at `:120`) is shown at `:105-131`.
 - `_authorized` (`app/main.py:145-162`) is gated by `handle_mcp` at `:206-208`. `_send_unauthorized` is
   `main.py:164-175`.
 - Trace reuse: `CallerPropagationMiddleware` uses `claims.get("trace_id") or _new_trace_id()`
   (`app/tools.py:214`). Middleware trace reuse is already tested by `test_propagates_a_supplied_trace_id`
   (`tests/test_header_propagation.py:100`).
-- The TestClient portal loop needs a threaded server, not `grpc.aio` (247 fixture docstring rationale). Step 2's
+- The TestClient portal loop needs a threaded server, not `grpc.aio` (247 fixture docstring, `tests/conftest.py:84-91`). Step 2's
   `hung_backend` is threaded and takes `module=app.auth`.
 - `IdentityService.ValidateToken` returns `TokenClaims` (`packages/proto/identity/v1/identity.proto:12`).
+- `tests/test_auth_deadline.py` does not exist yet (create).
 
 **TDD**: `red-green required`
 
@@ -846,16 +861,17 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 - The sidecar contract is `.claude/skills/sdd-qa/reference/defect-filing.md:26-47`:
   - `triaged` + `ref: feature:<NNN-slug>`;
   - a `triaged` report whose feature reaches `launched` counts as resolved.
-- `merge-order.md` lists only hard ordering constraints (`:14-18`). `origin/main-dev` already carries both rows
-  (`git show origin/main-dev:docs/roadmap/features/merge-order.md`, lines 84-85): 273 after 247, and 272 after 273.
-  The 272 row describes the pass-through as "`deadline_s is None → exc.details()`", which Step 5 widened. The
-  feature-branch tip predates those rows; the 247-precondition rebase onto `main-dev` brings them in.
+- `merge-order.md` lists only hard ordering constraints (`:14-18`). After the 2026-10-29 `main-dev` merge the
+  branch already carries both rows: 273 after 247 (`merge-order.md:84`) and 272 after 273 (`:85`). So Step 11
+  adds no row. The 272 row still describes the pass-through as "`deadline_s is None → exc.details()`", which
+  Step 5 widened, so this step must reword it. Row `:91` (275) also names 273 and is not edited here.
 - 272 is `fix-analysis-backtest-bounds`
-  (`git show origin/main-dev:docs/reports/2026-10-21-analysis-backtest-bounds-defect.status` →
-  `ref: feature:272-fix-analysis-backtest-bounds`).
+  (`docs/reports/2026-10-21-analysis-backtest-bounds-defect.status` →
+  `ref: feature:272-fix-analysis-backtest-bounds`). Its `status.md` reads `implementation-ready` at 2026-10-29,
+  so the 272 row still applies.
 - R4: `list_opportunities` reaches 68 s: auth 10 + policy 3 + the `ListOpportunities` ceiling 55
   (`services/xstockstrat-agent/CLAUDE.md` `agent.opportunities.read_timeout_seconds` row; design §4).
-- R10: `extract_*` HTTP egress has no MCP-level cap (`tools.py:2390` `_fetch_url`; design §4).
+- R10: `extract_*` HTTP egress has no MCP-level cap (`tools.py:2398` `_fetch_url`; design §4).
 
 **TDD**: N/A (docs)
 
@@ -864,12 +880,10 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 **Instructions**:
 1. Overwrite the SEV-3 sidecar with `triaged` and `ref: feature:273-fix-agent-client-deadlines`, because Step 7
    adds all six wraps. Do not edit the report body (it is a point-in-time record).
-2. Ensure exactly one `merge-order.md` row exists for each pair, with Resolved = `No`. Add a row only if it is
-   missing; never add a duplicate.
-   - `fix-agent-client-deadlines` (273) | `fix-agent-getconfig-deadline` (247). Keep the existing reason. If the
-     row is missing, add it and also name 273's @AC-10 allow-list and the @AC-2/@AC-8 tests, which consume 247's
-     `_CONFIG_READ_TIMEOUT_S` and `hung_config_server`.
-   - `fix-analysis-backtest-bounds` (272) | `fix-agent-client-deadlines` (273). Amend the existing row:
+2. Both `merge-order.md` rows already exist (`:84`, `:85`), each with Resolved = `No`. Do not add a row or a
+   duplicate.
+   - `fix-agent-client-deadlines` (273) | `fix-agent-getconfig-deadline` (247) (`:84`). Keep it unchanged.
+   - `fix-analysis-backtest-bounds` (272) | `fix-agent-client-deadlines` (273) (`:85`). Amend this row:
      - reword the pass-through to match Step 5: it "fires whenever `exc.details()` is non-empty and is not grpc's
        client sentinel `Deadline Exceeded`, regardless of `deadline_s`";
      - add the PLAT-13 nesting note: 272's server bound on `analysis.backtest.max_duration_seconds` must sit at
