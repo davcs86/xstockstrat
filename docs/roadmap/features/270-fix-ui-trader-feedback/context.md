@@ -782,3 +782,22 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree (the main worktree has no `node_modules` to
   symlink). Chromium came from `/opt/pw-browsers`.
 
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+- Step 11 done (D-11 freshness) in `services/xstockstrat-ui`:
+  - `src/lib/orderFreshness.ts` (new): `pickFresherOrder(streamed, polled)` returns `polled` when there is no
+    streamed record or when its `timestampToMillis(updatedAt)` is strictly greater. An absent timestamp counts as
+    `-Infinity`; a tie keeps the streamed record.
+  - `src/components/trader/OrdersTable.tsx`: the `merged` memo is now
+    `orders.map((o) => pickFresherOrder(liveUpdates[o.orderId], o))`. Step 13 renames `liveUpdates` and keeps the call.
+- TDD (throwaway Vitest probe of Step 12's six cases, deleted before commit; see the Deviation Log):
+  - **Red:** with today's `streamed ?? polled`, 2 of 6 failed: AC-1 partial fill (`expected 2 to be 3`, streamed
+    PARTIALLY_FILLED kept over a newer polled FILLED) and absent-streamed-timestamp (`expected 1 to be 3`).
+  - **Green:** 6/6 passed.
+- Verification: the `pickFresherOrder` grep hits `OrdersTable.tsx:9`/`:67`. `pnpm run lint` exits 0 (only
+  pre-existing warnings), `lint:dup` finds 0 clones, and Vitest passes 290/290. `tsc --noEmit` fails only on the
+  pre-existing `e2e/insights/backfills.spec.ts:135-136`.
+- Tooling: the worktree's `node_modules` symlink pointed at a missing main-worktree `node_modules`, so it was
+  removed and `pnpm install --frozen-lockfile` ran in the worktree.
+

@@ -6,6 +6,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { BASE_PATH_INSIGHTS } from '@/lib/basepath';
+import { pickFresherOrder } from '@/lib/orderFreshness';
 import { useOrderUpdates } from '@/hooks/useOrderUpdates';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -54,8 +55,8 @@ export function OrdersTable({
   error,
   emptyLabel = 'No orders',
 }: OrdersTableProps) {
-  // Live updates pushed via StreamOrderUpdates override the listed snapshot so status
-  // transitions appear without a manual refresh.
+  // A StreamOrderUpdates record overrides the listed snapshot unless the polled record has a
+  // strictly newer `updatedAt` (pickFresherOrder).
   const liveUpdates = useOrderUpdates();
   const { mutate: cancelOrder } = useCancelOrder();
   const [editing, setEditing] = useState<Order | null>(null);
@@ -63,7 +64,7 @@ export function OrdersTable({
 
   // Wrapped in useMemo — TanStack Table requires a referentially-stable `data` array.
   const merged = useMemo(
-    () => orders.map((o) => liveUpdates[o.orderId] ?? o),
+    () => orders.map((o) => pickFresherOrder(liveUpdates[o.orderId], o)),
     [orders, liveUpdates],
   );
 

@@ -776,7 +776,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/order-form.sp
 
 ### Step 11 — service: D-11 freshness, where the order record with the strictly newer `updatedAt` wins
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/orderFreshness.ts` — create
@@ -1245,3 +1245,19 @@ _Populated by /sdd-execute as implementation proceeds._
   `Portfolio`). **Disposition**: test-shape detail inside the step's **Files**.
 - **`@AC-12` is GREEN-only** (regression guard), as the step predicted: it passed on the pre-fix tree because the
   badge was already null-safe.
+
+### Step 11 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 11's paired test lives in Step 12's **Files**, so the RED/GREEN
+  cycle ran a throwaway Vitest probe (`src/lib/zzProbeStep11.test.ts`, Step 12's six cases built as
+  `{ ...ORDER_WORKING, status, updatedAt }` with `timestampFromDate`). It was deleted before commit; Step 12 authors
+  the real test. For RED, `orderFreshness.ts` first held today's streamed-wins merge (`streamed ?? polled`), so RED
+  failed on the assertion, not on a missing import. **Disposition**: CI-equivalent fallback.
+- **One comment updated.** `OrdersTable.tsx` said streamed updates override the listed snapshot. That is no longer
+  unconditional, so it now states the strictly-newer `updatedAt` exception. **Disposition**: inside the step's
+  **Files**; no scope change.
+- **Evidence citations not re-read.** The `trading.go` stamp lines and `insights.md:1551` back only the field
+  number and the neutral-fallback rule; they were not re-verified. **Disposition**: noted only.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean. **Disposition**: not fixed here; already
+  handed to `/sdd-qa defect`.
