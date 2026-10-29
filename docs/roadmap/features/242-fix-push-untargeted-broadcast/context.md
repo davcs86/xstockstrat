@@ -343,3 +343,10 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   the `<git-common-dir>#branch=` form). Open Thread "Step 1 needs local refs/heads/main-dev" is resolved: it exists.
 - Stubs not regenerated here; Step 2 owns them, so `proto-freshness` is red on this branch until Step 2 commits.
 - C-09 reminder: identity-owner proto approval must be recorded in this file before Step 2 commits; not yet recorded.
+
+## Session 2026-10-29 — sdd-execute sequential, C-09 identity-owner proto approval
+
+- C-09 identity-owner approval recorded (operator, acting as `xstockstrat-identity` owner, 2026-10-29): "identity
+  owner approves additive ListAdminUserIds, 2026-10-29". Scope: `rpc ListAdminUserIds`, `ListAdminUserIdsRequest {}`,
+  `ListAdminUserIdsResponse { repeated string user_ids = 1; }` — additive only. Resolves the Step 2 blocker
+  (Option A); Step 2 may commit.
