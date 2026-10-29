@@ -106,18 +106,18 @@ There is no proto change and no migration. The key is reused with name, type and
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "def _fetch_bars_paged" app/handlers/servicer.py` → line 1394. Docstring `:1395-1411`;
-  `page_token = ""` `:1413`; `last_seen = None` `:1414`; the `fresh` filter `:1429-1431`.
-- The defect terminal is at `:1432-1435`:
+- Confirmed via: `grep -n "def _fetch_bars_paged" app/handlers/servicer.py` → line 1401 (re-spec 2026-10-29). Docstring
+  `:1402-1418`; `page_token = ""` `:1420`; `last_seen = None` `:1421`; the `fresh` filter `:1436-1438`.
+- The defect terminal is at `:1439-1442`:
   ```python
   if not fresh:
       # Either genuine EOF, or a server that re-served an already-consumed page.
       # Both are terminal; neither should loop.
       return bars
   ```
-- `page_token = resp.page.next_page_token` and `if not page_token: return bars` are at `:1441-1443`. The page-cap
-  raise at `:1445-1448` ends with `"— refusing to return a truncated series"`.
-- `class _BarFetchError(Exception):` is at `:358`. Its docstring reads "Raised when bar pagination cannot complete
+- `page_token = resp.page.next_page_token` and `if not page_token: return bars` are at `:1448-1450`. The page-cap
+  raise at `:1452-1455` ends with `"— refusing to return a truncated series"`.
+- `class _BarFetchError(Exception):` is at `:366`. Its docstring reads "Raised when bar pagination cannot complete
   safely (non-advancing cursor, page cap)."
 - Spec-time prototype (scratch copy, not committed): replacing the terminal with
   `if page_token and resp.page.next_page_token: raise _BarFetchError(...)` turned exactly
@@ -129,8 +129,8 @@ There is no proto change and no migration. The key is reused with name, type and
 **Covers**: —
 
 **Instructions**:
-1. In `_fetch_bars_paged`, replace the body of `if not fresh:` (`:1432-1435`) with the two-token rule (design §1,
-   option (a)). Here `page_token` is still the token *just sent*, because it is only reassigned at `:1441`:
+1. In `_fetch_bars_paged`, replace the body of `if not fresh:` (`:1439-1442`) with the two-token rule (design §1,
+   option (a)). Here `page_token` is still the token *just sent*, because it is only reassigned at `:1448`:
    ```python
    if not fresh:
        if page_token and resp.page.next_page_token:
@@ -142,11 +142,11 @@ There is no proto change and no migration. The key is reused with name, type and
    ```
    An empty `page_token` (an empty first page) and an empty response token (a sent token followed by an empty
    terminal page, @AC-7) both remain EOF. Comment at most 2 lines (root CLAUDE.md §How to Act #5).
-2. Update the docstring's "Strict cursor monotonicity" bullet (`:1401-1405`) to state the rule: a page with no
+2. Update the docstring's "Strict cursor monotonicity" bullet (`:1409-1412`) to state the rule: a page with no
    strictly newer bar raises when a token was sent **and** the response re-issues a non-empty token; with an empty
    response token it is EOF.
-3. Do not touch the `:1441-1443` EOF exit, the `_MAX_BAR_PAGES` cap raise (`:1445-1448`), `_BAR_PAGE_SIZE` (`:294`)
-   or any caller. Callers inherit the error (product-spec Out of Scope: no per-caller retry or fallback).
+3. Do not touch the `:1448-1450` EOF exit, the `_MAX_BAR_PAGES` cap raise (`:1452-1455`), `_BAR_PAGE_SIZE` (`:295`),
+   `_MAX_BAR_PAGES` (`:299`) or any caller. Callers inherit the error (product-spec Out of Scope: no per-caller retry or fallback).
 
 **Verification**:
 ```bash
@@ -222,12 +222,12 @@ Deviation Log entry and a blocker; never patch it silently. Confirm the C-13 ver
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `@owner_scoped` `:784` and `async def RunBacktest(self, request, context):` `:785`. The body runs to
-  `return result` at `:1353`.
-- `def owner_scoped(fn):` `:467-480` wraps `fn(self, request, context)`; a non-raising abort `return None` is at
-  `:475-476`.
-- The per-symbol loop is `for symbol in symbols_to_run:` at `:996`. It calls `_backtest_symbol_evaluated` (`:1005`)
-  and `_backtest_symbol` (`:1032`), and its trailing handlers are at `:1127-1132`:
+- `@owner_scoped` `:791` and `async def RunBacktest(self, request, context):` `:792` (re-spec 2026-10-29). The body
+  runs to `return result` at `:1361`.
+- `def owner_scoped(fn):` `:475-485` wraps `fn(self, request, context)`; a non-raising abort `return None` is at
+  `:484`.
+- The per-symbol loop is `for symbol in symbols_to_run:` at `:1003`. It awaits `_backtest_symbol_evaluated` (`:1012`)
+  and `_backtest_symbol` (`:1039`), and its trailing handlers are at `:1134-1139`:
   ```python
   except grpc.RpcError as e:
       log.warning("backtest symbol %s failed: %s — skipping", symbol, e)
@@ -236,11 +236,11 @@ Deviation Log entry and a blocker; never patch it silently. Confirm the C-13 ver
       log.warning("backtest symbol %s error: %s — skipping", symbol, e)
       continue
   ```
-- The benchmark preload `await self._load_benchmark_bars(...)` at `:952` is outside the loop. It catches only
-  `except _InsufficientData as ins:` (`:959`), so a `_BarFetchError` propagates out of the body.
+- The benchmark preload `await self._load_benchmark_bars(...)` at `:959` is outside the loop. It catches only
+  `except _InsufficientData as ins:` (`:966`), so a `_BarFetchError` propagates out of the body.
 - `grep -rn "RunBacktest" app/` shows no internal Python caller of `self.RunBacktest`; only the gRPC server and
   tests call it.
-- Abort idiom: `context.abort(grpc.StatusCode.FAILED_PRECONDITION, ...)` at `:648`. The test context
+- Abort idiom: `context.abort(grpc.StatusCode.FAILED_PRECONDITION, ...)` at `:654-655`. The test context
   `_owned_ctx()` (`tests/test_analysis_servicer.py:63-70`) makes `abort` an `AsyncMock(side_effect=Exception("aborted"))`.
 
 **TDD**: `red-green required`
@@ -265,7 +265,7 @@ Deviation Log entry and a blocker; never patch it silently. Confirm the C-13 ver
    FAILED_PRECONDITION, not UNAVAILABLE: both causes are deterministic, and UNAVAILABLE is reserved for transient
    store outages (design.md § Rejected Alternatives).
 3. In the per-symbol loop, insert `except _BarFetchError: raise` immediately before `except grpc.RpcError as e:`
-   (`:1127`). A truncated symbol must fail the run, not be skipped (R-1).
+   (`:1134`). A truncated symbol must fail the run, not be skipped (R-1).
 4. Trace rule (operator 2026-10-21, C-03): the abort uses the inbound `context`. Add no emit and mint no background
    context.
 
@@ -297,10 +297,10 @@ Behavior is verified in Step 4.
   - `_mkt_def(period=5)` `:56`: a `source_symbol="VOO"` benchmark component.
   It already imports `make_servicer`, `_owned_ctx`, `_windowed_req` and `_EOF_PAGE` from
   `tests/test_analysis_servicer.py` (`make_servicer` `:36`, `_owned_ctx` `:63`, `_EOF_PAGE` `:136`,
-  `_windowed_req` `:3590`).
-- Persistence seams: `_persist_backtest_run` (`servicer.py:2848`) and `_persist_symbol_cells` (`:2927`).
+  `_windowed_req` `:3685`, which still takes `symbols=`; re-spec 2026-10-29).
+- Persistence seams: `_persist_backtest_run` (`servicer.py:2855`) and `_persist_symbol_cells` (`:2934`).
   `AsyncMock` replacement precedent: `svc._persist_symbol_cells = AsyncMock()`
-  (`tests/test_backtest_fundamentals_guard.py:131`).
+  (`tests/test_backtest_fundamentals_guard.py:132`).
 - `make_servicer()` already stubs `cfg.get_int_present` to return the default (`test_analysis_servicer.py:49`;
   fails.md:1394).
 
@@ -352,38 +352,45 @@ grep -n "from .test_backtest_source_symbol\|from .test_analysis_servicer" servic
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `get_int_present(self, key, default)` is at `app/config/watcher.py:107-118`. It returns the stored `int_val`,
-  including 0, when the field is set, else the default. The zero-trapping `get_int` is at `:99-105`.
-  Call-site precedent: `servicer.py:3890` `get_int_present("analysis.readiness.stale_after_seconds", 30)`.
-- Screener idiom, mirrored but **not edited** (feature 245), at `servicer.py:3786-3796`:
-  `deadline = self._cfg.get_int("analysis.screener.max_duration_seconds", 120)`,
+- Re-spec 2026-10-29 (feature 244 landed on main-dev, `9b20cb66`): in `app/config/watcher.py`, `get_int`
+  (`:111-117`) is itself presence-aware. It returns the stored `int_val`, including 0, when the field is set, else
+  the default. `get_int_present` is now an alias, `get_int_present = get_int` (`:119`). Calling `get_int_present`
+  keeps the semantics this step needs (stored 0 = no limit), and it matches the name every `RunBacktest` test
+  harness already stubs (Step 6 harness audit). Call-site precedent: `servicer.py:3897`
+  `get_int_present("analysis.readiness.stale_after_seconds", 30)`.
+- `int_positive(cfg, key, default)` (`watcher.py:142-144`) is **not** used for this key. It maps 0 and negatives
+  to the default, but here 0 must mean "no limit" (`@AC-5`), and a negative must log a WARN, which
+  `int_positive` does not do.
+- Screener idiom, mirrored but **not edited** (feature 245), at `servicer.py:3793-3803`:
+  `deadline = int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)` (`:3793`),
   `asyncio.wait_for(...)`, `except TimeoutError: await context.abort(grpc.StatusCode.DEADLINE_EXCEEDED,
-  f"screen exceeded {deadline}s deadline")`, then `return`.
-- Disarm anchor: `self._backtests[backtest_id] = result` at `:1267`. The only awaited call between compute and that
-  anchor is `await self._fundamentals_gap_labels(refused_diags, propagation_meta)` at `:1246`, a read RPC.
+  f"screen exceeded {deadline}s deadline")` (`:3800-3802`), then `return`.
+- Disarm anchor: `self._backtests[backtest_id] = result` at `:1274`. The only awaited call between compute and that
+  anchor is `await self._fundamentals_gap_labels(refused_diags, propagation_meta)` at `:1253`, a read RPC.
   Everything after the anchor is persistence and the completion emit:
-  - `_persist_symbol_cells` `:1280`
-  - `_persist_backtest_run` `:1300`
-  - `_persist_backtest_detail` `:1314`
-  - `_recompute_headline` `:1322`
-  - `analysis.backtest.completed` AppendEvent `:1344-1352` (`event_type` at `:1346`)
-- `import asyncio` is at `:13`. Python is 3.13 (`python3 --version` → 3.13.16; root CLAUDE.md), so
+  - `_persist_symbol_cells` `:1287`
+  - `_persist_backtest_run` `:1307`
+  - `_persist_backtest_detail` `:1321`
+  - `_recompute_headline` `:1329`
+  - `analysis.backtest.completed` AppendEvent `:1351-1359` (`event_type` at `:1353`)
+- `import asyncio` is at `:13`. Python is 3.13 (`python3 --version` → 3.13.17; root CLAUDE.md), so
   `asyncio.timeout`, `Timeout.expired()` and `Timeout.reschedule(None)` are available.
-- CPU cores run via `run_in_executor(self._compute_executor, _core)` at `:1717`, `:2229` and `:2400`. They stay
+- CPU cores run via `run_in_executor(self._compute_executor, _core)` at `:1724`, `:2236` and `:2407`. They stay
   there (`@AC-4 @feature-176`).
-- The `default_fill_model` `get_int` zero-trap read at `:787-794` is intentional and stays untouched
-  (`@AC-9 @feature-151`).
+- The `default_fill_model` read at `:797-801` (`self._cfg.get_int("analysis.backtest.default_fill_model", 0)`) stays
+  untouched (`@AC-9 @feature-151`). Since 244, `get_int` no longer zero-traps, but 0 maps to the legacy fill
+  model whether it is stored or absent (comment `:797`), so the outcome is the same.
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. Add a module constant next to `_MAX_BAR_PAGES` (`:298`): `_BACKTEST_MAX_DURATION_DEFAULT_S = 300`. It is the
+1. Add a module constant next to `_MAX_BAR_PAGES` (`:299`): `_BACKTEST_MAX_DURATION_DEFAULT_S = 300`. It is the
    documented call-site default; F-07 is honored because the live value comes from WatchConfig. The getter default
    and the negative fallback both use it, so the literal is not duplicated.
 2. Change the signature to `async def _run_backtest(self, request, context, disarm):`.
-   - Insert a single `disarm()` call immediately before `self._backtests[backtest_id] = result` (`:1267`).
+   - Insert a single `disarm()` call immediately before `self._backtests[backtest_id] = result` (`:1274`).
    - Add a ≤2-line comment stating the constraint: no awaited state-writing call may move above it.
 3. Rewrite the Step 3 wrapper as:
    ```python
@@ -420,7 +427,7 @@ grep -n "from .test_backtest_source_symbol\|from .test_analysis_servicer" servic
      re-raised unchanged; it is not the backtest deadline.
 4. Do not move any compute out of `run_in_executor`. A timed-out executor thread runs to completion (design §3,
    Open Risks); that is documented in Step 7 and not fixed here.
-5. Trace rule (C-03): the abort uses the inbound `context`. The `analysis.backtest.started` append (`:817-826`, `event_type` at `:820`) stays
+5. Trace rule (C-03): the abort uses the inbound `context`. The `analysis.backtest.started` append (`:825-833`, `event_type` at `:827`) stays
    inside the bound and keeps `metadata=propagation_meta`. No new emits.
 
 **Verification**:
@@ -430,8 +437,8 @@ cd services/xstockstrat-analysis \
   && grep -n "analysis.screener.max_duration_seconds" app/handlers/servicer.py \
   && ruff check . && ruff format --check .
 ```
-The second grep must still show the screener read at the unchanged `get_int(..., 120)` call. Behavior is verified
-in Step 6.
+The second grep must still show the screener read at the unchanged
+`int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)` call. Behavior is verified in Step 6.
 
 ---
 
@@ -441,22 +448,24 @@ in Step 6.
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_bounds.py` — modify (created in Step 4)
-- `services/xstockstrat-analysis/tests/conftest.py` — modify (new shared `config_watcher(**values)`, item 0)
-- `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py` — modify (drop local `_watcher` at
-  `:63-69`; import `config_watcher`)
 
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- A real-watcher config pattern for stored values (including 0 and negative) is in
-  `tests/test_list_opportunities_deadlines.py:63-69`: `_watcher(**values)` builds a `_StubWatcher` with a
-  `config_pb2.ConfigSnapshot`, and is assigned as `svc._cfg = _watcher(...)` at `:129`. `_StubWatcher` itself is at
-  `tests/test_analysis_servicer.py:483-488`.
+- Re-spec 2026-10-29 (C-13): `tests/conftest.py:61-85` already has the shared factory this step needs,
+  `snapshot_watcher(**values)`. It is a dial-free real `ConfigWatcher` (`__new__` bypasses the channel dial) whose
+  snapshot maps each raw Python value by type to `int_val` / `float_val` / `bool_val` / `string_val`. So
+  `snapshot_watcher(**{"analysis.backtest.max_duration_seconds": 1})` stores `int_val=1`, and `0` and `-5` are stored
+  as set `int_val`s, which the presence-aware `get_int` / `get_int_present` (`app/config/watcher.py:111-119`) returns.
+  Import precedent: `from tests.conftest import ...` (`tests/test_strategy_templates.py:26`).
+- `tests/test_list_opportunities_deadlines.py:63` keeps its own `_watcher(**values)` (call sites `:129`, `:210`,
+  `:350`; it passes explicit `ConfigValue` protos, including `float_val=5.0` for an int key at `:345`). Migrating it
+  onto `snapshot_watcher` is a separate decision outside this feature's scope; this step does not touch that file.
 - **Harness audit (fails.md:1394-1396, design hard verification item).** Every `RunBacktest` test harness builds
   its cfg with a `get_int_present` stub returning the default:
   - `make_servicer()` (`test_analysis_servicer.py:49`)
   - `_servicer()` (`test_owner_dimension.py:34`)
-  - `_backtest_servicer()` (`test_fundamentals_formula_servicer.py:185`)
+  - `_backtest_servicer()` (`test_fundamentals_formula_servicer.py:186`)
   - `test_blend_guard.py:34`
 
   The other RunBacktest suites (`test_backtest_fundamentals_guard.py`, `test_backtest_source_symbol.py`,
@@ -464,28 +473,23 @@ in Step 6.
   all derive from `make_servicer()`. No bare-MagicMock RunBacktest harness exists, so existing runs keep the 300 s
   default.
 - Stall seams:
-  - `_backtest_symbol_evaluated`, awaited at `servicer.py:1005`;
+  - `_backtest_symbol_evaluated`, awaited at `servicer.py:1012`;
   - `svc._marketdata.GetBars`, an `AsyncMock` (`_wire_per_symbol`);
-  - `_persist_backtest_run` (`:2848`), which runs after the disarm anchor;
-  - `self._compute_executor` (`:555`, a `ThreadPoolExecutor`).
+  - `_persist_backtest_run` (`:2855`), which runs after the disarm anchor;
+  - `self._compute_executor` (`:563`, a `ThreadPoolExecutor`).
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-3, AC-5`
 
 **Instructions**:
-0. **C-13, first.** Before writing any test, move the `_watcher(**values)` helper
-   (`tests/test_list_opportunities_deadlines.py:63-69`) into `tests/conftest.py` as `config_watcher(**values)`
-   (or reuse an existing equivalent, if `grep -n "def _watcher\|ConfigSnapshot" tests/conftest.py` finds one;
-   none exists today). It builds `_StubWatcher` (`tests/test_analysis_servicer.py:483`); if a module-level import
-   of that test module from conftest cycles at collection, import it inside the function. In
-   `test_list_opportunities_deadlines.py`, rename the three `_watcher(` call sites (`:129`, `:210`, `:350`) to
-   `config_watcher(` and add `from tests.conftest import config_watcher` (precedent:
-   `tests/test_strategy_templates.py:26`).
+0. **C-13, first.** Reuse the existing shared `snapshot_watcher` (`tests/conftest.py:61`): add
+   `from tests.conftest import snapshot_watcher` to `tests/test_backtest_bounds.py`. Declare no new watcher factory
+   and do not edit `tests/conftest.py` or `tests/test_list_opportunities_deadlines.py`.
 
-Then add these tests to `tests/test_backtest_bounds.py`. Each sets `svc._cfg` to a `config_watcher(...)` holding
-`analysis.backtest.max_duration_seconds`. The `config_pb2` import and `from app.handlers import servicer as servicer_mod` mirror
-`test_list_opportunities_deadlines.py:16,18`.
+Then add these tests to `tests/test_backtest_bounds.py`. Each sets
+`svc._cfg = snapshot_watcher(**{"analysis.backtest.max_duration_seconds": N})`, where the tests below write `N` as
+`int_val=N`. `from app.handlers import servicer as servicer_mod` mirrors `test_list_opportunities_deadlines.py:18`.
 Each test asserts elapsed time with `time.monotonic()`. Stalls use `asyncio.sleep`, never real compute (R-4).
 Every test that expects an abort (AC-3, AC-3b, T-executor) makes the call under
 `pytest.raises(Exception, match="aborted")`, because the `_owned_ctx()` abort mock raises (as in Step 4).
@@ -499,7 +503,7 @@ Every test that expects an abort (AC-3, AC-3b, T-executor) makes the call under
 2. **AC-3b** `test_deadline_fires_inside_awaited_getbars`:
    - `int_val=1`; the AAPL `GetBars` side effect sleeps 3 s.
    - Under `pytest.raises(Exception, match="aborted")`, assert DEADLINE_EXCEEDED in under 2 s. This guards against
-     the `:1127-1132` handlers absorbing the cancellation.
+     the `:1134-1139` handlers absorbing the cancellation.
 3. **AC-5** `test_stored_zero_means_no_limit`:
    - `int_val=0`; the patched `_backtest_symbol_evaluated` sleeps 2 s, then delegates to the real method.
    - Assert a result with `status == BACKTEST_STATUS_OK` and that `ctx.abort` was not awaited.
@@ -511,7 +515,7 @@ Every test that expects an abort (AC-3, AC-3b, T-executor) makes the call under
    - Assert it was entered with `300`, and that `caplog` holds a WARNING containing
      `analysis.backtest.max_duration_seconds` and `-5`.
 5. **T-inner-timeout** `test_inner_timeout_is_not_mapped_to_deadline`:
-   - `int_val=60`; patch `svc._load_benchmark_bars` (awaited at `servicer.py:952`, which catches only
+   - `int_val=60`; patch `svc._load_benchmark_bars` (awaited at `servicer.py:959`, which catches only
      `_InsufficientData`) with an `AsyncMock(side_effect=TimeoutError())`, using a `_mkt_def()` definition so the
      benchmark preload runs.
    - Assert `pytest.raises(TimeoutError)`.
@@ -532,7 +536,7 @@ Every test that expects an abort (AC-3, AC-3b, T-executor) makes the call under
      is False at abort time, and that
      `done.wait(3)` is True afterwards.
    - This documents that the thread is not interrupted (R-3).
-8. **C-13.** Item 0 is the only declaration site of the helper; do not leave an inline `_watcher` in either file.
+8. **C-13.** `tests/test_backtest_bounds.py` declares no watcher factory of its own; it uses `snapshot_watcher`.
 
 **Verification**:
 ```bash
@@ -540,9 +544,12 @@ cd services/xstockstrat-analysis \
   && pytest tests/test_backtest_bounds.py -q \
   && pytest --cov=app --cov-fail-under=40 \
   && ruff check . && ruff format --check .
-grep -rn "def _watcher\|def config_watcher" services/xstockstrat-analysis/tests/
+grep -rn "def _watcher\|def config_watcher\|def snapshot_watcher" services/xstockstrat-analysis/tests/
+grep -n "snapshot_watcher" services/xstockstrat-analysis/tests/test_backtest_bounds.py
 ```
-The grep must show at most one declaration site.
+The first grep must show exactly the two pre-existing declaration sites, `conftest.py` (`snapshot_watcher`) and
+`test_list_opportunities_deadlines.py` (`_watcher`), and nothing in `test_backtest_bounds.py`. The second grep must
+show the import and its uses.
 
 ---
 
@@ -556,8 +563,8 @@ The grep must show at most one declaration site.
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `grep -n "max_duration_seconds" services/xstockstrat-analysis/CLAUDE.md` → `:468`, with
-  `| analysis.backtest.max_duration_seconds | int | 300 | Max backtest run time |`. The screener row at `:497`
+- `grep -n "max_duration_seconds" services/xstockstrat-analysis/CLAUDE.md` → `:509` (re-spec 2026-10-29), with
+  `| analysis.backtest.max_duration_seconds | int | 300 | Max backtest run time |`. The screener row at `:538`
   stays unchanged.
 
 **TDD**: `N/A (docs)`
@@ -565,7 +572,7 @@ The grep must show at most one declaration site.
 **Covers**: —
 
 **Instructions**:
-Replace the `:468` description cell with the design §5 text, keeping type `int` and default `300`:
+Replace the `:509` description cell with the design §5 text, keeping type `int` and default `300`:
 > Wall-clock bound on backtest evaluation up to result assembly; persistence and grade recompute are not bounded
 > (total RPC time can exceed it). `0` = no limit, negative = 300 (WARN). Exceeded → `DEADLINE_EXCEEDED`
 > `backtest exceeded Ns deadline`; executor threads are not interrupted — do not retry immediately. Read
@@ -595,12 +602,13 @@ grep -c "Max backtest run time" services/xstockstrat-analysis/CLAUDE.md   # expe
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/runbooks/mcp-tools.md:406-415`, the `run_backtest` **Errors** table (heading `:406`). Sibling row
-  `| Window span over \`analysis.backtest.max_range_days\` | \`INVALID_ARGUMENT\` from analysis |` is at `:412`;
-  the table ends with `| Analysis service unreachable | ... |` at `:415`. Re-grep both anchors at execute time.
-- `plugins/strat-lab/skills/backtest/SKILL.md`: `## Phase 2 — Run, and handle the oversized output` is at `:181`,
-  followed by `### Fill model (feature 151)` at `:189`.
-- `reference/output-handling.md:9-31`, `## The JSON shape`. The fundamentals-outage "rerun" bullet is at `:29-31`
+- `docs/runbooks/mcp-tools.md:421-430`, the `run_backtest` **Errors** table (heading `:421`; re-spec 2026-10-29).
+  Sibling row `| Window span over \`analysis.backtest.max_range_days\` | \`INVALID_ARGUMENT\` from analysis |` is at
+  `:427`; the table ends with `| Analysis service unreachable | ... |` at `:430`. Re-grep both anchors at execute
+  time.
+- `plugins/strat-lab/skills/backtest/SKILL.md`: `## Phase 2 — Run, and handle the oversized output` is at `:184`,
+  followed by `### Fill model (feature 151)` at `:195`.
+- `reference/output-handling.md`, `## The JSON shape`. The fundamentals-outage "rerun" bullet is at about `:29-31`
   and must stay distinct from the new failures (`@AC-8 @feature-215`).
 - `reference/aggregation.md:28`, `## Combine independent runs`.
 - `plugins/strat-lab/README.md:12-24` holds the "fails in three predictable ways" list.
@@ -615,19 +623,22 @@ grep -c "Max backtest run time" services/xstockstrat-analysis/CLAUDE.md   # expe
 **Covers**: —
 
 **Instructions**:
-1. **`mcp-tools.md`.** After the `max_range_days` row (`:412`), add two rows:
-   - `| Backtest evaluation exceeds \`analysis.backtest.max_duration_seconds\` (prod 120 s, staging 300 s; 0 = no
-     limit) | \`DEADLINE_EXCEEDED\` \`backtest exceeded Ns deadline\` — narrow the range or symbols; do not retry
+1. **`mcp-tools.md`.** After the `max_range_days` row (`:427`), add two rows:
+   - `| Backtest evaluation exceeds \`analysis.backtest.max_duration_seconds\` (default 300 s; 0 = no limit) |
+     \`DEADLINE_EXCEEDED\` \`backtest exceeded Ns deadline\` — narrow the range or symbols; do not retry
      immediately (the compute thread keeps running) |`
+   - Re-spec 2026-10-29: name no per-environment value. The earlier "prod 120 s, staging 300 s" was ungrounded (see
+     Step 9); this wording stays true whichever Step 9 decision the operator takes.
    - `| marketdata re-served a bar page, or bar pagination hit its page cap | \`FAILED_PRECONDITION\` \`backtest bar
      series incomplete: …\` — retrying will not fix it; report it |`
 
-   Add one sentence under the table: through the agent, the MCP 60 s tool cap fires before a 120 s server deadline,
-   so agent users see the server message only when the limit is below 60 s, and only once feature 273's
-   pass-through lands.
-2. **`SKILL.md` Phase 2.** Add a short "Failure modes" paragraph with the same two cases and the 60 s-cap fact.
+   Add one sentence under the table: through the agent, the MCP 60 s tool cap fires before any server deadline
+   above 60 s (the default is 300 s), so agent users see the server message only when the limit is below 60 s, and
+   only once feature 273's pass-through lands.
+2. **`SKILL.md` Phase 2** (`:184`). Add a short "Failure modes" paragraph with the same two cases and the 60 s-cap
+   fact, naming no per-environment limit value.
    One truncated symbol now fails the whole multi-symbol run; it is no longer silently skipped.
-3. **`reference/output-handling.md`.** Add a bullet after `:29-31`: these two are RPC errors, not result fields;
+3. **`reference/output-handling.md`.** Add a bullet after the fundamentals-outage bullet (about `:29-31`): these two are RPC errors, not result fields;
    there is no result file to parse. Keep the fundamentals "rerun" warning distinct.
 4. **`reference/aggregation.md`.** Add a note under `:28`: a basket member failing with `FAILED_PRECONDITION` or
    `DEADLINE_EXCEEDED` is a failed run. Report it; never aggregate it as zero trades.
@@ -655,15 +666,35 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 
 **Codebase Evidence**:
 - `rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse);` is at `packages/proto/ledger/v1/ledger.proto:15`.
-- The `analysis.backtest.started` append is at `servicer.py:817-826` (`event_type` `:820`), and the
-  `analysis.backtest.completed` append at `:1344-1352` (`event_type` `:1346`). Both use `stream_key=f"backtest:{backtest_id}"`.
-- The prod seed is `'120'`, `'production'` at `services/xstockstrat-config/migrations/002_config_environment.up.sql:71`.
-  The staging and base seed is `'300'` at `001_config_tables.up.sql:69`. Since `029_heal_config_keys_full_dotted.up.sql:24-25`,
-  the live key is the dotted `analysis.backtest.max_duration_seconds`.
+- The `analysis.backtest.started` append is at `servicer.py:825-833` (`event_type` `:827`), and the
+  `analysis.backtest.completed` append at `:1351-1359` (`event_type` `:1353`). Both use `stream_key=f"backtest:{backtest_id}"`.
+- **Re-spec 2026-10-29 — the prior evidence was wrong.** The seeded rows are the **bare** key
+  `backtest.max_duration_seconds` in namespace `'analysis'`: `'120'`, `'production'` at
+  `services/xstockstrat-config/migrations/002_config_environment.up.sql:71`, and the base seed `'300'` at
+  `001_config_tables.up.sql:69`. The `029_heal_config_keys_full_dotted.up.sql` UPDATE (`:24-28`) heals only
+  `namespace IN ('platform', 'trading', 'portfolio', 'marketdata')`. No later migration (030-034; 031 is
+  indicators-only, 032 is description-only) heals the analysis namespace. The WatchConfig snapshot is keyed by the
+  raw `key` column (029 header `:8-10`). So the Step 5 read `get_int_present("analysis.backtest.max_duration_seconds", 300)`
+  does **not** see the prod `120` seed. Unless an operator has created a dotted row, the effective limit is the code
+  default, **300 s in every environment**. The earlier premise of a "first-enforced prod value of 120 s" is
+  ungrounded.
 
 **TDD**: `N/A (operational gate)`
 
 **Covers**: —
+
+**Operator decision required (blocker for this step only; Steps 1-8 are unaffected):** before this gate runs, the
+operator picks one of these and it is recorded in `context.md`:
+- **(A) Reword G-1.** The gate measures against the effective limit, the 300 s code default in every environment,
+  unless the operator creates dotted `analysis.backtest.max_duration_seconds` rows via `set_config` or `/config-ui`
+  (no migration; F-01).
+- **(B) Heal migration.** A new config migration renames the bare analysis row(s) to the dotted key, so the prod
+  `120` seed applies. This adds a DB-migration gate (DBA + service owner; root CLAUDE.md § Approval Flow) that this
+  spec does not have. It needs a re-spec that adds a step, and it would also rename every other bare analysis row
+  that is read by its dotted name, so the scope must be decided first.
+- **(C) Another operator instruction.**
+
+Do not choose on the operator's behalf. Until a decision is recorded, the execute loop stops before this step.
 
 **Instructions**:
 1. After Step 5 is on dev, and before `launch-ready`, query ledger `QueryEvents` for `analysis.backtest.started` and
@@ -671,16 +702,19 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 2. Record in `context.md`:
    - for completed pairs, n, p50, p95, p99 and max of (completed − started);
    - per environment, the count of `started` events with no `completed` (orphans; this corrects survivorship bias).
-3. The threshold is an **operator input**. The proposed default is edge-origin-timeout minus 10 s; 90 s holds only
+3. Before measuring, confirm the effective limit in each environment with the agent `get_config` or
+   `list_config_keys` tool (does a dotted `analysis.backtest.max_duration_seconds` row exist?), and record it next
+   to the percentiles. The threshold is an **operator input**. The proposed default is edge-origin-timeout minus 10 s; 90 s holds only
    if the ungrounded Cloudflare ~100 s assumption holds (P-03).
 4. **Pass condition:** prod p99 is at or below the threshold, and the orphan count is trivial. Otherwise the
    operator must do one of:
-   - raise the prod row via `set_config` or `/config-ui` (no migration; F-01);
+   - set or raise the dotted prod row via `set_config` or `/config-ui` (no migration; F-01);
    - sign off in `context.md` quoting the numbers.
 
 **Verification**:
-`grep -n "G-1" docs/roadmap/features/272-fix-analysis-backtest-bounds/context.md` shows the recorded percentiles,
-the orphan counts, the threshold the operator chose, and either a pass or the operator's sign-off.
+`grep -n "G-1" docs/roadmap/features/272-fix-analysis-backtest-bounds/context.md` shows the operator's
+decision (A/B/C), the effective limit per environment, the recorded percentiles, the orphan counts, the threshold the
+operator chose, and either a pass or the operator's sign-off.
 
 ---
 
