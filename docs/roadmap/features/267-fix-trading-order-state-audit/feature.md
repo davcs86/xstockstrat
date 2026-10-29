@@ -23,6 +23,7 @@
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — `reclaimStaleIntent` + `reclaimedUnknownPayload`; three reactive reclaims audited and logged; sweeper payload populated (FR-5, FR-6) |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — RED `TestTrace_*` suite: all 32 request-reachable `Background()` rows assert the inbound x-trace-id and an uncancelled ctx (RED: traceID `""` at every row) |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — 32 request-reachable `Background()` sites now `context.WithoutCancel(ctx)`; `finalizeCancelIntent` takes ctx; `TestTrace_*` GREEN; only `:2858`/`:2906` (watchdog, background-only) keep `Background()` |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — `order_intent.reclaimed_unknown` row added to trading CLAUDE.md; findings `:13` resolved, bare-`orderID` stream doc-lie and `emitLedgerEvent` NewStruct latent-bug rows added. All 7 steps done |
 
 ---
 
@@ -56,4 +57,4 @@ reactive intent reclaims leave no `order_intent.reclaimed_unknown` audit event.
 
 ## Next Action
 
-`/sdd-execute fix-trading-order-state-audit sequential` — in progress (Step 7 next)
+`/sdd-execute fix-trading-order-state-audit sequential` — all 7 steps done (integration PR next)

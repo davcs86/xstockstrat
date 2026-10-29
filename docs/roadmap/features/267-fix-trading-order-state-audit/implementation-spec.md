@@ -557,7 +557,7 @@ cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./..
 
 ### Step 7 — docs: ledger-event row, trading findings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading` (docs)
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -688,3 +688,16 @@ _Populated by /sdd-execute as implementation proceeds._
   literally. Total `73.3%` (>= 40%). **Disposition**: verification fallback, same packages and flags.
 - **D6-3 (line drift):** the step cites `:2859`/`:2907`/`:2617`; after the main-dev merge these are `:2858`/`:2906`/
   `:2616`, as the Step 5 table already records. Edits were made by the Step 5 table's lines. **Disposition**: none needed.
+
+### 2026-10-29 — Step 7
+
+- **D7-1 (teardown, plugin unavailable):** `/context-constitution refresh` is not available in this session
+  (only `context-forge:context-scrubber` is loaded). Done by hand instead: the new CLAUDE.md row was re-read
+  against `order_intent.go#reclaimedUnknownPayload`/`#reclaimStaleIntent` and the three `reclaimStaleIntent`
+  call sites in `trading.go`, and the three findings rows against `trading.go#emitLedgerEvent` and the bare-key
+  `order.created`/`order.canceled` emits. No further drift in the touched rows. The integration PR body must
+  record that the plugin was unavailable and this manual reconciliation. **Disposition**: manual fallback.
+- **D7-2 (row formatting):** the Instruction 1 row text is used verbatim, with its identifiers in backticks to
+  match the table's style. **Disposition**: cosmetic.
+- **D7-3 (pre-commit hook):** same as D3-4: the main worktree has no `node_modules` to link, so git ran no hook
+  (no `--no-verify`). **Disposition**: environment only.

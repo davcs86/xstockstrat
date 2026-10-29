@@ -741,3 +741,24 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - Deviations: D6-1 (lint binary), D6-2 (coverage command literal COVERPKGS), D6-3 (cited lines -1, resolved by table).
 - The `internal/service` package is green again on the branch (the Step 5 RED suite now passes).
 
+---
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+### Step 7 — docs: ledger-event row, trading findings [done]
+- Discovery: the digest read the main worktree and reported Steps 4 and 6 pending. On
+  `origin/feature/fix-trading-order-state-audit` both are done (`00326e31`, `8f7e2804`). The row's claims
+  were re-checked against the code there: `reclaimedUnknownPayload` (`trigger`, `order_id`, `intent_id`,
+  `was_pending_since` as RFC3339Nano), stream `"order:"+OrderID`, and triggers `sweep`, `reactive_place`,
+  `reactive_cancel`, `reactive_replace`. Not a blocker.
+- Change: added the `order_intent.reclaimed_unknown` row to trading CLAUDE.md "Ledger Events Emitted".
+  In the findings file: marked the `:13` row resolved (267); added a doc-lie row for the bare `orderID`
+  lifecycle stream vs `order:{order_id}`; added a latent-bug row for `emitLedgerEvent` discarding the
+  `NewStruct` error.
+- TDD: N/A (docs). Baseline before the edit: the second verification grep exited 1 (no row).
+- Verification: both specced greps now match (CLAUDE.md `:159`, findings `:13`).
+- Teardown: the context-constitution plugin is unavailable, so reconciliation was done by hand (D7-1). The
+  integration PR body must record both facts.
+- Files modified: `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-trading/docs/context-constitution-findings.md`
+- Deviations: D7-1 (teardown by hand), D7-2 (backticks), D7-3 (no hook installed).
+
