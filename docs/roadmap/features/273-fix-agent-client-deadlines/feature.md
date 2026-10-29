@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator r3 additions: FR-6/@AC-11 (ValidateToken deadline), 503 without WWW-Authenticate on identity stall, widened 272 pass-through |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-10-29 | `implementation-ready` (no change) | /sdd-execute (re-spec) | Steps 2, 3, 6, 7, 8 and 11 re-anchored to the post-247 `main-dev` merge; BacktestResult cite fixed (`analysis.proto:123`); Step 11 now only rewords the existing 272 merge-order row |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29) |
 
 ---
 
