@@ -110,6 +110,15 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)
+
+Bounds the `EventNotifier` LISTEN-connection read that resolves a NOTIFY row trimmed over ~7000 chars before live
+fan-out. **Seeded** (staging + production) by config migration `033_ledger_stream_resolve_timeout`, stored as `int`.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `ledger.stream.resolve_timeout_ms` | int | `2000` | clamp: `≤ 0`/non-finite → `2000` | Applied as the listener session's `statement_timeout` (SET-on-change); the client `query_timeout` backstop is 2×. |
+
 ### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
 
 Bounds the last-close search window behind offline marks and Day P&L. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
