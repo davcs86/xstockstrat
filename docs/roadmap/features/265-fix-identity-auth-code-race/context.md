@@ -409,3 +409,19 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
   All files 82.56% lines (≥40).
 - Deviations logged (F-09): `pnpm test` route + spec-reporter output (no TAP `# ` lines); RED via temporary
   pre-Step-1 source swap because Step 1 was committed first.
+
+## Session 2026-10-29 — sdd-execute sequential, branch setup + re-spec (sdd-batch-execute)
+
+- Up-front plan approved by the operator's standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints
+  `report`; C-16 promotion auto-confirmed unless it changes an existing @AC rule; operator-only DB/prod steps:
+  open PR, hold merge). Status already `in-progress` (Steps 1-2 done), so no status flip.
+- §5.3 branch setup: merged `origin/main-dev` into the feature branch (normal merge, no conflicts, merge commit
+  `6b61bfbf`); ledger-guard `--own-slug fix-identity-auth-code-race --fix` reported clean, no repair needed.
+- Re-spec of Steps 3, 4, 5 (line-anchor drift only, no symbol drift):
+  - Step 3: `refreshOAuthToken`'s `mintOAuthAccessToken` call is now `identityServiceImpl.ts:560-562`
+    (`:533-535` is `exchangeAuthCode`'s Step 1 call); the 3 grep hits are `:295`, `:533`, `:560`.
+  - Step 4: `describe('refreshOAuthToken')` is `:593-619` (new describe goes after `:619`); `routePool` `:850-861`;
+    `pool.queries` example `:607`; `APPLICATION_ENV` precedent `:121-140`.
+  - Step 5: `issueAuthCode` starts at `identityServiceImpl.ts:468`; request fields unchanged. No Postgres on
+    `localhost:5432`, so the BEFORE/AFTER repro run stays with the operator, as the spec already says.
