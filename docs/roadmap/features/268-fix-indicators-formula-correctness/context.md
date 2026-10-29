@@ -741,3 +741,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   4 lines (def + 3 call sites); `except json.JSONDecodeError:$` no hit. Full suite 302 passed, coverage
   85.55%; `ruff check .` / `ruff format --check .` clean.
 - No deviations.
+
+## Session 2026-10-29 — re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-indicators-formula-correctness` with `-X ours`
+  (merge commit 0991650b).
+- Status already `in-progress` (Step 3 done); no status change. Standing authorization re-recorded: operator
+  chat 2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f), "Start executing features 241-276" via
+  batch-execute — unattended checkpoints (`report`), C-16 promotion auto-confirmed unless it changes an
+  existing @AC rule, merge-train authorized, 255 and 275 deferred, operator-only DB/prod steps (open the PR,
+  hold the merge), blocker decisions 2026-10-29 recorded per feature.
+- Re-spec of steps 5 and 6 against the merged codebase. Line drift only, no file or symbol missing:
+  - Step 5: `screener.py` `_latest_indicator("ATR", ...)` `:285` → `app/services/screener.py:319`, its
+    close-only comment `:279-284` → starts at `:313`; `pnl_pattern_consumer.py:50` lives under
+    `app/engine/`; `ListIndicators` `servicer.py:354` → `app/handlers/servicer.py:355`.
+    `indicators_engine.py`, `evaluator.py` and `warmup.py` citations re-verified unchanged.
+  - Step 6: servicer path made explicit (`app/handlers/servicer.py`); `ComputeIndicator` `:204`, None-drop
+    `:216-217` → `:217`, `IndicatorPoint` `:221`; `ListIndicators` `:354` → `:355`. Test-file, conftest,
+    `EXEMPT` and proto citations re-verified unchanged.
