@@ -874,3 +874,23 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   are clean.
 - Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), second re-spec before Step 13
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; per-feature blocker
+  decisions 2026-10-29 given by the operator through the session's question tool; checkpoints "report"; C-16
+  promotion auto-confirmed unless it changes an existing @AC rule).
+- Merged `origin/main-dev` into the branch (normal merge, `9ea2113e`). One conflict, in
+  `services/xstockstrat-indicators/tests/test_config_watcher.py`: both sides kept (main-dev's feature-243
+  full-dotted getter test, then this branch's @AC-5/@AC-8 watcher tests); that file is 15 passed and ruff-clean.
+  `ledger-guard --fix` reported clean. The merge's `uv.lock` bump (#1329) left asyncpg at 0.31.0 (`uv.lock:44-45`).
+- Re-spec, Step 13 only: Steps 11-12 shifted `pnl_pattern_consumer.py` below `:257`. Re-pointed `_advance_cursor` to
+  `:401-403` (it now delegates to `_advance_cursor_conn` `:405-415`, the GREATEST upsert) and the `acquire()` sites in
+  6b to `:205/:269/:402`. Unchanged: `run_forever :147-162`, `_cursor :140-145`, `process_event :164-174`, constants
+  `:37-47`, `ledgerServiceImpl.ts :190-191/:239`, `read_budget.py:8`, 2 `asyncpg.DataError` hits.
+  `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` was already listed in instruction 2 by the earlier re-spec. The Execution
+  Summary's `:205,268,400` and Step 14's `_handle_close_event :256` citations still carry the old numbers; they are
+  outside this re-spec's scope (Step 13 bodies only).
+- Status already `in-progress`; no status change.
