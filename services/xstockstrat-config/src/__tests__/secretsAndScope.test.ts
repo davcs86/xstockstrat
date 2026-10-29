@@ -98,10 +98,14 @@ describe('GetSecret allow-list + failure modes', () => {
   });
   after(() => { client?.close(); ingestClient?.close(); server?.forceShutdown(); });
 
-  function getSecret(metadata: grpc.Metadata, req: Record<string, unknown>) {
+  function getSecretAs(c: any, metadata: grpc.Metadata, req: Record<string, unknown>) {
     return new Promise<{ err: any; res: any }>((resolve) =>
-      client.getSecret(req, metadata, (err: any, res: any) => resolve({ err, res })),
+      c.getSecret(req, metadata, (err: any, res: any) => resolve({ err, res })),
     );
+  }
+
+  function getSecret(metadata: grpc.Metadata, req: Record<string, unknown>) {
+    return getSecretAs(client, metadata, req);
   }
 
   it('AC-4: an allow-listed caller resolves the decrypted plaintext', async () => {
@@ -112,6 +116,16 @@ describe('GetSecret allow-list + failure modes', () => {
     assert.equal(err, null);
     assert.equal(res.found, true);
     assert.equal(res.value, 'alpaca-key-xyz');
+  });
+
+  it('AC-3 (254): marketdata secret is denied to an mTLS peer whose SAN is xstockstrat-ingest', async () => {
+    state.getSecretCiphertext = encryptSecret('alpaca-xyz');
+    const { err, res } = await getSecretAs(ingestClient, md({ [HEADER_INTERNAL_CALLER]: 'marketdata' }), {
+      namespace: 'marketdata', key: 'alpaca.api_key', environment: 'ENVIRONMENT_PRODUCTION',
+    });
+    assert.ok(err, 'a wrong-SAN peer must be refused');
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(res, undefined);
   });
 
   it('AC-5: a caller not on the allow-list is denied, no plaintext', async () => {

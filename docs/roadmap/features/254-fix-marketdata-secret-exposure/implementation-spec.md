@@ -400,7 +400,7 @@ git diff --quiet -- src/grpc/authz.ts && echo "authz.ts untouched"
 
 ### Step 6 — test: wire wrong-SAN negative for the marketdata grant (red evidence)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts` — modify
@@ -623,6 +623,11 @@ _Populated by /sdd-execute as implementation proceeds._
   out the `setEnv(...leaf, caPem)` spread (3-arg `setEnv`, `mintLeaf` tuple) and read the CA PEM with
   `readFileSync`. Step 9 Verification names the DigitalOcean apps MCP `apps-get-logs` tool, since `doctl` is absent.
 
+- **2026-10-29, Step 6 (verification grep).** The config suite prints the node:test spec reporter, not TAP, so the
+  Verification grep's `not ok` / `# fail` alternatives never match. The equivalent spec-reporter markers were used:
+  `grep -E "AC-3 \(254\)|✖|ℹ fail"`. That showed exactly one failing test, `AC-3 (254)`, with `ℹ fail 1` and
+  182/183 passing. The wire `getSecret` helper now delegates to a sibling `getSecretAs(c, metadata, req)`, the first
+  option the Codebase Evidence names. No scope or Files change.
 - **2026-10-29, Step 4 (duplication check).** Verification line 4 (`bash scripts/check-duplication.sh`) could not be
   run as a script in this sandbox (the worktree guard refuses it), so its jscpd call was run directly with the same
   config: `node node_modules/jscpd/bin/jscpd --config .jscpd.json --threshold 0`. Scoped to

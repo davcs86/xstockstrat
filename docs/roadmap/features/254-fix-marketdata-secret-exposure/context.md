@@ -444,3 +444,19 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   lines are 86.77% both times (>= 40).
 - Verification: `pnpm run test:coverage` exit 0; `pnpm run lint` 0 errors (warnings only; the new `ingestClient: any`
   mirrors the existing `client: any`); `git diff --quiet -- src/grpc/authz.ts` → untouched.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 6
+
+- Tooling setup (step 6): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter . --filter "xstockstrat-config..."`).
+- Step 6 done (D-40 red evidence). Added `it('AC-3 (254): marketdata secret is denied to an mTLS peer whose SAN is
+  xstockstrat-ingest')` to the GetSecret describe of `secretsAndScope.test.ts`. It seeds `encryptSecret('alpaca-xyz')`,
+  calls GetSecret through `ingestClient` (ingest leaf, valid CA, wrong SAN) with `x-internal-caller: marketdata`, and
+  asserts `PERMISSION_DENIED` with no `res`. The local `getSecret` helper now delegates to a new `getSecretAs(c, …)`.
+- TDD: AC-3 red: under the current header-only `marketdata` grant (no `peerSan`), `assert.ok(err, 'a wrong-SAN peer
+  must be refused')` failed with `actual: null`. GetSecret succeeded for the ingest-SAN peer, which is the D-40 gap.
+  Suite: `ℹ tests 183`, `ℹ pass 182`, `ℹ fail 1`, and the only `✖` is `AC-3 (254)`. AC-4 / AC-5 x2 / AC-16 x2 stay
+  green. → green: pending Step 7 (the `peerSan: 'xstockstrat-marketdata'` grant). This is the RED evidence for Step 7
+  (C-08 pair); copy it into the integration PR body.
+- Verification: the expected-red run above. The spec-reporter grep replaces the TAP grep (Deviation Log).
+  `pnpm run lint` exits 0, with 0 errors and only warnings. `authz.ts` is untouched. There is no coverage gate at
+  this step (F-05: it moves to Step 7).

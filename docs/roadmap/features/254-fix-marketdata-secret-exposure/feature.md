@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute (re-spec) | Steps 4-9 re-checked against the codebase after merging `origin/main-dev`: all cites resolve; Step 5 `setEnv(...leaf, caPem)` arity clarified, Step 9 log check via DO apps MCP `apps-get-logs` |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 4 done: shared mTLS PKI test helper `mtlsTestPki.ts` (`sh`, `mintLeaf`, `setEnv`) extracted from `peerSanSpike.test.ts` and `mtls.test.ts` |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 5 done: the GetSecret describe of `secretsAndScope.test.ts` now runs over mTLS (config server leaf, marketdata client leaf, plus an `ingestClient` for Step 6) |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 6 done: wire AC-3 (254) wrong-SAN negative added to `secretsAndScope.test.ts`; recorded RED against the header-only marketdata grant (pairs with Step 7) |
 
 ---
 
