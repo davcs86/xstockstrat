@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute | Steps 3, 4, 6, 7, 8 re-specced after the main-dev merge: line drift in analysis `servicer.py`/`conftest.py`/`ci.yml` and ingest test imports; Step 7 marked done (merge-order.md:91 row already present) |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute | `sequential` mode via /sdd-batch-execute; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29) |
 
 ---
 
@@ -53,4 +54,4 @@ empty-id CREATE semantics also differ across the three template repositories.
 
 ## Next Action
 
-`/sdd-review fix-template-update-metadata impl-spec` — validate implementation spec, then `/sdd-execute fix-template-update-metadata`
+`/sdd-execute fix-template-update-metadata sequential` — continue with Step 1
