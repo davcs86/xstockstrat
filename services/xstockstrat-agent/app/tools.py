@@ -221,14 +221,26 @@ class CallerPropagationMiddleware:
 
 
 def _grpc_error_message(
-    exc: grpc.aio.AioRpcError, not_found: str = "not found", *, deadline_s: float | None = None
+    exc: grpc.aio.AioRpcError,
+    not_found: str = "not found",
+    *,
+    deadline_s: float | None = None,
+    write: bool = False,
 ) -> str:
     """Map a gRPC error to a concise, caller-facing message for an MCP tool."""
     code = exc.code()
     if code == grpc.StatusCode.DEADLINE_EXCEEDED:
+        details = exc.details()
+        # grpc's client-side sentinel is exactly this literal; other text came from the server.
+        if details and details != "Deadline Exceeded":
+            return details
         if deadline_s is None:
-            return "upstream did not respond (deadline exceeded); retry shortly"
-        return f"upstream did not respond within {deadline_s:g}s (deadline exceeded); retry shortly"
+            head = "upstream did not respond (deadline exceeded)"
+        else:
+            head = f"upstream did not respond within {deadline_s:g}s (deadline exceeded)"
+        # A client deadline does not prove a write failed.
+        tail = "outcome unknown, verify before retrying" if write else "retry shortly"
+        return f"{head}; {tail}"
     if code == grpc.StatusCode.NOT_FOUND:
         return not_found
     if code == grpc.StatusCode.UNAUTHENTICATED:

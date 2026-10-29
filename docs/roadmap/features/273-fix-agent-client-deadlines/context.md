@@ -927,3 +927,16 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
   81.80% (≥40).
 - Deviation: the spec's `tests/test_tools.py` line anchors drifted by +2. See the Deviation Log.
 
+## Session 2026-10-29 — Step 5 — service: `_grpc_error_message` `write` flag and server-detail pass-through
+
+- Files: `services/xstockstrat-agent/app/tools.py`. Only the DEADLINE_EXCEEDED branch changed. Non-empty details
+  other than grpc's `"Deadline Exceeded"` sentinel are returned as is (272, operator r3 (c), regardless of
+  `deadline_s`). Otherwise the message is `head; tail`, where the tail is `outcome unknown, verify before retrying`
+  when `write=True`. The `deadline_s=None, write=False` text is byte-identical (227). The other branches are
+  untouched, and every existing caller still works because `write` defaults to `False`.
+- TDD RED (Step 4 tests before the change): 3 failed / 5 passed (two `TypeError: unexpected keyword argument
+  'write'`, one pass-through `AssertionError`). GREEN: `-k grpc_error_message` 8 passed.
+  `test_list_opportunities_deadline.py` 7 passed (the 227 "within 0.2s" text is unchanged).
+- Verification: ruff check and format are clean. The full suite is 555 passed, coverage 81.84% (≥40).
+- Tooling: `uv sync --frozen --extra dev` ran in this worktree. The lockfile is unchanged.
+

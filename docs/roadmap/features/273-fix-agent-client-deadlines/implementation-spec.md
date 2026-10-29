@@ -391,7 +391,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 5 — service: `_grpc_error_message` `write` flag and server-detail pass-through
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -992,3 +992,7 @@ _Populated by /sdd-execute as implementation proceeds._
   `read_deadline_keeps_retry_text` and `client_sentinel_is_not_passed_through`, already pass on today's code
   because they pin behaviour Step 5 must keep. Full suite 3 failed / 552 passed, coverage 81.80% (≥40).
   **Disposition**: expected per spec; Step 5 GREEN re-runs these tests.
+- **Step 5 (2026-10-29)** — the spec cites the mapper at `app/tools.py:223-231` as a one-line signature; it spans
+  three lines (`:223-225`), and ruff format splits the widened signature one parameter per line. The
+  sentinel comment was shortened to fit the 100-column limit. No behaviour change from the spec.
+  **Disposition**: accepted (no scope change).
