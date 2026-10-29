@@ -9,7 +9,7 @@
 Python gRPC service providing two capabilities:
 
 1. **Built-in indicator engine** — vectorized computation of SMA, EMA, RSI, MACD, BB, ATR, VWAP, STOCH
-2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory cap
+2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory headroom
 
 **Formulas are private to their author (feature 224) — there is no public concept.** `is_public`
 and `ListFormulas`' `include_public` are deprecated and ignored. No write path writes `is_public`;

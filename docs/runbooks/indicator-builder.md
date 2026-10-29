@@ -164,7 +164,7 @@ that escapes the language guard **cannot** open a socket, `execve` a binary, wri
 size-zero cap), read another process's memory, or read the service's secrets — those syscalls return
 `EPERM` and the run fails with a `runtime_error`. A fork bomb is bounded by `RLIMIT_NPROC` and an
 infinite loop by the wall-clock timeout (+ a `RLIMIT_CPU` backstop). The concurrency bound, timeouts,
-and memory cap all come from the `indicators.sandbox.*` config above — no hardcoded limits.
+and memory headroom all come from the `indicators.sandbox.*` config above — no hardcoded limits.
 
 ---
 
