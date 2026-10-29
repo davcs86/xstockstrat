@@ -93,8 +93,9 @@ and `@AC-1/@AC-3 @feature-173`. They are covered by the existing tests that each
   `for value in sc.values(): if isinstance(value, list): return value` then `return [sc]`. The text fallback at
   `:46-51` does `decoded = json.loads(text)` and `return decoded if isinstance(decoded, list) else [decoded]`.
   Confirmed by `sed -n 34,52p` (recon.md:26-29).
-- The error channel already exists: `run_one_cycle`'s per-source `try/except Exception` at `:143-152` calls
-  `mark_source_error(servicer._db, src["user_id"], slug, str(e))` at `:148` (recon.md:125-126).
+- The error channel already exists: `run_one_cycle`'s per-source `try/except Exception` at `:140-150` (the
+  `except` at `:142`) calls `mark_source_error(servicer._db, src["user_id"], slug, str(e))` at `:145`
+  (re-grepped 2026-10-29; was `:143-152`/`:148` before the 244/259 merges).
 - `_select_signal_list` and any well-known-key handling are **Not found** (recon.md:245). The function is new, and
   there is no existing helper to reuse.
 
@@ -121,7 +122,7 @@ and `@AC-1/@AC-3 @feature-173`. They are covered by the existing tests that each
 4. Update the `_extract_result_items` docstring (`:35-37`), because it currently says "a dict wrapping the list" and
    that wording describes the old rule. Keep it to two lines. The new rule is in `_select_signal_list`'s own
    one-line docstring.
-5. Do not add plumbing. The raise reaches the existing `run_one_cycle` catch at `:143-152`. Do not touch
+5. Do not add plumbing. The raise reaches the existing `run_one_cycle` catch at `:140-150`. Do not touch
    `McpClientExtractor` (INGEST-6: extractors stay pure parsers).
 
 **Verification**:
@@ -142,12 +143,13 @@ cd services/xstockstrat-ingest && grep -n "_select_signal_list\|ambiguous result
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion
 
 **Codebase Evidence**:
-- Fakes: `_FakeResult(items)` (`test_mcp_client_loop.py:19-23`) sets `structured_content = items` and
-  `content = []`, so passing a dict drives the dict branch. Others: `_FakeMcpClient` `:26`, `_FakeCfgWatcher` `:56`,
-  `_mcp_source` `:70`.
-- Existing pattern: `test_source_failure_records_health_and_continues` (`:171-200`) captures
-  `mark_source_error(db, user_id, slug, error)` with `monkeypatch.setattr(loop, "mark_source_error", AsyncMock(side_effect=fake_mark_error))`.
-- `test_cycle_parses_and_ingests_signal` (`:84-108`) is the `@AC-4 @feature-166` bare-list case and must stay green.
+- Fakes: `_FakeResult(items)` (`test_mcp_client_loop.py:22`) sets `structured_content = items` and
+  `content = []`, so passing a dict drives the dict branch. Others: `_FakeMcpClient` `:29`, `_FakeCfgWatcher` `:59`,
+  `_mcp_source` `:73` (re-grepped 2026-10-29; +3 drift).
+- Existing pattern: `test_source_failure_records_health_and_continues` (`:208`) captures
+  `mark_source_error(db, user_id, slug, error)` with `monkeypatch.setattr(loop, "mark_source_error", AsyncMock(side_effect=fake_mark_error))`
+  (`:220`).
+- `test_cycle_parses_and_ingests_signal` (`:87`) is the `@AC-4 @feature-166` bare-list case and must stay green.
 
 **TDD**: `red-green required`. AC-5 fails on today's tree (first list `warnings: []` → zero ingests). AC-7 fails (it
 ingests `alerts`, with no error). The tags case fails (today it returns `["ai"]`, so the extractor drops it).
@@ -196,8 +198,8 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client_loop.py -q
 - The unguarded loop is at `mcp_client_loop.py:124-125`:
   `for item in parsed: await servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)`.
 - `_build_external_signal` subscripts `item["symbol"]` / `["direction"]` / `["conviction"]` at `:72-74`.
-- The per-source isolation style to reuse is at `:143-152`:
-  `except Exception as e: log.warning("mcp_client loop: source %s failed: %s", slug, e)` (recon.md:105-108).
+- The per-source isolation style to reuse is at `:140-150`:
+  `except Exception as e: log.warning("mcp_client loop: source %s failed: %s", slug, e)` (`:142-143`).
 - `log = logging.getLogger(__name__)` is at `:28`.
 - A skipped-count log record is **Not found** (recon.md:248).
 
@@ -216,7 +218,7 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client_loop.py -q
    `log.info("mcp_client loop: source %s polled ingested=%d skipped=%d", slug, ingested, skipped)`. It goes **before**
    any raise.
 4. `if parsed and skipped == len(parsed): raise RuntimeError(f"all {len(parsed)} items failed: {first_err}")`. The
-   existing catch at `:143-152` records it as `last_error`. The pinned marker is `all <N> items failed`.
+   existing catch at `:140-150` records it as `last_error`. The pinned marker is `all <N> items failed`.
 5. A partial failure must not call `mark_source_error`. `owner=owner` stays on every ingest (`@AC-9 @feature-224`).
    Items the extractor drops keep its warning and are not counted.
 
@@ -238,9 +240,10 @@ cd services/xstockstrat-ingest && grep -n "item skipped\|polled ingested=\|items
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion
 
 **Codebase Evidence**:
-- The same fakes as Step 2 (`test_mcp_client_loop.py:19-81`).
-- The `mark_source_error` capture pattern is at `:178-182`.
-- `_mcp_source(slug=..., **over)` is at `:70-81`. Its default is `"user_id": "seed-user"` (`:72`), so pass
+- The same fakes as Step 2 (`test_mcp_client_loop.py:22-84`).
+- The `mark_source_error` capture pattern is inside `test_source_failure_records_health_and_continues` (`:208`,
+  `monkeypatch.setattr` at `:220`).
+- `_mcp_source(slug=..., **over)` is at `:73-84`. Its default is `"user_id": "seed-user"` (`:75`), so pass
   `user_id="u-1"` through `over`.
 
 **TDD**: `red-green required`. AC-1 fails today (item 3 is never ingested, and the source is marked errored). AC-8's
@@ -262,7 +265,7 @@ cd services/xstockstrat-ingest && grep -n "item skipped\|polled ingested=\|items
    - the `skipped=1` summary record appears in `caplog.records` **before** the `"source %s failed"` warning that
      `run_one_cycle` logs (compare record indices).
 3. Re-run the whole module, so `test_source_failure_records_health_and_continues` (`@AC-5 @feature-166`) and
-   `test_second_identical_cycle_deduplicates` stay green.
+   `test_second_identical_cycle_deduplicates` (`:166`) stay green.
 C-13: single consumer, so the data stays inline.
 
 **Verification**:
@@ -286,13 +289,18 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client_loop.py -q
 `x-internal-caller`, and a deadline error must not log the bearer or key material (feature.md triage snapshot)
 
 **Codebase Evidence**:
-- `async def resolve_secret(self, key: str, user_id: str = "") -> tuple[str, bool]:` is at `watcher.py:146`. The
+- `async def resolve_secret(self, key: str, user_id: str = "") -> tuple[str, bool]:` is at `watcher.py:150`. The
   call `resp = await self._stub.GetSecret(config_pb2.GetSecretRequest(...), metadata=((HEADER_INTERNAL_CALLER, INGEST_INTERNAL_CALLER_ID),))`
-  is at `:155-163`, with no `timeout=`. It returns `resp.value, resp.found` at `:164`.
-- `import grpc` is at `watcher.py:10`. `grpc.aio.AioRpcError` is already caught in this file at `:91`.
+  is at `:159-167`, with no `timeout=`. It returns `resp.value, resp.found` at `:168` (re-grepped 2026-10-29).
+- `import grpc` is at `watcher.py:10`. `grpc.aio.AioRpcError` is **no longer referenced anywhere in `watcher.py`**:
+  feature 259 replaced the `_watch` catch with a generic `except Exception` (`:103`). The `except
+  grpc.aio.AioRpcError` this step adds is therefore the file's only one; `import grpc` already covers it.
 - Call site: `bearer, found = await cfg_watcher.resolve_secret(key, user_id=owner)` at `mcp_client_loop.py:116`.
-  `timeout_seconds` is already a `poll_one_source` parameter (`:97`), and `run_one_cycle` computes it as the
-  clamped `timeout` at `:133-138`.
+  `timeout_seconds` is already a `poll_one_source` parameter (`:97`). **Feature 244 has merged** into main-dev
+  (`code-completed`): `run_one_cycle` now computes `timeout = int_positive(cfg_watcher,
+  "ingest.mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS)` at `:133-135`, so this step takes
+  the "pass 244's clamped value" branch of § Step Dependencies. The 244 -> 261 row now exists at
+  `docs/roadmap/features/merge-order.md:82`.
 - Precedent: feature 247 chose the gRPC `timeout=` kwarg over `asyncio.wait_for`
   (`docs/roadmap/features/247-fix-agent-getconfig-deadline/design.md:22`, `:162`; design.md § Rejected
   Alternatives).
@@ -314,8 +322,9 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client_loop.py -q
    The message must not include `key` or any value (Security). The pinned marker is `GetSecret deadline exceeded`.
    Add one docstring line stating the timeout bound.
 2. `mcp_client_loop.py:116`: change to
-   `await cfg_watcher.resolve_secret(key, user_id=owner, timeout=float(timeout_seconds))`. Do not change the timeout
-   read at `:133-138` (feature 244 owns it; see § Step Dependencies). Do not fall back to an unauthenticated fetch.
+   `await cfg_watcher.resolve_secret(key, user_id=owner, timeout=float(timeout_seconds))`. Do not change 244's
+   `int_positive` timeout read at `:133-135`; `timeout_seconds` already carries its clamped value. Do not fall back
+   to an unauthenticated fetch.
 
 **Verification**:
 ```bash
@@ -340,14 +349,14 @@ deadline error
 
 **Codebase Evidence**:
 - `_FakeSecretStub.GetSecret(self, request, metadata=None)` is at `test_mcp_client.py:27`. It does not accept
-  `timeout`, so it must be widened. `_watcher_with(stub)` is at `:33-39`. Both are imported by
-  `test_mcp_client_loop.py:16`.
-- These fakes override `resolve_secret(self, key, user_id="")`: `_FakeCfgWatcher` at `test_mcp_client_loop.py:65`
-  and `_PerOwnerCfgWatcher` at `:210`. Both must accept `timeout=None`, or the Step 5 call site raises `TypeError`.
+  `timeout`, so it must be widened. `_watcher_with(stub)` is at `:33`. Both are imported by
+  `test_mcp_client_loop.py:19` (re-grepped 2026-10-29).
+- These fakes override `resolve_secret(self, key, user_id="")`: `_FakeCfgWatcher` at `test_mcp_client_loop.py:68`
+  and `_PerOwnerCfgWatcher` at `:247`. Both must accept `timeout=None`, or the Step 5 call site raises `TypeError`.
 - An inline `AioRpcError` builder already exists:
   `grpc.aio.AioRpcError(grpc.StatusCode.INVALID_ARGUMENT, grpc.aio.Metadata(), grpc.aio.Metadata(), details=...)`
-  (`tests/test_ingest_servicer.py:536-541`).
-- `test_resolve_secret_sends_exact_user_scope` (`test_mcp_client_loop.py:283`) is `@AC-35 @feature-224` and must stay
+  (`tests/test_ingest_servicer.py:552`).
+- `test_resolve_secret_sends_exact_user_scope` (`test_mcp_client_loop.py:320`) is `@AC-35 @feature-224` and must stay
   green.
 
 **TDD**: `red-green required`. On today's tree the AC-4 test fails. The hanging stub is never bounded (the outer
@@ -364,10 +373,10 @@ deadline error
      `AioRpcError`, and that the message does not contain the key.
    - Add a `PERMISSION_DENIED` variant that still raises `AioRpcError` (untranslated).
 3. `test_mcp_client_loop.py`: add `test_ac4_hung_getsecret_is_bounded_and_recorded`.
-   - Set `request_timeout_seconds` to 2 via `_FakeCfgWatcher`-style `ints`, but build the watcher with
-     `_watcher_with(stub)`, where the stub's `GetSecret` asserts `timeout == 2.0`, runs
-     `await asyncio.sleep(timeout)`, then raises `DEADLINE_EXCEEDED` (O-7). Monkeypatch `get_int` on the watcher
-     instance, because `_watcher_with` bypasses `__init__`.
+   - Set `request_timeout_seconds` to 2, but build the watcher with `_watcher_with(stub)`, where the stub's
+     `GetSecret` asserts `timeout == 2.0`, runs `await asyncio.sleep(timeout)`, then raises `DEADLINE_EXCEEDED`
+     (O-7). The read now goes through 244's `int_positive(cfg_watcher, key, default)`, which calls
+     `cfg_watcher.get_int`; monkeypatch `get_int` on the watcher instance (`_watcher_with` bypasses `__init__`).
    - Use two sources, `src-a` (hangs) and `src-b` (resolves). Key the stub on `request.key` or `request.user_id`.
    - Wrap `run_one_cycle` in `asyncio.wait_for(..., timeout=10)` (feature 247's outer hang guard).
    - Assert that the captured error for `src-a` contains `"GetSecret deadline exceeded"`, and that `src-b` was
@@ -438,7 +447,7 @@ distinct behavior covered by `test_resume_job_sends_minted_trace_id` (Step 8). R
 4. **FR-4.** In `_resume_job`, after the `row is None` return (`:725-726`) and before the RUNNING write (`:734`):
    `if row["status"] == ingest_pb2.BACKFILL_STATUS_CANCELED:` →
    `log.info("skipping resume of canceled job %s", job_id)`; `return`. This is the only persisted-status check. Do
-   not change `resume_incomplete_jobs` or its count (`test_ingest_servicer.py:624` stays green; design.md § Rejected
+   not change `resume_incomplete_jobs` or its count (`test_ingest_servicer.py:640` stays green; design.md § Rejected
    Alternatives: join filter).
 5. **Trace (C-03, operator 2026-10-21).** In `_resume_job`, mint `meta = (("x-trace-id", str(uuid.uuid4())),)` once
    per resumed job, after the FR-4 check, and pass `meta` instead of `()` to `_run_chunks` and `_finalize_backfill`
@@ -467,15 +476,16 @@ cd services/xstockstrat-ingest && grep -n "_canceled_jobs" app/handlers/servicer
 **Reviewers**: `xstockstrat-ingest` owner — idempotent ingestion, backfill lifecycle correctness
 
 **Codebase Evidence**:
-- `make_servicer(db=None, *, max_concurrent=5, ...)` is at `test_ingest_servicer.py:31-60`. It builds the real
-  `asyncio.Semaphore` from `max_concurrent`.
+- `make_servicer(db=None, *, max_concurrent=5, ...)` is at `test_ingest_servicer.py:34`. It builds the real
+  `asyncio.Semaphore` from `max_concurrent` (re-grepped 2026-10-29).
 - Helpers:
-  - `_REPO = "app.repositories.backfill_jobs"` `:88` and `_CHUNKS` `:408`;
-  - `_mk_backfill_resp` `:91`, `_make_backfill_req` `:411`, `_chunk` `:422`, `patch_chunk_repo` `:431-432`;
-  - `_mk_fund_resp` `:1724`, `_make_fund_req` `:1731`.
-- `tests._helpers.job_row(job_id, status, **over)` is at `tests/_helpers.py:60`, and `tests.conftest._ctx` is
-  imported at `test_cancel_backfill.py:16`. `_ctx("4")` is an admin context.
-- Existing resume tests: `test_resume_incomplete_jobs_returns_count` `:624`, `test_resume_job_redrives_incomplete_chunks` `:639`.
+  - `_REPO = "app.repositories.backfill_jobs"` `:104` and `_CHUNKS` `:424`;
+  - `_mk_backfill_resp` `:107`, `_make_backfill_req` `:427`, `_chunk` `:438`, `patch_chunk_repo` `:448`;
+  - `_mk_fund_resp` `:1726`, `_make_fund_req` `:1733`.
+- `tests._helpers.job_row(job_id, status, **over)` is at `tests/_helpers.py:60` and is **already imported** into
+  `test_ingest_servicer.py` as the alias `_job_row` (`:26`); reuse that alias and add no second import.
+  `tests.conftest._ctx` is imported at `test_cancel_backfill.py:16`. `_ctx("4")` is an admin context.
+- Existing resume tests: `test_resume_incomplete_jobs_returns_count` `:640`, `test_resume_job_redrives_incomplete_chunks` `:655`.
 - Ledger trap: drive through `CancelBackfill` plus repo fakes, not by mutating `_canceled_jobs`. Do not copy the
   private-set assertion at `test_cancel_backfill.py:52` (`fails.md` 2026-08-06; design.md § Tests).
 
@@ -494,7 +504,7 @@ TDD gate. `/sdd-execute` must capture that red run's output in context.md, then 
    - Start `asyncio.create_task(svc._run_backfill("job-A", ...))` and then `svc._run_backfill("job-B", <bars req | _make_fund_req>)`,
      and yield until job-B is blocked on the semaphore.
    - Call `await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="job-B"), _ctx("4"))`, with `get_job`
-     returning `job_row("job-B", BACKFILL_STATUS_QUEUED)` and then the CANCELED row.
+     returning `_job_row("job-B", BACKFILL_STATUS_QUEUED)` and then the CANCELED row.
    - Set the event, and await both tasks.
    - Assert:
      - no `update_job` call for `job-B` with `status=BACKFILL_STATUS_RUNNING`, and the last job-B status write is
@@ -502,7 +512,7 @@ TDD gate. `/sdd-execute` must capture that red run's output in context.md, then 
      - no `AppendEvent` whose payload is `ingest.backfill.running` for `job-B`;
      - `BackfillBars` was never called with job-B's symbols, and `BackfillFundamentals.assert_not_called()` holds.
 2. `test_ac3_canceled_job_not_resumed_after_restart`.
-   - Patch `list_jobs_with_incomplete_chunks` → `["job-C"]` and `get_job` → `job_row("job-C", BACKFILL_STATUS_CANCELED)`.
+   - Patch `list_jobs_with_incomplete_chunks` → `["job-C"]` and `get_job` → `_job_row("job-C", BACKFILL_STATUS_CANCELED)`.
    - Run with `_canceled_jobs` empty (fresh servicer = restart), and `await svc._resume_job("job-C")` directly. Also
      run `resume_incomplete_jobs()` and drain the created task.
    - Assert that `update_job` is never awaited, that `get_incomplete_chunks` / `mark_chunk_running` /
@@ -521,9 +531,9 @@ TDD gate. `/sdd-execute` must capture that red run's output in context.md, then 
 5. `test_resume_job_sends_minted_trace_id`.
    - Extend the `test_resume_job_redrives_incomplete_chunks` setup (RUNNING row).
    - Assert that `BackfillBars.await_args.kwargs["metadata"]` contains an `x-trace-id` entry with a non-empty value.
-6. Keep `test_resume_incomplete_jobs_returns_count` (`:624`) and `test_resume_job_redrives_incomplete_chunks` (`:639`)
+6. Keep `test_resume_incomplete_jobs_returns_count` (`:640`) and `test_resume_job_redrives_incomplete_chunks` (`:655`)
    unchanged and green.
-C-13: `job_row` is reused from `tests/_helpers.py`. The event-gated marketdata fakes are scenario one-offs and stay
+C-13: `job_row` is reused from `tests/_helpers.py` via the existing `_job_row` alias. The event-gated marketdata fakes are scenario one-offs and stay
 inline.
 
 **Verification**:
@@ -531,12 +541,12 @@ inline.
 cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py tests/test_cancel_backfill.py -q \
   && uv run pytest --cov=app --cov-fail-under=40 \
   && uv run ruff check . && uv run ruff format --check . \
-  && grep -n "from tests._helpers import\|job_row" tests/test_ingest_servicer.py | head
+  && grep -n "from tests._helpers import job_row as _job_row" tests/test_ingest_servicer.py
 ```
 
 ---
 
-### Step 9 — docs: teardown (resume drift, single-instance invariant, findings, key-form defect report)
+### Step 9 — docs: teardown (resume drift, single-instance invariant, findings)
 
 **Status**: `pending`
 **Service**: `docs` (`services/xstockstrat-ingest/` docs + `docs/reports/`)
@@ -544,8 +554,6 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py te
 - `services/xstockstrat-ingest/CLAUDE.md` — modify
 - `services/xstockstrat-ingest/docs/context-constitution.md` — modify
 - `services/xstockstrat-ingest/docs/context-constitution-findings.md` — modify
-- `docs/reports/2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.md` — create
-- `docs/reports/2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.status` — create
 
 **Reviewers**: none
 
@@ -565,12 +573,13 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py te
   - config's `reloadNamespace` keys the snapshot by the raw `row.key`
     (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:203-213`), and ingest's `get_int` does
     `self._snapshot.values.get(key)` (`app/config/watcher.py:112-118`), so the dotted read misses both rows;
-  - the dotted read is at `mcp_client_loop.py:135`;
+  - the dotted read is at `mcp_client_loop.py:134` (now via 244's `int_positive`);
   - migration 029 excludes the `ingest` namespace (`029_heal_config_keys_full_dotted.up.sql:28`);
   - it is out of scope here (recon.md:194-207; design.md § Open Risks).
-- Defect-report format: `.claude/skills/sdd-qa/reference/defect-filing.md`, and the sidecar convention in
-  `docs/CLAUDE.md` § `reports/`. Example sidecar: `docs/reports/2026-10-21-ingest-poller-backfill-defect.status`
-  (`triaged` / `ref: …`).
+- **The key-form defect is already filed**: `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md`
+  covers `mcp_client.request_timeout_seconds` plus four other ingest keys. Its `.status` sidecar reads `wont-fix`,
+  `ref: feature:277-fix-ingest-seeded-config-keys`, and 277 is `demoted/canceled` (operator, 2026-10-23). A new
+  report would duplicate it, so this step files none (re-spec 2026-10-29).
 
 **TDD**: `N/A (docs)`
 
@@ -587,10 +596,10 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py te
    ingest past one instance re-opens D-34.
 3. `context-constitution-findings.md`: add a "Documentation that lies" row for the `main.py:66` and `:117-118`
    comment drift, with the suggested action "fix when `main.py` is next touched".
-4. Before filing, re-confirm the miss (both 025 rows bare; `reloadNamespace` raw-key snapshot; no later migration
-   renames them). Then file the key-form defect report, citing both rows: observed (seeded bare key vs dotted read, so the effective timeout is the 30 s
-   code default), evidence (above), severity proposal, and suggested route (`/sdd-triage --from-report`, or a 244
-   follow-up). Create its `.status` sidecar with `open`.
+4. Do **not** file a new key-form defect report. In the findings entry, cite the existing
+   `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` (`wont-fix`; feature 277
+   demoted/canceled 2026-10-23) as the record that the seeded bare `mcp_client.request_timeout_seconds` rows are
+   never read, so the timeout FR-5 passes to `GetSecret` is effectively the 30 s code default.
 5. Run `/context-forge:context-constitution refresh` scoped to the touched ingest docs. If the plugin is
    unavailable, do the manual reconciliation and record it in the PR body (root CLAUDE.md § Teardown).
 
@@ -599,7 +608,8 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py te
 grep -n "resume_incomplete_jobs\|CANCELED" services/xstockstrat-ingest/CLAUDE.md \
   && grep -n "INGEST-10" services/xstockstrat-ingest/docs/context-constitution.md \
   && grep -n "main.py" services/xstockstrat-ingest/docs/context-constitution-findings.md \
-  && ls docs/reports/2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.md docs/reports/2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.status
+  && grep -n "ingest-seeded-config-keys-never-read-defect" services/xstockstrat-ingest/docs/context-constitution-findings.md \
+  && ! ls docs/reports/2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.md 2>/dev/null
 ```
 
 ---
