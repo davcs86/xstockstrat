@@ -276,7 +276,7 @@ grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: sing
 
 ### Step 5 — service: notify `AdminDirectory` client + `IDENTITY_ENDPOINT` wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/services/adminDirectory.ts` — create
@@ -806,3 +806,10 @@ _Populated by /sdd-execute as implementation proceeds._
   reformat would touch unrelated lines. `adminDirectory.test.ts` is prettier-clean. (e) The P-06 load check found
   that the guarded `identityServiceImpl.test.ts` skips vacuously on Node 24.20.0 (see context.md). Per Instruction
   5 the `fails.md:2222` claim is corrected by an appended ledger entry (append-only rule), in its own commit.
+- **Step 5 (2026-10-29) — formatting and TDD-evidence mechanics only, no behaviour deviation.** (a) The spec puts
+  every `@AC-*` test for this seam in Step 6's `adminDirectory.test.ts`, so the step-5 RED→GREEN gate ran on an
+  uncommitted scratch suite (5 cases mirroring Step 6's freshness, single-flight, deadline/trio, failure-clears-slot
+  and missing-endpoint cases), deleted before commit; Step 6 still owns the committed tests. (b) The worktree had no
+  `node_modules`; `pnpm install --frozen-lockfile` was run at the worktree root (as Steps 2-4) instead of symlinking
+  the main worktree's, so pnpm never writes into the shared checkout. (c) `adminDirectory.ts` was run through
+  prettier (new file); the `IdentityServiceClient` construction and the `listAdminUserIds` call wrap across lines.

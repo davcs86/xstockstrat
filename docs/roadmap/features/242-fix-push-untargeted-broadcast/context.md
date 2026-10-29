@@ -419,3 +419,25 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   on Node 24. This means the Step 3 `listAdminUserIds` delegate in `identityServiceImpl.ts` has no executing test.
   The handler itself is covered directly. Hand this to `/sdd-qa defect`.
 
+
+## Session 2026-10-29 — sdd-execute sequential, Step 5 (notify AdminDirectory client + env wiring)
+
+- Step 5 done. Created `services/xstockstrat-notify/src/services/adminDirectory.ts`: `AdminDirectory`,
+  `ADMIN_LOOKUP_DEADLINE_MS = 2000` (F-07 mechanism constant), module-private `PROPAGATED_HEADERS`, `AdminLookupClient`
+  (`Pick<IdentityServiceClient, 'listAdminUserIds'>`) and `createAdminDirectory(endpoint = process.env.IDENTITY_ENDPOINT,
+  client?)`. Unset endpoint with no client logs ERROR once and returns a directory that rejects `IDENTITY_ENDPOINT unset`
+  (no default host). Otherwise one long-lived client (`mtls.clientCredentials()` + `targetOverride('xstockstrat-identity')`);
+  calls are single-flight (slot cleared in `finally`, no TTL cache), relay the trio via `md?.get?.(h)?.[0]`, and pass only
+  `{ deadline }` (no `waitForReady`). `index.ts` untouched (Step 7 wires it).
+- `IDENTITY_ENDPOINT` added after `LEDGER_ENDPOINT` in the notify block of `docker-compose.yml`
+  (`xstockstrat-identity:50058`) and `.do/app.yaml` / `.do/app.dev.yaml` (`${xstockstrat-identity.PRIVATE_DOMAIN}:50058`).
+  `WAIT_FOR` and `depends_on` unchanged.
+- TDD (P-06), uncommitted scratch suite mirroring Step 6 (Step 6 owns the committed tests). Red:
+  `tsc` → `TS2307: Cannot find module '../services/adminDirectory.js'` → green: `tests 5, pass 5, fail 0`.
+- Verification:
+  - `pnpm run build`: exit 0.
+  - `pnpm run lint`: 0 errors (211 pre-existing warnings); `eslint src/services/adminDirectory.ts` clean; prettier-clean.
+  - Notify-block `IDENTITY_ENDPOINT` counts: compose 1, `.do/app.yaml` 1, `.do/app.dev.yaml` 1.
+  - Trio grep hits `:11` and `:44`; `waitForReady` / default-host grep: none; `src/middleware`: absent.
+  - Existing notify suite: `pnpm test` gives 70 pass, 0 fail, 0 skipped.
+- Toolchain: Node v24.20.0, pnpm 9.15.9, `pnpm install --frozen-lockfile` at the worktree root.
