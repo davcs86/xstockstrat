@@ -613,4 +613,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Deviation: the malformed-row WARNING assertion is narrowed so it is never vacuous (Deviation Log).
   - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
     was not used.
-
+- Step 6 done (service, `app/repositories/strategies.py`, `app/handlers/servicer.py`): deleted
+  `get_by_id` and `update` (no callers in `app/`); the `get_by_owner_and_id` docstring opens
+  "Resolve the row only under its owner (feature 133)"; the `UniqueViolationError` comment at
+  `servicer.py:3181` now reads "...raced get_by_owner_and_id." `import json` stays (`update_locked`).
+  - TDD (scratch `@AC-6` test, not committed — Step 7 owns it): RED
+    `True = hasattr(StrategiesRepository, 'get_by_id')` → GREEN 1 passed.
+  - Verification: both greps empty; `ruff check .` + `ruff format --check .` clean; full suite
+    1454 passed (servicer tests mock `_strategies_repo` as a bare `AsyncMock`, so the dead
+    `get_by_id` mock lines Step 7 deletes are still present but inert).
+  - The spec's example comment wording is 102 chars (E501), so the shorter form above was used;
+    the spec offered it as "e.g.", same meaning. No deviation.
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.

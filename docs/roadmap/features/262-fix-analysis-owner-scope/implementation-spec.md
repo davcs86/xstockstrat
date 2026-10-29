@@ -517,7 +517,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 6 — service: delete owner-agnostic `StrategiesRepository.get_by_id` / `.update` (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategies.py` — modify

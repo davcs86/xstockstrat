@@ -23,6 +23,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — `@AC-1`/`@AC-2` tests + runtime `x-user-id`/`x-trace-id` guard on the trading stub |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — `run_once` failure isolation (strategies read, blend-universe resolve, system drain, row parse/resolve, owner held/watch with `failed_owners`, owner-signal fallback, gather-result logging) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — `@AC-3`/`@AC-4`/`@AC-5`/`@AC-8`/`@AC-9` failure-isolation tests (real loop for `@AC-3`); `real_live_loop` moved to `tests/conftest.py` |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — deleted owner-agnostic `StrategiesRepository.get_by_id`/`.update` (FR-5); the `get_by_owner_and_id` docstring and the `servicer.py` backstop comment no longer name `get_by_id` |
 
 ---
 
