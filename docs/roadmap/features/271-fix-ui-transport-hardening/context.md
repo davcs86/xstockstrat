@@ -707,3 +707,21 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   - `test:coverage`: 50 files / 259 tests pass, and thresholds are met (`src/lib/**` 72% lines).
   - `lint` exits 0. Prettier is clean on both test files. `tsc --noEmit` still reports only the 2 pre-existing `e2e/insights/backfills.spec.ts` errors.
 - Deviation (Deviation Log): the spec's "9 cases" count predates the order-mutation class, so 13 ran. The admin JWT comes from the shared `e2e/helpers/auth.ts` helper.
+
+## Session 2026-10-29 — Step 8 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile`, run in this worktree only. The main worktree still has no `node_modules` to symlink.
+- Step 8 done:
+  - `src/middleware.ts`: a module-level `PUBLIC_HEALTH_PATHS` set holds exactly the eight segment health paths. The first statement of `middleware()` returns `NextResponse.next()` on an exact match.
+  - The matcher lookahead loses only `api/health|` and `health|`. These are unchanged: the `:18-21` comment, `api/auth/refresh`, the PWA assets and `runtime: 'nodejs'`. `agent-health/route.ts` is untouched.
+- TDD, AC-3/AC-4: I used a temporary probe of Step 9's vitest cases (`src/step8probe.test.ts`, deleted after green, since Step 9 owns the committed `middleware.test.ts`).
+  - Red (pre-fix): 11/20 failed. The 3 root-lookalike matcher cases failed with `expected false to be true`. The 8 health paths failed with `expected 307 to be 200`. The 6 gated non-health paths passed.
+  - Green: 20/20 pass.
+- Verification:
+  - The `PUBLIC_HEALTH_PATHS`, `api/auth/refresh` and `runtime: 'nodejs'` greps match.
+  - The `api/health|health|` grep has no hits.
+  - `lint` exits 0.
+- Open item for Step 9: `middleware.test.ts:60` (`matches('/api/health')` is false) now fails, 1 of 19 cases. Step 9 instruction 1 removes it.
+- Deviations (Deviation Log):
+  - The `:60` red carries over to Step 9.
+  - `format:check` still fails on the 10 pre-existing files. `middleware.ts` is clean.

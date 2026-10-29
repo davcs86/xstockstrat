@@ -480,7 +480,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/lib/__tests__/insightsBff
 
 ### Step 8 — service: Exact-path health exemption + drop dead matcher prefixes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.ts` — modify
@@ -673,3 +673,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **What**: the step **Verification** asks to confirm "all 9 `bffDeadlines` cases". The **Instructions** list 6 long-RPC methods, 4 order mutations (operator 2026-10-22) and 3 preservation checks, which is 13. The "9" predates the order-mutation addition. All 13 cases ran. Separately, the admin cookie is signed with `signTestJwt(['admin'])` from `e2e/helpers/auth.ts` (the helper `configUiBff.test.ts` already uses), not an inline `jose` `SignJWT`, to keep a single JWT fixture (C-13). `FUNDAMENTALS_TIMEOUT_MS` is imported from `@/lib/deadlines`, where Step 1 moved it.
 - **Disposition**: no behavior change; the assertions follow the step **Instructions** exactly. Verification: 18/18 targeted tests pass (5 `forward`/`forwardAdmin` + 13 `bffDeadlines`), `test:coverage` 50 files / 259 tests with thresholds met, `lint` exits 0.
+
+### Step 8 — `middleware.test.ts:60` stays red until Step 9; pre-existing `format:check` drift (2026-10-29)
+
+- **What**: deleting `api/health|` from the matcher makes the existing `src/middleware.test.ts:58-62` case ("still excludes the sibling auth/health paths") fail on `expect(matches('/api/health')).toBe(false)`. The Step 8 **Files** list holds only `middleware.ts`, and Step 9 instruction 1 already renames that case and drops the `/api/health` line, so the fix stays in Step 9. Between the Step 8 and Step 9 commits, `vitest run src/middleware.test.ts` has 1 known failure. Separately, `pnpm run format:check` exits 1 on the same 10 pre-existing files recorded under Step 1. `middleware.ts` is not among them.
+- **Disposition**: no scope change. The Step 8 **Verification** greps all pass and `pnpm run lint` exits 0. The integration PR runs CI after Step 9, so the intermediate red never reaches `main-dev`.
