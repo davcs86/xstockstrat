@@ -591,7 +591,7 @@ grep -n "boundReadUserId" services/xstockstrat-config/src/grpc/authz.ts services
     `new ConfigServiceImpl(pool)`
   - its capturing `pool.query` routes on SQL text (`DISTINCT ON (key)` → `listParams`)
   - its client is `ConfigServiceClient` from `@xstockstrat/proto/config/v1/config`
-- `setConfigAuthz.test.ts:42` declares the `md(pairs)` Metadata builder, and `:139-149` passes explicit
+- `setConfigAuthz.test.ts:43` declares the `md(pairs)` Metadata builder, and `:139-149` passes explicit
   `metadata` to a unary call.
 - `HEADER_ACCESS_SCOPE` and `HEADER_USER_ID` are exported from `authz.ts:10-11`.
 - The test runner is `tsc && node --test dist/__tests__/*.test.js`, and `test:coverage` is
@@ -654,17 +654,17 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/readUserB
 `docs/runbooks/mcp-tools.md` parity, admin `x-access-scope` forwarded only by management tools
 
 **Codebase Evidence**:
-- `client.py:35-38`: `_Caller = tuple[str, int, str]  # (user_id, access_scope, trace_id)`, and
+- `client.py:39-42`: `_Caller = tuple[str, int, str]  # (user_id, access_scope, trace_id)`, and
   `_CALLER: contextvars.ContextVar[_Caller | None]` defaults to `None`, so stdio and pre-token paths
   carry no caller.
-- `client.py:2035` is `async def get_config(namespace, environment, user_id="")`. It echoes
-  `"user_id": user_id` at `:2060`.
-- `client.py:2065` is `async def list_config_keys(...)`. It echoes at `:2081`.
+- `client.py:2040` is `async def get_config(namespace, environment, user_id="")`. It echoes
+  `"user_id": user_id` at `:2065`.
+- `client.py:2070` is `async def list_config_keys(...)`. It echoes at `:2086`.
 - `app/scopes.py:35`: `_ADMIN = 0x04`. `scopes.py` imports only `os` (`:14`), so `client.py` importing
   from it creates no import cycle.
 - Tool docstrings:
-  - `tools.py:1601-1605` (`get_config`): "pass a user id to see that user's per-user overrides…"
-  - `tools.py:1629-1633` (`list_config_keys`): same wording
+  - `tools.py:1603-1604` (`get_config`): "pass a user id to see that user's per-user overrides…"
+  - `tools.py:1631-1632` (`list_config_keys`): same wording
 - The tools stay ctx-less, so `tests/test_config_tools.py:78/:320/:328` and
   `test_config_tools_expose_no_environment_parameter` are unaffected.
 
@@ -680,7 +680,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/readUserB
      and differs from `caller[0]`, return `caller[0]`. Otherwise return `user_id`.
    - Give it a comment of at most 2 lines saying it mirrors config `boundReadUserId`
      (`services/xstockstrat-config/src/grpc/authz.ts`) and must change with it.
-3. At `:2060` and `:2081`, echo `"user_id": _effective_config_user_id(user_id)`.
+3. At `:2065` and `:2086`, echo `"user_id": _effective_config_user_id(user_id)`.
 4. Leave the request `user_id` sent to config unchanged (the agent-to-config wire stays the same), and
    leave the metadata via `_metadata()` unchanged.
 5. In `tools.py`, reword both docstrings' `user_id:` lines in no more than the same line budget:
@@ -705,13 +705,13 @@ and expect one definition plus two uses.
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, return shape
 
 **Codebase Evidence**:
-- The stub-capture harness is `TestSetConfigRequestParity` (`test_config_tools.py:261`; the
-  `mtls`/`ConfigServiceStub` patches are at `:283-284`). It patches `app.client.mtls` with a `secure_channel` async-context-manager mock, and patches
+- The stub-capture harness is `TestSetConfigRequestParity` (`test_config_tools.py:255`; the
+  `mtls`/`ConfigServiceStub` patches are at `:277-278`). It patches `app.client.mtls` with a `secure_channel` async-context-manager mock, and patches
   `config_pb2_grpc.ConfigServiceStub` to return an `AsyncMock` stub.
 - `client.set_caller(user_id, access_scope, trace_id)` returns a token, and `client.reset_caller(token)`
-  releases it (`client.py:41`; usage in `tests/test_header_propagation.py:40-45` and
+  releases it (`client.py:45` and `:53`; usage in `tests/test_header_propagation.py:40-45` and
   `tests/test_template_tools.py:39-43`).
-- Claims are in `tests/conftest.py:12-13`: `ADMIN u-1`, `TRADER u-2`. `roles_to_access_scope`
+- Claims are in `tests/conftest.py:14-15`: `ADMIN u-1`, `TRADER u-2`. `roles_to_access_scope`
   maps trader→11 and admin→15.
 
 **TDD**: `red-green required`
@@ -734,7 +734,7 @@ and expect one definition plus two uses.
      echo `"u-b"`.
    - **No caller bound** (stdio). The echo equals the request.
    - **Empty `user_id` from a non-admin.** The echo is `""` (global).
-3. C-13: reuse `TRADER`/`ADMIN` from `tests.conftest`. The stub doubles are inline, with one consumer
+3. C-13: reuse `TRADER`/`ADMIN` from `tests.conftest` (already imported at `test_config_tools.py:22`). The stub doubles are inline, with one consumer
    class.
 
 **Verification**:
@@ -772,14 +772,14 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
 - `services/xstockstrat-config/CLAUDE.md:36`, invariant #5, whose text at `:40` reads
   "`GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**…"
 - `services/xstockstrat-agent/CLAUDE.md`:
-  - `:28-30`: "Body `user_id` is still sent where it is a **target/scope selector**… the config tools
+  - `:29-30`: "Body `user_id` is still sent where it is a **target/scope selector**… the config tools
     (per-user scope)"
   - `:74` `get_config` row: "scoped by an optional per-user `user_id`"
   - `:75` `list_config_keys` row
 - `docs/runbooks/mcp-tools.md`: `### get_config` at `:1052`, `user_id` row at `:1059`; `### list_config_keys`
   at `:1077`, `user_id` row at `:1085`
 - `docs/context-constitution-findings.md`: a `## Latent bugs` table at `:29` and `## Open questions` at
-  `:46`. It is the root log for cross-module defects.
+  `:45`. It is the root log for cross-module defects.
 - `docs/roadmap/features/merge-order.md:78` **already** holds the operator-ordered row
   "`fix-ledger-query-pagination` (257) waits for `fix-edge-owner-scope` (263)" (2026-10-22). It arrived
   through the 2026-10-28 main-dev merge.
@@ -805,15 +805,15 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
      `GetSecret` are unbound.
    - Future internal readers must not forward a user's `x-user-id` while asking about another user.
 3. **Agent `CLAUDE.md`.**
-   - At `:28-30`, the config tools' body `user_id` is a scope selector **bound to the caller for
+   - At `:29-30`, the config tools' body `user_id` is a scope selector **bound to the caller for
      non-admins**.
    - Reword the `:74`/`:75` rows the same way. The echoed `user_id` is the scope actually read.
 4. **`mcp-tools.md`.** Update the `get_config` and `list_config_keys` `user_id` rows and their Returns
    lines to the same semantics. The tool count, names and parameters are unchanged.
 5. **Findings entry (P-03)** in `docs/context-constitution-findings.md` `## Latent bugs`, as one row,
    feature 263. These are the accepted gaps, each with evidence:
-   - `WatchConfig` body `user_id` is unbound (`configServiceImpl.ts:283`)
-   - header-less agent paths are unbound (`client.py:35-38`, stdio)
+   - `WatchConfig` body `user_id` is unbound (`configServiceImpl.ts:284`)
+   - header-less agent paths are unbound (`client.py:39-42`, stdio)
    - ledger `streamEvents` (`ledgerServiceImpl.ts:186`) and `getEvent` (`:266`) are owner-unscoped
    - the `order:<id>` NULL-owned `order_intent.*` rows are hidden by branch 3 (`trading.go:2246`,
      `:2277`)
