@@ -104,6 +104,7 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 |---|---|---|
 | `trading-reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102); `changed_by` = `caller_identity`. Audit rows written before feature 241 keep the old free-text `system:reconciliation-poller`, so the `/config-ui` audit "By" column shows both spellings |
 | `system` | `xstockstrat-indicators` | Not a config write: the `Formula.author` ownership sentinel on the seeded fundamentals-scoring formula, set from the module's `AUTHOR` constant (`app/formulas/fundamentals_value_quality.py`), never from a request body |
+| `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 
 ## Per-Feature Registered Keys
 
