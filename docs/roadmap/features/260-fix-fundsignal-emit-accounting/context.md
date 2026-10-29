@@ -413,3 +413,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - blocker decisions are recorded per feature (2026-10-29).
 - Status: `implementation-ready` → `in-progress`. The re-spec of Steps 1-9 is logged in the session entry above.
 - Next: Step 1 (RED test, `tests/test_fundsignal_loop.py`).
+
+### Step 1 — test: failed fetch chunks are reported as `partial` (RED) — done (2026-10-29)
+
+- File: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`.
+  - `test_paced_fetch_respects_budget` now unpacks `fetched, deferred, failed, calls` and asserts `failed == []`.
+  - `class TestFailedChunk` follows `TestBudgetDefer`. Its `@staticmethod _fail_first_chunk(loop)` makes the first
+    `GetFundamentalsMulti` call raise `UNAVAILABLE` and lets later calls succeed.
+  - `test_ac4_failed_chunk_is_partial_and_deferred` uses 60 symbols. It asserts `partial`, deferred 50, processed 10,
+    and that the `fundsignal_runs` UPDATE args are `status="partial"` and `deferred_count=50`. It then calls
+    `_paced_fetch` directly and asserts 50 failed, `deferred == []` and 2 calls.
+  - `test_ac6_failed_chunk_beats_budget_cutoff` uses budget 2 and 120 symbols. It asserts `partial`, deferred 70,
+    processed 50, and exactly one `EmitAlert` whose body contains both `50` and `20`.
+- RED (pre-Step-2), as predicted: 3 failed (unpack `ValueError`; `completed`≠`partial`; `budget_deferred`≠`partial`).
+  The other 56 tests pass. ruff check and format are clean.
+- Constraint for Step 2: AC-6 requires exactly ONE warning. That warning must name both the failed-chunk symbol count
+  (50) and the budget-deferred symbol count (20). Fold both into the single `_emit_warning`.
+- Deviation: minor test-file line drift (`_rpc_error` is now at `:584`), recorded in the Deviation Log.
+- Next: Step 2 (service: `_paced_fetch` failed bucket and `partial` status).

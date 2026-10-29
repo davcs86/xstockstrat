@@ -159,7 +159,8 @@ class TestBudgetDefer:
     async def test_paced_fetch_respects_budget(self):
         loop = _make_loop()
         symbols = [f"S{i}" for i in range(120)]
-        fetched, deferred, calls = await loop._paced_fetch(symbols, budget=1, metadata=())
+        fetched, deferred, failed, calls = await loop._paced_fetch(symbols, budget=1, metadata=())
+        assert failed == []
         assert calls == 1
         assert calls <= 1
         assert len(deferred) == 70  # 120 - one 50-symbol chunk
@@ -173,6 +174,57 @@ class TestBudgetDefer:
         assert summary.status == "budget_deferred"
         assert summary.deferred_count == 70
         loop._notify.EmitAlert.assert_awaited()
+
+
+class TestFailedChunk:
+    @staticmethod
+    def _fail_first_chunk(loop):
+        import grpc
+
+        calls = {"n": 0}
+
+        async def _get_multi(request, metadata=()):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise _rpc_error(grpc.StatusCode.UNAVAILABLE)
+            return SimpleNamespace(fundamentals=[_fund(s) for s in request.symbols])
+
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(side_effect=_get_multi)
+        return loop
+
+    @pytest.mark.asyncio
+    async def test_ac4_failed_chunk_is_partial_and_deferred(self):
+        symbols = [f"S{i}" for i in range(60)]
+        loop = self._fail_first_chunk(_make_loop())
+        summary = await loop.run_once(override_symbols=symbols)
+        assert summary.status == "partial"
+        assert summary.deferred_count == 50
+        assert summary.symbols_processed == 10
+        (update,) = [
+            c
+            for c in loop._db.execute.await_args_list
+            if "UPDATE analysis.fundsignal_runs" in c.args[0]
+        ]
+        assert update.args[3] == "partial"
+        assert update.args[6] == 50
+
+        fresh = self._fail_first_chunk(_make_loop())
+        fetched, deferred, failed, calls = await fresh._paced_fetch(symbols, 200, ())
+        assert len(failed) == 50
+        assert deferred == []
+        assert calls == 2
+
+    @pytest.mark.asyncio
+    async def test_ac6_failed_chunk_beats_budget_cutoff(self):
+        loop = self._fail_first_chunk(_make_loop({"analysis.fundsignal.daily_call_budget": 2}))
+        symbols = [f"S{i}" for i in range(120)]
+        summary = await loop.run_once(override_symbols=symbols)
+        assert summary.status == "partial"
+        assert summary.deferred_count == 70
+        assert summary.symbols_processed == 50
+        assert loop._notify.EmitAlert.await_count == 1
+        body = loop._notify.EmitAlert.await_args_list[0].args[0].body
+        assert "50" in body and "20" in body
 
 
 # ── Score → direction (FR-6) ────────────────────────────────────────────────────

@@ -94,7 +94,7 @@ pass-through sites as its check.
 
 ### Step 1 — test: failed fetch chunks are reported as `partial` (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
@@ -745,3 +745,10 @@ grep -n '"status": resp.status' services/xstockstrat-agent/app/client.py && grep
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29, Step 1 (minor, no scope change):** test-file line drift. `_rpc_error` is at
+  `tests/test_fundsignal_loop.py:584` (spec `:528`), because Step 1's own `TestFailedChunk` class is inserted above it;
+  the spec's other Step 1 citations matched. `_fail_first_chunk` is a `@staticmethod` on `TestFailedChunk` (the spec's
+  "local helper"), and it calls the module-level `_rpc_error` at run time, so no conftest fixture is added (C-13).
+  RED is as the spec predicted: an unpack `ValueError` (3 values, 4 expected), `'completed' == 'partial'` (AC-4) and
+  `'budget_deferred' == 'partial'` (AC-6). The other 56 tests in the file pass.
