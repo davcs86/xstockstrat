@@ -603,3 +603,17 @@ halt). design.md is not written and status stays `spec-ready`.
 - [x] Add the `merge-order.md` row 244 → 261 (WARN) — exists at `merge-order.md:82`.
 - [x] Confirm 244 merge state before Step 5 — merged into main-dev; Step 5 re-specced onto `int_positive`.
 - [ ] Step 8: record the O-3 RED run.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `sequential` (one commit per step on `feature/fix-ingest-poller-backfill`, single integration PR at the end).
+  Status: `implementation-ready` → `in-progress`.
+- Up-front confirmation: given by the operator's standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints;
+  merge-train authorized; 255/275 deferred; operator-only DB/prod steps — open the PR, hold the merge). Per-feature
+  blocker decisions of 2026-10-29 were given by the operator through the session's question tool. Checkpoints:
+  `report`. C-16 promotion auto-confirmed unless it changes an existing `@AC` rule (the `@AC-4 @feature-166` EXTEND
+  in `mcp-client-signal-source.feature` extends, not changes, so it is in scope of the auto-confirm only if it adds
+  a scenario without rewording the existing one).
+- Plan: Steps 1–9 as re-specced above (TDD red-before-green for every service/test pair; Step 8 records the O-3 RED
+  run here).
