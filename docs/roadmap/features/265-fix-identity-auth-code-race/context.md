@@ -464,3 +464,75 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
 - Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.
 - Deviations: F-09 evidence route and RED-by-temporary-source-swap, the same as Steps 2 and 3. The OAuth case is
   nested as the spec allows. See the Deviation Log.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 5 (sdd-batch-execute)
+
+### Step 5 — test: real-Postgres 20-caller repro of AC-1 [pending — deferred to operator]
+- Blocked on an operator-only action: `pg_isready -h localhost -p 5432` → "no response", and the execute loop may not
+  start a database. Step **Status** stays `pending`; the integration PR merge is held (see the Deviation Log entry).
+- Code side done: `repro-265.cjs` written in the session scratchpad (not committed), `node --check` passes, and on
+  Node v24.20.0 against the Step 4 `dist/` it loads `pg` and `IdentityServiceImpl`, then fails at connect
+  (`repro-265 failed: connect ECONNREFUSED 127.0.0.1:5432`). Seeded rows are removed by deleting the client and user
+  (auth codes and refresh tokens cascade, migrations 001/003/004).
+- BEFORE base: `d6cd9f3c` (pre-Step-1 `identityServiceImpl.ts`). AFTER: this branch at or after `56daa169`.
+- Command (run from the repo root or the BEFORE worktree root, after `pnpm --filter xstockstrat-identity run build`):
+
+  ```bash
+  DB_POOL_MAX=20 JWT_SECRET=repro DATABASE_URL='postgres://xstockstrat:<pw>@localhost:5432/xstockstrat?sslmode=disable' timeout 60 node <scratchpad>/repro-265.cjs
+  ```
+
+- local only; never set DB_POOL_MAX for identity in .do/app*.yaml (direct :25060, budget 2)
+- F-06 check: `DB_POOL_MAX=20` over `.do/app.yaml` and `.do/app.dev.yaml` → 0 hits.
+- Operator to record here: `node --version`; BEFORE line (expect `successes` > 1, `refresh_rows` > 1); AFTER line
+  (expect `repro-265 successes=1/20 refresh_rows=1`); and confirmation that this repro counts as the AC-1
+  real-Postgres harness (design.md §3).
+- Script `repro-265.cjs`, verbatim:
+
+```js
+// repro-265: 20 concurrent exchangeAuthCode calls on one code against real Postgres (AC-1).
+// Run from the repo root after `pnpm test` (or `pnpm run build`) in services/xstockstrat-identity.
+const path = require('node:path');
+const crypto = require('node:crypto');
+const dir = path.resolve(process.env.IDENTITY_DIR || 'services/xstockstrat-identity');
+const { Pool } = require(require.resolve('pg', { paths: [dir] }));
+const { IdentityServiceImpl } = require(path.join(dir, 'dist/grpc/identityServiceImpl.js'));
+
+const call = (fn, request) => new Promise((resolve) => fn({ request }, (err, res) => resolve({ err, res })));
+
+(async () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.DB_POOL_MAX) });
+  const impl = new IdentityServiceImpl(pool, { getInt: (_k, d) => d });
+  const ts = Date.now();
+  const clientId = `repro265_${ts}`;
+  const redirectUri = 'https://agent.example/callback';
+  const verifier = 'repro-265-fixed-code-verifier-0123456789abcdefghijklmnop';
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  let userId;
+  try {
+    userId = (await pool.query(
+      'INSERT INTO identity.users (email, password_hash) VALUES ($1, $2) RETURNING user_id',
+      [`repro-265-${ts}@example.com`, 'repro-265-not-a-hash'],
+    )).rows[0].user_id;
+    await pool.query(
+      "INSERT INTO identity.oauth_clients (client_id, redirect_uris) VALUES ($1, '{https://agent.example/callback}')",
+      [clientId],
+    );
+    const issued = await call(impl.issueAuthCode.bind(impl), { userId, clientId, redirectUri, codeChallenge: challenge, resource: '' });
+    if (issued.err) throw new Error(`issueAuthCode failed: ${JSON.stringify(issued.err)}`);
+    const results = await Promise.all(Array.from({ length: 20 }, () => call(impl.exchangeAuthCode.bind(impl), {
+      code: issued.res.code, codeVerifier: verifier, redirectUri, clientId, resource: '',
+    })));
+    const ok = results.filter((r) => !r.err).length;
+    const errCodes = results.filter((r) => r.err).map((r) => r.err.code);
+    const rows = (await pool.query(
+      'SELECT count(*)::int AS n FROM identity.refresh_tokens WHERE user_id = $1 AND client_id = $2',
+      [userId, clientId],
+    )).rows[0].n;
+    console.log(`repro-265 successes=${ok}/20 refresh_rows=${rows} error_codes=${JSON.stringify(errCodes)}`);
+  } finally {
+    await pool.query('DELETE FROM identity.oauth_clients WHERE client_id = $1', [clientId]).catch(() => {});
+    if (userId) await pool.query('DELETE FROM identity.users WHERE user_id = $1', [userId]).catch(() => {});
+    await pool.end();
+  }
+})().catch((e) => { console.error('repro-265 failed:', e.message); process.exit(1); });
+```
