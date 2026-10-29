@@ -378,3 +378,19 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
 - Lifecycle: `implementation-ready` → `in-progress`.
 - Known operator-only item: Step 5 (real-Postgres AC-1 repro) needs a local Postgres, which this run may not start;
   it goes to the operator per the spec's stop-and-ask path.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 1 (sdd-batch-execute)
+
+- Step 1 done: `exchangeAuthCode` keeps Phase A as is, mints before the claim, then calls new private
+  `redeemAuthCode(codeHash, userId, clientId)` (after `rotateRefreshToken`), which runs the conditional claim
+  (`consumed_at IS NULL AND expires_at > NOW()`) and `issueRefreshToken(…, client)` in one transaction; 0 rows →
+  `16 invalid_grant`. Unconditional autocommit UPDATE removed. No deviations.
+- TDD (C-08 pair with Step 2): Step 2's tests were drafted per its Instructions and run uncommitted on the
+  pre-Step-1 tree (Node 24.20.0, `pnpm test`), then the draft was reverted; Step 2 owns committing them.
+  - RED: 86 tests, 82 pass, 4 fail — AC-1 20-way race (`20 !== 1` winners), AC-1 claim-time expiry (`undefined !== 16`),
+    AC-3 `failInsert` and AC-3 `JWT_SECRET` unset (`consumedAt` set, expected `null`). AC-2/AC-5/AC-6 guards green.
+  - GREEN: 86 tests, 86 pass, 0 fail, 0 skipped; tsc diagnostics: none.
+- Verification: `pnpm run lint` 0 errors (194 pre-existing `no-explicit-any` warnings, none in new code); predicate
+  grep 1 hit (`redeemAuthCode`); unconditional-UPDATE grep 0 hits; jscpd report: 1 clone, pre-existing
+  (`updateUserMetadata`/`adminUpdateUserMetadata`), none between `redeemAuthCode` and `rotateRefreshToken` — no
+  stop-and-ask triggered.

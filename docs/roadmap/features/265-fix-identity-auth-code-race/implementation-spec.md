@@ -91,7 +91,7 @@ second inline copy of a domain literal.
 
 ### Step 1 — service: single-use auth-code redemption in `exchangeAuthCode` (D-23)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify

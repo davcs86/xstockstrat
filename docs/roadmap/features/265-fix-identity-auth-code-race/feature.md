@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 2, 4, 5, 6 re-anchored to the current codebase after the main-dev merge (feature 252 test-file rewrite); Steps 1, 3 unchanged |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front confirmation by operator standing authorization (batch-execute 241-276) |
+| 2026-10-29 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | Step 1 — `redeemAuthCode` conditional claim + same-transaction refresh INSERT in `exchangeAuthCode` (D-23) |
 
 ---
 

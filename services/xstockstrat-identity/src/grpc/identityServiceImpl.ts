@@ -374,6 +374,35 @@ export class IdentityServiceImpl {
   }
 
   /**
+   * Single-use auth-code redemption: the conditional claim lets exactly one concurrent caller win,
+   * and the refresh token is inserted in the same transaction so a failure consumes nothing.
+   */
+  private async redeemAuthCode(codeHash: string, userId: string, clientId: string): Promise<string | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const claim = await client.query(
+        `UPDATE identity.oauth_auth_codes SET consumed_at = NOW()
+         WHERE code = $1 AND consumed_at IS NULL AND expires_at > NOW()
+         RETURNING code`,
+        [codeHash]
+      );
+      if (claim.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const refreshToken = await this.issueRefreshToken(userId, clientId, client);
+      await client.query('COMMIT');
+      return refreshToken;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * RegisterOAuthClient — RFC 7591 Dynamic Client Registration (public client, no secret).
    */
   async registerOAuthClient(call: any, callback: any) {
@@ -500,15 +529,12 @@ export class IdentityServiceImpl {
       if (challenge !== row.code_challenge) {
         return callback({ code: 16, message: 'invalid_grant' });
       }
-      await this.pool.query(
-        'UPDATE identity.oauth_auth_codes SET consumed_at = NOW() WHERE code = $1',
-        [codeHash]
-      );
       const audience = resource || row.resource || '';
       const { accessToken, expiresIn } = this.mintOAuthAccessToken(
         row.user_id, row.email, row.roles ?? [], audience,
       );
-      const refreshToken = await this.issueRefreshToken(row.user_id, clientId);
+      const refreshToken = await this.redeemAuthCode(codeHash, row.user_id, clientId);
+      if (refreshToken === null) return callback({ code: 16, message: 'invalid_grant' });
       log.info('OAuth code exchanged', { clientId, userId: row.user_id });
       callback(null, { accessToken, tokenType: 'Bearer', expiresIn, refreshToken });
     } catch (err: any) {
