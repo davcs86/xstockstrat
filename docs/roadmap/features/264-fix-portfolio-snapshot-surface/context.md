@@ -699,3 +699,90 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - The post-deploy `list_config_keys(namespace="portfolio")` smoke on the staging and production agents is an operator action.
 - Step 10 stays `pending`; the Deviation Log hold entry now carries the re-run.
 - Open: merge-order.md:77 still names 243 as unmerged. Update it when 244 and 248 land and the row resolves.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan: fix-portfolio-snapshot-surface (feature 264)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-portfolio/acceptance/fix-portfolio-snapshot-surface.feature | CREATE | NEW | gRPC subscriber isolation |
+| @AC-2 | same | CREATE | NEW | gRPC empty x-user-id rejected |
+| @AC-3 | same | CREATE | NEW | Connect subscriber isolation |
+| @AC-6 | same | CREATE | NEW | Connect empty-caller non-regression |
+| @AC-5 | services/xstockstrat-config/acceptance/fix-portfolio-snapshot-surface.feature | CREATE | NEW | key retirement via config migration 034 |
+
+Neither target file exists. A repo-wide grep of `**/acceptance/*.feature` and `docs/sdd/business-rules/platform.feature` for `StreamPortfolioUpdates` and `snapshot.interval_minutes` returned no matches. So there are no DUP, OVERLAP or CONFLICT cases.
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-portfolio-snapshot-surface.feature (CREATE) ---
+~~~gherkin
+# Promoted from docs/roadmap/features/264-fix-portfolio-snapshot-surface/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-264` tag.
+# Durable business rules xstockstrat-portfolio already guarantees. A rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-portfolio - StreamPortfolioUpdates is owner-scoped and fail-closed
+  A snapshot stream delivers only the subscriber's own snapshots (a snapshot's portfolio_id is the owning
+  user_id) and rejects a subscriber with no caller identity.
+
+  @AC-1 @FR-1 @regression @feature-264
+  Scenario: A snapshot stream subscriber receives only its own snapshots
+    Given a gRPC StreamPortfolioUpdates stream "A" opened with x-user-id "u-1"
+    And a gRPC StreamPortfolioUpdates stream "B" opened with x-user-id "u-2"
+    When a snapshot is broadcast for user "u-1" holding 10 "AAPL" priced at 100.00
+    Then stream "A" receives a snapshot with portfolio_id "u-1"
+    And stream "B" receives no snapshot
+
+  @AC-2 @FR-2 @regression @feature-264
+  Scenario: A snapshot stream with no caller identity is rejected on the gRPC path
+    When a gRPC StreamPortfolioUpdates stream is opened with no x-user-id
+    Then the stream fails with INVALID_ARGUMENT
+    And it is not registered as a subscriber
+
+  @AC-3 @FR-3 @regression @feature-264
+  Scenario: The Connect path also isolates subscribers
+    Given a Connect StreamPortfolioUpdates stream "A" opened with x-user-id "u-1"
+    And a Connect StreamPortfolioUpdates stream "B" opened with x-user-id "u-2"
+    When portfolio broadcasts a snapshot for user "u-1"
+    Then stream "A" receives a snapshot with portfolio_id "u-1"
+    And stream "B" receives no snapshot
+
+  @AC-6 @FR-3 @non-regression @feature-264
+  Scenario: A snapshot stream with no caller identity stays rejected on the Connect path
+    When a Connect StreamPortfolioUpdates stream is opened with no x-user-id
+    Then the stream fails with INVALID_ARGUMENT
+    And it is not registered as a subscriber
+~~~
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-portfolio-snapshot-surface.feature (CREATE) ---
+~~~gherkin
+# Promoted from docs/roadmap/features/264-fix-portfolio-snapshot-surface/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-264` tag.
+# Durable business rules xstockstrat-config already guarantees. A rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-config - portfolio.snapshot.interval_minutes is a retired key
+  The dead key (its periodic writer was never started) is deleted by migration and must not be re-seeded.
+
+  @AC-5 @FR-4 @regression @feature-264
+  Scenario: portfolio.snapshot.interval_minutes is retired (FR-4 branch b)
+    Given the xstockstrat-config migration set
+    When the up migrations are scanned in numeric order for "portfolio.snapshot.interval_minutes" and "snapshot.interval_minutes"
+    Then the highest-numbered match deletes the key from config.config_values in namespace "portfolio"
+    And no migration from that one onward inserts either key form
+    And after the migrations are applied, neither the "production" nor the "staging" listing for service "portfolio" contains "portfolio.snapshot.interval_minutes"
+~~~
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1, 2, 3 and 6 assert on StreamPortfolioUpdates behavior, which lives in portfolio, so they go to the portfolio suite. AC-5 asserts on config.config_values and the config migration set (migration 034), so it goes to the config suite even though the key's namespace is `portfolio`. The feature.md Reviewers table lists both owners.
+- AC-4 was deleted at design (operator, 2026-10-22). The source file has no AC-4, and the gap is intentional, so nothing was renumbered.
+- No contradiction with promoted rules. The retired key still appears in `services/xstockstrat-portfolio/CLAUDE.md` § Config Keys Consumed. The step that executes migration 034 should remove that row. This is a doc-drift note, not a promotion issue.
+- The suites have no "Backed by" comment, because test names are not known at plan time. The orchestrator may add one after execution, as in `fix-book-portfolio-page.feature`.
+
+### Coverage check
+- Source scenarios: 5 (AC-1, 2, 3, 5, 6). Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None were skipped.
+```
