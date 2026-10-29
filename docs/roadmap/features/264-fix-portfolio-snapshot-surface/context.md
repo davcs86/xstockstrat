@@ -586,3 +586,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - the C-13 grep finds one declaration each of `fakeHub` and `fakeGRPCStream`.
 - Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_stream_test.go` (new).
 - Deviations: RED via a working-tree revert; lint fallback (Deviation Log). Out-of-scope changes: none.
+
+### Step 5 — service: Delete the zero-caller `StartSnapshotWriter` [done]
+- Deleted `StartSnapshotWriter` (doc comment + func, `portfolio_service.go:898-911`). `broadcastSnapshot` stays: its
+  production caller is the per-fill path (`:376`), plus its unit tests. `s.cfg`, `"time"` and `commonv1` stay in use.
+- TDD: N/A (dead-code deletion, no caller). Pre-deletion, the verification grep found 3 hits (`:898-900`).
+- Verification:
+  - `grep -rn "StartSnapshotWriter\|snapshot.interval_minutes" --include=*.go services/` exits 1;
+  - `GOWORK=off go build ./...` and `go test ./... -race -count=1` are ok across all packages;
+  - golangci-lint v2.14.0 (go1.27 rebuild) reports `0 issues`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`.
+- Deviations: lint fallback (Deviation Log). Out-of-scope changes: none.
+- Open: `portfolio.snapshot.interval_minutes` now has no Go reader; the service CLAUDE.md config row and the findings
+  row are handled by the later doc steps.
+

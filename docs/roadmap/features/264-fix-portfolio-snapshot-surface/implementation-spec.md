@@ -416,7 +416,7 @@ applies to it. The suite-wide total must still meet the threshold.
 
 ### Step 5 — service: Delete the zero-caller `StartSnapshotWriter`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -769,4 +769,11 @@ _Populated by /sdd-execute as implementation proceeds._
   and the handler was restored byte-for-byte from a scratch copy before GREEN. Nothing from the revert was committed.
   The AC-2 status assertion uses `t.Errorf` so the RED shows both failures (status code and Subscribe count). Lint
   used the same CI-pinned v2.14.0 go1.27 rebuild as Steps 2-3, because `~/go/bin/golangci-lint` is built with go1.26.
+- **Disposition**: no behavior change; CI-equivalent lint fallback.
+
+### 2026-10-29 — Step 5: line drift; lint binary at the CI pin
+- **Spec said**: delete the doc comment and function at `:898-911`; lint with `GOWORK=off golangci-lint run`.
+- **Done**: deleted by symbol at `:898-911` plus the following blank line (no drift). The discovery digest's
+  `main.go:64-69` reference was already corrected to `:71-76` by the re-spec. Lint used the same CI-pinned v2.14.0
+  go1.27 rebuild as Steps 2-4, because `~/go/bin/golangci-lint` is built with go1.26.
 - **Disposition**: no behavior change; CI-equivalent lint fallback.

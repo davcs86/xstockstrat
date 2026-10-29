@@ -895,21 +895,6 @@ func (s *PortfolioService) Unsubscribe(id string) {
 	s.mu.Unlock()
 }
 
-// StartSnapshotWriter periodically writes portfolio snapshots to the DB.
-func (s *PortfolioService) StartSnapshotWriter(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	intervalMin := s.cfg.GetInt("portfolio.snapshot.interval_minutes", 5)
-	ticker := time.NewTicker(time.Duration(intervalMin) * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.broadcastSnapshot(ctx, userID, mode)
-		}
-	}
-}
-
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
 	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
