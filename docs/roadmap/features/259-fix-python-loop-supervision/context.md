@@ -959,3 +959,28 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   `services/xstockstrat-analysis/app/repositories/pnl_pattern_samples.py`
 - Deviations: verification fallback for the PRESERVE guard (Deviation Log 2026-10-29 — Step 13)
 
+
+## Session 2026-10-29 — sdd-execute sequential, Step 14
+
+### Step 14 — test: retry, park, replay, probe and escalation (@AC-6, @AC-7, @AC-9, @AC-10) [done]
+- `tests/test_pnl_pattern_consumer.py`: item 0 widens `FakePool.acquire/fetchval/execute`,
+  `FakeSnapshots.count_for_position/list_for_position` and `FakeSamples.insert_many` for `timeout=` (`acquire` records
+  it); `FakeLedger` gains a scripted, inclusive `StreamEvents` (records `from_sequence`, raises `_StopConsumer`, a
+  `BaseException`, past `max_streams`). New cases: @AC-6 retry in place (handler order `[10, 10, 11]`, one stream);
+  @AC-7 park parametrized over `ValueError`/`DataError`/`IntegrityConstraintViolationError` (3 attempts,
+  `non-transient`) and `OutOfMemoryError` with the real `_probe_db` (15 attempts over 5 stream opens,
+  `transient-persistent`), each asserting the ERROR park log, one `analysis.pnl.event_parked` with key `pnl_park:10`
+  and `timeout == 5`, log → emit → advance order, 11 processed, cursor 11; @AC-9 (OOM + probe
+  `PostgresConnectionError`, Deadlock + probe `TimeoutError`): no park, cursor 9, replays W×4 then ERROR, pair
+  `(10, 5)` despite event 9 re-delivered each reconnect; bounded `_probe_db`; @AC-10 outer handler W×4 then ERROR;
+  reset rule; park-cursor failure in both branches keeps the pair and the re-park reuses `pnl_park:10`; `_is_poison`
+  truth table; 6c per-attempt bound (`acquire(timeout=0.05)` ×3, replay pair `(10, 1)`, WARNING) and the six
+  repository `timeout=` pass-throughs (0.5 and `None`).
+- TDD: RED against the pre-Step-13 tree (`1049c4d7` app files checked out temporarily, `_is_poison` import shimmed
+  with `getattr` for the run only): 37 failed, 13 passed — e.g. AC-6 `assert [10, 11] == [10, 10, 11]` (10 skipped,
+  not retried), AC-7 `assert 1 == 3` attempts → GREEN on the Step 13 tree: 58 passed (consumer + query suites).
+- Verification: `pytest tests/test_pnl_pattern_consumer.py tests/test_query_pnl_patterns.py` 58 passed; full suite
+  1357 passed, coverage 89.66% (≥40); `ruff check .` / `ruff format --check .` clean; no `conftest` reference (C-13).
+  The 2 interim `tests/test_owner_header_guard.py` failures from Step 13 are fixed by the widened fakes.
+- Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
+- Deviations: none.

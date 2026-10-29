@@ -784,7 +784,7 @@ ruff check . && ruff format --check .
 
 ### Step 14 — test: retry, park, replay, probe and escalation (@AC-6, @AC-7, @AC-9, @AC-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` — modify

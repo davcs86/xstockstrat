@@ -9,12 +9,23 @@ asyncio_mode = auto (pyproject) — bare `async def test_*` runs.
 """
 
 import asyncio
+import logging
+from unittest.mock import AsyncMock
 
+import asyncpg
+import asyncpg.exceptions as apg
+import pytest
 from gen.ledger.v1 import ledger_pb2
+from google.protobuf.json_format import ParseError
+from google.protobuf.message import DecodeError
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from app.engine.pnl_pattern_consumer import PnLPatternConsumer
+from app.engine import pnl_pattern_consumer as consumer_mod
+from app.engine.pnl_pattern_consumer import CLOSE_EVENT, PnLPatternConsumer, _is_poison
+from app.repositories.order_snapshots import OrderSnapshotsRepository
+from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
+from app.repositories.pnl_positions import PnLPositionsRepository
 
 # ── LedgerEvent builder ─────────────────────────────────────────────────────
 
@@ -62,19 +73,21 @@ class FakeAcquire:
 class FakePool:
     def __init__(self):
         self.cursor = 0
+        self.acquire_timeouts = []
 
-    async def fetchval(self, sql, *args):
+    async def fetchval(self, sql, *args, timeout=None):
         if "ledger_stream_cursor" in sql:
             return self.cursor
         return None
 
-    def acquire(self):
+    def acquire(self, timeout=None):
+        self.acquire_timeouts.append(timeout)
         return FakeAcquire(self)
 
     def transaction(self):
         return FakeTxn()
 
-    async def execute(self, sql, *args):
+    async def execute(self, sql, *args, timeout=None):
         if "ledger_stream_cursor" in sql:
             self.cursor = max(self.cursor, int(args[1]))
 
@@ -99,10 +112,10 @@ class FakeSnapshots:
             }
         )
 
-    async def count_for_position(self, position_id):
+    async def count_for_position(self, position_id, *, timeout=None):
         return sum(1 for r in self.rows if r["position_id"] == position_id)
 
-    async def list_for_position(self, position_id):
+    async def list_for_position(self, position_id, *, timeout=None):
         return [r for r in self.rows if r["position_id"] == position_id]
 
 
@@ -134,19 +147,38 @@ class FakeSamples:
     def __init__(self):
         self.rows = []
 
-    async def insert_many(self, db, rows):
+    async def insert_many(self, db, rows, *, timeout=None):
         self.rows.extend(rows)
+
+
+class _StopConsumer(BaseException):
+    """Ends run_forever: a BaseException escapes its `except Exception` reconnect handler."""
 
 
 class FakeLedger:
     def __init__(self):
         self.appended = []
         self.calls = []
+        self.events = []  # scripted StreamEvents backlog
+        self.max_streams = 1
+        self.stream_from = []
 
     async def AppendEvent(self, req, metadata=(), timeout=None):
         self.appended.append(req.event_type)
         self.calls.append((req, tuple(metadata), timeout))
         return None
+
+    def StreamEvents(self, req):
+        if len(self.stream_from) >= self.max_streams:
+            raise _StopConsumer
+        self.stream_from.append(req.from_sequence)
+        return self._replay(req.from_sequence)
+
+    async def _replay(self, from_sequence):
+        # Inclusive, like the ledger: the cursor's own row is re-delivered on every reconnect.
+        for event in self.events:
+            if event.sequence >= from_sequence:
+                yield event
 
 
 class FakeCfg:
@@ -435,3 +467,358 @@ async def test_compose_threads_order_owner_header():
         "indicators": [("x-user-id", "u-1")],
         "signals": [("x-user-id", "u-1")],
     }
+
+
+# ── feature 259: per-event retry, park, replay, probe and escalation ────────
+
+PARKED = "analysis.pnl.event_parked"
+CONSUMER_LOGGER = "app.engine.pnl_pattern_consumer"
+
+
+def close_event(seq):
+    return make_event(seq, CLOSE_EVENT, CLOSE_PAYLOAD, source_service="xstockstrat-portfolio")
+
+
+@pytest.fixture
+def sleeps(monkeypatch):
+    rec = AsyncMock()
+    monkeypatch.setattr("app.engine.pnl_pattern_consumer.asyncio.sleep", rec)
+    return rec
+
+
+def streaming_consumer(*, max_streams):
+    """Cursor at 9; the ledger backlog is close events 9 (already processed), 10 and 11."""
+    consumer, pool, _snaps, _positions, _samples, ledger = make_consumer()
+    pool.cursor = 9
+    ledger.events = [close_event(9), close_event(10), close_event(11)]
+    ledger.max_streams = max_streams
+    return consumer, pool, ledger
+
+
+def fail_seq_10(consumer, error_for_attempt):
+    """Wrap the close handler: error_for_attempt(n) is raised on attempt n of sequence 10."""
+    original = consumer._handle_close_event
+    handled = []
+
+    async def wrapper(event, payload):
+        handled.append(event.sequence)
+        if event.sequence == 10:
+            err = error_for_attempt(handled.count(10))
+            if err is not None:
+                raise err
+        await original(event, payload)
+
+    consumer._handle_close_event = wrapper
+    return handled
+
+
+def parked_calls(ledger):
+    return [(req, timeout) for req, _md, timeout in ledger.calls if req.event_type == PARKED]
+
+
+def records(caplog, fragment):
+    return [r for r in caplog.records if fragment in r.getMessage()]
+
+
+async def run_until_stopped(consumer):
+    with pytest.raises(_StopConsumer):
+        await consumer.run_forever()
+
+
+async def test_ac6_failed_event_is_retried_in_place_before_the_next(sleeps):
+    consumer, pool, ledger = streaming_consumer(max_streams=1)
+    handled = fail_seq_10(
+        consumer, lambda n: asyncpg.PostgresConnectionError("reset") if n == 1 else None
+    )
+    await run_until_stopped(consumer)
+    assert handled == [10, 10, 11], "10 must succeed on retry before 11 is processed"
+    assert pool.cursor == 11
+    assert ledger.stream_from == [9], "retried in place — no reconnect"
+    assert parked_calls(ledger) == []
+
+
+@pytest.mark.parametrize(
+    "error, reason, attempts, streams",
+    [
+        (ValueError("bad payload"), "non-transient", 3, 1),
+        (asyncpg.DataError("bad value"), "non-transient", 3, 1),
+        (asyncpg.IntegrityConstraintViolationError("dup"), "non-transient", 3, 1),
+        (apg.OutOfMemoryError("oom"), "transient-persistent", 15, 5),
+    ],
+)
+async def test_ac7_exhausted_event_is_parked_and_the_stream_moves_on(
+    sleeps, caplog, error, reason, attempts, streams
+):
+    caplog.set_level(logging.WARNING, logger=CONSUMER_LOGGER)
+    consumer, pool, ledger = streaming_consumer(max_streams=streams)
+    handled = fail_seq_10(consumer, lambda n: error)
+    order = []
+    original_append = ledger.AppendEvent
+    original_advance = consumer._advance_cursor
+
+    async def append(req, metadata=(), timeout=None):
+        if req.event_type == PARKED:
+            order.append(("emit", len(records(caplog, "parking event seq=10"))))
+        return await original_append(req, metadata=metadata, timeout=timeout)
+
+    async def advance(sequence):
+        if sequence == 10:
+            order.append(("advance", len(parked_calls(ledger))))
+        await original_advance(sequence)
+
+    ledger.AppendEvent = append
+    consumer._advance_cursor = advance
+
+    await run_until_stopped(consumer)
+
+    assert handled.count(10) == attempts
+    assert len(ledger.stream_from) == streams
+    park_logs = records(caplog, "parking event seq=10")
+    assert len(park_logs) == 1
+    assert park_logs[0].levelno == logging.ERROR
+    assert f"reason={reason}" in park_logs[0].getMessage()
+    parked = parked_calls(ledger)
+    assert len(parked) == 1
+    req, timeout = parked[0]
+    assert req.idempotency_key == "pnl_park:10"
+    assert timeout == 5
+    assert req.payload.fields["reason"].string_value == reason
+    assert order == [("emit", 1), ("advance", 1)], "park order: log → emit → advance"
+    assert handled[-1] == 11, "the event after the parked one is processed"
+    assert pool.cursor == 11
+    assert (consumer._replay_seq, consumer._replay_count) == (None, 0)
+
+
+@pytest.mark.parametrize(
+    "error, probe_error",
+    [
+        (apg.OutOfMemoryError("oom"), asyncpg.PostgresConnectionError("db down")),
+        (apg.DeadlockDetectedError("deadlock"), TimeoutError()),
+    ],
+)
+async def test_ac9_db_down_at_the_fifth_replay_never_parks(sleeps, caplog, error, probe_error):
+    caplog.set_level(logging.WARNING, logger=CONSUMER_LOGGER)
+    consumer, pool, ledger = streaming_consumer(max_streams=5)
+    fail_seq_10(consumer, lambda n: error)
+    consumer._probe_db = AsyncMock(side_effect=probe_error)
+
+    await run_until_stopped(consumer)
+
+    assert parked_calls(ledger) == []
+    assert pool.cursor == 9
+    assert consumer._probe_db.await_count == 1
+    replays = records(caplog, "seq=10 type=portfolio.position.closed correlation_id=")
+    assert [r.levelno for r in replays] == [logging.WARNING] * 4 + [logging.ERROR]
+    assert records(caplog, "DB health probe failed at seq=10")
+    # Event 9 is re-delivered on every reconnect and must not reset the replay pair.
+    assert (consumer._replay_seq, consumer._replay_count) == (10, 5)
+
+
+async def test_probe_db_is_bounded(monkeypatch):
+    consumer, *_ = make_consumer()
+    monkeypatch.setattr(consumer_mod, "_PROBE_TIMEOUT_SECONDS", 0.01)
+
+    async def hang():
+        await asyncio.Event().wait()
+
+    consumer._cursor = hang
+    with pytest.raises(TimeoutError):
+        await consumer._probe_db()
+
+
+async def test_ac10_consecutive_stream_failures_escalate_to_error(sleeps, caplog):
+    caplog.set_level(logging.WARNING, logger=CONSUMER_LOGGER)
+    consumer, *_ = make_consumer()
+    consumer._cursor = AsyncMock(side_effect=asyncpg.PostgresConnectionError("db down"))
+    sleeps.side_effect = [None, None, None, None, _StopConsumer()]
+
+    await run_until_stopped(consumer)
+
+    outer = records(caplog, "stream error (consecutive=")
+    assert [r.levelno for r in outer] == [logging.WARNING] * 4 + [logging.ERROR]
+
+
+async def test_success_at_or_past_the_replayed_sequence_resets_the_pair(sleeps):
+    consumer, pool, ledger = streaming_consumer(max_streams=1)
+    ledger.events = ledger.events[:2]  # 9 (re-delivered) and 10
+    consumer._replay_seq, consumer._replay_count = 10, 3
+    await run_until_stopped(consumer)
+    assert pool.cursor == 10
+    assert (consumer._replay_seq, consumer._replay_count) == (None, 0)
+
+
+@pytest.mark.parametrize(
+    "error, streams, seeded_pair, pair_after_failed_park",
+    [
+        (ValueError("bad payload"), 1, (10, 2), (10, 2)),
+        (apg.OutOfMemoryError("oom"), 5, (None, 0), (10, 5)),
+    ],
+)
+async def test_park_cursor_failure_keeps_the_pair_and_repark_reuses_the_key(
+    sleeps, error, streams, seeded_pair, pair_after_failed_park
+):
+    consumer, pool, ledger = streaming_consumer(max_streams=streams)
+    fail_seq_10(consumer, lambda n: error)
+    consumer._replay_seq, consumer._replay_count = seeded_pair
+    original_advance = consumer._advance_cursor
+    advance_calls = []
+
+    async def advance(sequence):
+        advance_calls.append(sequence)
+        if len(advance_calls) == 1:
+            raise RuntimeError("cursor write failed")
+        await original_advance(sequence)
+
+    consumer._advance_cursor = advance
+
+    await run_until_stopped(consumer)
+    assert (consumer._replay_seq, consumer._replay_count) == pair_after_failed_park
+    assert pool.cursor == 9
+
+    ledger.max_streams += 1
+    await run_until_stopped(consumer)
+    keys = [req.idempotency_key for req, _timeout in parked_calls(ledger)]
+    assert keys == ["pnl_park:10", "pnl_park:10"]
+    assert pool.cursor == 11
+    assert (consumer._replay_seq, consumer._replay_count) == (None, 0)
+
+
+@pytest.mark.parametrize(
+    "error, poison",
+    [
+        (ValueError("x"), True),
+        (TypeError("x"), True),
+        (KeyError("x"), True),
+        (DecodeError("x"), True),
+        (ParseError("x"), True),
+        (asyncpg.DataError("x"), True),
+        (asyncpg.IntegrityConstraintViolationError("x"), True),
+        (apg.OutOfMemoryError("x"), False),
+        (apg.DeadlockDetectedError("x"), False),
+        (apg.SerializationError("x"), False),
+        (TimeoutError(), False),
+        (RuntimeError("x"), False),
+    ],
+)
+def test_is_poison_truth_table(error, poison):
+    assert _is_poison(error) is poison
+
+
+class _TimingOutAcquire:
+    def __init__(self, timeout):
+        self._timeout = timeout
+
+    async def __aenter__(self):
+        await asyncio.wait_for(asyncio.Event().wait(), self._timeout)
+
+    async def __aexit__(self, *a):
+        return False
+
+
+class _ExhaustedPool(FakePool):
+    def acquire(self, timeout=None):
+        self.acquire_timeouts.append(timeout)
+        return _TimingOutAcquire(timeout)
+
+
+async def test_attempt_db_wait_is_bounded_and_reaches_the_replay_path(sleeps, caplog, monkeypatch):
+    caplog.set_level(logging.WARNING, logger=CONSUMER_LOGGER)
+    monkeypatch.setattr(consumer_mod, "_ATTEMPT_DB_TIMEOUT_SECONDS", 0.05)
+    pool = _ExhaustedPool()
+    pool.cursor = 9
+    consumer = PnLPatternConsumer(
+        db_pool=pool,
+        ledger_stub=FakeLedger(),
+        config_watcher=FakeCfg(),
+        composer=FakeComposer(),
+        snapshots=FakeSnapshots(),
+        positions=FakePositions(),
+        samples=FakeSamples(),
+    )
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(consumer._process_with_retry(close_event(10)), 2)
+    assert pool.acquire_timeouts == [consumer_mod._ATTEMPT_DB_TIMEOUT_SECONDS] * 3
+    assert (consumer._replay_seq, consumer._replay_count) == (10, 1)
+    exhausted = records(caplog, "exhausted retries")
+    assert [r.levelno for r in exhausted] == [logging.WARNING]
+
+
+class _KwargRecordingDb:
+    def __init__(self):
+        self.kwargs = []
+
+    async def execute(self, sql, *args, **kw):
+        self.kwargs.append(kw)
+
+    async def fetchval(self, sql, *args, **kw):
+        self.kwargs.append(kw)
+        return 0
+
+    async def fetch(self, sql, *args, **kw):
+        self.kwargs.append(kw)
+        return []
+
+    async def fetchrow(self, sql, *args, **kw):
+        self.kwargs.append(kw)
+        return None
+
+
+_IDENTITY_KW = dict(user_id="u", account_id="a", symbol="AAPL", trading_mode="m")
+_SNAPSHOT_KW = dict(
+    event_id="e",
+    order_id="o",
+    position_id="p",
+    symbol="AAPL",
+    event_type="filled",
+    event_ts=None,
+    strategy_id=None,
+    side="buy",
+    quantity=1.0,
+    price=1.0,
+    ohlcv_bar=None,
+    indicators={},
+    signals=[],
+)
+_SAMPLE_ROW = {
+    "symbol": "AAPL",
+    "factor_name": "RSI",
+    "factor_type": "indicator",
+    "realized_pnl": 1.0,
+    "closed_at": None,
+    "close_event_id": "c",
+    "position_id": "p",
+}
+_REPO_CALLS = {
+    "snapshots.insert": lambda db, kw: OrderSnapshotsRepository(db).insert(
+        db, **_SNAPSHOT_KW, **kw
+    ),
+    "snapshots.count_for_position": lambda db, kw: OrderSnapshotsRepository(db).count_for_position(
+        "p", **kw
+    ),
+    "snapshots.list_for_position": lambda db, kw: OrderSnapshotsRepository(db).list_for_position(
+        "p", **kw
+    ),
+    "positions.open": lambda db, kw: PnLPositionsRepository(db).open(
+        db,
+        position_id="p",
+        strategy_id=None,
+        opened_at=None,
+        open_event_id="e",
+        **_IDENTITY_KW,
+        **kw,
+    ),
+    "positions.seal": lambda db, kw: PnLPositionsRepository(db).seal(
+        db, closed_at=None, realized_pnl=1.0, close_event_id="c", **_IDENTITY_KW, **kw
+    ),
+    "samples.insert_many": lambda db, kw: PnLPatternSamplesRepository(db).insert_many(
+        db, [_SAMPLE_ROW], **kw
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_REPO_CALLS))
+@pytest.mark.parametrize("kw, expected", [({"timeout": 0.5}, 0.5), ({}, None)])
+async def test_repository_forwards_timeout_to_asyncpg(name, kw, expected):
+    db = _KwargRecordingDb()
+    await _REPO_CALLS[name](db, kw)
+    assert db.kwargs == [{"timeout": expected}]

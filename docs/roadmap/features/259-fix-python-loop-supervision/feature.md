@@ -36,6 +36,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after second main-dev merge: step 13 line citations re-pointed after Steps 11-12 shifted `pnl_pattern_consumer.py` (`_advance_cursor :401-403` + `_advance_cursor_conn :405-415`; `acquire()` at `:205/:269/:402`); `_ATTEMPT_DB_TIMEOUT_SECONDS` already declared in instruction 2 |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of steps 13-15 (main-dev merge was a no-op): Step 13 6b names the real attempt-path queries and adds the three P&L repositories to Files for a `timeout=` pass-through; Step 14 citations re-pointed and fakes extended for `timeout=`; Step 15 adds the `config-startup.md:87` `_watch_loop` → `_watch` drift |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 13 done — P&L consumer: 3-attempt per-event retry, `_is_poison` allow-list park (`non-transient`), replay counter with reset rule, bounded `_probe_db` at the 5th replay (`transient-persistent` park), stream-fail escalation, log → idempotent `analysis.pnl.event_parked` emit → advance park; every attempt-path DB wait bounded by `_ATTEMPT_DB_TIMEOUT_SECONDS` (three repositories gain a `timeout=` pass-through) |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 14 done — analysis `tests/test_pnl_pattern_consumer.py`: fakes accept `timeout=`; scripted inclusive `FakeLedger.StreamEvents` drives `run_forever` for @AC-6 (retry in place), @AC-7 (non-transient and transient-persistent park, log → emit → advance), @AC-9 (no park while the probe fails), @AC-10 (stream-fail escalation), plus reset rule, park-cursor failure re-park, `_is_poison` table, bounded probe and per-attempt DB bound |
 
 ---
 
@@ -72,4 +73,4 @@ consumer skips a failed event and its monotonic cursor moves past it.
 
 ## Next Action
 
-`/sdd-execute fix-python-loop-supervision sequential` — Step 10
+`/sdd-execute fix-python-loop-supervision sequential` — Step 15
