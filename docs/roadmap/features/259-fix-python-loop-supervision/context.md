@@ -1006,3 +1006,158 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-startup.md`,
   `services/xstockstrat-analysis/docs/context-constitution-findings.md`, `docs/roadmap/features/merge-order.md`
 - Progress: 15 done / 15 total. Status → `code-completed`. Next: merge-order gate (248 soft-first) and integration PR.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-python-loop-supervision (feature 259)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-python-loop-supervision.feature | CREATE | NEW | fundsignal loop survives schedule DB error. Related to feature-158 AC-1/AC-2 (retry cadence) but asserts loop survival, a different outcome. |
+| AC-2 | same | CREATE | NEW | fundsignal loop survives failed cycle plus failed advance |
+| AC-3 | same | CREATE | NEW | Outline over 3 analysis servicer loops |
+| AC-4 | same | CREATE | NEW | background task retention and exit logging at analysis boot |
+| AC-5 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Outline spans analysis, indicators and ingest, so cross-service. No existing watcher-reconnect rule. The 174 suites only assert client_id. |
+| AC-6 | same analysis suite | CREATE | NEW | P&L consumer retries a transient failure. Feature 042 order-snapshots-pnl-patterns.feature has no retry or skip rule, so no conflict. |
+| AC-7 | same analysis suite | CREATE | NEW | poison or persistent event parked, with a ledger event |
+| AC-8 | docs/sdd/business-rules/platform.feature | APPEND | NEW | same cross-service reasoning as AC-5 |
+| AC-9 | same analysis suite | CREATE | NEW | replay vs park while the DB-health probe fails |
+| AC-10 | same analysis suite | CREATE | NEW | cursor-read failure escalates to ERROR |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-python-loop-supervision.feature (CREATE) ---
+# Promoted from docs/roadmap/features/259-fix-python-loop-supervision/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-259` tag.
+# Durable business rules: analysis background loops and the P&L-pattern consumer survive transient
+# errors and never silently skip a ledger event. A rule enters only by promotion, never hand-authoring.
+
+Feature: xstockstrat-analysis — background loop supervision
+  What analysis guarantees about its recurring loops, background tasks and the P&L-pattern ledger consumer
+  under transient failures.
+
+  @AC-1 @FR-1 @regression @feature-259
+  Scenario: The fundamentals producer loop keeps ticking after a schedule DB error
+    Given a FundamentalsSignalLoop whose durable schedule raises a connection error on the first next_sleep_seconds call and returns 0 after it
+    When run_forever runs for two scheduler iterations
+    Then the loop task is still running
+    And _tick has been called at least once after the error
+    And the error was logged
+
+  @AC-2 @FR-1 @regression @feature-259
+  Scenario: The fundamentals producer loop survives a failed cycle whose retry advance also fails
+    Given a FundamentalsSignalLoop whose run_once raises a connection error and whose _advance_schedule raises once
+    When one scheduler iteration runs
+    Then the loop task is still running
+    And a further tick runs
+    And the connection error was logged
+
+  @AC-3 @FR-1 @regression @feature-259
+  Scenario Outline: Each servicer background loop survives a schedule DB error
+    Given the analysis servicer's "<loop>" whose DurableSchedule raises a connection error once on next_sleep_seconds
+    When the loop runs for two iterations
+    Then the loop task is still running and the tick ran again after the error
+
+    Examples:
+      | loop                               |
+      | run_opportunity_refresh_forever    |
+      | run_readiness_materializer_forever |
+      | run_template_intent_sweep_forever  |
+
+  @AC-4 @FR-2 @regression @feature-259
+  Scenario: Analysis keeps a reference to every background task and logs an unexpected exit
+    Given analysis has started its background tasks at boot
+    When one background coroutine ends with RuntimeError "boom"
+    Then an error naming the task and "boom" is logged
+    And no other background task stops running
+
+  @AC-6 @FR-4 @regression @feature-259
+  Scenario: A transiently failing ledger event is retried, not skipped past
+    Given the P&L-pattern consumer cursor is at 9
+    And the ledger streams "portfolio.position.closed" event 10 and event 11
+    And processing event 10 raises a connection error once and then succeeds
+    When the consumer processes the stream
+    Then event 10 is processed successfully before the cursor reaches 11
+    And the cursor ends at 11
+
+  @AC-7 @FR-5 @regression @feature-259
+  Scenario Outline: A ledger event that keeps failing is parked and recorded, and the cursor moves on
+    Given the P&L-pattern consumer cursor is at 9
+    And the ledger streams "portfolio.position.closed" event 10 and event 11
+    And the consumer's retry bound is 3 attempts and its replay escalation threshold is 5
+    And processing event 10 raises <error> on every attempt
+    And the bounded DB-health probe succeeds
+    When the consumer processes the stream
+    Then event 10 is attempted exactly <attempts> times and is then parked with reason "<reason>"
+    And a log line records that event 10 was parked, with the reason
+    And an "analysis.pnl.event_parked" ledger event records sequence 10 with idempotency key "pnl_park:10"
+    And event 11 is processed successfully
+    And the cursor ends at 11
+
+    Examples:
+      | error                                                         | attempts | reason               |
+      | a poison error (ValueError, or asyncpg SQLSTATE class 22/23)  | 3        | non-transient        |
+      | a non-poison error that persists (asyncpg OutOfMemoryError)   | 15       | transient-persistent |
+
+  @AC-9 @FR-5 @regression @feature-259
+  Scenario Outline: A non-poison failure is replayed, not parked, while the DB-health probe fails
+    Given the P&L-pattern consumer cursor is at 9
+    And every reconnect re-delivers the cursor's own event 9 before event 10
+    And processing event 10 raises <error> on every attempt
+    And the bounded DB-health probe <probe outcome>
+    When the consumer has replayed event 10 five times
+    Then event 10 is not parked and the cursor stays at 9
+    And the 5th replay logs ERROR naming sequence 10
+    And the re-delivered event 9 never resets the replay count
+
+    Examples:
+      | error                               | probe outcome |
+      | an asyncpg OutOfMemoryError         | raises        |
+      | an asyncpg DeadlockDetectedError    | times out     |
+
+  @AC-10 @FR-5 @regression @feature-259
+  Scenario: A consumer whose cursor read fails on every reconnect escalates to ERROR
+    Given the P&L-pattern consumer's cursor read raises a connection error on every call
+    When the consumer has failed to open the ledger stream 5 consecutive times
+    Then the first 4 failures log WARNING
+    And the 5th consecutive failure logs ERROR
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  @AC-5 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher reconnects after a non-gRPC exception
+    Given the <service> ConfigWatcher whose first WatchConfig stream raises RuntimeError "boom"
+    And whose second WatchConfig stream yields a snapshot with version "v2"
+    When the watcher runs
+    Then WatchConfig is called a second time after a backoff
+    And the watcher's snapshot version is "v2"
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
+
+  @AC-8 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher task that ends unexpectedly is retained and its exit is logged
+    Given the <service> ConfigWatcher has started its watch task
+    When the watch coroutine ends with RuntimeError "boom"
+    Then an error naming the watch task and "boom" is logged
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
+
+### Notes / ambiguities / conflicts
+- Attribution call: AC-5 and AC-8 are Scenario Outlines whose Examples cover analysis, indicators and ingest. They go to platform.feature as one cross-service guarantee, verbatim, and are not split per service. If the owner wants per-service recon visibility, the alternative is a per-service copy, which would need editing the Examples.
+- The platform.feature `Feature:` header and style (2-space indented scenarios) are assumed to match the file. The orchestrator should check the indent when appending.
+- No OVERLAP or CONFLICT found. I grepped every services/*/acceptance/*.feature and platform.feature for supervision, reconnect, ConfigWatcher, parked and cursor terms. The closest are analysis durable-loop-scheduler.feature (feature 158) and fix-config-watcher-client-id.feature (feature 174), and they assert different outcomes. 158 AC-2 says a caught run error advances the schedule by the retry cadence. 259 AC-2 adds survival when that advance also fails, which extends it without contradicting it.
+- Analysis acceptance directory already exists, so no lazy dir creation is needed. The new file is a CREATE.
+- Feature 042 (order-snapshots-pnl-patterns.feature) says nothing about failure handling in the consumer, so AC-6/7/9/10 are additive.
+
+### Coverage check
+- Source scenarios: 10 (AC-1..AC-10). Planned: 10 NEW (8 in the analysis suite, 2 in platform.feature), 0 DUP, 0 OVERLAP, 0 skipped. Counts match.
+```
