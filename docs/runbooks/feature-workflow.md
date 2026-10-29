@@ -53,7 +53,7 @@ feature/<slug>/step-N  →  PR →  feature/<slug>  →  final PR →  main-dev
 ```
 
 **Flow per step:**
-1. `sdd-execute` syncs `feature/<slug>` with `origin/main-dev` (feature branch wins on conflict).
+1. `sdd-execute` syncs `feature/<slug>` with `origin/main-dev` (a normal merge, conflicts resolved by hand, then `scripts/ledger-guard.py`).
 2. Creates `feature/<slug>/step-N`, executes the step, runs verification.
 3. On verification pass: commits, pushes, opens PR `feature/<slug>/step-N → feature/<slug>`, prints URL, stops.
 4. Merge the PR, then run `/sdd-execute <slug> next` for the next step.
