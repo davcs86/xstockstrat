@@ -64,7 +64,7 @@ before the fix; the pins are excluded from the red gate.
 - Step 9 runs at integration, after Steps 1–6 are green (C-16 promotion happens at launch/integration).
 - **Merge overlap (soft):** 244-fix-python-config-stored-zero edits `services/xstockstrat-indicators/app/handlers/servicer.py`,
   and 244 plus 245-fix-screener-symbol-isolation edit `services/xstockstrat-analysis/app/handlers/servicer.py`.
-  This feature changes one line in each (`:652`, `:3581`). Whichever lands second rebases. Step 7 records this.
+  This feature changes one line in each (`:652`, `:3588`). Whichever lands second rebases. Step 7 records this.
 
 ---
 
@@ -211,8 +211,8 @@ Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in 
   - `:38` `async def create(self, meta, payload_json: dict, created_by: str)` binds `meta.description` raw at `:48`.
   - `:54` `async def update(self, template_id: str, payload_json: dict) -> dict | None:`, with docstring `:55` and SQL `:59` `SET payload = $2::jsonb, version = version + 1, updated_at = NOW()` / `:60` `WHERE template_id = $1 AND retired_at IS NULL`.
   - `retire` `:68-78`: `:72` `SET retired_at = COALESCE(retired_at, NOW()), updated_at = NOW()`. It already meets FR-3/FR-4, so it does not change.
-- `app/handlers/servicer.py:3581`: `row = await self._strategy_templates_repo.update(meta.template_id, payload_json)`. `meta = request.template.meta` is at `:3542`, and the empty-id/kind guard is at `:3543-3552`.
-- `_row_to_strategy_template` (`servicer.py:7138-7150`) reads `name`, `description` and `updated_at` from the row (re-read this session), so it needs no change.
+- `app/handlers/servicer.py:3588`: `row = await self._strategy_templates_repo.update(meta.template_id, payload_json)`. `meta = request.template.meta` is at `:3550`, and the empty-id/kind guard is at `:3551-3559` (re-verified 2026-10-29 after the main-dev merge).
+- `_row_to_strategy_template` (`servicer.py:7146-7158`) reads `name`, `description` and `updated_at` from the row (re-read this session), so it needs no change.
 - Pattern to REUSE: ingest `source_templates.update` SQL (`source_templates.py:56-58`).
 
 **TDD**: `red-green required`
@@ -233,7 +233,7 @@ Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in 
    indicators' `or ""`), and `json.dumps(payload_json)`. Update the docstring to "Replace name, description and payload and bump
    ``version`` in one UPDATE; None if missing or retired." Use full-replace semantics, with no `COALESCE`/`NULLIF`.
 2. Leave `retire` (`:68-78`) untouched.
-3. In `servicer.py:3581`, change the call to `row = await self._strategy_templates_repo.update(meta, payload_json)`. Change no other line in `ManageTemplate`.
+3. In `servicer.py:3588`, change the call to `row = await self._strategy_templates_repo.update(meta, payload_json)`. Change no other line in `ManageTemplate`.
 
 **Verification**:
 ```bash
@@ -266,8 +266,8 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
   - `test_manage_template_update_bumps_version_and_retire_hides` is at `:344-358`.
   - `test_template_update_bumps_version_in_one_statement` (`:686-692`) calls the old `update("tpl", {...})` and uses `pool = AsyncMock(); pool.fetchrow = AsyncMock(return_value=None)`.
 - Real-PG harness:
-  - The `tests/conftest.py:367-368` session fixture `local_pg` yields a DSN. It skips locally when no PG binaries exist, and fails under `CI=true` (`:370-375`).
-  - `.github/workflows/ci.yml:393-397` installs postgresql for the analysis matrix leg.
+  - The `tests/conftest.py:402-403` session fixture `local_pg` yields a DSN. It skips locally when no PG binaries exist, and fails under `CI=true` (`_unavailable`, `:407-410`).
+  - `.github/workflows/ci.yml:405-407` ("install postgresql (analysis real_pg tests)") installs postgresql for the analysis matrix leg.
   - `tests/test_read_budget_real_pg.py:20` uses `pytestmark = pytest.mark.real_pg`, and `:25-28` uses `_pool(dsn, size, **kw)` → `asyncpg.create_pool(dsn, min_size=size, max_size=size, statement_cache_size=0, ...)`.
   - The marker is registered at `pyproject.toml:33`.
 - `migrations/026_owner_dimension_templates.up.sql:89` reads `CREATE TABLE IF NOT EXISTS analysis.strategy_templates (`, and the statement closes with `);` at `:99`. `DEFAULT NOW()` appears at `:97-98`.
@@ -418,7 +418,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check .
   - `_template_row(...)` at `:29`.
   - `_template_msg(source_type="derived", cfg=None, **payload_over)` at `:63-77` builds `TemplateMeta(template_id="t1", name="Example feed")`.
   - `_manage_req(op, template=None)` at `:80-81`.
-  - `_ctx` and `_aborted_code` are imported at `:17`/`:20`.
+  - `_ctx` and `_aborted_code` are imported at `:18`/`:20`.
   - The pattern is `with patch(f"{_ST}.create", create):` (`:157`).
   - `test_ac13_non_admin_manage_template_permission_denied` (`:126-139`) patches all three writes and asserts none was called.
   - `test_admin_create_validates_payload_like_register` is at `:163`.
@@ -468,18 +468,17 @@ Red gate: on the pre-Step-5 tree, (a), (b) and (c) fail. (d) and (e) pass on bot
 
 ### Step 7 — docs: merge-order.md soft-overlap entry for 244/245
 
-**Status**: `pending`
+**Status**: `done` (deliverable already present; no edit — re-spec 2026-10-29)
 **Service**: `docs/roadmap/features/`
 **Files**:
-- `docs/roadmap/features/merge-order.md` — modify
+- `docs/roadmap/features/merge-order.md` — no change (row already present)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/roadmap/features/merge-order.md` § Blocking Dependencies is a table with the columns `| Feature | Must wait for | Reason | Resolved |`.
-- The coverage note (`:15-19`) says ordinary textual overlap is "intentionally **not** listed". There is precedent for a soft/rebase entry at
-  `:55` (`shadcn-migration-medium-confidence` (121) → (120), "soft/rebase (not blocking)").
-- `grep -n "244\|245\|269" docs/roadmap/features/merge-order.md` → no entry for these features (verified this session).
+- `docs/roadmap/features/merge-order.md:91` (§ Blocking Dependencies, columns `| Feature | Must wait for | Reason | Resolved |`) already holds:
+  `| \`fix-template-update-metadata\` (269) | \`fix-python-config-stored-zero\` (244), \`fix-screener-symbol-isolation\` (245) | Soft rebase only: shared files in the indicators/analysis servicers and tests. 269 rebases after them; 262, 268 and 272 overlap at file level only (operator yes, 2026-10-22) | No |`
+- The row is on `origin/feature/fix-template-update-metadata` and `origin/main-dev`. It records the same soft/rebase, non-blocking overlap the original instruction asked for, in different wording.
 - Overlap source: context.md 2026-10-21 sdd-review overlap findings, and recon.md § Risks "Merge overlap".
 
 **TDD**: `N/A (docs)`
@@ -487,13 +486,12 @@ Red gate: on the pre-Step-5 tree, (a), (b) and (c) fail. (d) and (e) pass on bot
 **Covers**: —
 
 **Instructions**:
-Append one row to the § Blocking Dependencies table, following the `:55` soft-entry form:
-`| \`fix-template-update-metadata\` (269) | \`fix-python-config-stored-zero\` (244), \`fix-screener-symbol-isolation\` (245) | **File-level overlap, soft/rebase (not blocking)**: 269 changes one call-site line in \`services/xstockstrat-indicators/app/handlers/servicer.py\` (\`ManageTemplate\` UPDATE, ~L652) and \`services/xstockstrat-analysis/app/handlers/servicer.py\` (\`ManageTemplate\` UPDATE, ~L3581); 244 edits both files and 245 edits the analysis one. No field, config, or migration collision; whichever lands second rebases. | No |`
-This is a design deliverable (design.md § Spec deliverables; Open Risk 4).
+Do not append a row: a second 269 entry would duplicate `:91`. The design deliverable (design.md § Spec deliverables; Open Risk 4)
+is met by the existing row, so the step is done with no edit.
 
 **Verification**:
 ```bash
-grep -n "fix-template-update-metadata" docs/roadmap/features/merge-order.md
+grep -c "fix-template-update-metadata" docs/roadmap/features/merge-order.md   # expect 1
 ```
 
 ---
@@ -510,7 +508,7 @@ grep -n "fix-template-update-metadata" docs/roadmap/features/merge-order.md
 **Codebase Evidence**:
 - `docs/repo-surveyor/debt-radar-findings.md:407`: `### D-41 Template \`ManageTemplate\` UPDATE silently drops \`name\`/\`description\` (indicators + analysis) — SEV-2`. Its bullets are **Evidence** / **Intent asserted** / **Impact** / **Routing** (`:408-416`).
 - The design accepted the residual (design.md § Open Risks, item 1; Rejected Alternatives: "Copying `local_pg` into the indicators and ingest conftests"). fails.md:2255 rule (3) names a shared real-DB fixture as a platform follow-up, not a per-feature rig.
-- Indicators and ingest have no `local_pg`/`real_pg` harness: `grep -rn "real_pg\|local_pg" services/xstockstrat-indicators/tests services/xstockstrat-ingest/tests` → none (recon.md § Risks). Only analysis has one (`tests/conftest.py:367-368`).
+- Indicators and ingest have no `local_pg`/`real_pg` harness: `grep -rn "real_pg\|local_pg" services/xstockstrat-indicators/tests services/xstockstrat-ingest/tests` → none (recon.md § Risks). Only analysis has one (`tests/conftest.py:402-403`).
 - The debt radar was chosen over `docs/context-constitution-findings.md` because it is the D-41 finding's own home. It is also not a context-forge context file, so it does not trigger the root CLAUDE.md teardown.
 
 **TDD**: `N/A (docs)`
