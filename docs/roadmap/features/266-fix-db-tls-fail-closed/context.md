@@ -554,3 +554,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   authoritative where they differ.
 - Steps 8/10 gate: the operator crash-loop sign-off is already recorded (§ "Session 2026-10-22 (operator decision —
   fail-closed boot)"); the earlier unchecked open-thread items predate it.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`.
+- **Up-front confirmation (sequential mode entry):** given by operator standing authorization — operator chat
+  2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute;
+  unattended checkpoints (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
+  merge-train authorized; 255/275 deferred; operator-only DB/prod steps: open the PR, hold the merge. Per-feature
+  blocker decisions of 2026-10-29 were given by the operator in their own words through the session's question
+  tool; none was recorded specifically for 266 beyond this directive.
+- Steps 8/10 crash-loop gate: satisfied by the 2026-10-22 operator sign-off above.
+- Step 17's pre-merge dev canary is operator-only (running dev backends); the integration PR is opened and its merge
+  held for the operator.
