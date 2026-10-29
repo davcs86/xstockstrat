@@ -843,7 +843,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 { "run_id": "…", "symbols_processed": 42, "signals_emitted": 7, "calls_spent": 3, "deferred_count": 0, "status": "completed", "finished_at": "2026-08-26T05:06:00+00:00" }
 ```
 
-`status` is `"completed"` | `"budget_deferred"` | `"failed"`.
+`status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. `partial` means a fetch chunk failed and its symbols are in `deferred_count`.
 
 **Errors**
 
