@@ -637,3 +637,29 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
   Step 4, no husky hook installed in this environment) are detailed in the Deviation Log.
 - The pipe-regex `-run` was accepted this session, so the D1-3/D2-1 fallback was not needed.
 
+
+---
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f):
+  "Start executing features 241-276" via batch-execute; unattended checkpoints ("report"), C-16 promotion
+  auto-confirmed unless it changes an existing @AC rule, merge-train authorized, 255/275 deferred; operator-only
+  DB/prod steps (open PR, hold merge); blocker decisions 2026-10-29 recorded per feature. This stands as the
+  up-front confirmation (§5.4) for this run. Status was already `in-progress` (flipped 2026-10-28), so no flip.
+- Branch setup (§5.3): `git merge -X ours origin/main-dev` into the feature branch (merge commit 1ee93e5c), pushed.
+  The merge removed one line from `trading.go` (`escalateSystemic`, `Author: "system:reconciliation-poller"`,
+  from 241-fix-config-audit-author-spoof), so every `trading.go` line at or after `:2173` is one lower.
+- Directive: conditional, Steps 5 and 7.
+  - Step 5: `Background()` count is 34, not 36 (Step 2 replaced `:688`/`:703` with `persistOrderBestEffort`).
+    Re-spec'd the post-merge line numbers: rows #26-#32 `:3396/:3407/:3418/:3424/:3460/:3466/:2616`, callers
+    `:2527/:2574/:2689`, flatten `:2837`, left-as-is `:2858/:2906`, watchdog `:2865` → `:2883`. Rows #1-#25,
+    fakes and test anchors (`trading_bracket_test.go`, `trading_cancel_not_cancelable_test.go`,
+    `trading_order_state_audit_test.go` helpers) and `ci.yml:266` COVERPKGS verified unchanged.
+  - Step 7: `emitLedgerEvent` is at `trading.go:3670`, its `p, _ := structpb.NewStruct` at `:3671`. CLAUDE.md
+    Ledger Events table (`:139-159`), findings `:13` row and the bare-`orderID` lifecycle emits verified unchanged.
+- Not re-spec'd (outside the directive): Steps 4 and 6 also cite `trading.go` lines past `:2173` (`:2838`,
+  `:2617`, `:2859`, `:2907`, `:3359`, `:3389`, `:3432`); each is now one lower. The executor of those steps
+  should resolve them by symbol, not line.
+- Hook note: no `node_modules` in the main worktree and `core.hooksPath` points at a missing `.husky/_`, so the
+  husky pre-commit hook does not run in this environment (same as D3-4); doc-only commits here.
