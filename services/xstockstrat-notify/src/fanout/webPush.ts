@@ -4,8 +4,10 @@
  */
 import webpush from 'web-push';
 import { Pool } from 'pg';
+import type { Metadata } from '@grpc/grpc-js';
 import { alertSeverityToNumber, AlertSeverity } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
+import type { AdminDirectory } from '../services/adminDirectory';
 import { getLogger } from '../services/logger';
 
 const log = getLogger('notify:webpush');
@@ -14,6 +16,8 @@ const log = getLogger('notify:webpush');
 // distinct concerns, do not conflate. Both fixed constants, not config keys (F-07).
 const WEBPUSH_TTL_SECONDS = 3600;
 const WEBPUSH_SEND_TIMEOUT_MS = 10000;
+// Admin-lookup ERROR rate limit — a fixed mechanism constant, not a config key (F-07).
+const ADMIN_LOOKUP_ERROR_INTERVAL_MS = 60_000;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
@@ -26,7 +30,7 @@ export interface PushAlert {
   category: string;
   title: string;
   body: string;
-  targetUserId: string; // '' means broadcast to every subscription
+  targetUserId: string; // '' = untargeted: pushed only to admin-role users' subscriptions
 }
 
 interface SubscriptionRow {
@@ -48,10 +52,13 @@ interface PushPayload {
 
 export class WebPushDispatcher {
   private readonly vapidConfigured: boolean;
+  private lastLookupErrorAt = -Infinity;
 
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
+    private readonly admins: AdminDirectory,
+    private readonly now: () => number = Date.now,
   ) {
     const priv = process.env.VAPID_PRIVATE_KEY?.trim() || '';
     const pub = process.env.VAPID_PUBLIC_KEY?.trim() || '';
@@ -75,7 +82,7 @@ export class WebPushDispatcher {
   }
 
   /** Best-effort Web Push. Never throws — the whole body is guarded (FR-3 / @AC-4 / @AC-5). */
-  async dispatch(alert: PushAlert): Promise<void> {
+  async dispatch(alert: PushAlert, md?: Metadata): Promise<void> {
     try {
       if (!this.vapidConfigured) return; // FR-5 / @AC-6 — silently disabled when VAPID absent
 
@@ -85,20 +92,32 @@ export class WebPushDispatcher {
       const minSev = clamp(this.config.getInt('notify.push.min_severity', 2), 0, 4);
       if (sevNum < minSev) return;
 
-      // Target by user (empty targetUserId = broadcast to every subscription). Reuse the injected
-      // pool — no new pool (F-06).
-      const rows = alert.targetUserId
-        ? (
-            await this.pool.query<SubscriptionRow>(
-              'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions WHERE user_id = $1',
-              [alert.targetUserId],
-            )
-          ).rows
-        : (
-            await this.pool.query<SubscriptionRow>(
-              'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions',
-            )
-          ).rows;
+      // Untargeted (empty targetUserId) reaches only admin-role users' subscriptions, never everyone.
+      // Reuse the injected pool — no new pool (F-06).
+      let rows: SubscriptionRow[];
+      if (alert.targetUserId) {
+        rows = (
+          await this.pool.query<SubscriptionRow>(
+            'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions WHERE user_id = $1',
+            [alert.targetUserId],
+          )
+        ).rows;
+      } else {
+        let adminIds: string[];
+        try {
+          adminIds = await this.admins.listAdminUserIds(md);
+        } catch (e: any) {
+          this.reportAdminLookupError(alert.alertId, e);
+          return;
+        }
+        if (adminIds.length === 0) return;
+        rows = (
+          await this.pool.query<SubscriptionRow>(
+            'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions WHERE user_id = ANY($1::text[])',
+            [adminIds],
+          )
+        ).rows;
+      }
 
       if (rows.length === 0) return;
 
@@ -116,6 +135,23 @@ export class WebPushDispatcher {
     } catch (e: any) {
       log.warn('push dispatch error', { alertId: alert.alertId, channel: 'push', error: e?.message ?? String(e) });
     }
+  }
+
+  private reportAdminLookupError(alertId: string, e: any): void {
+    const t = this.now();
+    if (t - this.lastLookupErrorAt < ADMIN_LOOKUP_ERROR_INTERVAL_MS) return;
+    this.lastLookupErrorAt = t;
+    this.logAdminLookupError({
+      alertId,
+      channel: 'push',
+      code: e?.code,
+      error: e?.message ?? String(e),
+    });
+  }
+
+  // Protected seam so tests can count the escalation, same rationale as `deliver`.
+  protected logAdminLookupError(meta: Record<string, unknown>): void {
+    log.error('push admin lookup failed — untargeted push skipped', meta);
   }
 
   // Single outbound-network seam, isolated as a protected method so tests can override it

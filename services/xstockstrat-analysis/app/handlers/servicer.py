@@ -3585,7 +3585,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                     return
             else:
-                row = await self._strategy_templates_repo.update(meta.template_id, payload_json)
+                row = await self._strategy_templates_repo.update(meta, payload_json)
         else:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unsupported template operation")
             return

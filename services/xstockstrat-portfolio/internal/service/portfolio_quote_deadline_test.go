@@ -342,17 +342,19 @@ func TestBroadcastSnapshot_SkipsWhenUnpriced(t *testing.T) {
 
 // ── feature 231: broker-first snapshot and concentration, skip on any unpriced position ──
 
-// recordingNotify records every alert body checkRiskLimits emits.
+// recordingNotify records every alert checkRiskLimits emits.
 type recordingNotify struct {
 	notifyv1.NotifyServiceClient
 	mu     sync.Mutex
 	bodies []string
+	reqs   []*notifyv1.EmitAlertRequest
 }
 
 func (n *recordingNotify) EmitAlert(_ context.Context, in *notifyv1.EmitAlertRequest, _ ...grpc.CallOption) (*notifyv1.EmitAlertResponse, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.bodies = append(n.bodies, in.Body)
+	n.reqs = append(n.reqs, in)
 	return &notifyv1.EmitAlertResponse{}, nil
 }
 
@@ -455,6 +457,11 @@ func TestCheckRiskLimits_AC3_SumsAcrossAccounts(t *testing.T) {
 	if !sameSet(notify.bodies, want) {
 		t.Fatalf("alerts = %v, want exactly %v", notify.bodies, want)
 	}
+	for _, req := range notify.reqs {
+		if req.TargetUserId != "u1" || req.Category != "risk" || req.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING {
+			t.Fatalf("alert %q: target=%q category=%q severity=%v, want target u1, category risk, WARNING", req.Body, req.TargetUserId, req.Category, req.Severity)
+		}
+	}
 }
 
 // @AC-9: any unpriced position skips concentration (WARN names it); drawdown still alerts on broker equity.
@@ -475,7 +482,36 @@ func TestCheckRiskLimits_AC9_UnpricedSkipsConcentrationDrawdownStillAlerts(t *te
 	if !sameSet(notify.bodies, want) {
 		t.Fatalf("alerts = %v, want exactly %v", notify.bodies, want)
 	}
+	if got := notify.reqs[0].TargetUserId; got != "u1" {
+		t.Fatalf("drawdown alert TargetUserId = %q, want u1", got)
+	}
 	if w := rec.find("concentration check skipped: positions unpriced"); w == nil || !strings.Contains(w["unpriced"], testdata.Elwt) {
 		t.Fatalf("want WARN naming ELWT, got %v", w)
+	}
+}
+
+// @AC-6: a drawdown breach alert targets the account owner, not an untargeted broadcast.
+func TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner(t *testing.T) {
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	notify := &recordingNotify{}
+	svc.cfg, svc.notify = &config.Watcher{}, notify
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(mock.NewRows(positionCols))
+	balances := mock.NewRows([]string{"account_id", "equity", "peak_equity"}).AddRow("acct-1", 8500.0, 10000.0)
+	mock.ExpectQuery(`FROM portfolio.account_balances`).WithArgs("user-42", "TRADING_MODE_PAPER").WillReturnRows(balances)
+
+	svc.checkRiskLimits(ctxWithUser(t, "user-42"), "user-42", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	if len(notify.reqs) != 1 {
+		t.Fatalf("want exactly 1 alert, got %d: %v", len(notify.reqs), notify.bodies)
+	}
+	req := notify.reqs[0]
+	if want := "drawdown limit breach: account acct-1 at 15.0% (peak 10000.00, current 8500.00)"; req.Body != want {
+		t.Fatalf("body = %q, want %q", req.Body, want)
+	}
+	if req.Category != "risk" || req.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING || req.TargetUserId != "user-42" {
+		t.Fatalf("category=%q severity=%v target=%q, want risk, WARNING, user-42", req.Category, req.Severity, req.TargetUserId)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock: %v", err)
 	}
 }

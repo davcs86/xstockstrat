@@ -414,6 +414,7 @@
 - **Intent asserted:** The RPC accepts a full `TemplateMeta`, and the config-ui admin page (`/config-ui/templates`) offers rename.
 - **Impact:** An admin rename on formula or strategy templates "succeeds" and bumps `version`, which shows "update available" to every instance holder, yet nothing changes.
 - **Routing:** Human triage. Decide whether metadata is mutable, then make the three repositories agree (D-20 family).
+- **Status (feature 269):** fixed in indicators, analysis and ingest. **Residual proof gap (accepted, follow-up):** indicators (`formula_templates_repository.py`) and ingest (`source_templates.py`) template SQL is proven only by SQL-text plus bound-argument tests, because neither service has a real-PG harness; only analysis does (`tests/conftest.py` `local_pg`, `tests/test_strategy_templates_real_pg.py`). A column or bind-order mistake mirrored in both a query and its assertion would pass. Follow-up: a shared Python real-PG test fixture (platform, D-20 family; fails.md:2255 rule 3), not a per-service copy.
 
 ### D-45 UI symbol-page backtest omits `strategyId`, so the run earns no evidence and never appears in history — SEV-2
 - **Evidence:**

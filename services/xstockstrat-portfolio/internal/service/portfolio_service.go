@@ -981,7 +981,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 		for sym, val := range posValues {
 			pct := val / totalValue
 			if pct > concentrationLimitPct {
-				s.emitRiskAlert(ctx, fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
+				s.emitRiskAlert(ctx, userID, fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
 			}
 		}
 	}
@@ -989,12 +989,12 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	drawdowns, err := s.repo.GetAccountDrawdowns(ctx, userID, mode.String())
 	if err == nil {
 		for _, msg := range evaluateDrawdowns(drawdowns, maxDrawdownPct) {
-			s.emitRiskAlert(ctx, msg)
+			s.emitRiskAlert(ctx, userID, msg)
 		}
 	}
 }
 
-func (s *PortfolioService) emitRiskAlert(ctx context.Context, msg string) {
+func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, msg string) {
 	s.emitEvent(ctx, "portfolio.risk.drawdown_breach", "portfolio:risk", map[string]interface{}{
 		"message": msg,
 	})
@@ -1004,6 +1004,7 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, msg string) {
 		Title:         "portfolio risk limit breach",
 		Body:          msg,
 		SourceService: "portfolio",
+		TargetUserId:  userID,
 	})
 	if err != nil {
 		slog.Warn("notify emit failed", "error", err)
