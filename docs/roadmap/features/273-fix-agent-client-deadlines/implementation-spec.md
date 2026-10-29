@@ -649,7 +649,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 8 — test: Auth deadline and three-way result RED tests (@AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_auth.py` — modify
@@ -1010,3 +1010,20 @@ _Populated by /sdd-execute as implementation proceeds._
   and `manage_watchlist` verb literals were re-grepped: same verbs and variable (`operation`). ruff format re-wraps
   the widened calls over several lines. Grep counts are 41 RPC / 4 LONG, as the spec expects. **Disposition**:
   accepted (no scope change).
+- **Step 8 (2026-10-29)** — committed with 6 of the 9 new test cases RED by design (spec Verification: "RED
+  before Step 9"). The two `timeout` tests fail on `None == 10.0`, the trace test on `TypeError: unexpected
+  keyword argument 'trace_id'`, the two parametrised sentinel cases on `None is 'missing sentinel'`, the stalled
+  503 test on the `HANG_GUARD_S` `TimeoutError`, and the claims-stamp test on `None == 'trace-273'`. The
+  invalid-token `None` and 401 tests already pass because they pin behaviour Step 9 must keep. A temporary,
+  reverted, uncommitted probe of the Step 9 change gave 44/44 passed over `test_auth.py`, `test_auth_deadline.py`,
+  `test_oauth.py` and `test_header_propagation.py`, so the harness is GREEN-capable. Three mechanics differ from
+  the literal text:
+  - `app.main._new_trace_id` is patched with `create=True`, so before Step 9 the tests fail on their assertions
+    instead of on the patch target. Step 9 must import `_new_trace_id` into `app.main`'s namespace (its
+    Instruction 4), or the patch will not reach `_authorized`.
+  - Elapsed is timed around `tc.post` only, inside the worker, so TestClient lifespan start-up does not count
+    against the 0.7 s bound.
+  - The sentinel is read with `getattr(auth, "IDENTITY_UNAVAILABLE", ...)` and `AioRpcError` is built inline
+    (no third `_rpc_error` helper, C-13), so the RED is an assertion failure, not an `AttributeError`.
+  Full suite 6 failed / 576 passed, coverage 83.05% (≥40). **Disposition**: expected per spec; Step 9 GREEN
+  re-runs these tests.

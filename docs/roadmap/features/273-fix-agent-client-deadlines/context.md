@@ -985,3 +985,26 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
   - ruff check and format are clean.
   - The full suite passed 574, coverage 82.47% (≥40).
 - Deviation: line anchors were re-anchored by function name. See the Deviation Log.
+
+## Session 2026-10-29 — Step 8 — test: Auth deadline and three-way result RED tests (@AC-11)
+
+- Files:
+  - `services/xstockstrat-agent/tests/test_auth.py`: four tests in the `:21-28` mocked-stub shape, with the
+    sentinel test parametrised over DEADLINE_EXCEEDED and UNAVAILABLE (real `AioRpcError`, built inline).
+  - `services/xstockstrat-agent/tests/test_auth_deadline.py` (new): three ASGI tests through
+    `TestClient(build_http_app())` against `hung_backend("IDENTITY_ENDPOINT", module=app.auth)`, with
+    `client._RPC_TIMEOUT_S` patched to 0.2 and `app.main._new_trace_id` patched to `"trace-273"`
+    (`create=True`). Each request runs in a worker thread bounded by `HANG_GUARD_S`.
+- TDD RED (AC-11): 6 failed / 5 passed. The stall test hits the 10 s hang guard (`TimeoutError`) because
+  ValidateToken has no deadline. The claims test shows no `trace_id` key. The sentinel tests give
+  `None is 'missing sentinel'`, the deadline tests `None == 10.0`, and the trace test `TypeError` on `trace_id`.
+  The invalid-token `None` / 401 tests already pass (guards). GREEN is Step 9's run. A temporary, reverted
+  probe of Step 9 gave 44/44 passed across the four auth/oauth/propagation files.
+- Note for Step 9: import `_new_trace_id` into `app.main`'s module namespace (Instruction 4); the test patches it
+  there.
+- Verification: ruff check and format are clean. The full suite is 6 failed (by design) / 576 passed, coverage
+  83.05% (≥40).
+- Tooling: `uv sync --frozen --extra dev` in this worktree; lockfile unchanged. No root `node_modules` exists in
+  the main worktree to symlink, so the husky hook does not run (as in Steps 1-7); no `--no-verify` was used.
+- Deviation: three test mechanics (`create=True` patch, elapsed timed around `tc.post`, `getattr` sentinel read).
+  See the Deviation Log.
