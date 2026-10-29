@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-29 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | Steps 1-9 re-aligned to `main-dev` after the 246 merge: line drift in 1, 2, 4, 6; `_score` tuple return in 3, 5; Step 9 merges with 246's Idempotency text; Steps 7-8 unchanged |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by the operator's standing authorization (2026-10-28/29) |
 
 ---
 
@@ -54,4 +55,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-review fix-fundsignal-emit-accounting impl-spec` — validate implementation spec, then `/sdd-execute fix-fundsignal-emit-accounting`
+`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 1 (RED test)
