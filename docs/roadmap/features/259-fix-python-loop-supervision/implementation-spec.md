@@ -616,7 +616,7 @@ ruff check . && ruff format --check .
 
 ### Step 12 — test: `_emit` request shape and trace propagation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` — modify

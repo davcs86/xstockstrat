@@ -856,3 +856,21 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   `make_consumer`) fail only because `_emit` swallows that `TypeError`, leaving `ledger.appended` empty.
 - Files modified: `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 12
+
+### Step 12 — test: `_emit` request shape and trace propagation [done]
+- `tests/test_pnl_pattern_consumer.py`: `FakeLedger.AppendEvent(req, metadata=(), timeout=None)` now also records
+  `(req, tuple(metadata), timeout)` in `self.calls` (`self.appended` unchanged); `make_event` takes keyword
+  `correlation_id=""`. Three tests: `_emit` with `correlation_id="t-1"`, `idempotency_key="k-1"`, `timeout=5` sends
+  those fields plus `(("x-trace-id", "t-1"),)`; an empty `correlation_id` sends `()` metadata, empty fields and
+  `timeout=None`; an order + close event built with `correlation_id="t-9"` yield `analysis.snapshot.captured` and
+  `analysis.pattern.sealed` requests carrying `t-9` and `x-trace-id: t-9`, with `timeout is None`.
+- TDD: RED ran the new tests against the pre-Step-11 `pnl_pattern_consumer.py` (from `a103d77b`, restored afterwards):
+  2 failed (the request-shape test and the trace-propagation test); the empty-correlation test is a regression guard
+  and passes on both. GREEN against the Step 11 source: 13 passed.
+- Verification: `uv run pytest tests/test_pnl_pattern_consumer.py -q` 13 passed; full suite 1320 passed at 89.19%
+  coverage (>=40), so the 6 interim failures Step 11 recorded are cleared; `ruff check .` and `ruff format --check .`
+  are clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
+- Deviations: none

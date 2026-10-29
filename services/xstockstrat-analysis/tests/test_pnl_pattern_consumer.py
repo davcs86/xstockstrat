@@ -19,7 +19,9 @@ from app.engine.pnl_pattern_consumer import PnLPatternConsumer
 # ── LedgerEvent builder ─────────────────────────────────────────────────────
 
 
-def make_event(seq, event_type, payload, *, event_id=None, source_service="trading"):
+def make_event(
+    seq, event_type, payload, *, event_id=None, source_service="trading", correlation_id=""
+):
     p = Struct()
     p.update(payload)
     ts = Timestamp()
@@ -31,6 +33,7 @@ def make_event(seq, event_type, payload, *, event_id=None, source_service="tradi
         recorded_at=ts,
         payload=p,
         sequence=seq,
+        correlation_id=correlation_id,
     )
 
 
@@ -138,9 +141,11 @@ class FakeSamples:
 class FakeLedger:
     def __init__(self):
         self.appended = []
+        self.calls = []
 
-    async def AppendEvent(self, req, metadata=()):
+    async def AppendEvent(self, req, metadata=(), timeout=None):
         self.appended.append(req.event_type)
+        self.calls.append((req, tuple(metadata), timeout))
         return None
 
 
@@ -320,6 +325,57 @@ async def test_ac7_audit_events_emitted():
     )
     assert "analysis.snapshot.captured" in ledger.appended
     assert "analysis.pattern.sealed" in ledger.appended
+
+
+async def test_ac7_emit_request_carries_trace_idempotency_and_timeout():
+    consumer, pool, snaps, positions, samples, ledger = make_consumer()
+    await consumer._emit(
+        "analysis.test.event",
+        "AAPL",
+        {"k": "v"},
+        correlation_id="t-1",
+        idempotency_key="k-1",
+        timeout=5,
+    )
+    assert len(ledger.calls) == 1
+    req, metadata, timeout = ledger.calls[0]
+    assert req.event_type == "analysis.test.event"
+    assert req.correlation_id == "t-1"
+    assert req.idempotency_key == "k-1"
+    assert metadata == (("x-trace-id", "t-1"),)
+    assert timeout == 5
+
+
+async def test_emit_without_correlation_sends_no_metadata():
+    consumer, pool, snaps, positions, samples, ledger = make_consumer()
+    await consumer._emit("analysis.test.event", "AAPL", {"k": "v"})
+    assert len(ledger.calls) == 1
+    req, metadata, timeout = ledger.calls[0]
+    assert req.correlation_id == ""
+    assert req.idempotency_key == ""
+    assert metadata == ()
+    assert timeout is None
+
+
+async def test_existing_emits_propagate_event_trace():
+    consumer, pool, snaps, positions, samples, ledger = make_consumer()
+    await consumer.process_event(make_event(1, "order.filled", ORDER_PAYLOAD, correlation_id="t-9"))
+    await consumer.process_event(
+        make_event(
+            2,
+            "portfolio.position.closed",
+            CLOSE_PAYLOAD,
+            source_service="xstockstrat-portfolio",
+            correlation_id="t-9",
+        )
+    )
+    by_type = {req.event_type: (req, md, to) for req, md, to in ledger.calls}
+    assert {"analysis.snapshot.captured", "analysis.pattern.sealed"} <= by_type.keys()
+    for event_type in ("analysis.snapshot.captured", "analysis.pattern.sealed"):
+        req, metadata, timeout = by_type[event_type]
+        assert req.correlation_id == "t-9"
+        assert ("x-trace-id", "t-9") in metadata
+        assert timeout is None
 
 
 # ── Idempotency + ordering ──────────────────────────────────────────────────

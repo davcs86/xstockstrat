@@ -31,6 +31,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 9 done — ingest `ConfigWatcher._watch` reconnects after any `Exception`; watch task retained as `_watch_task` with an `_on_watch_done` exit log |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 10 done — ingest `tests/test_config_watcher.py` @AC-5 (reconnect after a non-gRPC error, 2s sleep, `ingest-` client_id) and @AC-8 (retained `_watch_task`, ERROR exit log naming `config-watch-ingest`) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 11 done — P&L consumer `_emit` takes keyword-only `correlation_id`/`idempotency_key`/`timeout`; existing snapshot and pattern-sealed emits carry `event.correlation_id` as the request field and `x-trace-id` metadata |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 12 done — analysis `tests/test_pnl_pattern_consumer.py`: `FakeLedger` records `(req, metadata, timeout)`; `_emit` request shape (`correlation_id`, `idempotency_key`, `x-trace-id`, `timeout`) and event-trace propagation on the snapshot/sealed emits (@AC-7) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after merging main-dev: step 13 evidence re-verified unchanged; `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` added to instruction 2's fixed invariants (6b used it without declaring it) |
 
 ---
