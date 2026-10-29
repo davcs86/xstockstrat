@@ -338,3 +338,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deferred-slug mapping, superseding the `agent-rpc-deadlines` targets in the 2026-10-20 sdd-design entry (Decisions,
   Open Threads) above: `client.get_config` and `register_oauth_client` → feature `273-fix-agent-client-deadlines`.
   The `agent-config-snapshot-read` and `agent-dcr-fail-closed` targets are unchanged.
+
+### Step 5 — docs: materialize three follow-up defect reports + teardown audit [done] (2026-10-29)
+
+- Created `docs/reports/2026-10-29-agent-config-snapshot-read-defect.md` / `.status` (`open`) and
+  `docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md` / `.status` (`open`, labelled SECURITY POSTURE, records
+  "FR-2 / AC-4 of feature 247 sanctioned fail-open"); each carries the single token `SEV-2`. Added
+  `## Filed as defect reports (2026-10-29)` (2 rows) to the agent findings index. Per operator Option A, no
+  `agent-rpc-deadlines` report: one cross-reference line was added to `docs/reports/2026-10-21-agent-client-deadlines-defect.md`
+  (feature 273) naming `client.get_config` and `register_oauth_client`.
+- Files modified: the four report/sidecar files above, `services/xstockstrat-agent/docs/context-constitution-findings.md`,
+  `docs/reports/2026-10-21-agent-client-deadlines-defect.md` (out-of-**Files**, Deviation Log).
+- TDD: N/A (docs). Verification (revised, 2 reports): both reports print `SEV-2`, severity-field count 1, sidecar `open`;
+  2 index rows; `(2026-10-19)` and `(2026-10-29)` headings; cross-reference present; 0 `agent-rpc-deadlines` files.
+- Teardown audit: the `/context-forge:context-constitution refresh` skill is **unavailable** in this session (only
+  `context-forge:context-scrubber` is installed), so the reconciliation was done by hand against the code at 841b404a:
+  - `services/xstockstrat-agent/CLAUDE.md`: `_CONFIG_READ_TIMEOUT_S` = 3.0 s matches `app/client.py:33` and its use at
+    `:1759`; `_POLICY_READ_TIMEOUT_S` = 3s matches `app/tools.py:2380`; DCR key defaults match `oauth_server.py:84-110`. No drift.
+  - `services/xstockstrat-agent/docs/context-constitution.md:40`: both `#`-symbol citations resolve. No drift.
+  - `services/xstockstrat-agent/docs/context-constitution-findings.md`: the two § Resolved bullets match the code (deadline in
+    `get_config_value`, warning logs `e.code().name` at `client.py:1763`; `oauth_server.py` comment and identity's https-only
+    check at `identityServiceImpl.ts:385-388`); new index rows link existing files. No drift.
+  - `docs/context-constitution-findings.md`: § Resolved row cites `client.py#_CONFIG_READ_TIMEOUT_S` and the AC-1 test, both
+    present; the 2026-10-19 index row stays until launch (sidecar `triaged`). No drift.
+  - `app/tools.py` / `app/oauth_server.py` comments (Step 3) match behaviour. No drift fixes were needed, so no extra files.
+  - The integration PR body must repeat "context-forge refresh unavailable" plus this per-file reconciliation.
+- Deviations: operator Option A (duplicate report dropped, cross-reference added, Verification revised, filenames dated
+  2026-10-29) — Deviation Log.

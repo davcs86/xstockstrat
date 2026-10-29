@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-28
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -24,6 +24,7 @@
 | 2026-10-28 | step 2 done (status retained at `in-progress`) | /sdd-execute | Step 2 — AC-2, `extract_email_content` urls, AC-3 tool tests and AC-4 DCR test against `hung_config_server` (RED pending Step 3) |
 | 2026-10-28 | step 3 done (status retained at `in-progress`) | /sdd-execute | Step 3 — `_CONFIG_READ_TIMEOUT_S = 3.0` + `timeout=` on `get_config_value`'s `GetConfig`, status-code warning; `tools.py`/`oauth_server.py` comment corrections (Steps 1-2 GREEN) |
 | 2026-10-28 | step 4 done (status retained at `in-progress`) | /sdd-execute | Step 4 — agent `CLAUDE.md`, agent context-constitution + findings, root findings reconciled for `_CONFIG_READ_TIMEOUT_S` (docs only) |
+| 2026-10-29 | step 5 done (status retained at `in-progress`) | /sdd-execute | Step 5 — two follow-up defect reports (`agent-config-snapshot-read`, `agent-dcr-fail-closed`) + `open` sidecars and agent findings index; `agent-rpc-deadlines` dropped as a duplicate of the feature-273 report (operator Option A, cross-reference added); manual teardown audit |
 
 ---
 

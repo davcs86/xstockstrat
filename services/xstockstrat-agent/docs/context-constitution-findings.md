@@ -69,5 +69,14 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 | [`2026-10-19-agent-ui-claude-md-drift-defect`](../../../docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md) | Agent and UI CLAUDE.md / tool docstring drift from current code |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 
+## Filed as defect reports (2026-10-29)
+
+Follow-ups from feature 247 `design.md` § Open Risks, recorded as `docs/reports/` defects (status sidecar `open`).
+
+| Report | Title |
+|---|---|
+| [`2026-10-29-agent-config-snapshot-read-defect`](../../../docs/reports/2026-10-29-agent-config-snapshot-read-defect.md) | Agent `extract_email_content` exceeds the MCP 60 s budget during a config stall for five or more URLs |
+| [`2026-10-29-agent-dcr-fail-closed-defect`](../../../docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md) | Agent OAuth dynamic client registration fails open on a config stall (SECURITY POSTURE) |
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

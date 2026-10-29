@@ -494,7 +494,7 @@ grep -n "~L2360" services/xstockstrat-agent/docs/context-constitution.md   # 0 h
 
 ### Step 5 — docs: materialize three follow-up defect reports + teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`docs/reports/`)
 **Files**:
 - `docs/reports/2026-10-21-agent-config-snapshot-read-defect.md` — create
