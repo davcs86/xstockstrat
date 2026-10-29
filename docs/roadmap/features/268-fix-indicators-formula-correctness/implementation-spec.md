@@ -624,7 +624,7 @@ grep -n "wilderATR\|Wilder" services/xstockstrat-indicators/docs/context-constit
 
 ### Step 10 — docs: file the "never assigns result" silent-success defect report
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`
 **Files**:
 - `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` — create

@@ -29,6 +29,8 @@
 | 2026-10-29 | `in-progress` (Step 7 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A in the UI: `BUILTIN_INDICATORS` ATR/VWAP descriptions mirror the engine strings (C-10) |
 | 2026-10-29 | `in-progress` (Step 8 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 UI test: `strategyCatalog.test.ts` asserts no misleading ATR/VWAP names and stable `ATR`/`VWAP` keys (AC-4/AC-5) |
 | 2026-10-29 | `in-progress` (Step 9 done) | /sdd-execute sequential (sdd-batch-execute) | Docs: no-output sandbox failure rule, ATR/VWAP approximation note, findings row for the two "ATR" numbers (Wilder ATR in trading) |
+| 2026-10-29 | `in-progress` (Step 10 done) | /sdd-execute sequential (sdd-batch-execute) | Filed `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` (+ `open` sidecar) for the never-assigns-`result` gap; untriaged |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; integration PR next |
 
 ---
 
@@ -64,4 +66,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 10
+`/sdd-execute fix-indicators-formula-correctness sequential` — all steps done; open the integration PR (§5.6). Then `/sdd-triage --from-report docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md`

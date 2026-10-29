@@ -860,3 +860,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   in raw stdout.
 - Deviations: `wilderATR` one-line anchor drift + manual teardown — see Deviation Log.
 
+
+
+### Step 10 — docs: file the "never assigns result" silent-success defect report — done (2026-10-29)
+
+- `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` (new): `defect-filing.md` template with
+  the 2026-10-21 header shape plus `**Source**` (design.md § Open Risks). Severity is SEV-2 and provisional (triage
+  confirms it). Expected is left undecided. Evidence is `sandbox.py:311` (`.get('result', {{}})`) and `:312` (the marker print).
+- `…defect.status` (new): `open`. Not triaged here; `/sdd-triage --from-report` routes it.
+- Reproduction confirmed on this branch: `execute_formula(source='x = 1', input_data={}, allowed_imports=[])` →
+  `True {} success ''`.
+- TDD: N/A (docs). Verification: both files exist; sidecar `open`; `grep -oE 'SEV-[123]' | sort -u` → one line; no
+  checkbox or `config-propagation` text.
+- All 10 steps done → `status.md` `code-completed`. Next: integration PR (PR body must carry Step 9's teardown note +
+  Open Risks), then triage of the new report.
+- Deviations: none.
