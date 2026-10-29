@@ -350,3 +350,15 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   owner approves additive ListAdminUserIds, 2026-10-29". Scope: `rpc ListAdminUserIds`, `ListAdminUserIdsRequest {}`,
   `ListAdminUserIdsResponse { repeated string user_ids = 1; }` — additive only. Resolves the Step 2 blocker
   (Option A); Step 2 may commit.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 2 (proto-gen)
+
+- Step 2 done: `./scripts/buf-gen.sh` regenerated the identity stubs (Go `identity.pb.go`, `identity_grpc.pb.go`,
+  `identityv1connect/identity.connect.go`; Python `identity_pb2.py`, `identity_pb2_grpc.py`; TS `identity.ts`,
+  `identity_pb.ts`, `identity_connect.ts` + `dist/identity/v1/*`). `IdentityServiceService.listAdminUserIds` and
+  `IdentityServiceClient.listAdminUserIds` now exist for Steps 3 and 5.
+- TDD: N/A (generated code). RED: `grep -rl ListAdminUserIds packages/proto/gen/` -> 0 files. GREEN: 12 files.
+  Verification: non-identity gen drift empty; second `buf-gen.sh` run after staging -> `git diff --exit-code
+  packages/proto/gen/` exit 0. `buf lint` + `buf breaking` (vs `main-dev` extract) exit 0.
+- Toolchain parity (Deviation Log): Go plugins rebuilt with `GOTOOLCHAIN=go1.27.0` because the provisioned go1.24.7
+  build reflowed a comment in `analysis.pb.go`; `pnpm install --frozen-lockfile` so `tsc` is the lockfile's 5.9.3.

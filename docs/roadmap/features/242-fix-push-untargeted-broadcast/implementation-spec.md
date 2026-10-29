@@ -133,7 +133,7 @@ Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/identity/v1/identity.pb.go` — modify (generated)
@@ -780,3 +780,11 @@ _Populated by /sdd-execute as implementation proceeds._
   packages/proto` extracted to the session scratchpad, then `buf breaking --against <extract>/packages/proto`. Both
   exit 0 (local `main-dev` 0fc13c41 is behind `origin/main-dev` fa40c8a4, so both were checked); `buf lint` exit 0
   (buf 1.72.0). A blank line precedes the new rpc comment, matching the service block's existing comment spacing.
+- **Step 2 (2026-10-29) — toolchain parity only, no code deviation.** (a) The provisioned `protoc-gen-go`
+  (v1.36.11) and `protoc-gen-connect-go` (v1.19.2) in `~/go/bin` were built with go1.24.7 and reflowed an unrelated
+  doc comment in `gen/go/analysis/v1/analysis.pb.go`; all three Go plugins were rebuilt at their CI pins with
+  `GOTOOLCHAIN=go1.27.0` (CI `proto-freshness` uses Go 1.27) into the session scratchpad, which removed the drift.
+  (b) `gen/ts` had no `node_modules`, so `tsc` resolved to a global TypeScript 6.0.2 (TS5107 error); ran
+  `pnpm install --frozen-lockfile` in the worktree (lockfile TypeScript 5.9.3, as CI does). (c) `buf-gen.sh:41`'s
+  `buf breaking` passed in the worktree; also re-checked against a `git archive main-dev packages/proto` extract
+  (exit 0). Result: drift is identity-only, and a second `buf-gen.sh` run gives an empty `git diff packages/proto/gen/`.
