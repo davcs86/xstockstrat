@@ -22,6 +22,7 @@
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done — `app/supervision.py` + eight `main.py` boot tasks routed through `spawn` |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 2 done — `tests/test_supervision.py` (@AC-4 supervision helper + boot-retention guard) |
 | 2026-10-28 | `in-progress` (no change) | /sdd-execute sequential | Step 3 done — fundsignal + three servicer `*_forever` loops seed via `retry_until_ok` and tick via `run_supervised` |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after merging main-dev: steps 4, 6, 15 re-anchored (fundsignal_loop.py +1 drift and post-Step-3 `run_supervised` evidence; test_config_watcher.py tests :14-38; CLAUDE.md P&L section :143-177) |
 
 ---
 
