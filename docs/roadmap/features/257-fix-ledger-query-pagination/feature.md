@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ledger-query-pagination-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 248, 251, 263) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator signed off FR-1/FR-7/AC-5 late-commit wording and FR-5 max-cumulative pass 2; 263 merges first |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec FR-1/FR-4/FR-5/FR-6/FR-7 and acceptance AC-1/AC-5 restated per operator sign-off (a)/(b) |
+| 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute | Steps 1–9 re-spec'd against the main-dev-merged tree (263/252/248 in); Step 8 moved from a manual real-TimescaleDB run into the CI real-DB tier (`src/__tests__/db/queryPagination.db.test.ts`, job `Ledger DB test (TimescaleDB)`), operator decision 2026-10-29 |
 
 ---
 
