@@ -2,6 +2,7 @@
 update-available origin on reads, retire, and the analysis strategy-template saga."""
 
 import datetime
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
@@ -80,10 +81,12 @@ class _FakeTemplates:
         self.rows[meta.template_id] = row
         return row
 
-    async def update(self, template_id, payload_json):
-        row = self.rows.get(template_id)
+    async def update(self, meta, payload_json):
+        row = self.rows.get(meta.template_id)
         if row is None or row["retired_at"] is not None:
             return None
+        row["name"] = meta.name
+        row["description"] = meta.description
         row["payload"] = payload_json
         row["version"] += 1
         return row
@@ -250,6 +253,45 @@ class TestAuthoring:
             ("tpl-zscore", 2)
         ]
         assert listed.templates[0].payload.source == _payload().source
+
+    async def test_ac1_update_passes_meta_and_maps_returned_row(self):
+        svc = _servicer()
+        await _seed(svc)
+        seeded = svc._templates_repo.rows["tpl-zscore"]
+        svc._templates_repo.update = AsyncMock(
+            return_value={**seeded, "name": "New", "description": "d2", "version": 2}
+        )
+        tpl = _template()
+        tpl.meta.name, tpl.meta.description = "New", "d2"
+        resp = await _manage(svc, common_pb2.TEMPLATE_OPERATION_UPDATE, tpl)
+        passed = svc._templates_repo.update.await_args.args[0]
+        assert (passed.template_id, passed.name, passed.description) == ("tpl-zscore", "New", "d2")
+        assert (resp.meta.name, resp.meta.description, resp.meta.version) == ("New", "d2", 2)
+
+    async def test_ac1_update_meta_visible_in_list(self):
+        svc = _servicer()
+        await _seed(svc)
+        tpl = _template()
+        tpl.meta.name, tpl.meta.description = "New", "d2"
+        await _manage(svc, common_pb2.TEMPLATE_OPERATION_UPDATE, tpl)
+        listed = await svc.ListTemplates(indicators_pb2.ListTemplatesRequest(), _user("bob"))
+        assert [(t.meta.name, t.meta.description, t.meta.version) for t in listed.templates] == [
+            ("New", "d2", 2)
+        ]
+
+    async def test_ac3_create_with_empty_template_id_is_invalid_argument(self):
+        svc = _servicer()
+        ctx = _admin()
+        with pytest.raises(grpc.RpcError):
+            await svc.ManageTemplate(
+                indicators_pb2.ManageTemplateRequest(
+                    operation=common_pb2.TEMPLATE_OPERATION_CREATE,
+                    template=_template(template_id=""),
+                ),
+                ctx,
+            )
+        assert _code(ctx) == grpc.StatusCode.INVALID_ARGUMENT
+        assert svc._templates_repo.rows == {}
 
     async def test_ac15_empty_catalog_lists_zero_templates(self):
         svc = _servicer()
@@ -536,17 +578,34 @@ class TestRepositories:
         pool = MagicMock()
         pool.fetchrow = AsyncMock(return_value=None)
         repo = FormulaTemplatesRepository(pool)
-        await repo.update("tpl-zscore", MessageToDict(_payload()))
+        meta = common_pb2.TemplateMeta(template_id="tpl-zscore", name="New", description="d2")
+        await repo.update(meta, MessageToDict(_payload()))
         assert pool.fetchrow.await_count == 1
         sql = pool.fetchrow.call_args[0][0]
         assert "UPDATE indicators.formula_templates" in sql
+        assert "SET name = $2, description = $3, payload = $4::jsonb" in sql
         assert "version = version + 1" in sql and "updated_at = NOW()" in sql
+        assert "retired_at IS NULL" in sql
+        assert pool.fetchrow.call_args.args[1:4] == ("tpl-zscore", "New", "d2")
+        assert json.loads(pool.fetchrow.call_args.args[4]) == MessageToDict(_payload())
+
+    async def test_template_update_binds_empty_name_as_full_replace(self):
+        pool = MagicMock()
+        pool.fetchrow = AsyncMock(return_value=None)
+        meta = common_pb2.TemplateMeta(template_id="tpl-zscore", name="", description="")
+        await FormulaTemplatesRepository(pool).update(meta, {"name": "x"})
+        assert pool.fetchrow.call_args.args[2:4] == ("", "")
 
     async def test_template_retire_stamps_retired_at(self):
         pool = MagicMock()
         pool.fetchrow = AsyncMock(return_value=None)
         await FormulaTemplatesRepository(pool).retire("tpl-zscore")
-        assert "retired_at" in pool.fetchrow.call_args[0][0]
+        sql = pool.fetchrow.call_args[0][0]
+        assert "retired_at = COALESCE(retired_at, NOW())" in sql
+        assert "updated_at = NOW()" in sql
+        where = sql.split("WHERE", 1)[1]
+        assert "template_id = $1" in where and "retired_at IS NULL" not in where
+        assert pool.fetchrow.call_args.args[1] == "tpl-zscore"
 
     async def test_latest_versions_is_one_batched_query_over_active_templates(self):
         pool = MagicMock()

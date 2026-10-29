@@ -70,7 +70,7 @@ before the fix; the pins are excluded from the red gate.
 
 ### Step 1 — service: Indicators — UPDATE persists name/description; RETIRE stamps updated_at
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formula_templates_repository.py` — modify
@@ -122,7 +122,7 @@ cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 
 ### Step 2 — test: Indicators — red-first repo SQL/bind tests, wiring spy, fake lockstep (@AC-1, @AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formula_templates.py` — modify. This covers the `_FakeTemplates.update` fake (`:83-89`), the SQL tests at `:535` and `:545`, and the handler test class `TestAuthoring` (`:214`, including `test_ac14_admin_update_bumps_version_and_bob_lists_it` at `:241`).
@@ -572,3 +572,12 @@ git diff --stat -- 'services/*/acceptance/private-by-default-templates.feature' 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29 — Steps 1 + 2 landed in one commit** (`/sdd-execute` sequential, Step 1 run).
+  - **What**: Step 2's **Files** (`services/xstockstrat-indicators/tests/test_formula_templates.py`) were staged in
+    the Step 1 commit and Step 2's **Status** was set to `done` with it.
+  - **Why**: `## Step Dependencies` requires it ("Steps 1 and 2 land in one commit"). Step 1's signature change breaks
+    `_FakeTemplates.update` and `test_template_update_bumps_version_in_one_update`, so a Step-1-only commit would
+    leave the branch red. `reference/tdd-gate.md` treats the service/test pair as one red-green cycle.
+  - **Disposition**: no behavior deviation; the code and tests follow Step 1 and Step 2 **Instructions** as written.
+    The verification ran `ruff` through `uv run` (the service venv), which is the same pinned tool.

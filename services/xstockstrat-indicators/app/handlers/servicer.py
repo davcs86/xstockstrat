@@ -649,7 +649,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 return
             row = await self._templates_repo.create(meta, payload, self._reader(context))
         elif op == common_pb2.TEMPLATE_OPERATION_UPDATE:
-            row = await self._templates_repo.update(meta.template_id, payload)
+            row = await self._templates_repo.update(meta, payload)
         elif op == common_pb2.TEMPLATE_OPERATION_RETIRE:
             row = await self._templates_repo.retire(meta.template_id)
         else:

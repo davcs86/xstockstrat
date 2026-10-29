@@ -437,3 +437,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   authorized. Operator-only DB/prod steps: open the PR and hold the merge. The operator recorded the per-feature blocker
   decisions on 2026-10-29 through the session's question tool.
 - Severity: SEV-2. Remaining steps: 1–6, 8, 9 (Step 7 is already done, see the re-spec entry above).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 1 + 2 (indicators)
+
+- Steps 1 and 2 landed in one commit, as `## Step Dependencies` requires (Step 1 breaks the old fake and SQL test).
+  Logged in the impl-spec `## Deviation Log`; no behavior deviation.
+- Files: `services/xstockstrat-indicators/app/services/formula_templates_repository.py` (`update(meta, payload_json)`
+  writes name/description with `meta.description or ""`; `retire` adds `updated_at = NOW()`, WHERE stays unfiltered),
+  `app/handlers/servicer.py:652` (`update(meta, payload)`), `tests/test_formula_templates.py` (fake lockstep + tests a–e).
+- TDD red (pre-Step-1 tree, Step 2 tests in place): `uv run pytest tests/test_formula_templates.py -q` → 10 failed,
+  27 passed. AC-1 red: (a) SQL `SET name = $2, description = $3, payload = $4::jsonb` assert failed; (b) empty-name bind
+  failed; (d)/(d′) failed (`'str' object has no attribute 'template_id'` — handler passed the id, not meta). AC-2 red:
+  (c) `updated_at = NOW()` missing from retire SQL. The lockstep fake also turned the existing handler tests that
+  UPDATE (`test_ac14_...`, `test_update_of_missing_template_is_not_found`, three `TestInstantiation` tests) red for
+  the same reason. AC-3 (e) passed on both trees (regression pin, as specced).
+- TDD green: same command → 37 passed. Full suite `uv run pytest --cov=app --cov-fail-under=50` → 369 passed, 84.28%.
+  `ruff check .` and `ruff format --check .` clean. Step 1 grep checks all match.
+- C-13: no new fixtures; `TemplateMeta` literals stay inline (single consumer).
+- Out of scope: none. Open items unchanged (real-PG gap for indicators → Step 8).
