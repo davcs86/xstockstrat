@@ -61,11 +61,11 @@ def main():
         base_txt, head_txt = show(mb, path), show(a.head, path)
         if not base_txt:
             continue
-        head_blocks = {b for _, b in blocks(head_txt)}
+        head_blocks = {b.rstrip() for _, b in blocks(head_txt)}
         lost = [
             (s, b)
             for s, b in blocks(base_txt)
-            if s not in (None, a.own_slug) and b not in head_blocks
+            if s not in (None, a.own_slug) and b.rstrip() not in head_blocks
         ]
         if not lost:
             continue
@@ -75,9 +75,11 @@ def main():
                 f"{path}: entry of '{s}' missing or altered on branch: {b.splitlines()[0]}"
             )
         if a.fix:
-            base_set = {b for _, b in blocks(base_txt)}
+            base_set = {b.rstrip() for _, b in blocks(base_txt)}
             own_new = [
-                b for s, b in blocks(head_txt) if s == a.own_slug and b not in base_set
+                b
+                for s, b in blocks(head_txt)
+                if s == a.own_slug and b.rstrip() not in base_set
             ]
             fixed = base_txt
             for b in own_new:
