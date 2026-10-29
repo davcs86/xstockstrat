@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (Step 1 @AC-9 append done at spec time) |
 | 2026-10-29 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | Steps 2–8 evidence re-aligned after merging origin/main-dev (244 semaphore clamp, 259 spawn supervision, 244/246 conftest helpers landed); line-number drift only, no instruction scope change |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report` |
 
 ---
 
