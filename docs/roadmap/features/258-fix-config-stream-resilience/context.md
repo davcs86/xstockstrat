@@ -514,3 +514,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (174 warnings); `test:coverage` 191/191 pass; one `pool.connect()` (`:188`); both backoff constants (`:156-157`).
 - The only open item is still the operator-only pg_terminate_backend check. The existing Deviation Log entry
   ("Step 1 deferred to operator") stands, so no new spec entry was added. Step **Status** stays `pending`.
+
+### Step 4 — test: unary handlers return an error status and keep their specific codes (AC-3, AC-4, AC-11) [done]
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` (config + root) ⬇ (the main worktree has
+  no `node_modules`, so it was installed in this worktree rather than symlinked).
+- Added `describe('ConfigServiceImpl — unary DB failures (feature 258)')` with 6 cases: @AC-3, @AC-4, @AC-11 and the
+  INVALID_ARGUMENT / NOT_FOUND / PERMISSION_DENIED pins. It uses a local regex-failing pool and `unhandled()`
+  helper (C-13 inline), and imports `ADMIN_SCOPE_ERROR`, `HEADER_ACCESS_SCOPE` and `HEADER_USER_ID` from
+  `../grpc/authz`.
+- TDD: RED against the pre-Step-3 `configServiceImpl.ts` (907fa340, restored temporarily). @AC-3 and @AC-4 failed
+  with `connection terminated` rejecting from the handler, and the four pins passed. GREEN on the Step 3 code: 6/6,
+  and the whole file passed with 0 failures in 3 repeated runs.
+- Verification: `pnpm run test:coverage` exit 0 (197/197 pass, c8 lines 92.34% ≥ 40). `pnpm run lint` exit 0 with
+  0 errors (182 warnings = 174 + 8 `no-explicit-any` in the new test helpers). The AC grep hits `:448`, `:460` and
+  `:470`.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
+

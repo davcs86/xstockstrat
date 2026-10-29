@@ -416,7 +416,7 @@ grep -n "getConfig failed\|setConfig existence gate failed" src/grpc/configServi
 
 ### Step 4 — test: unary handlers return an error status and keep their specific codes (AC-3, AC-4, AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
@@ -871,5 +871,15 @@ INSERT is issued after a gate failure. Step 1 had shifted the anchors (now `getC
 pre-edit), so the edits were applied by symbol as the spec allows. Lint warnings rose 168 → 172, all
 `no-explicit-any` from the spec-mandated `Record<string, any>`, `let existing: any` and two `err: any` catches
 (0 errors). Step 4 owns the committed red→green proof.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced (procedure note).
+
+### Deviation: Step 4 — RED captured against the pre-Step-3 source
+**Spec said**: "**TDD**: `red-green required`. Against the pre-Step-3 tree, AC-3 and AC-4 reject from the handler
+instead of invoking the callback".
+**Actual**: Step 3 had already landed (4720488a), so RED was run by temporarily restoring `configServiceImpl.ts` from
+907fa340 (the pre-Step-3 commit), compiling, and running the suite: exactly @AC-3 and @AC-4 failed, each with
+`Error: connection terminated` rejecting from the handler; @AC-11 and the INVALID_ARGUMENT / NOT_FOUND /
+PERMISSION_DENIED pins passed, as predicted. The file was restored with `git checkout` (no diff) and GREEN run.
 **Reason**: the paired test step follows its service step in the spec's order.
 **Disposition**: as specced (procedure note).

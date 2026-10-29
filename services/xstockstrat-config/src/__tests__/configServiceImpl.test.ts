@@ -11,6 +11,7 @@ import { describe, it, before, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import * as grpc from '@grpc/grpc-js';
+import { ADMIN_SCOPE_ERROR, HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 
 let ConfigServiceImpl: typeof import('../grpc/configServiceImpl').ConfigServiceImpl;
 
@@ -385,5 +386,121 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
     await flush();
     assert.deepStrictEqual(seen, []);
     assert.strictEqual(rig.log.length, before, 'no query for a malformed payload');
+  });
+});
+
+describe('ConfigServiceImpl — unary DB failures (feature 258)', () => {
+  const KEY = 'analysis.backtest.max_duration_seconds';
+  const OVERLAY = /user_id = \$3/;
+  const GATE = /SELECT is_secret/;
+  const WRITE = /INSERT INTO config\.config_values/;
+
+  function makePool(fail: RegExp | null, gateRows: Record<string, unknown>[] = []) {
+    const sqls: string[] = [];
+    const pool: any = {
+      query: async (sql: string) => {
+        sqls.push(sql);
+        if (fail && fail.test(sql)) throw new Error('connection terminated');
+        if (GATE.test(sql)) return { rows: gateRows };
+        return { rows: [] };
+      },
+      connect: async () => ({ query: async () => ({ rows: [] }), on: () => {}, release: () => {} }),
+    };
+    return { pool, sqls };
+  }
+
+  function unhandled(t: TestContext) {
+    const seen: unknown[] = [];
+    const onRejection = (reason: unknown) => {
+      seen.push(reason);
+    };
+    process.on('unhandledRejection', onRejection);
+    t.after(() => {
+      process.off('unhandledRejection', onRejection);
+    });
+    return seen;
+  }
+
+  function adminMd(): grpc.Metadata {
+    const m = new grpc.Metadata();
+    m.set(HEADER_ACCESS_SCOPE, '4');
+    m.set(HEADER_USER_ID, 'admin-7');
+    return m;
+  }
+
+  async function invoke(handler: (call: any, cb: any) => Promise<void>, call: any) {
+    const calls: Array<{ err: any; res: any }> = [];
+    await handler(call, (err: any, res: any) => {
+      calls.push({ err, res });
+    });
+    await new Promise<void>((r) => setImmediate(r));
+    assert.strictEqual(calls.length, 1, 'the callback is invoked exactly once');
+    return calls[0];
+  }
+
+  function setConfigCall(value: Record<string, unknown>, metadata = adminMd(), key = KEY) {
+    return {
+      metadata,
+      request: { namespace: 'analysis', key, value, author: 'admin-7', environment: 'ENVIRONMENT_STAGING' },
+    };
+  }
+
+  it('@AC-3 GetConfig returns code 13 when the per-user overlay query fails', async (t) => {
+    const seen = unhandled(t);
+    const { pool, sqls } = makePool(OVERLAY);
+    const impl = new ConfigServiceImpl(pool);
+    const { err } = await invoke(impl.getConfig.bind(impl), {
+      request: { namespace: 'analysis', userId: 'u-1', environment: 'ENVIRONMENT_STAGING' },
+    });
+    assert.ok(sqls.some((q) => OVERLAY.test(q)), 'the overlay SELECT was issued');
+    assert.strictEqual(err?.code, 13);
+    assert.deepStrictEqual(seen, []);
+  });
+
+  it('@AC-4 SetConfig returns code 13 when the existence-gate query fails, with no write', async (t) => {
+    const seen = unhandled(t);
+    const { pool, sqls } = makePool(GATE);
+    const impl = new ConfigServiceImpl(pool);
+    const { err } = await invoke(impl.setConfig.bind(impl), setConfigCall({ intVal: 600 }));
+    assert.strictEqual(err?.code, 13);
+    assert.ok(!sqls.some((q) => WRITE.test(q)), 'no INSERT after a gate failure');
+    assert.deepStrictEqual(seen, []);
+  });
+
+  it('@AC-11 SetConfig returns code 13 when the value write fails after the gate passes', async (t) => {
+    const seen = unhandled(t);
+    const { pool, sqls } = makePool(WRITE, [{ is_secret: false }]);
+    const impl = new ConfigServiceImpl(pool);
+    const { err } = await invoke(impl.setConfig.bind(impl), setConfigCall({ intVal: 600 }));
+    assert.ok(sqls.some((q) => WRITE.test(q)), 'the INSERT was issued');
+    assert.strictEqual(err?.code, 13);
+    assert.deepStrictEqual(seen, []);
+  });
+
+  it('keeps INVALID_ARGUMENT for an out-of-bounds value, before any query', async () => {
+    const { pool, sqls } = makePool(null);
+    const impl = new ConfigServiceImpl(pool);
+    const { err } = await invoke(
+      impl.setConfig.bind(impl),
+      setConfigCall({ floatVal: -1 }, adminMd(), 'analysis.scoring.signal_decay_half_life_hours'),
+    );
+    assert.strictEqual(err?.code, 3);
+    assert.deepStrictEqual(sqls, []);
+  });
+
+  it('keeps NOT_FOUND for an unregistered key without create_key', async () => {
+    const { pool, sqls } = makePool(null, []);
+    const impl = new ConfigServiceImpl(pool);
+    const { err } = await invoke(impl.setConfig.bind(impl), setConfigCall({ intVal: 600 }));
+    assert.strictEqual(err?.code, 5);
+    assert.ok(!sqls.some((q) => WRITE.test(q)));
+  });
+
+  it('keeps PERMISSION_DENIED for a global write without admin scope, before any query', async () => {
+    const { pool, sqls } = makePool(null);
+    const impl = new ConfigServiceImpl(pool);
+    const { err } = await invoke(impl.setConfig.bind(impl), setConfigCall({ intVal: 600 }, new grpc.Metadata()));
+    assert.deepStrictEqual(err, ADMIN_SCOPE_ERROR);
+    assert.deepStrictEqual(sqls, []);
   });
 });
