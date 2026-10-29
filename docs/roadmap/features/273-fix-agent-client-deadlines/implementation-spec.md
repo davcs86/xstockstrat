@@ -433,7 +433,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 6 — test: Tool-level deadline RED tests and catch-site guards (@AC-1..4, @AC-6..9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tool_deadlines.py` — create
@@ -996,3 +996,11 @@ _Populated by /sdd-execute as implementation proceeds._
   three lines (`:223-225`), and ruff format splits the widened signature one parameter per line. The
   sentinel comment was shortened to fit the 100-column limit. No behaviour change from the spec.
   **Disposition**: accepted (no scope change).
+- **Step 6 (2026-10-29)** — committed with 14 of the 19 new test cases RED by design (spec Verification: "RED
+  before Step 7"): @AC-1/2/9/6 and the instantiate_template guard fail on the missing "within Ns" / "outcome
+  unknown" wording; @AC-3 and the six-wrap cases raise a raw `AioRpcError`; the two AST guards list every catch
+  site. Beyond the spec's early passes (AC-4, AC-7, FR-3), `test_ac8_…` and
+  `test_ingest_watchlist_followup_stall_is_swallowed` also pass now: their bounds are the client-level
+  `timeout=` Step 3 shipped, and the follow-ups are already in `except Exception`. They stay as FR-5/R6
+  regression guards. Elapsed bounds in the hung tests use the patched budgets plus 0.5 s. Full suite 14 failed /
+  560 passed, coverage 82.32% (≥40). **Disposition**: expected per spec; Step 7 GREEN re-runs these tests.

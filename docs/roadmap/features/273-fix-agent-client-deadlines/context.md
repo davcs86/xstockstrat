@@ -940,3 +940,21 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
 - Verification: ruff check and format are clean. The full suite is 555 passed, coverage 81.84% (≥40).
 - Tooling: `uv sync --frozen --extra dev` ran in this worktree. The lockfile is unchanged.
 
+## Session 2026-10-29 — Step 6 — test: Tool-level deadline RED tests and catch-site guards (@AC-1..4, @AC-6..9)
+
+- Files: `services/xstockstrat-agent/tests/test_tool_deadlines.py` (new). It uses `hung_backend` (Step 2),
+  247's `hung_config_server`, and `ADMIN`/`_ctx`/`HANG_GUARD_S` from conftest. Budgets are patched to
+  0.2/0.6/0.2 s. `_rpc_error` is defined locally (C-13: one consumer). The AST guards key on the innermost
+  enclosing function and require at least 40 mapper calls, so they cannot pass vacuously.
+- TDD RED: 14 failed / 5 passed. AC-1, AC-2, AC-9, AC-6 and the instantiate_template case fail on
+  `'upstream did not respond (deadline exceeded); retry shortly'` (no "within Ns", no "outcome unknown"). AC-3
+  and the six-wrap cases raise a raw `AioRpcError`. The `deadline_s` guard lists all 39 non-227 sites, and the
+  `write` guard lists 16 mutating sites. Early passes: AC-4, AC-7, FR-3 (as the spec allows), plus AC-8 and the
+  127 @AC-4 watchlist guard, which Step 3's client `timeout=` already bounds (Deviation Log). GREEN is Step 7's
+  run.
+- Verification: ruff check and format are clean. The full suite is 14 failed (by design) / 560 passed, coverage
+  82.32% (≥40).
+- Tooling: `uv sync --frozen --extra dev` in this worktree; lockfile unchanged. The main worktree has no root
+  `node_modules` to symlink and `core.hooksPath` (`.husky/_`) does not exist, so the husky hook does not run
+  (same as Steps 1-5); no `--no-verify` was used.
+
