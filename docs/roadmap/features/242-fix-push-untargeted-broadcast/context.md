@@ -650,3 +650,22 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
 - Out of scope: the notify `CLAUDE.md` banner drift ("config-as-startup-gate-only", "fictional ledger dep") and the
   rest of the stale identity method list stay with the open defects `2026-10-19-notify-claude-md-drift-defect` and
   `2026-10-19-identity-claude-md-drift-defect`.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 16 (C-14 follow-up for trading per-account alerts)
+
+- Step 16 done. Filed `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md` (SEV-2,
+  `xstockstrat-trading`) and its sidecar `.status` (`open`). The report covers the two per-account CRITICAL
+  alerts without `TargetUserId`: the reconciliation mismatch alert in `emitReconciliationFinding`
+  (`trading.go:1938-1944`) and the halt alert in `haltAccount` (`trading.go:2751-2757`). The owner is resolvable
+  from `accountID` through `trading.broker_accounts.user_id` (`BrokerAccountRecord.UserID`). The systemic
+  escalation alert (`trading.go:2183-2189`) is explicitly out of scope: it is system-wide, so admin-only delivery
+  is intended.
+- **C-14 follow-up (required before the integration PR merges, `design.md:207-212`):** provisional slug
+  `fix-trading-account-alert-targeting`. Its `NNN` is assigned by `/sdd-triage`; route it with
+  `/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`. An operator
+  sign-off recorded here is the alternative. FR-3 is not extended to trading in this feature.
+- TDD: N/A (docs). Before: the Verification `ls` exited 2 (both files missing). After: both files exist, the
+  sidecar reads `open`, the defect-filing greps print exactly one `SEV-2` token and the `**Severity**` line.
+- Files modified: `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`,
+  `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.status`, this `context.md`.
+- Out of scope: the trading code change itself (owned by the follow-up).

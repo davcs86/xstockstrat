@@ -735,7 +735,7 @@ grep -n "resolved by feature 242" services/xstockstrat-notify/docs/context-const
 
 ### Step 16 — docs: C-14 follow-up for trading per-account alerts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`, feature dir
 **Files**:
 - `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md` — create
@@ -889,3 +889,8 @@ _Populated by /sdd-execute as implementation proceeds._
   `2026-10-19-identity-claude-md-drift-defect`. (e) The notify findings "Filed as defect reports" row for
   `2026-10-19-notify-untargeted-push-broadcasts-all-users-defect` stays, because its sidecar is `triaged`, not
   `resolved` (the table rule: a row stays until its report is resolved).
+- **Step 16 (2026-10-29) — report date and wording only, no behaviour deviation.** (a) The report keeps the
+  spec's file name (`2026-10-21-…`, fixed at spec time), but its `**Recorded**` field is the actual filing date,
+  2026-10-29. (b) The owner lookup is cited as `trading.broker_accounts.user_id` (`BrokerAccountRecord.UserID`,
+  `account_repo.go:24`); the table is `broker_accounts`, not `accounts`. (c) Spec cites (`:1938-1944`,
+  `:2751-2757`, `:2183-2189`, `:3348`/`:3684`/`:3700`) all matched the branch tree.
