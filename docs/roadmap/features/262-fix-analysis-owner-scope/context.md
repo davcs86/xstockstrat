@@ -519,3 +519,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   checkpoint.
 - [ ] Step 4: if the `run_once` row loop gets hard to read after the guards land, extract the
   per-row logic into a helper (advisory, no FR impact).
+
+## Session 2026-10-29 (/sdd-execute re-spec, sdd-batch-execute)
+
+- Branch setup (§5.3): merged `origin/main-dev` into the feature branch (clean, no conflicts; merge
+  commit `41462525`). Ledger guard: clean.
+- Re-spec of Steps 2–8 (commit `6244b100`): evidence re-verified against the merged tree. Drift is
+  line numbers only: 244's `int_positive` semaphore clamp (`entry_backfill.py:57-59`) shifted
+  `run_once` by +1; 259's `spawn(..., "entry-backfill", forever=False)` now starts the backfill
+  (`app/main.py:174-180`, not edited); 244/246 `fundamentals_row`/`snapshot_watcher` are already in
+  `tests/conftest.py`, so the Step 5 conftest-collision fallback is no longer expected; the
+  analysis `CLAUDE.md` trading row moved to `:271`. Instructions, Files and Verification are
+  unchanged in scope.
+- Open Thread update: the 244 `entry_backfill.py` ADJACENT conflict has effectively happened
+  (244 merged to main-dev); edits are indented against the current tree. The merge-order soft row
+  for 244 is moot.
