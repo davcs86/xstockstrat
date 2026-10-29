@@ -722,7 +722,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 10 — test: AC-3 and AC-12 unknown environment sends UNSPECIFIED and shows no Paper label on any trader page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/tradingMode.test.ts` — create
@@ -1232,3 +1232,16 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
   `e2e/insights/backfills.spec.ts:135-136`, and `src/` type-checks clean (`pnpm build` passes).
   **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 10 — 2026-10-29
+
+- **TDD RED ran against the pre-Step-9 tree.** Step 9 had already landed, so its eleven source files were
+  checked out from `8a36112d~1` (with `src/lib/tradingMode.ts` removed), built, and restored from `HEAD` before
+  GREEN. The Vitest RED is therefore an unresolved import of `./tradingMode` (the helper did not exist before
+  Step 9). The e2e RED failed on the assertion itself. Playwright ran under `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Steps 1-9 used. **Disposition**: CI-equivalent fallback.
+- **Heading wait on `/trader`.** The dashboard has no `<h1>`, so the `@AC-12` loop waits for the "Place Order"
+  card title there. The other four pages wait for their level-1 heading (`Orders`, `Exposure`, `AAPL`,
+  `Portfolio`). **Disposition**: test-shape detail inside the step's **Files**.
+- **`@AC-12` is GREEN-only** (regression guard), as the step predicted: it passed on the pre-fix tree because the
+  badge was already null-safe.

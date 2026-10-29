@@ -761,3 +761,24 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
     branch intact. Its timed return becomes a clean end that reconnects after backoff, which is tolerated.
   - Step 14 scope: added `e2e/trader/order-parity.spec.ts`, comment only. Its `:118` comment and the
     `orders.spec.ts:11` header have the same stale wording as `orders.spec.ts:128`, and Step 14 updates all three.
+
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 10
+
+- Step 10 done (`@AC-3`, `@AC-12`) in `services/xstockstrat-ui`:
+  - `src/lib/tradingMode.test.ts` (new): `toPbTradingMode` maps `live` → LIVE, `paper` → PAPER (PRESERVE
+    `@feature-095`) and `null` → UNSPECIFIED.
+  - `e2e/trader/order-form.spec.ts`: a new top-level `@AC-3 @AC-12 environment unknown` describe. Its
+    `beforeEach` routes `ListBrokerAccounts` and a 503 `GetTradingEnvironment`. `@AC-3` captures the PlaceOrder
+    body on `/trader`. `@AC-12` loops `/trader`, `/trader/orders`, `/trader/positions`, `/trader/positions/AAPL`
+    and `/trader/portfolio`, and asserts no `^paper$` text on each.
+- TDD (prebuilt app, `CI=1 E2E_PREBUILT=1`; RED built from the pre-Step-9 tree, see the Deviation Log):
+  - **Red:** AC-3 failed on `body.tradingMode === undefined || === 'TRADING_MODE_UNSPECIFIED'`
+    (`Expected: true, Received: false`; the body carried PAPER). The five `@AC-12` pages passed, so AC-12 is a
+    GREEN-only regression guard. The Vitest file failed to resolve `./tradingMode`.
+  - **Green:** `order-form.spec.ts` passed 19/19 (13 existing plus 6 new). `tradingMode.test.ts` passed 3/3.
+- Verification: `pnpm run lint` exits 0 (only pre-existing warnings). `pnpm run test:coverage` passes 290/290
+  across 55 files (all files 73.35% statements, above the 40% threshold). `lint:dup` finds 0 clones.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree (the main worktree has no `node_modules` to
+  symlink). Chromium came from `/opt/pw-browsers`.
+
