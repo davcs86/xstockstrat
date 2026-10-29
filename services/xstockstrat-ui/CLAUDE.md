@@ -168,6 +168,8 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   copilot-aware `queryEvents`): the BFF forces `stream_key=copilot:<user>:default` +
   `event_type=copilot.message` server-side from the verified session, so the browser never learns
   the user id and can only touch its own thread. No agent DB, no LLM, no new pool (F-06).
+  For other keys the same `queryEvents` checks `account:` keys against trading `ListBrokerAccounts`
+  and forces ledger `owner_only` server-side on every remaining key (feature 263).
 - **Mobile companion** — one shared `src/components/mobile/SectionRenderer.tsx` (section kinds
   `head/stat/signal/signalGroup/chart/row/form/note/action`, ≥44px tap targets) drawn behind
   `sm:hidden` beside the desktop layout, plus a fixed `BottomTabBar` (mobile-only) mounted globally in

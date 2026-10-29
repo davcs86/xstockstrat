@@ -749,7 +749,7 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
 
 ### Step 12 — docs: same-PR contract docs, findings, merge order (C-10, P-03)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, plus the CLAUDE.md files of `xstockstrat-ledger`, `xstockstrat-config` and `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-ledger/CLAUDE.md` — modify
@@ -974,3 +974,21 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Shape**: the six spec cases are one test parametrized over both read tools (10 cases), with the stub
   doubles in a single static helper on the class (C-13: one consumer).
 - **Disposition**: CI-equivalent fallback for the RED evidence (same pattern as DEV-3/DEV-5/DEV-8); no spec change.
+
+### DEV-11 — Step 12: manual teardown; grep-matching wording (2026-10-29)
+
+- **Teardown (item 8)**: the `/context-forge:context-constitution refresh` skill is not available in this
+  session (only `context-forge:context-scrubber` is listed), so the audit was done by hand. Re-read
+  `docs/context-constitution.md` (PLAT-11) and `services/xstockstrat-{ledger,config,agent,ui}/docs/context-constitution{,-findings}.md`
+  against the Step 1–11 code. No grounded drift: none of them states that `QueryEvents` is owner-unscoped or
+  that config reads trust the body `user_id`, and their `#symbol` anchors (CONFIG-7 `DISTINCT ON (key)`,
+  UI-3 `traderBff.ts` handlers) still resolve. None was edited. The integration PR body must record that the
+  plugin was unavailable and this manual reconciliation.
+- **Wording**: `mcp-tools.md` and the agent `CLAUDE.md` prose keep "bound to the caller" on one line so the
+  step's case-sensitive verification grep matches; verification grep 3 also matched a pre-existing
+  "outbound" line in the config `CLAUDE.md` before this step, so its RED was not empty.
+- **Evidence lines** in the findings row were re-verified against the post-Step-11 code: `watchConfig`
+  `requestUserId(req)` `:284`, `client.py` `_CALLER` `:39-42`, ledger `streamEvents` `:186` / `getEvent`
+  `:266`, `trading.go` `:2246` / `:2277`, `traderBff.ts` `queryEvents` `:119-139`.
+- **Item 6**: `merge-order.md:78` already holds the single operator-ordered 257-after-263 row; nothing added.
+- **Disposition**: no spec change.

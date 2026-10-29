@@ -720,3 +720,24 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 - Verification: `pytest tests/test_config_tools.py` 42 passed; `pytest --cov=app --cov-fail-under=40` 540 passed,
   82.07%; `ruff check .` clean; `ruff format --check .` clean; conftest import grep → `:22`.
 
+### Step 12 — docs: same-PR contract docs, findings, merge order (2026-10-29)
+
+- Files:
+  - `services/xstockstrat-ledger/CLAUDE.md`: Critical Invariant #5 (`QueryEvents.owner_only`: scoped to
+    `x-user-id`, NULL rows excluded, edges MUST set it, fails open by default); Stream Key rows
+    `account:{account_id}` (trading, reconciliation rows NULL-owned) and `copilot:{user_id}:default` (UI BFF).
+  - `services/xstockstrat-config/CLAUDE.md`: invariant #5 gains the bound-read paragraph (`boundReadUserId` on
+    `GetConfig`/`ListKeys`; admins and header-less callers keep the body id; `WatchConfig`/`GetSecret` unbound;
+    internal readers must not forward a user's `x-user-id` while asking about another user).
+  - `services/xstockstrat-agent/CLAUDE.md`: body-`user_id` sentence and the `get_config`/`list_config_keys`
+    rows say "bound to the caller for non-admins", echo = scope read.
+  - `docs/runbooks/mcp-tools.md`: both `user_id` rows and Returns lines, same semantics; tool count, names and
+    parameters unchanged.
+  - `docs/context-constitution-findings.md`: one `## Latent bugs` row for the gaps 263 accepts (P-03).
+  - `services/xstockstrat-ui/CLAUDE.md`: Copilot rail paragraph — `account:` keys are checked via trading
+    `ListBrokerAccounts`, every other key gets `owner_only` server-side.
+  - `docs/roadmap/features/merge-order.md`: verified only — one `fix-edge-owner-scope` row (`:78`).
+- TDD: N/A (docs). Baseline: verification greps 1, 2, 4, 6 returned nothing → after: all six return lines.
+- Teardown: context-constitution refresh skill unavailable; manual reconciliation found no drift (DEV-11).
+  Open item for the integration PR body: state the plugin was unavailable and the manual reconciliation done.
+

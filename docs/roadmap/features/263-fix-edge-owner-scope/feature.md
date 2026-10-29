@@ -65,4 +65,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–11 done; continue at Step 12 (docs: same-PR contract docs, findings, merge order)
+`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–12 done; all steps complete. Next: transition to `code-completed`, check `merge-order.md`, open the integration PR (sequential §5.6). The PR body must record the manual teardown (DEV-11).
