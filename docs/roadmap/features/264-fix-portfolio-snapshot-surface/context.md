@@ -543,3 +543,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - golangci-lint v2.14.0 reports `0 issues`.
 - Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`.
 - Deviations: RED probe not committed (Deviation Log). Out-of-scope changes: none.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+- **Up-front confirmation:** standing operator authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute. Checkpoints are
+  unattended ("report"). C-16 promotion is auto-confirmed unless it changes an existing @AC rule. Merge-train is
+  authorized; 255/275 are deferred. DB/prod steps are operator-only: open the PR and hold the merge. Status was
+  already `in-progress` (set 2026-10-28), so there is no status flip this session.
+- **Branch setup:** `git merge -X ours origin/main-dev` into the detached checkout of `origin/feature/fix-portfolio-snapshot-surface` (8ddff283).
+- **Re-spec gate §5.3:** step bodies 4, 5, 6, 7, 8, 9 and 10 were re-checked against the merged tree.
+  - Step 4: the gRPC adapter signature is at `portfolio_handler.go:305`. The Step-3 wiring (`:43`, `:54`, `:63`,
+    `:151`, `:312`) is recorded.
+  - Step 5: `StartSnapshotWriter` comment is at `:898`, func at `:899-911`, reader at `:900`. Other `s.cfg` uses are
+    at `:492` and `:973-974`. Delete by symbol.
+  - Step 6: 248's branch now commits `033_ledger_stream_resolve_timeout` (990ceb0b). Claims are 031 = 243,
+    032 = 244, 033 = 248; the double claim is resolved. 034 is still free on every remote ref. The row reason text was
+    updated, and the blockquote anchor moved to `merge-order.md:226`.
+  - Steps 7 and 8: no mismatch; a re-verified note was added.
+  - Step 9: `InsertSnapshot` is at `:936` and `max_drawdown_pct` at `:973`. config-governance anchors moved to
+    `:426`/`:108` after the main-dev merge.
+  - Step 10: gate state recorded. (a) passes because main-dev tops out at 030. (b) is not yet met because
+    031/032/033 exist only on the 243/244/248 branches.
