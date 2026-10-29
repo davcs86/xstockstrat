@@ -290,8 +290,9 @@ ruff check . && ruff format --check .
   a `BaseException` (design.md Open Risks).
 - Helpers `_sched_loop` `:381`, `_make_loop` `:47`, `_make_cfg` `:23`; `fundsignal_module.asyncio` sleep patched at `:496`
   and `:513`; `_tick` patched with `side_effect=_StopLoop` at `:501` and `:516` (re-grep these anchors before editing).
-- `app/engine/fundsignal_loop.py`: `_tick` `:128` (the `_advance_schedule(retry)` raise path `:155`), `run_forever`
-  `:158` (`await asyncio.sleep(await self._tick())` `:165`).
+- `app/engine/fundsignal_loop.py` (post-Step 3): `_tick` `:129` (the `_advance_schedule(retry)` raise path `:156`),
+  `run_forever` `:159`, which now ends `await run_supervised(self._tick, "fundsignal")` (`:165`) after
+  `retry_until_ok(self._seed_schedule, ...)` (`:161`); `run_supervised`/`retry_until_ok` imported at `:32`.
 - `tests/test_opportunity_refresh.py:109` `class _Stop(Exception)` is raised from the patched sleep, which Step 1
   places outside the `try`, so `test_startup_jitter_bounded` (`:93`) stays valid unchanged.
 - Servicer builder `make_servicer` imported from `tests.test_analysis_servicer` (`tests/test_opportunity_refresh.py:15`).
@@ -311,11 +312,12 @@ ruff check . && ruff format --check .
    recorder raising `_StopLoop` on the 4th call (jitter, backoff, post-tick, stop). Run `run_forever` under
    `pytest.raises(_StopLoop)`. Assert: the task did not end with the connection error, `_tick` ran again after the
    error (`next_sleep_seconds.await_count >= 2`, `run_once` awaited), the recorded sleeps contain `30`, and an ERROR
-   record names the error. RED today: the error escapes `run_forever` at `:165`.
+   record names the error. With Step 3 landed this pins the supervised `run_forever` (`:165`); confirm RED by
+   reverting `:165` to the pre-Step-3 direct tick in a scratch run (do not commit the revert).
 3. `@AC-2`: `run_once = AsyncMock(side_effect=asyncpg.PostgresConnectionError("down"))`, `_advance_schedule =
    AsyncMock(side_effect=[asyncpg.PostgresConnectionError("adv"), None])`, schedule due. Same sleep recorder. Assert a
-   further tick runs (`run_once.await_count >= 2`) and the connection error was logged. RED today: the `:155` raise
-   ends the loop.
+   further tick runs (`run_once.await_count >= 2`) and the connection error was logged. Pins that the `:156` raise is
+   absorbed by `run_supervised` (pre-Step-3 it ended the loop).
 4. `@AC-3` (new `tests/test_loop_supervision.py`, `pytest.mark.parametrize` over the three Examples rows): build the
    servicer with `make_servicer()`; set the attributes the early return checks to non-`None`
    (`_opportunities_repo` / `_readiness_cache_repo` + `_strategies_repo` / `_template_intents_repo`, and `_db_pool` an
@@ -398,7 +400,7 @@ ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- The file today covers only `resolve_environment` / `resolve_trading_mode` (`tests/test_config_watcher.py:11-38`).
+- The file today covers only `resolve_environment` / `resolve_trading_mode` (import `:11`, tests `:14-38`).
 - Dial-free construction idiom `ConfigWatcher.__new__(ConfigWatcher)` (indicators `tests/test_config_watcher.py:52`,
   ingest `:52`, comment "fails-074"). A live `__init__` dials `grpc.aio.secure_channel` with `mtls.channel_credentials()`
   / `mtls.target_override(...)` (`watcher.py:51-54`; `app/mtls.py:36,44`) and must be patched (ledger fails.md:125).
@@ -837,10 +839,10 @@ grep -n "conftest" tests/test_pnl_pattern_consumer.py   # expect none (single co
 
 **Codebase Evidence**:
 - Analysis `CLAUDE.md` § "Shared durable scheduler (feature 158)" `:130-141`, § "P&L pattern consumer (feature 042)"
-  `:143-172`, § "Ledger Events Emitted" `:549-559` (no `analysis.pnl.*` row today); fixed-invariant wording precedent
+  `:143-177` (next `###` heading at `:179`), § "Ledger Events Emitted" `:549-559` (no `analysis.pnl.*` row today); fixed-invariant wording precedent
   `:64` ("fixed invariants, not config keys").
 - `docs/patterns/config-startup.md:87` says the Python watcher "retries the WatchConfig stream every 2 s on
-  `AioRpcError`" — becomes drift after Steps 5/7/9; `:16` and `:149` say "on error" (still true).
+  `AioRpcError`" — becomes drift after Steps 5/7/9; `:16` says "on error" and `:149` "on stream error" (both still true).
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md:23` "Boot recompute task is unreferenced"
   (REFUTED, hygiene only) — Step 1 retains every boot task.
 - `docs/roadmap/features/merge-order.md` has no 259 entry of its own: `grep -n "259\|loop-supervision"` returns only
