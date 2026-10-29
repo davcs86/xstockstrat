@@ -23,6 +23,7 @@
 | 2026-10-28 | `in-progress` (step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2: regenerated Go/TS/Python portfolio stubs via `buf-gen.sh`; diff only in `portfolio/v1` |
 | 2026-10-28 | `in-progress` (step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3: shared `isFinite` guard; ConfirmOrder rejects non-finite/negative `filled_qty` and (when filling) `filled_avg_price` before the load; snapshot checks use the helper |
 | 2026-10-28 | `in-progress` (step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4: durable ConfirmOrder tests for `@AC-4` (non-finite/negative fill rejected before the load, no emit), `@AC-7` (PARTIALLY_FILLED/FILLED + one positions.synced each) and `@AC-10` (0/0 un-confirm → NEW + emit) |
+| 2026-10-29 | `in-progress` (step 4 done) | /sdd-execute sequential (sdd-batch-execute) — re-spec | Merged `origin/main-dev` (`-X ours`); re-specced Steps 5, 6, 12 line citations to the current tree (trading.go +5 from Steps 3-4 above :2178, +4 below it after main-dev dropped one line; test drift from Step 4; portfolio comment :114-115). No instruction or scope change |
 
 ---
 
