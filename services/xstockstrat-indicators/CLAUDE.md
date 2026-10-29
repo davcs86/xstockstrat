@@ -220,3 +220,12 @@ uv run pytest --cov=app --cov-fail-under=50  # with coverage
 uv sync
 uv run python -m app.main
 ```
+
+## Maintenance
+
+`app.maintenance.legacy_authors` reports and repairs `indicators.formulas` rows whose `author` is a legacy username instead of a user id. The owner cannot read those rows, because `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`. An operator runs it by hand. It is not part of the service process. It opens one `asyncpg` connection from a required `DATABASE_URL`, with no fallback, and does not use the `main.py` pool. Report mode writes nothing. Apply mode needs a confirmed plan whose sha256 digest matches. Follow `docs/runbooks/legacy-formula-authors.md` for the full procedure, including DBA sign-off, the pooled `:25061` URL with `DB_PGBOUNCER=true`, and restarting every instance afterwards.
+
+```bash
+uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json   # report
+uv run python -m app.maintenance.legacy_authors --apply --plan plan.json --users users.json --confirm-digest <sha256>   # apply
+```
