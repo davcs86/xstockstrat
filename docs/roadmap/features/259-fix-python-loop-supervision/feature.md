@@ -27,6 +27,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — analysis `ConfigWatcher._watch` reconnects after any `Exception`; watch task retained as `_watch_task` with an `_on_watch_done` exit log |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — `tests/test_config_watcher.py` @AC-5 (reconnect after a non-gRPC error, 2s sleep, `analysis-` client_id) and @AC-8 (retained `_watch_task`, ERROR exit log naming `config-watch-analysis`) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — indicators `ConfigWatcher._watch` reconnects after any `Exception`; watch task retained as `_watch_task` with an `_on_watch_done` exit log |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done — indicators `tests/test_config_watcher.py` @AC-5 (reconnect after a non-gRPC error, 2s sleep, `indicators-` client_id) and @AC-8 (retained `_watch_task`, ERROR exit log naming `config-watch-indicators`) |
 
 ---
 

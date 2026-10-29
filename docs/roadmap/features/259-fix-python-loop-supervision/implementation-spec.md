@@ -471,7 +471,7 @@ ruff check . && ruff format --check .
 
 ### Step 8 — test: indicators watcher reconnect and exit log (@AC-5, @AC-8 indicators rows)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify

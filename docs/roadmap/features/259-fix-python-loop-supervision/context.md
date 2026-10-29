@@ -771,3 +771,18 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   85.61% (≥50).
 - Files modified: `services/xstockstrat-indicators/app/config/watcher.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 8
+
+### Step 8 — test: indicators watcher reconnect and exit log (@AC-5, @AC-8 indicators rows) [done]
+- `tests/test_config_watcher.py`: added `test_watch_reconnects_after_non_grpc_exception` (@AC-5) and
+  `test_watch_task_retained_and_exit_logged` (@AC-8), mirroring Step 6 with the `indicators` namespace and the
+  `indicators-` client_id prefix. Inline single-consumer doubles (`_Done`, `_FakeStub`) (C-13). Existing getter tests
+  untouched (feature 244 rebase).
+- TDD: red came from a scratch revert of `app/config/watcher.py` to `430b726f~1`, not committed. Result: 2 failed
+  (`RuntimeError: boom` escaped `_watch`; `AttributeError` because `_watch_task` was missing). Green against the Step-7
+  file: 12 passed.
+- Verification: `uv run pytest tests/test_config_watcher.py -q` gives 12 passed. The full suite gives 296 passed with
+  coverage at 85.61% (≥50). `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
+- Deviations: none
