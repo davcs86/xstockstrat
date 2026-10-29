@@ -129,7 +129,7 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
 
 ### Step 1 — test: IBKR reference fixtures (ibind vectors, test keys, DH params, gitleaks scope)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/testdata/ibkr/signature_key.pem` — create
@@ -1182,3 +1182,26 @@ grep -n "feature 249" services/xstockstrat-trading/docs/context-constitution-fin
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — 2026-10-29 (sdd-execute sequential)
+
+- **`.gitleaks.toml` path allowlist for `vectors.json` (scope expansion, operator Option A).** The spec scoped
+  the gitleaks change to two line regexes for the PEM bodies. The generated `vectors.json` also trips the default
+  rules (fake OAuth tokens, signatures, the encrypted test secret), so the existing `[allowlist]` gains exactly
+  `paths = ['''services/xstockstrat-trading/internal/testdata/ibkr/vectors\.json''']` (OR with the regexes;
+  `regexTarget` unchanged), and the feature-249 comment block names `vectors.json` as generated test data with no
+  real secrets. Operator decision 2026-10-29 (session question tool: "Yes, run both"), confirming the earlier
+  Option A. The `[[allowlists]]` AND fallback was not needed: the line regexes suppress the multi-line
+  `private-key` finding (local `gitleaks dir` → "no leaks found").
+- **Generator: wrong-key decrypt guard for pycryptodome 4.2.0.** `PKCS1_v1_5.decrypt(ct, None)` in pycryptodome
+  4.2.0 returns empty bytes (not the `None` sentinel) for a wrong-key ciphertext, so ibind's
+  `calculate_live_session_token_prepend` returns `""` instead of raising. `gen_vectors.py` accepts either `""` or
+  the older `AttributeError` and fails on anything else. **Carried requirement for Step 4:** the Go decrypt must
+  fail closed on an empty plaintext (an empty prepend is a credential error, never a valid secret).
+- **`ibkr.go` uses one `//go:embed` per variable** instead of the single `//go:embed ibkr/*.pem ibkr/vectors.json`
+  line: each PEM binds to its own exported string, which needs a per-file directive. Same embedded file set.
+- **PEMs force-added past the root `.gitignore` `*.pem` rule** (`.gitignore:55`, "never commit private keys").
+  The three fixture PEMs are tracked with `git add -f`, so the rule stays in force for every other path and
+  `.gitignore` is not edited. The committed keys are the operator-approved test keys (2026-10-29).
+- ibind SHA unchanged (`759ec3a1`). Regenerated locally with pycryptodome 4.2.0 from the pinned ibind source:
+  output byte-identical to the committed `vectors.json`.

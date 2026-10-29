@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-28
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
 | 2026-10-28 | `implementation-ready` (no change) | /sdd-execute (re-spec) | Steps 1, 4, 6, 7, 15 re-grounded against the codebase after merging origin/main-dev (line-drift only; substance unchanged) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: IBKR reference fixtures (ibind vectors, test keys, DH params) + gitleaks scope incl. the operator-approved `vectors.json` path allowlist |
 
 ---
 

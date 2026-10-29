@@ -283,3 +283,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (session entry above).
 - Still owed (carried): the FR-3 operator ruling at the Step 2 checkpoint, or a recorded deferral to the
   integration-PR merge.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 1
+
+- Step 1 done: `internal/testdata/ibkr/` (two committed 2048-bit RSA test keys, RFC 3526 group-14 `dhparam.pem`,
+  `gen_vectors.py`, generated `vectors.json`) and `internal/testdata/ibkr.go` (`IBKRSignatureKeyPEM`,
+  `IBKREncryptionKeyPEM`, `IBKRDHParamPEM`, `MustIBKRVectors()`). TDD N/A (fixture data).
+- Operator decision (2026-10-29, session question tool, "Yes, run both"): Option A, the `.gitleaks.toml`
+  `[allowlist]` gains a `paths` entry for exactly `.../testdata/ibkr/vectors.json`; the comment block names it as
+  generated test data with no real secrets. Recorded in the spec's Deviation Log.
+- Verification: `go vet`/`go test ./internal/testdata/` pass; a throwaway test confirmed `MustIBKRVectors()`
+  decodes (14 request vectors, 2 DH cases, non-empty PEMs). `gitleaks dir .../ibkr` → no leaks found; a fresh key
+  is still detected both standalone and when dropped inside `ibkr/` (exit 1). Regeneration with pycryptodome 4.2.0
+  from ibind `759ec3a1` is byte-identical.
+- The root `.gitignore:55` ignores `*.pem`; the three fixture PEMs are force-added (`git add -f`), `.gitignore`
+  unchanged (Deviation Log).
+- Carried to Step 4: pycryptodome 4.2.0 returns empty bytes for a wrong-key PKCS#1 v1.5 decrypt, so the Go decrypt
+  must fail closed on an empty plaintext.
+- Still owed: the FR-3 operator ruling at the Step 2 checkpoint (or a recorded deferral to the integration-PR merge).
