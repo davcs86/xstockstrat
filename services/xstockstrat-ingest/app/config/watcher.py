@@ -66,7 +66,19 @@ class ConfigWatcher:
             endpoint, mtls.channel_credentials(), options=mtls.target_override("xstockstrat-config")
         )
         self._stub = config_pb2_grpc.ConfigServiceStub(self._channel)
-        asyncio.get_event_loop().create_task(self._watch())
+        self._watch_task = asyncio.get_event_loop().create_task(
+            self._watch(), name=f"config-watch-{namespace}"
+        )
+        self._watch_task.add_done_callback(self._on_watch_done)
+
+    def _on_watch_done(self, task):
+        try:
+            if task.cancelled():
+                return
+            exc = task.exception()
+            log.error("config watch task %s exited unexpectedly: %r", task.get_name(), exc)
+        except Exception:  # noqa: BLE001 — a done-callback must never raise
+            pass
 
     def _build_watch_request(self) -> config_pb2.WatchConfigRequest:
         return config_pb2.WatchConfigRequest(
@@ -88,8 +100,8 @@ class ConfigWatcher:
                         snapshot.namespace,
                         snapshot.version,
                     )
-            except grpc.aio.AioRpcError as e:
-                log.warning("config stream error: %s, reconnecting in 2s", e)
+            except Exception as e:  # noqa: BLE001 — any error reconnects; CancelledError propagates
+                log.warning("config stream error (%s): %s, reconnecting in 2s", type(e).__name__, e)
                 await asyncio.sleep(2)
 
     async def wait_for_snapshot(self, timeout_seconds: float = 90.0):

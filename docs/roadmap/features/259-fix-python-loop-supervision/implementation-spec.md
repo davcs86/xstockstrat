@@ -506,7 +506,7 @@ ruff check . && ruff format --check .
 
 ### Step 9 — service: ingest ConfigWatcher reconnects after any exception; watch task retained (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
