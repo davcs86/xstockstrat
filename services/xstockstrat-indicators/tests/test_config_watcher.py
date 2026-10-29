@@ -6,6 +6,7 @@ docs/reports/2026-08-07-watchconfig-scope-omission-defect.md
 (pruned 2026-10-05; `git show 2ce8de0a:<path>`).
 """
 
+import pytest
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 
@@ -48,16 +49,16 @@ def test_resolve_trading_mode_unset_defaults_paper():
 # ---------------------------------------------------------------------------
 
 
-def _str_watcher(key: str, val: str) -> ConfigWatcher:
+def _watcher(key: str, field: str, val) -> ConfigWatcher:
     w = ConfigWatcher.__new__(ConfigWatcher)  # dial-free (fails-074)
     snap = config_pb2.ConfigSnapshot()
-    snap.values[key].string_val = val  # sets the oneof case → HasField True even for ""
+    setattr(snap.values[key], field, val)  # sets the oneof case → HasField True even for ""
     w._snapshot = snap
     return w
 
 
 def test_get_str_present_honors_empty():
-    w = _str_watcher("indicators.sandbox.allowed_imports", "")
+    w = _watcher("indicators.sandbox.allowed_imports", "string_val", "")
     assert (
         w.get_str_present("indicators.sandbox.allowed_imports", "numpy,pandas,math,statistics")
         == ""
@@ -71,6 +72,32 @@ def test_get_str_present_defaults_when_absent():
 
 
 def test_sandbox_allowed_imports_empty_denies_all():
-    w = _str_watcher("indicators.sandbox.allowed_imports", "")
+    w = _watcher("indicators.sandbox.allowed_imports", "string_val", "")
     # RED on buggy: ["numpy", "pandas", "math", "statistics"]
     assert w.sandbox_allowed_imports == []
+
+
+@pytest.mark.parametrize(
+    ("key", "field", "stored", "prop", "resolved"),
+    [
+        ("indicators.sandbox.timeout_ms", "int_val", 3000, "sandbox_timeout_ms", 3000),
+        (
+            "indicators.sandbox.memory_bytes",
+            "int_val",
+            100663296,
+            "sandbox_memory_bytes",
+            100663296,
+        ),
+        (
+            "indicators.sandbox.allowed_imports",
+            "string_val",
+            "numpy,math",
+            "sandbox_allowed_imports",
+            ["numpy", "math"],
+        ),
+    ],
+)
+def test_sandbox_getters_resolve_full_dotted_rows(key, field, stored, prop, resolved):
+    # AC-2 (feature 243): getters must read the full-dotted key that migration 031 stores.
+    w = _watcher(key, field, stored)
+    assert getattr(w, prop) == resolved

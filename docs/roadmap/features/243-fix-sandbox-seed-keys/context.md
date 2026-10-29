@@ -74,7 +74,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - migration NNN: 031 claimed here; 241-fix-config-audit-author-spoof may take 031 if its design adopts a config
     migration (`241/product-spec.md:49`). Second to merge renumbers to 032. 031 still free on origin/main-dev
     (a8e0f58d) 2026-10-20; re-check at impl-spec review.
-  - `services/xstockstrat-indicators/app/config/watcher.py`: 244-fix-python-config-stored-zero edits `get_int`
+  - `services/xstockstrat-indicators/app/config/watcher.py`: 244-fix-python-config-zero-trap edits `get_int`
     bodies (`:96,114,130`); sandbox getters call `get_int` (`:134,138`). Shared test home
     `tests/test_config_watcher.py`. Soft ordering; second lander reconciles.
   - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` `SCALAR_BOUNDS_REGISTRY` (`:100-146`): conditional
@@ -309,3 +309,218 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Trunk drift: the root checkout (`ccr-f537be2d-6mwmqf`) and main-dev hold only the 2026-10-20 triage state of
     243 (status draft, AC-1 3000, no AC-4/AC-5). All progress through implementation-ready is on
     `feature/fix-sandbox-seed-keys`; run `/sdd-sync` before promotion.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-sandbox-seed-keys`, `git merge -X ours origin/main-dev` (30465a2f).
+- Re-spec of Steps 1-5 against the current codebase (implementation-spec.md only; step bodies):
+  - Step 1: `ci.yml` job `migration-rerun` `:633` → `:643`, `/repo` mount `:668` → `:678`. `migration-rerun.sh`
+    pass 3 is `:111-181` (was cited `:173-181`, the tail of its recovery check); pass 2 at `:91` now cited.
+    main-dev added pass 4 (`:192+`), which runs after the assertion loop (`:183-190`) and touches only
+    marketdata, so it does not affect `config-031.sql`. The header text changes from "after all passes" to "after passes 0-3".
+  - Step 2: the ledger cite for "029 rename is not conflict-safe" moves from `fails.md:2953-2957` (now the 242
+    entry) to `fails.md:2969-2975` (`:2972`). 031 is still free: origin/main-dev ends at `030_marketdata_edgar_snapshot_keys`.
+  - Steps 3-5: re-verified, no mismatch. Hotfix #1263 has landed on main-dev (`_clamp_override`). It does not touch
+    `tests/test_config_watcher.py`. Feature 241 has not landed, so `config-governance.md:95-103` is unchanged.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: implementation-ready → in-progress.
+- Up-front confirmation: the operator approved the plan under standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Recorded answers:
+  - checkpoints are unattended (mode `report`);
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred.
+- Mode: sequential, one commit per step on `feature/fix-sandbox-seed-keys`, single integration PR at the end.
+  Step 5 (operator G1 staging gate plus the prod read-back) still needs the operator's pasted output.
+  Standing authorization does not stand in for that output (`operator-db-access.md:58`).
+- Next: Step 1.
+
+### Step 1 — test: DB assertions for migration 031 (`config-031.sql`) [done]
+- Created `scripts/migration-assertions/config-031.sql`. It has three blocks:
+  - block 1: AC-1, no bare `sandbox.*` rows, and exactly one global full-dotted row per env with 5000 / 134217728 / seed imports and int/int/string;
+  - block 2: AC-3, the headroom/VmData description, with no "memory cap" and no "64MB";
+  - block 3: inside `BEGIN;`…`ROLLBACK;`, fixtures (i) and (ii), the `b031` baseline, a `\ir` replay of the 031 up-file, then the AC-4/AC-5 asserts. These include an `EXCEPT` both ways against `b031`, outside the indicators `sandbox.*` rows.
+- No psql `:var` is used, so the runner's `-v seed_user_id` is inert.
+- TDD (AC-1): RED a is static. Sequential mode has no step PR and no DB. With 031 absent, the bare seeds remain, so block 1 raises `AC-1:` before reaching the `\ir`.
+- GREEN (offline): the Verification greps pass:
+  - AC-1 RAISE=2, AC-3 RAISE=1, `AC-4:`=5, `AC-5:`=2;
+  - the `\ir` line is at `:96`;
+  - `BEGIN;`=1 and `ROLLBACK;`=1.
+- `pglast` 7.x, run in a scratch venv and not added to the repo, parses 10 statements and 3 PL/pgSQL bodies.
+- The live GREEN is the integration PR's `migration-rerun` job, after Step 2.
+- Files modified: `scripts/migration-assertions/config-031.sql`
+- Deviations: RED/GREEN capture moves from the step PR to the integration PR, with a static RED a (Deviation Log).
+
+### Step 2 — migration: `031_heal_indicators_sandbox_keys_full_dotted` (twin-wins heal, forward-only down) [done]
+- Created the 031 up-file with statements S0-S4 in order:
+  - S0: `CREATE TABLE IF NOT EXISTS config.config_values_premigration_031` with the explicit column list (no ciphertext column);
+  - S1: twin-wins DELETE matched on the full `config_values_scope_uniq` tuple;
+  - S2: rename plus literal values for global rows only, with the sentinel and `caller_identity = NULL`;
+  - S3: six-row global insert with `ON CONFLICT … DO NOTHING`;
+  - S4: headroom/VmData description on every `indicators.sandbox.memory_bytes` row, attributed.
+- Created the down-file: a forward-only `SELECT 1;` that keeps `premigration_031`.
+- TDD: N/A (migration). RED b is static, not a pushed draft (Deviation Log). GREEN is the integration PR's
+  `migration-rerun` job running `config-031.sql`.
+- Verification (offline): both files exist; 030 then 031, with no other `031*` on `origin/main-dev`. Grep results:
+  - premigration_031 = 1, value_encrypted = 0, `COALESCE(t.user_id` = 1, ON CONFLICT = 1;
+  - sentinel = 8, `value_type =` = 0, pg_notify/BEGIN/COMMIT/headers = 0;
+  - down `SELECT 1;` = 1.
+- `pglast` 7.21 parses 5 statements (up) and 1 statement (down). It ran in a scratch venv and was not added to the repo. The down is forward-only by design, with no inverse.
+- Files modified: `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.up.sql`,
+  `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.down.sql`
+- Deviations: RED b is captured statically; the S0 comment wording avoids the literal column name to satisfy the
+  `value_encrypted` = 0 grep (Deviation Log).
+
+### Step 3 — test: AC-2 indicators watcher getter-contract test [done]
+- `tests/test_config_watcher.py`: `_str_watcher(key, val)` generalized to `_watcher(key, field, val)` (`setattr` on the
+  oneof field, dial-free comment kept); both callers now pass `"string_val", ""`. Added `import pytest` and the
+  parametrized `test_sandbox_getters_resolve_full_dotted_rows` over the three `@AC-2` Examples rows
+  (3000 / 100663296 / "numpy,math" → ["numpy", "math"]). No `_int_watcher`, no conftest move (C-18, C-13).
+- TDD: red N/A — no behavior change; characterization test added (tdd-gate.md escape; the getters already read the
+  full-dotted keys). Sensitivity check, not committed: with `watcher.py:134,138,143` temporarily pointed at bare
+  `sandbox.*` keys, all 3 new cases FAILED; the file was then restored with `git checkout`.
+- GREEN: `pytest tests/test_config_watcher.py -q` 13 passed; full suite 297 passed, coverage 85.61% (≥ 50%);
+  `ruff check .` clean; `ruff format --check .` 40 files formatted; `_str_watcher` grep and conftest grep empty.
+- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
+- Deviations: none.
+
+### Step 4 — docs: headroom wording, full-dotted key, findings row, sentinel convention, teardown [done]
+- `services/xstockstrat-indicators/CLAUDE.md:12` and `docs/runbooks/indicator-builder.md:167`: "memory cap" → "memory headroom".
+- `docs/runbooks/config-rollout.md:180`: example read uses `'indicators.sandbox.timeout_ms'` (241's `:76-100` hunks untouched).
+- Module findings "Inert indicators seeds" row: status **resolved (feature 243)**; names migration 031 (5000 / 134217728 /
+  seed imports, headroom descriptions) and keeps 001/002 untouched (F-01). Row "Unclamped override" untouched.
+- `docs/patterns/config-governance.md` Author-sentinel table: added `system:config-migration-<NNN>` (pre-241 table on
+  this branch; if 241 lands first, rebase the row into its rewritten section).
+- TDD: N/A (docs). Verification: both "memory cap" greps empty; full-dotted `snap.values.get` = 1 hit (`:180`);
+  findings row shows resolved; `system:config-migration-` = 1 hit (`config-governance.md:104`).
+- Teardown: the `/context-forge:context-constitution refresh` skill is not available in this session (only
+  `context-scrubber` is listed). Manual reconciliation of every touched file against code: watcher getters
+  (`watcher.py:133-145`) read full-dotted keys with defaults 5000 / 128 MiB / seed imports, matching the CLAUDE.md
+  Config Keys table and indicator-builder table; 031 up-file sets `updated_by = 'system:config-migration-031'` and
+  `caller_identity = NULL` (`:41-43`) and writes the headroom description (`:59,63`), matching the new sentinel row and
+  findings text. `scrubberExtraTargets` (README.md, ui-ux-governance.md) not touched. Drift noticed but out of scope:
+  findings row "Unclamped override" still reads "fixed on `hotfix/fix-sandbox-overrides-unclamped`" although
+  `servicer.py:66,282-283` already carries `_clamp_override` — left for the hotfix #1263 back-merge (spec forbids touching it).
+  The integration PR body must record both the plugin unavailability and this manual reconciliation.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/config-rollout.md`,
+  `docs/runbooks/indicator-builder.md`, `services/xstockstrat-indicators/docs/context-constitution-findings.md`,
+  `docs/patterns/config-governance.md`
+- Deviations: none.
+
+## Session 2026-10-28 — re-spec Step 5 (sdd-execute sequential, sdd-batch-execute)
+
+- Authorization: operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute). Checkpoints are unattended (`report`), C-16 promotion is
+  auto-confirmed unless it changes an existing @AC rule, merge-train is authorized, and 255/275 are deferred.
+  DB and prod steps stay operator-only: open the PR, hold the merge.
+- Branch setup: detached at `origin/feature/fix-sandbox-seed-keys`, `git merge -X ours origin/main-dev` (3de34155).
+- Status was already `in-progress`, so no status change.
+- Re-spec of Step 5 only (the single pending step). Its Files path and every evidence cite still resolve
+  (`operator-db-access.md:42-49,57,58`, `001:62-64`, `002:61-63`, `017:38`, `recon.md:30`, `design.md:165,175`,
+  `fails.md:642-644,2909-2912`). `origin/main-dev` still ends at `030_marketdata_edgar_snapshot_keys`.
+- Stale fact: `origin/feature/fix-python-config-stored-zero` (244, `d2002841`) adds config migration
+  `032_analysis_zero_trap_descriptions`. If 244 merges first, environments at 032 skip 031 silently
+  (`fails.md:2909-2912`). Instruction 1 now also scans every remote branch, and 243 must merge before 244
+  (otherwise 031 is renumbered). This supersedes the Step Dependencies line "Neither needs a `merge-order.md` row".
+  The operator still has to decide on the 243 → 244 `merge-order.md` row; this run does not add it.
+
+### Step 5 — config: G1 staging gate before the `main-dev` merge; production advisory read-back [pending — operator]
+- NNN re-check (instruction 1), 2026-10-28: `origin/main-dev` ends at `030_marketdata_edgar_snapshot_keys`, so no
+  renumber. Other remotes hold `031_heal_indicators_sandbox_keys_full_dotted` (this branch) and
+  `032_analysis_zero_trap_descriptions` (244, `d2002841`). 243 must merge into `main-dev` before 244, or 032
+  reaching an environment first makes golang-migrate skip 031 (`fails.md:2909-2912`). The 243→244 ordering and
+  its `merge-order.md` row await an operator decision.
+- G1 staging: not run. The executor holds no DB access (`operator-db-access.md:58`); the operator pastes the
+  query output and a verdict here. Exact commands are in the Deviation Log entry "Step 5 deferred to operator".
+- Production advisory read-back: after the promotion deploy; does not gate `done`.
+- Integration PR merge is held until both entries above are recorded.
+
+## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-sandbox-seed-keys (feature 243)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | config.config_values state after the corrective migration; config owns the table and migrations |
+| AC-2 | services/xstockstrat-indicators/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | The Then asserts on the indicators watcher properties |
+| AC-3 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | Asserts on config row descriptions |
+| AC-4 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | Asserts on migration behaviour and config_values_scope_uniq |
+| AC-5 | services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature | CREATE | NEW | Asserts on migration behaviour; value preserved |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-sandbox-seed-keys.feature (CREATE) ---
+# Promoted from docs/roadmap/features/243-fix-sandbox-seed-keys/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
+Feature: fix-sandbox-seed-keys (config migration guarantees)
+
+  @AC-1 @FR-1 @regression @feature-243
+  Scenario: After the corrective migration no bare sandbox keys remain and the full-dotted rows exist
+    Given config migrations up to the corrective migration have run
+    When config.config_values is queried for namespace "indicators"
+    Then no row has key "sandbox.timeout_ms", "sandbox.memory_bytes" or "sandbox.allowed_imports"
+    And rows "indicators.sandbox.timeout_ms", "indicators.sandbox.memory_bytes" and "indicators.sandbox.allowed_imports" exist for environment "production"
+    And the same three full-dotted rows exist for environment "staging"
+    And in environments "production" and "staging" the "indicators.sandbox.timeout_ms" row has value 5000
+    And in environments "production" and "staging" the "indicators.sandbox.memory_bytes" row has value 134217728
+    And in environments "production" and "staging" the "indicators.sandbox.allowed_imports" row has value "numpy,pandas,math,statistics"
+    And in both environments the "indicators.sandbox.timeout_ms", "indicators.sandbox.memory_bytes" and "indicators.sandbox.allowed_imports" rows have value_type "int", "int" and "string"
+
+  @AC-3 @FR-3 @regression @feature-243
+  Scenario: The memory_bytes row describes headroom, not an absolute cap
+    Given config migrations up to the corrective migration have run
+    When the "indicators.sandbox.memory_bytes" rows are read
+    Then one row is returned for each of environments "production" and "staging"
+    And each row's description names headroom above the measured VmData baseline
+    And no row's description contains "memory cap"
+    And no row's description contains "64MB"
+
+  @AC-4 @FR-4 @regression @feature-243
+  Scenario: The heal does not abort when a full-dotted row already exists in the same scope
+    Given config migrations up to 030 have run
+    And a global row "indicators.sandbox.timeout_ms" with value 4000 exists for environment "production" alongside the bare "sandbox.timeout_ms" row
+    When the corrective migration runs
+    Then the migration completes with no unique violation on config_values_scope_uniq
+    And exactly one global "indicators.sandbox.timeout_ms" row exists for environment "production"
+    And no "sandbox.timeout_ms" row exists for environment "production"
+
+  @AC-5 @FR-4 @regression @feature-243
+  Scenario: A pre-existing full-dotted row keeps its value and the bare row is removed
+    Given config migrations up to 030 have run
+    And a global row "indicators.sandbox.timeout_ms" with value 4000 exists for environment "production" alongside the bare "sandbox.timeout_ms" row
+    When the corrective migration runs
+    Then the global "indicators.sandbox.timeout_ms" row for environment "production" has value 4000
+    And no "sandbox.timeout_ms" row exists for environment "production"
+
+--- /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-sandbox-seed-keys.feature (CREATE) ---
+# Promoted from docs/roadmap/features/243-fix-sandbox-seed-keys/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
+Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
+
+  @AC-2 @FR-2 @regression @feature-243
+  Scenario Outline: The indicators watcher resolves the stored full-dotted sandbox row, not the code default
+    Getter-contract guard: passes on pre-fix code; the red-first proof is @AC-1, @AC-3 and @AC-4.
+    Fixture values differ from the code defaults so a default cannot satisfy the Then.
+    Given the WatchConfig snapshot for environment "production" carries row "<key>" with fixture value <stored>
+    When xstockstrat-indicators receives its WatchConfig snapshot for namespace "indicators"
+    Then the watcher property <property> returns <resolved>
+
+    Examples:
+      | key                                | stored       | property                | resolved          |
+      | indicators.sandbox.timeout_ms      | 3000         | sandbox_timeout_ms      | 3000              |
+      | indicators.sandbox.memory_bytes    | 100663296    | sandbox_memory_bytes    | 100663296         |
+      | indicators.sandbox.allowed_imports | "numpy,math" | sandbox_allowed_imports | ["numpy", "math"] |
+
+### Notes / ambiguities / conflicts
+- Routing: AC-1, AC-3, AC-4 and AC-5 go to config because they assert on config.config_values and the config migrations. AC-2 goes to indicators because it asserts on the watcher. I did not check where the migration files physically live.
+- No OVERLAP or CONFLICT. I grepped all `services/*/acceptance` suites and `docs/sdd/business-rules/platform.feature` for the three `sandbox.*` keys, and no `@feature-243` tag exists in any suite.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature uses `indicators.sandbox.memory_bytes` only as a sandbox-enforcement input (lines 17, 24, 31). It does not assert seeded rows or watcher resolution.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature covers the empty allow-list being honored. This is compatible with AC-2.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/analysis-concurrency-offload.feature line 15 only mentions the timeout.
+- AC-4 and AC-5 reference "migration 030" and "the corrective migration" (031 per feature.md). The text is promoted verbatim.
+- The `Feature:` header descriptions in the two new files are mine. All scenario text is verbatim from the source.
+
+### Coverage check
+- Source scenarios: 5 (AC-1 to AC-5). Planned: 5 NEW, 0 DUP, 0 OVERLAP. Nothing was skipped.
+```
