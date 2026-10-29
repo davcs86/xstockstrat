@@ -607,3 +607,148 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   so (Deviation Log, Step 9).
 - All 9 steps done → `status.md` `code-completed` (separate commit). No ledger insight appended.
 - Next: merge `origin/main-dev` into the branch (Step 7 deviation), then the §5.6 integration PR.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-fundsignal-emit-accounting (feature 260)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-emit-accounting.feature | CREATE | NEW | failed emit retried same day; row carries signal_id |
+| AC-2 | same | CREATE | NEW | signals_emitted counts only accepted |
+| AC-3 | same | CREATE | NEW | no orphan claim after abort |
+| AC-4 | same | CREATE | NEW | failed fetch chunk reported as partial/deferred |
+| AC-5 | same | CREATE | NEW | abort keeps earlier confirmed rows |
+| AC-6 | same | CREATE | NEW | failed chunk wins over budget cutoff |
+| AC-7 | same | CREATE | NEW | confirmed symbols skipped, zero fetches |
+| AC-8 | same | CREATE | NEW | lost-response retry resends same signal, counts dedup |
+| AC-9 | same | CREATE | NEW | one-symbol retry keeps day's cross-sectional direction |
+| AC-10 | same | CREATE | NEW | force re-emit anchors valid_until at run time |
+
+All ten are owned by xstockstrat-analysis (observable subject: the producer's run_once, analysis.fundsignal_emitted and analysis.fundsignal_runs). IngestSignal appears only as a mocked dependency, so none is cross-cutting. platform.feature is not touched.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-fundsignal-emit-accounting.feature (CREATE) ---
+# Durable business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 260's
+# acceptance.feature on code-completion; @feature-260 marks provenance. These are the guarantees a
+# future feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: fix-fundsignal-emit-accounting (bug fix)
+  Regression guard for docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md:
+  a failed fundamentals emit burns the day's claim; a failed fetch chunk vanishes from a "completed" run.
+
+  @AC-1 @FR-1 @regression @feature-260
+  Scenario: A symbol whose emit failed is emitted on the next same-day run
+    Given the fundamentals producer scores "AAPL" at 0.85 with source "fundamentals" on 2026-10-21
+    And IngestSignal fails with UNAVAILABLE on the first run
+    When run_once runs with force false, and then runs again with IngestSignal healthy on 2026-10-21
+    Then IngestSignal is called for "AAPL" on the second run
+    And the fundsignal_emitted row for ("AAPL", "fundamentals", 2026-10-21) carries the signal_id ingest returned
+
+  @AC-2 @FR-2 @regression @feature-260
+  Scenario: signals_emitted counts only signals ingest accepted
+    Given the producer scores "AAPL" at 0.85 and "MSFT" at 0.90
+    And IngestSignal succeeds for "MSFT" and fails with UNAVAILABLE for "AAPL"
+    When run_once runs with force false
+    Then the finished run records signals_emitted 1
+
+  @AC-3 @FR-3 @regression @feature-260
+  Scenario: A cycle aborted by a system-write rejection leaves no orphan claim
+    Given the producer scores "AAPL" at 0.85
+    And IngestSignal fails with NOT_FOUND for "AAPL"
+    When run_once runs with force false
+    Then the run is aborted
+    And no fundsignal_emitted row without a signal_id exists for ("AAPL", "fundamentals", 2026-10-21)
+
+  @AC-4 @FR-4 @regression @feature-260
+  Scenario: Symbols from a failed fetch chunk are reported, not silently dropped
+    Given the producer's universe is 60 symbols and its daily call budget is 200
+    And the first GetFundamentalsMulti chunk of 50 symbols fails with UNAVAILABLE
+    When run_once runs with force false
+    Then the finished run's status is "partial"
+    And the run's deferred_count is 50
+    And the run's symbols_processed is 10
+
+  @AC-5 @FR-3 @regression @feature-260
+  Scenario: A cycle abort keeps the confirmed rows of symbols emitted before it
+    The producer emits in sorted symbol order, so "AAPL" is processed before "MSFT".
+
+    Given the producer scores "AAPL" at 0.85 and "MSFT" at 0.90
+    And IngestSignal accepts "AAPL" and fails with NOT_FOUND for "MSFT"
+    When run_once runs with force false
+    Then the run is aborted with signals_emitted 1
+    And the fundsignal_emitted row for ("AAPL", "fundamentals", 2026-10-21) carries the signal_id ingest returned
+    And no fundsignal_emitted row without a signal_id exists for ("MSFT", "fundamentals", 2026-10-21)
+
+  @AC-6 @FR-4 @regression @feature-260
+  Scenario: A failed fetch chunk wins over a budget cutoff in the run status
+    Given the producer's universe is 120 symbols and its daily call budget is 2
+    And the first GetFundamentalsMulti chunk of 50 symbols fails with UNAVAILABLE
+    And the second chunk of 50 symbols succeeds
+    When run_once runs with force false
+    Then the finished run's status is "partial"
+    And the run's deferred_count is 70
+    And the run's symbols_processed is 50
+
+  @AC-7 @FR-1 @regression @feature-260
+  Scenario: Symbols confirmed earlier the same day are skipped with zero fetch calls
+    Given fundsignal_emitted rows carrying a signal_id exist for "AAPL" and "MSFT" with source "fundamentals" on 2026-10-21
+    When run_once runs with force false over the universe "AAPL", "MSFT" on 2026-10-21
+    Then GetFundamentalsMulti is called 0 times
+    And IngestSignal is not called
+    And the finished run records signals_emitted 0
+
+  @AC-8 @FR-1 @FR-2 @feature-260
+  Scenario: A non-force retry after a lost IngestSignal response resends the same signal and counts the dedup
+    Ingest absorbs the retry only while ingest.signals.dedup_window_hours > 0 and the conviction is
+    unchanged between attempts. A marketdata cache refresh that changes the score, or a window of 0,
+    lets ingest store a second row.
+
+    Given the producer scores "AAPL" at 0.85 and "MSFT" at 0.90 with source "fundamentals" on 2026-10-21
+    And analysis.fundsignal.valid_days is 90
+    And on the first run IngestSignal accepts "MSFT" and fails with UNAVAILABLE for "AAPL" after ingest committed the signal
+    When run_once runs with force false, and then runs again on 2026-10-21 with IngestSignal returning the committed signal_id with deduplicated true for "AAPL"
+    Then both IngestSignal requests for "AAPL" carry the same direction and conviction
+    And both carry valid_until 2027-01-19T00:00:00Z
+    And the second run records signals_emitted 1
+    And the fundsignal_emitted row for ("AAPL", "fundamentals", 2026-10-21) carries the returned signal_id
+
+  @AC-9 @FR-1 @feature-260
+  Scenario: A one-symbol retry keeps the day's cross-sectional direction
+    Cuts are computed over the day's stored scores plus the run's own scores. The same day-wide cuts
+    apply to a budget_deferred resume and to a non-force override_symbols scan. A retry's direction can
+    still flip at a cut boundary when min_conviction_to_emit > 0 or some symbols failed scoring, because
+    the stored rows are not the first run's full score set.
+
+    Given fundsignal_emitted rows carrying a signal_id exist on 2026-10-21 for "MSFT" at 0.90, "NVDA" at 0.70 and "GOOG" at 0.50
+    And the buy quantile is 0.80 and the sell quantile is 0.20
+    And "AAPL" scores 0.10 and has no fundsignal_emitted row on 2026-10-21
+    When run_once runs with force false over the universe "AAPL", "GOOG", "MSFT", "NVDA"
+    Then IngestSignal is called once, for "AAPL", with direction "sell"
+
+  @AC-10 @FR-1 @feature-260
+  Scenario: A force run re-emits with a validity anchored at the run time, not the run date
+    Pins the anchor asymmetry: date-anchoring force runs would make a same-day force re-emit an
+    ingest dedup no-op.
+
+    Given a fundsignal_emitted row carrying a signal_id exists for ("AAPL", "fundamentals", 2026-10-21)
+    And analysis.fundsignal.valid_days is 90
+    When run_once runs with force true at 2026-10-21T15:30:00Z
+    Then IngestSignal is called for "AAPL"
+    And its valid_until is 2027-01-19T15:30:00Z, not 2027-01-19T00:00:00Z
+
+### Notes / ambiguities / conflicts
+- Dedup: grepped all analysis suites. The only other fundsignal suites are fix-fundamentals-signal-producer.feature (feature 156, schedule/cadence only: @AC-1..7), fix-fundsignal-neutral-score.feature (feature 246, unscored-symbol skipping), and fundsignal-watchlist-universe.feature. None asserts emit accounting, claim semantics, signals_emitted, deferred_count/partial status, or valid_until anchoring. No OVERLAP, no CONFLICT.
+- Compatibility checks: 246's "symbols_processed still counts unscored symbols" (analysis CLAUDE.md) is consistent with AC-4/AC-6 (symbols_processed counts only fetched symbols; failed-chunk symbols are deferred). 156's AC-4 (caught cycle error advances blocked_until_ms by retry_seconds) is untouched: AC-3/AC-5 abort via _abort_cycle without changing schedule semantics.
+- The services/xstockstrat-analysis/CLAUDE.md "Idempotency" bullet (claim-before-emit wording, "force=true re-emits by clearing the day's rows first") is prose, not a promoted @AC rule. It will likely need a doc update from this feature's execution, but that is not part of promotion.
+- The scenario-level description lines in AC-5, AC-8, AC-9 and AC-10 are kept verbatim. @feature-260 is appended after the original tags, and original @AC/@FR/@regression tags are preserved. The header comment follows the 156 suite format. The acceptance/ directory already exists.
+- Source file read from the local working tree at docs/roadmap/features/260-fix-fundsignal-emit-accounting/acceptance.feature. I did not diff it against origin/feature/fix-fundsignal-emit-accounting, so the orchestrator should confirm the two match before writing.
+
+### Coverage check
+- Source scenarios: 10 (AC-1..AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT, 0 skipped. Counts match.
+```
+
+- Source check (2026-10-29): the main-worktree `acceptance.feature` and the copy on `origin/feature/fix-fundsignal-emit-accounting` (`a3b8635b`) are byte-identical (`diff` empty).
+- Nothing is written to the durable suite until the operator confirms this plan.
