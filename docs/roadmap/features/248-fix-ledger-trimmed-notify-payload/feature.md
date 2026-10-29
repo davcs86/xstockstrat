@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-28
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started under operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f); Step 3 onward held on the unmet 252 precondition |
 | 2026-10-28 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | Step 1: three Blocking Dependencies rows appended to `merge-order.md` (248 after 252, 243, 244); Steps 3-11 still held on the unmet 252 precondition |
 | 2026-10-28 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2: config `033_ledger_stream_resolve_timeout.{up,down}.sql` seeds `ledger.stream.resolve_timeout_ms` (int, 2000, staging + production); Steps 3-11 still held on the unmet 252 precondition |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec §5.3 on merged-up tree `b6e518a7` (merge with `origin/main-dev` `8082157a`: already up to date; ledger-guard clean): Steps 3-11 aligned with the current codebase; the 252 precondition is now met (252 `code-completed`, `tsc && node --test dist/` runner, test exclude gone, 0 skip guards), so Steps 3-9 are unblocked; drifted test-file, `index.ts`, `ci.yml` and docs anchors re-grepped |
 
 ---
 
@@ -58,4 +59,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 3 next, only (after 252 `fix-identity-ledger-test-suites` merges to `main-dev`; see implementation-spec.md § Step Dependencies)
+`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 3 next (the 252 precondition is met as of 2026-10-29)
