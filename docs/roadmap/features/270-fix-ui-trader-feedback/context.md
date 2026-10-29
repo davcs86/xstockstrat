@@ -739,3 +739,25 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`. `.next` was
   bind-mounted onto `/dev/shm` because the root filesystem was full (see the Deviation Log).
 
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec Steps 10–14
+
+- Authorization: the operator approved the up-front plan by standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Checkpoints are
+  `report`, C-16 promotion is auto-confirmed unless it changes an existing `@AC` rule, and the operator opens the
+  PR and holds the merge. `status.md` was already `in-progress`, so no status change.
+- Branch setup: merged `origin/main-dev` into the feature branch (normal merge, no conflicts). The ledger guard
+  was clean.
+- Re-spec (line drift only unless noted):
+  - Step 10: the `getTradingEnvironment` mock is now at `e2e/mock-backend.ts:345-347`. The badge path is
+    `src/components/shared/TradingModeBadge.tsx`.
+  - Step 11: added the `trading.go:1787` `UpdatedAt` stamp to the evidence.
+  - Steps 12 and 13: evidence still matches. Step 13 notes the stale "stops silently" comments and hands them to
+    Step 14.
+  - Step 14: the TradingService routers are at `:281` and `:1377`, and `streamAlerts` is at `:541-559`. The
+    alert fixtures are at `alerts.ts:11-35`.
+  - Step 14, substantive: feature 271 added a `streamAlerts` hold branch (`@feature-271` `@AC-5`, keyed on
+    `ALERT_STREAM_HOLD_TRACE_ID`). The hold-open change replaces only the default path's clean end and leaves that
+    branch intact. Its timed return becomes a clean end that reconnects after backoff, which is tolerated.
+  - Step 14 scope: added `e2e/trader/order-parity.spec.ts`, comment only. Its `:118` comment and the
+    `orders.spec.ts:11` header have the same stale wording as `orders.spec.ts:128`, and Step 14 updates all three.
