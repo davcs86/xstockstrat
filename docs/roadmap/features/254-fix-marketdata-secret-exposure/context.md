@@ -625,3 +625,10 @@ Feature: xstockstrat-config - the marketdata vendor secret grant is bound to the
 - Promotion plan above applied as written: `services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature` (AC-1, AC-2, AC-5, AC-7) and `services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature` (AC-3, AC-4, AC-6) created. Scenario text is verbatim, with `@feature-254` added.
 - **Amendment to an existing rule (operator decision 2026-10-29):** `services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature` feature-147 `@AC-4 @FR-3` now has the precondition "the caller presents an mTLS peer certificate whose DNS SAN is `xstockstrat-marketdata`" (per 254 AC-6) and is tagged `@feature-254` as well. 147's other assertions are unchanged, and 147 `@AC-5` is untouched.
 - Status stays `code-completed`, so there is no history row. The husky pre-commit hook did not run: `core.hooksPath` points to `/home/user/xstockstrat/.husky/_`, which does not exist, and the main worktree has no `node_modules` to symlink. These were docs-only commits, and `--no-verify` was not used.
+
+## Session 2026-10-29 — Step 9 post-merge dev smoke (operator session)
+
+- **Result: PASS.** The squash merge `1b5a922a` (#1344) deployed to dev; the `deploy-dev` run succeeded at 06:48:49Z.
+- **Evidence:** Tempo shows 4 `ConfigService/GetSecret` spans at 06:47:56Z on the new config pod `xstockstrat-config-856865669c-zbmgm`. That pod's ReplicaSet is new; the earlier boots ran on `6fbb9bf545`. All four spans have `rpc.grpc.status_code=0` and `deployment.environment=development`. This is the marketdata boot resolving its four vendor credentials while presenting its SAN.
+- A TraceQL search for `GetSecret` spans with `status_code != 0` over 06:40–07:10Z returned **0** spans. So no marketdata request was denied by the new `peerSan` binding.
+- Loki holds no marketdata log streams (no `service_name` values over 24h), so the log grep for `resolving vendor credential from config failed` could not run. The trace check above is the equivalent the step allowed. No revert of the Step 7 `authz.ts` `peerSan` line is needed.
