@@ -198,7 +198,7 @@ Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in 
 
 ### Step 3 — service: Analysis — UPDATE persists name/description
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategy_templates.py` — modify
@@ -246,7 +246,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 4 — test: Analysis — red-first repo SQL/bind tests, required real-PG test, wiring spy, fake lockstep (@AC-1, @AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_templates.py` — modify. This covers `FakeTemplates.create` (`:99-103`), `.update` (`:105-110`), `.retire` (`:112-116`, listed but not changed), the SQL test at `:686`, and the handler tests near `:344`.
@@ -581,3 +581,21 @@ _Populated by /sdd-execute as implementation proceeds._
     leave the branch red. `reference/tdd-gate.md` treats the service/test pair as one red-green cycle.
   - **Disposition**: no behavior deviation; the code and tests follow Step 1 and Step 2 **Instructions** as written.
     The verification ran `ruff` through `uv run` (the service venv), which is the same pinned tool.
+- **2026-10-29 — Steps 3 + 4 landed in one commit** (`/sdd-execute` sequential, Step 3 run).
+  - **What**: Step 4's **Files** (`services/xstockstrat-analysis/tests/test_strategy_templates.py`,
+    new `tests/test_strategy_templates_real_pg.py`) were staged in the Step 3 commit and Step 4's **Status** set to `done`.
+  - **Why**: `## Step Dependencies` requires it ("Steps 3 and 4 land together"); Step 3's signature change breaks
+    `FakeTemplates.update` and `test_template_update_bumps_version_in_one_statement`.
+  - **Disposition**: no behavior deviation. Line drift only: the `update` call is at `servicer.py:3588` (as re-specced).
+- **2026-10-29 — Step 4 real-PG verification deferred to CI** (never-start-a-database HARD CONSTRAINT).
+  - **What**: `local_pg` starts a throwaway PostgreSQL; SKILL.md forbids starting a database to verify a step, so
+    the `CI=true uv run pytest tests/test_strategy_templates_real_pg.py` line and the real-PG red leg were not run
+    here. Local runs used `-m "not real_pg"` (the coverage run too, since `test_read_budget_real_pg.py` would also
+    start `local_pg`). Offline checks: the file collects 3 tests, the DDL regex extracts the full
+    `analysis.strategy_templates` table through its closing `);`, and only `026_owner_dimension_templates.up.sql`
+    mentions `strategy_templates`.
+  - **Shape**: the (f) legs are three tests (`test_ac1_update_persists_name_description_payload`,
+    `test_update_of_retired_template_returns_none`, `test_ac2_second_retire_keeps_retired_at_and_stamps_updated_at`)
+    so the red UPDATE leg cannot mask the two regression pins. Each opens and closes its own pool.
+  - **Disposition**: CI-equivalent fallback. The CI python job (analysis leg) installs postgresql and fails rather
+    than skips under `CI=true`, so the integration PR's CI is the real-PG proof.

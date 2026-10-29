@@ -455,3 +455,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `ruff check .` and `ruff format --check .` clean. Step 1 grep checks all match.
 - C-13: no new fixtures; `TemplateMeta` literals stay inline (single consumer).
 - Out of scope: none. Open items unchanged (real-PG gap for indicators → Step 8).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 3 + 4 (analysis)
+
+- Steps 3 and 4 landed in one commit, as `## Step Dependencies` requires. Logged in the impl-spec `## Deviation Log`.
+- Files: `services/xstockstrat-analysis/app/repositories/strategy_templates.py` (`update(meta, payload_json)` writes
+  name/description, `meta.description` bound raw like `create`; `retire` untouched), `app/handlers/servicer.py:3588`
+  (`update(meta, payload_json)`), `tests/test_strategy_templates.py` (fake lockstep, `_manage` gains `description=`,
+  tests a–d), new `tests/test_strategy_templates_real_pg.py` (three `real_pg` legs).
+- TDD red (pre-Step-3 tree, Step 4 tests in place, `-m "not real_pg"`): 4 failed, 29 passed. (a) SQL
+  `SET name = $2, description = $3, payload = $4::jsonb` missing; (b) empty-name bind failed; (c) wiring spy failed
+  (`'str' object has no attribute 'template_id'`); the existing `test_manage_template_update_bumps_version_and_retire_hides`
+  also went red through the lockstep fake. (d) AC-3 pin passed on both trees.
+- TDD green: same command → 33 passed. Full suite `uv run pytest -m "not real_pg" --cov=app --cov-fail-under=40`
+  → 1438 passed, 89.82%. `ruff check .` / `ruff format --check .` clean; Step 3 greps match.
+- Real-PG legs NOT run locally (never start a database); proof deferred to the integration PR's CI (Deviation Log).
+- Tooling: `pnpm install --frozen-lockfile --ignore-scripts` in the worktree for the husky hook (main worktree had no
+  `node_modules` to symlink).
+- Out of scope: none.
+
