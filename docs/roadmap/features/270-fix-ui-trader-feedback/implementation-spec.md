@@ -468,7 +468,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
   | `useManageSignalSource` | `insights/signal-sources/page.tsx:192` | every `manageMutate` call has `onError`: `:226`, `:296`, `:332`, and Step 3 `handleToggle` |
   | `useRunBacktest` | `trader/positions/[symbol]/page.tsx:1109` | inline `{errorMessage && …}` at `:1187` |
   | `useRunBacktest` | `insights/strategies/[id]/page.tsx:66` | inline `runErrorObj` at `:90-92` |
-  | `useScreenSymbols` | `components/trader/SymbolScreening.tsx:43` | inline at `:228` |
+  | `useScreenSymbols` | `components/trader/SymbolScreening.tsx:43` | inline `symbol-screen-error` at `:230-234` |
   | `useScreenSymbols` | `insights/screener/page.tsx:67` | inline at `:485` |
   | `useSetConfig` | `config-ui/[namespace]/NamespaceEditor.tsx:250` | `Save error: {errMessage(saveError)}` at `:358` |
   | `useSetStrategyLive` | `components/trader/LiveStrategiesPanel.tsx:22` | `{setLive.isError && …}` at `:99` |
@@ -521,7 +521,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
      design-role tokens only, through the `destructive` variant.
 4. **Mount it** once in each provider. Render `<MutationErrorFallback />` as a sibling after `{children}`:
    - inside `AccountProvider` in `src/app/trader/providers.tsx:13`;
-   - inside `QueryNormalizerProvider` in `src/components/shared/QueryProviders.tsx:32-34`.
+   - inside `QueryNormalizerProvider` in `src/components/shared/QueryProviders.tsx:15-17`.
 5. **Factory passthrough.** In `useInvalidatingMutation.ts`:
    - Widen `:17` to `options?: { mutationKey?: QueryKey; meta?: Record<string, unknown> }`.
    - Add `meta: options?.meta,` beside `mutationKey` at `:22`.
@@ -884,7 +884,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
   - The bell `listAlerts` count effect is mount-only (`:18-31`).
   - The icon-only bell `Button` (`:57`) has no accessible name.
 - Server behavior:
-  - Trading `StreamOrderUpdates` (`trading.go:1667-1685`) sends a snapshot and then blocks until the context is
+  - Trading `StreamOrderUpdates` (`trading.go:1667-1686`) sends a snapshot and then blocks until the context is
     done. A reconnect therefore replays the snapshot, which is idempotent under keyed state plus
     `pickFresherOrder`.
   - Notify `streamAlerts` (`services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:120-140`) registers a
@@ -947,7 +947,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
 4. **Orders table.** In `OrdersTable.tsx`:
    - Change `:59` to `const { updates: liveUpdates, disconnected, terminal } = useOrderUpdates();` and keep the
      Step 11 merge.
-   - Under the `QueryStateMessages` at `:202`, render
+   - Under the `QueryStateMessages` at `:203`, render
      `{disconnected && <Alert variant="destructive" role="alert" data-testid="order-stream-disconnected"><AlertDescription>{terminal ? \`Live order updates stopped: ${terminal}\` : 'Live order updates disconnected — reconnecting…'}</AlertDescription></Alert>}`.
 5. **Alerts.** Move the `AlertStream.tsx:33-48` `streamAlerts` effect onto the hook with key `'alerts'`:
    - `open = (signal) => notifyClient.streamAlerts({ categories: [], severities: [], includeAcknowledged: false }, { signal })`.
