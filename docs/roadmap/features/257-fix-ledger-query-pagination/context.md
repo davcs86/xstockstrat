@@ -420,3 +420,15 @@ Still open (surface at the /sdd-execute checkpoint):
   because the tier fails loudly without `LEDGER_DB_TEST_URL` (no-silent-skip convention). This supersedes the r2
   manual-run evidence plan and design.md's "CI TimescaleDB job" rejected alternative. The `p100_ms` /
   `token_walk_count` / `per_page_ms` context.md lines are dropped.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `sequential`, one commit per step on `feature/fix-ledger-query-pagination`, single integration PR at the end.
+  Status `implementation-ready` → `in-progress`.
+- **Up-front confirmation:** given by the operator's standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Terms: unattended
+  checkpoints (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train
+  authorized; 255/275 deferred; operator-only DB/prod steps mean open the PR and hold the merge. This feature's
+  blocker decision (2026-10-29, the operator's own words via the session question tool): "Move it into CI real-DB
+  tier" — applied to Step 8 in the re-spec above.
+- Branch setup done: `origin/main-dev` merged, ledger guard clean, Steps 1–9 re-spec'd. Next: Step 1.
