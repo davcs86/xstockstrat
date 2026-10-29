@@ -96,12 +96,14 @@ export const BUILTIN_INDICATORS: BuiltinIndicator[] = [
   },
   {
     name: 'ATR',
-    description: 'Average True Range',
+    description:
+      "ATR (close-to-close approximation): rolling mean of |close change| over period; not Wilder's true range",
     params: [{ key: 'period', label: 'Period', default: 14 }],
   },
   {
     name: 'VWAP',
-    description: 'Volume Weighted Average Price',
+    description:
+      'VWAP (running mean approximation): cumulative mean of closes; no volume weighting',
     params: [],
   },
   {

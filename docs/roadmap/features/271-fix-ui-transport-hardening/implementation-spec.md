@@ -76,7 +76,7 @@ There are no UI page or route additions, so C-10(a) nav registration does not ap
 
 ### Step 1 — service: Leaf `deadlines.ts` + unary transport default
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/deadlines.ts` — create
@@ -89,9 +89,9 @@ There are no UI page or route additions, so C-10(a) nav registration does not ap
 
 **Codebase Evidence**:
 - `src/lib/connectClients.ts:48-74` `makeTransport`:
-  - The lazy `get()` is at `:49-65`. Its load-bearing comment at `:45-47` explains that `next build` has no `MTLS_*`.
-  - The `unary` wrapper is at `:67-68`: `return get().unary(method, signal, timeoutMs, header, input, contextValues);`.
-  - The `stream` wrapper is at `:70-71` and forwards `timeoutMs` unchanged.
+  - The lazy `get()` is at `:50-65`. Its load-bearing comment at `:45-47` explains that `next build` has no `MTLS_*`.
+  - The `unary` wrapper is at `:67-69`; its return statement is `:68`: `return get().unary(method, signal, timeoutMs, header, input, contextValues);`.
+  - The `stream` wrapper is at `:70-72` and forwards `timeoutMs` unchanged.
 - `connectClients.ts:1-13` imports only packages and `node:tls`, with no `@/` alias. The Step 2 real-socket spec imports this module from Playwright, so the new import must be relative.
 - `src/lib/bffShared.ts:53-55`: `export const FUNDAMENTALS_TIMEOUT_MS = 15_000;`, with its feature-220 comment at `:53-54`.
 - Importers of `FUNDAMENTALS_TIMEOUT_MS` (`grep -rn FUNDAMENTALS_TIMEOUT_MS src e2e`):
@@ -116,8 +116,8 @@ There are no UI page or route additions, so C-10(a) nav registration does not ap
 3. In `insightsBff.ts`, remove `FUNDAMENTALS_TIMEOUT_MS` from the `@/lib/bffShared` import (`:27`) and add `import { FUNDAMENTALS_TIMEOUT_MS } from '@/lib/deadlines';`. Do the same in `traderBff.ts` (`:24`). Leave the call sites at `insightsBff.ts:103`, `:114` and `traderBff.ts:78` unchanged.
 4. In `connectClients.ts`, add `import { DEFAULT_UNARY_TIMEOUT_MS } from './deadlines';` after the package imports. It must be relative, not `@/lib/deadlines`, because the Step 2 Playwright spec imports this module outside Next's alias resolution.
 5. Change only the `unary` body (`:68`) to `return get().unary(method, signal, timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS, header, input, contextValues);`.
-   - Leave the `stream` wrapper (`:70-71`) **byte-for-byte unchanged**. That keeps `streamAlerts`, `streamOrderUpdates` and `exportEvents` unbounded.
-   - Leave the lazy `get()` (`:49-65`) unchanged.
+   - Leave the `stream` wrapper (`:70-72`) **byte-for-byte unchanged**. That keeps `streamAlerts`, `streamOrderUpdates` and `exportEvents` unbounded.
+   - Leave the lazy `get()` (`:50-65`) unchanged.
 6. Leave the literal `timeoutMs: 30_000` at `insightsBff.ts:58` (`@AC-1 @feature-191`) as written.
 
 **Verification**:
@@ -136,7 +136,7 @@ cd services/xstockstrat-ui && grep -n "timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS" sr
 
 ### Step 2 — test: Unary default + per-call override (vitest + real-socket black hole)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.test.ts` — create
@@ -199,7 +199,7 @@ grep -n "helpers/devCerts\|from './mock-backend'" e2e/transport-deadline.spec.ts
 
 ### Step 3 — test: Held-open alert stream outlives the unary default (e2e)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/alerts.ts` — modify
@@ -223,7 +223,7 @@ grep -n "helpers/devCerts\|from './mock-backend'" e2e/transport-deadline.spec.ts
   - Its INVENTORY row is `e2e/fixtures/INVENTORY.md:43`.
   - Sentinel precedent: `FUNDAMENTALS_STALL_SYMBOL` (`e2e/fixtures/fundamentals.ts:32-34`, INVENTORY `:19`), whose stall is abort-aware (`mock-backend.ts:643-650`).
 - `'Order rejected'` is both a stream title and a list title (`alerts.ts:21`, `:48`), so it cannot prove stream delivery. The held alert needs a distinct title.
-- Existing spec pattern: `e2e/trader/alert-stream.spec.ts:40-49`. It opens the sheet by clicking the parent of the unread badge (`/^2$/`), then asserts the alert text.
+- Existing spec pattern: `e2e/trader/alert-stream.spec.ts:41-50` ("opening the sheet shows at least one alert title"). It opens the sheet by clicking the parent of the unread badge (`/^2$/`), then asserts the alert text.
 - Request-scoped stateful mock rule (insights.md): keying on a per-test trace id keeps parallel specs unaffected.
 
 **TDD**: `red-green required` (preservation guard: RED via the mutation check in § Step Dependencies)
@@ -246,7 +246,7 @@ grep -n "helpers/devCerts\|from './mock-backend'" e2e/transport-deadline.spec.ts
 3. In `alert-stream.spec.ts`, add a test, "the alert stream survives past the unary default deadline (feature 271 @AC-5)":
    - `test.setTimeout(ALERT_STREAM_HOLD_MS + 45_000)`.
    - `await page.setExtraHTTPHeaders({ 'x-trace-id': ALERT_STREAM_HOLD_TRACE_ID })`, then `addAuthCookie(page)`, then `page.goto('/trader')`.
-   - Record `t0`, then open the sheet the same way as `:43-46`.
+   - Record `t0`, then open the sheet the same way as `:44-47`.
    - `await expect(page.getByText('Held stream alert')).toBeVisible({ timeout: ALERT_STREAM_HOLD_MS + 15_000 })`.
    - Assert `Date.now() - t0 >= DEFAULT_UNARY_TIMEOUT_MS`.
 4. In `INVENTORY.md`, append `ALERT_STREAM_HELD`, `ALERT_STREAM_HOLD_TRACE_ID` and `ALERT_STREAM_HOLD_MS` to the Alerts row (`:43`). Add the `streamAlerts` hold branch to its consumer list.
@@ -264,7 +264,7 @@ grep -n "ALERT_STREAM_HOLD_TRACE_ID" e2e/fixtures/INVENTORY.md e2e/mock-backend.
 
 ### Step 4 — service: 10s bound on `refreshSession`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/identity.ts` — modify
@@ -300,7 +300,7 @@ cd services/xstockstrat-ui && grep -n "timeoutMs: REFRESH_TIMEOUT_MS" src/lib/id
 
 ### Step 5 — test: Refresh deadline fails closed (vitest + e2e stalled identity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/identity.test.ts` — create
@@ -313,17 +313,17 @@ cd services/xstockstrat-ui && grep -n "timeoutMs: REFRESH_TIMEOUT_MS" src/lib/id
 
 **Codebase Evidence**:
 - Mock pattern for `@/lib/connectClients`: `src/lib/insightsBff.test.ts:9-18` (`vi.mock('@/lib/connectClients', () => ({ … }))`).
-- The identity mock's `refreshToken()` is at `e2e/mock-backend.ts:184-190`. It takes no args today and always returns `refreshToken: 'test-refresh-token'`. `ConnectError` and `Code` are already imported (`:16`).
-- The abort-aware stall precedent is at `:643-650`.
+- The identity mock's `refreshToken()` is at `e2e/mock-backend.ts:191-196` (`:184-190` is `authenticateUser`). It takes no args today and always returns `refreshToken: 'test-refresh-token'`. `ConnectError` and `Code` are already imported (`:16`).
+- The abort-aware stall precedent is `getFundamentals` at `:662-668` (`FUNDAMENTALS_STALL_SYMBOL`: wait for `ctx.signal` abort, then `ConnectError` `Code.Canceled`).
 - `e2e/helpers/auth.ts`:
   - It is the canonical home for test JWT signing (`:14-17`: "specs must not re-implement SignJWT").
   - `signTestJwt` (`:29-44`) always signs `expires_at: now + 3600`.
-  - `mock-backend.ts:31` already imports from it.
+  - `mock-backend.ts:38` already imports `signTestJwt` from it.
 - `e2e/auth.spec.ts:70-89` is the existing `POST /api/auth/refresh` pattern: `request.post(..., { headers: { cookie: 'refresh_token=…' } })`, with Set-Cookie inspection via `headersArray()`.
-- Redirect assertion pattern: `auth.spec.ts:189-193` (`page.request.get(path, { maxRedirects: 0 })`, status in `[302, 307]`, `location` contains `/auth/login`).
+- Redirect assertion pattern: the loop at `auth.spec.ts:183-195` (`page.request.get(path, { maxRedirects: 0 })` at `:190`, status in `[302, 307]`, `location` contains `/auth/login`).
 - `middleware.ts:60`: `redirect` = `pathname + search`, so `/trader` → `redirect=%2Ftrader`. The cookie-clear shape is `Max-Age=0` (`src/middleware.test.ts:171-172`).
 - `IDENTITY_ENDPOINT: '127.0.0.1:9091'` is the shared mock (`playwright.config.ts:152`). A sentinel token keeps the stall request-scoped, so no new env var or port is needed.
-- Sentinel table: `e2e/fixtures/INVENTORY.md:53-58` (§ Recurring sentinel ids).
+- Sentinel table: `e2e/fixtures/INVENTORY.md:53` (§ Recurring sentinel ids), table header at `:58`.
 
 **TDD**: `red-green required`
 
@@ -338,7 +338,7 @@ cd services/xstockstrat-ui && grep -n "timeoutMs: REFRESH_TIMEOUT_MS" src/lib/id
    - Export `REFRESH_STALL_TOKEN = 'refresh-stall-token'`.
    - Export `signExpiredTestJwt()`. It mirrors `signTestJwt` with `issued_at: now - 1800`, `expires_at: now - 900` and `setExpirationTime(now - 900)`, and stays in this canonical SignJWT home.
 3. `mock-backend.ts` `refreshToken(req, ctx)`:
-   - If `req.refreshToken === REFRESH_STALL_TOKEN`, wait for `ctx.signal` abort and then `throw new ConnectError('aborted by caller', Code.Canceled)`. This mirrors `:643-650`.
+   - If `req.refreshToken === REFRESH_STALL_TOKEN`, wait for `ctx.signal` abort and then `throw new ConnectError('aborted by caller', Code.Canceled)`. This mirrors `:662-668`.
    - Otherwise return the existing response unchanged.
    - Import `REFRESH_STALL_TOKEN` from `./helpers/auth`.
 4. `e2e/auth.spec.ts`: new describe, "Session refresh against a stalled identity (feature 271 @AC-2)". Import `REFRESH_TIMEOUT_MS` from `../src/lib/deadlines` and use `test.setTimeout(REFRESH_TIMEOUT_MS + 20_000)`.
@@ -366,7 +366,7 @@ grep -n "REFRESH_STALL_TOKEN" e2e/fixtures/INVENTORY.md
 
 ### Step 6 — service: `forwardAdmin` timeout option + long-RPC class
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/bffShared.ts` — modify
@@ -378,8 +378,8 @@ grep -n "REFRESH_STALL_TOKEN" e2e/fixtures/INVENTORY.md
 
 **Codebase Evidence**:
 - `src/lib/traderBff.ts:33` `placeOrder`, `:42` `cancelOrder`, `:43` `replaceOrder`, `:45` `confirmOrder` are bare `forward(...)`.
-- `src/lib/bffShared.ts:80-84`: `forwardAdmin(call: (req, opts: { headers: Headers }) => Promise<Res>)` → `forward(call, { admin: true })`.
-- `forward()` (`:64-77`) applies `options.admin` at `:70` and sets `callOpts.timeoutMs` only when it is defined (`:74`).
+- `src/lib/bffShared.ts:76-80` (JSDoc at `:75`): `forwardAdmin(call: (req, opts: { headers: Headers }) => Promise<Res>)` → `forward(call, { admin: true })`.
+- `forward()` (`:60-73`) applies `options.admin` at `:66` and sets `callOpts.timeoutMs` only when it is defined (`:70`).
 - `src/lib/insightsBff.ts`:
   - `:40` `scoreStrategy`, `:41` `runBacktest` and `:42` `screenSymbols` are all bare `forward(...)`.
   - `:80` `triggerBackfill` is `forward(...)`.
@@ -398,7 +398,7 @@ grep -n "REFRESH_STALL_TOKEN" e2e/fixtures/INVENTORY.md
    - Widen `call` to `(req: Req, opts: { headers: Headers; timeoutMs?: number }) => Promise<Res>`.
    - Add a second parameter, `options: { timeoutMs?: number } = {}`.
    - The body becomes `return forward(call, { ...options, admin: true });`. `admin` is spread last, so a caller cannot unset it.
-   - Update its JSDoc (`:79`) in one line.
+   - Update its JSDoc (`:75`) in one line.
 2. `insightsBff.ts`:
    - Add `LONG_RPC_TIMEOUT_MS` to the `@/lib/deadlines` import created in Step 1.
    - Pass `{ timeoutMs: LONG_RPC_TIMEOUT_MS }` as the `forward` options for `scoreStrategy` (`:40`), `runBacktest` (`:41`), `screenSymbols` (`:42`) and `triggerBackfill` (`:80`).
@@ -421,7 +421,7 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
 
 ### Step 7 — test: `forwardAdmin` threading + BFF deadline classes (vitest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/insightsBff.test.ts` — modify
@@ -431,9 +431,10 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
 
 **Codebase Evidence**:
 - `src/lib/__tests__/insightsBff.test.ts` is the feature-183 `forward()` threading suite:
-  - `vi.mock('@/lib/auth', …)` with `hasAdminScope: vi.fn(() => false)` at `:10-19`.
-  - The `fakeCtx()` stub is at `:26-34`.
-  - Its cases capture `opts.timeoutMs` at `:36-85`.
+  - `vi.mock('@/lib/auth', …)` at `:11-20`, with `hasAdminScope: vi.fn(() => false)` at `:19`.
+  - The `fakeCtx()` stub is at `:27-35`.
+  - Its cases capture `opts.timeoutMs` at `:37-85`.
+  - It currently imports only `forward` from `@/lib/bffShared` (`:22`); `forwardAdmin` and `hasAdminScope` are not imported yet.
 - `src/lib/insightsBff.test.ts:1-46` is the dispatch-level pattern:
   - Mock `@/lib/connectClients` with spies.
   - `await import('@/lib/insightsBff')` to get `dispatchConnect`.
@@ -441,6 +442,7 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
   - POST JSON to `http://localhost/insights/api/<service>/<Method>`.
 - `configUiBff.ts:101`: `export const dispatchConnect = createDispatch(router, '/config-ui/api');`. It imports `configClient`, `ingestClient`, `analysisClient`, `identityClient` and `indicatorsClient` (`:8-14`).
 - `insightsBff.ts` imports its clients at `:10-19`.
+- `dispatchConnect` exports: `insightsBff.ts:209`, `traderBff.ts:151`. `traderBff.ts` imports its clients at `:9-16`.
 - Admin gate: `requireAdminScope` (`bffShared.ts:47-51`) calls `hasAdminScope(claims.roles)`. Admin JWT roles are `['admin']`, as in `e2e/helpers/auth.ts` `addAdminCookie`.
 - C-12 does not apply: there are no domain fixtures. The request bodies are `{}`, which are scenario one-offs.
 
@@ -449,11 +451,11 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
 **Covers**: `AC-6`
 
 **Instructions**:
-1. Add a describe to `src/lib/__tests__/insightsBff.test.ts`: "forwardAdmin() — timeoutMs threading (feature 271)". Import `forwardAdmin` and the mocked `hasAdminScope`.
+1. Add a describe to `src/lib/__tests__/insightsBff.test.ts`: "forwardAdmin() — timeoutMs threading (feature 271)". Add `forwardAdmin` to the `@/lib/bffShared` import and add `import { hasAdminScope } from '@/lib/auth';` (the mocked export).
    - (a) With `vi.mocked(hasAdminScope).mockReturnValueOnce(true)`, `forwardAdmin(mockCall, { timeoutMs: LONG_RPC_TIMEOUT_MS })` passes `timeoutMs === LONG_RPC_TIMEOUT_MS` along with `headers`. RED pre-fix: `undefined`, because the option is ignored.
    - (b) When `hasAdminScope` returns false, the handler rejects with `Code.PermissionDenied` and `mockCall` is never called.
 2. `src/lib/bffDeadlines.test.ts`:
-   - Mock `@/lib/connectClients` with every client both BFFs import. Give spies resolving `{}` to:
+   - Mock `@/lib/connectClients` with the union of every client the three BFFs import (`configUiBff.ts:8-14`, `insightsBff.ts:10-19`, `traderBff.ts:9-16` — the latter adds `tradingClient`, `portfolioClient`, `notifyClient`, `ledgerClient`, `configClient`); unexercised clients may be empty objects. Give spies resolving `{}` to:
      - `analysisClient.{scoreStrategy, runBacktest, screenSymbols, listOpportunities, runFundamentalsScan}`
      - `ingestClient.triggerBackfill`
      - `marketDataClient.{deleteBackfilledData, getBars, getFundamentals}`
@@ -478,7 +480,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/lib/__tests__/insightsBff
 
 ### Step 8 — service: Exact-path health exemption + drop dead matcher prefixes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.ts` — modify
@@ -534,7 +536,7 @@ cd services/xstockstrat-ui && grep -n "PUBLIC_HEALTH_PATHS" src/middleware.ts \
 
 ### Step 9 — test: Health routes public, everything else gated (vitest + e2e)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.test.ts` — modify
@@ -585,7 +587,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/middleware.test.ts \
 
 ### Step 10 — docs: UI context docs + teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-ui/` docs
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify
@@ -615,7 +617,7 @@ cd services/xstockstrat-ui && pnpm exec vitest run src/middleware.test.ts \
    - `forwardAdmin` takes `{ timeoutMs }`.
    - The authoritative home is `src/lib/deadlines.ts`.
    - Re-stamp the evidence pointers.
-3. Leave the open finding `docs/context-constitution-findings.md:36` (the `listOpportunities` literal) open. Design kept the literal (design.md item 1).
+3. Leave the open finding `services/xstockstrat-ui/docs/context-constitution-findings.md:36` (the `listOpportunities` literal; not the root findings file, whose `:36` is an unrelated feature-227 analysis finding) open. Design kept the literal (design.md item 1).
 4. Run `/context-forge:context-constitution refresh` scoped to `services/xstockstrat-ui/` and fix any grounded drift it reports. If the plugin is unavailable, re-read both files against the code by hand and record the manual reconciliation in the PR body.
 
 **Verification**:
@@ -630,3 +632,59 @@ grep -n "deadlines.ts" services/xstockstrat-ui/docs/context-constitution.md
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — `pnpm run format:check` fails on pre-existing drift (2026-10-28)
+
+- **What**: Step 1 **Verification** chains `pnpm run format:check`, which exits 1 on 10 files this step does not touch (`src/app/config-ui/users/page.tsx`, `src/app/insights/pnl-patterns/page.tsx`, `src/components/insights/PerformanceDashboard.tsx`, `src/components/trader/CredentialStatusBadge.tsx`, `src/hooks/{useAccountPortfolios,useOrders,useOrderUpdates,useSignalAttribution}.ts`, `src/lib/performanceMetrics{,.test}.ts`).
+- **Why not fixed here**: reformatting unrelated files is outside Step 1 **Files** (F-08). CI does not run `format:check` (`.github/workflows/ci.yml`); the pre-commit hook formats staged files only.
+- **Disposition**: CI-equivalent fallback — `prettier --check` scoped to the five Step 1 files passes; every other Verification clause (greps, count = 2, `lint`, `build`) passes, and the `stream(` wrapper shows no diff.
+
+### Step 2 — Playwright verification run with `CI=1` (2026-10-28)
+
+- **What**: the local (non-CI) Playwright mode starts `pnpm dev`, and the `setup` warmup project exceeded the 10s local test timeout on first compile, so `transport-deadline.spec.ts` never ran.
+- **Disposition**: CI-equivalent fallback — ran `CI=1 pnpm exec playwright test e2e/transport-deadline.spec.ts` (the CI shape: `pnpm build && pnpm start`, CI timeouts). Both cases passed (AC-6 2.0s, AC-1 30.0s); `pnpm build` also re-ran lint over the new files.
+
+### Step 2 — vitest case (a) asserts a post-import call-count snapshot (2026-10-28)
+
+- **What**: vitest clears mock call history before each test, so `expect(createGrpcTransport).not.toHaveBeenCalled()` inside the test was vacuous: an eager-build mutation still passed it. Case (a) instead records `createGrpcTransport.mock.calls.length` right after the dynamic import in `beforeAll` and asserts it is 0, then asserts exactly one build on the first RPC.
+- **Disposition**: same assertion intent as the spec (no transport built at import, built on first RPC); the eager-build mutation now fails (`expected 10 to be +0`).
+
+### Step 3 — Playwright verification run with `CI=1`; `tsc` pre-existing errors (2026-10-28)
+
+- **What**: as in Step 2, the local `pnpm dev` warmup exceeded the 10s local test timeout on first compile, so `alert-stream.spec.ts` was run in the CI shape. The `--project=chromium` filter was added because `/opt/pw-browsers` has no Firefox build (CI runs `chromium` only). Separately, `tsc --noEmit` reports 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`, a file outside Step 3; the Step 3 files compile clean.
+- **Disposition**: CI-equivalent fallback — `CI=1 pnpm exec playwright test e2e/trader/alert-stream.spec.ts --project=chromium`: 7/7 passed, including setup (AC-5 case 37.4s); the five existing alert-stream tests still pass, so the default stream still ends cleanly. `pnpm run lint` exits 0. The pre-existing `INVENTORY.md` prettier drift is unchanged by this step (not CI-enforced).
+
+### Step 4 — `pnpm run format:check` fails on pre-existing drift (2026-10-29)
+
+- **What**: the Step 4 **Verification** chain ends with `pnpm run format:check`, which exits 1 on the same 10 pre-existing files recorded under Step 1. `src/lib/identity.ts` is not among them.
+- **Disposition**: CI-equivalent fallback, as in Step 1. `prettier --check src/lib/identity.ts` passes, the `timeoutMs: REFRESH_TIMEOUT_MS` grep matches (`identity.ts:17`), and `pnpm run lint` exits 0. Prettier wrapped the call across lines, but the grep still matches on its own line.
+
+### Step 5 — Playwright run with `CI=1 --project=chromium`; explicit timeout on case (b); pre-existing drift (2026-10-29)
+
+- **What**: as in Steps 2–3, `auth.spec.ts` was run in the CI shape (`CI=1`, `pnpm build && pnpm start`), chromium only, because `/opt/pw-browsers` has no Firefox build. Case (b) `request.post('/api/auth/refresh', …)` also passes `timeout: REFRESH_TIMEOUT_MS + 15_000`, the same bound case (a) specs, so the RED run fails at a fixed 25s rather than at Playwright's 30s default. Separately, `prettier --check e2e/fixtures/INVENTORY.md` fails on drift already present at `HEAD` (confirmed on the pre-step file; recorded under Step 3), and `tsc --noEmit` still reports the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` errors.
+- **Disposition**: CI-equivalent fallback. All 23 `auth.spec.ts` tests pass (setup + 22), including both new AC-2 cases (10.0s / 10.2s). The vitest file passes 2/2, `test:coverage` passes 49 files / 244 tests with thresholds met, `lint` exits 0, and prettier is clean on the four code files.
+
+### Step 6 — `pnpm run format:check` fails on pre-existing drift (2026-10-29)
+
+- **What**: the Step 6 **Verification** chain ends with `pnpm run format:check`, which exits 1 on the same 10 pre-existing files recorded under Step 1. None of the four Step 6 files is among them. Separately, the step's `bffShared.ts` evidence lines had drifted by +4 (`forward()` at `:64-77`, `forwardAdmin` at `:80-84`, JSDoc `:79`); the symbols and signatures matched, so the instructions applied unchanged.
+- **Disposition**: CI-equivalent fallback, as in Steps 1 and 4. Prettier `--write` left the four Step 6 files clean, and the `grep -c` counts match the spec (`insightsBff.ts` 6, `configUiBff.ts` 2, `traderBff.ts` 5). The `{ ...options, admin: true }` grep matches (`bffShared.ts:80`), and `pnpm run lint` exits 0.
+
+### Step 7 — `bffDeadlines` runs 13 cases, not 9; admin JWT via the shared helper (2026-10-29)
+
+- **What**: the step **Verification** asks to confirm "all 9 `bffDeadlines` cases". The **Instructions** list 6 long-RPC methods, 4 order mutations (operator 2026-10-22) and 3 preservation checks, which is 13. The "9" predates the order-mutation addition. All 13 cases ran. Separately, the admin cookie is signed with `signTestJwt(['admin'])` from `e2e/helpers/auth.ts` (the helper `configUiBff.test.ts` already uses), not an inline `jose` `SignJWT`, to keep a single JWT fixture (C-13). `FUNDAMENTALS_TIMEOUT_MS` is imported from `@/lib/deadlines`, where Step 1 moved it.
+- **Disposition**: no behavior change; the assertions follow the step **Instructions** exactly. Verification: 18/18 targeted tests pass (5 `forward`/`forwardAdmin` + 13 `bffDeadlines`), `test:coverage` 50 files / 259 tests with thresholds met, `lint` exits 0.
+
+### Step 8 — `middleware.test.ts:60` stays red until Step 9; pre-existing `format:check` drift (2026-10-29)
+
+- **What**: deleting `api/health|` from the matcher makes the existing `src/middleware.test.ts:58-62` case ("still excludes the sibling auth/health paths") fail on `expect(matches('/api/health')).toBe(false)`. The Step 8 **Files** list holds only `middleware.ts`, and Step 9 instruction 1 already renames that case and drops the `/api/health` line, so the fix stays in Step 9. Between the Step 8 and Step 9 commits, `vitest run src/middleware.test.ts` has 1 known failure. Separately, `pnpm run format:check` exits 1 on the same 10 pre-existing files recorded under Step 1. `middleware.ts` is not among them.
+- **Disposition**: no scope change. The Step 8 **Verification** greps all pass and `pnpm run lint` exits 0. The integration PR runs CI after Step 9, so the intermediate red never reaches `main-dev`.
+
+### Step 9 — e2e run in CI shape, chromium only; RED via a pre-Step-8 `middleware.ts` (2026-10-29)
+
+- **What**: Step 8 had already landed, so RED was captured by checking `src/middleware.ts` out from `a5103815~1` (pre-Step-8), running both suites, then restoring it with `git checkout HEAD --`. As in Steps 2–5, `e2e/auth.spec.ts` was run in the CI shape (`CI=1`, `pnpm build && pnpm start`), chromium only, because `/opt/pw-browsers` has no Firefox build. The `vitest` health describe adds `/trader/health/x` to the gated table; the e2e AC-4 table follows the `acceptance.feature` Examples exactly.
+- **Disposition**: no scope change. RED (pre-Step-8): vitest 9 failed / 19 passed (the lookalike case `expected false to be true`; all 8 health paths `expected 307 to be 200`); e2e 10 failed (8 health rows received 307; `/healthcheck-x` and `/health/anything` received 404). GREEN on `HEAD`: vitest 28/28, the full `auth.spec.ts` passes 38/38 (setup + 22 existing + 15 new), `test:coverage` 50 files / 274 tests with thresholds met, `lint` exits 0, prettier clean on both files.
+
+### Step 10 — teardown audit done by hand; UI-3 line hints re-stamped (2026-10-29)
+
+- **What**: Instruction 4 names `/context-forge:context-constitution refresh`, but this session exposes only `context-forge:context-scrubber`, so the `context-constitution` skill is unavailable. The teardown was reconciled by hand: every `path#symbol` anchor in `services/xstockstrat-ui/docs/context-constitution.md` was resolved against the tree by script (all resolve), and the `PUBLIC_HEALTH_PATHS`, `deadlines.ts`, `forward`/`forwardAdmin`, `connectClients.ts#unary`/`#stream`, `identity.ts#refreshSession` and BFF registration pointers were re-read. The only grounded drift found outside the gotcha was UI-3's `~L` hints (`#forward` ~L64 → ~L60, `#forwardAdmin` ~L80 → ~L76, shifted by Steps 1 and 6); they were re-stamped in the same file, and the file header got a 2026-10-29 refresh note.
+- **Disposition**: no scope change (both edits are inside the step's **Files**). The integration PR body must record that the plugin was unavailable and describe this manual reconciliation (root `CLAUDE.md` § Teardown). `services/xstockstrat-ui/docs/context-constitution-findings.md:36` (`listOpportunities` literal) stays open, per instruction 3.

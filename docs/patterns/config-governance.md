@@ -23,7 +23,7 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
    and hands the value to an **allow-listed internal service caller** (the `x-internal-caller`
    metadata channel, mirroring feature 102). A grant may additionally require the caller's mTLS peer
    certificate to carry an exact DNS SAN (`peerSan`; the `ingest` grant requires
-   `xstockstrat-ingest`, feature 224). `GetSecret` resolves the **exact** scope named by
+   `xstockstrat-ingest`, feature 224, and the `marketdata` grant `xstockstrat-marketdata`, feature 254). `GetSecret` resolves the **exact** scope named by
    `GetSecretRequest.user_id` (empty = the global row only; a `user_id` = only that user's row — never
    a cross-scope fallback, feature 224). `is_secret` is **row-authoritative on write** (read
    from the stored row, never trusted from the request), so an admin update can never land
@@ -104,6 +104,7 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 |---|---|---|
 | `trading-reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102); `changed_by` = `caller_identity`. Audit rows written before feature 241 keep the old free-text `system:reconciliation-poller`, so the `/config-ui` audit "By" column shows both spellings |
 | `system` | `xstockstrat-indicators` | Not a config write: the `Formula.author` ownership sentinel on the seeded fundamentals-scoring formula, set from the module's `AUTHOR` constant (`app/formulas/fundamentals_value_quality.py`), never from a request body |
+| `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 
 ## Per-Feature Registered Keys
 
