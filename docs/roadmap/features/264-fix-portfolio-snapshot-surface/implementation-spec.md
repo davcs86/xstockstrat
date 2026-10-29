@@ -823,3 +823,6 @@ _Populated by /sdd-execute as implementation proceeds._
   via #1334 (`031_heal_indicators_sandbox_keys_full_dotted`). The `/0(3[4-9]|[4-9][0-9])_` grep returns nothing (exit 1),
   so (a) passes. (b) is still unmet: `032` and `033` are only on `origin/feature/fix-python-config-stored-zero` and
   `origin/feature/fix-ledger-trimmed-notify-payload`. The hold conditions 1-3 above are unchanged, and only 244 and 248 remain to merge.
+- **Gate re-run 2026-10-29 (`origin/main-dev` @ `0099647f`, Step 10 execute pass)**: config migrations still top out at
+  `031`; the `/0(3[4-9]|[4-9][0-9])_` grep returns nothing (exit 1), so (a) passes. (b) is still unmet (`032`/`033`
+  only on the 244 and 248 feature branches). Step 10 stays `pending`; hold conditions 1-3 above are unchanged.
