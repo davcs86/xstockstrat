@@ -255,6 +255,9 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
+- `services/xstockstrat-agent/tests/test_config_tools.py` — modify (capture stub signature only; operator scope expansion 2026-10-29)
+- `services/xstockstrat-agent/tests/test_signal_source_reliability_weight.py` — modify (capture stub signature only; operator scope expansion 2026-10-29)
+- `services/xstockstrat-agent/tests/test_template_tools.py` — modify (capture stub signature only; operator scope expansion 2026-10-29)
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
 
@@ -973,3 +976,12 @@ _Populated by /sdd-execute as implementation proceeds._
   reverted, uncommitted probe of the Step 3 change (constants plus `timeout=` on the 71 untimed stub calls) gave
   20/20 passed in 2.94 s, so the harness is GREEN-capable. Precedent: 247 Step 1. **Disposition**: expected per
   spec; Step 3 GREEN re-runs these tests.
+- **Step 3 (2026-10-29)** — scope expansion by operator decision ("A: Sign off, expand scope", recorded in
+  context.md). With `timeout=` on every stub call, six existing tests failed with `TypeError` because their
+  hand-written capture stubs accept only `(req, metadata=None)`: three in `tests/test_config_tools.py`, two in
+  `tests/test_signal_source_reliability_weight.py` and one in `tests/test_template_tools.py`. Step 3's **Files**
+  gain those three test files. Only each capture stub's signature changes, to `(req, metadata=None,
+  timeout=None)`; no assertion changes. **Disposition**: accepted by operator.
+- **Step 3 (2026-10-29)** — the Step 1 `Baseline verdict: HALT` (R1 not measured) is overridden by the
+  operator's explicit R1 sign-off in context.md, which accepts the 45 s LONG budget without a measured p99.
+  **Disposition**: accepted by operator.
