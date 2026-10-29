@@ -617,7 +617,7 @@ grep -n "AC-6\|AC-7\|AC-8\|cancel during catch-up" src/__tests__/configServiceIm
 
 ### Step 7 — service: ledger `appendEvent` acquires the client inside the try and releases it with the error
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -911,3 +911,15 @@ and a `destroys` counter.
 **Reason**: the paired test step follows its service step in the spec's order; four inline copies would trip the DRY
 guard rail.
 **Disposition**: as specced in substance (procedure and helper-shape note).
+
+### Deviation: Step 7 — RED/GREEN via a throwaway probe; no `client!` needed
+**Spec said**: "**TDD**: `red-green required` (Step 8 is the paired test)" and "use `client!` or a narrowed local
+(`const c = client`), as lint and tsc allow".
+**Actual**: Step 8's cases do not exist yet. RED and GREEN were captured with an uncommitted fake-pool probe run
+against the compiled `dist/grpc/ledgerServiceImpl.js`. Pre-change, AC-5 failed (`appendEvent` rejected with
+`timeout exceeded when trying to connect`, no callback) and AC-10 failed (`release()` got no Error). Post-change,
+3/3 passed, including a success-path pin of `release(undefined)`. tsc narrows `client` after
+`client = await this.pool.connect()`, so the try body uses `client.` unchanged, with no `!` and no local alias.
+Step 8 still owns the committed red→green proof.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced in substance (procedure note).

@@ -569,3 +569,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
 - Next: Step 7.
 
+### Step 7 — service: ledger appendEvent acquires the client inside the try and releases it with the error [done]
+- `ledgerServiceImpl.ts`:
+  - Added `import type { PoolClient } from 'pg';` (`:2`).
+  - `let client: PoolClient | undefined; let failure: unknown;` replaces the pre-try connect.
+    `client = await this.pool.connect();` is now the first statement in the try (`:78`).
+  - The catch sets `failure = err` and guards the ROLLBACK with `if (client)`.
+  - The finally runs `client?.release(failure instanceof Error ? failure : undefined)` (`:121`).
+  - The success path, dedup branch (LEDGER-1), insert SQL and plain no-key path are unchanged. tsc narrowing
+    made `client!` unnecessary.
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓. `pnpm install --frozen-lockfile` ran in this worktree, because the main
+  worktree has no `node_modules`.
+- TDD (a throwaway probe; Step 8 owns the committed proof):
+  - AC-5 red: `appendEvent` rejected with `timeout exceeded when trying to connect` and never called back → green:
+    `cb` was called once with code 13 and nothing was released.
+  - AC-10 red: `assert.ok(releases[0] instanceof Error)` failed → green: released with `connection terminated`, and
+    ROLLBACK was issued.
+  - Success pin: `release(undefined)`.
+- Verification:
+  - `pnpm run build` exit 0.
+  - `pnpm run lint` 0 errors, 97 warnings; the file has 24 warnings both before and after the change.
+  - `pnpm run test:coverage` 47/47 pass, with c8 lines at 73.55%.
+  - The 3 greps hit once each: `:2`, `:78` (after `try {` at `:77`) and `:121`.
+- Line shift: `appendEvent`'s idempotent block moved by +2 to +3 lines. LEDGER-1's `~L73-118` anchor and
+  `fix-identity-ledger-test-suites.feature:9` (`:84-105`) are approximate now. Refresh them in Step 9 or in the
+  teardown.
+- Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`
+- Next: Step 8.

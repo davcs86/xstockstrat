@@ -1,4 +1,5 @@
 import { Pool, Client } from 'pg';
+import type { PoolClient } from 'pg';
 import Cursor from 'pg-cursor';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigWatcher } from '../services/configWatcher';
@@ -71,8 +72,10 @@ export class LedgerServiceImpl {
     }
 
     // Idempotent path — claim key + insert atomically; on duplicate, return the stored event.
-    const client = await this.pool.connect();
+    let client: PoolClient | undefined;
+    let failure: unknown;
     try {
+      client = await this.pool.connect();
       await client.query('BEGIN');
       const claim = await client.query(
         `INSERT INTO ledger.idempotency_keys (idempotency_key, event_id)
@@ -110,11 +113,12 @@ export class LedgerServiceImpl {
       const row = result.rows[0];
       callback(null, { eventId, sequence: row.sequence, recordedAt: row.recorded_at });
     } catch (err: any) {
-      await client.query('ROLLBACK').catch(() => {});
+      failure = err;
+      if (client) await client.query('ROLLBACK').catch(() => {});
       log.error('appendEvent failed', { error: err.message, streamKey: req.streamKey });
       callback({ code: 13, message: `Internal error: ${err.message}` });
     } finally {
-      client.release();
+      client?.release(failure instanceof Error ? failure : undefined);
     }
   }
 
