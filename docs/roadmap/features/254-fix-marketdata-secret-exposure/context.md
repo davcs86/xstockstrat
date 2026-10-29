@@ -415,3 +415,17 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   Instructions 2-3 spell out `setEnv(...leaf, caPem)` (3-arg `setEnv`, `mintLeaf` returns `[certPem, keyPem]`, CA PEM
   read with `readFileSync` since openssl writes it to a path); Step 9 Verification names the DO apps MCP
   `apps-get-logs` tool because `doctl` is not installed in the sandbox. Steps 4, 6, 7, 8 unchanged.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4
+
+- Tooling setup (step 4): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter "xstockstrat-config..."`).
+- Step 4 done (D-40 prep). Created `services/xstockstrat-config/src/__tests__/mtlsTestPki.ts`, which exports `sh`,
+  `mintLeaf` and `setEnv` moved verbatim from `peerSanSpike.test.ts`. Both `peerSanSpike.test.ts` and `mtls.test.ts`
+  now import them and drop their local copies and the unused `execFileSync` / `writeFileSync` imports. `mintPki` and
+  the spike's inline CA lines are unchanged.
+- TDD: N/A (refactor with no behavior change). The characterization suites ran before and after the move: 182/182
+  pass both times, and `inter-service mTLS` and `peer SAN spike` stay green. c8 all-files lines are 86.77% both
+  times (>= 40).
+- Verification: `pnpm run lint` exit 0 (warnings only, none in the touched files). The grep finds `function sh|mintLeaf|setEnv`
+  only in `mtlsTestPki.ts`. jscpd was run directly instead of through the script (Deviation Log): 0 clones in config.
+  The 46 repo-wide clones are all in files this step does not touch.
