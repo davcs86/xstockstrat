@@ -25,11 +25,18 @@ import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
-import { ALERT_STREAM_ALL, ALERT_LIST_WITH_READ_STATE, MOCK_UNREAD_COUNT } from './fixtures/alerts';
+import {
+  ALERT_STREAM_ALL,
+  ALERT_STREAM_HELD,
+  ALERT_STREAM_HOLD_MS,
+  ALERT_STREAM_HOLD_TRACE_ID,
+  ALERT_LIST_WITH_READ_STATE,
+  MOCK_UNREAD_COUNT,
+} from './fixtures/alerts';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { signTestJwt } from './helpers/auth';
-import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../src/lib/headers';
+import { REFRESH_STALL_TOKEN, signTestJwt } from './helpers/auth';
+import { HEADER_ACCESS_SCOPE, HEADER_TRACE_ID, HEADER_USER_ID } from '../src/lib/headers';
 import { ADMIN_SCOPE } from '../src/lib/auth';
 import {
   TEST_USER_ID,
@@ -181,7 +188,12 @@ export async function startMockBackend(): Promise<void> {
         claims: { userId: TEST_USER_ID, email: TEST_USER_EMAIL, roles: [] },
       };
     },
-    async refreshToken() {
+    async refreshToken(req: { refreshToken: string }, ctx: { signal: AbortSignal }) {
+      // feature 271: a stalled identity — never answers until the caller's deadline aborts it.
+      if (req.refreshToken === REFRESH_STALL_TOKEN) {
+        await new Promise<void>((resolve) => ctx.signal.addEventListener('abort', () => resolve()));
+        throw new ConnectError('aborted by caller', Code.Canceled);
+      }
       return {
         accessToken: testAccessToken,
         refreshToken: 'test-refresh-token',
@@ -527,7 +539,19 @@ export async function startMockBackend(): Promise<void> {
       });
 
       router.service(NotifyService, {
-        async *streamAlerts(): AsyncGenerator<Alert> {
+        async *streamAlerts(_req, ctx): AsyncGenerator<Alert> {
+          // feature 271 @AC-5: hold the stream open past the unary default, abort-aware.
+          if (ctx.requestHeader.get(HEADER_TRACE_ID) === ALERT_STREAM_HOLD_TRACE_ID) {
+            const held = await new Promise<boolean>((resolve) => {
+              const timer = setTimeout(() => resolve(true), ALERT_STREAM_HOLD_MS);
+              ctx.signal.addEventListener('abort', () => {
+                clearTimeout(timer);
+                resolve(false);
+              });
+            });
+            if (held) yield ALERT_STREAM_HELD as Alert;
+            return;
+          }
           for (const alert of ALERT_STREAM_ALL) {
             yield alert as Alert;
           }
