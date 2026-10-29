@@ -66,7 +66,19 @@ class ConfigWatcher:
             endpoint, mtls.channel_credentials(), options=mtls.target_override("xstockstrat-config")
         )
         self._stub = config_pb2_grpc.ConfigServiceStub(self._channel)
-        asyncio.get_event_loop().create_task(self._watch())
+        self._watch_task = asyncio.get_event_loop().create_task(
+            self._watch(), name=f"config-watch-{namespace}"
+        )
+        self._watch_task.add_done_callback(self._on_watch_done)
+
+    def _on_watch_done(self, task):
+        try:
+            if task.cancelled():
+                return
+            exc = task.exception()
+            log.error("config watch task %s exited unexpectedly: %r", task.get_name(), exc)
+        except Exception:  # noqa: BLE001 — a done-callback must never raise
+            pass
 
     def _build_watch_request(self) -> config_pb2.WatchConfigRequest:
         return config_pb2.WatchConfigRequest(
@@ -88,8 +100,8 @@ class ConfigWatcher:
                         snapshot.namespace,
                         snapshot.version,
                     )
-            except grpc.aio.AioRpcError as e:
-                log.warning("config stream error: %s, reconnecting in 2s", e)
+            except Exception as e:  # noqa: BLE001 — any error reconnects; CancelledError propagates
+                log.warning("config stream error (%s): %s, reconnecting in 2s", type(e).__name__, e)
                 await asyncio.sleep(2)
 
     async def wait_for_snapshot(self, timeout_seconds: float = 90.0):
@@ -107,7 +119,7 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.string_val or default
+        return v.string_val if v.HasField("string_val") else default
 
     def get_int(self, key: str, default: int = 0) -> int:
         if self._snapshot is None:
@@ -115,17 +127,9 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.int_val or default
-
-    def get_int_present(self, key: str, default: int) -> int:
-        """Use this (never get_int) for keys where a stored 0 is meaningful: HasField honors
-        a present 0 instead of collapsing it to the default."""
-        if self._snapshot is None:
-            return default
-        v = self._snapshot.values.get(key)
-        if v is None:
-            return default
         return v.int_val if v.HasField("int_val") else default
+
+    get_int_present = get_int
 
     def get_bool(self, key: str, default: bool = False) -> bool:
         if self._snapshot is None:
@@ -141,7 +145,7 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.float_val or default
+        return v.float_val if v.HasField("float_val") else default
 
     async def resolve_secret(self, key: str, user_id: str = "") -> tuple[str, bool]:
         """Resolve an encrypted config secret (feature 166) via the config GetSecret RPC.
@@ -163,28 +167,11 @@ class ConfigWatcher:
         )
         return resp.value, resp.found
 
-    # Sandbox config helpers — indicators.sandbox.*
-    @property
-    def sandbox_timeout_ms(self) -> int:
-        return self.get_int("indicators.sandbox.timeout_ms", default=5000)
-
-    @property
-    def sandbox_memory_bytes(self) -> int:
-        return self.get_int("indicators.sandbox.memory_bytes", default=128 * 1024 * 1024)
-
-    @property
-    def sandbox_allowed_imports(self) -> list[str]:
-        raw = self.get_str(
-            "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
-        )
-        return [m.strip() for m in raw.split(",") if m.strip()]
-
     # Backfill config helpers — ingest.backfill.*
     @property
     def backfill_max_concurrent_jobs(self) -> int:
-        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
-        # asyncio.Semaphore(0) at servicer.py:191 and deadlock. Do NOT switch to get_int_present.
-        return self.get_int("ingest.backfill.max_concurrent_jobs", default=3)
+        # >0: Semaphore(0) deadlocks IngestServicer._backfill_sem
+        return int_positive(self, "ingest.backfill.max_concurrent_jobs", 3)
 
     @property
     def backfill_retry_on_failure(self) -> bool:
@@ -197,19 +184,24 @@ class ConfigWatcher:
     # Chunked-backfill config helpers — ingest.backfill.*
     @property
     def backfill_chunk_max_bars(self) -> int:
-        return self.get_int("ingest.backfill.chunk_max_bars", default=200000)
+        return int_positive(self, "ingest.backfill.chunk_max_bars", 200000)
 
     @property
     def backfill_chunk_window_days(self) -> int:
-        return self.get_int("ingest.backfill.chunk_window_days", default=90)
+        return int_positive(self, "ingest.backfill.chunk_window_days", 90)
 
     @property
     def backfill_max_concurrent_chunks(self) -> int:
-        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
-        # asyncio.Semaphore(0) at servicer.py:519 and deadlock. Do NOT switch to get_int_present.
-        return self.get_int("ingest.backfill.max_concurrent_chunks", default=3)
+        # >0: Semaphore(0) deadlocks the per-job chunk semaphore in IngestServicer
+        return int_positive(self, "ingest.backfill.max_concurrent_chunks", 3)
 
     # Signal dedup config helper — ingest.signals.*
     @property
     def dedup_window_hours(self) -> int:
         return self.get_int_present("ingest.signals.dedup_window_hours", default=24)
+
+
+def int_positive(cfg, key: str, default: int) -> int:
+    # >0, not >=0: Semaphore(-1) raises and sleep(-n) busy-loops just like 0 does.
+    v = cfg.get_int(key, default)
+    return v if v > 0 else default

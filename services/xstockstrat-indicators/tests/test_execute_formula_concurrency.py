@@ -23,7 +23,7 @@ from gen.indicators.v1 import indicators_pb2
 from app.handlers.servicer import IndicatorsServicer
 from app.services import sandbox
 from app.services.sandbox import SandboxResult
-from tests.conftest import OWNER_HEADERS, ctx_with
+from tests.conftest import OWNER_HEADERS, ctx_with, snapshot_watcher
 
 pytestmark = pytest.mark.asyncio
 
@@ -118,3 +118,42 @@ async def test_timeout_preserved_end_to_end():
     resp = await servicer.ExecuteFormula(req, ctx_with(OWNER_HEADERS))
 
     assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+
+
+# Feature 244 @AC-6 — a stored max_concurrent 0 reaches neither the semaphore nor the sandbox's
+# RLIMIT_NPROC; the timeout/memory defaults reach the sandbox through _clamp_override (no override).
+def _stored_zero_watcher():
+    return snapshot_watcher(
+        **{"indicators.sandbox.max_concurrent": 0, "indicators.sandbox.allowed_imports": ""}
+    )
+
+
+async def test_stored_zero_max_concurrent_builds_default_semaphore():
+    assert IndicatorsServicer(config_watcher=_stored_zero_watcher())._sandbox_sem._value == 4
+
+
+async def test_stored_zero_max_concurrent_passes_defaults_to_sandbox(monkeypatch):
+    calls = []
+
+    def _recorder(**kwargs):
+        calls.append(kwargs)
+        return SandboxResult(
+            success=True,
+            output={"value": 1.0},
+            stdout="",
+            stderr="",
+            execution_ms=0,
+            memory_used_bytes=0,
+            error="",
+            exit_reason="success",
+        )
+
+    monkeypatch.setattr(sandbox, "execute_formula", _recorder)
+    servicer = IndicatorsServicer(config_watcher=_stored_zero_watcher())
+
+    await servicer.ExecuteFormula(_exec_req(), ctx_with(OWNER_HEADERS))
+
+    assert len(calls) == 1
+    assert calls[0]["max_concurrent"] == 4
+    assert calls[0]["timeout_ms"] == 5000
+    assert calls[0]["memory_bytes"] == 134217728

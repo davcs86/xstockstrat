@@ -15,6 +15,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app import mtls
+from app.scopes import _ADMIN
 
 log = logging.getLogger(__name__)
 
@@ -2037,6 +2038,15 @@ def _config_env(environment: str) -> int:
     )
 
 
+def _effective_config_user_id(user_id: str) -> str:
+    # Mirrors config boundReadUserId (services/xstockstrat-config/src/grpc/authz.ts);
+    # the two must change together.
+    caller = _CALLER.get()
+    if caller and caller[0] and not (caller[1] & _ADMIN) and user_id and user_id != caller[0]:
+        return caller[0]
+    return user_id
+
+
 async def get_config(namespace: str, environment: str, user_id: str = "") -> dict:
     """One-shot ConfigService.GetConfig. Read path — no admin scope (AGENT-3).
     Feature 147: scoped by environment (production/staging) x optional user_id (empty = global).
@@ -2062,7 +2072,7 @@ async def get_config(namespace: str, environment: str, user_id: str = "") -> dic
             "namespace": resp.namespace,
             "version": resp.version,
             "environment": environment,
-            "user_id": user_id,
+            "user_id": _effective_config_user_id(user_id),
             "values": values,
         }
 
@@ -2083,7 +2093,7 @@ async def list_config_keys(namespace: str, environment: str, user_id: str = "") 
         return {
             "namespace": namespace,
             "environment": environment,
-            "user_id": user_id,
+            "user_id": _effective_config_user_id(user_id),
             "keys": [
                 {
                     "key": k.key,

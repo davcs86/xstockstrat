@@ -1603,7 +1603,7 @@ export type FundamentalsScanSummary = Message<"xstockstrat.analysis.v1.Fundament
   deferredCount: number;
 
   /**
-   * "completed" | "budget_deferred" | "failed"
+   * "completed" | "budget_deferred" | "partial" | "failed"
    *
    * @generated from field: string status = 6;
    */

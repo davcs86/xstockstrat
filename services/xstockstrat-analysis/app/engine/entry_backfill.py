@@ -17,6 +17,7 @@ from datetime import UTC
 
 from gen.trading.v1 import trading_pb2
 
+from app.config.watcher import int_positive
 from app.engine.live_loop import resolve_universe
 from app.handlers.servicer import _row_to_strategy_definition, blend_strategy_id
 
@@ -54,7 +55,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     if trading_stub is None:
         return
     sem = asyncio.Semaphore(
-        max(1, cfg_watcher.get_int("analysis.strategy.max_concurrent_entry_backfill", 4))
+        int_positive(cfg_watcher, "analysis.strategy.max_concurrent_entry_backfill", 4)
     )
     rows = await db_pool.fetch(
         "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"
