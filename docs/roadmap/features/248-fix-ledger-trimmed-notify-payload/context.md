@@ -694,3 +694,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `services/xstockstrat-ledger/src/__tests__/fixtures/INVENTORY.md`, `.github/workflows/ci.yml`
 - Deviations: Deviation Log 2026-10-29 "Step 9 execution".
 - Next: Step 10.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 10
+
+- Authorization: the same operator standing authorization as Step 9. Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`dcfeac34`). Root `node_modules` is
+  symlinked from the main worktree for the husky hook.
+
+### Step 10 — test: Consumer verification — analysis and portfolio (no code change) [done]
+- Re-read result: unchanged, so there is no stop-and-ask.
+  - Portfolio: `consumeEventStream` (`portfolio_service.go:185-202`) returns only when `ctx.Err() != nil` and
+    otherwise sleeps 2 s (`:199`) and reconnects. `isGracefulStreamClose` only selects the log line.
+  - Portfolio: in `streamEventsFrom` (`:206-233`), `io.EOF` (`:220`) is the only clean close. Codes 13 and 14 return
+    `lastSeq` at `:223-224`. The cursor moves after `handle` succeeds (`:229-230`), and the resume point is
+    `lastSeq + 1` (`:207-210`).
+  - Analysis: `run_forever` (`pnl_pattern_consumer.py:147-162`) re-reads the cursor on every reconnect and sleeps 2 s
+    after any stream exception. `process_event` drops `sequence <= cursor` (`:167`). The cursor is advanced inside the
+    handler's transaction (`:240`, `:287`).
+  - There is no consumer source diff since `b6e518a7`; only `analysis/uv.lock` changed.
+- TDD: N/A. This is verification only, a characterization of unchanged consumers.
+- Verification:
+  - The three greps hit at `portfolio_service.go:199` and `:220`, and at `pnl_pattern_consumer.py:162`.
+  - Portfolio: `GOWORK=off go test ./... -race -count=1 -coverpkg=<non-service pkgs>` exited 0, with total 68.6%.
+    This is a smoke check only, because `/service` is excluded from `COVERPKGS`.
+  - Portfolio: `TestStreamEventsFrom_HandlerError_DoesNotAdvanceCursor` passed.
+  - Analysis: `uv run --no-sync pytest -m "not real_pg"` passed 1296, with 4 deselected. Those `real_pg` tests need a
+    local PostgreSQL, which the executor may not start; CI runs them. `tests/test_pnl_pattern_consumer.py` passed
+    10/10.
+- Observations, not fixed (outside scope, existing behaviour):
+  - Analysis `run_forever` reconnects with no sleep when the stream ends cleanly. A ledger that closes cleanly in a
+    tight loop would cause rapid reconnects.
+  - A per-event exception (`:158-159`) is logged and skipped. A later successful event can then move the cursor past
+    the failed one.
+- Files modified: none (verification only).
+- Deviations: Deviation Log 2026-10-29 "Step 10 execution" (analysis `real_pg` deselected; docs-only commit).
+- Next: Step 11.

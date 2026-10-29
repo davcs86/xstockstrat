@@ -30,6 +30,7 @@
 | 2026-10-29 | `in-progress` (Step 7 done) | /sdd-execute sequential (sdd-batch-execute) | Step 7: `streamEvents` normalises `sequence` with `Number()` (the `maxSeq` seed, `writeRow`, live `onEvent`, buffer flush), so pg-string `BIGINT` sequences compare numerically. The RED/GREEN probe was uncommitted. Suite 79/79 pass, coverage 86.39% lines |
 | 2026-10-29 | `in-progress` (Step 8 done) | /sdd-execute sequential (sdd-batch-execute) | Step 8: tier (iii) `streamEvents` sequence-normalisation cases (AC-2 replayed `"98"`/`"99"` then resolved `"100"` with no NOTIFY duplicate; AC-5 buffered `"100"` flushed once) and a string-`int64` encode/decode case. RED against pre-Step-7 source. Suite 82/82 pass, coverage 86.39% lines |
 | 2026-10-29 | `in-progress` (Step 9 done) | /sdd-execute sequential (sdd-batch-execute) | Step 9: real-TimescaleDB tier (iv). Adds the `test:db` script, `src/__tests__/db/streamResolve.db.test.ts` (AC-1 trigger round-trip plus one chunk and one row, AC-6/AC-7 replay recovery, AC-9 `statement_timeout`), and the `ledger-db-test` CI job, which is also in `ci-gate`. The RED was not captured because the DB is CI-only. The GREEN is owed on the integration PR's `ledger-db-test` run. Unit suite 82/82, coverage 86.39% lines |
+| 2026-10-29 | `in-progress` (Step 10 done) | /sdd-execute sequential (sdd-batch-execute) | Step 10: consumer verification with no code change. Portfolio `consumeEventStream`/`streamEventsFrom` and analysis `PnLPatternConsumer.run_forever` still reconnect and replay on a non-OK end, and advance the cursor only after the handler. Portfolio `go test -race` passed with total 68.6% (smoke check; `/service` is excluded), and `TestStreamEventsFrom_HandlerError_DoesNotAdvanceCursor` passed. Analysis pytest passed 1296 with the 4 `real_pg` tests deselected |
 
 ---
 
@@ -67,4 +68,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 10 next (consumer verification: analysis and portfolio, no code change)
+`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 11 next (docs teardown: invariants, CLAUDE.md, findings, config log, CI table)

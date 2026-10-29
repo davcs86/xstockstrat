@@ -893,7 +893,7 @@ grep -n 'needs.ledger-db-test.result' .github/workflows/ci.yml
 
 ### Step 10 — test: Consumer verification — analysis and portfolio (no code change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`, `xstockstrat-portfolio`
 **Files**: none (verification only)
 
@@ -1213,3 +1213,18 @@ _Populated by /sdd-execute as implementation proceeds._
   warnings in the new suite.
 - **Disposition**: no spec change.
 
+### 2026-10-29 — Step 10 execution
+
+- **Step**: 10
+- **Planned**: Instruction 2 says to run both suites and "Commit nothing"; **Verification** gives only the portfolio
+  `go test` command, and nothing for analysis.
+- **Actual**:
+  - The analysis suite ran as CI does (`uv sync --frozen --extra dev`, then `uv run --no-sync pytest`), but with
+    `-m "not real_pg"`: 1296 passed and 4 deselected. Those 4 `real_pg` tests start a local PostgreSQL
+    (`tests/conftest.py` `local_pg`), and the executor may not start a database. CI's `python-test` job still runs
+    them.
+  - "Commit nothing" is read as "no code". Per §5.5 the step's status flip, feature.md and context.md go in one
+    docs-only commit; no service file is staged.
+  - The consumer sources are unchanged since `b6e518a7`: the only diff on either service is
+    `xstockstrat-analysis/uv.lock`, a lockfile change from the main-dev merge.
+- **Disposition**: no spec change.
