@@ -444,7 +444,7 @@ grep -n "signal_id IS NULL" services/xstockstrat-analysis/app/engine/fundsignal_
 
 ### Step 5 — test: retry direction stability and the mode-dependent `valid_until` anchor (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
@@ -778,3 +778,13 @@ _Populated by /sdd-execute as implementation proceeds._
   skipped this command under the "never start a database" HARD CONSTRAINT, so this run departs from that
   disposition. It touched no shared, staging or production database. The other commands ran as specced:
   `test_fundsignal_loop.py` 68 passed; coverage `-m "not real_pg"` 1307 passed, 7 deselected, 88.72%; ruff clean.
+- **2026-10-29, Step 5 (minor, no scope change):** four test-harness notes.
+  - (a) `_FixedClock` is applied by an autouse fixture on `TestRetryStability`. The fixture makes the same
+    `monkeypatch.setattr(fundsignal_module, "datetime", _FixedClock)` call each test would have made. Two inline
+    helpers back it (C-13, single consumer): `_FIXED_NOW` and `_ingest_requests(loop, symbol)`.
+  - (b) In @AC-8, run 2 passes `override_symbols=["AAPL", "MSFT"]`. MSFT is already confirmed, so `to_process` is
+    still `[AAPL]`, as specced, and the day's stored scores still feed the cuts.
+  - (c) @AC-8's RED fails first on the direction assertion (`'buy' == 'sell'`), so its `valid_until` assertion is
+    masked on the pre-fix tree.
+  - (d) To check that GREEN is reachable, Step 6's specced change was applied temporarily. `test_fundsignal_loop.py`
+    then gave 72 passed, including every `valid_until` assertion. The change was reverted and is not in this commit.

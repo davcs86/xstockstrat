@@ -24,6 +24,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute (re-spec, sdd-batch-execute) | `origin/main-dev` merged into the branch (clean; ledger-guard clean). Steps 3-6 re-aligned to the current codebase: `fundsignal_loop.py` and test-harness line drift only (+3..+8 in the loop, about +52 in tests); no change to scope, predicates or SQL |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 3 done: RED tests for @AC-1/2/3/5/7, the stateful `_EmittedTable` fake (`TestEmitAccounting`) and the `real_pg` claim/confirm/release file |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 4 done: an unconfirmed emit releases its NULL claim (`_release_claim`), the confirm is scoped by `run_id` and `signal_id IS NULL`, and only accepted signals are counted |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 5 done: RED tests for @AC-8/9 and the `reference_scores` cuts, plus the @AC-10 force PRESERVE pin (`TestRetryStability`, `_FixedClock`) |
 
 ---
 
@@ -60,4 +61,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 5 (test: retry direction stability and the mode-dependent `valid_until` anchor, RED)
+`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 6 (service: day-wide direction cuts and the mode-dependent `valid_until` anchor)

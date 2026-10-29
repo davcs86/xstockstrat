@@ -1213,3 +1213,82 @@ class TestEmitAccounting:
         await fresh.run_once(override_symbols=["AAPL"])
         assert _ingested_symbols(fresh) == ["AAPL"]
         assert yesterday_only.rows[key]["signal_id"] == 33
+
+
+# ── Feature 260 — retry direction stability and the valid_until anchor (AC-8/9/10) ─────────────
+
+_FIXED_NOW = datetime(2026, 10, 21, 15, 30, tzinfo=UTC)
+
+
+class _FixedClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return _FIXED_NOW
+
+
+def _ingest_requests(loop, symbol):
+    return [c[1] for c in loop._ingest.of("IngestSignal") if c[1].signal.symbol == symbol]
+
+
+class TestRetryStability:
+    @pytest.fixture(autouse=True)
+    def _fixed_clock(self, monkeypatch):
+        monkeypatch.setattr(fundsignal_module, "datetime", _FixedClock)
+
+    @pytest.mark.asyncio
+    async def test_ac8_lost_response_retry_resends_identical_signal(self):
+        import grpc
+
+        table = _EmittedTable()
+        ingest = _ingest_by_symbol(
+            {
+                "AAPL": _rpc_error(grpc.StatusCode.UNAVAILABLE),
+                "MSFT": SimpleNamespace(signal_id=11),
+            }
+        )
+        first = _fake_loop({"AAPL": 0.85, "MSFT": 0.90}, ingest, table)
+        await first.run_once(override_symbols=["AAPL", "MSFT"])
+
+        second = _fake_loop({"AAPL": 0.85}, SimpleNamespace(signal_id=10, deduplicated=True), table)
+        summary = await second.run_once(override_symbols=["AAPL", "MSFT"])
+
+        (sent,) = _ingest_requests(first, "AAPL")
+        (resent,) = _ingest_requests(second, "AAPL")
+        assert resent.signal.direction == sent.signal.direction
+        assert resent.signal.conviction == sent.signal.conviction
+        assert resent.signal.valid_until == sent.signal.valid_until
+        assert resent.signal.valid_until.ToDatetime(tzinfo=UTC) == datetime(2027, 1, 19, tzinfo=UTC)
+        assert summary.signals_emitted == 1
+        assert table.rows[("AAPL", "fundamentals", _FIXED_NOW.date())]["signal_id"] == 10
+
+    @pytest.mark.asyncio
+    async def test_ac9_one_symbol_retry_keeps_day_wide_direction(self):
+        table = _EmittedTable()
+        today = _FIXED_NOW.date()
+        table.seed("MSFT", today, signal_id=21, score=0.90)
+        table.seed("NVDA", today, signal_id=22, score=0.70)
+        table.seed("GOOG", today, signal_id=23, score=0.50)
+        loop = _fake_loop({"AAPL": 0.10}, SimpleNamespace(signal_id=24), table)
+        await loop.run_once(override_symbols=["AAPL", "GOOG", "MSFT", "NVDA"])
+
+        calls = loop._ingest.of("IngestSignal")
+        assert [c[1].signal.symbol for c in calls] == ["AAPL"]
+        assert calls[0][1].signal.direction == "sell"
+
+    def test_map_directions_reference_scores_set_the_cuts(self):
+        assert FundamentalsSignalLoop._map_directions(
+            {"AAPL": 0.10}, 0.80, 0.20, reference_scores=[0.90, 0.70, 0.50]
+        ) == {"AAPL": "sell"}
+        assert FundamentalsSignalLoop._map_directions({"AAPL": 0.10}, 0.80, 0.20) == {"AAPL": "buy"}
+
+    @pytest.mark.asyncio
+    async def test_ac10_force_keeps_now_anchored_valid_until(self):
+        table = _EmittedTable()
+        table.seed("AAPL", _FIXED_NOW.date(), signal_id=31)
+        loop = _fake_loop({"AAPL": 0.85}, SimpleNamespace(signal_id=32), table)
+        await loop.run_once(force=True, override_symbols=["AAPL"])
+
+        (req,) = _ingest_requests(loop, "AAPL")
+        valid_until = req.signal.valid_until.ToDatetime(tzinfo=UTC)
+        assert valid_until == datetime(2027, 1, 19, 15, 30, tzinfo=UTC)
+        assert valid_until != datetime(2027, 1, 19, tzinfo=UTC)

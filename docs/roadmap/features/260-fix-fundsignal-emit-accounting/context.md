@@ -529,3 +529,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     That is in the Deviation Log.
 - Deviations: line drift only (+-3 against the rev-2 citations), recorded in the Deviation Log.
 - Next: Step 5 (test: retry direction stability and the mode-dependent `valid_until` anchor, RED).
+
+### Step 5 — test: retry direction stability and the mode-dependent `valid_until` anchor (RED) — done (2026-10-29)
+
+- Files: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`.
+  - Adds an inline `_FixedClock` (now = `2026-10-21T15:30Z`), applied by an autouse fixture that monkeypatches
+    `fundsignal_module.datetime`.
+  - Adds `_FIXED_NOW`, `_ingest_requests` and `class TestRetryStability` with 4 tests. They reuse Step 3's
+    `_EmittedTable` and `_fake_loop`.
+- TDD RED (`-k "TestRetryStability or TestScoreDirection"`): 3 failed, 4 passed, matching the spec.
+  - AC-8 red: `'buy' == 'sell'`. Run 2 maps the lone AAPL 0.85 to buy, but run 1 (with MSFT 0.90) mapped it to sell.
+  - AC-9 red: `'buy' == 'sell'`.
+  - The `reference_scores` cuts test is red: `TypeError: unexpected keyword argument 'reference_scores'`.
+  - Green as guards: AC-10, the force PRESERVE pin with `valid_until` `2027-01-19T15:30Z`, and
+    `test_quantile_buckets`.
+- Full suite `-m "not real_pg"`: 3 failed (the RED above), 1308 passed, 7 deselected. ruff check and format are clean.
+- GREEN reachability: Step 6's specced change was applied temporarily and gave 72 passed in the file. It was reverted.
+- Toolchain: the worktree had no `.venv`, so `uv sync --extra dev` created one with CPython 3.12.3, the host
+  interpreter.
+- Deviations: an autouse fixture applies the clock, two inline helpers were added, and @AC-8 run 2 uses override
+  `[AAPL, MSFT]`. All three are in the Deviation Log.
+- Next: Step 6 (service: day-wide direction cuts and the mode-dependent `valid_until` anchor).
