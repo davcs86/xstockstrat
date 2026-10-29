@@ -875,3 +875,103 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - All 10 steps done → `status.md` `code-completed`. Next: integration PR (PR body must carry Step 9's teardown note +
   Open Risks), then triage of the new report.
 - Deviations: none.
+
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-indicators-formula-correctness (feature 268)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-indicators/acceptance/fix-indicators-formula-correctness.feature | CREATE | NEW | ExecuteFormula empty-output failure; no existing suite asserts it |
+| AC-2 | same | CREATE | NEW | unparseable output line fails |
+| AC-3 | same | CREATE | NEW | `result = {...}` still succeeds (positive guard for FR-2) |
+| AC-4 | same | CREATE | NEW | ATR described as close-to-close approximation |
+| AC-5 | same | CREATE | NEW | VWAP described as running mean |
+| AC-6 | same | CREATE | NEW | UpdateFormula refuses pending-hidden saga copy |
+| AC-7 | same | CREATE | NEW | DeleteFormula refuses pending-hidden saga copy |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-indicators-formula-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/268-fix-indicators-formula-correctness/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-268` tag.
+# Durable business rules xstockstrat-indicators already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-indicators — formula execution reports failures, built-ins are honestly named, saga copies are immutable
+  Regression guard for docs/reports/2026-10-21-indicators-formula-correctness-defect.md:
+  silent empty formula success (D-10), misnamed ATR/VWAP (D-18), and mutation of hidden saga copies (D-54).
+
+  @AC-1 @FR-1 @regression @feature-268
+  Scenario: A formula that exits before producing output is reported as a failure
+    Given a formula whose source is "raise SystemExit(0)"
+    When ExecuteFormula runs it
+    Then success is false
+    And error contains "produced no output"
+    And output is empty
+    And exit_reason is not SANDBOX_EXIT_REASON_SUCCESS
+
+  @AC-2 @FR-1 @regression @feature-268
+  Scenario: A formula whose only output line does not parse is reported as a failure
+    Given a formula whose source prints "__OUTPUT__:{" and then raises SystemExit(0)
+    When ExecuteFormula runs it
+    Then success is false
+    And error contains "could not be parsed"
+    And exit_reason is not SANDBOX_EXIT_REASON_SUCCESS
+
+  @AC-3 @FR-2 @regression @feature-268
+  Scenario: A formula that assigns result still succeeds
+    Given a formula whose source is "result = {'x': 1}"
+    When ExecuteFormula runs it
+    Then success is true
+    And output is {"x": 1}
+
+  @AC-4 @FR-3 @option-A @regression @feature-268
+  Scenario: The ATR built-in is described as the close-to-close approximation it computes
+    Given close values [10, 12, 11, 13] and params {"period": 2}
+    When ListIndicators and ComputeIndicator "ATR" are called
+    Then ListIndicators still lists the key "ATR"
+    And its description does not contain "Average True Range"
+    And its description names the close-to-close approximation
+    And the ComputeIndicator "ATR" response result holds 2 IndicatorPoints with values [1.5, 1.5]
+    And the 2 warm-up positions are omitted from result
+
+  @AC-5 @FR-4 @option-A @regression @feature-268
+  Scenario: The VWAP built-in is described as the running mean it computes
+    Given close values [10, 20, 30]
+    When ListIndicators and ComputeIndicator "VWAP" are called
+    Then ListIndicators still lists the key "VWAP"
+    And its description does not contain "Volume Weighted Average Price"
+    And its description names the running mean
+    And the ComputeIndicator "VWAP" response result holds IndicatorPoints with values [10, 15, 20]
+
+  @AC-6 @FR-5 @regression @feature-268
+  Scenario: UpdateFormula refuses a pending-hidden saga copy
+    Given a formula "f-1" authored by "u-1" with pending_intent_id "i-1"
+    When "u-1" calls UpdateFormula on "f-1"
+    Then the call fails with NOT_FOUND
+    And the stored row for "f-1" is unchanged
+
+  @AC-7 @FR-5 @regression @feature-268
+  Scenario: DeleteFormula refuses a pending-hidden saga copy
+    Given a formula "f-1" authored by "u-1" with pending_intent_id "i-1"
+    When "u-1" calls DeleteFormula on "f-1"
+    Then the call fails with NOT_FOUND
+    And "f-1" has no deleted_at timestamp
+
+### Notes / ambiguities / conflicts
+- All 7 route to indicators: observable subjects (ExecuteFormula, ListIndicators/ComputeIndicator, UpdateFormula/DeleteFormula) are indicators RPCs. None is cross-service, so nothing goes to /home/user/xstockstrat/docs/sdd/business-rules/platform.feature.
+- No dedup hits. Grepped all services/*/acceptance/*.feature and platform.feature for ATR, VWAP, pending_intent, "produced no output", SystemExit, ExecuteFormula, UpdateFormula and DeleteFormula. No @feature-268 scenario exists anywhere, so there are no DUPs.
+- Related but not overlapping or conflicting:
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/private-by-default-templates.feature:73 says an admin gets PERMISSION_DENIED on Update/Delete. AC-6 and AC-7 cover the author on a pending-hidden copy, which is a different outcome, so they extend that rule.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/indicators-sandbox-os-isolation.feature:33 says a legitimate formula gives an identical result. AC-3 is compatible with it.
+  - /home/user/xstockstrat/services/xstockstrat-trading/acceptance/wire-signal-confidence-to-position-sizing.feature:9 mentions ATR only as sizing input, not the built-in's description.
+- The `@option-A` tag is kept verbatim on AC-4 and AC-5. It records that D-18 resolved as Option A at design.
+- The source's preamble comment about the deleted @option-B pair (AC-8, AC-9) is not carried over, since those scenarios do not exist.
+- The target directory already exists. The file is a CREATE because no suite of this name exists.
+
+### Coverage check
+- Source scenarios: 7 (AC-1 to AC-7). Planned (NEW+DUP+OVERLAP): 7 (7 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). None skipped.
+```
