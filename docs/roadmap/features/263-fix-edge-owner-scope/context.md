@@ -588,3 +588,52 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   `e2e/insights/backfills.spec.ts:135-136` errors (DEV-4).
 - Deviations: DEV-5 (RED via temporary restore of the pre-Step-5 handler, since Step 5 landed first).
 
+
+### Step 7 — test: trader BFF owner scoping end to end (e2e mock + fixtures + spec) [done] (2026-10-29)
+
+- Fixtures (`e2e/fixtures/ledgerEvents.ts`): added `OWNER_SCOPE_ORDER_FILLED_EVENTS`. It has three
+  `order.filled` `LedgerExportFixtureRow`s: the own `TEST_USER_ID` MSFT row, a foreign
+  `OWNER_SCOPE_FOREIGN_USER_ID` (= `TEST_USER_B_ID`) AAPL row, and a NULL-owned TSLA row on
+  `account:acct-legacy`. Also added `OWNER_SCOPE_FOREIGN_ACCOUNT_ID` (`acct-b`), the own and legacy
+  symbols, and the own and foreign copilot note texts.
+- `INVENTORY.md`: added a catalog row for these fixtures. The "Not yet centralized" ledger row no longer
+  lists the `order.filled` branch.
+- Mock (`e2e/mock-backend.ts`): the default `order.filled` branch now maps the fixture. It keeps only
+  `TEST_USER_ID` rows when `req.ownerOnly`, and no longer filters on `sourceService`. The
+  `copilotThreads` store is seeded with a foreign note under
+  `copilotStreamKey(OWNER_SCOPE_FOREIGN_USER_ID)`. The `account:` and copilot branches are unchanged.
+- Spec (`e2e/trader/ledger-owner-scope.spec.ts`): 4 tests use the api-smoke browser-`fetch` pattern
+  with `addAuthCookie`:
+  - AC-1: a foreign `account:` returns non-200 with `permission_denied`
+  - AC-2/AC-7: no foreign, NULL-owned or TSLA rows come back, and the own MSFT row does
+  - AC-3: an owned `account:alpaca-default` returns the reconciliation event
+  - AC-3 copilot: `AppendEvent`, then `QueryEvents` with the foreign copilot key, resolves to the
+    caller's thread; the appended note is present and the foreign note is absent
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/ledgerEvents.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/mock-backend.ts`,
+  `services/xstockstrat-ui/e2e/trader/ledger-owner-scope.spec.ts`
+- Tooling setup (step 7):
+  - node ✓ 24.20.0 · pnpm ✓ 9.15.9
+  - workspace deps ⬇ `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter .`
+    (worktree-local)
+  - Chromium pre-provisioned at `/opt/pw-browsers` (no `playwright install`)
+- TDD (AC-1/AC-2/AC-7, DEV-6):
+  - Red, against the pre-Step-5 `traderBff.ts` (`54ef1a73~1`, restored temporarily): 2/4 fail.
+    - AC-1: `expect(result.status).not.toBe(200)` got 200.
+    - AC-2: `events.some(userId === OWNER_SCOPE_FOREIGN_USER_ID)` expected false, got true.
+    - Both AC-3 cases pass as baselines.
+  - Green: 4/4 pass.
+- Verification:
+  - `playwright test ledger-owner-scope + positions-reconciliation + api-smoke` (`--project=chromium
+    --no-deps --timeout=120000`): 14/14 pass.
+  - Extra regression check: `copilot.spec.ts` + `trader/positions.spec.ts` 9/9 pass.
+  - The import grep shows `../helpers/auth`, `../fixtures` and `../fixtures/ledgerEvents`, and
+    `INVENTORY.md` lists `OWNER_SCOPE_ORDER_FILLED_EVENTS`.
+  - `pnpm run lint` exits 0.
+  - `tsc --noEmit` reports only the pre-existing `e2e/insights/backfills.spec.ts:135-136` errors (DEV-4).
+- Deviations: DEV-6:
+  - RED came from a temporary restore of the pre-Step-5 handler.
+  - `u-b` is the canonical `TEST_USER_B_ID`.
+  - The copilot foreign seed lives in the mock store, and the spec asserts "present", not "exactly one".
+  - The harness ran with `--no-deps`.
+  - `lint-staged` reformats the existing `CLOSED_POSITION_ROWS` rows (whitespace only).

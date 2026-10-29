@@ -75,7 +75,11 @@ import {
   LEDGER_EXPORT_EVENTS,
   EXPORT_DISABLED_SENTINEL,
   CLOSED_POSITION_ROWS,
+  OWNER_SCOPE_ORDER_FILLED_EVENTS,
+  OWNER_SCOPE_FOREIGN_USER_ID,
+  OWNER_SCOPE_FOREIGN_COPILOT_NOTE_TEXT,
 } from './fixtures/ledgerEvents';
+import { copilotStreamKey } from '../src/lib/copilot';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
 import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
@@ -389,6 +393,10 @@ export async function startMockBackend(): Promise<void> {
       // key to copilot:<user>:default and forces event_type copilot.message before it reaches
       // this mock, so we key by the resolved stream_key.
       const copilotThreads = new Map<string, { role: string; text: string; sequence: bigint }[]>();
+      // Foreign user's thread (feature 263 AC-3): the trader BFF must never resolve a caller to it.
+      copilotThreads.set(copilotStreamKey(OWNER_SCOPE_FOREIGN_USER_ID), [
+        { role: 'user', text: OWNER_SCOPE_FOREIGN_COPILOT_NOTE_TEXT, sequence: BigInt(1) },
+      ]);
 
       router.service(LedgerService, {
         async queryEvents(req) {
@@ -447,25 +455,22 @@ export async function startMockBackend(): Promise<void> {
               page: { nextPageToken: '' },
             };
           }
+          // feature 263 — mirrors the ledger owner predicate: ownerOnly keeps only the caller's rows,
+          // so a BFF that does not force it leaks the foreign and NULL-owned fixture rows.
           return {
-            events: [
-              {
-                eventId: 'evt-001',
-                eventType: 'order.filled',
-                streamKey: 'order:mock-order-001',
-                sourceService: 'trading',
-                payload: {
-                  order_id: 'mock-order-001',
-                  symbol: 'AAPL',
-                  qty: 10,
-                  fill_price: 180.0,
-                  account_id: 'alpaca-default',
-                  trading_mode: 'TRADING_MODE_PAPER',
-                  user_id: 'test-user-001',
-                },
-                sequence: BigInt(1),
-              },
-            ],
+            events: OWNER_SCOPE_ORDER_FILLED_EVENTS.filter(
+              (r) => !req.ownerOnly || r.userId === TEST_USER_ID,
+            ).map((r) => ({
+              eventId: r.eventId,
+              eventType: r.eventType,
+              sourceService: r.sourceService,
+              correlationId: r.correlationId,
+              streamKey: r.streamKey,
+              sequence: r.sequence,
+              userId: r.userId,
+              occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
+              payload: r.payload,
+            })),
             page: { nextPageToken: '' },
           };
         },

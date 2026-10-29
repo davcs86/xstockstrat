@@ -430,7 +430,7 @@ cd services/xstockstrat-ui && pnpm run test:coverage && pnpm run lint
 
 ### Step 7 — test: trader BFF owner scoping end to end (e2e mock + fixtures + spec)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/ledgerEvents.ts` — modify
@@ -903,3 +903,26 @@ _Populated by /sdd-execute as implementation proceeds._
   restoring `traderBff.ts` from `54ef1a73~1`, running the test (7/9 fail; the AC-3 account/copilot cases pass
   as baselines), and restoring the file from the index (not committed). GREEN: 9/9 on the Step 5 code.
 - **Disposition**: CI-equivalent fallback for the RED evidence (same pattern as DEV-3); no spec change.
+
+### DEV-6 — Step 7: RED via the pre-Step-5 handler; fixture and harness choices (2026-10-29)
+
+- **RED**: Step 5 had already landed, so RED was captured by temporarily restoring `traderBff.ts` from
+  `54ef1a73~1` (AC-1 and AC-2/AC-7 fail; both AC-3 cases pass as baselines), then restoring the file from
+  the index (not committed). GREEN ran on the committed Step 5 code.
+- **Foreign user**: the spec's foreign user `u-b` is the canonical second identity `TEST_USER_B_ID`
+  (`'test-user-002'`, `fixtures/users.ts`), re-exported as `OWNER_SCOPE_FOREIGN_USER_ID`, so no new
+  identity literal is added (C-12/C-13).
+- **AC-3 copilot**: the foreign note is seeded in the mock's `copilotThreads` under
+  `copilotStreamKey(OWNER_SCOPE_FOREIGN_USER_ID)` (the "mock's own store keyed by the resolved stream key"
+  option). The spec queries with the foreign key itself (stricter than `copilot:anything`) and asserts
+  every event is on the caller's key, the appended note is present, and the foreign note is absent. It
+  asserts "present", not "exactly one", because the mock store lives for the whole Playwright run and is
+  shared with `copilot.spec.ts` and retries. Keys come from `src/lib/copilot` (`copilotStreamKey`,
+  `COPILOT_EVENT_TYPE`), not re-typed literals.
+- **Harness**: the local dev-server `[setup]` warm-up exceeded its 10 s local timeout, so the
+  verification ran with `--project=chromium --no-deps --timeout=120000`. The spec files and assertions
+  are unchanged.
+- **Formatting**: the pre-commit `lint-staged` prettier pass also reformats the existing
+  `CLOSED_POSITION_ROWS` one-line rows in `ledgerEvents.ts`. This is whitespace only, and no
+  `--no-verify` was used.
+- **Disposition**: CI-equivalent fallback for the RED evidence and the harness flags. No spec change.
