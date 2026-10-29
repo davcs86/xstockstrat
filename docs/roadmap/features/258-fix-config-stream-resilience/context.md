@@ -430,3 +430,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Status `implementation-ready` → `in-progress`.
 - Carry-forward: the Step 1 pg_terminate_backend check is pending, and goes to the dev app as an integration-PR
   blocker unless a session can run it. The merge-order rows (258↔241/263/248) are still owed at integration.
+
+### Step 1 — service: config LISTEN lifecycle (reconnect with backoff, serial chain, guarded notifications) [blocked]
+- Implemented Instructions 1–10 in `configServiceImpl.ts`:
+  - `connectListener` runs LISTEN before `reloadAll`, with `pool.connect()` inside the try.
+  - `dropListener` has an identity guard and a single `release(err)`.
+  - `scheduleReconnect` uses a single timer and backs off 1 s → 30 s.
+  - `resyncAll` and the guarded `onNotification` both run through the `serial` chain.
+  - `initialize()` now calls `connectListener()`.
+- Verification passed:
+  - build exit 0;
+  - lint exit 0 (0 errors, 158 pre-existing warnings, unchanged);
+  - one `pool.connect()` at `:188`, constants at `:156-157`;
+  - existing suite 182/182 pass (`test:coverage` exit 0).
+- TDD (throwaway probe; Step 2 owns the committed proof). Both runs used the same uncommitted fake-pool probe
+  against `dist/`:
+  - RED: `listenBeforeReloadAll:false, connects:1, listens:1, releases:[]`; unhandled: the `"not json"`
+    JSON.parse rejection and the unhandled `error` event; and one namespace SELECT for a payload without a
+    namespace.
+  - GREEN: `listenBeforeReloadAll:true, connects:2, listens:2`, one release carrying the error, no unhandled
+    rejections, and 0 namespace SELECTs.
+- Blocked only on the operator-only pg_terminate_backend check (Deviation Log). Step **Status** stays `pending`, and
+  the integration-PR merge is held until that check passes on the dev app. Steps 2–6 may proceed.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: Step 1 deferred to operator (pg_terminate_backend check); RED captured by a throwaway probe because the
+  paired test is Step 2. Full detail is in the Deviation Log.
+- Two constraint comments were added beyond the spec text: the `chain` field (it serializes reloads) and the
+  LISTEN-before-reload line.

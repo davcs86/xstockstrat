@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { getLogger } from '../services/logger';
 import {
   ADMIN_SCOPE_ERROR,
@@ -152,25 +152,110 @@ function lookupScalarBounds(namespace: string, key: string) {
   return SCALAR_BOUNDS_REGISTRY[key] ?? SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
 }
 
+// Code constants, not config keys: config cannot watch its own keys.
+const LISTENER_BACKOFF_INITIAL_MS = 1000;
+const LISTENER_BACKOFF_MAX_MS = 30000;
+
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
   // snapKey → global snapshot (keyed by "namespace:env")
   private snapshots: Map<string, any> = new Map();
+  private listener: PoolClient | null = null;
+  private connectedOnce = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private backoffMs = LISTENER_BACKOFF_INITIAL_MS;
+  // Serializes reloads and notification work so a stale reloadAll cannot overwrite a newer reloadNamespace.
+  private chain: Promise<void> = Promise.resolve();
 
   constructor(private readonly pool: Pool) {}
 
   async initialize() {
+    await this.connectListener();
+  }
+
+  private serial<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.chain.then(fn);
+    this.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async connectListener(): Promise<void> {
+    let c: PoolClient | undefined;
+    try {
+      c = await this.pool.connect();
+      const client = c;
+      client.on('error', (e: Error) => this.dropListener(client, e));
+      client.on('end', () => this.dropListener(client, new Error('LISTEN connection ended')));
+      client.on('notification', (msg: { payload?: string }) => this.onNotification(client, msg));
+      this.listener = client;
+      // LISTEN before the reload, so a change committed during the reload is not lost.
+      await client.query('LISTEN config_changed');
+      await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()));
+      this.connectedOnce = true;
+      this.backoffMs = LISTENER_BACKOFF_INITIAL_MS;
+      log.info('Config service initialised, listening for config_changed notifications');
+    } catch (err: any) {
+      if (c) this.dropListener(c, err);
+      else if (this.connectedOnce) this.scheduleReconnect();
+      if (!this.connectedOnce) throw err;
+    }
+  }
+
+  private dropListener(c: PoolClient, err: Error) {
+    if (this.listener !== c) return;
+    this.listener = null;
+    c.removeAllListeners('notification');
+    try {
+      c.release(err);
+    } catch {
+      /* already released */
+    }
+    log.error('config LISTEN connection lost', { error: err.message });
+    if (this.connectedOnce) this.scheduleReconnect();
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+    const delay = this.backoffMs;
+    this.backoffMs = Math.min(this.backoffMs * 2, LISTENER_BACKOFF_MAX_MS);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connectListener().catch(() => {
+        /* every failure path reschedules itself */
+      });
+    }, delay);
+  }
+
+  private async resyncAll() {
     await this.reloadAll();
-    const pgClient = await this.pool.connect();
-    await pgClient.query('LISTEN config_changed');
-    pgClient.on('notification', async (msg: any) => {
-      if (!msg.payload) return;
-      const { namespace, environment } = JSON.parse(msg.payload);
-      const env = (environment ?? 'staging') as EnvStr;
-      await this.reloadNamespace(namespace, env);
-      await this.broadcastToSubscribers(namespace, env);
-    });
-    log.info('Config service initialised, listening for config_changed notifications');
+    const pairs = new Map<string, { ns: string; env: EnvStr }>();
+    for (const sub of this.subscribers.values()) {
+      pairs.set(snapKey(sub.namespace, sub.environment), { ns: sub.namespace, env: sub.environment });
+    }
+    for (const { ns, env } of pairs.values()) {
+      await this.broadcastToSubscribers(ns, env);
+    }
+  }
+
+  private onNotification(c: PoolClient, msg: { payload?: string }) {
+    if (this.listener !== c || !msg.payload) return;
+    let namespace: unknown;
+    let environment: unknown;
+    try {
+      ({ namespace, environment } = JSON.parse(msg.payload));
+    } catch {
+      return; /* malformed payload */
+    }
+    if (typeof namespace !== 'string' || !namespace) return; /* payload without a namespace */
+    const ns = namespace;
+    const env = (environment ?? 'staging') as EnvStr;
+    this.serial(async () => {
+      await this.reloadNamespace(ns, env);
+      await this.broadcastToSubscribers(ns, env);
+    }).catch((err) => log.error('config_changed handling failed', { namespace: ns, env, error: err?.message }));
   }
 
   private async reloadAll() {

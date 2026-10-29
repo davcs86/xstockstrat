@@ -798,3 +798,28 @@ cd services/xstockstrat-config && grep -n "private async reloadNamespace\|change
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — config LISTEN lifecycle (deferred to operator)
+**Spec said**: "If Docker is unavailable in the executing session, the step is **blocked** on this check. … The check
+then moves to the dev app (`main-dev` deploy) as a blocker on the integration PR. … Step 1 cannot be marked `done`
+until this check has passed, locally or on the dev app. Steps 2–6 may proceed while it is pending."
+**Actual**: Step 1 deferred to operator — integration PR merge held until, on the dev app (or a local stack an
+operator starts), `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query ILIKE 'LISTEN config_changed%';`
+is followed in the xstockstrat-config logs by `config LISTEN connection lost` and, within about 1 s, a new
+`listening for config_changed`, and a `SetConfig` of a registered global key then reaches an open WatchConfig
+stream. The code is implemented and committed so Steps 2–6 can proceed. The **Verification** block passed
+(`pnpm run build` exit 0; `pnpm run lint` exit 0 with 0 errors and the same 158 pre-existing warnings; exactly one
+`pool.connect()` at `:188` inside `connectListener`'s try; both backoff constants at `:156-157`). Step **Status**
+stays `pending`.
+**Reason**: a batch-execute worktree session may not start a database (sdd-execute HARD CONSTRAINT), so the
+pg_terminate_backend check cannot run here. The spec's own fallback was applied.
+**Disposition**: operator-only check, integration-PR merge blocker.
+
+### Deviation: Step 1 — RED captured with a throwaway probe
+**Spec said**: "**TDD**: `red-green required` (Step 2 is the paired test)".
+**Actual**: Step 2's suite does not exist yet. RED and GREEN were captured with an uncommitted fake-pool probe run
+against the compiled `dist/grpc/configServiceImpl.js`. It checks five things: LISTEN runs before the reloadAll
+SELECT; a second connect and a second LISTEN follow `error`+`end`; exactly one `release(err)` occurs; a malformed or
+namespace-less payload causes no unhandled rejection; and such a payload issues no namespace query. Step 2 still owns
+the committed red→green proof against the pre-Step-1 tree.
+**Reason**: the paired test step follows the service step in the spec's order.
