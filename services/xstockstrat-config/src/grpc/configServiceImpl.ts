@@ -6,6 +6,7 @@ import {
   MISSING_AUTHOR_ERROR,
   PER_USER_SCOPE_ERROR,
   SECRET_SCOPE_ERROR,
+  boundReadUserId,
   first,
   hasAdminAccessScope,
   hasInternalCallerAuthority,
@@ -314,7 +315,7 @@ export class ConfigServiceImpl {
 
   async getConfig(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const userId = requestUserId(call.request);
+    const userId = boundReadUserId(call, requestUserId(call.request));
     const namespace = call.request.namespace;
     const values = await this.resolveOverlayValues(namespace, env, userId);
     const global = this.snapshots.get(snapKey(namespace, env));
@@ -526,7 +527,7 @@ export class ConfigServiceImpl {
 
   async listKeys(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const userId = requestUserId(call.request);
+    const userId = boundReadUserId(call, requestUserId(call.request));
     try {
       // Global keys overlaid with the caller's per-user rows (per-user wins over global for the same key).
       const result = await this.pool.query(
