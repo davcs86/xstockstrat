@@ -35,6 +35,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 14 done — root `CLAUDE.md` (Node outbound callers + notify → identity diagram edge), PLAT-4, `header-propagation.md` (explicit-threading Node form + notify → identity edge) and `inter-service-mtls.md` (Peer-SAN authorization) document the `ListAdminUserIds` edge; verification greps green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 15 done — notify `CLAUDE.md` (identity dependency, admin-only untargeted push, `IDENTITY_ENDPOINT`), NOTIFY-8 + Pointers, notify findings broadcast bullet → Resolved, identity `CLAUDE.md` (uncounted method phrase + `ListAdminUserIds`), IDENTITY-12 + IDENTITY-3 second exception; manual Teardown for Steps 14-15 (plugin unavailable); verification greps green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 16 done — C-14 follow-up: defect report `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md` + `.status` (`open`) for trading's untargeted per-account halt/reconciliation alerts (systemic escalation excluded); provisional slug `fix-trading-account-alert-targeting` recorded in context.md; verification green |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 16 steps done; C-16 promotion plan applied (operator standing authorization, auto-confirm): 11 `@AC-*` scenarios promoted as NEW into `services/xstockstrat-{notify,portfolio,analysis,identity}/acceptance/fix-push-untargeted-broadcast.feature` (5/2/2/2); integration PR opened to `main-dev` |
 
 ---
 
@@ -74,4 +75,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-All 16 steps done — open the integration PR (`/sdd-execute fix-push-untargeted-broadcast sequential`, final phase); before it merges, route `/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md` (C-14) and record the manual Teardown in the PR body
+Integration PR open against `main-dev` (merge held for the operator). Before it merges, route `/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md` (C-14).
