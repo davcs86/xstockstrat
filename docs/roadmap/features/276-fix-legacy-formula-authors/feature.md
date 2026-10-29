@@ -20,6 +20,7 @@
 | 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute (sdd-batch-execute) | Re-spec: Steps 1-9 evidence aligned with current codebase after merging main-dev |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done (docs: indicators `## Maintenance`, `INDICATORS-12`); Steps 1-9 done |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE PATH) | C-16 promotion applied (8 scenarios to `services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature`; @AC-6 skipped as OVERLAP with 224 @AC-1); integration PR opened |
 
 ---
 
