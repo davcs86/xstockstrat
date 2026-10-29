@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -1114,7 +1116,7 @@ func (p *positionSyncPayload) offlineState() repository.OfflineState {
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
-	s.consumeEventStream(ctx, "position sync", "account.positions.synced", ackAlways(s.processPositionSync))
+	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.boundedRetry("position sync", s.processPositionSync))
 }
 
 // accountDeregisteredPayload is the shape of trading's account.deregistered event.
@@ -1126,24 +1128,104 @@ type accountDeregisteredPayload struct {
 // ConsumeAccountDeregistrations purges an offline account's positions + realized P&L on
 // account.deregistered — no broker sync reconciles an offline account away, so the purge is event-driven.
 func (s *PortfolioService) ConsumeAccountDeregistrations(ctx context.Context) {
-	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", ackAlways(s.processAccountDeregistered))
+	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", s.boundedRetry("account deregistration", s.processAccountDeregistered))
 }
 
-func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) {
+// Bounds for boundedRetry's park rule (operator decision, ledgerEmitTimeout precedent).
+const (
+	syncRetryMinAttempts     = 5
+	syncRetryFallbackElapsed = 10 * time.Minute
+)
+
+type retryClass int
+
+const (
+	retryUnclassified retryClass = iota
+	retryDeterministic
+	retryTransient
+)
+
+// classifyConsumerErr ranks every errors.Join leaf; precedence is transient > deterministic > unclassified.
+func classifyConsumerErr(err error) retryClass {
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		best := retryUnclassified
+		for _, leaf := range j.Unwrap() {
+			best = max(best, classifyConsumerErr(leaf))
+		}
+		return best
+	}
+	class := retryUnclassified
+	var netErr net.Error
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled), pgconn.Timeout(err), errors.As(err, &netErr):
+		return retryTransient
+	case errors.As(err, &pgErr) && len(pgErr.Code) >= 2:
+		switch pgErr.Code[:2] {
+		case "08", "40", "53", "57":
+			return retryTransient
+		case "22", "23":
+			class = retryDeterministic
+		}
+	}
+	if w := errors.Unwrap(err); w != nil {
+		class = max(class, classifyConsumerErr(w))
+	}
+	return class
+}
+
+// boundedRetry withholds the cursor on a handler error until the event parks. Its state is unlocked:
+// each consumer runs on one goroutine.
+func (s *PortfolioService) boundedRetry(consumer string, h eventHandler) eventHandler {
+	var st struct {
+		seq      int64
+		attempts int
+		first    time.Time
+	}
+	return func(ctx context.Context, ev *ledgerv1.LedgerEvent) error {
+		err := h(ctx, ev)
+		if err == nil {
+			if st.seq == ev.Sequence {
+				st.attempts = 0
+			}
+			return nil
+		}
+		if st.attempts == 0 || st.seq != ev.Sequence {
+			st.seq, st.attempts, st.first = ev.Sequence, 0, s.clock()
+		}
+		st.attempts++
+		park := false
+		switch classifyConsumerErr(err) {
+		case retryDeterministic:
+			park = st.attempts >= syncRetryMinAttempts
+		case retryUnclassified:
+			park = st.attempts >= syncRetryMinAttempts && s.clock().Sub(st.first) >= syncRetryFallbackElapsed
+		}
+		if !park {
+			return err
+		}
+		slog.Error("event parked", "event_id", ev.EventId, "sequence", ev.Sequence, "stream_key", ev.StreamKey,
+			"consumer", consumer, "attempts", st.attempts, "error", err)
+		st.attempts = 0
+		return nil
+	}
+}
+
+func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
-		return
+		return nil
 	}
 	raw, err := event.Payload.MarshalJSON()
 	if err != nil {
-		return
+		return nil
 	}
 	var payload accountDeregisteredPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		slog.Warn("parse account deregistered payload", "error", err)
-		return
+		return nil
 	}
 	if payload.AccountID == "" {
-		return
+		return nil
 	}
 	userID := payload.UserID
 	if userID == "" {
@@ -1153,12 +1235,16 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	defer s.positionsMu.Unlock()
 
 	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
+	var failures []error
 	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
 		slog.Warn("deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
+		failures = append(failures, fmt.Errorf("delete positions: %w", err))
 	}
 	if err := s.repo.DeleteOfflineRealized(ctx, payload.AccountID); err != nil {
 		slog.Warn("deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
+		failures = append(failures, fmt.Errorf("delete offline realized: %w", err))
 	}
+	return errors.Join(failures...)
 }
 
 // shouldReconcileSyncDeletions reports whether an account.positions.synced event should run
@@ -1172,22 +1258,25 @@ func shouldReconcileSyncDeletions(positionCount int, realizedPnl *float64) bool 
 	return positionCount > 0 || realizedPnl != nil
 }
 
-func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
+// processPositionSync returns an error only for an offline sync (RealizedPnl != nil): every offline write
+// is attempted and the failures joined. A broker sync stays warn-and-continue.
+func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
-		return
+		return nil
 	}
 	raw, err := event.Payload.MarshalJSON()
 	if err != nil {
-		return
+		return nil
 	}
 	var sync positionSyncPayload
 	if err := json.Unmarshal(raw, &sync); err != nil {
 		slog.Warn("parse position sync payload", "error", err)
-		return
+		return nil
 	}
 	if sync.AccountID == "" {
-		return
+		return nil
 	}
+	var failures []error
 
 	s.positionsMu.Lock()
 	defer s.positionsMu.Unlock()
@@ -1212,12 +1301,14 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
+			failures = append(failures, fmt.Errorf("upsert position %s: %w", p.Symbol, err))
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
 	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
 		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
 			slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+			failures = append(failures, fmt.Errorf("delete positions not in sync: %w", err))
 		}
 	} else {
 		slog.Debug("skipping delete on empty broker position snapshot", "account_id", sync.AccountID)
@@ -1228,8 +1319,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	if sync.RealizedPnl != nil {
 		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
 			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
+			failures = append(failures, fmt.Errorf("upsert offline realized: %w", err))
 		}
 	}
+	if sync.RealizedPnl == nil {
+		return nil
+	}
+	return errors.Join(failures...)
 }
 
 // bracketUpdatePayload is the shape of the order.bracket_updated event payload. An empty

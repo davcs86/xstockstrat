@@ -532,7 +532,7 @@ func (r *PortfolioRepo) GetOfflineStates(ctx context.Context, userID string, acc
 
 // DeleteOfflineRealized removes an offline account's realized row.
 func (r *PortfolioRepo) DeleteOfflineRealized(ctx context.Context, accountID string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM portfolio.offline_account_realized WHERE account_id=$1`, accountID)
+	_, err := r.db.Exec(ctx, `DELETE FROM portfolio.offline_account_realized WHERE account_id=$1`, accountID)
 	return err
 }
 

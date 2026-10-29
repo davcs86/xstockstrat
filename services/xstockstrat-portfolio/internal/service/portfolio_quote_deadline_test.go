@@ -34,7 +34,7 @@ type warnRecorder struct {
 
 func (h *warnRecorder) Enabled(context.Context, slog.Level) bool { return true }
 func (h *warnRecorder) Handle(_ context.Context, r slog.Record) error {
-	if r.Level != slog.LevelWarn {
+	if r.Level < slog.LevelWarn {
 		return nil
 	}
 	rec := map[string]string{"msg": r.Message}

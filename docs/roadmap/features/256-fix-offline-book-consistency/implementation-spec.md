@@ -417,7 +417,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 
 ### Step 7 — service: D-47 error-returning offline sync / deregistration handlers behind a SQLSTATE-classifying `boundedRetry`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -512,7 +512,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 
 ### Step 8 — test: D-47 retry, park classification, deregistration retry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_sync_retry_test.go` — create
@@ -1109,3 +1109,19 @@ _Populated by /sdd-execute as implementation proceeds._
   behavioural RED ran with those two removed. `TestRecomputeEmit_PayloadKeepsUserID` passes on both trees by design
   (non-regression guard, fails.md:2054). The test file adds one helper beyond the instructions, a `setFailFn` setter,
   so the hook is swapped under the ledger mutex.
+- Steps 7 + 8 (2026-10-29, operator decision "B: merge Steps 7+8", session question tool): the two steps land as
+  **one** lint-green commit with one red→green cycle on Step 8's tests. This breaks one-commit-per-step on purpose:
+  Step 7 alone cannot compile the service tests, because the three void call sites
+  (`portfolio_offline_test.go:257`, `:307`, `portfolio_fill_sync_race_test.go:84`) must take the new return value.
+  The race test checks it with `t.Errorf` inside its goroutine (`t.Fatalf` is not goroutine-safe). Both steps are
+  marked done in that commit. Option (a) for deregistration scope was already signed off on 2026-10-22 (context.md).
+- Steps 7 + 8 (2026-10-29, Files gap, spec-sanctioned): `portfolio_quote_deadline_test.go` — `warnRecorder.Handle`
+  now records Warn **and** Error (`r.Level < slog.LevelWarn` skips), as Step 8 instruction 2 allows ("extended to
+  Error level if needed"), so the AC-6 test can read the `"event parked"` Error. The existing callers look records
+  up by message only, so they are unaffected.
+- Steps 7 + 8 (2026-10-29, implementation detail, no spec change): `classifyConsumerErr` also follows a single-`Unwrap`
+  chain, so a `fmt.Errorf("%w", errors.Join(...))` wrapper keeps the per-leaf precedence. The processPositionSync
+  failures are wrapped with the write that failed (`upsert position <sym>`, `delete positions not in sync`,
+  `upsert offline realized`), so `errors.Is` still reaches the driver error.
+- Steps 7 + 8 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-6, reported 0 issues. **Disposition**: CI-equivalent fallback.

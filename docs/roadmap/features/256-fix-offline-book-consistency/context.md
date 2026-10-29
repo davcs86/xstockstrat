@@ -843,3 +843,29 @@ Each item names the step where it is resolved.
 - Next: Step 7 (D-47 `boundedRetry`). It still needs the pre-entered operator sign-off on deregistration retry
   option (a) versus (b).
 
+## Session 2026-10-29 — Steps 7 + 8 (service + test, D-47)
+
+- Operator decision (2026-10-29, session question tool, in their words): "B: merge Steps 7+8". The two steps are one
+  lint-green commit with one red→green cycle on Step 8's tests, and both are marked done (Deviation Log). The
+  deregistration scope stays option (a), signed off 2026-10-22, so that Open Thread is closed.
+- `portfolio_service.go`:
+  - `processPositionSync` returns `error`. Parse failures and nil/empty-account payloads return nil (acked). The
+    offline branch (`RealizedPnl != nil`) attempts every write, keeps each Warn and returns `errors.Join`. The broker
+    branch returns nil. `shouldReconcileSyncDeletions` is unchanged.
+  - `processAccountDeregistered` returns the `errors.Join` of both delete failures, for every account type (option a).
+  - New `syncRetryMinAttempts=5` and `syncRetryFallbackElapsed=10m`, `retryClass`, `classifyConsumerErr` (per-leaf,
+    transient > deterministic > unclassified) and `boundedRetry` (per-sequence state in the closure, clock seam
+    `s.clock()`, one `slog.Error("event parked", ...)` on park).
+  - `ConsumePositionSyncs` and `ConsumeAccountDeregistrations` use `boundedRetry`. Only the bracket and balance
+    consumers keep `ackAlways`. `consumeEventStream` and `streamEventsFrom` are untouched.
+- `portfolio_repo.go`: `DeleteOfflineRealized` now uses `r.db.Exec` (same pool in prod), so pgxmock can fail it.
+- Tests: new `portfolio_sync_retry_test.go` (AC-1 via `streamEventsFrom` + `sliceStream`, try-all, broker acked,
+  malformed acked, AC-2, AC-6 deterministic park, AC-9 transient never parks, unclassified fallback bound,
+  classification table). The three call sites now check the error (the race goroutine uses `t.Errorf`).
+  `warnRecorder` records Error as well as Warn (spec-sanctioned).
+- TDD: RED was a compile failure. The handlers were void (`(no value) used as value` at the three call sites and in
+  the new file), and `svc.boundedRetry` was undefined. GREEN: every targeted test passes.
+- Verification: the spec greps match (only `:1345` bracket and `:1393` balance keep `ackAlways`). `go build`, `go vet`
+  and the full `go test ./... -race` pass, with 68.6% total on the CI coverpkg set (≥ 40%). `golangci-lint` v2.14.0
+  (go1.27.0 build) reported 0 issues.
+- Next: Step 9 (D-48 per-row `GetOfflineStates` decode and `readValuation.unavailable`).
