@@ -631,3 +631,16 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   - Steps 4, 8, 10: re-verified, no mismatch.
   - Step 9: the batch directive reported the middleware.test 307 assertion at `:165-166`. Grep shows `:166-167`, which is what the spec already says, so it is left unchanged.
 - Tooling note: the main worktree has no `node_modules` to symlink. `core.hooksPath` points to a non-existent `/home/user/xstockstrat/.husky/_`, so the husky pre-commit hook does not run in this worktree. Implementation steps must run `pnpm install --frozen-lockfile` locally (as Steps 1–3 did) and run lint/format by hand.
+
+## Session 2026-10-29 — Step 4 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter xstockstrat-ui...`, run in this worktree only.
+- Step 4 done. `src/lib/identity.ts` now imports `REFRESH_TIMEOUT_MS` from `@/lib/deadlines`, and `refreshSession` passes `{ timeoutMs: REFRESH_TIMEOUT_MS }` as the second argument to `identityClient.refreshToken`. The `catch` → `null` (fail-closed), `revokeToken` (30s default), `middleware.ts` and the refresh route are unchanged.
+- TDD: a temporary probe of Step 5 vitest case (a), with `@/lib/connectClients` mocked. Red: `toHaveBeenCalledWith({ refreshToken: 'rt' }, { timeoutMs: 10000 })` failed because the call had one argument. Green: passed. The probe was deleted, since Step 5 owns the committed `identity.test.ts`. AC-2 is covered by Step 5.
+- Verification:
+  - The `timeoutMs: REFRESH_TIMEOUT_MS` grep matches (`:17`).
+  - `pnpm run lint` exits 0, with pre-existing warnings only.
+  - `prettier --check src/lib/identity.ts` passes.
+  - `vitest run`: 48 files / 242 tests pass.
+- Deviation: `pnpm run format:check` still fails on the 10 pre-existing files recorded under Step 1. See the Deviation Log.
+

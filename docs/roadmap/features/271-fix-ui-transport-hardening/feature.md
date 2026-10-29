@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ui-transport-hardening-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-28
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -23,6 +23,7 @@
 | 2026-10-28 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 2 done — vitest transport-deadline cases + real-socket black-hole spec (AC-1, AC-5, AC-6) |
 | 2026-10-28 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — held-open alert stream e2e outlives the 30s unary default (AC-5) |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 4–10 re-verified after merging `origin/main-dev`; Steps 5, 6, 7 re-specced (line drift; Step 7 client mock widened to the three-BFF union); Steps 4, 8, 9, 10 unchanged |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — `refreshSession` bounded by `REFRESH_TIMEOUT_MS` (10s) |
 
 ---
 

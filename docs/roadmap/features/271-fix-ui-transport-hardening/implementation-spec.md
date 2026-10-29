@@ -264,7 +264,7 @@ grep -n "ALERT_STREAM_HOLD_TRACE_ID" e2e/fixtures/INVENTORY.md e2e/mock-backend.
 
 ### Step 4 — service: 10s bound on `refreshSession`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/identity.ts` — modify
@@ -653,3 +653,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **What**: as in Step 2, the local `pnpm dev` warmup exceeded the 10s local test timeout on first compile, so `alert-stream.spec.ts` was run in the CI shape. The `--project=chromium` filter was added because `/opt/pw-browsers` has no Firefox build (CI runs `chromium` only). Separately, `tsc --noEmit` reports 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`, a file outside Step 3; the Step 3 files compile clean.
 - **Disposition**: CI-equivalent fallback — `CI=1 pnpm exec playwright test e2e/trader/alert-stream.spec.ts --project=chromium`: 7/7 passed, including setup (AC-5 case 37.4s); the five existing alert-stream tests still pass, so the default stream still ends cleanly. `pnpm run lint` exits 0. The pre-existing `INVENTORY.md` prettier drift is unchanged by this step (not CI-enforced).
+
+### Step 4 — `pnpm run format:check` fails on pre-existing drift (2026-10-29)
+
+- **What**: the Step 4 **Verification** chain ends with `pnpm run format:check`, which exits 1 on the same 10 pre-existing files recorded under Step 1. `src/lib/identity.ts` is not among them.
+- **Disposition**: CI-equivalent fallback, as in Step 1. `prettier --check src/lib/identity.ts` passes, the `timeoutMs: REFRESH_TIMEOUT_MS` grep matches (`identity.ts:17`), and `pnpm run lint` exits 0. Prettier wrapped the call across lines, but the grep still matches on its own line.
