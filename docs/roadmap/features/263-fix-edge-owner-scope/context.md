@@ -709,3 +709,14 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 - Verification: `uv run pytest --cov=app --cov-fail-under=40` 530 passed, 81.20%; `ruff check .` clean;
   `ruff format --check .` clean; `grep _effective_config_user_id app/client.py` → 1 definition + 2 uses.
 
+### Step 11 — test: agent effective `user_id` echo (2026-10-29)
+
+- Files: `services/xstockstrat-agent/tests/test_config_tools.py` — new `TestConfigReadEchoesEffectiveUserId`
+  (stub-capture harness mirrored from `TestSetConfigRequestParity`; `GetConfig`→`ConfigSnapshot`,
+  `ListKeys`→`ListKeysResponse`), parametrized over `get_config`/`list_config_keys` × non-admin foreign (AC-4/AC-5),
+  own (AC-6), admin foreign (AC-8), no caller bound, empty id; each asserts the echo and that the wire `user_id`
+  is unchanged. Reuses `TRADER`/`ADMIN` from `tests.conftest` (C-13).
+- TDD (DEV-10): red 2/10 against the pre-Step-10 client (`cff6d631~1`; echo `'u-b'`, expected `'u-2'`) → green 10/10.
+- Verification: `pytest tests/test_config_tools.py` 42 passed; `pytest --cov=app --cov-fail-under=40` 540 passed,
+  82.07%; `ruff check .` clean; `ruff format --check .` clean; conftest import grep → `:22`.
+

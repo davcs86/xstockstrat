@@ -697,7 +697,7 @@ and expect one definition plus two uses.
 
 ### Step 11 — test: agent effective `user_id` echo
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_tools.py` — modify
@@ -963,3 +963,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Docstrings / comment**: the reworded `user_id:` lines stay at two lines each but needed different
   wording to fit ruff's 100-column limit (E501); the helper's mirror comment wraps to two lines.
 - **Disposition**: CI-equivalent fallback for the RED evidence; no spec change.
+
+### DEV-10 — Step 11: RED captured against the pre-Step-10 client (2026-10-29)
+
+- **What**: Step 10 had already landed (`cff6d631`), so RED was captured by temporarily restoring
+  `app/client.py` from `cff6d631~1` and running the new `TestConfigReadEchoesEffectiveUserId` cases: 2/10
+  fail (the non-admin foreign-id echo is `'u-b'`, not `'u-2'`, for both `get_config` and `list_config_keys`);
+  own-id, admin, no-caller and empty-id cases pass as baselines. The file was then restored (not committed).
+  GREEN ran on the committed Step 10 code.
+- **Shape**: the six spec cases are one test parametrized over both read tools (10 cases), with the stub
+  doubles in a single static helper on the class (C-13: one consumer).
+- **Disposition**: CI-equivalent fallback for the RED evidence (same pattern as DEV-3/DEV-5/DEV-8); no spec change.
