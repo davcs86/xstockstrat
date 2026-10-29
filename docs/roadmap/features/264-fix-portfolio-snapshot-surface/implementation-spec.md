@@ -699,11 +699,15 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
 
 **Codebase Evidence**:
 - golang-migrate never applies a version lower than the current one. A sibling that lands a higher number first
-  silently skips this migration (fails.md:2909 "re-verify the next-free number against main-dev and merge-order.md
-  immediately before merge"; fails.md:613).
+  silently skips this migration (fails.md:2909 Mistake / :2911 Rule: "Re-verify the next-free migration number
+  against `main-dev` and `merge-order.md` immediately before merge"; fails.md:613 reserve/announce next-free numbers).
 - `scripts/db-migrate.sh` is the migration runner (root `CLAUDE.md` § Database). `ListKeys` is redacted and
-  environment-scoped (config `ListKeys`; agent `list_config_keys`).
-- Gate state on 2026-10-29: `origin/main-dev` tops out at `030`, so (a) passes. (b) is not met yet: 031, 032 and 033
+  environment-scoped (`packages/proto/config/v1/config.proto:29` `rpc ListKeys`). The agent tool is
+  `list_config_keys(namespace, user_id="")` (`services/xstockstrat-agent/app/tools.py:1628`); its environment is
+  fixed to the agent deployment's own `APPLICATION_ENV`, with no `service`/`environment` argument.
+- `docs/roadmap/features/merge-order.md:77` sequences 264 after 243/244/248.
+- Gate state on 2026-10-29 (re-verified after the `origin/main-dev` merge `f01acaa`): `origin/main-dev` tops out at
+  `030` (no 031-033, nothing ≥ 034), so (a) passes. (b) is not met yet: 031, 032 and 033
   exist only on the 243/244/248 feature branches (all `implementation-ready`), so 264 stays sequenced after them per
   the Step 6 row.
 
@@ -722,9 +726,10 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
      after 264 in `docs/roadmap/features/merge-order.md`.
    - If (a) or (b) fails, **hold the merge** or renumber 034 to the next free number. A renumber is a deviation: it
      needs a Deviation Log entry plus a merge-order.md update, and the Step 8 scan needs no change.
-2. After the dev deploy, run `scripts/db-migrate.sh` (or confirm the deploy ran it). Then list the config keys for
-   service `portfolio` in `staging` and in `production` (`ListKeys` / the agent `list_config_keys` tool). Neither
-   listing may contain `portfolio.snapshot.interval_minutes`.
+2. **Operator / post-deploy action** (needs a deployed build; not runnable locally). After the dev deploy, run
+   `scripts/db-migrate.sh` (or confirm the deploy ran it). Then call `list_config_keys(namespace="portfolio")`
+   against the staging and the production agent deployments (or config `ListKeys` with `environment` set to each).
+   Neither listing may contain `portfolio.snapshot.interval_minutes`.
 3. Record the gate output and both listings in context.md and the integration PR body.
 4. **Enforcement.** The gate is a process control; no CI job checks it. Open the integration PR as a **draft**, with
    a gate checklist (a)/(b) in its body. Mark it ready only after the item-1 output, captured that day, passes. The
@@ -733,7 +738,7 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
 **Verification**:
 ```bash
 git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | grep -E '/0(3[4-9]|[4-9][0-9])_'   # expect no output before 264 merges
-# dev smoke: list_config_keys(service="portfolio", environment="staging"|"production") → no portfolio.snapshot.interval_minutes
+# post-deploy smoke (operator): list_config_keys(namespace="portfolio") on the staging and production agents → no portfolio.snapshot.interval_minutes
 ```
 
 ---
