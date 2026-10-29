@@ -589,3 +589,27 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
     Deviation Log).
 - Tooling: `pnpm install --frozen-lockfile` in the worktree. The main worktree has no `node_modules`, so a symlink
   would dangle. Playwright Chromium comes from the preinstalled `/opt/pw-browsers`.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4 (sdd-batch-execute)
+
+- Step 4 done (AC-5, AC-6):
+  - `src/lib/errMessage.test.ts` checks that `errMessage` returns a ConnectError's `rawMessage` (`'boom'`, with no
+    `[unavailable]` prefix) and a plain Error's `message`.
+  - `opportunities.spec.ts` adds `@AC-5 a failed Snooze shows an error`. It re-routes `SetOpportunityAction` to a
+    503 `unavailable` after `beforeEach`'s mock, so the later route wins. It then clicks
+    `snooze-${OPPORTUNITIES[0].symbol}`.
+  - `signal-sources.spec.ts` adds `@AC-6 a failed deactivate shows an error`. It routes `**${MANAGE_SOURCE_BFF}` to
+    a 503 and clicks the `Disable` row action for `SIGNAL_SOURCE_WEIGHTED`. It then asserts that the alert is
+    visible and the edit form (`Display name`) is absent.
+- TDD (AC-5/AC-6). The tree was reverted to pre-Step-3 for RED, then restored, then rebuilt for GREEN:
+  - **Red:** `errMessage.test.ts` failed to import `./errMessage`. `getByRole('alert').filter({ hasText:
+    'opportunity action unavailable' })` and `… 'deactivate unavailable'` each failed with "element(s) not found".
+  - **Green:** both new e2e tests pass, and all of `opportunities.spec.ts` + `signal-sources.spec.ts` pass
+    (52/52). Vitest passes 240/240, and `src/lib/errMessage.ts` has 1/1 lines covered.
+- Verification:
+  - `pnpm run lint` exits 0.
+  - `pnpm run test:coverage` exits 0, at 73.41% lines over the files exercised.
+  - The `helpers/auth` / `'../fixtures'` grep hits both specs. `opportunities.spec.ts` imports `'../fixtures/opportunities'`,
+    which is the pre-existing import.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
+

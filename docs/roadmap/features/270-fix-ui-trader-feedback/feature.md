@@ -23,6 +23,7 @@
 | 2026-10-28 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2 — `@AC-4` e2e pins that the symbol-page `RunBacktest` carries both `strategyId` and `strategyIdRef` |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Merged `origin/main-dev` (`-X ours`); re-spec of Steps 7 and 13 for line drift only (no semantic change) |
 | 2026-10-29 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3 — D-64 per-call `onError` on opportunity actions and the signal-source toggle (`CardNotice` error), `errMessage` hoisted to `src/lib/errMessage.ts` |
+| 2026-10-29 | `in-progress` (Step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4 — `@AC-5`/`@AC-6` e2e (503 SetOpportunityAction / ManageSignalSource → `role=alert` error) plus the `errMessage` unit test |
 
 ---
 

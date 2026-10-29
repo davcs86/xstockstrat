@@ -274,7 +274,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 4 — test: AC-5 and AC-6 failed opportunity action and failed source toggle show an error
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/errMessage.test.ts` — create
@@ -1121,3 +1121,19 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
   `e2e/insights/backfills.spec.ts:135-136`, and `src/` type-checks clean (`pnpm build` passes).
   **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 4 — 2026-10-29
+
+- **"Deactivate" is the `Disable` menu item.** The step says to deactivate `SIGNAL_SOURCE_WEIGHTED` through its row
+  action. The page labels that action `Disable` for an active source (`signal-sources/page.tsx:455`), and the
+  fixture is `active: true`, so the test clicks `getByRole('menuitem', { name: 'Disable' })`. **Disposition**:
+  selector wording only; same behavior, no scope change.
+- **The "edit form is closed" assertion is `getByPlaceholder('Display name')` with count 0.** This is the edit
+  form's own field, as used by the existing Edit test. **Disposition**: test-shape choice inside the step's
+  **Files**.
+- **TDD RED ran against the pre-Step-3 tree.** Step 3 had already landed, so the three Step-3 source files were
+  temporarily checked out from `HEAD~1` and `src/lib/errMessage.ts` was moved aside for the RED run, then all four
+  were restored from `HEAD` before GREEN. Playwright ran under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the
+  same harness Steps 1-3 used. **Disposition**: CI-equivalent fallback.
+- **The `-g "@AC-5|@AC-6"` filter also matches two pre-existing tests** (feature 185 `@AC-6` and feature 161
+  `@AC-5`). They passed both in RED and GREEN. **Disposition**: noted only. GREEN ran both spec files in full.
