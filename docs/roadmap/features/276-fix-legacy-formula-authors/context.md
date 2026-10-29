@@ -350,3 +350,26 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 - Verification: `uv run pytest --cov=app --cov-fail-under=50` gave 322 passed at 83.17%. `ruff check .` and `ruff format --check .` are clean. The suite ran on both the service's `.python-version` (CPython 3.12.3) and 3.13.17 (`uv run --python 3.13`), with the same results.
 - Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors_read_path.py`
 - Deviations: test-local fake pool, sandbox stub, admin-filled warm cache and the RED reason (Deviation Log).
+
+### Step 8 — docs: runbook `docs/runbooks/legacy-formula-authors.md` [done]
+- `docs/runbooks/legacy-formula-authors.md` (new) covers these sections, in order:
+  - Scope. The prod row count is unknown, and the six staging ids are a floor.
+  - Authority. It comes from the DB credential plus the DBA change record; the digest is integrity, not authority.
+  - Prerequisites and connection. The pooled `:25061` URL with `DB_PGBOUNCER=true`, with the stated deviation from `operator-db-access.md`.
+  - Step A, the users export.
+  - Step B, the report and plan editing (`suggested` → `confirmed`, and `override` entries).
+  - Step C, in the order edit → hash (`shasum -a 256`) → record → apply, with the list of refusals.
+  - Attaching the plan and result files to the change record (PII, storage location, retention, deleting local copies).
+  - Restart every indicators instance, then re-run the report. Verify as the owner via `get_formula`/`test_formula`/`ExecuteFormula`, not `list_formulas` alone. Re-run for any `skipped_concurrent` rows.
+  - Undo by a manual compare-and-set.
+  - Staging first, then prod, recording the observed prod count.
+- `docs/runbooks/CLAUDE.md`: index row added in alphabetical order, before `mcp-tools.md`.
+- Flags, log lines, refusal reasons and the `plan.result.json` default were checked against the built `legacy_authors.py` and its `--help` output, not only the spec text. `list-users --json` exists (`scripts/manage-users.py:281`).
+- TDD: N/A (docs).
+- Verification:
+  - Before the edit, the runbook grep failed (no such file) and the index grep found nothing.
+  - After it, the ordered edit/hash/record/apply lines are present and the index row is at `docs/runbooks/CLAUDE.md:17`.
+  - `grep -nE "grep -P|pip install"` returns nothing (macOS rule).
+- Files modified: `docs/runbooks/legacy-formula-authors.md`, `docs/runbooks/CLAUDE.md`
+- Deviations: the pooled-URL derivation, the named storage location and retention, and the restart command example (Deviation Log).
+- Open item: the repo documents no change-record system, so the operator and DBA pick the concrete system when running the runbook.
