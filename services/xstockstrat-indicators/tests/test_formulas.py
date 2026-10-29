@@ -535,6 +535,18 @@ class TestExecuteFormulaInlineParameters:
         assert resp.success is False
         assert [e.name for e in resp.parameter_errors] == ["period"]
 
+    async def test_no_output_run_returns_runtime_error(self):
+        """AC-1 at the servicer: a run with no output line maps to RUNTIME_ERROR."""
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        req = indicators_pb2.ExecuteFormulaRequest(formula_source="raise SystemExit(0)")
+
+        resp = await servicer.ExecuteFormula(req, _ctx([("x-user-id", "user-1")]))
+        assert resp.success is False
+        assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR
+        assert "produced no output" in resp.error
+
 
 class TestFormulaAdminOverride:
     async def test_owner_updates_without_admin_scope(self):

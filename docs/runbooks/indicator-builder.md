@@ -21,6 +21,11 @@ Available via `ComputeIndicator` RPC without registration.
 | `VWAP` | — | — | `value` |
 | `STOCH` | `period` | — | `value` (K), `d` (D) |
 
+`ATR` and `VWAP` are **close-only approximations** (feature 268): `ComputeIndicator` takes a 1-D `values`
+series, so `ATR` is the rolling close-to-close mean of `|Δclose|` (not Wilder's true range) and `VWAP` is the
+running mean of closes (no volume weighting). Trading's auto-sizing uses its own Wilder ATR(14), so the two
+"ATR" numbers differ.
+
 ### Example: Compute RSI via gRPC
 ```python
 import grpc
@@ -165,6 +170,12 @@ size-zero cap), read another process's memory, or read the service's secrets —
 `EPERM` and the run fails with a `runtime_error`. A fork bomb is bounded by `RLIMIT_NPROC` and an
 infinite loop by the wall-clock timeout (+ a `RLIMIT_CPU` backstop). The concurrency bound, timeouts,
 and memory headroom all come from the `indicators.sandbox.*` config above — no hardcoded limits.
+
+**A run must produce output** (feature 268): success requires a parseable `__OUTPUT__:` marker line,
+which the wrapper prints from `result`. A formula that exits early (e.g. `raise SystemExit(0)`) fails with
+`runtime_error` "formula produced no output"; an unparseable marker fails with "formula output could not
+be parsed"; a non-zero exit with empty stderr reports "formula exited with code N before producing
+output". A formula that never assigns `result` still succeeds with an empty output (filed separately).
 
 ---
 

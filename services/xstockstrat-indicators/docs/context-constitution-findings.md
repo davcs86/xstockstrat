@@ -31,6 +31,7 @@ governance. The fictional ledger/notify dependency is a repeated pattern also re
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
+| `ATR` reads as one indicator platform-wide | "ATR" means two numbers: the indicators built-in `ATR` is a close-to-close approximation (rolling mean of `\|Δclose\|`), while trading's position sizing computes true Wilder ATR(14) from OHLC bars | `app/services/indicators_engine.py` `INDICATOR_REGISTRY["ATR"]`; `services/xstockstrat-trading/internal/service/trading.go#wilderATR` (`:3169-3198`, called as `wilderATR(recentBars, 14)` `:3232`) | Feature 268 (D-18 Option A) renamed the description only, values unchanged; do not compare or substitute the two. True OHLCV ATR/VWAP is a proto change (`ComputeIndicatorRequest` has only `values`) — status: **open (documented)** |
 | `CLAUDE.md` env block lists `TRADING_MODE=paper` (partially resolved 2026-10-19: the banner no longer lists "⚠ sandbox env inheritance" — fixed by `0aa9c04`) | `TRADING_MODE` is the repo-wide docs-vs-code disagreement in the root findings log | `services/xstockstrat-indicators/CLAUDE.md` env block (`TRADING_MODE=paper`, ~L206); `app/config/watcher.py` | Refresh the env block |
 
 
