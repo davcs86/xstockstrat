@@ -600,3 +600,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open: `portfolio.snapshot.interval_minutes` now has no Go reader; the service CLAUDE.md config row and the findings
   row are handled by the later doc steps.
 
+### Step 6 — docs: Reserve config migration 034 and sequence 264 in merge-order.md [done]
+- Added the 264 row after the 231 row (`merge-order.md:77`): 264 after 243 (`031`), 244 (`032`) and 248 (`033`),
+  reserving `034_retire_portfolio_snapshot_interval`; Resolved `No`. The 243/244/248 rows and claims are untouched.
+- TDD: N/A (docs). Pre-edit, `grep -n "034_retire_portfolio_snapshot_interval" merge-order.md` found 0 hits.
+- Verification: the same grep now returns exactly one row (`:77`). The pre-assignment blockquote cite `:226` holds.
+- Files modified: `docs/roadmap/features/merge-order.md`.
+- Deviations: none. Out-of-scope changes: none.
+- Open: the Step 10 two-sided gate must be re-run before merge, after 243/244/248 land.

@@ -451,7 +451,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 
 ### Step 6 — docs: Reserve config migration 034 and sequence 264 in merge-order.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/merge-order.md` — modify
