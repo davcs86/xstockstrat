@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 import type { Pool } from 'pg';
-import { listAdminUserIds } from '../grpc/adminDirectory.ts';
+import { listAdminUserIds } from '../grpc/adminDirectory';
 
 interface FakePool {
   pool: Pool;

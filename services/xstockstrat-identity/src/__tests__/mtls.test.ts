@@ -12,8 +12,8 @@ import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
 import type { Pool } from 'pg';
 import { IdentityServiceClient, IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity';
-import * as mtls from '../mtls.ts';
-import { listAdminUserIds } from '../grpc/adminDirectory.ts';
+import * as mtls from '../mtls';
+import { listAdminUserIds } from '../grpc/adminDirectory';
 
 const SVC = 'xstockstrat-test';
 const METHOD = '/test.Echo/Call';
