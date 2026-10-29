@@ -718,6 +718,8 @@ def register_tools(server: MCPServer) -> None:
         broadcast: REQUIRED, no default. True sends a system-wide broadcast (unchanged semantic —
             target_user_id="" on the wire). False addresses the alert to the OAuth-authenticated
             caller's own derived identity — you can no longer address another user.
+            With broadcast=True the in-app stream/history reaches every user, but the
+            Web Push device notification reaches admin-role users only (feature 242).
         context: optional structured JSON object stored and fanned out with the alert.
         tags: optional list of string tags for filtering/grouping.
         correlation_id: optional id to correlate related alerts.

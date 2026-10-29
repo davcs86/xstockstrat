@@ -8,6 +8,7 @@ import { ConfigWatcher } from './services/configWatcher';
 import { NotifyServiceImpl } from './grpc/notifyServiceImpl';
 import { FanoutDispatcher } from './fanout/fanout';
 import { WebPushDispatcher } from './fanout/webPush';
+import { createAdminDirectory } from './services/adminDirectory';
 import { createNotifyServiceDefinition } from './grpc/serviceDefinition';
 import { getLogger } from './services/logger';
 
@@ -44,7 +45,7 @@ async function main() {
   });
 
   const fanout = new FanoutDispatcher(configWatcher);
-  const webPush = new WebPushDispatcher(pool, configWatcher);
+  const webPush = new WebPushDispatcher(pool, configWatcher, createAdminDirectory());
   const notifyImpl = new NotifyServiceImpl(pool, configWatcher, fanout, webPush);
 
   const grpcServer = new grpc.Server();

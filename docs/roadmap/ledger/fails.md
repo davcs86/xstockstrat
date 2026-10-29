@@ -3095,3 +3095,16 @@ ambiguity is logged here).
 - **Rule it implies**: Never merge a shared append-only doc with `-X ours`/`-X theirs`; merge normally and keep both
   sides. A deletion the branch never meant to make is invisible to later merges, so check for it explicitly:
   `scripts/ledger-guard.py` (CI `ledger-guard`, and before any batch merge).
+
+### 2026-10-29 — fix-push-untargeted-broadcast — assumption
+- **Mistake**: The 2026-09-06 `mcp-user-profile-roles` entry claims CI escapes the vacuous identity suite because
+  Node 24 strip-types "handles both". That is false. On Node 24.20.0 (the CI pin), `--experimental-strip-types`
+  still rejects the parameter property in `identityServiceImpl.ts` (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). It also
+  still fails to resolve the `../grpc/*.js` specifier (`ERR_MODULE_NOT_FOUND`). So `identityServiceImpl.test.ts`
+  is vacuous in CI as well: 70 pass, with its impl/authz-dependent cases returning early. This corrects that entry.
+- **Evidence**: `docs/roadmap/features/242-fix-push-untargeted-broadcast/context.md` 2026-10-29 Step 4 entry
+  (direct `import()` of both specifiers on v24.20.0); the `before()` try/catch in
+  `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.
+- **Rule it implies**: In a strip-types Node suite, import the target statically with a `.ts` specifier and
+  keep the target free of parameter properties. One example is `adminDirectory.test.ts`. Treat any
+  try/catch-guarded import as unexecuted until a load check proves otherwise, on every Node version.
