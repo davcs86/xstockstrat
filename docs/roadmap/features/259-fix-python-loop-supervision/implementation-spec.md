@@ -540,7 +540,7 @@ ruff check . && ruff format --check .
 
 ### Step 10 — test: ingest watcher reconnect and exit log (@AC-5, @AC-8 ingest rows)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_config_watcher.py` — modify

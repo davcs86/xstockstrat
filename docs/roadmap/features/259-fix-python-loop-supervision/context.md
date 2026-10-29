@@ -820,3 +820,19 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   Spec-internal fix: instruction 6b used `_ATTEMPT_DB_TIMEOUT_SECONDS` but instruction 2 did not declare it; it is
   now listed there as `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` (value from the Execution Summary and the 2026-10-22 note).
 - Status already `in-progress`; no status change.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 10
+
+### Step 10 — test: ingest watcher reconnect and exit log (@AC-5, @AC-8 ingest rows) [done]
+- `tests/test_config_watcher.py`: mirrors Step 8. `@AC-5` drives `_watch()` on a dial-free `__new__` watcher with a
+  two-stream fake stub (first raises `RuntimeError("boom")`, second yields version `"v2"` then a `BaseException`
+  sentinel) and a patched `app.config.watcher.asyncio.sleep`; asserts two `WatchConfig` calls, one 2s backoff, snapshot
+  `"v2"` and the `ingest-` client_id on both requests. `@AC-8` builds a patched (no dial) watcher whose `_watch` raises
+  `RuntimeError("boom")`; asserts the retained `_watch_task` is done and an ERROR names `config-watch-ingest` and `boom`.
+  Existing getter tests untouched.
+- TDD: RED against the pre-Step-9 `watcher.py` (`1513e415~1`): 2 failed, 11 passed. GREEN against the current file:
+  13 passed.
+- Verification: `uv run pytest tests/test_config_watcher.py -q` gives 13 passed. The full suite gives 330 passed with
+  coverage at 82.92% (≥40). `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`
+- Deviations: none
