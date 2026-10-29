@@ -17,7 +17,8 @@ Source: repo-surveyor debt-radar scan @ 4535695, finding D-16 (re-verified on ma
 issues 71 unary stub calls; only `ListOpportunities` (`:866-872`) passes `timeout=`. `mtls.secure_channel`
 (`services/xstockstrat-agent/app/mtls.py:37-43`) sets no deadline or keepalive. A backend that accepts but never
 answers (stalled handler, stuck DB pool, paused process) blocks the MCP tool until the MCP client times out, with no
-`DEADLINE_EXCEEDED` surfaced. Examples: `IngestSignal` `:242`, `EmitAlert` `:282`, `RunBacktest` `:634`,
+`DEADLINE_EXCEEDED` surfaced. The person affected is the MCP client user or operator (for example a Claude.ai
+remote-connector session), who sees a tool call hang with no error instead of a fast, retryable failure. Examples: `IngestSignal` `:242`, `EmitAlert` `:282`, `RunBacktest` `:634`,
 `ScreenSymbols` `:746`, `RunFundamentalsScan` `:1712`, `TriggerBackfill` `:1949`, the `get_config` tool's
 `GetConfig` `:2043`.
 
@@ -25,6 +26,47 @@ answers (stalled handler, stuck DB pool, paused process) blocks the MCP tool unt
 explicit larger budgets for long-running RPCs (`RunBacktest`, `TriggerBackfill`, `RunFundamentalsScan`,
 `ScreenSymbols`), each inside the MCP request timeout (PLAT-13). A stall surfaces as a clear tool error derived from
 `DEADLINE_EXCEEDED`.
+
+## Functional Requirements
+
+Budget values are grounded on the MCP client's 60 s request timeout (`services/xstockstrat-agent/CLAUDE.md`,
+`agent.opportunities.read_timeout_seconds` row; feature 227) and the 3.0 s `_POLICY_READ_TIMEOUT_S` precedent
+(`services/xstockstrat-agent/app/tools.py:2371`). Design may revise a value only by amending this section.
+
+- **FR-1 — Default deadline.** Every agent → backend unary RPC in `services/xstockstrat-agent/app/client.py` that is
+  not listed in FR-2, other than the excluded `get_config_value` call (see Out of Scope), carries a deadline of
+  **10 seconds**. This includes the `get_config` tool's `GetConfig` (`client.py:2043`) and `register_oauth_client`
+  (`client.py:1355`). The "every" guarantee is regression-guarded by a static check over all stub calls (@AC-10).
+- **FR-2 — Long-running budgets.** `RunBacktest`, `TriggerBackfill`, `RunFundamentalsScan` and `ScreenSymbols` each
+  carry an explicit deadline of **45 seconds** in place of the default. A call that finishes inside 45 s succeeds
+  unchanged.
+- **FR-3 — Nested inside the MCP request timeout (PLAT-13).** For every MCP tool, the worst-case wall-clock of one
+  invocation (the sum of the deadlines of its sequential backend calls) stays at least 3 s under the MCP client's
+  60 s request timeout. A tool that issues several sequential calls (for example `ingest_signal` →
+  `IngestSignal` + `EmitAlert`) must bound its total. Design chooses how, and must enumerate every tool with more
+  than one sequential backend call (for example `ingest_signal`, `manage_watchlist` read-modify-write,
+  `instantiate_template`, the config tools) and show its worst-case sum.
+- **FR-4 — Stalls surface as tool errors.** When a deadline expires, the MCP tool returns an error derived from
+  gRPC `DEADLINE_EXCEEDED`. The error says that the upstream did not respond within the deadline, and the tool does
+  not hang. The `list_opportunities` wording from feature 227 is the precedent.
+- **FR-5 — No behavior change on the happy path.** A backend that answers within its deadline produces the same
+  tool result as before the fix.
+- **FR-6 — Inbound token validation is bounded and fails closed without forcing re-auth.** Added by operator
+  decision at the design gate r3 (2026-10-22), amending scope beyond `client.py`. The agent's `ValidateToken` call
+  to identity (`services/xstockstrat-agent/app/auth.py:39`, `:71`, reached from `_authorized`, `app/main.py:156`)
+  carries the FR-1 10 s deadline and the request's `x-trace-id`. When identity returns `DEADLINE_EXCEEDED` or
+  `UNAVAILABLE`, the agent responds **503 without `WWW-Authenticate`**, so a brief identity slowdown never forces
+  a re-auth or logout. A genuinely invalid token still gets 401 with `WWW-Authenticate`. This is a sanctioned
+  change to the agent OAuth edge contract (`main.py:164-174`). Covered by @AC-11.
+
+## Consumer Surface(s)
+
+- **MCP Agent tools** (`services/xstockstrat-agent/app/tools.py`): every tool that reaches a backend through
+  `app/client.py`, for example `get_positions`, `ingest_signal`, `emit_alert`, `run_backtest`, `screen_symbols`,
+  `trigger_backfill`, `run_fundamentals_scan` and `get_config`. The observable change: a stalled backend now
+  produces a bounded `DEADLINE_EXCEEDED`-derived tool error instead of a hang until the MCP client times out
+  (FR-4). The happy path does not change (FR-5).
+- No UI, proto or REST surface changes.
 
 ## Reproduction Steps
 
@@ -45,11 +87,18 @@ a reported hang (features 227, 247).
 
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
-- [ ] No config key changes anticipated — open: design decides whether long-running budgets are code constants (like
-  `_POLICY_READ_TIMEOUT_S` / 247's `_CONFIG_READ_TIMEOUT_S`) or `agent.*` config keys; a key is unsuitable for the
-  config read itself (circular, per 247)
+- [x] No config key changes anticipated. Resolved: the FR-1/FR-2 budgets are fixed code constants, following the
+  `_POLICY_READ_TIMEOUT_S` / 247 `_CONFIG_READ_TIMEOUT_S` precedent. A config key cannot bound the config read itself
+  (circular, per 247), and no operator need to tune them has been shown. Design may propose `agent.*` keys only by
+  amending this spec. Any such key must follow `<service>.<category>.<key>` (C-05), for example
+  `agent.rpc.default_timeout_seconds`, and goes through the new-config-key approval gate.
 
-(Update after investigation — remove or replace each item as needed)
+**Scope ownership with feature 247.** 247 owns only `get_config_value` → `GetConfig` (`client.py:1751`). This feature
+owns every other undeadlined call site, including `get_config` (`client.py:2034-2046`) and `register_oauth_client`
+(`client.py:1355`). The follow-up `agent-rpc-deadlines` defect report that 247 plans for those two sites is
+superseded by `docs/reports/2026-10-21-agent-client-deadlines-defect.md`, so 247 should not file it. Reconcile at
+247 execute. Sequencing: 247 merges first and this feature rebases. This feature reuses 247's constant style and
+does not re-edit 247's call site.
 
 ## Acceptance Criteria
 
@@ -59,7 +108,9 @@ dev.
 
 ## Out of Scope
 
-- `get_config_value` → `GetConfig` (`client.py:1751`) — feature `247-fix-agent-getconfig-deadline`
+- `get_config_value` → `GetConfig` (`client.py:1751`, the internal `agent.*` policy read) is owned by feature
+  `247-fix-agent-getconfig-deadline`. The separate `get_config` MCP tool's `GetConfig` (`client.py:2043`) is **in**
+  scope (FR-1, @AC-2).
 - Changing the `ListOpportunities` deadline or the feature-227 `wait_for` (`tools.py:1551`)
 - Channel caching/reuse (the other half of D-16's suggested LOE) unless design shows it is needed to place the
   deadline; it is a performance change, not the bug

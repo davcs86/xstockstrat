@@ -561,7 +561,7 @@ message FundamentalsScanSummary {
   int32 signals_emitted = 3;
   int32 calls_spent = 4;
   int32 deferred_count = 5;
-  string status = 6;               // "completed" | "budget_deferred" | "failed"
+  string status = 6;               // "completed" | "budget_deferred" | "partial" | "failed"
   google.protobuf.Timestamp finished_at = 7;
 }
 

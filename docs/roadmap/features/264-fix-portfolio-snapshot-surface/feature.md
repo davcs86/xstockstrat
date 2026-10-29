@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-portfolio-snapshot-surface-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -14,19 +14,28 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-portfolio-snapshot-surface-defect.md` (debt-radar D-12, D-24) |
+| 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; overlap WARN only) |
+| 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator sign-off on @AC-4 deletion and @AC-5 change (branch b, migration 034) |
+| 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
+| 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge: steps 1,3,4,5,6,8 line refs aligned; Step 6 evidence records 031 (243) / 032 (244) now committed; 034 reservation unchanged |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge: steps 4,5,6,7,8,9,10 aligned (line drift; Step 6 records 248 at `033_`, so 031/032/033 = 243/244/248; 034 reservation unchanged) |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge `f01acaa`: Step 10 aligned (fails.md:2911 rule citation, `list_config_keys(namespace, user_id="")` at tools.py:1628, post-deploy smoke marked operator action); gate (a) passes, (b) still unmet |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge (`0099647f`): Step 10 Codebase Evidence gate-state bullet updated (main-dev now tops out at `031`, 243 merged via #1334); (a) passes, (b) still unmet (032/033 only on 244/248 branches); step stays operator-held |
+| 2026-10-29 | `in-progress` → `code-completed` | operator decision (session_01NpS3HShZK6pSnogA7CFo2f) | Step 10 gate (a)/(b) passed at main-dev `0ba6a8b7`; the post-deploy ListKeys smoke becomes post-merge verification ("Post-merge verification (Recommended)"); all 10 steps done |
 
 ---
 
 ## Reviewers
 
-Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-21). `/sdd-spec` overwrites it with per-step assignments.
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22), collected from the per-step **Reviewers** lines.
 
 | Reviewer | Focus | Steps |
 |---|---|---|
-| `xstockstrat-portfolio` owner | Position snapshot consistency, per-user stream isolation, pool-budget impact of a periodic writer | All steps |
-| Security | Cross-tenant isolation of `StreamPortfolioUpdates` (auth scope: a subscriber sees only its own `x-user-id`) | D-24 steps |
-| `xstockstrat-config` owner | Only if design deletes `portfolio.snapshot.interval_minutes` (config seed migration + governance log) | Conditional |
-| DBA | Only if design deletes the key via a new config migration | Conditional |
+| `xstockstrat-portfolio` owner | Position snapshot consistency, concurrent write safety, stream correctness | 1, 2, 3, 4, 5 |
+| Security | Cross-tenant isolation and fail-closed caller identity on `StreamPortfolioUpdates` (a subscriber sees only its own `x-user-id`) | 1, 2, 3, 4 |
+| `xstockstrat-config` owner | Key retirement, environment × global/per-user scoping; key removal approval with all consumers (`docs/runbooks/config-rollout.md:246`) | 7, 8, 10 |
+| DBA | Config migration `034` numbering (no conflicts, two-sided pre-merge gate), up+down pair, run order | 7, 10 |
 
 ---
 
@@ -34,7 +43,9 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-triage time (2026-10-
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-portfolio-snapshot-surface`_
+- [Recon](recon.md) — Phase 0 codebase dossier
+- [Design](design.md) — approved design: owner-scoped fail-closed fan-out (D-24), retire `portfolio.snapshot.interval_minutes` via config migration 034 (D-12)
+- [Implementation Spec](implementation-spec.md) — 10 steps
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -47,4 +58,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-`/sdd-design fix-portfolio-snapshot-surface quick` — recommended design depth: quick (single service, SEV-2; escalate to full if design deletes the config key via a migration); see context.md
+All 10 steps done. Merge integration PR #1345. After the dev deploy, run `list_config_keys(namespace="portfolio")` on staging and record that `portfolio.snapshot.interval_minutes` is absent. The production check goes on the next `/promote` checklist.

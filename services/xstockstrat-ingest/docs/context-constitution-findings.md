@@ -2,8 +2,8 @@
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped; `default_timeframe` doc-lie resolved (CLAUDE.md now self-labels it) and re-filed as a dead config key; other findings re-checked still open). For triage/fixing, not
-governance. The config zero-trap and the `client_id="indicators-…"` copy-paste are repeated patterns
-also recorded at the root.
+governance. The config zero-trap was resolved by feature 244 (root CF-N10), and the
+`client_id="indicators-…"` copy-paste was resolved by feature 174.
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
@@ -24,7 +24,7 @@ also recorded at the root.
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| **Dead indicators-only `sandbox_*` helpers**: the file still carries `sandbox_timeout_ms`/`sandbox_memory_bytes`/`sandbox_allowed_imports` (`watcher.py#sandbox_timeout_ms`/`#sandbox_memory_bytes`/`#sandbox_allowed_imports`, ~L168-178) that no ingest code calls (ingest runs no sandbox). ~~The identity clause (docstring + `client_id="indicators-…"`) was **RESOLVED by feature 174**~~: docstring is now "Config watcher for xstockstrat-**ingest**" and `client_id=f"ingest-{id(self)}"` via `_build_watch_request()`. | dead helpers copy-pasted from the indicators template remain (a separate change class — dead-code deletion) | `app/config/watcher.py#sandbox_timeout_ms` (~L168-178) |
+| ~~**Dead indicators-only `sandbox_*` helpers**~~ **RESOLVED (feature 244)**: deleted with their tests; the file used to carry `sandbox_timeout_ms`/`sandbox_memory_bytes`/`sandbox_allowed_imports` (`watcher.py#sandbox_timeout_ms`/`#sandbox_memory_bytes`/`#sandbox_allowed_imports`, ~L168-178) that no ingest code calls (ingest runs no sandbox). ~~The identity clause (docstring + `client_id="indicators-…"`) was **RESOLVED by feature 174**~~: docstring is now "Config watcher for xstockstrat-**ingest**" and `client_id=f"ingest-{id(self)}"` via `_build_watch_request()`. | resolved | n/a (helpers removed) |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 

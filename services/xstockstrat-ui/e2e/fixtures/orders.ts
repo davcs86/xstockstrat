@@ -51,6 +51,10 @@ export const ORDER_WORKING = {
   tradingMode: 1, // PAPER
 };
 
+/** AC timestamps for `mock-order-002` (feature 270): the stream's PARTIALLY_FILLED, then its FILLED. */
+export const ORDER_WORKING_STREAMED_AT = '2026-10-21T10:00:00Z';
+export const ORDER_WORKING_FILLED_AT = '2026-10-21T10:00:05Z';
+
 /**
  * A working order whose platform-side command outcome is unknown (feature 101,
  * intentState 4=UNKNOWN per trading.proto's IntentState enum: UNSPECIFIED=0/PENDING=1/

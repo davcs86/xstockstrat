@@ -26,6 +26,7 @@ import {
   forward,
   forwardAdmin,
 } from '@/lib/bffShared';
+import { LONG_RPC_TIMEOUT_MS } from '@/lib/deadlines';
 
 const router = createBffRouter();
 
@@ -34,7 +35,7 @@ router.service(ConfigService, {
   async setConfig(req, ctx) {
     const claims = await requireSession(ctx);
     // Admin-only, defense in depth (the backend re-checks the x-access-scope ADMIN bit). Keeps an
-    // explicit body rather than forwardAdmin because the author is injected from the session below.
+    // explicit body rather than forwardAdmin because the environment is filled/rejected below.
     requireAdminScope(claims);
     // An UNSPECIFIED environment (e.g. the /sources secret write, which can't read APPLICATION_ENV)
     // targets THIS deployment's native scope — fill it server-side so the write lands on the right env.
@@ -50,7 +51,7 @@ router.service(ConfigService, {
       );
     }
     return configClient.setConfig(
-      { ...req, environment, author: claims.user_id },
+      { ...req, environment },
       { headers: backendHeaders(claims, ctx) },
     );
   },
@@ -66,7 +67,9 @@ router.service(IngestService, {
 // Only the admin-scoped producer trigger and template authoring are exposed — connect-node leaves
 // every other AnalysisService method unimplemented, so this doesn't widen the config-ui surface.
 router.service(AnalysisService, {
-  runFundamentalsScan: forwardAdmin((req, opts) => analysisClient.runFundamentalsScan(req, opts)),
+  runFundamentalsScan: forwardAdmin((req, opts) => analysisClient.runFundamentalsScan(req, opts), {
+    timeoutMs: LONG_RPC_TIMEOUT_MS,
+  }),
   listTemplates: forward((req, opts) => analysisClient.listTemplates(req, opts)),
   manageTemplate: forwardAdmin((req, opts) => analysisClient.manageTemplate(req, opts)),
 });

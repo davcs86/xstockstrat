@@ -16,7 +16,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { HEADER_ACCESS_SCOPE } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 
@@ -71,7 +71,7 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
 
   function setConfig(value: Record<string, unknown>, key = KEY, namespace = NS) {
     const request = { namespace, key, value, author: 'tester', reason: 'bounds test' };
-    const metadata = md({ [HEADER_ACCESS_SCOPE]: '7' }); // admin scope for a global write
+    const metadata = md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'tester' }); // admin scope for a global write
     return new Promise<{ err: any; res: any }>((resolve) => {
       client.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
     });
@@ -106,6 +106,7 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     const { err } = await setConfig({ floatVal: -1 });
     assert.ok(err);
     assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
+    assert.match(err.details ?? err.message, /\[0, 8760\]/);
     assert.equal(insertQuery(), undefined);
   });
 
@@ -114,6 +115,7 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     const { err } = await setConfig({ stringVal: 'abc' });
     assert.ok(err, 'a non-numeric write to a scalar-bounded key must be rejected (NaN)');
     assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
+    assert.match(err.details ?? err.message, /\[0, 8760\]/);
     assert.equal(insertQuery(), undefined);
   });
 
@@ -218,6 +220,11 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.match(r.err.details ?? r.err.message, /\[1, 5\]/);
     assert.equal(insertQuery(), undefined, 'no INSERT for an out-of-range value');
     queries = [];
+    r = await setConfig({ intVal: 0 }, OPP_CONC); // feature 244 @AC-8: the reader honours 0, so the write edge must reject it
+    assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT, 'max_concurrent_bars_fetches 0 is below min');
+    assert.match(r.err.details ?? r.err.message, /\[1, 5\]/);
+    assert.equal(insertQuery(), undefined);
+    queries = [];
     r = await setConfig({ intVal: 99 }, OPP_REFRESH);
     assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT, 'refresh_hour_utc 99 is out of [0,23]');
     assert.match(r.err.details ?? r.err.message, /\[0, 23\]/);
@@ -308,6 +315,7 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     queries = [];
     const { err } = await setConfig({ intVal: 56 }, 'opportunities.read_timeout_seconds', 'agent');
     assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, 'intVal 56 is above the 55s ceiling');
+    assert.match(err.details ?? err.message, /\[30, 55\]/);
     assert.equal(insertQuery(), undefined);
   });
 });
