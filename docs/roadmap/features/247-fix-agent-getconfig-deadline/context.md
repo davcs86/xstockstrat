@@ -392,3 +392,82 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - a post-merge dev smoke of `ingest_signal` and `extract_website_content` with config healthy;
   - a check that no `get_config_value: GetConfig DEADLINE_EXCEEDED` warnings appear in the agent logs.
 - Step 6 **Status** stays `pending` (Deviation Log entry `Step 6 (2026-10-29)`).
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-agent-getconfig-deadline (feature 247)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature | CREATE | NEW | Observable subject is agent get_config_value deadline. |
+| AC-2 | same | CREATE | NEW | extract_website_content default policy under a hung config. The existing extract-tool-ssrf-hardening.feature covers config-driven policy and SSRF denial, not hung-config fallback, so this is not an overlap. |
+| AC-3 | same | CREATE | NEW | ingest_signal alerts at the default 0.6 threshold when config hangs. |
+| AC-4 | same | CREATE | NEW | /oauth/register does not hang when config hangs. |
+| AC-5 | same | CREATE | NEW | A healthy config service is read unchanged under the deadline. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature (CREATE) ---
+# Promoted from docs/roadmap/features/247-fix-agent-getconfig-deadline/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-247` tag.
+# Durable business rules xstockstrat-agent already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-agent - get_config_value is deadline-bounded
+  The agent's get_config_value issues GetConfig under a deadline so a hung config service
+  cannot hang callers.
+  D is the get_config_value deadline: 3.0 s, aligned with _POLICY_READ_TIMEOUT_S, final value fixed at design.
+
+  @AC-1 @FR-1 @regression @feature-247
+  Scenario: get_config_value is bounded by its default deadline
+    Given the config service accepts connections but never answers GetConfig
+    When the agent calls get_config_value for "signal.alert_threshold" in namespace "agent"
+    Then the call raises a gRPC DEADLINE_EXCEEDED error within D plus 0.5 seconds
+
+  @AC-2 @FR-2 @regression @feature-247
+  Scenario: extract_website_content proceeds with its default fetch policy
+    Given the config service accepts connections but never answers GetConfig
+    And a registered website source "acme-site" with has_credentials false
+    And its config_json.url is a public https URL that passes the SSRF egress gate and serves a 1 KB HTML page
+    When the caller invokes extract_website_content with source_slug "acme-site"
+    Then the tool returns {raw_text: <the page text>}
+    And it returns within 4 × D plus 1 second plus the page fetch time
+    # Supporting unit check (internal state, not consumer-observable): _fetch_url runs with the defaults
+    # max_redirects 5, max_bytes 5000000, connect_timeout 10.0 s and read_timeout 30.0 s.
+
+  @AC-3 @FR-2 @regression @feature-247
+  Scenario: ingest_signal returns and alerts against the default threshold
+    Given the config service accepts connections but never answers GetConfig
+    And ingest IngestSignal and notify EmitAlert are healthy
+    And a registered signal source "acme-signals"
+    When the caller invokes ingest_signal with source "acme-signals", symbol "NVDA", direction "buy", valid_from "2026-10-20T00:00:00Z" and conviction 0.9 for a new, non-duplicate signal
+    Then the tool returns {signal_id: <int>, deduplicated: false} within D plus 1 second after IngestSignal completes
+    And one alert with category "signal" is emitted, because 0.9 is at least the default alert threshold of 0.6
+
+  @AC-4 @FR-2 @regression @feature-247
+  Scenario: OAuth dynamic client registration does not hang
+    Given the config service accepts connections but never answers GetConfig
+    And identity RegisterOAuthClient succeeds
+    When a client POSTs to /oauth/register with redirect_uris ["https://client.example/cb"]
+    Then the endpoint responds within 2 × D plus 1 second with HTTP 201
+    And the body carries a client_id and redirect_uris ["https://client.example/cb"]
+
+  @AC-5 @FR-3 @feature-247
+  Scenario: a healthy config service is read unchanged under the deadline
+    Given the config service answers GetConfig after 0.5 seconds with "signal.alert_threshold" set to "0.8" in namespace "agent"
+    When the agent calls get_config_value for "signal.alert_threshold" in namespace "agent"
+    Then the call returns "0.8"
+
+### Notes / ambiguities / conflicts
+- All five scenarios are attributed to xstockstrat-agent. The Reviewers table in feature.md lists only the agent owner, and every Then asserts on agent tool or endpoint behavior. None is cross-cutting, so platform.feature is untouched.
+- Dedup grep of /home/user/xstockstrat/services/xstockstrat-agent/acceptance/ and /home/user/xstockstrat/docs/sdd/business-rules/platform.feature found no scenario on get_config_value deadlines, alert_threshold, /oauth/register, or GetConfig timeouts.
+- The only nearby hits are extract-tool-ssrf-hardening.feature (SSRF denial and config-driven policy) and fix-opportunities-read-hangs.feature (ListOpportunities deadline, feature 227). Neither asserts the same outcome, so there are no OVERLAPs.
+- The new suite sits alongside fix-opportunities-read-hangs.feature, which follows the same header and provenance style.
+- Consolidation candidate for a human to decide later: AC-1 and feature 227 AC-2 are the same kind of deadline guard on different RPCs. I did not flag this as an OVERLAP.
+- No CONFLICT. AC-2 and AC-3 use the documented defaults (extract policy 5 / 5000000 / 10.0 / 30.0, alert threshold 0.6). The agent CLAUDE.md "Config Keys Consumed" table gives the same defaults.
+
+### Coverage check
+- Source scenarios: 5. Planned (NEW+DUP+OVERLAP): 5 (5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Every @AC-1 through @AC-5 is accounted for and none was skipped. Given/When/Then is verbatim, and the original @AC and @FR tags are preserved with @feature-247 added.
+- The original @regression tags are kept. AC-5 had none and none was added.
+```
