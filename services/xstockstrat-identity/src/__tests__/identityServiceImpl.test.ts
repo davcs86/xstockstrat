@@ -234,10 +234,13 @@ describe('validateToken success serialization (regression)', () => {
 /** A pool that records every SQL statement it sees and returns `rows` for all queries. */
 function makeSpyPool(rows: any[] = []) {
   const queries: string[] = [];
+  const params: any[][] = [];
   return {
     queries,
-    async query(sql: string, _params?: any[]) {
+    params,
+    async query(sql: string, p?: any[]) {
       queries.push(sql);
+      params.push(p ?? []);
       return { rows };
     },
     async connect() {
@@ -253,6 +256,37 @@ function implWithPool(pool: any) {
 
 function challengeFor(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url');
+}
+
+/** The `client_id` bound to the single refresh-token INSERT a spy pool recorded. */
+function refreshInsertClientId(pool: { queries: string[]; params: any[][] }): unknown {
+  const i = pool.queries.findIndex((q) => /INSERT INTO identity\.refresh_tokens/.test(q));
+  assert.ok(i >= 0, 'expected a refresh-token INSERT');
+  return pool.params[i][3];
+}
+
+async function withAppEnvUnset(fn: () => Promise<void>): Promise<void> {
+  const prev = process.env.APPLICATION_ENV;
+  delete process.env.APPLICATION_ENV;
+  try {
+    await fn();
+  } finally {
+    if (prev === undefined) delete process.env.APPLICATION_ENV;
+    else process.env.APPLICATION_ENV = prev;
+  }
+}
+
+/** AC-4 shared claim half: every access token carries the same claims and TTL. */
+function assertSharedClaims(accessToken: string): any {
+  const decoded: any = (jwt as any).verify(accessToken, process.env.JWT_SECRET);
+  for (const key of ['user_id', 'email', 'roles', 'issued_at', 'expires_at']) {
+    assert.ok(key in decoded, `missing claim ${key}`);
+  }
+  assert.strictEqual(decoded.user_id, 'u1');
+  assert.strictEqual(decoded.email, 'u@example.com');
+  assert.deepStrictEqual(decoded.roles, ['trader']);
+  assert.strictEqual(decoded.expires_at - decoded.issued_at, 900);
+  return decoded;
 }
 
 describe('registerOAuthClient', () => {
@@ -323,6 +357,21 @@ describe('exchangeAuthCode', () => {
     // Feature 051: the OAuth grant's refresh token must be tagged with its client_id so
     // it becomes listable/revocable in "My Authorized Apps".
     assert.ok(pool.queries.some((q) => /INSERT INTO identity\.refresh_tokens[^)]*client_id/.test(q)));
+  });
+
+  it('@AC-4 OAuth exchange: shared claims, aud = resource, refresh tagged with client_id', async () => {
+    process.env.JWT_SECRET = 'ac4-secret';
+    await withAppEnvUnset(async () => {
+      const pool = makeSpyPool([storedRow({ resource: 'https://agent.example/mcp' })]);
+      const res: any = await new Promise((resolve, reject) => {
+        implWithPool(pool).exchangeAuthCode(exchangeCall({ resource: 'https://agent.example/mcp' }), (err: any, r: any) =>
+          err ? reject(err) : resolve(r),
+        );
+      });
+      const decoded = assertSharedClaims(res.accessToken);
+      assert.strictEqual(decoded.aud, 'https://agent.example/mcp');
+      assert.strictEqual(refreshInsertClientId(pool), 'oauthc_1');
+    });
   });
 
   it('rejects a bad code_verifier as invalid_grant', async () => {
@@ -614,6 +663,39 @@ describe('refreshOAuthToken', () => {
         assert.strictEqual(err.code, 16);
         resolve();
       });
+    });
+  });
+});
+
+// The OAuth-exchange AC-4 case lives in describe('exchangeAuthCode') to reuse storedRow/exchangeCall.
+describe('token claim-shape parity (AC-4)', () => {
+  it('@AC-4 login: shared claims, no aud, refresh client_id NULL', async () => {
+    process.env.JWT_SECRET = 'ac4-secret';
+    await withAppEnvUnset(async () => {
+      const pool = makeSpyPool([{ user_id: 'u1', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'] }]);
+      const res: any = await new Promise((resolve, reject) => {
+        implWithPool(pool).authenticateUser(makeCall({ email: 'u@example.com', password: 'admin' }), (err: any, r: any) =>
+          err ? reject(err) : resolve(r),
+        );
+      });
+      const decoded = assertSharedClaims(res.accessToken);
+      assert.ok(!('aud' in decoded), 'first-party login token must carry no aud');
+      assert.strictEqual(refreshInsertClientId(pool), null);
+    });
+  });
+
+  it('@AC-4 first-party refresh: shared claims, no aud, refresh client_id NULL', async () => {
+    process.env.JWT_SECRET = 'ac4-secret';
+    await withAppEnvUnset(async () => {
+      const pool = makeSpyPool([{ token_id: 't1', user_id: 'u1', client_id: null, email: 'u@example.com', roles: ['trader'] }]);
+      const res: any = await new Promise((resolve, reject) => {
+        implWithPool(pool).refreshToken(makeCall({ refreshToken: 'r1' }), (err: any, r: any) =>
+          err ? reject(err) : resolve(r),
+        );
+      });
+      const decoded = assertSharedClaims(res.accessToken);
+      assert.ok(!('aud' in decoded), 'first-party refresh token must carry no aud');
+      assert.strictEqual(refreshInsertClientId(pool), null);
     });
   });
 });

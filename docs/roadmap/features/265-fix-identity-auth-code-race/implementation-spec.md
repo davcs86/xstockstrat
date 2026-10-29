@@ -359,7 +359,7 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
 
 ### Step 4 — test: claim-shape and client-tagging parity across login, refresh and OAuth exchange (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -579,3 +579,10 @@ _Populated by /sdd-execute as implementation proceeds._
   `expires_at - issued_at === 900`), deleted after GREEN; Step 4 owns the committed AC-4 tests. Evidence via
   `pnpm test` spec-reporter `ℹ` lines (same route as Step 2). The `authenticateUser` inline comment "JWT payload
   uses snake_case claim names" moved into `mintAccessToken`'s 2-line doc comment rather than being dropped.
+- **2026-10-29 — Step 4 (F-09):** RED/GREEN evidence via `pnpm test` spec-reporter `ℹ` lines (no TAP `# ` lines, same
+  route as Step 2); logs written to the session scratchpad, not `/tmp/identity-265-step4.log`. Step 3 was committed
+  first, so RED was captured by temporarily restoring the pre-Step-3 `identityServiceImpl.ts` from `d98f682f~1`
+  (uncommitted), then restoring the Step 3 file before GREEN. The OAuth-exchange AC-4 case is nested in
+  `describe('exchangeAuthCode')` to reuse `storedRow`/`exchangeCall` (the spec's offered option), so
+  `describe('token claim-shape parity (AC-4)')` holds the login and first-party refresh cases; the shared
+  assertions live in module-level helpers `assertSharedClaims`, `refreshInsertClientId` and `withAppEnvUnset`.

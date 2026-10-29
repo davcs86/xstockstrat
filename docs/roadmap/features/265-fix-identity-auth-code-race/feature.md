@@ -23,6 +23,7 @@
 | 2026-10-29 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2 — AC-1/2/3/5/6 tests with the `makeAuthCodeDb` transactional fake (RED 4 fail → GREEN 86/86) |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 3, 4, 5 re-anchored to the current codebase after merging origin/main-dev (line-anchor drift only, no symbol drift) |
 | 2026-10-29 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3 — `mintAccessToken` (optional `aud`) + `issueRefreshToken` shared by login, refresh and OAuth (D-21) |
+| 2026-10-29 | `in-progress` (Step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4 — AC-4 claim-shape + refresh `client_id` parity tests (RED 1 fail on pre-Step-3 source → GREEN 89/89); FR-6/FR-7 grep 1 sign + 1 INSERT |
 
 ---
 

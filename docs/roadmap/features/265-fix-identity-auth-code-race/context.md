@@ -439,3 +439,28 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
   `grep -c mintOAuthAccessToken` → 0. FR-6/FR-7 structural preview: one `(jwt as any).sign` (`:287`, in
   `mintAccessToken`), one `INSERT INTO identity.refresh_tokens` (`:305`, in `issueRefreshToken`).
   `pnpm run test:coverage` (probe removed) 86/86, All files 82.67% lines.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4 (sdd-batch-execute)
+
+### Step 4 — test: claim-shape and client-tagging parity across login, refresh and OAuth exchange (AC-4) [done]
+- `makeSpyPool` now records `params` beside `queries` (additive). Three `@AC-4` cases were added. The login and
+  first-party refresh cases are in the new `describe('token claim-shape parity (AC-4)')`. The OAuth-exchange case is
+  nested in `describe('exchangeAuthCode')` so it can reuse `storedRow` and `exchangeCall`. Each case checks the
+  shared claims (`user_id`/`email`/`roles`/`issued_at`/`expires_at`, TTL 900), the `aud` rule, and the refresh
+  INSERT `client_id` (`null`, `null`, `'oauthc_1'`). `APPLICATION_ENV` is unset and restored in `finally`.
+- Tooling: Node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile --filter "xstockstrat-identity..."` ⬇
+  (worktree, no lockfile change).
+- TDD (`pnpm test`):
+  - **RED** ran on the pre-Step-3 `identityServiceImpl.ts`, restored temporarily from `d98f682f~1` and not committed.
+    89 tests: 88 pass, 1 fail. The failure was "AC-4 login", with refresh INSERT `client_id` `undefined !== null`.
+  - **GREEN** ran on the Step 3 tree: 89 tests, 89 pass, 0 fail, 0 skipped. All three `@AC-4` cases executed.
+- FR-6/FR-7 structural check:
+  - `grep -n "(jwt as any).sign"` → 1 hit, `:287`, inside `mintAccessToken` (`:271`).
+  - `grep -n "INSERT INTO identity.refresh_tokens"` → 1 hit, `:305`, inside `issueRefreshToken` (`:297`).
+- Verification:
+  - `pnpm run lint`: 0 errors. Warnings went from 192 to 206. All 14 new ones are `any` warnings in the new
+    test code, which follows the file's existing untyped-mock style.
+  - `pnpm run test:coverage`: 89/89, All files 83.7% lines (threshold ≥40).
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.
+- Deviations: F-09 evidence route and RED-by-temporary-source-swap, the same as Steps 2 and 3. The OAuth case is
+  nested as the spec allows. See the Deviation Log.
