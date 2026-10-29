@@ -489,3 +489,29 @@ Feature: Platform-wide guarantees
       | xstockstrat-identity | dist/__tests__/identityServiceImpl.test.js | dist/grpc/identityServiceImpl.js |
       | xstockstrat-ledger   | dist/__tests__/ledgerServiceImpl.test.js   | dist/grpc/ledgerServiceImpl.js   |
       | xstockstrat-ledger   | dist/__tests__/eventNotifier.test.js       | dist/services/eventNotifier.js   |
+
+  @AC-5 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher reconnects after a non-gRPC exception
+    Given the <service> ConfigWatcher whose first WatchConfig stream raises RuntimeError "boom"
+    And whose second WatchConfig stream yields a snapshot with version "v2"
+    When the watcher runs
+    Then WatchConfig is called a second time after a backoff
+    And the watcher's snapshot version is "v2"
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
+
+  @AC-8 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher task that ends unexpectedly is retained and its exit is logged
+    Given the <service> ConfigWatcher has started its watch task
+    When the watch coroutine ends with RuntimeError "boom"
+    Then an error naming the watch task and "boom" is logged
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
