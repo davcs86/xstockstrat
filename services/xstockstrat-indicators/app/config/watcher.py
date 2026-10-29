@@ -93,17 +93,9 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.string_val or default
-
-    def get_str_present(self, key: str, default: str) -> str:
-        """Use this (never get_str) for keys where a stored "" is meaningful: HasField honors
-        a present empty string instead of collapsing it to the default."""
-        if self._snapshot is None:
-            return default
-        v = self._snapshot.values.get(key)
-        if v is None:
-            return default
         return v.string_val if v.HasField("string_val") else default
+
+    get_str_present = get_str
 
     def get_int(self, key: str, default: int = 0) -> int:
         if self._snapshot is None:
@@ -111,7 +103,7 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.int_val or default
+        return v.int_val if v.HasField("int_val") else default
 
     def get_bool(self, key: str, default: bool = False) -> bool:
         if self._snapshot is None:
@@ -127,15 +119,15 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.float_val or default
+        return v.float_val if v.HasField("float_val") else default
 
     @property
     def sandbox_timeout_ms(self) -> int:
-        return self.get_int("indicators.sandbox.timeout_ms", default=5000)
+        return int_positive(self, "indicators.sandbox.timeout_ms", 5000)
 
     @property
     def sandbox_memory_bytes(self) -> int:
-        return self.get_int("indicators.sandbox.memory_bytes", default=128 * 1024 * 1024)
+        return int_positive(self, "indicators.sandbox.memory_bytes", 128 * 1024 * 1024)
 
     @property
     def sandbox_allowed_imports(self) -> list[str]:
@@ -145,4 +137,10 @@ class ConfigWatcher:
         return [m.strip() for m in raw.split(",") if m.strip()]
 
     def sandbox_max_concurrent(self) -> int:
-        return self.get_int("indicators.sandbox.max_concurrent", default=4)
+        return int_positive(self, "indicators.sandbox.max_concurrent", 4)
+
+
+def int_positive(cfg, key: str, default: int) -> int:
+    # >0, not >=0: Semaphore(-1) raises and memory_bytes=-1 skips RLIMIT_DATA just like 0 does.
+    v = cfg.get_int(key, default)
+    return v if v > 0 else default
