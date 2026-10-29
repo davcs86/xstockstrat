@@ -536,3 +536,22 @@ const call = (fn, request) => new Promise((resolve) => fn({ request }, (err, res
   }
 })().catch((e) => { console.error('repro-265 failed:', e.message); process.exit(1); });
 ```
+
+## Session 2026-10-29 — sdd-execute sequential, Step 6 (sdd-batch-execute)
+
+### Step 6 — docs: teardown context refresh for identity [done]
+- `/context-forge:context-constitution refresh` unavailable in this session, so the refresh was manual (root
+  `CLAUDE.md` § Teardown): both files re-read against `src/grpc/identityServiceImpl.ts` @ `0e4fc22d`.
+- `services/xstockstrat-identity/docs/context-constitution.md`:
+  - IDENTITY-1: `jwt.verify` ~L192 (`#validateToken`), single `jwt.sign` ~L287 (`#mintAccessToken`).
+  - IDENTITY-2: hex sites ~L213/303/460/484/529; PKCE base64url compare ~L504 in `#exchangeAuthCode`.
+  - IDENTITY-4: now names `#mintAccessToken` (~L271) and states `aud` is written only for OAuth callers (~L286);
+    first-party tokens carry none.
+  - Every other `~L` hint re-stamped; `last_used_at` gotcha re-anchored to `#rotateRefreshToken` `touchLastUsed`.
+  - No new IDENTITY-* rule (none proposed; IDENTITY-8 holds the atomic-guard family).
+- `services/xstockstrat-identity/CLAUDE.md:37-38` unchanged: "single-use" is now true under concurrency.
+- Verification: `grep -n mintOAuthAccessToken` over both files → 0 hits; `grep -c mintAccessToken`
+  context-constitution.md → 3 (header, IDENTITY-1, IDENTITY-4). TDD: N/A (docs).
+- Integration PR body owes: "context-forge refresh plugin unavailable; manual reconciliation of identity's
+  context-constitution.md + CLAUDE.md performed in Step 6" (Deviation Log, Step 6).
+

@@ -517,7 +517,7 @@ The AFTER output must show exactly 1 success and exactly 1 refresh row.
 
 ### Step 6 — docs: teardown context refresh for identity (IDENTITY-1/2/4 anchors, single-use wording)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-identity/docs/`)
 **Files**:
 - `services/xstockstrat-identity/docs/context-constitution.md` — modify
@@ -601,3 +601,12 @@ _Populated by /sdd-execute as implementation proceeds._
   The script is recorded verbatim in context.md (Step 5 note). Code-side it was syntax-checked (`node --check`) and
   load-checked against the Step 4 `dist/` (it reached the connect and failed `ECONNREFUSED 127.0.0.1:5432`).
   F-06 grep `DB_POOL_MAX=20` over `.do/app.yaml` and `.do/app.dev.yaml` → 0 hits.
+- **2026-10-29 — Step 6 (plugin unavailable):** `/context-forge:context-constitution refresh` is not available in this
+  session (only `context-forge:context-scrubber` is loaded), so the refresh was done by hand per root `CLAUDE.md`
+  § Teardown: `services/xstockstrat-identity/docs/context-constitution.md` and `services/xstockstrat-identity/CLAUDE.md`
+  re-read against `identityServiceImpl.ts` @ `0e4fc22d`. The integration PR body must state that the plugin was
+  unavailable and list this reconciliation. Scope: beyond IDENTITY-1/2/4, every `~L` hint in the file was
+  re-stamped (IDENTITY-3/5/6/7/8/9 and the gotchas drifted +6/-49 lines from Steps 1 and 3), and the
+  `refreshOAuthToken` `last_used_at` gotcha was re-anchored to `rotateRefreshToken`'s `touchLastUsed` branch (its
+  "before revoking" wording predated hotfix `5bd271d`). No new IDENTITY-* rule. `CLAUDE.md:37-38` unchanged:
+  "single-use" is now accurate under concurrency, so there is no drift.
