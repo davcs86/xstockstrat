@@ -81,7 +81,7 @@ and `@AC-1/@AC-3 @feature-173`. They are covered by the existing tests that each
 
 ### Step 1 — service: FR-6 unambiguous signal-list selection (`_select_signal_list`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/engine/mcp_client_loop.py` — modify

@@ -54,4 +54,4 @@ deadline), and ingests nothing when the result's first list key is not the signa
 
 ## Next Action
 
-`/sdd-execute fix-ingest-poller-backfill sequential` — Step 1 onward on `feature/fix-ingest-poller-backfill`
+`/sdd-execute fix-ingest-poller-backfill sequential` — Step 2 onward on `feature/fix-ingest-poller-backfill` (Step 1 done 2026-10-29)

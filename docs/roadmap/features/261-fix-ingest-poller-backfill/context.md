@@ -617,3 +617,14 @@ halt). design.md is not written and status stays `spec-ready`.
   a scenario without rewording the existing one).
 - Plan: Steps 1–9 as re-specced above (TDD red-before-green for every service/test pair; Step 8 records the O-3 RED
   run here).
+
+### Step 1 — service: FR-6 `_select_signal_list` (done 2026-10-29)
+
+- Added `_select_signal_list` above `_extract_result_items` in `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
+  (design.md § FR-6 rule order); the dict branch and the dict text-fallback route through it; `json.loads` stays
+  unguarded. The `ambiguous result` `ValueError` reaches the existing `run_one_cycle` catch (no new plumbing).
+- TDD: FR-6 red (scratch test, not committed — Step 2 owns the real tests): `signals`-alongside-`warnings`, two
+  candidate lists raising `ambiguous result`, single object with `tags` list wrapped, sole all-dict list, text-fallback
+  envelope → 6 failed / 4 passed on the pre-implementation tree → green: 10 passed. Scratch file removed.
+- Verification: grep hits; `ruff check` + `ruff format --check` clean; full suite 346 passed, coverage 82.57% (≥40%).
+- Deviations: none.
