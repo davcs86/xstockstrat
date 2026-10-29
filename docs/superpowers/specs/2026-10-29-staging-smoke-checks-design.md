@@ -35,8 +35,8 @@ carries a manual "smoke-tested on dev" checkbox.
   no public listener are all load-bearing.
 - A green result not attributable to the commit actually deployed.
 - A skipped or errored check reported as a pass.
-- A results commit that triggers a deploy, or a git write credential living in a staging/DO runtime with
-  reach beyond the results location.
+- A results commit that triggers a deploy, or a git write credential on the smoke service itself. The only
+  accepted exception is the PAT on the DO `POST_DEPLOY` job (see Results location and writers).
 
 ## Constraints
 
@@ -79,6 +79,7 @@ carries a manual "smoke-tested on dev" checkbox.
   per environment.
 - The durable result record is **a committed file** (the "dedicated artifact").
 - `doctl` is not used.
+- Result files go on a dedicated branch (`smoke-results`); the DO dev writer uses a PAT.
 - Features needing intermediate checks are split into parts (Project B).
 
 ## Proposals (my calls — not yet agreed)
@@ -117,17 +118,27 @@ carries a manual "smoke-tested on dev" checkbox.
   `POST_DEPLOY` job and by Claude through the agent's public route. The agent tools are never registered on
   a prod agent.
 
-## Open decision (blocks the plan)
+## Results location and writers (decided; mechanics are my proposals)
 
-Where the result files are committed and by whom. Committing to `main-dev` would trigger the deploy
-pipeline unless path-ignored and would put a git credential beside every writer. My lean: a dedicated
-non-deploying branch (`smoke-results`), written by a single recorder workflow in GitHub Actions that fetches
-completed runs from the service, so no git credential lives in staging or DO. DO dev's internal-only service
-still needs a fetch path for that recorder (agent route, or a `POST_DEPLOY` job holding a push token scoped
-to the results branch only).
+Result files live on a dedicated, non-deploying branch, `smoke-results` (user decision), so a results commit
+can never trigger the `main-dev` deploy pipeline. Each trigger path commits its own run files:
+
+- **GitHub Actions / homelab post-deploy job:** `GITHUB_TOKEN` with `contents: write`, scoped to the workflow.
+- **DO dev `POST_DEPLOY` job:** runs the checks over private networking and pushes the run files with a
+  **PAT** (user decision) held as a `type: SECRET` env var of that job only — never on the smoke service.
+- **Claude:** the agent tool returns the run records; the session commits them to `smoke-results` through its
+  GitHub access. An uncommitted run stays unrecorded, so its checks remain pending.
+- Run files are unique per run, so concurrent pushes rebase trivially; the writer retries on non-fast-forward.
+
+**Residual risk of the PAT.** A fine-grained PAT cannot be limited to one branch; with `contents: write` a
+leak could push to any branch the rulesets don't protect. Mitigations to build in: fine-grained and
+single-repo, `Contents` only (no `workflows`/`administration`), owned by a dedicated machine account, short
+expiry with a rotation runbook, and `main-dev`/`main` rulesets verified to block it (`scripts/setup-branch-protection.sh`).
+A GitHub App installation token is the stronger upgrade path if the residual risk is not acceptable.
 
 ## Left to the builder
 
 Implementation language (lean Python 3.13/uv); check manifest and file layout; SQL assertion format and
 script sandboxing; exact RPC-client wrapper; how the agent tool is gated off in prod; deploy-pipeline wiring
-in `deploy-homelab.yml` and the DO path; recorder workflow; CI job and coverage.
+in `deploy-homelab.yml` and the DO path; shared writer helper (commit run files, rebase-retry); `smoke-results`
+branch bootstrap and ruleset; PAT rotation runbook; CI job and coverage.
