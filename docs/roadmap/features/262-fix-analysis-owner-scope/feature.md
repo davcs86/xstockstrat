@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — `@AC-3`/`@AC-4`/`@AC-5`/`@AC-8`/`@AC-9` failure-isolation tests (real loop for `@AC-3`); `real_live_loop` moved to `tests/conftest.py` |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — deleted owner-agnostic `StrategiesRepository.get_by_id`/`.update` (FR-5); the `get_by_owner_and_id` docstring and the `servicer.py` backstop comment no longer name `get_by_id` |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — deletion-first mock cleanup (26 dead `get_by_id` mock lines deleted, 2 multi-line mocks renamed, `:4595` mock deleted, disable-path assert retargeted) + `@AC-6` repo-surface test; `@AC-7` grep 30 → 0 |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done — analysis `CLAUDE.md` trading row now names the owner-scoped `ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id`/per-pass `x-trace-id`; manual context teardown (context-forge `context-constitution` unavailable) found no further drift |
 
 ---
 

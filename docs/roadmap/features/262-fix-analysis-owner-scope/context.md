@@ -642,3 +642,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     assertion; E501 wrapping of the reworded comments.
   - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
     was not used.
+- Step 8 done (docs, `services/xstockstrat-analysis/CLAUDE.md`): the `xstockstrat-trading`
+  dependency row (`:271`) now reads "`ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id`
+  (and a per-pass `x-trace-id`) boot-time-only ..."; the feature-083 `ListOrders(strategy_id)` part
+  and the rest of the row are unchanged.
+  - TDD: N/A (docs). Before: new-form grep 0 hits, old-form grep 1 hit. After: new-form 1 hit
+    (`:271`), old-form no output.
+  - Context teardown: `/context-forge:context-constitution` is not available in this session (only
+    `context-forge:context-scrubber` is listed), so it was done by hand against the post-Step-7 code.
+    The integration PR body must record both facts:
+    - `CLAUDE.md` § Dependencies: the edited row matches `entry_backfill.py:81-85` (body `user_id`,
+      `owner_metadata(user_id)` + `x-trace-id`). No `StrategiesRepository`/`get_by_id` mention
+      remains in `CLAUDE.md`. The `:531` `max_concurrent_entry_backfill` row is still accurate.
+    - ANALYSIS-7 (`docs/context-constitution.md:23`): still true. `entry_backfill.py:67` still
+      re-types the live-gate literal, `LIVE_ENABLED_PREDICATE_SQL` and `list_live_enabled` are
+      still in `strategies.py`. The `~L5817` anchor for `_load_strategy_definition` is now `:5822`,
+      within its "~" tolerance, so it was left alone.
+    - Findings `:28` (live-gate literal question): still accurate and still **open**; this feature
+      does not address it.
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.

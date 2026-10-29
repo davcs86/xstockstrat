@@ -646,7 +646,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 8 — docs: analysis CLAUDE.md dependency row + context teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-analysis/` (docs)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
