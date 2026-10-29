@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 4 done: five `_grpc_error_message` tests (write tail, read retry text, 272 server-detail pass-through, client sentinel, write without deadline); 3 RED pending Step 5, 227 tests unchanged |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 5 done: `_grpc_error_message` gains keyword-only `write` (the "outcome unknown, verify before retrying" tail) and passes through non-sentinel server DEADLINE_EXCEEDED details (272); 227 text byte-identical |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 6 done: `tests/test_tool_deadlines.py` (@AC-1..4, @AC-6..9, FR-3 arithmetic, catch-site `deadline_s`/`write` AST guards, six-wrap mapping); 14 RED pending Step 7 |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 7 done: `deadline_s` on all 39 `_grpc_error_message` catch sites (36 RPC, 3 LONG; `list_opportunities` unchanged), `write=` at 16 mutating sites (verb-derived for `manage_watchlist` / `manage_offline_account`), and six new `AioRpcError` wraps (`list_signal_sources`, `_get_source`, `ingest_signal` primary, `emit_alert`, `screen_symbols` LONG, `_write_source_bearer`) |
 
 ---
 

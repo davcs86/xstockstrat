@@ -958,3 +958,30 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
   `node_modules` to symlink and `core.hooksPath` (`.husky/_`) does not exist, so the husky hook does not run
   (same as Steps 1-5); no `--no-verify` was used.
 
+## Session 2026-10-29 — Step 7 — service: Catch-site `deadline_s` / `write`, plus the six new wraps
+
+- Files: `services/xstockstrat-agent/app/tools.py`, and only that file.
+  - `deadline_s` is added to all 39 `_grpc_error_message` catch sites, keyed by enclosing function name:
+    - LONG: `run_backtest`, `trigger_backfill`, `run_fundamentals_scan`.
+    - RPC: the other 36. `list_opportunities` keeps `timeout_s`.
+  - `write=True` is added at the 14 table rows. Two sites use a verb-derived expression instead:
+    - `manage_watchlist`: `operation != "update"`.
+    - `manage_offline_account`: `operation not in ("get_order", "list_orders", "list_positions")`.
+  - `not_found=` is unchanged at every site.
+- Six new `except grpc.aio.AioRpcError` wraps:
+  - `list_signal_sources` and `_get_source`: RPC.
+  - `screen_symbols`: LONG.
+  - `emit_alert`: RPC, `write=True`.
+  - `_write_source_bearer`: only the `client.set_config` call, RPC, `write=True`.
+  - `ingest_signal`: only the primary `client.ingest_signal` call, RPC, `write=True`. The three follow-ups stay in
+    their own `except Exception` blocks (127 @AC-4), and the docstring SIDE EFFECT text is untouched (127 @AC-5).
+- No new helper or middleware catch (C-18).
+- TDD RED (pre-Step-7 tree), `tests/test_tool_deadlines.py`: 14 failed / 5 passed. The failures are the Step 6
+  set: missing "within Ns" / "outcome unknown" wording, raw `AioRpcError` from the six wraps, and the AST guards
+  listing every site. GREEN: the five-file Step 7 verification run passed 175.
+- Verification:
+  - grep `deadline_s=client._RPC_TIMEOUT_S` = 41, and `deadline_s=client._LONG_RPC_TIMEOUT_S` = 4. Both match the
+    spec.
+  - ruff check and format are clean.
+  - The full suite passed 574, coverage 82.47% (≥40).
+- Deviation: line anchors were re-anchored by function name. See the Deviation Log.

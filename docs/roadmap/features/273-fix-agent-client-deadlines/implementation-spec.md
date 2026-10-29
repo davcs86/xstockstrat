@@ -561,7 +561,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 7 — service: Catch-site `deadline_s` / `write`, plus the six new wraps
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -1004,3 +1004,9 @@ _Populated by /sdd-execute as implementation proceeds._
   `timeout=` Step 3 shipped, and the follow-ups are already in `except Exception`. They stay as FR-5/R6
   regression guards. Elapsed bounds in the hung tests use the patched budgets plus 0.5 s. Full suite 14 failed /
   560 passed, coverage 82.32% (≥40). **Disposition**: expected per spec; Step 7 GREEN re-runs these tests.
+- **Step 7 (2026-10-29)** — the spec's `tools.py` catch-site and wrap line anchors drifted (Step 5 widened the
+  mapper signature), so every site was re-anchored by enclosing function name, as the spec directs. The 39 edited
+  sites plus the unchanged `list_opportunities` give exactly the 40 in the table. The `manage_offline_account`
+  and `manage_watchlist` verb literals were re-grepped: same verbs and variable (`operation`). ruff format re-wraps
+  the widened calls over several lines. Grep counts are 41 RPC / 4 LONG, as the spec expects. **Disposition**:
+  accepted (no scope change).
