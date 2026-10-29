@@ -18,6 +18,7 @@ Run:
 from __future__ import annotations
 
 import importlib.util
+import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -413,6 +414,45 @@ class TestListUsersCmd:
         result = runner.invoke(mu.app, ["list-users"])
         assert result.exit_code == 0
         assert "inactive@test.com" in result.stdout
+
+
+class TestListUsersJson:
+    @patch("psycopg.connect")
+    def test_json_emits_only_id_local_part_and_active(self, mock_connect: MagicMock):
+        conn = _mock_conn()
+        conn.execute.return_value.fetchall.return_value = [
+            (FAKE_UUID, "Alice@Example.com", True),
+        ]
+        mock_connect.return_value = conn
+        result = runner.invoke(mu.app, ["list-users", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.stdout) == [
+            {"user_id": str(FAKE_UUID), "email_local": "Alice", "is_active": True}
+        ]
+        assert "@" not in result.stdout
+        assert "roles" not in result.stdout
+
+    @patch("psycopg.connect")
+    def test_json_active_only_filter(self, mock_connect: MagicMock):
+        conn = _mock_conn()
+        conn.execute.return_value.fetchall.return_value = [
+            (FAKE_UUID, "active@test.com", True),
+        ]
+        mock_connect.return_value = conn
+        result = runner.invoke(mu.app, ["list-users", "--json", "--active-only"])
+        assert result.exit_code == 0
+        executed_query = conn.execute.call_args[0][0]
+        assert "WHERE is_active = TRUE" in executed_query
+        assert "user_id" in executed_query
+
+    @patch("psycopg.connect")
+    def test_json_empty_prints_empty_array(self, mock_connect: MagicMock):
+        conn = _mock_conn()
+        conn.execute.return_value.fetchall.return_value = []
+        mock_connect.return_value = conn
+        result = runner.invoke(mu.app, ["list-users", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.stdout) == []
 
 
 # ═══════════════════════════════════════════════════════════════════════
