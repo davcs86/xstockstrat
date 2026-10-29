@@ -116,6 +116,7 @@ const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
     callerID: 'marketdata',
     namespace: 'marketdata',
     keys: ['alpaca.api_key', 'alpaca.api_secret', 'fmp.api_key', 'finnhub.api_key'],
+    peerSan: 'xstockstrat-marketdata',
   },
   {
     callerID: 'ingest',

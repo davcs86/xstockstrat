@@ -9,6 +9,8 @@
 Python gRPC service providing two capabilities:
 
 1. **Built-in indicator engine** — vectorized computation of SMA, EMA, RSI, MACD, BB, ATR, VWAP, STOCH
+   (`ATR` and `VWAP` are close-only approximations — the close-to-close mean of `|Δclose|` and the running
+   mean of closes — not Wilder ATR or volume-weighted VWAP; the 1-D `values` input carries no high/low/volume, feature 268)
 2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory headroom
 
 **Formulas are private to their author (feature 224) — there is no public concept.** `is_public`
@@ -192,6 +194,12 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   sandbox result dict must contain every declared series, else the run fails with
   `SANDBOX_EXIT_REASON_RUNTIME_ERROR` and an error naming the missing series. Inline
   `formula_source` runs have no stored definition, so no output enforcement applies.
+- **No-output failure (feature 268)**: success requires the child's last `__OUTPUT__:` marker line to
+  parse. Exit 0 with no marker fails `SANDBOX_EXIT_REASON_RUNTIME_ERROR` ("formula produced no output");
+  an unparseable last marker fails the same way ("formula output could not be parsed: …"); a non-zero exit
+  with empty stderr reports "formula exited with code N before producing output". The wrapper prints the
+  marker on its own line, so a formula printing a valid marker then `SystemExit(0)` is an accepted
+  author-controlled forgery of its own result, not an isolation breach.
 
 ## Environment Variables
 

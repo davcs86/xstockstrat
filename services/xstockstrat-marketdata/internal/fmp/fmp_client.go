@@ -223,7 +223,12 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	u := c.baseURL + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return fmt.Errorf("fmp: build request: %w", err)
+		// *url.Error carries the key-bearing URL: wrap only its inner cause.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return fmt.Errorf("fmp: %s build request: %w", path, ue.Err)
+		}
+		return fmt.Errorf("fmp: %s build request", path)
 	}
 	if err := c.throttle(ctx); err != nil {
 		return fmt.Errorf("fmp: rate limiter: %w", err)
@@ -240,7 +245,11 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	}()
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("fmp: %s request failed: %w", path, err)
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return fmt.Errorf("fmp: %s request failed: %w", path, ue.Err)
+		}
+		return fmt.Errorf("fmp: %s request failed", path)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusOK {

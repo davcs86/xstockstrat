@@ -667,3 +667,311 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Target: the /sdd-execute integration PR.
 - [ ] Re-scan the `servicer.py` overlap with 269 once its implementation-spec exists.
   - Target: the /sdd-execute checkpoint before Step 1.
+
+## Session 2026-10-28 — re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-indicators-formula-correctness` with `-X ours`
+  (merge commit 8c38a675).
+- Re-spec of steps 2, 3, 7, 10 against the merged codebase. Line drift only, no file or symbol missing:
+  - Step 2: `SYSTEM_AUTHOR` import `test_private_formulas.py:9` → `:10`; `_admin` `:63-67` → `:62-66`;
+    `ctx.abort` side effect `conftest.py:33` → `:32`. All other citations re-verified.
+  - Step 3: the wrapper output block is `sandbox.py:310-312` with `:310` the comment and the code on
+    `:311-312`. All other citations re-verified.
+  - Step 7: the `strategyCatalog` consumer list now includes `src/lib/screenPresets.test.ts`. It reads only
+    `.name` (`:7`) and asserts no description, so "no consumer needs a change" holds.
+  - Step 10: the `_output = _formula_globals.get('result', {{}})` citation `sandbox.py:310` → `:311`.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`.
+- Mode-entry (up-front) confirmation: operator approved the plan by standing authorization, operator chat
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute.
+  Answers recorded: unattended checkpoints (checkpoint mode `report`); C-16 promotion auto-confirmed unless
+  it changes an existing @AC rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps
+  (open the PR, hold the merge); "start batch 2 in parallel too".
+- Plan: steps 1-10 in order, one commit per step on `feature/fix-indicators-formula-correctness`, then a
+  single integration PR to `main-dev`.
+
+### Step 1 — service: D-54 — done (2026-10-28)
+
+- `servicer.py:491` (`UpdateFormula`) and `:594` (`DeleteFormula`): `if row is None:` →
+  `if row is None or row.get("pending_intent_id") is not None:`. Abort message and `return` unchanged.
+- TDD (AC-6/AC-7, throwaway probe — Step 2 owns `tests/test_private_formulas.py`, so the probe was not
+  committed): red: 4 failed — pending `u-1` Update/Delete not refused, pending `SYSTEM_AUTHOR` Update/Delete
+  `PERMISSION_DENIED` != `NOT_FOUND` → green: 4 passed after the change.
+- Verification grep: exactly 2 hits (`:491`, `:594`). Full indicators suite 294 passed; `ruff check app` clean.
+- No deviations.
+
+### Step 2 — test: D-54 guard-branch tests — done (2026-10-28)
+
+- Added `class TestPendingHiddenMutation` after `TestPendingAndCache` in `tests/test_private_formulas.py`,
+  reusing `_row`/`_servicer`/`_admin` (C-13: no conftest builder; single `_row`). 8 cases: AC-6 own pending
+  Update (no `repo.update`, row dict unchanged); AC-7 own pending Delete (no `repo.delete`,
+  `deleted_at` None); pending `SYSTEM_AUTHOR` row Update/Delete → NOT_FOUND; pending foreign row by ADMIN
+  Update/Delete → NOT_FOUND; missing id Update/Delete → NOT_FOUND (not covered anywhere before).
+- Existing branches cited in the class docstring, not duplicated: system row → PERMISSION_DENIED
+  (`test_formulas.py` `TestSystemFormulaReadOnly`, `test_private_formulas.py` `test_ac23_*`); foreign row by
+  ADMIN → PERMISSION_DENIED (`test_ac28_admin_mutation_and_execute_denied`); deleted row on Update →
+  FAILED_PRECONDITION (`test_formulas.py` `test_update_soft_deleted_formula_rejected`, in
+  `TestFormulaPartialUpdate`, not the `TestFormulaDeletedFlag` class the spec named as a candidate).
+- TDD: AC-6/AC-7 red (servicer.py temporarily restored to its pre-Step-1 version): 6 failed, 2 passed
+  (the missing-id cases) — own pending Update/Delete DID NOT RAISE, pending system/foreign-admin
+  `PERMISSION_DENIED` != `NOT_FOUND` → green: 8 passed after restoring Step 1.
+- Verification: `-k PendingHiddenMutation` 8 passed; full suite 302 passed, coverage 85.61% (≥50%);
+  `ruff check .` and `ruff format --check .` clean; C-13 grep shows the single `_row` builder.
+- No deviations.
+
+### Step 3 — service: D-10 — a sandbox run with no parseable output line fails — done (2026-10-28)
+
+- `app/services/sandbox.py`: wrapper prints `"\\n__OUTPUT__:"` in source (child receives `"\n__OUTPUT__:"`);
+  the parse loop keeps the raw payload of the last marker line; a local `_fail(error, exit_reason)` closure
+  (C-18) builds every non-timeout failure; rc≠0 keeps its classification and falls back to
+  `formula exited with code N before producing output` on empty stderr; rc==0 with no marker →
+  `formula produced no output`, unparseable marker → `formula output could not be parsed: …`, both
+  `runtime_error`. Timeout branch, `:252` builtins, stderr markers and `memory_used_bytes` untouched.
+- TDD: Step 4's six sandbox cases run as an uncommitted scratch file (Step 3 owns only `sandbox.py`) →
+  red: 5 failed, 1 passed (AC-1/AC-2/os._exit `True is False`, SystemExit(1) `error == ''`, framing guard
+  `output == {}`) → green: 6 passed.
+- Note for Step 4: the marker-framing guard is RED before Step 3 too (a trailing `print("x", end="")`
+  glued the marker mid-line, so the run "succeeded" with `output == {}`); the spec's RED proof calls it a
+  pass-both guard. Only AC-3 passes on both sides.
+- Note: the spec's evidence `servicer.py:313-319` means `app/handlers/servicer.py` (`:317` maps
+  `runtime_error`); path typo only, read-only for this step.
+- Verification: `__OUTPUT__` grep shows the `\\n` print (`:312`) and the `startswith` parse; `_fail` grep
+  4 lines (def + 3 call sites); `except json.JSONDecodeError:$` no hit. Full suite 302 passed, coverage
+  85.55%; `ruff check .` / `ruff format --check .` clean.
+- No deviations.
+
+## Session 2026-10-29 — re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-indicators-formula-correctness` with `-X ours`
+  (merge commit 0991650b).
+- Status already `in-progress` (Step 3 done); no status change. Standing authorization re-recorded: operator
+  chat 2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f), "Start executing features 241-276" via
+  batch-execute — unattended checkpoints (`report`), C-16 promotion auto-confirmed unless it changes an
+  existing @AC rule, merge-train authorized, 255 and 275 deferred, operator-only DB/prod steps (open the PR,
+  hold the merge), blocker decisions 2026-10-29 recorded per feature.
+- Re-spec of steps 5 and 6 against the merged codebase. Line drift only, no file or symbol missing:
+  - Step 5: `screener.py` `_latest_indicator("ATR", ...)` `:285` → `app/services/screener.py:319`, its
+    close-only comment `:279-284` → starts at `:313`; `pnl_pattern_consumer.py:50` lives under
+    `app/engine/`; `ListIndicators` `servicer.py:354` → `app/handlers/servicer.py:355`.
+    `indicators_engine.py`, `evaluator.py` and `warmup.py` citations re-verified unchanged.
+  - Step 6: servicer path made explicit (`app/handlers/servicer.py`); `ComputeIndicator` `:204`, None-drop
+    `:216-217` → `:217`, `IndicatorPoint` `:221`; `ListIndicators` `:354` → `:355`. Test-file, conftest,
+    `EXEMPT` and proto citations re-verified unchanged.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 4 — test: D-10 sandbox failure semantics, success guard and preserved classifications — done (2026-10-29)
+
+- `tests/test_sandbox.py`: new `class TestSandboxNoOutputFails` (6 cases, each docstring names its scenario):
+  AC-1 `SystemExit(0)`, AC-2 unparseable marker, AC-3 `result` success guard, marker-framing guard,
+  `os._exit(0)` via `numpy.lib._datasource.os`, `SystemExit(1)` empty-stderr error text.
+- `tests/test_formulas.py`: `test_no_output_run_returns_runtime_error` added inside
+  `TestExecuteFormulaInlineParameters` (reuses its `_cfg`; no fourth copy) — `success` False,
+  `SANDBOX_EXIT_REASON_RUNTIME_ERROR`, `"produced no output"` in `error`.
+- C-13: inline formula-source strings only; no conftest change. `tests/test_sandbox_isolation.py` unedited.
+- TDD (Step 3 already landed, so `sandbox.py` was temporarily checked out at `85ef0ac8~1` for RED, then
+  restored): red: 6 failed, 1 passed — AC-1/AC-2/os._exit/servicer `True is False`, SystemExit(1)
+  `'' != ''`, framing guard `{} == {'x': 1}`; only AC-3 passed → green: 7 passed.
+- Verification: `test_sandbox.py test_sandbox_isolation.py test_formulas.py -v` 103 passed; full suite
+  309 passed, coverage 86.24% (≥50%); `ruff check .` clean; `ruff format --check .` clean after
+  `ruff format tests/test_sandbox.py` (step's own lines).
+- Deviations: RED-proof wording only (framing guard is RED pre-Step-3, not pass-both) — see Deviation Log.
+
+### Step 5 — service: D-18 Option A — honest ATR/VWAP descriptions in the engine registry — done (2026-10-29)
+
+- `app/services/indicators_engine.py`: `INDICATOR_REGISTRY` `ATR`/`VWAP` descriptions set to the exact specced
+  strings (parenthesized multi-line entries, `ruff format` layout); `_atr`/`_vwap` docstrings now state the
+  rolling mean of absolute close-to-close change / cumulative mean of the inputs, and that neither is the
+  true-range / volume-weighted indicator. Keys, `required`, dispatch `:30-31` and math unchanged, so the
+  analysis consumers (`evaluator.py`, `screener.py`, `warmup.py`, `pnl_pattern_consumer.py`) resolve as before.
+- TDD: Step 6's engine-level AC-4/AC-5 assertions run as an uncommitted scratch file (Step 5 owns only
+  `indicators_engine.py`) → red: 2 failed (`'Average True Range' not in ...`, `'Volume Weighted Average Price'
+  not in ...`) → green: 2 passed (values `[None, None, 1.5, 1.5]` and `[10.0, 15.0, 20.0]` unchanged). Scratch
+  file deleted before commit.
+- Verification: grep 2 → `0`; grep 1 adapted to the multi-line layout (see Deviation Log). Full suite 309
+  passed, coverage 86.24% (≥50%); `ruff check .` / `ruff format --check .` clean.
+- Deviations: verification grep 1 form only — see Deviation Log.
+
+### Step 6 — test: D-18 ATR/VWAP descriptions and unchanged values (engine + servicer) — done (2026-10-29)
+
+- `tests/test_indicators_engine.py`: new `class TestAtrVwapHonestDescriptions` (5 cases): AC-4/AC-5 engine-level
+  registry key + description text + `compute` values (`[None, None, 1.5, 1.5]`, `[10.0, 15.0, 20.0]`);
+  servicer `ListIndicators` descriptions; servicer `ComputeIndicator` ATR `[1.5, 1.5]` (warm-up omitted) and VWAP
+  `[10.0, 15.0, 20.0]`. Servicer built as `IndicatorsServicer(config_watcher=<MagicMock, sandbox_max_concurrent=4>)`,
+  context `ctx_with([])`. C-13: inline single-consumer literals; no conftest change.
+- TDD (Step 5 already landed, so `indicators_engine.py` was temporarily checked out at `b0dc843c` for RED, then
+  restored byte-identical): AC-4/AC-5 red: 3 failed (`'Average True Range' not in 'Average True Range'` x2 engine +
+  ListIndicators, `'Volume Weighted Average Price' not in ...`), 2 passed (servicer ComputeIndicator value guards)
+  → green: 5 passed.
+- Verification: `test_indicators_engine.py -v` 29 passed; full suite 314 passed, coverage 87.16% (≥50%);
+  `ruff check .` / `ruff format --check .` clean.
+- Deviations: none.
+
+### Step 7 — service: D-18 Option A — mirror the honest descriptions in the UI strategy catalog (C-10) — done (2026-10-29)
+
+- `services/xstockstrat-ui/src/lib/strategyCatalog.ts`: `BUILTIN_INDICATORS` `ATR`/`VWAP` `description` set to the
+  engine's runtime strings, byte-identical (ATR in double quotes for the apostrophe; prettier-wrapped). `name`,
+  `params` and all other entries unchanged; no consumer needs a change.
+- TDD: Step 8's assertions (no `Average True Range`/`Volume Weighted Average Price`; exact engine strings via `toBe`)
+  run as an uncommitted scratch vitest (Step 7 owns only `strategyCatalog.ts`) → red: 2 failed (`expected 'Average
+  True Range' not to contain 'Average True Range'`; `expected 'Average True Range' to be 'ATR (close-to-close
+  approximation): …'`) → green: 2 passed. Scratch file deleted before commit.
+- Verification: grep → `0`; `pnpm run lint` no errors (pre-existing `react-hooks/exhaustive-deps` warnings only, none
+  in this file); `prettier --check` clean; full vitest 47 files / 238 tests passed.
+- Tooling: `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter .` in this worktree (pnpm 9.15.9,
+  Node 24.20.0); no manifest or lockfile change.
+- Deviations: prettier-wrapped source layout only — see Deviation Log.
+
+
+### Step 8 — test: UI catalog carries no misleading ATR/VWAP names (vitest) — done (2026-10-29)
+
+- `services/xstockstrat-ui/src/lib/strategyCatalog.test.ts` (new): imports the real `BUILTIN_INDICATORS`; asserts no
+  `description` contains `Average True Range` / `Volume Weighted Average Price`, and that the `ATR` / `VWAP` entries
+  still exist (key stability). C-12: no mocked domain objects, so no fixture import or `INVENTORY.md` row.
+- TDD (Step 7 already landed, so `strategyCatalog.ts` was temporarily replaced with its `a8ce834d` content for RED,
+  then restored byte-identical): red: 2 failed (`expected [ 'ATR' ] to deeply equal []`, `expected [ 'VWAP' ] to
+  deeply equal []`), 2 passed (key guards) → green: 4 passed.
+- Verification: `vitest run src/lib/strategyCatalog.test.ts` 4 passed; `pnpm run test:coverage` exit 0 (lines
+  73.36%, statements 71.73%, functions 74.73% ≥ 40%; 48 files / 242 tests); `pnpm run lint` exit 0 (pre-existing
+  `react-hooks/exhaustive-deps` warnings only); `prettier --check` clean.
+- Deviations: none.
+
+
+### Step 9 — docs: indicators sandbox failure rule, ATR/VWAP approximation note, Wilder-ATR divergence — done (2026-10-29)
+
+- `services/xstockstrat-indicators/CLAUDE.md`: `## Role` item 1 notes ATR/VWAP are close-only approximations
+  (close-to-close mean, running mean); `## Declared Formula Outputs` gains the **No-output failure** rule (exit 0 with no
+  marker → "formula produced no output"; unparseable marker → "formula output could not be parsed"; non-zero exit +
+  empty stderr → "formula exited with code N before producing output"; marker on its own line; valid marker +
+  `SystemExit(0)` is an accepted author-controlled forgery, not an isolation breach).
+- `docs/runbooks/indicator-builder.md`: approximation note under the Built-in Indicators table (incl. trading's own
+  Wilder ATR(14)); "A run must produce output" rule under `### Sandbox Constraints`, noting the never-assigns-`result`
+  gap is filed separately (Step 10).
+- `services/xstockstrat-indicators/docs/context-constitution-findings.md`: row in `## Documentation that lies —
+  additions` recording that "ATR" means two numbers (indicators close-to-close vs `trading.go#wilderATR` ATR(14)).
+- TDD: N/A (docs). Verification: all three spec greps return hits.
+- Teardown: `/context-forge:context-constitution` is not available in this session (only `context-scrubber` is
+  listed). Manual reconciliation done instead — each touched section re-read against `sandbox.py:312,406-428`,
+  `indicators_engine.py:144-156` and `trading.go#wilderATR` (`:3169-3198`, call `:3232`); no further drift.
+  **PR body must state both** (plugin unavailable + this manual reconciliation), plus the Open Risks: the D-10 visible
+  behavior change (formulas that silently produced nothing now fail) and the one extra blank line before the marker
+  in raw stdout.
+- Deviations: `wilderATR` one-line anchor drift + manual teardown — see Deviation Log.
+
+
+
+### Step 10 — docs: file the "never assigns result" silent-success defect report — done (2026-10-29)
+
+- `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` (new): `defect-filing.md` template with
+  the 2026-10-21 header shape plus `**Source**` (design.md § Open Risks). Severity is SEV-2 and provisional (triage
+  confirms it). Expected is left undecided. Evidence is `sandbox.py:311` (`.get('result', {{}})`) and `:312` (the marker print).
+- `…defect.status` (new): `open`. Not triaged here; `/sdd-triage --from-report` routes it.
+- Reproduction confirmed on this branch: `execute_formula(source='x = 1', input_data={}, allowed_imports=[])` →
+  `True {} success ''`.
+- TDD: N/A (docs). Verification: both files exist; sidecar `open`; `grep -oE 'SEV-[123]' | sort -u` → one line; no
+  checkbox or `config-propagation` text.
+- All 10 steps done → `status.md` `code-completed`. Next: integration PR (PR body must carry Step 9's teardown note +
+  Open Risks), then triage of the new report.
+- Deviations: none.
+
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-indicators-formula-correctness (feature 268)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-indicators/acceptance/fix-indicators-formula-correctness.feature | CREATE | NEW | ExecuteFormula empty-output failure; no existing suite asserts it |
+| AC-2 | same | CREATE | NEW | unparseable output line fails |
+| AC-3 | same | CREATE | NEW | `result = {...}` still succeeds (positive guard for FR-2) |
+| AC-4 | same | CREATE | NEW | ATR described as close-to-close approximation |
+| AC-5 | same | CREATE | NEW | VWAP described as running mean |
+| AC-6 | same | CREATE | NEW | UpdateFormula refuses pending-hidden saga copy |
+| AC-7 | same | CREATE | NEW | DeleteFormula refuses pending-hidden saga copy |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-indicators-formula-correctness.feature (CREATE) ---
+# Promoted from docs/roadmap/features/268-fix-indicators-formula-correctness/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-268` tag.
+# Durable business rules xstockstrat-indicators already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-indicators — formula execution reports failures, built-ins are honestly named, saga copies are immutable
+  Regression guard for docs/reports/2026-10-21-indicators-formula-correctness-defect.md:
+  silent empty formula success (D-10), misnamed ATR/VWAP (D-18), and mutation of hidden saga copies (D-54).
+
+  @AC-1 @FR-1 @regression @feature-268
+  Scenario: A formula that exits before producing output is reported as a failure
+    Given a formula whose source is "raise SystemExit(0)"
+    When ExecuteFormula runs it
+    Then success is false
+    And error contains "produced no output"
+    And output is empty
+    And exit_reason is not SANDBOX_EXIT_REASON_SUCCESS
+
+  @AC-2 @FR-1 @regression @feature-268
+  Scenario: A formula whose only output line does not parse is reported as a failure
+    Given a formula whose source prints "__OUTPUT__:{" and then raises SystemExit(0)
+    When ExecuteFormula runs it
+    Then success is false
+    And error contains "could not be parsed"
+    And exit_reason is not SANDBOX_EXIT_REASON_SUCCESS
+
+  @AC-3 @FR-2 @regression @feature-268
+  Scenario: A formula that assigns result still succeeds
+    Given a formula whose source is "result = {'x': 1}"
+    When ExecuteFormula runs it
+    Then success is true
+    And output is {"x": 1}
+
+  @AC-4 @FR-3 @option-A @regression @feature-268
+  Scenario: The ATR built-in is described as the close-to-close approximation it computes
+    Given close values [10, 12, 11, 13] and params {"period": 2}
+    When ListIndicators and ComputeIndicator "ATR" are called
+    Then ListIndicators still lists the key "ATR"
+    And its description does not contain "Average True Range"
+    And its description names the close-to-close approximation
+    And the ComputeIndicator "ATR" response result holds 2 IndicatorPoints with values [1.5, 1.5]
+    And the 2 warm-up positions are omitted from result
+
+  @AC-5 @FR-4 @option-A @regression @feature-268
+  Scenario: The VWAP built-in is described as the running mean it computes
+    Given close values [10, 20, 30]
+    When ListIndicators and ComputeIndicator "VWAP" are called
+    Then ListIndicators still lists the key "VWAP"
+    And its description does not contain "Volume Weighted Average Price"
+    And its description names the running mean
+    And the ComputeIndicator "VWAP" response result holds IndicatorPoints with values [10, 15, 20]
+
+  @AC-6 @FR-5 @regression @feature-268
+  Scenario: UpdateFormula refuses a pending-hidden saga copy
+    Given a formula "f-1" authored by "u-1" with pending_intent_id "i-1"
+    When "u-1" calls UpdateFormula on "f-1"
+    Then the call fails with NOT_FOUND
+    And the stored row for "f-1" is unchanged
+
+  @AC-7 @FR-5 @regression @feature-268
+  Scenario: DeleteFormula refuses a pending-hidden saga copy
+    Given a formula "f-1" authored by "u-1" with pending_intent_id "i-1"
+    When "u-1" calls DeleteFormula on "f-1"
+    Then the call fails with NOT_FOUND
+    And "f-1" has no deleted_at timestamp
+
+### Notes / ambiguities / conflicts
+- All 7 route to indicators: observable subjects (ExecuteFormula, ListIndicators/ComputeIndicator, UpdateFormula/DeleteFormula) are indicators RPCs. None is cross-service, so nothing goes to /home/user/xstockstrat/docs/sdd/business-rules/platform.feature.
+- No dedup hits. Grepped all services/*/acceptance/*.feature and platform.feature for ATR, VWAP, pending_intent, "produced no output", SystemExit, ExecuteFormula, UpdateFormula and DeleteFormula. No @feature-268 scenario exists anywhere, so there are no DUPs.
+- Related but not overlapping or conflicting:
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/private-by-default-templates.feature:73 says an admin gets PERMISSION_DENIED on Update/Delete. AC-6 and AC-7 cover the author on a pending-hidden copy, which is a different outcome, so they extend that rule.
+  - /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/indicators-sandbox-os-isolation.feature:33 says a legitimate formula gives an identical result. AC-3 is compatible with it.
+  - /home/user/xstockstrat/services/xstockstrat-trading/acceptance/wire-signal-confidence-to-position-sizing.feature:9 mentions ATR only as sizing input, not the built-in's description.
+- The `@option-A` tag is kept verbatim on AC-4 and AC-5. It records that D-18 resolved as Option A at design.
+- The source's preamble comment about the deleted @option-B pair (AC-8, AC-9) is not carried over, since those scenarios do not exist.
+- The target directory already exists. The file is a CREATE because no suite of this name exists.
+
+### Coverage check
+- Source scenarios: 7 (AC-1 to AC-7). Planned (NEW+DUP+OVERLAP): 7 (7 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). None skipped.
+```
