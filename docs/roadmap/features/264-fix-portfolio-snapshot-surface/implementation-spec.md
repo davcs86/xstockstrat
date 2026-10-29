@@ -502,7 +502,7 @@ grep -n "034_retire_portfolio_snapshot_interval" docs/roadmap/features/merge-ord
 
 ### Step 7 — migration: `034_retire_portfolio_snapshot_interval.{up,down}.sql`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/034_retire_portfolio_snapshot_interval.up.sql` — create

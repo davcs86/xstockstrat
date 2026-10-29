@@ -608,3 +608,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `docs/roadmap/features/merge-order.md`.
 - Deviations: none. Out-of-scope changes: none.
 - Open: the Step 10 two-sided gate must be re-run before merge, after 243/244/248 land.
+
+### Step 7 — migration: `034_retire_portfolio_snapshot_interval.{up,down}.sql` [done]
+- Pre-check (ordering): `grep -rn "snapshot.interval_minutes" --include=*.go services/` exits 1, so Step 5 has landed
+  (3e531aaf) and no Go reader remains.
+- Up: `DELETE FROM config.config_values WHERE namespace = 'portfolio' AND key IN ('portfolio.snapshot.interval_minutes',
+  'snapshot.interval_minutes')`, so every environment, every `user_id` and both stored key forms. Header follows 020.
+- Down: the 020 layout (clobber NOTE, column list with `is_secret`, `ON CONFLICT … DO NOTHING`). It restores exactly the
+  two seeded rows: staging/5 (001:68, renamed by 017:38) and production/1 (002:69), full-dotted key, `user_id` NULL.
+  Per-user overrides are not restored, which is accepted as in 020.
+- TDD: N/A (migration). Pre-state: the 034 files were absent, and the only `snapshot.interval_minutes` matches in the
+  config migrations were the 001/002 INSERT seeds.
+- Verification (offline, no DB): both files are listed; `^03[1-9]_` shows only the 034 pair locally; the up has the
+  DELETE (`:6`); the down count is `2`. By inspection, the down re-inserts exactly the rows the up deletes.
+- Files modified: `services/xstockstrat-config/migrations/034_retire_portfolio_snapshot_interval.{up,down}.sql` (new).
+- Deviations: none. Out-of-scope changes: none.
+- Open: the Step 8 @AC-5 scan is the paired test. Its RED (the highest match being the 002 INSERT) can no longer be
+  captured on this tree; Step 8 must re-capture it by moving the 034 files aside in the working tree only. The Step 10
+  two-sided gate is still owed before merge.
