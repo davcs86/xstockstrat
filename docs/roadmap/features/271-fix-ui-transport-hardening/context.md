@@ -619,3 +619,15 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   - "Long wall-clock e2e": **kept as is**. This is one ~37s case on `chromium` only in CI.
   - "Mutation RED evidence (Steps 2/3)": recorded above and in the Step 2 session. **Closed.**
 - Deviations (Deviation Log): Playwright ran with `CI=1`. `tsc` has 2 pre-existing errors in `e2e/insights/backfills.spec.ts`, which is outside this step.
+
+## Session 2026-10-29 — re-spec Steps 4–10 (sdd-execute sequential, sdd-batch-execute)
+
+- Authorization: the operator approved the up-front plan by standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Checkpoints are unattended and set to `report`. C-16 promotion is auto-confirmed unless it changes an existing @AC rule. The merge-train is authorized. DB/prod steps are operator-only: open the PR and hold the merge.
+- Branch setup (§5.3): merged `origin/main-dev` into the detached checkout with `-X ours` (`fdc5b195`). Status was already `in-progress`, so no status flip.
+- Re-spec (implementation-spec.md only; no code touched):
+  - Step 5: `mock-backend.ts` `refreshToken()` is now `:191-196` (`:184-190` is `authenticateUser`). The stall precedent is `getFundamentals` at `:662-668`. The `helpers/auth` import is at `:38`. The redirect loop is `auth.spec.ts:183-195` (get at `:190`). The INVENTORY sentinel section is at `:53`, header at `:58`.
+  - Step 6: `bffShared.ts` `forward()` is at `:60-73` (admin check `:66`, `timeoutMs` `:70`). `forwardAdmin` is at `:76-80`, JSDoc `:75`. The signature is unchanged.
+  - Step 7: the `connectClients` mock must cover the union of the three BFFs' imports. `traderBff.ts:9-16` adds `tradingClient`, `portfolioClient`, `notifyClient`, `ledgerClient`, `configClient`. `dispatchConnect` is at `insightsBff.ts:209` and `traderBff.ts:151`.
+  - Steps 4, 8, 10: re-verified, no mismatch.
+  - Step 9: the batch directive reported the middleware.test 307 assertion at `:165-166`. Grep shows `:166-167`, which is what the spec already says, so it is left unchanged.
+- Tooling note: the main worktree has no `node_modules` to symlink. `core.hooksPath` points to a non-existent `/home/user/xstockstrat/.husky/_`, so the husky pre-commit hook does not run in this worktree. Implementation steps must run `pnpm install --frozen-lockfile` locally (as Steps 1–3 did) and run lint/format by hand.
