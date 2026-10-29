@@ -287,7 +287,7 @@ cd services/xstockstrat-ledger && pnpm run test:coverage && pnpm run lint
 
 ### Step 5 — service: trader BFF `queryEvents` three-branch owner scoping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
@@ -883,3 +883,16 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Line drift** (no spec edit, F-09): `makePool` `:26`, `describe('queryEvents')` `:141`,
   `makeStreamCall` `:577`, `describe('exportEvents')` `:655` after this step.
 - **Disposition**: no spec change; Step 4's verification ran unmodified.
+
+### DEV-4 — Step 5: RED/GREEN captured with an uncommitted draft of the Step 6 test; pre-existing `tsc` error (2026-10-29)
+
+- **What**: Step 5's paired test is Step 6 (`src/lib/__tests__/traderBff.test.ts`, create). To satisfy
+  P-06 before implementing, a draft of that test (Step 6's eight case groups, driven through
+  `dispatchConnect`) was written in the worktree, run RED against the pre-Step-5 `traderBff.ts`, then GREEN
+  after; it was moved out before commit so Step 6 owns and commits it (F-08).
+- **Verification note**: `pnpm exec tsc --noEmit` reports two errors in
+  `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type
+  'never'`). The output is byte-identical with and without the Step 5 change, so it is pre-existing and
+  outside this step's Files; it was not touched.
+- **Disposition**: CI-equivalent fallback for the RED/GREEN evidence (no spec change); the `tsc` error is
+  an open item outside this feature's scope.

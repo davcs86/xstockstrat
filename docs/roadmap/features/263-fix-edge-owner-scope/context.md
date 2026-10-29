@@ -545,3 +545,23 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 - Prettier: the pre-existing file is not prettier-clean; only the added hunks were formatted, the rest
   left untouched (surgical diff).
 
+### Step 5 — service: trader BFF `queryEvents` three-branch owner scoping [done] (2026-10-29)
+
+- `queryEvents` builds `backendHeaders(claims, ctx)` once and takes the first matching branch: `copilot:`
+  → rewritten to `copilotStreamKey(user)`, `ownerOnly: false`; `account:<id>` → empty id or an id not in
+  trading `listBrokerAccounts` (same headers, errors uncaught) is `PERMISSION_DENIED`, an owned id forwards
+  unchanged with `ownerOnly: false`; anything else (incl. no key) → `ownerOnly: true`. Added the
+  `ConnectError`/`Code` import and module-local `ACCOUNT_STREAM_PREFIX`; handler comment replaced (2 lines).
+- Files modified: `services/xstockstrat-ui/src/lib/traderBff.ts`
+- Tooling setup (step 5): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile
+  --filter xstockstrat-ui... --filter .` (worktree-local `node_modules`, husky installed by `prepare`).
+- TDD (AC-1/AC-2/AC-7, uncommitted Step 6 draft test, DEV-4): red — 7/9 fail (`expected undefined to be
+  'permission_denied'` for foreign/empty `account:`; `expected undefined to be 'unavailable'`; `ownerOnly`
+  `expected false to be true` for no key / `portfolio:u-b` / browser override; C-03 no trading call), AC-3
+  account + copilot passed as baselines → green — 9/9 pass.
+- Verification: `grep backendHeaders(claims, ctx)` → one call in `queryEvents` (`:123`), shared by
+  `listBrokerAccounts` and both `queryEvents` calls; `pnpm run lint` 0 errors (pre-existing warnings only);
+  `tsc --noEmit` only the pre-existing `e2e/insights/backfills.spec.ts:135-136` errors (identical without
+  this change, DEV-4); `test:unit` 48 files / 247 tests pass.
+- Deviations: DEV-4 (RED/GREEN via uncommitted draft of the Step 6 test; pre-existing `tsc` error noted).
+
