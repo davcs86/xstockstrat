@@ -190,7 +190,7 @@ The GREEN run is Step 2's Verification.
 
 ### Step 2 — test: auth-code race, atomicity and non-consumption tests (AC-1, AC-2, AC-3, AC-5, AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -565,3 +565,11 @@ grep -n "mintAccessToken" services/xstockstrat-identity/docs/context-constitutio
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29 — Step 2 (F-09):** RED/GREEN evidence route is `pnpm test` (`tsc && node --test dist/__tests__/*.test.js`,
+  feature 252), not the scratch `tsc --outDir .verify` compile; the run's output is the node spec reporter
+  (`ℹ tests/pass/fail` lines), not TAP `# tests` lines, so the Verification `grep '^# '` pattern matches nothing —
+  counts were read from the `ℹ` lines instead. Logs written to the session scratchpad, not `/tmp/identity-265-step2.log`.
+- **2026-10-29 — Step 2 (TDD order):** Step 1 was committed before Step 2's tests, so RED was captured by temporarily
+  restoring the pre-Step-1 `identityServiceImpl.ts` from `d6cd9f3c` (uncommitted), running `pnpm test`, then restoring
+  the Step 1 file before GREEN. Result matches the spec table: 86 tests, 4 fail (the 4 RED-marked AC tests).

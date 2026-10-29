@@ -394,3 +394,18 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
   grep 1 hit (`redeemAuthCode`); unconditional-UPDATE grep 0 hits; jscpd report: 1 clone, pre-existing
   (`updateUserMetadata`/`adminUpdateUserMetadata`), none between `redeemAuthCode` and `rotateRefreshToken` — no
   stop-and-ask triggered.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 2 (sdd-batch-execute)
+
+- Step 2 done: inline `makeAuthCodeDb` fake (after `makeTokenDb`; fidelity rules a–e of design.md §3) plus 7
+  `@AC-*`-named tests and a local `exchange()` helper inside `describe('exchangeAuthCode')`. Existing exchange tests
+  and `makeTokenDb` untouched; no `if (!impl) return;` guards. `JWT_SECRET`-unset test restores the prior value in
+  `finally`.
+- TDD (Node 24.20.0, `pnpm test`): RED on the pre-Step-1 `identityServiceImpl.ts` (temporarily restored from
+  `d6cd9f3c`, uncommitted) — 86 tests, 82 pass, 4 fail: AC-1 20-way race (`20 !== 1`), AC-1 claim-time expiry
+  (`undefined !== 16`), AC-3 `failInsert` and AC-3 `JWT_SECRET` unset (`consumedAt` set, expected `null`).
+  GREEN on the Step 1 tree — 86 tests, 86 pass, 0 fail, 0 skipped; tsc errors: none.
+- Verification: `pnpm run lint` 0 errors (194 warnings, unchanged from Step 1); `pnpm run test:coverage` 86/86,
+  All files 82.56% lines (≥40).
+- Deviations logged (F-09): `pnpm test` route + spec-reporter output (no TAP `# ` lines); RED via temporary
+  pre-Step-1 source swap because Step 1 was committed first.
