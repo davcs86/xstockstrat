@@ -1,31 +1,24 @@
-/**
- * Unit tests for LedgerServiceImpl — no real DB required.
- *
- * Pool is replaced with an inline mock object whose `query` method returns
- * controlled data. Tests gracefully skip if the TypeScript import fails in
- * strip-only mode (parameter properties); they run fully when
- * --experimental-transform-types or a supporting runtime is used.
- *
- * Run: node --experimental-strip-types --test src/__tests__/*.test.ts
- */
+// Unit tests for LedgerServiceImpl — the pool is an inline mock routed by SQL text; no real DB.
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
-
-// ---------------------------------------------------------------------------
-// Lazy imports — guard against strip-only TypeScript syntax errors
-// ---------------------------------------------------------------------------
+import { makeEventRow as makeRow } from './fixtures/ledgerEvents';
+import { makeRecordingCall as makeStreamCall } from './fixtures/streamCall';
 
 let LedgerServiceImpl: any;
 let rowToEvent: any;
 
+// This import must throw on failure — never wrap it in try/catch or early-return on a
+// missing subject; a swallowed import turns every case into a silent pass.
 before(async () => {
-  try {
-    const mod = await import('../grpc/ledgerServiceImpl.js');
-    LedgerServiceImpl = mod.LedgerServiceImpl;
-    rowToEvent = mod.rowToEvent;
-  } catch {
-    // Unsupported TypeScript syntax in strip-only mode — tests will be skipped.
-  }
+  const mod = await import('../grpc/ledgerServiceImpl.js');
+  LedgerServiceImpl = mod.LedgerServiceImpl;
+  rowToEvent = mod.rowToEvent;
+});
+
+describe('test harness', () => {
+  it('imports the implementation under test', () => {
+    assert.strictEqual(typeof LedgerServiceImpl, 'function', 'LedgerServiceImpl must import — never skip silently');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -42,9 +35,20 @@ function makePool(rows: any[] = [], throws?: Error) {
 }
 
 function makeImpl(rows: any[] = [], throws?: Error) {
-  if (!LedgerServiceImpl) return null;
   const pool = makePool(rows, throws);
   return new LedgerServiceImpl(pool, {});
+}
+
+function captureQuery(rows: any[] = []) {
+  const captured: { sql?: string; params?: any[] } = {};
+  const pool = {
+    async query(sql: string, params?: any[]) {
+      captured.sql = sql;
+      captured.params = params;
+      return { rows };
+    },
+  };
+  return { impl: new LedgerServiceImpl(pool, {}), captured };
 }
 
 function makeCall(req: any) {
@@ -84,31 +88,12 @@ function makeIdempotentPool(opts: {
   return { pool, calls };
 }
 
-// makeRow produces DB-row shaped objects (snake_case from PostgreSQL columns)
-function makeRow(overrides: any = {}) {
-  const now = new Date('2024-01-01T00:00:00Z');
-  return {
-    event_id: 'evt-1',
-    event_type: 'order.filled',
-    source_service: 'xstockstrat-trading',
-    correlation_id: null,
-    stream_key: 'order:1',
-    payload: {},
-    metadata: {},
-    occurred_at: now,
-    recorded_at: now,
-    sequence: 1,
-    ...overrides,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // rowToEvent — pure helper
 // ---------------------------------------------------------------------------
 
 describe('rowToEvent', () => {
   it('maps row fields to proto event shape', () => {
-    if (!rowToEvent) return;
     const now = new Date('2024-01-01T00:00:00Z');
     const row = makeRow({ event_id: 'evt-x', sequence: 42, occurred_at: now, recorded_at: now });
     const evt = rowToEvent(row);
@@ -121,7 +106,6 @@ describe('rowToEvent', () => {
   });
 
   it('uses empty string for missing correlation_id', () => {
-    if (!rowToEvent) return;
     const evt = rowToEvent(makeRow({ correlation_id: null, metadata: null }));
     assert.strictEqual(evt.correlationId, '');
     assert.deepStrictEqual(evt.metadata, {});
@@ -129,7 +113,6 @@ describe('rowToEvent', () => {
 
   // Feature 021 — the DB user_id column surfaces on the wire shape (AC-8).
   it('maps user_id onto userId (empty string when NULL)', () => {
-    if (!rowToEvent) return;
     assert.strictEqual(rowToEvent(makeRow({ user_id: 'u_7' })).userId, 'u_7');
     assert.strictEqual(rowToEvent(makeRow({ user_id: null })).userId, '');
   });
@@ -142,7 +125,6 @@ describe('rowToEvent', () => {
 describe('queryEvents', () => {
   it('returns all events when no filters', async () => {
     const impl = makeImpl([makeRow({ event_id: 'e1' }), makeRow({ event_id: 'e2' })]);
-    if (!impl) return;
     const call = makeCall({ page: { pageSize: 100 } });
 
     await new Promise<void>((resolve, reject) => {
@@ -157,7 +139,6 @@ describe('queryEvents', () => {
 
   it('applies streamKey filter in params', async () => {
     const impl = makeImpl([makeRow({ stream_key: 'order:99' })]);
-    if (!impl) return;
     const call = makeCall({ streamKey: 'order:99', page: { pageSize: 10 } });
 
     await new Promise<void>((resolve, reject) => {
@@ -173,7 +154,6 @@ describe('queryEvents', () => {
     // pageSize=2 → limit=2; mock returns 3 rows → hasMore=true
     const rows = [0, 1, 2].map((i) => makeRow({ event_id: `e${i}`, sequence: i + 1 }));
     const impl = makeImpl(rows);
-    if (!impl) return;
     const call = makeCall({ page: { pageSize: 2 } });
 
     await new Promise<void>((resolve, reject) => {
@@ -188,7 +168,6 @@ describe('queryEvents', () => {
 
   it('calls back with error code 13 on DB failure', async () => {
     const impl = makeImpl([], new Error('connection refused'));
-    if (!impl) return;
     const call = makeCall({ page: { pageSize: 10 } });
 
     await new Promise<void>((resolve) => {
@@ -207,7 +186,6 @@ describe('queryEvents', () => {
   // xstockstrat-portfolio's HydrateStops) as an Internal error.
   it('sets page.totalCount to a number so the int32 field encodes', async () => {
     const impl = makeImpl([makeRow({ event_id: 'e1' }), makeRow({ event_id: 'e2' })]);
-    if (!impl) return;
     const call = makeCall({ page: { pageSize: 100 } });
 
     await new Promise<void>((resolve, reject) => {
@@ -219,6 +197,57 @@ describe('queryEvents', () => {
       });
     });
   });
+
+  // Feature 263 — opt-in owner predicate (AC-2/AC-7); flag absent must keep internal callers' SQL.
+  function runQuery(impl: any, call: any) {
+    return new Promise<void>((resolve, reject) => {
+      impl.queryEvents(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  it('ownerOnly binds the caller x-user-id as a user_id predicate', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(impl, makeStreamCall({ ownerOnly: true, page: { pageSize: 100 } }, 'u-a'));
+    assert.strictEqual(
+      captured.sql,
+      'SELECT * FROM ledger.events WHERE user_id = $1 ORDER BY recorded_at ASC LIMIT $2',
+    );
+    assert.deepStrictEqual(captured.params, ['u-a', 101]);
+  });
+
+  it('ownerOnly with no caller binds the empty string (matches nothing)', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(impl, makeStreamCall({ ownerOnly: true, page: { pageSize: 100 } }));
+    assert.match(captured.sql ?? '', /WHERE user_id = \$1 /);
+    assert.deepStrictEqual(captured.params, ['', 101]);
+  });
+
+  it('flag absent leaves the SQL and params unchanged (internal callers)', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(
+      impl,
+      makeStreamCall({ eventType: 'order.filled', streamKey: 'order:1' }, 'u-a'),
+    );
+    assert.strictEqual(
+      captured.sql,
+      'SELECT * FROM ledger.events WHERE stream_key = $1 AND event_type = $2 ORDER BY recorded_at ASC LIMIT $3',
+    );
+    assert.deepStrictEqual(captured.params, ['order:1', 'order.filled', 101]);
+    assert.doesNotMatch(captured.sql ?? '', /user_id/);
+  });
+
+  it('ownerOnly with eventType keeps placeholders sequential and LIMIT last', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(
+      impl,
+      makeStreamCall({ ownerOnly: true, eventType: 'order.filled', page: { pageSize: 10 } }, 'u-a'),
+    );
+    assert.strictEqual(
+      captured.sql,
+      'SELECT * FROM ledger.events WHERE event_type = $1 AND user_id = $2 ORDER BY recorded_at ASC LIMIT $3',
+    );
+    assert.deepStrictEqual(captured.params, ['order.filled', 'u-a', 11]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -228,7 +257,6 @@ describe('queryEvents', () => {
 describe('getEvent', () => {
   it('returns error code 5 when event not found', async () => {
     const impl = makeImpl([]);
-    if (!impl) return;
     const call = makeCall({ eventId: 'missing' });
 
     await new Promise<void>((resolve) => {
@@ -242,7 +270,6 @@ describe('getEvent', () => {
 
   it('returns event when found', async () => {
     const impl = makeImpl([makeRow({ event_id: 'found', sequence: 10 })]);
-    if (!impl) return;
     const call = makeCall({ eventId: 'found' });
 
     await new Promise<void>((resolve, reject) => {
@@ -257,7 +284,6 @@ describe('getEvent', () => {
 
   it('calls back with error code 13 on DB failure', async () => {
     const impl = makeImpl([], new Error('db error'));
-    if (!impl) return;
     const call = makeCall({ eventId: 'any' });
 
     await new Promise<void>((resolve) => {
@@ -276,7 +302,6 @@ describe('getEvent', () => {
 
 describe('appendEvent', () => {
   it('inserts event and returns id + sequence', async () => {
-    if (!LedgerServiceImpl) return;
     const now = new Date();
     const pool = {
       async query(_sql: string, _params?: any[]) {
@@ -303,7 +328,6 @@ describe('appendEvent', () => {
 
   it('calls back with error code 13 on DB failure', async () => {
     const impl = makeImpl([], new Error('insert failed'));
-    if (!impl) return;
     const call = makeCall({ eventType: 'order.filled', sourceService: 'trading', streamKey: 'order:1' });
 
     await new Promise<void>((resolve) => {
@@ -320,7 +344,6 @@ describe('appendEvent', () => {
   // `new Date(undefined * 1000)` → Invalid Date, which Postgres rejected with
   // `invalid input syntax for type timestamp with time zone: "0NaN-NaN-NaN…"`.
   it('binds the provided occurredAt Date as occurred_at, not an Invalid Date', async () => {
-    if (!LedgerServiceImpl) return;
     let capturedParams: any[] = [];
     const pool = {
       async query(_sql: string, params?: any[]) {
@@ -352,7 +375,6 @@ describe('appendEvent', () => {
   // Regression: when occurredAt is absent, occurred_at falls back to `recorded_at`
   // (a valid Date), never an Invalid Date.
   it('falls back to a valid Date when occurredAt is omitted', async () => {
-    if (!LedgerServiceImpl) return;
     let capturedParams: any[] = [];
     const pool = {
       async query(_sql: string, params?: any[]) {
@@ -383,7 +405,6 @@ describe('appendEvent', () => {
   // a per-stream sequence that no migration ever creates, so every insert to a
   // fresh stream_key failed with `relation "ledger.event_seq_…" does not exist`.
   it('uses the global sequence default, not a per-stream sequence', async () => {
-    if (!LedgerServiceImpl) return;
     let capturedSql = '';
     let capturedParams: any[] = [];
     const pool = {
@@ -414,7 +435,6 @@ describe('appendEvent', () => {
 
   // Idempotency: a first-seen key claims the row and inserts the event normally.
   it('idempotent path: claims the key and inserts the event', async () => {
-    if (!LedgerServiceImpl) return;
     const { pool, calls } = makeIdempotentPool({
       claimRows: [{ event_id: 'new' }],
       insertRow: { sequence: 7, recorded_at: new Date() },
@@ -442,7 +462,6 @@ describe('appendEvent', () => {
   // Idempotency: a duplicate key returns the originally-stored event and does NOT
   // insert a second ledger.events row.
   it('idempotent path: returns the stored event on a duplicate key (no second insert)', async () => {
-    if (!LedgerServiceImpl) return;
     const now = new Date();
     const { pool, calls } = makeIdempotentPool({
       claimRows: [], // ON CONFLICT DO NOTHING → no row → duplicate
@@ -485,7 +504,6 @@ describe('appendEvent', () => {
   }
 
   it('stamps req.userId onto the insert (request field wins)', async () => {
-    if (!LedgerServiceImpl) return;
     const { pool, params } = captureAppend();
     const impl = new LedgerServiceImpl(pool, {});
     const call = makeCall({
@@ -502,7 +520,6 @@ describe('appendEvent', () => {
   });
 
   it('falls back to the x-user-id metadata when req.userId is empty', async () => {
-    if (!LedgerServiceImpl) return;
     const { pool, params } = captureAppend();
     const impl = new LedgerServiceImpl(pool, {});
     const call = {
@@ -521,7 +538,6 @@ describe('appendEvent', () => {
   });
 
   it('stamps NULL when neither req.userId nor x-user-id metadata is present', async () => {
-    if (!LedgerServiceImpl) return;
     const { pool, params } = captureAppend();
     const impl = new LedgerServiceImpl(pool, {});
     const call = makeCall({
@@ -541,31 +557,7 @@ describe('appendEvent', () => {
 // exportEvents — feature 021 (server-streaming cursor read)
 // ---------------------------------------------------------------------------
 
-// A streaming call mock: records write()s and the terminal end()/destroy().
-function makeStreamCall(req: any, userId?: string) {
-  return {
-    request: req,
-    metadata: { get: (k: string) => (k === 'x-user-id' && userId ? [userId] : []) },
-    writes: [] as any[],
-    ended: false,
-    destroyed: null as any,
-    write(msg: any) {
-      this.writes.push(msg);
-    },
-    end() {
-      this.ended = true;
-    },
-    destroy(err: any) {
-      this.destroyed = err;
-    },
-    on() {
-      /* cancellation wiring — unused in unit */
-    },
-  };
-}
-
 function makeExportImpl(cfg: { enabled?: boolean; maxDays?: number }) {
-  if (!LedgerServiceImpl) return null;
   let poolQueried = false;
   const pool = {
     options: { connectionString: 'postgres://x', ssl: false },
@@ -624,7 +616,6 @@ function makeExportImpl(cfg: { enabled?: boolean; maxDays?: number }) {
 describe('exportEvents', () => {
   it('AC-10: rejects with FAILED_PRECONDITION (code 9) when ledger.export.enabled=false', async () => {
     const h = makeExportImpl({ enabled: false });
-    if (!h) return;
     const call = makeStreamCall({ eventType: '' }, 'u_42');
     await h.impl.exportEvents(call);
     assert.ok(call.destroyed, 'must destroy the stream');
@@ -634,7 +625,6 @@ describe('exportEvents', () => {
 
   it('AC-5: rejects with INVALID_ARGUMENT (code 3) + exact message when window exceeds max', async () => {
     const h = makeExportImpl({ maxDays: 365 });
-    if (!h) return;
     const call = makeStreamCall(
       { start: new Date('2024-01-01T00:00:00Z'), end: new Date('2026-01-01T00:00:00Z'), eventType: '' },
       'u_42',
@@ -647,7 +637,6 @@ describe('exportEvents', () => {
 
   it('AC-11 + AC-1: scopes to the caller (WHERE user_id = $1) and orders by sequence ASC', async () => {
     const h = makeExportImpl({});
-    if (!h) return;
     const call = makeStreamCall(
       { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
       'u_42',
@@ -661,7 +650,6 @@ describe('exportEvents', () => {
 
   it('AC-3: applies an event_type = ANY() predicate for a comma-joined subset', async () => {
     const h = makeExportImpl({});
-    if (!h) return;
     const call = makeStreamCall(
       { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: 'fill,signal' },
       'u_42',
@@ -673,7 +661,6 @@ describe('exportEvents', () => {
 
   it('AC-4: omits the event_type predicate when empty (all types)', async () => {
     const h = makeExportImpl({});
-    if (!h) return;
     const call = makeStreamCall(
       { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
       'u_42',
@@ -684,7 +671,6 @@ describe('exportEvents', () => {
 
   it('AC-7: streams in batches (multiple write()s) via the dedicated client, never this.pool', async () => {
     const h = makeExportImpl({});
-    if (!h) return;
     const call = makeStreamCall(
       { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
       'u_42',
@@ -697,7 +683,6 @@ describe('exportEvents', () => {
 
   it('AC-8: each emitted event carries the full wire shape incl userId + payload', async () => {
     const h = makeExportImpl({});
-    if (!h) return;
     const call = makeStreamCall(
       { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
       'u_42',
@@ -724,14 +709,7 @@ describe('exportEvents', () => {
 
 describe('rowToEvent serialization (regression)', () => {
   it('produces Date timestamps that ts-proto encodes without throwing', async () => {
-    if (!rowToEvent) return;
-
-    let LedgerEvent: any;
-    try {
-      ({ LedgerEvent } = await import('@xstockstrat/proto/ledger/v1/ledger.js'));
-    } catch {
-      return; // proto package unavailable in this runtime — skip.
-    }
+    const { LedgerEvent } = await import('@xstockstrat/proto/ledger/v1/ledger');
 
     const event = rowToEvent({
       event_id: 'e1',
@@ -749,5 +727,132 @@ describe('rowToEvent serialization (regression)', () => {
     assert.ok(event.occurredAt instanceof Date, 'occurredAt must be a Date');
     assert.ok(event.recordedAt instanceof Date, 'recordedAt must be a Date');
     assert.doesNotThrow(() => LedgerEvent.encode(event).finish());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// streamEvents — onGap ends the call non-OK (feature 248)
+// ---------------------------------------------------------------------------
+
+function makeFakeNotifier() {
+  const n = {
+    captured: null as any,
+    unsubscribed: false,
+    subscribe(sub: any) {
+      n.captured = sub;
+      return () => {
+        n.unsubscribed = true;
+      };
+    },
+  };
+  return n;
+}
+
+describe('streamEvents onGap', () => {
+  for (const [label, notFound, code] of [
+    ['AC-7: no row → INTERNAL (13)', true, 13],
+    ['AC-6: read error → UNAVAILABLE (14)', false, 14],
+  ] as const) {
+    it(`${label}, never a clean end()`, async () => {
+      const notifier = makeFakeNotifier();
+      const impl = new LedgerServiceImpl(makePool([]), {}, notifier);
+      const call = makeStreamCall({ fromSequence: 10 });
+      await impl.streamEvents(call);
+      notifier.captured.onGap({ notFound, message: 'm' });
+      assert.deepStrictEqual(call.destroyed, { code, message: 'm' });
+      assert.strictEqual(call.ended, false);
+      assert.strictEqual(notifier.unsubscribed, true);
+    });
+  }
+
+  it('AC-6 / AC-7 recovery: a fresh stream from the gap replays the full rows in order', async () => {
+    const rows = [11, 12].map((s) =>
+      makeRow({ event_id: `e${s}`, sequence: s, payload: { n: s } }),
+    );
+    const impl = new LedgerServiceImpl(makePool(rows), {}, makeFakeNotifier());
+    const call = makeStreamCall({ fromSequence: 11 });
+    await impl.streamEvents(call);
+    assert.deepStrictEqual(
+      call.writes.map((w: any) => w.sequence),
+      [11, 12],
+    );
+    assert.deepStrictEqual(
+      call.writes.map((w: any) => w.payload),
+      [{ n: 11 }, { n: 12 }],
+    );
+    assert.strictEqual(call.destroyed, null);
+  });
+
+  it('onGap during the replay query writes nothing to the destroyed call', async () => {
+    let release: (r: any) => void = () => {};
+    const pool = {
+      query: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    };
+    const notifier = makeFakeNotifier();
+    const impl = new LedgerServiceImpl(pool, {}, notifier);
+    const call = makeStreamCall({ fromSequence: 8 });
+    const done = impl.streamEvents(call);
+    notifier.captured.onGap({ notFound: false, message: 'm' });
+    release({ rows: [8, 9, 10].map((s) => makeRow({ event_id: `e${s}`, sequence: s })) });
+    await done;
+    assert.deepStrictEqual(call.destroyed, { code: 14, message: 'm' });
+    assert.strictEqual(notifier.unsubscribed, true);
+    assert.deepStrictEqual(call.writes, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// streamEvents — sequence normalisation (feature 248): pg returns BIGINT as a string
+// ---------------------------------------------------------------------------
+
+describe('streamEvents sequence normalisation', () => {
+  const seqs = (call: any) => call.writes.map((w: any) => Number(w.sequence));
+
+  it('AC-2: a resolved "100" after replayed "98"/"99" is delivered, and NOTIFY 100 is not duplicated', async () => {
+    const rows = ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
+    const notifier = makeFakeNotifier();
+    const impl = new LedgerServiceImpl(makePool(rows), {}, notifier);
+    const call = makeStreamCall({ fromSequence: 98 });
+    await impl.streamEvents(call);
+    assert.deepStrictEqual(seqs(call), [98, 99]);
+
+    notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: '100', payload: { n: 100 } }));
+    assert.deepStrictEqual(seqs(call), [98, 99, 100], 'string "100" must not compare lexicographically below "99"');
+    assert.deepStrictEqual(call.writes[2].payload, { n: 100 });
+
+    notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: 100 }));
+    assert.deepStrictEqual(seqs(call), [98, 99, 100], 'no duplicate for the NOTIFY number form');
+  });
+
+  it('AC-5: a resolved "100" buffered during replay is flushed exactly once', async () => {
+    let release: (r: any) => void = () => {};
+    const pool = {
+      query: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    };
+    const notifier = makeFakeNotifier();
+    const impl = new LedgerServiceImpl(pool, {}, notifier);
+    const call = makeStreamCall({ fromSequence: 98 });
+    const done = impl.streamEvents(call);
+    notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: '100' }));
+    release({ rows: ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s })) });
+    await done;
+    assert.deepStrictEqual(seqs(call), [98, 99, 100]);
+    assert.strictEqual(call.destroyed, null);
+  });
+
+  it('encodes a string int64 sequence from a pg row without throwing', async () => {
+    const { LedgerEvent } = await import('@xstockstrat/proto/ledger/v1/ledger');
+    const event = rowToEvent(makeRow({ sequence: '100' }));
+    let bytes: Uint8Array = new Uint8Array();
+    assert.doesNotThrow(() => {
+      bytes = LedgerEvent.encode(event).finish();
+    });
+    assert.strictEqual(Number(LedgerEvent.decode(bytes).sequence), 100);
   });
 });

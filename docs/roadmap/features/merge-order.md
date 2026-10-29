@@ -81,6 +81,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `fix-fundsignal-emit-accounting` (260) | `fix-fundsignal-neutral-score` (246) | Same file and test helpers (`analysis/app/engine/fundsignal_loop.py`, `tests/test_fundsignal_loop.py`). 246 lands first; 260 rebases | No |
 | `fix-ingest-poller-backfill` (261) | `fix-python-config-stored-zero` (244) | 261's FR-5 `GetSecret` timeout builds on 244's `int_positive` timeout read in `mcp_client_loop.py`/the ingest watcher; both also edit the INGEST rules table in `context-constitution.md` (expect a doc merge) | No |
 | `fix-analysis-owner-scope` (262) | `fix-python-config-stored-zero` (244) | 244 changes `analysis/app/engine/entry_backfill.py:56-58`, the function 262 rewrites (D-44/D-55). 262 rebases onto 244. 262 also reuses 259's task-retention helper for the `main.py:174` task | No |
+| `fix-python-loop-supervision` (259) | `fix-ledger-trimmed-notify-payload` (248) | **248 first** (soft): 248 re-reads `analysis/app/engine/pnl_pattern_consumer.py:147-162` and greps `await asyncio.sleep(2)`; 259 rewrites that loop but keeps the line byte-identical in the outer handler, so 248's check still holds or is re-pointed. Rebase-only peers, line-disjoint today: `fix-python-config-stored-zero` (244) edits the getters in all three Python `app/config/watcher.py` files and the `retry_seconds` reads in `fundsignal_loop.py`/`servicer.py`; `fix-fundsignal-emit-accounting` (260) edits `fundsignal_loop.py` (246, same file, already merged into 259's branch); `fix-analysis-owner-scope` (262) must reuse `app/supervision.py#spawn` for the `main.py` entry-backfill task, not add a second helper; `fix-indicators-formula-correctness` (268, indicators `tests/test_config_watcher.py`) is already merged into 259's branch. Replay amplification vs `fix-ledger-query-pagination` (257): a stuck P&L event re-opens the unpaged `StreamEvents` at most 5 times before the probe-gated park | No |
 | `fix-agent-client-deadlines` (273) | `fix-agent-getconfig-deadline` (247) | 247 adds the `get_config_value` deadline in agent `client.py`; 273 covers every other call and must not re-add it. Same file | No |
 | `fix-analysis-backtest-bounds` (272) | `fix-agent-client-deadlines` (273) | **Operator-ordered (2026-10-22).** 273 owns the `deadline_s is None → exc.details()` pass-through in agent `_grpc_error_message` (`tools.py`), which 272's new `run_backtest` failure surface relies on; 272 stays analysis-only | No |
 | `fix-config-stream-resilience` (258) | `fix-identity-ledger-test-suites` (252) | 258's Step 8 (ledger `appendEvent` tests) needs 252's ledger test-runner fix to execute; Step 7 may land first | No |
@@ -90,6 +91,10 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `fix-template-update-metadata` (269) | `fix-python-config-stored-zero` (244), `fix-screener-symbol-isolation` (245) | Soft rebase only: shared files in the indicators/analysis servicers and tests. 269 rebases after them; 262, 268 and 272 overlap at file level only (operator yes, 2026-10-22) | No |
 | `fix-backtest-silent-symbol-skip` (275) | `fix-analysis-backtest-bounds` (272), `fix-agent-client-deadlines` (273), `block-fundamentals-strategy-on-etf` (215) | All three rewrite the analysis `RunBacktest` symbol loop and status gate in `servicer.py` (272 renames the body to `_run_backtest`; 275 keeps 272's `_BarFetchError` re-raise). 273 owns the agent `tools.py` error pass-through that 275's docstring and strat-lab skill edits describe. 275 re-anchors every cited line and re-checks proto `NoTradeReason` value 6 after they land (operator-ordered 2026-10-22) | No |
 | `fix-etf-flag-fill` (230) | `fix-marketdata-fundamentals-cache` (255) | **Hard (operator-ordered 2026-10-22).** 255 fixes the root cause (D-51 source-filtered FMP seed + `SeedFMPBudget`) and adds the `enrichmentClass` classifier (with `other` for stage-less errors) that 230 exports as `fmp.ErrorClass`. 230's classifier and logging steps are blocked until 255 merges | No |
+| `fix-ledger-trimmed-notify-payload` (248) | `fix-identity-ledger-test-suites` (252) | 248's tier (i)-(iii) RED-before-green and tier (iv) `test:db` run on 252's compile-then-test runner and de-guarded ledger suites (248 design.md § Chosen Approach 6; P-06). Hard: 248 Step 3 onward does not start until 252 is in `main-dev` | No |
+| `fix-ledger-trimmed-notify-payload` (248) | `fix-sandbox-seed-keys` (243) | **Config migration number ordering.** 243 adds config `031_heal_indicators_sandbox_keys_full_dotted`; 248 adds `033_ledger_stream_resolve_timeout`. golang-migrate applies by version, so 033 landing first leaves 031 permanently skipped on environments already at 033. Merge 243 first (merge order only) | No |
+| `fix-ledger-trimmed-notify-payload` (248) | `fix-python-config-stored-zero` (244) | **Config migration number ordering.** 244 adds config `032_analysis_zero_trap_descriptions`; 248 adds `033_ledger_stream_resolve_timeout`. Same golang-migrate skip hazard as the 243 row. Merge 244 first (merge order only) | No |
+| `fix-python-config-stored-zero` | `fix-sandbox-seed-keys` | Soft: both add an xstockstrat-config migration (243 = 031, 244 = 032) and both edit indicators tests/test_config_watcher.py (244 Step 6 delegates whichever helper is on the base). Expected order 243 → 244, which is not a hard gate (design rejected one). If 244 merges first, it renumbers to 031 and 243 to 032, each by max(origin/main-dev)+1 immediately before merge (fails.md:2910) | No |
 
 **Screener initiative build order**: `058 watchlist-management` ∥ `059 fundamentals-data-source`
 (independent to *build*, but their `xstockstrat-config` seed migrations **merge** in number order
@@ -152,6 +157,19 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 > - **085 `mcp-python-sdk-v2-upgrade` ↔ 094 on `app/tools.py`.** 085 rewrites imports/decorators/
 >   signatures wholesale; 094 edits only the `ingest_signal` and `emit_alert` **docstring bodies**.
 >   Disjoint lines; 085 (code-completed) lands first and 094 rebases its two docstring edits onto it.
+
+> **Note on 252 `fix-identity-ledger-test-suites` ↔ 248 (and #1262 / 084 / 250 / 241) — rebase-only, no hard ordering row.**
+> 252 makes the identity and ledger impl suites execute (compile-then-test) and deletes every
+> `if (!<subject>) return;` skip guard. None of the overlaps is a field-number / migration / config-key collision:
+>
+> - **#1262 `hotfix/fix-refresh-token-rotation`** — already on `main-dev`; 252 deletes its two
+>   `if (!impl) return;` guards in `${method} rotation is single-use` and keeps the conditional-claim regex assertion.
+> - **248 `fix-ledger-trimmed-notify-payload` ↔ 252 on `ledgerServiceImpl.test.ts` / `eventNotifier.test.ts`.**
+>   248 writes its tests unguarded (a guarded case is a silent pass once 252 lands); whoever lands second
+>   de-guards and merges the other's test changes.
+> - **084 `droplet-compose-deploy`** — `demoted/canceled`; no overlap.
+> - **250 `fix-otel-metrics-logs-gap`** — fix (b) is out of scope in its product-spec; no overlap on the telemetry tests.
+> - **241 `fix-config-audit-author-spoof`** — no overlap (config + agent only).
 
 ---
 

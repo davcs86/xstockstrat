@@ -350,8 +350,7 @@ async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token:
         value_type="string",
         value=bearer_token,
         environment=resolve_scope(""),
-        author=tool,
-        reason=f"bearer for signal source {slug}",
+        reason=f"{tool}: bearer for signal source {slug}",
         access_scope=_caller_access_scope(ctx, tool),
         create_key=True,
         user_id=_caller_user_id(ctx, tool),
@@ -1603,8 +1602,8 @@ def register_tools(server: MCPServer) -> None:
     async def get_config(namespace: str, user_id: str = "") -> dict:
         """Read the current config values for a namespace from xstockstrat-config (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        user_id: optional per-user scope. Omit (empty) for the global values; pass a user id to see
-        that user's per-user overrides layered over the global values.
+        user_id: optional per-user scope (empty = global values). A non-admin's other-user id is
+        bound to their own id; admins may read any user's. Returned user_id = the scope read.
         The config environment is always this agent deployment's own environment
         (production/staging, from APPLICATION_ENV) — it is a deployment property, not a caller
         choice, so this tool cannot read another environment's rows.
@@ -1631,8 +1630,8 @@ def register_tools(server: MCPServer) -> None:
     async def list_config_keys(namespace: str, user_id: str = "") -> dict:
         """List the config keys registered for a namespace, with metadata only (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        user_id: optional per-user scope. Omit (empty) for the global keys; pass a user id to see
-        that user's per-user overrides layered over the global keys.
+        user_id: optional per-user scope (empty = global keys). A non-admin's other-user id is
+        bound to their own id; admins may read any user's. Returned user_id = the scope read.
         The config environment is always this agent deployment's own environment
         (production/staging, from APPLICATION_ENV) — a deployment property, not a caller choice.
         Returns {namespace, environment, user_id, keys[]} where each key carries key,
@@ -1656,7 +1655,6 @@ def register_tools(server: MCPServer) -> None:
         key: str,
         value_type: Literal["string", "int", "float", "bool"],
         value: str,
-        author: str,
         reason: str,
         user_id: str = "",
         create_key: bool = False,
@@ -1671,8 +1669,8 @@ def register_tools(server: MCPServer) -> None:
           that is byte-identical to what the server stores. NOTE value_type is only honored when
           CREATING a new key; for an existing key the stored type wins and this is ignored.
         value: the new value, as a string; it is converted according to value_type.
-        author: who is making the change — required, and recorded in config.config_audit.
-        reason: why — required, and recorded alongside author.
+        reason: why — required, recorded in config.config_audit; the change is attributed to your
+          verified user id.
         user_id: optional per-user scope. Omit (empty) to write the global value; pass a user id to
           set that user's per-user override. Secret keys are global-scope only — a per-user write to
           a secret key is rejected INVALID_ARGUMENT by the backend.
@@ -1692,6 +1690,8 @@ def register_tools(server: MCPServer) -> None:
         serves since feature 079 removed the legacy SSE one."""
         # Fails fast when no verified claims are present; the backend admin gate authorizes writes.
         access_scope = _caller_access_scope(ctx, "set_config")
+        # Fail fast at the edge: config attributes the write to x-user-id and rejects an empty one.
+        _caller_user_id(ctx, "set_config")
 
         env = _resolve_scope("")
 
@@ -1702,7 +1702,6 @@ def register_tools(server: MCPServer) -> None:
                 value_type=value_type,
                 value=value,
                 environment=env,
-                author=author,
                 reason=reason,
                 access_scope=access_scope,
                 create_key=create_key,
@@ -2377,8 +2376,8 @@ def _same_origin(a: str, b: str) -> bool:
     return pa.scheme == "http" and pb.scheme == "https"
 
 
-# Fixed bound on the undeadlined GetConfig policy read; looked up at call time (never bound as a
-# default argument) so tests can monkeypatch it.
+# Outer bound keeping list_opportunities inside the MCP client's 60 s budget; looked up at call
+# time so tests can monkeypatch it.
 _POLICY_READ_TIMEOUT_S = 3.0
 
 

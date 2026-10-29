@@ -15,6 +15,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app import mtls
+from app.scopes import _ADMIN
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50
 PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
 TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
+
+# Fixed, not a config key: a config read cannot bound itself. Read at call time so tests can
+# monkeypatch it.
+_CONFIG_READ_TIMEOUT_S = 3.0
 
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
@@ -1752,10 +1757,11 @@ async def get_config_value(
             snapshot = await stub.GetConfig(
                 config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id),
                 metadata=_metadata(),
+                timeout=_CONFIG_READ_TIMEOUT_S,
             )
-    except grpc.aio.AioRpcError:
+    except grpc.aio.AioRpcError as e:
         # Surface a transport failure — never swallow to None (reserved for an absent key).
-        log.warning("get_config_value: GetConfig failed for %s.%s", namespace, key)
+        log.warning("get_config_value: GetConfig %s for %s.%s", e.code().name, namespace, key)
         raise
     cv = snapshot.values.get(key)
     if cv is None:
@@ -2032,6 +2038,15 @@ def _config_env(environment: str) -> int:
     )
 
 
+def _effective_config_user_id(user_id: str) -> str:
+    # Mirrors config boundReadUserId (services/xstockstrat-config/src/grpc/authz.ts);
+    # the two must change together.
+    caller = _CALLER.get()
+    if caller and caller[0] and not (caller[1] & _ADMIN) and user_id and user_id != caller[0]:
+        return caller[0]
+    return user_id
+
+
 async def get_config(namespace: str, environment: str, user_id: str = "") -> dict:
     """One-shot ConfigService.GetConfig. Read path — no admin scope (AGENT-3).
     Feature 147: scoped by environment (production/staging) x optional user_id (empty = global).
@@ -2057,7 +2072,7 @@ async def get_config(namespace: str, environment: str, user_id: str = "") -> dic
             "namespace": resp.namespace,
             "version": resp.version,
             "environment": environment,
-            "user_id": user_id,
+            "user_id": _effective_config_user_id(user_id),
             "values": values,
         }
 
@@ -2078,7 +2093,7 @@ async def list_config_keys(namespace: str, environment: str, user_id: str = "") 
         return {
             "namespace": namespace,
             "environment": environment,
-            "user_id": user_id,
+            "user_id": _effective_config_user_id(user_id),
             "keys": [
                 {
                     "key": k.key,
@@ -2098,7 +2113,6 @@ async def set_config(
     value_type: str,
     value: str,
     environment: str,
-    author: str,
     reason: str,
     access_scope: int,
     create_key: bool = False,
@@ -2116,6 +2130,8 @@ async def set_config(
     tool (the hardcoded-admin ``_admin_metadata()`` was removed), so this is no longer an exception.
     The server-side ADMIN-bit gate (feature 074) is what enforces it, so a non-admin caller gets
     PERMISSION_DENIED here rather than a silent success.
+
+    Attribution is the caller's ``x-user-id``, never a body field (feature 241).
     """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
@@ -2140,7 +2156,6 @@ async def set_config(
                 namespace=namespace,
                 key=key,
                 value=cv,
-                author=author,
                 reason=reason,
                 environment=env,
                 create_key=create_key,

@@ -13,7 +13,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { HEADER_ACCESS_SCOPE } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 
@@ -76,7 +76,7 @@ describe('platform.trading_state write-time validation', () => {
       author: 'tester',
       reason: 'trading state validation test',
     };
-    const metadata = md({ [HEADER_ACCESS_SCOPE]: '7' }); // admin scope
+    const metadata = md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'tester' }); // admin scope
     return new Promise<{ err: any; res: any }>((resolve) => {
       client.setConfig(request, metadata, (err: any, res: any) => resolve({ err, res }));
     });
@@ -117,6 +117,7 @@ describe('platform.trading_state write-time validation', () => {
     const { err } = await setConfig('');
     assert.ok(err, 'expected a gRPC error for an empty literal');
     assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
+    assert.match(err.details ?? err.message, /must be one of ACTIVE, REDUCE_ONLY, HALTED/);
     assert.equal(insertQuery(), undefined);
   });
 
@@ -130,7 +131,7 @@ describe('platform.trading_state write-time validation', () => {
       reason: 'unaffected-key test',
     };
     const { err } = await new Promise<{ err: any; res: any }>((resolve) => {
-      client.setConfig(request, md({ [HEADER_ACCESS_SCOPE]: '7' }), (err: any, res: any) =>
+      client.setConfig(request, md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'tester' }), (err: any, res: any) =>
         resolve({ err, res }),
       );
     });
