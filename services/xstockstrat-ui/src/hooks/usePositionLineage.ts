@@ -1,13 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { ledgerClient } from '@/lib/browserClients/ledgerClient';
+import type { EnvironmentMode } from '@/context/AccountContext';
 
 // order.filled ledger events (source_service "trading"), joined client-side on symbol/account_id/
 // trading_mode — where trading_mode is the proto enum String() form ("TRADING_MODE_PAPER"/"_LIVE").
 export function usePositionLineage(
   symbol: string | null,
   accountId: string | null,
-  mode: 'paper' | 'live',
+  mode: EnvironmentMode | null,
 ) {
   return useQuery({
     queryKey: ['position-lineage', symbol, accountId, mode],
@@ -24,7 +25,7 @@ export function usePositionLineage(
         return (
           p.symbol === symbol &&
           (!accountId || p.account_id === accountId) &&
-          (p.trading_mode === undefined || p.trading_mode === modeStr)
+          (mode === null || p.trading_mode === undefined || p.trading_mode === modeStr)
         );
       });
     },
