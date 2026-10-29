@@ -619,3 +619,9 @@ Feature: xstockstrat-config - the marketdata vendor secret grant is bound to the
 ### Coverage check
 - Source scenarios: 7. Planned: 7 NEW (4 marketdata, 3 config), 0 DUP, 0 OVERLAP, 0 CONFLICT. All of AC-1..AC-7 are accounted for and none were skipped. Scenario text is verbatim; only the `@feature-254` tag was added.
 ```
+
+## Session 2026-10-29 — sdd-execute sequential, C-16 promotion applied
+
+- Promotion plan above applied as written: `services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature` (AC-1, AC-2, AC-5, AC-7) and `services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature` (AC-3, AC-4, AC-6) created. Scenario text is verbatim, with `@feature-254` added.
+- **Amendment to an existing rule (operator decision 2026-10-29):** `services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature` feature-147 `@AC-4 @FR-3` now has the precondition "the caller presents an mTLS peer certificate whose DNS SAN is `xstockstrat-marketdata`" (per 254 AC-6) and is tagged `@feature-254` as well. 147's other assertions are unchanged, and 147 `@AC-5` is untouched.
+- Status stays `code-completed`, so there is no history row. The husky pre-commit hook did not run: `core.hooksPath` points to `/home/user/xstockstrat/.husky/_`, which does not exist, and the main worktree has no `node_modules` to symlink. These were docs-only commits, and `--no-verify` was not used.
