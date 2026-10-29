@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 2, 4, 5, 6 re-anchored to the current codebase after the main-dev merge (feature 252 test-file rewrite); Steps 1, 3 unchanged |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front confirmation by operator standing authorization (batch-execute 241-276) |
 
 ---
 
@@ -51,4 +52,4 @@ duplication (D-21) is folded in so the fix covers one shared path.
 
 ## Next Action
 
-`/sdd-review fix-identity-auth-code-race impl-spec` — validate implementation spec, then `/sdd-execute fix-identity-auth-code-race`
+`/sdd-execute fix-identity-auth-code-race sequential` — Step 1 (single-use auth-code redemption)
