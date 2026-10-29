@@ -373,3 +373,10 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 - Files modified: `docs/runbooks/legacy-formula-authors.md`, `docs/runbooks/CLAUDE.md`
 - Deviations: the pooled-URL derivation, the named storage location and retention, and the restart command example (Deviation Log).
 - Open item: the repo documents no change-record system, so the operator and DBA pick the concrete system when running the runbook.
+
+### Step 9 — docs: indicators CLAUDE.md Maintenance section and context-constitution invariant [done]
+- `services/xstockstrat-indicators/CLAUDE.md` gets a new `## Maintenance` section after `## Running Locally`. It is one paragraph plus the report and apply commands. It says the tool is operator-run and outside the service process, uses one `asyncpg` connection rather than the `main.py` pool, and needs `DATABASE_URL` with no fallback. It links `docs/runbooks/legacy-formula-authors.md`.
+- `services/xstockstrat-indicators/docs/context-constitution.md` gets the `INDICATORS-12` row, using the spec's rule text. Its Evidence and Example cells anchor `REWRITE_SQL` at `legacy_authors.py:32-36`. A hand-refresh note is added to the header.
+- TDD: N/A (docs). Verification grep before the edit: exit 1, no matches. After the edit: `INDICATORS-12` at `:29` and `## Maintenance` at `:224`, exit 0.
+- Teardown (root CLAUDE.md): `/context-forge:context-constitution` is not available in this session. Manual reconciliation re-checked both touched files against the code: `servicer.py:141`, `REWRITE_SQL`, the CLI `--help` flags, and the runbook's pooled-port and restart text all match, and the Database migrations list is unchanged. The integration PR body must record both that the plugin was unavailable and this reconciliation.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-indicators/docs/context-constitution.md`
