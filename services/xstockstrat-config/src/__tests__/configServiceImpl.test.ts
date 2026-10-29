@@ -125,7 +125,11 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
     const log: string[] = [];
     const clients: FakeClient[] = [];
     const connectScript: Array<FakeClient | Error> = [];
-    const hooks: { reloadAll: Hook[]; reloadNamespace: Hook[] } = { reloadAll: [], reloadNamespace: [] };
+    const hooks: { reloadAll: Hook[]; reloadNamespace: Hook[]; overlay: Hook[] } = {
+      reloadAll: [],
+      reloadNamespace: [],
+      overlay: [],
+    };
     const rows: Record<string, unknown>[] = [
       {
         namespace: 'analysis',
@@ -147,6 +151,7 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
       query: async (sql: string, params: unknown[] = []) => {
         if (/user_id = \$3/.test(sql)) {
           log.push('overlay');
+          await hooks.overlay.shift()?.();
           return { rows: [] };
         }
         if (/namespace = \$1 AND environment = \$2 AND user_id IS NULL/.test(sql)) {
@@ -174,15 +179,17 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
     return { log, clients, connectScript, hooks, pool, setValue, connects, listens };
   }
 
-  function fakeCall() {
+  function fakeCall(userId = '') {
     const call: any = new EventEmitter();
-    call.request = { namespace: 'analysis', environment: 'ENVIRONMENT_STAGING', user_id: '', client_id: 'c1' };
+    call.request = { namespace: 'analysis', environment: 'ENVIRONMENT_STAGING', user_id: userId, client_id: 'c1' };
     call.metadata = new grpc.Metadata();
     call.writes = [] as any[];
     call.write = (p: any) => {
       call.writes.push(p);
     };
+    call.destroys = 0;
     call.destroy = (s: unknown) => {
+      call.destroys++;
       call.destroyed = s;
     };
     return call;
@@ -375,6 +382,140 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
     );
     const { err } = await getConfig(impl);
     assert.strictEqual(err, null);
+  });
+
+  // winston's Console transport writes every level to console._stdout, i.e. process.stdout.
+  function captureStdout(t: TestContext): string[] {
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    t.mock.method(process.stdout, 'write', (chunk: any, ...rest: any[]) => {
+      out.push(String(chunk));
+      return write(chunk, ...rest);
+    });
+    return out;
+  }
+
+  const terminations = (out: string[]) => out.filter((s) => s.includes('WatchConfig subscriber terminated'));
+  const rejectOverlay = () => {
+    throw new Error('overlay rejected');
+  };
+
+  async function booted() {
+    const rig = makeRig();
+    const impl = new ConfigServiceImpl(rig.pool);
+    await impl.initialize();
+    return { rig, impl };
+  }
+
+  it('@AC-6 a failed initial snapshot ends the stream with INTERNAL and gets no later write', async (t) => {
+    const seen = unhandled(t);
+    const { rig, impl } = await booted();
+    rig.hooks.overlay.push(rejectOverlay);
+    const call = fakeCall('u-1');
+    impl.watchConfig(call);
+    await flush();
+    assert.strictEqual(call.destroyed?.code, 13, 'the stream is ended with INTERNAL');
+    assert.strictEqual(call.writes.length, 0);
+
+    rig.setValue('600');
+    rig.clients[0].notify(NOTIFY_ANALYSIS);
+    await flush();
+    assert.strictEqual(call.writes.length, 0, 'an ended subscriber receives no broadcast');
+    assert.deepStrictEqual(seen, []);
+  });
+
+  it('@AC-7 a change broadcast while the snapshot is in flight reaches the new subscriber', async () => {
+    const { rig, impl } = await booted();
+    let release!: () => void;
+    rig.hooks.overlay.push(() => new Promise<void>((r) => (release = r)));
+    const call = fakeCall('u-1');
+    impl.watchConfig(call);
+    await flush();
+
+    rig.setValue('600');
+    rig.clients[0].notify(NOTIFY_ANALYSIS);
+    await flush();
+    assert.strictEqual(call.writes.length, 0, 'the snapshot is still in flight');
+
+    release();
+    await flush();
+    assert.strictEqual(call.writes[0].updateType, 'CONFIG_UPDATE_TYPE_SNAPSHOT', 'SNAPSHOT first');
+    assert.strictEqual(call.writes.length, 2, 'one catch-up DELTA after the SNAPSHOT');
+    assert.strictEqual(lastDeltaValue(call), 600);
+  });
+
+  it('@AC-8 a failed broadcast ends the subscriber with INTERNAL and logs the error', async (t) => {
+    const seen = unhandled(t);
+    const { rig, impl } = await booted();
+    const call = fakeCall('u-1');
+    impl.watchConfig(call);
+    await flush();
+    assert.strictEqual(call.writes.length, 1, 'the initial SNAPSHOT reached the subscriber');
+
+    const out = captureStdout(t);
+    rig.hooks.overlay.push(rejectOverlay);
+    rig.clients[0].notify(NOTIFY_ANALYSIS);
+    await flush();
+    assert.strictEqual(call.destroyed?.code, 13, 'the call is ended with INTERNAL');
+    assert.ok(
+      out.some((s) => s.includes('error') && s.includes('overlay rejected')),
+      `error-level record expected, got ${JSON.stringify(out)}`,
+    );
+
+    rig.clients[0].notify(NOTIFY_ANALYSIS);
+    await flush();
+    assert.strictEqual(call.writes.length, 1, 'no write after the subscriber was ended');
+    assert.deepStrictEqual(seen, []);
+  });
+
+  it('cancel during catch-up: no write, no destroy and no termination log', async (t) => {
+    const seen = unhandled(t);
+    const { rig, impl } = await booted();
+    let release!: () => void;
+    rig.hooks.overlay.push(() => new Promise<void>((r) => (release = r)));
+    const call = fakeCall('u-1');
+    impl.watchConfig(call);
+    await flush();
+    rig.clients[0].notify(NOTIFY_ANALYSIS);
+    await flush();
+
+    const out = captureStdout(t);
+    call.emit('cancelled');
+    release();
+    await flush();
+    assert.strictEqual(call.writes.length, 0, 'no write after cancel');
+    assert.strictEqual(call.destroys, 0, 'a cancelled call is not destroyed');
+    assert.deepStrictEqual(terminations(out), []);
+    assert.deepStrictEqual(seen, []);
+  });
+
+  it('ends a subscriber once: two failures give one destroy and one error log', async (t) => {
+    const { rig, impl } = await booted();
+    const call = fakeCall('u-1');
+    impl.watchConfig(call);
+    await flush();
+
+    const out = captureStdout(t);
+    rig.hooks.overlay.push(rejectOverlay, rejectOverlay);
+    rig.clients[0].notify(NOTIFY_ANALYSIS);
+    rig.clients[0].notify(NOTIFY_ANALYSIS);
+    await flush();
+    await flush();
+    assert.strictEqual(call.destroys, 1);
+    assert.strictEqual(terminations(out).length, 1);
+  });
+
+  it('logs the propagated x-trace-id when a subscriber is terminated', async (t) => {
+    const { rig, impl } = await booted();
+    rig.hooks.overlay.push(rejectOverlay);
+    const call = fakeCall('u-1');
+    call.metadata.set('x-trace-id', 't-258');
+    const out = captureStdout(t);
+    impl.watchConfig(call);
+    await flush();
+    const lines = terminations(out);
+    assert.strictEqual(lines.length, 1, JSON.stringify(out));
+    assert.ok(lines[0].includes('"traceId":"t-258"'), lines[0]);
   });
 
   it('ignores a malformed notification payload', async (t) => {

@@ -554,3 +554,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The existing suite passes 197/197, with c8 lines at 90.55%.
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 
+### Step 6 — test: snapshot failure, in-flight change, broadcast failure, cancel during catch-up (AC-6, AC-7, AC-8) [done]
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` (config + root) ⬇. The main worktree
+  has no `node_modules`, so it was installed in this worktree rather than symlinked.
+- Added 6 cases to `describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)')`, reusing `FakeClient`/`makeRig()`:
+  @AC-6, @AC-7, @AC-8, cancel during catch-up, idempotent end and trace id (`x-trace-id: t-258`). All six subscribe
+  with `user_id: 'u-1'` so the overlay SELECT can be held or rejected.
+- Rig changes: `makeRig()` gained a `hooks.overlay` queue; `fakeCall(userId)` gained a `destroys` counter; a
+  describe-local `captureStdout(t)` wraps the Step 2 stdout capture (Deviation Log).
+- TDD: RED against the pre-Step-5 `configServiceImpl.ts` (ec5d13d0^, swapped in temporarily): 6/6 new cases failed
+  for the predicted reasons. GREEN on the Step 5 code: 203/203 pass, and 2 repeat runs had 0 failures.
+- Verification: `pnpm run test:coverage` exit 0 (203/203, c8 lines 92.89% ≥ 40). `pnpm run lint` 0 errors (185
+  warnings = 183 + 2 `no-explicit-any` in `captureStdout`). The AC grep hits `:410`, `:427`, `:447`, `:471`.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
+- Next: Step 7.
+

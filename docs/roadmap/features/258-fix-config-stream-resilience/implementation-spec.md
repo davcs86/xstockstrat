@@ -552,7 +552,7 @@ grep -n "this.endSubscriber(" src/grpc/configServiceImpl.ts   # expect: exactly 
 
 ### Step 6 — test: snapshot failure, in-flight change, broadcast failure, cancel during catch-up (AC-6, AC-7, AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
@@ -897,3 +897,17 @@ SELECT, because `resolveOverlayValues` returns early on `''`. Only a per-user su
 snapshot read in flight, and Step 6 needs the same choice.
 **Reason**: the paired test step follows its service step in the spec's order (same as Step 3).
 **Disposition**: as specced (procedure note).
+
+### Deviation: Step 6 — RED captured against the pre-Step-5 source; log capture is a describe-local helper
+**Spec said**: "**TDD**: `red-green required`. Against the pre-Step-5 tree…" and "Step 6 uses the same inline
+pattern in each case that asserts a log line."
+**Actual**: Step 5 had already landed (ec5d13d0), so RED was run by temporarily swapping in `configServiceImpl.ts`
+from ec5d13d0^ and running the suite: all 6 new cases failed (AC-6/AC-8/trace id: no `destroy`; AC-7: 1 write, not
+2; cancel: a write after cancel; idempotent end: 0 termination logs). The file was restored (no diff) and GREEN run.
+The Step 2 `process.stdout.write` capture is used unchanged, but it is wrapped once as a describe-local
+`captureStdout(t)` for the four cases that read logs, rather than repeated inline four times (DRY guard rail). The
+`@AC-2` case was left as is. `makeRig()` gained an `overlay` hook queue, and `fakeCall()` gained a `userId` argument
+and a `destroys` counter.
+**Reason**: the paired test step follows its service step in the spec's order; four inline copies would trip the DRY
+guard rail.
+**Disposition**: as specced in substance (procedure and helper-shape note).
