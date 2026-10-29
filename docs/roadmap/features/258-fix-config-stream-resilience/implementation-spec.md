@@ -748,7 +748,7 @@ design.md § Build order requires.
 
 ### Step 9 — docs: config service docs, CONFIG-1 anchors, limitations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-config/`, feature directory)
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
@@ -936,3 +936,22 @@ cases share a describe-local `appendIdempotent(pool, key)` helper. Lint warnings
 `no-explicit-any` in the new helper's `any` signatures, matching the file's existing style (0 errors).
 **Reason**: the paired test step follows its service step in the spec's order.
 **Disposition**: as specced in substance (procedure note).
+
+### Deviation: Step 9 — Step 1 check outcome recorded as pending; teardown re-stamped the other hints
+**Spec said**: "Append to the feature `context.md`: the half-open-socket limitation and the outcome of Step 1's
+pg_terminate_backend check" and "Teardown … Run `/context-forge:context-constitution refresh` scoped to
+`services/xstockstrat-config/`. If the plugin is unavailable, do the manual reconciliation of both touched context
+files against the code".
+**Actual**: the pg_terminate_backend check has not run (Step 1 stays `pending`, operator-only), so context.md records
+its outcome as "not yet run — integration-PR merge blocker", not a pass. The `context-constitution` skill is not
+loaded in this session (only `context-forge:context-scrubber` is), so the teardown was done by hand. Every
+`configServiceImpl.ts` line hint in `docs/context-constitution.md` was re-grepped and re-stamped, not only
+CONFIG-1, because Steps 1–5 shifted them all by about 85–140 lines. That covers CONFIG-2/3/4/6/7/8/11, the Gotchas
+and the Pointers. CONFIG-4's LISTEN handler cite moved to `#connectListener`/`#onNotification`. `authz.ts` and
+`index.ts` hints were re-verified unchanged. In config `CLAUDE.md` § WatchConfig Flow, the stale pg_notify payload
+`{…, trading_mode}` was corrected to `{…, user_id}` (the `setConfig` producer at `:646-648`). The three limitations
+went into a "Known limitations (feature 258)" list under § WatchConfig Flow.
+**Reason**: an outcome that has not happened cannot be recorded as a pass. The teardown requires the grounded drift
+in touched context files to be fixed.
+**Disposition**: within the step's Files; PR body must state that the plugin was unavailable and that the manual
+reconciliation above was performed.

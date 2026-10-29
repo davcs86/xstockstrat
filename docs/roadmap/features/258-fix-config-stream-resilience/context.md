@@ -612,3 +612,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `pnpm run lint` 0 errors, 100 warnings (97 → 100, new `no-explicit-any` in the test helper).
 - Files modified: `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`
 - Next: Step 9.
+
+### Step 9 — docs: config service docs, CONFIG-1 anchors, limitations [done]
+- `services/xstockstrat-config/CLAUDE.md`:
+  - Invariant #4 now says LISTEN runs before the boot `reloadAll`, work runs on one serial chain, and the client
+    is released on `error`/`end` and reconnects with 1 s → 30 s backoff, then re-broadcasts.
+  - § WatchConfig Flow gained the pending registration with its catch-up DELTA, a LISTEN-lost branch, the
+    `INTERNAL` (13) end-of-call rule (cancel and transport error only unregister), and a "Known limitations
+    (feature 258)" list. The stale pg_notify payload `trading_mode` was corrected to `user_id`.
+- `services/xstockstrat-config/docs/context-constitution.md`: CONFIG-1 was re-stamped (`reloadNamespace` `~L290-314`,
+  `changedKeys` `~L307`). `#resyncAll` (`~L234`) and the `watchConfig` catch-up loop (`~L420`) were added as
+  full-namespace DELTA producers. Every other `configServiceImpl.ts` hint was re-stamped as teardown (Deviation Log).
+- Limitations (recorded here per design.md § Open Risks):
+  - **Half-open socket.** `index.ts` sets no keepAlive, so a half-open or silently dropped LISTEN socket may never
+    emit `error`/`end`. The reconnect path would then never fire, and AC-1/AC-9 are proven only against the
+    FakeClient. **Step 1 pg_terminate_backend check outcome: not yet run.** A worktree session may not start a
+    database, so the check is an operator-only integration-PR merge blocker (Deviation Log, Step 1). If it shows the
+    pooled client emits no `error`/`end`, return to `/sdd-design` for fork (b), the dedicated client.
+  - **Stale namespace.** A namespace whose rows were all deleted during an outage keeps its stale snapshot.
+    `reloadAll` only sets the namespaces it finds. This is an accepted limitation.
+  - Propagation can lag about 30 s after a long outage, and the listener competes for the 2 pool slots while
+    pg-pool's `connect()` wait is unbounded. Both are now documented in config `CLAUDE.md`.
+- F-07 rationale (code-constant backoff, not config keys): see the 2026-10-22 sdd-design session above ("F-07
+  rationale: …", precedent `eventNotifier.ts:35`).
+- TDD: N/A (docs, non-code-bearing).
+- Verification: `grep -n "reconnect\|LISTEN before\|catch-up"` on config `CLAUDE.md` hits `:35`, `:72`, `:94`, `:95`,
+  `:99` and `:103`. `grep -n "private async reloadNamespace\|changedKeys: Object.keys(values)"` gives `:290`, `:307`
+  and `:340`, which match the CONFIG-1 hints.
+- Teardown: the `context-constitution` skill is unavailable in this session (only `context-forge:context-scrubber`
+  is loaded). A manual reconciliation of both touched context files against the code was done (Deviation Log).
+  The PR body must state both facts.
+- Open, out of this step's Files: LEDGER-1's `~L73-118` anchor in `services/xstockstrat-ledger/docs/` and
+  `fix-identity-ledger-test-suites.feature:9` are approximate after Step 7. Refresh them at the integration PR or in a
+  ledger teardown.
+- Files modified: `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-config/docs/context-constitution.md`
+- Next: Step 1's operator check, then the integration PR.

@@ -55,4 +55,4 @@ that never reconnect).
 
 ## Next Action
 
-`/sdd-execute fix-config-stream-resilience sequential` — continue from Step 9 (Step 1 stays `pending` on the operator-only pg_terminate_backend check)
+Steps 2–9 done. Step 1 stays `pending` on the operator-only pg_terminate_backend check (dev app or an operator-started local stack). Then open the integration PR via `/sdd-execute fix-config-stream-resilience sequential`, holding the merge until that check passes.
