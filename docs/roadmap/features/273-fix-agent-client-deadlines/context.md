@@ -780,3 +780,32 @@ Once the operator rules on the three gated items, the design is approvable witho
     reference when both features land (Step 12 teardown).
   - [ ] Feature 272's lifecycle state was unverified by the overlap scan. Confirm it before Step 11 amends its
     merge-order row.
+
+## Session 2026-10-29 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup: `git merge --no-edit origin/main-dev` into the detached `origin/feature/fix-agent-client-deadlines`
+  checkout (merge `723964ae`). The one conflict was `docs/roadmap/ledger/insights.md`. The branch side was empty,
+  so main-dev's `homelab-compose-deploy` entry was kept after the base. `ledger-guard --fix` reported clean, so no
+  repair went into the merge commit.
+- **247 precondition met**: 247 is merged into main-dev. After the merge, `client.py:33` has
+  `_CONFIG_READ_TIMEOUT_S = 3.0`, and `tests/conftest.py` has `HANG_GUARD_S` (`:19`) and `hung_config_server`
+  (`:83`).
+- Re-spec of Step bodies 2, 3, 6, 7, 8 and 11 only (commit `eb7cc507`). Every named symbol resolves; only the
+  anchors moved.
+  - Step 2: conftest anchors moved (`set_env` `:57`, `MTLS_*` `:69-71`). The AST walk still finds 73 stub calls.
+    Exactly two carry `timeout`: `ListOpportunities` (`:871`) and `get_config_value`'s `GetConfig`
+    (`_CONFIG_READ_TIMEOUT_S`, `:1756`), which matches the @AC-10 allow-list.
+  - Step 3: the call-site table was regenerated from the post-247 AST walk (about +4/+5 lines). The
+    `metadata=` baseline is still 73.
+  - Step 6: the cited tool-body lines moved. The BacktestResult cite is corrected to `analysis.proto:123`; `:13`
+    is the `rpc RunBacktest` line. There are still 40 catch sites, and `list_opportunities` (`:1572-1573`) is the
+    only one passing `deadline_s`.
+  - Step 7: the catch-site table was regenerated. It is the same 40-site set, so the expected 41/4 grep counts
+    stand. Verb literals are at `:1959/:1970/:1982` and `:2100-2135`.
+  - Step 8: the test_oauth anchors moved (`:97-102`, `:105-131`). The auth.py, test_auth.py and main.py cites
+    still hold.
+  - Step 11: both merge-order rows already exist (`:84`, `:85`), so the step now only rewords the 272 row, which
+    still carries the old `deadline_s is None → exc.details()` text. The SEV-3 sidecar is still `open`. 272 is
+    `implementation-ready`, which closes the "272 lifecycle unverified" open thread from the impl-spec review.
+- The Execution Summary still says "pre-247 line numbers". Only step bodies were in re-spec scope, and the step
+  bodies are now authoritative.
