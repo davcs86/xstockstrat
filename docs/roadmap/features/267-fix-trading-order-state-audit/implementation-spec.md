@@ -1,6 +1,6 @@
 # Implementation Spec: fix-trading-order-state-audit
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/267-fix-trading-order-state-audit/feature.md`
 **Total Steps**: 7
@@ -78,7 +78,7 @@ messages are unchanged.
 
 ### Step 1 — test: RED — D-04 order-state write failures are logged (AC-1, AC-2, AC-3, AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — create
@@ -94,7 +94,7 @@ messages are unchanged.
 - The precedent log it must be told apart from: `trading.go:646` `slog.Warn("db upsert order failed", "order_id", orderID, "error", err)`. It fires first under an always-failing DB (recon.md:129-130).
 - DB fake to embed: `execOnlyDB` at `trading_flatten_rejection_test.go:27`. Its `Exec` always succeeds. Repo constructor: `repository.NewTradingRepoWithDB(db dbQuerier)` at `internal/repository/trading_repo.go:41`.
 - Log capture: `captureLogs(t)` at `trading_sync_test.go:16`. It swaps `slog.Default`, so tests that use it must not call `t.Parallel`.
-- Ctx seam: `middleware.WithPropagationData` at `internal/middleware/propagation.go:24-28`, and `middleware.FromContext` at `:19-22`.
+- Ctx seam: `middleware.WithPropagationData` at `internal/middleware/propagation.go:27`, and `middleware.FromContext` at `:20` (re-verified 2026-10-28).
 - Fakes: `fakeBroker` at `trading_bracket_test.go:26` (`submitOrderFn`, `cancelOrderFn`; `ReplaceOrder` at `:53`). `fakeOrderIntentRepo` at `:496` (`InsertIntent`→true, `FinalizeIntent`→nil). `fakeLedgerClient` at `:201`. `fakeNotifyClient` at `:176`. `fakeBracketRepo` at `:95`.
 - PlaceOrder gate table:
   - `platform.maintenance_mode` at `trading.go:401`
@@ -103,7 +103,7 @@ messages are unchanged.
   - ownership at `:433`
   - the `s.accountRepo != nil` guard at `:440` (leave it nil)
   - `isAccountHalted` at `:460`
-  - `checkTradingStateForPlaceOrder` at `:466`, which reads `platform.trading_state` and defaults to `HALTED` (`trading.go:3496-3498`); inject it with `config.NewSnapshotWatcher` (`internal/config/config.go:249`), as `trading_state_gate_test.go:156` does
+  - `checkTradingStateForPlaceOrder` at `:466`, which reads `platform.trading_state` and defaults to `HALTED` (`currentTradingState`, `trading.go:3494-3497`); inject it with `config.NewSnapshotWatcher` (`internal/config/config.go:249`), as `trading_state_gate_test.go:156` does
   - `validateTIF` at `:472`, where TIF is required (`tif_validation.go:61-64`)
   - `needRiskCheck` at `:494`, controlled by `trading.risk.max_position_pct`; set it to `0`
 - ReplaceOrder gate table:
@@ -166,13 +166,13 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
 # RED (pre-Step-2): FAIL — no "order state write failed" record; trace/ctxErr assertions fail
 ```
 Coverage threshold: N/A for this step. The new tests live in `internal/service/`, which the CI coverage
-gate excludes (`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
+gate excludes (`COVERPKGS` regex at `.github/workflows/ci.yml:266`); the `>= 40%` gate is run in Step 6.
 
 ---
 
 ### Step 2 — service: `persistOrderBestEffort` and the four D-04 sites (FR-1..FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -231,10 +231,10 @@ grep -n "_ = s.repo.UpsertOrder" services/xstockstrat-trading/internal/service/t
 
 ### Step 3 — test: RED — reactive reclaims are audited and their failures logged (AC-4, AC-5, AC-7, AC-8, AC-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
-- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify
+- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify (created by Step 1; absent until then)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
@@ -252,10 +252,10 @@ grep -n "_ = s.repo.UpsertOrder" services/xstockstrat-trading/internal/service/t
 - Hash helpers:
   - `placeOrderRequestHash` (used at `trading.go:478`; tested at `order_intent_test.go:38`);
   - `deriveReplaceCancelIntentID(req)` (`trading.go:1269`, `:1465`; tested at `order_intent_test.go:63`).
-- `classifyIntentLookup` is at `order_intent.go:74`. It returns `intentActionRejectPending, isStale` when the state is PENDING and older than `staleThreshold`, which is 15s at the defaults (`order_intent.go:98-106`).
-- The real interceptor is `middleware.UnaryClientInterceptor` (`propagation.go:46-56`). It writes `x-trace-id` into outgoing metadata from the ctx value.
+- `classifyIntentLookup` is at `order_intent.go:74`. It returns `intentActionRejectPending, isStale` when the state is PENDING and older than `staleThreshold` (`order_intent.go:83-85`); `staleThreshold`, 15s at the defaults, is at `order_intent.go:98-106`.
+- The real interceptor is `middleware.UnaryClientInterceptor` (`propagation.go:45`). It writes `x-trace-id` into outgoing metadata from the ctx value.
 - `recordingLedgerClient` is at `trading_reconciliation_test.go:136`. It has a `mu` and `events`.
-- Downstream readers of `order_intent.reclaimed_unknown`: none. `grep -rln reclaimed_unknown services packages/proto` (excluding `gen/`) returns only `order_intent.go`. This closes design.md Open Risk 1: nothing reads the sweeper payload.
+- Downstream readers of `order_intent.reclaimed_unknown`: none. `grep -rln reclaimed_unknown services packages/proto` (excluding `gen/`) returns `order_intent.go` plus `services/xstockstrat-trading/docs/context-constitution-findings.md` (the drift row Step 7 resolves — a doc, not a code reader). This closes design.md Open Risk 1: nothing reads the sweeper payload.
 
 **TDD**: `red-green required`
 
@@ -313,13 +313,13 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
 # RED (pre-Step-4): FAIL / build failure (reclaimedUnknownPayload undefined); no reclaimed_unknown event; no reclaim-failure log
 ```
 Coverage threshold: N/A for this step (`internal/service/` is excluded from the CI coverage gate,
-`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
+`COVERPKGS` regex at `.github/workflows/ci.yml:266`); the `>= 40%` gate is run in Step 6.
 
 ---
 
 ### Step 4 — service: `reclaimStaleIntent`, `reclaimedUnknownPayload`, the three reactive sites, and the sweeper payload swap (FR-5, FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/order_intent.go` — modify
@@ -399,23 +399,24 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 
 ### Step 5 — test: RED — every request-reachable `Background()` emit/finalize carries the inbound x-trace-id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
-- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify
+- `services/xstockstrat-trading/internal/service/trading_order_state_audit_test.go` — modify (created by Step 1; absent until then)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only dev invariant, position limit enforcement
 
 **Codebase Evidence**:
-- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` this session. This is 36 hits (re-verified at impl-spec review): the 32 converted rows below (row 32 is `:2617`, by operator decision 2026-10-21), the two Step 2 sites `:688`/`:703`, and the two left-as-is sites. Every hit is classified, so design.md Open Risk 8 is discharged for the enumeration.
+- Full enumeration, by `grep -n "context.Background()" services/xstockstrat-trading/internal/service/trading.go` (re-verified 2026-10-29 re-spec, after the `origin/main-dev` merge). This is 34 hits: the 32 converted rows below (row 32 is `:2616`, by operator decision 2026-10-21) and the two left-as-is sites. The impl-spec-review count was 36; the two Step 2 sites (`:688`/`:703`) now call `persistOrderBestEffort` (`trading.go:3659`) and no longer appear. Every hit is classified, so design.md Open Risk 8 is discharged for the enumeration.
+- Line numbers at or after `trading.go:2173` are one lower than at impl-spec review: the main-dev merge removed one line in `escalateSystemic` (`Author: "system:reconciliation-poller"`). Rows #1-#25 are unchanged.
 - `grep -rn "context.Background()" internal/service/*.go`, excluding `_test` and `trading.go`, returned nothing else.
-- Each hit is classified by its reachable callers below. Sites already owned by Steps 2 and 4 are `:688`, `:703`, `:1367`, `:1550`, `:603`, `:1301` and `:1498`; `:688` and `:703` are in the grep list and appear here only as owned elsewhere.
+- Each hit is classified by its reachable callers below. Sites already owned by Steps 2 and 4 are `:688`, `:703`, `:1367`, `:1550`, `:603`, `:1301` and `:1498`; `:688` and `:703` (Step 2, done) are no longer `Background()` hits.
 
 **Converted in Step 6 (request-reachable):**
 
 | # | Site | Enclosing fn | Call | Request-path caller(s) | Background caller(s) |
 |---|---|---|---|---|---|
-| 1 | `:649` | `submitOrder` | emit `order.created` | `PlaceOrder` `:544` | flatten `:2838` |
+| 1 | `:649` | `submitOrder` | emit `order.created` | `PlaceOrder` `:544` | flatten `:2837` |
 | 2 | `:655` | `submitOrder` | emit `order.approval_requested` | `PlaceOrder` | — |
 | 3 | `:659` | `submitOrder` | `emitApprovalAlert` (notify) | `PlaceOrder` | — |
 | 4 | `:665` | `submitOrder` | emit `order.submitted` | `PlaceOrder` | flatten |
@@ -440,18 +441,18 @@ grep -n "_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent" services/xstockstrat-t
 | 23 | `:1832` | `applyBrokerOrderStatus` | `maybeSubmitBracket` (PARTIAL) | same | same |
 | 24 | `:1836` | `applyBrokerOrderStatus` | emit `order.canceled` | function shared with a request path (the CANCELED branch is unreachable from `reconcileNotCancelable`, which returns early on CANCELED at `:1390`) | same |
 | 25 | `:1841` | `applyBrokerOrderStatus` | emit `order.rejected` | same as #19 | same |
-| 26 | `:3397` | `createBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #8 / #21 | via #21 / #23 from `pollFills` |
-| 27 | `:3408` | `createBracket` | emit `order.bracket_updated` (Alpaca) | same | same |
-| 28 | `:3419` | `createBracket` | `emitBracketFailureAlert` (IBKR) | same | same |
-| 29 | `:3425` | `createBracket` | emit `order.bracket_updated` (IBKR) | same | same |
-| 30 | `:3461` | `resizeBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #21 / #23 | same |
-| 31 | `:3467` | `resizeBracket` | emit `order.bracket_updated` | same | same |
-| 32 | `:2617` | `validateAndRecordCredential` | `accountRepo.UpdateCredentialStatus` | `RegisterBrokerAccount` `:2528`, `UpdateBrokerAccountCredentials` `:2575` | credential poller `:2690` |
+| 26 | `:3396` | `createBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #8 / #21 | via #21 / #23 from `pollFills` |
+| 27 | `:3407` | `createBracket` | emit `order.bracket_updated` (Alpaca) | same | same |
+| 28 | `:3418` | `createBracket` | `emitBracketFailureAlert` (IBKR) | same | same |
+| 29 | `:3424` | `createBracket` | emit `order.bracket_updated` (IBKR) | same | same |
+| 30 | `:3460` | `resizeBracket` | `emitBracketFailureAlert` | via `maybeSubmitBracket` ← #21 / #23 | same |
+| 31 | `:3466` | `resizeBracket` | emit `order.bracket_updated` | same | same |
+| 32 | `:2616` | `validateAndRecordCredential` | `accountRepo.UpdateCredentialStatus` | `RegisterBrokerAccount` `:2527`, `UpdateBrokerAccountCredentials` `:2574` | credential poller `:2689` |
 
 Row 32 was converted by operator decision on 2026-10-21 (context.md): the standing rule covers request-derived writes. Its test asserts that the repo write receives a ctx carrying the inbound `PropagationData` trace id, using a ctx-capturing `accountRepo` fake, and that the write still lands after the request ctx is cancelled.
 
 **Left as-is:**
-- `:2859` `haltAccount` in `flattenAndHalt`, and `:2907` `flattenAndHalt`. Their only caller chain is `StartBracketProtectionWatchdog` (`:2866`) → `checkBracketProtection` (`:2884`), which is background-only per the operator decision.
+- `:2858` `haltAccount` in `flattenAndHalt`, and `:2906` `flattenAndHalt`. Their only caller chain is `StartBracketProtectionWatchdog` (`:2865`) → `checkBracketProtection` (`:2883`), which is background-only per the operator decision.
 
 For shared functions (#19-#31), `WithoutCancel(ctx)` on a background caller's ctx behaves the same as
 today's `Background()`. The poller ctx carries no `PropagationData`, and `WithoutCancel` strips only its
@@ -502,13 +503,13 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
 # RED (pre-Step-6): FAIL — traceID "" at every row
 ```
 Coverage threshold: N/A for this step (`internal/service/` is excluded from the CI coverage gate,
-`.github/workflows/ci.yml:259`); the `>= 40%` gate is run in Step 6.
+`COVERPKGS` regex at `.github/workflows/ci.yml:266`); the `>= 40%` gate is run in Step 6.
 
 ---
 
 ### Step 6 — service: convert the request-reachable `Background()` sites to `context.WithoutCancel(ctx)`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -556,7 +557,7 @@ cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./..
 
 ### Step 7 — docs: ledger-event row, trading findings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading` (docs)
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -568,7 +569,7 @@ cd services/xstockstrat-trading && export GOWORK=off && COVERPKGS=$(go list ./..
 - The "Ledger Events Emitted" table is at `services/xstockstrat-trading/CLAUDE.md:139-159`. It has no `order_intent.reclaimed_unknown` row, and it lists lifecycle streams as `order:{order_id}`.
 - The code emits lifecycle events on a bare `orderID` stream key (`trading.go:649`, `:689`, `:700`, `:1370`, all passing `orderID`/`req.OrderId` as `streamKey`), while the reclaim emits use `"order:"+OrderID`.
 - The drift row at `docs/context-constitution-findings.md:13` reads "omits `order_intent.reclaimed_unknown`".
-- `emitLedgerEvent` swallows the `NewStruct` error (`p, _ :=`, `trading.go:3662`).
+- `emitLedgerEvent` (`trading.go:3670`) swallows the `NewStruct` error (`p, _ :=`, `trading.go:3671`; re-verified 2026-10-29 after the Step 2 helper and the `origin/main-dev` merge).
 
 **TDD**: `N/A (docs)`
 
@@ -595,3 +596,108 @@ grep -n "reactive_place\|was_pending_since" services/xstockstrat-trading/CLAUDE.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-10-28 — Step 1
+
+- **D1-1 (test-local fake, in-file):** Instruction 5 says the broker `ReplaceOrder` succeeds via
+  `trading_bracket_test.go:53`, but that `fakeBroker.ReplaceOrder` panics ("not implemented"). The test
+  file adds `replaceOKBroker{*fakeBroker}`, overriding only `ReplaceOrder` to succeed. Stays inside Step 1's
+  **Files** (C-13: single consumer, test-local). **Disposition**: applied in-step, no production change.
+- **D1-2 (ledger fake):** Instruction 2 names `fakeLedgerClient`, which records nothing, so Instruction 7's
+  bounded poll on the ledger event count is impossible with it. The tests use the existing
+  `recordingLedgerClient` (`trading_reconciliation_test.go:136`) instead, polled 2s/10ms.
+  **Disposition**: applied in-step.
+- **D1-3 (verification command shape):** this session's sandbox refused the literal
+  `-run 'AC1|AC2|AC3|AC6'` (a `|` inside the argument). Ran `-run _AC` instead, a superset that covers every
+  new test plus the pre-existing offline `_AC*` tests (all passed). The RED result is unchanged.
+  **Disposition**: verification fallback, same package, same `-race -count=1 -v` flags.
+- **D1-4 (ctx-test naming):** the Instruction 6 ctx repeats are separate tests
+  (`TestOrderStateWriteCtx_{BrokerTimeout_AC1,BrokerReject_AC2,CancelFinal_AC3,ReplaceFinal_AC6}`) so the
+  AC regex selects them. Instruction 1's fallback (cancel-after-return) was **not** needed: no path aborts
+  on the pre-cancelled ctx before the D-04 site.
+
+### 2026-10-28 — Step 2
+
+- **D2-1 (verification command shape):** as in D1-3, ran `-run _AC` instead of the piped
+  `-run 'AC1|AC2|AC3|AC6'` regex (a superset; all passed). **Disposition**: verification fallback, same
+  package and flags.
+- **D2-2 (lint binary):** the provisioned `golangci-lint` v2.14.0 was built with go1.26 and refuses the
+  Go 1.27 module. Rebuilt the same pinned v2.14.0 with `GOTOOLCHAIN=go1.27.0 go install` (proxy.golang.org)
+  into the session scratchpad and ran the specced command: `0 issues.` **Disposition**: CI-equivalent
+  fallback (same version as `golangci-lint-action@v9` pin; toolchain only).
+
+### 2026-10-28 — Step 3
+
+- **D3-1 (ledger injection):** Step 1's `auditSvc` takes a `*recordingLedgerClient`, so the reclaim tests
+  build the service through it and then set `svc.ledger = &traceCapturingLedger{}` and
+  `svc.orderIntentRepo = staleIntentRepo` (helper `reclaimSvc`). No Step 1 test changed.
+  **Disposition**: applied in-step, test-local.
+- **D3-2 (AC-5/AC-7 ctx):** Instruction 5 names no ctx, so the failure-log tests use `ctxAsUser("u-1")`
+  (no cancellation needed, since no emit is expected). AC-4/8/9 use `tracedCancelledCtx("u-1")` as specced.
+  **Disposition**: applied in-step.
+- **D3-3 (package-wide build failure until Step 4):** `TestReclaimedUnknownPayload` references the Step 4
+  symbol, so the whole `internal/service` test binary fails to build on the branch between Steps 3 and 4.
+  This is the specced RED evidence (Instruction 7); Step 4 must land before the integration PR's CI runs.
+  The per-test RED was captured first, before that test was added (see context.md).
+  **Disposition**: accepted by spec.
+- **D3-4 (pre-commit hook):** the worktree has no `node_modules` and the main worktree has none to link;
+  `core.hooksPath` points at `.husky/_`, which is not installed, so git ran no hook. The commit did not use
+  `--no-verify`. `gofmt -l` and `go vet` were run by hand and are clean. **Disposition**: environment only.
+
+### 2026-10-29 — Step 4
+
+- **D4-1 (lint binary):** as in D2-2, the provisioned `golangci-lint` v2.14.0 (built with go1.26) refuses the
+  Go 1.27 module, so the same pinned v2.14.0 was rebuilt with `GOTOOLCHAIN=go1.27.0 go install` into the
+  session scratchpad and the specced command was run: `0 issues.` **Disposition**: CI-equivalent fallback.
+- **D4-2 (line drift, resolved by symbol):** the 2026-10-29 main-dev merge shifted `trading.go` lines after
+  `:2173` by -1 (flatten's `submitOrder` call is now `:2837`). Step 4 edits only `:603`/`:1301`/`:1498` (before
+  `:2173`, unchanged); the cited later lines are evidence only. **Disposition**: none needed.
+- **D4-3 (pre-commit hook):** same as D3-4: the main worktree has no `node_modules` to link and `.husky/_` is
+  not installed, so git ran no hook (no `--no-verify`). `gofmt -l` is clean and `golangci-lint` reports
+  0 issues. **Disposition**: environment only.
+
+### 2026-10-29 — Step 5
+
+- **D5-1 (row #32 driver added):** Instruction 2's driver list has no test for row #32, but the Codebase
+  Evidence paragraph under the table requires one. Added `TestTrace_ValidateAndRecordCredential` with a
+  test-local `ctxCapturingAccountRepo` (C-13: single consumer, inline). **Disposition**: applied in-step,
+  inside Step 5's **Files**.
+- **D5-2 (#30/#31 split):** "`partially_filled` with an ACTIVE IBKR bracket covers rows #22, #23, #30-fail and
+  #31" cannot run as one call, because #30 (resize failure alert) and #31 (resize success emit) are
+  alternative branches of `resizeBracket`. `TestTrace_ApplyBrokerOrderStatus` has two sub-cases: "resizes"
+  (#22, #23 via #31) and "resize fails" (#22, #23 via #30). **Disposition**: applied in-step.
+- **D5-3 (bracket-call rows asserted transitively):** `fakeBracketRepo` ignores ctx, so the
+  `maybeSubmitBracket` call rows #8, #21 and #23 are asserted through their downstream emit or alert (#27,
+  #31, #30). Each such assertion stays RED until both the caller row and the downstream site are converted.
+  **Disposition**: test design. No fake was changed.
+- **D5-4 (shared interceptor helper):** the interceptor-through-fake-invoker body of
+  `traceCapturingLedger.AppendEvent` (Step 3) was extracted to `outgoingTraceID`, so `traceCapturingNotify`
+  reuses it under the DRY guard rail. Step 3's tests are unchanged in behaviour and the full package still passes.
+  **Disposition**: in-file refactor, test-only.
+- **D5-5 (environment):** as in D2-2/D4-1, `golangci-lint` v2.14.0 was rebuilt with go1.27 (`0 issues.`). As
+  in D3-4/D4-3, no husky hook is installed (no `node_modules`), so git ran no hook; `--no-verify` was not
+  used. **Disposition**: environment only.
+
+### 2026-10-29 — Step 6
+
+- **D6-1 (lint binary):** as in D2-2/D4-1/D5-5, the provisioned `golangci-lint` v2.14.0 (built with go1.26)
+  refuses the Go 1.27 module, so the same pinned v2.14.0 rebuilt with go1.27 in the session scratchpad ran the
+  specced command: `0 issues.` **Disposition**: CI-equivalent fallback.
+- **D6-2 (coverage command shape):** the sandbox refused the `$(...)`-computed `COVERPKGS` argument, so its value
+  (`internal/{broker,config,middleware,mtls}`, from the same `go list | grep -Ev` filter run on its own) was passed
+  literally. Total `73.3%` (>= 40%). **Disposition**: verification fallback, same packages and flags.
+- **D6-3 (line drift):** the step cites `:2859`/`:2907`/`:2617`; after the main-dev merge these are `:2858`/`:2906`/
+  `:2616`, as the Step 5 table already records. Edits were made by the Step 5 table's lines. **Disposition**: none needed.
+
+### 2026-10-29 — Step 7
+
+- **D7-1 (teardown, plugin unavailable):** `/context-constitution refresh` is not available in this session
+  (only `context-forge:context-scrubber` is loaded). Done by hand instead: the new CLAUDE.md row was re-read
+  against `order_intent.go#reclaimedUnknownPayload`/`#reclaimStaleIntent` and the three `reclaimStaleIntent`
+  call sites in `trading.go`, and the three findings rows against `trading.go#emitLedgerEvent` and the bare-key
+  `order.created`/`order.canceled` emits. No further drift in the touched rows. The integration PR body must
+  record that the plugin was unavailable and this manual reconciliation. **Disposition**: manual fallback.
+- **D7-2 (row formatting):** the Instruction 1 row text is used verbatim, with its identifiers in backticks to
+  match the table's style. **Disposition**: cosmetic.
+- **D7-3 (pre-commit hook):** same as D3-4: the main worktree has no `node_modules` to link, so git ran no hook
+  (no `--no-verify`). **Disposition**: environment only.
