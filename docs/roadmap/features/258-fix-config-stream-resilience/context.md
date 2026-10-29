@@ -530,3 +530,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `:470`.
 - Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
 
+### Step 5 — service: WatchConfig registers pending before the snapshot; failures end the call (D-35, D-58) [done]
+- `Subscriber`: `lastVersion` was replaced by `pending`, `missedDelta` and `traceId?`.
+- New `endSubscriber(id, sub, err)`:
+  - It is identity-guarded.
+  - It logs `WatchConfig subscriber terminated` at error level, with the trace id and `err`.
+  - It calls `call.destroy({ code: 13 })` inside a try.
+  - Its only callers are the broadcast catch and the watchConfig chain.
+- `broadcastToSubscribers`: a pending subscriber gets `missedDelta = true` and no write.
+- `watchConfig` now registers before the snapshot read. It writes the SNAPSHOT, drains `missedDelta` with DELTA
+  catch-ups, then clears `pending`. The `cancelled`/`error` handlers stay delete-only.
+- TDD (a throwaway probe; Step 6 owns the committed proof):
+  - RED: AC-6 and AC-8 had no `destroy` (code undefined). AC-7 lost the in-flight change: the only write was
+    `[SNAPSHOT 300]`.
+  - GREEN: 3/3.
+  - Step 6 must subscribe with a non-empty `user_id` to hold a snapshot in flight, because the global path issues no
+    SELECT.
+- Verification:
+  - Build exit 0.
+  - Lint 0 errors. 183 warnings = 182 + 1 spec-mandated `err: any` on `endSubscriber`.
+  - `lastVersion` has 0 hits.
+  - `this.endSubscriber(` has exactly 2 call sites: `:360` (broadcast) and `:427` (chain).
+  - The existing suite passes 197/197, with c8 lines at 90.55%.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+

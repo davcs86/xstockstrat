@@ -90,7 +90,9 @@ interface Subscriber {
   userId: string; // '' = global subscriber
   clientId: string;
   call: any;
-  lastVersion: string;
+  pending: boolean;
+  missedDelta: boolean;
+  traceId?: string;
 }
 
 // Scalar numeric bounds, keyed on the FULL config key path. Looked up (feature 182) with a two-operand
@@ -346,16 +348,36 @@ export class ConfigServiceImpl {
     let count = 0;
     for (const [id, sub] of this.subscribers) {
       if (sub.namespace !== namespace || sub.environment !== env) continue;
+      if (sub.pending) {
+        sub.missedDelta = true;
+        continue;
+      }
       try {
         const payload = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
         sub.call.write(payload);
         count++;
       } catch (err) {
-        log.warn('Failed to write to subscriber', { clientId: sub.clientId });
-        this.subscribers.delete(id);
+        this.endSubscriber(id, sub, err);
       }
     }
     log.info(`Broadcast config update namespace=${namespace} env=${env} subscribers=${count}`);
+  }
+
+  // Ends only the registration it was given; a replaced or cancelled subscriber is left alone.
+  private endSubscriber(id: string, sub: Subscriber, err: any) {
+    if (this.subscribers.get(id) !== sub) return;
+    this.subscribers.delete(id);
+    log.error('WatchConfig subscriber terminated', {
+      subId: id,
+      clientId: sub.clientId,
+      traceId: sub.traceId,
+      error: err?.message,
+    });
+    try {
+      sub.call.destroy({ code: 13, message: `Internal error: ${err?.message}` });
+    } catch {
+      /* call already closed */
+    }
   }
 
   /**
@@ -384,17 +406,25 @@ export class ConfigServiceImpl {
       userId,
       clientId: req.client_id,
       call,
-      lastVersion: '0',
+      pending: true,
+      missedDelta: false,
+      traceId: first(call.metadata, 'x-trace-id') || undefined,
     };
+    // Registered before the snapshot read so a change landing mid-read is recorded as missedDelta.
+    this.subscribers.set(subId, sub);
 
-    this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT)
-      .then((payload) => {
-        call.write(payload);
-        this.subscribers.set(subId, sub);
-      })
-      .catch((err) => {
-        log.warn('Failed to send initial snapshot', { subId, error: err?.message });
-      });
+    (async () => {
+      const snap = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT);
+      if (this.subscribers.get(subId) !== sub) return;
+      call.write(snap);
+      while (sub.missedDelta && this.subscribers.get(subId) === sub) {
+        sub.missedDelta = false;
+        const d = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
+        if (this.subscribers.get(subId) !== sub) break;
+        call.write(d);
+      }
+      sub.pending = false;
+    })().catch((err) => this.endSubscriber(subId, sub, err));
   }
 
   async getConfig(call: any, callback: any) {

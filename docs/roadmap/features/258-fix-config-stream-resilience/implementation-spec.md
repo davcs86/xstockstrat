@@ -478,7 +478,7 @@ grep -n "AC-3\|AC-4\|AC-11" src/__tests__/configServiceImpl.test.ts
 
 ### Step 5 — service: WatchConfig registers pending before the snapshot; failures end the call (D-35, D-58)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -882,4 +882,18 @@ instead of invoking the callback".
 `Error: connection terminated` rejecting from the handler; @AC-11 and the INVALID_ARGUMENT / NOT_FOUND /
 PERMISSION_DENIED pins passed, as predicted. The file was restored with `git checkout` (no diff) and GREEN run.
 **Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced (procedure note).
+
+### Deviation: Step 5 — RED/GREEN via a throwaway probe; Step 6 owns the committed proof
+**Spec said**: "**TDD**: `red-green required` (Step 6 is the paired test)".
+**Actual**: an uncommitted probe test drove the three Step 6 scenarios. It was deleted before commit, along with its
+dist output. RED on the pre-Step-5 tree:
+- @AC-6 snapshot failure: `call.destroyed?.code` was undefined (expected 13).
+- @AC-7: the only write was `[SNAPSHOT 300]`, so the in-flight change to 600 was lost.
+- @AC-8 broadcast write failure: `call.destroyed?.code` was undefined, and the failure was logged at warn.
+
+GREEN after the change: 3/3. The probe subscribes with a non-empty `user_id`. A global subscriber's snapshot issues no
+SELECT, because `resolveOverlayValues` returns early on `''`. Only a per-user subscriber can therefore hold a
+snapshot read in flight, and Step 6 needs the same choice.
+**Reason**: the paired test step follows its service step in the spec's order (same as Step 3).
 **Disposition**: as specced (procedure note).
