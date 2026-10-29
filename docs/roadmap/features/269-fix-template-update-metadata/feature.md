@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-template-update-metadata-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings; overlap WARN: shared servicer.py with 244, 245) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute | Steps 3, 4, 6, 7, 8 re-specced after the main-dev merge: line drift in analysis `servicer.py`/`conftest.py`/`ci.yml` and ingest test imports; Step 7 marked done (merge-order.md:91 row already present) |
 
 ---
 
