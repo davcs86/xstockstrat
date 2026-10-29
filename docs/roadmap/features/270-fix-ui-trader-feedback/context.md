@@ -558,5 +558,5 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
     `SymbolScreening` inline `symbol-screen-error` is at `:230-234` (was `:228`). Every other Step 7 evidence item
     re-verified unchanged.
   - Step 13: the disconnect `Alert` goes under the `QueryStateMessages` at `OrdersTable.tsx:203` (was `:202`).
-    Trading `StreamOrderUpdates` is now `trading.go:1667-1686` (the merge shifted its closing brace by one line). The
+    Trading `StreamOrderUpdates` is `trading.go:1667-1686` (its closing brace was mis-cited as `:1685`). The
     rest re-verified unchanged.
