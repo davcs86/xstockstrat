@@ -330,6 +330,12 @@ export async function startMockBackend(): Promise<void> {
           // Single-order read for the order-ticket page (feature 096).
           return orderForId(req.orderId);
         },
+        async *streamOrderUpdates(_req, ctx) {
+          // Held open until the client aborts: a clean end would make the page reconnect.
+          await new Promise<void>((r) =>
+            ctx.signal.addEventListener('abort', () => r(), { once: true }),
+          );
+        },
         async listBrokerAccounts() {
           return { accounts: BROKER_ACCOUNTS };
         },
@@ -555,7 +561,10 @@ export async function startMockBackend(): Promise<void> {
           for (const alert of ALERT_STREAM_ALL) {
             yield alert as Alert;
           }
-          // Stream ends cleanly — no hang in tests.
+          // Stays open until the client aborts: a clean end would make AlertStream reconnect.
+          await new Promise<void>((r) =>
+            ctx.signal.addEventListener('abort', () => r(), { once: true }),
+          );
         },
         async listAlerts() {
           // feature 203 — per-user read state + server-side unread count.

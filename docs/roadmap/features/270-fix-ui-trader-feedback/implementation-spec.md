@@ -982,7 +982,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 14 — test: AC-2, AC-9 and AC-1 streams disconnect, show the indicator, reconnect and recover without a reload
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/streamBackoff.test.ts` — create
@@ -1298,3 +1298,23 @@ _Populated by /sdd-execute as implementation proceeds._
   **Disposition**: carried to the integration PR.
 - **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
   `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean. **Disposition**: not fixed here.
+
+### Step 14 — 2026-10-29
+
+- **Instruction 9 fallback ran for the orders stream.** `route.fulfill` cannot hold a body open, so orders attempt 2
+  (behind the gate) is a complete body: the FILLED frame plus a clean end-stream frame. Attempts 3+ `route.continue()`
+  to the held-open `streamOrderUpdates` mock, so the hook stops cycling. The indicator assertions target the first
+  item and the stable timer, so they hold. The alerts attempt 2 `route.continue()`s to the held-open mock as specced.
+  **Disposition**: specced fallback.
+- **TDD RED ran against the pre-Step-13 tree.** Step 13 had already landed, so `AlertStream.tsx`, `OrdersTable.tsx`
+  and `useOrderUpdates.ts` were temporarily restored from `adcd3be0`, and `streamBackoff.ts` was replaced by a stub
+  (no backoff, nothing retryable). Unit RED: 7 of 10 failed on assertions. E2E RED: both new scenarios failed on
+  the missing `order-stream-disconnected` / `alert-stream-disconnected` indicators. Then everything was restored
+  before GREEN. **Disposition**: CI-equivalent fallback.
+- **E2E ran in CI mode (`CI=1`, `next build && next start`).** The local `pnpm dev` server timed out the 10 s
+  warmup on a cold compile. That is the CI harness, not a spec change. A `--repeat-each=4` run of
+  `stream-reconnect.spec.ts` was 8/8 green. **Disposition**: CI-equivalent.
+- **The orders AC-1 render check also asserts no `NEW`.** Polls keep returning the older NEW record at
+  `ORDER_WORKING_STREAMED_AT`, so the row must not fall back to it. **Disposition**: inside the step's **Files**.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`. **Disposition**: not fixed here.

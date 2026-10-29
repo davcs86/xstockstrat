@@ -850,3 +850,29 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   - Instruction 7 (the dev 5-minute idle reconnect observation) is for the integration PR.
 - Tooling: `pnpm install --frozen-lockfile` ran in the worktree (the main worktree has no `node_modules`).
 
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 14
+
+- Step 14 done (tests for D-11) in `services/xstockstrat-ui`:
+  - `src/lib/streamBackoff.test.ts` (new): the `nextBackoffMs(0..6)` schedule, retryable `TypeError` plus five
+    codes, and terminal `PermissionDenied`/`InvalidArgument`/`Unimplemented`.
+  - `e2e/mock-backend.ts`: a trader `streamOrderUpdates` that yields nothing and holds open until abort, and
+    `streamAlerts` now holds open after `ALERT_STREAM_ALL`. The feature-271 hold branch is untouched.
+  - `e2e/fixtures/orders.ts`: `ORDER_WORKING_STREAMED_AT`/`ORDER_WORKING_FILLED_AT`, registered in INVENTORY.md.
+  - `e2e/trader/stream-reconnect.spec.ts` (new, inline `connectStreamBody` helper): `@AC-2 @AC-1` on
+    `/trader/orders` and `@AC-9` on `/trader`.
+  - The stale "stops silently" comments in `orders.spec.ts` (header and stub) and `order-parity.spec.ts` now say
+    the stream retries with backoff behind the indicator. The stubs stay.
+- TDD:
+  - **Red** (pre-Step-13 components plus a stub `streamBackoff.ts`): Vitest 7 of 10 failed. Both e2e scenarios
+    failed waiting for `order-stream-disconnected` / `alert-stream-disconnected`.
+  - **Green:** Vitest 306/306 (57 files). E2E 18/18 across `stream-reconnect`, `alert-stream`, `orders` and
+    `order-parity`. `stream-reconnect` was 8/8 under `--repeat-each=4`.
+- Verification: `pnpm run lint` exits 0 (only pre-existing warnings). `test:coverage` is 73.81% statements over
+  `src/lib/**`. Both greps hit. `lint:dup` is clean. `tsc --noEmit` fails only on the pre-existing
+  `e2e/insights/backfills.spec.ts:135-136`.
+- Deviations: the orders attempt 2 is a complete body (instruction 9 fallback), and e2e ran in `CI=1` mode. See the
+  Deviation Log.
+- Open items: Step 13 instruction 7 (the dev 5-minute idle reconnect observation) is still for the integration PR.
+  All 14 steps are now `done`, so the `status.md` flip and the integration PR are next.
+- Tooling: `pnpm install --frozen-lockfile` ran in the worktree. Chromium is from `/opt/pw-browsers`.
+

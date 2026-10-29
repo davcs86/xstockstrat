@@ -8,8 +8,8 @@ import { BROKER_ACCOUNT_ALPACA } from '../fixtures';
  * All trading RPCs are intercepted via page.route on the BFF Connect paths so the test
  * is paper-safe and never reaches a live broker. ListOrders returns four orders spanning
  * the editable (NEW / PARTIALLY_FILLED) and terminal (FILLED) states plus PENDING_APPROVAL.
- * StreamOrderUpdates is failed fast so the live-feed hook stops silently (it wraps the
- * stream in try/catch, matching AlertStream).
+ * StreamOrderUpdates is failed fast; the live-feed hook retries it with backoff behind the
+ * disconnected indicator (feature 270), which these tests do not assert on.
  */
 
 const ORDERS = [
@@ -125,7 +125,7 @@ test.describe('Orders management page', () => {
       });
     });
 
-    // Fail the live stream fast so useOrderUpdates stops silently.
+    // Fail the live stream fast; useOrderUpdates retries with backoff behind the disconnected indicator.
     await page.route(
       '**/xstockstrat.trading.v1.TradingService/StreamOrderUpdates',
       async (route) => {

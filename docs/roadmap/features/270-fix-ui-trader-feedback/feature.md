@@ -34,6 +34,7 @@
 | 2026-10-29 | `in-progress` (Step 11 done) | /sdd-execute sequential (sdd-batch-execute) | Step 11 — D-11: `pickFresherOrder` (`src/lib/orderFreshness.ts`) keeps the streamed order unless the polled one has a strictly newer `updatedAt` (absent = oldest); `OrdersTable` merges through it |
 | 2026-10-29 | `in-progress` (Step 12 done) | /sdd-execute sequential (sdd-batch-execute) | Step 12 — `@AC-1`/`@AC-8` Vitest `src/lib/orderFreshness.test.ts`: six `pickFresherOrder` cases (newer poll wins, a tie keeps the stream, an older poll loses, absent timestamps count as oldest, no streamed record returns the poll) |
 | 2026-10-29 | `in-progress` (Step 13 done) | /sdd-execute sequential (sdd-batch-execute) | Step 13 — D-11: `useReconnectingStream` (+ `src/lib/streamBackoff.ts`) reconnects the order and alert streams with capped exponential backoff; `OrdersTable` shows `order-stream-disconnected`, the bell shows `BellOff` + `alert-stream-disconnected` with an accessible name; alerts dedupe on `alertId`; `listAlerts` stays mount-only |
+| 2026-10-29 | `in-progress` (Step 14 done) | /sdd-execute sequential (sdd-batch-execute) | Step 14 — `@AC-2`/`@AC-9`/`@AC-1` tests: Vitest `streamBackoff.test.ts` (backoff schedule + retryable/terminal codes) and e2e `stream-reconnect.spec.ts` (drop → indicator → gated reconnect → FILLED / alerts recover and dedupe, no reload); the mock holds `streamOrderUpdates`/`streamAlerts` open; new `ORDER_WORKING_STREAMED_AT`/`ORDER_WORKING_FILLED_AT` fixtures |
 
 ---
 
