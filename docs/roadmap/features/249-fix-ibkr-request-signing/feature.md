@@ -20,6 +20,7 @@
 | 2026-10-28 | `implementation-ready` (no change) | /sdd-execute (re-spec) | Steps 1, 4, 6, 7, 15 re-grounded against the codebase after merging origin/main-dev (line-drift only; substance unchanged) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: IBKR reference fixtures (ibind vectors, test keys, DH params) + gitleaks scope incl. the operator-approved `vectors.json` path allowlist |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 2+3 done in one commit (operator decision): LST signer `authorize`/`authorizeLST`/`buildBaseString` + ibind known-answer tests; FR-3 ruled include query params |
 
 ---
 
@@ -58,4 +59,4 @@ therefore expected to 401; `ValidateCredentials` maps that to INVALID (TRADING-3
 
 ## Next Action
 
-`/sdd-review fix-ibkr-request-signing impl-spec` — validate implementation spec, then `/sdd-execute fix-ibkr-request-signing`. Operator ruling owed before the integration PR merges: FR-3 query-param inclusion vs the ibind reference (implementation-spec.md § Execution Summary, CONFLICT).
+`/sdd-review fix-ibkr-request-signing impl-spec` — validate implementation spec, then `/sdd-execute fix-ibkr-request-signing`. FR-3 query-param inclusion vs the ibind reference: operator ruled "include" on 2026-10-29 (context.md).

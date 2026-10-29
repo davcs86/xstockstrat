@@ -301,3 +301,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Carried to Step 4: pycryptodome 4.2.0 returns empty bytes for a wrong-key PKCS#1 v1.5 decrypt, so the Go decrypt
   must fail closed on an empty plaintext.
 - Still owed: the FR-3 operator ruling at the Step 2 checkpoint (or a recorded deferral to the integration-PR merge).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 2 + 3
+
+- Steps 2 and 3 done in **one commit** by operator decision (session question tool, 2026-10-29: "A: Steps 2+3
+  together (Recommended)"). Recorded in the spec's Deviation Log.
+- `ibkr.go`: `IBKRConfig` gains the `Now`/`Nonce`/`DHRandom` seams, with defaults set in `NewIBKRClient` (16-char
+  alnum nonce and 256-bit DH random, both from `crypto/rand`). It also gains `ibkrRealm = "limited_poa"`,
+  `oauthEncode` (`url.QueryEscape`), `oauthParams`, `buildBaseString`, `authorizeHeader`, `authorize` (HMAC-SHA256
+  keyed by the LST) and `authorizeLST` (RSA-SHA256 PKCS#1 v1.5 over `prepend + baseString`). `signRequest` and its 11
+  call sites are untouched; Step 6 deletes them.
+- `ibkr_sign_internal_test.go` (package `broker`): `TestIBKRAuthorize_GETQueryParamsSigned` (AC-1),
+  `_LSTKeyedAndRealm` (AC-2), `_EncodingPinned` (`BRK B` and the `%2B`/`%2F`/`%3D` signature) and
+  `TestIBKRAuthorizeLST_RSAVector`. All fixtures come from `testdata.MustIBKRVectors()`. RED: compile failure; GREEN:
+  pass.
+- **FR-3 operator ruling (closes the "Still owed" item):** operator, 2026-10-29: "Include params (FR-3)". This is
+  the final ruling and it does not hold the integration-PR merge. Query params stay in the signature base string,
+  which deviates from ibind. The single inclusion point is `buildBaseString`.
+- Verification: `go build ./...` and `go vet ./...` clean. golangci-lint v2.14.0 reports 0 issues; it was rebuilt
+  with go1.27, because the provisioned binary was built with go1.26 and rejects the `go 1.27.0` module (Deviation
+  Log). `go test ./... -race` passes with COVERPKGS total coverage 73.1%. `oauth_version` appears only in
+  `signRequest`. No vector nonce literal appears in any `_test.go`.
+- Carried to Step 4: the Go decrypt must fail closed on an empty plaintext (from Step 1).

@@ -225,7 +225,7 @@ openssl genrsa 2048 > /tmp/probe.pem && gitleaks dir /tmp/probe.pem --config .gi
 
 ### Step 2 — service: signer — `authorize` replaces `signRequest`'s base-string/header logic
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -288,7 +288,7 @@ grep -n "oauth_version" internal/broker/ibkr.go   # only inside the not-yet-dele
 
 ### Step 3 — test: signer known-answer vectors (AC-1, AC-2 signer half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr_sign_internal_test.go` — create (package `broker`)
@@ -1205,3 +1205,24 @@ _Populated by /sdd-execute as implementation proceeds._
   `.gitignore` is not edited. The committed keys are the operator-approved test keys (2026-10-29).
 - ibind SHA unchanged (`759ec3a1`). Regenerated locally with pycryptodome 4.2.0 from the pinned ibind source:
   output byte-identical to the committed `vectors.json`.
+
+### Steps 2 + 3 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 2 and 3 land in one commit (breaks one-commit-per-step, operator decision).** Operator, session question
+  tool, 2026-10-29: "A: Steps 2+3 together (Recommended)". The signer (`ibkr.go`) and its known-answer test
+  (`ibkr_sign_internal_test.go`) are committed together and both steps are marked done. The test file was not on
+  disk at execution time, so it was authored in this session from the Step 3 instructions. RED was a compile failure
+  against the pre-Step-2 tree (no `Now`/`Nonce` seams, `buildBaseString`, `authorize`, `authorizeLST`). GREEN: all
+  four `TestIBKRAuthorize*` tests pass against the ibind vectors.
+- **FR-3 ruling: query params stay in the signature base string.** Operator, 2026-10-29: "Include params (FR-3)".
+  This is the final ruling and does not hold the merge. It deviates from ibind, which excludes them. The inclusion
+  stays isolated in `buildBaseString`.
+- **Shared `oauthParams(signatureMethod)` helper (not named in the spec).** `authorize` and `authorizeLST` both build
+  the five oauth params through one unexported method, and the Step 3 test reuses it. This avoids restating the
+  param set three times (DRY guard rail).
+- **`buildBaseString` keeps every value of a repeated query key** as its own `k=v` pair, sorted by key and then by
+  value. The spec says "every decoded `u.Query()` value" and does not pin an order for repeated keys. No current
+  call site repeats a key.
+- **Verification fallback: golangci-lint rebuilt.** The provisioned `~/go/bin/golangci-lint` v2.14.0 was built with
+  go1.26 and refuses to load a `go 1.27.0` module. The same pinned v2.14.0 was rebuilt with go1.27.0 into a scratch
+  `GOBIN`, then run: 0 issues. The pinned version is unchanged.
