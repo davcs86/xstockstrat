@@ -97,7 +97,7 @@ Steps 6/7) plus the MCP HTTP auth edge (`app/main.py`, Steps 8/9). There is no U
 
 ### Step 1 — docs: Latency baseline for the long RPCs and ValidateToken (R1, R5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/273-fix-agent-client-deadlines/`
 **Files**:
 - `docs/roadmap/features/273-fix-agent-client-deadlines/context.md` — modify

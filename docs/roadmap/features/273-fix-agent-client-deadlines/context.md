@@ -826,3 +826,34 @@ Once the operator rules on the three gated items, the design is approvable witho
   every commit.
 - Preconditions: 247 is merged and the re-spec of Steps 2/3/6/7/8/11 is committed (session above). Step 1, the
   R1/R5 latency baseline, gates Step 3 and runs first.
+
+## Session 2026-10-29 — Deadline latency baseline (Step 1, R1/R5)
+
+- Operator decision (2026-10-29, session question tool): "Query Grafana". Measured with read-only Grafana Cloud
+  Tempo queries, datasource uid `grafanacloud-traces`. Window (UTC): 2026-10-28T07:21:00Z → 2026-10-29T07:21:00Z
+  (24 h), `deployment.environment=development`, agent client spans (`resource.service.name = "agent"`).
+- Queries:
+  - Count: `{ resource.service.name = "agent" && resource.deployment.environment = "development" && kind = client } | count_over_time() by (name)` (instant).
+  - Quantiles: `{ resource.service.name = "agent" && resource.deployment.environment = "development" && kind = client && name = "<RPC>" } | quantile_over_time(duration, .5, .99, 1)` (instant).
+  - Exact max cross-check: TraceQL search `{ ... && name = "<RPC>" && duration > 100ms }`.
+  - Zero-span cross-check across every service and span kind: `{ resource.deployment.environment = "development" && name =~ ".*(RunBacktest|RunFundamentalsScan|ScreenSymbols|TriggerBackfill)" } | count_over_time() by (name, resource.service.name)` returned no series.
+- `quantile_over_time` reports power-of-two bucket bounds. The p99 and max below are bucket upper bounds
+  (2^27 ns = 134.2 ms), and the p50 is interpolated inside its bucket. The exact max comes from the trace search.
+
+| RPC | Count | p50 | p99 | Max | Margin |
+|---|---|---|---|---|---|
+| `/xstockstrat.analysis.v1.AnalysisService/RunBacktest` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.ingest.v1.IngestService/TriggerBackfill` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.identity.v1.IdentityService/ValidateToken` | 58 | ≈27.4 ms | ≤134.2 ms (bucket bound) | 121.9 ms (exact, trace `a425ce4e739f451231b2c3f78a2ac1b5`) | vs 10 s: ≥9.86 s (p99 < 1.4 % of budget) |
+
+- R5 (ValidateToken): p99 is comfortably below 10 s, so the 10 s budget stands.
+- R1 (long RPCs): there are no agent client spans for any of the four long RPCs, and `analysis` emitted no spans
+  in this window (it is absent from dev's `resource.service.name` values). The 45 s budget therefore cannot be
+  checked against observed latency. The server bounds that would cap it are all above 45 s (R2): 120 s for the
+  screener default and for backtest in production, and 300 s for the backtest default.
+- Per Step 1 instruction 4, "Not measured" counts as HALT until the operator signs off here. Step 3 must not be
+  committed until that sign-off is recorded or a re-measurement with spans present gives PASS.
+
+Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/TriggerBackfill not measured (0 dev spans in 24 h); ValidateToken p99 ≤134 ms passes R5
