@@ -281,17 +281,18 @@ behavioural proof, and the coverage command guards the threshold.
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, fill detection
 
 **Codebase Evidence**:
-- `const ledgerEmitTimeout = 10 * time.Second` (`trading.go:3657`); void
+- `const ledgerEmitTimeout = 10 * time.Second` (`trading.go:3661`); void
   `func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {`
-  (`:3661`) drops `structpb.NewStruct`'s error (`:3662`) and only Warns `"ledger emit failed"` (`:3671-3673`).
+  (`:3665`) drops `structpb.NewStruct`'s error (`:3666`) and only Warns `"ledger emit failed"` (`:3675-3677`).
   `grep -n 'emitLedgerEvent(' internal/service/*.go` (non-test) → 28 lines = definition + 27 call sites; only
-  the `:1067` site changes (fails.md:2092 shared-helper trap).
-- `recomputeAndEmitOfflinePositions` (`:962`, doc comment `:960-961`) emits at `:1067` and ends with an
-  unconditional `return nil` (`:1078`); query failures already return errors (`:964-978`).
-- ConfirmOrder swallow `trading.go:951-954`
+  the `:1072` site changes (fails.md:2092 shared-helper trap). A second `"account.positions.synced"`
+  `emitLedgerEvent` call at `trading.go:2414` is on the broker sync path and stays on the void wrapper.
+- `recomputeAndEmitOfflinePositions` (`:967`, doc comment `:965-966`) emits at `:1072` and ends with an
+  unconditional `return nil` (`:1083`); query failures already return errors (`:969-983`).
+- ConfirmOrder swallow `trading.go:956-959`
   (`slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted", ...)` then `return resp, nil`);
-  lock `lock := s.confirmLock(order.AccountId)` (`:918`).
-- SnapshotOfflinePositions call `:1224-1227` (Warn only); `warnings` slice already built above (`:1190-1192`,
+  lock `lock := s.confirmLock(order.AccountId)` (`:923`).
+- SnapshotOfflinePositions call `:1229-1232` (Warn only); `warnings` slice already built above (`:1191-1197`,
   `warnings = append(warnings, "account has unconfirmed NEW offline orders; ...")`), response field
   `repeated string warnings = 4;` (`packages/proto/trading/v1/trading.proto:350`).
 - Idempotency key: `string idempotency_key = 8;` (`packages/proto/ledger/v1/ledger.proto:50`). Precedent: portfolio
@@ -308,7 +309,7 @@ behavioural proof, and the coverage command guards the threshold.
 **Covers**: —
 
 **Instructions**:
-1. Add, beside `ledgerEmitTimeout` (`:3657`), the constants:
+1. Add, beside `ledgerEmitTimeout` (`:3661`), the constants:
    `appendMaxAttempts = 2` (one bounded retry), `appendRetryBackoff = 100 * time.Millisecond`,
    `offlineRecomputeQueryBudget = 5 * time.Second`, and
    `offlineRecomputeTimeout = 30 * time.Second`. Comment (≤ 2 lines, constraint only): the timeout must exceed
@@ -320,18 +321,18 @@ behavioural proof, and the coverage command guards the threshold.
    `context.WithTimeout(ctx, ledgerEmitTimeout)`; retries only when `grpcstatus.Code(err) == codes.Unavailable`
    and attempts remain, sleeping `appendRetryBackoff`; returns the last error. It never touches `confirmLock`
    (the caller holds it; the lock is non-reentrant — fails.md:2028).
-3. Make `emitLedgerEvent` (`:3661`) a void wrapper: `if err := s.appendLedgerEvent(...); err != nil { slog.Warn("ledger emit failed", "event_type", eventType, "error", err) }`.
+3. Make `emitLedgerEvent` (`:3665`) a void wrapper: `if err := s.appendLedgerEvent(...); err != nil { slog.Warn("ledger emit failed", "event_type", eventType, "error", err) }`.
    This is the design's "sibling" shape (`emitLedgerEvent` is "its void wrapper"). **Recorded behaviour change
    for the other 26 call sites** (impl-spec review, C-18 trade-off): each now gets one `codes.Unavailable` retry
    under a fresh per-event idempotency key, so a ledger outage raises a caller's worst-case emit wait from
    10s to 2×10s + 100ms; non-Unavailable failures are unchanged (one attempt, Warn). Pre-entered in the
    Deviation Log; the no-retry alternative for those callers is an operator choice carried in context.md.
 4. In `recomputeAndEmitOfflinePositions`, replace the `s.emitLedgerEvent(ctx, "account.positions.synced", ...)`
-   call at `:1067` with `if err := s.appendLedgerEvent(ctx, ...same args...); err != nil { return fmt.Errorf("emit account.positions.synced: %w", err) }`
+   call at `:1072` (only this site — the broker-sync `:2414` emit of the same event type stays void) with `if err := s.appendLedgerEvent(ctx, ...same args...); err != nil { return fmt.Errorf("emit account.positions.synced: %w", err) }`
    and keep the payload map verbatim — `user_id` included (fails.md:2054). The final `return nil` stays for the
-   success path. Update the doc comment at `:960-961` to "Fail-closed: a query or ledger-append error is
+   success path. Update the doc comment at `:965-966` to "Fail-closed: a query or ledger-append error is
    returned and nothing is emitted."
-5. In `ConfirmOrder`, replace `:950-954` with:
+5. In `ConfirmOrder`, replace `:955-959` (comment + swallow) with:
    ```go
    recomputeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), offlineRecomputeTimeout)
    defer cancel()
@@ -342,11 +343,11 @@ behavioural proof, and the coverage command guards the threshold.
    ```
    The order row is already persisted; a re-confirm with the same values is idempotent (absolute recompute,
    `@AC-10 @feature-157`) and re-emits.
-6. In `SnapshotOfflinePositions`, wrap the `:1224` call with the same `WithTimeout(WithoutCancel(ctx), offlineRecomputeTimeout)`
+6. In `SnapshotOfflinePositions`, wrap the `:1229` call with the same `WithTimeout(WithoutCancel(ctx), offlineRecomputeTimeout)`
    and, on error, keep the Warn and append `"positions not published; re-snapshot to retry"` to `warnings`
-   (the response literal already sets `Warnings: warnings`, `:1233`). No error return there (design §2).
+   (the response literal already sets `Warnings: warnings`, `:1238`). No error return there (design §2).
 7. Frozen-window confirm (`@AC-46 @feature-240`) still recomputes and emits — there is no no-op path in
-   `:962-1078`; it fails only if the ledger append fails.
+   `:967-1083`; it fails only if the ledger append fails.
 8. Fill-state completeness: PARTIALLY_FILLED and FILLED both go through the same persist → recompute → emit path;
    order type handling and broker coverage are unaffected (offline-only path).
 
@@ -373,8 +374,8 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
   no failure hook today.
 - `fakeBaselineStore.baselineErr` (`:112`, returned at `:237-238`) and `confirmedErr` (`:116`) inject query
   failures; `newConfirmHarness` `:1598`; `parseSyncedPayload(t, ledger)` `:704`.
-- `TestConfirmOrder_AC46_FrozenWindowFillIgnored` `:2003`, `TestConfirmOrder_AC47_FrozenReconfirmLeavesPayload`
-  `:2016` (PRESERVE guards, must stay green).
+- `TestConfirmOrder_AC46_FrozenWindowFillIgnored` `:2058`, `TestConfirmOrder_AC47_FrozenReconfirmLeavesPayload`
+  `:2071` (PRESERVE guards, must stay green).
 
 **TDD**: `red-green required` — on the pre-Step-5 tree a failing append still returns success from ConfirmOrder.
 
@@ -750,7 +751,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
   sdd-design session of context.md, inside the design the operator approved at the r3 gate. It is a recorded
   240 decision (`240-offline-account-full-pnl/context.md:399`, `:771`), not a durable `@AC-*` business rule:
   `grep -rni 'non-fatal\|GetOfflineStates' docs/sdd/business-rules/` → no hit, so no C-16 CHANGE applies.
-- `portfolio_quote_deadline_test.go:113-114`: "GetOfflineStates is left unexpected (its error is non-fatal)" in
+- `portfolio_quote_deadline_test.go:115` (in the `expectAllAccounts` doc comment `:114-115`): "GetOfflineStates is left unexpected (its error is non-fatal)" in
   `expectAllAccounts` — an unexpected pgxmock query now marks the offline ids degraded instead of being
   silently ignored, so callers asserting offline P&L under this helper must be swept.
 - Fixture homes: `internal/testdata/` exists (`marks.go`, `offline_pnl.go`; `testdata.Aapl`, `testdata.AaplMid`,
@@ -778,7 +779,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
    `Equity` still includes the offline market value.
 6. Sweep: run the whole package; any test that relied on an unexpected `GetOfflineStates` being non-fatal gets
    an explicit `expectStates`/`expectOfflineStates`, or asserts the marker if degradation is the point. Update
-   the `portfolio_quote_deadline_test.go:113-114` comment to the new contract. `TestAC29_OfflineReadParity`,
+   the `portfolio_quote_deadline_test.go:114-115` comment to the new contract. `TestAC29_OfflineReadParity`,
    `..._AC39_...` and `..._AC52_...` must stay green unchanged (PRESERVE).
 7. C-13: the 500.00/100.00/200.00/120.00 values are scenario literals in one file; reuse
    `internal/testdata` symbols for symbols/quotes; a second-consumer literal moves to `internal/testdata/offline_pnl.go`
