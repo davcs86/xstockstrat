@@ -777,3 +777,14 @@ Each item names the step where it is resolved.
   - The full `go test ./... -race` passed, with coverage total 72.8% (≥ 40%).
   - `golangci-lint` v2.14.0, rebuilt under go1.27.0, reported 0 issues.
 - Next: Step 5 (D-63 `appendLedgerEvent` + ConfirmOrder UNAVAILABLE).
+
+## Session 2026-10-29 — re-spec + sdd-execute sequential (sdd-batch-execute)
+
+- Authorization: standing operator approval (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended checkpoints ('report'); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train authorized; 255/275 deferred; operator-only DB/prod steps mean open the PR and hold the merge. This serves as the up-front sequential-mode confirmation. Status was already `in-progress`, so it is unchanged.
+- Branch setup: `git merge -X ours origin/main-dev` into the detached checkout. The only trading.go change from main-dev removes one line at :2181 (`Author:` in `escalateSystemic`). Every citation below that line moves by -1.
+- Re-spec, citations only, with no change to instructions or scope:
+  - Step 5: `ledgerEmitTimeout` :3661, `emitLedgerEvent` :3665 (NewStruct :3666, Warn :3675-3677), `confirmLock` :923, swallow :956-959 (replace :955-959), `recomputeAndEmitOfflinePositions` :967 (doc :965-966, queries :969-983, emit :1072, `return nil` :1083), `warnings` :1191-1197, Snapshot call :1229-1232, `Warnings: warnings` :1238. The directive's `return nil :1078` was stale; :1083 was verified.
+  - Step 5: the non-test `emitLedgerEvent(` grep still returns 28 lines. A second `"account.positions.synced"` emit sits at :2414 on the broker sync path. It stays on the void wrapper, and only :1072 changes.
+  - Step 6: AC46 test :2058, AC47 test :2071.
+  - Step 12: the `portfolio_quote_deadline_test.go` "non-fatal" comment is at :115, inside the `expectAllAccounts` doc comment :114-115.
+- Next: Step 5 (D-63 `appendLedgerEvent` + ConfirmOrder UNAVAILABLE).
