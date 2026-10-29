@@ -26,6 +26,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 4 done: shared mTLS PKI test helper `mtlsTestPki.ts` (`sh`, `mintLeaf`, `setEnv`) extracted from `peerSanSpike.test.ts` and `mtls.test.ts` |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 5 done: the GetSecret describe of `secretsAndScope.test.ts` now runs over mTLS (config server leaf, marketdata client leaf, plus an `ingestClient` for Step 6) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 6 done: wire AC-3 (254) wrong-SAN negative added to `secretsAndScope.test.ts`; recorded RED against the header-only marketdata grant (pairs with Step 7) |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 7 done: D-40 `marketdata` GetSecret grant bound to `peerSan: 'xstockstrat-marketdata'`; unit deny matrix (AC-3/AC-4/AC-6) in `perUserSecrets.test.ts`; wire AC-3 (254) now green |
 
 ---
 

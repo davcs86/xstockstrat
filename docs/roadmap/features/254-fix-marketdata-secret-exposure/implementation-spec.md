@@ -439,7 +439,7 @@ pair. The `c8 lines >= 40` gate applies at Step 7's Verification (F-05, P-06).
 
 ### Step 7 — service: D-40 bind the marketdata GetSecret grant to DNS SAN `xstockstrat-marketdata` (+ unit deny matrix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify

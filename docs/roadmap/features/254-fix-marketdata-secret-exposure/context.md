@@ -460,3 +460,22 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: the expected-red run above. The spec-reporter grep replaces the TAP grep (Deviation Log).
   `pnpm run lint` exits 0, with 0 errors and only warnings. `authz.ts` is untouched. There is no coverage gate at
   this step (F-05: it moves to Step 7).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 7
+
+- Tooling setup (step 7): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter . --filter "xstockstrat-config..."`).
+- Step 7 done (D-40 fix). `SECRET_CALLER_ALLOWLIST`'s `marketdata` entry in `src/grpc/authz.ts` now carries
+  `peerSan: 'xstockstrat-marketdata'`, mirroring the ingest grant. No other `authz.ts` edit (ingest and SetConfig
+  grants and the matcher are untouched). In `perUserSecrets.test.ts`, the old "no SAN required" test became
+  `marketdata GetSecret requires the xstockstrat-marketdata peer SAN (254: AC-3/AC-4/AC-6)`, with a new
+  `MARKETDATA_SAN` const: the marketdata SAN resolves `alpaca-xyz` (AC-4); the ingest SAN, `() => ({})` and no auth
+  context each give `PERMISSION_DENIED` with no `res` (AC-3/AC-6). `secretCallerAuthz.test.ts:59` now passes
+  `callWith('marketdata', 'DNS:xstockstrat-marketdata')`.
+- TDD: red: unit tests authored first, run before the `authz.ts` edit. `ℹ tests 183`, `ℹ pass 181`, `ℹ fail 2`: the
+  new unit test failed on the wrong-SAN assert (`undefined !== 7`, i.e. GetSecret succeeded for an ingest-SAN peer),
+  and Step 6's wire `AC-3 (254)` still failed. → green: after the grant edit, `ℹ tests 183`, `ℹ pass 183`, `ℹ fail 0`;
+  in the wire suite only AC-3 (254) changed state (AC-4 / AC-5 x2 / AC-16 x2 stayed green).
+- Verification: `pnpm run test:coverage` exit 0, c8 all-files lines 86.79% (>= 40). `pnpm run lint` exit 0 (0 errors,
+  warnings only). `grep peerSan: 'xstockstrat-marketdata'` → `authz.ts:119`. Pre-merge gate (P-03): the three SAN
+  material lines (`gen-dev-certs.sh:28`, `:50`, `deploy.yml:101`) are unchanged.
+- Rollback for D-40 is reverting the `authz.ts:119` line alone (D-39 stays).
