@@ -567,3 +567,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Steps 8/10 crash-loop gate: satisfied by the 2026-10-22 operator sign-off above.
 - Step 17's pre-merge dev canary is operator-only (running dev backends); the integration PR is opened and its merge
   held for the operator.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 1+2
+
+- Tooling setup (steps 1–2): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`.
+- Steps 1 and 2 landed as one commit under the operator's standing merge-pairs rule (Step 1's RED test is Step 2's
+  test table); Deviation Log entry added.
+- TDD (AC-3, AC-6, AC-8 at resolver level) red: ledger `tsc` TS2307 `Cannot find module '../dbTls'`, UI vitest
+  import failure → green: 14/14 resolver tests pass in ledger, identity, config, notify (`--test-reporter=spec`
+  lists every name; P-06) and UI vitest.
+- Verification: the five `dbTls.ts` copies share one sha256; 0 imports; backend `build`/`lint`/`test:coverage` all
+  exit 0 (dbTls 100% lines; all-files ≥83%); UI `test:coverage` and `lint` exit 0 (dbTls 100% lines).
+- Formatting note: prettier (lint-staged for the UI copy, same rules as the backend `.prettierrc`) wraps the
+  `parameter "${key}" is not allowed` throw onto three lines. All five copies were formatted identically so the
+  hash guard holds; no token of the spec's resolver changed.
+- Pre-existing, out of scope: UI `pnpm exec tsc --noEmit` reports two TS2339 errors, both in the untouched
+  `e2e/insights/backfills.spec.ts:135-136` (last changed by feature 198); `src/` compiles clean. Not fixed here.

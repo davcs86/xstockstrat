@@ -109,7 +109,7 @@ so C-10(a) does not apply. Agent: not affected (product spec § Consumer Surface
 
 ### Step 1 — service: Add the fail-closed resolver `dbTls.ts` (five byte-identical copies)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ledger/src/dbTls.ts` — create
@@ -203,7 +203,7 @@ for s in ledger config identity notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 2 — test: Resolver test table (`dbTls.test.ts`, five copies)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/dbTls.test.ts` — create
@@ -1044,3 +1044,12 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
   not prove that gRPC is served.
 - **AC-7 narrowed (UI).** The route's rejection handling is proven with a mocked `pg`, not a live TLS handshake.
   pg's verification itself is proven by the backend stub tests.
+- **Steps 1 and 2 executed as one commit (2026-10-29, sequential).** Step 1's TDD gate is `red-green required
+  (paired with Step 2)`: its RED test is Step 2's `dbTls.test.ts`, so Step 1 cannot complete a red→green cycle
+  alone. Applied the standing operator rule (operator, 2026-10-29, in their own words: 'Merge pairs + standing
+  rule'): "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step (e.g. ... the RED test is that next step's test), do NOT return a blocker. Execute this
+  step and the next one together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps
+  done, and add a Deviation Log entry quoting the rule." RED: `tsc` TS2307 `Cannot find module '../dbTls'` (ledger)
+  and vitest "no tests" import failure (UI). GREEN: 14/14 resolver tests in each of the five services.
+  **Disposition**: operator standing rule.
