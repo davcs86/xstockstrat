@@ -806,3 +806,17 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   the spec keeps the sleep inside the `except` (unchanged behaviour, not a deviation).
 - Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec before Step 13
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; checkpoints "report").
+- Merged `origin/main-dev` into the branch (normal merge). One conflict, in append-only `docs/roadmap/ledger/fails.md`;
+  both sides kept. `ledger-guard --fix` reported clean.
+- Re-spec, Step 13 only: all codebase evidence re-verified unchanged (`run_forever :147-162`, `_cursor :140-145`,
+  `process_event :164-174`, `_advance_cursor :399-401` / GREATEST upsert `:403-413`, constants `:37-47`, `acquire()` at
+  `:205/:268/:400`, ledger `ledgerServiceImpl.ts :190-191/:239`, `read_budget.py:8`, `uv.lock` asyncpg 0.31.0).
+  Spec-internal fix: instruction 6b used `_ATTEMPT_DB_TIMEOUT_SECONDS` but instruction 2 did not declare it; it is
+  now listed there as `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` (value from the Execution Summary and the 2026-10-22 note).
+- Status already `in-progress`; no status change.
