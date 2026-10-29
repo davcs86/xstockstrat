@@ -376,11 +376,14 @@ bash scripts/check-duplication.sh 2>/dev/null || (cd ../.. && bash scripts/check
    - Mint the test CA inline with one `sh('req','-x509','-newkey','rsa:2048','-nodes','-keyout',caKey,'-out',ca,'-days','1','-subj','/CN=test-ca')`.
    - Mint three leaves with `mintLeaf`: `xstockstrat-config` (server), `xstockstrat-marketdata` and
      `xstockstrat-ingest`.
-2. Set the env to the server leaf with `setEnv(serverCert, serverKey, caPem)`, then bind with
-   `mtls.serverCredentials()` in place of `createInsecure()` at `:75`.
-3. Build `client` (the marketdata client) by calling `setEnv(<marketdata leaf>, caPem)` and then
+2. `sh`/openssl writes the CA to a path, so read it once with `const caPem = readFileSync(ca, 'utf8')`. `mintLeaf`
+   returns a `[certPem, keyPem]` tuple and `setEnv(cert, key, ca)` takes three PEM strings. Set the env to the server
+   leaf with `setEnv(...serverLeaf, caPem)`, then bind with `mtls.serverCredentials()` in place of `createInsecure()`
+   at `:75`.
+3. Build `client` (the marketdata client) by calling `setEnv(...marketdataLeaf, caPem)` and then
    `new ConfigServiceClient(\`127.0.0.1:${port}\`, mtls.clientCredentials(), mtls.targetOverride('xstockstrat-config'))`.
-   Build a second `ingestClient` the same way after `setEnv(<ingest leaf>)`. Step 6 uses it; close both in `after`.
+   Build a second `ingestClient` the same way after `setEnv(...ingestLeaf, caPem)`. Step 6 uses it; close both in
+   `after`.
 4. Keep the five existing `it` blocks unchanged. They now run on the wire through the marketdata leaf.
 5. Import `* as mtls from '../mtls'` and `{ sh, mintLeaf, setEnv } from './mtlsTestPki'`, plus the needed `node:*`
    imports. Update the header comment's covered list only if needed, and keep it within the 2-line comment cap for
@@ -604,7 +607,8 @@ head -1 docs/reports/*-marketdata-vendor-key-url-residuals-defect.status   # →
 
 **Verification**:
 ```bash
-# e.g. via the DO apps logs tool / doctl for the dev app, component xstockstrat-marketdata, run log of the chosen boot:
+# doctl is not installed in the agent sandbox: fetch the run log with the DigitalOcean apps MCP tool `apps-get-logs`
+# (dev app, component xstockstrat-marketdata, type RUN) and count matches; with doctl on an operator host:
 doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolving vendor credential from config failed'   # → 0
 ```
 
@@ -613,6 +617,11 @@ doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolv
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29, re-spec of Steps 4-9 (after merging `origin/main-dev`).** Every path, symbol and line cite in Steps
+  4-9 was re-checked against the merged tree and still resolves; no Files change. Step 5 Instructions 2-3 now spell
+  out the `setEnv(...leaf, caPem)` spread (3-arg `setEnv`, `mintLeaf` tuple) and read the CA PEM with
+  `readFileSync`. Step 9 Verification names the DigitalOcean apps MCP `apps-get-logs` tool, since `doctl` is absent.
 
 - **2026-10-28, Step 1 (TDD ordering).** Step Dependencies says to author Steps 2 and 3 first and run them RED before
   Step 1. Sequential mode executes Step 1 as its own unit, so RED was captured with throwaway, uncommitted probe tests
