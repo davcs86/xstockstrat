@@ -122,17 +122,20 @@ so C-10(a) does not apply. Agent: not affected (product spec § Consumer Surface
 
 **Codebase Evidence**:
 - No shared helper exists. All five sites inline `includes('sslmode=disable')` plus `searchParams.delete('sslmode')`:
-  - ledger `src/index.ts:26,31`;
+  - ledger `src/index.ts:27,32`;
   - config `src/index.ts:25,30`;
   - identity `src/index.ts:24,29`;
-  - notify `src/index.ts:25,30`;
+  - notify `src/index.ts:26,31`;
   - UI `src/app/config-ui/api/audit/route.ts:13,17`.
   - Confirmed by `grep -rn "rejectUnauthorized\|includes('sslmode" services/xstockstrat-{ledger,config,identity,notify,ui}/src`, which matches only those files.
 - Per-service fail-closed module precedent: `services/xstockstrat-config/src/mtls.ts:15-17` throws
   `'mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set (fail-closed)'`.
-- Runtime regimes the copy must satisfy:
-  - Ledger and identity run tests under `node --experimental-strip-types` (`services/xstockstrat-ledger/package.json:13`, `services/xstockstrat-identity/package.json:12`). Erasable syntax only.
-  - Config and notify run `tsc && node --test dist/...` (`package.json:12`, CJS `"module": "commonjs"` in `tsconfig.json`).
+- Runtime regimes the copy must satisfy (re-spec 2026-10-29, after feature 252):
+  - All four backends now build and test tsc-first under CJS: `test` is `tsc && node --test dist/__tests__/*.test.js`
+    and `test:coverage` is `tsc && c8 ... --lines 40 node --test dist/__tests__/*.test.js` (ledger
+    `package.json:13-14`, identity `:12-13`, config `:12-13`, notify `:12-13`); each `tsconfig.json` sets
+    `"module": "commonjs"` and includes `src/**/*`. Ledger and identity no longer use strip-types, so the
+    erasable-syntax rule below is harmless rather than required.
   - UI uses the Next bundler plus vitest (`services/xstockstrat-ui/vitest.config.ts:20`).
 - pg precedence: see § P-03 gate result (`pg/lib/connection-parameters.js:59-60`; `pg-connection-string/index.js:39-41,73-78,100-148`).
 
@@ -214,12 +217,13 @@ for s in ledger config identity notify; do (cd services/xstockstrat-$s && pnpm r
 **Codebase Evidence**:
 - Node test style is `import { describe, it } from 'node:test'` plus `import assert from 'node:assert/strict'`
   (`services/xstockstrat-identity/src/__tests__/mtls.test.ts:6-7`).
-- The import specifier differs by runner:
-  - Ledger and identity use the `.ts` extension: `import * as mtls from '../mtls.ts'` (`services/xstockstrat-identity/src/__tests__/mtls.test.ts:13`, `services/xstockstrat-ledger/src/__tests__/mtls.test.ts:13`).
-  - Config and notify omit it: `from '../mtls'` (`services/xstockstrat-config/src/__tests__/mtls.test.ts:13`).
+- The import specifier is extensionless in all four backends (re-spec 2026-10-29, after feature 252):
+  `import * as mtls from '../mtls'` (ledger `src/__tests__/mtls.test.ts:13`, identity `:15`, config `:12`, notify
+  `:14`). Their `tsconfig.json` has no `allowImportingTsExtensions` and includes `src/**/*`, so tests are compiled
+  by `tsc` and a `'../dbTls.ts'` specifier would fail with TS5097.
 - UI vitest picks up `src/**/*.test.ts` and measures coverage over `src/lib/**` (`services/xstockstrat-ui/vitest.config.ts:20,25`).
-- Feature 252 dependency (P-06): fails.md:2223-2225 records strip-types suites that skip silently through a `before()`
-  import guard. This file must not use such a guard.
+- P-06: fails.md:2223-2225 records strip-types suites that skipped silently through a `before()` import guard. After
+  252 the suites run tsc-first, so the risk is moot, but this file still adds no such guard.
 
 **TDD**: `red-green required` — RED: the file fails to import `resolveDbConnection` before Step 1 lands; GREEN after.
 
@@ -227,8 +231,7 @@ for s in ledger config identity notify; do (cd services/xstockstrat-$s && pnpm r
 
 **Instructions**:
 1. Write one test table and put the same rows in all five files. Only the import line and the test API differ:
-   - ledger and identity: `import { resolveDbConnection } from '../dbTls.ts'`;
-   - config and notify: `from '../dbTls'`;
+   - ledger, identity, config and notify: `import { resolveDbConnection } from '../dbTls'`;
    - UI: `from './dbTls'`, using vitest `describe/it/expect`.
 2. Use the placeholder `const CA = '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----'`. It is a
    single-consumer inline literal, so it is C-13 compliant. Use `const BASE = 'postgres://u:secretpw@db.example:25060/xstockstrat'`.
@@ -252,10 +255,10 @@ for s in ledger config identity notify; do (cd services/xstockstrat-$s && pnpm r
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ledger && node --experimental-strip-types --test --test-reporter=spec src/__tests__/dbTls.test.ts && pnpm run test:coverage && pnpm run lint
-cd ../xstockstrat-identity && node --experimental-strip-types --test --test-reporter=spec src/__tests__/dbTls.test.ts && pnpm run test:coverage && pnpm run lint
-cd ../xstockstrat-config && pnpm run test:coverage && pnpm run lint
-cd ../xstockstrat-notify && pnpm run test:coverage && pnpm run lint
+cd services/xstockstrat-ledger && pnpm run build && node --test --test-reporter=spec dist/__tests__/dbTls.test.js && pnpm run test:coverage && pnpm run lint
+cd ../xstockstrat-identity && pnpm run build && node --test --test-reporter=spec dist/__tests__/dbTls.test.js && pnpm run test:coverage && pnpm run lint
+cd ../xstockstrat-config && pnpm run build && node --test --test-reporter=spec dist/__tests__/dbTls.test.js && pnpm run test:coverage && pnpm run lint
+cd ../xstockstrat-notify && pnpm run build && node --test --test-reporter=spec dist/__tests__/dbTls.test.js && pnpm run test:coverage && pnpm run lint
 cd ../xstockstrat-ui && pnpm exec vitest run src/lib/dbTls.test.ts && pnpm run test:coverage && pnpm run lint
 # coverage threshold: 40% in every service (c8 --lines 40 for the four backends; vitest src/lib 40% for UI)
 # confirm the spec reporter lists every AC-tagged test name (non-zero assertion count; P-06)
@@ -278,8 +281,8 @@ cd ../xstockstrat-ui && pnpm exec vitest run src/lib/dbTls.test.ts && pnpm run t
 - `.github/workflows/ci.yml:63`: `xstockstrat-ui:         ['services/xstockstrat-ui/**']`. The filter block runs
   `:39-71` and has no `.do` entry. recon cited `:62`; the line has since drifted to `:63`.
 - `node-test` runs the whole Node matrix, including `xstockstrat-ui`, when any of
-  `xstockstrat-{config,ledger,identity,notify,ui}`, `proto`, `node-shared` or `ci` matches (`ci.yml:540-549`, matrix
-  `:550-565`).
+  `xstockstrat-{config,ledger,identity,notify,ui}`, `proto`, `node-shared` or `ci` matches (job `ci.yml:547`,
+  `if:` `:550-558`, matrix `:559-574`).
 - `yaml` is absent from `services/xstockstrat-ui/package.json`. It is already in the lockfile as a transitive dep:
   `yaml@2.9.0` at `pnpm-lock.yaml:6372,12592`.
 
@@ -315,19 +318,23 @@ pnpm install --frozen-lockfile
 **Reviewers**: `xstockstrat-ledger` owner — append-only invariant, event ordering (LISTEN/NOTIFY client boot); Security — fail-closed TLS verification
 
 **Codebase Evidence**:
-- `services/xstockstrat-ledger/src/index.ts`:
-  - `const databaseUrl = process.env.DATABASE_URL ?? ''` `:18`;
-  - `new ConfigWatcher(configEndpoint, 'ledger')` `:22`, whose constructor calls `mtls.clientCredentials()` (`src/services/configWatcher.ts:33`);
-  - `waitForSnapshot(90_000)` `:23`;
-  - inline block `:26-39`: `sslDisabled`, `catch { /* keep original if URL parsing fails */ }` `:33`, `rejectUnauthorized: !!caCert` `:37`;
-  - `new Pool({ connectionString: dbUrl, ..., ssl: sslOption })` `:40-46`;
-  - `await pool.query('SELECT 1')` `:47`;
-  - `new EventNotifier(() => new Client({ connectionString: dbUrl, ssl: sslOption }))` `:51`;
-  - `main().catch(... console.error('Fatal error:', err); process.exit(1))` `:85-88`.
+- `services/xstockstrat-ledger/src/index.ts` (re-spec 2026-10-29, after feature 248):
+  - `import { makeListenerClient, makeResolveRow } from './services/eventRowResolver'` `:11`;
+  - `configEndpoint` `:17`; `const databaseUrl = process.env.DATABASE_URL ?? ''` `:19`;
+  - `new ConfigWatcher(configEndpoint, 'ledger')` `:23`, whose constructor calls `mtls.clientCredentials()` (`src/services/configWatcher.ts:33`);
+  - `waitForSnapshot(90_000)` `:24`;
+  - inline block `:27-40`: `sslDisabled` `:27`, `catch { /* keep original if URL parsing fails */ }` `:34`, `rejectUnauthorized: !!caCert` `:38`;
+  - `new Pool({ connectionString: dbUrl, ..., ssl: sslOption })` `:41-47`;
+  - `await pool.query('SELECT 1')` `:48`;
+  - `new EventNotifier(makeListenerClient(dbUrl, sslOption, configWatcher), { resolveRow: makeResolveRow(configWatcher) })` `:53-55`;
+  - `main().catch(... console.error('Fatal error:', err); process.exit(1))` `:89-92`.
+- The listener factory takes TLS positionally: `makeListenerClient(connectionString, ssl: ClientConfig['ssl'], config)`
+  returns `() => new Client({ connectionString, ssl, statement_timeout: ... })`
+  (`src/services/eventRowResolver.ts:40-47`). No edit there.
 - Third consumer: the export cursor `new Client({ connectionString: opts.connectionString, ssl: opts.ssl })` reads
-  `(this.pool as any).options` (`src/grpc/ledgerServiceImpl.ts:338-339`), so it inherits whatever the Pool was given.
+  `(this.pool as any).options` (`src/grpc/ledgerServiceImpl.ts:355-356`), so it inherits whatever the Pool was given.
   No edit there.
-- Logger: `const log = getLogger('ledger:server')` `:13`.
+- Logger: `const log = getLogger('ledger:server')` `:14`.
 
 **TDD**: `red-green required` (paired with Step 5)
 
@@ -337,21 +344,24 @@ pnpm install --frozen-lockfile
 1. Add `import { resolveDbConnection } from './dbTls';` beside `import * as mtls from './mtls';` (`:5`). It stays
    extensionless, like the existing imports.
 2. Make `const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);` the **first
-   statement** of `main()`, before `configEndpoint` (`:16`) and before `new ConfigWatcher` (`:22`). Then, when
+   statement** of `main()`, before `configEndpoint` (`:17`) and before `new ConfigWatcher` (`:23`). Then, when
    `dbConn.ssl !== false`, log `log.info('db-tls: verifying server cert against DATABASE_CA_CERT')`. The line
    carries no value (canary, design item 8).
-3. Delete `const databaseUrl` (`:18`) and the inline block `:26-39`.
-4. Pool (`:40-46`): set `connectionString: dbConn.connectionString` and `ssl: dbConn.ssl`. Keep `max` and its comment.
-5. EventNotifier (`:51`): `new Client({ connectionString: dbConn.connectionString, ssl: dbConn.ssl })`.
-6. Do not touch `ledgerServiceImpl.ts`. The export cursor keeps inheriting through `pool.options`.
-7. Exit path: a resolver throw reaches the existing `main().catch` (`:85-88`), and `console.error` prints the message
+3. Delete `const databaseUrl` (`:19`) and the inline block `:27-40`.
+4. Pool (`:41-47`): set `connectionString: dbConn.connectionString` and `ssl: dbConn.ssl`. Keep `max` and its comment.
+5. EventNotifier (`:53`): change only the listener factory's arguments to
+   `makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)`. Keep the `resolveRow` option.
+6. Do not touch `ledgerServiceImpl.ts` or `eventRowResolver.ts`. The export cursor keeps inheriting through
+   `pool.options`, and the listener factory passes `ssl` through unchanged.
+7. Exit path: a resolver throw reaches the existing `main().catch` (`:89-92`), and `console.error` prints the message
    that names `DATABASE_CA_CERT` (FR-1). No new exit path.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ledger && pnpm run build && pnpm run lint
 grep -n "rejectUnauthorized\|includes('sslmode" src/index.ts   # → no output
-grep -c "ssl: dbConn.ssl" src/index.ts                          # → 2 (Pool + EventNotifier)
+grep -c "ssl: dbConn.ssl" src/index.ts                          # → 1 (Pool)
+grep -c "makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)" src/index.ts   # → 1 (EventNotifier)
 ```
 
 ---
@@ -366,35 +376,36 @@ grep -c "ssl: dbConn.ssl" src/index.ts                          # → 2 (Pool + 
 **Reviewers**: `xstockstrat-ledger` owner — boot behaviour of query pool + LISTEN connection; Security — wrong-CA rejection
 
 **Codebase Evidence**:
-- Throwaway-CA fixture to mirror: `mintPki()` and `mintLeaf()` shell out to `openssl` in a `mkdtempSync` dir
-  (`services/xstockstrat-identity/src/__tests__/mtls.test.ts:33-53`; ledger's copy has the same header,
-  `services/xstockstrat-ledger/src/__tests__/mtls.test.ts:1-20`).
+- Throwaway-CA fixture to mirror: `mintLeaf()` and `mintPki()` shell out to `openssl` in a `mkdtempSync` dir
+  (`services/xstockstrat-ledger/src/__tests__/mtls.test.ts:35` and `:43`; identity's copy at
+  `services/xstockstrat-identity/src/__tests__/mtls.test.ts:38` and `:46`).
 - Production entry is `node dist/index.js` (`services/xstockstrat-ledger/Dockerfile:38`). `build` is `tsc`
-  (`package.json:8`), and `tsconfig.json` excludes `src/**/*.test.ts`.
-- Strip-types cannot load `src/index.ts` directly, because extensionless ESM imports fail (§ Spec-time decisions).
-- Test glob: `src/__tests__/*.test.ts` (`package.json:13-14`).
+  (`package.json:8`).
+- Re-spec 2026-10-29 (after feature 252): `tsconfig.json` includes `src/**/*` and excludes only `node_modules` and
+  `dist`, so tests compile to `dist/__tests__/`. Test glob: `tsc && node --test dist/__tests__/*.test.js`
+  (`package.json:13-14`). `dist/index.js` therefore exists whenever the suite runs.
 
 **TDD**: `red-green required` — RED before Step 4:
 - the boot test's stderr lacks `DATABASE_CA_CERT`, because the old code reaches `ConfigWatcher` and throws `mtls: ...`
   or waits on config;
-- the Pool-level test fails on the missing `../dbTls.ts` import before Step 1.
+- the Pool-level test fails to compile on the missing `../dbTls` import before Step 1.
 
 **Covers**: `AC-1, AC-6, AC-2` (AC-2 narrowed to Pool level + Step 15 wiring guard → Deviation Log)
 
 **Instructions**:
 1. **Boot test (AC-1, AC-6).**
-   - In `before()`, run `execFileSync('pnpm', ['run', 'build'], { cwd: process.cwd(), stdio: 'pipe' })`. The
-     tests run from the service dir.
-   - Spawn `process.execPath` with `['dist/index.js']`. Give it an **explicit** env: `{ PATH: process.env.PATH }`
+   - No `pnpm run build` in `before()`: the `test`/`test:coverage` scripts run `tsc` first, and the Verification
+     below builds explicitly. The tests run from the service dir.
+   - Spawn `process.execPath` with `[join(process.cwd(), 'dist/index.js')]`. Give it an **explicit** env: `{ PATH: process.env.PATH }`
      plus `DATABASE_URL`. Do not inherit `DATABASE_CA_CERT` or `MTLS_*`.
    - Case AC-1: `DATABASE_URL=postgres://u:p@db.example:25060/xstockstrat?sslmode=require`.
    - Case AC-6: the same URL with no query string.
    - For each case, assert a non-zero exit code within 15 s, and that stderr contains `DATABASE_CA_CERT` and does
      **not** contain `mtls:`. The second check proves the resolver ran before `ConfigWatcher`.
 2. **Pool-level TLS stub (AC-2).**
-   - Mint two throwaway CAs, A and B, inline with the openssl helpers modelled on `mtls.test.ts:33-53`. Mint a
-     server leaf with `subjectAltName=DNS:localhost` signed by B. The helper has one consumer in this file, so it
-     stays inline (C-13).
+   - Mint two throwaway CAs, A and B, inline with the openssl helpers modelled on ledger `mtls.test.ts` (`mintLeaf`
+     `:35`, `mintPki` `:43`). Mint a server leaf with `subjectAltName=DNS:localhost` signed by B. The helper has one
+     consumer in this file, so it stays inline (C-13).
    - Stand up a `net.createServer` on `127.0.0.1:0`.
      - The first 8-byte packet must be the SSLRequest: `readInt32BE(4) === 80877103`.
      - Answer `'S'`, then upgrade with `new tls.TLSSocket(sock, { isServer: true, cert, key })`.
@@ -406,12 +417,12 @@ grep -c "ssl: dbConn.ssl" src/index.ts                          # → 2 (Pool + 
    - Positive control: repeat with the CA set to B. The stub must record a completed `secure` handshake, and the
      rejection, which comes from the stub closing the socket, must **not** carry either verification code.
    - `pool.end()` in `finally`.
-3. Import with `import { resolveDbConnection } from '../dbTls.ts'` and `import pg from 'pg'`. Add no `before()`
-   skip-guard (P-06).
+3. Import with `import { resolveDbConnection } from '../dbTls'` and `import pg from 'pg'` (`esModuleInterop: true`).
+   Add no `before()` skip-guard (P-06).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ledger && node --experimental-strip-types --test --test-reporter=spec src/__tests__/dbTlsBoot.test.ts
+cd services/xstockstrat-ledger && pnpm run build && node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js
 pnpm run test:coverage   # c8 --lines 40 passes
 pnpm run lint
 # C-13: grep -n "mintPki\|mintLeaf" src/__tests__/dbTlsBoot.test.ts → declared once in this file (single consumer)
@@ -472,12 +483,14 @@ grep -c "ssl: dbConn.ssl" src/index.ts                          # → 1
 **Reviewers**: `xstockstrat-config` owner — boot ordering beside `CONFIG_SECRETS_ENCRYPTION_KEY` fail-fast; Security — wrong-CA rejection
 
 **Codebase Evidence**:
-- `loadMasterKey()` requires `CONFIG_SECRETS_ENCRYPTION_KEY` as 64 hex chars (32 bytes)
-  (`services/xstockstrat-config/src/crypto.ts:13-27`).
+- `loadMasterKey()` (`services/xstockstrat-config/src/crypto.ts:13`) requires `CONFIG_SECRETS_ENCRYPTION_KEY` as
+  64 hex chars (32 bytes), throwing at ~`:16` (range `:13-27`).
 - Test script: `tsc && node --test dist/__tests__/*.test.js` (`package.json:12-13`). `tsconfig.json` compiles tests
   and `dist/index.js` exists when the tests run.
 - Production entry: `CMD ["node", "dist/index.js"]` (`Dockerfile:34`).
-- Openssl fixture pattern: `services/xstockstrat-config/src/__tests__/mtls.test.ts:1-30`.
+- Openssl fixture pattern: `services/xstockstrat-config/src/__tests__/mtls.test.ts` imports `sh`, `mintLeaf` and
+  `setEnv` from `./mtlsTestPki` (`:13`) and defines `mintPki()` at `:31`. The boot test may reuse the
+  `./mtlsTestPki` helpers instead of an inline openssl helper.
 
 **TDD**: `red-green required` — RED before Step 6:
 - AC-1: the old code connects without verification, so it does not exit with `DATABASE_CA_CERT`.
@@ -538,7 +551,10 @@ pnpm run lint
   - `bindAsync` `:55`;
   - `main().catch(... process.exit(1))` `:72`.
 - No boot `pool.query` exists today: the pool is lazy (recon.md:36). The probe pattern to mirror is ledger
-  `await pool.query('SELECT 1'); log.info('Database connected');` (`services/xstockstrat-ledger/src/index.ts:47-48`).
+  `await pool.query('SELECT 1'); log.info('Database connected');` (`services/xstockstrat-ledger/src/index.ts:48-49`).
+- Gate status: the operator crash-loop sign-off is recorded in `context.md` § "Session 2026-10-22 (operator
+  decision — fail-closed boot)" (`:528-531`). The earlier `- [ ]` open-thread items (`:432`, `:491`, `:518`) predate
+  it and were not ticked in place (append-only log).
 - Pool budget: identity is direct, max 2 (root `CLAUDE.md` § Connection Pool Budget). The probe borrows one pooled
   connection and returns it, so no new budget is needed (F-06).
 
@@ -547,8 +563,8 @@ pnpm run lint
 **Covers**: —
 
 **Instructions**:
-0. **Gate:** confirm the operator's crash-loop sign-off is recorded in `context.md` (§ Step Dependencies). If it is
-   refused, skip instruction 4 only and log a Deviation.
+0. **Gate:** confirm the operator's crash-loop sign-off is recorded in `context.md` (§ Step Dependencies; recorded
+   at `context.md:528-531`). If it is refused, skip instruction 4 only and log a Deviation.
 1. Add `import { resolveDbConnection } from './dbTls';` after `import * as mtls from './mtls';` (`:5`).
 2. Make `const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);` the first
    statement of `main()`, before `new ConfigWatcher` (`:20`). Log the canary line when `dbConn.ssl !== false`.
@@ -576,10 +592,13 @@ grep -n "ssl: dbConn.ssl\|pool.query('SELECT 1')" src/index.ts  # → both prese
 **Reviewers**: `xstockstrat-identity` owner — boot behaviour; Security — wrong-CA rejection
 
 **Codebase Evidence**:
-- Same runner as ledger: `node --experimental-strip-types --test src/__tests__/*.test.ts` (`package.json:12-13`).
-- `build: tsc` (`:8`); `tsconfig.json` excludes tests; entry `CMD ["node", "dist/index.js"]` (`Dockerfile:45`).
-- Fixture model: `src/__tests__/mtls.test.ts:33-53`.
-- P-06 / 252: fails.md:2223-2225 (silent skip in this exact suite). The new file must execute visibly.
+- Same runner as ledger after feature 252 (re-spec 2026-10-29): `tsc && node --test dist/__tests__/*.test.js`
+  (`package.json:12-13`).
+- `build: tsc` (`:8`); `tsconfig.json` includes `src/**/*`, so tests are compiled; entry `CMD ["node", "dist/index.js"]`
+  (`Dockerfile:45`).
+- Fixture model: `src/__tests__/mtls.test.ts` `mintLeaf` `:38`, `mintPki` `:46`.
+- P-06: fails.md:2223-2225 (silent skip in the old strip-types suite) is moot after 252, but the new file must still
+  execute visibly (`--test-reporter=spec`).
 
 **TDD**: `red-green required` — RED before Step 8: the boot stderr lacks `DATABASE_CA_CERT` (it hits `mtls:`).
 
@@ -587,15 +606,15 @@ grep -n "ssl: dbConn.ssl\|pool.query('SELECT 1')" src/index.ts  # → both prese
 
 **Instructions**:
 1. Same structure as Step 5:
-   - **boot test (AC-1):** `pnpm run build` in `before()`, spawn `dist/index.js` with an explicit env and a
-     `?sslmode=require` URL with no CA, then assert a non-zero exit and that stderr contains `DATABASE_CA_CERT` and
-     not `mtls:`;
+   - **boot test (AC-1):** no build in `before()` (tsc runs first); spawn `dist/index.js` with an explicit env and
+     a `?sslmode=require` URL with no CA, then assert a non-zero exit and that stderr contains `DATABASE_CA_CERT`
+     and not `mtls:`;
    - **Pool-level TLS stub (AC-2):** a wrong-CA rejection code plus the positive control.
-2. Imports: `from '../dbTls.ts'` and `import pg from 'pg'`. No skip-guard.
+2. Imports: `from '../dbTls'` and `import pg from 'pg'`. No skip-guard.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-identity && node --experimental-strip-types --test --test-reporter=spec src/__tests__/dbTlsBoot.test.ts
+cd services/xstockstrat-identity && pnpm run build && node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js
 pnpm run test:coverage   # c8 --lines 40 passes
 pnpm run lint
 ```
@@ -612,16 +631,16 @@ pnpm run lint
 **Reviewers**: `xstockstrat-notify` owner — stream delivery guarantees, no regression of alert delivery at boot; Security — fail-closed TLS verification
 
 **Codebase Evidence**:
-- `services/xstockstrat-notify/src/index.ts`:
-  - `databaseUrl` `:19`;
-  - `new ConfigWatcher(configEndpoint, 'notify')` `:21`, whose constructor calls `mtls.clientCredentials()`
+- `services/xstockstrat-notify/src/index.ts` (re-spec 2026-10-29; cites shifted +1):
+  - `databaseUrl` `:20`;
+  - `new ConfigWatcher(configEndpoint, 'notify')` `:22`, whose constructor calls `mtls.clientCredentials()`
     (`src/services/configWatcher.ts:35`);
-  - `waitForSnapshot(90_000)` `:22`;
-  - inline block `:25-33`;
-  - `new Pool({ ..., max: parseInt(process.env.DB_POOL_MAX ?? '1', 10), ssl: ... rejectUnauthorized: !!caCert ... })` `:35-44`;
-  - `new FanoutDispatcher` `:46`;
-  - `bindAsync` `:53`;
-  - `main().catch(... process.exit(1))` `:70`.
+  - `waitForSnapshot(90_000)` `:23`;
+  - inline block `:26-34`;
+  - `new Pool({ ..., max: parseInt(process.env.DB_POOL_MAX ?? '1', 10), ssl: ... rejectUnauthorized: !!caCert ... })` `:36-45` (`DB_POOL_MAX` `:40`);
+  - `new FanoutDispatcher` `:47`;
+  - `bindAsync` `:54`;
+  - `main().catch(... process.exit(1))` `:71`.
 - The pool is lazy today (recon.md:42). Budget: notify is direct, max 1, and the probe returns its connection
   before the server binds (F-06).
 
@@ -630,14 +649,14 @@ pnpm run lint
 **Covers**: —
 
 **Instructions**:
-0. **Gate:** confirm the crash-loop sign-off, as in Step 8.
+0. **Gate:** confirm the crash-loop sign-off, as in Step 8 (recorded at `context.md:528-531`).
 1. Add `import { resolveDbConnection } from './dbTls';` after `import * as mtls from './mtls';` (`:5`).
 2. Make `const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);` the first
-   statement of `main()`, before `new ConfigWatcher` (`:21`). Log the canary line when `dbConn.ssl !== false`.
-3. Delete `databaseUrl` (`:19`) and the inline block `:25-33`. The Pool becomes
+   statement of `main()`, before `new ConfigWatcher` (`:22`). Log the canary line when `dbConn.ssl !== false`.
+3. Delete `databaseUrl` (`:20`) and the inline block `:26-34`. The Pool becomes
    `{ connectionString: dbConn.connectionString, max: ..., ssl: dbConn.ssl }`. Keep the `max` comment.
 4. After the Pool, add `await pool.query('SELECT 1'); log.info('Database connected');`, before
-   `new FanoutDispatcher` (`:46`).
+   `new FanoutDispatcher` (`:47`).
 
 **Verification**:
 ```bash
@@ -808,12 +827,14 @@ grep -n "from '@/lib/headers'" src/app/config-ui/api/audit/route.test.ts
 **Codebase Evidence**:
 - Entry to copy verbatim from `.do/app.yaml:434-436`: `- key: DATABASE_CA_CERT` / `scope: RUN_TIME` /
   `value: ${xstockstrat.CA_CERT}`.
-- `.do/app.yaml`: the `xstockstrat-ui` component is at `:601`. Its `DATABASE_URL` is at `:656-658`, there is no CA,
-  and `jobs:` / `db-migrator` follow at `:660-663`.
-- `.do/app.dev.yaml`: the `xstockstrat-ui` component is at `:598`. Its `DATABASE_URL` is at `:658-660`, there is no
-  CA, and `db-migrator` is at `:665`.
-- `${xstockstrat.CA_CERT}` is a DO DB binding, not a `YOUR_*` placeholder, so no `deploy.yml` substitution is needed
-  (`.github/workflows/deploy.yml:186`, recon.md:53).
+- `.do/app.yaml`: the `xstockstrat-ui` component is at `:603`. Its `DATABASE_URL` entry is `:658-660` (`- key` at
+  `:658`, `value: ${xstockstrat.DATABASE_URL}` at `:660`), there is no CA, and `jobs:` / `db-migrator` follow at
+  `:662` / `:665`.
+- `.do/app.dev.yaml`: the `xstockstrat-ui` component is at `:600`. Its `DATABASE_URL` entry is `:660-662`, there is
+  no CA, and `jobs:` / `db-migrator` follow at `:664` / `:667`.
+- `${xstockstrat.CA_CERT}` is a DO DB binding, not a `YOUR_*` placeholder, so no `deploy.yml` substitution is needed:
+  `.github/workflows/deploy.yml` has no `CA_CERT` substitution (recon.md:53; the earlier `:186` cite now points at
+  an unrelated cert-glob loop).
 - Preserve `@AC-8 @feature-147`: the diff adds only `DATABASE_CA_CERT` lines (`docs/sdd/business-rules/platform.feature:11-12`).
 
 **TDD**: `N/A (deploy-spec env binding; behaviour proven by Step 15's AC-5 guard, whose RED run precedes this step)`
@@ -821,9 +842,9 @@ grep -n "from '@/lib/headers'" src/app/config-ui/api/audit/route.test.ts
 **Covers**: —
 
 **Instructions**:
-1. In `.do/app.yaml`, insert the three lines from `:434-436` directly after `:658`
+1. In `.do/app.yaml`, insert the three lines from `:434-436` directly after `:660`
    (`value: ${xstockstrat.DATABASE_URL}` in the `xstockstrat-ui` block), with the same 6-space `- key` indentation.
-2. In `.do/app.dev.yaml`, insert the same three lines directly after `:660`.
+2. In `.do/app.dev.yaml`, insert the same three lines directly after `:662`.
 3. Do not touch `db-migrator` (out of scope per product spec) or any other line.
 
 **Verification**:
@@ -846,14 +867,17 @@ git diff .do/ | grep -c MCP_AGENT_SECRET                                 # → 0
 
 **Codebase Evidence**:
 - `yaml` devDependency from Step 3. The guard runs on `.do`-only PRs through the Step 3 filter, and on any Node
-  service PR through the `node-test` matrix (`ci.yml:540-565`).
+  service PR through the `node-test` matrix (`ci.yml:547-574`).
 - The repo root is four levels above `services/xstockstrat-ui/src/lib/`. CI runs from the full checkout
-  (`actions/checkout@v7`, `ci.yml:567`).
+  (`actions/checkout@v7`, `ci.yml:577`).
 - Parse, don't grep: fails.md:2836 and recon.md:100.
 - The direct-DB components among the five services are each `- name: xstockstrat-<svc>` under the specs' component
-  list: `.do/app.yaml:399,444,493,556,601` and `.do/app.dev.yaml:598` (UI) plus the matching backend blocks.
-- Wiring targets: the four `src/index.ts` files and `src/app/config-ui/api/audit/route.ts`. The only allowed
-  pass-through elsewhere is ledger's export cursor, `ssl: opts.ssl` (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:339`).
+  list: `.do/app.yaml:399,444,493,558,603` and `.do/app.dev.yaml:396,441,490,555,600`.
+- Wiring targets: the four `src/index.ts` files and `src/app/config-ui/api/audit/route.ts`. The allowed `ssl:` hits
+  elsewhere (re-spec 2026-10-29, `grep -rn "ssl:"` over the five non-test `src` trees) are exactly two, both in ledger:
+  the export cursor `ssl: opts.ssl` (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:356`) and the listener
+  factory's parameter annotation `ssl: ClientConfig['ssl'],` (`services/xstockstrat-ledger/src/services/eventRowResolver.ts:42`,
+  feature 248). The ledger listener now receives TLS positionally through `makeListenerClient` (Step 4).
 
 **TDD**: `red-green required` — **execute order is 13 → 15 (RED) → 14 → 15 (GREEN)**; Step 15 is written and
 RED-run before Step 14's `.do` edit exists (if Step 14 was applied first, revert its hunk with
@@ -862,7 +886,7 @@ RED-run before Step 14's `.do` edit exists (if Step 14 was applied first, revert
 the final state. Also capture the negative rows passing (they assert that the check detects a violation).
 GREEN: re-run after Step 14 lands.
 
-**Covers**: `AC-5, AC-2` (AC-2: per-service wiring proof for ledger Pool + EventNotifier, config, identity, notify and the UI route)
+**Covers**: `AC-5, AC-2` (AC-2: per-service wiring proof for ledger Pool + `makeListenerClient` listener, config, identity, notify and the UI route)
 
 **Instructions**:
 1. Header comment, at most 2 lines: state that this is a platform check housed in the UI suite, and that it reads
@@ -883,9 +907,11 @@ GREEN: re-run after Step 14 lands.
    - Assert that no file other than `dbTls.ts` contains `rejectUnauthorized` or `includes('sslmode`.
    - Assert that each of the five entry files contains `resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT)`.
    - Assert that every `/\bssl:\s*([^,}\s]+)/g` match in each entry file captures `dbConn.ssl`.
-   - Assert that ledger `src/index.ts` has at least 2 such matches (Pool + EventNotifier).
-   - Assert that the only other `ssl:` hit across the five `src/` trees is `ssl: opts.ssl` in
-     `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`.
+   - Assert that ledger `src/index.ts` has exactly 1 such match (Pool) and contains
+     `makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)` (listener).
+   - Assert that the only other `ssl:` hits across the five `src/` trees are an allow-list of exactly two:
+     `ssl: opts.ssl` in `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` and
+     `ssl: ClientConfig['ssl']` in `services/xstockstrat-ledger/src/services/eventRowResolver.ts`.
 7. **Synthetic negative for the wiring scan.** Assert that the scan function flags a string containing
    `rejectUnauthorized: !!caCert`. This proves the check is not vacuous.
 
@@ -913,17 +939,17 @@ pnpm run test:coverage && pnpm run lint   # vitest src/lib thresholds (40%) pass
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `## Environment Variables` sections: ledger `CLAUDE.md:108`, config `:107`, identity `:79`, notify `:105`, UI
-  `:276` (where `DATABASE_URL # config-ui audit route only` is at `:296`). `DATABASE_CA_CERT` is undocumented in
+- `## Environment Variables` sections: ledger `CLAUDE.md:117`, config `:125`, identity `:82`, notify `:110`, UI
+  `:278` (where `DATABASE_URL # config-ui audit route only` is at `:298`). `DATABASE_CA_CERT` is undocumented in
   all five (recon.md:104).
-- `docs/patterns/database.md` § `## Connection pooling (PgBouncer)` is at `:93`, followed by `## Approval` at `:146`.
+- `docs/patterns/database.md` § `## Connection pooling (PgBouncer)` is at `:104`, followed by `## Approval` at `:157`.
 - `docs/patterns/dry-guard-rail.md` § `## Exemptions` is at `:72`. The hook is enforced only for
-  `services/xstockstrat-ui/src` (`.husky/pre-commit:10-13`) and is report-only elsewhere (`:18`).
+  `services/xstockstrat-ui/src` (`.husky/pre-commit:10-13`) and is report-only elsewhere (`:19`).
   `.jscpd.json:4` sets `minTokens: 100`.
 - **Spec-time correction to recon.md:104 and design item 9:**
-  - `services/xstockstrat-identity/docs/operations.md:20` runs `uv run scripts/manage-users.py`, a Python/psycopg
-    CLI (`operations.md:16-22`).
-  - `docs/setup/digitalocean.md:555` runs `./scripts/db-migrate.sh force` with golang-migrate.
+  - `services/xstockstrat-identity/docs/operations.md:21` runs `uv run scripts/manage-users.py`, a Python/psycopg
+    CLI (`operations.md:7-24`).
+  - `docs/setup/digitalocean.md:556` runs `./scripts/db-migrate.sh force` with golang-migrate.
   - Neither is a Node `pg.Pool`, so neither "fails to boot" after 266. Both sit outside D-32 (product spec § Out of
     Scope: db-migrator).
   - These two files are **confirm-only**: re-read them and do not edit. The finding is recorded in `context.md`.
@@ -940,9 +966,9 @@ pnpm run test:coverage && pnpm run lint   # vitest src/lib thresholds (40%) pass
      never affects gRPC mTLS (`@AC-4 @feature-210`).
 
    Identity and notify also note that the service now needs the DB to boot (the `SELECT 1` probe).
-2. In the UI `CLAUDE.md` env section, beside `DATABASE_URL` (`:296`), add `DATABASE_CA_CERT`, for the config-ui
+2. In the UI `CLAUDE.md` env section, beside `DATABASE_URL` (`:298`), add `DATABASE_CA_CERT`, for the config-ui
    audit route only. The route returns 500 and logs when the variable is missing on a TLS URL.
-3. In `docs/patterns/database.md`, before `## Approval` (`:146`), add a short `## Node DB TLS (fail-closed)`
+3. In `docs/patterns/database.md`, before `## Approval` (`:157`), add a short `## Node DB TLS (fail-closed)`
    subsection. It names `resolveDbConnection` in the five `dbTls.ts` files, the rule order from Step 1, and that
    the six PgBouncer Go/Python services are out of scope (recon.md:105).
 4. In `docs/patterns/dry-guard-rail.md` § Exemptions, add one bullet:
@@ -951,7 +977,7 @@ pnpm run test:coverage && pnpm run lint   # vitest src/lib thresholds (40%) pass
    - It states that the copies stay per-service because the services use separate Docker build contexts.
    - It names `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` as the hash enforcement for `dbTls.ts`.
    - It says explicitly that this is **not** general permission to copy security code.
-5. Re-read `services/xstockstrat-identity/docs/operations.md:15-22` and `docs/setup/digitalocean.md:550-558`. Make
+5. Re-read `services/xstockstrat-identity/docs/operations.md:7-24` and `docs/setup/digitalocean.md:551-559`. Make
    no edit (see Evidence).
 
 **Verification**:
