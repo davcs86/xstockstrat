@@ -153,6 +153,19 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 >   signatures wholesale; 094 edits only the `ingest_signal` and `emit_alert` **docstring bodies**.
 >   Disjoint lines; 085 (code-completed) lands first and 094 rebases its two docstring edits onto it.
 
+> **Note on 252 `fix-identity-ledger-test-suites` ↔ 248 (and #1262 / 084 / 250 / 241) — rebase-only, no hard ordering row.**
+> 252 makes the identity and ledger impl suites execute (compile-then-test) and deletes every
+> `if (!<subject>) return;` skip guard. None of the overlaps is a field-number / migration / config-key collision:
+>
+> - **#1262 `hotfix/fix-refresh-token-rotation`** — already on `main-dev`; 252 deletes its two
+>   `if (!impl) return;` guards in `${method} rotation is single-use` and keeps the conditional-claim regex assertion.
+> - **248 `fix-ledger-trimmed-notify-payload` ↔ 252 on `ledgerServiceImpl.test.ts` / `eventNotifier.test.ts`.**
+>   248 writes its tests unguarded (a guarded case is a silent pass once 252 lands); whoever lands second
+>   de-guards and merges the other's test changes.
+> - **084 `droplet-compose-deploy`** — `demoted/canceled`; no overlap.
+> - **250 `fix-otel-metrics-logs-gap`** — fix (b) is out of scope in its product-spec; no overlap on the telemetry tests.
+> - **241 `fix-config-audit-author-spoof`** — no overlap (config + agent only).
+
 ---
 
 **Live-Capital Safety program (added 2026-08-04 from an external risk review, cut down 2026-08-04

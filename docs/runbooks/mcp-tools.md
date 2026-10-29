@@ -1105,8 +1105,7 @@ Streamable HTTP transport only.**
 | `key` | string | yes | e.g. `marketdata.fmp.enabled` |
 | `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
 | `value` | string | yes | Converted according to `value_type` |
-| `author` | string | yes | Recorded in `config.config_audit` |
-| `reason` | string | yes | Recorded alongside `author` |
+| `reason` | string | yes | Recorded in `config.config_audit` (`update_reason`); the change is attributed to your verified user id (`x-user-id`), never a parameter (feature 241) |
 | `user_id` | string | no | Per-user override. Omit to write the global value. Per-user secret writes are accepted (feature 224); the value stays redacted on every read edge |
 | `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, key, environment, user_id)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
@@ -1149,11 +1148,11 @@ require a PR" is enforced, not merely conventional.)
   does not update the type column, so for an existing key the stored type wins.
 - Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
 - **Key creation is audited** (feature 091): a `create_key=true` create writes a `config.config_audit`
-  row (author + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
+  row (caller identity + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
   existing `BEFORE UPDATE` audit. Rewriting a key to its existing value still writes no row (the
   update trigger fires only on a value change).
 
-**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → "propagated identity required" (your claims carry no `user_id`; the tool also fails fast at the edge);
 `NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
 
 ---

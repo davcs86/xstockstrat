@@ -1,25 +1,20 @@
-/**
- * Unit tests for EventNotifier — the shared LISTEN/NOTIFY fan-out that decouples
- * live StreamEvents subscribers from the DB query pool.
- *
- * A fake pg Client (no real DB) drives connect / LISTEN / notification / end.
- * Tests gracefully skip if the TypeScript import fails in strip-only mode
- * (parameter properties), matching ledgerServiceImpl.test.ts.
- *
- * Run: node --experimental-strip-types --test src/__tests__/*.test.ts
- */
+// Unit tests for EventNotifier — a FakeClient stands in for pg.Client; no real DB.
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 
 let EventNotifier: any;
 
+// This import must throw on failure — never wrap it in try/catch or early-return on a
+// missing subject; a swallowed import turns every case into a silent pass.
 before(async () => {
-  try {
-    const mod = await import('../services/eventNotifier.js');
-    EventNotifier = mod.EventNotifier;
-  } catch {
-    // Unsupported TypeScript syntax in strip-only mode — tests will be skipped.
-  }
+  const mod = await import('../services/eventNotifier.js');
+  EventNotifier = mod.EventNotifier;
+});
+
+describe('test harness', () => {
+  it('imports the implementation under test', () => {
+    assert.strictEqual(typeof EventNotifier, 'function', 'EventNotifier must import — never skip silently');
+  });
 });
 
 // Minimal pg.Client stand-in: records LISTENs and lets the test push
@@ -69,7 +64,6 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 
 describe('EventNotifier', () => {
   it('LISTENs on the shared channel once connected', async () => {
-    if (!EventNotifier) return;
     const client = new FakeClient();
     const n = new EventNotifier(() => client);
     await n.start();
@@ -80,7 +74,6 @@ describe('EventNotifier', () => {
   });
 
   it('fans out an event to a matching subscriber', async () => {
-    if (!EventNotifier) return;
     const client = new FakeClient();
     const n = new EventNotifier(() => client);
     await n.start();
@@ -93,7 +86,6 @@ describe('EventNotifier', () => {
   });
 
   it('filters by stream_key and event_type', async () => {
-    if (!EventNotifier) return;
     const client = new FakeClient();
     const n = new EventNotifier(() => client);
     await n.start();
@@ -109,7 +101,6 @@ describe('EventNotifier', () => {
   });
 
   it('stops delivering after unsubscribe', async () => {
-    if (!EventNotifier) return;
     const client = new FakeClient();
     const n = new EventNotifier(() => client);
     await n.start();
@@ -123,7 +114,6 @@ describe('EventNotifier', () => {
   });
 
   it('ignores malformed NOTIFY payloads', async () => {
-    if (!EventNotifier) return;
     const client = new FakeClient();
     const n = new EventNotifier(() => client);
     await n.start();
@@ -136,7 +126,6 @@ describe('EventNotifier', () => {
   });
 
   it('one subscriber throwing does not break fan-out to others', async () => {
-    if (!EventNotifier) return;
     const client = new FakeClient();
     const n = new EventNotifier(() => client);
     await n.start();
@@ -149,7 +138,6 @@ describe('EventNotifier', () => {
   });
 
   it('reconnects after a connection error and fires onReconnect', async () => {
-    if (!EventNotifier) return;
     const clients: FakeClient[] = [];
     const n = new EventNotifier(
       () => {
