@@ -448,3 +448,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: the fetch call is wrapped by `ruff format`, and the coverage run deselects the 4 `real_pg` tests so no
   database is started (CI runs them). Both are in the Deviation Log.
 - Next: Step 3 (test: claim release, accepted-only count, abort cleanup, and real SQL).
+
+## Session 2026-10-29 — sdd-execute re-spec rev 2 (sdd-batch-execute)
+
+- Authorization: the operator's standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Checkpoints are unattended
+  ('report'), C-16 promotion is auto-confirmed unless it changes an existing @AC rule, and the merge-train is authorized.
+  The operator alone opens the PR and holds the merge for DB/prod steps. Per-feature blocker decisions were given
+  2026-10-29 through the session's question tool.
+- Branch setup (§5.3): `git merge --no-edit origin/main-dev` into the detached checkout of
+  `origin/feature/fix-fundsignal-emit-accounting`. It merged with no conflicts. `ledger-guard --fix` reported clean,
+  so no repair was needed.
+- Status: already `in-progress` (Steps 1-2 done). No status flip.
+- Re-spec of Steps 3-6 bodies (Codebase Evidence and Instructions line citations only). Re-grepped on the merged tree:
+  - `fundsignal_loop.py`:
+    - Claim INSERT `:247-258`, `row is None` `:259-260`, `_emit_signal` call `:261-263`.
+    - Unscoped UPDATE `:264-272`, `emitted += 1` `:273`, `except _SystemWriteRejected` `:274-282`.
+    - `_score` unpack `:229`, `_warn_unscored` `:230` (def `:365`), `_score` def `:430`.
+    - `_already_emitted` `:391-397`, `_map_directions` `:505-521` (call `:234`), `_quantile` `:667-676`.
+    - `_emit_signal` `:556`, NOT_FOUND raise `:578-582`, return None `:584`.
+    - Best-effort `noqa: BLE001` precedents `:633`/`:663`.
+  - Test harness: `_rpc_error` `:580`, `_identity_loop` `:586`, `_emitted_inserts` `:603`, `_alert_severities` `:609`,
+    `test_quantile_buckets` `:234`, `random.uniform` patch `:547`, 246 spy `:814-831`.
+  - Confirmed as cited, so not changed: the force DELETE `:210-216`, `as_of_date` `:172`, the stale docstring `:9`,
+    the lock `:145`, `tests/conftest.py` (RecordingStub `:90`, FunctionType `:108`, `local_pg` `:375`), and
+    `pyproject.toml:32-33`.
+  - Also confirmed as cited: migrations 003/004 (FK at 004:13, `score numeric` at :11), `CLAUDE.md:513` and
+    `/usr/lib/postgresql/16`.
+- No change to scope, SQL, predicates, TDD gates or Covers. `test_fundsignal_emitted_real_pg.py` is still absent; Step 3
+  creates it.
+- Next: Step 3 (test: claim release, accepted-only count, abort cleanup, and real SQL — RED).
