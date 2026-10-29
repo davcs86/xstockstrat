@@ -1008,3 +1008,24 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
   the main worktree to symlink, so the husky hook does not run (as in Steps 1-7); no `--no-verify` was used.
 - Deviation: three test mechanics (`create=True` patch, elapsed timed around `tc.post`, `getattr` sentinel read).
   See the Deviation Log.
+
+## Session 2026-10-29 — Step 9 — service: Bounded ValidateToken, three-way result, 503 on an identity stall, shared trace id
+
+- Files:
+  - `services/xstockstrat-agent/app/auth.py`: imports `client`; adds the `IDENTITY_UNAVAILABLE` sentinel;
+    `_metadata(trace_id="")` sends `x-trace-id` when set; both ValidateToken calls pass
+    `timeout=client._RPC_TIMEOUT_S`; `validate_bearer_claims(token, trace_id="")` returns the sentinel with a
+    WARNING on DEADLINE_EXCEEDED / UNAVAILABLE and keeps INFO + `None` for every other code.
+  - `services/xstockstrat-agent/app/main.py`: imports `_new_trace_id` at module level and `IDENTITY_UNAVAILABLE`
+    in `build_http_app`. `_authorized` mints the trace id, passes it to ValidateToken, returns the sentinel, and
+    stamps `claims["trace_id"]`. New `_send_identity_unavailable` gives 503 text/plain without
+    WWW-Authenticate. `handle_mcp` checks the sentinel before `if not verdict`.
+- TDD RED (before the change): `tests/test_auth.py` + `tests/test_auth_deadline.py` gave 6 failed / 5 passed,
+  the same six failures Step 8 recorded (for example `None == 'trace-273'` on the claims stamp).
+- TDD GREEN: the five-file Verification run (auth, auth_deadline, oauth, streamable_http_auth,
+  header_propagation) gave 45 passed. The grep shows the timeout, `x-trace-id` and sentinel sites.
+- Verification: ruff check and format are clean. The full suite passed 582, coverage 83.12% (≥40).
+- Tooling: `uv sync --frozen --extra dev`; lockfile unchanged. No root `node_modules` exists in the main worktree,
+  so the husky hook does not run (as in Steps 1-8); no `--no-verify` was used.
+- Deviation: return annotations and the comment wrap only. See the Deviation Log.
+

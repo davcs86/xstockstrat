@@ -722,7 +722,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 9 — service: Bounded ValidateToken, three-way result, 503 on an identity stall, shared trace id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/auth.py` — modify
@@ -1027,3 +1027,10 @@ _Populated by /sdd-execute as implementation proceeds._
     (no third `_rpc_error` helper, C-13), so the RED is an assertion failure, not an `AttributeError`.
   Full suite 6 failed / 576 passed, coverage 83.05% (≥40). **Disposition**: expected per spec; Step 9 GREEN
   re-runs these tests.
+- **Step 9 (2026-10-29)** — implemented as specified. Two presentational differences from the literal text:
+  - `_authorized`'s return annotation widens to `bool | object`, and its docstring states that the sentinel is
+    truthy, so callers test for it before the boolean check. `validate_bearer_claims` is annotated
+    `dict | object | None`.
+  - The `_send_identity_unavailable` constraint comment wraps to two lines (ruff E501, 100 columns).
+  `_new_trace_id` is imported into `app.main`'s module namespace, as the Step 8 note requires. **Disposition**:
+  accepted (no scope change).
