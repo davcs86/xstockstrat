@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute | Steps 3, 4, 6, 7, 8 re-specced after the main-dev merge: line drift in analysis `servicer.py`/`conftest.py`/`ci.yml` and ingest test imports; Step 7 marked done (merge-order.md:91 row already present) |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute | `sequential` mode via /sdd-batch-execute; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29) |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–9 done; C-16 promotion already landed in Step 9 (per-service `fix-template-update-metadata.feature`), batch `platform.feature` plan not applied (would duplicate the (feature, AC) identity); integration PR opened, merge held for operator |
 
 ---
 
@@ -54,4 +55,4 @@ empty-id CREATE semantics also differ across the three template repositories.
 
 ## Next Action
 
-`/sdd-execute fix-template-update-metadata sequential` — open the integration PR (§5.6); Steps 1–9 done 2026-10-29
+Operator: review the integration PR (`feature/fix-template-update-metadata` → `main-dev`) and the C-16 routing note in context.md, then merge
