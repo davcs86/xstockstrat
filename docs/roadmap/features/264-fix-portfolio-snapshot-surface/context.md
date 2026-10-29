@@ -673,3 +673,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: governance entry placement, PLAT-6 line (~L958, not ~L973), and the manual teardown (Deviation Log).
   Out-of-scope changes: none.
 - Open: Step 10 (the two-sided migration-number gate before merge, plus dev-smoke `ListKeys`).
+
+## Session 2026-10-29 — sdd-execute re-spec gate (§5.3), sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints; C-16 promotion auto-confirmed unless it
+  changes an existing @AC rule; merge-train authorized; 255/275 deferred; operator-only DB/prod steps: open PR, hold merge).
+- Status already `in-progress`; no status flip.
+- Branch setup: `git merge --no-edit origin/main-dev` → `f01acaa` (no conflicts). ledger-guard
+  (`--own-slug fix-portfolio-snapshot-surface --base origin/main-dev --fix`) reported clean; no repair needed.
+- Re-spec (Step 10 body only):
+  - Evidence now cites fails.md:2909 (Mistake) / :2911 (Rule).
+  - Adds `config.proto:29` `rpc ListKeys` and agent `list_config_keys(namespace, user_id="")` at `tools.py:1628` (was :1620).
+  - Adds `merge-order.md:77`.
+  - Gate state re-verified: `origin/main-dev` config migrations top out at `030`, so (a) passes and (b) is still unmet.
+  - Instructions item 2 and the Verification smoke line now use the real tool signature. The smoke is marked as an operator/post-deploy action.
+- Step 10 stays `pending`. It is held for the operator per the existing Deviation Log entry; nothing local remains to run.
