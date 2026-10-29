@@ -881,3 +881,13 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
 ### Coverage check
 - Source scenarios: 9. Planned: 9 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped.
 ```
+
+## Session 2026-10-29 — C-16 promotion applied + integration PR
+
+- Promotion plan above applied exactly (auto-confirm under operator standing authorization): created
+  `services/xstockstrat-ledger/acceptance/fix-ledger-trimmed-notify-payload.feature` with AC-1..AC-9 verbatim
+  plus `@feature-248` (step-text diff against `acceptance.feature`: identical). 9 NEW, 0 DUP/OVERLAP/CONFLICT.
+- `status.md` → `code-completed`; feature.md history row added.
+- Integration PR `feature/fix-ledger-trimmed-notify-payload` → `main-dev` opened; merge held for the operator.
+  The PR body records the context-forge "plugin unavailable" note plus the Step 11 manual reconciliation (fails.md:670)
+  and that the Step 9 `ledger-db-test` GREEN is owed on the PR's CI run.
