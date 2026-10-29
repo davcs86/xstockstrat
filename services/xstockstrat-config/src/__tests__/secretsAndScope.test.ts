@@ -19,7 +19,7 @@ process.env.CONFIG_SECRETS_ENCRYPTION_KEY = TEST_KEY;
 
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
-import { HEADER_ACCESS_SCOPE, HEADER_INTERNAL_CALLER } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_INTERNAL_CALLER, HEADER_USER_ID } from '../grpc/authz';
 import { encryptSecret } from '../crypto';
 
 interface Handlers {
@@ -157,7 +157,7 @@ describe('SetConfig encrypts a secret (row-authoritative)', () => {
   after(() => { client?.close(); server?.forceShutdown(); });
 
   function setConfig(req: Record<string, unknown>) {
-    const metadata = md({ [HEADER_ACCESS_SCOPE]: '4' });
+    const metadata = md({ [HEADER_ACCESS_SCOPE]: '4', [HEADER_USER_ID]: 'tester' });
     return new Promise<{ err: any }>((resolve) =>
       client.setConfig(req, metadata, (err: any) => resolve({ err })),
     );
