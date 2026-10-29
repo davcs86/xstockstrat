@@ -529,3 +529,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - **Signed off:** when DB TLS cannot be verified, identity and notify fail their boot `SELECT 1` and crash-loop rather
   than start against an unverified database (gates Steps 8/10). The deploy smoke check is the detection point.
+
+## Session 2026-10-29 — re-spec after main-dev merge (sdd-batch-execute)
+
+- §5.3 branch setup: merged `origin/main-dev` into the detached checkout (normal merge, no conflicts, `56561b39`);
+  ledger-guard clean.
+- Re-spec of Steps 1–17 (step bodies only; directive conditional):
+  - **Feature 252** moved ledger and identity to tsc-first CJS (`tsc && node --test dist/__tests__/*.test.js`,
+    `tsconfig.json` includes `src/**/*`). The new ledger/identity tests now import `'../dbTls'` (a `.ts` specifier
+    would be TS5097) and verify via `pnpm run build && node --test --test-reporter=spec dist/__tests__/<file>.test.js`.
+    The erasable-syntax constraint on `dbTls.ts` is now harmless, not required; the P-06 skip-guard risk is moot.
+  - **Feature 248** routes the ledger listener through `makeListenerClient(connectionString, ssl, config)`
+    (`src/services/eventRowResolver.ts:40-47`). Step 4 instruction 5 becomes
+    `makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)`; its grep expects 1 `ssl: dbConn.ssl`
+    plus 1 `makeListenerClient(...)`. Step 15 asserts exactly 1 `ssl:` match in ledger `index.ts` plus the listener
+    call, and allow-lists exactly two other `ssl:` hits: `ledgerServiceImpl.ts:356` (`ssl: opts.ssl`) and
+    `eventRowResolver.ts:42` (`ssl: ClientConfig['ssl']`).
+  - Line drift refreshed (ledger/notify `index.ts`, `ci.yml` node-test `:547-577`, `.do` UI blocks — Step 14 now
+    inserts after `.do/app.yaml:660` / `.do/app.dev.yaml:662`, service `CLAUDE.md` env sections, `database.md`
+    `## Approval` `:157`).
+  - Steps 6, 11, 12, 13, 17: no mismatches.
+- Note: the header sections (§ Spec-time decisions "boot-test entry", § Step Dependencies P-06 line) still describe
+  the pre-252 strip-types regime and `'../dbTls.ts'`; they were outside the re-spec scope. The step bodies are
+  authoritative where they differ.
+- Steps 8/10 gate: the operator crash-loop sign-off is already recorded (§ "Session 2026-10-22 (operator decision —
+  fail-closed boot)"); the earlier unchecked open-thread items predate it.
