@@ -92,15 +92,18 @@ edge, `GetSecret` allow-list, `is_secret` row-authoritative on write).
 
 ## Author-sentinel conventions
 
-A `SetConfigRequest.author` (or equivalent write-attribution field) written by an automated
-process, not a human operator, uses a `system:<process>` sentinel so an investigator can
-distinguish "an operator clicked Save" from "an automated process wrote this" in the audit log —
-without this convention, both look identical (fails.md 2026-07-01).
+`SetConfigRequest.author` is deprecated and ignored (feature 241). `xstockstrat-config` sets an audit
+row's `changed_by` from the request's propagated identity: a human write is credited to its
+`x-user-id`; an automated write is credited to the `callerID` of the `INTERNAL_CALLER_ALLOWLIST`
+grant that authorized it (`services/xstockstrat-config/src/grpc/authz.ts`) and also carries
+`caller_identity IS NOT NULL` — the column that tells "an operator clicked Save" apart from "an
+automated process wrote this" (fails.md 2026-07-01). A write with neither is rejected
+`INVALID_ARGUMENT`.
 
-| Sentinel | Service | Writer |
+| `changed_by` / sentinel | Service | Writer |
 |---|---|---|
-| `system` | `xstockstrat-indicators` | The seeded fundamentals-scoring formula (`app/formulas/fundamentals_value_quality.py`), documented here retroactively per feature 102 |
-| `system:reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102) — paired with the structural `x-internal-caller`/`caller_identity` mechanism (see `services/xstockstrat-config/CLAUDE.md`), not a free-text convention alone |
+| `trading-reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102); `changed_by` = `caller_identity`. Audit rows written before feature 241 keep the old free-text `system:reconciliation-poller`, so the `/config-ui` audit "By" column shows both spellings |
+| `system` | `xstockstrat-indicators` | Not a config write: the `Formula.author` ownership sentinel on the seeded fundamentals-scoring formula, set from the module's `AUTHOR` constant (`app/formulas/fundamentals_value_quality.py`), never from a request body |
 
 ## Per-Feature Registered Keys
 

@@ -107,7 +107,6 @@ class TestSetConfigSecretWrites:
                 key="marketdata.alpaca.api_key",
                 value_type="string",
                 value="PKREALKEY",
-                author="me",
                 reason="rotate alpaca key",
             )
         # The write is forwarded to the backend (which encrypts it); no refusal, no ListKeys probe.
@@ -130,7 +129,6 @@ class TestSetConfigSecretWrites:
                     key="marketdata.fmp.enabled",
                     value_type="bool",
                     value="true",
-                    author="me",
                     reason="r",
                 )
         write.assert_not_awaited()
@@ -149,7 +147,6 @@ class TestSetConfigForwardsRealScope:
                 key="marketdata.fmp.enabled",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
             )
         assert write.await_args.kwargs["access_scope"] == 15  # admin, not the hardcoded 7
@@ -168,7 +165,6 @@ class TestSetConfigForwardsRealScope:
                 key="marketdata.fmp.enabled",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
             )
         forwarded = write.await_args.kwargs["access_scope"]
@@ -234,7 +230,6 @@ class TestSetConfigCreateKey:
                 key="marketdata.fmp.new_knob",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
                 create_key=True,
             )
@@ -252,7 +247,6 @@ class TestSetConfigCreateKey:
                 key="marketdata.fmp.enabled",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
             )
         assert write.await_args.kwargs["create_key"] is False
@@ -286,22 +280,24 @@ class TestSetConfigRequestParity:
             mock_grpc.secure_channel.return_value = cm
             # A distinct non-default value for every SetConfigRequest field the builder sets so
             # each appears in ListFields(): environment='production' maps to a non-zero enum,
-            # user_id is a per-user scope. trading_mode is deprecated (feature 147) and
-            # intentionally NOT set by the builder, so it is excluded from the expected set below.
+            # user_id is a per-user scope. trading_mode (feature 147) and author (feature 241) are
+            # deprecated and intentionally NOT set by the builder, so both are excluded below.
             await client.set_config(
                 namespace="ns",
                 key="k",
                 value_type="string",
                 value="v",
                 environment="production",
-                author="a",
                 reason="r",
                 access_scope=15,
                 create_key=True,
                 user_id="u-1",
             )
         built = {f.name for f, _ in captured["req"].ListFields()}
-        expected = set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name) - {"trading_mode"}
+        expected = set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name) - {
+            "trading_mode",
+            "author",
+        }
         assert built == expected
 
 
@@ -336,6 +332,88 @@ class TestScopeIsDeploymentBound:
         for tool in ("get_config", "list_config_keys", "set_config"):
             props = server._tool_manager.get_tool(tool).parameters["properties"]
             assert "environment" not in props, f"{tool} still exposes an environment parameter"
+
+    def test_set_config_exposes_no_author_parameter(self):
+        """Feature 241: attribution is the caller's verified x-user-id, never a free-text arg."""
+        props = _make_server()._tool_manager.get_tool("set_config").parameters["properties"]
+        assert "author" not in props
+
+
+class TestSetConfigCarriesNoAuthor:
+    """@AC-4 (feature 241): the outbound SetConfig carries no author; config attributes the write
+    to the bound caller's x-user-id."""
+
+    @staticmethod
+    def _capturing_stub(captured: dict):
+        from gen.config.v1 import config_pb2  # noqa: PLC0415
+
+        async def _capture(req, metadata=None):
+            captured["req"] = req
+            captured["metadata"] = metadata
+            return config_pb2.SetConfigResponse(version="1")
+
+        stub = MagicMock()
+        stub.SetConfig = AsyncMock(side_effect=_capture)
+        return stub
+
+    @staticmethod
+    def _assert_no_author(captured: dict) -> None:
+        assert captured["req"].author == ""
+        assert [v for k, v in captured["metadata"] if k == "x-user-id"] == [ADMIN["user_id"]]
+
+    @pytest.mark.asyncio
+    async def test_set_config_tool(self, bound_admin):
+        from gen.config.v1 import config_pb2_grpc  # noqa: PLC0415
+
+        captured: dict = {}
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch("app.client.mtls") as mock_grpc,
+            patch.object(
+                config_pb2_grpc, "ConfigServiceStub", return_value=self._capturing_stub(captured)
+            ),
+        ):
+            mock_grpc.secure_channel.return_value = cm
+            await _tool_fn(_make_server(), "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="notify",
+                key="notify.push.min_severity",
+                value_type="int",
+                value="3",
+                reason="r",
+            )
+        self._assert_no_author(captured)
+
+    @pytest.mark.asyncio
+    async def test_manage_signal_source_bearer_write(self, bound_admin):
+        from gen.config.v1 import config_pb2_grpc  # noqa: PLC0415
+
+        captured: dict = {}
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch("app.client.mtls") as mock_grpc,
+            patch.object(
+                config_pb2_grpc, "ConfigServiceStub", return_value=self._capturing_stub(captured)
+            ),
+            patch.object(
+                client,
+                "manage_signal_source",
+                AsyncMock(return_value={"slug": "acme", "has_credentials": True}),
+            ),
+        ):
+            mock_grpc.secure_channel.return_value = cm
+            await _tool_fn(_make_server(), "manage_signal_source")(
+                _ctx(ADMIN),
+                operation="register",
+                slug="acme",
+                source_type="mcp_client",
+                bearer_token="sk-live-abc",
+            )
+        self._assert_no_author(captured)
 
 
 class TestSdkWiring:

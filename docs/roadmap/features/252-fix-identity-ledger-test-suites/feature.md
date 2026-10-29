@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -17,6 +17,15 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 3 notes; overlap WARN) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-10-28 | (no status change) | /sdd-execute sequential (re-spec) | Steps 1, 2, 3, 4, 6 re-spec'd against `origin/main-dev` @ `fa40c8a4` (#1262 now on main-dev; ci.yml, ci-overview.md, merge-order.md, fails.md anchors shifted) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | (no status change) | /sdd-execute step 1 | Requirement amendment (C-15) applied: AC-1/AC-4/AC-5 reworded, AC-6 appended, FR-4 narrowed |
+| 2026-10-28 | (no status change) | /sdd-execute step 2 | identity compile-then-test runner landed (`tsc` → `dist/`, config scripts byte-identical); AC-1 and AC-4 green, 78/78 tests, aggregate 81.88% lines |
+| 2026-10-28 | (no status change) | /sdd-execute step 3 | identity impl suite hard-fails: swallowed `before()` import and proto try/catch removed, 67 skip guards removed, harness case added; AC-3/AC-6 identity rows green, 79/79 tests, aggregate 81.88% lines |
+| 2026-10-28 | (no status change) | /sdd-execute step 4 | ledger compile-then-test runner landed (`tsc` → `dist/`, config scripts byte-identical); AC-2 and AC-4 green, 45/45 tests, aggregate 73.7% lines |
+| 2026-10-28 | (no status change) | /sdd-execute step 5 | ledger impl suites hard-fail: swallowed `before()` imports and proto try/catch removed, 38 skip guards removed, harness cases added; AC-3/AC-6 ledger rows green, 47/47 tests, aggregate 73.7% lines |
+| 2026-10-28 | (no status change) | /sdd-execute step 6 | Teardown: Node-leaf "40% enforced" claims narrowed (`lang-node.md`, `ci-overview.md`, `spec-template.md`, root `CLAUDE.md`); follow-up defect `2026-10-28-node-leaf-c8-check-coverage-unenforced-defect` filed (SEV-3, `open`) and logged in the four Node-leaf findings logs; merge-order rebase-only note added; manual context audit (plugin unavailable) |
+| 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute, ALL-DONE) | All 6 steps done; C-16 promotion applied (AC-1, AC-2 to the identity/ledger suites; AC-3..AC-6 to `platform.feature`); integration PR opened to `main-dev` |
 
 ---
 
