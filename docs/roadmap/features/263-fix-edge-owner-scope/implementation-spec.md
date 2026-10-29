@@ -442,18 +442,23 @@ cd services/xstockstrat-ui && pnpm run test:coverage && pnpm run lint
 position lineage / reconciliation status
 
 **Codebase Evidence**:
-- `e2e/mock-backend.ts:393-470`: `LedgerService.queryEvents` has these branches:
+- `e2e/mock-backend.ts:394-471`: `LedgerService.queryEvents` has these branches:
   - `portfolio.position.closed` (`:399`)
   - copilot (`:418`; `copilotThreads.get` at `:419`), keyed by `req.streamKey` in `copilotThreads`
   - `account:` (`:435`), which returns one `reconciliation.mismatch_found`
-  - a default `order.filled` row (`:449-469`), with no top-level `userId` and `sourceService: 'trading'`
+  - a default `order.filled` return (`:450-470`), with no top-level `userId` and `sourceService: 'trading'`
+    (`:456`)
   It has no owner or `ownerOnly` branch.
-- `mock-backend.ts:321-323`: `listBrokerAccounts` returns `BROKER_ACCOUNTS`. That is
+- `mock-backend.ts:321-323`: `listBrokerAccounts` returns `BROKER_ACCOUNTS` (a second router's copy at
+  `:1354` is unrelated and stays untouched). That is
   `[BROKER_ACCOUNT_ALPACA ('alpaca-default'), BROKER_ACCOUNT_IBKR ('ibkr-001')]`
   (`e2e/fixtures/accounts.ts:15-16`, `:24-25`, `:75`).
 - `e2e/fixtures/ledgerEvents.ts:7` imports `TEST_USER_ID` from `./users`
-  (`users.ts:9`, `'test-user-001'`). INVENTORY.md rows `:22-23` and `:81` record that the inline
-  `order.filled` branch "migrate[s] opportunistically".
+  (`users.ts:9`, `'test-user-001'`). INVENTORY.md row `:81` records that the inline `order.filled`
+  branch migrates opportunistically, under the "migrate opportunistically" policy at `:73`.
+- No existing spec depends on the default AAPL `mock-order-001` row: `positions.spec.ts` intercepts its
+  own lineage query, and the api-smoke `QueryEvents` test asserts the shape only when
+  `events.length > 0`.
 - `e2e/trader/api-smoke.spec.ts:194-221` is the BFF `fetch` pattern (`addAuthCookie(page)`,
   `page.goto('/auth/login')`, `page.evaluate(fetch('/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents'…))`).
 - The existing `positions-reconciliation.spec.ts` uses `account:alpaca-default`, which is owned in the
@@ -472,7 +477,7 @@ position lineage / reconciliation status
    - one with an empty `userId` (NULL-owned legacy), symbol `TSLA`, stream `account:acct-legacy`
    Add one catalog row for it to `INVENTORY.md`, and update the `:81` row: the `order.filled` default
    branch now comes from this fixture.
-2. **Mock.** In `mock-backend.ts`, replace the default `order.filled` branch (`:449-469`) so it returns
+2. **Mock.** In `mock-backend.ts`, replace the default `order.filled` return (`:450-470`) so it returns
    the rows from `OWNER_SCOPE_ORDER_FILLED_EVENTS`. When `req.ownerOnly` is true, it returns only the
    rows whose `userId === TEST_USER_ID`; otherwise it returns all three.
    - This mirrors the ledger predicate and lets the spec fail RED against today's BFF.
@@ -528,17 +533,17 @@ stability; Security — a caller reads only their own per-user data, explicit ad
   - `:78` `requestUserId(req)` reads the body `userId ?? user_id ?? ''`
   - `getConfig` `:315`, with `const userId = requestUserId(call.request);` at `:317`, feeding
     `resolveOverlayValues` (`:229-243`, `WHERE … user_id = $3`)
-  - `listKeys` `:525`, with `requestUserId` at `:527` feeding the SQL
-    `(user_id IS NULL OR user_id = $3)` (`:534`)
+  - `listKeys` `:527`, with `requestUserId` at `:529` feeding the SQL
+    `(user_id IS NULL OR user_id = $3)` (`:536`)
   - the `authz` import block is `:3-14`
-- `setConfig` (`:371-376`) is the reference header-derived pattern
-  (`const callerUserId = userIdFrom(call.metadata);`).
+- `setConfig` (`:371`; header read at `:376`) is the reference header-derived pattern
+  (`const callerUserId = userIdFrom(call.metadata);`). Feature 241 (merged) also lives there.
 - `watchConfig` (its `requestUserId` call is at `:283`) and `getSecret` (`:335-343`) must stay
   untouched. That preserves invariant #5 (`services/xstockstrat-config/CLAUDE.md:36`, with the
   "deliberately **open**" text at `:40`), `@AC-13 @feature-147` and NC-B.
 - The config-ui admin view stays exempt:
   - `configUiBff.ts:33` `listKeys: forward(...)` sends `backendHeaders`
-  - `rolesToAccessScope` sets `ADMIN_SCOPE` for `admin` (`ui src/lib/auth.ts:78`, `:89`)
+  - `rolesToAccessScope` sets `ADMIN_SCOPE` for `admin` (`ui src/lib/auth.ts:79`, `:89`)
 
 **TDD**: `red-green required`
 
@@ -555,7 +560,7 @@ stability; Security — a caller reads only their own per-user data, explicit ad
    - Taking `bodyUserId` as a parameter keeps `requestUserId` as the single body reader (DRY).
 2. In `configServiceImpl.ts`, add `boundReadUserId` to the `./authz` import block. At `getConfig:317`,
    use `const userId = boundReadUserId(call, requestUserId(call.request));`. Do the same at
-   `listKeys:527`.
+   `listKeys:529`.
 3. Leave `watchConfig`, `getSecret`, `setConfig` (the 241 overlap zone) and `resolveOverlayValues`
    unchanged. Redaction runs after the bind, inside `buildConfigValue` and the `listKeys` mapping, so
    secrets stay redacted under a bound overlay.
@@ -649,7 +654,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-config/src/__tests__/readUserB
 `docs/runbooks/mcp-tools.md` parity, admin `x-access-scope` forwarded only by management tools
 
 **Codebase Evidence**:
-- `client.py:34-38`: `_Caller = tuple[str, int, str]  # (user_id, access_scope, trace_id)`, and
+- `client.py:35-38`: `_Caller = tuple[str, int, str]  # (user_id, access_scope, trace_id)`, and
   `_CALLER: contextvars.ContextVar[_Caller | None]` defaults to `None`, so stdio and pre-token paths
   carry no caller.
 - `client.py:2035` is `async def get_config(namespace, environment, user_id="")`. It echoes
@@ -808,10 +813,10 @@ grep -n "from tests.conftest\|conftest" services/xstockstrat-agent/tests/test_co
 5. **Findings entry (P-03)** in `docs/context-constitution-findings.md` `## Latent bugs`, as one row,
    feature 263. These are the accepted gaps, each with evidence:
    - `WatchConfig` body `user_id` is unbound (`configServiceImpl.ts:283`)
-   - header-less agent paths are unbound (`client.py:34-38`, stdio)
-   - ledger `streamEvents` (`:182`) and `getEvent` (`:262`) are owner-unscoped
-   - the `order:<id>` NULL-owned `order_intent.*` rows are hidden by branch 3 (`trading.go:2247`,
-     `:2278`)
+   - header-less agent paths are unbound (`client.py:35-38`, stdio)
+   - ledger `streamEvents` (`ledgerServiceImpl.ts:186`) and `getEvent` (`:266`) are owner-unscoped
+   - the `order:<id>` NULL-owned `order_intent.*` rows are hidden by branch 3 (`trading.go:2246`,
+     `:2277`)
    - `owner_only` fails open by default
 6. **`merge-order.md`: verify, do not add.** The operator confirmed the direction on 2026-10-22, and
    the row "257 waits for 263" is already at `merge-order.md:78`. Do not add a duplicate row. Only
