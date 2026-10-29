@@ -5,9 +5,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/xstockstrat/marketdata/internal/source"
 )
@@ -244,5 +247,54 @@ func TestGetFundamentals_OutageIsNotAbsence(t *testing.T) {
 	}
 	if f == nil || f.Symbol != "VOO" || f.PERatio != nil || f.MarketCap != nil {
 		t.Fatalf("empty 200: got %+v, want a VOO row with nil fields", f)
+	}
+}
+
+// assertNoKeyLeak fails unless err names the vendor and path while carrying neither the key nor a *url.Error.
+func assertNoKeyLeak(t *testing.T, err error, wantPath string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "finnhub") || !strings.Contains(msg, wantPath) {
+		t.Fatalf("error %q does not name finnhub and %s", msg, wantPath)
+	}
+	if strings.Contains(msg, "k-secret") || strings.Contains(msg, "token=") {
+		t.Fatalf("error leaked api token: %q", msg)
+	}
+	if errors.As(err, new(*url.Error)) {
+		t.Fatalf("error chain still holds a *url.Error: %q", msg)
+	}
+}
+
+func newLeakClient(baseURL string) *Client {
+	return NewClient(ClientConfig{BaseURL: baseURL, APIKey: "k-secret"})
+}
+
+// Feature 254 @AC-2: a transport failure (connection refused) never reveals the API token.
+func TestTransportError_DoesNotLeakAPIKey_AC2(t *testing.T) {
+	_, err := newLeakClient("http://127.0.0.1:1").GetFundamentals(context.Background(), "AAPL")
+	assertNoKeyLeak(t, err, "/stock/metric")
+}
+
+// Feature 254: a URL that fails to parse never reveals the API token.
+func TestBuildRequestError_DoesNotLeakAPIKey(t *testing.T) {
+	_, err := newLeakClient("http://127.0.0.1:1\x7f").GetFundamentals(context.Background(), "AAPL")
+	assertNoKeyLeak(t, err, "/stock/metric")
+}
+
+// Feature 254: redaction keeps the deadline cause reachable via errors.Is.
+func TestTransportError_PreservesDeadlineCause(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := newLeakClient(srv.URL).GetFundamentals(ctx, "AAPL")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want errors.Is(context.DeadlineExceeded)", err)
+	}
+	if errors.As(err, new(*url.Error)) {
+		t.Fatalf("error chain still holds a *url.Error: %v", err)
 	}
 }

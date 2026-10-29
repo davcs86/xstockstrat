@@ -104,7 +104,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         self._templates_repo: FormulaTemplatesRepository | None = (
             FormulaTemplatesRepository(db_pool) if db_pool is not None else None
         )
-        self._sandbox_sem = asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))
+        self._sandbox_sem = asyncio.Semaphore(config_watcher.sandbox_max_concurrent())
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -488,7 +488,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
         row = await self._repo.get_by_id(request.formula_id)
-        if row is None:
+        if row is None or row.get("pending_intent_id") is not None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
@@ -591,7 +591,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
         row = await self._repo.get_by_id(request.formula_id)
-        if row is None:
+        if row is None or row.get("pending_intent_id") is not None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )

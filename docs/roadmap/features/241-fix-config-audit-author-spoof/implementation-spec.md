@@ -67,8 +67,8 @@ grant has no `peerSan` (`services/xstockstrat-config/src/grpc/authz.ts:66-76`). 
   reconciliation recorded in the PR body).
 - Overlap (Mode B scan, context.md 2026-10-20 sdd-review impl-spec): WARN, file-level only. No config key,
   proto field number or migration NNN collision.
-  - `trading.go` vs 251: line-disjoint. 251 edits only `applyBrokerOrderStatus` (`:1772-1829`, its Step 5 fill
-    payloads); this feature's Step 5 deletes `:2176` in `escalateSystemic` (`:2163-2190`). Rebase only.
+  - `trading.go` vs 251: same function. 251 edits the `SourceService` literal at `:2188` in `escalateSystemic`
+    (`:2163-2190`), Step 5 deletes `:2176`. Whichever merges second reconciles that function by hand.
   - `configServiceImpl.ts` vs 244 (`:115-117,120`, scalar-bounds registry): disjoint from `setConfig`
     (`:371-414`), rebase only. 243 is not confirmed in this file by its docs.
   - `tools.py` / `client.py` / `mcp-tools.md` vs 215 (`_opportunity_to_dict`, other tool docstrings) and 247
@@ -82,7 +82,7 @@ grant has no `peerSan` (`services/xstockstrat-config/src/grpc/authz.ts:66-76`). 
 
 ### Step 1 — proto: Deprecate `SetConfigRequest.author` in place
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/config/v1/config.proto` — modify
@@ -125,7 +125,7 @@ Both commands must exit 0.
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/` — modify (generated)
@@ -170,7 +170,7 @@ Both commands must exit 0.
 
 ### Step 3 — service: config `SetConfig` attributes only propagated identity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -272,7 +272,7 @@ cd services/xstockstrat-config && pnpm run build && pnpm run lint
 
 ### Step 4 — test: config attribution, rejection and fixture identity (AC-1, AC-2, AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigAuthz.test.ts` — modify
@@ -409,7 +409,7 @@ grep -n "__tests__/fixtures" src/__tests__/*.test.ts   # C-13: expect no hits (n
 
 ### Step 5 — service: trading reconciliation poller stops sending `Author`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -452,10 +452,12 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 
 ### Step 6 — test: trading escalation sends the grant callerID and no author (AC-2 trading half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
+- `services/xstockstrat-trading/internal/testdata/caller_ids.go` — create
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify
+- `services/xstockstrat-trading/internal/config/config_test.go` — modify
 
 **Reviewers**:
 - `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only
@@ -469,8 +471,14 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
   if req.Author != "system:reconciliation-poller" {
   ```
 - `TestReconcileTick_BelowThreshold_NoEscalation` reuses the fake (`:805-811`).
-- `TestWatcher_SetConfig_AttachesMetadata` (`internal/config/config_test.go:211-244`) already pins the transport
-  header (recon.md:123-126).
+- `TestWatcher_SetConfig_AttachesMetadata` (`internal/config/config_test.go:211`) already pins the transport
+  header (recon.md:123-126). It and the test after it already use the literal `"trading-reconciliation-poller"`
+  as a test value at `config_test.go:232`, `:238`, `:239` and `:255` (`package config`, internal test).
+- The production value is `trading.go:2168` `s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", ...)`.
+- C-13 Go home `services/xstockstrat-trading/internal/testdata/` exists (`package testdata`; `order_rows.go`,
+  `offline_history.go`, feature 240). Precedent consumer in this package: `trading_offline_test.go:27` imports
+  `"github.com/xstockstrat/trading/internal/testdata"`. `testdata` imports only `time`, protobuf and the
+  `commonv1`/`tradingv1` gen packages, so importing it from `internal/config` tests creates no cycle.
 - Reading `req.Author` after Step 1 would trip SA1019. The proto-reflection read below names no deprecated Go
   symbol, so the test needs no nolint (recon.md:118-122: trading has no `nolint:staticcheck` today).
 
@@ -487,8 +495,14 @@ both trees.
    - **Mandatory pin.** `setter.callerIDs[0] != "trading-reconciliation-poller"` → `t.Errorf(...)`.
    - **RED.** `fd := req.ProtoReflect().Descriptor().Fields().ByName("author")`, and
      `if req.ProtoReflect().Has(fd) { t.Errorf("SetConfig must not send the deprecated author field") }`.
-3. C-13: `"trading-reconciliation-poller"` already appears as a test literal only here, and `internal/testdata/`
-   does not exist. The literal stays inline as a single consumer.
+3. C-13 (second consumer file → centralize; re-decided 2026-10-28, see Deviation Log):
+   - Create `internal/testdata/caller_ids.go` (`package testdata`) declaring
+     `const ReconciliationPollerCallerID = "trading-reconciliation-poller"`, with a ≤2-line comment that it must
+     equal the config `INTERNAL_CALLER_ALLOWLIST` grant the poller authenticates as.
+   - Use `testdata.ReconciliationPollerCallerID` in the new Step 6 assertion (import
+     `"github.com/xstockstrat/trading/internal/testdata"` in `trading_reconciliation_test.go`).
+   - Replace the four literals at `config_test.go:232`, `:238`, `:239`, `:255` with the constant (add the same
+     import). No production code changes: `trading.go:2168` keeps its literal.
 
 **Verification**:
 ```bash
@@ -497,7 +511,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run '
   GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && \
   GOWORK=off go tool cover -func=coverage.out | grep "^total:" && \
   GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include="*_test.go"   # ≤1 declaration site per file
+grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include="*.go"   # expect: trading.go:2168 and internal/testdata/caller_ids.go only
 ```
 - The new logic is in `internal/service/`, which is excluded from CI coverage measurement. No threshold applies
   to it; confirm only that the total stays ≥ 40%.
@@ -507,7 +521,7 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
 
 ### Step 7 — service: agent sends no free-text `author` (set_config, manage_signal_source, instantiate_template)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -520,28 +534,30 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
 
 **Codebase Evidence**:
 - `set_config` tool:
-  - `tools.py:1642` `async def set_config(`, with param `:1648` `author: str,`;
-  - docstring `:1663` `author: who is making the change — required, and recorded in config.config_audit.`
-    and `:1664` `reason: why — required, and recorded alongside author.`;
-  - `:1683` `access_scope = _caller_access_scope(ctx, "set_config")`;
-  - forward `:1694` `author=author,`.
+  - `tools.py:1651` `async def set_config(`, with param `:1657` `author: str,`;
+  - docstring `:1672` `author: who is making the change — required, and recorded in config.config_audit.`
+    and `:1673` `reason: why — required, and recorded alongside author.`;
+  - `:1692` `access_scope = _caller_access_scope(ctx, "set_config")`;
+  - forward `:1703` `author=author,`.
 - `_write_source_bearer`:
   - `tools.py:341` `async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token: str) -> str:`;
   - `:353` `author=tool,`;
   - `:354` `reason=f"bearer for signal source {slug}",`;
   - `:357` `user_id=_caller_user_id(ctx, tool),`.
-  - Callers: `instantiate_template` (`:1222`) and `manage_signal_source` (`:1309`).
-- `client.py:2094` `async def set_config(`, with param `:2100` `author: str,` and the request field `:2142`
-  `author=author,`. Metadata `:2149` `_metadata(("x-access-scope", str(access_scope)))`. `x-user-id` comes from
-  the bound caller (`client.py:59-80`, appended when non-empty at `:75-76`).
+  - Callers: `instantiate_template` (`:1230`) and `manage_signal_source` (`:1317`).
+- `client.py:2095` `async def set_config(`, with param `:2101` `author: str,` and the request field `:2143`
+  `author=author,`. Metadata `:2150` `_metadata(("x-access-scope", str(access_scope)))`. `x-user-id` comes from
+  the bound caller (`_metadata`, `client.py:59`, appended when non-empty at `:76-77`).
 - Edge binding: `CallerPropagationMiddleware` (`tools.py:190-220`) calls `client.set_caller(...)`
   (`:211-215`; AGENT-4).
 - Fail-fast helper: `_caller_user_id` (`tools.py:155-170`) raises `RuntimeError` on empty claims `user_id`
   (AGENT-3b).
 - Precedent: feature 111 `manage_formula` has no `author` param and derives `"author": user_id`
-  (`tools.py:1109-1113`).
-- Q2 (design.md): the pinned mcp 2.2.0 `ArgModelBase` has no `extra` setting, so an undeclared transport
-  argument is dropped silently. Removal is safe.
+  (`tools.py:1121`).
+- Q2 (design.md): the pinned mcp 2.3.0 (`services/xstockstrat-agent/uv.lock`, feature branch and main-dev)
+  `ArgModelBase` (`mcp/server/mcpserver/utilities/func_metadata.py`) has only
+  `ConfigDict(arbitrary_types_allowed=True)` and no `extra` setting, so an undeclared transport argument is
+  dropped silently. Removal is safe.
 - Header propagation: no new outbound call. `client.set_config` keeps `_metadata(...)`.
 
 **TDD**: `red-green required` (Step 8 is the paired test)
@@ -550,14 +566,14 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
 
 **Instructions**:
 1. **`client.py` `set_config`.**
-   - Remove the `author: str` parameter (`:2100`) and `author=author,` (`:2142`).
+   - Remove the `author: str` parameter (`:2101`) and `author=author,` (`:2143`).
    - Add one docstring line: attribution is the caller's `x-user-id`, never a body field (feature 241).
 2. **`tools.py` `set_config`.**
-   - a. Remove the `author: str` parameter (`:1648`) and the forward at `:1694`.
+   - a. Remove the `author: str` parameter (`:1657`) and the forward at `:1703`.
    - b. Docstring:
-     - delete the `:1663` `author:` line;
-     - reword `:1664` to `reason: why — required, recorded in config.config_audit; the change is attributed to your verified user id.`
-   - c. Directly after `:1683`, add a fail-fast call with a comment of at most 2 lines (C-18, Q5):
+     - delete the `:1672` `author:` line;
+     - reword `:1673` to `reason: why — required, recorded in config.config_audit; the change is attributed to your verified user id.`
+   - c. Directly after `:1692`, add a fail-fast call with a comment of at most 2 lines (C-18, Q5):
      ```python
      # Fail fast at the edge: config attributes the write to x-user-id and rejects an empty one.
      _caller_user_id(ctx, "set_config")
@@ -568,7 +584,7 @@ grep -rn "trading-reconciliation-poller" services/xstockstrat-trading --include=
    - Delete `author=tool,` (`:353`).
    - Change `:354` to `reason=f"{tool}: bearer for signal source {slug}",`. That keeps the tool provenance that
      `changed_by` no longer carries (design.md item 4).
-4. Do not touch the `:1665-1667` per-user-secret docstring drift. It is adjacent and out of scope (design.md §
+4. Do not touch the `:1674-1676` per-user-secret docstring drift. It is adjacent and out of scope (design.md §
    Open Risks); Step 13 records it.
 
 **Verification**:
@@ -582,7 +598,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ### Step 8 — test: agent outbound SetConfig carries no author, the parameter is gone, the probe holds (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify
@@ -676,13 +692,13 @@ grep -n "def bound_admin\|from tests.conftest\|conftest" tests/test_config_tools
 grep -n '"author": "a@b.c"' tests/test_streamable_http_auth.py   # probe kept: 1 hit
 ```
 - `test_set_config_receives_the_real_callers_scope_over_the_real_transport` must pass with `isError is False`
-  against the frozen mcp 2.2.0 lock. That pass is the behavioural confirmation of Q2 (design.md § Open Risks).
+  against the frozen mcp 2.3.0 lock. That pass is the behavioural confirmation of Q2 (design.md § Open Risks).
 
 ---
 
 ### Step 9 — service: UI BFFs drop the `author` stamp (/config-ui, /insights)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
@@ -734,7 +750,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 10 — test: UI BFF setConfig sends the session identity as `x-user-id` and no author
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.test.ts` — create
@@ -747,7 +763,7 @@ cd services/xstockstrat-ui && pnpm run lint
 - `insightsBff.test.ts` harness:
   - `vi.mock('@/lib/connectClients', ...)` (`:9-18`) and `dispatchConnect` import (`:20`);
   - `SignJWT` cookie in `beforeAll` (`:26-33`);
-  - `post(method, body)` (`:40-48`) and `SET_CONFIG` (`:50`);
+  - `post(method, body)` (`:39-48`, `dispatchConnect(` at `:40`) and `SET_CONFIG` (`:49`);
   - the fixture `author: 'user-mallory'` (`:59`) and the assertion `expect(sent.author).toBe(SESSION_USER)` (`:69`);
   - the header-assertion pattern `opts.headers.get(HEADER_USER_ID)` (`:91-92`), with `HEADER_USER_ID` imported
     from `@/lib/headers` (`:4`).
@@ -780,9 +796,10 @@ both trees.
      - `expect(sent.author).toBe('')` (RED);
      - `expect((setConfig.mock.calls[0][1] as { headers: Headers }).headers.get(HEADER_USER_ID)).toBe(SESSION_USER)`
        (mandatory pin).
-2. **Create `configUiBff.test.ts`**, mirroring the `insightsBff.test.ts:1-48` structure:
+2. **Create `configUiBff.test.ts`**, mirroring the `insightsBff.test.ts:1-49` structure:
    - `vi.mock('@/lib/connectClients', () => ({ configClient: { setConfig }, ingestClient: {}, analysisClient: {}, identityClient: {}, indicatorsClient: {} }))`.
-   - `const { dispatchConnect } = await import('@/lib/configUiBff')`.
+   - `const { dispatchConnect } = await import('@/lib/configUiBff')` (the test file does not exist yet; this
+     step creates it).
    - In `beforeAll`, set `process.env.JWT_SECRET = TEST_JWT_SECRET` and
      `cookie = \`access_token=${await signTestJwt(['admin'])}\``. Both helpers are imported from
      `../../e2e/helpers/auth` (C-12).
@@ -808,7 +825,7 @@ grep -n "helpers/auth\|e2e/fixtures" src/lib/configUiBff.test.ts   # C-12: canon
 
 ### Step 11 — docs: file the SetConfig internal-caller peerSan follow-up defect
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`
 **Files**:
 - `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` — create
@@ -856,7 +873,7 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
 
 ### Step 12 — docs: platform patterns and runbooks (config-governance, header-propagation, config-rollout, mcp-tools)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -870,20 +887,20 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
 - `config-governance.md:93` is `## Author-sentinel conventions`.
   - The `:95-98` prose says automated writers use a `system:<process>` `SetConfigRequest.author`.
   - Row `:102` `system` / indicators. Its body author is already ignored:
-    `services/xstockstrat-indicators/app/handlers/servicer.py:391` reads "The author is the x-user-id header
+    `services/xstockstrat-indicators/app/handlers/servicer.py:398` reads "The author is the x-user-id header
     only; the deprecated body author is ignored."
   - Row `:103` `system:reconciliation-poller`.
 - `header-propagation.md:34-46` `### Documented exception: indicators formula author-ownership`.
   - `:38-44` claims "an explicit `request.author` **wins** … `xstockstrat-config`'s `SetConfig` follows the
     same precedence (feature 074)".
-  - The indicators half is already stale (`servicer.py:391`). The config half is fixed by Step 3.
+  - The indicators half is already stale (`servicer.py:398`). The config half is fixed by Step 3.
 - `config-rollout.md`:
   - `:76-80`, the rule text ("either an explicit `author` field … or a propagated `x-user-id`");
   - `:93` bare `key="approval.require_above_notional"`, `:95` `author="platform-team"`, `:100`
     `("x-user-id", "platform-team")`;
   - `:117-119`, the MCP example with `author="platform-team"`;
   - `:122-124`, which claims `environment`/`trading_mode` parameters and "refuses `is_secret` keys", both
-    contradicted by `tools.py:1642-1651` and AGENT CLAUDE.md;
+    contradicted by `tools.py:1651-1660` and AGENT CLAUDE.md;
   - `:139-141`, the STALE Connect block;
   - `:150-163`, the `RolloutConfig` endpoint. `config.proto:20-35` declares only `WatchConfig`, `GetConfig`,
     `SetConfig`, `ListKeys` and `GetSecret`;
@@ -892,11 +909,11 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
 - Migration `029_heal_config_keys_full_dotted.up.sql:24-28` renamed bare keys in the `platform` and `trading`
   namespaces to full-dotted form. As written, the procedures above fail `NOT_FOUND` at the existence gate
   (`configServiceImpl.ts:466-471`).
-- `mcp-tools.md:1096` `### \`set_config\``.
-  - `:1107` is the `| \`author\` | string | yes | Recorded in \`config.config_audit\` |` row.
-  - `:1108` is "Recorded alongside `author`".
-  - `:1151` "row (author + value, `old_value` NULL)".
-  - `:1155` `INVALID_ARGUMENT` → missing author.
+- `mcp-tools.md:1097` `### \`set_config\``.
+  - `:1108` is the `| \`author\` | string | yes | Recorded in \`config.config_audit\` |` row.
+  - `:1109` is "Recorded alongside `author`".
+  - `:1152` "row (author + value, `old_value` NULL)".
+  - `:1156` `INVALID_ARGUMENT` → missing author.
 - Parity rule: platform `@AC-32 @feature-224` (`docs/sdd/business-rules/platform.feature:300`). `plugins/` has
   no `set_config` reference (recon.md:185).
 
@@ -916,7 +933,7 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
      column shows both spellings (design.md § Open Risks).
    - Fix the `:102` `system` row: it is an indicators `Formula.author` ownership sentinel, not a SetConfig
      author. It is set from the formula module's `AUTHOR` constant, not the request body
-     (`servicer.py:391`). If this rewrite cannot be grounded in one read, leave the row and list it in the PR
+     (`servicer.py:398`). If this rewrite cannot be grounded in one read, leave the row and list it in the PR
      body as teardown drift.
 2. **`header-propagation.md:34-46`.** Rewrite the paragraph:
    - Both indicators `RegisterFormula` and config `SetConfig` take identity from headers only. The body
@@ -934,17 +951,17 @@ grep -n "^## Observed\|^## Expected\|^## Reproduction\|^## Evidence\|^## Root ca
        `platform.maintenance_mode` at `:228`).
    - `:100`: `"platform-team"` → `<operator-id>`.
    - `:117-119`: drop `author=` from the MCP example.
-   - `:122-124`, grounded in `tools.py:1642-1651`: say there are no `environment`/`trading_mode` parameters,
+   - `:122-124`, grounded in `tools.py:1651-1660`: say there are no `environment`/`trading_mode` parameters,
      and that `is_secret` keys are writable.
    - `:139-141` STALE block: drop `"author"`.
    - `:150-163`: mark `RolloutConfig` as **not an RPC**. Cite `config.proto:20-35` and point to sequential
      `SetConfig` calls.
 4. **`mcp-tools.md` § `set_config`**
-   - Delete the `:1107` `author` row.
-   - `:1108` `reason` → "Recorded in `config.config_audit` (`update_reason`); the change is attributed to your
+   - Delete the `:1108` `author` row.
+   - `:1109` `reason` → "Recorded in `config.config_audit` (`update_reason`); the change is attributed to your
      verified user id (`x-user-id`), never a parameter (feature 241)".
-   - `:1151` "(author + value" → "(caller identity + value".
-   - `:1155`: `INVALID_ARGUMENT` → "propagated identity required" (claims carry no `user_id`; the tool also
+   - `:1152` "(author + value" → "(caller identity + value".
+   - `:1156`: `INVALID_ARGUMENT` → "propagated identity required" (claims carry no `user_id`; the tool also
      fails fast at the edge).
 
 **Verification**:
@@ -959,7 +976,7 @@ grep -n "request.author\` \*\*wins\*\*" docs/patterns/header-propagation.md     
 
 ### Step 13 — docs: service context files + teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/*/CLAUDE.md`, `services/*/docs/`
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
@@ -1025,7 +1042,7 @@ grep -n "request.author\` \*\*wins\*\*" docs/patterns/header-propagation.md     
    - If the plugin is unavailable, re-read each touched file against the code by hand, and record both the
      unavailability and the reconciliation in the PR body.
    - Record as drift, not fixed:
-     - `services/xstockstrat-agent/app/tools.py:1665-1667` (the per-user-secret docstring that contradicts
+     - `services/xstockstrat-agent/app/tools.py:1674-1676` (the per-user-secret docstring that contradicts
        feature 224, `services/xstockstrat-agent/docs/context-constitution-findings.md:20`);
      - the `config-governance.md:102` row, if Step 12 left it.
 
@@ -1042,3 +1059,93 @@ The PR body must carry the teardown record.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-28 — re-spec (sdd-execute sequential, pre-execution).** Steps 6, 7, 8, 10, 12, 13 re-grounded
+  against the merged `origin/main-dev` tree. Line drift only in 7, 10, 12, 13; Step 8's mcp pin is 2.3.0 (Q2
+  conclusion unchanged). Step 6 C-13 verdict re-decided: `internal/testdata/` now exists (feature 240) and the
+  `"trading-reconciliation-poller"` literal already lives in `internal/config/config_test.go`, so Step 6 would
+  make it a second consumer file — it is centralized as `testdata.ReconciliationPollerCallerID`, and Step 6's
+  Files gain `internal/testdata/caller_ids.go` (create) and `internal/config/config_test.go` (modify).
+- **2026-10-28 — Step 1 verification (CI-equivalent fallback).** The spec's `buf breaking --against
+  "$(git rev-parse --show-toplevel)/.git#branch=feature/fix-config-audit-author-spoof,subdir=packages/proto"`
+  cannot resolve here: no local `feature/fix-config-audit-author-spoof` branch (detached checkout at `origin/…`)
+  and the worktree's `.git` is a file. Ran `buf breaking --against <dir>` on a `git archive` export of
+  `origin/feature/fix-config-audit-author-spoof:packages/proto` instead — same baseline and module config.
+  `buf lint` exit 0, `buf breaking` exit 0 (buf 1.72.0). **Disposition**: CI-equivalent fallback.
+- **2026-10-28 — Step 2 codegen (CI-equivalent fallback).** Ran `./scripts/buf-gen.sh` host-natively rather than
+  via the Docker `Dockerfile.codegen` image, with the CI `proto-freshness` pins: buf 1.72.0, protoc-gen-go v1.36.11,
+  protoc-gen-go-grpc 1.6.2, protoc-gen-connect-go 1.19.2, grpcio-tools 1.80.0 (scratch venv), TS plugins from the
+  committed lockfile (`pnpm install --frozen-lockfile`). The preinstalled `protoc-gen-go` was built with go1.24.7
+  and rewrote an unrelated doc comment in `gen/go/analysis/v1/analysis.pb.go`; it was rebuilt with go1.27.0 (the
+  CI Go) and the regen re-run, after which the gen diff is config-only (7 files). A second run left the diff
+  byte-identical (proto-freshness). **Disposition**: CI-equivalent fallback.
+- **2026-10-28 — Step 3 TDD red/green (process note, no spec change).** The paired test is Step 4, so RED→GREEN
+  was captured with an uncommitted scratch test in the `internalCallerSetConfig.test.ts` loopback harness (AC-1,
+  AC-2, AC-3 ×2): 4/4 failed pre-change (`params[6]` was `'someone-else@example.com'`; AC-3 writes succeeded),
+  4/4 passed post-change; the scratch file was deleted. Between Step 3 and Step 4 the config `pnpm test` suite is
+  red (75/180, every failure the new `propagated identity required` rejection on admin-scope fixtures with no
+  `x-user-id`) — exactly the fixtures Step 4 Instruction 3 updates. **Disposition**: accepted; Step 4 restores green.
+- **2026-10-28 — Step 5 verification (red window + toolchain fallback).** RED→GREEN used an uncommitted scratch
+  test calling `escalateSystemic` with `fakeConfigSetter` and asserting `author` unset via proto reflection: it
+  failed before the change, passed after it, and was then deleted. Two failures remain until Step 6, both from the
+  `req.Author` pin at `trading_reconciliation_test.go:789-790`, which is Step 6's rewrite target:
+  - the full `golangci-lint run` reports 2 SA1019 there (the field has been deprecated since Steps 1-2);
+  - `go test` fails on that pin (`author = ""`).
+  `golangci-lint --tests=false` reports 0 issues. The provisioned golangci-lint v2.14.0 was built with go1.26 and
+  refuses this go1.27 module, so the same version was rebuilt with go1.27.0 in a scratch GOBIN.
+  **Disposition**: accepted; Step 6 restores green.
+- **2026-10-28 — Step 6 verification (TDD red source + toolchain fallback).** Step 5 was already committed, so the
+  RED for the `author`-unset assertion was captured by temporarily re-inserting `Author:
+  "system:reconciliation-poller"` into `escalateSystemic` (the pre-Step-5 shape) in an uncommitted scratch edit:
+  `trading_reconciliation_test.go:797: SetConfig must not send the deprecated author field`. The edit was then
+  reverted, and the test passed against the committed tree. golangci-lint v2.14.0 ran from the same go1.27.0
+  rebuild as Step 5 (`run`, with tests): 0 issues, so the two Step 5 SA1019s are cleared. Step 5's red window
+  is closed. **Disposition**: accepted.
+- **2026-10-28 — Step 7 verification (red window + docstring wrap).** RED→GREEN used an uncommitted scratch test
+  (removed-parameter, AC-4 `set_config` and `manage_signal_source` capture): 3/3 failed before the change
+  (`author` in props; `TypeError` on the missing `author`; `req.author == 'manage_signal_source'`), 3/3 passed
+  after it; the scratch file was deleted. The Instruction 2b `reason:` docstring text is unchanged but wrapped
+  onto two lines (ruff E501, 100 cols). Until Step 8, 7 tests in `tests/test_config_tools.py` fail with
+  `unexpected keyword argument 'author'` — exactly Step 8's break-list (`:110,133,152,171,237,255,297`).
+  **Disposition**: accepted; Step 8 restores green.
+- **2026-10-28 — Step 8 TDD red source (process note, no spec change).** Step 7 was already committed, so RED was
+  captured by temporarily restoring the pre-Step-7 `app/client.py` and `app/tools.py` (from `0b1a737d`) in an
+  uncommitted scratch edit. The four new Step 8 assertions failed exactly as the step's **TDD** predicts:
+  `author` in props; `TypeError` missing `author`; `req.author == 'manage_signal_source'` /
+  `'instantiate_template'`; `author` in `mock_set.await_args.kwargs`. The edit was reverted. GREEN: 521 passed,
+  coverage 81.29%. Step 7's 7-test red window is closed. **Disposition**: accepted.
+- **2026-10-28 — Step 9 verification (red window).** RED→GREEN used an uncommitted scratch vitest file
+  (`configUiBff` and `insightsBff` SetConfig, `author === ''` plus the `x-user-id` pin): 2/2 failed before the
+  change (`expected 'test-user-001' to be ''`), 2/2 passed after it; the scratch file was deleted. Until Step 10,
+  `insightsBff.test.ts` "forces isSecret, createKey, …" fails at `:69` (`expected 'user-mallory' to be
+  'user-alice'`): with the stamp gone, the `:59` fixture `author` passes through `...req`. That is exactly
+  Step 10's break-list (delete `:59`, replace `:69`). **Disposition**: accepted; Step 10 restores green.
+- **2026-10-28 — Step 10 TDD red source (process note, no spec change).** Step 9 was already committed, so RED was
+  captured by temporarily restoring the pre-Step-9 `configUiBff.ts` and `insightsBff.ts` (from `HEAD~1`) in an
+  uncommitted scratch edit. Both new `author === ''` assertions failed as the step's **TDD** predicts
+  (`expected 'test-user-001' to be ''`, `expected 'user-alice' to be ''`); the `x-user-id` pins passed. The edit
+  was reverted. The C-12 `e2e/helpers/auth` import resolved under vitest, so the inline-`SignJWT` fallback was not
+  needed. Step 9's `insightsBff.test.ts:69` red window is closed. **Disposition**: accepted.
+- **2026-10-28 — Step 11 `Impact type` field (template gap, no spec change).** The step's field list omits the
+  defect-filing template's `**Impact type**` header; it was filled as `forgeable-config-write-attribution` in the
+  template's kebab-case style. **Disposition**: accepted.
+- **2026-10-28 — Step 12 header-propagation scope (stale-claim fix inside the rewritten paragraph).** The
+  `:34-46` paragraph also claimed a feature-049 admin-scope override for formula writes and an ownership check
+  against `request.user_id`; both are stale (feature 224 removed the write override; `servicer.py:502` compares
+  against the `x-user-id` reader). Rewritten with the paragraph rather than left contradicting it. The
+  `config-rollout.md` multi-key replacement for `RolloutConfig` is a sequential-`SetConfig` Python loop; the STALE
+  Connect block keeps its bare key (Instruction 3 only drops `"author"` there). **Disposition**: accepted.
+- **2026-10-28 — Step 13 teardown (manual reconciliation; drift recorded, not fixed).** The
+  `/context-forge:context-constitution refresh` skill is not available in this session (only
+  `context-forge:context-scrubber` is listed), so every context file touched in Steps 12-13 was re-read by hand
+  against `configServiceImpl.ts#setConfig` (`:371-415`, INSERT `:515`), `authz.ts` (`:47-56`, `:66`, `:82`, `:114`,
+  `:124`, `:149`), `configUiBff.ts:34-55`, `insightsBff.ts:174-184` and `app/tools.py#set_config`; no further
+  grounded drift in those files. The integration PR body must carry this record. Recorded as drift, not fixed:
+  - the `set_config` per-user-secret docstring is at `services/xstockstrat-agent/app/tools.py:1673-1675` (the spec
+    cites `:1674-1676`); it still contradicts feature 224, as `services/xstockstrat-agent/docs/context-constitution-findings.md:20` records;
+  - the `config-governance.md:102` row: none left. Step 12 rewrote § Author-sentinel conventions (`:92-107`), and its
+    `system` row is now the indicators `Formula.author` sentinel, not a config-write claim.
+  UI-3's rule cell now names the insights per-user secret target row (`userId: claims.user_id`) and the config-ui
+  `environment` fill as the surviving explicit bodies; UI-7 (`:27`) needed no change. The config constitution `:34`
+  cites were re-anchored to `internalCallerAuthorized` `~L379-388`, `callerIdentity` `~L407` and
+  `const author = callerUserId || …` `~L412`. **Disposition**: accepted.

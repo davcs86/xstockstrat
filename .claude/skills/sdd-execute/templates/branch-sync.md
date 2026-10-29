@@ -30,11 +30,16 @@ Variables:
    git checkout <dev-branch>
    git pull origin <dev-branch>
    ```
-5. Merge latest `main-dev` into `<dev-branch>` (feature branch changes win on conflict):
+5. Merge latest `main-dev` into `<dev-branch>` — a normal merge, **never** `-X ours`/`-X theirs` (they silently
+   drop the other side of every conflicting hunk: other features' ledger entries and fixes already on `main-dev`):
    ```bash
-   git merge -X ours origin/main-dev
+   git merge origin/main-dev
+   # on conflict, resolve by hand keeping both sides' intent: docs/roadmap/ledger/{fails,insights}.md and
+   # append-only acceptance suites keep BOTH sides (main-dev first); this feature's own dir keeps the branch side
+   python3 scripts/ledger-guard.py --own-slug <slug> --base origin/main-dev --fix   # must print clean, or repair
    git push origin <dev-branch>
    ```
+   A code conflict whose resolution is not obvious is a blocker for the user, not a side to pick.
    (In sequential mode this `main-dev` merge is the re-spec gate's job, done once per feature in §5.3;
    sequential mode stops here — it does not run step 6.)
 6. **(Default modes only — sequential mode skips this step.)** Create the step sub-branch from

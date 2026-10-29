@@ -43,12 +43,47 @@ _setup_gen_path()
 
 from datetime import date  # noqa: E402
 
+from gen.marketdata.v1 import marketdata_pb2  # noqa: E402
+
 from app.services.evaluator import FundamentalPeriod  # noqa: E402
 
 
 def fund_period(filed_date, **values):
     """One evaluator PIT filing (feature 215 fixtures)."""
     return FundamentalPeriod(filed_date=filed_date, values=dict(values))
+
+
+def fundamentals_row(symbol, missing=(), **metrics):
+    """A real ``marketdata.v1.Fundamentals`` row; ``missing`` is passed through verbatim."""
+    return marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
+
+
+def snapshot_watcher(**values):
+    """A dial-free ConfigWatcher; each value lands in the oneof member matching its Python type."""
+    from gen.config.v1 import config_pb2
+
+    from app.config.watcher import ConfigWatcher
+
+    # __new__ bypasses __init__'s channel + watch-task dial (fails-074: never a live watcher).
+    w = ConfigWatcher.__new__(ConfigWatcher)
+    w.endpoint = "localhost:50060"
+    w.namespace = "analysis"
+    w._snapshot_event = asyncio.Event()
+    snap = config_pb2.ConfigSnapshot()
+    for key, val in values.items():
+        # bool before int: bool is an int subclass.
+        if isinstance(val, bool):
+            snap.values[key].bool_val = val
+        elif isinstance(val, int):
+            snap.values[key].int_val = val
+        elif isinstance(val, float):
+            snap.values[key].float_val = val
+        elif isinstance(val, str):
+            snap.values[key].string_val = val
+        else:
+            raise TypeError(f"snapshot_watcher: unsupported value type for {key}: {type(val)!r}")
+    w._snapshot = snap
+    return w
 
 
 # Feature 215 PIT fixtures: SCHD (an ETF) has no SEC filings; AAPL has quarterly filings carrying

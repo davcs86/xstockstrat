@@ -7,6 +7,7 @@
 **Affected service(s)**: xstockstrat-agent
 **Config-only fix possible**: no
 **Source**: repo-surveyor debt-radar scan (`docs/repo-surveyor/debt-radar-findings.md` @ 4535695), finding D-16. Re-verified against main-dev @ a053b0e on 2026-10-21; current lines below. The single `get_config_value` → `GetConfig` call is already covered by `2026-10-19-agent-get-config-value-no-deadline-defect` (feature `247-fix-agent-getconfig-deadline`) and is excluded here; this report covers every other agent → backend RPC.
+**Cross-reference** (added 2026-10-29): feature 247 excluded `client.get_config` (`GetConfig`, the `get_config` tool) and `register_oauth_client` (`RegisterOAuthClient`, identity, used by `/oauth/register`) from its fix and routes both here (feature 273) instead of filing a separate report.
 
 ## Observed
 
