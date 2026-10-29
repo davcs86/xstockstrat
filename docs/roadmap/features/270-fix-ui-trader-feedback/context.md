@@ -712,3 +712,30 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   - The `errorHandled: true` grep still has 9 hits.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 9 (sdd-batch-execute)
+
+- Step 9 done (D-17) in `services/xstockstrat-ui`:
+  - `src/lib/tradingMode.ts` (new): `toPbTradingMode(mode: EnvironmentMode | null)` maps `live` → LIVE, `paper` →
+    PAPER (PRESERVE `@feature-095`) and `null` → UNSPECIFIED.
+  - `TradingMode` (`app/trader/page.tsx`) and the two local copies in `positions/page.tsx` and
+    `positions/[symbol]/page.tsx` are now `EnvironmentMode | null`. The five `?? 'paper'` defaults are gone.
+  - `OrderForm` sends `toPbTradingMode(mode)` and imports only `BrokerType` from `common_pb`. `useOrders`,
+    `usePortfolio` (`usePortfolio`/`usePositions`/`usePosition`) take `EnvironmentMode | null`, and the four
+    local `toPbMode` lambdas are deleted. Query keys still carry `mode`.
+  - `usePositionLineage` takes `EnvironmentMode | null` and skips the trading-mode clause when `mode === null`.
+  - Empty-state copy omits the mode word when it is unknown: `No orders` (orders page, `OrderBook`),
+    `No open positions`, `No position in {symbol}`. `AccountContext.tsx:59` and `orders/[id]/page.tsx:174` are
+    untouched.
+- TDD (throwaway probe of Step 10's `@AC-3`/`@AC-12` assertions, deleted before commit; prebuilt app,
+  `CI=1 E2E_PREBUILT=1`; RED built from the pre-Step-9 tree):
+  - **Red:** `@AC-3` failed, and the captured PlaceOrder body carried `"tradingMode":"TRADING_MODE_PAPER"`. The
+    four `@AC-12` pages passed (the badge was already null-safe), so AC-12 is a regression guard as the spec
+    predicted.
+  - **Green:** the probe passed 6/6. `order-form.spec.ts` and `orders.spec.ts` passed (25/25 with the probe), and
+    the whole `e2e/trader` suite passed 160/160.
+- Verification: the `?? 'paper'` and `toPbMode` greps have no hits. The OrderForm grep shows `toPbTradingMode` at
+  `:7`/`:140`. `pnpm run lint` exits 0 (only pre-existing warnings), `lint:dup` finds 0 clones, and Vitest passes
+  247/247. `tsc --noEmit` fails only on the pre-existing `e2e/insights/backfills.spec.ts:135-136`.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`. `.next` was
+  bind-mounted onto `/dev/shm` because the root filesystem was full (see the Deviation Log).
+

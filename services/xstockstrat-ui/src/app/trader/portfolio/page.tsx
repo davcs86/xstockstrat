@@ -24,7 +24,7 @@ import { sumPortfolioTotals } from '@/lib/portfolioTotals';
  */
 export default function PortfolioPage() {
   const { accounts, selectedAccountId, environmentMode } = useAccountContext();
-  const mode = environmentMode ?? 'paper';
+  const mode = environmentMode;
   // Combined view: all accounts (null → no account filter).
   const { data: portfoliosData, isLoading, error } = usePortfolios(null);
   const portfolios = portfoliosData?.portfolios ?? [];

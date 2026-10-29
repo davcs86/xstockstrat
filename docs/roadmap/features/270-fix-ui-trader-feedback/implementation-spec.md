@@ -609,7 +609,7 @@ grep -rn "errorHandled: true" services/xstockstrat-ui/src/hooks services/xstocks
 
 ### Step 9 — service: D-17 unknown environment shows no Paper default and sends `TRADING_MODE_UNSPECIFIED`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/tradingMode.ts` — create
@@ -1193,3 +1193,29 @@ _Populated by /sdd-execute as implementation proceeds._
   from `HEAD` before GREEN. The store was kept, so RED failed on the assertion and not on an import. Playwright
   ran under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the same harness Steps 1-7 used.
   **Disposition**: CI-equivalent fallback.
+
+### Step 9 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 9's paired test lives in Step 10's **Files**, so the RED/GREEN
+  cycle ran a throwaway probe spec (`e2e/trader/zz-tdd-probe-step9.spec.ts`) holding Step 10's `@AC-3`
+  (503 `GetTradingEnvironment`, captured PlaceOrder body, no `^paper$` text) and `@AC-12` page-loop assertions.
+  It was deleted before commit; Step 10 authors the real tests. RED was built from the pre-Step-9 tree (the
+  implementation was saved as a patch, the files reset to `HEAD`, then re-applied for GREEN). Playwright ran
+  under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the same harness Steps 1-8 used. **Disposition**:
+  CI-equivalent fallback.
+- **Build output on tmpfs.** The host root filesystem had under 1 GB free (shared with parallel worktrees), and
+  the first `pnpm build` failed with `ENOSPC`. `.next` was bind-mounted onto `/dev/shm` for the RED/GREEN builds;
+  a symlink does not work because Next then cannot resolve externals from `node_modules`. **Disposition**:
+  harness-only; nothing committed.
+- **Probe waits 3 s instead of `networkidle`.** The trader pages hold open streams, so `networkidle` never
+  settles. Step 10 waits for each page's main heading as specified. **Disposition**: probe-only.
+- **Prettier (lint-staged) reformatted the pre-existing long `trading_pb` type import in `useOrders.ts`** and
+  wrapped the new `OrderBook.tsx` empty-state line. Behavior is unchanged. **Disposition**: formatting only.
+- **One comment updated.** `app/trader/page.tsx:17-18` said the mode defaults to 'paper' until the environment
+  is known. That is now false, so it states the null/UNSPECIFIED constraint instead. **Disposition**: inside
+  the step's **Files**; no scope change.
+- **Evidence line drift (no code impact).** `resolveTradingMode` spans `trading.go:3572-3581` (cited
+  `3573-3582`). **Disposition**: noted only; step body not edited (F-09).
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`, and `src/` type-checks clean (`pnpm build` passes).
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.

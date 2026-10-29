@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppShell } from '@/components/trader/AppShell';
-import { useAccountContext } from '@/context/AccountContext';
+import { useAccountContext, type EnvironmentMode } from '@/context/AccountContext';
 import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
 import { useOrders } from '@/hooks/useOrders';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
@@ -81,7 +81,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 
-type TradingMode = 'paper' | 'live';
+type TradingMode = EnvironmentMode | null;
 
 // LineStyle.Dashed = 2 in lightweight-charts.
 const DASHED = 2;
@@ -107,7 +107,7 @@ function PositionDetailInner() {
   const symbol = (params?.symbol ?? '').toUpperCase();
   const searchParams = useSearchParams();
   const { selectedAccountId, environmentMode } = useAccountContext();
-  const mode: TradingMode = environmentMode ?? 'paper';
+  const mode: TradingMode = environmentMode;
 
   const { data: position, error, isLoading } = usePosition(symbol, mode, selectedAccountId);
   const { data: portfolio } = usePortfolio(mode, selectedAccountId);
@@ -577,7 +577,7 @@ function PositionDetailInner() {
 
         {positionNotFound && (
           <CardNotice>
-            No {mode} position in {symbol || 'this symbol'}.{' '}
+            No {mode ? `${mode} ` : ''}position in {symbol || 'this symbol'}.{' '}
             {selectedAccountId
               ? 'You do not hold this symbol in the selected account.'
               : 'Select an account in the header to load the position.'}
