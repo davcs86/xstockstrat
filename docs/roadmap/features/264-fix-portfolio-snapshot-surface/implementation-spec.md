@@ -706,10 +706,11 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
   `list_config_keys(namespace, user_id="")` (`services/xstockstrat-agent/app/tools.py:1628`); its environment is
   fixed to the agent deployment's own `APPLICATION_ENV`, with no `service`/`environment` argument.
 - `docs/roadmap/features/merge-order.md:77` sequences 264 after 243/244/248.
-- Gate state on 2026-10-29 (re-verified after the `origin/main-dev` merge `f01acaa`): `origin/main-dev` tops out at
-  `030` (no 031-033, nothing ≥ 034), so (a) passes. (b) is not met yet: 031, 032 and 033
-  exist only on the 243/244/248 feature branches (all `implementation-ready`), so 264 stays sequenced after them per
-  the Step 6 row.
+- Gate state on 2026-10-29 (re-verified against `origin/main-dev` @ `0099647f`, merged into this branch): config
+  migrations top out at `031_heal_indicators_sandbox_keys_full_dotted` (243 merged via #1334); nothing ≥ 034, so (a)
+  passes. (b) is not met yet: `032` exists only on `origin/feature/fix-python-config-stored-zero` (244) and `033` only
+  on `origin/feature/fix-ledger-trimmed-notify-payload` (248), so 264 stays sequenced after them per the Step 6 row.
+  This feature's own `034_retire_portfolio_snapshot_interval.{up,down}.sql` is present on the branch.
 
 **TDD**: `N/A (verification gate; no code)`
 
