@@ -30,6 +30,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done — portfolio `emitRiskAlert(ctx, userID, msg)` sets `TargetUserId: userID` on both risk alerts (concentration + drawdown); build/lint/service tests green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done — portfolio tests pin `TargetUserId` to the owner on concentration (`@AC-3`) and drawdown (`@AC-9`, new `@AC-6`) risk alerts; red→green, coverage, lint green |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done — analysis live loop sets `target_user_id=definition.user_id` on the strategy-trigger and fundamentals-unavailable alerts; `fundsignal_loop` stays a broadcast; ruff green |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 12 done — analysis tests pin `target_user_id` to the owner on the strategy-trigger (`@AC-4`) and fundamentals-unavailable (`@AC-7`, `@AC-6 @feature-215` extended) alerts; red→green, coverage 88.6%, ruff green |
 
 ---
 
@@ -69,4 +70,4 @@ Changes feature 165 FR-3 broadcast semantics for the push channel.
 
 ## Next Action
 
-`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 12 (test: analysis owner targeting) onward
+`/sdd-execute fix-push-untargeted-broadcast sequential` — Step 13 (docs: agent `emit_alert` broadcast wording) onward

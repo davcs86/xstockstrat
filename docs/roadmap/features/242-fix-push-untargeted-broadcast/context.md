@@ -552,3 +552,17 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   `target_user_id=definition.user_id` hits; `fundsignal_loop.py` has no `target_user_id`.
 - Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`.
 - Out of scope: none.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 12 (analysis owner-targeting tests)
+
+- Step 12 done. `services/xstockstrat-analysis/tests/test_live_loop.py` gains
+  `test_242_ac4_trigger_alert_targets_owner` (`@AC-4`, owner `user-42`, title `Strategy strat-1 entry on AAPL`) and
+  `test_242_ac7_fundamentals_alert_targets_owner` (`@AC-7`, owner `user-42`, title
+  `Strategy strat-2: fundamentals unavailable for MSFT`); `test_ac6_ac5_denied_three_cycles_one_warn_one_alert` now
+  also asserts `target_user_id == "u1"` (still exactly one alert). Ids are inline scenario sentinels (C-13).
+- TDD (P-06). RED against the pre-Step-11 `live_loop.py` (`330afc77~1`, swapped in and restored): 3 failed,
+  `assert '' == 'user-42'` ×2 and `assert '' == 'u1'`. GREEN: `-k "242 or ac6_ac5"` 3 passed.
+- Verification: full suite 1302 passed, coverage 88.60% (≥ 40%); `ruff check .` all passed; `ruff format --check .`
+  113 files already formatted; the conftest grep shows only the pre-existing `from tests.conftest` imports.
+- Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`.
+- Out of scope: none.

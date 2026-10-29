@@ -83,6 +83,21 @@ class TestLiveEvaluationLoopStateTracking:
         assert loop._notify.EmitAlert.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_242_ac4_trigger_alert_targets_owner(self):
+        """@AC-4: a live-loop strategy trigger alert is pushed to the strategy owner only."""
+        loop = _make_loop()
+        defn = analysis_pb2.StrategyDefinition(
+            strategy_id="strat-1", user_id="user-42", display_name="S1"
+        )
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        req = loop._notify.EmitAlert.await_args.args[0]
+        assert req.target_user_id == "user-42"
+        assert req.category == "strategy"
+        assert req.severity == live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING
+        assert req.title == "Strategy strat-1 entry on AAPL"
+
+    @pytest.mark.asyncio
     async def test_no_bars_no_alert(self):
         loop = _make_loop()
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[]))
@@ -1411,6 +1426,24 @@ class TestLiveLoopFundamentalsDenyEntry_feature215:
         assert req.severity == live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING
         assert req.category == "strategy"
         assert f"strategy_id:{self._SID}" in req.tags
+        assert req.target_user_id == "u1"
+
+    @pytest.mark.asyncio
+    async def test_242_ac7_fundamentals_alert_targets_owner(self):
+        """@AC-7: the fundamentals-unavailable alert is pushed to the strategy owner only."""
+        loop = self._loop(self._not_found)
+        defn = self._blend()
+        defn.user_id = "user-42"
+        defn.strategy_id = "strat-2"
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(defn, "MSFT", throttle=0)
+        alerts = self._fund_alerts(loop)
+        assert len(alerts) == 1
+        req = alerts[0].args[0]
+        assert req.target_user_id == "user-42"
+        assert req.category == "strategy"
+        assert req.severity == live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING
+        assert req.title == "Strategy strat-2: fundamentals unavailable for MSFT"
 
     @pytest.mark.asyncio
     async def test_held_exit_still_fires(self):

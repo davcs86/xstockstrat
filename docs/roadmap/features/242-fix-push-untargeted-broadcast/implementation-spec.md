@@ -589,7 +589,7 @@ grep -n "target_user_id" app/engine/fundsignal_loop.py   # none
 
 ### Step 12 — test: analysis owner targeting (strategy trigger + fundamentals-unavailable)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -854,3 +854,9 @@ _Populated by /sdd-execute as implementation proceeds._
   analysis tests in Step 12, so the step-11 RED→GREEN gate ran on an uncommitted scratch test (trigger alert for
   owner `user-42` and fundamentals-unavailable alert for owner `u1` must carry `target_user_id`), deleted before
   commit. Step 12 still owns the committed tests. Spec line cites (`:835-844`, `:851-860`) matched the tree.
+- **Step 12 (2026-10-29) — test mechanics only, no behaviour deviation.** (a) Step 11's production change was
+  already on the branch, so RED was captured by running the new tests against the pre-Step-11 `live_loop.py`
+  (`330afc77~1`), swapped in temporarily and restored byte-identical before GREEN; that file is not in this commit.
+  (b) The severity assertions read `live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING`, as the existing feature-215
+  test does, so the file gains no import. (c) `strategy_id` is not load-bearing in the `_loop` fixtures, so the
+  `@AC-7` test overrides it to `strat-2` and asserts the spec title; it selects the alert with `_fund_alerts`.
