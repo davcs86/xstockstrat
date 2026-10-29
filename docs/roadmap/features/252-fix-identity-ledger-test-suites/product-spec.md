@@ -63,7 +63,7 @@ exact file set, including whether the production `tsc` output may gain compiled 
 FR-1. The identity suite loads the real `IdentityServiceImpl` (and `authz`) and its impl tests execute their assertions.
 FR-2. The ledger suite loads the real `LedgerServiceImpl` and `EventNotifier` and their impl tests execute their assertions.
 FR-3. A test file whose subject module cannot be imported fails the run (non-zero exit), never passes.
-FR-4. The c8 `--lines 40` gate measures the impl modules and still passes.
+FR-4. The c8 coverage report measures the impl modules (a non-zero row for each), and `c8 check-coverage --lines 40` run after `test:coverage` exits 0 over a numeric aggregate. The scripts' `--lines 40` flag alone enforces nothing (unenforced in all four Node leaves; follow-up defect report).
 FR-5. Every existing test passes once it executes; a test that fails for real is a pre-existing defect to fix or record
 in `context.md`, never deleted, skipped or weakened.
 
@@ -82,7 +82,7 @@ None — internal/platform-only: unit-test runner and coverage config for identi
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass after the fix
-(Constitution **C-15**): AC-1 (FR-1), AC-2 (FR-2), AC-3 (FR-3), AC-4 (FR-4). AC-5 (FR-5) is a guard, not
+(Constitution **C-15**): AC-1 (FR-1), AC-2 (FR-2), AC-3 (FR-3), AC-4 (FR-4), AC-6 (FR-3). AC-5 (FR-5) is a guard, not
 `@regression`: it passes vacuously on the buggy code.
 
 No ordering dependency on hotfix #1262: AC-1's mutation check targets `refreshOAuthToken`, present on main-dev.

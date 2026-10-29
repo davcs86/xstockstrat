@@ -733,13 +733,14 @@ func (x *GetSecretResponse) GetFound() bool {
 }
 
 type SetConfigRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Namespace   string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Key         string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Value       *ConfigValue           `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
-	Author      string                 `protobuf:"bytes,4,opt,name=author,proto3" json:"author,omitempty"`
-	Reason      string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
-	Environment v1.Environment         `protobuf:"varint,6,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key       string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value     *ConfigValue           `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	// Deprecated: Marked as deprecated in config/v1/config.proto.
+	Author      string         `protobuf:"bytes,4,opt,name=author,proto3" json:"author,omitempty"` // deprecated (feature 241): ignored; attribution is the propagated x-user-id or authorized x-internal-caller
+	Reason      string         `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	Environment v1.Environment `protobuf:"varint,6,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"`
 	// Deprecated: Marked as deprecated in config/v1/config.proto.
 	TradingMode v1.TradingMode `protobuf:"varint,7,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"` // deprecated (feature 147): ignored
 	// When true, allow this write to CREATE a not-yet-registered key at the exact
@@ -805,6 +806,7 @@ func (x *SetConfigRequest) GetValue() *ConfigValue {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in config/v1/config.proto.
 func (x *SetConfigRequest) GetAuthor() string {
 	if x != nil {
 		return x.Author
@@ -1191,12 +1193,12 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\auser_id\x18\x04 \x01(\tR\x06userId\"?\n" +
 	"\x11GetSecretResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
-	"\x05found\x18\x02 \x01(\bR\x05found\"\xf5\x02\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\"\xf9\x02\n" +
 	"\x10SetConfigRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x128\n" +
-	"\x05value\x18\x03 \x01(\v2\".xstockstrat.config.v1.ConfigValueR\x05value\x12\x16\n" +
-	"\x06author\x18\x04 \x01(\tR\x06author\x12\x16\n" +
+	"\x05value\x18\x03 \x01(\v2\".xstockstrat.config.v1.ConfigValueR\x05value\x12\x1a\n" +
+	"\x06author\x18\x04 \x01(\tB\x02\x18\x01R\x06author\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12D\n" +
 	"\venvironment\x18\x06 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12I\n" +
 	"\ftrading_mode\x18\a \x01(\x0e2\".xstockstrat.common.v1.TradingModeB\x02\x18\x01R\vtradingMode\x12\x1d\n" +

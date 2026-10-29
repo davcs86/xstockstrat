@@ -74,6 +74,19 @@ def set_env(monkeypatch):
     monkeypatch.setattr(oauth_server, "JWT_SECRET", "test-jwt-secret")
 
 
+@pytest.fixture
+def bound_admin():
+    """Bind ADMIN as the outbound caller, as CallerPropagationMiddleware does at the edge."""
+    from app import client  # local import: gen path is set up above
+    from app.scopes import roles_to_access_scope
+
+    token = client.set_caller(ADMIN["user_id"], roles_to_access_scope(ADMIN["roles"]), "trace-241")
+    try:
+        yield
+    finally:
+        client.reset_caller(token)
+
+
 def credentialed_source(**overrides) -> dict:
     """A signal source with has_credentials=True (feature 093, C-13 shared fixture).
 
