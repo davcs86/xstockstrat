@@ -625,3 +625,15 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
   Steps 1-8.
 - [ ] C-10 merge-order pin (273 before 272) and I-1..I-3 in 273's context.md: still outside this writer's scope.
 - [ ] G-1 measurements and the operator threshold, after Step 5 is on dev.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Lifecycle: `implementation-ready` → `in-progress`.
+- **Up-front confirmation (sequential mode entry):** given by the operator's standing authorization (operator chat
+  2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute;
+  unattended checkpoints; merge-train authorized; operator-only DB/prod steps are to open a PR and hold the merge).
+  Checkpoints are `report`. C-16 promotion is auto-confirmed unless it changes an existing @AC rule. No
+  feature-specific blocker decision for 272 was relayed in this unit, so the Step 9 key-scope decision (previous
+  entry) stays open for the operator.
+- Execution order: Steps 1-8 per implementation-spec.md (TDD pairs 1/2, 3/4, 5/6). Step 9 is an operational gate
+  after Step 5 is on dev, and it is blocked on the operator decision above.
