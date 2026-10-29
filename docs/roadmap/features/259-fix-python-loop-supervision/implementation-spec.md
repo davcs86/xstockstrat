@@ -673,7 +673,8 @@ ruff check . && ruff format --check .
 - `_cursor()` `:140-145`; `process_event` `:164` re-reads the cursor `:165` and returns early on
   `event.sequence <= cursor` `:167-168`; self-emissions advance the cursor at `:170-174` (so the park event is skipped
   on the way back in).
-- `_advance_cursor(sequence)` `:399-401` over the `GREATEST` upsert `:403-413` — reused for the park, no new write.
+- `_advance_cursor(sequence)` `:401-403` (own `pool.acquire()` `:402`) delegating to `_advance_cursor_conn` `:405-415`,
+  the `GREATEST` upsert — reused for the park, no new write.
 - Constants block `CONSUMER_NAME` `:37`, `ORDER_EVENTS` `:41-46`, `CLOSE_EVENT` `:47`.
 - Inclusive replay: ledger `StreamEvents` seeds `maxSeq` at `fromSequence-1` and queries `sequence >= $3`
   (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:190-191,239`; context.md r2 rationale), so the cursor's
@@ -734,7 +735,8 @@ ruff check . && ruff format --check .
    A raise in (c) propagates to the reconnect handler without running (d); the re-park on replay is deduplicated by
    the ledger idempotency key.
 6b. Per-attempt DB bound (operator 2026-10-22): apply `_ATTEMPT_DB_TIMEOUT_SECONDS` to every `pool.acquire()`
-   (`:205,268,400` → `acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS)`) and every attempt-path query (`:141` `fetchval` and
+   (`:205` `process_event`, `:269` `_handle_close_event`, `:402` `_advance_cursor` →
+   `acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS)`) and every attempt-path query (`:141` `fetchval` and
    the `execute`/`fetch` calls inside `process_event`) via asyncpg's `timeout=` argument. Do not wrap
    `process_event` in `asyncio.wait_for`.
 7. `run_forever`: inside `async for event in stream:` first set `self._stream_fail_count = 0`, then
