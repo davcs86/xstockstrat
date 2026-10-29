@@ -486,3 +486,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Environment note: the host disk was at 100% (about 40 MB free) during this step; one Edit failed with ENOSPC and
   was retried with no partial write.
 
+
+## Session 2026-10-29 (/sdd-execute sequential (sdd-batch-execute) — second main-dev merge + re-spec)
+
+- Authorization: operator's standing up-front authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints
+  reported, C-16 promotion auto-confirmed unless it changes an existing @AC rule; operator-only DB/prod steps:
+  open the PR and hold the merge). Status was already `in-progress`, so no transition.
+- Merged `origin/main-dev` into the branch (`7759f2b0`, a normal merge with no conflicts); ledger-guard clean.
+- Re-spec of Steps 1, 4, 5, 6 and 9 (the step bodies' evidence/line hints only; no instruction changes):
+  - Step 1: Codebase Evidence now describes the implemented tree (`907fa340`): `pool.connect()` at `:188` inside
+    `connectListener`, backoff constants at `:156-157`, `reloadNamespace` `:288`, `broadcastToSubscribers` `:345`.
+    The false "every Step 1 anchor still matches" line is replaced. Step 1 stays `pending` on the operator
+    pg_terminate_backend check (Deviation Log).
+  - Step 4: `getConfig` `:400` / overlay call `:406`; overlay SELECT `:318-322`; setConfig gates `:541-563`
+    (catch/code 13 `:559-563`); NOT_FOUND `:566-572`.
+  - Step 5: `lastVersion: '0'` `:387`; broadcast `:345-359` (catch `:353-356`); `watchConfig` `:365-398`;
+    `first()` declared at `authz.ts:15`; call form `:499`. The false "every Step 5 anchor still matches" line is
+    replaced.
+  - Step 6: reuse `FakeClient` (test `:104`) and `makeRig()` (`:123`); log capture is the inline
+    `process.stdout.write` mock (about `:358-360`), not a shared helper.
+  - Step 9: CONFIG-1 hints now `reloadNamespace` `:288` / `changedKeys` `:305` (pre-Step-5).
+- Next: Step 4.
