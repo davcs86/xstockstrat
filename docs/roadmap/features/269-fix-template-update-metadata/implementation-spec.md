@@ -498,7 +498,7 @@ grep -c "fix-template-update-metadata" docs/roadmap/features/merge-order.md   # 
 
 ### Step 8 — docs: Durable record of the indicators/ingest real-PG proof gap (debt radar D-41)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/repo-surveyor/`
 **Files**:
 - `docs/repo-surveyor/debt-radar-findings.md` — modify

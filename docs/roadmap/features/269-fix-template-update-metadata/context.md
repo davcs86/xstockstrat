@@ -491,3 +491,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: `pnpm install --frozen-lockfile --ignore-scripts` in the worktree for the husky hook.
 - Out of scope: none. Remaining: Step 8 (real-PG gap record), Step 9 (C-16 promotion at integration).
 
+## Session 2026-10-29 — sdd-execute sequential, Step 8 (debt radar D-41)
+
+- File: `docs/repo-surveyor/debt-radar-findings.md` — one **Status (feature 269)** bullet appended after D-41's
+  **Routing** bullet, text verbatim from Step 8 **Instructions**; no other finding edited.
+- TDD: N/A (docs). Verification: `grep -n "Residual proof gap (accepted, follow-up)"` → line 417. Cited files
+  re-checked: both repositories exist, `tests/test_strategy_templates_real_pg.py` exists (Step 4), and indicators/ingest
+  tests still have zero `real_pg`/`local_pg` matches.
+- Line drift only (no deviation): `local_pg` is at analysis `tests/conftest.py:403`; the bullet cites no line numbers.
+- Out of scope: none. Remaining: Step 9 (C-16 promotion at integration).
+
