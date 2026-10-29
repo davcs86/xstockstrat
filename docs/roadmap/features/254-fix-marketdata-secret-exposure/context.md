@@ -514,3 +514,108 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   longer holds the integration PR. It is **not yet performed**: after the merge deploys to dev, the operator's session
   checks marketdata `GetSecret` at startup (Grafana logs/traces, or the Verification grep expecting 0) and records the
   boot timestamp and match count here. A match still means reverting the Step 7 `authz.ts` `peerSan` line alone.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-marketdata-secret-exposure (feature 254)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/254-fix-marketdata-secret-exposure/acceptance.feature (7 scenarios, AC-1..AC-7). Affected services (feature.md Reviewers): xstockstrat-marketdata, xstockstrat-config.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 (FR-1) | services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature | CREATE | NEW | FMP client error text; no existing suite asserts it |
+| AC-2 (FR-2) | same marketdata file | CREATE (same file) | NEW | Finnhub client error text |
+| AC-5 (FR-3) | same marketdata file | CREATE (same file) | NEW | GetFundamentals UNAVAILABLE status message |
+| AC-7 (FR-3) | same marketdata file | CREATE (same file) | NEW | GetFundamentalsMulti UNAVAILABLE status message |
+| AC-3 (FR-4) | services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature | CREATE | NEW | GetSecret refused without marketdata SAN. Tightens the config @feature-147 @AC-4/@AC-5 allow-list rule; see Notes |
+| AC-4 (FR-5) | same config file | CREATE (same file) | NEW | marketdata still resolves with SAN xstockstrat-marketdata. Adds the SAN precondition that @feature-147 @AC-4 did not state |
+| AC-6 (FR-4) | same config file | CREATE (same file) | NEW | No peer SAN is refused. Replaces the "no SAN required" assertion in perUserSecrets.test.ts:236 |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature (CREATE) ---
+# Promoted from docs/roadmap/features/254-fix-marketdata-secret-exposure/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-254` tag.
+# Durable business rules xstockstrat-marketdata already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-marketdata - vendor API keys never leak through errors
+  Vendor API keys must not appear in transport errors (D-39) or in gRPC status messages returned to callers.
+
+  @AC-1 @FR-1 @regression @feature-254
+  Scenario: An FMP transport failure never reveals the API key
+    Given an FMP client configured with api key "k-secret" and base URL "http://127.0.0.1:1"
+    When GetFundamentalsMulti is called for "AAPL" and the HTTP transport fails
+    Then an error is returned that names "fmp" and the request path "/stable/quote"
+    And the error text does not contain "k-secret"
+    And the error text does not contain "apikey="
+
+  @AC-2 @FR-2 @regression @feature-254
+  Scenario: A Finnhub transport failure never reveals the token
+    Given a Finnhub client configured with api key "k-secret" and base URL "http://127.0.0.1:1"
+    When GetFundamentals is called for "AAPL" and the HTTP transport fails
+    Then an error is returned that names "finnhub" and the request path "/stock/metric"
+    And the error text does not contain "k-secret"
+    And the error text does not contain "token="
+
+  @AC-5 @FR-3 @regression @feature-254
+  Scenario: The marketdata gRPC Unavailable status never carries the vendor key
+    Given marketdata uses fundamentals provider "fmp" with api key "k-secret" and base URL "http://127.0.0.1:1"
+    And the fundamentals cache holds no row for "AAPL"
+    When the GetFundamentals RPC is called for "AAPL"
+    Then the call fails with UNAVAILABLE
+    And the status message names "fmp"
+    And the status message does not contain "k-secret"
+    And the status message does not contain "apikey="
+
+  @AC-7 @FR-3 @regression @feature-254
+  Scenario: The marketdata batch Unavailable status never carries the vendor key
+    Given marketdata uses fundamentals provider "fmp" with api key "k-secret" and base URL "http://127.0.0.1:1"
+    And the fundamentals cache holds no row for "AAPL"
+    When the GetFundamentalsMulti RPC is called for "AAPL"
+    Then the call fails with UNAVAILABLE
+    And the status message names "fmp"
+    And the status message does not contain "k-secret"
+    And the status message does not contain "apikey="
+    # AC-5 covers marketdata_service.go:1760 (single); AC-7 covers :1704 (batch).
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature (CREATE) ---
+# Promoted from docs/roadmap/features/254-fix-marketdata-secret-exposure/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-254` tag.
+# Durable business rules xstockstrat-config already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-config - the marketdata vendor secret grant is bound to the marketdata mTLS SAN
+  GetSecret for the marketdata vendor keys requires both the x-internal-caller grant and the marketdata peer SAN (D-40).
+
+  @AC-3 @FR-4 @regression @feature-254
+  Scenario: The marketdata vendor secret is refused to a peer without the marketdata SAN
+    Given config holds secret "marketdata/alpaca.api_key" = "alpaca-xyz"
+    When GetSecret is called for namespace "marketdata" key "alpaca.api_key" with header x-internal-caller "marketdata" from an mTLS peer whose DNS SAN is "xstockstrat-ingest"
+    Then the call fails with PERMISSION_DENIED
+    And no plaintext value is returned
+
+  @AC-4 @FR-5 @regression @feature-254
+  Scenario: The marketdata service still resolves its vendor secret
+    Given config holds secret "marketdata/alpaca.api_key" = "alpaca-xyz"
+    When GetSecret is called for namespace "marketdata" key "alpaca.api_key" with header x-internal-caller "marketdata" from an mTLS peer whose DNS SAN is "xstockstrat-marketdata"
+    Then the response has found true and value "alpaca-xyz"
+
+  @AC-6 @FR-4 @regression @feature-254
+  Scenario: The marketdata vendor secret is refused to a caller with no mTLS SAN
+    Given config holds secret "marketdata/alpaca.api_key" = "alpaca-xyz"
+    When GetSecret is called for namespace "marketdata" key "alpaca.api_key" with header x-internal-caller "marketdata" and no peer SAN
+    Then the call fails with PERMISSION_DENIED
+    And no plaintext value is returned
+    # Replaces the "no SAN required" assertion at services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts:236.
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1/2/5/7 assert on marketdata vendor clients and the marketdata RPC status -> marketdata. AC-3/4/6 assert on config's GetSecret outcome (the allow-list lives in services/xstockstrat-config/src/grpc/authz.ts) -> config, even though the Given names marketdata. No scenario spans services, so nothing goes to docs/sdd/business-rules/platform.feature (grep of it found no overlapping secret/SAN rule).
+- Tag collision is intentional: the marketdata dir already has @feature-147 @AC-6/@AC-7 and the config dir has @feature-147 @AC-4/@AC-5. Provenance is the @AC+@feature pair, so there is no DUP. Dedup grep found no existing marketdata scenario on error-text redaction.
+- CHANGES EXISTING RULE (tightening, not a literal contradiction): /home/user/xstockstrat/services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature @feature-147 @AC-4 (lines 42-47) says an allow-listed "marketdata" caller with x-internal-caller="marketdata" gets plaintext, and it states no SAN condition. The 254 AC-3/AC-6 make the header alone insufficient, and AC-6 explicitly replaces the "no SAN required" test. AC-4 (254) restates the happy path with the SAN. I did not mark CONFLICT, because 147 @AC-4 is silent on SAN and 254 is a reviewed, intentional hardening that narrows the grant. I did not edit or delete the 147 scenario; promotion is additive. A human may want to annotate or consolidate 147 @AC-4 with 254 @AC-4 (OVERLAP-style candidate). The 147 @AC-5 fail-closed rule is unaffected.
+- The existing config suite's header comment for ingest-style SAN binding (Constitution invariant #6 in services/xstockstrat-config/CLAUDE.md) already describes the SAN mechanism for `ingest`; 254 extends the same mechanism to `marketdata`.
+
+### Coverage check
+- Source scenarios: 7. Planned: 7 NEW (4 marketdata, 3 config), 0 DUP, 0 OVERLAP, 0 CONFLICT. All of AC-1..AC-7 are accounted for and none were skipped. Scenario text is verbatim; only the `@feature-254` tag was added.
+```
