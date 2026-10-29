@@ -47,4 +47,4 @@ Six staging formulas store the legacy username `davcs86` as `author` instead of 
 
 ## Next Action
 
-`/sdd-execute fix-legacy-formula-authors sequential` — Steps 1-3 done; Steps 4-9 pending
+`/sdd-execute fix-legacy-formula-authors sequential` — Steps 1-4 done; Steps 5-9 pending

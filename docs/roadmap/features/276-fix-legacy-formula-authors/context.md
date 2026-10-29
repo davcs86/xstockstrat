@@ -294,3 +294,11 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
   - `uv run pytest --cov=app --cov-fail-under=50`: 294 passed at 69.49% total. The new module sits at 0% until Step 4.
 - Files modified: `services/xstockstrat-indicators/app/maintenance/__init__.py`, `services/xstockstrat-indicators/app/maintenance/legacy_authors.py`
 - Deviations: keyword-only signature additions (`run_id`, `target`, `clean`), and `--apply` is refused until Step 5. Both are logged in the implementation-spec.md Deviation Log.
+
+### Step 4 — test: classification, plan builder, report mode, SQL guard text [done]
+- `tests/conftest.py`: added `USERS` (users-file entries in the `list-users --json` shape: davcs86, alice, bob, carol, two `sam`, inactive `olduser`), `make_formula_row(formula_id, author, *, deleted=False, **fields)`, and `FakeFormulasTable`. The fake dispatches on `DETECT_SQL`/`CLEAN_COUNT_SQL`/`REWRITE_SQL` (imported lazily so conftest loads without the module), evaluates every predicate (system, case-insensitive UUID regex, byte-exact `old_author`, `formula_id`), raises on any other SQL, logs to `execute_log`, and exposes `update_count()` and `mutate(formula_id, **fields)` (update, or insert when absent) for Steps 6-7.
+- `tests/test_legacy_authors.py`: the 8 specced tests (pgbouncer case parametrized over `true`/`1`/unset → 11 cases). Unmappable/ambiguous tests also assert the report's stdout line naming formula id and author.
+- TDD: AC-2/AC-3/AC-5/AC-7 red: with `app/maintenance/` moved aside (pre-Step-3 tree) → collection error `ModuleNotFoundError: No module named 'app.maintenance'`; green: `uv run pytest tests/test_legacy_authors.py -v` → 11 passed.
+- Verification: `uv run pytest --cov=app --cov-fail-under=50` → 305 passed, 83.62% total (`legacy_authors.py` 75%; apply/main land in Steps 5-6); `ruff check .` and `ruff format --check .` clean.
+- Files modified: `services/xstockstrat-indicators/tests/conftest.py`, `services/xstockstrat-indicators/tests/test_legacy_authors.py`
+- Deviations: none.

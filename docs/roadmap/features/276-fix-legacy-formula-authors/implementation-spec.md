@@ -158,7 +158,7 @@ Create `legacy_authors.py` with these pieces (names are the contract the tests i
 
 ### Step 4 — test: classification, plan builder, report mode, SQL guard text
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify (add `FakeFormulasTable`, `make_formula_row`, `USERS`)
