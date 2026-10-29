@@ -510,3 +510,7 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   alone. Record boot timestamp + match count here when done.
 - Line drift noted: the WARN is at `services/xstockstrat-marketdata/cmd/server/main.go:77-78` (Step 9 Codebase
   Evidence already cites this; older planning notes cite `:70-71`).
+- Update (operator decision 2026-10-29): Step 9 **Status** set to `done`. The smoke is post-merge verification and no
+  longer holds the integration PR. It is **not yet performed**: after the merge deploys to dev, the operator's session
+  checks marketdata `GetSecret` at startup (Grafana logs/traces, or the Verification grep expecting 0) and records the
+  boot timestamp and match count here. A match still means reverting the Step 7 `authz.ts` `peerSan` line alone.

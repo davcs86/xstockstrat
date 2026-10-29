@@ -579,7 +579,7 @@ head -1 docs/reports/*-marketdata-vendor-key-url-residuals-defect.status   # →
 
 ### Step 9 — docs: dev smoke check of marketdata credential resolution (post-merge)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata` (dev deploy, observation only)
 **Files**:
 - `docs/roadmap/features/254-fix-marketdata-secret-exposure/context.md` — modify (record the evidence)
@@ -617,6 +617,15 @@ doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolv
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29, Step 9 marked `done` by operator decision; the smoke itself runs post-merge.** Operator decision
+  2026-10-29: Step 9 is post-merge verification, cannot precede the merge, and so does not hold the integration PR.
+  This supersedes the "deferred to operator" entry below for the Status field and the merge hold. **The smoke has not
+  been performed yet:** after the integration PR merges to `main-dev` and deploys to dev, the operator's session runs
+  it (Grafana logs/traces of marketdata `GetSecret` at startup, or the log grep in this step's Verification, expecting
+  0 matches of `resolving vendor credential from config failed` on a post-config-healthy boot) and records the boot
+  timestamp and match count in `context.md`. Any match still means reverting the Step 7 `authz.ts` `peerSan` line
+  alone. No Files change.
 
 - **2026-10-29, Step 9 deferred to operator — integration PR merge held until the post-merge dev smoke passes.** The
   step's precondition is unmet: Step 7 (`d3f6780b`) is only on `origin/feature/fix-marketdata-secret-exposure`, not
