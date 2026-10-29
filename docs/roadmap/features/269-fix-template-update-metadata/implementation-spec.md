@@ -345,7 +345,7 @@ real-PG red proof to CI (`CI=true` fails rather than skips).
 
 ### Step 5 — service: Ingest — RETIRE first-wins; CREATE rejects an empty template_id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/source_templates.py` — modify
@@ -404,7 +404,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check .
 
 ### Step 6 — test: Ingest — red-first RETIRE SQL test, empty-id CREATE tests, UPDATE wiring pin (@AC-1, @AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_source_templates.py` — modify. This covers `test_repo_retire_and_list_active_hide_retired` (`:440-448`, whose assertion at `:445` is rewritten) and `test_admin_update_returns_bumped_version` (`:197-207`), and adds the new @AC-2/@AC-3 tests.
@@ -599,3 +599,11 @@ _Populated by /sdd-execute as implementation proceeds._
     so the red UPDATE leg cannot mask the two regression pins. Each opens and closes its own pool.
   - **Disposition**: CI-equivalent fallback. The CI python job (analysis leg) installs postgresql and fails rather
     than skips under `CI=true`, so the integration PR's CI is the real-PG proof.
+- **2026-10-29 — Steps 5 + 6 landed in one commit** (`/sdd-execute` sequential, Step 5 run).
+  - **What**: Step 6's **Files** (`services/xstockstrat-ingest/tests/test_source_templates.py`) were staged in the
+    Step 5 commit and Step 6's **Status** was set to `done` with it.
+  - **Why**: `## Step Dependencies` requires it ("Steps 5 and 6 land together"); Step 5 breaks the
+    `"retired_at = NOW()"` assertion in `test_repo_retire_and_list_active_hide_retired`.
+  - **Disposition**: no behavior deviation. Two cosmetic deviations: the Step 5 docstring text is wrapped onto two
+    lines (the single line breaks ruff E501), and the three empty-id tests (b), (c), (e) share a file-local
+    `_empty_id_create(source_type)` builder over `_template_msg` (C-13: same single consumer file, no conftest change).

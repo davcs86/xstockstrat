@@ -65,10 +65,11 @@ async def update(
 
 
 async def retire(db_pool, template_id: str) -> dict | None:
-    """Hide the template from the catalog; instances are never touched. None if missing."""
+    """Hide the template from the catalog (first RETIRE wins ``retired_at``); instances are
+    never touched. None if missing."""
     row = await db_pool.fetchrow(
         "UPDATE ingest.source_templates"
-        " SET retired_at = NOW(), updated_at = NOW()"
+        " SET retired_at = COALESCE(retired_at, NOW()), updated_at = NOW()"
         f" WHERE template_id = $1 RETURNING {_COLS}",
         template_id,
     )

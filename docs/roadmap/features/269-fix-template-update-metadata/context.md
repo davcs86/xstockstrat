@@ -474,3 +474,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `node_modules` to symlink).
 - Out of scope: none.
 
+## Session 2026-10-29 — sdd-execute sequential, Steps 5 + 6 (ingest)
+
+- Steps 5 and 6 landed in one commit, as `## Step Dependencies` requires. Logged in the impl-spec `## Deviation Log`.
+- Files: `services/xstockstrat-ingest/app/repositories/source_templates.py` (`retire` → `retired_at =
+  COALESCE(retired_at, NOW())`, WHERE stays unfiltered, docstring wrapped for E501), `app/handlers/servicer.py`
+  (`ManageTemplate`: CREATE-only `template_id required` INVALID_ARGUMENT guard after the ADMIN gate and `meta =`,
+  before payload validation; CREATE binds `meta.template_id` with no uuid mint; `import uuid` kept for `job_id`),
+  `tests/test_source_templates.py` (tests a–e).
+- TDD red (pre-Step-5 tree, Step 6 tests in place): `uv run pytest tests/test_source_templates.py -q` → 3 failed,
+  30 passed. (a) retire SQL lacked `COALESCE(retired_at, NOW())`; (b) empty-id CREATE minted a uuid and reached the
+  mocked `create` (no abort); (c) abort carried `mcp_client requires non-empty mcp_endpoint in config_json` instead of
+  `template_id required`. (d) AC-1 wiring pin and (e) AC-13 ordering pin passed on both trees, as specced.
+- TDD green: same command → 33 passed. Full suite `uv run pytest --cov=app --cov-fail-under=40` → 349 passed, 83.22%.
+  `ruff check .` / `ruff format --check .` clean; Step 5 greps match (`uuid.uuid4` count 1).
+- Tooling: `pnpm install --frozen-lockfile --ignore-scripts` in the worktree for the husky hook.
+- Out of scope: none. Remaining: Step 8 (real-PG gap record), Step 9 (C-16 promotion at integration).
+
