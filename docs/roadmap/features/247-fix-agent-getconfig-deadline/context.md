@@ -365,3 +365,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The integration PR body must repeat "context-forge refresh unavailable" plus this per-file reconciliation.
 - Deviations: operator Option A (duplicate report dropped, cross-reference added, Verification revised, filenames dated
   2026-10-29) — Deviation Log.
+
+## Session 2026-10-29 — sdd-execute sequential (Step 6: GetConfig latency baseline)
+
+### GetConfig latency baseline — Not measured (Step 6 deferred to operator, P-03)
+
+- Grafana Cloud trace access worked this session (Tempo datasource `grafanacloud-traces`; the earlier HTTP 424 is gone),
+  but the dev agent exports no spans, so there is nothing to measure. Queries run:
+  - window 2026-10-28T00:00Z–2026-10-29T00:00Z UTC, `{ } | count_over_time() by (resource.service.name,
+    resource.deployment.environment)`: ten `development` services (config, identity, indicators, ingest, ledger,
+    marketdata, notify, portfolio, trading, xstockstrat-ui) and no `agent`;
+  - same window, `{ name =~ ".*GetConfig.*" } | count_over_time() by (resource.service.name, kind)`: no series
+    (config's server side emits none either);
+  - window 2026-10-28T02:00Z–2026-10-29T02:00Z UTC, search `{ resource.service.name =~ ".*agent.*" }`: 0 traces.
+- Count, p50, p99, max: none (0 spans). The margin against D = 3.0 s cannot be computed.
+- Likely cause (unverified): `.do/app.dev.yaml:32-36` holds the placeholders `YOUR_DEV_OTEL_EXPORTER_OTLP_ENDPOINT` /
+  `_HEADERS`, or the agent is not running on dev.
+- Escalated to the operator. The integration PR merge is held until these steps are done:
+  1. Make the dev agent export traces.
+  2. Run `{ resource.service.name = "agent" && name = "/xstockstrat.config.v1.ConfigService/GetConfig" } |
+     quantile_over_time(span:duration, .5, .99)`, plus `count_over_time()` and `max_over_time(span:duration)`, over
+     a window of at least 24 h. Tempo caps a metrics query at 25 h.
+  3. Append the figures here.
+  If p99 is not comfortably below 3.0 s, D changes before the integration PR (design change).
+- Integration PR test plan (Instruction 3, carried):
+  - a post-merge dev smoke of `ingest_signal` and `extract_website_content` with config healthy;
+  - a check that no `get_config_value: GetConfig DEADLINE_EXCEEDED` warnings appear in the agent logs.
+- Step 6 **Status** stays `pending` (Deviation Log entry `Step 6 (2026-10-29)`).
