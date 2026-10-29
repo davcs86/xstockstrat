@@ -24,6 +24,7 @@
 | 2026-10-28 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | D-10: a sandbox run with no parseable `__OUTPUT__:` line fails (`runtime_error`) |
 | 2026-10-29 | `in-progress` (Step 4 done) | /sdd-execute sequential (sdd-batch-execute) | D-10 tests: `TestSandboxNoOutputFails` (AC-1/AC-2/AC-3) + servicer RUNTIME_ERROR mapping |
 | 2026-10-29 | `in-progress` (re-spec steps 5, 6) | /sdd-execute sequential (sdd-batch-execute) | Merged `origin/main-dev` (`-X ours`); steps 5, 6 aligned with the current codebase (line drift only) |
+| 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A: honest ATR/VWAP descriptions in `INDICATOR_REGISTRY` and docstrings; math unchanged |
 
 ---
 
@@ -59,4 +60,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 5
+`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 6

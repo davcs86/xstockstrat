@@ -778,3 +778,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   309 passed, coverage 86.24% (≥50%); `ruff check .` clean; `ruff format --check .` clean after
   `ruff format tests/test_sandbox.py` (step's own lines).
 - Deviations: RED-proof wording only (framing guard is RED pre-Step-3, not pass-both) — see Deviation Log.
+
+### Step 5 — service: D-18 Option A — honest ATR/VWAP descriptions in the engine registry — done (2026-10-29)
+
+- `app/services/indicators_engine.py`: `INDICATOR_REGISTRY` `ATR`/`VWAP` descriptions set to the exact specced
+  strings (parenthesized multi-line entries, `ruff format` layout); `_atr`/`_vwap` docstrings now state the
+  rolling mean of absolute close-to-close change / cumulative mean of the inputs, and that neither is the
+  true-range / volume-weighted indicator. Keys, `required`, dispatch `:30-31` and math unchanged, so the
+  analysis consumers (`evaluator.py`, `screener.py`, `warmup.py`, `pnl_pattern_consumer.py`) resolve as before.
+- TDD: Step 6's engine-level AC-4/AC-5 assertions run as an uncommitted scratch file (Step 5 owns only
+  `indicators_engine.py`) → red: 2 failed (`'Average True Range' not in ...`, `'Volume Weighted Average Price'
+  not in ...`) → green: 2 passed (values `[None, None, 1.5, 1.5]` and `[10.0, 15.0, 20.0]` unchanged). Scratch
+  file deleted before commit.
+- Verification: grep 2 → `0`; grep 1 adapted to the multi-line layout (see Deviation Log). Full suite 309
+  passed, coverage 86.24% (≥50%); `ruff check .` / `ruff format --check .` clean.
+- Deviations: verification grep 1 form only — see Deviation Log.
+

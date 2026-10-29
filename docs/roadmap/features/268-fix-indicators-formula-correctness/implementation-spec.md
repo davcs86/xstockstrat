@@ -359,7 +359,7 @@ fail. AC-3 and the framing guard pass both before and after; they are guards, no
 
 ### Step 5 — service: D-18 Option A — honest ATR/VWAP descriptions in the engine registry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/indicators_engine.py` — modify
@@ -675,3 +675,13 @@ _Populated by /sdd-execute as implementation proceeds._
   captured by temporarily checking out the pre-Step-3 `sandbox.py` (`85ef0ac8~1`) and restoring it before GREEN.
 - **Disposition**: test unchanged. The guard is stronger than specced (it is also a RED assertion for the
   framing fix). No scope change.
+
+### Step 5 — verification grep 1 matches the formatter's layout (2026-10-29)
+- **Spec said**: `grep -n '"ATR": {"description"\|"VWAP": {"description"'` shows the two edited entries.
+- **Actual**: both new descriptions exceed the 100-char `line-length`, so each entry is written as a
+  multi-line dict with a parenthesized string (the `ruff format` layout, no `noqa`). That grep returns
+  nothing. The equivalent check `grep -n '"ATR": {\|"VWAP": {'` hits `:144` and `:151`, and the runtime
+  values equal the specced strings exactly (checked via `INDICATOR_REGISTRY[...]["description"]`). Grep 2
+  returns `0` as specced.
+- **Disposition**: verification command form only; strings, keys, `required`, dispatch and math as specced.
+  Step 7 must match the runtime strings, not a one-line source form.
