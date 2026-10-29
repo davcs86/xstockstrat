@@ -55,4 +55,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-`/sdd-execute fix-portfolio-snapshot-surface sequential` — Steps 1–3 done; continue with Step 4
+`/sdd-execute fix-portfolio-snapshot-surface sequential` — Steps 1–4 done; continue with Step 5

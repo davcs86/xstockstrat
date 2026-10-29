@@ -564,3 +564,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `:426`/`:108` after the main-dev merge.
   - Step 10: gate state recorded. (a) passes because main-dev tops out at 030. (b) is not yet met because
     031/032/033 exist only on the 243/244/248 branches.
+
+### Step 4 — test: Stream handler identity gate and helper wiring (@AC-2, @AC-6, @AC-3 Connect half) [done]
+- Created `portfolio_stream_test.go` with inline `fakeHub` (owner-filtered `push`, which mirrors the Step 1 producer
+  contract) and `fakeGRPCStream`. C-13: there is a single consumer, so nothing goes into testdata. It holds five tests:
+  - `TestStreamPortfolioUpdates_GRPC_AC2_RejectsEmptyCaller`;
+  - `TestStreamPortfolioUpdates_Connect_AC6_RejectsEmptyCaller`, which sets the deprecated body `UserId` and confirms
+    it is ignored;
+  - `TestStreamSnapshots_AC3_DeliversOnlyToCallersStream`;
+  - `TestStreamPortfolioUpdates_GRPC_AC1_WiresCallerIdentity`, end to end through the mounted adapter;
+  - `TestStreamSnapshots_TradingModeFilterPreserved`.
+- TDD, @AC-2 RED: the gRPC check was reverted in the working tree only. Output (FAIL):
+  - `portfolio_stream_test.go:162: want InvalidArgument, got context deadline exceeded`;
+  - `portfolio_stream_test.go:165: anonymous stream must never subscribe; recorded 1 Subscribe calls`.
+  - @AC-6 and the @AC-1/@AC-3 wiring cases passed on that tree, which is expected (red N/A per the spec).
+- GREEN with the handler restored: all five pass under `-race`.
+- Verification:
+  - `go test ./... -race` is ok;
+  - CI-scoped coverage total is 68.6% (threshold 40%);
+  - golangci-lint v2.14.0 (go1.27 rebuild) reports `0 issues`;
+  - the C-13 grep finds one declaration each of `fakeHub` and `fakeGRPCStream`.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_stream_test.go` (new).
+- Deviations: RED via a working-tree revert; lint fallback (Deviation Log). Out-of-scope changes: none.

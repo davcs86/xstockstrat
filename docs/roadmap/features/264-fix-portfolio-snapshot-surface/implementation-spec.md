@@ -326,7 +326,7 @@ grep -c "streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.
 
 ### Step 4 — test: Stream handler identity gate and helper wiring (@AC-2, @AC-6, @AC-3 Connect half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_stream_test.go` — create
@@ -762,3 +762,11 @@ _Populated by /sdd-execute as implementation proceeds._
   for RED (fail) and GREEN (pass), then removed from the Step 3 commit (F-08: Step 3's **Files** is the handler only).
   Step 4 creates and commits `portfolio_stream_test.go`. Lint used the same CI-pinned v2.14.0 rebuild as Step 2.
 - **Disposition**: no behavior change. The gRPC adapter range was `:292-312` (spec says `:291-311`); line drift only.
+
+### 2026-10-29 — Step 4: RED re-captured by reverting Part B in the working tree; lint binary at the CI pin
+- **Spec said**: capture RED at Step 3 Part A (before the gRPC empty-caller check exists).
+- **Done**: Step 3 is already committed, so the gRPC check was removed from the working tree only, RED was captured,
+  and the handler was restored byte-for-byte from a scratch copy before GREEN. Nothing from the revert was committed.
+  The AC-2 status assertion uses `t.Errorf` so the RED shows both failures (status code and Subscribe count). Lint
+  used the same CI-pinned v2.14.0 go1.27 rebuild as Steps 2-3, because `~/go/bin/golangci-lint` is built with go1.26.
+- **Disposition**: no behavior change; CI-equivalent lint fallback.
