@@ -922,7 +922,7 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Harness**: the local dev-server `[setup]` warm-up exceeded its 10 s local timeout, so the
   verification ran with `--project=chromium --no-deps --timeout=120000`. The spec files and assertions
   are unchanged.
-- **Formatting**: the pre-commit `lint-staged` prettier pass also reformats the existing
-  `CLOSED_POSITION_ROWS` one-line rows in `ledgerEvents.ts`. This is whitespace only, and no
-  `--no-verify` was used.
+- **Formatting**: a standalone `prettier --check` flags the existing one-line `CLOSED_POSITION_ROWS`
+  rows in `ledgerEvents.ts`. That is pre-existing. The pre-commit `lint-staged` pass left them unchanged,
+  and the added lines are clean.
 - **Disposition**: CI-equivalent fallback for the RED evidence and the harness flags. No spec change.
