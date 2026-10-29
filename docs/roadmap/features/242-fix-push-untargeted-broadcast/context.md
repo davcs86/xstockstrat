@@ -524,3 +524,19 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`.
 - Out of scope: none. The trading precedent citation is `trading.go:3347`, not `:3348` (citation drift only).
 
+## Session 2026-10-29 — sdd-execute sequential, Step 10 (portfolio owner-targeting tests)
+
+- Step 10 done. In `portfolio_quote_deadline_test.go`, `recordingNotify` also records each request in `reqs`.
+  `TestCheckRiskLimits_AC3_SumsAcrossAccounts` asserts each alert has target `u1`, category `risk` and severity
+  WARNING. `TestCheckRiskLimits_AC9_...` asserts its drawdown alert targets `u1`. The new
+  `TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner` (owner `user-42`, account `acct-1`, 8500/10000) asserts exactly
+  one alert with the 15.0% drawdown body, category `risk`, severity WARNING and target `user-42`. `expectDrawdowns`
+  is unchanged.
+- TDD: RED ran against the pre-Step-9 `portfolio_service.go`, swapped in and then restored. AC-3 red: `target=""
+  ... want target u1`. AC-9 red: `drawdown alert TargetUserId = "", want u1`. AC-6 red: `target="", want ... user-42`.
+  GREEN: all 3 tests `--- PASS`.
+- Verification: the `-run TestCheckRiskLimits` tests pass. The full race suite passes with coverage `total: 68.6%`
+  (threshold 40%). golangci-lint (go1.27 rebuild of v2.14.0) reports `0 issues.` All 3 `"user-42"` hits in this file
+  are inside the new test (C-13 inline sentinel).
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go`.
+- Out of scope: none.

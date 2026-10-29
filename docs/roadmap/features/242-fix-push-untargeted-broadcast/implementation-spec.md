@@ -517,7 +517,7 @@ grep -n "emitRiskAlert(ctx, userID" internal/service/portfolio_service.go   # 2 
 
 ### Step 10 — test: portfolio owner targeting (concentration + drawdown)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — modify
@@ -845,3 +845,8 @@ _Populated by /sdd-execute as implementation proceeds._
   gate ran on an uncommitted scratch test (drawdown alert for owner `u1` must carry `TargetUserId == "u1"`), deleted
   before commit. Step 10 still owns the committed tests. (c) Codebase Evidence cites the trading precedent at
   `trading.go:3348`; it is at `:3347` (also `:3693`, `:3709`). Citation drift only.
+- **Step 10 (2026-10-29) — verification tooling and TDD-evidence mechanics only, no code deviation.** (a) Lint ran
+  with the same go1.27 rebuild of golangci-lint v2.14.0 as Step 9, because the provisioned binary is go1.26; it
+  reports `0 issues.` (b) Step 9's production change was already on the branch, so RED was captured by running the
+  new tests against the pre-Step-9 `portfolio_service.go` (`574dc1cf~1`), swapped in temporarily and restored
+  before GREEN. That file is not part of this commit.
