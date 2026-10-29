@@ -640,3 +640,36 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts` (new).
 - Deviations: RED re-capture method (Deviation Log). Out-of-scope changes: none.
 - Open: Step 10 still owes the dev-smoke `ListKeys` check (applied state) and the two-sided migration-number gate.
+
+### Step 9 — docs: Retire the key and record stream isolation in context docs, then the teardown refresh [done]
+- Portfolio `CLAUDE.md`: deleted the `portfolio.snapshot.interval_minutes` row; `portfolio.snapshot` event reworded to
+  "Snapshot written after each processed fill"; appended the `StreamPortfolioUpdates` isolation sentence to the H-3
+  paragraph (owner-only delivery; empty caller `InvalidArgument` on both paths before subscribing). That keeps the
+  `:21-22` "missing header yields `InvalidArgument`" claim true (gRPC adapter `portfolio_handler.go:309`, Connect `:148`).
+- Portfolio findings `:29`: `StartSnapshotWriter` row marked `~~…~~ **RESOLVED 2026-10-29 (feature 264)**` (240-row
+  convention); evidence now cites config migration 034 and `#broadcastSnapshot`.
+- Debt radar D-12 (`:236`) and D-24 (`:447`): suffix `*(carried, open)*` → `*(fixed by feature 264)*`.
+- config-governance: new `### feature 264` entry at the top of § Per-Feature Registered Keys (newest-first), with
+  "**Removes** `portfolio.snapshot.interval_minutes` (migration 034)".
+- PLAT-6 (`docs/context-constitution.md:40`): evidence now `portfolio_service.go#portfolio.risk.max_drawdown_pct`
+  (~L958, `s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)`); rule text unchanged.
+- **Teardown: the context-forge `context-constitution` refresh skill is unavailable in this session** (only
+  `context-forge:context-scrubber` is listed). Manual reconciliation: re-read each touched file against current code.
+  - `grep -rn "StartSnapshotWriter|interval_minutes" --include=*.go services/xstockstrat-portfolio` returns no hits.
+  - `broadcastSnapshot` (`portfolio_service.go:898`) skips subscribers whose `userID` differs from the owner (`:928`);
+    `InsertSnapshot` is at `:921`.
+  - Portfolio `docs/context-constitution.md` (PORTFOLIO-1/-16 and the 231 note) cites `broadcastSnapshot` only for
+    valuation and skip behaviour, which is unchanged, so there is no grounded drift. Root findings have no
+    snapshot-stream entry.
+  - `scrubberExtraTargets` (`README.md`, `docs/patterns/ui-ux-governance.md`) were not touched and describe no changed behaviour.
+  - The integration PR body must record both that the plugin was unavailable and this reconciliation.
+- TDD: N/A (docs).
+- Verification: (1) the `snapshot.interval_minutes` grep over portfolio `CLAUDE.md` and `docs/context-constitution.md`
+  exits 1; (2) config-governance `:114` matches `**Removes** \`portfolio.snapshot.interval_minutes\``; (3) D-12
+  and D-24 both show "fixed by feature 264"; (4) portfolio `CLAUDE.md:52` holds the `StreamPortfolioUpdates` sentence.
+- Files modified: `services/xstockstrat-portfolio/CLAUDE.md`,
+  `services/xstockstrat-portfolio/docs/context-constitution-findings.md`, `docs/repo-surveyor/debt-radar-findings.md`,
+  `docs/patterns/config-governance.md`, `docs/context-constitution.md`.
+- Deviations: governance entry placement, PLAT-6 line (~L958, not ~L973), and the manual teardown (Deviation Log).
+  Out-of-scope changes: none.
+- Open: Step 10 (the two-sided migration-number gate before merge, plus dev-smoke `ListKeys`).

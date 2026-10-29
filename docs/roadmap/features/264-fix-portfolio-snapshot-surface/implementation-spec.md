@@ -621,7 +621,7 @@ cd services/xstockstrat-config && npx tsc && node --test dist/__tests__/retiredP
 
 ### Step 9 — docs: Retire the key and record stream isolation in context docs, then the teardown refresh
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (portfolio, platform)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
@@ -784,3 +784,13 @@ _Populated by /sdd-execute as implementation proceeds._
   captured (`002_config_environment.up.sql: highest-numbered match must DELETE …`), and the files were moved back
   unchanged (clean `git status` apart from the new test) before GREEN. Nothing from the move was committed.
 - **Disposition**: no behavior change; same RED as specified.
+
+### 2026-10-29 — Step 9: governance entry placement, PLAT-6 line, manual teardown
+- **Spec said**: add the config-governance entry "in the `:426` form" in § Per-Feature Registered Keys; cite
+  `max_drawdown_pct` at `~L973`; run `/context-constitution refresh` for the teardown.
+- **Done**: the entry uses the `**Removes**` form under a new `### feature 264` heading at the top of the section,
+  because that log is newest-first and append-only (editing 161's entry would rewrite a past entry). The PLAT-6
+  evidence cites `~L958`, the re-grepped line after Step 5's deletion. The context-forge `context-constitution`
+  skill is not available in this session, so the teardown was done by hand (context.md, Step 9).
+- **Disposition**: docs-only; no behavior change. The integration PR body must state that the plugin was
+  unavailable and list the manual reconciliation (context.md, Step 9).

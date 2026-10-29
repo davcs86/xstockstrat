@@ -55,4 +55,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-`/sdd-execute fix-portfolio-snapshot-surface sequential` — Steps 1–8 done; continue with Step 9
+`/sdd-execute fix-portfolio-snapshot-surface sequential` — Steps 1–9 done; continue with Step 10 (pre-merge migration-number gate + dev-smoke `ListKeys`)
