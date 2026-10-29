@@ -431,3 +431,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (50) and the budget-deferred symbol count (20). Fold both into the single `_emit_warning`.
 - Deviation: minor test-file line drift (`_rpc_error` is now at `:584`), recorded in the Deviation Log.
 - Next: Step 2 (service: `_paced_fetch` failed bucket and `partial` status).
+
+### Step 2 — service: `_paced_fetch` failed bucket and `partial` status — done (2026-10-29)
+
+- File: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`.
+  - `_paced_fetch` collects a raising chunk's symbols in `failed` and returns `fetched, deferred, failed, calls`. A
+    failed call still spends budget.
+  - `run_once` computes `deferred_count = len(deferred) + len(failed)` and passes it to both `_abort_cycle` and
+    `_finish`. `symbols_done=len(fetched)` is unchanged.
+  - Status is `partial` when any chunk failed, else `budget_deferred` or `completed`. One `_emit_warning` names both
+    counts.
+- TDD (AC-4, AC-6): red: 3 failed (unpack `ValueError`; `'completed' == 'partial'`; `'budget_deferred' == 'partial'`),
+  56 passed → green: `tests/test_fundsignal_loop.py` 59 passed.
+- Verification: full suite with coverage, excluding `real_pg`: 1298 passed, 4 deselected, 88.63% (≥40). ruff check and
+  format are clean. The `"partial"` grep matches at `:284`.
+- Deviations: the fetch call is wrapped by `ruff format`, and the coverage run deselects the 4 `real_pg` tests so no
+  database is started (CI runs them). Both are in the Deviation Log.
+- Next: Step 3 (test: claim release, accepted-only count, abort cleanup, and real SQL).

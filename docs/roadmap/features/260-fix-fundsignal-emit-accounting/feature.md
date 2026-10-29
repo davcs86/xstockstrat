@@ -20,6 +20,7 @@
 | 2026-10-29 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | Steps 1-9 re-aligned to `main-dev` after the 246 merge: line drift in 1, 2, 4, 6; `_score` tuple return in 3, 5; Step 9 merges with 246's Idempotency text; Steps 7-8 unchanged |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by the operator's standing authorization (2026-10-28/29) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 1 done: RED tests for @AC-4/@AC-6 (`TestFailedChunk`) and the 4-tuple `_paced_fetch` unpack |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 2 done: `_paced_fetch` returns a `failed` bucket; a run with a failed chunk ends `partial` with one combined warning |
 
 ---
 
@@ -56,4 +57,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 1 (RED test)
+`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 3 (RED test)

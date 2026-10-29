@@ -159,7 +159,7 @@ grep -n "conftest" tests/test_fundsignal_loop.py   # C-13: no new conftest fixtu
 
 ### Step 2 — service: `_paced_fetch` failed bucket and `partial` status
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -752,3 +752,9 @@ _Populated by /sdd-execute as implementation proceeds._
   "local helper"), and it calls the module-level `_rpc_error` at run time, so no conftest fixture is added (C-13).
   RED is as the spec predicted: an unpack `ValueError` (3 values, 4 expected), `'completed' == 'partial'` (AC-4) and
   `'budget_deferred' == 'partial'` (AC-6). The other 56 tests in the file pass.
+- **2026-10-29, Step 2 (minor, no scope change):** two verification/format notes. (a) The `run_once` call
+  `fetched, deferred, failed, calls_spent = await self._paced_fetch(to_process, budget, metadata)` is 101 columns, so
+  `ruff format` wraps its arguments over three lines; the call is otherwise as specced. (b) The coverage command ran
+  as `uv run --no-sync pytest --cov=app --cov-fail-under=40 -q -m "not real_pg"`. The 4 `real_pg` tests start a
+  throwaway PostgreSQL through `tests/conftest.py` `local_pg`, and starting a database is forbidden here (HARD
+  CONSTRAINT); CI runs them. **Disposition**: CI-equivalent fallback. Result: 1298 passed, 4 deselected, 88.63%.

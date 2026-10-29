@@ -220,7 +220,10 @@ class FundamentalsSignalLoop:
 
         # Paced, budget-bounded cached fundamentals fetch (never FMP directly).
         budget = self._cfg.get_int("analysis.fundsignal.daily_call_budget", default=200)
-        fetched, deferred, calls_spent = await self._paced_fetch(to_process, budget, metadata)
+        fetched, deferred, failed, calls_spent = await self._paced_fetch(
+            to_process, budget, metadata
+        )
+        deferred_count = len(deferred) + len(failed)
 
         # Score → cross-sectional direction → drop below min conviction.
         scores, unscored = await self._score(fetched, sys_meta)
@@ -274,22 +277,24 @@ class FundamentalsSignalLoop:
                 str(e),
                 symbols_done=len(fetched),
                 calls_spent=calls_spent,
-                deferred=len(deferred),
+                deferred=deferred_count,
                 signals_emitted=emitted,
             )
 
-        status = "budget_deferred" if deferred else "completed"
-        if deferred:
-            await self._emit_warning(
-                f"fundsignal: deferred {len(deferred)} symbols — "
-                f"daily call budget ({budget}) reached"
-            )
+        status = "partial" if failed else ("budget_deferred" if deferred else "completed")
+        if failed or deferred:
+            parts = []
+            if failed:
+                parts.append(f"{len(failed)} symbols from failed GetFundamentalsMulti chunks")
+            if deferred:
+                parts.append(f"{len(deferred)} symbols at the daily call budget ({budget})")
+            await self._emit_warning("fundsignal: deferred " + " and ".join(parts))
         return await self._finish(
             run_id,
             status=status,
             symbols_done=len(fetched),
             calls_spent=calls_spent,
-            deferred=len(deferred),
+            deferred=deferred_count,
             signals_emitted=emitted,
         )
 
@@ -395,9 +400,11 @@ class FundamentalsSignalLoop:
         """Fetch fundamentals via marketdata GetFundamentalsMulti in budget-bounded chunks.
 
         This is the ONLY fundamentals access path — the producer never imports/calls FMP.
-        One GetFundamentalsMulti call per chunk counts as one against the daily budget.
+        One GetFundamentalsMulti call per chunk counts as one against the daily budget; a
+        chunk whose call raises has its symbols returned in ``failed``.
         """
         fetched = {}
+        failed = []
         calls = 0
         i = 0
         while i < len(symbols):
@@ -413,11 +420,12 @@ class FundamentalsSignalLoop:
                     fetched[f.symbol.upper()] = f
             except Exception as e:  # noqa: BLE001 - one bad chunk should not abort the run
                 log.warning("fundsignal: GetFundamentalsMulti failed for chunk: %s", e)
+                failed.extend(chunk)
             calls += 1
             i += chunk_size
             await asyncio.sleep(0)  # cooperative pacing point
         deferred = symbols[i:]
-        return fetched, deferred, calls
+        return fetched, deferred, failed, calls
 
     async def _score(self, fundamentals_by_symbol, metadata):
         """Return (scores, unscored): scores in [0,1], deterministic and run-local.
