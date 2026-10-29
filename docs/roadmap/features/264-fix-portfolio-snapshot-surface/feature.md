@@ -22,6 +22,7 @@
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge: steps 4,5,6,7,8,9,10 aligned (line drift; Step 6 records 248 at `033_`, so 031/032/033 = 243/244/248; 034 reservation unchanged) |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge `f01acaa`: Step 10 aligned (fails.md:2911 rule citation, `list_config_keys(namespace, user_id="")` at tools.py:1628, post-deploy smoke marked operator action); gate (a) passes, (b) still unmet |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge (`0099647f`): Step 10 Codebase Evidence gate-state bullet updated (main-dev now tops out at `031`, 243 merged via #1334); (a) passes, (b) still unmet (032/033 only on 244/248 branches); step stays operator-held |
+| 2026-10-29 | `in-progress` → `code-completed` | operator decision (session_01NpS3HShZK6pSnogA7CFo2f) | Step 10 gate (a)/(b) passed at main-dev `0ba6a8b7`; the post-deploy ListKeys smoke becomes post-merge verification ("Post-merge verification (Recommended)"); all 10 steps done |
 
 ---
 
@@ -57,4 +58,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-`/sdd-execute fix-portfolio-snapshot-surface sequential` — Steps 1–9 done; continue with Step 10 (pre-merge migration-number gate + dev-smoke `ListKeys`)
+All 10 steps done. Merge integration PR #1345. After the dev deploy, run `list_config_keys(namespace="portfolio")` on staging and record that `portfolio.snapshot.interval_minutes` is absent. The production check goes on the next `/promote` checklist.

@@ -1,6 +1,6 @@
 # Implementation Spec: fix-portfolio-snapshot-surface
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/264-fix-portfolio-snapshot-surface/feature.md`
 **Total Steps**: 10
@@ -690,7 +690,7 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
 
 ### Step 10 — test: Pre-merge two-sided migration-number gate and dev-smoke `ListKeys` (@AC-5 applied state)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - none (a verification gate; record its output in context.md and the integration PR body)
@@ -800,6 +800,12 @@ _Populated by /sdd-execute as implementation proceeds._
   skill is not available in this session, so the teardown was done by hand (context.md, Step 9).
 - **Disposition**: docs-only; no behavior change. The integration PR body must state that the plugin was
   unavailable and list the manual reconciliation (context.md, Step 9).
+
+### 2026-10-29 — Step 10: gate (a)/(b) passed; ListKeys smoke becomes post-merge verification (operator decision)
+**Spec said**: hold the integration-PR merge until (a) main-dev has no config migration numbered `034` or higher, (b) `031`, `032` and `033` are all on main-dev, and the post-deploy `list_config_keys(namespace="portfolio")` smoke on the staging and production agents shows no `portfolio.snapshot.interval_minutes`.
+**Actual**: (a) and (b) pass at `origin/main-dev` `0ba6a8b7`: the highest config migration there is `033_ledger_stream_resolve_timeout` (from 248), and `031_heal_indicators_sandbox_keys_full_dotted`, `032_analysis_zero_trap_descriptions` and `033_ledger_stream_resolve_timeout` are all present. This branch's `034_retire_portfolio_snapshot_interval` does not collide, and `git merge-tree` against main-dev is conflict-free. The ListKeys smoke can only run after migration 034 is applied by a deploy, so it can never pass before the merge. The operator chose "Post-merge verification (Recommended)": Step 10 is `done`, the operator's session runs the staging smoke after the dev deploy and records it in context.md, and the production smoke moves to the next `/promote` checklist.
+**Reason**: the remaining check is post-deploy by construction. The 254 Step 9, 258 Step 1 and 265 Step 5 precedent applies.
+**Disposition**: merge hold lifted. merge-order.md row 77 is set to Resolved `Yes`, since 243, 244 and 248 have all merged and the numbering is verified. This entry supersedes the one below.
 
 ### 2026-10-29 — Step 10 deferred to operator — integration PR merge held until the two-sided gate passes and the post-deploy `ListKeys` smoke is clean
 - **Spec said**: run the item-1 gate immediately before merge, then after the dev deploy list `portfolio` keys in

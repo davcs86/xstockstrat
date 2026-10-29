@@ -793,3 +793,13 @@ Feature: xstockstrat-config - portfolio.snapshot.interval_minutes is a retired k
 - Branch setup: `git merge --no-edit origin/main-dev` (`0099647f`) merged cleanly (merge commit `1b440eab`); ledger-guard `--fix` reported clean.
 - Re-spec (Step 10 only, still `pending`): Codebase Evidence gate-state bullet updated. `origin/main-dev` config migrations now top out at `031_heal_indicators_sandbox_keys_full_dotted` (243 merged via #1334). Gate (a) passes (`/0(3[4-9]|[4-9][0-9])_` grep: no output). Gate (b) unmet: `032` only on `origin/feature/fix-python-config-stored-zero`, `033` only on `origin/feature/fix-ledger-trimmed-notify-payload`. Other evidence re-verified: `scripts/db-migrate.sh`, `config.proto:29` `rpc ListKeys`, `tools.py:1628` `list_config_keys`, `merge-order.md:77`, `fails.md:613/2909/2911`; local `034_retire_portfolio_snapshot_interval.{up,down}.sql` present. Step 10 stays an operator-held gate (integration PR draft, merge held).
 - Step 10 execute (2026-10-29): gate item 1 run against `origin/main-dev` @ `0099647f`. Config migrations list `…028 029 030 031`; the `/0(3[4-9]|[4-9][0-9])_` grep prints nothing (exit 1), so (a) passes. (b) is unmet: 244 (`032`) and 248 (`033`) are not yet on `main-dev`, and merge-order.md:77 stays `Resolved: No`. The post-deploy `list_config_keys(namespace="portfolio")` smoke on the staging and production agents needs a deployed build. Step 10 is deferred to the operator per the Deviation Log entry and stays `pending`; open the integration PR as a draft with the (a)/(b) checklist and hold the merge.
+
+## Session 2026-10-29 — operator decision: Step 10 becomes post-merge verification
+
+- Gate (a): `git ls-tree origin/main-dev services/xstockstrat-config/migrations/` tops out at `033_ledger_stream_resolve_timeout`; nothing is numbered `034` or higher. **Pass.**
+- Gate (b): `031_heal_indicators_sandbox_keys_full_dotted`, `032_analysis_zero_trap_descriptions` and `033_ledger_stream_resolve_timeout` are all on main-dev (`0ba6a8b7`), so 243, 244 and 248 have landed. **Pass.** No renumber is needed.
+- The ListKeys smoke needs migration 034 applied by a deploy, so it is post-merge by construction. The operator chose **"Post-merge verification (Recommended)"**.
+- Step 10 is `done` and status is `code-completed`. merge-order.md row 77 is set to `Resolved: Yes`.
+- Owed after merge:
+  - (1) After the dev deploy, run staging `list_config_keys(namespace="portfolio")` and confirm `portfolio.snapshot.interval_minutes` is absent; record the output here.
+  - (2) At the next `/promote`, run the same check on production.
