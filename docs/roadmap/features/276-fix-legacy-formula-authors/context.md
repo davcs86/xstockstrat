@@ -320,3 +320,21 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
   - `ruff check .` and `ruff format --check .` are clean, and `uv lock --check` is OK (no dependency added).
 - Files modified: `services/xstockstrat-indicators/app/maintenance/legacy_authors.py`
 - Deviations: keyword-only `run_id`/`target` on `run_apply`, and the result-path naming. Both are logged in the implementation-spec.md Deviation Log. Open item for Step 8 (runbook): apply does not compare the plan's recorded `target` with the connected host/db. The write set is still bounded by live detection and the users file, so the runbook should tell the operator to check the printed target line.
+
+### Step 6 — test: apply refusals, guarded rewrite, idempotence, concurrency [done]
+- `tests/test_legacy_authors.py`: added the 14 specced apply tests. Shared helpers:
+  - `_confirm` hand-edits the plan from suggested to confirmed (plus overrides and extra entries) and returns the digest.
+  - `_entry` builds a confirmed entry.
+  - `_assert_refused` checks `ApplyRefused`, `exit_code == 2`, zero UPDATEs and rows byte-equal.
+  - The tests reuse `USERS`, `FakeFormulasTable` and `make_formula_row` from `conftest.py` (C-13, no inline copies).
+- Idempotence (AC-4): a second report finds no entries, and its apply rewrites 0. Replaying the first, already-applied plan also rewrites 0 (`skipped_not_detected` 1), with no new UPDATE. Author and `updated_at` are unchanged for the system, user-id and rewritten rows.
+- Hand-widened plan (AC-9): the user-id row is excluded by the confirmed ∩ live intersection, and `REWRITE_SQL` alone also returns no row for it.
+- Concurrency (AC-8): a test-local `_InterleavedTable` mutates the rows right after apply's detection. The row comes back `skipped_concurrent` and both the owner's write and the new row survive. The interleaving placement is logged in the Deviation Log.
+- TDD (red → green). AC-1/AC-4/AC-8/AC-9:
+  - Red: the module was reverted to its Step 4 version (`67360c3f`, no apply). 14 failed and 11 passed, each failure `AttributeError: module 'app.maintenance.legacy_authors' has no attribute 'run_apply'`/`'ApplyRefused'`.
+  - Green: `uv run pytest tests/test_legacy_authors.py -v`, 25 passed.
+- Verification:
+  - `uv run pytest --cov=app --cov-fail-under=50`: 319 passed at 83.17% total (`legacy_authors.py` 77%; what is left uncovered is the `main`/`_apply`/`_report` CLI wiring).
+  - `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors.py`
+- Deviations: the AC-8 interleaving point (Deviation Log).
