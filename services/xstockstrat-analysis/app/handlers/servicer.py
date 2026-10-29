@@ -40,7 +40,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.admin_audit import audit_admin_read
-from app.config.watcher import ConfigWatcher
+from app.config.watcher import ConfigWatcher, float_positive, int_positive, str_nonempty
 from app.engine.durable_schedule import DurableSchedule, seconds_until_hour_utc
 from app.identity import SYSTEM_IDENTITY, owner_metadata
 from app.repositories.backtest_details import BacktestDetailsRepository
@@ -353,7 +353,14 @@ _PROPAGATED_HEADERS = ("x-user-id", "x-access-scope", "x-trace-id")
 
 def blend_strategy_id(cfg) -> str:
     """The strategy id the fundamentals-blend rules govern (feature 168); the sole reader."""
-    return cfg.get_str("analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend")
+    return str_nonempty(
+        cfg, "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
+    )
+
+
+def default_cooldown_days(cfg) -> int:
+    """Platform-wide re-entry cooldown default (feature 069); the sole reader."""
+    return int_positive(cfg, "analysis.strategy.default_cooldown_days", 31)
 
 
 class _BarFetchError(Exception):
@@ -534,27 +541,27 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._strategy_templates_repo = StrategyTemplatesRepository(db_pool) if db_pool else None
         self._template_intents_repo = TemplateIntentsRepository(db_pool) if db_pool else None
         # Process-lifetime singleton semaphore bounding cross-request GetIndicatorSeries compute so
-        # a busy Symbol page can't starve the live loop. max(1, …) guards a negative config value.
+        # a busy Symbol page can't starve the live loop. A stored value ≤ 0 reads as the default.
         self._component_series_sem = asyncio.Semaphore(
-            max(1, self._cfg.get_int("analysis.series.max_concurrent_components", 4))
+            int_positive(self._cfg, "analysis.series.max_concurrent_components", 4)
         )
         # Process-lifetime singleton semaphore bounding cross-request _compute_opportunities bars
         # fetches (TimescaleDB OOM fix); per-call semaphores would bound nothing across users.
         self._bars_fetch_sem = asyncio.Semaphore(
-            max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_bars_fetches", 2))
+            int_positive(self._cfg, "analysis.opportunity.max_concurrent_bars_fetches", 2)
         )
         # Bounds the Phase-2 per-candidate fan-out in _compute_opportunities (feature 176, FR-1).
         # DISTINCT from _bars_fetch_sem (avoids a self-deadlock re-entering the benchmark loader,
         # and keeps a large opportunity compute from starving interactive readiness).
         self._candidates_sem = asyncio.Semaphore(
-            max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_candidates", 4))
+            int_positive(self._cfg, "analysis.opportunity.max_concurrent_candidates", 4)
         )
         # Dedicated bounded pool for the pure-CPU simulator cores + screener sync tail (feature 176,
         # FR-4) so a long backtest burst runs OFF the event loop and can't block interactive reads.
         # F-06: these cores touch only in-memory bars/proto (fetched in the async prologue) and open
         # NO DB connection, so the asyncpg pool stays 2.
         self._compute_executor = ThreadPoolExecutor(
-            max_workers=max(1, self._cfg.get_int("analysis.compute.max_worker_threads", 4)),
+            max_workers=int_positive(self._cfg, "analysis.compute.max_worker_threads", 4),
             thread_name_prefix="analysis-compute",
         )
         # Durable backup for the in-memory _strategies dict: reads stay in-memory, this persists on
@@ -579,11 +586,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._readiness_cache_repo = ReadinessCacheRepository(db_pool) if db_pool else None
         # feature 180: the readiness materializer's OWN bars-fetch semaphore — SEPARATE from
         # _bars_fetch_sem so the background pre-warm can never starve interactive readiness
-        # (feature-176 priority-inversion guard). max(1, …) guards a negative config value.
+        # (feature-176 priority-inversion guard). A stored value ≤ 0 reads as the default.
         self._readiness_materializer_bars_sem = asyncio.Semaphore(
-            max(
-                1,
-                self._cfg.get_int("analysis.readiness_materializer.max_concurrent_bars_fetches", 2),
+            int_positive(
+                self._cfg, "analysis.readiness_materializer.max_concurrent_bars_fetches", 2
             )
         )
         # feature 177 FR-3: per-user empty-universe compute-state gating redundant recompute.
@@ -787,8 +793,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
-        # Resolve the effective fill model: request wins, else config default, else legacy. The
-        # get_int zero-trap is INTENTIONAL — an absent key and a configured 0 both mean legacy.
+        # Resolve the effective fill model: request wins, else config default, else legacy.
+        # default_fill_model 0 means legacy whether stored or absent (UNSPECIFIED → SAME_BAR_CLOSE).
         effective_fill_model = (
             request.fill_model
             if request.fill_model != analysis_pb2.FILL_MODEL_UNSPECIFIED
@@ -872,7 +878,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Cap every backtest to analysis.backtest.max_range_days: both bounds set + span over cap
         # → reject (not silent clamp); an unset bound is defaulted so ALL backtests stay bounded.
-        max_range_days = self._cfg.get_int("analysis.backtest.max_range_days", 730)
+        max_range_days = int_positive(self._cfg, "analysis.backtest.max_range_days", 730)
         cap_seconds = max_range_days * 86_400
         start_set = request.range.start.seconds > 0
         end_set = request.range.end.seconds > 0
@@ -1150,13 +1156,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         resolved_position_weight: float | None = None
         resolved_max_concurrent: int | None = None
         if sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO:
-            # Resolve sizing params once (zero-trap helpers: a stored 0 disables the portfolio →
-            # default; max_concurrent clamped ≥ 1 so a stored negative can't reach the sim).
-            resolved_position_weight = self._cfg.get_float(
-                "analysis.backtest.portfolio_position_weight", 0.10
+            # Resolve sizing params once: a stored value ≤ 0 reads as the default, so a zero or
+            # negative weight / max_concurrent never reaches the sim.
+            resolved_position_weight = float_positive(
+                self._cfg, "analysis.backtest.portfolio_position_weight", 0.10
             )
-            resolved_max_concurrent = max(
-                1, self._cfg.get_int("analysis.backtest.portfolio_max_concurrent", 9)
+            resolved_max_concurrent = int_positive(
+                self._cfg, "analysis.backtest.portfolio_max_concurrent", 9
             )
             # Cooldown days: strategy-level (uniform across symbols), resolved exactly as the
             # evaluated serial path does (servicer cooldown block); SMA path has no cooldown → 0.
@@ -1165,7 +1171,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     active_definition.cooldown_days
                     if active_definition.HasField("cooldown_days")
                     else None,
-                    self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+                    default_cooldown_days(self._cfg),
                 )
                 port_exit_cooldown_days = effective_cooldown_days(
                     active_definition.exit_cooldown_days
@@ -2128,10 +2134,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # never persisted to analysis.strategy_cooldowns, so two runs can't cross-contaminate.
             cooldown_days = effective_cooldown_days(
                 definition.cooldown_days if definition.HasField("cooldown_days") else None,
-                self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+                default_cooldown_days(self._cfg),
             )
-            # Exit cooldown (min holding period), ephemeral per-RunBacktest state. get_int_present
-            # (not get_int) — a configured 0 is legitimate and must not be zero-trapped.
+            # Exit cooldown (min holding period), ephemeral per-RunBacktest state. A configured 0
+            # is legitimate (no minimum hold).
             exit_cooldown_days = effective_cooldown_days(
                 definition.exit_cooldown_days
                 if definition.HasField("exit_cooldown_days")
@@ -2670,7 +2676,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 winrate_weight,
             )
             scored.append((int(c["trading_days"]), overall, comps))
-        k = self._cfg.get_int("analysis.scoring.shrinkage_days", 250)
+        k = int_positive(self._cfg, "analysis.scoring.shrinkage_days", 250)
         agg = _aggregate_cells(scored, k)
         if agg is None:
             return None
@@ -2910,9 +2916,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """
         if self._backtest_details_repo is None:
             return
-        # Clamp: a negative config value makes the eviction LIMIT raise (swallowed → unbounded
-        # growth). get_int zero-trap: a stored 0 reads as the default 20.
-        retention = max(1, self._cfg.get_int("analysis.backtest.detail_retention_per_strategy", 20))
+        # Clamp: a value ≤ 0 reads as the default 20; a negative eviction LIMIT would raise
+        # (swallowed → unbounded growth).
+        retention = int_positive(self._cfg, "analysis.backtest.detail_retention_per_strategy", 20)
         try:
             await self._backtest_details_repo.insert(
                 backtest_id=result.backtest_id,
@@ -3784,7 +3790,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
         # Enforce the overall scan deadline (default 120s).
-        deadline = self._cfg.get_int("analysis.screener.max_duration_seconds", 120)
+        deadline = int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)
         try:
             resp = await asyncio.wait_for(
                 engine.screen(request, propagation_meta), timeout=deadline
@@ -4264,7 +4270,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
         min_sample = self._cfg.get_int("analysis.patterns.min_sample_count", 5)
-        bucket_count = self._cfg.get_int("analysis.patterns.indicator_bucket_count", 5)
+        bucket_count = int_positive(self._cfg, "analysis.patterns.indicator_bucket_count", 5)
         factors = bucket_pnl_factors(samples, min_sample=min_sample, bucket_count=bucket_count)
 
         positive = sorted(
@@ -4543,11 +4549,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             offset = int(request.page.page_token) if request.page.page_token else 0
         except ValueError:
             offset = 0
-        budget_ms = self._cfg.get_int(
-            "analysis.opportunity.read_db_budget_ms", _DEFAULT_OPP_READ_DB_BUDGET_MS
+        budget_ms = int_positive(
+            self._cfg, "analysis.opportunity.read_db_budget_ms", _DEFAULT_OPP_READ_DB_BUDGET_MS
         )
-        if budget_ms <= 0:
-            budget_ms = _DEFAULT_OPP_READ_DB_BUDGET_MS
 
         q = _OpportunityQueueRead()
         err = None
@@ -4699,11 +4703,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # FR-4: a short success-only memo skips the live RPC for a symbol re-enriched within
         # the window (0 disables the memo → always fetch). Read once per pass (F-07).
         ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 20)
-        enrich_ms = self._cfg.get_int(
-            "analysis.opportunity.live_enrich_timeout_ms", _DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS
+        enrich_ms = int_positive(
+            self._cfg,
+            "analysis.opportunity.live_enrich_timeout_ms",
+            _DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS,
         )
-        if enrich_ms <= 0:
-            enrich_ms = _DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
         by_symbol: dict[str, list] = {}
         for opp in opps:
@@ -4871,7 +4875,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._indicators, propagation_meta, component_sem=self._component_series_sem
         )
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
-        window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
+        window_hours = int_positive(self._cfg, "analysis.opportunity.valid_window_hours", 24)
 
         # Re-drain active signals once so a healed row restores signal_axis (both axes, @AC-8).
         signals = await self._drain_active_signals(propagation_meta)
@@ -5292,8 +5296,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Per-symbol live-attribution fan-out cap, applied ONLY at candidate-CREATION sites. The
         # exclude-before-slice order is LOAD-BEARING so the budget goes to genuinely-new strategies.
-        max_live_strats = self._cfg.get_int(
-            "analysis.opportunity.max_live_strategies_per_symbol", 5
+        max_live_strats = int_positive(
+            self._cfg, "analysis.opportunity.max_live_strategies_per_symbol", 5
         )
 
         def _capped_live(sym: str, exclude=frozenset()) -> list[str]:
@@ -5344,8 +5348,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # 2. Held positions — attribute to each watchlist strategy, plus bounded live-covered
         #    strategies; else an unattributed (symbol, "") row. Every held symbol yields ≥1 row.
-        max_live_held = self._cfg.get_int(
-            "analysis.opportunity.max_live_held_symbols_per_compute", 20
+        max_live_held = int_positive(
+            self._cfg, "analysis.opportunity.max_live_held_symbols_per_compute", 20
         )
         live_eligible_held = [
             sym
@@ -5380,8 +5384,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # entry-traced duplicate (held symbols already got their exit-traced rows above).
         live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
         competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
-        max_live_only = self._cfg.get_int(
-            "analysis.opportunity.max_live_only_symbols_per_compute", 20
+        max_live_only = int_positive(
+            self._cfg, "analysis.opportunity.max_live_only_symbols_per_compute", 20
         )
         ranked_live_only = sorted(
             competitive_pool,
@@ -5468,7 +5472,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Rank curated (watchlist/held/live) ABOVE the max_universe_size cut so it is never
         # truncated; a muted_only bucket ranks above the speculative tail too.
-        max_universe = self._cfg.get_int("analysis.opportunity.max_universe_size", 100)
+        max_universe = int_positive(self._cfg, "analysis.opportunity.max_universe_size", 100)
 
         def _sel(c: dict) -> bool:
             return c["is_watchlist"] or c["is_held"] or c["is_live"]
@@ -5508,7 +5512,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fund_failures: dict = {}
         fund_gate = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False)
         session_end_seconds = 0
-        window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
+        window_hours = int_positive(self._cfg, "analysis.opportunity.valid_window_hours", 24)
 
         # FR-1/FR-6 (feature 176): three-phase single-flight fan-out. Serial-identical output —
         # per-candidate eligibility, session_end, dedup and ordering are all preserved; only the
@@ -6167,7 +6171,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if request.HasField("snooze_until"):
                 snooze_until = request.snooze_until.ToDatetime(tzinfo=UTC)
             else:
-                hours = self._cfg.get_int("analysis.opportunity.snooze_default_hours", 24)
+                hours = int_positive(self._cfg, "analysis.opportunity.snooze_default_hours", 24)
                 snooze_until = datetime.now(UTC) + timedelta(hours=hours)
 
         try:

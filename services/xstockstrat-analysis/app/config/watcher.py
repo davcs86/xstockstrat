@@ -106,7 +106,7 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.string_val or default
+        return v.string_val if v.HasField("string_val") else default
 
     def get_int(self, key: str, default: int = 0) -> int:
         if self._snapshot is None:
@@ -114,20 +114,9 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.int_val or default
-
-    def get_int_present(self, key: str, default: int) -> int:
-        """Presence-aware int read (feature 097): returns the stored ``int_val`` whenever the
-        field is set — **including a legitimate 0** — else the default. Mirrors ``get_bool``'s
-        ``HasField`` pattern; use this (never ``get_int``) for keys where 0 is a meaningful
-        value, e.g. ``analysis.opportunity.refresh_hour_utc`` (0 = midnight UTC) which the
-        ``get_int`` zero-trap would otherwise swallow into the default."""
-        if self._snapshot is None:
-            return default
-        v = self._snapshot.values.get(key)
-        if v is None:
-            return default
         return v.int_val if v.HasField("int_val") else default
+
+    get_int_present = get_int
 
     def get_bool(self, key: str, default: bool = False) -> bool:
         if self._snapshot is None:
@@ -143,32 +132,23 @@ class ConfigWatcher:
         v = self._snapshot.values.get(key)
         if v is None:
             return default
-        return v.float_val or default
-
-    def get_float_present(self, key: str, default: float) -> float:
-        """Presence-aware float read (feature 022): returns the stored ``float_val`` whenever the
-        field is set — **including a legitimate 0.0** — else the default. Mirrors
-        ``get_int_present``; use this (never ``get_float``) for keys where 0 is a meaningful
-        value, e.g. ``analysis.scoring.signal_decay_half_life_hours`` (0 disables decay, FR-3)
-        which the ``get_float`` zero-trap would otherwise swallow into the default."""
-        if self._snapshot is None:
-            return default
-        v = self._snapshot.values.get(key)
-        if v is None:
-            return default
         return v.float_val if v.HasField("float_val") else default
 
-    @property
-    def sandbox_timeout_ms(self) -> int:
-        return self.get_int("indicators.sandbox.timeout_ms", default=5000)
+    get_float_present = get_float
 
-    @property
-    def sandbox_memory_bytes(self) -> int:
-        return self.get_int("indicators.sandbox.memory_bytes", default=128 * 1024 * 1024)
 
-    @property
-    def sandbox_allowed_imports(self) -> list[str]:
-        raw = self.get_str(
-            "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
-        )
-        return [m.strip() for m in raw.split(",") if m.strip()]
+# >0, not >=0: these keys size semaphores, pools, intervals and caps, where 0 or a negative
+# deadlocks, raises, busy-loops or empties the result just as an unset key never should.
+def int_positive(cfg, key: str, default: int) -> int:
+    v = cfg.get_int(key, default)
+    return v if v > 0 else default
+
+
+def float_positive(cfg, key: str, default: float) -> float:
+    v = cfg.get_float(key, default)
+    return v if v > 0 else default
+
+
+def str_nonempty(cfg, key: str, default: str) -> str:
+    v = cfg.get_str(key, default)
+    return v if v else default

@@ -160,6 +160,31 @@ def _setup_gen_path() -> None:
 _setup_gen_path()
 
 
+def snapshot_watcher(**values):
+    """A dial-free ConfigWatcher; each value lands in the oneof member matching its Python type."""
+    from gen.config.v1 import config_pb2
+
+    from app.config.watcher import ConfigWatcher
+
+    # __new__ bypasses __init__'s channel + watch-task dial (fails-074: never a live watcher).
+    w = ConfigWatcher.__new__(ConfigWatcher)
+    snap = config_pb2.ConfigSnapshot()
+    for key, val in values.items():
+        # bool before int: bool is an int subclass.
+        if isinstance(val, bool):
+            snap.values[key].bool_val = val
+        elif isinstance(val, int):
+            snap.values[key].int_val = val
+        elif isinstance(val, float):
+            snap.values[key].float_val = val
+        elif isinstance(val, str):
+            snap.values[key].string_val = val
+        else:
+            raise TypeError(f"snapshot_watcher: unsupported value type for {key}: {type(val)!r}")
+    w._snapshot = snap
+    return w
+
+
 @pytest.fixture
 def otel_reset(monkeypatch):
     """Isolate a test calling init_telemetry: the OTel tracer provider is set-once per process."""

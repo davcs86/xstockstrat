@@ -27,6 +27,7 @@ from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from app.config.watcher import int_positive, str_nonempty
 from app.engine.durable_schedule import DurableSchedule
 from app.identity import SYSTEM_IDENTITY
 from app.supervision import retry_until_ok, run_supervised
@@ -35,6 +36,11 @@ log = logging.getLogger(__name__)
 
 # Ingest/indicators grant for the producer's writes and scoring as the reserved `system` owner.
 _FUNDSIGNAL_CALLER = "analysis-fundsignal"
+
+
+def fundsignal_source_slug(cfg) -> str:
+    """Slug of the producer's registered `derived` signal source; the sole reader."""
+    return str_nonempty(cfg, "analysis.fundsignal.source_slug", "fundamentals")
 
 
 class _SystemWriteRejected(Exception):
@@ -135,8 +141,8 @@ class FundamentalsSignalLoop:
         # Due. A disabled producer neither runs nor advances the schedule — it re-checks after one
         # interval (the manual RunFundamentalsScan trigger is the immediate "enable then run" path).
         if not self._cfg.get_bool("analysis.fundsignal.enabled", default=False):
-            interval_hours = self._cfg.get_int("analysis.fundsignal.run_interval_hours", default=24)
-            return max(1, interval_hours) * 3600
+            interval_hours = int_positive(self._cfg, "analysis.fundsignal.run_interval_hours", 24)
+            return interval_hours * 3600
         if self._lock.locked():
             log.info("fundsignal: previous cycle still running — skipping")
             # Back off without advancing the persisted schedule (no completed run to record).
@@ -146,10 +152,10 @@ class FundamentalsSignalLoop:
         async with self._lock:
             try:
                 await self.run_once(force=False, dry_run=False, override_symbols=None)
-                interval_hours = self._cfg.get_int(
-                    "analysis.fundsignal.run_interval_hours", default=24
+                interval_hours = int_positive(
+                    self._cfg, "analysis.fundsignal.run_interval_hours", 24
                 )
-                await self._advance_schedule(max(1, interval_hours) * 3600)
+                await self._advance_schedule(interval_hours * 3600)
             except Exception as e:  # never let one bad cycle kill the loop
                 log.error("fundsignal: cycle error: %s", e)
                 retry = max(1, self._cfg.get_int_present("analysis.fundsignal.retry_seconds", 300))
@@ -168,7 +174,7 @@ class FundamentalsSignalLoop:
 
     async def run_once(self, force=False, dry_run=False, override_symbols=None, metadata=()):
         run_id = str(uuid.uuid4())
-        source_slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
+        source_slug = fundsignal_source_slug(self._cfg)
         as_of_date = datetime.now(UTC).date()
         # Ingest/indicators always see the producer as `system` (manual path included); only the
         # caller's trace survives. Marketdata/portfolio keep the caller's metadata.
@@ -178,7 +184,7 @@ class FundamentalsSignalLoop:
         ]
 
         # Universe (dedup, then FMP-gated cap).
-        max_symbols = self._cfg.get_int("analysis.fundsignal.max_symbols_per_run", default=200)
+        max_symbols = int_positive(self._cfg, "analysis.fundsignal.max_symbols_per_run", 200)
         universe = override_symbols or await self._resolve_universe(metadata)
         universe = self._apply_symbol_cap(self._dedup(universe), max_symbols)
 
@@ -219,7 +225,7 @@ class FundamentalsSignalLoop:
             to_process = [s for s in universe if s not in already]
 
         # Paced, budget-bounded cached fundamentals fetch (never FMP directly).
-        budget = self._cfg.get_int("analysis.fundsignal.daily_call_budget", default=200)
+        budget = int_positive(self._cfg, "analysis.fundsignal.daily_call_budget", 200)
         fetched, deferred, calls_spent = await self._paced_fetch(to_process, budget, metadata)
 
         # Score → cross-sectional direction → drop below min conviction.
@@ -230,7 +236,7 @@ class FundamentalsSignalLoop:
         min_conv = self._cfg.get_float("analysis.fundsignal.min_conviction_to_emit", default=0.0)
         directions = self._map_directions(scores, buy_q, sell_q)
 
-        valid_days = self._cfg.get_int("analysis.fundsignal.valid_days", default=90)
+        valid_days = int_positive(self._cfg, "analysis.fundsignal.valid_days", 90)
 
         emitted = 0
         try:
