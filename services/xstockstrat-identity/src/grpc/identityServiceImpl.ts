@@ -160,29 +160,8 @@ export class IdentityServiceImpl {
         return callback({ code: 16, message: 'invalid credentials' });
       }
 
-      const now = Math.floor(Date.now() / 1000);
-      const expiresAt = now + this.accessTtlSeconds;
-      // JWT payload uses snake_case claim names — these are internal JWT fields, not proto fields
-      const claimsPayload = {
-        user_id: user.user_id,
-        email,
-        roles: user.roles ?? [],
-        issued_at: now,
-        expires_at: expiresAt,
-      };
-
-      const accessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
-        expiresIn: this.accessTtlSeconds,
-      });
-
-      const refreshToken = uuidv4();
-      const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-
-      await this.pool.query(
-        `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at)
-         VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval)`,
-        [user.user_id, refreshTokenHash, this.refreshTtlSeconds]
-      );
+      const { accessToken, issuedAt, expiresAt } = this.mintAccessToken(user.user_id, email, user.roles);
+      const refreshToken = await this.issueRefreshToken(user.user_id);
 
       log.info('User authenticated', { userId: user.user_id });
       callback(null, {
@@ -193,7 +172,7 @@ export class IdentityServiceImpl {
           userId: user.user_id,
           email,
           roles: user.roles ?? [],
-          issuedAt: secondsToDate(now),
+          issuedAt: secondsToDate(issuedAt),
           expiresAt: secondsToDate(expiresAt),
         },
       });
@@ -240,13 +219,7 @@ export class IdentityServiceImpl {
       const { user_id, email, roles } = rotated.row;
       const newRefreshToken = rotated.refreshToken;
 
-      const now = Math.floor(Date.now() / 1000);
-      const expiresAt = now + this.accessTtlSeconds;
-      const claimsPayload = { user_id, email, roles: roles ?? [], issued_at: now, expires_at: expiresAt };
-
-      const newAccessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
-        expiresIn: this.accessTtlSeconds,
-      });
+      const { accessToken: newAccessToken, issuedAt, expiresAt } = this.mintAccessToken(user_id, email, roles);
 
       log.info('Token refreshed', { userId: user_id });
       callback(null, {
@@ -257,7 +230,7 @@ export class IdentityServiceImpl {
           userId: user_id,
           email,
           roles: roles ?? [],
-          issuedAt: secondsToDate(now),
+          issuedAt: secondsToDate(issuedAt),
           expiresAt: secondsToDate(expiresAt),
         },
       });
@@ -291,27 +264,30 @@ export class IdentityServiceImpl {
 
   // ── OAuth 2.1 authorization-server backend ───────────
 
-  /** Mint an audience-bound access JWT for the OAuth flow. */
-  private mintOAuthAccessToken(
+  /**
+   * `aud` is written only when an OAuth caller passes an audience, so first-party tokens carry none
+   * (IDENTITY-4). JWT claim names are snake_case internal fields, not proto fields.
+   */
+  private mintAccessToken(
     userId: string,
     email: string,
     roles: string[],
-    audience: string,
-  ): { accessToken: string; expiresIn: number } {
+    audience?: string,
+  ): { accessToken: string; expiresIn: number; issuedAt: number; expiresAt: number } {
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = now + this.accessTtlSeconds;
-    const claimsPayload = {
+    const claimsPayload: Record<string, unknown> = {
       user_id: userId,
       email,
       roles: roles ?? [],
       issued_at: now,
       expires_at: expiresAt,
-      aud: audience,
     };
+    if (audience !== undefined) claimsPayload.aud = audience;
     const accessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
       expiresIn: this.accessTtlSeconds,
     });
-    return { accessToken, expiresIn: this.accessTtlSeconds };
+    return { accessToken, expiresIn: this.accessTtlSeconds, issuedAt: now, expiresAt };
   }
 
   /**
@@ -530,7 +506,7 @@ export class IdentityServiceImpl {
         return callback({ code: 16, message: 'invalid_grant' });
       }
       const audience = resource || row.resource || '';
-      const { accessToken, expiresIn } = this.mintOAuthAccessToken(
+      const { accessToken, expiresIn } = this.mintAccessToken(
         row.user_id, row.email, row.roles ?? [], audience,
       );
       const refreshToken = await this.redeemAuthCode(codeHash, row.user_id, clientId);
@@ -557,7 +533,7 @@ export class IdentityServiceImpl {
       if (!rotated) return callback({ code: 16, message: 'invalid_grant' });
       const { user_id, email, roles } = rotated.row;
       const newRefreshToken = rotated.refreshToken;
-      const { accessToken, expiresIn } = this.mintOAuthAccessToken(
+      const { accessToken, expiresIn } = this.mintAccessToken(
         user_id, email, roles ?? [], resource || '',
       );
       log.info('OAuth token refreshed', { userId: user_id });

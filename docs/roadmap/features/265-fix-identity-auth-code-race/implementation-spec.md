@@ -287,7 +287,7 @@ pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40)
 
 ### Step 3 — service: one mint helper and one refresh-issue helper for first-party and OAuth (D-21)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -574,3 +574,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **2026-10-29 — Step 2 (TDD order):** Step 1 was committed before Step 2's tests, so RED was captured by temporarily
   restoring the pre-Step-1 `identityServiceImpl.ts` from `d6cd9f3c` (uncommitted), running `pnpm test`, then restoring
   the Step 1 file before GREEN. Result matches the spec table: 86 tests, 4 fail (the 4 RED-marked AC tests).
+- **2026-10-29 — Step 3 (TDD order, C-08 pair with Step 4):** RED/GREEN taken from a temporary, uncommitted probe
+  test (`src/__tests__/zz-step3-red.test.ts`, the AC-4 login case: refresh INSERT `params[3] === null`, no `aud`,
+  `expires_at - issued_at === 900`), deleted after GREEN; Step 4 owns the committed AC-4 tests. Evidence via
+  `pnpm test` spec-reporter `ℹ` lines (same route as Step 2). The `authenticateUser` inline comment "JWT payload
+  uses snake_case claim names" moved into `mintAccessToken`'s 2-line doc comment rather than being dropped.

@@ -22,6 +22,7 @@
 | 2026-10-29 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | Step 1 — `redeemAuthCode` conditional claim + same-transaction refresh INSERT in `exchangeAuthCode` (D-23) |
 | 2026-10-29 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2 — AC-1/2/3/5/6 tests with the `makeAuthCodeDb` transactional fake (RED 4 fail → GREEN 86/86) |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 3, 4, 5 re-anchored to the current codebase after merging origin/main-dev (line-anchor drift only, no symbol drift) |
+| 2026-10-29 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3 — `mintAccessToken` (optional `aud`) + `issueRefreshToken` shared by login, refresh and OAuth (D-21) |
 
 ---
 
@@ -55,4 +56,4 @@ duplication (D-21) is folded in so the fix covers one shared path.
 
 ## Next Action
 
-`/sdd-execute fix-identity-auth-code-race sequential` — Step 1 (single-use auth-code redemption)
+`/sdd-execute fix-identity-auth-code-race sequential` — Step 4 (AC-4 claim-shape parity tests)

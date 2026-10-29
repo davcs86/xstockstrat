@@ -425,3 +425,17 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
     `pool.queries` example `:607`; `APPLICATION_ENV` precedent `:121-140`.
   - Step 5: `issueAuthCode` starts at `identityServiceImpl.ts:468`; request fields unchanged. No Postgres on
     `localhost:5432`, so the BEFORE/AFTER repro run stays with the operator, as the spec already says.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 3 (sdd-batch-execute)
+
+- Step 3 done: `mintOAuthAccessToken` renamed to `mintAccessToken(userId, email, roles, audience?)`, returning
+  `{ accessToken, expiresIn, issuedAt, expiresAt }`; `aud` written only when `audience !== undefined` (OAuth callers
+  still pass `audience` / `resource || ''`, so `aud: ''` is preserved, FR-8). `authenticateUser` and `refreshToken`
+  mint through it; `authenticateUser` issues its refresh token through `issueRefreshToken(user.user_id)`, so
+  first-party login rows now write `client_id = NULL` explicitly (accepted side effect, design.md §2). No import change.
+- TDD (Node 24.20.0, `pnpm test`), temporary uncommitted AC-4 login probe (deleted after GREEN):
+  RED — 87 tests, 86 pass, 1 fail: refresh INSERT `params[3]` `undefined !== null`. GREEN — 87 tests, 87 pass, 0 fail.
+- Verification: `pnpm run lint` 0 errors (192 warnings, down from 194 — two `jwt as any` sites removed);
+  `grep -c mintOAuthAccessToken` → 0. FR-6/FR-7 structural preview: one `(jwt as any).sign` (`:287`, in
+  `mintAccessToken`), one `INSERT INTO identity.refresh_tokens` (`:305`, in `issueRefreshToken`).
+  `pnpm run test:coverage` (probe removed) 86/86, All files 82.67% lines.
