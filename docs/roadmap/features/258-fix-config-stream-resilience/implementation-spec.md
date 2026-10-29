@@ -130,6 +130,7 @@ secret redaction on every broadcast
     The timer callback clears `this.reconnectTimer = null` (`:114`) before reconnecting.
   - `:119-137` `dispatch()`: a guarded `JSON.parse`, and a malformed payload is ignored.
   - `:35` `reconnectDelayMs = 2000`, a hardcoded constant. This is the F-07 precedent for code-constant backoff.
+- Re-verified 2026-10-29 after the main-dev merge: every Step 1 anchor above still matches.
 - Boot path: `src/index.ts:47-48` (`new ConfigServiceImpl(pool)`, `await configImpl.initialize()`). A rejection
   from `initialize()` makes `main()` exit (recon.md:20-22). That fail-fast behaviour is kept, and `index.ts` is not
   edited.
@@ -230,6 +231,9 @@ docker compose logs --since 1m xstockstrat-config | grep -E "config LISTEN conne
   Deviation Log. The check then moves to the dev app (`main-dev` deploy) as a blocker on the integration PR. It is
   never silently waived. Step 1 cannot be marked `done` until this check has passed, locally or on the dev app.
   Steps 2–6 may proceed while it is pending, because their fakes do not depend on it.
+- Tooling note (2026-10-29): the `docker` / `dockerd` binaries and Compose v5.6.1 are present on the execute host,
+  but a batch-execute worktree session is barred from starting a database (sdd-execute HARD CONSTRAINT). In that
+  case the check takes the fallback above (dev app, integration-PR blocker). It is not hard-blocked by tooling.
 
 ---
 
@@ -251,8 +255,8 @@ secret redaction on every broadcast
     inert client with no `release`/`removeAllListeners`.
 - The suite runs against compiled output: `package.json:12-13`
   (`tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js`).
-- Fake model: ledger `FakeClient` (`services/xstockstrat-ledger/src/__tests__/eventNotifier.test.ts:27-55`). It has
-  `on`/`emit`/`notify`/`listens`/`failConnect`.
+- Fake model: ledger `FakeClient` (`services/xstockstrat-ledger/src/__tests__/eventNotifier.test.ts`; `class FakeClient` at `:22`,
+  `failConnect` at `:27`, `notify` at `:47`). It has `on`/`emit`/`notify`/`listens`/`failConnect`.
 - Timer precedent: `t.mock.timers.enable({ apis: ['setTimeout'] })` and `t.mock.timers.tick(...)`
   (`src/__tests__/configWatcher.test.ts:139-144`).
 - AC fixture data: `buildConfigValue` maps a `value_type: 'int'` row to `{ int_val }` (`configServiceImpl.ts:582`).
@@ -260,7 +264,8 @@ secret redaction on every broadcast
   `'CONFIG_UPDATE_TYPE_DELTA'` (string enums; `:37-41`).
 - Log capture. `log` is a module-private winston logger (`src/services/logger.ts:10-19`, a
   `transports.Console()` sink), and no config/ledger test captures logs today (grep for `stdout.write`/`winston` in
-  `src/__tests__`: no hits). Winston is not installed in this checkout, so the sink is **Not verified** here.
+  `src/__tests__`: no hits). Winston is not installed until `pnpm install` runs (no `node_modules` in a fresh
+  checkout), so the sink is **Not verified** here.
   Capture with `t.mock.method(process.stdout, 'write', …)`, which is where winston 3's Console transport writes by
   default. At execute, confirm that against the installed `winston/lib/winston/transports/console.js`. If the sink
   differs, mock what that file actually calls (`console._stdout`, `console.log` or `console.error`) and record the
@@ -367,21 +372,22 @@ secret redaction on every broadcast
 **Codebase Evidence**:
 - **D-06** `getConfig` `:315-328`. `const values = await this.resolveOverlayValues(namespace, env, userId);` at
   `:319` is outside any try. The success callback is at `:321-327`.
-- **D-06** `setConfig` `:371`:
-  - `:446` `const createKey = …`
-  - `:447-451` `const existing = await this.pool.query(...)` — outside any try.
-  - `:455` `let globalRow: any = null;`
-  - `:457-462` `const globalExisting = await this.pool.query(...)` — outside any try.
-  - `:465` `keyRegistered`, which reads `existing` and `globalRow`.
-  - NOT_FOUND `code: 5` at `:466-472`.
-  - `:476-482` `isSecret`, which reads `existing.rows`.
-  - The encryption catch, `code: 13`, at `:490-493` (`encryptSecret` at `:489`).
-  - The write try at `:500-522`. Its catch `callback({ code: 13, message: err.message })` at `:521` is the reuse
+- **D-06** `setConfig` (anchors re-stamped 2026-10-29: +2 after the main-dev merge brought the
+  `platform.trading_state` INVALID_ARGUMENT block at `:418-430`; match by symbol, the code shapes are unchanged):
+  - `:448` `const createKey = …`
+  - `:449-453` `const existing = await this.pool.query(...)` — outside any try.
+  - `:457` `let globalRow: any = null;`
+  - `:458-465` the `if` block holding `const globalExisting = await this.pool.query(...)` — outside any try.
+  - `:467` `keyRegistered`, which reads `existing` and `globalRow`.
+  - NOT_FOUND `code: 5` at `:468-474`.
+  - `:478-484` `isSecret`, which reads `existing.rows`.
+  - The encryption catch, `code: 13`, at `:492-495`.
+  - The write try at `:502-524`. Its catch `callback({ code: 13, message: err.message })` at `:523` is the reuse
     convention (recon.md § Patterns to REUSE).
 - These checks stay **outside** the new try, so their specific codes survive:
-  - PERMISSION_DENIED `:391`/`:402`
-  - MISSING_AUTHOR `:411-414`
-  - INVALID_ARGUMENT `:418-441`
+  - PERMISSION_DENIED callbacks `:393`/`:405`; `first(call.metadata, HEADER_INTERNAL_CALLER)` at `:407`
+  - MISSING_AUTHOR `:413-416`
+  - INVALID_ARGUMENT, including the `platform.trading_state` block `:418-430`, up to the gate
 - `getSecret` `:335-369` is not touched, and no shared helper is added (PRESERVE config-secrets `@AC-16`).
 
 **TDD**: `red-green required` (Step 4 is the paired test)
@@ -391,10 +397,10 @@ secret redaction on every broadcast
 **Instructions**:
 1. `getConfig`: wrap `:319` in `let values: Record<string, any>; try { values = await this.resolveOverlayValues(namespace, env, userId); } catch (err: any) { log.error('getConfig failed', { namespace, env, userId, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
    Leave `:320-327` unchanged.
-2. `setConfig`: declare `let existing: any; let globalRow: any = null;` above `:447`. Then wrap only the two gate
-   queries (`:447-451` and the `if` block `:456-463`) in `try { … } catch (err: any) { log.error('setConfig existence gate failed', { namespace, key, env, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
-   Remove the original `const`/`let` on those lines. `:465` onward reads the same names.
-3. Do not move the NOT_FOUND gate, the encryption catch or the write try (`:500-522`). AC-11 is a regression pin on
+2. `setConfig`: declare `let existing: any; let globalRow: any = null;` above `:449`. Then wrap only the two gate
+   queries (`:449-453` and the `if` block `:458-465`) in `try { … } catch (err: any) { log.error('setConfig existence gate failed', { namespace, key, env, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
+   Remove the original `const`/`let` on those lines. `:467` onward reads the same names.
+3. Do not move the NOT_FOUND gate, the encryption catch or the write try (`:502-524`). AC-11 is a regression pin on
    that unchanged try.
 
 **Verification**:
@@ -416,15 +422,16 @@ grep -n "getConfig failed\|setConfig existence gate failed" src/grpc/configServi
 secret redaction on every broadcast
 
 **Codebase Evidence**:
-- Step 3's sites: `getConfig` `:319`, and the `setConfig` gates `:447-462`.
+- Step 3's sites: `getConfig` `:319`, and the `setConfig` gates `:449-465` (re-stamped 2026-10-29; same +2 drift as
+  Step 3).
 - Admin-scope metadata shape: `setConfigAuthz.test.ts` uses `HEADER_ACCESS_SCOPE`/`HEADER_USER_ID` imported from
   `../grpc/authz` (`authz.ts:10-11`). The inline literals are banned by `.eslintrc.json:13-27`. Scope `'4'` passes
   `hasAdminAccessScope`.
 - The bounds registry has no entry for `analysis.backtest.max_duration_seconds` (`configServiceImpl.ts:100-146`;
-  grep), so a write of 600 reaches the existence gate.
+  grep, re-verified 2026-10-29), so a write of 600 reaches the existence gate.
 - INVALID_ARGUMENT source: `'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 }`
   (`:101`).
-- NOT_FOUND source: `:466-472`.
+- NOT_FOUND source: `:468-474`.
 - C-13: inline scenario values in this file only; compliant inline.
 
 **TDD**: `red-green required`. Against the pre-Step-3 tree, AC-3 and AC-4 reject from the handler instead of
@@ -488,12 +495,13 @@ secret redaction on every broadcast
   - `.then(...)` at `:305-309` registers only after the snapshot write.
   - `.catch(...)` at `:310-312` only warns.
 - `first(md, key): string` — `src/grpc/authz.ts:14`, already imported (`configServiceImpl.ts:9`). The call form is
-  at `:405` (C-18; not the array-returning `metadata.get`). There is no `x-trace-id` header constant in config
+  at `:407` (C-18; not the array-returning `metadata.get`). There is no `x-trace-id` header constant in config
   (grep), so the literal is used once.
 - Stream-termination pattern to reuse: ledger `call.destroy({ code: 13, message: \`Internal error: ${err.message}\` })`
   (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:325`; also `:285`, `:297`). Config has no
   `call.destroy` today (grep).
 - `ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT` / `_DELTA` are used at `:305` and `:265`.
+- Re-verified 2026-10-29 after the main-dev merge: every Step 5 anchor above still matches.
 
 **TDD**: `red-green required` (Step 6 is the paired test)
 
@@ -549,7 +557,7 @@ secret redaction on every broadcast
 - Step 5's sites: `watchConfig` `:280-313`, `broadcastToSubscribers` `:260-274`.
 - `broadcastToSubscribers` is private. Tests drive it through the Step 1 `notification` path, using Step 2's
   `FakeClient` and the routing pool, which are reused in this file (no second copy).
-- Fake-call model: ledger stream tests assert `call.destroyed.code` (`ledgerServiceImpl.test.ts:551-559`, `:630-631`).
+- Fake-call model: ledger stream tests assert `call.destroyed.code` (`ledgerServiceImpl.test.ts:597-598`, `:609`; fake call `destroyed` field at `:520`, set at `:528`).
 - Per-user overlay SELECT: `configServiceImpl.ts:233-238` (`user_id = $3`).
 
 **TDD**: `red-green required`. Against the pre-Step-5 tree:
@@ -654,20 +662,16 @@ grep -n "client?.release(failure" src/grpc/ledgerServiceImpl.ts              # o
 hypertable partition safety
 
 **Codebase Evidence**:
-- The import swallow is at `ledgerServiceImpl.test.ts:21-29` (`try { await import('../grpc/ledgerServiceImpl.js') … } catch { … skipped }`).
-  The `if (!impl) return;` skip appears at 9 sites (grep count).
-- `makeIdempotentPool(opts)` is at `:56-84`. It routes SQL by regex (`:63-68`). Its client has
-  `release() {}` (`:73`), and its `connect()` (`:77-79`) always resolves.
-- **Runner (blocking; see § Step Dependencies).** Today the script is `node --experimental-strip-types --test
-  src/__tests__/*.test.ts` (`package.json:13-14`). `LedgerServiceImpl` uses constructor parameter properties
-  (`ledgerServiceImpl.ts:20-25`). Strip-only mode rejects those on every Node version, so under the current runner
-  the import is always swallowed. This is the reason the file header gives at `ledgerServiceImpl.test.ts:5-8`.
-  Under that runner, `assert.ok(LedgerServiceImpl, …)` fails both before and after Step 7, and the step cannot go
-  green. Feature 252 Step 4 replaces the runner with `tsc && … node --test dist/__tests__/*.test.js`. The test's
-  `'../grpc/ledgerServiceImpl.js'` specifier then resolves to the compiled `dist/grpc/ledgerServiceImpl.js`.
-  Step 8 runs only on that runner.
-- Line hints above are from the pre-252 file. After rebasing onto 252 (whose Step 5 de-guards this file), re-grep
-  `makeIdempotentPool` and the `before()` import before editing.
+- Re-stamped 2026-10-29 — feature 252 has landed on this branch (via the main-dev merge):
+  - `ledgerServiceImpl.test.ts` (707 lines) no longer swallows the import: the `before()` import at `:10-12` is
+    unguarded, and `:18` asserts `typeof LedgerServiceImpl === 'function'` with the message `'… never skip
+    silently'`. There are 0 `if (!impl) return;` sites (grep).
+  - `makeIdempotentPool(opts)` is at `:46` (doc comment `:44`). Its client has `release() {}` (`:64`), and its
+    `async connect()` (`:67`) always resolves. Existing callers are at `:391` and `:419`.
+- **Runner (precondition met).** `services/xstockstrat-ledger/package.json:14` `test:coverage` is now
+  `tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js` (252 Step 4). The
+  test's `'../grpc/ledgerServiceImpl.js'` specifier resolves to the compiled `dist/grpc/ledgerServiceImpl.js`, so
+  `LedgerServiceImpl`'s constructor parameter properties load. The Step 0 gate below passes; re-grep it anyway.
 - No `src/__tests__/fixtures/` home exists in ledger (ls). `makeIdempotentPool` has one consumer file. C-13
   verdict: compliant inline.
 
@@ -688,7 +692,8 @@ These failing runs are the proof that the cases **execute**. A vacuous skip cann
    `describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)')`.
    - Its first statement in each case is `assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');`.
    - Do **not** use `if (!impl) return;`.
-   - Do not edit the `before()` import block or the runner. They belong to `252-fix-identity-ledger-test-suites`.
+   - Do not edit the `before()` import block (`:10-12`) or the runner. They belong to
+     `252-fix-identity-ledger-test-suites`.
    - Name the two cases with `@AC-5` and `@AC-10` in their titles, so the TAP check below can find them.
 2. Extend `makeIdempotentPool`'s `opts` with `connectThrows?: Error` and `throwOn?: RegExp`, and record releases:
    - `connect()` rejects with `connectThrows` when it is set.
@@ -742,10 +747,12 @@ design.md § Build order requires.
 **Codebase Evidence**:
 - `services/xstockstrat-config/CLAUDE.md`:
   - Invariant #4 at `:35`: "Config changes trigger pg_notify → reloads namespace in memory → broadcasts DELTA…".
-  - § WatchConfig Flow at `:64-89`. Its tail is "ConfigServiceImpl receives LISTEN notification → Reloads
-    namespace from DB → Broadcasts DELTA" (`:86-88`).
+  - § WatchConfig Flow starts at `:65`. Its tail is "ConfigServiceImpl receives LISTEN notification → Reloads
+    namespace from DB → Broadcasts DELTA" (about `:86-88`).
 - `services/xstockstrat-config/docs/context-constitution.md:18` CONFIG-1 cites
-  `configServiceImpl.ts#reloadNamespace (~L197-217; … ~L214)`. These line hints drift with Steps 1, 3 and 5.
+  `configServiceImpl.ts#reloadNamespace (~L197-217; … ~L214)`. This is already stale before any step: the current
+  code has `private async reloadNamespace` at `:203` and `changedKeys: Object.keys(values)` at `:220`. The hints
+  drift further with Steps 1, 3 and 5; instruction 2's re-stamp covers both.
 - The root CLAUDE.md pool-budget table needs no change. The pooled LISTEN client is unchanged (F-06; design.md
   § Constitution Rules Touched).
 
