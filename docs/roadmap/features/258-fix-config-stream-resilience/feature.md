@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 3, 4, 5, 8, 2, 1, 9 re-aligned with the codebase after the main-dev merge (setConfig anchors +2; feature 252 runner landed, so the Step 8 precondition passes) |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started under the operator's standing up-front authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1, 4, 5, 6, 9 re-aligned with the codebase after the second main-dev merge (configServiceImpl.ts anchors shifted about 85 lines by Steps 1–3; Step 1 evidence now describes the implemented tree) |
 
 ---
 
