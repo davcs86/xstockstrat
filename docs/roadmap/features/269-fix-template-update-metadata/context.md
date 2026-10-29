@@ -512,3 +512,71 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   recorded in the Deviation Log. `git diff --stat` on `private-by-default-templates.feature` is empty.
 - Out of scope: none. Remaining: integration PR (§5.6).
 
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+- Operator note: Step 9 (commit `10f4d61d`) already created `services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature`
+  carrying `@feature-269`, so the plan's "no @feature-269 tag exists anywhere yet" dedup claim and its `platform.feature` routing conflict with that tree; resolve before writing.
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-template-update-metadata (feature 269)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Outline spans indicators/analysis/ingest via Examples |
+| AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | same |
+| AC-3 | docs/sdd/business-rules/platform.feature | APPEND | NEW | same |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  @AC-1 @FR-1 @FR-2 @regression @feature-269
+  Scenario Outline: An admin rename of a template is persisted and bumps the version once
+    Given an admin and a <kind> template "t-1" named "Old" with description "d1" at version 1 in <service>
+    When the admin calls ManageTemplate UPDATE on "t-1" with name "New", description "d2" and the same payload
+    Then the UPDATE response returns "t-1" with name "New", description "d2" and version 2
+    And ListTemplates on <service> returns "t-1" with name "New", description "d2" and version 2
+
+    Examples:
+      | kind          | service                |
+      | FORMULA       | xstockstrat-indicators |
+      | STRATEGY      | xstockstrat-analysis   |
+      | SIGNAL_SOURCE | xstockstrat-ingest     |
+
+  @AC-2 @FR-3 @FR-4 @regression @feature-269
+  Scenario Outline: Retiring a template twice keeps the first retired_at and sets updated_at each time
+    Given an admin and a <kind> template "t-1" in <service>
+    When the admin retires "t-1"
+    And the admin retires "t-1" again
+    Then the second RETIRE succeeds and returns "t-1" as retired
+    And "t-1" in <service> keeps the retired_at set by the first RETIRE
+    And "t-1" in <service> has an updated_at later than that retired_at
+
+    Examples:
+      | kind          | service                |
+      | FORMULA       | xstockstrat-indicators |
+      | STRATEGY      | xstockstrat-analysis   |
+      | SIGNAL_SOURCE | xstockstrat-ingest     |
+
+  @AC-3 @FR-5 @regression @feature-269
+  Scenario Outline: CREATE with an empty template_id is rejected
+    Given an admin
+    When the admin calls ManageTemplate CREATE on <service> with a <kind> template, template_id "" and a valid payload
+    Then the call fails with INVALID_ARGUMENT
+    And ListTemplates on <service> returns no new <kind> template
+
+    Examples:
+      | kind          | service                |
+      | FORMULA       | xstockstrat-indicators |
+      | STRATEGY      | xstockstrat-analysis   |
+      | SIGNAL_SOURCE | xstockstrat-ingest     |
+
+### Notes / ambiguities / conflicts
+- Routing call: each scenario is a single Scenario Outline whose Examples span three services (indicators, analysis, ingest). Splitting per service would break the verbatim rule, and no single service owns the guarantee, so all three go to platform.feature (cross-service contract: the same ManageTemplate UPDATE/RETIRE/CREATE behavior on every template-owning service). Alternative if a human prefers per-service suites: split by Examples row into services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature (not recommended, it alters the scenario text).
+- Dedup: grep for ManageTemplate, retired_at and template_id in all services/*/acceptance/*.feature found only services/xstockstrat-indicators/acceptance/private-by-default-templates.feature lines 38, 51 and 81. These are the private-by-default CREATE and origin-template rules, not UPDATE metadata, double-RETIRE or empty-id behavior, so there is no OVERLAP or CONFLICT. No @feature-269 tag exists anywhere yet, so this is not a re-run.
+- Ingest has no ManageTemplate scenarios in its suite for these behaviors. Only the platform.feature append is needed.
+- Affected services per feature.md Reviewers: indicators, analysis, ingest.
+
+### Coverage check
+- Source scenarios: 3 (AC-1, AC-2, AC-3). Planned (NEW+DUP+OVERLAP): 3 (3 NEW). All accounted for, none skipped. @AC numbers unchanged, @feature-269 added.
+```
