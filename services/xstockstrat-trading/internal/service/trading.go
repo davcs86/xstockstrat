@@ -2178,7 +2178,6 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 		Key:         "platform.trading_state",
 		Value:       &configv1.ConfigValue{Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
 		Reason:      fmt.Sprintf("reconciliation: %d/%d accounts unreachable/unprotected this tick", systemicCount, totalAccounts),
-		Author:      "system:reconciliation-poller",
 		Environment: env,
 	})
 	if err != nil {

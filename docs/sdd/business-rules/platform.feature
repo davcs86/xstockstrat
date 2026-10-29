@@ -440,3 +440,52 @@ Feature: Platform-wide guarantees
     When the feature's migrations are applied
     Then both "acc-1" orders have fees 0.00 and the "alp-1" order has no fees value
     And "acc-1" lifetime realized P&L is 450.00, fees_since_snapshot is 0.00, and fees_lifetime is 0.00
+
+  # Promoted from feature 252 (fix-identity-ledger-test-suites): identity and ledger test-suite integrity.
+  @AC-3 @FR-3 @regression @feature-252
+  Scenario Outline: an unloadable test subject fails the run instead of passing
+    Given in services/<service>, the subject import in <test_file> points at the nonexistent module "<missing>"
+    When "pnpm run test:coverage" runs in services/<service>
+    Then the command exits non-zero
+    And no test in <test_file> is reported as passed
+
+    Examples:
+      | service              | test_file                                 | missing                             |
+      | xstockstrat-identity | src/__tests__/identityServiceImpl.test.ts | ../grpc/identityServiceImpl.missing |
+      | xstockstrat-ledger   | src/__tests__/ledgerServiceImpl.test.ts   | ../grpc/ledgerServiceImpl.missing   |
+      | xstockstrat-ledger   | src/__tests__/eventNotifier.test.ts       | ../services/eventNotifier.missing   |
+
+  @AC-4 @FR-4 @regression @feature-252
+  Scenario: the coverage gate measures the implementation
+    Given each service's c8-wrapped "pnpm run test:coverage" run
+    When "pnpm run test:coverage" runs in services/xstockstrat-identity and services/xstockstrat-ledger
+    Then the identity coverage report has a row with non-zero line coverage for identityServiceImpl and for authz
+    And the ledger coverage report has a row with non-zero line coverage for ledgerServiceImpl and for eventNotifier
+    And "c8 check-coverage --lines 40", run in each of those services right after its run, exits 0 and the report shows a numeric All files % Lines of at least 40
+    # Rows are matched by module name, whether c8 reports them under src/ or dist/.
+
+  @AC-5 @FR-5 @feature-252
+  Scenario Outline: existing tests still pass once they actually execute
+    Given the tests in services/<service>/src/__tests__ on main-dev
+    When "pnpm run test:coverage" runs in services/<service> after the fix
+    Then the test summary reports 0 failed tests
+    And no existing test is deleted, marked skip or todo, or has an assertion removed
+
+    Examples:
+      | service              |
+      | xstockstrat-identity |
+      | xstockstrat-ledger   |
+
+  @AC-6 @FR-3 @regression @feature-252
+  Scenario Outline: a compiled test whose compiled subject is missing fails instead of passing
+    Given "tsc" has completed in services/<service>
+    And "node --test --test-reporter=tap <compiled_test>" exits 0 with a "# pass" count above 0
+    When <compiled_subject> is deleted and "node --test --test-reporter=tap <compiled_test>" runs again
+    Then the command exits non-zero
+    And the TAP summary reports "# pass 0"
+
+    Examples:
+      | service              | compiled_test                              | compiled_subject                 |
+      | xstockstrat-identity | dist/__tests__/identityServiceImpl.test.js | dist/grpc/identityServiceImpl.js |
+      | xstockstrat-ledger   | dist/__tests__/ledgerServiceImpl.test.js   | dist/grpc/ledgerServiceImpl.js   |
+      | xstockstrat-ledger   | dist/__tests__/eventNotifier.test.js       | dist/services/eventNotifier.js   |

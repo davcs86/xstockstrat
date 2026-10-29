@@ -1,23 +1,8 @@
-/**
- * Unit tests for IdentityServiceImpl — no real DB required.
- *
- * Tests cover the input-validation fast paths (no credentials, missing token)
- * and the validateToken round-trip with a locally-signed JWT.
- *
- * Tests gracefully skip if the TypeScript import fails in strip-only mode
- * (parameter properties); they run fully when --experimental-transform-types
- * or a supporting runtime is used.
- *
- * Run: node --experimental-strip-types --test src/__tests__/*.test.ts
- */
+// Unit tests for IdentityServiceImpl and authz — pool and config are inline mocks; no real DB.
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
-
-// ---------------------------------------------------------------------------
-// Lazy imports — guard against strip-only TypeScript syntax errors
-// ---------------------------------------------------------------------------
 
 let IdentityServiceImpl: any;
 let userIdFrom: any;
@@ -25,18 +10,23 @@ let first: any;
 let isBlockedDefaultAdmin: any;
 let SEED_ADMIN_PASSWORD_HASH: any;
 
+// This import must throw on failure — never wrap it in try/catch or early-return on a
+// missing subject; a swallowed import turns every case into a silent pass.
 before(async () => {
-  try {
-    const mod = await import('../grpc/identityServiceImpl.js');
-    IdentityServiceImpl = mod.IdentityServiceImpl;
-    isBlockedDefaultAdmin = mod.isBlockedDefaultAdmin;
-    SEED_ADMIN_PASSWORD_HASH = mod.SEED_ADMIN_PASSWORD_HASH;
-    const authz = await import('../grpc/authz.js');
-    userIdFrom = authz.userIdFrom;
-    first = authz.first;
-  } catch {
-    // Unsupported TypeScript syntax in strip-only mode — tests will be skipped.
-  }
+  const mod = await import('../grpc/identityServiceImpl.js');
+  IdentityServiceImpl = mod.IdentityServiceImpl;
+  isBlockedDefaultAdmin = mod.isBlockedDefaultAdmin;
+  SEED_ADMIN_PASSWORD_HASH = mod.SEED_ADMIN_PASSWORD_HASH;
+  const authz = await import('../grpc/authz.js');
+  userIdFrom = authz.userIdFrom;
+  first = authz.first;
+});
+
+describe('test harness', () => {
+  it('imports the implementation under test', () => {
+    assert.strictEqual(typeof IdentityServiceImpl, 'function', 'IdentityServiceImpl must import — never skip silently');
+    assert.strictEqual(typeof userIdFrom, 'function', 'authz.userIdFrom must import — never skip silently');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -53,7 +43,6 @@ function makePool(rows: any[] = [], throws?: Error) {
 }
 
 function makeImpl(rows: any[] = [], throws?: Error) {
-  if (!IdentityServiceImpl) return null;
   const pool = makePool(rows, throws);
   const config = { getInt: (_key: string, def: number) => def } as any;
   return new IdentityServiceImpl(pool, config);
@@ -79,7 +68,6 @@ function makeCallWithMetadata(req: any, userId: string) {
 describe('authenticateUser', () => {
   it('rejects when email is missing', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     const call = makeCall({ email: '', password: 'secret' });
 
     await new Promise<void>((resolve) => {
@@ -93,7 +81,6 @@ describe('authenticateUser', () => {
 
   it('rejects when password is missing', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     const call = makeCall({ email: 'user@example.com', password: '' });
 
     await new Promise<void>((resolve) => {
@@ -107,7 +94,6 @@ describe('authenticateUser', () => {
 
   it('returns error code 16 when user not found', async () => {
     const impl = makeImpl([]); // empty rows
-    if (!impl) return;
     const call = makeCall({ email: 'unknown@example.com', password: 'pass' });
 
     await new Promise<void>((resolve) => {
@@ -126,7 +112,6 @@ describe('authenticateUser', () => {
 
 describe('default seed-admin lockout', () => {
   it('isBlockedDefaultAdmin blocks the committed seed hash only in production', () => {
-    if (!isBlockedDefaultAdmin) return;
     assert.strictEqual(isBlockedDefaultAdmin(SEED_ADMIN_PASSWORD_HASH, 'production'), true);
     assert.strictEqual(isBlockedDefaultAdmin(SEED_ADMIN_PASSWORD_HASH, 'development'), false);
     assert.strictEqual(isBlockedDefaultAdmin(SEED_ADMIN_PASSWORD_HASH, undefined), false);
@@ -137,7 +122,6 @@ describe('default seed-admin lockout', () => {
     const impl = makeImpl([
       { user_id: 'u-admin', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['admin', 'trader'] },
     ]);
-    if (!impl) return;
     const prev = process.env.APPLICATION_ENV;
     process.env.APPLICATION_ENV = 'production';
     try {
@@ -165,7 +149,6 @@ describe('default seed-admin lockout', () => {
 describe('validateToken', () => {
   it('rejects when token is missing', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     const call = makeCall({ token: '' });
 
     await new Promise<void>((resolve) => {
@@ -179,7 +162,6 @@ describe('validateToken', () => {
 
   it('rejects an invalid / tampered token', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     const call = makeCall({ token: 'not.a.valid.jwt' });
 
     await new Promise<void>((resolve) => {
@@ -198,7 +180,6 @@ describe('validateToken', () => {
 describe('revokeToken', () => {
   it('succeeds immediately when no token provided', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     // If revokeToken just calls callback with success for missing token:
     const call = makeCall({ token: '' });
 
@@ -222,14 +203,8 @@ describe('revokeToken', () => {
 describe('validateToken success serialization (regression)', () => {
   it('returns Date timestamps that ts-proto encodes without throwing', async () => {
     const impl = makeImpl();
-    if (!impl) return;
 
-    let TokenClaims: any;
-    try {
-      ({ TokenClaims } = await import('@xstockstrat/proto/identity/v1/identity.js'));
-    } catch {
-      return; // proto package unavailable in this runtime — skip.
-    }
+    const { TokenClaims } = await import('@xstockstrat/proto/identity/v1/identity');
 
     process.env.JWT_SECRET = 'regression-test-secret';
     const now = Math.floor(Date.now() / 1000);
@@ -272,7 +247,6 @@ function makeSpyPool(rows: any[] = []) {
 }
 
 function implWithPool(pool: any) {
-  if (!IdentityServiceImpl) return null;
   const config = { getInt: (_key: string, def: number) => def } as any;
   return new IdentityServiceImpl(pool, config);
 }
@@ -284,7 +258,6 @@ function challengeFor(verifier: string): string {
 describe('registerOAuthClient', () => {
   it('rejects a non-https redirect uri', async () => {
     const impl = makeImpl([]);
-    if (!impl) return;
     const call = makeCall({ redirectUris: ['http://evil.example/cb'], clientName: 'x' });
     await new Promise<void>((resolve) => {
       impl.registerOAuthClient(call, (err: any) => {
@@ -297,7 +270,6 @@ describe('registerOAuthClient', () => {
 
   it('returns a client_id for a valid https redirect uri', async () => {
     const impl = makeImpl([]);
-    if (!impl) return;
     const call = makeCall({ redirectUris: ['https://app.example/cb'], clientName: 'x' });
     const res: any = await new Promise((resolve, reject) => {
       impl.registerOAuthClient(call, (err: any, r: any) => (err ? reject(err) : resolve(r)));
@@ -340,7 +312,6 @@ describe('exchangeAuthCode', () => {
     process.env.JWT_SECRET = 'oauth-test-secret';
     const pool = makeSpyPool([storedRow()]);
     const impl = implWithPool(pool);
-    if (!impl) return;
     const res: any = await new Promise((resolve, reject) => {
       impl.exchangeAuthCode(exchangeCall(), (err: any, r: any) => (err ? reject(err) : resolve(r)));
     });
@@ -357,7 +328,6 @@ describe('exchangeAuthCode', () => {
   it('rejects a bad code_verifier as invalid_grant', async () => {
     process.env.JWT_SECRET = 'oauth-test-secret';
     const impl = implWithPool(makeSpyPool([storedRow()]));
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.exchangeAuthCode(exchangeCall({ codeVerifier: 'wrong-verifier' }), (err: any) => {
         assert.ok(err);
@@ -370,7 +340,6 @@ describe('exchangeAuthCode', () => {
 
   it('rejects a consumed code', async () => {
     const impl = implWithPool(makeSpyPool([storedRow({ consumed_at: new Date() })]));
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.exchangeAuthCode(exchangeCall(), (err: any) => {
         assert.strictEqual(err.code, 16);
@@ -381,7 +350,6 @@ describe('exchangeAuthCode', () => {
 
   it('rejects an expired code', async () => {
     const impl = implWithPool(makeSpyPool([storedRow({ expires_at: new Date(Date.now() - 1000) })]));
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.exchangeAuthCode(exchangeCall(), (err: any) => {
         assert.strictEqual(err.code, 16);
@@ -392,7 +360,6 @@ describe('exchangeAuthCode', () => {
 
   it('rejects a non-matching redirect_uri', async () => {
     const impl = implWithPool(makeSpyPool([storedRow()]));
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.exchangeAuthCode(exchangeCall({ redirectUri: 'https://other.example/cb' }), (err: any) => {
         assert.strictEqual(err.code, 16);
@@ -458,7 +425,6 @@ for (const [method, req] of [
       process.env.JWT_SECRET = 'rotation-secret';
       const pool = makeTokenDb(row);
       const impl = implWithPool(pool);
-      if (!impl) return;
       const results = await Promise.all([refresh(impl, method, req), refresh(impl, method, req)]);
       assert.strictEqual(results.filter((r) => r.token).length, 1);
       assert.deepStrictEqual(results.filter((r) => r.err).map((r) => r.err), [16]);
@@ -469,7 +435,6 @@ for (const [method, req] of [
       process.env.JWT_SECRET = 'rotation-secret';
       const pool = makeTokenDb(row, { failInsert: true });
       const impl = implWithPool(pool);
-      if (!impl) return;
       const res = await refresh(impl, method, req);
       assert.strictEqual(res.err, 13);
       assert.strictEqual(pool.db.revoked, false);
@@ -482,7 +447,6 @@ describe('refreshOAuthToken', () => {
     process.env.JWT_SECRET = 'oauth-test-secret';
     const pool = makeSpyPool([{ token_id: 't1', user_id: 'u1', email: 'u@example.com', roles: ['trader'] }]);
     const impl = implWithPool(pool);
-    if (!impl) return;
     const call = makeCall({ refreshToken: 'old-refresh', resource: 'https://agent.example/agent' });
     const res: any = await new Promise((resolve, reject) => {
       impl.refreshOAuthToken(call, (err: any, r: any) => (err ? reject(err) : resolve(r)));
@@ -497,7 +461,6 @@ describe('refreshOAuthToken', () => {
 
   it('rejects an unknown refresh token', async () => {
     const impl = implWithPool(makeSpyPool([]));
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.refreshOAuthToken(makeCall({ refreshToken: 'nope', resource: 'r' }), (err: any) => {
         assert.strictEqual(err.code, 16);
@@ -511,7 +474,6 @@ describe('validateToken aud surfacing', () => {
   it('surfaces the aud claim from a signed JWT', async () => {
     process.env.JWT_SECRET = 'oauth-test-secret';
     const impl = makeImpl();
-    if (!impl) return;
     const now = Math.floor(Date.now() / 1000);
     const token = (jwt as any).sign(
       { user_id: 'u1', email: 'u@x.com', roles: [], issued_at: now, expires_at: now + 900, aud: 'https://agent.example/agent' },
@@ -531,7 +493,6 @@ describe('validateToken aud surfacing', () => {
 describe('listAuthorizedApps', () => {
   it('rejects when userId is missing', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.listAuthorizedApps(makeCall({ userId: '' }), (err: any) => {
         assert.ok(err);
@@ -552,7 +513,6 @@ describe('listAuthorizedApps', () => {
       },
     ]);
     const impl = implWithPool(pool);
-    if (!impl) return;
     const res: any = await new Promise((resolve, reject) => {
       impl.listAuthorizedApps(makeCall({ userId: 'u1' }), (err: any, r: any) =>
         err ? reject(err) : resolve(r),
@@ -572,7 +532,6 @@ describe('listAuthorizedApps', () => {
 describe('revokeAuthorizedApp', () => {
   it('rejects when userId is missing', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.revokeAuthorizedApp(makeCall({ userId: '', clientId: 'oauthc_1' }), (err: any) => {
         assert.strictEqual(err.code, 3);
@@ -583,7 +542,6 @@ describe('revokeAuthorizedApp', () => {
 
   it('rejects when clientId is missing', async () => {
     const impl = makeImpl();
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.revokeAuthorizedApp(makeCall({ userId: 'u1', clientId: '' }), (err: any) => {
         assert.strictEqual(err.code, 3);
@@ -595,7 +553,6 @@ describe('revokeAuthorizedApp', () => {
   it('revokes scoped by both user_id AND client_id (IDOR-safe)', async () => {
     const pool = makeSpyPool([]);
     const impl = implWithPool(pool);
-    if (!impl) return;
     const res: any = await new Promise((resolve, reject) => {
       impl.revokeAuthorizedApp(makeCall({ userId: 'u1', clientId: 'oauthc_1' }), (err: any, r: any) =>
         err ? reject(err) : resolve(r),
@@ -613,7 +570,6 @@ describe('revokeAuthorizedApp', () => {
 describe('getUserMetadata', () => {
   it('returns NOT_FOUND (code 5) when user does not exist', async () => {
     const impl = makeImpl([]);
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.getUserMetadata(
         makeCallWithMetadata({}, 'nonexistent-user'),
@@ -631,7 +587,6 @@ describe('getUserMetadata', () => {
       display_name: 'Alice', metadata: {}, metadata_updated_at: new Date(),
     };
     const impl = makeImpl([row]);
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.getUserMetadata(
         makeCallWithMetadata({}, 'u1'),
@@ -648,7 +603,6 @@ describe('getUserMetadata', () => {
 
   it('rejects when call.metadata is missing', async () => {
     const impl = makeImpl([]);
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.getUserMetadata(
         makeCall({}),
@@ -668,7 +622,6 @@ describe('getUserMetadata', () => {
 describe('updateUserMetadata', () => {
   it('rejects when no fields are provided', async () => {
     const impl = makeImpl([]);
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.updateUserMetadata(
         makeCallWithMetadata({}, 'u1'),
@@ -686,7 +639,6 @@ describe('updateUserMetadata', () => {
       display_name: 'Alice', metadata: {}, metadata_updated_at: new Date(),
     };
     const impl = makeImpl([row]);
-    if (!impl) return;
     await new Promise<void>((resolve) => {
       impl.updateUserMetadata(
         makeCallWithMetadata({ phone: '+9999' }, 'u1'),
@@ -707,12 +659,10 @@ describe('updateUserMetadata', () => {
 
 describe('handler registration (smoke)', () => {
   it('getUserMetadata is a callable method on the prototype', () => {
-    if (!IdentityServiceImpl) return;
     assert.equal(typeof IdentityServiceImpl.prototype.getUserMetadata, 'function');
   });
 
   it('updateUserMetadata is a callable method on the prototype', () => {
-    if (!IdentityServiceImpl) return;
     assert.equal(typeof IdentityServiceImpl.prototype.updateUserMetadata, 'function');
   });
 });
@@ -723,25 +673,21 @@ describe('handler registration (smoke)', () => {
 
 describe('authz: userIdFrom / first', () => {
   it('userIdFrom extracts x-user-id from metadata', () => {
-    if (!userIdFrom) return;
     const md = { get: (key: string) => key === 'x-user-id' ? ['uid-123'] : [] };
     assert.equal(userIdFrom(md), 'uid-123');
   });
 
   it('userIdFrom returns empty string when x-user-id is absent', () => {
-    if (!userIdFrom) return;
     const md = { get: () => [] };
     assert.equal(userIdFrom(md), '');
   });
 
   it('first returns the first element of a metadata array', () => {
-    if (!first) return;
     const md = { get: (key: string) => key === 'x-trace-id' ? ['t1', 't2'] : [] };
     assert.equal(first(md, 'x-trace-id'), 't1');
   });
 
   it('first returns empty string for a missing key', () => {
-    if (!first) return;
     const md = { get: () => [] };
     assert.equal(first(md, 'x-missing'), '');
   });
@@ -767,7 +713,6 @@ function routePool(routes: Array<{ re: RegExp; resp: any }>) {
 }
 
 function makeAdminImpl(pool: any) {
-  if (!IdentityServiceImpl) return null;
   const config = { getInt: (_k: string, d: number) => d } as any;
   return new IdentityServiceImpl(pool, config);
 }
@@ -808,7 +753,6 @@ describe('user management admin gate (AC-7)', () => {
   const methods = ['createUser', 'listUsers', 'getUser', 'updatePassword', 'setUserRoles', 'setUserActive'];
   for (const m of methods) {
     it(`${m} denies a non-admin caller with PERMISSION_DENIED and runs no query`, async () => {
-      if (!IdentityServiceImpl) return;
       const pool = routePool([]);
       const impl = makeAdminImpl(pool);
       const { err } = await runRpc(impl, m, nonAdminCall({ userId: 'u-1', email: 'a@b.c', password: 'x', newPassword: 'x' }));
@@ -821,7 +765,6 @@ describe('user management admin gate (AC-7)', () => {
 
 describe('listUsers (AC-1/AC-10)', () => {
   it('returns password-free user views', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /SELECT .* FROM identity\.users ORDER BY created_at/, resp: { rows: [USER_ROW] } }]);
     const impl = makeAdminImpl(pool);
     const { err, resp } = await runRpc(impl, 'listUsers', adminCall({}));
@@ -837,7 +780,6 @@ describe('listUsers (AC-1/AC-10)', () => {
 
 describe('createUser (AC-2/AC-10)', () => {
   it('hashes the password (never stores plaintext) and returns a password-free view', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /INSERT INTO identity\.users/, resp: { rows: [USER_ROW], rowCount: 1 } }]);
     const impl = makeAdminImpl(pool);
     const { err, resp } = await runRpc(impl, 'createUser', adminCall({ email: 'alice@example.com', password: 'plaintext-pw', roles: [2] }));
@@ -851,7 +793,6 @@ describe('createUser (AC-2/AC-10)', () => {
   });
 
   it('maps a Postgres unique-violation to ALREADY_EXISTS', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = {
       calls: [] as any[],
       async query(sql: string, params?: any[]) {
@@ -869,7 +810,6 @@ describe('createUser (AC-2/AC-10)', () => {
 
 describe('updatePassword (AC-3/AC-10)', () => {
   it('updates the hash then revokes the target refresh tokens, returning an empty body', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([
       { re: /UPDATE identity\.users SET password_hash/, resp: { rows: [{ email: 'alice@example.com' }], rowCount: 1 } },
       { re: /UPDATE identity\.refresh_tokens SET revoked_at/, resp: { rowCount: 1 } },
@@ -889,7 +829,6 @@ describe('updatePassword (AC-3/AC-10)', () => {
 
 describe('setUserRoles (AC-4)', () => {
   it('maps Role enums to DB strings and returns the mapped view', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /UPDATE identity\.users SET roles/, resp: { rows: [{ ...USER_ROW, roles: ['trader', 'admin'] }], rowCount: 1 } }]);
     const impl = makeAdminImpl(pool);
     const { err, resp } = await runRpc(impl, 'setUserRoles', adminCall({ userId: 'u-1', roles: [2, 1] }));
@@ -903,7 +842,6 @@ describe('setUserRoles (AC-4)', () => {
 
 describe('setUserActive (AC-5/AC-6)', () => {
   it('deactivate flips is_active=false AND revokes refresh tokens', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([
       { re: /UPDATE identity\.users SET is_active/, resp: { rows: [{ ...USER_ROW, is_active: false }], rowCount: 1 } },
       { re: /UPDATE identity\.refresh_tokens SET revoked_at/, resp: { rowCount: 1 } },
@@ -916,7 +854,6 @@ describe('setUserActive (AC-5/AC-6)', () => {
   });
 
   it('reactivate flips is_active=true and does NOT revoke tokens', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /UPDATE identity\.users SET is_active/, resp: { rows: [USER_ROW], rowCount: 1 } }]);
     const impl = makeAdminImpl(pool);
     const { err } = await runRpc(impl, 'setUserActive', adminCall({ userId: 'u-1', active: true }));
@@ -927,7 +864,6 @@ describe('setUserActive (AC-5/AC-6)', () => {
 
 describe('last-admin guard (AC-11)', () => {
   it('setUserActive(false) on the last admin → FAILED_PRECONDITION cannot remove last admin', async () => {
-    if (!IdentityServiceImpl) return;
     // Guarded UPDATE affects 0 rows; existence check shows the target exists.
     const pool = routePool([
       { re: /UPDATE identity\.users SET is_active/, resp: { rows: [], rowCount: 0 } },
@@ -940,7 +876,6 @@ describe('last-admin guard (AC-11)', () => {
   });
 
   it('setUserRoles stripping admin from the last admin → FAILED_PRECONDITION', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([
       { re: /UPDATE identity\.users SET roles/, resp: { rows: [], rowCount: 0 } },
       { re: /SELECT 1 FROM identity\.users WHERE user_id/, resp: { rowCount: 1 } },
@@ -967,7 +902,6 @@ function makeFakeAudit() {
 }
 
 function makeAuditImpl(pool: any, audit: any) {
-  if (!IdentityServiceImpl) return null;
   const config = { getInt: (_k: string, d: number) => d } as any;
   return new IdentityServiceImpl(pool, config, audit);
 }
@@ -979,7 +913,6 @@ function assertNoSecret(payload: any) {
 
 describe('ledger audit emits (AC-8/AC-10)', () => {
   it('createUser emits identity.user.created with a secret-free payload from x-user-id', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /INSERT INTO identity\.users/, resp: { rows: [USER_ROW], rowCount: 1 } }]);
     const audit = makeFakeAudit();
     const impl = makeAuditImpl(pool, audit);
@@ -992,7 +925,6 @@ describe('ledger audit emits (AC-8/AC-10)', () => {
   });
 
   it('updatePassword emits identity.user.password_updated with NO password in the payload', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([
       { re: /UPDATE identity\.users SET password_hash/, resp: { rows: [{ email: 'alice@example.com' }], rowCount: 1 } },
       { re: /refresh_tokens SET revoked_at/, resp: { rowCount: 1 } },
@@ -1006,7 +938,6 @@ describe('ledger audit emits (AC-8/AC-10)', () => {
   });
 
   it('setUserRoles and setUserActive emit their events; reads emit nothing', async () => {
-    if (!IdentityServiceImpl) return;
     const rolesAudit = makeFakeAudit();
     const rolesImpl = makeAuditImpl(routePool([{ re: /SET roles/, resp: { rows: [{ ...USER_ROW, roles: ['trader'] }], rowCount: 1 } }]), rolesAudit);
     await runRpc(rolesImpl, 'setUserRoles', adminCall({ userId: 'u-1', roles: [2] }));
@@ -1030,7 +961,6 @@ describe('ledger audit emits (AC-8/AC-10)', () => {
   });
 
   it('is best-effort: a throwing audit sink does not fail the mutation (AC-8 / design R5)', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /INSERT INTO identity\.users/, resp: { rows: [USER_ROW], rowCount: 1 } }]);
     const throwingAudit = {
       async append() {
@@ -1060,7 +990,6 @@ const META_ROW = {
 describe('admin metadata gate (AC-10)', () => {
   for (const m of ['adminGetUserMetadata', 'adminUpdateUserMetadata']) {
     it(`${m} denies a non-admin caller (PERMISSION_DENIED) and runs no query`, async () => {
-      if (!IdentityServiceImpl) return;
       const pool = routePool([]);
       const impl = makeAdminImpl(pool);
       const { err } = await runRpc(impl, m, nonAdminCall({ userId: 'target-1', displayName: 'x' }));
@@ -1073,7 +1002,6 @@ describe('admin metadata gate (AC-10)', () => {
 
 describe('adminGetUserMetadata (AC-7)', () => {
   it("returns the target's metadata, selected by the request-body user_id (not x-user-id)", async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /SELECT .* FROM identity\.users WHERE user_id/, resp: { rows: [META_ROW] } }]);
     const impl = makeAdminImpl(pool);
     const { err, resp } = await runRpc(impl, 'adminGetUserMetadata', adminCall({ userId: 'target-1' }, 'admin-9'));
@@ -1086,7 +1014,6 @@ describe('adminGetUserMetadata (AC-7)', () => {
   });
 
   it('returns NOT_FOUND (code 5) for a missing target', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /SELECT .* FROM identity\.users WHERE user_id/, resp: { rows: [] } }]);
     const impl = makeAdminImpl(pool);
     const { err } = await runRpc(impl, 'adminGetUserMetadata', adminCall({ userId: 'ghost' }));
@@ -1094,7 +1021,6 @@ describe('adminGetUserMetadata (AC-7)', () => {
   });
 
   it('requires user_id (INVALID_ARGUMENT) and emits no audit on read', async () => {
-    if (!IdentityServiceImpl) return;
     const audit = makeFakeAudit();
     const impl = makeAuditImpl(routePool([]), audit);
     const { err } = await runRpc(impl, 'adminGetUserMetadata', adminCall({}));
@@ -1105,7 +1031,6 @@ describe('adminGetUserMetadata (AC-7)', () => {
 
 describe('adminUpdateUserMetadata (AC-8)', () => {
   it('partial update: display_name only, advances metadata_updated_at, audits acting admin + target (no values)', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /UPDATE identity\.users SET .* WHERE user_id/, resp: { rows: [{ ...META_ROW, display_name: 'Jane Quant' }], rowCount: 1 } }]);
     const audit = makeFakeAudit();
     const impl = makeAuditImpl(pool, audit);
@@ -1126,7 +1051,6 @@ describe('adminUpdateUserMetadata (AC-8)', () => {
   });
 
   it('rejects an empty update (INVALID_ARGUMENT) with no DB write', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([]);
     const impl = makeAdminImpl(pool);
     const { err } = await runRpc(impl, 'adminUpdateUserMetadata', adminCall({ userId: 'target-1' }));
@@ -1135,7 +1059,6 @@ describe('adminUpdateUserMetadata (AC-8)', () => {
   });
 
   it('returns NOT_FOUND (code 5) for a missing target', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /UPDATE identity\.users SET/, resp: { rows: [], rowCount: 0 } }]);
     const impl = makeAdminImpl(pool);
     const { err } = await runRpc(impl, 'adminUpdateUserMetadata', adminCall({ userId: 'ghost', phone: '+1' }));
@@ -1143,7 +1066,6 @@ describe('adminUpdateUserMetadata (AC-8)', () => {
   });
 
   it('reads user_id via ts-proto camelCase (a snake_case-only user_id is not read → INVALID_ARGUMENT)', async () => {
-    if (!IdentityServiceImpl) return;
     const pool = routePool([{ re: /UPDATE/, resp: { rows: [META_ROW], rowCount: 1 } }]);
     const impl = makeAdminImpl(pool);
     const { err } = await runRpc(impl, 'adminUpdateUserMetadata', adminCall({ user_id: 'target-1', displayName: 'x' }));
@@ -1153,17 +1075,14 @@ describe('adminUpdateUserMetadata (AC-8)', () => {
 
 describe('mapDbError — 8KB metadata CHECK (SQLSTATE 23514) → INVALID_ARGUMENT', () => {
   it('self updateUserMetadata maps 23514 to code 3 (fixes the pre-existing INTERNAL leak)', async () => {
-    if (!IdentityServiceImpl) return;
     const e: any = new Error('metadata size'); e.code = '23514';
     const impl = makeImpl([], e);
-    if (!impl) return;
     const { err } = await runRpc(impl, 'updateUserMetadata', makeCallWithMetadata({ displayName: 'x' }, 'u1'));
     assert.equal(err.code, 3);
     assert.equal(err.message, 'metadata exceeds 8KB limit');
   });
 
   it('adminUpdateUserMetadata maps 23514 to code 3; a generic error still maps to code 13', async () => {
-    if (!IdentityServiceImpl) return;
     const e514: any = new Error('too big'); e514.code = '23514';
     const impl514 = makeAdminImpl({ calls: [], async query() { throw e514; } } as any);
     const r514 = await runRpc(impl514, 'adminUpdateUserMetadata', adminCall({ userId: 'target-1', displayName: 'x' }));
@@ -1177,7 +1096,6 @@ describe('mapDbError — 8KB metadata CHECK (SQLSTATE 23514) → INVALID_ARGUMEN
 
 describe('admin metadata handler registration (smoke)', () => {
   it('adminGetUserMetadata / adminUpdateUserMetadata are callable prototype methods', () => {
-    if (!IdentityServiceImpl) return;
     assert.equal(typeof IdentityServiceImpl.prototype.adminGetUserMetadata, 'function');
     assert.equal(typeof IdentityServiceImpl.prototype.adminUpdateUserMetadata, 'function');
   });
