@@ -1020,3 +1020,23 @@ Feature: fix-ui-trader-feedback (bug fix)
 - Still open for the operator: Step 13 instruction 7 (5-minute idle reconnect observation on dev), and the
   pre-existing `tsc --noEmit` failure in `e2e/insights/backfills.spec.ts:135-136` (out of scope, handed to
   `/sdd-qa defect`).
+
+## Session 2026-10-29 — PR #1353 CI repair (Frontend E2E red)
+
+- Frontend E2E failed on two regressions this feature introduced (commit `0466feaa`):
+  - **Double-reported mutation errors.** `MutationErrorFallback` repeated errors that are already shown inline, so
+    Playwright strict mode failed in `config-ui/users.spec.ts:51` and `insights/strategy-authoring.spec.ts:396`.
+    The Step 7 inventory covered only `src/hooks` and `src/app/config-ui/hooks`, and missed two sites:
+    - the four in-page `useMutation`s in `config-ui/users/page.tsx`. Each `onError` writes to a CardNotice.
+    - the `useManageStrategy` call in `StrategyWizard`, which renders `serverError` inline with a Go to Step link.
+  - Both now set `meta.errorHandled`, following the binding rule. `useManageStrategy` takes an optional `meta`
+    and only the wizard passes it. `MuteForStrategy` and the strategies-list deactivate do not render errors, so
+    they keep the global fallback. The `errorHandled: true` count pin, scoped to `src/hooks src/app/config-ui/hooks`,
+    is still 9.
+  - **networkidle never settles on trader pages.** Step 12 made the mock order and alert streams stay open until
+    abort, so the networkidle wait in `mobile-overflow.spec.ts` ran until the 30 s test timeout. That wait is
+    best-effort, and it is now capped at 5 s.
+- Verified locally (CI=1, chromium): all 53 tests in mobile-overflow, users and strategy-authoring passed. Vitest
+  passed 315/315, `next lint` passed, and `tsc` is clean apart from the known `backfills.spec.ts` defect.
+- Follow-up for the operator: other unflagged mutations outside the audited directories may also double-report,
+  for example `useFormulas` and `useBackfills` callers. No current e2e covers them, and they were left unchanged.
