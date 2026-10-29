@@ -26,6 +26,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 4 done: an unconfirmed emit releases its NULL claim (`_release_claim`), the confirm is scoped by `run_id` and `signal_id IS NULL`, and only accepted signals are counted |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 5 done: RED tests for @AC-8/9 and the `reference_scores` cuts, plus the @AC-10 force PRESERVE pin (`TestRetryStability`, `_FixedClock`) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 6 done: direction cuts include the day's stored scores (`_already_emitted` returns `symbol → score`, `_map_directions(reference_scores=…)`), and `valid_until` is anchored to the run date at midnight UTC except under `force`, which stays now-anchored |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 7 done: the `FundamentalsScanSummary.status` comment lists `"partial"` (comment only, no wire change; `buf lint`/`buf breaking` clean) |
 
 ---
 
@@ -62,4 +63,4 @@ symbols are neither fetched nor deferred, and the run still reports `completed`.
 
 ## Next Action
 
-`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 7 (proto: add `"partial"` to the `FundamentalsScanSummary.status` comment)
+`/sdd-execute fix-fundsignal-emit-accounting sequential` — Step 8 (proto-gen: regenerate stubs)

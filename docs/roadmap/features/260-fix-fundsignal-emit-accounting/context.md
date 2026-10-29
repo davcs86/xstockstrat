@@ -569,3 +569,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: line drift, the anchor comment reworded to fit 100 columns, and the real_pg note. All are in the
   Deviation Log.
 - Next: Step 7 (proto: add `"partial"` to the `FundamentalsScanSummary.status` comment).
+
+### Step 7 — proto: add `"partial"` to the `FundamentalsScanSummary.status` comment — done (2026-10-29)
+
+- Files: `packages/proto/analysis/v1/analysis.proto`. Only the `:564` trailing comment changed, to
+  `// "completed" | "budget_deferred" | "partial" | "failed"`. The field is still `string status = 6` (C-04).
+- TDD: N/A (comment-only proto edit, no wire change).
+- Verification: `buf lint` (1.72.0) passed. `buf breaking` was run on `git archive` exports because the worktree guard
+  refuses `.git#branch=` refs. It passes against the merge base `0099647f`, and it passes on `main-dev`'s tree with
+  only this edit applied. Against `origin/main-dev` as-is it reports a `ledger.proto` `owner_only` (field 7)
+  "deletion". That field was added on trunk by 263 (#1350) after the branch point, so it is branch staleness, not
+  this feature. Merge `main-dev` into the branch before the integration PR. This is in the Deviation Log.
+- Next: Step 8 (proto-gen: regenerate stubs).

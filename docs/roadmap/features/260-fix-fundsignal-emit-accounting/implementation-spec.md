@@ -602,7 +602,7 @@ grep -n "signal_id IS NOT NULL" services/xstockstrat-analysis/app/engine/fundsig
 
 ### Step 7 — proto: add `"partial"` to the `FundamentalsScanSummary.status` comment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -799,3 +799,13 @@ _Populated by /sdd-execute as implementation proceeds._
   7 `real_pg` tests and stopped it at session end; no postgres process remains. It touched no shared, staging or
   production database, matching the Step 4 disposition. Results: target files 96 passed; coverage 1318 passed,
   88.74%; ruff check and format clean; the `signal_id IS NOT NULL` grep has no match.
+- **2026-10-29, Step 7 (minor, no scope change):** verification fallback. The edit is exactly as specced
+  (`analysis.proto:564`, comment only). `buf lint` passed. The specced `buf breaking` command, which compares against
+  `.git#branch=origin/main-dev`, could not run here: the worktree-isolation guard refuses `.git` refs. The comparison
+  was run on `git archive` exports instead, with three results. (a) Against `origin/main-dev` @ `06990652`, buf
+  reports one finding: `ledger.proto` `QueryEventsRequest` field 7 `owner_only` is missing. That field was added on
+  `main-dev` by 263 (#1350) after this branch's merge base `0099647f`, and this branch never touches `ledger.proto`.
+  So the finding comes from the branch being behind trunk; it is not a break this feature makes. (b) Against the
+  merge base, `buf breaking` passes with exit 0. (c) On `main-dev`'s tree with only this step's `analysis.proto`
+  applied, lint and `buf breaking` against `main-dev` both pass with exit 0. **Disposition**: merge `origin/main-dev`
+  into the feature branch before the integration PR (§5.3/§5.6). CI's `proto-lint` job compares the PR merge result.
