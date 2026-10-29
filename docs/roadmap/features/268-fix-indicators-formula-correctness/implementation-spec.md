@@ -409,7 +409,7 @@ Lint and coverage are run in Step 6.
 
 ### Step 6 — test: D-18 ATR/VWAP descriptions and unchanged values (engine + servicer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_indicators_engine.py` — modify

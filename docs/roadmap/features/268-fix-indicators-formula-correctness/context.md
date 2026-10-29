@@ -794,3 +794,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   passed, coverage 86.24% (≥50%); `ruff check .` / `ruff format --check .` clean.
 - Deviations: verification grep 1 form only — see Deviation Log.
 
+### Step 6 — test: D-18 ATR/VWAP descriptions and unchanged values (engine + servicer) — done (2026-10-29)
+
+- `tests/test_indicators_engine.py`: new `class TestAtrVwapHonestDescriptions` (5 cases): AC-4/AC-5 engine-level
+  registry key + description text + `compute` values (`[None, None, 1.5, 1.5]`, `[10.0, 15.0, 20.0]`);
+  servicer `ListIndicators` descriptions; servicer `ComputeIndicator` ATR `[1.5, 1.5]` (warm-up omitted) and VWAP
+  `[10.0, 15.0, 20.0]`. Servicer built as `IndicatorsServicer(config_watcher=<MagicMock, sandbox_max_concurrent=4>)`,
+  context `ctx_with([])`. C-13: inline single-consumer literals; no conftest change.
+- TDD (Step 5 already landed, so `indicators_engine.py` was temporarily checked out at `b0dc843c` for RED, then
+  restored byte-identical): AC-4/AC-5 red: 3 failed (`'Average True Range' not in 'Average True Range'` x2 engine +
+  ListIndicators, `'Volume Weighted Average Price' not in ...`), 2 passed (servicer ComputeIndicator value guards)
+  → green: 5 passed.
+- Verification: `test_indicators_engine.py -v` 29 passed; full suite 314 passed, coverage 87.16% (≥50%);
+  `ruff check .` / `ruff format --check .` clean.
+- Deviations: none.
+
