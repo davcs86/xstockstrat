@@ -380,3 +380,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   applied because it would renumber Steps 4-9 and their cross-references. Splitting is not required, since Step 3 touches
   2 files. At the Step 3 checkpoint, /sdd-execute should decide whether to commit the real_pg file separately.
   Target: /sdd-execute Step 3.
+
+## Session 2026-10-29 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup: `git merge --no-edit origin/main-dev` into the detached `origin/feature/fix-fundsignal-emit-accounting`
+  checkout (9912cbf5). It merged with no conflicts, and this feature's directory was untouched by the merge.
+  `ledger-guard --own-slug fix-fundsignal-emit-accounting --base origin/main-dev --fix` reported clean, so the merge
+  needed no repair.
+- Re-spec of Steps 1-9 against `main-dev` after 246 (`fix-fundsignal-neutral-score`) was merged in:
+  - Steps 1, 2, 4 and 6: line drift only. Every symbol still exists, and `_paced_fetch` still returns a 3-tuple.
+  - Steps 3 and 5 (substantive): 246 changed `_score` to return `(scores, unscored)`, which `run_once` unpacks at
+    `:226`. Every `_score` mock (`_fake_loop`, the real-PG test, and `test_ac9`) now returns `(scores, [])`. 246's
+    `_map_directions` spy test (`:770-779`) stays compatible with the added `reference_scores=` keyword.
+    `test_quantile_buckets` passes keyword args, which is also compatible.
+  - Step 9 (substantive): 246 rewrote the analysis CLAUDE.md Idempotency bullet (`:123`), so the "does not dedup" text
+    is already gone. Instruction 2 now extends that bullet and keeps 246's unscored-symbol clause. The `merge-order.md`
+    260-vs-246 row already exists at `:81`. Its wording differs from the original spec text, but it records the same
+    dependency, which is now satisfied (246 merged), so Step 9 only verifies it and the file is verify-only.
+  - Steps 7 and 8: no change. The proto comment is at `:564`, and exactly 5 generated files carry it.
+- Step Dependencies "merge-order row before Step 1": already satisfied by the existing `:81` row. No edit is needed.
