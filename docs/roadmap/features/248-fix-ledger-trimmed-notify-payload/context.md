@@ -422,3 +422,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   because `node_modules` is not installed in this worktree. They need `pnpm install`, which does not block. Step 3
   records this.
 - Next: Step 3 (`eventRowResolver.ts`), with Step 4's RED captured first.
+
+### Step 3 — service: Resolver module (`resolveEventRow`, bound, listener factories) [done]
+- Created `eventRowResolver.ts`. It holds `RESOLVE_TIMEOUT_KEY`, `streamResolveTimeoutMs` (`getInt(key, 2000)`;
+  values that are not finite or ≤0 read as 2000, and others are floored), and `resolveEventRow`. That function does a
+  PK `SELECT … WHERE event_id = $1 AND recorded_at = $2::timestamptz` with the stub's text `recorded_at`, and
+  `query_timeout` 2B. Before the read it runs `SET statement_timeout = B` only when the WeakMap-tracked B changes.
+  `resolveEventRow` returns `rows[0] ?? null` and lets errors propagate. The module also exports
+  `makeListenerClient` (startup `statement_timeout`) and `makeResolveRow`. Nothing imports it yet; Step 5 wires it.
+- Tooling: ran `pnpm install --no-frozen-lockfile` at the worktree root (same as CI node-test), which installed
+  pg 8.20.0 and @types/pg 8.20.0. No lockfile changed. Re-checked pg evidence: `client.js:525-526` (startup
+  `statement_timeout`), `:613,623` (`query_timeout`), `:641` (`'Query read timeout'`), `index.d.ts:21,23,60`.
+- TDD (AC-7 no-row → null, AC-9 bound): red: `tsc` TS2307 "Cannot find module '../services/eventRowResolver.js'"
+  from an uncommitted probe test. Green: `pnpm test` 49/49 pass, probe included. The probe was then deleted and the
+  committed tree's `pnpm test` is 47/47.
+- Verification: `pnpm build` exit 0. `pnpm run lint` exit 0, with 4 `no-explicit-any` warnings on the spec-mandated
+  `any` stub/row types and 0 errors. The new file is prettier-formatted. The export grep gives 3+1 hits (see
+  Deviation Log). The `$2::timestamptz` grep hits. There is no `BEGIN`/`SET LOCAL` and no pool.
+- Files modified: `services/xstockstrat-ledger/src/services/eventRowResolver.ts`
+- Deviations: the export-grep defect and the probe-based RED (Deviation Log 2026-10-29).
+

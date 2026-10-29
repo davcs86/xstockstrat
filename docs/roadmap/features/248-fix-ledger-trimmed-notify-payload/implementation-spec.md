@@ -203,7 +203,7 @@ grep -n "ledger.stream.resolve_timeout_ms" services/xstockstrat-config/migration
 
 ### Step 3 — service: Resolver module (`resolveEventRow`, bound, listener factories)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/services/eventRowResolver.ts` — create
@@ -1035,3 +1035,22 @@ _Populated by /sdd-execute as implementation proceeds._
   `032_analysis_zero_trap_descriptions` on its branch; 243 holds `031`; 264 reserves `034`.
 - **Disposition**: re-spec before the step loop; Step 1 records 248-after-243 and 248-after-244 merge-order rows.
   product-spec.md is not edited by this re-spec (its `032` mention is superseded here).
+
+### 2026-10-29 — Step 3: `resolveEventRow` export grep matches 3 of 4
+
+- **Step**: 3
+- **Planned**: Verification greps `export function resolveEventRow\|…` and expects 4 hits.
+- **Actual**: Instruction 3 specifies `export async function resolveEventRow(…)`, which the literal
+  `export function resolveEventRow` pattern does not match, so the grep returns 3 hits. The fourth export is at
+  `eventRowResolver.ts:17` (`grep -n "export async function resolveEventRow"`).
+- **Disposition**: spec grep defect, not a code deviation; the module follows Instruction 3. No other change.
+
+### 2026-10-29 — Step 3: RED captured with an uncommitted probe test
+
+- **Step**: 3
+- **Planned**: `TDD: red-green required`, with behaviour asserted in Step 4 (`eventRowResolver.test.ts`).
+- **Actual**: Step 4's file is outside Step 3's **Files** (F-08), so RED/GREEN was captured with a temporary probe,
+  `src/__tests__/step3probe.test.ts`. RED was `tsc` TS2307 (module missing). GREEN was 49/49 pass, including the
+  probe's 2 cases (PK SELECT text/values, `query_timeout` 2B, SET-on-change, null on miss, clamp). The probe was
+  deleted before commit. Step 4 still authors the real suite.
+- **Disposition**: no spec change; Step 4 unchanged.
