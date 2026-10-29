@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator gate approval: D-28 option (a) + new AC-7; I-2 owned by 273 (merge 273 before 272) |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; @AC-5..7 added to acceptance.feature |
 | 2026-10-29 | `implementation-ready` (re-spec, no transition) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of steps 1,3,4,5,6,7,8,9 against main-dev @ merge b8b8bac2: line drift; Step 5 post-244 getters; Step 6 reuses `snapshot_watcher`; Step 9 dotted-key premise corrected, operator decision required before G-1 |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing @AC rule |
 
 ---
 
