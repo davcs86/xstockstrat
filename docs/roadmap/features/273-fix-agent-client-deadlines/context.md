@@ -809,3 +809,20 @@ Once the operator rules on the three gated items, the design is approvable witho
     `implementation-ready`, which closes the "272 lifecycle unverified" open thread from the impl-spec review.
 - The Execution Summary still says "pre-247 line numbers". Only step bodies were in re-spec scope, and the step
   bodies are now authoritative.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- **Mode-entry confirmation (up-front plan)**: given by operator standing authorization. In operator chat
+  2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f), the operator said "Start executing features 241-276" via
+  batch-execute. The terms of that authorization:
+  - checkpoints are unattended, in `report` mode;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred;
+  - DB and prod steps stay operator-only: open the PR and hold the merge;
+  - blocker decisions are recorded per feature as of 2026-10-29.
+- Status `implementation-ready` → `in-progress`.
+- Severity: SEV-2. Branch: `feature/fix-agent-client-deadlines`. The detached worktree pushes to that ref after
+  every commit.
+- Preconditions: 247 is merged and the re-spec of Steps 2/3/6/7/8/11 is committed (session above). Step 1, the
+  R1/R5 latency baseline, gates Step 3 and runs first.
