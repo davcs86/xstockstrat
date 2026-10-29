@@ -591,3 +591,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: RED order, the characterization recovery case, the warn spy, and lint warning count (Deviation Log
   2026-10-29 "Step 6 execution").
 - Next: Step 7.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f,
+  'Start executing features 241-276' via batch-execute). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`63b02758`). The launcher's
+  discovery digest reported Step 5's `onGap` as missing because it had read a stale tree. On the branch, Step 5 is
+  present and `done`, and the flush site is at `:265`, as re-spec'd.
+- Tooling: the main worktree has no root `node_modules`, so `pnpm install --frozen-lockfile --filter
+  xstockstrat-ledger...` ran here (pnpm 9.15.9). The lockfile is unchanged.
+
+### Step 7 — service: Normalise `sequence` with `Number()` in `streamEvents` [done]
+- `maxSeq` is seeded with `Number(req.fromSequence) - 1`.
+- `writeRow` sets `const seq = Number(row.sequence)` and keeps the max numerically.
+- The live `onEvent` and the buffer flush both gate on `Number(row.sequence) > maxSeq`.
+- Untouched: `rowToEvent`, the replay SQL, the `cleaned` guards, and the synchronous flush. `streamEvents` still has
+  exactly 1 `await`.
+- TDD (AC-2, AC-5), using an uncommitted probe (Deviation Log 2026-10-29 "Step 7 execution"):
+  - RED: replayed `"98"`/`"99"` then a resolved `"100"` gave writes `[98, 99]`, not `[98, 99, 100]`; the buffered
+    `"100"` flush gave the same. 0/2 pass.
+  - GREEN: 2/2 pass.
+- Verification:
+  - `pnpm build` exit 0; `pnpm run lint` exit 0 (173 warnings, 0 errors, unchanged).
+  - `grep -c "Number(row.sequence)"` returns 3; `Number(req.fromSequence)` is at `:191`; the awk `await` count is 1.
+  - `pnpm run test:coverage` exit 0, 79/79 pass, 0 fail/cancelled/skipped/todo; All files 86.39% lines.
+- Note for Step 8 case 1: on the current code, case 1 fails only if it checks the writes right after the string
+  `"100"` event. If it checks only after both events, it passes, because NOTIFY's number `100` compares
+  numerically (Deviation Log).
+- Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`
+- Next: Step 8.

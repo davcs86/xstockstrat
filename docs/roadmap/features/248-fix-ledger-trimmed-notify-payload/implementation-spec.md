@@ -666,7 +666,7 @@ ls src/__tests__/fixtures/INVENTORY.md
 
 ### Step 7 — service: Normalise `sequence` with `Number()` in `streamEvents`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -1147,5 +1147,26 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Lint/format**: `pnpm run lint` exit 0 with 173 `no-explicit-any` warnings (147 before; the new `any`-bound
   subjects and fakes), 0 errors. The new and changed lines are prettier-clean; prettier drift on untouched
   pre-existing lines of `eventNotifier.test.ts` and `ledgerServiceImpl.test.ts` was left alone.
+- **Disposition**: no spec change.
+
+### 2026-10-29 — Step 7 execution (sdd-batch-execute)
+
+- **Step**: 7
+- **RED via an uncommitted probe**: the paired test is Step 8, which is outside Step 7's **Files**. RED and GREEN
+  therefore used the Step 5 pattern, a temporary `src/__tests__/zzStep7Probe.test.ts` with 2 cases built from the
+  `makeEventRow` and `makeRecordingCall` fixtures.
+  - Case 1 replays `"98"` and `"99"`, then sends a live `onEvent` of a resolved `sequence: "100"`.
+  - Case 2 buffers a resolved `"100"` during a held replay.
+  - RED: 0 pass / 2 fail. Both failed at runtime with `actual [98, 99]` against `[98, 99, 100]`, and `tsc` was clean.
+  - GREEN: 2 pass / 0 fail. The probe was deleted before commit.
+- **Finding for Step 8 case 1**: on the current code, Step 8 case 1 does not fail if the test checks only once,
+  after both the string `"100"` and the NOTIFY number `100` have arrived. The number compares numerically
+  (`100 > "99"`), so 100 is written exactly once. To fail as RED requires, Step 8 must:
+  - check that the writes are `[98, 99, 100]` right after the string `"100"` event;
+  - then check that the number `100` adds no duplicate.
+- **Formatting**: the `writeRow` normalisation is two lines, `const seq = Number(row.sequence);` and then the `if`,
+  in prettier's layout. The spec quoted it as one line. `grep -c "Number(row.sequence)"` still returns 3.
+- **Tooling**: the main worktree has no root `node_modules` to symlink. `pnpm install --frozen-lockfile --filter
+  xstockstrat-ledger...` (pnpm 9.15.9) therefore ran in this worktree. The lockfile is unchanged.
 - **Disposition**: no spec change.
 

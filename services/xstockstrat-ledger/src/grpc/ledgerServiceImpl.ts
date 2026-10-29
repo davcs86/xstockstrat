@@ -188,12 +188,13 @@ export class LedgerServiceImpl {
     }
 
     // Seeded just below fromSequence so the first replayed row (== fromSequence) is delivered.
-    let maxSeq = req.fromSequence ? req.fromSequence - 1 : 0;
+    let maxSeq = req.fromSequence ? Number(req.fromSequence) - 1 : 0;
     let live = false;
     let buffer: any[] = [];
 
     const writeRow = (row: any) => {
-      if (row.sequence > maxSeq) maxSeq = row.sequence;
+      const seq = Number(row.sequence);
+      if (seq > maxSeq) maxSeq = seq;
       call.write(rowToEvent(row));
     };
 
@@ -207,7 +208,7 @@ export class LedgerServiceImpl {
           buffer.push(row);
           return;
         }
-        if (row.sequence > maxSeq) writeRow(row);
+        if (Number(row.sequence) > maxSeq) writeRow(row);
       },
       onReconnect: () => {
         // Missed NOTIFYs during reconnect — end the stream so the client reconnects and replays the gap.
@@ -262,7 +263,7 @@ export class LedgerServiceImpl {
     // Flush buffered events (dedup by sequence) then go live; synchronous so no NOTIFY
     // interleaves before live=true.
     for (const row of buffer) {
-      if (row.sequence > maxSeq) writeRow(row);
+      if (Number(row.sequence) > maxSeq) writeRow(row);
     }
     buffer = [];
     live = true;
