@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-22
-**Last Updated**: 2026-10-28
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -47,4 +47,4 @@ Six staging formulas store the legacy username `davcs86` as `author` instead of 
 
 ## Next Action
 
-`/sdd-execute fix-legacy-formula-authors sequential` — Steps 1-2 done; Steps 3-9 pending
+`/sdd-execute fix-legacy-formula-authors sequential` — Steps 1-3 done; Steps 4-9 pending

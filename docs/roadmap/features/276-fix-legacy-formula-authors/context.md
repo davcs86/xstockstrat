@@ -276,3 +276,21 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 - TDD: AC-5 (partial) red: run against the pre-Step-1 `manage-users.py` (`91c25c3c~1`, scratch copy) → 3 failed, `assert 2 == 0` (typer "No such option: --json"); green: `uv run --with pytest ... pytest scripts/tests/test_manage_users.py -v` → 44 passed.
 - Files modified: `scripts/tests/test_manage_users.py`
 - Deviation (operator decision, Option C): the specced ruff gate over `scripts/` fails on pre-existing findings; narrowed to "clean on the added lines" (no `ruff check` finding or `ruff format --diff` hunk on them). Logged in implementation-spec.md Deviation Log; cleanup + CI ruff job for `scripts/` filed as `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md`.
+
+### Step 3 — service: legacy-author CLI core (detection, classification, plan, report mode) [done]
+- Created `app/maintenance/__init__.py` (empty) and `app/maintenance/legacy_authors.py`:
+  - Constants: `UUID_RE`, `DETECT_SQL` (no `deleted_at` filter), `CLEAN_COUNT_SQL`, and `REWRITE_SQL`. `REWRITE_SQL` carries the system/UUID guard in the SQL and touches neither `is_public` nor `updated_at`.
+  - `connect`: `DATABASE_URL` is required, with no fallback. It sets `statement_cache_size=0` under `DB_PGBOUNCER` and prints the host and db, never the password.
+  - `load_users`, `detect`, `plan_digest`, `run_report` (SELECTs only) and an argparse `main`.
+  - `classify`: matches active users only, comparing `email_local` case-insensitively. One match is `suggested`, none is `unmappable`, two or more is `ambiguous`. `old_author` is kept byte-exact.
+  - No dependency added, `uv.lock` untouched, `main.py` not edited.
+- TDD (red → green): a scratch test covered Step 4's report, detect, SQL-guard and connect cases. It is not committed, because Step 4 owns the committed tests.
+  - Red: `ModuleNotFoundError: No module named 'app.maintenance'` (collection error).
+  - Green: 6 passed.
+- Verification:
+  - `uv run python -m app.maintenance.legacy_authors --help` lists `--users --out --apply --plan --confirm-digest` (exit 0).
+  - A missing `DATABASE_URL` exits 1.
+  - `ruff check .` and `ruff format --check .` are clean.
+  - `uv run pytest --cov=app --cov-fail-under=50`: 294 passed at 69.49% total. The new module sits at 0% until Step 4.
+- Files modified: `services/xstockstrat-indicators/app/maintenance/__init__.py`, `services/xstockstrat-indicators/app/maintenance/legacy_authors.py`
+- Deviations: keyword-only signature additions (`run_id`, `target`, `clean`), and `--apply` is refused until Step 5. Both are logged in the implementation-spec.md Deviation Log.
