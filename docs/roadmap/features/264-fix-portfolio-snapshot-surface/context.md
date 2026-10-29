@@ -689,3 +689,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Gate state re-verified: `origin/main-dev` config migrations top out at `030`, so (a) passes and (b) is still unmet.
   - Instructions item 2 and the Verification smoke line now use the real tool signature. The smoke is marked as an operator/post-deploy action.
 - Step 10 stays `pending`. It is held for the operator per the existing Deviation Log entry; nothing local remains to run.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 10 (operator-deferred)
+
+- Ran the Step 10 item-1 gate on `origin/main-dev` @ `22001134`.
+  - Config migrations top out at `031`: 243 merged in #1334.
+  - The `/0(3[4-9]|[4-9][0-9])_` grep is empty, so (a) passes.
+  - (b) is unmet: `032` (244) and `033` (248) are still only on their feature branches.
+- The post-deploy `list_config_keys(namespace="portfolio")` smoke on the staging and production agents is an operator action.
+- Step 10 stays `pending`; the Deviation Log hold entry now carries the re-run.
+- Open: merge-order.md:77 still names 243 as unmerged. Update it when 244 and 248 land and the row resolves.
