@@ -176,7 +176,6 @@ router.service(ConfigService, {
         ...req,
         userId: claims.user_id,
         environment: nativeConfigEnvironment(),
-        author: claims.user_id,
         createKey: true,
         value: { ...req.value, isSecret: true },
       },
