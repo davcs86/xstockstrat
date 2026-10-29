@@ -551,7 +551,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 8 — test: AC-10 a mutation with no handler reaches the global fallback, and flagged ones do not
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/mutationErrorStore.test.ts` — create
@@ -1177,3 +1177,19 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
   `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean and `pnpm build` passes.
   **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 8 — 2026-10-29
+
+- **The e2e test presses Escape before clicking "Dismiss error".** After the confirm, the row's kebab
+  `DropdownMenu` (Radix, modal) stays open. `body` keeps `pointer-events: none`, so Playwright sees `<html>`
+  intercept the click. The test presses Escape and asserts no `role=menu` remains. **Disposition**: test-shape
+  adaptation inside the step's **Files**. The stuck-open menu is pre-existing `OrdersTable` behavior and out
+  of scope; handed to `/sdd-qa defect`.
+- **The per-call `onError` unit case subscribes a listener to the `MutationObserver`.** TanStack v5 fires
+  per-call `mutate()` callbacks only while the observer has listeners, as `useMutation` does. Without one,
+  the case's own `perCallSaw` check fails. **Disposition**: test-harness detail inside the step's **Files**.
+- **TDD RED ran against the pre-Step-7 tree.** Step 7 had already landed, so `queryClient.ts`,
+  `trader/providers.tsx` and `QueryProviders.tsx` were temporarily checked out from `4a47b924~1`, then restored
+  from `HEAD` before GREEN. The store was kept, so RED failed on the assertion and not on an import. Playwright
+  ran under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the same harness Steps 1-7 used.
+  **Disposition**: CI-equivalent fallback.

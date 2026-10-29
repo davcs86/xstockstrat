@@ -680,3 +680,35 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   navigates.
 - Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 8 (sdd-batch-execute)
+
+- Step 8 done (AC-10) in `services/xstockstrat-ui`:
+  - `src/lib/mutationErrorStore.test.ts` (new) covers:
+    - the newest report overwrites the slot;
+    - clear empties it, and listeners fire on report and on clear (and stop after unsubscribe);
+    - the server snapshot is `null`;
+    - `shouldReportMutationError` opts out only on `errorHandled === true` (`'yes'` still reports).
+  - `src/lib/queryClient.test.ts` (new) runs `createQueryClient()` with a `MutationObserver`:
+    - (a) an unflagged `ConnectError('down')` is reported;
+    - (b) `meta: { errorHandled: true }` is not reported;
+    - (c) a per-call `onError` alone is still reported. This pins the hook-level-only `MutationCache` assumption.
+  - `e2e/trader/orders.spec.ts` gains `@AC-10`:
+    - a 503 `CancelOrder` from the unflagged `OrdersTable` cancel shows the global "cancel unavailable" alert;
+    - "Dismiss error" removes it;
+    - no `pageerror` is raised.
+- TDD (RED built with `queryClient.ts`, `trader/providers.tsx` and `QueryProviders.tsx` from `4a47b924~1`; prebuilt
+  app, `CI=1 E2E_PREBUILT=1`):
+  - **Red:**
+    - Unit cases (a) and (c) failed with `expected undefined to be 'down'`. Case (b) and the store tests passed.
+    - The e2e test failed waiting for `getByRole('alert').filter({ hasText: 'cancel unavailable' })`.
+  - **Green:** 7/7 unit tests passed, and `orders.spec.ts` passed 8/8.
+- Found while testing (out of scope, for `/sdd-qa defect`): after a cancel confirm, the row's kebab
+  `DropdownMenu` stays open and modal, leaving `body` at `pointer-events: none` until Escape or an outside click.
+  The e2e test presses Escape before dismissing.
+- Verification:
+  - `pnpm run lint` exits 0 (only pre-existing warnings).
+  - `test:coverage` passes 247/247 and stays above the thresholds; `mutationErrorStore.ts` is 100% lines.
+  - `lint:dup` finds 0 clones.
+  - The `errorHandled: true` grep still has 9 hits.
+- Tooling: `pnpm install --frozen-lockfile` in the worktree. Chromium came from `/opt/pw-browsers`.
+

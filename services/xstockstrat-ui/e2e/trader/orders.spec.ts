@@ -199,6 +199,32 @@ test.describe('Orders management page', () => {
     await expect.poll(() => cancelRequested).toBe(true);
   });
 
+  test('@AC-10 a failed cancel with no per-call handler shows the global error', async ({
+    page,
+  }) => {
+    const pageErrors: Error[] = [];
+    page.on('pageerror', (err) => pageErrors.push(err));
+    await page.route('**/xstockstrat.trading.v1.TradingService/CancelOrder', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'unavailable', message: 'cancel unavailable' }),
+      }),
+    );
+    await page.getByTestId('actions-ord-new').click({ timeout: 10000 });
+    await page.getByTestId('cancel-ord-new').click();
+    await page.getByTestId('cancel-ord-new-confirm').click();
+
+    const alert = page.getByRole('alert').filter({ hasText: 'cancel unavailable' });
+    await expect(alert).toBeVisible();
+    // The row's kebab menu stays open (modal) after the confirm; close it so the banner is clickable.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Dismiss error' }).click();
+    await expect(alert).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+  });
+
   test('PENDING_APPROVAL is surfaced in the list', async ({ page }) => {
     await expect(page.getByText('PENDING_APPROVAL')).toBeVisible({ timeout: 10000 });
   });

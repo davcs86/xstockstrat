@@ -27,6 +27,7 @@
 | 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | Step 5 — D-64 ledger export (`/trader/portfolio`) shows a `CardNotice` error on a non-OK response or a rejected `fetch`; success download path unchanged |
 | 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6 — `@AC-7`/`@AC-11` e2e on `/trader/portfolio` (500 / aborted ledger export → `role=alert` "Export failed", no `pageerror`) |
 | 2026-10-29 | `in-progress` (Step 7 done) | /sdd-execute sequential (sdd-batch-execute) | Step 7 — D-64 global mutation error fallback: `MutationCache` `onError` → single-slot `mutationErrorStore` → `MutationErrorFallback` alert in both providers; `meta.errorHandled` opt-out on the 9 audited hooks; the three no-op `onError` blocks removed |
+| 2026-10-29 | `in-progress` (Step 8 done) | /sdd-execute sequential (sdd-batch-execute) | Step 8 — `@AC-10` tests: `mutationErrorStore`/`queryClient` Vitest units (unflagged → reported, `meta.errorHandled` → not, per-call `onError` → still reported) and an `orders.spec.ts` e2e (503 CancelOrder → global "cancel unavailable" alert, dismissable, no `pageerror`) |
 
 ---
 
