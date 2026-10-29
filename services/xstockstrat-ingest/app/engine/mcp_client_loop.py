@@ -138,8 +138,21 @@ async def poll_one_source(
     result = await mcp_client.fetch(endpoint, tool, arguments, bearer, float(timeout_seconds))
     items = _extract_result_items(result)
     parsed = await extractor.extract(McpClientInput(result_items=items))
+    ingested = 0
+    skipped = 0
+    first_err: Exception | None = None
     for item in parsed:
-        await servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)
+        try:
+            await servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)
+            ingested += 1
+        except Exception as e:
+            log.warning("mcp_client loop: source %s item skipped: %s", slug, e)
+            skipped += 1
+            if first_err is None:
+                first_err = e
+    log.info("mcp_client loop: source %s polled ingested=%d skipped=%d", slug, ingested, skipped)
+    if parsed and skipped == len(parsed):
+        raise RuntimeError(f"all {len(parsed)} items failed: {first_err}")
 
 
 async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) -> None:

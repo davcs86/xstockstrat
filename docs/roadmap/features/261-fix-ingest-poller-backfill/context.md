@@ -643,3 +643,17 @@ halt). design.md is not written and status stays `spec-ready`.
 - Verification: module 17 passed; full suite 353 passed, coverage 84.10% (≥40%); `ruff check` + `ruff format --check`
   clean. Run with `uv run --extra dev` (plain `uv run` re-syncs without the dev extra and falls back to a global pytest).
 - Deviations: none.
+
+### Step 3 — service: FR-1 per-item guard, summary log, all-fail raise (done 2026-10-29)
+
+- `poll_one_source` in `services/xstockstrat-ingest/app/engine/mcp_client_loop.py` now wraps each ingest in
+  `try/except` (`item skipped` warning), always logs `polled ingested=<n> skipped=<m>` before any raise, and raises
+  `RuntimeError("all <N> items failed: <first_err>")` only when every parsed item failed, so the existing
+  `run_one_cycle` catch records it as `last_error`. A partial failure does not call `mark_source_error`; `owner=owner`
+  is kept on every ingest.
+- TDD: AC-1 red: partial batch aborted on the first failing item (1 of 3 awaited, `boom BAD` recorded as source error);
+  AC-8 red: `last_error` was `boom BAD`, not `all 2 items failed` → 2 failed on the pre-implementation tree → green: 2
+  passed. Scratch test (ingest mock raising per symbol), not committed — Step 4 owns the real tests; file removed.
+- Verification: grep hits at `:149`/`:153`/`:155`; `ruff check` + `ruff format --check` clean; full suite 353 passed,
+  coverage 83.83% (≥40%).
+- Deviations: none.

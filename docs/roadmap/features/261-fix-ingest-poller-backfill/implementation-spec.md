@@ -187,7 +187,7 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client_loop.py -q
 
 ### Step 3 — service: FR-1 per-item guard, summary log, all-fail raise
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/engine/mcp_client_loop.py` — modify
