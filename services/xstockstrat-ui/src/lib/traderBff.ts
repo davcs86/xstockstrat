@@ -5,6 +5,7 @@ import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
+import { ConnectError, Code } from '@connectrpc/connect';
 import {
   tradingClient,
   portfolioClient,
@@ -24,6 +25,8 @@ import {
 } from '@/lib/bffShared';
 import { FUNDAMENTALS_TIMEOUT_MS, ORDER_MUTATION_TIMEOUT_MS } from '@/lib/deadlines';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
+
+const ACCOUNT_STREAM_PREFIX = 'account:';
 
 const router = createBffRouter();
 
@@ -121,17 +124,27 @@ router.service(AnalysisService, {
 });
 
 router.service(LedgerService, {
-  // Copilot reads: the BFF rewrites the client key to the per-user thread server-side, so the
-  // browser can only read its own thread (IDOR). Also serves position↔order fill lineage.
+  // Every branch sets ownerOnly server-side; account: keys are ownership-checked via trading
+  // ListBrokerAccounts (its errors pass through, so the read fails closed).
   queryEvents: async (req, ctx) => {
     const claims = await requireSession(ctx);
-    const streamKey = req.streamKey?.startsWith(COPILOT_STREAM_PREFIX)
-      ? copilotStreamKey(claims.user_id)
-      : req.streamKey;
-    return ledgerClient.queryEvents(
-      { ...req, streamKey },
-      { headers: backendHeaders(claims, ctx) },
-    );
+    const headers = backendHeaders(claims, ctx);
+    if (req.streamKey?.startsWith(COPILOT_STREAM_PREFIX)) {
+      return ledgerClient.queryEvents(
+        { ...req, streamKey: copilotStreamKey(claims.user_id), ownerOnly: false },
+        { headers },
+      );
+    }
+    if (req.streamKey?.startsWith(ACCOUNT_STREAM_PREFIX)) {
+      const accountId = req.streamKey.slice(ACCOUNT_STREAM_PREFIX.length);
+      if (!accountId) throw new ConnectError('stream not owned by caller', Code.PermissionDenied);
+      const { accounts } = await tradingClient.listBrokerAccounts({}, { headers });
+      if (!accounts.some((a) => a.id === accountId)) {
+        throw new ConnectError('stream not owned by caller', Code.PermissionDenied);
+      }
+      return ledgerClient.queryEvents({ ...req, ownerOnly: false }, { headers });
+    }
+    return ledgerClient.queryEvents({ ...req, ownerOnly: true }, { headers });
   },
   // Append-only note persistence — stream key/event type/source forced server-side, so the client
   // cannot write outside its own thread.
