@@ -1008,3 +1008,15 @@ Feature: fix-ui-trader-feedback (bug fix)
 ### Coverage check
 - Source scenarios: 12 (AC-1 to AC-12). Planned: 12 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped.
 ```
+
+## Session 2026-10-29 — sdd-execute ALL-DONE PATH (C-16 promotion + integration PR)
+
+- Promotion plan (`sdd-batch-promotion-plan` above) applied as written under the operator's standing authorization
+  (auto-confirm C-16): created `services/xstockstrat-ui/acceptance/fix-ui-trader-feedback.feature` with AC-1..AC-12
+  (12 NEW, 0 DUP/OVERLAP/CONFLICT). Body matches `acceptance.feature` apart from the added `@feature-270` tags.
+- `status.md`: `in-progress` → `code-completed`; feature.md Status History row added.
+- Integration PR `feature/fix-ui-trader-feedback` → `main-dev` opened; merge held for the operator. No new
+  migrations or env vars.
+- Still open for the operator: Step 13 instruction 7 (5-minute idle reconnect observation on dev), and the
+  pre-existing `tsc --noEmit` failure in `e2e/insights/backfills.spec.ts:135-136` (out of scope, handed to
+  `/sdd-qa defect`).
