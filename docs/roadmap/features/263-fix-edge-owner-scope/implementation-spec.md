@@ -368,7 +368,7 @@ grep -n "backendHeaders(claims, ctx)" services/xstockstrat-ui/src/lib/traderBff.
 
 ### Step 6 — test: trader BFF `queryEvents` unit test (vitest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/traderBff.test.ts` — create
@@ -896,3 +896,10 @@ _Populated by /sdd-execute as implementation proceeds._
   outside this step's Files; it was not touched.
 - **Disposition**: CI-equivalent fallback for the RED/GREEN evidence (no spec change); the `tsc` error is
   an open item outside this feature's scope.
+
+### DEV-5 — Step 6: RED captured against the pre-Step-5 handler (2026-10-29)
+
+- **What**: Step 5 had already landed (`54ef1a73`), so the committed test's RED was captured by temporarily
+  restoring `traderBff.ts` from `54ef1a73~1`, running the test (7/9 fail; the AC-3 account/copilot cases pass
+  as baselines), and restoring the file from the index (not committed). GREEN: 9/9 on the Step 5 code.
+- **Disposition**: CI-equivalent fallback for the RED evidence (same pattern as DEV-3); no spec change.

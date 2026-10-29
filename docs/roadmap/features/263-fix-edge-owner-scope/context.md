@@ -565,3 +565,26 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
   this change, DEV-4); `test:unit` 48 files / 247 tests pass.
 - Deviations: DEV-4 (RED/GREEN via uncommitted draft of the Step 6 test; pre-existing `tsc` error noted).
 
+### Step 6 — test: trader BFF `queryEvents` unit test (vitest) [done] (2026-10-29)
+
+- Created `src/lib/__tests__/traderBff.test.ts`: 9 cases driven through the real `dispatchConnect`
+  (`/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents`, JSON body + `access_token` cookie), with
+  `@/lib/auth` mocked (`u-a`, `['trader']`, fixed `generateTraceId`) and `@/lib/connectClients` mocked
+  (`listBrokerAccounts`/`queryEvents` `vi.fn`s, other clients `{}`). Covers AC-1 (foreign + empty `account:`
+  id), trading `Unavailable` pass-through, AC-3 (owned account, copilot via `copilotStreamKey('u-a')`),
+  AC-2/AC-7 (no key, `portfolio:u-b`), browser `ownerOnly:false` override, and C-03 (same `HEADER_USER_ID` /
+  `HEADER_TRACE_ID` on trading + ledger calls). C-12: inputs are scenario one-offs, kept inline.
+- Files modified: `services/xstockstrat-ui/src/lib/__tests__/traderBff.test.ts`
+- Tooling setup (step 6): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile
+  --filter xstockstrat-ui... --filter .` (worktree-local `node_modules`, husky installed by `prepare`).
+- TDD (AC-1/AC-2/AC-7, DEV-5): red — against the pre-Step-5 `traderBff.ts` (`54ef1a73~1`, restored
+  temporarily) 7/9 fail (`expected 200 to be greater than or equal to 400` foreign `account:`; `expected
+  undefined to be 'permission_denied'` empty id; `expected undefined to be 'unavailable'`; `ownerOnly`
+  `expected false to be true` for no key / `portfolio:u-b` / override; C-03 no trading call), AC-3 account +
+  copilot pass as baselines → green — 9/9 pass on the committed Step 5 code.
+- Verification: `vitest run src/lib/__tests__/traderBff.test.ts` 9/9; `test:coverage` 48 files / 247 tests
+  pass, `src/lib/**` 73.36% lines (≥40%, `*Bff.ts` excluded so unchanged); `lint` exit 0 (pre-existing
+  warnings only, none in the new file); prettier clean; `tsc --noEmit` only the pre-existing
+  `e2e/insights/backfills.spec.ts:135-136` errors (DEV-4).
+- Deviations: DEV-5 (RED via temporary restore of the pre-Step-5 handler, since Step 5 landed first).
+

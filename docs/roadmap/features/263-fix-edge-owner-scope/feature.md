@@ -64,4 +64,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–5 done; continue at Step 6 (trader BFF `queryEvents` unit test, vitest)
+`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–6 done; continue at Step 7 (trader BFF owner scoping end to end — e2e mock + fixtures + spec)
