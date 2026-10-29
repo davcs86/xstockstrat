@@ -843,7 +843,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 { "run_id": "…", "symbols_processed": 42, "signals_emitted": 7, "calls_spent": 3, "deferred_count": 0, "status": "completed", "finished_at": "2026-08-26T05:06:00+00:00" }
 ```
 
-`status` is `"completed"` | `"budget_deferred"` | `"failed"`.
+`status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. `partial` means a fetch chunk failed and its symbols are in `deferred_count`.
 
 **Errors**
 
@@ -1056,7 +1056,7 @@ Read a namespace's current config values from `xstockstrat-config`. **Read-only.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | `marketdata`, `analysis`, `trading`, `platform`, … |
-| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values |
+| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values. For non-admins it is **bound to the caller**: a non-admin asking for another user's id reads their own (bound, not refused); admins may read any user's (feature 263) |
 
 The **environment is always this agent deployment's own** (`production`/`staging`, from
 `APPLICATION_ENV`) — it is a deployment property, not a caller choice, so there is no `environment`
@@ -1064,7 +1064,8 @@ parameter and the tool cannot read another environment's rows (PR #994). `tradin
 (feature 147 — paper/live is derived from environment).
 
 Returns `{namespace, version, environment, user_id, values}`, each value being
-`{value, value_type, is_secret}`.
+`{value, value_type, is_secret}`. `user_id` is the scope actually read — for a bound non-admin
+request, the caller's own id, not the one passed.
 
 **Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
 the key name, so a flagged-but-unprefixed key is still redacted. Secret values are never returned by
@@ -1082,12 +1083,12 @@ nothing here can leak a secret.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | As above |
-| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys |
+| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys. For non-admins it is **bound to the caller**, as for `get_config` (feature 263) |
 
 The environment is always the agent's own deployment env (from `APPLICATION_ENV`) — no `environment`
 parameter, no `trading_mode` (PR #994 / feature 147).
 
-Returns `{namespace, environment, user_id, keys[]}`; each key carries `key`, `description`,
+Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key`, `description`,
 `default_value`, `is_secret`, `consuming_service`.
 
 Use it to discover what exists — and which keys are secret — before calling `set_config`.

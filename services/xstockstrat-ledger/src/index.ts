@@ -8,7 +8,8 @@ import { ConfigWatcher } from './services/configWatcher';
 import { LedgerServiceImpl } from './grpc/ledgerServiceImpl';
 import { createLedgerServiceDefinition } from './grpc/serviceDefinition';
 import { EventNotifier } from './services/eventNotifier';
-import { Pool, Client } from 'pg';
+import { makeListenerClient, makeResolveRow } from './services/eventRowResolver';
+import { Pool } from 'pg';
 
 const log = getLogger('ledger:server');
 
@@ -47,8 +48,11 @@ async function main() {
   await pool.query('SELECT 1');
   log.info('Database connected');
 
-  // Dedicated LISTEN/NOTIFY connection (separate from the query pool) so live streams never starve AppendEvent.
-  const notifier = new EventNotifier(() => new Client({ connectionString: dbUrl, ssl: sslOption }));
+  // Dedicated LISTEN/NOTIFY connection (separate from the query pool) so live streams never starve AppendEvent;
+  // it also resolves trimmed NOTIFY rows, so the pool is never borrowed for them.
+  const notifier = new EventNotifier(makeListenerClient(dbUrl, sslOption, configWatcher), {
+    resolveRow: makeResolveRow(configWatcher),
+  });
   await notifier.start();
   log.info('Event notifier started');
 

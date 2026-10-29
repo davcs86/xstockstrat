@@ -185,7 +185,7 @@ Indicators: `ZERO_IS_LEGIT = {}` (its one honour key matches no pattern).
 
 ### Step 1 — service: ingest getters honour a stored zero (HasField)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -224,7 +224,7 @@ Green run is Step 2's Verification.
 
 ### Step 2 — test: ingest getter rows for @AC-1 / @AC-4
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/conftest.py` — modify
@@ -270,7 +270,7 @@ grep -n "snapshot_watcher" tests/conftest.py tests/test_config_watcher.py   # C-
 
 ### Step 3 — service: ingest FR-3 clamps, dead sandbox helpers removed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -330,7 +330,7 @@ Green run is Step 4's Verification.
 
 ### Step 4 — test: ingest @AC-5 / @AC-6 rows and the read-classification guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_config_watcher.py` — modify
@@ -402,7 +402,7 @@ grep -n "def snapshot_watcher\|from tests.conftest\|conftest" tests/*.py   # one
 
 ### Step 5 — service: indicators getters honour a stored zero (HasField)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify
@@ -436,7 +436,7 @@ Green run is Step 6's Verification.
 
 ### Step 6 — test: indicators getter rows for @AC-1 / @AC-4
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify
@@ -485,7 +485,7 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 
 ### Step 7 — service: indicators sandbox accessors clamp a stored zero
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify
@@ -498,13 +498,17 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
   `sandbox_max_concurrent()` `:147-148`.
 - Consumers:
   - `servicer.py:107` (`asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))`)
-  - `:282-285` (`_clamp_override(request.*_override, self._cfg.sandbox_*)`, hotfix #1263 — unchanged; the accessor clamp guarantees its ceiling is ≥ 1)
+  - `:282` (`timeout_ms = _clamp_override(request.timeout_ms_override, self._cfg.sandbox_timeout_ms)`) and `:283-285`
+    (`_clamp_override(request.memory_bytes_override, self._cfg.sandbox_memory_bytes)`). `_clamp_override` `:66-68` is
+    `min(override, configured) if override > 0 else configured`, so a stored-zero `configured` still reaches the
+    sandbox (and pins any override to 0). It takes `configured` from the accessor, so the accessor clamp covers it.
   - `:310` (`max_concurrent=self._cfg.sandbox_max_concurrent()`, unclamped → `sandbox.py:346` `rlimit_nproc = max_concurrent * 16`)
   - `sandbox.py:282` (`if {memory_bytes} > 0:` skips `RLIMIT_DATA`)
-- Clamp in the accessor so `:310` is covered without a third copy of the defaults (`sandbox.py:332-335` already holds
+- Clamp in the accessor so `:310` and `_clamp_override` are covered without a third copy of the defaults (`sandbox.py:332-335` already holds
   one; recon.md:180-181, 328-330; design §3).
 - Every servicer test double sets these attributes directly (e.g. `tests/test_execute_formula_concurrency.py:31-37`,
-  `tests/test_formulas.py:19-22`), so it bypasses the accessor. Dry run: 290 passed.
+  `tests/test_formulas.py:19-22`, `tests/test_execute_formula_override_clamp.py` `_cfg()` `:20-26`), so it bypasses the
+  accessor and stays green. Dry run: 290 passed (before main-dev added the override-clamp test file).
 
 **TDD**: `red-green required`
 
@@ -513,7 +517,8 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 **Instructions**:
 1. Add the module-level `int_positive(cfg, key, default)` to `watcher.py` (same body as Step 3).
 2. `:134`, `:138` and `:148` → `return int_positive(self, "<same key>", <same default>)`.
-3. `servicer.py:107` → `asyncio.Semaphore(config_watcher.sandbox_max_concurrent())`. The `max(1, …)` is subsumed
+3. `servicer.py:107` → `asyncio.Semaphore(config_watcher.sandbox_max_concurrent())`. `_clamp_override` (`:66-68`) stays
+   unchanged. The `max(1, …)` is subsumed
    (design §4).
 4. `sandbox_allowed_imports` (`:140-145`) stays `get_str_present`, which honours `""` (feature-173 @AC-4).
 
@@ -528,7 +533,7 @@ Green run is Step 8's Verification.
 
 ### Step 8 — test: indicators @AC-6 rows and the read-classification guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify
@@ -539,7 +544,7 @@ Green run is Step 8's Verification.
 
 **Codebase Evidence**:
 - `IndicatorsServicer.__init__(self, config_watcher, db_pool=None, ledger_channel=None)` `servicer.py:93`. The
-  semaphore is built at `:102`.
+  semaphore is built at `:107`.
 - Capture double: `_blocking_execute_double` `tests/test_execute_formula_concurrency.py:40-63`. Semaphore-bound
   pattern: `test_semaphore_gates_at_configured_bound` `:93-106` (recon.md:190-191). It calls
   `monkeypatch.setattr(sandbox, "execute_formula", …)` and passes `_exec_req()` / `ctx_with(OWNER_HEADERS)`.
@@ -559,7 +564,8 @@ Green run is Step 8's Verification.
    `w = snapshot_watcher(**{"indicators.sandbox.max_concurrent": 0, "indicators.sandbox.allowed_imports": ""})`:
    - `IndicatorsServicer(config_watcher=w)._sandbox_sem._value == 4`.
    - With `sandbox.execute_formula` monkeypatched to a recorder, one `ExecuteFormula` passes `max_concurrent == 4`,
-     `timeout_ms == 5000` and `memory_bytes == 134217728`. This is the `:310` / `RLIMIT_NPROC` path.
+     `timeout_ms == 5000` and `memory_bytes == 134217728`. This is the `:310` / `RLIMIT_NPROC` path, plus `:282-285`
+     through `_clamp_override` with no override set.
 3. Guard file: the same structure as Step 4, with `FR3_KEYS` = the three sandbox int keys,
    `HONOUR_KEYS = {"indicators.sandbox.allowed_imports"}` and `ZERO_IS_LEGIT = {}`. The dry-run scan found the
    keyword-default call at `watcher.py:142-144` bindable.
@@ -576,7 +582,7 @@ uv run pytest --cov=app --cov-fail-under=50 && uv run ruff check . && uv run ruf
 
 ### Step 9 — service: analysis getters honour a stored zero (HasField)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/config/watcher.py` — modify
@@ -617,7 +623,7 @@ Green run is Step 10's Verification.
 
 ### Step 10 — test: analysis getter rows, FR-4 behaviours and zero-honour sites (@AC-1, @AC-2, @AC-3, @AC-4, @AC-9, @AC-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify
@@ -652,10 +658,12 @@ Green run is Step 10's Verification.
 - AC-3:
   - `_read_opportunity_queue(self, opps, state_repo, user_id, request, offset, q)` `servicer.py:4612` reads `w` at
     `:4615` and passes it to `opps.read(…, w, …)` at `:4619-4622`.
-  - The sort-0 ORDER BY text `_SORT_ORDER_BY[0]` `app/repositories/opportunities.py:35-40` uses
-    `(1 - $3) * o.conviction + $3 * o.signal_axis`, and the repo clamps w to `[0,1]` at `:224`.
+  - The sort-0 ORDER BY text `_SORT_ORDER_BY[0]` `app/repositories/opportunities.py:35-40` is the feature-200 symbol
+    roll-up `MAX(((1 - $3) * o.conviction + $3 * o.signal_axis)) OVER (PARTITION BY o.symbol) DESC, o.symbol ASC, ...`.
+    It references only `$3`; the window function is valid in ORDER BY over the VALUES subquery, and with distinct
+    symbols the expected AAA/BBB orders hold. The repo clamps w to `[0,1]` at `:224`.
   - Real-SQL harness: the `local_pg` session fixture `tests/conftest.py:367-` (marker `real_pg`, `pyproject.toml:33`;
-    CI installs PostgreSQL `.github/workflows/ci.yml:390-392`).
+    CI installs PostgreSQL in the `install postgresql (analysis real_pg tests)` step, `.github/workflows/ci.yml:400-404`).
   - Existing SQL-text tests: `tests/test_opportunities_repo.py:149-164`.
 - AC-9:
   - `_run_cycle` reads `throttle` at `live_loop.py:351` and passes it to `_eval_pair(definition, symbol, throttle, …)`
@@ -745,7 +753,7 @@ grep -n "def snapshot_watcher" tests/*.py   # exactly one hit, tests/conftest.py
 
 ### Step 11 — service: analysis FR-3 clamps, named readers, `max(1, …)` and inline-clamp conversion
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/config/watcher.py` — modify
@@ -874,7 +882,7 @@ Green run is Step 12's Verification.
 
 ### Step 12 — test: analysis @AC-6 / @AC-7, the guard, and the retention flip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_config_read_classification.py` — create
@@ -890,8 +898,8 @@ Green run is Step 12's Verification.
 - `AnalysisServicer(cfg, marketdata_channel=, indicators_channel=, ingest_channel=, ledger_channel=)`
   `tests/test_analysis_servicer.py:54-60`. Its semaphores are attributes (`servicer.py:537-587`).
 - Fundsignal: `FundamentalsSignalLoop._tick` `fundsignal_loop.py:128-156` returns the sleep seconds; when disabled it
-  returns `interval_hours * 3600` (`:136-138`). Harness: `_sched_loop` / `_make_loop` `tests/test_fundsignal_loop.py:45-58`,
-  `:393-402`.
+  returns `interval_hours * 3600` (`:136-138`). Harness: `_make_loop` `tests/test_fundsignal_loop.py:45` and `_sched_loop` `:379`
+  (a usage at `:393-402`).
 - Screener: `ScreenerEngine(marketdata, indicators, ingest, cfg, source_weights, compute_executor=None)`
   `services/screener.py:78-86`; semaphore `self._sem` `:84-86`.
 - AC-7 seams: `_opportunity_refresh_hour` `servicer.py:5869-5872` and `_readiness_materializer_hour` `:5934-5938`.
@@ -957,7 +965,7 @@ grep -n "def snapshot_watcher\|from tests.conftest" tests/*.py   # one definitio
 
 ### Step 13 — service: config bounds comments match the new getter semantics (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify (comments only)
@@ -995,7 +1003,7 @@ git diff --stat -- src/grpc/configServiceImpl.ts   # comment lines only
 
 ### Step 14 — test: config bounds still reject 0 (@AC-8) and a zero survives the WatchConfig wire (@AC-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -1051,9 +1059,13 @@ change; Step 13 is comments). This is the tdd-gate escape, recorded in the PR bo
      - `stringVal === ''`
    - Single-consumer inline rows (C-13).
 
+Tooling (re-spec 2026-10-28): config `node_modules` is not installed in a fresh worktree, so run `pnpm install` first.
+The root CLAUDE.md and CI pin Node 24; a host with only Node 22 can run the suite (no `engines` field forbids it),
+but record the Node version used in `context.md`.
+
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # test:coverage enforces c8 --lines 40 (package.json:13)
+cd services/xstockstrat-config && pnpm install && pnpm run test:coverage && pnpm run lint   # test:coverage enforces c8 --lines 40 (package.json:13)
 grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an intVal: 0 case
 ```
 
@@ -1061,7 +1073,7 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
 
 ### Step 15 — migration: description-only correction of the 027/028 zero-trap descriptions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.up.sql` — create
@@ -1087,7 +1099,7 @@ grep -n "OPP_CONC" src/__tests__/setConfigScalarBounds.test.ts   # includes an i
     the default 2)." at `:50`/`:53`; it contains the SQL-escaped `loop''s`)
 - The staging and production rows carry identical text, so one `UPDATE` per key covers both environments.
 - Pattern: the `UPDATE config.config_values SET … WHERE …` shape of `029_heal_config_keys_full_dotted.up.sql`
-  (design §12). There is no explicit BEGIN/COMMIT (`029:14`).
+  (design §12). There is no explicit BEGIN/COMMIT (`029_heal_config_keys_full_dotted.up.sql:15`).
 - Excluded: `028:100,103` (`sparkline_bars`), which has no analysis reader (recon.md:377). It is logged in Step 17.
 
 **TDD**: N/A (migration)
@@ -1128,7 +1140,7 @@ Then read both files and confirm each `.down` statement inverts one `.up` statem
 
 ### Step 16 — test: the description migration is description-only and reversible (@AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/zeroTrapDescriptionMigration.test.ts` — create
@@ -1166,7 +1178,7 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # te
 
 ### Step 17 — docs: config-key rows, constitutions, findings, governance; context-forge teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, service `CLAUDE.md`s
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -1186,14 +1198,15 @@ cd services/xstockstrat-config && pnpm run test:coverage && pnpm run lint   # te
 
 **Codebase Evidence**:
 - Analysis `CLAUDE.md` rows that name the trap, `max(1, …)` or `get_*_present`: `:472-474`, `:479`, `:482-489`,
-  `:494`, `:500`, `:513`, `:519-520`, `:525-531`, `:535-537` (grep of `zero-trap\|max(1, …)\|get_int_present\|get_float_present`,
-  2026-10-21).
+  `:500`, `:513`, `:519-521`, `:525-531`, `:535-537` (grep of `zero-trap\|max(1, …)\|get_int_present\|get_float_present`,
+  re-run 2026-10-28; `:521` `opportunity.retry_seconds` is new). `:494` (`fundamentals_blend_strategy_id`) no longer
+  matches the grep but still mentions `get_str`; review it too.
 - Ingest `CLAUDE.md:124,127,130-133` (`:127` and `:131` say "Read via `get_int_present` (never `get_int`)").
-- Indicators `CLAUDE.md:100-103` (`:102` "never `get_str`"; `:103` claims a `max(1, …)` clamp, which is now in the
-  accessor). 243 rewrites the same rows; the second to land rebases. In `:100`, keep hotfix #1263's `_clamp_override`
-  sentence verbatim and append only the FR-3 "a stored ≤ 0 reads as the default" text.
-- `docs/patterns/config-governance.md:251-269` (lower-bound rule and the `signal_rank_weight zero-trap` note at
-  `:257-258`), plus product-spec Fix Scope `:458-461,705,713,721`. The same doc also has `:319` ("must not be
+- Indicators `CLAUDE.md:100-103` (`:100` was rewritten on main-dev with the override-clamp text — keep it; `:102`
+  "never `get_str`"; `:103` claims a `max(1, …)` clamp, which is now in the accessor). 243 rewrites the same rows;
+  the second to land rebases.
+- `docs/patterns/config-governance.md:251-258` (lower-bound rule at `:252` and the `signal_rank_weight zero-trap` note
+  at `:257-258`, inside a table that runs to `:273`), plus product-spec Fix Scope `:458-461,705,713,721`. The same doc also has `:319` ("must not be
   swallowed by the `get_int` zero-trap") and `:688` (`refresh_hour_utc`: "never `get_int` … the zero-trap would
   swallow it"), grep 2026-10-21.
 - Module findings preambles that point the zero-trap at the root: `services/xstockstrat-analysis/docs/context-constitution-findings.md:5`
@@ -1238,7 +1251,7 @@ grep -n "CF-N10" docs/context-constitution-findings.md
 
 ### Step 18 — docs: rollout audit and consumer-surface verification (C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: rollout (dev, then prod) — results recorded in `docs/roadmap/features/244-fix-python-config-stored-zero/context.md`
 **Files**:
 - `docs/roadmap/features/244-fix-python-config-stored-zero/context.md` — modify (audit and smoke results)
@@ -1250,9 +1263,10 @@ grep -n "CF-N10" docs/context-constitution-findings.md
   (product-spec Fix Scope; design §13).
 - A malformed int becomes `parseInt` → `NaN` → a present member (`configServiceImpl.ts:582`).
 - Unseeded FR-4 keys need `create_key=true` with the matching `value_type` (`configServiceImpl.ts:466-469`; agent
-  `set_config` `services/xstockstrat-agent/app/tools.py:1642,1655-1662`).
+  `set_config` `services/xstockstrat-agent/app/tools.py:1651`, `value_type`/`create_key` params `:1655-1660`,
+  docstring `:1662`).
 - Surfaces:
-  - agent `run_backtest` `tools.py:715`, `list_opportunities` `tools.py:1518`
+  - agent `run_backtest` `tools.py:715`, `list_opportunities` `tools.py:1527`
   - `/insights` backtest view `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`
   - `/trader` `src/components/trader/AlertStream.tsx`, `/accounts/notifications` `src/app/accounts/notifications/AlertInbox.tsx`
   - `/config-ui` `src/app/config-ui/[namespace]/NamespaceEditor.tsx:71-76`
@@ -1297,3 +1311,128 @@ grep -niE "restored" "$f"                                                       
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- 2026-10-28 Step 1 (TDD evidence harness, no scope change): the step's paired test lands in Step 2, so the RED/GREEN
+  run used an uncommitted scratch test (`tests/test_zz_step1_scratch.py`, deleted before commit) asserting the
+  three @AC-1 ingest rows, the @AC-4 unset/mismatched rows and `get_int_present is get_int`. Only `watcher.py` was staged.
+- 2026-10-28 Step 3 (TDD evidence harness, no scope change): the paired test lands in Step 4, so RED/GREEN used an
+  uncommitted scratch test (`tests/test_zz_step3_scratch.py`, deleted before commit): the four FR-3 properties at 0
+  (and `max_concurrent_jobs` at -5), the loop timeout/poll reads at 0, the sandbox helpers gone, and
+  `max_retry_attempts`/`dedup_window_hours` still honouring 0. The docstring range cited as `:157-159` was actually
+  `:156-158` (line drift only).
+- 2026-10-28 Step 4 (TDD evidence method + line drift, no scope change): Step 3 had already landed, so RED ran the new
+  tests against the Step-2 `app/config/watcher.py` and `app/engine/mcp_client_loop.py` (`git checkout 62972c4f --`,
+  restored to HEAD before GREEN; never committed). `IngestServicer.__init__` spans `servicer.py:308-316` (class at
+  `:307`), not `:308-320`; `_backfill_sem` is still at `:323`. Guard shape choices within the instructions:
+  `FR3_KEYS`/`HONOUR_KEYS` are frozensets (rule 4 checks one default per key, it does not pin the table's values),
+  `ZERO_IS_LEGIT` is a key→reason dict, and `collect(app_dir)` returns `(reads, clamps, errors)`.
+- 2026-10-28 Step 5 (TDD evidence harness, no scope change): the paired test lands in Step 6, so RED/GREEN used an
+  uncommitted scratch test (`tests/test_zz_step5_scratch.py`, deleted before commit) asserting the three @AC-1
+  indicators rows, the @AC-4 unset/mismatched rows and `get_str_present is get_str`. Only `watcher.py` was staged.
+- 2026-10-28 Step 6 (TDD evidence method + test shape, no scope change): Step 5 had already landed, so RED ran the new
+  rows against the Step-4 `app/config/watcher.py` (`git checkout 52b55fee --`, restored to HEAD before GREEN; never
+  committed). 243 has not landed, so `_str_watcher` keeps its name and delegates to `snapshot_watcher` (no
+  `ConfigValue` arm). The @AC-4 rows are one parametrized test over watcher factories, because the `unset_int` row
+  needs `_snapshot = None`, which `snapshot_watcher(**values)` cannot express.
+- 2026-10-28 Step 7 (TDD evidence harness + path citation, no scope change): the paired test lands in Step 8, so
+  RED/GREEN used an uncommitted scratch test (`tests/test_scratch_step7.py`, deleted before commit): `int_positive`
+  exists, the three sandbox int accessors at 0 and -1 read 5000 / 134217728 / 4, a positive `max_concurrent` passes
+  through, `sandbox_allowed_imports` at `""` stays `[]`, and `IndicatorsServicer._sandbox_sem._value == 4` at 0.
+  The `int_positive` comment names the indicators hazards (Semaphore(-1), `memory_bytes=-1` skips `RLIMIT_DATA`)
+  rather than Step 3's ingest `sleep(-n)` wording; the body is identical. The Codebase Evidence cites `sandbox.py`;
+  the file is `app/services/sandbox.py` (not edited).
+- 2026-10-28 Step 8 (TDD evidence method, no scope change): Step 7 had already landed, so RED ran the new tests against
+  the Step-6 `app/config/watcher.py` and `app/handlers/servicer.py` (`git checkout e796238a --`, restored to HEAD
+  before GREEN; never committed). Instruction 4's "Step-5 tree" has the same `app/` as the Step-6 tree (Step 6 is
+  test-only). On that tree the semaphore row read `_value == 1` (the pre-Step-7 `max(1, …)`), not 0. The guard file
+  is the Step-4 ingest guard with the indicators key sets swapped in (`ZERO_IS_LEGIT` an empty dict).
+- 2026-10-28 Step 9 (TDD evidence harness, no scope change): the paired test lands in Step 10, so RED/GREEN used an
+  uncommitted scratch test (`tests/test_zz_step9_scratch.py`, deleted before commit) asserting the three @AC-1
+  analysis rows, the @AC-4 unset/mismatched rows, and `get_int_present is get_int` / `get_float_present is get_float`.
+  Between Steps 9 and 10 the analysis suite has one expected failure,
+  `test_get_float_present_explicit_zero_is_not_trapped` (`:594`). It asserts the old `get_float` zero-trap, and
+  Step 10 rewrites it. The same `ConfigWatcher` class serves the `marketdata` namespace watcher (`main.py:48`).
+  Its only read, `fundsignal_loop.py:97`, uses default `""`, so it behaves the same either way.
+- 2026-10-28 Step 10 (TDD evidence method + test shape, no scope change): Step 9 had already landed, so RED ran the new
+  tests against the Step-8 `app/config/watcher.py` (`git checkout e2b41e19 --`, restored to HEAD before GREEN; never
+  committed). Shape choices within the instructions:
+  - The AC-2 seam builds the servicer with the two lines of `_svc_req` (`_wire_evaluated(make_servicer(),
+    _series_bars(6, 12))`, `_windowed_req(_sma_def())`) in a new class rather than calling the method on
+    `TestRunBacktestFillModelRouting`. It records the `commission=`/`slippage=` keywords of every call.
+  - The AC-9 rows use strategy id `s1` (lower case), matching the existing `_last_alert_ts` keys in
+    `test_live_loop.py`; the instructions wrote `S1`. The AC-9 seam replaces `loop._cfg`, so `_run_cycle` reads every
+    other key through the real getter (absent → default).
+  - The @AC-4 `_snapshot = None` row is a separate test (`test_get_str_default_when_no_snapshot`), as in Step 6.
+  - The AC-3 order rows run under `real_pg` via `local_pg` (the project's own throwaway-PostgreSQL harness named by the
+    step); no service database or migration was started.
+- 2026-10-28 Step 11 (TDD evidence harness + verification grep, no scope change): the paired test lands in Step 12, so
+  RED/GREEN used an uncommitted scratch test (`tests/test_zz_step11_scratch.py`, deleted before commit). It asserted
+  the three helpers (0 / -5 / 0.0 / "" → default, 7 passes through), the five `AnalysisServicer.__init__` semaphore and
+  pool sizes at 0, `blend_strategy_id` / `default_cooldown_days` / `fundsignal_source_slug`, `ScreenerEngine._sem`,
+  and fundsignal `_tick() == 86400`. The Verification's first grep pattern `max(1, self._cfg.get_int` also
+  prefix-matches the kept present-aware `retry_seconds` wrappers (`get_int_present`: the two opportunity retry sites
+  in `servicer.py` and the fundsignal retry), which Instruction 8 says not to touch. The anchored form (`get_int(`)
+  returns no output. The three helpers share one 2-line constraint comment above `int_positive`.
+- 2026-10-28 Step 12 (TDD evidence method + guard/test shape, no scope change): Step 11 had already landed, so RED ran
+  the new tests against the Step-10 `app/` tree (`git checkout e16c0fff --`, restored to HEAD before GREEN; never
+  committed): 43 failed, 19 passed. Shape choices within the instructions:
+  - `collect(app_dir)` returns a `Scan(reads, clamps, errors)` named tuple whose `reads`/`clamps` map each key to its
+    set of `(module_dotted_path, default_source)` (the ingest/indicators copies return flat lists); the rules are the
+    Step-4 rules unchanged. Analysis `ZERO_IS_LEGIT` reasons cite symbols, not line numbers.
+  - The AC-6 seams share one real `snapshot_watcher` with all 34 FR-3 keys (plus `default_fill_model`) at 0. On the
+    Step-10 tree the `default_fill_model` seam fails at the `max_range_days` 0 range check (RunBacktest aborts), not at
+    the fill-model read, which is an honour read on both trees.
+  - The table rows import the clamps lazily and add `test_ac6_table_covers_every_fr3_key` (table keys == `FR3_KEYS`).
+  - The fundsignal `_tick` seam reuses `_make_loop` from `tests/test_fundsignal_loop.py` and replaces `loop._cfg`.
+  - AC-7 fundsignal rows read through the getter with the site default resolved from `collect()`.
+- 2026-10-28 Step 13 (layout + evidence harness, no scope change): the Instruction-2 rewrite is 2 lines; the kept
+  "max_concurrent_bars_fetches ceiling = marketdata PgBouncer pool" clause moved to its own third line rather than
+  being dropped, so the block stays 3 lines as before. TDD red is N/A (comment-only, per the step's **TDD**); the
+  Verification grep returned no output and the diff is 4/4 comment lines. `prettier --check` and `tsc --noEmit` were
+  not usable as a gate here: the config service has no `node_modules` in this worktree, and `prettier --check` warns
+  on the unedited HEAD file too.
+- 2026-10-28 Step 14 (evidence harness, no scope change): TDD red is N/A (characterization, per the step's **TDD**);
+  both new assertions passed on the unchanged tree. To show they can fail, two throwaway mutants were applied to the
+  compiled `dist/grpc/configServiceImpl.js` only (rebuilt from `src` before the gate): truthiness arms in
+  `toProtoSnapPayload` failed @AC-10 ("SNAPSHOT: zero_int must carry intVal"), and OPP_CONC `minValue: 0` failed the
+  @AC-8 `it`. The @AC-8 case went into the existing `:214` `it` (Instruction 1's first option). Node 22.22.0 was used
+  (CI pins 24). The new file is prettier-clean; `setConfigScalarBounds.test.ts` was already non-prettier at HEAD and
+  was not reformatted.
+- 2026-10-28 Step 16 (TDD evidence method + test shape, no scope change): Step 15 had already landed, so RED ran the
+  new test with the two `032_analysis_zero_trap_descriptions.*.sql` files moved to the session scratchpad (restored
+  before GREEN; never committed): the suite failed on "expected exactly one *_analysis_zero_trap_descriptions.up.sql,
+  got []". Shape choices within the instructions: the splitter also drops `--` comments outside literals (the 032
+  files open with a comment header) and collapses whitespace outside literals before the anchored regex; the test
+  also asserts four statements per direction with distinct keys and no up/down statement whose SET equals its WHERE,
+  so an empty or no-op file cannot pass vacuously.
+- 2026-10-28 Step 17 (scope detail + teardown method, no spec change):
+  - Beyond the cited lines, the same edit was applied to rows in the step's own files that described a now-removed
+    mechanism: ingest `CLAUDE.md` FR-3 rows `:128-129` and indicators `:100-101`; governance `:263-277` signal-rank row,
+    `:298`, `:314`, `:344-345`, `:542`, `:553`; the analysis findings dead `sandbox_*` row `:21` (Step 11 deleted those
+    helpers too); the analysis constitution Pointer `:52`, whose "zero-trap note" target no longer exists in root `CLAUDE.md`.
+  - Rows that still name `get_int_present`/`get_float_present` as a literal call (the names survive as aliases) were left as-is.
+  - The context-forge `context-constitution` skill is not available in this session (only `context-scrubber` is
+    listed). The teardown was a manual re-read of every touched file against the code (getters, clamps, guard sets,
+    the remaining `max(1, …)` sites, ingest INGEST-9 anchors). The integration PR body must record both facts.
+- 2026-10-28 Step 18 deferred to operator — integration PR merge held until the operator:
+  1. Runs both Instruction-1 audit queries against `config.config_values` on dev (and again before prod). These are
+     the zero/empty rows for `analysis`/`indicators`/`ingest` and `value_type='int' AND value_data !~ '^-?[0-9]+$'`.
+     Classify each row against § Guard classification (FR-3 → clamped; honour → takes effect).
+  2. Re-runs the FR-5 seed audit after 243's heal lands.
+  3. Deploys the integration PR to dev and runs the four Instruction-2 smokes as a staging admin:
+     - `signal_rank_weight=0` → conviction order;
+     - `default_commission_pct`/`default_slippage_pct=0` (float, `create_key=true`) → `run_backtest` fills at the bar
+       close with no cost, and the same run is shown in `/insights`;
+     - `alert_throttle_seconds=0` (int, `create_key=true`) → a repeat transition reaches the `/trader` AlertStream and
+       the `/accounts/notifications` inbox;
+     - `/config-ui` analysis namespace shows the four Step-15 descriptions.
+  4. Restores every value and records the results in `context.md` under `## Session <date> — rollout (dev)`, then
+     `(prod)`, until the step's Verification greps pass.
+
+  Code-side, nothing is pending: the step's only File is `context.md`, and the cited symbols were re-confirmed.
+  `configServiceImpl.ts:99` is the bounds comment; the registry starts at `:100`.
+- 2026-10-29 Step 18 (operator decision "Record audit, merge, I smoke"): Instruction 1 (dev) ran through the staging
+  agent MCP `get_config` instead of SQL (the operator has no DB access). Results are in context.md
+  `## Session 2026-10-29 — rollout (dev)`. Instruction 2's smokes need the deployed fix, so they run post-merge from
+  the operator's session and are recorded in a later context.md entry. The step is marked `done` so the integration
+  PR can merge. Still open: the post-deploy smoke + restore, and the prod audit before promotion.

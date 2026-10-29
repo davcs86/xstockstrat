@@ -701,6 +701,66 @@ jobs:
           git fetch --no-tags origin main "${{ github.base_ref }}"
           scripts/check-migration-contract.sh "origin/${{ github.base_ref }}"
 
+  # Needs a migrated TimescaleDB; test:db stays outside the node-test c8 coverage gate.
+  ledger-db-test:
+    name: Ledger DB test (TimescaleDB)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'migrations') ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci') ||
+      contains(fromJson(needs.changes.outputs.matched), 'node-shared')
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: xstockstrat
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: xstockstrat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xstockstrat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: build proto stubs
+        run: pnpm --filter @xstockstrat/proto run build
+
+      - name: Build migrator image (migrate + psql + envsubst)
+        run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
+
+      - name: Apply migrations
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
+            -e SEED_USER_ID="00000000-0000-4000-8000-0000000000c1" \
+            xstockstrat-migrate-ci
+
+      - name: test:db
+        working-directory: services/xstockstrat-ledger
+        env:
+          LEDGER_DB_TEST_URL: postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable
+        run: pnpm run test:db
+
   markdown-lint:
     name: CLAUDE.md lint (markdownlint)
     needs: changes
@@ -832,6 +892,7 @@ jobs:
       - shell-lint
       - migration-rerun
       - migration-contract-gate
+      - ledger-db-test
       - homelab-render
       - markdown-lint
       - context-map
@@ -853,6 +914,7 @@ jobs:
           echo "shell-lint:      ${{ needs.shell-lint.result }}"
           echo "migration-rerun: ${{ needs.migration-rerun.result }}"
           echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
+          echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"
           echo "homelab-render:  ${{ needs.homelab-render.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
