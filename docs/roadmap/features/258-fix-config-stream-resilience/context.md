@@ -647,3 +647,132 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   ledger teardown.
 - Files modified: `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-config/docs/context-constitution.md`
 - Next: Step 1's operator check, then the integration PR.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-config-stream-resilience (feature 258)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-config/acceptance/fix-config-stream-resilience.feature | CREATE | NEW | LISTEN reconnect, subject is config WatchConfig delta |
+| AC-2 | same | CREATE | NEW | notification handler error is logged, no crash |
+| AC-3 | same | CREATE | NEW | GetConfig error status |
+| AC-4 | same | CREATE | NEW | SetConfig existence-gate error status |
+| AC-5 | services/xstockstrat-ledger/acceptance/fix-config-stream-resilience.feature | CREATE | NEW | AppendEvent pool.connect failure; ledger owns it |
+| AC-6 | config suite | CREATE | NEW | failed initial snapshot ends stream |
+| AC-7 | config suite | CREATE | NEW | change during snapshot build is not lost |
+| AC-8 | config suite | CREATE | NEW | failed broadcast tells subscriber to reconnect |
+| AC-9 | config suite | CREATE | NEW | NOTIFY lost while LISTEN is down, resync after reconnect |
+| AC-10 | ledger suite | CREATE | NEW | AppendEvent in-transaction failure releases client |
+| AC-11 | config suite | CREATE | NEW | SetConfig value-write failure error status |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-config-stream-resilience.feature (CREATE) ---
+# Promoted from docs/roadmap/features/258-fix-config-stream-resilience/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-258` tag.
+# Durable business rules xstockstrat-config guarantees for change propagation and DB-error handling.
+
+Feature: xstockstrat-config - config stream resilience and DB-error handling
+  What xstockstrat-config guarantees: change propagation survives a dropped LISTEN connection, and handler DB errors surface as logged errors or gRPC error statuses rather than silent failures.
+
+  @AC-1 @FR-1 @regression @feature-258
+  Scenario: Config change propagation resumes after the LISTEN connection drops
+    Given xstockstrat-config is running with a WatchConfig subscriber on namespace "analysis" environment "staging"
+    And the config LISTEN connection to Postgres is terminated
+    When a SetConfig writes global key "analysis.backtest.max_duration_seconds" = 600 in "staging"
+    Then the subscriber receives a DELTA carrying "analysis.backtest.max_duration_seconds" = 600
+    And the config process was not restarted
+
+  @AC-2 @FR-2 @regression @feature-258
+  Scenario: A failing reload inside the notification handler does not crash config
+    Given the config LISTEN client receives a "config_changed" notification for namespace "analysis"
+    And the reload query for that namespace rejects with "connection terminated"
+    When the notification is handled
+    Then a log record at error level containing "connection terminated" is captured
+    And no unhandled promise rejection is raised and the process keeps serving GetConfig
+
+  @AC-3 @FR-3 @regression @feature-258
+  Scenario: GetConfig returns an error status when the per-user overlay query fails
+    Given the per-user overlay query for namespace "analysis" user "u-1" rejects with "connection terminated"
+    When GetConfig is called with namespace "analysis" and user_id "u-1"
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+  @AC-4 @FR-3 @regression @feature-258
+  Scenario: SetConfig returns an error status when the existence-gate query fails
+    Given the existence-gate query for namespace "analysis" key "analysis.backtest.max_duration_seconds" rejects with "connection terminated"
+    When an admin calls SetConfig for that key with value 600
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+  @AC-6 @FR-4 @regression @feature-258
+  Scenario: A failed initial WatchConfig snapshot ends the stream with an error status
+    Given the per-user overlay query for namespace "analysis" user "u-1" rejects
+    When a client opens WatchConfig for namespace "analysis" user_id "u-1"
+    Then the stream is ended with a gRPC error status
+    And a later SetConfig of "analysis.backtest.max_duration_seconds" = 600 sends no message to that stream
+
+  @AC-7 @FR-4 @regression @feature-258
+  Scenario: A change committed while the initial snapshot is being built still reaches the new subscriber
+    Given a client opens WatchConfig for namespace "analysis" user_id "u-1" and the snapshot read is still in flight
+    When "analysis.backtest.max_duration_seconds" is changed to 600 and "config_changed" is broadcast before the snapshot resolves
+    Then the subscriber's first SNAPSHOT or a following DELTA carries "analysis.backtest.max_duration_seconds" = 600
+
+  @AC-8 @FR-5 @regression @feature-258
+  Scenario: A subscriber whose broadcast fails is told to reconnect instead of silently dropped
+    Given a WatchConfig subscriber on namespace "analysis" user_id "u-1"
+    And the per-user overlay query rejects once during a broadcast for "analysis"
+    When "config_changed" is broadcast for namespace "analysis"
+    Then a log record at error level containing the overlay query's rejection message is captured
+    And that subscriber's call is ended with a gRPC error status
+
+  @AC-9 @FR-1 @regression @feature-258
+  Scenario: A change committed while the LISTEN connection is down reaches subscribers after reconnect
+    Given xstockstrat-config is running with a WatchConfig subscriber on namespace "analysis" environment "staging"
+    And the config LISTEN connection to Postgres is terminated
+    And while it is down global key "analysis.backtest.max_duration_seconds" is set to 600 in "staging" and its NOTIFY is lost
+    When the config LISTEN connection is re-established
+    Then the subscriber receives a message carrying "analysis.backtest.max_duration_seconds" = 600
+
+  @AC-11 @FR-3 @regression @feature-258
+  Scenario: SetConfig returns an error status when the value write fails after the existence gate passes
+    Given global key "analysis.backtest.max_duration_seconds" is registered in "staging"
+    And the INSERT/UPDATE of config.config_values for that key rejects with "connection terminated"
+    When an admin calls SetConfig for that key with value 600
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-config-stream-resilience.feature (CREATE) ---
+# Promoted from docs/roadmap/features/258-fix-config-stream-resilience/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-258` tag.
+# Durable business rules xstockstrat-ledger guarantees for idempotent AppendEvent DB failures.
+
+Feature: xstockstrat-ledger - idempotent AppendEvent surfaces DB failures
+  What xstockstrat-ledger guarantees: a pool or in-transaction failure on the idempotent append path returns a gRPC error status, releases its client, and raises no unhandled rejection.
+
+  @AC-5 @FR-3 @regression @feature-258
+  Scenario: Idempotent AppendEvent returns an error status when no pool connection can be acquired
+    Given ledger pool.connect rejects with "timeout exceeded when trying to connect"
+    When AppendEvent is called with stream_key "account:a-1" and idempotency_key "k-1"
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+  @AC-10 @FR-3 @regression @feature-258
+  Scenario: Idempotent AppendEvent returns an error status and releases its client when a query in the transaction fails
+    Given ledger pool.connect succeeds and the INSERT inside the idempotent transaction rejects with "connection terminated"
+    When AppendEvent is called with stream_key "account:a-1" and idempotency_key "k-2"
+    Then the callback is invoked with a gRPC error status
+    And the acquired pool client is released
+    And no unhandled promise rejection is raised
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1..4, 6..9, 11 assert on config's LISTEN/WatchConfig/GetConfig/SetConfig, so they go to services/xstockstrat-config/acceptance/. AC-5 and AC-10 assert on ledger AppendEvent, so they go to services/xstockstrat-ledger/acceptance/. None is cross-cutting, so docs/sdd/business-rules/platform.feature is untouched.
+- Dedup: I grepped the config and ledger suites and platform.feature for feature-258, LISTEN, unhandled, AppendEvent and config_changed. I found no same-outcome scenario. The nearest are config-secrets-and-scoping.feature and fix-python-config-stored-zero.feature, which cover redaction and zero values on the WatchConfig wire. They do not overlap, and nothing contradicts them. The ledger fix-identity-ledger-test-suites.feature only mentions the duplicate-key branch, which is unrelated.
+- No existing promoted @AC rule is changed or contradicted. This is additive.
+- Neither new file name exists yet. The ledger acceptance/ directory already exists. Only those two services appear in the Reviewers table.
+
+### Coverage check
+- Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW (9 config, 2 ledger), 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
+```
