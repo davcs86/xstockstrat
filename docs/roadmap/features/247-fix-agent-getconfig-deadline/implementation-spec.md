@@ -79,7 +79,9 @@ Steps 1-2 test each surface.
 - Deferred surfaces and paths (C-14, never "later"): each points at a report that Step 5 materializes.
   - `extract_email_content` N >= 5 residual → `agent-config-snapshot-read`.
   - DCR fail-open → `agent-dcr-fail-closed`.
-  - `client.get_config` and `register_oauth_client` → `agent-rpc-deadlines`.
+  - `client.get_config` and `register_oauth_client` → feature `273-fix-agent-client-deadlines` (report
+    `docs/reports/2026-10-21-agent-client-deadlines-defect.md`, triaged); the planned `agent-rpc-deadlines` report was
+    dropped as a duplicate (operator decision 2026-10-29, Deviation Log).
 - C-16 promotion of `@AC-1..5` into `services/xstockstrat-agent/acceptance/` happens in the
   `/sdd-execute` integration PR, not as a step here.
 - Overlap (recon.md:154-158) is file-level only, in disjoint regions:
@@ -568,11 +570,13 @@ Seven files exceeds the 5-file advisory; they are three report/sidecar pairs plu
 
 **Verification**:
 ```bash
-for f in docs/reports/2026-10-21-agent-config-snapshot-read-defect.md docs/reports/2026-10-21-agent-dcr-fail-closed-defect.md docs/reports/2026-10-21-agent-rpc-deadlines-defect.md; do
+for f in docs/reports/2026-10-29-agent-config-snapshot-read-defect.md docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md; do
   echo "$f: $(grep -oE 'SEV-[123]' "$f" | sort -u | tr '\n' ' ')"; grep -c '^\*\*Severity\*\*:' "$f"; head -1 "${f%.md}.status"
 done   # each: exactly "SEV-2", count 1, sidecar "open"
-grep -n "agent-config-snapshot-read\|agent-dcr-fail-closed\|agent-rpc-deadlines" services/xstockstrat-agent/docs/context-constitution-findings.md   # 3 index rows
-grep -n "^## Filed as defect reports" services/xstockstrat-agent/docs/context-constitution-findings.md   # (2026-10-19) and (2026-10-21)
+grep -n "agent-config-snapshot-read\|agent-dcr-fail-closed" services/xstockstrat-agent/docs/context-constitution-findings.md   # 2 index rows
+grep -n "^## Filed as defect reports" services/xstockstrat-agent/docs/context-constitution-findings.md   # (2026-10-19) and (2026-10-29)
+grep -n "feature 247" docs/reports/2026-10-21-agent-client-deadlines-defect.md   # cross-reference line present
+ls docs/reports | grep -c "agent-rpc-deadlines"   # 0 (dropped as a duplicate)
 ```
 
 ---
@@ -659,3 +663,18 @@ _Populated by /sdd-execute as implementation proceeds._
   The `oauth_server.py` resolved bullet cites the identity check by symbol/message (`identityServiceImpl.ts#redirect_uris must
   use https`) instead of `:385-388`, per the findings docs' cite-symbols convention. `docs/runbooks/mcp-tools.md` checked,
   unchanged (`:209`, `:1698` describe the threshold and default only). **Disposition**: accepted (same intent, no scope change).
+- **Step 5 (2026-10-29)** — operator decision (Option A, binding) on the Step 5 blocker: the planned
+  `agent-rpc-deadlines` report duplicates the existing `docs/reports/2026-10-21-agent-client-deadlines-defect.md`
+  (sidecar `triaged` / `ref: feature:273-fix-agent-client-deadlines`), which already covers every agent → backend RPC
+  other than `get_config_value`, including `client.get_config` (`:2043`) and identity calls. So:
+  - the `agent-rpc-deadlines` report and its `.status` are **not** created (the step's **Evidence** claim "No existing
+    report covers these follow-ups" was stale for this one);
+  - only two reports are created, dated with the execution date per the step's own rule: actual filenames
+    `docs/reports/2026-10-29-agent-config-snapshot-read-defect.md` / `.status` and
+    `docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md` / `.status`; the agent findings index section is
+    `## Filed as defect reports (2026-10-29)` with 2 rows;
+  - out-of-**Files** edit (F-08): `docs/reports/2026-10-21-agent-client-deadlines-defect.md` gains one cross-reference
+    line naming `register_oauth_client` and feature 247's exclusion;
+  - Step 5 **Verification** is changed to check 2 reports (operator-authorized exception to step-body immutability),
+    and the deferred-slug mapping (Step Dependencies above, `design.md`, `context.md`) now points at feature 273.
+  **Disposition**: accepted by operator (Option A).
