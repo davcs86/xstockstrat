@@ -2,11 +2,8 @@ import { after, before, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { createRequire } from 'node:module';
 
-// strip-types runs this file as ESM, which has no `require`; telemetry.ts lazy-requires its SDK.
-(globalThis as { require?: NodeRequire }).require = createRequire(import.meta.url);
-const TELEMETRY = '../telemetry.ts';
+const TELEMETRY = '../telemetry';
 
 const received: { path: string; auth: string | undefined }[] = [];
 let traceRequests = 0;
@@ -28,7 +25,7 @@ const warnSpy = mock.method(console, 'warn', () => {});
 mock.method(console, 'info', () => {});
 let endSpan: (name: string) => void;
 
-// Node runtime warnings ("(node:<pid>) …", e.g. MODULE_TYPELESS_PACKAGE_JSON under strip-types) are not OTel output.
+// Node runtime warnings ("(node:<pid>) …") are not OTel output.
 const logged = (spy: typeof errorSpy) =>
   spy.mock.calls.map((c) => c.arguments.map(String).join(' ')).filter((m) => !m.startsWith('(node:'));
 

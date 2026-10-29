@@ -446,13 +446,13 @@ see the `status` note below for when they aren't).
 ```json
 {
   "results": [
-    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
+    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "score_unavailable": false, "status": "SCREEN_RESULT_STATUS_OK" }
   ],
   "coverage_gaps": [ { "symbol": "TSLA", "timeframe": "TIMEFRAME_1DAY", "bars_have": "5", "bars_need": "50" } ]
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears. `score_unavailable: true` means the row has no comparable score and is unranked. Three row kinds carry it: an **evaluation fault** (`status` `OK`, `passed: false` — the symbol was not evaluated, which is different from a failed screen; the rest of the scan completes); a data-less row with a hard filter (`passed: false`); and a data-less soft-only row (feature 144, `passed: true`). Filter candidates on `passed`. Un-evaluated rows carry score `0.0`, so `min_conviction > 0` also removes them and `rank_limit` may cut them (they rank last); a dropped or cut row's only trace is then the server log.
 
 **Errors**
 
@@ -462,6 +462,7 @@ see the `status` note below for when they aren't).
 | Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
 | Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ValueError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
+| A per-symbol evaluation fault (non-RPC exception for one symbol) | No call error; that symbol returns `status OK`, `passed: false`, `score_unavailable: true` (the rest of the scan completes) |
 
 ---
 
@@ -833,7 +834,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `force` | `bool` | No | `false` default; `true` re-emits today's signals (clears the day's `fundsignal_emitted` idempotency rows first) |
-| `dry_run` | `bool` | No | `false` default; `true` scores + reports what *would* be scanned without emitting or spending cache calls |
+| `dry_run` | `bool` | No | `false` default; `true` reports what *would* be scanned without scoring, emitting or spending cache calls |
 | `symbols` | `string[]` | No | Optional explicit universe override; omitted = the configured `analysis.fundsignal.universe_source` |
 
 **Return** — the `FundamentalsScanSummary`:
@@ -1104,8 +1105,7 @@ Streamable HTTP transport only.**
 | `key` | string | yes | e.g. `marketdata.fmp.enabled` |
 | `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
 | `value` | string | yes | Converted according to `value_type` |
-| `author` | string | yes | Recorded in `config.config_audit` |
-| `reason` | string | yes | Recorded alongside `author` |
+| `reason` | string | yes | Recorded in `config.config_audit` (`update_reason`); the change is attributed to your verified user id (`x-user-id`), never a parameter (feature 241) |
 | `user_id` | string | no | Per-user override. Omit to write the global value. Per-user secret writes are accepted (feature 224); the value stays redacted on every read edge |
 | `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, key, environment, user_id)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
@@ -1148,11 +1148,11 @@ require a PR" is enforced, not merely conventional.)
   does not update the type column, so for an existing key the stored type wins.
 - Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
 - **Key creation is audited** (feature 091): a `create_key=true` create writes a `config.config_audit`
-  row (author + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
+  row (caller identity + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
   existing `BEFORE UPDATE` audit. Rewriting a key to its existing value still writes no row (the
   update trigger fires only on a value change).
 
-**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → "propagated identity required" (your claims carry no `user_id`; the tool also fails fast at the edge);
 `NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
 
 ---

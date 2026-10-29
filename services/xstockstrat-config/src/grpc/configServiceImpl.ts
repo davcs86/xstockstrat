@@ -375,14 +375,16 @@ export class ConfigServiceImpl {
     const userIdParam = userId === '' ? null : userId;
     const callerUserId = userIdFrom(call.metadata); // propagated x-user-id (edge-injected)
 
-    if (userIdParam === null) {
-      const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
-      const internalCallerAuthorized = hasInternalCallerAuthority(
+    const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
+    const internalCallerAuthorized =
+      userIdParam === null &&
+      hasInternalCallerAuthority(
         call.metadata,
         call.request?.namespace,
         call.request?.key,
         rawValue,
       );
+    if (userIdParam === null) {
       if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
         log.warn('SetConfig denied — global write without admin scope or internal-caller authority', {
           namespace: call.request?.namespace,
@@ -407,7 +409,7 @@ export class ConfigServiceImpl {
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
 
-    const author = call.request.author || userIdFrom(call.metadata);
+    const author = callerUserId || (internalCallerAuthorized ? (callerIdentity ?? '') : '');
     if (!author) {
       callback(MISSING_AUTHOR_ERROR);
       return;

@@ -43,10 +43,10 @@ export const PER_USER_SCOPE_ERROR = {
   message: 'per-user config is self-service: you may only write your own user_id',
 };
 
-/** Denial when a write carries no attributable author — neither request.author nor x-user-id. */
+/** Denial when a write carries no propagated identity — no x-user-id and no authorized x-internal-caller; the deprecated body author field is ignored. */
 export const MISSING_AUTHOR_ERROR = {
   code: status.INVALID_ARGUMENT,
-  message: 'author required: set request.author or propagate x-user-id',
+  message: 'propagated identity required: send x-user-id or an authorized x-internal-caller',
 };
 
 /**
