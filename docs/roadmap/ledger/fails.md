@@ -3065,3 +3065,20 @@ ambiguity is logged here).
 - **Mistake**: Two design rounds treated the sweeper's `order_intent.reclaimed_unknown` payload as a known-good template to copy into three new emit sites. That payload holds a `time.Time`, which `structpb.NewStruct` rejects, and `emitLedgerEvent` discards that error (`p, _ :=`), so the event already reaches the ledger with a nil payload. The r3 adversary caught it, not a test.
 - **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:3662`; `internal/repository/order_intent_repo.go:31`; `docs/roadmap/features/267-fix-trading-order-state-audit/design.md` § D-62 (b).
 - **Rule it implies**: a ledger payload built for `structpb.NewStruct` uses only JSON-native values (timestamps as RFC3339 strings), and every new emit test asserts `req.Payload != nil` plus the field values, not just the event type.
+### 2026-10-22 — fix-ui-trader-feedback — assumption
+- **Mistake**: A design round proposed a global TanStack `MutationCache.onError` fallback that skipped any mutation whose options set `onError`, treating that as "handled".
+  - The no-op hook-level `onError`s (`return err`) in `useBacktest.ts:12-15` and `useScreenSymbols.ts:13-16` would have silently suppressed the fallback.
+  - The same round claimed the two target hooks were not built on `useInvalidatingMutation`. They are, and that factory forwards no `meta` (`:17`, `:22`).
+  - The r2 adversary caught both.
+- **Evidence**: `docs/roadmap/features/270-fix-ui-trader-feedback/design.md` § Chosen Approach 2 and § Rejected Alternatives; context.md 2026-10-22 sdd-design entry.
+- **Rule it implies**: A global error fallback opts out only through an explicit marker, such as `meta.errorHandled === true`, set only after every call site is shown to render the error. Never infer "handled" from the presence of a callback. Confirm that any wrapper factory forwards the marker.
+
+### 2026-10-22 — fix-template-update-metadata — assumption
+- **Mistake**: A design round proposed a real-PG check that a second RETIRE "advances" `updated_at` and asserted it with `>=`. The check passes even when the fix is missing. Because Postgres `NOW()` is the transaction start time, running the calls inside one `conn.transaction()` would also make them equal by construction.
+- **Evidence**: `docs/roadmap/features/269-fix-template-update-metadata/design.md` § Chosen Approach, proof plan (b); context.md 2026-10-22 sdd-design entry.
+- **Rule it implies**: A real-DB test that proves a timestamp moved asserts strict `>` against both the prior value and the sibling timestamp. Run each write as its own autocommit statement with a short `pg_sleep` between writes, never inside one transaction.
+
+### 2026-10-22 — fix-backtest-silent-symbol-skip — assumption
+- **Mistake**: A client mapped an upstream refusal by a single gRPC status code. Indicators `ExecuteFormula` reports the same refusal ("the owner cannot run this formula") as NOT_FOUND to a non-admin caller and as PERMISSION_DENIED to an admin caller. Analysis `_execute_formula` mapped only NOT_FOUND. As a result, the admin-run case fell through to a catch-all and disappeared, and the round-3 design would have given the two cases different `NoTradeReason` values.
+- **Evidence**: `services/xstockstrat-indicators/app/handlers/servicer.py:243-253`; `services/xstockstrat-analysis/app/services/evaluator.py:260-263`; `docs/roadmap/features/275-fix-backtest-silent-symbol-skip/design.md` § Chosen Approach 2 (operator option (a)).
+- **Rule it implies**: Before a caller maps an owner-scoped RPC's error, enumerate every status code that RPC can return for one refusal across all caller scopes (admin, owner, system). Map all of them to one outcome, and use only the status code name in client-visible text.
