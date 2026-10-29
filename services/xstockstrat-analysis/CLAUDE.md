@@ -140,6 +140,15 @@ anchored to `analysis.opportunity.refresh_hour_utc`). Each loop keeps its own `_
 **`live_loop` is NOT migrated** (feature 158 Out of Scope — a ~60s loop gains almost nothing from a
 durable per-cycle row). No lease/CAS fencing is added (`instance_count:1` trap, ledger 2026-08-25).
 
+**Supervision (feature 259).** The four `*_forever` loops (`fundsignal_loop.run_forever`,
+`run_opportunity_refresh_forever`, `run_readiness_materializer_forever`,
+`run_template_intent_sweep_forever`) seed via `app/supervision.py#retry_until_ok` and tick under
+`run_supervised`: a failed seed, tick or schedule seam logs ERROR and sleeps
+`_LOOP_ERROR_BACKOFF_SECONDS` = 30 (a fixed invariant, not a config key), and the backoff never
+advances the schedule. Every boot task in `app/main.py` is started with `supervision.spawn` (retained
+in `_BACKGROUND_TASKS`; an exception exit logs ERROR naming the task). Peers adding a boot task reuse
+`spawn` — never a bare `create_task`.
+
 ### P&L pattern consumer (feature 042)
 
 A third background task (`app/engine/pnl_pattern_consumer.py`, `PnLPatternConsumer.run_forever`,
@@ -173,6 +182,32 @@ pool + existing gRPC stubs (**no new pool, no new edge, no new env var** — F-0
   `position_id`), so multiple open→close cycles for one identity share a `position_id` — the v2
   reconciliation (rebuild an incomplete window from the ledger via `QueryEvents`) is the tracked
   follow-up in the feature's `context.md`.
+- **Per-event retry and park (feature 259).** A failed event is never skipped: `_process_with_retry`
+  retries it in place (`_EVENT_MAX_ATTEMPTS` = 3, `_EVENT_RETRY_BACKOFF_SECONDS` = 1.0). On exhaustion
+  an error in the positive `_is_poison` allow-list (`ValueError`, `TypeError`, `KeyError`, protobuf
+  `DecodeError`/`ParseError`, asyncpg `DataError`/`IntegrityConstraintViolationError`) parks at once
+  (`reason=non-transient`). It is deliberately **not** `is_transient_db_error`: anything unlisted (OOM,
+  class 40, disk-full, timeouts, gRPC) is replayed, because misclassifying a transient error as poison
+  loses P&L data permanently. A non-poison exhaustion re-raises to the outer handler, which reconnects
+  from the unadvanced cursor (replay); `_replay_seq`/`_replay_count` count consecutive replays of one
+  sequence (WARNING, ERROR from the 5th) and reset only when an event with `sequence >= _replay_seq` is
+  processed (the re-delivered cursor row never resets it) or on park. At `_REPLAY_ESCALATE_AFTER` = 5
+  replays a bounded DB probe (`_probe_db`, `_PROBE_TIMEOUT_SECONDS` = 5) runs: probe down → ERROR,
+  no park, keep replaying; probe up → park (`reason=transient-persistent`, attempts = replays × 3).
+  Consecutive stream failures escalate WARNING → ERROR at the 5th. Park order is **log → idempotent
+  emit → advance**: ERROR log with the identity read straight from the payload `Struct`, then
+  `analysis.pnl.event_parked` (idempotency key `pnl_park:<seq>`, `_PARK_EMIT_TIMEOUT_SECONDS` = 5),
+  then the cursor advance. Every DB wait in an attempt is bounded by `_ATTEMPT_DB_TIMEOUT_SECONDS` =
+  10 (`pool.acquire(timeout=…)` + asyncpg per-query `timeout=`), so a pool-exhaustion hang becomes a
+  non-poison `TimeoutError` instead of a silent stall. All six are fixed invariants, not config keys.
+- **Accepted limitations (feature 259)**: under DB contention the single probe confirmation can park
+  a still-transient event (~25-30 s of replays); an unlisted deterministic error parks after
+  ~25-30 s, not ~2 s (keep the allow-list narrow); a parked `order.created`/`filled` opens no window,
+  so its later close no-ops, and a parked `position.closed` leaves its window open (reconcile from the
+  park payload); the replay and stream-fail counters are in-memory (`instance_count: 1`), so a restart
+  delays escalation by up to 5 replays. The existing snapshot/sealed emits carry the source event's
+  `correlation_id` as the request field and `x-trace-id` (empty when the source event has none —
+  never minted).
 
 New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSignalSource`, gRPC not DB) and **analysis → portfolio read** (watchlist universe; requires `PORTFOLIO_ENDPOINT`). The loop reuses the existing asyncpg pool (no new pool — budget stays 2).
 
@@ -557,6 +592,7 @@ Namespace: `analysis`
 | `analysis.strategy.live_toggled` | `SetStrategyLive` enabled/disabled live evaluation |
 | `analysis.fundsignal.run_started` | Fundamentals signal producer cycle started |
 | `analysis.fundsignal.run_completed` | Fundamentals signal producer cycle finished |
+| `analysis.pnl.event_parked` | P&L-pattern consumer parked a ledger event (poison, or persistent non-poison with the DB probe up); ownerless, idempotent per sequence (`pnl_park:<seq>`) |
 
 ## Running Tests
 

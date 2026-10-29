@@ -20,12 +20,14 @@ gRPC. Runs as a boot task; never blocks server start.
 import asyncio
 import logging
 
+import asyncpg.exceptions as apg
 import grpc
 from gen.indicators.v1 import indicators_pb2
 from gen.ingest.v1 import ingest_pb2
 from gen.ledger.v1 import ledger_pb2
 from gen.marketdata.v1 import marketdata_pb2
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseError
+from google.protobuf.message import DecodeError
 
 from app.config.watcher import int_positive
 from app.identity import owner_metadata
@@ -46,6 +48,31 @@ ORDER_EVENTS = {
     "order.canceled": "canceled",
 }
 CLOSE_EVENT = "portfolio.position.closed"
+
+# Fixed invariants, not config keys. _ATTEMPT_DB_TIMEOUT_SECONDS must exceed _PROBE_TIMEOUT_SECONDS.
+_EVENT_MAX_ATTEMPTS = 3
+_EVENT_RETRY_BACKOFF_SECONDS = 1.0
+_REPLAY_ESCALATE_AFTER = 5
+_PROBE_TIMEOUT_SECONDS = 5
+_PARK_EMIT_TIMEOUT_SECONDS = 5
+_ATTEMPT_DB_TIMEOUT_SECONDS = 10
+
+# Positive allow-list: anything unlisted (OOM, class 40, disk-full, timeouts, gRPC) is replayed,
+# never parked on first exhaustion — misclassifying here loses P&L data permanently.
+_POISON = (
+    ValueError,
+    TypeError,
+    KeyError,
+    DecodeError,
+    ParseError,
+    apg.DataError,
+    apg.IntegrityConstraintViolationError,
+)
+
+
+def _is_poison(e: BaseException) -> bool:
+    return isinstance(e, _POISON)
+
 
 # Default indicator set captured per snapshot.
 DEFAULT_INDICATORS = ("RSI", "ATR")
@@ -137,11 +164,15 @@ class PnLPatternConsumer:
         self._snapshots = snapshots or OrderSnapshotsRepository(db_pool)
         self._positions = positions or PnLPositionsRepository(db_pool)
         self._samples = samples or PnLPatternSamplesRepository(db_pool)
+        self._replay_seq: int | None = None
+        self._replay_count = 0
+        self._stream_fail_count = 0
 
     async def _cursor(self) -> int:
         row = await self._pool.fetchval(
             "SELECT last_sequence FROM analysis.ledger_stream_cursor WHERE consumer=$1",
             CONSUMER_NAME,
+            timeout=_ATTEMPT_DB_TIMEOUT_SECONDS,
         )
         return int(row) if row is not None else 0
 
@@ -154,13 +185,125 @@ class PnLPatternConsumer:
                     ledger_pb2.StreamEventsRequest(from_sequence=cursor)
                 )
                 async for event in stream:
-                    try:
-                        await self.process_event(event)
-                    except Exception as e:  # noqa: BLE001 — one bad event never kills the loop
-                        log.warning("pnl consumer: event %s error: %s", event.event_id, e)
+                    self._stream_fail_count = 0
+                    await self._process_with_retry(event)
+                    # The re-delivered cursor row (sequence < _replay_seq) must never reset.
+                    if self._replay_seq is not None and event.sequence >= self._replay_seq:
+                        self._replay_seq, self._replay_count = None, 0
             except Exception as e:  # noqa: BLE001 — reconnect on stream drop
-                log.warning("pnl consumer: stream error, retrying: %s", e)
+                self._stream_fail_count += 1
+                level = (
+                    logging.ERROR
+                    if self._stream_fail_count >= _REPLAY_ESCALATE_AFTER
+                    else logging.WARNING
+                )
+                log.log(
+                    level,
+                    "pnl consumer: stream error (consecutive=%d), retrying: %s",
+                    self._stream_fail_count,
+                    e,
+                )
                 await asyncio.sleep(2)
+
+    async def _probe_db(self) -> None:
+        await asyncio.wait_for(self._cursor(), _PROBE_TIMEOUT_SECONDS)
+
+    async def _process_with_retry(self, event) -> None:
+        last: Exception | None = None
+        for attempt in range(1, _EVENT_MAX_ATTEMPTS + 1):
+            if attempt > 1:
+                await asyncio.sleep(_EVENT_RETRY_BACKOFF_SECONDS)
+            try:
+                await self.process_event(event)
+                return
+            except Exception as e:  # noqa: BLE001 — classified below after exhaustion
+                last = e
+                log.warning(
+                    "pnl consumer: event seq=%s type=%s attempt %d/%d failed: %r",
+                    event.sequence,
+                    event.event_type,
+                    attempt,
+                    _EVENT_MAX_ATTEMPTS,
+                    e,
+                )
+        assert last is not None
+        if _is_poison(last):
+            await self._park(
+                event, attempts=_EVENT_MAX_ATTEMPTS, reason="non-transient", error=last
+            )
+            return
+
+        if event.sequence == self._replay_seq:
+            self._replay_count += 1
+        else:
+            self._replay_seq, self._replay_count = event.sequence, 1
+        level = logging.ERROR if self._replay_count >= _REPLAY_ESCALATE_AFTER else logging.WARNING
+        log.log(
+            level,
+            "pnl consumer: event seq=%s type=%s correlation_id=%s exhausted retries "
+            "(replay %d): %r",
+            event.sequence,
+            event.event_type,
+            event.correlation_id,
+            self._replay_count,
+            last,
+        )
+        if self._replay_count >= _REPLAY_ESCALATE_AFTER:
+            try:
+                await self._probe_db()
+            except Exception as probe_err:  # noqa: BLE001 — DB down: never park, keep replaying
+                log.error(
+                    "pnl consumer: DB health probe failed at seq=%s (replay %d), not parking: %r",
+                    event.sequence,
+                    self._replay_count,
+                    probe_err,
+                )
+                raise last from probe_err
+            await self._park(
+                event,
+                attempts=self._replay_count * _EVENT_MAX_ATTEMPTS,
+                reason="transient-persistent",
+                error=last,
+            )
+            return
+        raise last
+
+    async def _park(self, event, *, attempts, reason, error) -> None:
+        # Read the Struct directly: MessageToDict may be what failed on a poison payload.
+        fields = event.payload.fields if event.HasField("payload") else {}
+        identity = {
+            k: fields[k].string_value for k in ("user_id", "account_id", "symbol") if k in fields
+        }
+        log.error(
+            "pnl consumer: parking event seq=%s event_id=%s type=%s correlation_id=%s "
+            "attempts=%d reason=%s error=%s identity=%s",
+            event.sequence,
+            event.event_id,
+            event.event_type,
+            event.correlation_id,
+            attempts,
+            reason,
+            type(error).__name__,
+            identity,
+        )
+        await self._emit(
+            "analysis.pnl.event_parked",
+            f"pnl_park:{event.sequence}",
+            {
+                "sequence": event.sequence,
+                "event_id": event.event_id,
+                "event_type": event.event_type,
+                "attempts": attempts,
+                "reason": reason,
+                "error": f"{type(error).__name__}: {error}",
+                **identity,
+            },
+            correlation_id=event.correlation_id,
+            idempotency_key=f"pnl_park:{event.sequence}",
+            timeout=_PARK_EMIT_TIMEOUT_SECONDS,
+        )
+        await self._advance_cursor(event.sequence)
+        self._replay_seq, self._replay_count = None, 0
 
     async def process_event(self, event) -> None:
         cursor = await self._cursor()
@@ -203,7 +346,7 @@ class PnLPatternConsumer:
             symbol, strategy_id, user_id
         )
 
-        async with self._pool.acquire() as conn:
+        async with self._pool.acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS) as conn:
             async with conn.transaction():
                 await self._snapshots.insert(
                     conn,
@@ -222,6 +365,7 @@ class PnLPatternConsumer:
                     ohlcv_bar=bar,
                     indicators=indicators,
                     signals=signals,
+                    timeout=_ATTEMPT_DB_TIMEOUT_SECONDS,
                 )
                 # Open the position window on the first order event (no-op if already open).
                 if event_type in ("created", "filled", "partially_filled") and user_id:
@@ -237,6 +381,7 @@ class PnLPatternConsumer:
                         if event.HasField("recorded_at")
                         else None,
                         open_event_id=event.event_id,
+                        timeout=_ATTEMPT_DB_TIMEOUT_SECONDS,
                     )
                 await self._advance_cursor_conn(conn, event.sequence)
 
@@ -250,6 +395,7 @@ class PnLPatternConsumer:
                 "event_type": event_type,
                 "degraded": degraded,
             },
+            correlation_id=event.correlation_id,
         )
 
     # ── portfolio.position.closed → seal window, write samples, advance cursor ─────
@@ -266,7 +412,7 @@ class PnLPatternConsumer:
         closed_at = event.recorded_at.ToDatetime() if event.HasField("recorded_at") else None
 
         sealed = None
-        async with self._pool.acquire() as conn:
+        async with self._pool.acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS) as conn:
             async with conn.transaction():
                 sealed = await self._positions.seal(
                     conn,
@@ -278,18 +424,23 @@ class PnLPatternConsumer:
                     realized_pnl=realized_pnl,
                     close_event_id=event.event_id,
                     fees_total=fees_total,
+                    timeout=_ATTEMPT_DB_TIMEOUT_SECONDS,
                 )
                 if sealed is not None:
                     rows = await self._build_samples(
                         sealed, realized_pnl, closed_at, event.event_id
                     )
                     if rows:
-                        await self._samples.insert_many(conn, rows)
+                        await self._samples.insert_many(
+                            conn, rows, timeout=_ATTEMPT_DB_TIMEOUT_SECONDS
+                        )
                 await self._advance_cursor_conn(conn, event.sequence)
 
         # An empty-window close (pre-deploy open, no snapshots) no-ops — nothing sealed.
         if sealed is not None:
-            count = await self._snapshots.count_for_position(sealed["position_id"])
+            count = await self._snapshots.count_for_position(
+                sealed["position_id"], timeout=_ATTEMPT_DB_TIMEOUT_SECONDS
+            )
             if count < 2:
                 log.warning(
                     "pnl consumer: sealed position %s has only %d snapshot(s) — "
@@ -305,12 +456,15 @@ class PnLPatternConsumer:
                     "realized_pnl": realized_pnl,
                     "position_id": sealed["position_id"],
                 },
+                correlation_id=event.correlation_id,
             )
 
     async def _build_samples(self, sealed, realized_pnl, closed_at, close_event_id) -> list[dict]:
         """One sample per distinct factor across the sealed position's snapshots (v1: dedup by
         factor_name, entry value wins). Indicators → indicator_value; signals → signal_present."""
-        snaps = await self._snapshots.list_for_position(sealed["position_id"])
+        snaps = await self._snapshots.list_for_position(
+            sealed["position_id"], timeout=_ATTEMPT_DB_TIMEOUT_SECONDS
+        )
         seen: dict[tuple, dict] = {}
         for snap in snaps:
             inds = snap.get("indicators") or {}
@@ -400,7 +554,7 @@ class PnLPatternConsumer:
         return f"{user_id}:{account_id}:{symbol}:{trading_mode}"
 
     async def _advance_cursor(self, sequence) -> None:
-        async with self._pool.acquire() as conn:
+        async with self._pool.acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS) as conn:
             await self._advance_cursor_conn(conn, sequence)
 
     async def _advance_cursor_conn(self, conn, sequence) -> None:
@@ -413,9 +567,19 @@ class PnLPatternConsumer:
             """,
             CONSUMER_NAME,
             int(sequence),
+            timeout=_ATTEMPT_DB_TIMEOUT_SECONDS,
         )
 
-    async def _emit(self, event_type, stream_key, payload) -> None:
+    async def _emit(
+        self,
+        event_type,
+        stream_key,
+        payload,
+        *,
+        correlation_id: str = "",
+        idempotency_key: str = "",
+        timeout: float | None = None,
+    ) -> None:
         try:
             from google.protobuf.struct_pb2 import Struct
 
@@ -426,13 +590,18 @@ class PnLPatternConsumer:
                     for k, v in payload.items()
                 }
             )
+            req = ledger_pb2.AppendEventRequest(
+                event_type=event_type,
+                source_service="xstockstrat-analysis",
+                stream_key=stream_key,
+                payload=p,
+                correlation_id=correlation_id,
+                idempotency_key=idempotency_key,
+            )
             await self._ledger.AppendEvent(
-                ledger_pb2.AppendEventRequest(
-                    event_type=event_type,
-                    source_service="xstockstrat-analysis",
-                    stream_key=stream_key,
-                    payload=p,
-                )
+                req,
+                metadata=(("x-trace-id", correlation_id),) if correlation_id else (),
+                timeout=timeout,
             )
         except Exception as e:  # noqa: BLE001 — audit is best-effort
             log.warning("pnl consumer: ledger emit %s failed: %s", event_type, e)
