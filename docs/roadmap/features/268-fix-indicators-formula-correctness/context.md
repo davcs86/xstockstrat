@@ -837,3 +837,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   73.36%, statements 71.73%, functions 74.73% ≥ 40%; 48 files / 242 tests); `pnpm run lint` exit 0 (pre-existing
   `react-hooks/exhaustive-deps` warnings only); `prettier --check` clean.
 - Deviations: none.
+
+
+### Step 9 — docs: indicators sandbox failure rule, ATR/VWAP approximation note, Wilder-ATR divergence — done (2026-10-29)
+
+- `services/xstockstrat-indicators/CLAUDE.md`: `## Role` item 1 notes ATR/VWAP are close-only approximations
+  (close-to-close mean, running mean); `## Declared Formula Outputs` gains the **No-output failure** rule (exit 0 with no
+  marker → "formula produced no output"; unparseable marker → "formula output could not be parsed"; non-zero exit +
+  empty stderr → "formula exited with code N before producing output"; marker on its own line; valid marker +
+  `SystemExit(0)` is an accepted author-controlled forgery, not an isolation breach).
+- `docs/runbooks/indicator-builder.md`: approximation note under the Built-in Indicators table (incl. trading's own
+  Wilder ATR(14)); "A run must produce output" rule under `### Sandbox Constraints`, noting the never-assigns-`result`
+  gap is filed separately (Step 10).
+- `services/xstockstrat-indicators/docs/context-constitution-findings.md`: row in `## Documentation that lies —
+  additions` recording that "ATR" means two numbers (indicators close-to-close vs `trading.go#wilderATR` ATR(14)).
+- TDD: N/A (docs). Verification: all three spec greps return hits.
+- Teardown: `/context-forge:context-constitution` is not available in this session (only `context-scrubber` is
+  listed). Manual reconciliation done instead — each touched section re-read against `sandbox.py:312,406-428`,
+  `indicators_engine.py:144-156` and `trading.go#wilderATR` (`:3169-3198`, call `:3232`); no further drift.
+  **PR body must state both** (plugin unavailable + this manual reconciliation), plus the Open Risks: the D-10 visible
+  behavior change (formulas that silently produced nothing now fail) and the one extra blank line before the marker
+  in raw stdout.
+- Deviations: `wilderATR` one-line anchor drift + manual teardown — see Deviation Log.
+

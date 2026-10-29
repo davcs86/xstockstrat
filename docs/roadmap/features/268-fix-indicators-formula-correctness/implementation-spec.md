@@ -559,7 +559,7 @@ route, component or interaction, and no `e2e/` spec references the old strings (
 
 ### Step 9 — docs: indicators sandbox failure rule, ATR/VWAP approximation note, Wilder-ATR divergence
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators` (docs) + `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -692,3 +692,13 @@ _Populated by /sdd-execute as implementation proceeds._
   line after `description:` (`:99-100`, `:105-106`). The ATR value uses double quotes (apostrophe). Runtime values
   are byte-identical to the engine's `INDICATOR_REGISTRY` strings (asserted with `toBe` in a scratch vitest).
 - **Disposition**: source layout only; strings, `name`, `params` and other entries as specced.
+
+### Step 9 — `wilderATR` line drift; context-forge plugin unavailable (2026-10-29)
+- **Spec said**: `wilderATR` at `trading.go:3170-3198`, called at `:3233`; teardown via `/context-forge:context-constitution refresh`.
+- **Actual**: the definition is at `:3169-3198` and the call at `:3232` (one-line drift); the findings row cites the
+  symbol anchor `trading.go#wilderATR` plus the current lines. The `context-constitution` skill is not available in
+  this session, so the teardown was done by hand: each touched doc was re-read against `sandbox.py` (marker loop and
+  `_fail` messages `:406-428`, wrapper print `:312`), `indicators_engine.py` (`INDICATOR_REGISTRY` ATR/VWAP `:144-156`)
+  and `trading.go#wilderATR`; no other drift found in the touched sections.
+- **Disposition**: anchors only; doc content as specced. The PR body must record both facts (plugin unavailable +
+  manual reconciliation) and the Open Risks of Instruction 5.
