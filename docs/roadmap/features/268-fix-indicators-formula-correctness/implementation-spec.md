@@ -514,7 +514,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 8 — test: UI catalog carries no misleading ATR/VWAP names (vitest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/strategyCatalog.test.ts` — create

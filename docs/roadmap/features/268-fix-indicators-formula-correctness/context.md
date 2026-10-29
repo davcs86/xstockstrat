@@ -824,3 +824,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Node 24.20.0); no manifest or lockfile change.
 - Deviations: prettier-wrapped source layout only — see Deviation Log.
 
+
+### Step 8 — test: UI catalog carries no misleading ATR/VWAP names (vitest) — done (2026-10-29)
+
+- `services/xstockstrat-ui/src/lib/strategyCatalog.test.ts` (new): imports the real `BUILTIN_INDICATORS`; asserts no
+  `description` contains `Average True Range` / `Volume Weighted Average Price`, and that the `ATR` / `VWAP` entries
+  still exist (key stability). C-12: no mocked domain objects, so no fixture import or `INVENTORY.md` row.
+- TDD (Step 7 already landed, so `strategyCatalog.ts` was temporarily replaced with its `a8ce834d` content for RED,
+  then restored byte-identical): red: 2 failed (`expected [ 'ATR' ] to deeply equal []`, `expected [ 'VWAP' ] to
+  deeply equal []`), 2 passed (key guards) → green: 4 passed.
+- Verification: `vitest run src/lib/strategyCatalog.test.ts` 4 passed; `pnpm run test:coverage` exit 0 (lines
+  73.36%, statements 71.73%, functions 74.73% ≥ 40%; 48 files / 242 tests); `pnpm run lint` exit 0 (pre-existing
+  `react-hooks/exhaustive-deps` warnings only); `prettier --check` clean.
+- Deviations: none.

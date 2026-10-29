@@ -27,6 +27,7 @@
 | 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A: honest ATR/VWAP descriptions in `INDICATOR_REGISTRY` and docstrings; math unchanged |
 | 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 tests: `TestAtrVwapHonestDescriptions` (AC-4/AC-5) at engine and servicer level; values unchanged |
 | 2026-10-29 | `in-progress` (Step 7 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A in the UI: `BUILTIN_INDICATORS` ATR/VWAP descriptions mirror the engine strings (C-10) |
+| 2026-10-29 | `in-progress` (Step 8 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 UI test: `strategyCatalog.test.ts` asserts no misleading ATR/VWAP names and stable `ATR`/`VWAP` keys (AC-4/AC-5) |
 
 ---
 
@@ -62,4 +63,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 7
+`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 9
