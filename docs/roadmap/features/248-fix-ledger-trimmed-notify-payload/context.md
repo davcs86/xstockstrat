@@ -531,3 +531,63 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Re-spec (Deviation Log 2026-10-29 "resume"): line drift only. Step 6 `LedgerServiceImpl` class `:19`,
   constructor `:20`, `buffer.push(row)` `:207`; Step 11 `test-data-inventory.md` `:74-75`.
 - Next: Step 6.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 6
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  'Start executing features 241-276' via batch-execute; checkpoints 'report'). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`648dd93c`). The launcher's
+  discovery digest said Steps 3-5 were missing; it had read a stale tree. On the branch they are present and `done`.
+- Tooling: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-79` (identical
+  `pnpm-lock.yaml`, pg 8.20.0). No install, no lockfile change.
+
+### Step 6 — test: Notifier tier (i), wired tier (ii), `streamEvents` `onGap` tier (iii) [done]
+- Fixture home (C-13, Node `src/__tests__/fixtures/`, first materialization):
+  - `ledgerEvents.ts`: `makeEventRow` (moved verbatim from `ledgerServiceImpl.test.ts#makeRow`), `LARGE_PAYLOAD`
+    (serializes to exactly 8000 chars), `TRIMMED_RECORDED_AT`, `toTrimmedStub` (the trigger's 5 stub keys, no
+    `payload`).
+  - `streamCall.ts`: `makeRecordingCall(req, opts)`. A string `opts` is the caller's userId, so the 7 positional
+    `exportEvents` sites are unchanged. `write()` returns `writeReturns ?? true`, and `on()` records handlers.
+  - `INVENTORY.md`: one row per export.
+  - `ledgerServiceImpl.test.ts` imports them aliased as `makeRow` / `makeStreamCall`; only the import lines and the
+    two removed local functions change. `eventRowResolver.test.ts`'s inline `STUB` became
+    `toTrimmedStub(makeEventRow())` with no assertion change.
+- Tier (i) `eventNotifier.test.ts`: all 7 constructions migrated to `{ resolveRow }` (`reconnectDelayMs: 1` for the
+  reconnect case); `row()` defaults `payload: {}`. 13 new cases: AC-2 order behind an in-flight resolve, AC-3 and
+  AC-8 filtered subscribers (and zero reads for non-matching stubs), AC-6/AC-7 `onGap` once + removal from fan-out
+  while another sub still gets seq 12, AC-9 backstop timeout → `end()` → replacement listener → `onReconnect` once,
+  late-subscribed sub, sub removed during the await, queue cleared on reconnect and on `stop()`, the stale-drain
+  guard, and warn reasons `not_found`/`timeout`/`error` with no `unhandledRejection`.
+- Tier (ii) `streamResolveWired.test.ts` (real `EventNotifier` + `makeResolveRow` + `LedgerServiceImpl`):
+  - AC-1: the delivered message deep-equals `rowToEvent(full)`, with the 8000-char payload.
+  - AC-4: zero pool checkouts on the resolve path, and `appendEvent` calls back while the SELECT is held and
+    `write()` returns false.
+  - AC-5: 50 held replay rows plus a trimmed seq 51 produce 51 ascending writes with no duplicate.
+  - This also closes Step 4's open item: `makeResolveRow` is now executed (`eventRowResolver.js` 100% lines).
+- Tier (iii) `ledgerServiceImpl.test.ts` `streamEvents onGap`:
+  - AC-7 gives `{code: 13}` and AC-6 gives `{code: 14}`; neither calls `end()`, and both unsubscribe.
+  - Recovery from `fromSequence: 11` replays 11 and 12 in full.
+  - An `onGap` during a held replay leaves zero writes.
+- Unit-only (design 5): the AC-9 backstop teardown and the stale-drain guard. Step 9 owns the real-DB bound.
+- TDD (AC-1..AC-9):
+  - Red: post-Step-4 source restored from `1ef791b3` (Deviation Log 2026-10-29 "Step 6 execution"). `tsc` was
+    clean, and the suite gave 79 tests, 59 pass, 20 fail, all runtime. Examples:
+    - AC-2 "nothing past the stub before it resolves";
+    - AC-1 `client.selects[0]` undefined (no resolve);
+    - AC-6/AC-7 tier (iii) `TypeError: notifier.captured.onGap is not a function`;
+    - AC-4 "the resolve is in flight on the LISTEN client".
+  - Green: `pnpm run test:coverage` exit 0, with 79/79 pass and 0 fail/cancelled/skipped/todo. All files are at
+    86.38% lines (`eventNotifier.js` 91.26, `ledgerServiceImpl.js` 82.4, `eventRowResolver.js` 100).
+  - Per file: eventNotifier 20/0, streamResolveWired 4/0, ledgerServiceImpl 34/0. Three repeat runs were each
+    79/0, so nothing is flaky.
+- Verification greps: 0 legacy constructions; the wired file is unguarded; there are 4 fixture-importing test
+  files; local `makeRow`/`makeStreamCall` are gone; `typeof opts === 'string'` is present; fixtures import no dev
+  deps; `INVENTORY.md` exists. `pnpm run lint` exit 0 (173 warnings, 0 errors).
+- Open (Step 11): `docs/patterns/test-data-inventory.md:74-75` still says the Node home is "Not materialized". It is
+  now materialized for ledger; Step 11 owns that doc line.
+- Files modified: `services/xstockstrat-ledger/src/__tests__/{eventNotifier,ledgerServiceImpl,eventRowResolver}.test.ts`,
+  `services/xstockstrat-ledger/src/__tests__/streamResolveWired.test.ts` (new),
+  `services/xstockstrat-ledger/src/__tests__/fixtures/{ledgerEvents.ts,streamCall.ts,INVENTORY.md}` (new)
+- Deviations: RED order, the characterization recovery case, the warn spy, and lint warning count (Deviation Log
+  2026-10-29 "Step 6 execution").
+- Next: Step 7.

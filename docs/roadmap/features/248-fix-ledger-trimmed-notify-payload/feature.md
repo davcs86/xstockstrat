@@ -26,6 +26,7 @@
 | 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | Step 5: `EventNotifier` resolve-once FIFO (`queue`/`drain`/`gen`, `{ resolveRow }` opts, required `onGap`, wedged-listener teardown); `streamEvents` `onGap` → `call.destroy({code: 13\|14})` plus post-replay `cleaned` guard; `index.ts` wired via `makeListenerClient`/`makeResolveRow`. 7 legacy `eventNotifier.test.ts` cases red until Step 6 migrates them |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec §5.3 after Step 5 on merged-up tree `bf0cedc2` (normal merge of `origin/main-dev`, no conflicts; ledger-guard clean): Step 6 `makeRecordingCall` `opts` now accepts a positional `userId` string (the 7 `exportEvents` sites pass `'u_42'` positionally) and anchors refreshed; Steps 7, 9, 11 anchors re-grepped (Step 9 places `ledger-db-test` after the new `migration-contract-gate` job) |
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec on resume (merge of `origin/main-dev` already up to date; ledger-guard clean): Step 6 anchors `LedgerServiceImpl` class `:19`/constructor `:20`, `buffer.push(row)` `:207`; Step 11 `test-data-inventory.md` `:74-75`. Line drift only, instructions unchanged |
+| 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6: tier (i) notifier cases (AC-2/3/6/7/8/9, late/removed subscriber, queue clear on reconnect/stop, stale-drain guard, warn + no unhandled rejection), tier (ii) `streamResolveWired.test.ts` (AC-1/4/5) and tier (iii) `streamEvents` `onGap` cases; C-13 fixture home `src/__tests__/fixtures/` (`ledgerEvents.ts`, `streamCall.ts`, `INVENTORY.md`). Suite 79/79 pass, coverage 86.38% lines |
 
 ---
 
@@ -63,4 +64,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 6 next (notifier tier (i), wired tier (ii), `streamEvents` `onGap` tier (iii))
+`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 7 next (normalise `sequence` with `Number()` in `streamEvents`)

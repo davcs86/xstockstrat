@@ -2,6 +2,7 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { Client } from 'pg';
+import { makeEventRow, toTrimmedStub } from './fixtures/ledgerEvents';
 
 let resolveEventRow: any;
 let streamResolveTimeoutMs: any;
@@ -16,10 +17,7 @@ before(async () => {
   makeListenerClient = mod.makeListenerClient;
 });
 
-const STUB = {
-  event_id: '0b6f7c1e-3a4d-4c2b-9f1e-2d3c4b5a6f70',
-  recorded_at: '2026-10-21T12:00:00.123456+00:00',
-};
+const STUB = toTrimmedStub(makeEventRow());
 
 function makeFakeClient(opts: { rows?: any[]; selectError?: any } = {}) {
   const calls: any[] = [];

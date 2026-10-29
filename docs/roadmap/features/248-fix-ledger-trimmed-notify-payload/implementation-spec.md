@@ -464,7 +464,7 @@ grep -n "pool" src/services/eventNotifier.ts || echo "OK: notifier holds no pool
 
 ### Step 6 — test: Notifier tier (i), wired tier (ii), `streamEvents` `onGap` tier (iii)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/eventNotifier.test.ts` — modify
@@ -1125,3 +1125,27 @@ _Populated by /sdd-execute as implementation proceeds._
   `buffer.push(row)` `:207` (guard `:206`). Instructions unchanged.
 - **Step 11**: `test-data-inventory.md` "config/ledger at two … home is created at all" is `:74-75` (was `:73-74`).
   Instructions unchanged.
+
+### 2026-10-29 — Step 6 execution (sdd-batch-execute)
+
+- **RED capture order**: Step 5 had already landed, so the RED could not be captured before it in time. It was
+  captured on the post-Step-4 source instead: `eventNotifier.ts`, `ledgerServiceImpl.ts` and `index.ts` were
+  temporarily restored from `1ef791b3` (Step 4's commit), the suite was run, and the three files were restored from
+  `HEAD`. `tsc` compiled cleanly, so every RED is a runtime failure (20 fail / 59 pass). No source file is in this
+  step's diff.
+- **Characterization case**: the tier (iii) "AC-6 / AC-7 recovery" case (`fromSequence: 11` replays rows 11, 12)
+  also passes on the pre-Step-5 tree. It proves that a reconnect from the gap recovers the rows, not new
+  behaviour; the named REDs for AC-6/AC-7 are the `onGap` → `destroy({code})` cases.
+- **Fast-path `resolveRow` in legacy cases**: the 7 migrated constructions pass a module-level `resolveRow` that
+  throws if called. A full row that took the resolve path would surface as a missing delivery.
+- **`log.warn` assertion (A.3.10)**: `EventNotifier`'s logger is module-private and `getLogger` is not cached, so
+  the case spies on `winston` `transports.Console.prototype.log` (restored in `finally`) and asserts the reasons
+  `not_found`, `timeout` (pg code `57014`) and `error`.
+- **Unit-only proofs** (design 5): the AC-9 backstop teardown (`'Query read timeout'` → listener `end()` →
+  reconnect → `onReconnect`) and the stale-drain guard are proved only at the unit tier; Step 9 covers the real-DB
+  bound.
+- **Lint/format**: `pnpm run lint` exit 0 with 173 `no-explicit-any` warnings (147 before; the new `any`-bound
+  subjects and fakes), 0 errors. The new and changed lines are prettier-clean; prettier drift on untouched
+  pre-existing lines of `eventNotifier.test.ts` and `ledgerServiceImpl.test.ts` was left alone.
+- **Disposition**: no spec change.
+
