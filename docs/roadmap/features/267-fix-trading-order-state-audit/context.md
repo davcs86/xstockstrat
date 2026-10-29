@@ -762,3 +762,112 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
 - Files modified: `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-trading/docs/context-constitution-findings.md`
 - Deviations: D7-1 (teardown by hand), D7-2 (backticks), D7-3 (no hook installed).
 
+---
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+C-16 promotion plan for the durable trading acceptance suite. Nothing is written to
+`services/xstockstrat-trading/acceptance/` until the operator confirms.
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-trading-order-state-audit (feature 267)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-trading-order-state-audit.feature | CREATE | NEW | PlaceOrder broker timeout, failed order write logged |
+| AC-2 | same | CREATE | NEW | PlaceOrder broker reject, failed order write logged |
+| AC-3 | same | CREATE | NEW | CancelOrder final write failure logged |
+| AC-4 | same | CREATE | NEW | reactive PlaceOrder reclaim audited |
+| AC-5 | same | CREATE | NEW | CancelOrder reclaim failure logged |
+| AC-6 | same | CREATE | NEW | ReplaceOrder final write failure logged |
+| AC-7 | same | CREATE | NEW | ReplaceOrder reclaim failure logged |
+| AC-8 | same | CREATE | NEW | reactive CancelOrder reclaim audited |
+| AC-9 | same | CREATE | NEW | reactive ReplaceOrder reclaim audited |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-trading-order-state-audit.feature (CREATE) ---
+# Promoted from docs/roadmap/features/267-fix-trading-order-state-audit/acceptance.feature at
+# launch (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-267` tag.
+# Durable regression guards for the defect at docs/reports/2026-10-21-trading-order-state-audit-defect.md:
+# trading must not silently discard UpsertOrder errors (D-04) or reactive ReclaimOrphanIntent results (D-62).
+# A rule enters only by promotion from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: fix-trading-order-state-audit (bug fix)
+  Regression guard for docs/reports/2026-10-21-trading-order-state-audit-defect.md:
+  trading discards UpsertOrder errors (D-04) and reactive ReclaimOrphanIntent results (D-62).
+
+  @AC-1 @FR-1 @regression @feature-267
+  Scenario: A failed order-state write after a broker timeout is logged
+    Given a trading repository whose UpsertOrder returns error "db unavailable"
+    And a broker whose PlaceOrder returns context.DeadlineExceeded
+    When user "u-1" places a buy 10 "AAPL" market order with client_order_id "c-1"
+    Then an error-level log records the failed order write with the order id, user "u-1" and status ORDER_STATUS_NEW
+
+  @AC-2 @FR-2 @regression @feature-267
+  Scenario: A failed order-state write after a broker reject is logged
+    Given a trading repository whose UpsertOrder returns error "db unavailable"
+    And a broker whose PlaceOrder returns a rejection "insufficient buying power"
+    When user "u-1" places a buy 10 "AAPL" market order
+    Then an error-level log records the failed order write with the order id, user "u-1" and status ORDER_STATUS_REJECTED
+
+  @AC-3 @FR-3 @regression @feature-267
+  Scenario: A failed final write in CancelOrder is logged
+    Given an open order "o-1" for user "u-1"
+    And a trading repository whose UpsertOrder returns error "db unavailable"
+    When user "u-1" cancels order "o-1"
+    Then an error-level log records the failed order write for order "o-1", user "u-1" and status ORDER_STATUS_CANCELED
+
+  @AC-6 @FR-4 @regression @feature-267
+  Scenario: A failed final write in ReplaceOrder is logged
+    Given an open limit order "o-1" for user "u-1"
+    And a trading repository whose UpsertOrder returns error "db unavailable"
+    When user "u-1" replaces order "o-1" with limit price 101.00
+    Then an error-level log records the failed order write for order "o-1" and user "u-1"
+
+  @AC-4 @FR-5 @regression @feature-267
+  Scenario: A reactive stale-intent reclaim is audited like a sweeper reclaim
+    Given an order intent "c-1" for user "u-1" in PENDING last updated longer ago than the stale threshold
+    When user "u-1" calls PlaceOrder again with client_order_id "c-1"
+    Then the call returns FailedPrecondition "still pending"
+    And the ledger receives an "order_intent.reclaimed_unknown" event for intent "c-1" with trigger "reactive_place"
+
+  @AC-5 @FR-6 @regression @feature-267
+  Scenario: A failed reactive reclaim in CancelOrder is logged
+    Given an open order "o-1" for user "u-1" with a cancel intent in PENDING older than the stale threshold
+    And an order-intent repository whose ReclaimOrphanIntent returns error "db unavailable"
+    When user "u-1" cancels order "o-1"
+    Then the call returns FailedPrecondition "still pending"
+    And a log records the failed reclaim with the cancel intent id and error "db unavailable"
+
+  @AC-7 @FR-6 @regression @feature-267
+  Scenario: A failed reactive reclaim in ReplaceOrder is logged
+    Given an open limit order "o-1" for user "u-1" with a replace intent in PENDING older than the stale threshold
+    And an order-intent repository whose ReclaimOrphanIntent returns error "db unavailable"
+    When user "u-1" replaces order "o-1" with limit price 101.00
+    Then the call returns FailedPrecondition "still pending"
+    And a log records the failed reclaim with the replace intent id and error "db unavailable"
+
+  @AC-8 @FR-5 @regression @feature-267
+  Scenario: A reactive stale-intent reclaim in CancelOrder is audited
+    Given an open order "o-1" for user "u-1" with a cancel intent in PENDING older than the stale threshold
+    When user "u-1" cancels order "o-1"
+    Then the call returns FailedPrecondition "still pending"
+    And the ledger receives an "order_intent.reclaimed_unknown" event for order "o-1" with trigger "reactive_cancel"
+
+  @AC-9 @FR-5 @regression @feature-267
+  Scenario: A reactive stale-intent reclaim in ReplaceOrder is audited
+    Given an open limit order "o-1" for user "u-1" with a replace intent in PENDING older than the stale threshold
+    When user "u-1" replaces order "o-1" with limit price 101.00
+    Then the call returns FailedPrecondition "still pending"
+    And the ledger receives an "order_intent.reclaimed_unknown" event for order "o-1" with trigger "reactive_replace"
+
+### Notes / ambiguities / conflicts
+- All 9 scenarios assert on trading-service behavior (logs, PlaceOrder/CancelOrder/ReplaceOrder results, ledger emit), so none is cross-cutting. platform.feature was grepped and has no related rules.
+- Dedup: grep of the 8 existing suites in /home/user/xstockstrat/services/xstockstrat-trading/acceptance/ for reclaimed_unknown, ReclaimOrphanIntent, UpsertOrder and "still pending" returned nothing. There is no OVERLAP, DUP or CONFLICT.
+- AC-1 to AC-9 are kept verbatim and in source order (AC-6 sits before AC-4, as in the source). The only change is the added @feature-267 tag. A header provenance comment is added to the new file.
+- The scenarios only add audit and logging guarantees and contradict no promoted rule. The new `order_intent.reclaimed_unknown` ledger event is additive and is not in trading CLAUDE.md's emitted-events table. The orchestrator may want to update that table (docs only).
+
+### Coverage check
+- Source scenarios: 9 (AC-1 to AC-9). Planned: 9 NEW, 0 DUP, 0 OVERLAP. All are accounted for and none were skipped.
+```
