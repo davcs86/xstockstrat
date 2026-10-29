@@ -509,7 +509,7 @@ Coverage threshold: N/A for this step (`internal/service/` is excluded from the 
 
 ### Step 6 — service: convert the request-reachable `Background()` sites to `context.WithoutCancel(ctx)`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -677,3 +677,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **D5-5 (environment):** as in D2-2/D4-1, `golangci-lint` v2.14.0 was rebuilt with go1.27 (`0 issues.`). As
   in D3-4/D4-3, no husky hook is installed (no `node_modules`), so git ran no hook; `--no-verify` was not
   used. **Disposition**: environment only.
+
+### 2026-10-29 — Step 6
+
+- **D6-1 (lint binary):** as in D2-2/D4-1/D5-5, the provisioned `golangci-lint` v2.14.0 (built with go1.26)
+  refuses the Go 1.27 module, so the same pinned v2.14.0 rebuilt with go1.27 in the session scratchpad ran the
+  specced command: `0 issues.` **Disposition**: CI-equivalent fallback.
+- **D6-2 (coverage command shape):** the sandbox refused the `$(...)`-computed `COVERPKGS` argument, so its value
+  (`internal/{broker,config,middleware,mtls}`, from the same `go list | grep -Ev` filter run on its own) was passed
+  literally. Total `73.3%` (>= 40%). **Disposition**: verification fallback, same packages and flags.
+- **D6-3 (line drift):** the step cites `:2859`/`:2907`/`:2617`; after the main-dev merge these are `:2858`/`:2906`/
+  `:2616`, as the Step 5 table already records. Edits were made by the Step 5 table's lines. **Disposition**: none needed.

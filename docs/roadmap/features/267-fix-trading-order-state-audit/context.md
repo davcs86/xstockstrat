@@ -721,3 +721,23 @@ Full-mode `/sdd-design` debate halted at its approval gate after round 3 (gate p
   - D5-5: environment.
 - `internal/service` tests fail on this branch until Step 6 lands, because the `TestTrace_*` RED suite is in place. Step 6 must land before the
   integration PR's CI runs.
+
+---
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 6
+
+### Step 6 — service: convert the request-reachable `Background()` sites to `context.WithoutCancel(ctx)` [done]
+- Discovery: the digest read the main worktree and reported Step 5 missing; on `origin/feature/fix-trading-order-state-audit`
+  Step 5 is done (`696dfa39`) and the 34 `Background()` hits match the Step 5 table. Not a blocker.
+- Change: rows #1-#32 now pass `context.WithoutCancel(ctx)`; `finalizeCancelIntent` gained a leading `ctx` param and its
+  three callers (`CancelOrder`, `reconcileNotCancelable` x2) pass the request ctx. `:2858`/`:2906` left as `Background()`.
+  No comments added. 36 lines changed, `trading.go` only.
+- TDD red (pre-change): `go test ./internal/service/ -run 'TestTrace_' -race -count=1` → `FAIL`, every row `x-trace-id = ""`
+  (e.g. `UpdateCredentialStatus: x-trace-id = "", ctx.Err() = <nil>; want t-267 and nil`).
+- TDD green: same command → all 12 `TestTrace_*` PASS (`ok internal/service 1.165s`).
+- Verification: `grep -n "context.Background()" trading.go` → only `:2858`, `:2906`; `gofmt -l` / `go vet` clean;
+  `golangci-lint` → `0 issues.` (D6-1); full suite `go test ./... -race` all ok, coverage total `73.3%` (D6-2).
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: D6-1 (lint binary), D6-2 (coverage command literal COVERPKGS), D6-3 (cited lines -1, resolved by table).
+- The `internal/service` package is green again on the branch (the Step 5 RED suite now passes).
+
