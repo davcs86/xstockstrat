@@ -660,3 +660,8 @@ None. Both target suites already exist in the working tree with all seven scenar
 - Source scenarios: 7 (AC-1 through AC-7). Planned: 7 (0 NEW, 7 DUP, 0 OVERLAP, 0 CONFLICT).
 - The marketdata suite holds 4 (AC-1, AC-2, AC-5, AC-7) and the config suite holds 3 (AC-3, AC-4, AC-6). Counts match and nothing was skipped.
 ```
+
+## Session 2026-10-29 — sdd-execute sequential, ALL-DONE PATH
+
+- The confirmed `sdd-batch-promotion-plan` (the later block above: 7 DUP, 0 NEW, no ready-to-write blocks) was applied: no durable suite changed. Both suites already hold AC-1..AC-7 verbatim with `@feature-254` (marketdata 4, config 3), and the feature-147 `@AC-4` SAN amendment is in place.
+- Status stays `code-completed` (no history row). Next: integration PR `feature/fix-marketdata-secret-exposure` → `main-dev`, merge held for the operator; Step 9 dev smoke runs post-merge.
