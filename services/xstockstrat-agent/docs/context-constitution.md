@@ -37,7 +37,7 @@ that *calls* backends as a gRPC client. Does not restate documented/CI-enforced 
 | OTel instruments the gRPC *client* channel (not a server) | `app/telemetry.py` (client-channel docstring ~L6-8), `#GrpcAioInstrumentorClient().instrument() (~L53)` |
 | `mtls.secure_channel` for all backend calls (mutual TLS, feature 210) | `app/mtls.py`, `app/client.py` (root PLAT-N3) |
 | n8n/HTTP-webhook migration to gRPC left no residue | PR #441 |
-| `list_opportunities` gRPC deadline + the fixed policy-read cap | `CLAUDE.md` `agent.opportunities.read_timeout_seconds` row; `app/tools.py#_POLICY_READ_TIMEOUT_S (~L2360)` |
+| `list_opportunities` gRPC deadline + the fixed policy-read cap | `CLAUDE.md` `agent.opportunities.read_timeout_seconds` row; `app/client.py#_CONFIG_READ_TIMEOUT_S`; `app/tools.py#_POLICY_READ_TIMEOUT_S` |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the
