@@ -669,3 +669,159 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
 - Files modified: `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`,
   `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.status`, this `context.md`.
 - Out of scope: the trading code change itself (owned by the follow-up).
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-push-untargeted-broadcast (feature 242)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-notify/acceptance/fix-push-untargeted-broadcast.feature | CREATE | NEW | Subject is notify's Web Push dispatch. No promoted rule covers untargeted push. |
+| AC-2 | same notify file | CREATE | NEW | Adds an exclusivity guarantee (no push to other users or admins) that 165 @AC-4 in pwa-notifications.feature lacks. Not an OVERLAP; see Notes. |
+| AC-3 | services/xstockstrat-portfolio/acceptance/fix-push-untargeted-broadcast.feature | CREATE | NEW | Portfolio risk check sets target_user_id (concentration). Existing portfolio suites assert the alert body only, not the target. |
+| AC-4 | services/xstockstrat-analysis/acceptance/fix-push-untargeted-broadcast.feature | CREATE | NEW | Live-loop strategy trigger alert targets the owner. |
+| AC-5 | same notify file | CREATE | NEW | Admin-only recipients for an untargeted alert. |
+| AC-6 | same portfolio file | CREATE | NEW | Drawdown alert targets the owner. Body format matches 172 / fix-after-hours; no conflict. |
+| AC-7 | same analysis file | CREATE | NEW | Fundamentals-unavailable alert targets the owner. fix-fundamentals-signal-producer and block-fundamentals-strategy-on-etf assert a log line only. |
+| AC-8 | same notify file | CREATE | NEW | Admin demotion or deactivation takes effect on the next alert. |
+| AC-9 | services/xstockstrat-identity/acceptance/fix-push-untargeted-broadcast.feature | CREATE | NEW | Subject is the identity ListAdminUserIds RPC. |
+| AC-10 | same identity file | CREATE | NEW | Scenario Outline kept verbatim. |
+| AC-11 | same notify file | CREATE | NEW | The Then outcomes (alert_id, no push, notify ERROR log) live in notify. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-notify/acceptance/fix-push-untargeted-broadcast.feature (CREATE) ---
+# Promoted from docs/roadmap/features/242-fix-push-untargeted-broadcast/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-242` tag.
+# Durable business rules notify already guarantees; a rule enters only by promotion from a reviewed acceptance.feature.
+
+Feature: xstockstrat-notify - Web Push recipients for targeted and untargeted alerts
+  An untargeted alert is never Web-Pushed to ordinary users' devices; only admin-role users receive it.
+
+  @AC-1 @FR-1 @regression @feature-242
+  Scenario: An untargeted alert is not Web-Pushed to any non-admin user's devices
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And "user-42" does not hold the admin role and has push subscriptions "https://push.example/one" and "https://push.example/two"
+    And "user-77" does not hold the admin role and has push subscription "https://push.example/three"
+    And "user-99" holds the admin role and has push subscription "https://push.example/admin"
+    When EmitAlert is called with an empty target_user_id, severity ALERT_SEVERITY_WARNING, title "portfolio risk limit breach", body "concentration limit breach: LYFT at 24.1%"
+    Then no Web Push is sent to "https://push.example/one", "https://push.example/two" or "https://push.example/three"
+    And EmitAlert returns an alert_id
+    And in-process StreamAlerts subscribers still receive the alert
+
+  @AC-2 @FR-2 @regression @feature-242
+  Scenario: A targeted alert reaches only the target user's devices
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And "user-42" does not hold the admin role and has push subscriptions "https://push.example/one" and "https://push.example/two"
+    And "user-77" does not hold the admin role and has push subscription "https://push.example/three"
+    And "user-99" holds the admin role and has push subscription "https://push.example/admin"
+    When EmitAlert is called with target_user_id "user-42", severity ALERT_SEVERITY_WARNING, title "Order filled", body "AAPL 10 @ 190.00"
+    Then a Web Push with title "Order filled" is sent to exactly "https://push.example/one" and "https://push.example/two"
+    And no Web Push is sent to "https://push.example/three" or "https://push.example/admin"
+
+  @AC-5 @FR-1 @regression @feature-242
+  Scenario: An untargeted alert is Web-Pushed only to admin-role users' devices
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And "user-42" does not hold the admin role and has push subscriptions "https://push.example/one" and "https://push.example/two"
+    And "user-77" does not hold the admin role and has push subscription "https://push.example/three"
+    And "user-99" holds the admin role and has push subscription "https://push.example/admin"
+    When EmitAlert is called with an empty target_user_id, severity ALERT_SEVERITY_WARNING, title "portfolio risk limit breach", body "concentration limit breach: LYFT at 24.1%"
+    Then a Web Push with title "portfolio risk limit breach" is sent to exactly "https://push.example/admin"
+
+  @AC-8 @FR-1 @FR-4 @regression @feature-242
+  Scenario: A demoted or deactivated admin stops receiving untargeted pushes on the next alert
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And "user-99" holds the admin role and has push subscription "https://push.example/admin"
+    And an untargeted ALERT_SEVERITY_WARNING alert has been Web-Pushed to "https://push.example/admin"
+    When "user-99" has the admin role removed or is deactivated
+    And EmitAlert is called with an empty target_user_id and severity ALERT_SEVERITY_WARNING
+    Then no Web Push is sent to "https://push.example/admin"
+
+  @AC-11 @FR-1 @FR-4 @regression @feature-242
+  Scenario: An identity lookup failure never fails or delays EmitAlert and sends no untargeted push
+    Given VAPID keys are configured and notify.push.min_severity is 2
+    And identity ListAdminUserIds fails with UNAVAILABLE
+    When EmitAlert is called with an empty target_user_id and severity ALERT_SEVERITY_WARNING
+    Then EmitAlert returns an alert_id
+    And no Web Push is sent to any subscription
+    And notify logs one ERROR for the admin lookup failure within a 60-second window
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-push-untargeted-broadcast.feature (CREATE) ---
+# Promoted from docs/roadmap/features/242-fix-push-untargeted-broadcast/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-242` tag.
+
+Feature: xstockstrat-portfolio - risk-breach alerts are targeted at the account owner
+
+  @AC-3 @FR-3 @regression @feature-242
+  Scenario: A portfolio risk breach alert is targeted at the account owner
+    Given portfolio.risk.concentration_limit_pct is 0.20
+    And "user-42" holds a position whose weight is 24.1% of their portfolio in "LYFT"
+    When the portfolio risk check runs for "user-42"
+    Then notify EmitAlert receives category "risk", severity ALERT_SEVERITY_WARNING and target_user_id "user-42"
+
+  @AC-6 @FR-3 @regression @feature-242
+  Scenario: A portfolio drawdown breach alert is targeted at the account owner
+    Given portfolio.risk.max_drawdown_pct is 0.10
+    And "user-42" account "acct-1" has peak equity 10000.00 and current equity 8500.00
+    When the portfolio risk check runs for "user-42"
+    Then notify EmitAlert receives category "risk", severity ALERT_SEVERITY_WARNING, body "drawdown limit breach: account acct-1 at 15.0% (peak 10000.00, current 8500.00)" and target_user_id "user-42"
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-push-untargeted-broadcast.feature (CREATE) ---
+# Promoted from docs/roadmap/features/242-fix-push-untargeted-broadcast/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-242` tag.
+
+Feature: xstockstrat-analysis - live-loop alerts are targeted at the strategy owner
+
+  @AC-4 @FR-3 @regression @feature-242
+  Scenario: A live-loop strategy trigger alert is targeted at the strategy owner
+    Given "user-42" owns live strategy "strat-1" that triggers "entry" on "AAPL"
+    When the analysis live loop emits the strategy trigger alert
+    Then notify EmitAlert receives category "strategy", severity ALERT_SEVERITY_WARNING and target_user_id "user-42"
+
+  @AC-7 @FR-3 @regression @feature-242
+  Scenario: A live-loop fundamentals-unavailable alert is targeted at the strategy owner
+    Given analysis.backtest.fundamentals.enabled is true
+    And "user-42" owns live strategy "strat-2" that requires fundamentals
+    And "MSFT" has no usable fundamentals
+    When the analysis live loop denies entry for "strat-2" on "MSFT"
+    Then notify EmitAlert receives category "strategy", severity ALERT_SEVERITY_WARNING, title "Strategy strat-2: fundamentals unavailable for MSFT" and target_user_id "user-42"
+
+--- /home/user/xstockstrat/services/xstockstrat-identity/acceptance/fix-push-untargeted-broadcast.feature (CREATE) ---
+# Promoted from docs/roadmap/features/242-fix-push-untargeted-broadcast/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-242` tag.
+
+Feature: xstockstrat-identity - ListAdminUserIds is an admin-ID lookup for the notify peer only
+
+  @AC-9 @FR-4 @feature-242
+  Scenario: ListAdminUserIds returns active admin user IDs only to the notify peer
+    Given identity users "user-99" (admin, active), "user-98" (admin, inactive) and "user-42" (not admin, active)
+    When a caller whose mTLS peer certificate SAN is "xstockstrat-notify" calls ListAdminUserIds
+    Then the response user_ids are exactly ["user-99"]
+    And the response carries no field other than user_ids
+
+  @AC-10 @FR-4 @feature-242
+  Scenario Outline: ListAdminUserIds denies every non-notify peer before touching identity.users
+    Given a caller whose mTLS peer SAN is <peer> and whose metadata carries x-access-scope "4" and x-user-id "system"
+    When it calls ListAdminUserIds
+    Then identity returns PERMISSION_DENIED
+    And no query is issued against identity.users
+
+    Examples:
+      | peer                        |
+      | "xstockstrat-ui"            |
+      | "xstockstrat-notify.evil"   |
+      | "xstockstrat-notifyx"       |
+      | absent                      |
+
+### Notes / ambiguities / conflicts
+- No CONFLICT. I grepped all `acceptance/*.feature` files and `docs/sdd/business-rules/platform.feature` for target_user_id, untargeted, ListAdminUserIds and Web Push.
+- AC-2 versus 165 @AC-4 (/home/user/xstockstrat/services/xstockstrat-notify/acceptance/pwa-notifications.feature:24): 165 asserts only that the target's devices get the push. AC-2 adds that no other user or admin gets it, so I promoted it as NEW. A human may later consolidate the two.
+- /home/user/xstockstrat/services/xstockstrat-notify/acceptance/alert-read-unread-persistence.feature:15 covers in-app visibility of broadcast alerts through ListAlerts. It is not Web Push, so it does not contradict AC-1 or AC-5.
+- Doc drift, not a promoted rule: /home/user/xstockstrat/services/xstockstrat-notify/CLAUDE.md says an empty `target_user_id` means "broadcast to all subscriptions". That is the defect behavior and should be updated in the implementing PR.
+- Attribution calls: AC-3 and AC-6 go to portfolio, AC-4 and AC-7 go to analysis, AC-11 goes to notify, and AC-9 and AC-10 go to identity. Each follows the service that owns the observable subject of the Then.
+- None of these four services has a `fix-push-untargeted-broadcast.feature` yet, so all four files are CREATE. The `acceptance/` directories already exist.
+
+### Coverage check
+- Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. All are accounted for and none were skipped. Per file: notify 5, portfolio 2, analysis 2, identity 2.
+```
