@@ -99,7 +99,7 @@ async def register(request):
             {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"}, 400
         )
 
-    # identity enforces the same allowlist / https rule server-side; this is the pre-check.
+    # Pre-check only: identity enforces https:// alone, not this allowlist.
     try:
         allowed_raw = await client.get_config_value(
             "oauth.allowed_redirect_uris", namespace="agent", environment=_env

@@ -6,8 +6,11 @@ shared `IngestServicer._ingest_external_signal` over the transaction_conn mock (
 seam the RPC uses).
 """
 
+import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.engine import mcp_client_loop as loop
 from app.repositories.signal_sources import derive_health_status
@@ -124,6 +127,40 @@ async def test_cycle_reads_namespace_prefixed_request_timeout_key(monkeypatch):
     await loop.run_one_cycle(servicer, cfg, mcp)
 
     assert mcp.calls[0]["timeout_seconds"] == 7.0
+
+
+async def test_cycle_request_timeout_stored_zero_reads_as_default(monkeypatch):
+    # Feature 244 @AC-6: a stored 0 timeout reads as the 30s default, not a 0s/1s request.
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=[_mcp_source()]))
+    servicer = MagicMock()
+    servicer._db = MagicMock()
+    servicer._ingest_external_signal = AsyncMock(return_value=(42, False))
+    mcp = _FakeMcpClient(result=_FakeResult([{"symbol": "AAPL", "direction": "buy"}]))
+    cfg = _FakeCfgWatcher(ints={"ingest.mcp_client.request_timeout_seconds": 0})
+
+    await loop.run_one_cycle(servicer, cfg, mcp)
+
+    assert mcp.calls[0]["timeout_seconds"] == 30.0
+
+
+async def test_poll_interval_stored_zero_reads_as_default(monkeypatch):
+    # Feature 244 @AC-6: a stored 0 poll interval sleeps the 300s default, never busy-loops.
+    class _StopLoop(Exception):
+        pass
+
+    slept = []
+
+    async def _fake_sleep(seconds):
+        slept.append(seconds)
+        raise _StopLoop
+
+    monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
+    cfg = _FakeCfgWatcher(ints={"ingest.mcp_client.poll_interval_seconds": 0})
+
+    with pytest.raises(_StopLoop):
+        await loop.run_mcp_client_loop(MagicMock(), cfg, _FakeMcpClient())
+
+    assert slept == [300]
 
 
 async def test_second_identical_cycle_deduplicates(monkeypatch):

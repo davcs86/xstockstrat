@@ -16,6 +16,7 @@
 #                                                   #   then: source scripts/mtls-dev-env.sh && docker compose up -d
 #   scripts/mtls-provision.sh ca <dev|prod>         # print the base64 CA bundle for {DEV,PROD}_MTLS_CA to stdout
 #   scripts/mtls-provision.sh set-secret <dev|prod> # gh secret set {DEV,PROD}_MTLS_CA (requires an authenticated gh)
+#   scripts/mtls-provision.sh decode-ca <certs_dir> # write $MTLS_CA's CA into <certs_dir>/_ca (deploy pipelines)
 #
 # bash 3.2 compatible (macOS default); BSD/GNU openssl compatible (via gen-dev-certs.sh).
 # Requires: openssl, python3. set-secret additionally requires gh.
@@ -68,6 +69,30 @@ sys.stdout.write(base64.b64encode(json.dumps(payload).encode()).decode())
 PY
 }
 
+# Inverse of emit_ca. Never prints the bundle; a key that does not match its cert fails (gen-dev-certs.sh hides openssl errors).
+decode_ca() {
+  local dir="$1" ca_pub key_pub
+  [ -n "${MTLS_CA:-}" ] || {
+    echo "mtls-provision: MTLS_CA is required" >&2
+    return 1
+  }
+  (umask 077 && mkdir -p "$dir/_ca") || return 1
+  if ! CERTS_DIR="$dir" python3 -I -c 'import base64, json, os
+d = json.loads(base64.b64decode(os.environ["MTLS_CA"]))
+ca = os.path.join(os.environ["CERTS_DIR"], "_ca")
+open(os.path.join(ca, "ca.pem"), "w").write(d["ca_cert"])
+open(os.path.join(ca, "ca-key.pem"), "w").write(d["ca_key"])' 2>/dev/null; then
+    echo "mtls-provision: MTLS_CA is not a base64 JSON {ca_cert, ca_key}" >&2
+    return 1
+  fi
+  if ! ca_pub="$(openssl x509 -in "$dir/_ca/ca.pem" -noout -pubkey 2>/dev/null)" ||
+    ! key_pub="$(openssl pkey -in "$dir/_ca/ca-key.pem" -pubout 2>/dev/null)" ||
+    [ "$ca_pub" != "$key_pub" ]; then
+    echo "mtls-provision: MTLS_CA ca_key does not match its ca_cert" >&2
+    return 1
+  fi
+}
+
 cmd="${1:-}"
 case "$cmd" in
 local)
@@ -102,8 +127,15 @@ set-secret)
   printf '%s' "$ca_value" | gh secret set "$secret_name" || exit 1
   echo "mtls-provision: set GitHub secret ${secret_name}"
   ;;
+decode-ca)
+  [ -n "${2:-}" ] || {
+    echo "usage: mtls-provision.sh decode-ca <certs_dir>" >&2
+    exit 2
+  }
+  decode_ca "$2" || exit 1
+  ;;
 *)
-  echo "usage: mtls-provision.sh {local | ca <dev|prod> | set-secret <dev|prod>}" >&2
+  echo "usage: mtls-provision.sh {local | ca <dev|prod> | set-secret <dev|prod> | decode-ca <certs_dir>}" >&2
   exit 2
   ;;
 esac

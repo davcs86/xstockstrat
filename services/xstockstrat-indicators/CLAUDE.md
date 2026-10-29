@@ -9,7 +9,9 @@
 Python gRPC service providing two capabilities:
 
 1. **Built-in indicator engine** — vectorized computation of SMA, EMA, RSI, MACD, BB, ATR, VWAP, STOCH
-2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory cap
+   (`ATR` and `VWAP` are close-only approximations — the close-to-close mean of `|Δclose|` and the running
+   mean of closes — not Wilder ATR or volume-weighted VWAP; the 1-D `values` input carries no high/low/volume, feature 268)
+2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory headroom
 
 **Formulas are private to their author (feature 224) — there is no public concept.** `is_public`
 and `ListFormulas`' `include_public` are deprecated and ignored. No write path writes `is_public`;
@@ -97,10 +99,10 @@ Namespace: `indicators`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms. `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value |
-| `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228) |
-| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. Read via `get_str_present` (never `get_str`): a configured `""` denies all imports rather than reverting to this permissive default (feature 173) |
-| `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via a new `ConfigWatcher.sandbox_max_concurrent()` accessor with a `max(1, …)` clamp. |
+| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms. `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value. A stored ≤ 0 reads as the default |
+| `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228). A stored ≤ 0 reads as the default |
+| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. A configured `""` is honoured: it denies all imports rather than reverting to this permissive default (feature 173) |
+| `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via `ConfigWatcher.sandbox_max_concurrent()`, which clamps through `int_positive`: a stored ≤ 0 reads as the default. |
 
 ## Seeded Formulas
 
@@ -192,6 +194,12 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   sandbox result dict must contain every declared series, else the run fails with
   `SANDBOX_EXIT_REASON_RUNTIME_ERROR` and an error naming the missing series. Inline
   `formula_source` runs have no stored definition, so no output enforcement applies.
+- **No-output failure (feature 268)**: success requires the child's last `__OUTPUT__:` marker line to
+  parse. Exit 0 with no marker fails `SANDBOX_EXIT_REASON_RUNTIME_ERROR` ("formula produced no output");
+  an unparseable last marker fails the same way ("formula output could not be parsed: …"); a non-zero exit
+  with empty stderr reports "formula exited with code N before producing output". The wrapper prints the
+  marker on its own line, so a formula printing a valid marker then `SystemExit(0)` is an accepted
+  author-controlled forgery of its own result, not an isolation breach.
 
 ## Environment Variables
 
@@ -219,4 +227,13 @@ uv run pytest --cov=app --cov-fail-under=50  # with coverage
 ```bash
 uv sync
 uv run python -m app.main
+```
+
+## Maintenance
+
+`app.maintenance.legacy_authors` reports and repairs `indicators.formulas` rows whose `author` is a legacy username instead of a user id. The owner cannot read those rows, because `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`. An operator runs it by hand. It is not part of the service process. It opens one `asyncpg` connection from a required `DATABASE_URL`, with no fallback, and does not use the `main.py` pool. Report mode writes nothing. Apply mode needs a confirmed plan whose sha256 digest matches. Follow `docs/runbooks/legacy-formula-authors.md` for the full procedure, including DBA sign-off, the pooled `:25061` URL with `DB_PGBOUNCER=true`, and restarting every instance afterwards.
+
+```bash
+uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json   # report
+uv run python -m app.maintenance.legacy_authors --apply --plan plan.json --users users.json --confirm-digest <sha256>   # apply
 ```

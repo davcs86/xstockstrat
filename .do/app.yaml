@@ -520,6 +520,8 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: WAIT_FOR
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: DATABASE_URL
