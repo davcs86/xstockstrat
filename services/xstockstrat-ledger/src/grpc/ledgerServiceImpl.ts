@@ -152,6 +152,10 @@ export class LedgerServiceImpl {
       conditions.push(`sequence >= $${p++}`);
       params.push(req.fromSequence);
     }
+    if (req.ownerOnly) {
+      conditions.push(`user_id = $${p++}`);
+      params.push(callerUserId(call));
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = req.page?.pageSize || 100;
@@ -188,12 +192,13 @@ export class LedgerServiceImpl {
     }
 
     // Seeded just below fromSequence so the first replayed row (== fromSequence) is delivered.
-    let maxSeq = req.fromSequence ? req.fromSequence - 1 : 0;
+    let maxSeq = req.fromSequence ? Number(req.fromSequence) - 1 : 0;
     let live = false;
     let buffer: any[] = [];
 
     const writeRow = (row: any) => {
-      if (row.sequence > maxSeq) maxSeq = row.sequence;
+      const seq = Number(row.sequence);
+      if (seq > maxSeq) maxSeq = seq;
       call.write(rowToEvent(row));
     };
 
@@ -207,12 +212,20 @@ export class LedgerServiceImpl {
           buffer.push(row);
           return;
         }
-        if (row.sequence > maxSeq) writeRow(row);
+        if (Number(row.sequence) > maxSeq) writeRow(row);
       },
       onReconnect: () => {
         // Missed NOTIFYs during reconnect — end the stream so the client reconnects and replays the gap.
         try {
           call.end();
+        } catch {
+          /* already closing */
+        }
+      },
+      onGap: ({ notFound, message }) => {
+        cleanup();
+        try {
+          call.destroy({ code: notFound ? 13 : 14, message });
         } catch {
           /* already closing */
         }
@@ -240,6 +253,7 @@ export class LedgerServiceImpl {
          ORDER BY sequence ASC`,
         [req.streamKey || null, req.eventType || null, req.fromSequence || 0],
       );
+      if (cleaned) return;
       for (const row of result.rows) writeRow(row);
     } catch (err: any) {
       cleanup();
@@ -253,7 +267,7 @@ export class LedgerServiceImpl {
     // Flush buffered events (dedup by sequence) then go live; synchronous so no NOTIFY
     // interleaves before live=true.
     for (const row of buffer) {
-      if (row.sequence > maxSeq) writeRow(row);
+      if (Number(row.sequence) > maxSeq) writeRow(row);
     }
     buffer = [];
     live = true;
@@ -298,8 +312,7 @@ export class LedgerServiceImpl {
       return;
     }
 
-    // Empty caller matches nothing (user_id = '' never true), excluding historical NULL-user_id rows.
-    const caller: string = call.metadata?.get?.('x-user-id')?.[0] ?? '';
+    const caller = callerUserId(call);
 
     // Optional event_type subset.
     const types = String(req.eventType || '')
@@ -359,6 +372,11 @@ export class LedgerServiceImpl {
 export function toValidDate(value: unknown, fallback: Date): Date {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   return fallback;
+}
+
+// Empty caller matches nothing (user_id = '' never true), excluding historical NULL-user_id rows.
+export function callerUserId(call: any): string {
+  return call.metadata?.get?.('x-user-id')?.[0] ?? '';
 }
 
 export function rowToEvent(row: any) {

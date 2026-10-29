@@ -11,7 +11,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { HEADER_ACCESS_SCOPE } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 
@@ -70,7 +70,6 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       namespace: 'platform',
       key: 'platform.trading_state',
       value: { stringVal: 'REDUCE_ONLY' },
-      author: 'system:reconciliation-poller',
       reason: 'reconciliation test',
       ...overrides,
     };
@@ -79,16 +78,19 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     });
   }
 
-  it('accepts an internal-caller write of REDUCE_ONLY, with no admin scope, and persists caller_identity', async () => {
+  it('@AC-2 accepts an internal-caller write of REDUCE_ONLY, with no admin scope, attributed to the caller', async () => {
     queries = [];
     keyExists = true;
-    const { err } = await setConfig(md({ 'x-internal-caller': 'trading-reconciliation-poller' }));
+    const { err } = await setConfig(md({ 'x-internal-caller': 'trading-reconciliation-poller' }), {
+      author: 'someone-else@example.com',
+    });
     assert.equal(err, null, 'internal-caller write must succeed without admin scope');
     const insert = insertQuery();
     assert.ok(insert, 'the INSERT must run');
     // Feature 147 params: [namespace, key, value_type, value_data, value_encrypted, is_secret,
     // updated_by, update_reason, environment, user_id, caller_identity].
     assert.equal(insert!.params?.[10], 'trading-reconciliation-poller');
+    assert.equal(insert!.params?.[6], 'trading-reconciliation-poller');
   });
 
   it('accepts the same caller writing HALTED', async () => {
@@ -130,11 +132,10 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
   it('an ordinary admin write to a different key leaves caller_identity unset', async () => {
     queries = [];
     keyExists = true;
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }), {
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-7' }), {
       namespace: 'platform',
       key: 'log_level',
       value: { stringVal: 'debug' },
-      author: 'tester',
     });
     assert.equal(err, null, 'admin write must succeed');
     const insert = insertQuery();

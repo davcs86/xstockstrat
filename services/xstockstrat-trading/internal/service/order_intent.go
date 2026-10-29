@@ -131,6 +131,32 @@ func (s *TradingService) StartOrderIntentSweeper(ctx context.Context) {
 	}
 }
 
+const reclaimedUnknownEventType = "order_intent.reclaimed_unknown"
+
+// reclaimedUnknownPayload must stay structpb-safe: emitLedgerEvent drops a NewStruct error, nil-ing the payload.
+func reclaimedUnknownPayload(trigger string, out *repository.OrderIntentRecord, pendingSince time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"trigger": trigger, "order_id": out.OrderID, "intent_id": out.IntentID,
+		"was_pending_since": pendingSince.UTC().Format(time.RFC3339Nano),
+	}
+}
+
+// Mirrors sweepOrderIntents' reclaim handling — change both together. Keep WithoutCancel(ctx):
+// Background() drops x-trace-id and a client cancel must not abort the CAS.
+func (s *TradingService) reclaimStaleIntent(ctx context.Context, intentID string, pendingSince, staleBefore time.Time, trigger, ownerID string) {
+	bg := context.WithoutCancel(ctx)
+	reclaimed, out, err := s.orderIntentRepo.ReclaimOrphanIntent(bg, intentID, staleBefore)
+	if err != nil {
+		slog.Warn("order intent reclaim failed", "intent_id", intentID, "trigger", trigger, "error", err)
+		return
+	}
+	if !reclaimed {
+		return
+	}
+	go s.emitLedgerEvent(bg, reclaimedUnknownEventType, "order:"+out.OrderID, ownerID,
+		reclaimedUnknownPayload(trigger, out, pendingSince))
+}
+
 // sweepOrderIntents runs one sweep tick: select up to 100 stale PENDING intents, then call the
 // identical CAS the reactive path uses — a row that changed state before its UPDATE is a safe no-op.
 func (s *TradingService) sweepOrderIntents(ctx context.Context) {
@@ -149,11 +175,6 @@ func (s *TradingService) sweepOrderIntents(ctx context.Context) {
 		if !reclaimed {
 			continue
 		}
-		s.emitLedgerEvent(ctx, "order_intent.reclaimed_unknown", fmt.Sprintf("order:%s", out.OrderID), "", map[string]interface{}{
-			"trigger":           "sweep",
-			"order_id":          out.OrderID,
-			"intent_id":         out.IntentID,
-			"was_pending_since": out.UpdatedAt,
-		})
+		s.emitLedgerEvent(ctx, reclaimedUnknownEventType, fmt.Sprintf("order:%s", out.OrderID), "", reclaimedUnknownPayload("sweep", out, rec.UpdatedAt))
 	}
 }

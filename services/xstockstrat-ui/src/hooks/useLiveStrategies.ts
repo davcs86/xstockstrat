@@ -16,6 +16,7 @@ export function useSetStrategyLive() {
     mutationFn: ({ strategyId, liveEnabled }: { strategyId: string; liveEnabled: boolean }) =>
       traderAnalysisClient.setStrategyLive({ strategyId, liveEnabled }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['trader-strategy-definitions'] }),
+    meta: { errorHandled: true },
   });
 }
 

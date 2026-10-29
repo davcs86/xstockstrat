@@ -12,6 +12,7 @@ findings log.
 | Service CLAUDE.md WatchConfig-flow: DELTA = "changed keys only" | Code sends the full namespace with all keys in `changedKeys` (CONFIG-1) | `CLAUDE.md` § WatchConfig Flow (~L71) vs `configServiceImpl.ts#reloadNamespace` (`changedKeys` ~L214) | ✓ **RESOLVED** (2026-08-02 refresh) — CLAUDE.md WatchConfig-flow now states DELTA "carries the FULL namespace … a wholesale replace" |
 | Service CLAUDE.md pg_notify payload documented as `{namespace, key}` | Code emits `{namespace, key, environment, user_id}` and depends on env+overlay scope (CONFIG-4) | `CLAUDE.md` § WatchConfig Flow (diagram ~L85) vs `configServiceImpl.ts#pg_notify('config_changed'` (~L509-511) | ◐ **PARTIAL** (2026-08-02 fixed the prose; **the ASCII diagram literal was missed** — 2026-09-02): the service CLAUDE.md **WatchConfig-Flow diagram block** still writes `pg_notify('config_changed', {namespace, key, environment, trading_mode})`, but the code emits `{namespace, key, environment, user_id}` (`configServiceImpl.ts#pg_notify('config_changed'` ~L509-511; `trading_mode` removed by feature 147). Fix the diagram literal `trading_mode` → `user_id` |
 | Service `CLAUDE.md` banner still advertises the "pg_notify env+mode requirement" and the "camelCase/snake_case trading-mode scoping collapse" defect; the **Webhooks** section says `SetConfig` "requires the ADMIN scope bit" | Both defects were resolved (features 078/147); the write gate is scope-branched (admin for global, owner-only for per-user, internal-caller allowlist — Critical Invariants #5/#7) | `services/xstockstrat-config/CLAUDE.md` banner and §Webhooks vs `src/grpc/authz.ts` | Update the banner and §Webhooks |
+| Seed migration `028` describes `analysis.opportunity.sparkline_bars` as "Read live per enrichment (get_int, max(1,...))", and `SCALAR_BOUNDS_REGISTRY` bounds it `[1,500]` (found by feature 244) | No analysis code reads the key: the server-side sparkline fetch was removed and the UI fetches its own bars, so the description names a reader that does not exist | `migrations/028_analysis_opportunity_keys.up.sql#sparkline_bars` (~L99,102); `src/grpc/configServiceImpl.ts#SCALAR_BOUNDS_REGISTRY` (~L126); no `sparkline_bars` hit under `services/xstockstrat-analysis/app/` | Retire the seed rows and bounds row with the sparkline-removal residue (`docs/reports/2026-10-19-opportunity-sparkline-removal-residue-defect.md`) |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
@@ -44,11 +45,12 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-config-audit-author-caller-spoofable-defect`](../../../docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md) | SetConfig audit author is caller-supplied free text, not the verified identity |
+| [`2026-10-19-config-audit-author-caller-spoofable-defect`](../../../docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md) | SetConfig audit author is caller-supplied free text, not the verified identity → fix: feature 241 |
 | [`2026-10-19-config-claude-md-drift-defect`](../../../docs/reports/2026-10-19-config-claude-md-drift-defect.md) | Config CLAUDE.md has a stale notify diagram, banner and write-gate text |
 | [`2026-10-19-config-seed-migration-late-lower-nnn-defect`](../../../docs/reports/2026-10-19-config-seed-migration-late-lower-nnn-defect.md) | A late-merging lower-numbered config seed migration never applies |
 | [`2026-10-19-cross-hop-deadline-bounds-unenforced-defect`](../../../docs/reports/2026-10-19-cross-hop-deadline-bounds-unenforced-defect.md) | Cross-hop read deadline ordering is not enforced by config bounds |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+| [`2026-10-28-node-leaf-c8-check-coverage-unenforced-defect`](../../../docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.md) | Node-leaf c8 `--lines 40` is declared but never enforced (no `--check-coverage`) |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

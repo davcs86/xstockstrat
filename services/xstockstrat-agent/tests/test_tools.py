@@ -1,9 +1,11 @@
 """Tests for app/tools.py — MCP tool definitions."""
 
+import asyncio
 import base64
 import json
 import logging
 import socket
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,9 +15,9 @@ import pytest
 import respx
 from mcp.server.mcpserver import MCPServer
 
-from app import client
+from app import client, tools
 from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
-from tests.conftest import ADMIN, _ctx  # feature 092: shared ctx/claims helpers
+from tests.conftest import ADMIN, HANG_GUARD_S, _ctx  # feature 092: shared ctx/claims helpers
 
 
 def _make_server() -> MCPServer:
@@ -2177,3 +2179,117 @@ async def test_extract_website_enforces_config_max_redirects():
                 await _tool_fn(server, "extract_website_content")(source_slug="red")
     assert first.called
     assert not final.called  # redirect budget of 0 refused the hop
+
+
+# ── stalled config service (feature 247) ─────────────────────────────────────
+
+_STALL_HTML = (
+    "<html><body>" + "<p>NVDA: strong buy on stalled-config day</p>" * 24 + "</body></html>"
+)
+
+
+@pytest.mark.asyncio
+async def test_ac2_extract_website_content_proceeds_on_stalled_config(
+    hung_config_server, monkeypatch
+):
+    """@AC-2: every fetch-policy read hits D, the fetch proceeds with the default policy."""
+    handle = hung_config_server()
+    monkeypatch.setattr(client, "_CONFIG_READ_TIMEOUT_S", 0.3, raising=False)
+    pinned_calls: list[dict] = []
+    policy_reads: dict = {}
+    real_build = tools.egress.build_pinned_client
+    real_policy = tools._agent_policy
+
+    def build_spy(**kwargs):
+        pinned_calls.append(kwargs)
+        return real_build(**kwargs)
+
+    async def policy_recorder(key, default, cast):
+        value = await real_policy(key, default, cast)
+        policy_reads[key] = value
+        return value
+
+    monkeypatch.setattr(tools.egress, "build_pinned_client", build_spy)
+    monkeypatch.setattr(tools, "_agent_policy", policy_recorder)
+    sources = _website_source("acme-site", "https://example.com/")
+    with patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)):
+        with respx.mock(base_url="https://example.com") as site_mock:
+            site_mock.get("/").mock(return_value=httpx.Response(200, text=_STALL_HTML))
+            server = _make_server()
+            start = time.monotonic()
+            result = await asyncio.wait_for(
+                _tool_fn(server, "extract_website_content")(source_slug="acme-site"), HANG_GUARD_S
+            )
+            elapsed = time.monotonic() - start
+    assert "NVDA" in result["raw_text"]
+    assert elapsed < 4 * 0.3 + 1.0
+    assert handle.entered == 4
+    assert pinned_calls == [{"connect_timeout": 10.0, "read_timeout": 30.0}]
+    assert policy_reads == {
+        "extract.max_redirects": 5,
+        "extract.max_bytes": 5_000_000,
+        "extract.connect_timeout_seconds": 10.0,
+        "extract.read_timeout_seconds": 30.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_extract_email_content_urls_proceeds_on_stalled_config(
+    hung_config_server, monkeypatch
+):
+    """The email `urls` path is the second _fetch_url caller (C-10): bounded the same way."""
+    handle = hung_config_server()
+    monkeypatch.setattr(client, "_CONFIG_READ_TIMEOUT_S", 0.3, raising=False)
+    with patch.object(client, "list_signal_sources", AsyncMock(return_value=_SOURCES)):
+        with respx.mock(base_url="https://example.com") as site_mock:
+            site_mock.get("/").mock(return_value=httpx.Response(200, text=_STALL_HTML))
+            server = _make_server()
+            start = time.monotonic()
+            result = await asyncio.wait_for(
+                _tool_fn(server, "extract_email_content")(
+                    source_slug="s1", urls=["https://example.com/"]
+                ),
+                HANG_GUARD_S,
+            )
+            elapsed = time.monotonic() - start
+    assert "NVDA" in result["raw_text"]
+    assert elapsed < 4 * 0.3 + 1.0
+    assert handle.entered == 4
+
+
+@pytest.mark.asyncio
+async def test_ac3_ingest_signal_alerts_at_default_threshold_on_stalled_config(
+    hung_config_server, monkeypatch
+):
+    """@AC-3: the stalled threshold read falls back to 0.6 within D and the alert still fires."""
+    handle = hung_config_server()
+    monkeypatch.setattr(client, "_CONFIG_READ_TIMEOUT_S", 0.3, raising=False)
+    marks: dict = {}
+
+    async def ingest(**_kwargs):
+        marks["t_ingest"] = time.monotonic()
+        return {"signal_id": 7, "deduplicated": False}
+
+    mock_alert = AsyncMock(return_value={"alert_id": "a1"})
+    with (
+        patch.object(client, "ingest_signal", AsyncMock(side_effect=ingest)),
+        patch.object(client, "emit_alert", mock_alert),
+    ):
+        server = _make_server()
+        result = await asyncio.wait_for(
+            _tool_fn(server, "ingest_signal")(
+                ctx=_ctx(ADMIN),
+                source="acme-signals",
+                symbol="NVDA",
+                direction="buy",
+                valid_from="2026-10-20T00:00:00Z",
+                conviction=0.9,
+            ),
+            HANG_GUARD_S,
+        )
+        after_ingest = time.monotonic() - marks["t_ingest"]
+    assert result == {"signal_id": 7, "deduplicated": False}
+    assert after_ingest < 0.3 + 1.0
+    mock_alert.assert_called_once()
+    assert mock_alert.await_args.kwargs["category"] == "signal"
+    assert handle.entered == 1

@@ -6,6 +6,7 @@ import {
   MISSING_AUTHOR_ERROR,
   PER_USER_SCOPE_ERROR,
   SECRET_SCOPE_ERROR,
+  boundReadUserId,
   first,
   hasAdminAccessScope,
   hasInternalCallerAuthority,
@@ -108,13 +109,13 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.readiness_materializer.valid_window_hours': { minValue: 1, maxValue: 168 },
   // Ceiling tracks marketdata's PgBouncer pool size (root CLAUDE.md § Connection Pool Budget): an
   // operator raising this above what marketdata can execute re-opens the feature-141 SEV-2 (TimescaleDB
-  // "out of shared memory"). min 1 — 0 is not "unlimited" (the get_int reader would collapse it to 2).
+  // "out of shared memory"). min 1 — a Python reader clamps ≤ 0 to the default, so 0 is never "unlimited".
   'analysis.readiness_materializer.max_concurrent_bars_fetches': { minValue: 1, maxValue: 5 },
   // feature 184: opportunity-queue tuning keys, operator-editable in config-ui once seeded
   // (migration 028). Write-edge-only guardrails on the numeric footguns; the 5 cadence/TTL/snooze
-  // keys are seeded unbounded. Lower 0 where the getter honors a legitimate 0 (refresh_hour_utc =
-  // midnight, signal_rank_weight = a valid weight); lower 1 on get_int zero-trap keys where 0 already
-  // collapses to the code default. max_concurrent_bars_fetches ceiling = marketdata PgBouncer pool.
+  // keys are seeded unbounded. Lower 0 where 0 is a legitimate value (refresh_hour_utc = midnight,
+  // signal_rank_weight); lower 1 where the Python reader clamps ≤ 0 to the default.
+  // max_concurrent_bars_fetches ceiling = marketdata PgBouncer pool.
   'analysis.opportunity.refresh_hour_utc': { minValue: 0, maxValue: 23 },
   'analysis.opportunity.max_concurrent_bars_fetches': { minValue: 1, maxValue: 5 },
   'analysis.opportunity.signal_rank_weight': { minValue: 0, maxValue: 1 },
@@ -314,7 +315,7 @@ export class ConfigServiceImpl {
 
   async getConfig(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const userId = requestUserId(call.request);
+    const userId = boundReadUserId(call, requestUserId(call.request));
     const namespace = call.request.namespace;
     const values = await this.resolveOverlayValues(namespace, env, userId);
     const global = this.snapshots.get(snapKey(namespace, env));
@@ -375,14 +376,16 @@ export class ConfigServiceImpl {
     const userIdParam = userId === '' ? null : userId;
     const callerUserId = userIdFrom(call.metadata); // propagated x-user-id (edge-injected)
 
-    if (userIdParam === null) {
-      const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
-      const internalCallerAuthorized = hasInternalCallerAuthority(
+    const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
+    const internalCallerAuthorized =
+      userIdParam === null &&
+      hasInternalCallerAuthority(
         call.metadata,
         call.request?.namespace,
         call.request?.key,
         rawValue,
       );
+    if (userIdParam === null) {
       if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
         log.warn('SetConfig denied — global write without admin scope or internal-caller authority', {
           namespace: call.request?.namespace,
@@ -407,7 +410,7 @@ export class ConfigServiceImpl {
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
 
-    const author = call.request.author || userIdFrom(call.metadata);
+    const author = callerUserId || (internalCallerAuthorized ? (callerIdentity ?? '') : '');
     if (!author) {
       callback(MISSING_AUTHOR_ERROR);
       return;
@@ -524,7 +527,7 @@ export class ConfigServiceImpl {
 
   async listKeys(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const userId = requestUserId(call.request);
+    const userId = boundReadUserId(call, requestUserId(call.request));
     try {
       // Global keys overlaid with the caller's per-user rows (per-user wins over global for the same key).
       const result = await this.pool.query(

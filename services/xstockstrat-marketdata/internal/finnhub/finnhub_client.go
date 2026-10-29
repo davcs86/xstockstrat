@@ -5,6 +5,7 @@ package finnhub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -111,11 +112,20 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	u := c.baseURL + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return fmt.Errorf("finnhub: build request: %w", err)
+		// *url.Error carries the token-bearing URL: wrap only its inner cause.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return fmt.Errorf("finnhub: %s build request: %w", path, ue.Err)
+		}
+		return fmt.Errorf("finnhub: %s build request", path)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("finnhub: %s request failed: %w", path, err)
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return fmt.Errorf("finnhub: %s request failed: %w", path, ue.Err)
+		}
+		return fmt.Errorf("finnhub: %s request failed", path)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
