@@ -102,32 +102,33 @@ pass-through sites as its check.
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_paced_fetch(self, symbols, budget, metadata, chunk_size=50)` is at `app/engine/fundsignal_loop.py:381-407`.
-  - The per-chunk `except Exception as e:  # noqa: BLE001` at `:401-402` only logs.
-  - `calls += 1; i += chunk_size` runs regardless (`:403-404`).
-  - `deferred = symbols[i:]` (`:406`) and `return fetched, deferred, calls` (`:407`).
-- The status line is `status = "budget_deferred" if deferred else "completed"` (`:280`), and the budget warning is at
-  `:281-285`.
-- Existing test `TestBudgetDefer.test_paced_fetch_respects_budget` (class at `tests/test_fundsignal_loop.py:155`, method
-  at `:157-164`) unpacks a
-  3-tuple: `fetched, deferred, calls = await loop._paced_fetch(symbols, budget=1, metadata=())`.
-- `test_run_marks_deferred_and_warns` (`:167-173`) asserts `status == "budget_deferred"`, `deferred_count == 70` and
+- `_paced_fetch(self, symbols, budget, metadata, chunk_size=50)` is at `app/engine/fundsignal_loop.py:394-420`
+  (re-spec 2026-10-29, after the 246 merge).
+  - The per-chunk `except Exception as e:  # noqa: BLE001` at `:414-415` only logs.
+  - `calls += 1; i += chunk_size` runs regardless (`:416-417`).
+  - `deferred = symbols[i:]` (`:419`) and `return fetched, deferred, calls` (`:420`), still a 3-tuple.
+- The status line is `status = "budget_deferred" if deferred else "completed"` (`:281`), and the budget warning is at
+  `:282-286`.
+- Existing test `TestBudgetDefer.test_paced_fetch_respects_budget` (class at `tests/test_fundsignal_loop.py:157`, method
+  at `:159`) unpacks a
+  3-tuple at `:162`: `fetched, deferred, calls = await loop._paced_fetch(symbols, budget=1, metadata=())`.
+- `test_run_marks_deferred_and_warns` (`:169`) asserts `status == "budget_deferred"`, `deferred_count == 70` and
   `EmitAlert.assert_awaited()`. It must stay green.
-- The `_make_loop` `_get_multi` side-effect shape is at `:60-63`.
+- The `_make_loop` `_get_multi` side-effect shape is at `:62-65`.
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-4, AC-6`
 
 **Instructions**:
-1. In `test_paced_fetch_respects_budget` (`:160`), change the unpack to
+1. In `test_paced_fetch_respects_budget` (`:162`), change the unpack to
    `fetched, deferred, failed, calls = await loop._paced_fetch(symbols, budget=1, metadata=())` and add
    `assert failed == []`.
 2. Add `class TestFailedChunk` after `TestBudgetDefer`. It holds a local `_fail_first_chunk(loop)` helper that
    replaces `loop._marketdata.GetFundamentalsMulti` with an `AsyncMock(side_effect=...)`. The side effect counts
    calls and:
-   - on the first call, raises `_rpc_error(grpc.StatusCode.UNAVAILABLE)` (`_rpc_error` is at `:526`; import `grpc`
-     inside the test, as `:700` does);
+   - on the first call, raises `_rpc_error(grpc.StatusCode.UNAVAILABLE)` (`_rpc_error` is at `:528`; import `grpc`
+     inside the test, as `:702` does);
    - on later calls, returns `SimpleNamespace(fundamentals=[_fund(s) for s in request.symbols])`.
 3. `test_ac4_failed_chunk_is_partial_and_deferred` (@AC-4):
    - Set up `loop = _make_loop()` with the side effect and 60 symbols (`[f"S{i}" for i in range(60)]`).
@@ -166,14 +167,15 @@ grep -n "conftest" tests/test_fundsignal_loop.py   # C-13: no new conftest fixtu
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_paced_fetch` (`fundsignal_loop.py:381-407`): the `except` is at `:401-402` and the return is at `:407`. Its only
-  callers are `run_once` (`:223`, `fetched, deferred, calls_spent = await self._paced_fetch(to_process, budget, metadata)`)
-  and the test at `tests/test_fundsignal_loop.py:160` (recon.md:108-110).
-- `_abort_cycle(..., deferred=len(deferred), ...)` is at `:270-278`, and `_finish(..., deferred=len(deferred), ...)`
-  is at `:286-293`.
+- `_paced_fetch` (`fundsignal_loop.py:394-420`): `fetched = {}` is at `:400`, the `except` is at `:414-415` and the
+  return is at `:420` (re-spec 2026-10-29). Its only callers are `run_once` (`:223`,
+  `fetched, deferred, calls_spent = await self._paced_fetch(to_process, budget, metadata)`) and the test at
+  `tests/test_fundsignal_loop.py:162` (recon.md:108-110).
+- `_abort_cycle(..., deferred=len(deferred), ...)` is at `:272-279`, and `_finish(..., deferred=len(deferred), ...)`
+  is at `:287-294`.
 - `migrations/003_fundsignal_runs.up.sql:9`: `status text NOT NULL DEFAULT 'running'`, with no CHECK constraint, so
   no migration is needed (F-01: the comment in that applied migration is not edited).
-- `_emit_warning(msg, severity=...WARNING)` is at `:614-628`. Its broadcast stays untargeted (`@AC-6 @feature-224`).
+- `_emit_warning(msg, severity=...WARNING)` is at `:642-656`. Its broadcast stays untargeted (`@AC-6 @feature-224`).
 
 **TDD**: `red-green required`
 
@@ -181,17 +183,18 @@ grep -n "conftest" tests/test_fundsignal_loop.py   # C-13: no new conftest fixtu
 
 **Instructions**:
 1. In `_paced_fetch`:
-   - Add `failed = []` next to `fetched = {}` (`:387`).
-   - Inside the existing `except` (`:401-402`), after the `log.warning`, add `failed.extend(chunk)`.
+   - Add `failed = []` next to `fetched = {}` (`:400`).
+   - Inside the existing `except` (`:414-415`), after the `log.warning`, add `failed.extend(chunk)`.
    - Change the return to `return fetched, deferred, failed, calls`.
    - Extend the docstring by one clause: a raising chunk's symbols are returned in `failed`.
    - `calls += 1` stays: a failed call still spends budget.
 2. In `run_once`:
    - Change `:223` to `fetched, deferred, failed, calls_spent = await self._paced_fetch(...)`.
    - Compute `deferred_count = len(deferred) + len(failed)` once, after the fetch.
-   - Pass `deferred=deferred_count` to both the `_abort_cycle` call (`:276`) and the `_finish` call (`:291`).
+   - Pass `deferred=deferred_count` to both the `_abort_cycle` call (`:272-279`) and the `_finish` call
+     (`:287-294`).
    - `symbols_done=len(fetched)` is unchanged at both sites (FR-4).
-3. Replace `:280-285` with:
+3. Replace `:281-286` with:
    ```python
    status = "partial" if failed else ("budget_deferred" if deferred else "completed")
    if failed or deferred:
@@ -228,28 +231,35 @@ grep -n '"partial"' services/xstockstrat-analysis/app/engine/fundsignal_loop.py
 
 **Codebase Evidence**:
 - Claim INSERT `... ON CONFLICT (symbol, source, as_of_date) DO NOTHING RETURNING symbol`, args
-  `(symbol, source_slug, as_of_date, score, directions[symbol], run_id)`: `fundsignal_loop.py:243-254`.
-  `row is None` → `continue` at `:255-256`.
-- The confirm UPDATE `SET signal_id=$4 WHERE symbol=$1 AND source=$2 AND as_of_date=$3` is unscoped (`:260-268`).
-  The unconditional `emitted += 1` is at `:269`.
-- The force DELETE is at `:210-216`, `_already_emitted` at `:373-379`, `_emit_signal`'s `NOT_FOUND` →
-  `_SystemWriteRejected` at `:542-546`, and its other errors → `None` at `:547-548`.
+  `(symbol, source_slug, as_of_date, score, directions[symbol], run_id)`: `fundsignal_loop.py:244-255`
+  (re-spec 2026-10-29). `row is None` → `continue` at `:256-257`.
+- The emit call is at `:258-260`. The confirm UPDATE `SET signal_id=$4 WHERE symbol=$1 AND source=$2 AND as_of_date=$3`
+  is unscoped (`:261-269`). The unconditional `emitted += 1` is at `:270`.
+- **Feature 246 (merged to `main-dev`) changed `_score`** (`:422-437`) to return a tuple `(scores, unscored)`.
+  `run_once` does `scores, unscored = await self._score(fetched, sys_meta)` at `:226` and then calls
+  `self._warn_unscored(...)` (`:227`, defined `:360`). A `_score` mock that returns a bare dict makes `run_once` fail
+  to unpack, so every mock here returns `(scores, [])`.
+- The force DELETE is at `:210-216`, `_already_emitted` at `:386-392`, `_emit_signal`'s `NOT_FOUND` →
+  `_SystemWriteRejected` at `:570-574`, and its other errors → `None` at `:575-576`.
 - Test harness:
-  - `_identity_loop(overrides, author, ingest_responses)` is at `tests/test_fundsignal_loop.py:532-546`. It is built
-    on `RecordingStub` (`tests/conftest.py:83-110`), whose responses may be a value, an exception, or a function of
-    the request (`isinstance(resp, types.FunctionType)`).
-  - `_rpc_error` is at `:526-529`, and `loop._db` comes from `_make_loop` (`:56-58`).
-  - Existing `test_already_emitted_skips_fetch_and_emit` stubs `fetch` rows as `{"symbol": ...}` only (`:100`).
+  - `_identity_loop(overrides, author, ingest_responses)` is at `tests/test_fundsignal_loop.py:534-548`. It is built
+    on `RecordingStub` (`tests/conftest.py:90-117`), whose responses may be a value, an exception, or a function of
+    the request (`isinstance(resp, types.FunctionType)`, `:108`).
+  - `_rpc_error` is at `:528-531`, and `loop._db` comes from `_make_loop` (`:47-70`, `_db.*` mocks at `:58-60`).
+  - Existing `test_already_emitted_skips_fetch_and_emit` (`:99`) stubs `fetch` rows as `{"symbol": ...}` only
+    (`:102`).
+  - 246's `_emitted_inserts(loop)` (`:551`) reads `loop._db.fetchrow.await_args_list`, so it only works on the
+    `AsyncMock` `_db`. The `_EmittedTable` tests assert on `table.rows` instead.
 - Real Postgres:
-  - The session fixture `local_pg` (`tests/conftest.py:367-431`) yields a DSN. It skips locally and fails under
-    `CI=true`.
+  - The session fixture `local_pg` (`tests/conftest.py:375`) yields a DSN. It skips locally and fails under
+    `CI=true`. A local PostgreSQL 16 at `/usr/lib/postgresql/16` is found by its glob.
   - The marker is `real_pg` (`pyproject.toml:33`), and `asyncio_mode = "auto"` (`pyproject.toml:32`).
   - Pool precedent: `asyncpg.create_pool(dsn, min_size=size, max_size=size, statement_cache_size=0)`
     (`tests/test_read_budget_real_pg.py:25-28`), with `pytestmark = pytest.mark.real_pg` (`:20`). That file imports
     helpers from another test module (`from tests.test_analysis_servicer import ...`, `:18`).
   - Schema: `migrations/003_fundsignal_runs.up.sql` and `migrations/004_fundsignal_emitted.up.sql`, both
     `CREATE TABLE IF NOT EXISTS`. `fundsignal_emitted.run_id` REFERENCES `fundsignal_runs(run_id)`
-    (`004...up.sql:12`).
+    (`004...up.sql:13`).
   - **Not found:** no existing test applies migration SQL files, and no stateful fake of `fundsignal_emitted` exists
     (recon.md:226). Both are created here.
 
@@ -275,10 +285,11 @@ grep -n '"partial"' services/xstockstrat-analysis/app/engine/fundsignal_loop.py
    - Any other SQL (`analysis.fundsignal_runs`) is appended to `runs` and returns `"OK"`.
    - An optional `fail_delete=True` flag makes the per-symbol DELETE raise `RuntimeError`.
 2. Add `_fake_loop(scores, ingest)`. It calls `loop = _identity_loop(ingest_responses={"IngestSignal": ingest})`,
-   sets `loop._db = _EmittedTable()` (or a passed-in shared table) and `loop._score = AsyncMock(return_value=scores)`.
+   sets `loop._db = _EmittedTable()` (or a passed-in shared table) and
+   `loop._score = AsyncMock(return_value=(scores, []))`. The tuple is required by 246's `(scores, unscored)` return.
    `ingest` may be a function of the request that raises for some symbols and returns
    `SimpleNamespace(signal_id=..., deduplicated=...)` for others.
-3. Update `test_already_emitted_skips_fetch_and_emit` (`:100`) to stub rows as
+3. Update `test_already_emitted_skips_fetch_and_emit` (`:102`) to stub rows as
    `{"symbol": "AAPL", "score": 0.5}` / `{"symbol": "MSFT", "score": 0.5}`. Step 6 reads `r["score"]`.
 4. Add `class TestEmitAccounting` (feature 260). Every test asserts on `table.rows` and on the summary:
    - `test_ac1_failed_emit_is_retried_same_day`:
@@ -310,7 +321,7 @@ grep -n '"partial"' services/xstockstrat-analysis/app/engine/fundsignal_loop.py
      - RED today: the unscoped UPDATE writes 9.
    - `test_release_failure_is_swallowed_and_abort_still_reported`:
      - Use `_EmittedTable(fail_delete=True)` with NOT_FOUND.
-     - Assert `summary.status == "failed"` and exactly one ERROR alert (`_alert_severities`, `:555`).
+     - Assert `summary.status == "failed"` and exactly one ERROR alert (`_alert_severities`, `:557`).
    - `test_cancelled_emit_releases_claim`:
      - The ingest function raises `asyncio.CancelledError`.
      - Assert `pytest.raises(asyncio.CancelledError)` around `run_once`, and that the AAPL row is gone.
@@ -325,7 +336,8 @@ grep -n '"partial"' services/xstockstrat-analysis/app/engine/fundsignal_loop.py
      `migrations/004_fundsignal_emitted.up.sql`, read from `pathlib.Path(__file__).resolve().parents[1] / "migrations"`.
      It ends with `TRUNCATE analysis.fundsignal_emitted, analysis.fundsignal_runs`.
    - Import `_identity_loop` and `_rpc_error` from `tests.test_fundsignal_loop`. These are imported, not copied, so
-     no second inline copy exists (C-13). Set `loop._db = pool` and `loop._score = AsyncMock(...)`.
+     no second inline copy exists (C-13). Set `loop._db = pool` and
+     `loop._score = AsyncMock(return_value=(scores, []))` (tuple, per 246).
    - `test_failed_emit_releases_then_reclaims_and_confirms` (@AC-1): run 1 gets UNAVAILABLE. Assert
      `SELECT count(*) FROM analysis.fundsignal_emitted` is 0. Run 2 is healthy (`signal_id=777`). Assert the row's
      `signal_id == 777` and that `run_id` equals run 2's `summary.run_id`.
@@ -360,17 +372,19 @@ grep -n "from tests.test_fundsignal_loop import\|conftest" tests/test_fundsignal
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Claim INSERT (`:243-254`): **unchanged**. It is the in-flight fence against the lock-less manual
+- Claim INSERT (`:244-255`): **unchanged**. It is the in-flight fence against the lock-less manual
   `RunFundamentalsScan` (`app/handlers/servicer.py:3812`; the loop takes `self._lock` at `fundsignal_loop.py:139-145`).
-- `signal_id = await self._emit_signal(...)` is at `:257-259`, the unscoped UPDATE at `:260-268`, and the
-  unconditional `emitted += 1` at `:269`.
-- `except _SystemWriteRejected` → `_abort_cycle` is at `:270-278`.
+- `signal_id = await self._emit_signal(...)` is at `:258-260`, the unscoped UPDATE at `:261-269`, and the
+  unconditional `emitted += 1` at `:270` (re-spec 2026-10-29). This block runs after 246's unscored filtering
+  (`:226-227`); unscored symbols never reach it, so the two changes do not conflict.
+- `except _SystemWriteRejected` → `_abort_cycle` is at `:271-279`.
 - Release SQL precedent: the force DELETE `DELETE FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2`
   at `:211-215`, issued through `self._db.execute`.
 - Best-effort log-and-swallow precedent: `_emit_ledger` / `_emit_warning`, which catch `except Exception as e:  # noqa: BLE001`
-  (`:597-598`, `:627-628`).
-- The module docstring at `:8-9` says "ingest's ``IngestSignal`` does not dedup". This is stale: ingest dedups per
-  `(user_id, source, symbol, direction)` (`services/xstockstrat-ingest/app/handlers/servicer.py:1044`).
+  (`:625`, `:655`).
+- The module docstring at `:9` says "(ingest's ``IngestSignal`` does not dedup)". This is stale: ingest dedups per
+  `(user_id, source, symbol, direction)` inside one transaction (`services/xstockstrat-ingest/app/handlers/servicer.py:1017`,
+  `signal_dedup_claims` INSERT at `:1041`, conflict key at `:1045`).
 
 **TDD**: `red-green required`
 
@@ -390,7 +404,7 @@ grep -n "from tests.test_fundsignal_loop import\|conftest" tests/test_fundsignal
            log.warning("fundsignal: claim release failed for %s: %s", symbol, e)
    ```
    It catches `Exception` only, never `BaseException`, so `CancelledError` still propagates (PLAT-N1).
-2. Replace `:257-269` (from the `_emit_signal` call through `emitted += 1`) with:
+2. Replace `:258-270` (from the `_emit_signal` call through `emitted += 1`) with:
    ```python
    confirmed = False
    try:
@@ -411,9 +425,9 @@ grep -n "from tests.test_fundsignal_loop import\|conftest" tests/test_fundsignal
    - `confirmed`/`emitted` are set once the UPDATE has executed, whether or not it matched a row.
    - A `deduplicated=true` response that carries a `signal_id` counts (`fails.md:2627-2640`).
    - The success path adds no DB round-trip (C-18).
-3. The `except _SystemWriteRejected` block (`:270-278`) is unchanged apart from Step 2's `deferred_count`.
+3. The `except _SystemWriteRejected` block (`:271-279`) is unchanged apart from Step 2's `deferred_count`.
    `_SystemWriteRejected` still propagates out of the `finally` into it, so earlier confirmed rows stay (@AC-5).
-4. Correct the stale docstring clause at `:8-9`. Say that the `analysis.fundsignal_emitted` claim guards re-emits:
+4. Correct the stale docstring clause on line `:9`. Say that the `analysis.fundsignal_emitted` claim guards re-emits:
    a NULL `signal_id` marks an in-flight claim that is released when the emit fails. Drop the "does not dedup"
    claim. No new inline comment is needed beyond the helper's `noqa` justification.
 
@@ -438,21 +452,28 @@ grep -n "signal_id IS NULL" services/xstockstrat-analysis/app/engine/fundsignal_
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_map_directions(scores, buy_quantile, sell_quantile)` is at `fundsignal_loop.py:469-485`. Its cuts come from
-  `sorted(scores.values())`. `_quantile` is at `:631-640`: with a single value, `buy_cut == sell_cut`, so
-  `s >= buy_cut` → `"buy"` (`:479`).
-- The `run_once` call `directions = self._map_directions(scores, buy_q, sell_q)` is at `:230`. The quantile defaults
-  are `0.80`/`0.20` (`:227-228`).
-- `_emit_signal`: `now = datetime.now(UTC)` and `valid_until.FromDatetime(now + timedelta(days=valid_days))`
-  (`:521-525`). `valid_days` defaults to 90 (`:232`).
+- `_map_directions(scores, buy_quantile, sell_quantile)` is at `fundsignal_loop.py:498-513` (re-spec 2026-10-29).
+  Its cuts come from `sorted(scores.values())`. `_quantile` is at `:659-668`: with a single value,
+  `buy_cut == sell_cut`, so `s >= buy_cut` → `"buy"` (`:507`).
+- The `run_once` call `directions = self._map_directions(scores, buy_q, sell_q)` is at `:231`. The quantile defaults
+  are `0.80`/`0.20` (`:228-229`).
+- `_emit_signal` is at `:548`: `now = datetime.now(UTC)` (`:549`) and
+  `valid_until.FromDatetime(now + timedelta(days=valid_days))` (`:553`). `valid_days` defaults to 90 (`:233`).
+- **Feature 246 (merged):** `_score` returns `(scores, unscored)` (`:422-437`, unpacked at `:226`), so the
+  `_fake_loop` `_score` mock returns `(scores, [])`, never a bare dict.
+- 246's `TestUnscoredSymbols.test_ac1_dataless_symbols_not_scored_ranked_or_emitted` wraps `_map_directions` in a spy
+  and unpacks `(scores, *_), _kw = spy.call_args` (`tests/test_fundsignal_loop.py:770-779`). It stays compatible with
+  an added `reference_scores=` keyword.
 - `as_of_date = datetime.now(UTC).date()` (`:172`). The module imports `from datetime import UTC, datetime, timedelta`
   (`:19`). Existing tests monkeypatch module attributes, e.g. `monkeypatch.setattr(fundsignal_module.random, "uniform", ...)`
-  (`tests/test_fundsignal_loop.py:493`).
-- `TestScoreDirection.test_quantile_buckets` (`:180-186`) calls `_map_directions` positionally. It must stay green.
+  (`tests/test_fundsignal_loop.py:495`).
+- `TestScoreDirection.test_quantile_buckets` (`:181-186`) calls `_map_directions` with keyword args
+  (`buy_quantile=0.80, sell_quantile=0.20`, `:185`). It stays compatible with the added `reference_scores=()` default
+  and must stay green.
 - Recorded requests: `loop._ingest.of("IngestSignal")` returns `(name, request, metadata)` tuples
-  (`tests/conftest.py:108-110`). The request's `signal.valid_until` is a protobuf `Timestamp`.
+  (`tests/conftest.py:116-117`). The request's `signal.valid_until` is a protobuf `Timestamp`.
 - Contract doc: `analysis.fundsignal.valid_days` reads "`valid_until` = run date + this"
-  (`services/xstockstrat-analysis/CLAUDE.md:512`).
+  (`services/xstockstrat-analysis/CLAUDE.md:513`).
 
 **TDD**: `red-green required`
 
@@ -462,7 +483,7 @@ grep -n "signal_id IS NULL" services/xstockstrat-analysis/app/engine/fundsignal_
 1. Add an inline fixed clock for this class (single consumer, C-13). `class _FixedClock(datetime)` gets
    `@classmethod now(cls, tz=None)` returning `datetime(2026, 10, 21, 15, 30, tzinfo=UTC)`. Each test applies it
    with `monkeypatch.setattr(fundsignal_module, "datetime", _FixedClock)`. Reuse Step 3's `_EmittedTable` and
-   `_fake_loop`.
+   `_fake_loop` (whose `_score` mock returns `(scores, [])`, per 246).
 2. Add `class TestRetryStability` (feature 260):
    - `test_ac8_lost_response_retry_resends_identical_signal`:
      - Run 1 uses `{"AAPL": 0.85, "MSFT": 0.90}`. Ingest raises UNAVAILABLE for AAPL and returns `signal_id=11` for
@@ -475,7 +496,7 @@ grep -n "signal_id IS NULL" services/xstockstrat-analysis/app/engine/fundsignal_
      - RED today: `valid_until` is `2027-01-19T15:30Z`, and run 1 vs run 2 direction can differ.
    - `test_ac9_one_symbol_retry_keeps_day_wide_direction`:
      - Pre-seed confirmed rows `MSFT 0.90`, `NVDA 0.70` and `GOOG 0.50` for today.
-     - The scores mock returns `{"AAPL": 0.10}`. Use override universe `["AAPL", "GOOG", "MSFT", "NVDA"]` and the
+     - The scores mock returns `({"AAPL": 0.10}, [])`. Use override universe `["AAPL", "GOOG", "MSFT", "NVDA"]` and the
        default quantiles.
      - Assert exactly one `IngestSignal`, for AAPL, with `direction == "sell"`.
      - RED today: `"buy"`.
@@ -511,14 +532,17 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_already_emitted` (`:373-379`) runs `SELECT symbol FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2`
-  and returns a set. Its only caller is `:218-219`.
+- `_already_emitted` (`:386-392`, re-spec 2026-10-29) runs
+  `SELECT symbol FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2` and returns a set. Its only caller
+  is `:218-219`.
 - The skip predicate is `to_process = [s for s in universe if s not in already]` (`:219`). It stays **unchanged**:
   every existing row, NULL or confirmed, is still skipped. Design rejected narrowing it to
   `signal_id IS NOT NULL`, and that must not be re-introduced.
 - `004_fundsignal_emitted.up.sql:11`: `score numeric`, which is nullable. asyncpg returns `numeric` as `Decimal`.
-- `_map_directions` is at `:469-485` and its call at `:230`. `_emit_signal(self, source, symbol, direction, conviction, valid_days, metadata)`
-  is at `:520`, with the `valid_until` computation at `:524-525` and its only call at `:257-259`.
+- `_map_directions` is at `:498-513` and its call at `:231`. `_emit_signal(self, source, symbol, direction, conviction, valid_days, metadata)`
+  is at `:548`, with `now` at `:549`, the `valid_until` computation at `:552-553` and its only call at `:258-260`.
+- After 246, unscored symbols write no `fundsignal_emitted` row and are absent from `scores`, so `reference_scores`
+  comes only from claimed rows. This matches the design.
 - `as_of_date` is at `:172`, and `force` is a `run_once` parameter (`:169`).
 - Under Step 5's `monkeypatch.setattr(fundsignal_module, "datetime", _FixedClock)`, `datetime.combine(...)` resolves
   to the inherited classmethod and returns a tz-aware `_FixedClock` instance (checked on Python 3:
@@ -538,8 +562,8 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
    - The membership test at `:219` works unchanged on the dict.
 3. **`run_once`.**
    - Initialise `prior = {}` before the `if force:` branch (`:210`), and rename `already` to `prior` in the else
-     branch.
-   - Change `:230` to:
+     branch (`:218-219`).
+   - Change `:231` to:
      ```python
      directions = self._map_directions(
          scores, buy_q, sell_q, reference_scores=[v for v in prior.values() if v is not None]
@@ -652,22 +676,26 @@ grep -rn '"budget_deferred" | "partial" | "failed"' packages/proto/gen | wc -l  
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
 - `docs/runbooks/mcp-tools.md` — modify
-- `docs/roadmap/features/merge-order.md` — modify
+- `docs/roadmap/features/merge-order.md` — verify only (row already present at `:81`; edit only if it is missing)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
 - `services/xstockstrat-analysis/CLAUDE.md:122`, **Cache-only FMP discipline**: "when the budget is exhausted the run
   is marked `budget_deferred`".
-- `services/xstockstrat-analysis/CLAUDE.md:123`, **Idempotency**: "ingest's `IngestSignal` does **not** dedup, so
-  analysis owns the guard … `force=true` re-emits by clearing the day's rows first". The "does not dedup" claim is
-  stale (ingest `servicer.py:1039-1066`).
-- `services/xstockstrat-analysis/CLAUDE.md:512`, `valid_days`: "`valid_until` = run date + this". This is already
+- `services/xstockstrat-analysis/CLAUDE.md:123`, **Idempotency** (re-spec 2026-10-29; rewritten by the 246 merge):
+  "analysis owns the producer's day guard in `analysis.fundsignal_emitted` (PK `(symbol, source, as_of_date)`), and
+  ingest also dedups per owner (`ingest.signal_dedup_claims`, …). A same-day re-run emits nothing new for
+  already-emitted symbols, but re-fetches unscored symbols (they write no row), bounded by
+  `analysis.fundsignal.daily_call_budget`; `force=true` re-emits by clearing the day's rows first." The stale
+  "does **not** dedup" text is already gone, so the bullet is extended, not corrected.
+- `services/xstockstrat-analysis/CLAUDE.md:513`, `valid_days`: "`valid_until` = run date + this". This is already
   correct for non-force runs after Step 6.
-- `docs/runbooks/mcp-tools.md:845`: `` `status` is `"completed"` | `"budget_deferred"` | `"failed"`. ``
-- `docs/roadmap/features/merge-order.md` § Blocking Dependencies. Soft-overlap precedent row: `shadcn-migration-medium-confidence` (`:55`,
-  "soft/rebase (not blocking)").
-- Pass-through consumer sites (C-14): `services/xstockstrat-agent/app/client.py:1724` (`"status": resp.status`) and
+- `docs/runbooks/mcp-tools.md:846`: `` `status` is `"completed"` | `"budget_deferred"` | `"failed"`. ``
+- `docs/roadmap/features/merge-order.md:81` already holds the 260-vs-246 row: "Same file and test helpers
+  (`analysis/app/engine/fundsignal_loop.py`, `tests/test_fundsignal_loop.py`). 246 lands first; 260 rebases". 246 is
+  merged to `main-dev` and this branch has merged `main-dev`, so the soft dependency is satisfied.
+- Pass-through consumer sites (C-14): `services/xstockstrat-agent/app/client.py:1729` (`"status": resp.status`) and
   `services/xstockstrat-ui/src/app/config-ui/fundamentals-scan/page.tsx:101`.
 
 **TDD**: `N/A (docs)`
@@ -677,9 +705,11 @@ grep -rn '"budget_deferred" | "partial" | "failed"' packages/proto/gen | wc -l  
 **Instructions**:
 1. **Analysis `CLAUDE.md` `:122`.** Add: a `GetFundamentalsMulti` chunk that raises counts its symbols in
    `deferred_count` and ends the run `partial`. `partial` wins over `budget_deferred`, and one warning names both.
-2. **Analysis `CLAUDE.md` `:123`.** Rewrite the bullet:
-   - Ingest dedups per `(user_id, source, symbol, direction)` only while conviction and `valid_until` are unchanged
-     inside `ingest.signals.dedup_window_hours`. Analysis keeps the day guard in `analysis.fundsignal_emitted`.
+2. **Analysis `CLAUDE.md` `:123`.** Extend the bullet in place, merging with 246's text. Keep its existing
+   statements, including the unscored-symbol clause ("re-fetches unscored symbols (they write no row)") and the
+   `force=true` clause, and add:
+   - Ingest's per-owner dedup applies per `(user_id, source, symbol, direction)` only while conviction and
+     `valid_until` are unchanged inside `ingest.signals.dedup_window_hours`.
    - A NULL `signal_id` is an in-flight claim. A failed, aborted or cancelled emit releases it (run_id-scoped
      DELETE), so the symbol retries the same day. Only accepted signals count in `signals_emitted`.
    - Non-force `valid_until` = `as_of_date` 00:00 UTC + `valid_days`, so a lost-response retry dedups at ingest.
@@ -689,11 +719,12 @@ grep -rn '"budget_deferred" | "partial" | "failed"' packages/proto/gen | wc -l  
      same NULL row with the same recovery.
    - Direction cuts include the day's stored scores. This also applies to a `budget_deferred` resume and to a
      non-force `override_symbols` scan.
-3. **`docs/runbooks/mcp-tools.md:845`.** Change it to `` `status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. ``
+3. **`docs/runbooks/mcp-tools.md:846`.** Change it to `` `status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. ``
    and add one sentence: `partial` = a fetch chunk failed and its symbols are in `deferred_count`.
-4. **`merge-order.md`.** Confirm this row is present (`/sdd-execute` lands it before Step 1; append it now if
-   it is missing):
-   `` | `fix-fundsignal-emit-accounting` (260) | `fix-fundsignal-neutral-score` (246) | Soft/rebase (not blocking): both edit `run_once`'s claim/skip/emit lines and the `_fund`/`_emitted_inserts` test helpers in `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` / `tests/test_fundsignal_loop.py`; 246 merges first, 260 rebases | No | ``.
+4. **`merge-order.md`.** Confirm the existing 260-vs-246 row at `:81` is present. Leave it unchanged: its wording
+   differs from the original spec text, but it records the same soft dependency, which is now satisfied (246 is merged).
+   Append the row only if it is missing:
+   `` | `fix-fundsignal-emit-accounting` (260) | `fix-fundsignal-neutral-score` (246) | Same file and test helpers (`analysis/app/engine/fundsignal_loop.py`, `tests/test_fundsignal_loop.py`). 246 lands first; 260 rebases | No | ``.
 5. **Teardown (root `CLAUDE.md` § Teardown).** Run `/context-forge:context-constitution refresh` scoped to
    `services/xstockstrat-analysis/` and `docs/runbooks/mcp-tools.md`, and fix any grounded drift it reports. If the
    plugin is unavailable, re-read both touched docs against the code by hand. Record in the PR body both that the
@@ -702,7 +733,9 @@ grep -rn '"budget_deferred" | "partial" | "failed"' packages/proto/gen | wc -l  
 **Verification**:
 ```bash
 grep -n "partial" services/xstockstrat-analysis/CLAUDE.md docs/runbooks/mcp-tools.md
-grep -n "does \*\*not\*\* dedup" services/xstockstrat-analysis/CLAUDE.md   # expect no match
+grep -n "does \*\*not\*\* dedup" services/xstockstrat-analysis/CLAUDE.md   # expect no match (already true after the 246 merge)
+grep -n "unscored symbols" services/xstockstrat-analysis/CLAUDE.md   # 246's clause kept
+grep -n "signal_id IS NULL\|run_id-scoped\|00:00 UTC" services/xstockstrat-analysis/CLAUDE.md   # 260's additions present
 grep -n "fix-fundsignal-emit-accounting" docs/roadmap/features/merge-order.md
 grep -n '"status": resp.status' services/xstockstrat-agent/app/client.py && grep -n "summary.status" services/xstockstrat-ui/src/app/config-ui/fundamentals-scan/page.tsx   # C-14 pass-through intact
 ```
