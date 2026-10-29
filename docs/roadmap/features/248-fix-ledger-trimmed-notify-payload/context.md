@@ -498,3 +498,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`, `services/xstockstrat-ledger/src/index.ts`
 - Deviations: probe-based RED, interim red legacy cases, and the `pool` grep note (Deviation Log 2026-10-29).
 
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec §5.3 after Step 5
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  'Start executing features 241-276' via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge). Per-feature blocker
+  decisions were given by the operator through the session's question tool on 2026-10-29. Checkpoints: 'report'.
+  C-16 promotion is auto-confirmed unless it changes an existing @AC rule. Up-front confirmation recorded; status
+  stays `in-progress` (no transition).
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`e36265af`), normal
+  `git merge --no-edit origin/main-dev` → `bf0cedc2`, no conflicts; `ledger-guard.py --fix` reported clean.
+- Re-spec (implementation-spec.md Deviation Log 2026-10-29 "after Step 5 + main-dev merge-up"):
+  - Step 6: `makeStreamCall(req, userId?)` takes userId positionally and the 7 `exportEvents` sites pass `'u_42'`
+    positionally. Decision: `makeRecordingCall(req, opts?: string | { userId?, writeReturns? })` normalises a string
+    to `{ userId }`, so the plain alias keeps "no line other than the import" true. Rejected: editing the 7 call
+    sites (widens the diff) or a local wrapper (a second double, against C-13). Anchors refreshed.
+  - Step 7: flush site `:265`, `cleaned` guards `:251`/`:260`, `rowToEvent` `sequence` `:384`.
+  - Step 9: `ci.yml` anchors refreshed; `ledger-db-test` goes after the new `migration-contract-gate` job.
+  - Step 11: `config-governance.md` anchors `:109`/`:113`.
+- Next: Step 6.
+
