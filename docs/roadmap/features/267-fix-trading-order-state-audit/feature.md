@@ -19,6 +19,7 @@
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1, 3, 4, 5, 6, 7 re-verified against main-dev; line-drift citations corrected in Steps 1/3/5 (no blocking mismatch) |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f); executing Steps 1–7 sequentially |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Merged origin/main-dev; Steps 5 and 7 re-spec'd to current line numbers (Step 5 `Background()` count 36→34 after Step 2; post-2173 sites shifted -1 by the main-dev merge; Step 7 `emitLedgerEvent` NewStruct at `trading.go:3671`). No blocking mismatch |
 
 ---
 
