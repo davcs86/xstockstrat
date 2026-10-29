@@ -676,3 +676,19 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   `services/xstockstrat-analysis/app/handlers/servicer.py`
 - Deviations: none (process note in the Deviation Log)
 
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec
+
+- Branch setup: merged `origin/main-dev` into the feature branch (`-X ours`, merge commit `d63bac2b`).
+- Status was already `in-progress` (flipped 2026-10-28); no status change.
+- Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended checkpoints
+  (`report`), C-16 promotion auto-confirmed unless it changes an existing @AC rule, merge-train authorized, 255/275
+  deferred; operator-only DB/prod steps: open PR, hold merge; blocker decisions 2026-10-29 recorded per feature.
+- Re-spec (anchors only, no scope change):
+  - Step 4: `fundsignal_loop.py` anchors +1 after Step 3 (`_tick` :129, `_advance_schedule(retry)` raise :156,
+    `run_forever` :159); `:165` is now `run_supervised(self._tick, "fundsignal")`, so the RED notes for @AC-1/@AC-2
+    now say to confirm red against a scratch revert of `:165` (not committed). Test-file anchors unchanged.
+  - Step 6: `tests/test_config_watcher.py` tests span `:14-38` (import at `:11`).
+  - Step 15: analysis `CLAUDE.md` § P&L pattern consumer spans `:143-177` (next `###` at `:179`);
+    `config-startup.md:149` reads "on stream error".
