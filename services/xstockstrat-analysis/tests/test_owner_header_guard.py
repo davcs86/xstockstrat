@@ -19,12 +19,12 @@ from gen.analysis.v1 import analysis_pb2
 from app import main as app_main
 from app.engine import entry_backfill
 from app.engine.fundsignal_loop import FundamentalsSignalLoop
-from app.engine.live_loop import LiveEvaluationLoop, resolve_fundamentals_universe
+from app.engine.live_loop import resolve_fundamentals_universe
 from app.engine.pnl_pattern_consumer import SnapshotComposer
 from app.handlers import servicer as servicer_mod
 from app.handlers.servicer import _row_to_strategy_definition
 from app.services.evaluator import StrategyEvaluator
-from tests.conftest import RecordingStub, ctx_with, fundamentals_row
+from tests.conftest import RecordingStub, ctx_with, fundamentals_row, real_live_loop
 from tests.test_analysis_servicer import make_servicer
 from tests.test_get_attribution import _FakePositionsRepo, _FakeSnapshotsRepo, _sig
 from tests.test_pnl_pattern_consumer import ORDER_PAYLOAD, make_consumer, make_event
@@ -137,20 +137,8 @@ def _marketdata():
 
 
 def _live_loop(ingest, indicators, rows):
-    db = MagicMock()
-    db.fetch = AsyncMock(return_value=rows)
-    portfolio = MagicMock()
-    portfolio.ListPositions = AsyncMock(return_value=SimpleNamespace(positions=[], page=_EOF))
-    portfolio.ListWatchlists = AsyncMock(return_value=SimpleNamespace(watchlists=[], page=_EOF))
-    return LiveEvaluationLoop(
-        config_watcher=_cfg(),
-        db_pool=db,
-        marketdata_stub=_marketdata(),
-        ingest_stub=ingest,
-        notify_stub=AsyncMock(),
-        ledger_stub=AsyncMock(),
-        evaluator=StrategyEvaluator(indicators, ()),
-        portfolio_stub=portfolio,
+    return real_live_loop(
+        ingest, indicators, rows, config_watcher=_cfg(), marketdata_stub=_marketdata()
     )
 
 

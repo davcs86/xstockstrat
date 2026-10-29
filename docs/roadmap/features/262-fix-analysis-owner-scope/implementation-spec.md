@@ -388,7 +388,7 @@ Behavioural verification is Step 5.
 
 ### Step 5 — test: `@AC-3`/`@AC-4`/`@AC-5`/`@AC-8`/`@AC-9` failure isolation (real loop for `@AC-3`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify
@@ -703,3 +703,6 @@ _Populated by /sdd-execute as implementation proceeds._
   line names ("the unfiltered fake returns u-b's fill"). The committed fake also returns every
   order when `req.user_id` is empty, mirroring `trading_repo.go:229-231`; it then fails RED and
   passes GREEN. No scope change.
+- **Step 5 (2026-10-29), WARNING-text assertion for the malformed row.** Instruction 4 asks for a
+  WARNING that names `"bad"`. A bare `"bad"` substring can also match the hex `pass_trace_id` every
+  warning carries, so the test asserts `"strategy bad (owner u-a)"`. Same intent, never vacuous.

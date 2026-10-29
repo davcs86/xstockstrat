@@ -587,3 +587,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - No deviations. The pre-commit hook is inert in this worktree (`core.hooksPath` points at
     `/home/user/xstockstrat/.husky/_`, which does not exist, and the main worktree has no
     `node_modules` to link); nothing was bypassed with `--no-verify`.
+- Step 5 done (test: `tests/conftest.py`, `tests/test_owner_header_guard.py`,
+  `tests/test_entry_backfill.py`). `_live_loop` now lives in conftest as
+  `real_live_loop(ingest, indicators, rows, *, config_watcher, marketdata_stub)`, with the page built
+  inline. `test_owner_header_guard._live_loop` delegates to it, and its now-unused
+  `LiveEvaluationLoop` import was dropped. The conftest fallback was not needed. Added 8 tests in
+  `TestRunOnceFailureIsolation`: `@AC-3` (real loop, `system` row), `@AC-8`, the malformed row,
+  the owner-signal fallback, `@AC-4`, `@AC-5`, `@AC-9` and the gather logging.
+  - TDD: run against the pre-Step-4 `entry_backfill.py` from `7c44df04`. RED, 8 failed:
+    - `@AC-3`: `ValueError: owner-scoped call needs a real owner, got 'system'`.
+    - `@AC-8`: `RuntimeError: portfolio rpc`.
+    - Malformed row: `KeyError: 'display_name'`.
+    - Owner-signal fallback: `RuntimeError: ingest owner`.
+    - `@AC-4`: `db down`.
+    - `@AC-5`: `ingest down`.
+    - `@AC-9` and gather logging: their WARNING assertions failed.
+
+    GREEN: 46 passed.
+  - Verification:
+    - The two files: 46 passed. The full suite: 1454 passed, coverage 89.83% (≥40).
+    - `LiveEvaluationLoop(` count in the guard file is 0.
+    - `ruff check .` and `ruff format --check .` are clean.
+    - The 193 PRESERVE guard `test_blend_backfill_restricted_to_fundamentals_universe` is
+      unchanged and green.
+  - Deviation: the malformed-row WARNING assertion is narrowed so it is never vacuous (Deviation Log).
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.
+

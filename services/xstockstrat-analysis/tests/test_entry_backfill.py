@@ -7,6 +7,7 @@ after a round trip, multi-crossing re-arming, zero-fill skip, unfiltered-status 
 without a trading stub).
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -14,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 from gen.trading.v1 import trading_pb2
 
 from app.engine.entry_backfill import _infer_open_entry_time, run_once
+from tests.conftest import RecordingStub, real_live_loop
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -285,3 +287,166 @@ class TestRunOnce:
         assert ("u1", "fundamentals_macd_blend", "AAPL") in live_loop._last_entry_at
         for off in ("NVDA", "COIN"):
             assert ("u1", "fundamentals_macd_blend", off) not in live_loop._last_entry_at
+
+
+def _blend_cfg():
+    cfg = _cfg()
+    cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+    cfg.get_bool = MagicMock(side_effect=lambda key, default=False: default)
+    return cfg
+
+
+def _buy_stub(when=_T0):
+    trading_stub = AsyncMock()
+    trading_stub.ListOrders = AsyncMock(
+        return_value=SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 5.0, when)])
+    )
+    return trading_stub
+
+
+def _warnings(caplog):
+    return [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+
+
+class TestRunOnceFailureIsolation:
+    async def test_system_owner_does_not_stop_other_owners(self, caplog):
+        """@AC-3: the real owner_metadata ValueError for a `system` row skips only that owner."""
+        filled_at = datetime(2026, 10, 1, 14, 30, tzinfo=UTC)
+        ingest = RecordingStub(
+            {"QuerySignals": SimpleNamespace(signals=[], page=SimpleNamespace(next_page_token=""))}
+        )
+        loop = real_live_loop(
+            ingest, RecordingStub(), [], config_watcher=_cfg(), marketdata_stub=MagicMock()
+        )
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(
+            return_value=[
+                _strategy_row("s-sys", ("AAPL",), user_id="system"),
+                _strategy_row("s-2", ("MSFT",), user_id="u-a"),
+            ]
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(loop, db_pool, _buy_stub(filled_at), _cfg())
+
+        assert loop._last_entry_at[("u-a", "s-2", "MSFT")] == filled_at
+        assert any("s-sys" in m and "system" in m for m in _warnings(caplog))
+
+    async def test_non_value_error_drain_failure_isolated_per_owner(self, caplog):
+        """@AC-8: a non-ValueError drain failure for one owner never stops another owner."""
+        live_loop = _fake_live_loop()
+
+        async def _held(owner):
+            if owner == "u-b":
+                raise RuntimeError("portfolio rpc")
+            return set()
+
+        live_loop._drain_held = AsyncMock(side_effect=_held)
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(
+            return_value=[
+                _strategy_row("s-3", ("AAPL",), user_id="u-b"),
+                _strategy_row("s-2", ("MSFT",), user_id="u-a"),
+            ]
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(live_loop, db_pool, _buy_stub(), _cfg())
+
+        assert live_loop._last_entry_at[("u-a", "s-2", "MSFT")] == _T0
+        assert any("s-3" in m and "u-b" in m for m in _warnings(caplog))
+
+    async def test_malformed_row_skips_only_that_row(self, caplog):
+        live_loop = _fake_live_loop()
+        bad = _strategy_row("bad", ("AAPL",), user_id="u-a")
+        del bad["display_name"]
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(
+            return_value=[bad, _strategy_row("s-2", ("MSFT",), user_id="u-a")]
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(live_loop, db_pool, _buy_stub(), _cfg())
+
+        assert live_loop._last_entry_at[("u-a", "s-2", "MSFT")] == _T0
+        assert any("strategy bad (owner u-a)" in m for m in _warnings(caplog))
+
+    async def test_owner_signal_drain_failure_falls_back_to_system_signals(self, caplog):
+        live_loop = _fake_live_loop(signals=["MSFT"])
+        live_loop._drain_owner_signals = AsyncMock(side_effect=RuntimeError("ingest owner"))
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(
+            return_value=[_strategy_row("s-sig", symbols=None, user_id="u-a", signal_eligible=True)]
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(live_loop, db_pool, _buy_stub(), _cfg())
+
+        assert live_loop._last_entry_at[("u-a", "s-sig", "MSFT")] == _T0
+        assert any("owner-signal drain failed" in m for m in _warnings(caplog))
+
+    async def test_failed_live_strategies_read_ends_quietly(self, caplog):
+        """@AC-4"""
+        live_loop = _fake_live_loop()
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(side_effect=RuntimeError("db down"))
+        trading_stub = _buy_stub()
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(live_loop, db_pool, trading_stub, _cfg())
+
+        assert any("live-strategies read failed" in m for m in _warnings(caplog))
+        trading_stub.ListOrders.assert_not_awaited()
+
+    async def test_failed_system_signal_drain_does_not_stop_pass(self, caplog):
+        """@AC-5"""
+        live_loop = _fake_live_loop()
+        live_loop._drain_system_signals = AsyncMock(side_effect=RuntimeError("ingest down"))
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(return_value=[_strategy_row("s-2", ("MSFT",), user_id="u-a")])
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(live_loop, db_pool, _buy_stub(), _cfg())
+
+        assert live_loop._last_entry_at[("u-a", "s-2", "MSFT")] == _T0
+        assert any("system-signal drain failed" in m for m in _warnings(caplog))
+
+    async def test_failed_blend_universe_resolve_skips_only_blend_pairs(self, caplog):
+        """@AC-9"""
+        live_loop = _fake_live_loop()
+        live_loop._resolve_fundamentals_universe = AsyncMock(side_effect=RuntimeError("md down"))
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(
+            return_value=[
+                _strategy_row(
+                    "fundamentals_macd_blend", symbols=None, signal_eligible=True, user_id="u-a"
+                ),
+                _strategy_row("s-2", ("MSFT",), user_id="u-a"),
+            ]
+        )
+        seen: list[tuple[str, str]] = []
+
+        async def _list_orders(req, metadata=None):
+            seen.append((req.strategy_id, req.symbol))
+            return SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
+
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(side_effect=_list_orders)
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(live_loop, db_pool, trading_stub, _blend_cfg())
+
+        assert live_loop._last_entry_at[("u-a", "s-2", "MSFT")] == _T0
+        assert not any(sid == "fundamentals_macd_blend" for sid, _ in seen)
+        assert any("fundamentals-universe resolve failed" in m for m in _warnings(caplog))
+
+    async def test_pair_task_exception_is_logged(self, caplog):
+        live_loop = _fake_live_loop()
+        live_loop._write_entry_cooldown = AsyncMock(side_effect=RuntimeError("cooldown"))
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(return_value=[_strategy_row("s-2", ("MSFT",), user_id="u-a")])
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.entry_backfill"):
+            await run_once(live_loop, db_pool, _buy_stub(), _cfg())
+
+        assert any("pair task failed" in m for m in _warnings(caplog))
