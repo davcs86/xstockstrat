@@ -794,3 +794,22 @@ _Populated by /sdd-execute as implementation proceeds._
   skill is not available in this session, so the teardown was done by hand (context.md, Step 9).
 - **Disposition**: docs-only; no behavior change. The integration PR body must state that the plugin was
   unavailable and list the manual reconciliation (context.md, Step 9).
+
+### 2026-10-29 — Step 10 deferred to operator — integration PR merge held until the two-sided gate passes and the post-deploy `ListKeys` smoke is clean
+- **Spec said**: run the item-1 gate immediately before merge, then after the dev deploy list `portfolio` keys in
+  `staging` and `production` and confirm `portfolio.snapshot.interval_minutes` is absent.
+- **Done (2026-10-29, this session)**: gate run against `origin/main-dev`. Its highest config migration is `030`, and
+  the `/0(3[4-9]|[4-9][0-9])_` grep returns nothing (exit 1), so (a) passes. (b) fails today: `031`/`032`/`033` exist only on
+  `origin/feature/fix-sandbox-seed-keys`, `fix-python-config-stored-zero` and `fix-ledger-trimmed-notify-payload`,
+  and merge-order.md:77 sequences 264 after all three (`Resolved: No`). The dev smoke needs a deployed build, which this session cannot do.
+- **Integration PR merge held until** (open it as a draft with an (a)/(b) checklist):
+  1. 243, 244 and 248 have merged into `main-dev`; then `git fetch origin` and
+     `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | grep -oE '/[0-9]{3}_' | tr -d '/_' | sort -u`
+     shows `031`, `032`, `033` and nothing ≥ `034` (else renumber 034 → next free and log a deviation here).
+  2. After the dev deploy has run `scripts/db-migrate.sh`, the `list_config_keys(namespace="portfolio")` agent tool
+     returns no `portfolio.snapshot.interval_minutes`. Run it against both the staging and the production agent
+     deployments, because the tool's environment is fixed to its own deployment and has no `service`/`environment`
+     argument. Config `ListKeys` with `environment` set to `staging` and then `production` works too.
+  3. Record both outputs in context.md and the PR body; mark the PR ready; flip merge-order.md:77 to `Resolved: Yes`.
+- **Also**: the spec's smoke line `list_config_keys(service=…, environment=…)` does not match the real tool
+  signature `list_config_keys(namespace, user_id="")` (`services/xstockstrat-agent/app/tools.py:1620`). Item 2 uses the real one.
