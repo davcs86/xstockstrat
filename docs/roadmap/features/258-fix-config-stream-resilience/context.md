@@ -508,3 +508,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `process.stdout.write` mock (about `:358-360`), not a shared helper.
   - Step 9: CONFIG-1 hints now `reloadNamespace` `:288` / `changedKeys` `:305` (pre-Step-5).
 - Next: Step 4.
+
+### Step 1 — re-run after the respec (2026-10-29) [blocked — operator-only]
+- The code is unchanged since `907fa340`. Verification was re-run on the post-merge tree: build exit 0; lint 0 errors
+  (174 warnings); `test:coverage` 191/191 pass; one `pool.connect()` (`:188`); both backoff constants (`:156-157`).
+- The only open item is still the operator-only pg_terminate_backend check. The existing Deviation Log entry
+  ("Step 1 deferred to operator") stands, so no new spec entry was added. Step **Status** stays `pending`.
