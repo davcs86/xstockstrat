@@ -581,3 +581,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "deletion". That field was added on trunk by 263 (#1350) after the branch point, so it is branch staleness, not
   this feature. Merge `main-dev` into the branch before the integration PR. This is in the Deviation Log.
 - Next: Step 8 (proto-gen: regenerate stubs).
+
+### Step 8 — proto-gen: regenerate stubs — done (2026-10-29)
+
+- Files: `packages/proto/gen/go/analysis/v1/analysis.pb.go`, `packages/proto/gen/ts/analysis/v1/analysis.ts`,
+  `packages/proto/gen/ts/analysis/v1/analysis_pb.ts`, `packages/proto/gen/ts/dist/analysis/v1/analysis.d.ts` and
+  `packages/proto/gen/ts/dist/analysis/v1/analysis_pb.d.ts`. In each, only the status comment line changed.
+- TDD: N/A (generated code). Baseline grep count 0; after `./scripts/buf-gen.sh` it is 5.
+- Toolchain: workspace deps were installed with `pnpm install --frozen-lockfile --ignore-scripts` (root + `@xstockstrat/proto`).
+  The Go proto plugins were rebuilt at the CI pins with `GOTOOLCHAIN=go1.27.0`. The host's plugin binaries were built
+  with go1.24.7 and rewrapped an unrelated `analysis.pb.go` doc comment, so that output was discarded. This is in the
+  Deviation Log.
+- Next: Step 9 (docs: analysis CLAUDE.md, MCP runbook, merge order, teardown audit).
+

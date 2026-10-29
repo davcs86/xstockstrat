@@ -27,6 +27,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 5 done: RED tests for @AC-8/9 and the `reference_scores` cuts, plus the @AC-10 force PRESERVE pin (`TestRetryStability`, `_FixedClock`) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 6 done: direction cuts include the day's stored scores (`_already_emitted` returns `symbol → score`, `_map_directions(reference_scores=…)`), and `valid_until` is anchored to the run date at midnight UTC except under `force`, which stays now-anchored |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 7 done: the `FundamentalsScanSummary.status` comment lists `"partial"` (comment only, no wire change; `buf lint`/`buf breaking` clean) |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 8 done: stubs regenerated with `./scripts/buf-gen.sh`; the Go and TS stubs plus the compiled `.d.ts` files carry the `"partial"` status comment (5 files, comment lines only) |
 
 ---
 

@@ -633,7 +633,7 @@ git fetch origin main-dev && cd packages/proto && buf lint && buf breaking . --a
 
 ### Step 8 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/analysis.pb.go` — modify (generated)
@@ -809,3 +809,11 @@ _Populated by /sdd-execute as implementation proceeds._
   merge base, `buf breaking` passes with exit 0. (c) On `main-dev`'s tree with only this step's `analysis.proto`
   applied, lint and `buf breaking` against `main-dev` both pass with exit 0. **Disposition**: merge `origin/main-dev`
   into the feature branch before the integration PR (§5.3/§5.6). CI's `proto-lint` job compares the PR merge result.
+- **2026-10-29, Step 8 (minor, no scope change):** codegen toolchain note. The first `./scripts/buf-gen.sh` run used
+  the host's provisioned `protoc-gen-go` v1.36.11, which was built with go1.24.7. Besides the expected comment line,
+  it rewrapped one unrelated doc comment in `analysis.pb.go` (the `UpdateStrategy` field-mask comment, spaces to
+  tabs, 7 lines). The plugin *versions* matched the pins, so this was not pin drift. The difference came from the Go
+  toolchain that built the plugin: CI's `proto-freshness` builds the pins with Go 1.27. That diff was discarded. The
+  three Go plugins were rebuilt at their pinned versions with `GOTOOLCHAIN=go1.27.0` into a scratch `GOBIN`, and
+  codegen was re-run. The final diff is exactly the five specced comment lines, and the grep count is 5. Codegen's
+  internal `buf breaking` was skipped because the worktree has no local `main-dev` ref; Step 7 already covered it.
