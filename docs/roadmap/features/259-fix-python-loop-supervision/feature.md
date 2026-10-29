@@ -34,6 +34,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 12 done — analysis `tests/test_pnl_pattern_consumer.py`: `FakeLedger` records `(req, metadata, timeout)`; `_emit` request shape (`correlation_id`, `idempotency_key`, `x-trace-id`, `timeout`) and event-trace propagation on the snapshot/sealed emits (@AC-7) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after merging main-dev: step 13 evidence re-verified unchanged; `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` added to instruction 2's fixed invariants (6b used it without declaring it) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after second main-dev merge: step 13 line citations re-pointed after Steps 11-12 shifted `pnl_pattern_consumer.py` (`_advance_cursor :401-403` + `_advance_cursor_conn :405-415`; `acquire()` at `:205/:269/:402`); `_ATTEMPT_DB_TIMEOUT_SECONDS` already declared in instruction 2 |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of steps 13-15 (main-dev merge was a no-op): Step 13 6b names the real attempt-path queries and adds the three P&L repositories to Files for a `timeout=` pass-through; Step 14 citations re-pointed and fakes extended for `timeout=`; Step 15 adds the `config-startup.md:87` `_watch_loop` → `_watch` drift |
 
 ---
 
