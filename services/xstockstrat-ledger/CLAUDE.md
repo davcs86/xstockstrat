@@ -1,7 +1,7 @@
 # xstockstrat-ledger — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (dedup lookup reuses the txn connection at pool=1, `StreamEvents` subscribe→replay→flush→live ordering, resume-from-sequence, global_sequence default) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (NOTIFY 8KB-trim Invalid-Date, migrate-tool mismatch) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (dedup lookup reuses the txn connection at pool=1, `StreamEvents` subscribe→replay→flush→live ordering, resume-from-sequence, global_sequence default) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (migrate-tool mismatch, dead config keys) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -33,6 +33,7 @@ was removed.
 2. **All services write here.** The ledger is the system's audit trail and event replay source.
 3. **stream_key** is the logical partition for event replay (`order:{id}`, `portfolio:{user_id}`, etc.)
 4. **sequence** is globally monotonic — never gaps, never decreasing.
+5. **`QueryEvents.owner_only` scopes the read to `user_id = x-user-id`** (feature 263); NULL-owned rows are never returned under it. Every user-facing edge MUST set it (the trader BFF does, except on the copilot key it forces and on `account:` keys it ownership-checks); internal callers leave it false. The field defaults to false, so an edge that forgets it fails **open**.
 
 ## Live Streaming Architecture (connection budget)
 
@@ -43,14 +44,19 @@ there in addition to the per-`stream_key` channel) and fans each event out to in
 subscribers, filtered per-subscriber by `stream_key`/`event_type`. Each `StreamEvents` handler
 replays history with a borrow-and-release pool query, then subscribes to the notifier.
 
-This decoupling is load-bearing: `xstockstrat-portfolio` holds **three** permanent `StreamEvents`
-subscriptions (`order.filled`, `account.positions.synced`, `account.balance.synced`). Under the
-old per-stream design each held one of the pool's 2 connections, so the pool was permanently
+This decoupling is load-bearing: `xstockstrat-portfolio` holds **five** permanent `StreamEvents`
+subscriptions (`order.filled`, `account.positions.synced`, `account.deregistered`,
+`order.bracket_updated`, `account.balance.synced`), and `xstockstrat-analysis` holds a single unfiltered
+P&L stream. Under the old per-stream design each held one of the pool's 2 connections, so the pool was permanently
 exhausted and **every `AppendEvent` blocked until the caller's deadline** (`DeadlineExceeded`) —
 which is why position/balance-sync ledger writes silently froze. The query pool is therefore now
 `DB_POOL_MAX=1` (+ 1 dedicated listener = 2 total, unchanged budget). Subscriptions are released on
 `cancelled`/`close`/`error` (leak-proof), and on listener reconnect the handler ends the call so
 the client reconnects and replays the gap.
+
+The trigger NOTIFYs a payload-less row for payloads over ~7000 chars; `EventNotifier` resolves it once, on the
+LISTEN connection, by PK `(event_id, recorded_at)` before fan-out. On a resolve failure the matching streams end
+with 13 (not found) or 14 (error/timeout) and clients replay from their last sequence.
 
 ## Dependencies
 
@@ -70,6 +76,7 @@ Namespace: `ledger`
 | `ledger.compression.after_days` | int | `3` | **Documented, not yet implemented** — intended chunk compression; no policy reads it |
 | `ledger.export.enabled` | bool | `true` | Master on/off switch for `ExportEvents` (feature 021). When `false`, the RPC rejects with `FAILED_PRECONDITION` (BFF → HTTP 403). Read via `getBool` — seeded `value_type` `bool` (never `string`). |
 | `ledger.export.max_window_days` | int | `365` | Maximum `ExportEvents` window span in days (feature 021). A wider start..end is rejected with `INVALID_ARGUMENT` (BFF → HTTP 400). Read via `getInt` — seeded `value_type` `int`. |
+| `ledger.stream.resolve_timeout_ms` | int | `2000` | Bound on the LISTEN-connection trimmed-row resolve (statement_timeout; 2× client backstop). ≤0/non-finite → 2000. Applied per session via SET-on-change. Seeded `value_type` `int` (config migration 033). |
 
 ## Idempotent Append
 
@@ -104,6 +111,8 @@ dedup).
 | `formula:{formula_id}` | xstockstrat-indicators |
 | `alert:{alert_id}` | xstockstrat-notify |
 | `config:{namespace}` | xstockstrat-config |
+| `account:{account_id}` | xstockstrat-trading (reconciliation rows are NULL-owned) |
+| `copilot:{user_id}:default` | xstockstrat-ui trader BFF (copilot note thread) |
 
 ## Environment Variables
 

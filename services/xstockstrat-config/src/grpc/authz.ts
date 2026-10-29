@@ -28,6 +28,24 @@ export function userIdFrom(md?: Metadata): string {
   return first(md, HEADER_USER_ID);
 }
 
+/** Read scope for GetConfig/ListKeys: a non-admin caller's foreign body id is bound to the caller.
+ * A header-less caller keeps the body id, and an empty body id stays global. */
+export function boundReadUserId(
+  call: { metadata?: Metadata; request?: any },
+  bodyUserId: string,
+): string {
+  const caller = userIdFrom(call.metadata);
+  if (
+    caller !== '' &&
+    !hasAdminAccessScope(call.metadata) &&
+    bodyUserId !== '' &&
+    bodyUserId !== caller
+  ) {
+    return caller;
+  }
+  return bodyUserId;
+}
+
 /** Denial for a caller lacking the ADMIN bit. */
 export const ADMIN_SCOPE_ERROR = {
   code: status.PERMISSION_DENIED,

@@ -74,6 +74,11 @@ export interface QueryEventsRequest {
     page?: PageRequest | undefined;
     /** replay from sequence */
     fromSequence: number;
+    /**
+     * When true, only rows whose user_id equals the caller's x-user-id (never NULL rows).
+     * Every user-facing edge MUST set it; internal callers leave it false.
+     */
+    ownerOnly: boolean;
 }
 export interface QueryEventsResponse {
     events: LedgerEvent[];

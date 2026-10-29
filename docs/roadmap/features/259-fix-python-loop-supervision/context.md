@@ -611,3 +611,553 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
 - `implementation-spec.md` updated: the decisions bullet, Step 13 item 6b, the Step 13 verification grep and the
   Step 15 CLAUDE.md limitation text. **Step 14 must add a test:** a fake pool whose `acquire()` never returns makes
   the attempt fail with `TimeoutError` within the bound and reach the replay path (no silent stall).
+
+## Session 2026-10-28 (sdd-execute sequential (sdd-batch-execute))
+
+- **Up-front confirmation:** the operator approved the up-front plan by standing authorization — operator chat
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; answers:
+  unattended checkpoints (`report`), auto-confirm C-16 promotion unless it changes an existing `@AC` rule,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; "start batch 2 in
+  parallel too".
+- Branch setup (§5.3): `git merge -X ours origin/main-dev` into the detached `origin/feature/fix-python-loop-supervision`
+  checkout (merge 4140f349).
+- **Re-spec (steps 4, 15) — line drift only, no substantive mismatch:**
+  - Step 4: `tests/test_fundsignal_loop.py` anchors moved — `class _StopLoop(Exception)` `:377` (was `:375`),
+    `_sched_loop` `:381`, `_make_loop` `:47`, `_make_cfg` `:23`, `fundsignal_module.asyncio` sleep patches `:496`/`:513`,
+    `_tick` `side_effect=_StopLoop` patches `:501`/`:516`. `fundsignal_loop.py` `_tick` `:128`, `run_forever` `:158`,
+    `:155`/`:165` raise points unchanged. Every named symbol still exists.
+  - Step 15: `merge-order.md` now has one hit for 259 at `:83`, inside the 262 row ("262 also reuses 259's
+    task-retention helper for the main.py:174 task"); 259 still has no entry of its own, so the add-entry instruction
+    stands (verification now greps the slug). Analysis `CLAUDE.md` sections drifted +1 (`:130`, `:143`, `:549`);
+    `config-startup.md:87` still says "on `AioRpcError`".
+- Status: `implementation-ready` → `in-progress`.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- **Step 1 done** (service, FR-2): created `services/xstockstrat-analysis/app/supervision.py` (`spawn`, `_on_done`,
+  `retry_until_ok`, `run_supervised`, `_BACKGROUND_TASKS`, `_LOOP_ERROR_BACKOFF_SECONDS = 30`; stdlib only) and
+  routed the eight `main.py` boot tasks through `spawn` with the spec's names/`forever` flags. The `:120` shutdown
+  task is unchanged; `grep -c "create_task(" app/main.py` = 1, `spawn(` = 8 sites.
+- TDD (red-green, Step 2's `tests/test_supervision.py` written per Step 2 instructions, not committed in Step 1):
+  @AC-4 red: `ImportError: cannot import name 'supervision' from 'app'` → green: `6 passed`. Full suite 1306 passed;
+  `ruff check .` / `ruff format --check .` clean.
+- Deviation: the readiness-materializer comment's "create_task is safe" now reads "spawn is safe" (see Deviation Log).
+- Peer `262-fix-analysis-owner-scope` must reuse `supervision.spawn` for the `entry-backfill` task (now `main.py:175`).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+### Step 2 — test: supervision helper and boot retention (@AC-4) [done]
+- Created `services/xstockstrat-analysis/tests/test_supervision.py`: @AC-4 crash-logged/sibling-retained/cancel-silent,
+  one-shot vs `forever` normal return, `_on_done` never raises, `run_supervised` backoff `[30, 0.0]` with a
+  `BaseException` sentinel, `retry_until_ok` `[30, 30]`, and the `main.py` wiring guard (one `create_task(`, eight
+  `spawn(` names). Inline literals only (C-13, no conftest).
+- TDD: AC-4 red: `ImportError: cannot import name 'supervision' from 'app'` (pre-Step-1 tree: `main.py` checked out from `94a152c9~1`,
+  `supervision.py` moved aside, then both restored to HEAD) → green: `6 passed`. Full suite
+  1306 passed, coverage 88.67% (≥40); `ruff check .` / `ruff format --check .` clean; no `conftest` reference.
+- Files modified: `services/xstockstrat-analysis/tests/test_supervision.py`
+- Deviations: none
+
+## Session 2026-10-28 — sdd-execute sequential, Step 3
+
+### Step 3 — service: analysis `*_forever` loops run under supervision (FR-1) [done]
+- `app/engine/fundsignal_loop.py`: `run_forever` = `retry_until_ok(self._seed_schedule, "fundsignal seed")` → unchanged
+  jitter → `run_supervised(self._tick, "fundsignal")`; `_tick` untouched (no inner `try`).
+- `app/handlers/servicer.py`: the opportunity-refresh, readiness-materializer and template-intent-sweep loops seed via
+  `retry_until_ok(schedule.seed, "<loop> seed")` and tick via `run_supervised(functools.partial(self.<tick>, schedule),
+  "<loop>")`. Early returns, jitter, anchors, `advance(...)` calls and `retry_seconds` reads unchanged.
+- TDD (scratch test, deleted; Step 4 authors the durable ones): red: `5 failed` (`PostgresConnectionError: down/seed`
+  escaped each loop) → green: `5 passed`. Verification: 4 `run_supervised` + 4 `retry_until_ok` call sites, no
+  `while True` in `fundsignal_loop.py`, `ruff check .` / `ruff format --check .` clean. Full suite: 1304 passed,
+  coverage 88.64%, with the two `@AC-7 @feature-156` jitter tests deselected.
+- **Open until Step 4:** those two jitter tests (`_StopLoop(Exception)` raised from a patched `_tick`) now spin
+  forever: the sentinel is swallowed by `run_supervised`. Step 4 item 1 (`_StopLoop(BaseException)`) fixes it. Do not
+  run the full suite without that fix or deselecting them.
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`,
+  `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none (process note in the Deviation Log)
+
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec
+
+- Branch setup: merged `origin/main-dev` into the feature branch (`-X ours`, merge commit `d63bac2b`).
+- Status was already `in-progress` (flipped 2026-10-28); no status change.
+- Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended checkpoints
+  (`report`), C-16 promotion auto-confirmed unless it changes an existing @AC rule, merge-train authorized, 255/275
+  deferred; operator-only DB/prod steps: open PR, hold merge; blocker decisions 2026-10-29 recorded per feature.
+- Re-spec (anchors only, no scope change):
+  - Step 4: `fundsignal_loop.py` anchors +1 after Step 3 (`_tick` :129, `_advance_schedule(retry)` raise :156,
+    `run_forever` :159); `:165` is now `run_supervised(self._tick, "fundsignal")`, so the RED notes for @AC-1/@AC-2
+    now say to confirm red against a scratch revert of `:165` (not committed). Test-file anchors unchanged.
+  - Step 6: `tests/test_config_watcher.py` tests span `:14-38` (import at `:11`).
+  - Step 15: analysis `CLAUDE.md` § P&L pattern consumer spans `:143-177` (next `###` at `:179`);
+    `config-startup.md:149` reads "on stream error".
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4
+
+### Step 4 — test: loops survive schedule and cycle errors (@AC-1, @AC-2, @AC-3) [done]
+- `tests/test_fundsignal_loop.py`: `_StopLoop` is now a `BaseException` (fixes the two `@AC-7 @feature-156` jitter
+  tests that spun after Step 3). New `TestScheduler` tests: @AC-1 (`next_sleep_seconds` raises
+  `PostgresConnectionError("down")` once → 30s backoff, tick re-runs, `run_once` awaited, ERROR logged) and @AC-2
+  (`run_once` fails and the error-path `_advance_schedule` raises once → absorbed, `run_once` awaited ≥2, both errors
+  logged at ERROR).
+- `tests/test_loop_supervision.py` (new, @AC-3): parametrized over opportunity-refresh / readiness-materializer /
+  template-intent-sweep. Two cases per loop: a schedule-read error (the tick re-runs after a 30s backoff), and a seed
+  error retried via `retry_until_ok` (the 30s sleep is recorded before the jitter and the first tick). There is also a
+  fundsignal seed-retry case. Both sentinels are `BaseException`, and the recorder stops on the tick's 3600s sleep.
+  The fundsignal case reuses `_sched_loop` from `test_fundsignal_loop.py`. Only inline literals are used (C-13).
+- TDD: red came from a scratch revert of both Step-3 source files to `fb89f90d~1`, not committed. That revert covers
+  the `:165` revert the spec names, plus the `:161` seed wiring. Result: 9 failed (`PostgresConnectionError` escaped
+  each loop). Green: all 10 pass.
+- Verification: the targeted suites (fundsignal, loop_supervision, opportunity_refresh, readiness_materializer,
+  durable_schedule, strategy_templates) give 116 passed. The full suite gives 1315 passed with coverage at 88.90%
+  (≥40). `ruff check .` and `ruff format --check .` are clean, and the `_StopLoop(BaseException)` grep hits `:379`.
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`,
+  `services/xstockstrat-analysis/tests/test_loop_supervision.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 5
+
+### Step 5 — service: analysis ConfigWatcher reconnects after any exception; watch task retained (FR-3) [done]
+- `app/config/watcher.py`: `__init__` keeps the task as `self._watch_task` (`name=f"config-watch-{namespace}"`) with
+  `add_done_callback(self._on_watch_done)`. `_on_watch_done` returns on cancel and otherwise logs ERROR
+  `config watch task %s exited unexpectedly: %r`. Its body is wrapped in `try/except Exception`, so it never raises.
+  `_watch` now catches `Exception` (not only `AioRpcError`), logs `config stream error (%s): %s, reconnecting in 2s`
+  with the type name, and keeps the single `while True`, the 2s sleep and `_build_watch_request()` per reconnect.
+  `_snapshot` is not reset on error (zero-trap). One edit covers both analysis watchers (`main.py:42,48`).
+- TDD: a scratch test written to Step 6's instructions (@AC-5 reconnect after `RuntimeError`; @AC-8 retained task plus
+  ERROR log naming `config-watch-analysis`) failed RED against the pre-step file: 2 failed (`RuntimeError` escaped
+  `_watch`; `AttributeError` because `_watch_task` was missing). It passed GREEN after the edit (2 passed) and was then
+  deleted (F-08). Step 6 authors the durable tests.
+- Verification: `grep "except grpc.aio.AioRpcError"` finds nothing. The `_watch_task` / `_on_watch_done` /
+  `_build_watch_request()` grep hits `:56,59,61,81`. `ruff check .` and `ruff format --check .` are clean. The full
+  suite gives 1315 passed with coverage at 88.79% (≥40).
+- Files modified: `services/xstockstrat-analysis/app/config/watcher.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 6
+
+### Step 6 — test: analysis watcher reconnect and exit log (@AC-5, @AC-8 analysis rows) [done]
+- `tests/test_config_watcher.py`: added `test_watch_reconnects_after_non_grpc_exception` (@AC-5). It builds the watcher
+  dial-free via `ConfigWatcher.__new__` with an inline `_FakeStub`: call 1 raises `RuntimeError("boom")`, call 2 yields
+  `ConfigSnapshot(version="v2")` and then a `_Done(BaseException)`. `asyncio.sleep` is patched with `AsyncMock`. The test
+  asserts two `WatchConfig` calls, `sleep` awaited once with 2, `_snapshot.version == "v2"`, and the `analysis-`
+  client_id on both requests. Also added `test_watch_task_retained_and_exit_logged` (@AC-8). It patches
+  `grpc.aio.secure_channel`, `mtls.channel_credentials`/`target_override`, `ConfigServiceStub` and a failing `_watch`,
+  then asserts `_watch_task` is done and an ERROR record names `config-watch-analysis` and `boom`. The doubles are inline
+  and single-consumer (C-13).
+- TDD: red came from a scratch revert of `app/config/watcher.py` to `affc979e~1`, not committed. Result: 2 failed
+  (`RuntimeError: boom` escaped `_watch`; `AttributeError` because `_watch_task` was missing). Green against the Step-5
+  file: 9 passed.
+- Verification: `uv run pytest tests/test_config_watcher.py -q` gives 9 passed. The full suite gives 1317 passed with
+  coverage at 89.19% (≥40). `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_config_watcher.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 7
+
+### Step 7 — service: indicators ConfigWatcher reconnects after any exception; watch task retained (FR-3) [done]
+- `app/config/watcher.py`: same edit shape as Step 5 (D-20). `__init__` keeps the task as `self._watch_task`
+  (`name=f"config-watch-{namespace}"`) with `add_done_callback(self._on_watch_done)`. `_on_watch_done` returns on cancel,
+  otherwise logs ERROR `config watch task %s exited unexpectedly: %r`, and never raises. `_watch` catches `Exception`
+  (`# noqa: BLE001`), logs `config stream error (%s): %s, reconnecting in 2s`, and keeps the inline request build, the
+  single `while True`, the 2s sleep and the last good `_snapshot` (@AC-4 @feature-173).
+- TDD: a scratch test written to Step 8's instructions (@AC-5 reconnect after `RuntimeError` with `indicators-`
+  client_id; @AC-8 retained task plus ERROR log naming `config-watch-indicators`) failed RED against the pre-step file:
+  2 failed (`RuntimeError` escaped `_watch`; `AttributeError` because `_watch_task` was missing). It passed GREEN after
+  the edit (2 passed) and was then deleted (F-08). Step 8 authors the durable tests.
+- Verification: `grep "except grpc.aio.AioRpcError"` finds nothing. The `_watch_task` / `_on_watch_done` grep hits
+  `:56,59,61`. `ruff check .` and `ruff format --check .` are clean. The full suite gives 294 passed with coverage at
+  85.61% (≥50).
+- Files modified: `services/xstockstrat-indicators/app/config/watcher.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 8
+
+### Step 8 — test: indicators watcher reconnect and exit log (@AC-5, @AC-8 indicators rows) [done]
+- `tests/test_config_watcher.py`: added `test_watch_reconnects_after_non_grpc_exception` (@AC-5) and
+  `test_watch_task_retained_and_exit_logged` (@AC-8), mirroring Step 6 with the `indicators` namespace and the
+  `indicators-` client_id prefix. Inline single-consumer doubles (`_Done`, `_FakeStub`) (C-13). Existing getter tests
+  untouched (feature 244 rebase).
+- TDD: red came from a scratch revert of `app/config/watcher.py` to `430b726f~1`, not committed. Result: 2 failed
+  (`RuntimeError: boom` escaped `_watch`; `AttributeError` because `_watch_task` was missing). Green against the Step-7
+  file: 12 passed.
+- Verification: `uv run pytest tests/test_config_watcher.py -q` gives 12 passed. The full suite gives 296 passed with
+  coverage at 85.61% (≥50). `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 9
+
+### Step 9 — service: ingest ConfigWatcher reconnects after any exception; watch task retained (FR-3) [done]
+- `app/config/watcher.py`: same edit shape as Steps 5 and 7 (D-20). `__init__` keeps the task as `self._watch_task`
+  (`name=f"config-watch-{namespace}"`) with `add_done_callback(self._on_watch_done)`. `_on_watch_done` returns on cancel,
+  otherwise logs ERROR `config watch task %s exited unexpectedly: %r`, and never raises. `_watch` catches `Exception`
+  (`# noqa: BLE001`), logs `config stream error (%s): %s, reconnecting in 2s`, and still reconnects through
+  `self._build_watch_request()` with the single `while True`, the 2s sleep and the last good `_snapshot`.
+- TDD: a scratch test written to Step 10's instructions (@AC-5 reconnect after `RuntimeError` with `ingest-`
+  client_id; @AC-8 retained task plus ERROR log naming `config-watch-ingest`) failed RED against the pre-step file:
+  2 failed (`RuntimeError` escaped `_watch`; `AttributeError` because `_watch_task` was missing). It passed GREEN after
+  the edit (2 passed) and was then deleted (F-08). Step 10 authors the durable tests.
+- Verification: `grep "except grpc.aio.AioRpcError"` finds nothing. The `_watch_task` / `_on_watch_done` /
+  `_build_watch_request()` grep hits `:69,72,74,94`. `ruff check .` and `ruff format --check .` are clean. The full
+  suite gives 328 passed with coverage at 81.25% (≥40).
+- Note: a clean stream end (the `async for` finishing without an exception) still loops with no 2s delay, as before;
+  the spec keeps the sleep inside the `except` (unchanged behaviour, not a deviation).
+- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec before Step 13
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; checkpoints "report").
+- Merged `origin/main-dev` into the branch (normal merge). One conflict, in append-only `docs/roadmap/ledger/fails.md`;
+  both sides kept. `ledger-guard --fix` reported clean.
+- Re-spec, Step 13 only: all codebase evidence re-verified unchanged (`run_forever :147-162`, `_cursor :140-145`,
+  `process_event :164-174`, `_advance_cursor :399-401` / GREATEST upsert `:403-413`, constants `:37-47`, `acquire()` at
+  `:205/:268/:400`, ledger `ledgerServiceImpl.ts :190-191/:239`, `read_budget.py:8`, `uv.lock` asyncpg 0.31.0).
+  Spec-internal fix: instruction 6b used `_ATTEMPT_DB_TIMEOUT_SECONDS` but instruction 2 did not declare it; it is
+  now listed there as `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` (value from the Execution Summary and the 2026-10-22 note).
+- Status already `in-progress`; no status change.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 10
+
+### Step 10 — test: ingest watcher reconnect and exit log (@AC-5, @AC-8 ingest rows) [done]
+- `tests/test_config_watcher.py`: mirrors Step 8. `@AC-5` drives `_watch()` on a dial-free `__new__` watcher with a
+  two-stream fake stub (first raises `RuntimeError("boom")`, second yields version `"v2"` then a `BaseException`
+  sentinel) and a patched `app.config.watcher.asyncio.sleep`; asserts two `WatchConfig` calls, one 2s backoff, snapshot
+  `"v2"` and the `ingest-` client_id on both requests. `@AC-8` builds a patched (no dial) watcher whose `_watch` raises
+  `RuntimeError("boom")`; asserts the retained `_watch_task` is done and an ERROR names `config-watch-ingest` and `boom`.
+  Existing getter tests untouched.
+- TDD: RED against the pre-Step-9 `watcher.py` (`1513e415~1`): 2 failed, 11 passed. GREEN against the current file:
+  13 passed.
+- Verification: `uv run pytest tests/test_config_watcher.py -q` gives 13 passed. The full suite gives 330 passed with
+  coverage at 82.92% (≥40). `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 11
+
+### Step 11 — service: P&L consumer `_emit` keywords; existing emits carry the event trace (C-03) [done]
+- `app/engine/pnl_pattern_consumer.py`: `_emit` gains keyword-only `correlation_id=""`, `idempotency_key=""` and
+  `timeout=None`; both IDs go on the `AppendEventRequest`, and the call passes
+  `metadata=(("x-trace-id", correlation_id),)` when `correlation_id` is non-empty (else `()`) and `timeout=timeout`.
+  The existing best-effort `except` is unchanged. The snapshot captured/degraded emit and the `analysis.pattern.sealed`
+  emit pass `correlation_id=event.correlation_id`; their `timeout` stays `None`.
+- TDD (the C-08 pair is Step 12; RED/GREEN ran via an uncommitted scratch test whose ledger fake accepts `timeout`):
+  RED: `_emit(..., correlation_id=, idempotency_key=, timeout=)` raised `TypeError: unexpected keyword argument`, and
+  the order/close emits carried `correlation_id=''` with no metadata (2 failed). GREEN: 2 passed. Scratch file deleted.
+- Verification: `grep -n "correlation_id=event.correlation_id"` gives 2 hits (`:252`, `:308`); `grep -n "x-trace-id"`
+  gives `:447`; `ruff check .` and `ruff format --check .` are clean.
+- Interim, expected (spec Step 12 evidence): the full suite is 1311 passed, 6 failed until Step 12 widens the test
+  `FakeLedger.AppendEvent` to accept `timeout`. The 6 (`test_pnl_pattern_consumer.py` ac1, ac2, ac6 x2, ac7 and
+  `test_owner_header_guard.py::test_ac17_ownerless_order_event_issues_no_owner_scoped_call`, which imports the same
+  `make_consumer`) fail only because `_emit` swallows that `TypeError`, leaving `ledger.appended` empty.
+- Files modified: `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 12
+
+### Step 12 — test: `_emit` request shape and trace propagation [done]
+- `tests/test_pnl_pattern_consumer.py`: `FakeLedger.AppendEvent(req, metadata=(), timeout=None)` now also records
+  `(req, tuple(metadata), timeout)` in `self.calls` (`self.appended` unchanged); `make_event` takes keyword
+  `correlation_id=""`. Three tests: `_emit` with `correlation_id="t-1"`, `idempotency_key="k-1"`, `timeout=5` sends
+  those fields plus `(("x-trace-id", "t-1"),)`; an empty `correlation_id` sends `()` metadata, empty fields and
+  `timeout=None`; an order + close event built with `correlation_id="t-9"` yield `analysis.snapshot.captured` and
+  `analysis.pattern.sealed` requests carrying `t-9` and `x-trace-id: t-9`, with `timeout is None`.
+- TDD: RED ran the new tests against the pre-Step-11 `pnl_pattern_consumer.py` (from `a103d77b`, restored afterwards):
+  2 failed (the request-shape test and the trace-propagation test); the empty-correlation test is a regression guard
+  and passes on both. GREEN against the Step 11 source: 13 passed.
+- Verification: `uv run pytest tests/test_pnl_pattern_consumer.py -q` 13 passed; full suite 1320 passed at 89.19%
+  coverage (>=40), so the 6 interim failures Step 11 recorded are cleared; `ruff check .` and `ruff format --check .`
+  are clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
+- Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), second re-spec before Step 13
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; per-feature blocker
+  decisions 2026-10-29 given by the operator through the session's question tool; checkpoints "report"; C-16
+  promotion auto-confirmed unless it changes an existing @AC rule).
+- Merged `origin/main-dev` into the branch (normal merge, `9ea2113e`). One conflict, in
+  `services/xstockstrat-indicators/tests/test_config_watcher.py`: both sides kept (main-dev's feature-243
+  full-dotted getter test, then this branch's @AC-5/@AC-8 watcher tests); that file is 15 passed and ruff-clean.
+  `ledger-guard --fix` reported clean. The merge's `uv.lock` bump (#1329) left asyncpg at 0.31.0 (`uv.lock:44-45`).
+- Re-spec, Step 13 only: Steps 11-12 shifted `pnl_pattern_consumer.py` below `:257`. Re-pointed `_advance_cursor` to
+  `:401-403` (it now delegates to `_advance_cursor_conn` `:405-415`, the GREATEST upsert) and the `acquire()` sites in
+  6b to `:205/:269/:402`. Unchanged: `run_forever :147-162`, `_cursor :140-145`, `process_event :164-174`, constants
+  `:37-47`, `ledgerServiceImpl.ts :190-191/:239`, `read_budget.py:8`, 2 `asyncpg.DataError` hits.
+  `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` was already listed in instruction 2 by the earlier re-spec. The Execution
+  Summary's `:205,268,400` and Step 14's `_handle_close_event :256` citations still carry the old numbers; they are
+  outside this re-spec's scope (Step 13 bodies only).
+- Status already `in-progress`; no status change.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec of steps 13-15
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge; per-feature blocker
+  decisions 2026-10-29 given by the operator through the session's question tool; checkpoints "report"; C-16
+  promotion auto-confirmed unless it changes an existing @AC rule).
+- `git merge origin/main-dev`: already up to date. `ledger-guard --fix`: clean. Status already `in-progress`.
+- Re-spec, Steps 13-15 bodies only:
+  - Step 13: instruction 6b claimed `execute`/`fetch` calls "inside `process_event`", but the consumer's only direct
+    queries are `fetchval :141` and `execute :406`; the rest are in `order_snapshots.py :34/:59/:65`,
+    `pnl_positions.py :27/:63`, `pnl_pattern_samples.py :16` (and `count_for_position` at `:292` runs on the pool,
+    outside any `acquire`). The operator's 2026-10-22 decision binds per-query `timeout=` on the whole attempt path,
+    so the three repositories were added to Files with a keyword-only `timeout: float | None = None` pass-through
+    (default = asyncpg's, servicer callers unchanged) instead of narrowing 6b. Verification gains a grep for the
+    six pass-throughs and the consumer test run.
+  - Step 14: citations re-pointed (`FakeLedger :141`, `FakePool :62-80` with `fetchval :66`/`acquire :71`/`execute
+    :77`, `_handle_close_event :257`); new item 0 extends the fakes to accept `timeout=` (`FakePool.acquire/fetchval/
+    execute`, `FakeSnapshots.count_for_position/list_for_position`, `FakeSamples.insert_many`); 6c also asserts the
+    repository pass-through.
+  - Step 15: `config-startup.md:87` also carries pre-existing drift (`_watch_loop`; all three watchers name it
+    `_watch`, analysis `:78`, indicators `:70`, ingest `:91`) — instruction 2 and its grep now fix it; `:197` added as a
+    fixed-invariant precedent. Other Step 15 evidence re-verified unchanged.
+- Asyncpg exception names still rely on the 2026-10-22 wheel check (no `.venv` present to re-verify); asyncpg stays
+  0.31.0 in `uv.lock:44-45`.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 13
+
+### Step 13 — service: P&L consumer retry, poison allow-list, replay, probe, escalation and park (FR-4, FR-5) [done]
+- `app/engine/pnl_pattern_consumer.py`: fixed invariants `_EVENT_MAX_ATTEMPTS=3`, `_EVENT_RETRY_BACKOFF_SECONDS=1.0`,
+  `_REPLAY_ESCALATE_AFTER=5`, `_PROBE_TIMEOUT_SECONDS=5`, `_PARK_EMIT_TIMEOUT_SECONDS=5`,
+  `_ATTEMPT_DB_TIMEOUT_SECONDS=10`; `_POISON` / `_is_poison` (ValueError, TypeError, KeyError, DecodeError, ParseError,
+  `apg.DataError`, `apg.IntegrityConstraintViolationError`). `run_forever` resets `_stream_fail_count` per delivered
+  event, calls `_process_with_retry`, then resets the replay pair only when `sequence >= _replay_seq`; the outer
+  handler logs WARNING below 5 consecutive failures and ERROR from the 5th; `await asyncio.sleep(2)` kept
+  byte-identical (peer 248). `_process_with_retry`: 3 attempts, 1s backoff outside the `try`; poison → `_park(...,
+  "non-transient")`; else the replay pair (WARNING < 5, ERROR from 5 naming seq/type/correlation_id), and at 5 a
+  `_probe_db` (`wait_for(_cursor(), 5)`) — probe failure logs ERROR and re-raises `last from probe_err` (no park),
+  probe success parks `"transient-persistent"` with `attempts = replay_count * 3`. `_park`: ERROR log (identity
+  read from `payload.fields`, never `MessageToDict`) → `_emit("analysis.pnl.event_parked", "pnl_park:<seq>", ...,
+  idempotency_key="pnl_park:<seq>", timeout=5)` → `_advance_cursor` → reset pair.
+  6b: all three `acquire()` sites take `timeout=_ATTEMPT_DB_TIMEOUT_SECONDS`, as do `fetchval` (`_cursor`), `execute`
+  (`_advance_cursor_conn`) and the six repository calls; `OrderSnapshotsRepository.insert/count_for_position/
+  list_for_position`, `PnLPositionsRepository.open/seal` and `PnLPatternSamplesRepository.insert_many` gain a
+  keyword-only `timeout: float | None = None` forwarded to asyncpg (default unchanged for servicer callers).
+- asyncpg names re-verified against the installed 0.31.0 wheel this session (`DataError`,
+  `IntegrityConstraintViolationError`, `PostgresConnectionError`, `OutOfMemoryError` < `InsufficientResourcesError`,
+  `DeadlockDetectedError`/`SerializationError` < `TransactionRollbackError`, `DiskFullError`).
+- TDD (C-08 pair is Step 14; scratch test, deleted): AC-6/AC-7/AC-9/AC-10 red: 9 failed (event 10 skipped not
+  retried; no `_is_poison`/`_probe_db`/`_ATTEMPT_DB_TIMEOUT_SECONDS`; repositories reject `timeout=`) → green: 9 passed.
+- Verification: the five greps hold (21 symbol hits; `sleep(2)` at `:205`; no `is_transient_db_error`/`_TRANSIENT`;
+  3 `acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS)`; 6 `timeout=timeout`); `ruff check .` / `ruff format --check .`
+  clean. PRESERVE guard: 54 passed with Step 14 item 0's fake widening applied temporarily (see Deviation Log).
+- **Interim, expected (Step 14 evidence)**: full suite 1307 passed, 13 failed (87% coverage) until Step 14 item 0
+  widens `FakePool.acquire/fetchval/execute`, `FakeSnapshots.count_for_position/list_for_position` and
+  `FakeSamples.insert_many`: 11 in `tests/test_pnl_pattern_consumer.py` and 2 in `tests/test_owner_header_guard.py`
+  (`test_pnl_handle_order_event`, `test_ac17_ownerless_order_event_issues_no_owner_scoped_call`, both via
+  `make_consumer`), all `TypeError: unexpected keyword argument 'timeout'`.
+- Files modified: `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`,
+  `services/xstockstrat-analysis/app/repositories/order_snapshots.py`,
+  `services/xstockstrat-analysis/app/repositories/pnl_positions.py`,
+  `services/xstockstrat-analysis/app/repositories/pnl_pattern_samples.py`
+- Deviations: verification fallback for the PRESERVE guard (Deviation Log 2026-10-29 — Step 13)
+
+
+## Session 2026-10-29 — sdd-execute sequential, Step 14
+
+### Step 14 — test: retry, park, replay, probe and escalation (@AC-6, @AC-7, @AC-9, @AC-10) [done]
+- `tests/test_pnl_pattern_consumer.py`: item 0 widens `FakePool.acquire/fetchval/execute`,
+  `FakeSnapshots.count_for_position/list_for_position` and `FakeSamples.insert_many` for `timeout=` (`acquire` records
+  it); `FakeLedger` gains a scripted, inclusive `StreamEvents` (records `from_sequence`, raises `_StopConsumer`, a
+  `BaseException`, past `max_streams`). New cases: @AC-6 retry in place (handler order `[10, 10, 11]`, one stream);
+  @AC-7 park parametrized over `ValueError`/`DataError`/`IntegrityConstraintViolationError` (3 attempts,
+  `non-transient`) and `OutOfMemoryError` with the real `_probe_db` (15 attempts over 5 stream opens,
+  `transient-persistent`), each asserting the ERROR park log, one `analysis.pnl.event_parked` with key `pnl_park:10`
+  and `timeout == 5`, log → emit → advance order, 11 processed, cursor 11; @AC-9 (OOM + probe
+  `PostgresConnectionError`, Deadlock + probe `TimeoutError`): no park, cursor 9, replays W×4 then ERROR, pair
+  `(10, 5)` despite event 9 re-delivered each reconnect; bounded `_probe_db`; @AC-10 outer handler W×4 then ERROR;
+  reset rule; park-cursor failure in both branches keeps the pair and the re-park reuses `pnl_park:10`; `_is_poison`
+  truth table; 6c per-attempt bound (`acquire(timeout=0.05)` ×3, replay pair `(10, 1)`, WARNING) and the six
+  repository `timeout=` pass-throughs (0.5 and `None`).
+- TDD: RED against the pre-Step-13 tree (`1049c4d7` app files checked out temporarily, `_is_poison` import shimmed
+  with `getattr` for the run only): 37 failed, 13 passed — e.g. AC-6 `assert [10, 11] == [10, 10, 11]` (10 skipped,
+  not retried), AC-7 `assert 1 == 3` attempts → GREEN on the Step 13 tree: 58 passed (consumer + query suites).
+- Verification: `pytest tests/test_pnl_pattern_consumer.py tests/test_query_pnl_patterns.py` 58 passed; full suite
+  1357 passed, coverage 89.66% (≥40); `ruff check .` / `ruff format --check .` clean; no `conftest` reference (C-13).
+  The 2 interim `tests/test_owner_header_guard.py` failures from Step 13 are fixed by the widened fakes.
+- Files modified: `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py`
+- Deviations: none.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 15
+
+### Step 15 — docs: analysis CLAUDE.md, config-startup pattern, findings, merge order; teardown [done]
+- Analysis `CLAUDE.md`: § Shared durable scheduler gains the feature-259 supervision paragraph (`retry_until_ok` /
+  `run_supervised`, `_LOOP_ERROR_BACKOFF_SECONDS` = 30, `spawn` for every boot task, peers reuse it); § P&L pattern
+  consumer gains the per-event retry/park bullet (six fixed invariants, `_is_poison` allow-list and why not
+  `is_transient_db_error`, replay reset rule, probe at 5, stream-fail escalation, log → emit → advance) and the
+  accepted-limitations bullet; § Ledger Events Emitted gains `analysis.pnl.event_parked`.
+- `docs/patterns/config-startup.md:87`: `_watch_loop` → `_watch`, "on `AioRpcError`" → any exception
+  (`CancelledError` propagates), retained `_watch_task` with ERROR exit log.
+- Findings:23: "Addressed by feature 259" note; evidence column re-pointed to `spawn` ~L144.
+- `merge-order.md:84`: new 259 row (248 first, soft; 244/260 rebases; 262 reuses `spawn`; 246 and 268 already
+  merged; replay amplification vs 257).
+- TDD: N/A (docs). Baseline (pre-edit) verification: no `event_parked`/`supervision` hits, `config-startup.md:87`
+  `AioRpcError` hit, no merge-order or findings 259 hit. After: all five greps hold (`AioRpcError|_watch_loop` none).
+- Teardown: `context-forge:context-constitution` is not loaded in this session (only `context-scrubber`); manual
+  reconciliation done (Deviation Log 2026-10-29 — Step 15). The integration PR body must record both facts.
+- Open Threads closed: the merge-order 259 entry and the Step 15 limitations documentation (sdd-spec session).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-startup.md`,
+  `services/xstockstrat-analysis/docs/context-constitution-findings.md`, `docs/roadmap/features/merge-order.md`
+- Progress: 15 done / 15 total. Status → `code-completed`. Next: merge-order gate (248 soft-first) and integration PR.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-python-loop-supervision (feature 259)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-python-loop-supervision.feature | CREATE | NEW | fundsignal loop survives schedule DB error. Related to feature-158 AC-1/AC-2 (retry cadence) but asserts loop survival, a different outcome. |
+| AC-2 | same | CREATE | NEW | fundsignal loop survives failed cycle plus failed advance |
+| AC-3 | same | CREATE | NEW | Outline over 3 analysis servicer loops |
+| AC-4 | same | CREATE | NEW | background task retention and exit logging at analysis boot |
+| AC-5 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Outline spans analysis, indicators and ingest, so cross-service. No existing watcher-reconnect rule. The 174 suites only assert client_id. |
+| AC-6 | same analysis suite | CREATE | NEW | P&L consumer retries a transient failure. Feature 042 order-snapshots-pnl-patterns.feature has no retry or skip rule, so no conflict. |
+| AC-7 | same analysis suite | CREATE | NEW | poison or persistent event parked, with a ledger event |
+| AC-8 | docs/sdd/business-rules/platform.feature | APPEND | NEW | same cross-service reasoning as AC-5 |
+| AC-9 | same analysis suite | CREATE | NEW | replay vs park while the DB-health probe fails |
+| AC-10 | same analysis suite | CREATE | NEW | cursor-read failure escalates to ERROR |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-python-loop-supervision.feature (CREATE) ---
+# Promoted from docs/roadmap/features/259-fix-python-loop-supervision/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-259` tag.
+# Durable business rules: analysis background loops and the P&L-pattern consumer survive transient
+# errors and never silently skip a ledger event. A rule enters only by promotion, never hand-authoring.
+
+Feature: xstockstrat-analysis — background loop supervision
+  What analysis guarantees about its recurring loops, background tasks and the P&L-pattern ledger consumer
+  under transient failures.
+
+  @AC-1 @FR-1 @regression @feature-259
+  Scenario: The fundamentals producer loop keeps ticking after a schedule DB error
+    Given a FundamentalsSignalLoop whose durable schedule raises a connection error on the first next_sleep_seconds call and returns 0 after it
+    When run_forever runs for two scheduler iterations
+    Then the loop task is still running
+    And _tick has been called at least once after the error
+    And the error was logged
+
+  @AC-2 @FR-1 @regression @feature-259
+  Scenario: The fundamentals producer loop survives a failed cycle whose retry advance also fails
+    Given a FundamentalsSignalLoop whose run_once raises a connection error and whose _advance_schedule raises once
+    When one scheduler iteration runs
+    Then the loop task is still running
+    And a further tick runs
+    And the connection error was logged
+
+  @AC-3 @FR-1 @regression @feature-259
+  Scenario Outline: Each servicer background loop survives a schedule DB error
+    Given the analysis servicer's "<loop>" whose DurableSchedule raises a connection error once on next_sleep_seconds
+    When the loop runs for two iterations
+    Then the loop task is still running and the tick ran again after the error
+
+    Examples:
+      | loop                               |
+      | run_opportunity_refresh_forever    |
+      | run_readiness_materializer_forever |
+      | run_template_intent_sweep_forever  |
+
+  @AC-4 @FR-2 @regression @feature-259
+  Scenario: Analysis keeps a reference to every background task and logs an unexpected exit
+    Given analysis has started its background tasks at boot
+    When one background coroutine ends with RuntimeError "boom"
+    Then an error naming the task and "boom" is logged
+    And no other background task stops running
+
+  @AC-6 @FR-4 @regression @feature-259
+  Scenario: A transiently failing ledger event is retried, not skipped past
+    Given the P&L-pattern consumer cursor is at 9
+    And the ledger streams "portfolio.position.closed" event 10 and event 11
+    And processing event 10 raises a connection error once and then succeeds
+    When the consumer processes the stream
+    Then event 10 is processed successfully before the cursor reaches 11
+    And the cursor ends at 11
+
+  @AC-7 @FR-5 @regression @feature-259
+  Scenario Outline: A ledger event that keeps failing is parked and recorded, and the cursor moves on
+    Given the P&L-pattern consumer cursor is at 9
+    And the ledger streams "portfolio.position.closed" event 10 and event 11
+    And the consumer's retry bound is 3 attempts and its replay escalation threshold is 5
+    And processing event 10 raises <error> on every attempt
+    And the bounded DB-health probe succeeds
+    When the consumer processes the stream
+    Then event 10 is attempted exactly <attempts> times and is then parked with reason "<reason>"
+    And a log line records that event 10 was parked, with the reason
+    And an "analysis.pnl.event_parked" ledger event records sequence 10 with idempotency key "pnl_park:10"
+    And event 11 is processed successfully
+    And the cursor ends at 11
+
+    Examples:
+      | error                                                         | attempts | reason               |
+      | a poison error (ValueError, or asyncpg SQLSTATE class 22/23)  | 3        | non-transient        |
+      | a non-poison error that persists (asyncpg OutOfMemoryError)   | 15       | transient-persistent |
+
+  @AC-9 @FR-5 @regression @feature-259
+  Scenario Outline: A non-poison failure is replayed, not parked, while the DB-health probe fails
+    Given the P&L-pattern consumer cursor is at 9
+    And every reconnect re-delivers the cursor's own event 9 before event 10
+    And processing event 10 raises <error> on every attempt
+    And the bounded DB-health probe <probe outcome>
+    When the consumer has replayed event 10 five times
+    Then event 10 is not parked and the cursor stays at 9
+    And the 5th replay logs ERROR naming sequence 10
+    And the re-delivered event 9 never resets the replay count
+
+    Examples:
+      | error                               | probe outcome |
+      | an asyncpg OutOfMemoryError         | raises        |
+      | an asyncpg DeadlockDetectedError    | times out     |
+
+  @AC-10 @FR-5 @regression @feature-259
+  Scenario: A consumer whose cursor read fails on every reconnect escalates to ERROR
+    Given the P&L-pattern consumer's cursor read raises a connection error on every call
+    When the consumer has failed to open the ledger stream 5 consecutive times
+    Then the first 4 failures log WARNING
+    And the 5th consecutive failure logs ERROR
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  @AC-5 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher reconnects after a non-gRPC exception
+    Given the <service> ConfigWatcher whose first WatchConfig stream raises RuntimeError "boom"
+    And whose second WatchConfig stream yields a snapshot with version "v2"
+    When the watcher runs
+    Then WatchConfig is called a second time after a backoff
+    And the watcher's snapshot version is "v2"
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
+
+  @AC-8 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher task that ends unexpectedly is retained and its exit is logged
+    Given the <service> ConfigWatcher has started its watch task
+    When the watch coroutine ends with RuntimeError "boom"
+    Then an error naming the watch task and "boom" is logged
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
+
+### Notes / ambiguities / conflicts
+- Attribution call: AC-5 and AC-8 are Scenario Outlines whose Examples cover analysis, indicators and ingest. They go to platform.feature as one cross-service guarantee, verbatim, and are not split per service. If the owner wants per-service recon visibility, the alternative is a per-service copy, which would need editing the Examples.
+- The platform.feature `Feature:` header and style (2-space indented scenarios) are assumed to match the file. The orchestrator should check the indent when appending.
+- No OVERLAP or CONFLICT found. I grepped every services/*/acceptance/*.feature and platform.feature for supervision, reconnect, ConfigWatcher, parked and cursor terms. The closest are analysis durable-loop-scheduler.feature (feature 158) and fix-config-watcher-client-id.feature (feature 174), and they assert different outcomes. 158 AC-2 says a caught run error advances the schedule by the retry cadence. 259 AC-2 adds survival when that advance also fails, which extends it without contradicting it.
+- Analysis acceptance directory already exists, so no lazy dir creation is needed. The new file is a CREATE.
+- Feature 042 (order-snapshots-pnl-patterns.feature) says nothing about failure handling in the consumer, so AC-6/7/9/10 are additive.
+
+### Coverage check
+- Source scenarios: 10 (AC-1..AC-10). Planned: 10 NEW (8 in the analysis suite, 2 in platform.feature), 0 DUP, 0 OVERLAP, 0 skipped. Counts match.
+```

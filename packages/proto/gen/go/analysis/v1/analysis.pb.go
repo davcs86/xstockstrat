@@ -3858,7 +3858,7 @@ type FundamentalsScanSummary struct {
 	SignalsEmitted   int32                  `protobuf:"varint,3,opt,name=signals_emitted,json=signalsEmitted,proto3" json:"signals_emitted,omitempty"`
 	CallsSpent       int32                  `protobuf:"varint,4,opt,name=calls_spent,json=callsSpent,proto3" json:"calls_spent,omitempty"`
 	DeferredCount    int32                  `protobuf:"varint,5,opt,name=deferred_count,json=deferredCount,proto3" json:"deferred_count,omitempty"`
-	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // "completed" | "budget_deferred" | "failed"
+	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // "completed" | "budget_deferred" | "partial" | "failed"
 	FinishedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
