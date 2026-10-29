@@ -575,7 +575,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 
 ### Step 9 — service: D-48 per-row `GetOfflineStates` decode and `readValuation.unavailable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -627,7 +627,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 
 ### Step 10 — test: per-row decode isolation and `valueRead` marking
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/offline_realized_test.go` — modify
@@ -1125,3 +1125,17 @@ _Populated by /sdd-execute as implementation proceeds._
   `upsert offline realized`), so `errors.Is` still reaches the driver error.
 - Steps 7 + 8 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
   `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-6, reported 0 issues. **Disposition**: CI-equivalent fallback.
+- Steps 9 + 10 (2026-10-29, operator decision "Merge pairs + standing rule", session question tool): the two steps
+  land as **one** lint-green commit with one red→green cycle on Step 10's tests, and both are marked done. Standing
+  rule, quoted: "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step [...] Execute this step and the next one together as ONE commit with one red→green cycle
+  on the next step's tests, mark BOTH steps done". Step 9 alone cannot compile the repository tests
+  (`offline_realized_test.go:55`, `:80` must take the 3-value `GetOfflineStates` return), and `degraded()` has no
+  non-test caller until Step 11.
+- Steps 9 + 10 (2026-10-29, implementation detail, no spec change): `GetOfflineStates` returns a non-nil empty
+  `failed` map on success (including the empty-ids early return); the per-row Warn keeps the `"offline state
+  unavailable"` message and adds `account_id`. RED was a compile failure of the new tests plus a throwaway 2-value
+  AC-8 test on the pre-Step-9 repo (`decode recent fills for off-1: invalid character ...`, whole batch failed), not
+  committed.
+- Steps 9 + 10 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-8, reported 0 issues. **Disposition**: CI-equivalent fallback.

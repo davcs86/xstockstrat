@@ -494,18 +494,19 @@ func (r *PortfolioRepo) UpsertOfflineRealized(ctx context.Context, accountID, us
 	return err
 }
 
-// GetOfflineStates returns the caller's offline P&L state for the given accounts; an account with no
-// row (or owned by another user) is absent from the map.
-func (r *PortfolioRepo) GetOfflineStates(ctx context.Context, userID string, accountIDs []string) (map[string]OfflineState, error) {
+// GetOfflineStates returns the caller's offline P&L state per account (absent: no row or another user's);
+// an undecodable row fails only that account (in the second map), never the whole call.
+func (r *PortfolioRepo) GetOfflineStates(ctx context.Context, userID string, accountIDs []string) (map[string]OfflineState, map[string]error, error) {
 	out := make(map[string]OfflineState, len(accountIDs))
+	failed := map[string]error{}
 	if len(accountIDs) == 0 {
-		return out, nil
+		return out, failed, nil
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT account_id, realized_pnl, realized_carried, fees_since_snapshot, fees_carried, recent_fills
 		FROM portfolio.offline_account_realized WHERE user_id=$1 AND account_id = ANY($2)`, userID, accountIDs)
 	if err != nil {
-		return nil, fmt.Errorf("get offline states: %w", err)
+		return nil, nil, fmt.Errorf("get offline states: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -515,19 +516,20 @@ func (r *PortfolioRepo) GetOfflineStates(ctx context.Context, userID string, acc
 			fillsJSON []byte
 		)
 		if err := rows.Scan(&id, &st.RealizedPnl, &st.RealizedCarried, &st.FeesSinceSnapshot, &st.FeesCarried, &fillsJSON); err != nil {
-			return nil, fmt.Errorf("scan offline state: %w", err)
+			return nil, nil, fmt.Errorf("scan offline state: %w", err)
 		}
 		if len(fillsJSON) > 0 {
 			if err := json.Unmarshal(fillsJSON, &st.RecentFills); err != nil {
-				return nil, fmt.Errorf("decode recent fills for %s: %w", id, err)
+				failed[id] = fmt.Errorf("decode recent fills for %s: %w", id, err)
+				continue
 			}
 		}
 		out[id] = st
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("offline states iteration: %w", err)
+		return nil, nil, fmt.Errorf("offline states iteration: %w", err)
 	}
-	return out, nil
+	return out, failed, nil
 }
 
 // DeleteOfflineRealized removes an offline account's realized row.

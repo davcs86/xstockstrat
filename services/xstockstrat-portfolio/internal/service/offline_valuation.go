@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math"
 	"sort"
@@ -25,10 +26,14 @@ type accountVal struct {
 }
 
 // readValuation is one read's shared valuation result: the caller's offline states and per-account Day P&L.
+// unavailable holds the offline accounts whose state could not be read; their P&L must not be trusted.
 type readValuation struct {
-	states   map[string]repository.OfflineState
-	accounts map[string]accountVal
+	states      map[string]repository.OfflineState
+	accounts    map[string]accountVal
+	unavailable map[string]bool
 }
+
+func (v readValuation) degraded(accountID string) bool { return v.unavailable[accountID] }
 
 // state is the caller's offline state for an account; nil when it has none (a broker or brand-new account).
 func (v readValuation) state(accountID string) *repository.OfflineState {
@@ -96,10 +101,18 @@ func (s *PortfolioService) valueRead(ctx context.Context, positions []*portfolio
 		return readValuation{}
 	}
 
-	states, err := s.repo.GetOfflineStates(ctx, middleware.FromContext(ctx).UserID, ids)
+	unavailable := map[string]bool{}
+	states, failed, err := s.repo.GetOfflineStates(ctx, middleware.FromContext(ctx).UserID, ids)
 	if err != nil {
-		slog.Warn("offline state unavailable", "accounts", len(ids), "error", err)
+		slog.Warn("offline state unavailable", "accounts", len(ids), "error", errors.Join(ErrOfflineStateUnavailable, err))
 		states = map[string]repository.OfflineState{}
+		for _, id := range ids {
+			unavailable[id] = true
+		}
+	}
+	for id, ferr := range failed {
+		slog.Warn("offline state unavailable", "account_id", id, "error", errors.Join(ErrOfflineStateUnavailable, ferr))
+		unavailable[id] = true
 	}
 	now := s.clock()
 	ref, _ := marketsession.Reference(now)
@@ -118,7 +131,7 @@ func (s *PortfolioService) valueRead(ctx context.Context, positions []*portfolio
 
 	quotes, bars := s.fetchMarks(ctx, now, unvaluedSymbols(positions), dedupe(barSyms))
 	applyQuotes(other, quotes)
-	return readValuation{states: states, accounts: valueOffline(now, offline, ids, states, quotes, bars)}
+	return readValuation{states: states, accounts: valueOffline(now, offline, ids, states, quotes, bars), unavailable: unavailable}
 }
 
 // fetchMarks runs the quote batch and the allow_partial daily-bars batch concurrently, each under the

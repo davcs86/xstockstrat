@@ -869,3 +869,25 @@ Each item names the step where it is resolved.
   and the full `go test ./... -race` pass, with 68.6% total on the CI coverpkg set (≥ 40%). `golangci-lint` v2.14.0
   (go1.27.0 build) reported 0 issues.
 - Next: Step 9 (D-48 per-row `GetOfflineStates` decode and `readValuation.unavailable`).
+
+## Session 2026-10-29 — Steps 9 + 10 (service + test, D-48 per-row decode)
+
+- Operator decision (2026-10-29, session question tool, in their words): "Merge pairs + standing rule". Steps 9 and 10
+  are one lint-green commit with one red→green cycle on Step 10's tests; both marked done (Deviation Log).
+- `portfolio_repo.go`: `GetOfflineStates` returns `(map[string]OfflineState, map[string]error, error)`. Query, Scan
+  and `rows.Err` stay whole-call (`nil, nil, err`); a `recent_fills` decode failure goes to `failed[id]` and the
+  account is left out of the states map.
+- `offline_valuation.go`: `readValuation.unavailable` + `degraded(accountID)`. `valueRead` marks every id in `ids` on a
+  whole-call error and only the failed id per row failure, each with a Warn `"offline state unavailable"` carrying
+  `errors.Join(ErrOfflineStateUnavailable, err)`. Broker accounts are never passed in, so never marked. No read path
+  consumes `degraded()` yet — Step 11 does.
+- `portfolio_service.go`: `ErrOfflineStateUnavailable` sentinel beside `ErrQuotesUnavailable` (logs/tests only; no
+  handler mapping change).
+- Tests: `offline_realized_test.go` (two call sites on the 3-value return; AC-8 undecodable row; scan error stays
+  whole-call) and `offline_valuation_test.go` (`TestValueRead_WholeCallErrorMarksEveryRequestedID`,
+  `TestValueRead_RowFailureMarksOnlyThatID`). C-13: the corrupt JSON literal is inline (single-consumer one-off).
+- TDD: RED was a compile failure (3-value return, `degraded`, `ErrOfflineStateUnavailable` undefined) plus a throwaway
+  AC-8 test on the old repo that failed the whole batch on one bad row. GREEN: all six targeted tests pass.
+- Verification: spec greps match; `go build`, `go vet` and the full `go test ./... -race` pass, 68.6% total on the CI
+  coverpkg set (≥ 40%); `golangci-lint` v2.14.0 (go1.27.0 build) 0 issues.
+- Next: Step 11 (D-48 degraded marker and zeroing on every read path).

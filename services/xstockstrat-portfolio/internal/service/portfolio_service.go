@@ -719,6 +719,9 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 // Unavailable so callers can tell a transient dependency gap from a server bug.
 var ErrQuotesUnavailable = errors.New("quotes unavailable")
 
+// ErrOfflineStateUnavailable tags offline-state read failures in logs; no read returns it to a caller.
+var ErrOfflineStateUnavailable = errors.New("offline state unavailable")
+
 // GetPnL computes realized + unrealized P&L over a time range. Realized uses the shared pnl package
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
