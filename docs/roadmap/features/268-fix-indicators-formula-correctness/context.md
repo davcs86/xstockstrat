@@ -759,3 +759,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 6: servicer path made explicit (`app/handlers/servicer.py`); `ComputeIndicator` `:204`, None-drop
     `:216-217` → `:217`, `IndicatorPoint` `:221`; `ListIndicators` `:354` → `:355`. Test-file, conftest,
     `EXEMPT` and proto citations re-verified unchanged.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 4 — test: D-10 sandbox failure semantics, success guard and preserved classifications — done (2026-10-29)
+
+- `tests/test_sandbox.py`: new `class TestSandboxNoOutputFails` (6 cases, each docstring names its scenario):
+  AC-1 `SystemExit(0)`, AC-2 unparseable marker, AC-3 `result` success guard, marker-framing guard,
+  `os._exit(0)` via `numpy.lib._datasource.os`, `SystemExit(1)` empty-stderr error text.
+- `tests/test_formulas.py`: `test_no_output_run_returns_runtime_error` added inside
+  `TestExecuteFormulaInlineParameters` (reuses its `_cfg`; no fourth copy) — `success` False,
+  `SANDBOX_EXIT_REASON_RUNTIME_ERROR`, `"produced no output"` in `error`.
+- C-13: inline formula-source strings only; no conftest change. `tests/test_sandbox_isolation.py` unedited.
+- TDD (Step 3 already landed, so `sandbox.py` was temporarily checked out at `85ef0ac8~1` for RED, then
+  restored): red: 6 failed, 1 passed — AC-1/AC-2/os._exit/servicer `True is False`, SystemExit(1)
+  `'' != ''`, framing guard `{} == {'x': 1}`; only AC-3 passed → green: 7 passed.
+- Verification: `test_sandbox.py test_sandbox_isolation.py test_formulas.py -v` 103 passed; full suite
+  309 passed, coverage 86.24% (≥50%); `ruff check .` clean; `ruff format --check .` clean after
+  `ruff format tests/test_sandbox.py` (step's own lines).
+- Deviations: RED-proof wording only (framing guard is RED pre-Step-3, not pass-both) — see Deviation Log.

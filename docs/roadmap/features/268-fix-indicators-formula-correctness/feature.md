@@ -22,6 +22,7 @@
 | 2026-10-28 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | D-54 guard: pending-hidden rows → NOT_FOUND on UpdateFormula/DeleteFormula |
 | 2026-10-28 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | D-54 guard-branch tests (`TestPendingHiddenMutation`, AC-6/AC-7) |
 | 2026-10-28 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | D-10: a sandbox run with no parseable `__OUTPUT__:` line fails (`runtime_error`) |
+| 2026-10-29 | `in-progress` (Step 4 done) | /sdd-execute sequential (sdd-batch-execute) | D-10 tests: `TestSandboxNoOutputFails` (AC-1/AC-2/AC-3) + servicer RUNTIME_ERROR mapping |
 | 2026-10-29 | `in-progress` (re-spec steps 5, 6) | /sdd-execute sequential (sdd-batch-execute) | Merged `origin/main-dev` (`-X ours`); steps 5, 6 aligned with the current codebase (line drift only) |
 
 ---
@@ -58,4 +59,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 4
+`/sdd-execute fix-indicators-formula-correctness sequential` — continue at Step 5

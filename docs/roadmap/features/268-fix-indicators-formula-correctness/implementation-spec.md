@@ -288,7 +288,7 @@ AC-3 and marker-framing guard catch it, so run Step 4's suite right after this e
 
 ### Step 4 — test: D-10 sandbox failure semantics, success guard and preserved classifications
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox.py` — modify
@@ -667,3 +667,11 @@ cat docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.stat
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — RED proof for the marker-framing guard (2026-10-29)
+- **Spec said**: Step 4's RED proof calls AC-3 and the marker-framing guard "pass both before and after".
+- **Actual**: only AC-3 passes before Step 3. The framing guard fails pre-Step-3 (`assert {} == {'x': 1}`),
+  because the trailing `print("x", end="")` glued the marker mid-line. Step 3 had already landed, so RED was
+  captured by temporarily checking out the pre-Step-3 `sandbox.py` (`85ef0ac8~1`) and restoring it before GREEN.
+- **Disposition**: test unchanged. The guard is stronger than specced (it is also a RED assertion for the
+  framing fix). No scope change.
