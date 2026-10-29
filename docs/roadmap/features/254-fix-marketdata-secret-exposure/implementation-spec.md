@@ -618,6 +618,16 @@ doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolv
 
 _Populated by /sdd-execute as implementation proceeds._
 
+- **2026-10-29, Step 9 deferred to operator — integration PR merge held until the post-merge dev smoke passes.** The
+  step's precondition is unmet: Step 7 (`d3f6780b`) is only on `origin/feature/fix-marketdata-secret-exposure`, not
+  `origin/main-dev`, so no dev deploy carries the fix and a log grep now would test the old code. Operator checks,
+  after the integration PR merges to `main-dev` and the dev deploy finishes: (1) pick an `xstockstrat-marketdata` boot
+  timestamped after the new `xstockstrat-config` instance became healthy, or force a marketdata restart; (2) run
+  `doctl apps logs <dev-app-id> xstockstrat-marketdata --type run | grep -c 'resolving vendor credential from config failed'`
+  (or the DO apps MCP `apps-get-logs`, component `xstockstrat-marketdata`, type RUN) and expect `0`; (3) any match
+  means revert the Step 7 `authz.ts:119` `peerSan` line alone (Steps 1-3 stay); (4) record the boot timestamp and
+  match count in `context.md` and set Step 9 **Status** to `done`. Step 9 **Status** stays `pending`.
+
 - **2026-10-29, Step 8 (report date, residual cite, teardown).** The residuals report is dated by execution, as the
   Files note allows: `docs/reports/2026-10-29-marketdata-vendor-key-url-residuals-defect.md` + `.status` (`open`).
   Residual (a) is cited by function and quoted text (`Client.do`), not `client.go:665`: on this go1.27.0 install the
