@@ -580,3 +580,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Coverage check
 - Source scenarios: 3 (AC-1, AC-2, AC-3). Planned (NEW+DUP+OVERLAP): 3 (3 NEW). All accounted for, none skipped. @AC numbers unchanged, @feature-269 added.
 ```
+
+## Session 2026-10-29 — sdd-execute ALL-DONE PATH (C-16 promotion + integration PR)
+
+- Status: `in-progress` → `code-completed`.
+- C-16 resolution: the `sdd-batch-promotion-plan` above was **not** applied. Its `platform.feature` APPEND rests on a
+  false premise ("no @feature-269 tag exists anywhere yet"): Step 9 (`10f4d61d`) already promoted `@AC-1..3` verbatim
+  into `services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature` under the
+  design/spec-named rule (identity = (feature, AC)). Appending would hold the same identity twice, so every row is DUP
+  under the plan's own dedup rule and nothing new is written. `docs/sdd/business-rules/platform.feature` is unchanged.
+- Open for the operator: if the cross-service `platform.feature` home is preferred, move (not copy) the three blocks
+  there and delete the per-service files; flagged in the integration PR body.
