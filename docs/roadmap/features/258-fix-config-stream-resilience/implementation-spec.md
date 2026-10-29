@@ -105,23 +105,25 @@ request, logs without a trace id.
 **Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
 secret redaction on every broadcast
 
-**Codebase Evidence**:
-- `configServiceImpl.ts:1` `import { Pool } from 'pg';`. `PoolClient` is not imported anywhere in config `src`
-  (grep).
+**Codebase Evidence** (re-spec 2026-10-29: the step is implemented in `907fa340`; the anchors describe the
+current tree, and the pre-Step-1 sites are in recon.md):
+- `configServiceImpl.ts:1` already reads `import { Pool, PoolClient } from 'pg';`.
 - `:19` `const log = getLogger('config:impl');`.
-- `:155` `export class ConfigServiceImpl {`. The fields are at `:156` (`subscribers`) and `:158` (`snapshots`). The
-  constructor is at `:160`: `constructor(private readonly pool: Pool) {}`.
-- **D-05**, `:162-174` `initialize()`:
-  - `:163` `await this.reloadAll();`
-  - `:164` `const pgClient = await this.pool.connect();`
-  - `:165` `await pgClient.query('LISTEN config_changed');`
-  - `:166-172` an `async` `notification` handler with no try. It does `JSON.parse(msg.payload)` (`:168`), defaults
-    env to `'staging'` (`:169`), then calls `reloadNamespace` (`:170`) and `broadcastToSubscribers` (`:171`).
-  - `:173` `log.info(...)`.
-- `reloadAll()` `:176-201` reads global rows only (`:181`) and writes snapshots at `:190-199`. It does not broadcast.
-- `reloadNamespace()` `:203-223` writes the full-namespace DELTA snapshot (`:214-222`; CONFIG-1).
-- `broadcastToSubscribers(namespace, env)` `:260-274` builds each payload through `snapshotForSubscriber` (`:265`).
-  Calling it after `reloadAll` therefore puts no `updateType: 1` on the wire (recon.md § Patterns to REUSE).
+- `:156-157` `LISTENER_BACKOFF_INITIAL_MS = 1000` / `LISTENER_BACKOFF_MAX_MS = 30000`.
+- `:159` `export class ConfigServiceImpl {`. The fields `subscribers` (`:160`) and `snapshots` (`:162`) are followed
+  by the Step 1 fields `listener`, `connectedOnce`, `reconnectTimer`, `backoffMs` (`:163-166`) and `chain` (`:168`).
+  The constructor is at `:170`.
+- `initialize()` `:172-174` is now `await this.connectListener();`. The old `:162-174` body (the unguarded
+  `pool.connect` at `:164` and the notification handler with no try) is gone.
+- `serial()` `:176-183`. `connectListener()` `:185-205`: `pool.connect()` at `:188` inside the try,
+  `LISTEN config_changed` at `:195` before the serial `reloadAll`/`resyncAll` at `:196`, the `log.info` at `:199`,
+  and the catch at `:200-204`.
+- `dropListener()` `:207-218`; `scheduleReconnect()` `:220-230`; `resyncAll()` `:232-241`; `onNotification()`
+  `:243-259`.
+- `reloadAll()` `:261-286` reads global rows only and does not broadcast. `reloadNamespace()` `:288-312` writes the
+  full-namespace DELTA snapshot (`changedKeys: Object.keys(values)` at `:305`; CONFIG-1).
+- `broadcastToSubscribers(namespace, env)` `:345-359` builds each payload through `snapshotForSubscriber` (`:350`),
+  so calling it after `reloadAll` puts no `updateType: 1` on the wire.
 - Reference to port (mandatory reuse, recon.md § Patterns to REUSE): ledger
   `services/xstockstrat-ledger/src/services/eventNotifier.ts`.
   - `:71-108` `connect()`: `connect()`/`LISTEN` sit inside one try (`:82`), and the catch reschedules
@@ -130,7 +132,8 @@ secret redaction on every broadcast
     The timer callback clears `this.reconnectTimer = null` (`:114`) before reconnecting.
   - `:119-137` `dispatch()`: a guarded `JSON.parse`, and a malformed payload is ignored.
   - `:35` `reconnectDelayMs = 2000`, a hardcoded constant. This is the F-07 precedent for code-constant backoff.
-- Re-verified 2026-10-29 after the main-dev merge: every Step 1 anchor above still matches.
+- Re-verified 2026-10-29 after the second main-dev merge: the ledger `eventNotifier.ts` anchors still match, and the
+  configServiceImpl.ts anchors above are re-stamped against the post-Step-3 tree.
 - Boot path: `src/index.ts:47-48` (`new ConfigServiceImpl(pool)`, `await configImpl.initialize()`). A rejection
   from `initialize()` makes `main()` exit (recon.md:20-22). That fail-fast behaviour is kept, and `index.ts` is not
   edited.
@@ -144,7 +147,7 @@ secret redaction on every broadcast
 
 **Covers**: —
 
-**Instructions**:
+**Instructions** (already applied in `907fa340`; kept as the record of what the step does — do not re-apply):
 1. Change `:1` to `import { Pool, PoolClient } from 'pg';`.
 2. Next to `:156-158`, add the private fields and two module-level code constants (F-07: config cannot watch itself,
    invariant #1; precedent `eventNotifier.ts:35`):
@@ -210,7 +213,7 @@ secret redaction on every broadcast
 **Verification**:
 ```bash
 cd services/xstockstrat-config && pnpm run build && pnpm run lint
-grep -n "pool.connect()" src/grpc/configServiceImpl.ts      # expect: exactly one hit, inside connectListener's try
+grep -n "pool.connect()" src/grpc/configServiceImpl.ts      # expect: exactly one hit (:188), inside connectListener's try
 grep -n "LISTENER_BACKOFF_INITIAL_MS = 1000\|LISTENER_BACKOFF_MAX_MS = 30000" src/grpc/configServiceImpl.ts
 ```
 
@@ -422,8 +425,10 @@ grep -n "getConfig failed\|setConfig existence gate failed" src/grpc/configServi
 secret redaction on every broadcast
 
 **Codebase Evidence**:
-- Step 3's sites: `getConfig` `:319`, and the `setConfig` gates `:449-465` (re-stamped 2026-10-29; same +2 drift as
-  Step 3).
+- Step 3's sites (re-stamped 2026-10-29 against the post-Step-3 tree): `getConfig` `:400`, with its overlay call
+  `resolveOverlayValues(namespace, env, userId)` at `:406` inside the try. The overlay SELECT (`user_id = $3`) is
+  at `:318-322`. The `setConfig` existence gates are at `:541-563`: the exact-scope `SELECT is_secret` at
+  `:545-549`, the per-user global-row fallback at `:553-558`, and the catch / code 13 at `:559-563`.
 - Admin-scope metadata shape: `setConfigAuthz.test.ts` uses `HEADER_ACCESS_SCOPE`/`HEADER_USER_ID` imported from
   `../grpc/authz` (`authz.ts:10-11`). The inline literals are banned by `.eslintrc.json:13-27`. Scope `'4'` passes
   `hasAdminAccessScope`.
@@ -431,7 +436,7 @@ secret redaction on every broadcast
   grep, re-verified 2026-10-29), so a write of 600 reaches the existence gate.
 - INVALID_ARGUMENT source: `'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 }`
   (`:101`).
-- NOT_FOUND source: `:468-474`.
+- NOT_FOUND source: `:566-572`.
 - C-13: inline scenario values in this file only; compliant inline.
 
 **TDD**: `red-green required`. Against the pre-Step-3 tree, AC-3 and AC-4 reject from the handler instead of
@@ -482,26 +487,28 @@ grep -n "AC-3\|AC-4\|AC-11" src/__tests__/configServiceImpl.test.ts
 secret redaction on every broadcast
 
 **Codebase Evidence**:
-- `interface Subscriber` `:87-94`. `lastVersion: string` (`:93`) is set at `:302` and read nowhere in
+- `interface Subscriber` `:87-94`. `lastVersion: string` (`:93`) is set at `:387` and read nowhere in
   `services/xstockstrat-config/src` (grep; recon.md:181-183).
-- **D-58** `broadcastToSubscribers` `:260-274`:
-  - The loop is at `:262`.
-  - The catch `:268-271` is `log.warn('Failed to write to subscriber', { clientId: sub.clientId })` followed by
+- **D-58** `broadcastToSubscribers` `:345-359`:
+  - The loop is at `:347`.
+  - The catch `:353-356` is `log.warn('Failed to write to subscriber', { clientId: sub.clientId })` followed by
     `this.subscribers.delete(id)`. It drops `err` and never ends the call.
-- **D-35** `watchConfig(call)` `:280-313`:
-  - `subId` is built at `:284`.
-  - The `cancelled`/`error` handlers at `:288-294` only delete.
-  - The `Subscriber` literal is at `:296-303`.
-  - `.then(...)` at `:305-309` registers only after the snapshot write.
-  - `.catch(...)` at `:310-312` only warns.
-- `first(md, key): string` — `src/grpc/authz.ts:14`, already imported (`configServiceImpl.ts:9`). The call form is
-  at `:407` (C-18; not the array-returning `metadata.get`). There is no `x-trace-id` header constant in config
-  (grep), so the literal is used once.
+- **D-35** `watchConfig(call)` `:365-398`:
+  - `subId` is built at `:369`.
+  - The `cancelled`/`error` handlers at `:373-379` only delete.
+  - The `Subscriber` literal is at `:381-388`.
+  - `.then(...)` at `:390-394` registers only after the snapshot write.
+  - `.catch(...)` at `:395-397` only warns.
+- `first(md, key): string` is declared at `src/grpc/authz.ts:15` (its doc comment is `:14`). It is already imported
+  (`configServiceImpl.ts:9`, inside the `./authz` import at `:3-14`). The call form is at `:499` (C-18; not the
+  array-returning `metadata.get`). Config `src` outside tests has no `x-trace-id` header constant or literal (grep),
+  so the literal is used once.
 - Stream-termination pattern to reuse: ledger `call.destroy({ code: 13, message: \`Internal error: ${err.message}\` })`
   (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:325`; also `:285`, `:297`). Config has no
   `call.destroy` today (grep).
-- `ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT` / `_DELTA` are used at `:305` and `:265`.
-- Re-verified 2026-10-29 after the main-dev merge: every Step 5 anchor above still matches.
+- `ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT` / `_DELTA` are used at `:390` and `:350`.
+- Re-verified 2026-10-29 after the second main-dev merge: the anchors above are re-stamped against the post-Step-3
+  tree (Steps 1–3 added about 85 lines above them).
 
 **TDD**: `red-green required` (Step 6 is the paired test)
 
@@ -517,18 +524,18 @@ secret redaction on every broadcast
    - `try { sub.call.destroy({ code: 13, message: \`Internal error: ${err?.message}\` }); } catch { /* call already closed */ }`
    - It is reachable **only** from the `watchConfig` snapshot/catch-up chain and the per-subscriber broadcast catch
      (C-16: PRESERVE platform `@AC-6 @FR-6 @feature-210`).
-3. `broadcastToSubscribers` (`:262-271`):
+3. `broadcastToSubscribers` (`:347-356`):
    - After the namespace/env filter, add `if (sub.pending) { sub.missedDelta = true; continue; }`.
-   - Replace the catch body (`:269-270`) with `this.endSubscriber(id, sub, err);`.
-4. `watchConfig` (`:296-312`):
+   - Replace the catch body (`:354-355`) with `this.endSubscriber(id, sub, err);`.
+4. `watchConfig` (`:381-397`):
    - The literal becomes `{ namespace, environment, userId, clientId, call, pending: true, missedDelta: false, traceId: first(call.metadata, 'x-trace-id') || undefined }`.
    - Register it **before** the snapshot read: `this.subscribers.set(subId, sub);`.
-   - Replace `:305-312` with an async chain:
+   - Replace `:390-397` with an async chain:
      1. `const snap = await this.snapshotForSubscriber(sub, SNAPSHOT); if (this.subscribers.get(subId) !== sub) return; call.write(snap);`
      2. `while (sub.missedDelta && this.subscribers.get(subId) === sub) { sub.missedDelta = false; const d = await this.snapshotForSubscriber(sub, DELTA); if (this.subscribers.get(subId) !== sub) break; call.write(d); }`
      3. `sub.pending = false;`
      4. Route any rejection to `this.endSubscriber(subId, sub, err)`.
-5. Leave the `cancelled`/`error` handlers (`:288-294`) as delete-only. A certificate rotation therefore never
+5. Leave the `cancelled`/`error` handlers (`:373-379`) as delete-only. A certificate rotation therefore never
    triggers `destroy`.
 6. All payloads still come from `snapshotForSubscriber` → `resolveOverlayValues` → `buildConfigValue`. No new SELECT
    is added (PRESERVE `@AC-2`/`@AC-13`/`@AC-14`, platform `@AC-35`). SNAPSHOT-first (service invariant #2) holds,
@@ -554,11 +561,16 @@ grep -n "this.endSubscriber(" src/grpc/configServiceImpl.ts   # expect: exactly 
 secret redaction on every broadcast
 
 **Codebase Evidence**:
-- Step 5's sites: `watchConfig` `:280-313`, `broadcastToSubscribers` `:260-274`.
-- `broadcastToSubscribers` is private. Tests drive it through the Step 1 `notification` path, using Step 2's
-  `FakeClient` and the routing pool, which are reused in this file (no second copy).
+- Step 5's sites in the pre-Step-5 tree (re-stamped 2026-10-29): `watchConfig` `:365-398` and
+  `broadcastToSubscribers` `:345-359`. Step 5 shifts both, so locate them by symbol.
+- `broadcastToSubscribers` is private. Tests drive it through the Step 1 `notification` path. They reuse Step 2's
+  `class FakeClient` (`configServiceImpl.test.ts:104`) and the routing pool from `makeRig()` (`:123`) in this file
+  (no second copy).
+- Log capture: there is no shared helper. Step 2's `@AC-2` case mocks `process.stdout.write` inline (about
+  `:358-360`, with `t.mock.method`, passing each chunk through; the sink is recorded in the Deviation Log). Step 6
+  uses the same inline pattern in each case that asserts a log line.
 - Fake-call model: ledger stream tests assert `call.destroyed.code` (`ledgerServiceImpl.test.ts:597-598`, `:609`; fake call `destroyed` field at `:520`, set at `:528`).
-- Per-user overlay SELECT: `configServiceImpl.ts:233-238` (`user_id = $3`).
+- Per-user overlay SELECT: `configServiceImpl.ts:318-322` (`user_id = $3`, in `resolveOverlayValues`).
 
 **TDD**: `red-green required`. Against the pre-Step-5 tree:
 - AC-6 fails: there is no `destroy`, and the stream gets no status.
@@ -585,7 +597,8 @@ secret redaction on every broadcast
    - Register a `u-1` subscriber and let its snapshot complete.
    - Make the overlay SELECT reject once with `new Error('overlay rejected')`, then notify for `analysis`.
    - Assert `call.destroyed.code === 13`.
-   - Assert a captured error-level record containing `overlay rejected` (Step 2's log capture).
+   - Assert a captured error-level record containing `overlay rejected`, using the inline
+     `process.stdout.write` capture from Step 2's `@AC-2` case.
    - A second notify writes nothing to that call.
 4. **Cancel during catch-up.**
    - With a held snapshot SELECT and a notify, emit `cancelled` on the call before releasing the SELECT.
@@ -748,11 +761,12 @@ design.md § Build order requires.
 - `services/xstockstrat-config/CLAUDE.md`:
   - Invariant #4 at `:35`: "Config changes trigger pg_notify → reloads namespace in memory → broadcasts DELTA…".
   - § WatchConfig Flow starts at `:65`. Its tail is "ConfigServiceImpl receives LISTEN notification → Reloads
-    namespace from DB → Broadcasts DELTA" (about `:86-88`).
+    namespace from DB → Broadcasts DELTA" (`:87-89`).
 - `services/xstockstrat-config/docs/context-constitution.md:18` CONFIG-1 cites
-  `configServiceImpl.ts#reloadNamespace (~L197-217; … ~L214)`. This is already stale before any step: the current
-  code has `private async reloadNamespace` at `:203` and `changedKeys: Object.keys(values)` at `:220`. The hints
-  drift further with Steps 1, 3 and 5; instruction 2's re-stamp covers both.
+  `configServiceImpl.ts#reloadNamespace (~L197-217; … ~L214)`. This is stale: after Steps 1–3 the code has
+  `private async reloadNamespace` at `:288` and `changedKeys: Object.keys(values)` at `:305`. A second
+  `changedKeys: Object.keys(values)` at `:338` belongs to `snapshotForSubscriber`. Step 5 shifts these again, and
+  instruction 2's grep re-stamp covers that.
 - The root CLAUDE.md pool-budget table needs no change. The pooled LISTEN client is unchanged (F-06; design.md
   § Constitution Rules Touched).
 
