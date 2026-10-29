@@ -753,3 +753,21 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   coverage at 89.19% (≥40). `ruff check .` and `ruff format --check .` are clean.
 - Files modified: `services/xstockstrat-analysis/tests/test_config_watcher.py`
 - Deviations: none
+
+## Session 2026-10-29 — sdd-execute sequential, Step 7
+
+### Step 7 — service: indicators ConfigWatcher reconnects after any exception; watch task retained (FR-3) [done]
+- `app/config/watcher.py`: same edit shape as Step 5 (D-20). `__init__` keeps the task as `self._watch_task`
+  (`name=f"config-watch-{namespace}"`) with `add_done_callback(self._on_watch_done)`. `_on_watch_done` returns on cancel,
+  otherwise logs ERROR `config watch task %s exited unexpectedly: %r`, and never raises. `_watch` catches `Exception`
+  (`# noqa: BLE001`), logs `config stream error (%s): %s, reconnecting in 2s`, and keeps the inline request build, the
+  single `while True`, the 2s sleep and the last good `_snapshot` (@AC-4 @feature-173).
+- TDD: a scratch test written to Step 8's instructions (@AC-5 reconnect after `RuntimeError` with `indicators-`
+  client_id; @AC-8 retained task plus ERROR log naming `config-watch-indicators`) failed RED against the pre-step file:
+  2 failed (`RuntimeError` escaped `_watch`; `AttributeError` because `_watch_task` was missing). It passed GREEN after
+  the edit (2 passed) and was then deleted (F-08). Step 8 authors the durable tests.
+- Verification: `grep "except grpc.aio.AioRpcError"` finds nothing. The `_watch_task` / `_on_watch_done` grep hits
+  `:56,59,61`. `ruff check .` and `ruff format --check .` are clean. The full suite gives 294 passed with coverage at
+  85.61% (≥50).
+- Files modified: `services/xstockstrat-indicators/app/config/watcher.py`
+- Deviations: none

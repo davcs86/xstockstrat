@@ -437,7 +437,7 @@ ruff check . && ruff format --check .
 
 ### Step 7 — service: indicators ConfigWatcher reconnects after any exception; watch task retained (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify
