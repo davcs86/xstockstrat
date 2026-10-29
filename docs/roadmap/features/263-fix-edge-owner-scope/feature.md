@@ -64,4 +64,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–7 done; continue at Step 8 (config `boundReadUserId` on `GetConfig` / `ListKeys`)
+`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–8 done; continue at Step 9 (config read-binding matrix test)

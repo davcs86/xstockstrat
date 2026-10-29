@@ -515,7 +515,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 8 — service: config `boundReadUserId` on `GetConfig` / `ListKeys`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -926,3 +926,16 @@ _Populated by /sdd-execute as implementation proceeds._
   rows in `ledgerEvents.ts`. That is pre-existing. The pre-commit `lint-staged` pass left them unchanged,
   and the added lines are clean.
 - **Disposition**: CI-equivalent fallback for the RED evidence and the harness flags. No spec change.
+
+### DEV-7 — Step 8: RED/GREEN via an uncommitted draft of the Step 9 test (2026-10-29)
+
+- **What**: Step 8's verification defers to Step 9 (`readUserBinding.test.ts`, create). To satisfy P-06
+  before implementing, a draft of that test (AC-4, AC-5, AC-6, AC-8, header-less and empty-body cases over
+  the real-server harness) was run RED against the pre-Step-8 handlers (2/5 fail: AC-4 and AC-5 bind
+  `'u-b'`, not `'u-a'`; the rest pass as baselines), then GREEN (5/5) after the change. It was moved out
+  before commit so Step 9 owns and commits the test (F-08), the same pattern as DEV-4.
+- **Formatting**: `authz.ts` was run through `prettier --write`, which only wrapped the new helper.
+  `configServiceImpl.ts` already fails `prettier --check` on lines this step does not touch, so it was not
+  reformatted (surgical diff). The `request?: any` parameter adds one `no-explicit-any` lint warning; the
+  signature is the spec's.
+- **Disposition**: CI-equivalent fallback for the RED evidence (no spec change).

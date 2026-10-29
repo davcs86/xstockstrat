@@ -640,3 +640,22 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 - Correction (2026-10-29, after commit `1ad6b0bd`): the `lint-staged` pass did **not** reformat the
   `CLOSED_POSITION_ROWS` rows. A standalone `prettier --check` flags them, but that is pre-existing, and
   the step diff contains only the added lines. DEV-6 has been amended to match.
+
+### Step 8 — service: config `boundReadUserId` on `GetConfig` / `ListKeys` (2026-10-29)
+
+- Files: `services/xstockstrat-config/src/grpc/authz.ts` (new exported `boundReadUserId` after
+  `userIdFrom`), `services/xstockstrat-config/src/grpc/configServiceImpl.ts` (import + the `getConfig`
+  and `listKeys` call sites). `watchConfig`, `getSecret`, `setConfig` and `resolveOverlayValues` are
+  unchanged, and still call `requestUserId` directly.
+- Tooling setup (step 8): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇
+  `pnpm install --frozen-lockfile --filter xstockstrat-config... --filter .` (worktree-local).
+- TDD (DEV-7): a draft of the Step 9 test, kept out of the commit.
+  - Red, on the pre-Step-8 tree: 2/5 fail. AC-4 `getConfig` and AC-5 `listKeys` bind `'u-b'` where
+    `'u-a'` is expected.
+  - Green: 5/5.
+- Verification:
+  - `pnpm run test:coverage`: 182/182 pass, 86.71% lines (threshold 40).
+  - `pnpm run lint`: 0 errors.
+  - The spec grep finds one definition and two call sites (`getConfig:318`, `listKeys:530`).
+- Bind-not-refuse (operator decision of 2026-10-22): a non-admin's foreign body id is rebound to the
+  header caller, with no error. Admin callers, header-less callers and an empty body id are passed through.
