@@ -231,24 +231,24 @@ grep -n '"partial"' services/xstockstrat-analysis/app/engine/fundsignal_loop.py
 
 **Codebase Evidence**:
 - Claim INSERT `... ON CONFLICT (symbol, source, as_of_date) DO NOTHING RETURNING symbol`, args
-  `(symbol, source_slug, as_of_date, score, directions[symbol], run_id)`: `fundsignal_loop.py:244-255`
-  (re-spec 2026-10-29). `row is None` → `continue` at `:256-257`.
-- The emit call is at `:258-260`. The confirm UPDATE `SET signal_id=$4 WHERE symbol=$1 AND source=$2 AND as_of_date=$3`
-  is unscoped (`:261-269`). The unconditional `emitted += 1` is at `:270`.
-- **Feature 246 (merged to `main-dev`) changed `_score`** (`:422-437`) to return a tuple `(scores, unscored)`.
-  `run_once` does `scores, unscored = await self._score(fetched, sys_meta)` at `:226` and then calls
-  `self._warn_unscored(...)` (`:227`, defined `:360`). A `_score` mock that returns a bare dict makes `run_once` fail
+  `(symbol, source_slug, as_of_date, score, directions[symbol], run_id)`: `fundsignal_loop.py:247-258`
+  (re-spec 2026-10-29, rev 2). `row is None` → `continue` at `:259-260`.
+- The emit call is at `:261-263`. The confirm UPDATE `SET signal_id=$4 WHERE symbol=$1 AND source=$2 AND as_of_date=$3`
+  is unscoped (`:264-272`). The unconditional `emitted += 1` is at `:273`.
+- **Feature 246 (merged to `main-dev`) changed `_score`** (def `:430`) to return a tuple `(scores, unscored)`.
+  `run_once` does `scores, unscored = await self._score(fetched, sys_meta)` at `:229` and then calls
+  `self._warn_unscored(...)` (`:230`, defined `:365`). A `_score` mock that returns a bare dict makes `run_once` fail
   to unpack, so every mock here returns `(scores, [])`.
-- The force DELETE is at `:210-216`, `_already_emitted` at `:386-392`, `_emit_signal`'s `NOT_FOUND` →
-  `_SystemWriteRejected` at `:570-574`, and its other errors → `None` at `:575-576`.
+- The force DELETE is at `:210-216`, `_already_emitted` at `:391-397`, `_emit_signal`'s `NOT_FOUND` →
+  `_SystemWriteRejected` at `:578-582`, and its other errors → `None` at `:583-584`.
 - Test harness:
-  - `_identity_loop(overrides, author, ingest_responses)` is at `tests/test_fundsignal_loop.py:534-548`. It is built
+  - `_identity_loop(overrides, author, ingest_responses)` is at `tests/test_fundsignal_loop.py:586-602`. It is built
     on `RecordingStub` (`tests/conftest.py:90-117`), whose responses may be a value, an exception, or a function of
     the request (`isinstance(resp, types.FunctionType)`, `:108`).
-  - `_rpc_error` is at `:528-531`, and `loop._db` comes from `_make_loop` (`:47-70`, `_db.*` mocks at `:58-60`).
+  - `_rpc_error` is at `:580-583`, and `loop._db` comes from `_make_loop` (`:47-70`, `_db.*` mocks at `:58-60`).
   - Existing `test_already_emitted_skips_fetch_and_emit` (`:99`) stubs `fetch` rows as `{"symbol": ...}` only
     (`:102`).
-  - 246's `_emitted_inserts(loop)` (`:551`) reads `loop._db.fetchrow.await_args_list`, so it only works on the
+  - 246's `_emitted_inserts(loop)` (`:603`) reads `loop._db.fetchrow.await_args_list`, so it only works on the
     `AsyncMock` `_db`. The `_EmittedTable` tests assert on `table.rows` instead.
 - Real Postgres:
   - The session fixture `local_pg` (`tests/conftest.py:375`) yields a DSN. It skips locally and fails under
@@ -321,7 +321,7 @@ grep -n '"partial"' services/xstockstrat-analysis/app/engine/fundsignal_loop.py
      - RED today: the unscoped UPDATE writes 9.
    - `test_release_failure_is_swallowed_and_abort_still_reported`:
      - Use `_EmittedTable(fail_delete=True)` with NOT_FOUND.
-     - Assert `summary.status == "failed"` and exactly one ERROR alert (`_alert_severities`, `:557`).
+     - Assert `summary.status == "failed"` and exactly one ERROR alert (`_alert_severities`, `:609`).
    - `test_cancelled_emit_releases_claim`:
      - The ingest function raises `asyncio.CancelledError`.
      - Assert `pytest.raises(asyncio.CancelledError)` around `run_once`, and that the AAPL row is gone.
@@ -372,16 +372,16 @@ grep -n "from tests.test_fundsignal_loop import\|conftest" tests/test_fundsignal
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Claim INSERT (`:244-255`): **unchanged**. It is the in-flight fence against the lock-less manual
+- Claim INSERT (`:247-258`): **unchanged**. It is the in-flight fence against the lock-less manual
   `RunFundamentalsScan` (`app/handlers/servicer.py:3812`; the loop takes `self._lock` at `fundsignal_loop.py:139-145`).
-- `signal_id = await self._emit_signal(...)` is at `:258-260`, the unscoped UPDATE at `:261-269`, and the
-  unconditional `emitted += 1` at `:270` (re-spec 2026-10-29). This block runs after 246's unscored filtering
-  (`:226-227`); unscored symbols never reach it, so the two changes do not conflict.
-- `except _SystemWriteRejected` → `_abort_cycle` is at `:271-279`.
+- `signal_id = await self._emit_signal(...)` is at `:261-263`, the unscoped UPDATE at `:264-272`, and the
+  unconditional `emitted += 1` at `:273` (re-spec 2026-10-29, rev 2). This block runs after 246's unscored filtering
+  (`:229-230`); unscored symbols never reach it, so the two changes do not conflict.
+- `except _SystemWriteRejected` → `_abort_cycle` is at `:274-282`.
 - Release SQL precedent: the force DELETE `DELETE FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2`
   at `:211-215`, issued through `self._db.execute`.
 - Best-effort log-and-swallow precedent: `_emit_ledger` / `_emit_warning`, which catch `except Exception as e:  # noqa: BLE001`
-  (`:625`, `:655`).
+  (`:633`, `:663`).
 - The module docstring at `:9` says "(ingest's ``IngestSignal`` does not dedup)". This is stale: ingest dedups per
   `(user_id, source, symbol, direction)` inside one transaction (`services/xstockstrat-ingest/app/handlers/servicer.py:1017`,
   `signal_dedup_claims` INSERT at `:1041`, conflict key at `:1045`).
@@ -404,7 +404,7 @@ grep -n "from tests.test_fundsignal_loop import\|conftest" tests/test_fundsignal
            log.warning("fundsignal: claim release failed for %s: %s", symbol, e)
    ```
    It catches `Exception` only, never `BaseException`, so `CancelledError` still propagates (PLAT-N1).
-2. Replace `:258-270` (from the `_emit_signal` call through `emitted += 1`) with:
+2. Replace `:261-273` (from the `_emit_signal` call through `emitted += 1`) with:
    ```python
    confirmed = False
    try:
@@ -425,7 +425,7 @@ grep -n "from tests.test_fundsignal_loop import\|conftest" tests/test_fundsignal
    - `confirmed`/`emitted` are set once the UPDATE has executed, whether or not it matched a row.
    - A `deduplicated=true` response that carries a `signal_id` counts (`fails.md:2627-2640`).
    - The success path adds no DB round-trip (C-18).
-3. The `except _SystemWriteRejected` block (`:271-279`) is unchanged apart from Step 2's `deferred_count`.
+3. The `except _SystemWriteRejected` block (`:274-282`) is unchanged apart from Step 2's `deferred_count`.
    `_SystemWriteRejected` still propagates out of the `finally` into it, so earlier confirmed rows stay (@AC-5).
 4. Correct the stale docstring clause on line `:9`. Say that the `analysis.fundsignal_emitted` claim guards re-emits:
    a NULL `signal_id` marks an in-flight claim that is released when the emit fails. Drop the "does not dedup"
@@ -452,23 +452,23 @@ grep -n "signal_id IS NULL" services/xstockstrat-analysis/app/engine/fundsignal_
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_map_directions(scores, buy_quantile, sell_quantile)` is at `fundsignal_loop.py:498-513` (re-spec 2026-10-29).
-  Its cuts come from `sorted(scores.values())`. `_quantile` is at `:659-668`: with a single value,
-  `buy_cut == sell_cut`, so `s >= buy_cut` → `"buy"` (`:507`).
-- The `run_once` call `directions = self._map_directions(scores, buy_q, sell_q)` is at `:231`. The quantile defaults
-  are `0.80`/`0.20` (`:228-229`).
-- `_emit_signal` is at `:548`: `now = datetime.now(UTC)` (`:549`) and
-  `valid_until.FromDatetime(now + timedelta(days=valid_days))` (`:553`). `valid_days` defaults to 90 (`:233`).
-- **Feature 246 (merged):** `_score` returns `(scores, unscored)` (`:422-437`, unpacked at `:226`), so the
+- `_map_directions(scores, buy_quantile, sell_quantile)` is at `fundsignal_loop.py:505-521` (re-spec 2026-10-29, rev 2).
+  Its cuts come from `sorted(scores.values())` (`:510`). `_quantile` is at `:667-676`: with a single value,
+  `buy_cut == sell_cut`, so `s >= buy_cut` → `"buy"` (`:515`).
+- The `run_once` call `directions = self._map_directions(scores, buy_q, sell_q)` is at `:234`. The quantile defaults
+  are `0.80`/`0.20` (`:231-232`).
+- `_emit_signal` is at `:556`: `now = datetime.now(UTC)` (`:557`) and
+  `valid_until.FromDatetime(now + timedelta(days=valid_days))` (`:561`). `valid_days` defaults to 90 (`:236`).
+- **Feature 246 (merged):** `_score` returns `(scores, unscored)` (def `:430`, unpacked at `:229`), so the
   `_fake_loop` `_score` mock returns `(scores, [])`, never a bare dict.
 - 246's `TestUnscoredSymbols.test_ac1_dataless_symbols_not_scored_ranked_or_emitted` wraps `_map_directions` in a spy
-  and unpacks `(scores, *_), _kw = spy.call_args` (`tests/test_fundsignal_loop.py:770-779`). It stays compatible with
+  and unpacks `(scores, *_), _kw = spy.call_args` (`tests/test_fundsignal_loop.py:814-831`). It stays compatible with
   an added `reference_scores=` keyword.
 - `as_of_date = datetime.now(UTC).date()` (`:172`). The module imports `from datetime import UTC, datetime, timedelta`
   (`:19`). Existing tests monkeypatch module attributes, e.g. `monkeypatch.setattr(fundsignal_module.random, "uniform", ...)`
-  (`tests/test_fundsignal_loop.py:495`).
-- `TestScoreDirection.test_quantile_buckets` (`:181-186`) calls `_map_directions` with keyword args
-  (`buy_quantile=0.80, sell_quantile=0.20`, `:185`). It stays compatible with the added `reference_scores=()` default
+  (`tests/test_fundsignal_loop.py:547`).
+- `TestScoreDirection.test_quantile_buckets` (`:234-240`) calls `_map_directions` with keyword args
+  (`buy_quantile=0.80, sell_quantile=0.20`, `:237`). It stays compatible with the added `reference_scores=()` default
   and must stay green.
 - Recorded requests: `loop._ingest.of("IngestSignal")` returns `(name, request, metadata)` tuples
   (`tests/conftest.py:116-117`). The request's `signal.valid_until` is a protobuf `Timestamp`.
@@ -532,15 +532,15 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_already_emitted` (`:386-392`, re-spec 2026-10-29) runs
+- `_already_emitted` (`:391-397`, SELECT `:393`, re-spec 2026-10-29, rev 2) runs
   `SELECT symbol FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2` and returns a set. Its only caller
   is `:218-219`.
 - The skip predicate is `to_process = [s for s in universe if s not in already]` (`:219`). It stays **unchanged**:
   every existing row, NULL or confirmed, is still skipped. Design rejected narrowing it to
   `signal_id IS NOT NULL`, and that must not be re-introduced.
 - `004_fundsignal_emitted.up.sql:11`: `score numeric`, which is nullable. asyncpg returns `numeric` as `Decimal`.
-- `_map_directions` is at `:498-513` and its call at `:231`. `_emit_signal(self, source, symbol, direction, conviction, valid_days, metadata)`
-  is at `:548`, with `now` at `:549`, the `valid_until` computation at `:552-553` and its only call at `:258-260`.
+- `_map_directions` is at `:505-521` and its call at `:234`. `_emit_signal(self, source, symbol, direction, conviction, valid_days, metadata)`
+  is at `:556`, with `now` at `:557`, the `valid_until` computation at `:560-561` and its only call at `:261-263`.
 - After 246, unscored symbols write no `fundsignal_emitted` row and are absent from `scores`, so `reference_scores`
   comes only from claimed rows. This matches the design.
 - `as_of_date` is at `:172`, and `force` is a `run_once` parameter (`:169`).
@@ -563,7 +563,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 3. **`run_once`.**
    - Initialise `prior = {}` before the `if force:` branch (`:210`), and rename `already` to `prior` in the else
      branch (`:218-219`).
-   - Change `:231` to:
+   - Change `:234` to:
      ```python
      directions = self._map_directions(
          scores, buy_q, sell_q, reference_scores=[v for v in prior.values() if v is not None]
