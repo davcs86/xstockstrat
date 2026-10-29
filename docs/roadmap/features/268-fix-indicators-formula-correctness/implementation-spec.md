@@ -378,7 +378,7 @@ fail. AC-3 and the framing guard pass both before and after; they are guards, no
   `"VWAP": {"description": "Volume Weighted Average Price", "required": []}` at `:142`.
 - The dispatch entries `"ATR": _atr` and `"VWAP": _vwap` are at `:30-31`. They are unchanged.
 - `ListIndicators` builds `IndicatorMeta(description=info["description"])` from `INDICATOR_REGISTRY`
-  (`servicer.py:354-363`).
+  (`app/handlers/servicer.py:355-363`).
 
 **TDD**: `red-green required`
 
@@ -393,9 +393,10 @@ fail. AC-3 and the framing guard pass both before and after; they are guards, no
    absolute close-to-close change; the cumulative mean of the inputs) and that it is not the
    true-range / volume-weighted indicator.
 4. Leave the keys, `"required"`, the dispatch at `:30-31` and the math unchanged. Analysis consumers
-   (`evaluator.py:141`, `:196-197`; `screener.py:285`, the `_latest_indicator("ATR", ...)` call, with
-   its close-only comment at `:279-284`; `warmup.py:86`, `:108`;
-   `pnl_pattern_consumer.py:50`) keep resolving, with identical numbers.
+   (`evaluator.py:141`, `:196-197`; `app/services/screener.py:319`, the `_latest_indicator("ATR", ...)`
+   call, with its close-only comment starting at `:313`; `warmup.py:86`, `:108`;
+   `app/engine/pnl_pattern_consumer.py:50`, `DEFAULT_INDICATORS = ("RSI", "ATR")`) keep resolving,
+   with identical numbers.
 
 **Verification**:
 ```bash
@@ -422,9 +423,10 @@ Lint and coverage are run in Step 6.
   pin is at `:182`, and the VWAP finite-at-index-0 check is at `:199-204`.
 - There is no existing `ListIndicators` or servicer `ComputeIndicator` test. The only mention is
   `test_owner_scoped_completeness.py:14` (`EXEMPT = {"ComputeIndicator", "ListIndicators", ...}`).
-- Servicer `ComputeIndicator` is at `servicer.py:204-225`. It drops points where
-  `r.get("value") is None` (`:216-217`) and builds `indicators_pb2.IndicatorPoint(value=..., extra=...)`.
-- Servicer `ListIndicators` is at `:354-363`. Construction is `IndicatorsServicer(config_watcher=...)`,
+- Servicer `ComputeIndicator` is at `services/xstockstrat-indicators/app/handlers/servicer.py:204`. It
+  drops points where `r.get("value") is None` (`:217`) and builds
+  `indicators_pb2.IndicatorPoint(value=..., extra=...)` (`:221`).
+- Servicer `ListIndicators` is at `:355-363`. Construction is `IndicatorsServicer(config_watcher=...)`,
   as in `tests/test_formulas.py:489`. `ComputeIndicator` and `ListIndicators` are owner-scope-exempt,
   so a bare `ctx_with([])` (`tests/conftest.py:21`) suffices.
 - `ComputeIndicatorRequest` fields are `indicator`, `values` and `params` (`indicators.proto:54-61`).
