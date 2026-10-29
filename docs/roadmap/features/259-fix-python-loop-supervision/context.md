@@ -692,3 +692,26 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
   - Step 6: `tests/test_config_watcher.py` tests span `:14-38` (import at `:11`).
   - Step 15: analysis `CLAUDE.md` § P&L pattern consumer spans `:143-177` (next `###` at `:179`);
     `config-startup.md:149` reads "on stream error".
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4
+
+### Step 4 — test: loops survive schedule and cycle errors (@AC-1, @AC-2, @AC-3) [done]
+- `tests/test_fundsignal_loop.py`: `_StopLoop` is now a `BaseException` (fixes the two `@AC-7 @feature-156` jitter
+  tests that spun after Step 3). New `TestScheduler` tests: @AC-1 (`next_sleep_seconds` raises
+  `PostgresConnectionError("down")` once → 30s backoff, tick re-runs, `run_once` awaited, ERROR logged) and @AC-2
+  (`run_once` fails and the error-path `_advance_schedule` raises once → absorbed, `run_once` awaited ≥2, both errors
+  logged at ERROR).
+- `tests/test_loop_supervision.py` (new, @AC-3): parametrized over opportunity-refresh / readiness-materializer /
+  template-intent-sweep. Two cases per loop: a schedule-read error (the tick re-runs after a 30s backoff), and a seed
+  error retried via `retry_until_ok` (the 30s sleep is recorded before the jitter and the first tick). There is also a
+  fundsignal seed-retry case. Both sentinels are `BaseException`, and the recorder stops on the tick's 3600s sleep.
+  The fundsignal case reuses `_sched_loop` from `test_fundsignal_loop.py`. Only inline literals are used (C-13).
+- TDD: red came from a scratch revert of both Step-3 source files to `fb89f90d~1`, not committed. That revert covers
+  the `:165` revert the spec names, plus the `:161` seed wiring. Result: 9 failed (`PostgresConnectionError` escaped
+  each loop). Green: all 10 pass.
+- Verification: the targeted suites (fundsignal, loop_supervision, opportunity_refresh, readiness_materializer,
+  durable_schedule, strategy_templates) give 116 passed. The full suite gives 1315 passed with coverage at 88.90%
+  (≥40). `ruff check .` and `ruff format --check .` are clean, and the `_StopLoop(BaseException)` grep hits `:379`.
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`,
+  `services/xstockstrat-analysis/tests/test_loop_supervision.py`
+- Deviations: none

@@ -275,7 +275,7 @@ ruff check . && ruff format --check .
 
 ### Step 4 — test: loops survive schedule and cycle errors (@AC-1, @AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
