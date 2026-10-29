@@ -298,8 +298,9 @@ pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40)
 - `private mintOAuthAccessToken(userId, email, roles, audience: string): { accessToken: string; expiresIn: number }`
   `identityServiceImpl.ts:295-315`.
   - It always writes `aud: audience` (`:309`) and signs with `{ expiresIn: this.accessTtlSeconds }` (`:311-313`).
-  - Its only callers are `exchangeAuthCode` (moved by Step 1) and `refreshOAuthToken` `:534-536`
-    (`grep -rn mintOAuthAccessToken --include=*.ts .` → 3 hits, all in this file).
+  - Its only callers are `exchangeAuthCode` `:533-535` (moved by Step 1) and `refreshOAuthToken` `:560-562`
+    (`grep -rn mintOAuthAccessToken --include=*.ts .` → 3 hits, all in this file: `:295`, `:533`, `:560`;
+    re-anchored 2026-10-29).
 - `authenticateUser`:
   - Inline `now`/`expiresAt` `:163-164`, `claimsPayload` `:166-172`, `(jwt as any).sign(…)` `:174-176`.
   - Inline `uuidv4()` plus `digest('hex')` plus a 3-column `INSERT INTO identity.refresh_tokens (user_id,
@@ -327,7 +328,7 @@ pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40)
      none (IDENTITY-4).
 2. **Update the two OAuth callers to the new name**, keeping their arguments and `''` fallbacks:
    - `exchangeAuthCode` passes `audience` (Step 1's moved call).
-   - `refreshOAuthToken` passes `resource || ''` (`:534-536`).
+   - `refreshOAuthToken` passes `resource || ''` (`:560-562`).
    - The OAuth `aud: ''` behaviour for an empty resource is preserved (FR-8).
 3. **`authenticateUser`: replace only `:163-185`** with
    `const { accessToken, issuedAt, expiresAt } = this.mintAccessToken(user.user_id, email, user.roles);` (no
@@ -370,9 +371,9 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
   feature 252's rewrite).
   - It records `queries: string[]` only (`query(sql, _params)` drops the params, `:239-242`).
   - `connect()` returns `{ query: this.query, release() {} }` (`:243-245`).
-  - Existing consumers assert on `pool.queries` (e.g. `:325`, `:459`), so an additive `params` array leaves them
+  - Existing consumers assert on `pool.queries` (e.g. `:325`, `:607`), so an additive `params` array leaves them
     unaffected.
-  - `routePool` (`:701-712`) already records params but has no `connect()`, so it cannot serve
+  - `routePool` (`:850-861`) already records params but has no `connect()`, so it cannot serve
     `rotateRefreshToken` or the Step 1 transaction; extending `makeSpyPool` stays the choice.
 - Login fixture with no new bcrypt dependency:
   - `SEED_ADMIN_PASSWORD_HASH` (`identityServiceImpl.ts:32-33`) is already imported by the test (`:11`, `:19`) and
@@ -382,7 +383,7 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
   - The claim returns the spy `rows`, so `rotated.row` supplies `user_id`/`email`/`roles`.
   - `issueRefreshToken` then runs on the same client.
 - Test file: `describe('authenticateUser')` `:68`; `describe('exchangeAuthCode')` `:282`;
-  `describe('refreshOAuthToken')` `:445-471`.
+  `describe('refreshOAuthToken')` `:593-619` (re-anchored 2026-10-29).
 - Today's first-party login INSERT has 3 params (`identityServiceImpl.ts:181-185`), so `params[3]` is `undefined`.
   That is the RED discriminator. Today's first-party refresh already writes `client_id` as `null` through
   `issueRefreshToken`, and no first-party token carries `aud` today, so those assertions are guards.
@@ -396,8 +397,8 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
 1. **Make `makeSpyPool` also record params, additively.** Add `const params: any[][] = []`, return it beside
    `queries`, and in `query(sql, p?)` do `queries.push(sql); params.push(p ?? []);`. Keep the `connect()` shape.
    Every existing assertion stays unchanged.
-2. **Add `describe('token claim-shape parity (AC-4)')`** after `describe('refreshOAuthToken')` (`:445-471`). It has
-   three cases. Each sets `process.env.JWT_SECRET`, saves and restores `APPLICATION_ENV` in `finally` (`:125-140`
+2. **Add `describe('token claim-shape parity (AC-4)')`** after `describe('refreshOAuthToken')` (ends `:619`). It has
+   three cases. Each sets `process.env.JWT_SECRET`, saves and restores `APPLICATION_ENV` in `finally` (`:121-140`
    precedent), and decodes with `jwt.verify`. No `if (!impl) return;` guard (removed by feature 252).
    - **Login:**
      - Pool: `makeSpyPool([{ user_id: 'u1', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'] }])`, with
@@ -465,7 +466,7 @@ pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40, i.e. line 
     (`migrations/001_identity_tables.up.sql:6-14`);
   - `identity.oauth_clients(client_id PK, redirect_uris TEXT[])` (`migrations/003_oauth.up.sql:7-12`).
 - `issueAuthCode(call, cb)` takes `{ userId, clientId, redirectUri, codeChallenge, resource }`
-  (`identityServiceImpl.ts:439-468`). It requires the client to exist and the redirect to be registered.
+  (`identityServiceImpl.ts:468`, re-anchored 2026-10-29). It requires the client to exist and the redirect to be registered.
 - As of 2026-10-29 no Postgres listens on `localhost:5432` in the execute environment (`pg_isready` reports no
   response), and the execute loop may not start one, so the BEFORE/AFTER runs go to the operator (Instruction 2).
 
