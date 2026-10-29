@@ -1068,3 +1068,42 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
 - Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
   Steps 1-10). No `--no-verify` was used.
 
+
+## Session 2026-10-29 — Step 12 — docs: Context teardown (AGENT-5 drift and the context-forge refresh)
+
+- Teardown result: the `/context-forge:context-constitution` plugin is **unavailable** in this session (only
+  `context-forge:context-scrubber` is loaded), so the refresh was done by hand. The integration PR body must say
+  so and list the reconciliation below.
+- Files: `services/xstockstrat-agent/docs/context-constitution.md` only.
+  - AGENT-5 rewritten: every gRPC-calling tool maps through `_grpc_error_message` and passes `deadline_s` (the
+    budget the call carries), plus `write=` in mutating tools (`write=True`, or verb-derived at
+    `manage_watchlist` / `manage_offline_account`). The write text is "outcome unknown, verify before
+    retrying". Non-sentinel server deadline details pass through. The false "the older tools don't have it"
+    clause is gone. Anchor `app/tools.py#_grpc_error_message` kept; branch hint ~L232-243.
+  - AGENT-4: added that `_authorized` mints the trace id before `ValidateToken` and stamps it on the claims,
+    so the auth call and tool calls share one trace (Step 9).
+  - AGENT-1: channel count corrected to 71 (69 in `client.py` + 2 in `auth.py`; unchanged by this feature, the
+    old "69 across both" was already off by 2).
+  - Line hints this feature shifted were re-stamped: AGENT-2 (`client.py` ~L137), AGENT-4 (`_metadata` ~L67,
+    `set_caller` ~L49, `reset_caller` ~L57), and every Gotchas `client.py`/`tools.py` hint. Header gains a
+    2026-10-29 refresh entry.
+- Manual reconciliation, checked against the code with no edit needed:
+  - AGENT-3/3b/4 `tools.py` hints (`_require_claims` L116, `_caller_access_scope` L134, `_caller_user_id`
+    L155, `_claims_from_scope_state` L178, `CallerPropagationMiddleware` L190) still resolve.
+  - AGENT-2's `auth.py` top-level `from gen.identity.v1` is still L13; AGENT-6 is untouched by this feature.
+  - `services/xstockstrat-agent/CLAUDE.md`: the `_CONFIG_READ_TIMEOUT_S` paragraph and the
+    `agent.opportunities.read_timeout_seconds` row match the code (read expiry text still "retry shortly").
+  - `services/xstockstrat-agent/docs/oauth.md`: its 503 sentence matches `_send_identity_unavailable`; no
+    AGENT-* references.
+  - Steps 10-11 docs (`docs/runbooks/mcp-tools.md` § Backend deadlines, the strat-lab backtest SKILL.md,
+    merge-order, the report sidecar) match `_RPC_TIMEOUT_S`/`_LONG_RPC_TIMEOUT_S` (10.0/45.0) and the mapper.
+  - The findings table row for `2026-10-19-agent-tools-missing-grpc-error-mapping-defect` stays: its sidecar is
+    `triaged` (not resolved) until this feature launches.
+- Open item, not edited (outside Step 12 **Files**): root `docs/context-constitution.md` PLAT-13 cites
+  `services/xstockstrat-agent/app/tools.py#opportunities.read_timeout_seconds (~L1552)`; the anchor resolves but
+  now sits at ~L1643. Leave for the next root refresh.
+- TDD: N/A (docs).
+- Verification: `AGENT-5` hits `context-constitution.md:22`; `outcome unknown` hits the AGENT-5 row; the last
+  `teardown` hit in this file is this entry.
+- Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
+  Steps 1-11). No `--no-verify` was used.

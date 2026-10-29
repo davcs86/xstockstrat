@@ -913,7 +913,7 @@ ls docs/reports/ | grep -i "list-opportunities-over-mcp-timeout\|extract-tools-n
 
 ### Step 12 — docs: Context teardown (AGENT-5 drift and the context-forge refresh)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-agent/docs/`
 **Files**:
 - `services/xstockstrat-agent/docs/context-constitution.md` — modify
