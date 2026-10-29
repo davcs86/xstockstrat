@@ -625,3 +625,38 @@ Feature: xstockstrat-config - the marketdata vendor secret grant is bound to the
 - Promotion plan above applied as written: `services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature` (AC-1, AC-2, AC-5, AC-7) and `services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature` (AC-3, AC-4, AC-6) created. Scenario text is verbatim, with `@feature-254` added.
 - **Amendment to an existing rule (operator decision 2026-10-29):** `services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature` feature-147 `@AC-4 @FR-3` now has the precondition "the caller presents an mTLS peer certificate whose DNS SAN is `xstockstrat-marketdata`" (per 254 AC-6) and is tagged `@feature-254` as well. 147's other assertions are unchanged, and 147 `@AC-5` is untouched.
 - Status stays `code-completed`, so there is no history row. The husky pre-commit hook did not run: `core.hooksPath` points to `/home/user/xstockstrat/.husky/_`, which does not exist, and the main worktree has no `node_modules` to symlink. These were docs-only commits, and `--no-verify` was not used.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-marketdata-secret-exposure (feature 254)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 (FR-1) | /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature | none | DUP | Present verbatim with @feature-254. FMP transport error never leaks the key. |
+| AC-2 (FR-2) | same marketdata suite | none | DUP | Present verbatim with @feature-254. Finnhub transport error never leaks the token. |
+| AC-3 (FR-4) | /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature | none | DUP | Present verbatim with @feature-254. Wrong peer SAN gets PERMISSION_DENIED. |
+| AC-4 (FR-5) | same config suite | none | DUP | Present verbatim with @feature-254. The marketdata SAN still resolves the secret. |
+| AC-5 (FR-3) | same marketdata suite | none | DUP | Present verbatim with @feature-254. Single GetFundamentals UNAVAILABLE status has no key. |
+| AC-6 (FR-4) | same config suite | none | DUP | Present verbatim with @feature-254. No peer SAN gets PERMISSION_DENIED. |
+| AC-7 (FR-3) | same marketdata suite | none | DUP | Present verbatim with @feature-254. Batch GetFundamentalsMulti UNAVAILABLE status has no key. |
+
+### Ready-to-write blocks
+None. Both target suites already exist in the working tree with all seven scenarios. Each has the `Feature:` header, the promotion provenance comment, and the `@AC-n @FR-n @regression @feature-254` tags. Re-running the promotion would write nothing, so it is idempotent.
+
+### Notes / ambiguities / conflicts
+- Routing is by the subject of each `Then`.
+  - AC-1, AC-2, AC-5 and AC-7 assert on marketdata clients and RPC status, so they go to the marketdata suite.
+  - AC-3, AC-4 and AC-6 assert on the config service's `GetSecret` grant check, so they go to the config suite. Their `Given` mentions the marketdata namespace, but the code under test is in config (`authz.ts`).
+  - No scenario spans services, so nothing goes to `/home/user/xstockstrat/docs/sdd/business-rules/platform.feature`. A grep of it for SAN and GetSecret found only the analysis SAN contract and ingest per-user secrets, which are unrelated.
+- No CONFLICT and no OVERLAP.
+  - `/home/user/xstockstrat/services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature` (about lines 46-53) already requires the marketdata SAN `xstockstrat-marketdata` for `GetSecret` and refuses a caller without the grant. AC-3, AC-4 and AC-6 tighten that rule and do not contradict it.
+  - `/home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/config-secrets-and-scoping.feature` (feature 147 AC-6 and AC-7) covers resolving credentials from config, not error redaction.
+- AC-6's trailing comment says it replaces the "no SAN required" assertion at `services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts:236`. That is a unit-test assertion and not a promoted `@AC-*` rule, so no promoted rule is changed. I did not open that test.
+- I read the feature's `acceptance.feature` from the working-tree copy and not from `origin/feature/fix-marketdata-secret-exposure`. The suite files are in the working tree and match it verbatim.
+
+### Coverage check
+- Source scenarios: 7 (AC-1 through AC-7). Planned: 7 (0 NEW, 7 DUP, 0 OVERLAP, 0 CONFLICT).
+- The marketdata suite holds 4 (AC-1, AC-2, AC-5, AC-7) and the config suite holds 3 (AC-3, AC-4, AC-6). Counts match and nothing was skipped.
+```
