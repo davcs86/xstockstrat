@@ -669,3 +669,25 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   - Case (b) has an explicit request timeout.
   - `INVENTORY.md` prettier drift and the 2 `backfills.spec.ts` `tsc` errors are both pre-existing.
 
+## Session 2026-10-29 — Step 6 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only. The main worktree still has no `node_modules` to symlink.
+- Step 6 done:
+  - `bffShared.ts`: `forwardAdmin(call, options: { timeoutMs? } = {})` now returns `forward(call, { ...options, admin: true })`. Because `admin` is spread last, a caller cannot unset it. The `call` opts type was widened to `{ headers; timeoutMs? }`.
+  - `insightsBff.ts`: `scoreStrategy`, `runBacktest`, `screenSymbols` and `triggerBackfill` (`forward`), and `deleteBackfilledData` (`forwardAdmin`), now run at `LONG_RPC_TIMEOUT_MS`.
+  - `configUiBff.ts`: `runFundamentalsScan` (`forwardAdmin`) now runs at `LONG_RPC_TIMEOUT_MS`, with a new `@/lib/deadlines` import.
+  - `traderBff.ts`: `placeOrder`, `cancelOrder`, `replaceOrder` and `confirmOrder` now run at `ORDER_MUTATION_TIMEOUT_MS`.
+  - No other registration changed.
+- TDD: I used a temporary dispatch-level probe (`src/lib/step6probe.test.ts`, deleted after green, since Step 7 owns the committed `bffDeadlines.test.ts`). It covers six representative methods across the three BFFs, sending an admin JWT through `dispatchConnect`.
+  - The six methods: RunBacktest, TriggerBackfill, DeleteBackfilledData, RunFundamentalsScan, PlaceOrder and ConfirmOrder.
+  - Red (pre-fix, `expect(spy.mock.calls[0][1].timeoutMs)`): 6/6 failed with `expected undefined to be 300000` or `expected undefined to be 60000`. The HTTP 200 assertions passed, so the failures came from the missing deadline and nothing else.
+  - Green after the change: 6/6 passed. AC-6 is covered by Step 7.
+- Verification:
+  - `grep -c LONG_RPC_TIMEOUT_MS` gives `insightsBff.ts` 6 and `configUiBff.ts` 2. `traderBff.ts` has 5 `ORDER_MUTATION_TIMEOUT_MS` matches.
+  - The `{ ...options, admin: true }` grep matches at `bffShared.ts:80`.
+  - `lint` exits 0.
+  - `vitest run`: 49 files / 244 tests pass.
+- Deviations (see the Deviation Log):
+  - `format:check` still fails on the 10 pre-existing files. The Step 6 files are clean.
+  - The `bffShared.ts` evidence lines drifted by +4. This is cosmetic.
+  - `tsc --noEmit` still reports only the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` errors.

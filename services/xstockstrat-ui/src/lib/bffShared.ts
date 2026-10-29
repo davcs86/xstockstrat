@@ -72,11 +72,12 @@ export function forward<Req, Res>(
   };
 }
 
-/** Like {@link forward}, but gated on admin scope (throws PermissionDenied otherwise). */
+/** Like {@link forward} (same `timeoutMs` option), but gated on admin scope (PermissionDenied). */
 export function forwardAdmin<Req, Res>(
-  call: (req: Req, opts: { headers: Headers }) => Promise<Res>,
+  call: (req: Req, opts: { headers: Headers; timeoutMs?: number }) => Promise<Res>,
+  options: { timeoutMs?: number } = {},
 ): (req: Req, ctx: HandlerContext) => Promise<Res> {
-  return forward(call, { admin: true });
+  return forward(call, { ...options, admin: true });
 }
 
 /** A Connect router preconfigured with the platform's accepted compressions. */

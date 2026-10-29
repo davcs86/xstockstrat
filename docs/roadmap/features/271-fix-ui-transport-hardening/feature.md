@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 4–10 re-verified after merging `origin/main-dev`; Steps 5, 6, 7 re-specced (line drift; Step 7 client mock widened to the three-BFF union); Steps 4, 8, 9, 10 unchanged |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — `refreshSession` bounded by `REFRESH_TIMEOUT_MS` (10s) |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — refresh deadline fails closed: vitest + e2e stalled identity (AC-2) |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — `forwardAdmin` takes `timeoutMs`; long RPCs at `LONG_RPC_TIMEOUT_MS` (300s), order mutations at `ORDER_MUTATION_TIMEOUT_MS` (60s) |
 
 ---
 
