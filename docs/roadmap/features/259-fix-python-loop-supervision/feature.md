@@ -29,6 +29,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — indicators `ConfigWatcher._watch` reconnects after any `Exception`; watch task retained as `_watch_task` with an `_on_watch_done` exit log |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done — indicators `tests/test_config_watcher.py` @AC-5 (reconnect after a non-gRPC error, 2s sleep, `indicators-` client_id) and @AC-8 (retained `_watch_task`, ERROR exit log naming `config-watch-indicators`) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 9 done — ingest `ConfigWatcher._watch` reconnects after any `Exception`; watch task retained as `_watch_task` with an `_on_watch_done` exit log |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after merging main-dev: step 13 evidence re-verified unchanged; `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` added to instruction 2's fixed invariants (6b used it without declaring it) |
 
 ---
 
