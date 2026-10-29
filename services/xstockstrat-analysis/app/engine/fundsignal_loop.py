@@ -17,7 +17,7 @@ import asyncio
 import logging
 import random
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import grpc
 from gen.indicators.v1 import indicators_pb2
@@ -171,6 +171,9 @@ class FundamentalsSignalLoop:
         run_id = str(uuid.uuid4())
         source_slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
         as_of_date = datetime.now(UTC).date()
+        # Force stays now-anchored or a same-day force re-emit is an ingest dedup no-op (@AC-10);
+        # non-force is date-anchored so a lost-response retry resends identical valid_until (@AC-8).
+        valid_anchor = datetime.now(UTC) if force else datetime.combine(as_of_date, time.min, UTC)
         # Ingest/indicators always see the producer as `system` (manual path included); only the
         # caller's trace survives. Marketdata/portfolio keep the caller's metadata.
         sys_meta = [(k, v) for k, v in metadata if k == "x-trace-id"] + [
@@ -208,6 +211,7 @@ class FundamentalsSignalLoop:
             )
 
         # Skip symbols already emitted today (no cache call) — unless force re-emits.
+        prior = {}
         if force:
             await self._db.execute(
                 "DELETE FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2",
@@ -216,8 +220,8 @@ class FundamentalsSignalLoop:
             )
             to_process = list(universe)
         else:
-            already = await self._already_emitted(source_slug, as_of_date)
-            to_process = [s for s in universe if s not in already]
+            prior = await self._already_emitted(source_slug, as_of_date)
+            to_process = [s for s in universe if s not in prior]
 
         # Paced, budget-bounded cached fundamentals fetch (never FMP directly).
         budget = self._cfg.get_int("analysis.fundsignal.daily_call_budget", default=200)
@@ -232,7 +236,9 @@ class FundamentalsSignalLoop:
         buy_q = self._cfg.get_float("analysis.fundsignal.buy_quantile", default=0.80)
         sell_q = self._cfg.get_float("analysis.fundsignal.sell_quantile", default=0.20)
         min_conv = self._cfg.get_float("analysis.fundsignal.min_conviction_to_emit", default=0.0)
-        directions = self._map_directions(scores, buy_q, sell_q)
+        directions = self._map_directions(
+            scores, buy_q, sell_q, reference_scores=[v for v in prior.values() if v is not None]
+        )
 
         valid_days = self._cfg.get_int("analysis.fundsignal.valid_days", default=90)
 
@@ -262,7 +268,13 @@ class FundamentalsSignalLoop:
                 confirmed = False
                 try:
                     signal_id = await self._emit_signal(
-                        source_slug, symbol, directions[symbol], score, valid_days, sys_meta
+                        source_slug,
+                        symbol,
+                        directions[symbol],
+                        score,
+                        valid_days,
+                        valid_anchor,
+                        sys_meta,
                     )
                     if signal_id is not None:
                         await self._db.execute(
@@ -399,11 +411,12 @@ class FundamentalsSignalLoop:
 
     async def _already_emitted(self, source, as_of_date):
         rows = await self._db.fetch(
-            "SELECT symbol FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2",
+            "SELECT symbol, score FROM analysis.fundsignal_emitted "
+            "WHERE source=$1 AND as_of_date=$2",
             source,
             as_of_date,
         )
-        return {r["symbol"] for r in rows}
+        return {r["symbol"]: (None if r["score"] is None else float(r["score"])) for r in rows}
 
     async def _release_claim(self, symbol, source, as_of_date, run_id):
         try:
@@ -525,11 +538,12 @@ class FundamentalsSignalLoop:
         return out, unscored
 
     @staticmethod
-    def _map_directions(scores, buy_quantile, sell_quantile):
-        """Cross-sectional quantile within the run: >= buy_q → buy, <= sell_q → sell, else hold."""
+    def _map_directions(scores, buy_quantile, sell_quantile, reference_scores=()):
+        """Cross-sectional quantile over the run's scores plus the day's stored scores
+        (``reference_scores``): >= buy_q → buy, <= sell_q → sell, else hold."""
         if not scores:
             return {}
-        ordered = sorted(scores.values())
+        ordered = sorted([*scores.values(), *reference_scores])
         buy_cut = _quantile(ordered, buy_quantile)
         sell_cut = _quantile(ordered, sell_quantile)
         directions = {}
@@ -575,12 +589,14 @@ class FundamentalsSignalLoop:
             else:
                 log.warning("fundsignal: source registration failed (non-fatal): %s", e)
 
-    async def _emit_signal(self, source, symbol, direction, conviction, valid_days, metadata):
+    async def _emit_signal(
+        self, source, symbol, direction, conviction, valid_days, valid_anchor, metadata
+    ):
         now = datetime.now(UTC)
         valid_from = Timestamp()
         valid_from.FromDatetime(now)
         valid_until = Timestamp()
-        valid_until.FromDatetime(now + timedelta(days=valid_days))
+        valid_until.FromDatetime(valid_anchor + timedelta(days=valid_days))
         try:
             resp = await self._ingest.IngestSignal(
                 ingest_pb2.IngestSignalRequest(

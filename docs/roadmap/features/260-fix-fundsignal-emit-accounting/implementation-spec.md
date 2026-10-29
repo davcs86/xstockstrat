@@ -524,7 +524,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 
 ### Step 6 — service: day-wide direction cuts and the mode-dependent `valid_until` anchor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -788,3 +788,14 @@ _Populated by /sdd-execute as implementation proceeds._
     masked on the pre-fix tree.
   - (d) To check that GREEN is reachable, Step 6's specced change was applied temporarily. `test_fundsignal_loop.py`
     then gave 72 passed, including every `valid_until` assertion. The change was reverted and is not in this commit.
+- **2026-10-29, Step 6 (minor, no scope change):** line drift, one comment rewrap and one verification note.
+  (a) On the branch tree the import was `fundsignal_loop.py:20`, `as_of_date` `:173`, the force branch `:211-220`,
+  the `_map_directions` call `:235`, `_already_emitted` `:400-406`, `_map_directions` `:527-543` and `_emit_signal`
+  `:578-583`; each site was found by its symbol or SQL text and changed as specced. The `_emit_signal` call and
+  signature were wrapped by `ruff format` style (one argument per line at the call). (b) The specced 2-line anchor
+  comment exceeded ruff's 100-column limit (E501), so it was reworded to fit while staying 2 lines with the same
+  constraint (@AC-10 force now-anchored, @AC-8 non-force date-anchored). (c) The coverage command was run as specced
+  (without `-m "not real_pg"`), so `local_pg` started a throwaway PostgreSQL on a Unix socket under `/tmp` for the
+  7 `real_pg` tests and stopped it at session end; no postgres process remains. It touched no shared, staging or
+  production database, matching the Step 4 disposition. Results: target files 96 passed; coverage 1318 passed,
+  88.74%; ruff check and format clean; the `signal_id IS NOT NULL` grep has no match.

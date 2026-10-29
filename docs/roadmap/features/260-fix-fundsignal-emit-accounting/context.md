@@ -550,3 +550,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: an autouse fixture applies the clock, two inline helpers were added, and @AC-8 run 2 uses override
   `[AAPL, MSFT]`. All three are in the Deviation Log.
 - Next: Step 6 (service: day-wide direction cuts and the mode-dependent `valid_until` anchor).
+
+### Step 6 — service: day-wide direction cuts and the mode-dependent `valid_until` anchor — done (2026-10-29)
+
+- Files: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`.
+  - `_already_emitted` now selects `symbol, score` and returns `symbol → float | None` (still one query). The
+    skip predicate is unchanged: every existing row, NULL-signal or confirmed, is still skipped.
+  - `run_once` initialises `prior = {}` before the force branch and passes the day's non-NULL stored scores to
+    `_map_directions(..., reference_scores=...)`; force passes an empty reference because its rows were deleted.
+  - `_map_directions` computes the cuts over the run's scores plus `reference_scores` and maps only `scores`.
+  - `valid_anchor` = `datetime.now(UTC)` under `force`, else `datetime.combine(as_of_date, time.min, UTC)`;
+    `_emit_signal` takes it and sets `valid_until = valid_anchor + valid_days`. `valid_from` stays `now`.
+- TDD RED (`-k "TestRetryStability or TestScoreDirection"`): 3 failed, 4 passed (AC-8, AC-9, the
+  `reference_scores` TypeError). GREEN: `test_fundsignal_loop.py` + `test_owner_header_guard.py` 96 passed.
+- Verification: coverage 1318 passed, 88.74% (the run included the 7 `real_pg` tests on a throwaway local
+  PostgreSQL, as in Step 4); ruff clean; greps as specced, no `signal_id IS NOT NULL`.
+- The `_FixedClock` subclass worked with `datetime.combine` and `FromDatetime`; no patch change was needed.
+- Deviations: line drift, the anchor comment reworded to fit 100 columns, and the real_pg note. All are in the
+  Deviation Log.
+- Next: Step 7 (proto: add `"partial"` to the `FundamentalsScanSummary.status` comment).
