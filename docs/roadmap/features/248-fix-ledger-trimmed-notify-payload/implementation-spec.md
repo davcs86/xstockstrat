@@ -289,7 +289,7 @@ grep -n "this.pool\|Pool" src/services/eventRowResolver.ts || echo "OK: no pool"
 
 ### Step 4 — test: Resolver unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/eventRowResolver.test.ts` — create
@@ -1054,3 +1054,13 @@ _Populated by /sdd-execute as implementation proceeds._
   probe's 2 cases (PK SELECT text/values, `query_timeout` 2B, SET-on-change, null on miss, clamp). The probe was
   deleted before commit. Step 4 still authors the real suite.
 - **Disposition**: no spec change; Step 4 unchanged.
+
+### 2026-10-29 — Step 4: RED captured by withholding Step 3's module
+
+- **Step**: 4
+- **Planned**: "RED first: author the file before Step 3's module exists" (TS2307), then GREEN after Step 3.
+- **Actual**: Step 3 had already landed (`f73f6893`), so the module existed when this step ran. RED was captured by
+  moving `src/services/eventRowResolver.ts` out of the tree for one `pnpm test` run: `tsc` failed with TS2307
+  "Cannot find module '../services/eventRowResolver.js'" (exit 2). The module was restored unchanged and GREEN was
+  then taken on the committed tree.
+- **Disposition**: no spec change; the RED reason matches the planned one.

@@ -442,3 +442,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-ledger/src/services/eventRowResolver.ts`
 - Deviations: the export-grep defect and the probe-based RED (Deviation Log 2026-10-29).
 
+### Step 4 — test: Resolver unit tests [done]
+- Created `eventRowResolver.test.ts`, 12 cases with a recording fake `{ query(cfg) }` and an inline single-consumer
+  stub (C-13; the fixtures home is Step 6's). It covers the PK SELECT text/values (string `recorded_at`) and
+  `query_timeout` 2B, `rows[0]` and `null` on miss, unchanged propagation of `'Query read timeout'` and `57014`,
+  SET-on-change (first call, same B, new B, new client), the `streamResolveTimeoutMs` clamp, and
+  `makeListenerClient` building an unconnected `pg.Client` with `connectionParameters.statement_timeout` 300.
+- TDD (AC-7 no-row → null, AC-9 bound/clamp): red: `pnpm test` exit 2, `tsc` TS2307 "Cannot find module
+  '../services/eventRowResolver.js'" with Step 3's module withheld. Green: `pnpm run test:coverage` exit 0, 59/59
+  pass, 0 fail/cancelled/skipped/todo; the file alone runs 12 pass / 0 fail. All files 74.88% lines;
+  `eventRowResolver.js` 92.68%.
+- Verification: `pnpm run lint` exit 0 (0 errors, `no-explicit-any` warnings only); prettier clean; the unguarded
+  grep reports OK; `src/__tests__/fixtures` is absent, as planned. pg 8.20.0 `connection-parameters.js:109` was
+  re-checked after `pnpm install --frozen-lockfile`. No lockfile changed.
+- Open: `makeResolveRow` (dist lines 39-41) is not executed here. Step 6's wired tier (ii) uses the real
+  `makeResolveRow`.
+- Files modified: `services/xstockstrat-ledger/src/__tests__/eventRowResolver.test.ts`
+- Deviations: RED captured by withholding the already-landed Step 3 module (Deviation Log 2026-10-29).
+

@@ -60,4 +60,4 @@ Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no
 
 ## Next Action
 
-`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 4 next (resolver unit tests)
+`/sdd-execute fix-ledger-trimmed-notify-payload sequential` — Step 5 next (`EventNotifier` resolve-once FIFO, `onGap`, wiring)
