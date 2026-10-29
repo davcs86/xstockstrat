@@ -586,3 +586,18 @@ _Populated by /sdd-execute as implementation proceeds._
   `describe('exchangeAuthCode')` to reuse `storedRow`/`exchangeCall` (the spec's offered option), so
   `describe('token claim-shape parity (AC-4)')` holds the login and first-party refresh cases; the shared
   assertions live in module-level helpers `assertSharedClaims`, `refreshInsertClientId` and `withAppEnvUnset`.
+- **2026-10-29 — Step 5 deferred to operator — integration PR merge held until** the operator runs the recorded
+  repro against a local TimescaleDB with identity migrations applied (`./scripts/bootstrap.sh`; no Postgres answers on
+  `localhost:5432` here — `pg_isready` "no response" — and the execute loop may not start one). Exact checks:
+  1. BEFORE (pre-Step-1 tree, base `d6cd9f3c`): `git worktree add --detach ../ident-265-before d6cd9f3c`, then in
+     `../ident-265-before`: `pnpm install --frozen-lockfile --filter "xstockstrat-identity..."` and
+     `pnpm --filter xstockstrat-identity run build`, then from that worktree root
+     `DB_POOL_MAX=20 JWT_SECRET=repro DATABASE_URL='postgres://xstockstrat:<pw>@localhost:5432/xstockstrat?sslmode=disable' timeout 60 node <path>/repro-265.cjs`
+     → expect `successes` > 1 and `refresh_rows` > 1.
+  2. AFTER (this branch at or after `56daa169`): same build and the same command from the repo root → expect exactly
+     `repro-265 successes=1/20 refresh_rows=1`.
+  3. Record both output lines and `node --version` in context.md under the Step 5 note, and confirm there that this
+     recorded repro counts as the AC-1 real-Postgres harness (design.md §3). Then flip Step 5 **Status** to `done`.
+  The script is recorded verbatim in context.md (Step 5 note). Code-side it was syntax-checked (`node --check`) and
+  load-checked against the Step 4 `dist/` (it reached the connect and failed `ECONNREFUSED 127.0.0.1:5432`).
+  F-06 grep `DB_POOL_MAX=20` over `.do/app.yaml` and `.do/app.dev.yaml` → 0 hits.
