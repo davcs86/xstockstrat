@@ -678,3 +678,21 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
     already at `test_config_tools.py:22`.
   - Step 12: agent CLAUDE.md scope-selector text `:29-30`; findings `## Open questions` `:45`;
     `watchConfig` `requestUserId` `configServiceImpl.ts:284`; accepted-gap cite `client.py:39-42`.
+
+### Step 9 — test: config read-binding matrix (2026-10-29)
+
+- Files: `services/xstockstrat-config/src/__tests__/readUserBinding.test.ts` (create) — a `boundReadUserId`
+  unit matrix (6 cases, inline `md()` builder) plus 8 cases over the real-server harness copied from
+  `scopeResolution.test.ts`, with a pool that captures the `getConfig` overlay params and the `listKeys`
+  `DISTINCT ON (key)` params and returns per-user rows keyed by `params[2]` (`u-a` 450 + one secret row,
+  `u-b` 900).
+- Tooling setup (step 9): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇
+  `pnpm install --frozen-lockfile --filter xstockstrat-config... --filter .` (worktree-local).
+- TDD (DEV-8): AC-4 red: overlay param `'u-b'` where `'u-a'` expected (also AC-5, the bound-overlay secret
+  case and the regression pin) against the pre-Step-8 call sites → green: 14/14.
+- Verification:
+  - `pnpm run test:coverage`: 196/196 pass, 86.94% lines (threshold 40); `scopeResolution`, `listKeys*`,
+    `secretsAndScope` and `perUserSecrets` still green.
+  - `pnpm run lint`: 0 errors.
+  - `grep "__tests__/fixtures"` → none: `md()` stays an inline single-file helper (C-13 verdict in the spec).
+

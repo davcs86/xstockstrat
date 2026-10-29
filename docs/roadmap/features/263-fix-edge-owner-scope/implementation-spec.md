@@ -578,7 +578,7 @@ grep -n "boundReadUserId" services/xstockstrat-config/src/grpc/authz.ts services
 
 ### Step 9 — test: config read-binding matrix
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/readUserBinding.test.ts` — create
@@ -939,3 +939,16 @@ _Populated by /sdd-execute as implementation proceeds._
   reformatted (surgical diff). The `request?: any` parameter adds one `no-explicit-any` lint warning; the
   signature is the spec's.
 - **Disposition**: CI-equivalent fallback for the RED evidence (no spec change).
+
+### DEV-8 — Step 9: RED captured against the pre-Step-8 call sites (2026-10-29)
+
+- **What**: Step 8 had already landed (`38c210d4`), so RED was captured by temporarily reverting the two
+  `getConfig`/`listKeys` call sites in `configServiceImpl.ts` to `requestUserId(call.request)`, compiling,
+  and running `node --test dist/__tests__/readUserBinding.test.js`: 4/14 fail (AC-4, AC-5, the bound-overlay
+  secret case and the bind-not-refuse regression pin all see `'u-b'`); the `boundReadUserId` unit matrix,
+  AC-6, AC-8, header-less and empty-body cases pass as baselines. The file was then restored from the index
+  (not committed). GREEN ran on the committed Step 8 code.
+- **Formatting**: the new test was run through `prettier --write` (lint-staged covers only
+  `xstockstrat-ui`). It adds 12 `no-explicit-any` lint warnings (0 errors), the same harness typing as
+  `scopeResolution.test.ts`.
+- **Disposition**: CI-equivalent fallback for the RED evidence (same pattern as DEV-3/DEV-5); no spec change.

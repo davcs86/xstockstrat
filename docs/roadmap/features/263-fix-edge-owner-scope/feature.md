@@ -65,4 +65,4 @@ verified `x-user-id`; either lets a signed-in user read another user's data.
 
 ## Next Action
 
-`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–8 done; continue at Step 9 (config read-binding matrix test)
+`/sdd-execute fix-edge-owner-scope sequential` — Steps 1–9 done; continue at Step 10 (agent echoes the effective `user_id`; docstrings state the bind)
