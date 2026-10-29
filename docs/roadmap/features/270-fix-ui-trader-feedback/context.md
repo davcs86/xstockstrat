@@ -801,3 +801,21 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
 - Tooling: the worktree's `node_modules` symlink pointed at a missing main-worktree `node_modules`, so it was
   removed and `pnpm install --frozen-lockfile` ran in the worktree.
 
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 12
+
+- Step 12 done (`@AC-1`, `@AC-8`) in `services/xstockstrat-ui`:
+  - `src/lib/orderFreshness.test.ts` (new): six `pickFresherOrder` cases. Orders are
+    `{ ...ORDER_WORKING, status, updatedAt }` (cast to `Order`), with timestamps from `timestampFromDate`.
+  - The cases: AC-1 partial fill (a newer polled FILLED wins), AC-8 tie (CANCELED is kept), an older poll, an
+    absent poll timestamp, an absent streamed timestamp, and no streamed record.
+- TDD (RED with `orderFreshness.ts` temporarily set back to `streamed ?? polled`, then restored; see the Deviation Log):
+  - **Red:** AC-1 failed `expected 2 to be 3`, and the absent-streamed-timestamp case failed `expected 1 to be 3`.
+    The other four cases passed.
+  - **Green:** 6/6 passed.
+- Verification: `pnpm run lint` exits 0 (only pre-existing warnings). `pnpm run test:coverage` passes 296/296 across
+  56 files (all files 73.53% statements, above the 40% threshold). `lint:dup` finds 0 clones.
+- Open item: `e2e/fixtures/INVENTORY.md` does not list this test as an `ORDER_WORKING` consumer. Other `src/lib`
+  fixture importers are unlisted too, and the file is outside this step's **Files**.
+- Tooling: `pnpm install --frozen-lockfile` ran in the worktree (the main worktree has no `node_modules`).
+

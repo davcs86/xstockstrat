@@ -32,6 +32,7 @@
 | 2026-10-29 | `in-progress` (re-spec Steps 10–14) | /sdd-execute sequential (sdd-batch-execute) | Re-spec after merging `origin/main-dev`: line-drift refresh for Steps 10–14; Step 14 now preserves the feature-271 `@AC-5` `streamAlerts` hold branch and also updates the stale "stops silently" comments at `order-parity.spec.ts:118` and the `orders.spec.ts:11` header |
 | 2026-10-29 | `in-progress` (Step 10 done) | /sdd-execute sequential (sdd-batch-execute) | Step 10 — `@AC-3`/`@AC-12` tests: `tradingMode.test.ts` Vitest unit (`live`/`paper`/`null` → LIVE/PAPER/UNSPECIFIED) and an `order-form.spec.ts` e2e block (503 `GetTradingEnvironment` → PlaceOrder carries no `TRADING_MODE_PAPER`; no `paper` label on the five trader pages) |
 | 2026-10-29 | `in-progress` (Step 11 done) | /sdd-execute sequential (sdd-batch-execute) | Step 11 — D-11: `pickFresherOrder` (`src/lib/orderFreshness.ts`) keeps the streamed order unless the polled one has a strictly newer `updatedAt` (absent = oldest); `OrdersTable` merges through it |
+| 2026-10-29 | `in-progress` (Step 12 done) | /sdd-execute sequential (sdd-batch-execute) | Step 12 — `@AC-1`/`@AC-8` Vitest `src/lib/orderFreshness.test.ts`: six `pickFresherOrder` cases (newer poll wins, a tie keeps the stream, an older poll loses, absent timestamps count as oldest, no streamed record returns the poll) |
 
 ---
 

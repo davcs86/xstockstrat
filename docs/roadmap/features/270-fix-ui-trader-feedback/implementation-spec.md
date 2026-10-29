@@ -820,7 +820,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 12 — test: AC-1 and AC-8 freshness rules
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/orderFreshness.test.ts` — create
@@ -1261,3 +1261,16 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
   `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean. **Disposition**: not fixed here; already
   handed to `/sdd-qa defect`.
+
+### Step 12 — 2026-10-29
+
+- **TDD RED ran against the pre-Step-11 behavior.** Step 11 had already landed, so `orderFreshness.ts` was
+  temporarily swapped for the old streamed-wins merge (`streamed ?? polled`) for the RED run, then restored before
+  GREEN. RED failed on the assertions, not on a missing import. **Disposition**: CI-equivalent fallback.
+- **The fixture spread is cast.** `ORDER_WORKING` is a plain object literal, not a protobuf-es message, so the
+  test builds `{ ...ORDER_WORKING, status, updatedAt } as unknown as Order`. The relative import
+  `../../e2e/fixtures/orders` resolves under Vitest, so the `create(OrderSchema, …)` fallback was not needed.
+  **Disposition**: test-shape detail inside the step's **Files**.
+- **`INVENTORY.md` consumers column not updated.** The new test also uses `ORDER_WORKING`, but INVENTORY.md is not
+  in this step's **Files**. The other `src/lib` tests that import e2e fixtures (`performanceMetrics`,
+  `indicatorChart`, `configUiBff`) are not listed there either. **Disposition**: noted only.
