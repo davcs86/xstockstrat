@@ -104,7 +104,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         self._templates_repo: FormulaTemplatesRepository | None = (
             FormulaTemplatesRepository(db_pool) if db_pool is not None else None
         )
-        self._sandbox_sem = asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))
+        self._sandbox_sem = asyncio.Semaphore(config_watcher.sandbox_max_concurrent())
 
     @staticmethod
     def _has_admin_scope(context) -> bool:

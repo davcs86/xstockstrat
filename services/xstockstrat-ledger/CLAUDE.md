@@ -33,6 +33,7 @@ was removed.
 2. **All services write here.** The ledger is the system's audit trail and event replay source.
 3. **stream_key** is the logical partition for event replay (`order:{id}`, `portfolio:{user_id}`, etc.)
 4. **sequence** is globally monotonic — never gaps, never decreasing.
+5. **`QueryEvents.owner_only` scopes the read to `user_id = x-user-id`** (feature 263); NULL-owned rows are never returned under it. Every user-facing edge MUST set it (the trader BFF does, except on the copilot key it forces and on `account:` keys it ownership-checks); internal callers leave it false. The field defaults to false, so an edge that forgets it fails **open**.
 
 ## Live Streaming Architecture (connection budget)
 
@@ -110,6 +111,8 @@ dedup).
 | `formula:{formula_id}` | xstockstrat-indicators |
 | `alert:{alert_id}` | xstockstrat-notify |
 | `config:{namespace}` | xstockstrat-config |
+| `account:{account_id}` | xstockstrat-trading (reconciliation rows are NULL-owned) |
+| `copilot:{user_id}:default` | xstockstrat-ui trader BFF (copilot note thread) |
 
 ## Environment Variables
 

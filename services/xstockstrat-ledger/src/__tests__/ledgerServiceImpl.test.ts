@@ -39,6 +39,18 @@ function makeImpl(rows: any[] = [], throws?: Error) {
   return new LedgerServiceImpl(pool, {});
 }
 
+function captureQuery(rows: any[] = []) {
+  const captured: { sql?: string; params?: any[] } = {};
+  const pool = {
+    async query(sql: string, params?: any[]) {
+      captured.sql = sql;
+      captured.params = params;
+      return { rows };
+    },
+  };
+  return { impl: new LedgerServiceImpl(pool, {}), captured };
+}
+
 function makeCall(req: any) {
   return { request: req };
 }
@@ -184,6 +196,57 @@ describe('queryEvents', () => {
         resolve();
       });
     });
+  });
+
+  // Feature 263 — opt-in owner predicate (AC-2/AC-7); flag absent must keep internal callers' SQL.
+  function runQuery(impl: any, call: any) {
+    return new Promise<void>((resolve, reject) => {
+      impl.queryEvents(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  it('ownerOnly binds the caller x-user-id as a user_id predicate', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(impl, makeStreamCall({ ownerOnly: true, page: { pageSize: 100 } }, 'u-a'));
+    assert.strictEqual(
+      captured.sql,
+      'SELECT * FROM ledger.events WHERE user_id = $1 ORDER BY recorded_at ASC LIMIT $2',
+    );
+    assert.deepStrictEqual(captured.params, ['u-a', 101]);
+  });
+
+  it('ownerOnly with no caller binds the empty string (matches nothing)', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(impl, makeStreamCall({ ownerOnly: true, page: { pageSize: 100 } }));
+    assert.match(captured.sql ?? '', /WHERE user_id = \$1 /);
+    assert.deepStrictEqual(captured.params, ['', 101]);
+  });
+
+  it('flag absent leaves the SQL and params unchanged (internal callers)', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(
+      impl,
+      makeStreamCall({ eventType: 'order.filled', streamKey: 'order:1' }, 'u-a'),
+    );
+    assert.strictEqual(
+      captured.sql,
+      'SELECT * FROM ledger.events WHERE stream_key = $1 AND event_type = $2 ORDER BY recorded_at ASC LIMIT $3',
+    );
+    assert.deepStrictEqual(captured.params, ['order:1', 'order.filled', 101]);
+    assert.doesNotMatch(captured.sql ?? '', /user_id/);
+  });
+
+  it('ownerOnly with eventType keeps placeholders sequential and LIMIT last', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(
+      impl,
+      makeStreamCall({ ownerOnly: true, eventType: 'order.filled', page: { pageSize: 10 } }, 'u-a'),
+    );
+    assert.strictEqual(
+      captured.sql,
+      'SELECT * FROM ledger.events WHERE event_type = $1 AND user_id = $2 ORDER BY recorded_at ASC LIMIT $3',
+    );
+    assert.deepStrictEqual(captured.params, ['order.filled', 'u-a', 11]);
   });
 });
 
