@@ -326,3 +326,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   only at root findings `:55` (§ Resolved starts `:50`); `~L2360` 0 hits.
 - `docs/runbooks/mcp-tools.md` checked, unchanged (tool contracts unchanged).
 - Deviation: design.md §6 table-row wording → sentence + existing row (Deviation Log).
+
+## Session 2026-10-29 — sdd-execute sequential (Step 5 blocker resolution)
+
+- Step 5 discovery found that `docs/reports/2026-10-21-agent-client-deadlines-defect.md` (sidecar `triaged` /
+  `ref: feature:273-fix-agent-client-deadlines`) already covers every agent → backend RPC except `get_config_value`,
+  including the `get_config` tool's `GetConfig` call, so the planned `agent-rpc-deadlines` report would duplicate it.
+- Operator decision (binding, Option A): drop `agent-rpc-deadlines` and its sidecar; create only
+  `agent-config-snapshot-read` and `agent-dcr-fail-closed`; add a cross-reference line to the existing report;
+  record it in the Deviation Log; Step 5 Verification checks 2 reports.
+- Deferred-slug mapping, superseding the `agent-rpc-deadlines` targets in the 2026-10-20 sdd-design entry (Decisions,
+  Open Threads) above: `client.get_config` and `register_oauth_client` → feature `273-fix-agent-client-deadlines`.
+  The `agent-config-snapshot-read` and `agent-dcr-fail-closed` targets are unchanged.
