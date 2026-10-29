@@ -1030,3 +1030,22 @@ deployment) per namespace, at global scope and for every user from `list_users` 
   merges, and the four Instruction-2 smokes plus restores run post-deploy through the staging MCP set_config/
   list_opportunities/run_backtest tools and Tempo, recorded in a follow-up `rollout (dev)` entry. UI-only checks
   are verified through the API and traces, not visually. The prod audit is due before the prod promotion.
+
+## Session 2026-10-29 — rollout (dev), post-deploy smoke
+
+**Step 18 Instruction 2 and 3, run by the operator's session after deploy-dev (main-dev `9b20cb66`) went green.**
+The smoke used the staging agent MCP (admin `set_config` at global scope, which is what analysis's `ConfigWatcher`
+reads), `list_opportunities`, `run_backtest`, `list_config_keys`, and Tempo. All writes carried an audit `reason`.
+
+| # | Write (global) | Before | Result | Restored to |
+|---|---|---|---|---|
+| 1 | `analysis.opportunity.signal_rank_weight = 0` | `0.3` (float) | **Pass.** Page 1 (50 rows) went from 15 adjacent-pair violations of the conviction order (sort-0 at w=0 reduces to `MAX(conviction) OVER symbol DESC, symbol ASC, conviction DESC`) to 0. Groups tied at 1.0 now fall back to symbol ASC (AHR, ALL, AXP, BILL…). Pre-fix, the stored 0 read as 0.3. | `0.3` |
+| 2 | `analysis.backtest.default_commission_pct = 0`, `default_slippage_pct = 0` (float, `create_key`) | absent (code defaults `0.001` / `0.0005`, `servicer.py:793-794`) | **Pass.** `fundamentals_macd_blend` on MSFT (rolling window, `same_bar_close`) ran as backtest `2d443ce1-…` with 7 trades. All 14 fills equal the bar close, and every trade's `pnl` equals `(exit − entry) × qty` (residual 0), with total return −13.16 %. The contrast run `a134f1f3-…` with the defaults restored fills every entry at exactly 1.0005 × close, charges commission, and returns −14.89 %. | `0.001` / `0.0005` (= code defaults) |
+| 3 | `analysis.engine.alert_throttle_seconds = 0` (int, `create_key`) | absent (code default `300`, `live_loop.py:354`) | **Partial.** The key was created as `value_type=int`, and `get_config` read back `0`. A repeat-delivery observation was not possible. Tempo shows one `EmitAlert` span on dev in the last 7 days (agent `emit_alert` tool, none from analysis's live loop), and a repeat on one (strategy, symbol) key inside 300 s needs two live transitions on daily bars. The `0 = no throttle` behaviour is covered by Step 9's unit test. | `300` (= code default) |
+| 4 | — (read) `list_config_keys analysis` | — | **Pass.** All four migration-032 descriptions are live (`signal_rank_weight` "0 is honored…", the two `max_concurrent_bars_fetches` and `max_concurrent_candidates` "a stored 0 or negative reads as the default…"), and no row still carries the old zero-trap wording. | — |
+
+- **Restore caveat:** the agent exposes no key deletion, so the three keys created for smokes 2–3 remain as rows
+  holding their exact code defaults. Effective behaviour is unchanged from pre-smoke. Deleting them needs SQL (P-03).
+- UI-only checks (`/insights` backtest view, `/trader` AlertStream, `/accounts/notifications`, `/config-ui`) were
+  verified through the API that backs them, per the operator decision above.
+- Outstanding: the prod audit (Instruction 1) before the prod promotion. No prod MCP is available to this session.
