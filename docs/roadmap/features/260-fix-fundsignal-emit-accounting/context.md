@@ -507,3 +507,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Commit hook: `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, and the main
   worktree has no `node_modules` to symlink. So the commit ran with no pre-commit hook. `--no-verify` was not used.
 - Next: Step 4 (service: release the claim on any unconfirmed exit, scope the confirm, count accepted only).
+
+### Step 4 — service: release the claim on any unconfirmed exit; scope the confirm; count accepted only — done (2026-10-29)
+
+- Files: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`.
+  - `run_once` now wraps the emit and confirm in `try`/`finally`. `confirmed` and `emitted` are set only after the
+    scoped confirm UPDATE (`... AND run_id=$5::uuid AND signal_id IS NULL`). Any unconfirmed exit, whether a `None`
+    emit, an exception, `_SystemWriteRejected` or a cancellation, calls `_release_claim`.
+  - New `_release_claim` follows `_already_emitted`. It deletes only this run's NULL claim and logs and swallows an
+    `Exception`, never a `BaseException`.
+  - The module docstring no longer says ingest does not dedup. It says the claim guards re-emits, and that a NULL
+    `signal_id` marks an in-flight claim that is released when the emit fails.
+- TDD:
+  - RED before the change: 6 failed, 62 passed in `test_fundsignal_loop.py`. The failures were AC-1, AC-2, AC-3,
+    AC-5, the scoped confirm and the cancelled-emit release.
+  - GREEN after the change: 68 passed.
+- Verification:
+  - The full suite with `-m "not real_pg"` gave 1307 passed, 7 deselected, at 88.72% coverage. ruff check and
+    format are clean. The `signal_id IS NULL` grep hits `:271` (confirm) and `:412` (release).
+  - The `real_pg` file gave 3 passed. This run started a throwaway `local_pg` cluster, and Steps 2-3 had not run it.
+    That is in the Deviation Log.
+- Deviations: line drift only (+-3 against the rev-2 citations), recorded in the Deviation Log.
+- Next: Step 5 (test: retry direction stability and the mode-dependent `valid_until` anchor, RED).

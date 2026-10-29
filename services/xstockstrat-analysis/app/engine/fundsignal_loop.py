@@ -5,8 +5,9 @@ builds a deduplicated symbol universe, reads cached fundamentals **only** via ma
 ``GetFundamentalsMulti`` (never FMP directly — the single FMP chokepoint), scores each
 symbol, maps the score to a ``buy``/``sell``/``hold`` direction by cross-sectional
 quantile, and emits an ``ExternalSignal`` per surviving symbol through ingest
-``IngestSignal``. Re-emits are guarded by the ``analysis.fundsignal_emitted`` table
-(ingest's ``IngestSignal`` does not dedup), so a same-day re-run spends zero cache calls.
+``IngestSignal``. Re-emits are guarded by the ``analysis.fundsignal_emitted`` claim, so a
+same-day re-run spends zero cache calls; a NULL ``signal_id`` marks an in-flight claim,
+which is released when the emit fails.
 
 The same ``run_once`` path backs both the scheduled loop and the manual
 ``RunFundamentalsScan`` RPC (feature 062, Step 9).
@@ -258,19 +259,27 @@ class FundamentalsSignalLoop:
                 )
                 if row is None:
                     continue  # already emitted today
-                signal_id = await self._emit_signal(
-                    source_slug, symbol, directions[symbol], score, valid_days, sys_meta
-                )
-                if signal_id is not None:
-                    await self._db.execute(
-                        "UPDATE analysis.fundsignal_emitted SET signal_id=$4 "
-                        "WHERE symbol=$1 AND source=$2 AND as_of_date=$3",
-                        symbol,
-                        source_slug,
-                        as_of_date,
-                        signal_id,
+                confirmed = False
+                try:
+                    signal_id = await self._emit_signal(
+                        source_slug, symbol, directions[symbol], score, valid_days, sys_meta
                     )
-                emitted += 1
+                    if signal_id is not None:
+                        await self._db.execute(
+                            "UPDATE analysis.fundsignal_emitted SET signal_id=$4 "
+                            "WHERE symbol=$1 AND source=$2 AND as_of_date=$3 "
+                            "AND run_id=$5::uuid AND signal_id IS NULL",
+                            symbol,
+                            source_slug,
+                            as_of_date,
+                            signal_id,
+                            run_id,
+                        )
+                        confirmed = True
+                        emitted += 1
+                finally:
+                    if not confirmed:
+                        await self._release_claim(symbol, source_slug, as_of_date, run_id)
         except _SystemWriteRejected as e:
             return await self._abort_cycle(
                 run_id,
@@ -395,6 +404,19 @@ class FundamentalsSignalLoop:
             as_of_date,
         )
         return {r["symbol"] for r in rows}
+
+    async def _release_claim(self, symbol, source, as_of_date, run_id):
+        try:
+            await self._db.execute(
+                "DELETE FROM analysis.fundsignal_emitted WHERE symbol=$1 AND source=$2 "
+                "AND as_of_date=$3 AND signal_id IS NULL AND run_id=$4::uuid",
+                symbol,
+                source,
+                as_of_date,
+                run_id,
+            )
+        except Exception as e:  # noqa: BLE001 - never mask the exit that triggered the release
+            log.warning("fundsignal: claim release failed for %s: %s", symbol, e)
 
     async def _paced_fetch(self, symbols, budget, metadata, chunk_size=50):
         """Fetch fundamentals via marketdata GetFundamentalsMulti in budget-bounded chunks.
