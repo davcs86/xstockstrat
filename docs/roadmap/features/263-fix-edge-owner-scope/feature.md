@@ -21,6 +21,7 @@
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute (re-spec) | Steps 7, 8, 10 and 12 re-aligned with the codebase after the main-dev merge (line drift only; Files unchanged) |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute (re-spec) | Steps 9, 10, 11 and 12 re-aligned with the codebase after the second 2026-10-29 main-dev merge (line drift only; Files unchanged) |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 12 steps done; C-16 promotion applied (8 scenarios → `services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature` AC-1/2/3/7, `services/xstockstrat-config/acceptance/fix-edge-owner-scope.feature` AC-4/5/6/8); integration PR opened |
 
 ---
 
