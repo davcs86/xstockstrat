@@ -134,3 +134,22 @@ def test_getters_default_when_unset_or_mismatched(make, getter, key, default):
 )
 def test_sandbox_accessors_clamp_stored_non_positive(key, stored, read, expected):
     assert read(snapshot_watcher(**{key: stored})) == expected
+
+
+@pytest.mark.parametrize(
+    ("key", "stored", "prop", "resolved"),
+    [
+        ("indicators.sandbox.timeout_ms", 3000, "sandbox_timeout_ms", 3000),
+        ("indicators.sandbox.memory_bytes", 100663296, "sandbox_memory_bytes", 100663296),
+        (
+            "indicators.sandbox.allowed_imports",
+            "numpy,math",
+            "sandbox_allowed_imports",
+            ["numpy", "math"],
+        ),
+    ],
+)
+def test_sandbox_getters_resolve_full_dotted_rows(key, stored, prop, resolved):
+    # AC-2 (feature 243): getters must read the full-dotted key that migration 031 stores.
+    w = snapshot_watcher(**{key: stored})
+    assert getattr(w, prop) == resolved

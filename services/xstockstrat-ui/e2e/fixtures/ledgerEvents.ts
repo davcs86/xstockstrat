@@ -4,7 +4,7 @@
 // canonical TEST_USER_ID owner, so a spec can assert global-sequence ordering, type filtering,
 // and the per-event wire shape (incl. user_id + payload). See INVENTORY.md.
 import type { JsonObject } from '@bufbuild/protobuf';
-import { TEST_USER_ID } from './users';
+import { TEST_USER_ID, TEST_USER_B_ID } from './users';
 
 export interface LedgerExportFixtureRow {
   eventId: string;
@@ -140,3 +140,58 @@ export function closedPositionEventWire(row: ClosedPositionRow): JsonObject {
     payload,
   };
 }
+
+// ── Feature 263: owner scoping of trader QueryEvents (AC-1/2/3/7) ──
+// The mock's default `order.filled` branch returns these rows — only the TEST_USER_ID row when the
+// BFF sets ownerOnly (mirrors the ledger owner predicate). The foreign-user row and the NULL-owned
+// legacy row (empty userId) must never reach a caller through the trader BFF.
+export const OWNER_SCOPE_FOREIGN_USER_ID = TEST_USER_B_ID;
+/** An `account:` id that is not in BROKER_ACCOUNTS, so the BFF ownership check refuses it (AC-1). */
+export const OWNER_SCOPE_FOREIGN_ACCOUNT_ID = 'acct-b';
+export const OWNER_SCOPE_OWN_SYMBOL = 'MSFT';
+export const OWNER_SCOPE_LEGACY_SYMBOL = 'TSLA';
+
+export const OWNER_SCOPE_ORDER_FILLED_EVENTS: LedgerExportFixtureRow[] = [
+  {
+    eventId: 'evt-owner-own-1',
+    eventType: 'order.filled',
+    sourceService: 'xstockstrat-trading',
+    correlationId: 'corr-owner-1',
+    streamKey: 'order:own-order-1',
+    sequence: BigInt(1),
+    userId: TEST_USER_ID,
+    occurredAtIso: '2026-02-01T15:00:00.000Z',
+    payload: { order_id: 'own-order-1', symbol: OWNER_SCOPE_OWN_SYMBOL, qty: 5, fill_price: 410.0 },
+  },
+  {
+    eventId: 'evt-owner-foreign-1',
+    eventType: 'order.filled',
+    sourceService: 'xstockstrat-trading',
+    correlationId: 'corr-owner-2',
+    streamKey: 'order:foreign-order-1',
+    sequence: BigInt(2),
+    userId: OWNER_SCOPE_FOREIGN_USER_ID,
+    occurredAtIso: '2026-02-01T15:01:00.000Z',
+    payload: { order_id: 'foreign-order-1', symbol: 'AAPL', qty: 10, fill_price: 180.0 },
+  },
+  {
+    eventId: 'evt-owner-legacy-1',
+    eventType: 'order.filled',
+    sourceService: 'xstockstrat-trading',
+    correlationId: 'corr-owner-3',
+    streamKey: 'account:acct-legacy',
+    sequence: BigInt(3),
+    userId: '',
+    occurredAtIso: '2026-02-01T15:02:00.000Z',
+    payload: {
+      order_id: 'legacy-order-1',
+      symbol: OWNER_SCOPE_LEGACY_SYMBOL,
+      qty: 2,
+      fill_price: 250.0,
+    },
+  },
+];
+
+/** AC-3 copilot isolation: the caller appends the own note; the mock seeds the foreign one. */
+export const OWNER_SCOPE_COPILOT_NOTE_TEXT = 'Owner-scope check: own copilot note.';
+export const OWNER_SCOPE_FOREIGN_COPILOT_NOTE_TEXT = 'Owner-scope check: foreign copilot note.';

@@ -1600,8 +1600,8 @@ def register_tools(server: MCPServer) -> None:
     async def get_config(namespace: str, user_id: str = "") -> dict:
         """Read the current config values for a namespace from xstockstrat-config (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        user_id: optional per-user scope. Omit (empty) for the global values; pass a user id to see
-        that user's per-user overrides layered over the global values.
+        user_id: optional per-user scope (empty = global values). A non-admin's other-user id is
+        bound to their own id; admins may read any user's. Returned user_id = the scope read.
         The config environment is always this agent deployment's own environment
         (production/staging, from APPLICATION_ENV) — it is a deployment property, not a caller
         choice, so this tool cannot read another environment's rows.
@@ -1628,8 +1628,8 @@ def register_tools(server: MCPServer) -> None:
     async def list_config_keys(namespace: str, user_id: str = "") -> dict:
         """List the config keys registered for a namespace, with metadata only (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        user_id: optional per-user scope. Omit (empty) for the global keys; pass a user id to see
-        that user's per-user overrides layered over the global keys.
+        user_id: optional per-user scope (empty = global keys). A non-admin's other-user id is
+        bound to their own id; admins may read any user's. Returned user_id = the scope read.
         The config environment is always this agent deployment's own environment
         (production/staging, from APPLICATION_ENV) — a deployment property, not a caller choice.
         Returns {namespace, environment, user_id, keys[]} where each key carries key,
@@ -2374,8 +2374,8 @@ def _same_origin(a: str, b: str) -> bool:
     return pa.scheme == "http" and pb.scheme == "https"
 
 
-# Fixed bound on the undeadlined GetConfig policy read; looked up at call time (never bound as a
-# default argument) so tests can monkeypatch it.
+# Outer bound keeping list_opportunities inside the MCP client's 60 s budget; looked up at call
+# time so tests can monkeypatch it.
 _POLICY_READ_TIMEOUT_S = 3.0
 
 
