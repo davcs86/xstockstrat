@@ -809,3 +809,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `ruff check .` / `ruff format --check .` clean.
 - Deviations: none.
 
+### Step 7 — service: D-18 Option A — mirror the honest descriptions in the UI strategy catalog (C-10) — done (2026-10-29)
+
+- `services/xstockstrat-ui/src/lib/strategyCatalog.ts`: `BUILTIN_INDICATORS` `ATR`/`VWAP` `description` set to the
+  engine's runtime strings, byte-identical (ATR in double quotes for the apostrophe; prettier-wrapped). `name`,
+  `params` and all other entries unchanged; no consumer needs a change.
+- TDD: Step 8's assertions (no `Average True Range`/`Volume Weighted Average Price`; exact engine strings via `toBe`)
+  run as an uncommitted scratch vitest (Step 7 owns only `strategyCatalog.ts`) → red: 2 failed (`expected 'Average
+  True Range' not to contain 'Average True Range'`; `expected 'Average True Range' to be 'ATR (close-to-close
+  approximation): …'`) → green: 2 passed. Scratch file deleted before commit.
+- Verification: grep → `0`; `pnpm run lint` no errors (pre-existing `react-hooks/exhaustive-deps` warnings only, none
+  in this file); `prettier --check` clean; full vitest 47 files / 238 tests passed.
+- Tooling: `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter .` in this worktree (pnpm 9.15.9,
+  Node 24.20.0); no manifest or lockfile change.
+- Deviations: prettier-wrapped source layout only — see Deviation Log.
+

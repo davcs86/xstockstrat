@@ -26,6 +26,7 @@
 | 2026-10-29 | `in-progress` (re-spec steps 5, 6) | /sdd-execute sequential (sdd-batch-execute) | Merged `origin/main-dev` (`-X ours`); steps 5, 6 aligned with the current codebase (line drift only) |
 | 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A: honest ATR/VWAP descriptions in `INDICATOR_REGISTRY` and docstrings; math unchanged |
 | 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 tests: `TestAtrVwapHonestDescriptions` (AC-4/AC-5) at engine and servicer level; values unchanged |
+| 2026-10-29 | `in-progress` (Step 7 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A in the UI: `BUILTIN_INDICATORS` ATR/VWAP descriptions mirror the engine strings (C-10) |
 
 ---
 

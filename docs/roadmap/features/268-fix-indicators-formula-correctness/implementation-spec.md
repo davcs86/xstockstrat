@@ -473,7 +473,7 @@ they guard that the numbers are unchanged.
 
 ### Step 7 — service: D-18 Option A — mirror the honest descriptions in the UI strategy catalog (C-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/strategyCatalog.ts` — modify
@@ -685,3 +685,10 @@ _Populated by /sdd-execute as implementation proceeds._
   returns `0` as specced.
 - **Disposition**: verification command form only; strings, keys, `required`, dispatch and math as specced.
   Step 7 must match the runtime strings, not a one-line source form.
+
+### Step 7 — catalog entries are prettier-wrapped (2026-10-29)
+- **Spec said**: replace `:99` / `:104` with a one-line `description: ...,` each.
+- **Actual**: both new strings exceed prettier's print width, so `prettier --write` puts each value on its own
+  line after `description:` (`:99-100`, `:105-106`). The ATR value uses double quotes (apostrophe). Runtime values
+  are byte-identical to the engine's `INDICATOR_REGISTRY` strings (asserted with `toBe` in a scratch vitest).
+- **Disposition**: source layout only; strings, `name`, `params` and other entries as specced.
