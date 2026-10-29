@@ -61,10 +61,14 @@ function makeIdempotentPool(opts: {
   claimRows: any[]; // rows returned by INSERT ... idempotency_keys ... RETURNING
   insertRow?: any; // row returned by the ledger.events insert (first-time path)
   existingRows?: any[]; // rows returned by the SELECT join (duplicate path)
+  connectThrows?: Error; // pool.connect() rejects with this
+  throwOn?: RegExp; // client.query() throws when the SQL matches
 }) {
   const calls: string[] = [];
+  const releases: unknown[] = [];
   const handle = (sql: string) => {
     calls.push(sql);
+    if (opts.throwOn?.test(sql)) throw new Error('connection terminated');
     if (/INSERT INTO ledger\.idempotency_keys/.test(sql)) return { rows: opts.claimRows };
     if (/INSERT INTO ledger\.events/.test(sql))
       return { rows: [opts.insertRow ?? { sequence: 1, recorded_at: new Date() }] };
@@ -75,17 +79,20 @@ function makeIdempotentPool(opts: {
     async query(sql: string, _params?: any[]) {
       return handle(sql);
     },
-    release() {},
+    release(err?: unknown) {
+      releases.push(err);
+    },
   };
   const pool = {
     async connect() {
+      if (opts.connectThrows) throw opts.connectThrows;
       return client;
     },
     async query(sql: string, _params?: any[]) {
       return handle(sql);
     },
   };
-  return { pool, calls };
+  return { pool, calls, releases };
 }
 
 // ---------------------------------------------------------------------------
@@ -435,7 +442,7 @@ describe('appendEvent', () => {
 
   // Idempotency: a first-seen key claims the row and inserts the event normally.
   it('idempotent path: claims the key and inserts the event', async () => {
-    const { pool, calls } = makeIdempotentPool({
+    const { pool, calls, releases } = makeIdempotentPool({
       claimRows: [{ event_id: 'new' }],
       insertRow: { sequence: 7, recorded_at: new Date() },
     });
@@ -457,13 +464,14 @@ describe('appendEvent', () => {
       });
     });
     assert.ok(calls.some((s) => /INSERT INTO ledger\.events/.test(s)), 'first call must insert');
+    assert.deepStrictEqual(releases, [undefined], 'success path releases the client without an error');
   });
 
   // Idempotency: a duplicate key returns the originally-stored event and does NOT
   // insert a second ledger.events row.
   it('idempotent path: returns the stored event on a duplicate key (no second insert)', async () => {
     const now = new Date();
-    const { pool, calls } = makeIdempotentPool({
+    const { pool, calls, releases } = makeIdempotentPool({
       claimRows: [], // ON CONFLICT DO NOTHING → no row → duplicate
       existingRows: [{ event_id: 'orig', sequence: 3, recorded_at: now }],
     });
@@ -488,6 +496,7 @@ describe('appendEvent', () => {
       !calls.some((s) => /INSERT INTO ledger\.events/.test(s)),
       'duplicate key must not insert a second event',
     );
+    assert.deepStrictEqual(releases, [undefined], 'duplicate path releases the client without an error');
   });
 
   // Feature 021 — owning user_id is stamped on the write path (AC-8/AC-11 write side).
@@ -727,6 +736,47 @@ describe('rowToEvent serialization (regression)', () => {
     assert.ok(event.occurredAt instanceof Date, 'occurredAt must be a Date');
     assert.ok(event.recordedAt instanceof Date, 'recordedAt must be a Date');
     assert.doesNotThrow(() => LedgerEvent.encode(event).finish());
+  });
+});
+
+describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)', () => {
+  function appendIdempotent(pool: any, idempotencyKey: string) {
+    const impl = new LedgerServiceImpl(pool, {});
+    const cbArgs: any[][] = [];
+    const done = impl.appendEvent(
+      makeCall({ streamKey: 'account:a-1', idempotencyKey, eventType: 'x', payload: {} }),
+      (...args: any[]) => cbArgs.push(args),
+    );
+    return { done, cbArgs };
+  }
+
+  it('@AC-5 returns code 13 when pool.connect rejects', async () => {
+    assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');
+    const { pool, releases } = makeIdempotentPool({
+      claimRows: [],
+      connectThrows: new Error('timeout exceeded when trying to connect'),
+    });
+    const { done, cbArgs } = appendIdempotent(pool, 'k-1');
+    await assert.doesNotReject(done);
+    assert.strictEqual(cbArgs.length, 1);
+    assert.strictEqual(cbArgs[0][0]?.code, 13);
+    assert.deepStrictEqual(releases, [], 'nothing was acquired, so nothing is released');
+  });
+
+  it('@AC-10 releases the client with the error when a query in the transaction fails', async () => {
+    assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');
+    const { pool, calls, releases } = makeIdempotentPool({
+      claimRows: [{ event_id: 'e' }],
+      throwOn: /INSERT INTO ledger\.events/,
+    });
+    const { done, cbArgs } = appendIdempotent(pool, 'k-2');
+    await assert.doesNotReject(done);
+    assert.strictEqual(cbArgs.length, 1);
+    assert.strictEqual(cbArgs[0][0]?.code, 13);
+    assert.strictEqual(releases.length, 1);
+    assert.ok(releases[0] instanceof Error, 'release must receive the caught Error');
+    assert.strictEqual((releases[0] as Error).message, 'connection terminated');
+    assert.ok(calls.includes('ROLLBACK'), 'the failed transaction is rolled back');
   });
 });
 
