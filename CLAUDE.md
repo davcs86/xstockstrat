@@ -301,7 +301,7 @@ When you change a service `Dockerfile`, update its chain in one PR — the servi
 
 ## CI/CD Overview
 
-CI runs on every PR to `main-dev` or `main`. Coverage thresholds: Go/Python/Node.js ≥40% (indicators ≥50%). Deploys: `main-dev` push → DO dev app; `main` push → DO prod app.
+CI runs on every PR to `main-dev` or `main`. Coverage thresholds: Go/Python ≥40% (indicators ≥50%); the Node.js leaves declare 40% but CI does not enforce it (no `--check-coverage` — see `docs/patterns/ci-overview.md`). Deploys: `main-dev` push → DO dev app; `main` push → DO prod app.
 
 **Full job matrix, coverage notes, and deployment pipeline** → `docs/patterns/ci-overview.md`.
 

@@ -25,6 +25,26 @@
 user and target status. A reactive reclaim logs a failure and, on success, emits
 `order_intent.reclaimed_unknown` with a trigger value that names the reactive path, matching the sweeper.
 
+## Functional Requirements
+
+- **FR-1.** When `UpsertOrder` fails on the `PlaceOrder` broker-timeout (uncertain-outcome) path
+  (`trading.go:688`), trading logs it at error level with order id, user id and the status written
+  (`ORDER_STATUS_NEW`, the pre-call status). → `@AC-1`
+- **FR-2.** When `UpsertOrder` fails on the `PlaceOrder` definite-reject path (`trading.go:703`),
+  trading logs it at error level with order id, user id and status `ORDER_STATUS_REJECTED`. → `@AC-2`
+- **FR-3.** When the `CancelOrder` final `UpsertOrder` (`trading.go:1367`) fails, trading logs it at
+  error level with order id, user id and status `ORDER_STATUS_CANCELED`. → `@AC-3`
+- **FR-4.** When the `ReplaceOrder` final `UpsertOrder` (`trading.go:1550`) fails, trading logs it at
+  error level with order id, user id and the status written (the order's existing status, which a
+  replace does not change). → `@AC-6`
+- **FR-5.** A successful reactive reclaim of a stale PENDING intent (`trading.go:603`, `:1301`,
+  `:1498`) emits `order_intent.reclaimed_unknown` with the sweeper's payload fields (`order_id`,
+  `intent_id`, `was_pending_since`) and `trigger` set to `reactive_place`, `reactive_cancel` or
+  `reactive_replace` respectively (the sweeper keeps `sweep`). The RPC still returns
+  `FailedPrecondition` "still pending". → `@AC-4`, `@AC-8`, `@AC-9`
+- **FR-6.** A failed reactive `ReclaimOrphanIntent` at those three sites is logged with the intent id
+  and error. → `@AC-5`, `@AC-7`
+
 ## Reproduction Steps
 
 1. D-04: `TradingService` with a repo fake whose `UpsertOrder` errors and a broker fake that returns
@@ -51,11 +71,32 @@ reclaim to three sites.
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed)
+**Trading-domain scope.**
 
-Design forks: log-only versus surfacing the `UpsertOrder` failure to the caller (the broker side
-effect has already happened on these paths); whether to extract the four-way intent-lookup switch in
-the same change (DRY guard rail) or keep the fix to three call sites.
+- **Brokers (C-2).** The fix sits in the provider-agnostic `TradingService` layer, so ALPACA and IBKR
+  are both covered; no broker client changes.
+- **Paper vs live (C-3).** Behavior is identical in paper (staging) and live (production): only logging
+  and one audit event are added on failure paths. Testing on dev is paper-safe.
+- **Order types (C-4).** No order-type-specific logic changes; MARKET, LIMIT, STOP, STOP_LIMIT and
+  TRAILING_STOP follow the same write and reclaim paths and are unaffected beyond the added logging.
+- **Fills (C-5).** PARTIALLY_FILLED and FILLED handling (fill sync, `ConfirmOrder`) is unchanged. A
+  cancel or replace of a partially filled order reaches the same final `UpsertOrder` and gains the
+  same FR-3/FR-4 logging, nothing else.
+
+## Consumer Surface(s)
+
+None — internal/platform-only. No UI, agent tool, proto or config surface changes. Operators and the
+reconciliation path gain visibility: new error-level logs, and `order_intent.reclaimed_unknown`
+events in the ledger with the new `reactive_*` trigger values beside the existing `sweep`.
+
+## Open Questions
+
+- [x] Log-only versus surfacing the `UpsertOrder` failure to the caller (the broker side effect has
+  already happened on these paths). Deferred to `/sdd-design` (C-11); the FRs above are the log-only
+  floor and hold either way.
+- [x] Extract the four-way intent-lookup switch in the same change (DRY guard rail) or keep the fix to
+  the three reclaim call sites. Deferred to `/sdd-design` (C-11); FR-5/FR-6 bind all three sites
+  either way.
 
 ## Acceptance Criteria
 
