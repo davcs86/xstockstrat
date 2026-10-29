@@ -741,3 +741,123 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 - Teardown: context-constitution refresh skill unavailable; manual reconciliation found no drift (DEV-11).
   Open item for the integration PR body: state the plugin was unavailable and the manual reconciliation done.
 
+## Session 2026-10-29 (sdd-batch-execute promotion plan (awaiting operator confirm))
+
+C-16 promotion plan for launch, produced by sdd-batch-execute. Nothing is written to a durable suite until
+the operator confirms.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-edge-owner-scope (feature 263)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature | CREATE | NEW | trader BFF QueryEvents foreign stream |
+| AC-2 | same ui file | CREATE | NEW | no stream_key leaks no foreign or NULL-owner events |
+| AC-3 | same ui file | CREATE | NEW | own account and copilot streams still work |
+| AC-7 | same ui file | CREATE | NEW | own position lineage with no stream_key |
+| AC-4 | /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-edge-owner-scope.feature | CREATE | NEW | non-admin get_config bound to caller |
+| AC-5 | same config file | CREATE | NEW | non-admin list_config_keys bound to caller |
+| AC-6 | same config file | CREATE | NEW | own per-user overlay still readable |
+| AC-8 | same config file | CREATE | NEW | admin override preserved |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature (CREATE) ---
+# Promoted from docs/roadmap/features/263-fix-edge-owner-scope/acceptance.feature on launch
+# (C-16). Scenarios are verbatim; each carries its source `@AC-*` and a `@feature-263` tag.
+# Durable business rule xstockstrat-ui guarantees: the trader BFF LedgerService.QueryEvents never returns
+# another user's (or an unowned) event, while a trader still reads their own streams. A rule enters only by promotion.
+Feature: fix-edge-owner-scope (bug fix)
+  Regression guard for docs/reports/2026-10-21-edge-owner-scope-defect.md:
+  trader BFF ledger queryEvents and agent get_config / list_config_keys read other users' data (debt-radar D-25, D-31).
+
+  Background:
+    Given user "u-a" owns broker account "acct-a" and user "u-b" owns broker account "acct-b"
+    And the ledger holds an "order.filled" event on stream "account:acct-b" for user "u-b" symbol "AAPL"
+    And the ledger holds an "order.filled" event on stream "account:acct-legacy" with a NULL user_id symbol "TSLA"
+
+  @AC-1 @FR-1 @regression @feature-263
+  Scenario: A trader cannot read another user's account stream through the trader BFF
+    Given user "u-a" is signed in to /trader
+    When "u-a" calls trader BFF LedgerService.QueryEvents with stream_key "account:acct-b"
+    Then the call fails with PERMISSION_DENIED
+    And no event from stream "account:acct-b" is returned
+
+  @AC-2 @FR-2 @regression @feature-263
+  Scenario: A trader BFF query with no stream key returns no other user's events
+    Given user "u-a" is signed in to /trader
+    When "u-a" calls trader BFF LedgerService.QueryEvents with event_type "order.filled" and no stream_key
+    Then the response contains no event belonging to user "u-b"
+    And the response contains no event whose user_id is NULL
+    And the "order.filled" event on "account:acct-legacy" symbol "TSLA" is not returned
+
+  @AC-3 @FR-1 @FR-5 @regression @feature-263
+  Scenario: A trader still reads their own account and copilot streams
+    Given user "u-a" is signed in to /trader
+    And the ledger holds a "reconciliation.tick" event on stream "account:acct-a"
+    And the ledger holds a "copilot.message" event "note-a" on stream "copilot:u-a:default" for user "u-a"
+    And the ledger holds a "copilot.message" event "note-b" on stream "copilot:u-b:default" for user "u-b"
+    When "u-a" calls trader BFF LedgerService.QueryEvents with stream_key "account:acct-a"
+    Then the "reconciliation.tick" event on "account:acct-a" is returned
+    And a QueryEvents with stream_key "copilot:anything" returns exactly the "note-a" event
+    And the "note-b" event is not returned
+
+  @AC-7 @FR-2 @FR-5 @regression @feature-263
+  Scenario: A trader still reads their own position lineage with no stream key
+    Given user "u-a" is signed in to /trader
+    And the ledger holds an "order.filled" event on stream "account:acct-a" for user "u-a" symbol "MSFT"
+    When "u-a" calls trader BFF LedgerService.QueryEvents with event_type "order.filled" and no stream_key
+    Then the "order.filled" event for user "u-a" symbol "MSFT" is returned
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-edge-owner-scope.feature (CREATE) ---
+# Promoted from docs/roadmap/features/263-fix-edge-owner-scope/acceptance.feature on launch
+# (C-16). Scenarios are verbatim; each carries its source `@AC-*` and a `@feature-263` tag.
+# Durable business rule xstockstrat-config guarantees: GetConfig/ListKeys bind a non-admin caller's per-user
+# scope to the verified caller (admin may read any user). A rule enters only by promotion.
+Feature: fix-edge-owner-scope (bug fix)
+  Regression guard for docs/reports/2026-10-21-edge-owner-scope-defect.md:
+  trader BFF ledger queryEvents and agent get_config / list_config_keys read other users' data (debt-radar D-25, D-31).
+
+  @AC-4 @FR-3 @regression @feature-263
+  Scenario: A non-admin MCP get_config with a foreign user_id is bound to the caller
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And user "u-a" has a per-user config row "analysis.backtest.max_duration_seconds" = 450 in the agent's environment scope
+    And non-admin user "u-a" is the verified MCP caller
+    When "u-a" calls get_config with namespace "analysis" and user_id "u-b"
+    Then the returned "analysis.backtest.max_duration_seconds" value is 450
+    And the value 900 is not returned
+
+  @AC-5 @FR-4 @regression @feature-263
+  Scenario: A non-admin MCP list_config_keys with a foreign user_id is bound to the caller
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And user "u-a" has no per-user config rows in namespace "analysis"
+    And non-admin user "u-a" is the verified MCP caller
+    When "u-a" calls list_config_keys with namespace "analysis" and user_id "u-b"
+    Then "analysis.backtest.max_duration_seconds" is not reported as a per-user override
+    And no key overridden by "u-b" is revealed
+
+  @AC-6 @FR-5 @regression @feature-263
+  Scenario: An MCP caller still reads their own per-user config overlay
+    Given user "u-a" has a per-user override "analysis.backtest.max_duration_seconds" = 450
+    And non-admin user "u-a" is the verified MCP caller
+    When "u-a" calls get_config with namespace "analysis" and user_id "u-a"
+    Then the returned "analysis.backtest.max_duration_seconds" value is 450
+
+  @AC-8 @FR-6 @regression @feature-263
+  Scenario: An admin MCP caller can still read another user's per-user config overlay
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And admin user "u-admin" is the verified MCP caller
+    When "u-admin" calls get_config with namespace "analysis" and user_id "u-b"
+    Then the returned "analysis.backtest.max_duration_seconds" value is 900
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1/2/3/7 assert on the trader BFF response, so they go to xstockstrat-ui. AC-4/5/6/8 are phrased via MCP tools, but the fix and the Then outcome live in config (design.md D-31: boundReadUserId in config authz.ts, applied at getConfig and listKeys). They are routed to xstockstrat-config rather than xstockstrat-agent. The agent echo fix is secondary. If the owner prefers an agent copy, that would be a second target. I did not duplicate.
+- The Background block is included only in the ui file, where all four scenarios use it. The config scenarios don't reference it, so it was dropped from that file. Scenario text is verbatim.
+- Possible tension, not a conflict: /home/user/xstockstrat/services/xstockstrat-config/acceptance/config-ui-usability.feature:11-14 and :27-28 call ListKeys with user_id "u-123" without naming the caller. Feature 263 binds non-admin callers to their own x-user-id. Those scenarios stay valid if the caller is u-123 or an admin. A human may want to confirm the caller identity assumption. No standing @AC-* is contradicted.
+- No OVERLAP: grep of every ui/config/agent/ledger suite and docs/sdd/business-rules/platform.feature found no existing QueryEvents-owner or get_config/list_config_keys user_id-binding rule. fix-config-audit-author-spoof (@feature-?, SetConfig author/x-user-id) covers writes only. config-secrets-and-scoping covers the overlay and WatchConfig, not caller binding.
+- The ledger suite is not a target: the ledger fix is an owner_only predicate, but no 263 scenario asserts ledger-level behavior.
+
+### Coverage check
+- Source scenarios: 8 (AC-1..AC-8). Planned: 8 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. All accounted for, none skipped.
+```
