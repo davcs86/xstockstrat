@@ -568,7 +568,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 7 — test: deletion-first mock cleanup + `@AC-6`/`@AC-7` (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -706,3 +706,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Step 5 (2026-10-29), WARNING-text assertion for the malformed row.** Instruction 4 asks for a
   WARNING that names `"bad"`. A bare `"bad"` substring can also match the hex `pass_trace_id` every
   warning carries, so the test asserts `"strategy bad (owner u-a)"`. Same intent, never vacuous.
+- **Step 7 (2026-10-29), `@AC-6` assertion obfuscates the method name (operator decision).**
+  Instruction 6's literal `hasattr(StrategiesRepository, "get_by_id")` would leave one hit for the
+  step's second Verification grep (`expect 0`). Operator decision in their own words (session
+  question tool, 2026-10-29): 'B: obfuscate the name'. The grep stays at `expect 0`; the test asserts
+  `not hasattr(StrategiesRepository, "get_" + "by_id")` with a one-line comment that the name is split
+  so the grep stays a strict 0. Same assertion, same RED/GREEN.
+- **Step 7 (2026-10-29), comment wrapping for E501.** The reworded `(v)` comments and the `(iv)`
+  line with its inline comment are 105-107 chars and fail ruff E501, which the step's own
+  Verification runs. The two `(v)` comments wrap onto a second line, and the `(iv)` comment
+  `# no precondition fetch on disable` moves to the line above the assert. Wording unchanged.

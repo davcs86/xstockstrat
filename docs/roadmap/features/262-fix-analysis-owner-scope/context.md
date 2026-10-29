@@ -626,3 +626,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     the spec offered it as "e.g.", same meaning. No deviation.
   - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
     was not used.
+- Step 7 done (test, `tests/test_analysis_servicer.py`, `tests/test_readiness_opportunities_source_symbol.py`):
+  deletion-first cleanup — 24 + 2 single-line `get_by_id` mocks deleted (each next line already sets
+  `get_by_owner_and_id`), the two multi-line mocks renamed with their alias lines deleted, the
+  owner-agnostic side_effect mock deleted and its comment reworded (single owner `u1`, so the
+  owner-scoped mock ignores `uid`), the disable-path `assert_not_awaited` retargeted to
+  `get_by_owner_and_id`, the two feature-089 comments reworded. New
+  `TestStrategiesRepositoryOwnerScopedOnly` (`@AC-6`) after `TestListLiveEnabled`.
+  - TDD: AC-6 red: `assert not hasattr(StrategiesRepository, "get_" + "by_id")` failed
+    (`True = hasattr(...)`) against the pre-Step-6 `strategies.py` (`0db51bcc`, temporary swap,
+    restored) → green: 1 passed. AC-7 red: `_strategies_repo.(get_by_id|update)` grep = 30 → green: 0.
+  - Verification: grep 1 = 0, grep 2 = 0; full suite 1455 passed; coverage 89.88% (≥40);
+    `ruff check .` + `ruff format --check .` clean.
+  - Deviations (Deviation Log): operator decision 'B: obfuscate the name' for the `@AC-6`
+    assertion; E501 wrapping of the reworded comments.
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.
