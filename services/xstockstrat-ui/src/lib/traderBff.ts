@@ -21,8 +21,8 @@ import {
   backendHeaders,
   forward,
   forwardAdmin,
-  FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
+import { FUNDAMENTALS_TIMEOUT_MS, ORDER_MUTATION_TIMEOUT_MS } from '@/lib/deadlines';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
 const router = createBffRouter();
@@ -30,7 +30,9 @@ const router = createBffRouter();
 router.service(TradingService, {
   // Ownership comes from the x-user-id header, so these forward unchanged. listOrders keeps an explicit
   // user_id — there it's a cross-user filter (empty = all), which the BFF pins to the session.
-  placeOrder: forward((req, opts) => tradingClient.placeOrder(req, opts)),
+  placeOrder: forward((req, opts) => tradingClient.placeOrder(req, opts), {
+    timeoutMs: ORDER_MUTATION_TIMEOUT_MS,
+  }),
   async listOrders(req, ctx) {
     const claims = await requireSession(ctx);
     return tradingClient.listOrders(
@@ -39,10 +41,16 @@ router.service(TradingService, {
     );
   },
   getOrder: forward((req, opts) => tradingClient.getOrder(req, opts)),
-  cancelOrder: forward((req, opts) => tradingClient.cancelOrder(req, opts)),
-  replaceOrder: forward((req, opts) => tradingClient.replaceOrder(req, opts)),
+  cancelOrder: forward((req, opts) => tradingClient.cancelOrder(req, opts), {
+    timeoutMs: ORDER_MUTATION_TIMEOUT_MS,
+  }),
+  replaceOrder: forward((req, opts) => tradingClient.replaceOrder(req, opts), {
+    timeoutMs: ORDER_MUTATION_TIMEOUT_MS,
+  }),
   // The trading service enforces the offline-only + ownership guard server-side from the header.
-  confirmOrder: forward((req, opts) => tradingClient.confirmOrder(req, opts)),
+  confirmOrder: forward((req, opts) => tradingClient.confirmOrder(req, opts), {
+    timeoutMs: ORDER_MUTATION_TIMEOUT_MS,
+  }),
   async *streamOrderUpdates(req, ctx) {
     const claims = await requireSession(ctx);
     yield* tradingClient.streamOrderUpdates(

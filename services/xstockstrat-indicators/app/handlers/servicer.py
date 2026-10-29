@@ -488,7 +488,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
         row = await self._repo.get_by_id(request.formula_id)
-        if row is None:
+        if row is None or row.get("pending_intent_id") is not None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
@@ -591,7 +591,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
         row = await self._repo.get_by_id(request.formula_id)
-        if row is None:
+        if row is None or row.get("pending_intent_id") is not None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
