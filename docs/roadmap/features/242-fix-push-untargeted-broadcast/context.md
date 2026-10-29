@@ -566,3 +566,16 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   113 files already formatted; the conftest grep shows only the pre-existing `from tests.conftest` imports.
 - Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`.
 - Out of scope: none.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 13 (agent emit_alert broadcast wording)
+
+- Step 13 done. The `emit_alert` docstring `broadcast` param (`services/xstockstrat-agent/app/tools.py`) and
+  `docs/runbooks/mcp-tools.md` (intro `:246`, `broadcast` row `:256`) now say a broadcast's in-app stream/history
+  reaches every user while its Web Push device notification reaches admin-role users only (feature 242). The code
+  line `target_user_id = "" if broadcast else ...` is unchanged.
+- TDD: N/A (docstring/docs wording only, `design.md:218`).
+- Verification: agent `ruff check .` all passed; `ruff format --check .` 58 files formatted; `tests/test_tools.py
+  tests/test_tools_endpoint.py` 121 passed (after `uv sync --extra dev --frozen`); the admin+push grep hits
+  `tools.py:694`, `mcp-tools.md:246`, `:256`.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`.
+- Out of scope: none.

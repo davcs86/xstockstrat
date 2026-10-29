@@ -623,7 +623,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_live_loop.py   # un
 
 ### Step 13 — docs: agent `emit_alert` broadcast wording (push reaches admins only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (docstring only)
@@ -860,3 +860,7 @@ _Populated by /sdd-execute as implementation proceeds._
   (b) The severity assertions read `live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING`, as the existing feature-215
   test does, so the file gains no import. (c) `strategy_id` is not load-bearing in the `_loop` fixtures, so the
   `@AC-7` test overrides it to `strat-2` and asserts the spec title; it selects the alert with `_fund_alerts`.
+- **Step 13 (2026-10-29) — line cites only, no behaviour deviation.** The spec's `tools.py:690-692` / `:699` sit at
+  `:689-691` / `:698` (off by one); the text matched as quoted. The new docstring clause is a separate sentence on
+  two lines so the Verification grep (`admin` and `push` on one line) hits `tools.py`. The agent venv lacked
+  `httpcore`/`starlette`, so `uv sync --extra dev --frozen` was run before the pytest Verification (no lockfile change).
