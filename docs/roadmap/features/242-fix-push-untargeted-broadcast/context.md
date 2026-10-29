@@ -362,3 +362,27 @@ OPERATOR DECISIONS (binding, recorded 2026-10-21):
   packages/proto/gen/` exit 0. `buf lint` + `buf breaking` (vs `main-dev` extract) exit 0.
 - Toolchain parity (Deviation Log): Go plugins rebuilt with `GOTOOLCHAIN=go1.27.0` because the provisioned go1.24.7
   build reflowed a comment in `analysis.pb.go`; `pnpm install --frozen-lockfile` so `tsc` is the lockfile's 5.9.3.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 3 (identity handler)
+
+- Step 3 done. Created `services/xstockstrat-identity/src/grpc/adminDirectory.ts`. It imports only `@grpc/grpc-js`
+  and `type { Pool }` from `pg`, opens with the 2-line constraint comment, and keeps module-private
+  `ADMIN_DIRECTORY_PEER_SANS = ['xstockstrat-notify']`, the verbatim `peerDnsSans` copy (C-18 runtime copy #2),
+  exact-match `hasAdminDirectoryPeer` and `PEER_SAN_ERROR`. The exported `listAdminUserIds(pool, call, callback)`
+  denies with PERMISSION_DENIED before touching the pool. It queries `user_id::text` for
+  `is_active = true AND 'admin' = ANY(roles)`, returns `{ userIds }` only, and on throw returns a generic INTERNAL
+  `admin directory lookup failed` without the thrown text.
+- `identityServiceImpl.ts` gains only the import beside `./ledgerAudit` and the `listAdminUserIds` delegate at the
+  end of the class. `adminGate`, `authz.ts` and `index.ts` are unchanged (`git diff --stat` is empty).
+- TDD (scratch suite mirroring Step 4 (i)-(vii), uncommitted; Step 4 owns the committed tests). AC-9/AC-10 red:
+  `ERR_MODULE_NOT_FOUND ... src/grpc/adminDirectory.ts` → green: `tests 7, pass 7, fail 0`.
+- Verification:
+  - `pnpm run build`: exit 0.
+  - `pnpm run lint`: exit 0, 0 errors.
+  - `prettier --check src/grpc/adminDirectory.ts`: clean.
+  - Imports grep: exactly the 2 allowed.
+  - Header grep: only the comment line matches.
+  - Existing identity suite: `pnpm test` gives 78 pass, 0 fail.
+- Toolchain: Node v24.20.0, pnpm 9.15.9, `pnpm install --frozen-lockfile` at the worktree root.
+- Deviation Log entry added for formatting and TDD mechanics; there is no behaviour deviation.
+- Still pending: the Step 15 docs note (the `grpc.status` use is a second IDENTITY-3 exception).

@@ -171,7 +171,7 @@ Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-
 
 ### Step 3 — service: identity `ListAdminUserIds` handler (SAN-gated, header-blind)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/adminDirectory.ts` — create
@@ -788,3 +788,12 @@ _Populated by /sdd-execute as implementation proceeds._
   `pnpm install --frozen-lockfile` in the worktree (lockfile TypeScript 5.9.3, as CI does). (c) `buf-gen.sh:41`'s
   `buf breaking` passed in the worktree; also re-checked against a `git archive main-dev packages/proto` extract
   (exit 0). Result: drift is identity-only, and a second `buf-gen.sh` run gives an empty `git diff packages/proto/gen/`.
+- **Step 3 (2026-10-29) — formatting and TDD-evidence mechanics only, no behaviour deviation.** (a) The delegate
+  `listAdminUserIds(call, callback)` spans three lines, not one (house brace style). `identityServiceImpl.ts` has no
+  other change. It was not run through prettier because the file already fails `prettier --check` at HEAD, and a
+  reformat would touch unrelated lines. (b) The verbatim `peerDnsSans` copy omits the JSDoc line above it in
+  config `authz.ts:134`. It is mechanism narration, not a constraint (root CLAUDE.md comment rule). (c) The spec
+  allows only `@AC-*` tests in Step 4's file. So the step-3 RED→GREEN gate ran on an uncommitted scratch suite
+  (7 cases mirroring Step 4 (i)-(vii)) that imports `src/grpc/adminDirectory.ts`. Step 4 still owns the committed
+  tests. (d) `pnpm run lint` exits 0 with 186 warnings, all pre-existing `no-explicit-any` warnings plus the two the
+  spec-mandated `any` delegate adds (`identityServiceImpl.ts:937`). `adminDirectory.ts` is warning-free.

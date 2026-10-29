@@ -7,6 +7,7 @@ import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
 import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
+import { listAdminUserIds } from './adminDirectory';
 
 const log = getLogger('identity:impl');
 
@@ -931,5 +932,9 @@ export class IdentityServiceImpl {
       log.error('setUserActive failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
+  }
+
+  async listAdminUserIds(call: any, callback: any) {
+    return listAdminUserIds(this.pool, call, callback);
   }
 }
