@@ -312,11 +312,11 @@ class TestConfigReadEchoesEffectiveUserId:
 
         captured = {}
 
-        async def _get(req, metadata=None):
+        async def _get(req, metadata=None, timeout=None):
             captured["req"] = req
             return config_pb2.ConfigSnapshot(namespace="analysis", version="1")
 
-        async def _list(req, metadata=None):
+        async def _list(req, metadata=None, timeout=None):
             captured["req"] = req
             return config_pb2.ListKeysResponse()
 
