@@ -11,6 +11,7 @@ import { useOrderUpdates } from '@/hooks/useOrderUpdates';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { Alert, AlertDescription } from '../ui/alert';
 import { DataTable } from '../ui/data-table';
 import {
   DropdownMenu,
@@ -57,7 +58,7 @@ export function OrdersTable({
 }: OrdersTableProps) {
   // A StreamOrderUpdates record overrides the listed snapshot unless the polled record has a
   // strictly newer `updatedAt` (pickFresherOrder).
-  const liveUpdates = useOrderUpdates();
+  const { updates: liveUpdates, disconnected, terminal } = useOrderUpdates();
   const { mutate: cancelOrder } = useCancelOrder();
   const [editing, setEditing] = useState<Order | null>(null);
   const [cancelling, setCancelling] = useState<Order | null>(null);
@@ -202,6 +203,15 @@ export function OrdersTable({
       </CardHeader>
       <CardContent>
         <QueryStateMessages isLoading={isLoading} error={error} errorText="Failed to load orders" />
+        {disconnected && (
+          <Alert variant="destructive" role="alert" data-testid="order-stream-disconnected">
+            <AlertDescription>
+              {terminal
+                ? `Live order updates stopped: ${terminal}`
+                : 'Live order updates disconnected — reconnecting…'}
+            </AlertDescription>
+          </Alert>
+        )}
         {!isLoading && !error && (
           <DataTable
             columns={columns}

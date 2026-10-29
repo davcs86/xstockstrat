@@ -860,7 +860,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
 
 ### Step 13 — service: D-11 streams reconnect with backoff and show a disconnected indicator (orders and alerts)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/streamBackoff.ts` — create
@@ -1274,3 +1274,27 @@ _Populated by /sdd-execute as implementation proceeds._
 - **`INVENTORY.md` consumers column not updated.** The new test also uses `ORDER_WORKING`, but INVENTORY.md is not
   in this step's **Files**. The other `src/lib` tests that import e2e fixtures (`performanceMetrics`,
   `indicatorChart`, `configUiBff`) are not listed there either. **Disposition**: noted only.
+
+### Step 13 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** The paired unit test (`streamBackoff.test.ts`) is in Step 14's
+  **Files**, so RED/GREEN ran a throwaway Vitest probe (`src/lib/zzProbeStep13.test.ts`, Step 14's backoff and
+  classification cases plus the remaining terminal codes), deleted before commit. RED ran against a
+  `streamBackoff.ts` stub with today's behavior (no backoff, nothing retryable): 2 of 3 failed on assertions. The
+  hook and component behavior has no node-env unit harness (component tests are out of scope for this service).
+  Step 14's e2e covers it. **Disposition**: CI-equivalent fallback.
+- **The hook resets `terminal` when `key` changes.** A new subscription must not keep the previous one's terminal
+  text. It also re-checks `aborted` after the `finally`, so a cleanly ended stream never sets `disconnected` after
+  unmount. **Disposition**: inside the step's **Files**; no behavior change for a fixed key.
+- **The alerts indicator `<span>` sits inside `<Sheet>`, before `<SheetTrigger>`.** Radix `Sheet` renders no
+  wrapper element, so the span lands beside the bell in the `AppShell` actions flex row. **Disposition**: layout
+  detail.
+- **`errMessage` already exists.** Step 3 created `src/lib/errMessage.ts`, so the hook imports it; no new helper.
+  **Disposition**: noted only.
+- **The existing e2e mocks are not yet updated (expected until Step 14).** The trader mock has no
+  `streamOrderUpdates` (it returns `Unimplemented`, which is terminal), and `streamAlerts` ends cleanly. No
+  existing spec asserts that the indicator is absent. **Disposition**: Step 14 scope; e2e was not run here.
+- **Instruction 7 (5-minute idle observation on dev) is operator-only.** It needs the deployed dev environment.
+  **Disposition**: carried to the integration PR.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean. **Disposition**: not fixed here.

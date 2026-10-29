@@ -819,3 +819,34 @@ protocol, `design.md` is not written and `status.md` stays `spec-ready`.
   fixture importers are unlisted too, and the file is outside this step's **Files**.
 - Tooling: `pnpm install --frozen-lockfile` ran in the worktree (the main worktree has no `node_modules`).
 
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 13
+
+- Step 13 done (D-11 reconnect) in `services/xstockstrat-ui`:
+  - `src/lib/streamBackoff.ts` (new): `STREAM_STABLE_MS`/`BACKOFF_BASE_MS`/`BACKOFF_MAX_MS`, `nextBackoffMs`
+    (1s doubling, 30s cap, no jitter), and `isRetryableStreamError` (non-`ConnectError` and the eight transient codes,
+    `Unauthenticated` included, are retryable; everything else is terminal).
+  - `src/hooks/useReconnectingStream.ts` (new): a keyed effect with refs for `open`/`onItem`, one `AbortController`,
+    a stable timer, `disconnected` set on every drop (no show-side debounce), an abort-aware backoff sleep, and a
+    terminal stop with `errMessage(err)`.
+  - `useOrderUpdates` now returns `{ updates, disconnected, terminal }`. `OrdersTable` renders a destructive
+    `Alert` `order-stream-disconnected` under `QueryStateMessages`, and keeps the `pickFresherOrder` merge.
+  - `AlertStream` streams through the hook (key `'alerts'`) and dedupes on `alertId`. On a drop the bell shows
+    `BellOff`, gets `aria-label` "Alerts — live alerts disconnected" ("Alerts" otherwise), and shows the
+    `alert-stream-disconnected` span. The mount-only `listAlerts` effect is untouched (PRESERVE `@feature-203`).
+  - Reconnects reuse `tradingClient`/`notifyClient`, so `x-trace-id` keeps flowing (operator 2026-10-21 decision).
+- TDD (throwaway probe, deleted before commit; see the Deviation Log):
+  - **Red:** against a stub with no backoff and nothing retryable, the backoff case failed (`[0,…]` vs
+    `[1000, 2000, 4000, 8000, 16000, 30000, 30000]`) and the retryable case failed (`expected false to be true`).
+    2 of 3 failed.
+  - **Green:** 3/3 passed.
+- Verification: the "silent stop" grep finds no hits. The `useReconnectingStream` and `tradingClient|notifyClient`
+  greps hit both files. `pnpm run lint` exits 0 (only pre-existing warnings, none in touched files), and `lint:dup`
+  finds 0 clones. `tsc --noEmit` fails only on the pre-existing `e2e/insights/backfills.spec.ts:135-136`.
+- Open items:
+  - Step 14 must add the held-open `streamOrderUpdates` and `streamAlerts` mocks. Until then, e2e
+    `/trader/orders` shows the terminal indicator (`Unimplemented`), and the alert stream reconnects after each
+    clean end.
+  - Instruction 7 (the dev 5-minute idle reconnect observation) is for the integration PR.
+- Tooling: `pnpm install --frozen-lockfile` ran in the worktree (the main worktree has no `node_modules`).
+

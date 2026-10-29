@@ -33,6 +33,7 @@
 | 2026-10-29 | `in-progress` (Step 10 done) | /sdd-execute sequential (sdd-batch-execute) | Step 10 — `@AC-3`/`@AC-12` tests: `tradingMode.test.ts` Vitest unit (`live`/`paper`/`null` → LIVE/PAPER/UNSPECIFIED) and an `order-form.spec.ts` e2e block (503 `GetTradingEnvironment` → PlaceOrder carries no `TRADING_MODE_PAPER`; no `paper` label on the five trader pages) |
 | 2026-10-29 | `in-progress` (Step 11 done) | /sdd-execute sequential (sdd-batch-execute) | Step 11 — D-11: `pickFresherOrder` (`src/lib/orderFreshness.ts`) keeps the streamed order unless the polled one has a strictly newer `updatedAt` (absent = oldest); `OrdersTable` merges through it |
 | 2026-10-29 | `in-progress` (Step 12 done) | /sdd-execute sequential (sdd-batch-execute) | Step 12 — `@AC-1`/`@AC-8` Vitest `src/lib/orderFreshness.test.ts`: six `pickFresherOrder` cases (newer poll wins, a tie keeps the stream, an older poll loses, absent timestamps count as oldest, no streamed record returns the poll) |
+| 2026-10-29 | `in-progress` (Step 13 done) | /sdd-execute sequential (sdd-batch-execute) | Step 13 — D-11: `useReconnectingStream` (+ `src/lib/streamBackoff.ts`) reconnects the order and alert streams with capped exponential backoff; `OrdersTable` shows `order-stream-disconnected`, the bell shows `BellOff` + `alert-stream-disconnected` with an accessible name; alerts dedupe on `alertId`; `listAlerts` stays mount-only |
 
 ---
 
