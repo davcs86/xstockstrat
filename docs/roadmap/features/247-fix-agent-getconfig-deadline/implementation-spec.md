@@ -583,7 +583,7 @@ ls docs/reports | grep -c "agent-rpc-deadlines"   # 0 (dropped as a duplicate)
 
 ### Step 6 — docs: dev GetConfig latency baseline (D sizing), before Step 3 is committed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (feature `context.md`; measurement on the dev deployment)
 **Files**:
 - `docs/roadmap/features/247-fix-agent-getconfig-deadline/context.md` — modify
@@ -692,4 +692,10 @@ _Populated by /sdd-execute as implementation proceeds._
      metrics query at 25 h, so a longer window is split into ≤ 25 h queries.
   3. Record count, p50, p99, max and the margin against D = 3.0 s in `context.md` under `GetConfig latency baseline`.
   If p99 is not comfortably below 3.0 s, `_CONFIG_READ_TIMEOUT_S` and its `== 3.0` pins change before the
-  integration PR (design change). Step **Status** stays `pending`. **Disposition**: open — P-03 operator escalation.
+  integration PR (design change). Step **Status** stays `pending`. **Disposition**: resolved 2026-10-29 — see next entry.
+- **Step 6 (2026-10-29, resolved)** — the operator ran the baseline query once the dev agent began exporting
+  traces (first agent spans 2026-10-29T02:15Z; the earlier windows ended before that, so the "Not measured" entry
+  was correct when written). Over 2026-10-28T01:45Z–2026-10-29T02:43Z (the 25 h Tempo cap): count 27, p50 24 ms,
+  p99 ≤ 134 ms (Tempo power-of-two bucket bound), max 83.4 ms, all `rpc.grpc.status_code = 0`. p99 is far below
+  D = 3.0 s, so `_CONFIG_READ_TIMEOUT_S` and its `== 3.0` pins stand. Figures in context.md
+  `GetConfig latency baseline (measured)`. Step **Status** → `done`. **Disposition**: accepted (operator-recorded).

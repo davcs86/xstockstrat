@@ -25,6 +25,7 @@
 | 2026-10-28 | step 3 done (status retained at `in-progress`) | /sdd-execute | Step 3 — `_CONFIG_READ_TIMEOUT_S = 3.0` + `timeout=` on `get_config_value`'s `GetConfig`, status-code warning; `tools.py`/`oauth_server.py` comment corrections (Steps 1-2 GREEN) |
 | 2026-10-28 | step 4 done (status retained at `in-progress`) | /sdd-execute | Step 4 — agent `CLAUDE.md`, agent context-constitution + findings, root findings reconciled for `_CONFIG_READ_TIMEOUT_S` (docs only) |
 | 2026-10-29 | step 5 done (status retained at `in-progress`) | /sdd-execute | Step 5 — two follow-up defect reports (`agent-config-snapshot-read`, `agent-dcr-fail-closed`) + `open` sidecars and agent findings index; `agent-rpc-deadlines` dropped as a duplicate of the feature-273 report (operator Option A, cross-reference added); manual teardown audit |
+| 2026-10-29 | step 6 done; status → `code-completed` | /sdd-execute (operator-recorded) | Step 6 — dev `GetConfig` latency baseline: 27 spans, p50 24 ms, p99 ≤ 134 ms (bucket bound), max 83.4 ms; D = 3.0 s stands. Integration PR #1338 merge no longer held |
 
 ---
 
@@ -58,4 +59,4 @@ read and OAuth dynamic client registration until the MCP client times out.
 
 ## Next Action
 
-`/sdd-execute fix-agent-getconfig-deadline sequential` — continue execution (Step 6 baseline before Step 3 is committed)
+Merge the integration PR #1338 (all 6 steps done; Step 6 baseline recorded 2026-10-29).

@@ -471,3 +471,21 @@ Feature: xstockstrat-agent - get_config_value is deadline-bounded
 - Source scenarios: 5. Planned (NEW+DUP+OVERLAP): 5 (5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). Every @AC-1 through @AC-5 is accounted for and none was skipped. Given/When/Then is verbatim, and the original @AC and @FR tags are preserved with @feature-247 added.
 - The original @regression tags are kept. AC-5 had none and none was added.
 ```
+
+## Session 2026-10-29 — Step 6 recorded by the operator's session
+
+### GetConfig latency baseline (measured)
+
+Supersedes the "Not measured" entry above. The dev agent started exporting traces at 2026-10-29T02:15Z; every
+earlier query window ended before that.
+
+- Datasource `grafanacloud-traces`. Window 2026-10-28T01:45Z – 2026-10-29T02:43Z UTC (25 h, the Tempo metrics cap).
+- Selector: `{ resource.service.name = "agent" && name = "/xstockstrat.config.v1.ConfigService/GetConfig" && kind = client }`
+  with `| count_over_time()`, `| quantile_over_time(span:duration, .5, .99)` and `| max_over_time(span:duration)`.
+- **count 27 · p50 24 ms · p99 ≤ 134 ms · max 83.4 ms**, environment `development`, all `rpc.grpc.status_code = 0`.
+  p99 is the 2^27 ns bucket bound of Tempo's power-of-two histogram; the slowest real span is 83.4 ms (trace search).
+- Margin against D = 3.0 s: ~36× on max, ~22× on the p99 bound. **D = 3.0 s stands**; no change to
+  `_CONFIG_READ_TIMEOUT_S` or its `== 3.0` pins.
+- Caveat: one ~12-minute burst (02:15–02:28Z) of 12 `ingest_signal`, 3 `extract_website_content` (3 reads each)
+  and 1 `get_config` calls. It sizes the healthy path, not tail behaviour under load or a config restart.
+- Step 6 → `done`; status → `code-completed`; the PR #1338 merge hold is lifted.
