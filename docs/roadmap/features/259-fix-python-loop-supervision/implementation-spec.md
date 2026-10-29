@@ -656,7 +656,7 @@ ruff check . && ruff format --check .
 
 ### Step 13 — service: P&L consumer retry, poison allow-list, replay, probe, escalation and park (FR-4, FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py` — modify
@@ -964,3 +964,17 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Disposition**: process note; no spec change. Between Step 3 and Step 4 the two `@AC-7 @feature-156` jitter tests
   (`tests/test_fundsignal_loop.py`, `_StopLoop(Exception)`) spin instead of exiting, as design.md Open Risks predicts;
   Step 4 item 1 fixes them.
+
+### 2026-10-29 — Step 13: TDD red/green with a scratch test; PRESERVE guard run on scratch-widened fakes
+- **Spec said**: Step 14 [test] covers Step 13 (red-before-green, P-06); Step 13 **Verification** runs
+  `uv run pytest tests/test_pnl_pattern_consumer.py tests/test_query_pnl_patterns.py -q` as the PRESERVE guard.
+- **Done**: an uncommitted scratch test (scripted inclusive-replay `StreamEvents`; @AC-6 retry-in-order, @AC-7 poison
+  and transient-persistent park, @AC-9 probe-fails-no-park with `_replay_count == 5`, @AC-10 4 WARNING + 1 ERROR,
+  `_is_poison`, bounded `acquire`/probe, six-method repository `timeout=` pass-through) ran RED on the pre-Step-13
+  tree (9 failed) and GREEN after (9 passed), then was deleted (F-08). The PRESERVE guard as written fails on the
+  committed tree (11 failed + 2 in `tests/test_owner_header_guard.py`, all `TypeError: ... unexpected keyword argument
+  'timeout'` from `make_consumer`'s fakes), exactly as Step 14's evidence predicts. It was therefore run with Step 14
+  item 0 applied temporarily to `tests/test_pnl_pattern_consumer.py` (fakes accept `timeout=`, then reverted): 54
+  passed across the consumer, query, owner-header-guard and scratch tests.
+- **Disposition**: verification fallback; no spec change. The 13 interim failures are cleared by Step 14 item 0 (the
+  Step 11 → Step 12 precedent). Step 14 must land before the integration PR.

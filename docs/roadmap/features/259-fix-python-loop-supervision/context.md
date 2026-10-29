@@ -920,3 +920,42 @@ The full `/sdd-design fix-python-loop-supervision` debate is at its approval gat
     fixed-invariant precedent. Other Step 15 evidence re-verified unchanged.
 - Asyncpg exception names still rely on the 2026-10-22 wheel check (no `.venv` present to re-verify); asyncpg stays
   0.31.0 in `uv.lock:44-45`.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 13
+
+### Step 13 — service: P&L consumer retry, poison allow-list, replay, probe, escalation and park (FR-4, FR-5) [done]
+- `app/engine/pnl_pattern_consumer.py`: fixed invariants `_EVENT_MAX_ATTEMPTS=3`, `_EVENT_RETRY_BACKOFF_SECONDS=1.0`,
+  `_REPLAY_ESCALATE_AFTER=5`, `_PROBE_TIMEOUT_SECONDS=5`, `_PARK_EMIT_TIMEOUT_SECONDS=5`,
+  `_ATTEMPT_DB_TIMEOUT_SECONDS=10`; `_POISON` / `_is_poison` (ValueError, TypeError, KeyError, DecodeError, ParseError,
+  `apg.DataError`, `apg.IntegrityConstraintViolationError`). `run_forever` resets `_stream_fail_count` per delivered
+  event, calls `_process_with_retry`, then resets the replay pair only when `sequence >= _replay_seq`; the outer
+  handler logs WARNING below 5 consecutive failures and ERROR from the 5th; `await asyncio.sleep(2)` kept
+  byte-identical (peer 248). `_process_with_retry`: 3 attempts, 1s backoff outside the `try`; poison → `_park(...,
+  "non-transient")`; else the replay pair (WARNING < 5, ERROR from 5 naming seq/type/correlation_id), and at 5 a
+  `_probe_db` (`wait_for(_cursor(), 5)`) — probe failure logs ERROR and re-raises `last from probe_err` (no park),
+  probe success parks `"transient-persistent"` with `attempts = replay_count * 3`. `_park`: ERROR log (identity
+  read from `payload.fields`, never `MessageToDict`) → `_emit("analysis.pnl.event_parked", "pnl_park:<seq>", ...,
+  idempotency_key="pnl_park:<seq>", timeout=5)` → `_advance_cursor` → reset pair.
+  6b: all three `acquire()` sites take `timeout=_ATTEMPT_DB_TIMEOUT_SECONDS`, as do `fetchval` (`_cursor`), `execute`
+  (`_advance_cursor_conn`) and the six repository calls; `OrderSnapshotsRepository.insert/count_for_position/
+  list_for_position`, `PnLPositionsRepository.open/seal` and `PnLPatternSamplesRepository.insert_many` gain a
+  keyword-only `timeout: float | None = None` forwarded to asyncpg (default unchanged for servicer callers).
+- asyncpg names re-verified against the installed 0.31.0 wheel this session (`DataError`,
+  `IntegrityConstraintViolationError`, `PostgresConnectionError`, `OutOfMemoryError` < `InsufficientResourcesError`,
+  `DeadlockDetectedError`/`SerializationError` < `TransactionRollbackError`, `DiskFullError`).
+- TDD (C-08 pair is Step 14; scratch test, deleted): AC-6/AC-7/AC-9/AC-10 red: 9 failed (event 10 skipped not
+  retried; no `_is_poison`/`_probe_db`/`_ATTEMPT_DB_TIMEOUT_SECONDS`; repositories reject `timeout=`) → green: 9 passed.
+- Verification: the five greps hold (21 symbol hits; `sleep(2)` at `:205`; no `is_transient_db_error`/`_TRANSIENT`;
+  3 `acquire(timeout=_ATTEMPT_DB_TIMEOUT_SECONDS)`; 6 `timeout=timeout`); `ruff check .` / `ruff format --check .`
+  clean. PRESERVE guard: 54 passed with Step 14 item 0's fake widening applied temporarily (see Deviation Log).
+- **Interim, expected (Step 14 evidence)**: full suite 1307 passed, 13 failed (87% coverage) until Step 14 item 0
+  widens `FakePool.acquire/fetchval/execute`, `FakeSnapshots.count_for_position/list_for_position` and
+  `FakeSamples.insert_many`: 11 in `tests/test_pnl_pattern_consumer.py` and 2 in `tests/test_owner_header_guard.py`
+  (`test_pnl_handle_order_event`, `test_ac17_ownerless_order_event_issues_no_owner_scoped_call`, both via
+  `make_consumer`), all `TypeError: unexpected keyword argument 'timeout'`.
+- Files modified: `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py`,
+  `services/xstockstrat-analysis/app/repositories/order_snapshots.py`,
+  `services/xstockstrat-analysis/app/repositories/pnl_positions.py`,
+  `services/xstockstrat-analysis/app/repositories/pnl_pattern_samples.py`
+- Deviations: verification fallback for the PRESERVE guard (Deviation Log 2026-10-29 — Step 13)
+
