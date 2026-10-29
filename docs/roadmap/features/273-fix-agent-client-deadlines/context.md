@@ -881,3 +881,14 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
 - Deviations (see Deviation Log): generic mocked-channel shape for the kwarg test; method name bound in
   `service(details)`.
 - Still open: `Baseline verdict: HALT` (Step 1) gates Step 3's commit until an operator sign-off is recorded.
+
+## Session 2026-10-29 — Step 3 operator sign-off (R1 baseline HALT override)
+
+- R1 operator sign-off (2026-10-29, session question tool), in the operator's own words: "A: Sign off, expand
+  scope". The operator accepts the 45 s LONG deadline budget (`_LONG_RPC_TIMEOUT_S`) for RunBacktest and
+  RunFundamentalsScan, and for the other LONG RPCs (ScreenSymbols, TriggerBackfill), without a measured p99. The
+  operator knowingly accepts the risk that runs of 45-60 s are cancelled (198 @AC-8). This overrides Step 1's
+  `Baseline verdict: HALT` for Step 3's commit gate.
+- Scope expansion, same decision: Step 3's **Files** gain `tests/test_config_tools.py`,
+  `tests/test_signal_source_reliability_weight.py` and `tests/test_template_tools.py`. Only each capture stub's
+  signature widens, to `(req, metadata=None, timeout=None)`. See the Deviation Log.
