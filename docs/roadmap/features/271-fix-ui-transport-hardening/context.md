@@ -691,3 +691,19 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
   - `format:check` still fails on the 10 pre-existing files. The Step 6 files are clean.
   - The `bffShared.ts` evidence lines drifted by +4. This is cosmetic.
   - `tsc --noEmit` still reports only the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` errors.
+
+## Session 2026-10-29 — Step 7 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only.
+- Step 7 done:
+  - `src/lib/__tests__/insightsBff.test.ts`: new describe "forwardAdmin() — timeoutMs threading (feature 271)". Case (a) checks that an admin session gets `timeoutMs === LONG_RPC_TIMEOUT_MS` plus `headers`. Case (b) checks that a non-admin session rejects with `Code.PermissionDenied` and the backend is never called.
+  - `src/lib/bffDeadlines.test.ts` (new): mocks `@/lib/connectClients` with the three-BFF client union and dispatches through `insights`, `config-ui` and `trader` `dispatchConnect` with an admin JWT (`signTestJwt(['admin'])`). It pins 6 long RPCs at `LONG_RPC_TIMEOUT_MS`, 4 order mutations at `ORDER_MUTATION_TIMEOUT_MS`, and preservation: `ListOpportunities` 30_000, `GetFundamentals` `FUNDAMENTALS_TIMEOUT_MS`, `GetBars` undefined.
+- TDD, AC-6 (red via mutation, because Step 6 had already landed):
+  - Mutation: the four Step 6 files (`bffShared.ts`, `insightsBff.ts`, `configUiBff.ts`, `traderBff.ts`) checked out from `dabc40f5~1`.
+  - Red: 11 failed / 7 passed. The `forwardAdmin` case (a) and all 10 long/order cases failed with `expected undefined to be 300000` / `expected undefined to be 60000`. The 7 passes were the 3 pre-existing `forward()` cases, the `forwardAdmin` PermissionDenied case (the gate predates this feature) and the 3 preservation cases.
+  - The mutation was restored with `git checkout HEAD --`. `git status` shows the four files unmodified.
+  - Green on the real tree: 18/18 pass. All 13 `bffDeadlines` cases and both `forwardAdmin` cases ran (verbose reporter).
+- Verification:
+  - `test:coverage`: 50 files / 259 tests pass, and thresholds are met (`src/lib/**` 72% lines).
+  - `lint` exits 0. Prettier is clean on both test files. `tsc --noEmit` still reports only the 2 pre-existing `e2e/insights/backfills.spec.ts` errors.
+- Deviation (Deviation Log): the spec's "9 cases" count predates the order-mutation class, so 13 ran. The admin JWT comes from the shared `e2e/helpers/auth.ts` helper.

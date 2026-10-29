@@ -421,7 +421,7 @@ cd services/xstockstrat-ui && grep -c "LONG_RPC_TIMEOUT_MS" src/lib/insightsBff.
 
 ### Step 7 — test: `forwardAdmin` threading + BFF deadline classes (vitest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/insightsBff.test.ts` — modify
@@ -668,3 +668,8 @@ _Populated by /sdd-execute as implementation proceeds._
 
 - **What**: the Step 6 **Verification** chain ends with `pnpm run format:check`, which exits 1 on the same 10 pre-existing files recorded under Step 1. None of the four Step 6 files is among them. Separately, the step's `bffShared.ts` evidence lines had drifted by +4 (`forward()` at `:64-77`, `forwardAdmin` at `:80-84`, JSDoc `:79`); the symbols and signatures matched, so the instructions applied unchanged.
 - **Disposition**: CI-equivalent fallback, as in Steps 1 and 4. Prettier `--write` left the four Step 6 files clean, and the `grep -c` counts match the spec (`insightsBff.ts` 6, `configUiBff.ts` 2, `traderBff.ts` 5). The `{ ...options, admin: true }` grep matches (`bffShared.ts:80`), and `pnpm run lint` exits 0.
+
+### Step 7 — `bffDeadlines` runs 13 cases, not 9; admin JWT via the shared helper (2026-10-29)
+
+- **What**: the step **Verification** asks to confirm "all 9 `bffDeadlines` cases". The **Instructions** list 6 long-RPC methods, 4 order mutations (operator 2026-10-22) and 3 preservation checks, which is 13. The "9" predates the order-mutation addition. All 13 cases ran. Separately, the admin cookie is signed with `signTestJwt(['admin'])` from `e2e/helpers/auth.ts` (the helper `configUiBff.test.ts` already uses), not an inline `jose` `SignJWT`, to keep a single JWT fixture (C-13). `FUNDAMENTALS_TIMEOUT_MS` is imported from `@/lib/deadlines`, where Step 1 moved it.
+- **Disposition**: no behavior change; the assertions follow the step **Instructions** exactly. Verification: 18/18 targeted tests pass (5 `forward`/`forwardAdmin` + 13 `bffDeadlines`), `test:coverage` 50 files / 259 tests with thresholds met, `lint` exits 0.

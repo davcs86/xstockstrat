@@ -26,6 +26,7 @@
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — `refreshSession` bounded by `REFRESH_TIMEOUT_MS` (10s) |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — refresh deadline fails closed: vitest + e2e stalled identity (AC-2) |
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — `forwardAdmin` takes `timeoutMs`; long RPCs at `LONG_RPC_TIMEOUT_MS` (300s), order mutations at `ORDER_MUTATION_TIMEOUT_MS` (60s) |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — vitest: `forwardAdmin` threads `timeoutMs` + admin gate; BFF deadline classes pinned per registration (AC-6) |
 
 ---
 
