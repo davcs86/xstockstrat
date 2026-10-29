@@ -49,6 +49,22 @@ Per language (all run native chain+SAN verification — never Go `InsecureSkipVe
   nodeOptions: { ca, cert, key, checkServerIdentity } })` (gRPC transport is inherently HTTP/2 — there
   is no `httpVersion` option; `checkServerIdentity` pins to `'xstockstrat-<target>'`).
 
+## Peer-SAN authorization
+
+A server may also authorize a caller by the **verified peer certificate's DNS SAN** (read from
+`getAuthContext()` / the gRPC auth context), because a propagated header alone is forgeable. Matching is
+**exact** against `xstockstrat-<svc>`; there is no prefix or wildcard match. SAN-gated grants:
+
+- config `GetSecret` ← `xstockstrat-ingest`, for the `ingest` caller's `mcp_credential.*` keys
+  (`peerSan` in `services/xstockstrat-config/src/grpc/authz.ts`, `SECRET_CALLER_ALLOWLIST`). The
+  `x-internal-caller` header is still required as well.
+- identity `ListAdminUserIds` ← `xstockstrat-notify` (feature 242,
+  `services/xstockstrat-identity/src/grpc/adminDirectory.ts`). The SAN is the **only** check: the RPC
+  ignores every header, so a forwarded `x-access-scope` or `x-user-id` confers nothing.
+- ingest and indicators honour `x-user-id: system` grants only from `xstockstrat-analysis` (feature 224,
+  `_SYSTEM_GRANT_SAN` / `_ANALYSIS_SAN` in each `app/handlers/servicer.py`), together with an
+  allow-listed `x-internal-caller`.
+
 ## connect-node client-cert spike (resolved, Step 1)
 
 `@connectrpc/connect-node@^2.1.0`'s `createGrpcTransport` accepts
