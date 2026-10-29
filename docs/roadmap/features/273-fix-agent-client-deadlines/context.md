@@ -911,3 +911,19 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
   81.80% (≥40). Before the stub widening it showed 6 `TypeError` failures in the three files above.
 - R1 risk accepted by the operator (session entry above): runs longer than 45 s on the LONG RPCs are now cancelled
   client-side.
+
+## Session 2026-10-29 — Step 4 — test: Mapper `write` branch and 272 pass-through RED tests (P-06)
+
+- Files: `services/xstockstrat-agent/tests/test_tools.py`. Five sync tests were added directly after the two 227
+  `_grpc_error_message` tests, which stay unchanged: `write_deadline_says_outcome_unknown`,
+  `read_deadline_keeps_retry_text`, `passes_through_server_deadline_detail` (three call shapes),
+  `client_sentinel_is_not_passed_through` and `write_without_deadline_s`. They use the existing `_rpc_error`
+  helper and keep literals inline (C-13).
+- TDD RED: 3 failed. The two `write=` tests fail with `TypeError: _grpc_error_message() got an unexpected keyword
+  argument 'write'`. Pass-through fails with `AssertionError: 'upstream did...retry shortly' ==
+  'backtest exc...ation_seconds'`. The read-retry and client-sentinel tests already pass because they guard
+  behaviour Step 5 must preserve. GREEN is Step 5's run.
+- Verification: ruff check and format are clean. The full suite is 3 failed (by design) / 552 passed, coverage
+  81.80% (≥40).
+- Deviation: the spec's `tests/test_tools.py` line anchors drifted by +2. See the Deviation Log.
+

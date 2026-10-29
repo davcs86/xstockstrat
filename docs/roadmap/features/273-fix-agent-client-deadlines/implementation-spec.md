@@ -341,7 +341,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 4 — test: Mapper `write` branch and 272 pass-through RED tests (P-06)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -985,3 +985,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Step 3 (2026-10-29)** — the Step 1 `Baseline verdict: HALT` (R1 not measured) is overridden by the
   operator's explicit R1 sign-off in context.md, which accepts the 45 s LONG budget without a measured p99.
   **Disposition**: accepted by operator.
+- **Step 4 (2026-10-29)** — spec anchors in `tests/test_tools.py` drifted by +2 lines: `_rpc_error` is at
+  `:931-934` and the two 227 tests at `:1976-1994`; the five new tests sit directly after them. Committed with 3
+  of the 5 new tests RED by design (spec Verification: "new tests RED before Step 5"): the two `write=` tests
+  (`TypeError: unexpected keyword argument 'write'`) and the server-detail pass-through test. The other two,
+  `read_deadline_keeps_retry_text` and `client_sentinel_is_not_passed_through`, already pass on today's code
+  because they pin behaviour Step 5 must keep. Full suite 3 failed / 552 passed, coverage 81.80% (≥40).
+  **Disposition**: expected per spec; Step 5 GREEN re-runs these tests.

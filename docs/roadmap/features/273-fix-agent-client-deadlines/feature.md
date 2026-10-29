@@ -22,6 +22,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: Tempo baseline recorded. ValidateToken p99 ≤134 ms (passes R5). The four long RPCs have 0 dev spans in 24 h, so `Baseline verdict: HALT` gates Step 3's commit pending operator sign-off |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 2 done: `hung_backend` fixture in conftest; `test_client_deadlines.py` with @AC-5 (live + kwarg) and @AC-10 AST guard, RED pending Step 3 |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 3 done: `_RPC_TIMEOUT_S = 10.0` / `_LONG_RPC_TIMEOUT_S = 45.0` and `timeout=` on 71 agent client calls (67 RPC, 4 LONG); R1 HALT overridden by operator sign-off; three capture stubs widened (operator scope expansion) |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 4 done: five `_grpc_error_message` tests (write tail, read retry text, 272 server-detail pass-through, client sentinel, write without deadline); 3 RED pending Step 5, 227 tests unchanged |
 
 ---
 
