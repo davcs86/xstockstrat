@@ -696,7 +696,8 @@ ruff check . && ruff format --check .
    existing `MessageToDict` import), `from google.protobuf.message import DecodeError`.
 2. Fixed invariants beside the constants at `:37-47` (not config keys, design.md §3.8): `_EVENT_MAX_ATTEMPTS = 3`,
    `_EVENT_RETRY_BACKOFF_SECONDS = 1.0`, `_REPLAY_ESCALATE_AFTER = 5`, `_PROBE_TIMEOUT_SECONDS = 5`,
-   `_PARK_EMIT_TIMEOUT_SECONDS = 5`; `_POISON = (ValueError, TypeError, KeyError, DecodeError, ParseError,
+   `_PARK_EMIT_TIMEOUT_SECONDS = 5`, `_ATTEMPT_DB_TIMEOUT_SECONDS = 10` (used by 6b; must exceed
+   `_PROBE_TIMEOUT_SECONDS`); `_POISON = (ValueError, TypeError, KeyError, DecodeError, ParseError,
    apg.DataError, apg.IntegrityConstraintViolationError)` (SQLSTATE classes 22 / 23); and
    `def _is_poison(e: BaseException) -> bool: return isinstance(e, _POISON)`. Everything unlisted (incl.
    `OutOfMemoryError` 53200, `DeadlockDetectedError`/`SerializationError` class 40, `DiskFullError`,
