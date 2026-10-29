@@ -233,7 +233,7 @@
   - **Not fixing:** a latent cross-owner overwrite.
   - **Fixing:** test churn only.
 
-### D-12 `PortfolioService.StartSnapshotWriter` has zero callers, so `portfolio.snapshot.interval_minutes` is a dead key — SEV-3 · leverage M÷XS  *(carried, open)*
+### D-12 `PortfolioService.StartSnapshotWriter` has zero callers, so `portfolio.snapshot.interval_minutes` is a dead key — SEV-3 · leverage M÷XS  *(fixed by feature 264)*
 - **Evidence:** `services/xstockstrat-portfolio/internal/service/portfolio_service.go:894` is the definition only.
 - **LOE:** XS (estimate). Wire it or delete it together with the key.
 - **Trade-off:**
@@ -445,7 +445,7 @@
   - The task is unretained (`main.py:174`, D-07).
 - **Routing:** Human triage.
 
-### D-24 ⚠ security — Portfolio snapshot stream fans out every user's snapshot to every subscriber — SEV-2 (latent)  *(carried, open)*
+### D-24 ⚠ security — Portfolio snapshot stream fans out every user's snapshot to every subscriber — SEV-2 (latent)  *(fixed by feature 264)*
 - **Evidence:** `services/xstockstrat-portfolio/internal/service/portfolio_service.go:937`, and `internal/handler/portfolio_handler.go:129`, `:292-302` (the TradingMode filter only, with no empty-userID guard on gRPC). There is still no client caller.
 - **Routing:** Human triage before any consumer is wired.
 

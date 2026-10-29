@@ -110,6 +110,12 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 264 — fix-portfolio-snapshot-surface (`xstockstrat-config` / `xstockstrat-portfolio`)
+
+**Removes** `portfolio.snapshot.interval_minutes` (migration 034) — its only reader, `StartSnapshotWriter`,
+had zero callers and was deleted; snapshots are written per fill only. The up deletes every environment and
+`user_id` row in both stored key forms; the down restores only the two seeded global rows.
+
 ### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)
 
 Bounds the `EventNotifier` LISTEN-connection read that resolves a NOTIFY row trimmed over ~7000 chars before live
