@@ -1107,3 +1107,137 @@ Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/Trigger
   `teardown` hit in this file is this entry.
 - Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
   Steps 1-11). No `--no-verify` was used.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+- C-16 promotion plan for this feature's acceptance scenarios. Nothing is written to a durable suite until the
+  operator confirms. The branch copy of `acceptance.feature` was checked and is identical to the working-tree
+  copy the plan was built from.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-agent-client-deadlines (feature 273)
+
+### Verdicts
+All 11 scenarios have the single observable subject "agent MCP tool or client call fails or returns within a deadline budget". Every one routes to services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature (CREATE). No @AC-* in feature 273 is already in that file, and the dedup grep of services/xstockstrat-agent/acceptance/*.feature and docs/sdd/business-rules/platform.feature found no scenario asserting the same outcomes.
+
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature | CREATE | NEW | get_positions, portfolio stall |
+| AC-2 | same | CREATE | NEW | get_config tool, 10.5 s. Distinct from 247 AC-1, which covers get_config_value at 3 s |
+| AC-3 | same | CREATE | NEW | ingest_signal, ingest stall |
+| AC-4 | same | CREATE | NEW | 20 s RunBacktest still succeeds |
+| AC-5 | same | CREATE | NEW | Scenario Outline over 9 RPCs. The GetConfig row is the 10.5 s client-function budget, not the 3 s get_config_value deadline |
+| AC-6 | same | CREATE | NEW | run_backtest answers within 57 s |
+| AC-7 | same | CREATE | NEW | responsive backend unchanged |
+| AC-8 | same | CREATE | NEW | sequential calls stay under 57 s |
+| AC-9 | same | CREATE | NEW | RunBacktest never responds, 45.5 s |
+| AC-10 | same | CREATE | NEW | static check that no stub call lacks a timeout |
+| AC-11 | same | CREATE | NEW | identity stall gives 503 with no WWW-Authenticate |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature (CREATE) ---
+# Promoted from docs/roadmap/features/273-fix-agent-client-deadlines/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-273` tag.
+# Durable business rules xstockstrat-agent already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-agent - backend gRPC calls are deadline-bounded
+  Agent backend gRPC calls carry a deadline so a stalled backend cannot hang MCP tool calls.
+  Budgets: 10 s default (FR-1), 45 s for long-running RPCs (FR-2), every tool at least 3 s under the
+  MCP client's 60 s request timeout (FR-3). Every "within N seconds" bound is asserted with an injected
+  or fake clock (or a measured elapsed time with the stated tolerance), never with raw wall-clock sleeps.
+
+  @AC-1 @regression @FR-1 @FR-4 @feature-273
+  Scenario: A stalled portfolio backend surfaces a deadline error from get_positions instead of hanging
+    Given a portfolio gRPC server that accepts ListPositions but never responds
+    When an authenticated MCP caller invokes get_positions
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 10.5 seconds
+    And the error message says the upstream did not respond within the deadline
+
+  @AC-2 @regression @FR-1 @FR-4 @feature-273
+  Scenario: A stalled config backend surfaces a deadline error from the get_config tool
+    Given a config gRPC server that accepts GetConfig but never responds
+    When an authenticated MCP caller invokes the get_config tool with namespace "analysis"
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 10.5 seconds
+
+  @AC-3 @regression @FR-1 @FR-3 @FR-4 @feature-273
+  Scenario: A stalled ingest backend surfaces a deadline error from ingest_signal
+    Given an ingest gRPC server that accepts IngestSignal but never responds
+    When an authenticated MCP caller invokes ingest_signal for symbol "AAPL"
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 10.5 seconds
+
+  @AC-4 @regression @FR-2 @FR-4 @FR-5 @feature-273
+  Scenario: A long-running RPC slower than the default deadline still succeeds
+    Given an analysis gRPC server whose RunBacktest responds after 20 seconds
+    When an authenticated MCP caller invokes run_backtest
+    Then the tool returns the backtest result
+
+  @AC-5 @regression @FR-1 @FR-2 @FR-4 @feature-273
+  Scenario Outline: Every agent backend RPC is bounded by its budget
+    Given a backend gRPC server that accepts <rpc> but never responds
+    When the agent client function that issues <rpc> is invoked
+    Then the call fails with DEADLINE_EXCEEDED within <budget> seconds
+
+    Examples:
+      | rpc                 | budget |
+      | IngestSignal        | 10.5   |
+      | EmitAlert           | 10.5   |
+      | ListPositions       | 10.5   |
+      | GetConfig           | 10.5   |
+      | RegisterOAuthClient | 10.5   |
+      | RunBacktest         | 45.5   |
+      | ScreenSymbols       | 45.5   |
+      | RunFundamentalsScan | 45.5   |
+      | TriggerBackfill     | 45.5   |
+
+  @AC-6 @regression @FR-3 @feature-273
+  Scenario: A tool whose backends all stall still answers before the MCP client gives up
+    Given every backend the run_backtest tool calls accepts requests but never responds
+    When an authenticated MCP caller invokes run_backtest
+    Then the tool returns an error derived from DEADLINE_EXCEEDED within 57 seconds
+
+  @AC-7 @regression @FR-5 @feature-273
+  Scenario: A responsive backend returns the same result as before the fix
+    Given a portfolio gRPC server that answers ListPositions with one AAPL position within 100 milliseconds
+    When an authenticated MCP caller invokes get_positions
+    Then the tool returns that one AAPL position
+
+  @AC-8 @regression @FR-3 @FR-4 @feature-273
+  Scenario: A tool with several sequential backend calls stays under the MCP request timeout when its follow-up calls stall
+    Given an ingest gRPC server that answers IngestSignal with signal_id 42
+    And a config gRPC server and a notify gRPC server that accept requests but never respond
+    When an authenticated MCP caller invokes ingest_signal for symbol "AAPL" with conviction 0.9
+    Then the tool returns signal_id 42 within 57 seconds
+
+  @AC-9 @regression @FR-2 @FR-4 @feature-273
+  Scenario: A long-running RPC that never responds is bounded by its own budget
+    Given an analysis gRPC server that accepts RunBacktest but never responds
+    When an authenticated MCP caller invokes run_backtest
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 45.5 seconds
+
+  @AC-10 @regression @FR-1 @FR-2 @feature-273
+  Scenario: No agent backend stub call is issued without a deadline
+    Given the source of services/xstockstrat-agent/app/client.py
+    When every unary gRPC stub call in it is enumerated statically
+    Then each call passes a timeout argument, including get_config_value once feature 247 has merged ahead of this one
+
+  @AC-11 @regression @FR-6 @feature-273
+  Scenario: A stalled identity yields a bounded fail-closed 503 that keeps the session
+    Given an identity gRPC server that accepts ValidateToken but never responds
+    When an MCP caller sends a request with a bearer token to the agent's MCP endpoint
+    Then the agent responds 503 within 10.5 seconds
+    And the response carries no WWW-Authenticate header
+    And the ValidateToken call carries the same x-trace-id as the rest of the request
+    And a request with a genuinely invalid token still receives 401 with a WWW-Authenticate header
+
+### Notes / ambiguities / conflicts
+- Service attribution: every Then asserts on the agent's MCP tools, client functions or HTTP edge (app/client.py, app/main.py). The stalled backends in the Givens are test fixtures, so a single agent suite is correct. platform.feature is not used.
+- No CONFLICT. Feature 247's suite (services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature) fixes get_config_value at 3.0 s. Feature 273 AC-2 and AC-5 bound the get_config tool and the GetConfig client function at 10.5 s. Those are different call paths, so this is not a contradiction. AC-10 only requires that get_config_value pass a timeout, which 247 already guarantees.
+- No OVERLAP. services/xstockstrat-agent/acceptance/fix-opportunities-read-hangs.feature (feature 227) covers list_opportunities, which feature 273 does not touch. 227's 40 s default and 60 s ceiling are consistent with the 45 s long-running budget.
+- AC-10 says "once feature 247 has merged ahead of this one". 247's suite is already in the tree, so the condition holds. The text is promoted verbatim.
+- Nothing in the existing suites is deleted or rewritten.
+
+### Coverage check
+- Source scenarios: 11 (AC-1 to AC-11, with AC-5 a single Scenario Outline of 9 rows). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. No scenario skipped. Counts match.
+- I could not read the source on origin/feature/fix-agent-client-deadlines. The plan was built from the working-tree copy at /home/user/xstockstrat/docs/roadmap/features/273-fix-agent-client-deadlines/acceptance.feature. The caller should confirm the branch copy is identical before writing.
+```
