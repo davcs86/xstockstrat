@@ -786,3 +786,9 @@ Feature: xstockstrat-config - portfolio.snapshot.interval_minutes is a retired k
 ### Coverage check
 - Source scenarios: 5 (AC-1, 2, 3, 5, 6). Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None were skipped.
 ```
+
+## Session 2026-10-29 — sdd-execute re-spec gate (§5.3), sdd-execute sequential (sdd-batch-execute)
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f — "Start executing features 241-276" via batch-execute; unattended checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing @AC rule; operator-only DB/prod steps: open PR, hold merge). Status already `in-progress`, so no status flip.
+- Branch setup: `git merge --no-edit origin/main-dev` (`0099647f`) merged cleanly (merge commit `1b440eab`); ledger-guard `--fix` reported clean.
+- Re-spec (Step 10 only, still `pending`): Codebase Evidence gate-state bullet updated. `origin/main-dev` config migrations now top out at `031_heal_indicators_sandbox_keys_full_dotted` (243 merged via #1334). Gate (a) passes (`/0(3[4-9]|[4-9][0-9])_` grep: no output). Gate (b) unmet: `032` only on `origin/feature/fix-python-config-stored-zero`, `033` only on `origin/feature/fix-ledger-trimmed-notify-payload`. Other evidence re-verified: `scripts/db-migrate.sh`, `config.proto:29` `rpc ListKeys`, `tools.py:1628` `list_config_keys`, `merge-order.md:77`, `fails.md:613/2909/2911`; local `034_retire_portfolio_snapshot_interval.{up,down}.sql` present. Step 10 stays an operator-held gate (integration PR draft, merge held).
