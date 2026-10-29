@@ -198,7 +198,7 @@ Behavioural verification is Step 3.
 
 ### Step 3 — test: `@AC-1`/`@AC-2` owner scoping + runtime header guard on the trading stub
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_entry_backfill.py` — modify
@@ -697,3 +697,9 @@ _Populated by /sdd-execute as implementation proceeds._
   Verification runs. Committed as
   `# Key must match live_loop's (user_id, strategy_id, symbol) key or the slot is never read.`;
   same constraint, no behaviour change. The second line is verbatim.
+- **Step 3 (2026-10-29), `@AC-2` fake models trading's fail-open.** Instruction 3's fake returns
+  only orders with `user_id == req.user_id`. Against the pre-Step-2 tree the body `user_id` is `""`,
+  so that fake returns nothing and the test passed — it could not show the RED the step's **TDD**
+  line names ("the unfiltered fake returns u-b's fill"). The committed fake also returns every
+  order when `req.user_id` is empty, mirroring `trading_repo.go:229-231`; it then fails RED and
+  passes GREEN. No scope change.

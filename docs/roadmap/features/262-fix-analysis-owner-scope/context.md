@@ -558,3 +558,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Expected interim breakage until Step 3: `test_run_once_swallows_per_pair_rpc_failure` and
     `test_blend_backfill_restricted_to_fundamentals_universe` fail because their `_list_orders(req)`
     fakes reject `metadata=`; Step 3 instruction 1 changes both signatures.
+- Step 3 done (test, `tests/test_entry_backfill.py`, `tests/test_owner_header_guard.py`): both
+  `_list_orders` fakes take `metadata=None`; added `test_list_orders_carries_owner_in_body_and_metadata`
+  (`@AC-1`) and `test_other_owner_fills_never_seed` (`@AC-2`); `test_entry_backfill_run_once` now
+  uses a `RecordingStub` trading stub and asserts non-vacuous `x-user-id: bob`, one `x-trace-id`
+  and body `user_id`.
+  - TDD (run against the pre-Step-2 `entry_backfill.py` from `0833f0e3`): AC-1 red:
+    `assert '' == 'u-a'` → green; AC-2 red: `('u-a','s-1','AAPL') not in {...: 2026-01-01}` → green;
+    header guard red: `assert [] == ['bob']` → green. 3 failed / 35 passed → 38 passed.
+  - Verification: the two files 38 passed; full suite 1446 passed, coverage 89.82% (≥40);
+    `ruff check .` + `ruff format --check .` clean. The Step 2 interim breakage is resolved.
+  - Deviation: the `@AC-2` fake mirrors trading's empty-`user_id` fail-open so RED is real
+    (Deviation Log).
+

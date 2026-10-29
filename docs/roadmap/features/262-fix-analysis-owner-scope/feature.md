@@ -20,6 +20,7 @@
 | 2026-10-29 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | Steps 2–8 evidence re-aligned after merging origin/main-dev (244 semaphore clamp, 259 spawn supervision, 244/246 conftest helpers landed); line-number drift only, no instruction scope change |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report` |
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 2 done — entry-backfill `ListOrders` owner-scoped (body `user_id` + `owner_metadata` + per-pass `x-trace-id`) |
+| 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — `@AC-1`/`@AC-2` tests + runtime `x-user-id`/`x-trace-id` guard on the trading stub |
 
 ---
 

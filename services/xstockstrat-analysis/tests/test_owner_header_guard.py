@@ -177,10 +177,17 @@ async def test_entry_backfill_run_once():
     loop = _live_loop(ingest, RecordingStub(), [])
     db = MagicMock()
     db.fetch = AsyncMock(return_value=[_row()])
-    trading = MagicMock()
-    trading.ListOrders = AsyncMock(return_value=SimpleNamespace(orders=[]))
+    trading = RecordingStub({"ListOrders": SimpleNamespace(orders=[])})
     await entry_backfill.run_once(loop, db, trading, _cfg())
     _assert_owner_headers(ingest)
+    # _row() is signal-eligible with no allowlist; the ingest stub returns MSFT, so a pair exists.
+    assert trading.calls, "no ListOrders issued — the guard would be vacuous"
+    for method, req, meta in trading.calls:
+        assert method == "ListOrders"
+        assert [v for k, v in meta if k == "x-user-id"] == ["bob"], meta
+        trace_ids = [v for k, v in meta if k == "x-trace-id"]
+        assert len(trace_ids) == 1 and trace_ids[0], meta
+        assert req.user_id == "bob"
 
 
 async def test_pnl_handle_order_event():

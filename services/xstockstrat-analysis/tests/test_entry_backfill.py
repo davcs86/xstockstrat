@@ -150,7 +150,7 @@ class TestRunOnce:
         )
         trading_stub = AsyncMock()
 
-        async def _list_orders(req):
+        async def _list_orders(req, metadata=None):
             if req.strategy_id == "s1":
                 raise RuntimeError("boom")
             return SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
@@ -161,6 +161,50 @@ class TestRunOnce:
 
         assert ("u1", "s1", "AAPL") not in live_loop._last_entry_at
         assert live_loop._last_entry_at[("u1", "s2", "MSFT")] == _T0
+
+    async def test_list_orders_carries_owner_in_body_and_metadata(self):
+        """@AC-1: the backfill's ListOrders names its owner in the body and in x-user-id."""
+        live_loop = _fake_live_loop()
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(return_value=[_strategy_row("s-1", ("AAPL",), user_id="u-a")])
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(return_value=SimpleNamespace(orders=[]))
+
+        await run_once(live_loop, db_pool, trading_stub, _cfg())
+
+        call = trading_stub.ListOrders.await_args
+        assert call.args[0].user_id == "u-a"
+        assert call.args[0].strategy_id == "s-1"
+        assert call.args[0].symbol == "AAPL"
+        md = call.kwargs["metadata"]
+        assert [v for k, v in md if k == "x-user-id"] == ["u-a"]
+        trace_ids = [v for k, v in md if k == "x-trace-id"]
+        assert len(trace_ids) == 1 and trace_ids[0]
+
+    async def test_other_owner_fills_never_seed(self):
+        """@AC-2: a fill owned by u-b on the same (strategy, symbol) never seeds u-a's slot."""
+        live_loop = _fake_live_loop()
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(return_value=[_strategy_row("s-1", ("AAPL",), user_id="u-a")])
+        other = _order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)
+        other.user_id = "u-b"
+        other.strategy_id = "s-1"
+        other.symbol = "AAPL"
+
+        async def _list_orders(req, metadata=None):
+            # Mirrors trading's fail-open: an empty body user_id returns every owner's orders.
+            mine = [o for o in (other,) if not req.user_id or o.user_id == req.user_id]
+            return SimpleNamespace(orders=mine)
+
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(side_effect=_list_orders)
+
+        await run_once(live_loop, db_pool, trading_stub, _cfg())
+
+        key = ("u-a", "s-1", "AAPL")
+        assert key not in live_loop._last_entry_at
+        assert live_loop._last_state.get(key) is not True
+        live_loop._write_entry_cooldown.assert_not_awaited()
 
     async def test_run_once_noop_without_trading_stub(self):
         live_loop = _fake_live_loop()
@@ -224,7 +268,7 @@ class TestRunOnce:
         )
         seen: list[str] = []
 
-        async def _list_orders(req):
+        async def _list_orders(req, metadata=None):
             seen.append(req.symbol)
             return SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
 
