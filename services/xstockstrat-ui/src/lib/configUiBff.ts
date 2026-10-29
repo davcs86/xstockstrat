@@ -34,7 +34,7 @@ router.service(ConfigService, {
   async setConfig(req, ctx) {
     const claims = await requireSession(ctx);
     // Admin-only, defense in depth (the backend re-checks the x-access-scope ADMIN bit). Keeps an
-    // explicit body rather than forwardAdmin because the author is injected from the session below.
+    // explicit body rather than forwardAdmin because the environment is filled/rejected below.
     requireAdminScope(claims);
     // An UNSPECIFIED environment (e.g. the /sources secret write, which can't read APPLICATION_ENV)
     // targets THIS deployment's native scope — fill it server-side so the write lands on the right env.
@@ -50,7 +50,7 @@ router.service(ConfigService, {
       );
     }
     return configClient.setConfig(
-      { ...req, environment, author: claims.user_id },
+      { ...req, environment },
       { headers: backendHeaders(claims, ctx) },
     );
   },

@@ -350,8 +350,7 @@ async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token:
         value_type="string",
         value=bearer_token,
         environment=resolve_scope(""),
-        author=tool,
-        reason=f"bearer for signal source {slug}",
+        reason=f"{tool}: bearer for signal source {slug}",
         access_scope=_caller_access_scope(ctx, tool),
         create_key=True,
         user_id=_caller_user_id(ctx, tool),
@@ -832,18 +831,26 @@ def register_tools(server: MCPServer) -> None:
         signal_sources/signal_weight/technical_weight: optional signal-blend params.
         min_conviction: honored as a hard floor (feature 090) — candidates whose relative
             conviction score is below the entry threshold for this min_conviction are dropped from
-            results (coverage_gaps are unaffected).
-        rank_limit: cap on returned results (0 = analysis default). Read-only, no admin scope.
+            results (coverage_gaps are unaffected). Un-evaluated rows (score 0.0, see
+            score_unavailable below) are also removed when min_conviction > 0.
+        rank_limit: cap on returned results (0 = analysis default); un-evaluated rows rank last
+            and may be cut. A dropped or cut row's only trace is then the server log.
+            Read-only, no admin scope.
         Returns {"results": [{"symbol", "score", "criterion_scores" (per-ref_name map), "passed"
-            (bool), "status"}], "coverage_gaps": [{"symbol", "timeframe", "bars_have",
+            (bool), "score_unavailable" (bool), "status"}], "coverage_gaps": [{"symbol",
+            "timeframe", "bars_have",
             "bars_need"}]}. coverage_gaps now carries the full gap detail (bars_have/bars_need as
             JSON strings — int64) and is computed BEFORE rank truncation, so an under-covered
             symbol ranked below the cut still surfaces (bars gaps only — see next line for
             fundamentals). A result is "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA" (passed=false, no
             score, its ref_name absent from criterion_scores) whenever a requested criterion
             couldn't be evaluated for lack of data — too few bars, or the fundamentals source
-            (FMP) unavailable while a fundamental criterion was requested; it is never reported
-            OK/passed just because a criterion had no data. Filter candidates on `passed`."""
+            (FMP) unavailable while a fundamental criterion was requested.
+            score_unavailable=true means the row has no comparable score and is unranked. Three
+            row kinds carry it: an evaluation fault (status OK, passed=false — the symbol was not
+            evaluated, which is different from a failed screen; the rest of the scan completes);
+            a data-less row with a hard filter (passed=false); a data-less soft-only row
+            (feature 144, passed=true). Filter candidates on `passed`."""
         return await client.screen_symbols(
             symbols=symbols,
             criteria=criteria,
@@ -1406,7 +1413,8 @@ def register_tools(server: MCPServer) -> None:
     ) -> dict:
         """Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156).
         force: re-emit today's signals even if already emitted (clears the day's idempotency rows).
-        dry_run: score + report what WOULD be scanned without emitting or spending cache calls.
+        dry_run: report what WOULD be scanned (universe size) without scoring, emitting
+        or spending cache calls.
         symbols: optional explicit universe override; omitted = the configured universe.
         Returns the FundamentalsScanSummary: {"run_id", "symbols_processed", "signals_emitted",
             "calls_spent", "deferred_count", "status", "finished_at"}. Admin-scoped — a non-admin
@@ -1645,7 +1653,6 @@ def register_tools(server: MCPServer) -> None:
         key: str,
         value_type: Literal["string", "int", "float", "bool"],
         value: str,
-        author: str,
         reason: str,
         user_id: str = "",
         create_key: bool = False,
@@ -1660,8 +1667,8 @@ def register_tools(server: MCPServer) -> None:
           that is byte-identical to what the server stores. NOTE value_type is only honored when
           CREATING a new key; for an existing key the stored type wins and this is ignored.
         value: the new value, as a string; it is converted according to value_type.
-        author: who is making the change — required, and recorded in config.config_audit.
-        reason: why — required, and recorded alongside author.
+        reason: why — required, recorded in config.config_audit; the change is attributed to your
+          verified user id.
         user_id: optional per-user scope. Omit (empty) to write the global value; pass a user id to
           set that user's per-user override. Secret keys are global-scope only — a per-user write to
           a secret key is rejected INVALID_ARGUMENT by the backend.
@@ -1681,6 +1688,8 @@ def register_tools(server: MCPServer) -> None:
         serves since feature 079 removed the legacy SSE one."""
         # Fails fast when no verified claims are present; the backend admin gate authorizes writes.
         access_scope = _caller_access_scope(ctx, "set_config")
+        # Fail fast at the edge: config attributes the write to x-user-id and rejects an empty one.
+        _caller_user_id(ctx, "set_config")
 
         env = _resolve_scope("")
 
@@ -1691,7 +1700,6 @@ def register_tools(server: MCPServer) -> None:
                 value_type=value_type,
                 value=value,
                 environment=env,
-                author=author,
                 reason=reason,
                 access_scope=access_scope,
                 create_key=create_key,
@@ -2366,8 +2374,8 @@ def _same_origin(a: str, b: str) -> bool:
     return pa.scheme == "http" and pb.scheme == "https"
 
 
-# Fixed bound on the undeadlined GetConfig policy read; looked up at call time (never bound as a
-# default argument) so tests can monkeypatch it.
+# Outer bound keeping list_opportunities inside the MCP client's 60 s budget; looked up at call
+# time so tests can monkeypatch it.
 _POLICY_READ_TIMEOUT_S = 3.0
 
 
