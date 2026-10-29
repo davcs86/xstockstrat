@@ -12,11 +12,12 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import grpc
 import pytest
 
 from app.engine import mcp_client_loop as loop
 from app.repositories.signal_sources import derive_health_status
-from tests._helpers import transaction_conn
+from tests._helpers import rpc_error, transaction_conn
 from tests.test_ingest_servicer import make_servicer
 from tests.test_mcp_client import _FakeSecretStub, _watcher_with
 
@@ -67,7 +68,7 @@ class _FakeCfgWatcher:
     def get_int(self, key, default=0):
         return self._ints.get(key, default)
 
-    async def resolve_secret(self, key, user_id=""):
+    async def resolve_secret(self, key, user_id="", timeout=None):
         self.resolve_calls.append(key)
         return self._bearer
 
@@ -246,7 +247,7 @@ class _PerOwnerCfgWatcher(_FakeCfgWatcher):
         self._secrets = secrets
         self.scoped_calls = []
 
-    async def resolve_secret(self, key, user_id=""):
+    async def resolve_secret(self, key, user_id="", timeout=None):
         self.scoped_calls.append((key, user_id))
         return self._secrets.get((key, user_id), ("", False))
 
@@ -451,3 +452,48 @@ async def test_ac8_all_items_failed_records_last_error(monkeypatch, caplog):
     summary = next(i for i, m in enumerate(msgs) if "src-a" in m and "skipped=1" in m)
     failed = next(i for i, m in enumerate(msgs) if "source src-a failed" in m)
     assert summary < failed
+
+
+class _HangingSecretStub(_FakeSecretStub):
+    """src-a's GetSecret hangs for the whole deadline then expires; any other key resolves."""
+
+    def __init__(self):
+        super().__init__("tok-b", True)
+        self.timeouts = []
+
+    async def GetSecret(self, request, metadata=None, timeout=None):
+        self.timeouts.append(timeout)
+        if request.key == "mcp_credential.src-a":
+            assert timeout == 2.0
+            await asyncio.sleep(timeout)
+            raise rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "Deadline Exceeded")
+        return await super().GetSecret(request, metadata=metadata, timeout=timeout)
+
+
+async def test_ac4_hung_getsecret_is_bounded_and_recorded(monkeypatch):
+    # AC-4 @FR-5: a hung GetSecret is cut at the request timeout, recorded, and src-b still polls.
+    sources = [
+        _mcp_source(slug="src-a", endpoint="https://a.example/mcp", user_id="u-1"),
+        _mcp_source(slug="src-b", endpoint="https://b.example/mcp", user_id="u-1"),
+    ]
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=sources))
+    errors = []
+
+    async def fake_mark_error(db, user_id, slug, error):
+        errors.append((slug, error))
+
+    monkeypatch.setattr(loop, "mark_source_error", AsyncMock(side_effect=fake_mark_error))
+    stub = _HangingSecretStub()
+    cfg = _watcher_with(stub)
+    ints = {"ingest.mcp_client.request_timeout_seconds": 2}
+    monkeypatch.setattr(cfg, "get_int", lambda key, default=0: ints.get(key, default))
+    servicer = MagicMock()
+    servicer._db = MagicMock()
+    servicer._ingest_external_signal = AsyncMock(return_value=(1, False))
+    mcp = _FakeMcpClient(result=_FakeResult([]))
+
+    await asyncio.wait_for(loop.run_one_cycle(servicer, cfg, mcp), timeout=10)
+
+    assert stub.timeouts == [2.0, 2.0]
+    assert any(slug == "src-a" and "GetSecret deadline exceeded" in err for slug, err in errors)
+    assert [c["endpoint"] for c in mcp.calls] == ["https://b.example/mcp"]

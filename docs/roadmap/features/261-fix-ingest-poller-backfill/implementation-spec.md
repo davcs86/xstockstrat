@@ -279,7 +279,7 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client_loop.py -q
 
 ### Step 5 — service: FR-5 GetSecret deadline with DEADLINE_EXCEEDED translation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -338,7 +338,7 @@ cd services/xstockstrat-ingest && grep -n "timeout=timeout\|GetSecret deadline e
 
 ### Step 6 — test: FR-5 deadline bounded and recorded (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client.py` — modify
@@ -617,3 +617,15 @@ grep -n "resume_incomplete_jobs\|CANCELED" services/xstockstrat-ingest/CLAUDE.md
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29 — Steps 5 + 6 landed as one commit (standing operator rule).** Step 5 alone could not pass:
+  passing `timeout=` at `mcp_client_loop.py` makes the Step 6 fakes (`_FakeSecretStub.GetSecret`,
+  `_FakeCfgWatcher.resolve_secret`, `_PerOwnerCfgWatcher.resolve_secret`) raise `TypeError`, and Step 5's RED test is
+  Step 6's. Operator, 2026-10-29, in their own words: "Merge pairs + standing rule" — land the FR-5 implementation with
+  Step 6's widened fakes and tests as ONE commit with one red→green cycle on Step 6's tests; both steps marked done.
+- **2026-10-29 — Step 5 Verification grep satisfied by the ruff-wrapped form.** `ruff format` splits the call site
+  over 3 lines, so `grep -n "resolve_secret(key, user_id=owner, timeout="` cannot match; per the same operator
+  decision it is checked as `grep -n "user_id=owner, timeout=float(timeout_seconds)" app/engine/mcp_client_loop.py`.
+- **2026-10-29 — Step 6 C-13 helper home.** The `AioRpcError` builder is used by both `test_mcp_client.py` and
+  `test_mcp_client_loop.py`, so per Step 6 Instruction 4 it lives in `tests/_helpers.py` as `rpc_error(code, details)`
+  (file added to the commit).

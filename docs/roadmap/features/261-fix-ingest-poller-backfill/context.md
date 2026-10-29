@@ -670,3 +670,21 @@ halt). design.md is not written and status stays `spec-ready`.
 - Verification: module 19 passed; full suite 355 passed, coverage 84.24% (≥40%); `ruff check` + `ruff format --check`
   clean. `test_source_failure_records_health_and_continues` and `test_second_identical_cycle_deduplicates` stay green.
 - Deviations: none.
+
+### Steps 5 + 6 — FR-5 GetSecret deadline + AC-4 tests (done 2026-10-29, one commit)
+
+- Operator decision (session question tool, 2026-10-29, own words): "Merge pairs + standing rule" — Step 5's call-site
+  change breaks Step 6's fakes and Step 5's RED test is Step 6's, so both land as one commit (Deviation Log).
+- `ConfigWatcher.resolve_secret` (`app/config/watcher.py`) takes `timeout: float | None = None`, passes `timeout=` to
+  `GetSecret` (request + `x-internal-caller` metadata unchanged), and translates only `DEADLINE_EXCEEDED` into
+  `RuntimeError("GetSecret deadline exceeded after <t>s")` (no key/value; `__cause__` kept); other codes re-raise
+  untranslated. `poll_one_source` passes `timeout=float(timeout_seconds)` (244's `int_positive` read untouched).
+- Tests: fakes widened with `timeout`; `test_resolve_secret_passes_timeout_and_translates_deadline`,
+  `test_resolve_secret_permission_denied_is_not_translated` (`test_mcp_client.py`) and
+  `test_ac4_hung_getsecret_is_bounded_and_recorded` (`test_mcp_client_loop.py`). C-13: the shared `AioRpcError`
+  builder's new home is `tests/_helpers.py::rpc_error` (two consumers).
+- TDD: red → 3 failed / 23 passed (`TypeError: resolve_secret() got an unexpected keyword argument 'timeout'` ×2;
+  AC-4 `assert [None, None] == [2.0, 2.0]`, GetSecret unbounded) → green: 26 passed.
+- Verification: Step 5 greps hit (call-site grep in its ruff-wrapped form, per operator); full suite 358 passed,
+  coverage 84.29% (≥40%); `ruff check` + `ruff format --check` clean; `DEADLINE_EXCEEDED` present in `tests/`.
+- Deviations: Steps 5+6 merged; Step 5 grep form (both logged in the Deviation Log).

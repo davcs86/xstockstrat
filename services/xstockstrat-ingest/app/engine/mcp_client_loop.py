@@ -130,7 +130,9 @@ async def poll_one_source(
         await mark_source_error(servicer._db, owner, slug, "bearer not configured")
         return
     _namespace, key = split_credentials_ref(credentials_ref)
-    bearer, found = await cfg_watcher.resolve_secret(key, user_id=owner)
+    bearer, found = await cfg_watcher.resolve_secret(
+        key, user_id=owner, timeout=float(timeout_seconds)
+    )
     if not (found and bearer):
         await mark_source_error(servicer._db, owner, slug, "bearer not configured")
         return
