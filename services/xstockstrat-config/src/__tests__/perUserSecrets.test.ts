@@ -239,7 +239,7 @@ describe('per-user secrets (feature 224 FR-14)', () => {
         namespace: 'marketdata', key: 'alpaca.api_key', value: { stringVal: 'alpaca-xyz', isSecret: true },
         environment: ENV_PROD, createKey: true, author: 'op', reason: 'seed',
       },
-      metadata: md({ [HEADER_ACCESS_SCOPE]: '4' }),
+      metadata: md({ [HEADER_ACCESS_SCOPE]: '4', [HEADER_USER_ID]: 'tester' }),
     });
     assert.equal(write.err, null);
     const r = await getSecret({ namespace: 'marketdata', key: 'alpaca.api_key' }, 'marketdata', () => ({}));

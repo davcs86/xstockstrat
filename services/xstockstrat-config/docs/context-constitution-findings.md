@@ -44,11 +44,12 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-config-audit-author-caller-spoofable-defect`](../../../docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md) | SetConfig audit author is caller-supplied free text, not the verified identity |
+| [`2026-10-19-config-audit-author-caller-spoofable-defect`](../../../docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md) | SetConfig audit author is caller-supplied free text, not the verified identity → fix: feature 241 |
 | [`2026-10-19-config-claude-md-drift-defect`](../../../docs/reports/2026-10-19-config-claude-md-drift-defect.md) | Config CLAUDE.md has a stale notify diagram, banner and write-gate text |
 | [`2026-10-19-config-seed-migration-late-lower-nnn-defect`](../../../docs/reports/2026-10-19-config-seed-migration-late-lower-nnn-defect.md) | A late-merging lower-numbered config seed migration never applies |
 | [`2026-10-19-cross-hop-deadline-bounds-unenforced-defect`](../../../docs/reports/2026-10-19-cross-hop-deadline-bounds-unenforced-defect.md) | Cross-hop read deadline ordering is not enforced by config bounds |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+| [`2026-10-28-node-leaf-c8-check-coverage-unenforced-defect`](../../../docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.md) | Node-leaf c8 `--lines 40` is declared but never enforced (no `--check-coverage`) |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

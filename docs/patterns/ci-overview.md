@@ -15,10 +15,11 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `python-lint` (×4) | `ruff check` + `ruff format --check` + `uv lock --check` (lock/pyproject sync, added 2026-07-27) | — |
 | `python-test` (×4) | `pytest --cov` | 40% (indicators: 50%) |
 | `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
-| `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% |
+| `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% declared, not enforced (no `--check-coverage`; follow-up defect) |
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 | `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
+| `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
 
 ## Branch Protection — CI Gate
 
@@ -65,4 +66,4 @@ rolls back on its own if the release is not healthy. Setup and operation → hom
 
 - Go: excludes `cmd/`, `handler/`, `repository/`, `telemetry/`, `service/` packages from threshold.
 - Python ingest: pre-existing shortfall in infrastructure files (`http_server.py`, `main.py`, `telemetry.py`) offset by handler coverage.
-- Node.js: `0%` shown in c8 table is a known TypeScript tooling artefact — tests do pass.
+- Node.js leaves (config, ledger, identity, notify): tests run compiled (`tsc && c8 … node --test dist/__tests__/*.test.js`), and the c8 table has a non-zero row per impl module. `--lines 40` is unenforced without `--check-coverage`; verify with `pnpm exec c8 check-coverage --lines 40` after `test:coverage` (follow-up defect `docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.md`).

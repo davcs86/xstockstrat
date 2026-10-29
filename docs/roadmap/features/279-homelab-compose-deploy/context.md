@@ -243,3 +243,11 @@
 - Feature promoted and committed: 497eaa01296f7d8df1e3203e5bdd8534e3cc9eb9
 - Status updated: `code-completed` → `launched`
 - Launched date: 2026-10-27
+
+## Session 2026-10-27 — follow-up after merge: app VMs converged by homelab-edge
+
+- homelab-edge gains an **app-host** workflow + `playbooks/app.yml` (Debian 13 VMs, 4 vCPU / 8 GiB / 40G, operator decisions).
+  The gate user is renamed **`app`** (operator: `deploy` is Ansible's sudo user on every homelab host), so
+  `deploy-homelab.yml` now SSHes `app@$VM_IP`. No VM existed yet, so nothing migrates. Gate keys: the operator generates
+  them; the public half lives in homelab-edge SOPS (`app_gate_xstockstrat_<env>_public_key`), the private half only in
+  this repo's `DEPLOY_SSH_KEY`.
