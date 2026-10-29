@@ -399,3 +399,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     dependency, which is now satisfied (246 merged), so Step 9 only verifies it and the file is verify-only.
   - Steps 7 and 8: no change. The proto comment is at `:564`, and exactly 5 generated files carry it.
 - Step Dependencies "merge-order row before Step 1": already satisfied by the existing `:81` row. No edit is needed.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute fix-fundsignal-emit-accounting sequential`, run in its own worktree via `sdd-batch-execute`
+  (P-01: this run is the only writer).
+- Up-front confirmation came from the operator's standing authorization, given in operator chat 2026-10-28/29
+  (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute. Its terms:
+  - checkpoints are unattended (`report`);
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized, and 255/275 are deferred;
+  - DB and prod steps are operator-only: open the PR and hold the merge;
+  - blocker decisions are recorded per feature (2026-10-29).
+- Status: `implementation-ready` → `in-progress`. The re-spec of Steps 1-9 is logged in the session entry above.
+- Next: Step 1 (RED test, `tests/test_fundsignal_loop.py`).
