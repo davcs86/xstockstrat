@@ -518,3 +518,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 11: `config-governance.md` anchors `:109`/`:113`.
 - Next: Step 6.
 
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), resume re-spec
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  'Start executing features 241-276' via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge). Per-feature blocker
+  decisions were given by the operator through the session's question tool on 2026-10-29. Checkpoints: 'report'.
+  C-16 promotion is auto-confirmed unless it changes an existing @AC rule. Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`5bfb9b23`); `git merge --no-edit
+  origin/main-dev` was already up to date; `ledger-guard.py --fix` reported clean.
+- Re-spec (Deviation Log 2026-10-29 "resume"): line drift only. Step 6 `LedgerServiceImpl` class `:19`,
+  constructor `:20`, `buffer.push(row)` `:207`; Step 11 `test-data-inventory.md` `:74-75`.
+- Next: Step 6.
