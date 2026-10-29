@@ -818,3 +818,7 @@ _Populated by /sdd-execute as implementation proceeds._
   3. Record both outputs in context.md and the PR body; mark the PR ready; flip merge-order.md:77 to `Resolved: Yes`.
 - **Also**: the spec's smoke line `list_config_keys(service=…, environment=…)` does not match the real tool
   signature `list_config_keys(namespace, user_id="")` (`services/xstockstrat-agent/app/tools.py:1620`). Item 2 uses the real one.
+- **Gate re-run 2026-10-29 (`origin/main-dev` @ `22001134`)**: config migrations now top out at `031`, because 243 merged
+  via #1334 (`031_heal_indicators_sandbox_keys_full_dotted`). The `/0(3[4-9]|[4-9][0-9])_` grep returns nothing (exit 1),
+  so (a) passes. (b) is still unmet: `032` and `033` are only on `origin/feature/fix-python-config-stored-zero` and
+  `origin/feature/fix-ledger-trimmed-notify-payload`. The hold conditions 1-3 above are unchanged, and only 244 and 248 remain to merge.
