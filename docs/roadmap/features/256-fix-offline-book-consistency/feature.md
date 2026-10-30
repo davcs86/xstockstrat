@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-offline-book-consistency-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-29
+**Last Updated**: 2026-10-30
 
 ---
 
@@ -31,6 +31,7 @@
 | 2026-10-29 | `in-progress` (steps 11-12 done) | /sdd-execute sequential (sdd-batch-execute) | Steps 11+12 merged into one commit (standing operator rule "Merge pairs + standing rule"): a degraded offline account keeps market-value equity, but its P&L is zeroed, `offline_state_unavailable` is set, and realized/fee/pct optionals stay unset. `markDegradedPositions` zeroes Day P&L on its offline positions across all four reads. The GetPortfolio aggregate excludes a degraded account's P&L and sets the marker. New AC-3 (all four reads), AC-8, broker-row and aggregate tests |
 | 2026-10-30 | `in-progress` (steps 13-14 done) | /sdd-execute sequential (sdd-batch-execute) | Steps 13+14 merged into one commit (standing operator rule "Merge pairs + standing rule"; operator decision "A: Gate it, drop e2e"): `PNL_UNAVAILABLE_LABEL` and `PortfolioTotals.incomplete` in `portfolioTotals.ts`; every Day/Total P&L surface (PortfolioPanel, OrderBook `PortfolioSummary`, Book page, positions table and sheet, position page, insights `AccountPortfolioSelector`) shows `P&L unavailable` for a degraded offline account. vitest + Playwright AC-3 cases, AC-4/AC-5 confirm-dialog error cases, and the `PORTFOLIO_OFFLINE_DEGRADED` / `POSITION_OFFLINE_AAPL_DEGRADED` fixtures |
 | 2026-10-30 | `in-progress` (step 15 done) | /sdd-execute sequential (sdd-batch-execute) | Step 15: agent pass-through tests for the `offline_state_unavailable` marker and the FR-5/FR-6 error details; Files widened to `test_position_parity.py` by operator decision (Deviation Log). No agent code change. |
+| 2026-10-30 | `in-progress` (step 16 done) | /sdd-execute sequential (sdd-batch-execute) | Step 16: portfolio/trading service docs and PORTFOLIO-3/-11 updated for the retry/park, degrade and confirm contracts. |
 
 ---
 

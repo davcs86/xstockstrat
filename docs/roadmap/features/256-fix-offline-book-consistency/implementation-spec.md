@@ -992,7 +992,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 16 — docs: service docs for the new retry/park, degrade and confirm contracts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify

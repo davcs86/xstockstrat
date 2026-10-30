@@ -961,3 +961,15 @@ Each item names the step where it is resolved.
 - TDD: N/A per spec (characterization; stubs from Step 2 already exist). Verification: full agent suite 524 passed,
   81% coverage (>= 40); `ruff check` and `ruff format --check` clean.
 - Next: Step 16 (docs).
+
+## Session 2026-10-30 — Step 16 (docs)
+
+- Edited `services/xstockstrat-portfolio/CLAUDE.md` (degrade wording at the offline-valuation paragraph; `boundedRetry` /
+  `event parked` / `lastSeq` self-heal on the sync row; a new `account.deregistered` consumer row, since none existed,
+  carrying the option-(a) broker scope), `services/xstockstrat-portfolio/docs/context-constitution.md` (PORTFOLIO-3 and
+  PORTFOLIO-11, with the head-of-line-blocking and log-only-park acceptances) and `services/xstockstrat-trading/CLAUDE.md`
+  (filled_qty/filled_avg_price validation, UNAVAILABLE "positions not published").
+- Verified against code: `boundedRetry`/`classifyConsumerErr`/`syncRetryMinAttempts` in `portfolio_service.go`,
+  `readValuation.unavailable` in `offline_valuation.go`, trading.go ConfirmOrder validation and the UNAVAILABLE message.
+- Teardown: `/context-forge:context-constitution refresh` plugin not run in this subagent; manual reconciliation of the three
+  touched files against the code was done as above (record in the PR body).
