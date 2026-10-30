@@ -13,6 +13,8 @@ absent from `.do/app.yaml` and the production homelab render. Contract and const
 
 Results are one JSON file per run on the orphan `smoke-results` branch: `smoke-results/<env>/<UTC>-<run_id>.json`.
 
+The `smoke-record` job runs `python -m app.trigger` from the smoke image, so the trigger code and the DO spec must land together.
+
 ## Local
 
 `source scripts/mtls-dev-env.sh && docker compose up -d xstockstrat-smoke`; the API listens on `9110` (mutual TLS,

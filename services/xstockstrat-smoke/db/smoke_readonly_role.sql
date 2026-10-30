@@ -1,5 +1,5 @@
--- Run by the DBA as an admin, once per environment. Replace :env (staging) and set the password
--- out of band; the role must stay non-superuser with no write privilege (startup asserts this).
+-- Run by the DBA as an admin on the staging database only (role and database names are fixed below).
+-- Pass the password with -v smoke_ro_password=...; the role must stay non-superuser with no write privilege (startup asserts this).
 CREATE ROLE xstockstrat_staging_smoke_ro LOGIN PASSWORD :'smoke_ro_password'
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION CONNECTION LIMIT 2;
 ALTER ROLE xstockstrat_staging_smoke_ro SET default_transaction_read_only = on;

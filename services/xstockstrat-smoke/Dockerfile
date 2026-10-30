@@ -6,6 +6,8 @@ RUN test -n "$SMOKE_GIT_SHA"
 ENV SMOKE_GIT_SHA=$SMOKE_GIT_SHA
 
 # git: the record-only POST_DEPLOY job pushes run files from this image.
+# DL3008 ignored: pinning git to the base-image version would break on a slim refresh.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

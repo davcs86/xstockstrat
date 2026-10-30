@@ -1,15 +1,16 @@
 # Smoke read-only DB role
 
-`xstockstrat-smoke` reads the database through a dedicated role `xstockstrat_<env>_smoke_ro`. The DBA creates it;
+`xstockstrat-smoke` reads the database through a dedicated role `xstockstrat_staging_smoke_ro` (staging only; database `xstockstrat-staging`). The DBA creates it;
 nothing in this repo creates it or holds its password.
 
 ## Create (DBA, per environment)
 
-1. Connect to the direct endpoint (`:25060`) as an admin (`docs/runbooks/operator-db-access.md`).
-2. Run `services/xstockstrat-smoke/db/smoke_readonly_role.sql` with `-v smoke_ro_password=...`.
+1. The password must be URL-safe (letters, digits, `-._~`): it is embedded unescaped in `DATABASE_URL`.
+2. Connect to the direct endpoint (`:25060`) as an admin (`docs/runbooks/operator-db-access.md`).
+3. Run `services/xstockstrat-smoke/db/smoke_readonly_role.sql` with `-v smoke_ro_password=...`.
    It grants `SELECT` on the service schemas, withholds `identity.*` and `config_values.value_encrypted`,
    and sets `default_transaction_read_only=on`.
-3. Store the password: DO dev as the GitHub secret `DEV_SMOKE_DB_PASSWORD` (filled into `YOUR_DEV_SMOKE_DB_PASSWORD`
+4. Store the password: DO dev as the GitHub secret `DEV_SMOKE_DB_PASSWORD` (filled into `YOUR_DEV_SMOKE_DB_PASSWORD`
    in `.do/app.dev.yaml`); homelab staging in the staging `APP_ENV` (the DSN user is `xstockstrat_staging_smoke_ro`).
 
 ## Verify
