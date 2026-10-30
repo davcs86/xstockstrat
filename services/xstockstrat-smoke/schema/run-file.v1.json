@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xstockstrat.local/smoke/run-file.v1.json",
+  "title": "xstockstrat-smoke run file v1",
+  "type": "object",
+  "required": [
+    "schema_version", "run_id", "check_id", "check_hash", "feature", "part", "env",
+    "deployed_sha", "outcome", "started_at", "duration_ms", "trigger", "triggered_by",
+    "rpcs_invoked", "evidence"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "check_id": { "type": "string", "minLength": 1 },
+    "check_hash": { "type": "string", "minLength": 1 },
+    "feature": { "type": "string", "minLength": 1 },
+    "part": { "type": "string", "minLength": 1 },
+    "env": { "enum": ["homelab-staging", "do-dev"] },
+    "deployed_sha": { "type": "string", "minLength": 1 },
+    "outcome": { "enum": ["PASS", "FAIL", "ERROR", "TIMEOUT"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "trigger": { "type": "string", "minLength": 1 },
+    "triggered_by": { "type": "string", "minLength": 1 },
+    "rpcs_invoked": { "type": "array", "items": { "type": "string" } },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+    }
+  },
+  "additionalProperties": true
+}

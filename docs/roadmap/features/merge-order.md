@@ -227,6 +227,7 @@ catalog list + count on each merge. Proto: each adds a distinct enum/message (08
 `update_mask`/`deleted`, 088 `SignalSourceOperation`, 089 `StrategyOperation.REACTIVATE`) — no
 proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 | `consolidate-watchlist-signal` (127) | `order-snapshots-pnl-patterns` (042) | **Portfolio migration-NNN collision on `010`** (`/sdd-review` product-spec overlap scan, 2026-08-19): both add a `services/xstockstrat-portfolio/migrations/` migration and the tip is `009_bracket_order_ids`, so each independently computes next-free `010`. 042 (design-approved) specced `010` first (`realized_accum` on `portfolio.positions`) and keeps it; 127 renumbers to `011` (its `system_managed` column + name-constraint rework + `source` column). No proto-field or config collision (042's portfolio change is migration+Go handler only, no `portfolio.proto` edit; 127 owns the next-free `Watchlist`/`WatchlistBinding` field numbers uncontested). Re-derive the NNN across **all remote branches** at `/sdd-spec` (ledger 081), not the local tree. The two may merge in either order as long as 127 uses `011`. | No |
+| `smoke-check-runtime` (280) | `fix-portfolio-snapshot-surface` (264) | Config migration ordering: 280 takes 035/036, which must apply after 264's 034 | No |
 
 > **Config-service seed-migration NNN pre-assignment (this batch, 2026-08-31).** Four features in the
 > 021/029/031/043/095/110/128/166/167/168 batch add a seed migration to the shared
