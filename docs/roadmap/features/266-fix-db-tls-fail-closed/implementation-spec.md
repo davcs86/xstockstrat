@@ -1108,3 +1108,28 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
   body `Cannot read properties of undefined (reading 'rows')`) and AC-7 failed (body echoed `self-signed certificate
   in certificate chain`); AC-8 and the unset-URL regression were green at RED. GREEN: 4/4. The pre-declared
   "AC-7 narrowed (UI)" entry above is confirmed: `pg` is mocked. **Disposition**: operator standing rule.
+- **Step 17 deferred to operator — integration PR merge held until the pre-merge dev canary passes (2026-10-29,
+  sequential).** This session cannot reach the running dev backends, the dev DB host or the DO-console CA, so
+  instruction 1 cannot run here. Everything code-side is done:
+  - The value-free `db-tls: verifying server cert against DATABASE_CA_CERT` log is in all four backend
+    `src/index.ts` files.
+  - The five `dbTls.ts` copies share one SHA-256.
+  - Both `.do` specs bind `DATABASE_CA_CERT` for all five Node DB callers.
+
+  The instruction 3 teardown was done by hand, because the context-forge `context-constitution` skill is not
+  available in this session. It found no drift (see `context.md`).
+
+  The operator runs these checks before merging the integration PR to `main-dev`:
+  1. `openssl s_client -starttls postgres -connect <dev-db-host>:25060 -CAfile <dev CA from the DO console> -verify_return_error </dev/null`
+     prints `Verify return code: 0 (ok)`, and the certificate SAN matches `<dev-db-host>`.
+  2. In the DO console, the dev `${xstockstrat.CA_CERT}` binding is non-empty. `${xstockstrat.DATABASE_URL}` has no
+     `ssl*` or `uselibpqcompat` query key other than a single `sslmode=require`. Record the result with no secret
+     values.
+  3. Append the result of checks 1 and 2 to `context.md` and set Step 17 **Status** to `done`, then merge. The UI
+     route, the `.do` change and the backends ship together in that one integration PR (design item 8).
+  4. After the merge, the `main-dev` dev deploy runs. Confirm that the logs of ledger, config, identity and notify
+     each show `db-tls: verifying server cert against DATABASE_CA_CERT`, and that none exits at boot with a
+     `db-tls:` error. Confirm that `GET /config-ui/api/audit` returns 200, not the generic 500.
+
+  The PR body must carry the teardown record: that the plugin was unavailable, and the manual reconciliation list
+  from `context.md`. **Disposition**: operator-only.
