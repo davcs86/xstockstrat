@@ -52,3 +52,17 @@
   block with `:-` defaults only; UI BFF 405 guard for non-POST (annotated reads would otherwise be valid GETs —
   verified: trader/insights/config-ui `route.ts` export GET and `dispatchConnect` forwards `req.method`).
 - New affected service from the adversary: `xstockstrat-ui` (`src/lib/bffShared.ts` + test).
+
+## Session 2026-10-30T03:40:00Z — sdd-design (round 2 gate)
+
+- Round 2: operator's key question ("Do we need a secret if the smoke service is in the same mesh?") answered by
+  the proposer: drop `smoke.api.key`/`x-smoke-key`; serve 9110 over the platform mTLS (CERT_REQUIRED). Adversary
+  agreed in direction; found: the "trigger CA" fallback is pointless (GitHub deploy jobs already hold the platform
+  CA key — `.github/workflows/deploy.yml:67-71,93-103`), a CA-only check lets any of 13 mesh identities hold the
+  one-run lock (add a SAN allowlist + trigger attribution), hostname pinning must be explicit, PEM temp files
+  must be unlinked, leaf wiring spans every deploy surface (`gen-dev-certs.sh`, three literal "12"s, DO job envs).
+- Operator gate answers: homelab trigger path = tailnet-published mTLS port with a `xstockstrat-smoke-trigger`
+  leaf (not an SSH `gate smoke` verb); approval = "Run another round" (no `@AC-1 @feature-214` sign-off yet).
+- External prerequisites (homelab-edge repo, unverified): tailnet ACL for `tag:ci` -> the VM's port 9110; the VM has
+  no non-tailnet interface (or the port is bound to the tailnet address, which `deploy-homelab.yml:224` already
+  resolves as `VM_IP`).
