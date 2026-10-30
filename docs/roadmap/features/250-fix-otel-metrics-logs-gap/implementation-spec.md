@@ -745,7 +745,7 @@ markdownlint-cli2 --config .markdownlint.yaml packages/otel/CLAUDE.md docs/setup
 
 ### Step 10 — test: `scripts/check-otel-produced-signals.test.sh` with verbatim pre-fix fixtures (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — create

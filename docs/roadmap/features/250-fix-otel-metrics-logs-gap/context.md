@@ -378,3 +378,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - markdownlint-cli2 (npx, repo `.markdownlint.yaml`) on `packages/otel/CLAUDE.md` and `docs/setup/CLAUDE.md`: 0 issues.
 - Files modified: `packages/otel/docs/context-constitution.md`, `packages/otel/docs/context-constitution-findings.md`
 - Deviations: none
+
+### Step 10 — scripts/check-otel-produced-signals.test.sh with verbatim pre-fix fixtures (RED) [done]
+- Fixtures (committed once, extracted from `06faaeb5`; the test never calls `git`): `alert-rules.prefix.yaml`,
+  `service-health.prefix.json`, and `fr4.prefix.tsv` (39 rows: pre-fix lines for the Step 3/5/6/7/8 cites, each asserted at
+  authoring time to match the token regex of its tag). Test cases: green fixed tree; AC-1 red; AC-2 red; one AC-3 red per
+  TSV row; multi-tag lines; strip (exact green / recased red); follow-up path (exact green / recased and trailing-prose
+  red); fence (pass / unfenced / prose / unclosed / still-existing file / ASCII separator); comment-only existence;
+  removal-prose count; dashboard-fallback tree (fenced green / unfenced red); C-16 attribute set; four-way follow-up
+  citation + dir exists; defect-report independence; `.feature` exclusion.
+- **RED (i)** guard absent: `ASSERT FAIL: scripts/check-otel-produced-signals.sh missing`, rc=1.
+- **RED (ii)** throwaway stub guard (`exit 0`, never staged, deleted): `cases=66 failed=53` = AC-1 red 1, AC-2 red 1, AC-3
+  per-cite 39, other red cases 12; none of the green/static cases fail.
+- Lint: shellcheck + shfmt via `uvx` PyPI wheels (Deviation 2 applies); `grep` confirms no runtime `git` in the test and
+  the only script referencing `otel-produced-signals` is the test (C-13: single-consumer fixtures, no inventory entry).
+- Test-authoring correction: a first draft asserted `platform.feature` already mentions Loki; it does not until the
+  @AC scenarios are promoted at integration, so the redundant precondition was removed (the `.feature` exclusion case
+  appends its own Loki line).
+- Files modified: `scripts/check-otel-produced-signals.test.sh`, `scripts/testdata/otel-produced-signals/{alert-rules.prefix.yaml,service-health.prefix.json,fr4.prefix.tsv}`
+- Deviations: none (lint tooling per Deviation 2)
