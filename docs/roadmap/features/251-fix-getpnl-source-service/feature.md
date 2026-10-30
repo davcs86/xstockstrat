@@ -27,6 +27,7 @@
 | 2026-10-30 | `in-progress` (step 11 done) | sdd-execute sequential | Step 11: positionLineage.ts per-order lineage via ListOrders, hook and truncation notice, Step 10 GREEN |
 | 2026-10-30 | `in-progress` (step 12 done) | sdd-execute sequential | Step 12: teardown docs reconciled (stream-key drift, ctx-first wording, side resolution, findings); plugin refresh done by hand |
 | 2026-10-30 | `in-progress` (step 13 done) | sdd-execute sequential | Step 13: rebase-only note 251 ↔ 249 added to merge-order.md; 241 launched (dropped), 252 context note dropped per re-spec |
+| 2026-10-30 | `in-progress` → `code-completed` | sdd-execute sequential (sdd-batch-execute) | All steps done; acceptance scenarios promoted to per-service suites (C-16); PG-1 remains an operator gate |
 
 ---
 
