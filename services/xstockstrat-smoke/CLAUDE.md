@@ -1,7 +1,7 @@
 # xstockstrat-smoke — CLAUDE.md
 
-Contract freeze for feature 280 (`smoke-check-runtime`). Everything below is a **contract
-(implemented in later tasks)**; no service code exists yet. Design and rationale:
+Contract freeze for feature 280 (`smoke-check-runtime`). The service core (listener, catalog,
+runner, read policy) landed in slice S1; the trigger/recorder lands in S2. Design and rationale:
 `docs/roadmap/features/280-smoke-check-runtime/design.md`.
 
 ## Role
@@ -64,7 +64,11 @@ DATABASE_URL=                  # read-only role DSN
 SMOKE_ENV=homelab-staging      # homelab-staging | do-dev
 SMOKE_GIT_SHA=                 # baked at build; build fails without it
 MTLS_CERT= MTLS_KEY= MTLS_CA_CERT=   # PEM strings; refuse to start if absent
+CONFIG_ENDPOINT=xstockstrat-config:50060
+<SERVICE>_ENDPOINT=            # e.g. LEDGER_ENDPOINT; an RPC to a service without one is ERROR
 ```
+
+`SMOKE_ENV` also selects the watchdog mode: `homelab-staging` is strict, `do-dev` is record-only.
 
 Callers: `SMOKE_ENDPOINT` (`host:port`, HTTPS mTLS), `SMOKE_RESULTS_PAT` (DO job only),
 `SMOKE_BIND_ADDR` (GitHub variable, staging). There is no `MTLS_SCOPE` and no `SMOKE_API_KEY`.
@@ -111,6 +115,7 @@ run file of that env; failed attempts stay in their files.
 | `RUN_LOCK_HOLD_S` | `900` | Upper bound on one run-lock hold |
 | `LOOP_STALL_S` | `30` | Event-loop stall before the watchdog acts |
 | Evidence cap | `4096` bytes | Flat scalar dict; long strings truncated, secrets redacted |
+| `DB_STATEMENT_TIMEOUT_MS` | `5000` | `SET LOCAL statement_timeout` on every check query |
 
 ## Fixture ownership
 
@@ -119,9 +124,10 @@ is the smoke user's ownership marker (C-10c). Cleanup and the pre-check janitor 
 
 ## Running Tests
 
-Applicable once the service code lands (slice S1); nothing to run in the contract-only slice.
+DB tests start a throwaway PostgreSQL from local binaries and fail instead of skipping under `CI=true`.
 
 ```bash
 uv sync --extra dev
 uv run pytest --cov=app --cov-fail-under=40
+python -m tools.lint_checks checks   # blocking-call / escape-hatch lint over check modules
 ```
