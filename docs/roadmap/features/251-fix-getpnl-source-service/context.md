@@ -741,3 +741,12 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - GREEN: `go test ./... -race -count=1` passes for the portfolio module (Step 8 wire + handler tests). Non-excluded packages coverage 64.4% (>= 40%). RED was Step 8's commit (arity compile failure).
 - golangci-lint unrunnable (built with go1.26, module needs 1.27).
 - Next: Step 10 (UI lineage RED).
+
+## Session 2026-10-30 - Step 10 executed (RED)
+
+- Added `src/lib/positionLineage.test.ts` (5 vitest cases), `e2e/trader/position-lineage.spec.ts` (AC-3/18/19/20/21/22), `LINEAGE_FILL_EVENTS` / `lineageOtherUserFills` in `ledgerEvents.ts`, `LINEAGE_ORDERS` / `LINEAGE_LIST_PAGE_SIZE` in `orders.ts`, INVENTORY rows, mock `listOrders` and `queryEvents` lineage branches, and moved `positions.spec.ts` / `api-smoke.spec.ts` to the per-order, canonical-source form.
+- RED captured: vitest fails to import `./positionLineage` (module missing, 346 other tests pass); Playwright `position-lineage.spec.ts` fails AC-3/18/19/21/22 (old hook reads the platform-wide page, sheet empty) and passes AC-20 (preserve guard). `positions.spec.ts`, `ledger-owner-scope.spec.ts` and `api-smoke.spec.ts` stay green; the first test of a cold dev-server run times out at 10s (compile), passes warm, unrelated to this step.
+- The mock lineage branch is narrower than the spec (see Deviation Log) so 263's owner-scope spec keeps its default data.
+- Env: root `node_modules` was a dangling tracked symlink; replaced locally by `pnpm install --frozen-lockfile --filter xstockstrat-ui...` (not committed, the symlink entry is left untouched).
+- Next: Step 11 (`positionLineage.ts`, hook, truncation notice) turns these GREEN.
+
