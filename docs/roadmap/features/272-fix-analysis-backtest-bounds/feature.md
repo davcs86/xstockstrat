@@ -62,4 +62,4 @@ but nothing reads it.
 
 ## Next Action
 
-Merge the integration PR (#1369). After the staging deploy: create `analysis.backtest.max_duration_seconds = 60` on staging via `set_config`, read it back with `get_config`, and record it in context.md.
+Done: merged (#1369, `484896de`) and the staging row `analysis.backtest.max_duration_seconds = 60` is applied and verified (2026-10-30). Prod is not running; nothing further owed.

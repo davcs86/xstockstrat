@@ -887,3 +887,14 @@ Feature: Analysis backtest — bar pagination and wall-clock bounds
   operator sign-off, no numbers quoted.
 - After merge and the staging deploy: set `analysis.backtest.max_duration_seconds = 60` on staging (with an audit
   reason), verify with `get_config`, and append the result here in a follow-up docs PR.
+
+## Session 2026-10-30 — Staging row applied (60 s)
+
+- 272 merged as `484896de` (#1369); Deploy dev (run 41044869711) succeeded at 11:08Z.
+- On **staging**, `analysis.backtest.max_duration_seconds` did not exist (only the bare `backtest.max_duration_seconds` = 300,
+  which the dotted read never sees). Created it with `set_config` (`create_key=true`, type `int`, value `60`, audit reason
+  citing the G-1 operator decision) and read it back with `get_config`: `{"value": 60, "value_type": "int"}`,
+  environment `staging`, config version `1793359007658`.
+- Effect: staging `RunBacktest` calls longer than 60 s now fail with `DEADLINE_EXCEEDED` ("backtest exceeded 60s deadline").
+  No run was exercised in this session. The bare 300 s seed row is unchanged and unused.
+- Not applied anywhere else (prod is not running). Roll back by `set_config` to 300 or 0 (no limit).
