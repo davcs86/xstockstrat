@@ -19,6 +19,7 @@
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps; AC-4..AC-22 + FR-4/FR-5 appended per design.md §6F |
 | 2026-10-30 | `implementation-ready` (re-spec) | sdd-execute sequential | Steps re-specced against `main-dev` after 257 merged (`079870fa`): Steps 1-3 superseded, GetPnL/UI/docs steps realigned |
 | 2026-10-30 | `implementation-ready` → `in-progress` | sdd-execute sequential (sdd-batch-execute) | Execution started under the operator's standing authorization; see context.md |
+| 2026-10-30 | `in-progress` (step 5 done) | sdd-execute sequential | Step 5: trading fill payloads carry `side`; Step 4 test GREEN |
 
 ---
 

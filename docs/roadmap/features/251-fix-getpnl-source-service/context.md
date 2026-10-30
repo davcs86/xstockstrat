@@ -712,3 +712,10 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
   assertions come after it and are untested until Step 5). golangci-lint unrunnable here (built with go1.26, module needs 1.27); one `notCancelableSvc` declaration (C-13).
 - Line drift vs the Codebase Evidence in this repo's HEAD: none relied on by the test.
 - Next: Step 5 (add `side` to both fill payloads in `trading.go`) turns this GREEN.
+
+## Session 2026-10-30 — Step 5 executed (sequential)
+
+- Step 5 done: `applyBrokerOrderStatus` in `trading.go` now lifts both fill payloads to locals and adds `side` (`order.Side.String()`) when the side is not UNSPECIFIED; `emitLedgerEvent` unchanged.
+- GREEN: `TestFillEmit251_AC10_CarriesSideSourceAndFees` passes (both rows); `go test ./... -race` passes for the whole trading module. RED was Step 4's commit (`payload side = ""`).
+- golangci-lint unrunnable (go1.26 build vs go1.27 module); `gofmt -l` and `go vet` clean.
+- Next: Step 6 (portfolio RED tests).

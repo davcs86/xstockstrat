@@ -288,7 +288,7 @@ The coverage threshold (≥ 40%) is enforced at paired GREEN Step 5, not here.
 
 ### Step 5 — service: trading adds `side` to both fill payloads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -888,4 +888,5 @@ _Populated by /sdd-execute as implementation proceeds._
 - 2026-10-30 (re-spec): Steps 1-3 superseded by features 257/263 (ledger `sequence` keyset already shipped).
 - 2026-10-30 (re-spec): `ErrRealizedUnavailable` dropped; `ErrLedgerUnavailable` (257) is reused. Added only `ErrFillUnattributable`.
 - 2026-10-30 (re-spec): acceptance wording drift to amend in `acceptance.feature` at Step 6 (own commits): AC-9 ("pages of 500", "exactly 2 calls"; the page size is now 1000) and AC-12 ("ordered by recorded_at then event_id"; the order is `sequence`).
+- 2026-10-30 (step 5): Lint gate unrunnable (golangci-lint built with go1.26, module targets 1.27); `gofmt -l` and `go vet ./internal/service/` clean instead. The spec's `context.Background()` wording was already corrected to `context.WithoutCancel(ctx)`; `"side"` grep also hits the pre-existing `:872`.
 - 2026-10-30 (re-spec): UI BFF backstop and `isForeignFillEvent` dropped (feature 263 forces `ownerOnly: true` in `traderBff.ts`); AC-20 becomes a preserve guard.
