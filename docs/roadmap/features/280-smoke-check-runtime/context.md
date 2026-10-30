@@ -66,3 +66,23 @@
 - External prerequisites (homelab-edge repo, unverified): tailnet ACL for `tag:ci` -> the VM's port 9110; the VM has
   no non-tailnet interface (or the port is bound to the tailnet address, which `deploy-homelab.yml:224` already
   resolves as `VM_IP`).
+
+## Session 2026-10-30T04:10:00Z — sdd-design (rounds 3-4 gates)
+
+- Round 3 (consolidation): adversary verdict APPROVE WITH CORRECTIONS (no Floor breach). Key corrections
+  adopted: `buf breaking` flags annotations (`RPC_SAME_IDEMPOTENCY_LEVEL`, default FILE; `packages/proto/buf.yaml`
+  has no `breaking:` block); homelab `:?` vs `:-` and the `IMAGE_SMOKE`/count fixtures; DO job write credential;
+  `MTLS_SCOPE` must default to production; BFF 405 must ship before the annotations; `mtls-dev-env.sh` pair list
+  and every literal "12". SAN allowlist SPIKE PASSED on uvicorn 0.47.0 + httpx 0.28.1 (allowed SANs 200,
+  non-allowlisted platform leaf 403, no cert -> connection error, wrong-SAN server rejected by sni_hostname
+  pinning); approach = override `H11Protocol.connection_made`, map `scope['client']` -> SAN (script kept in the
+  session scratchpad `spike/san_spike.py`; becomes a real test in slice S1).
+- Round 4 (delivery slicing, S0-S11): adversary NEEDS ANOTHER ROUND on eight blocking spec-level items
+  (CI registered only in S7; buf exclusion cannot be removed in the same PR; compose-profile prod render breaks
+  `homelab-render.test.sh`/`render-assert.jq`/digest resolution; undefined DB class and budget; `DATABASE_URL`
+  vs `SMOKE_DATABASE_URL` and undefined `MTLS_SCOPE`; exit codes 0/1/70 vs AC-15/AC-26; migration 035 ordering vs
+  feature 264's 034; S5 bundles three verification environments).
+- Operator gate answers: buf policy = permanent `breaking.except: [RPC_SAME_IDEMPOTENCY_LEVEL]` (no removal
+  step); approval = "Run final round 5" (hard cap reached after it; no `@AC-1 @feature-214` sign-off yet).
+- Operator note: BENIGN_READS ships as mechanism + guard + test-only entry with zero enabled entries until a check
+  needs one (to be acknowledged at final approval).
