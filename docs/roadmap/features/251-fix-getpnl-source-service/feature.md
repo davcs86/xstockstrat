@@ -22,6 +22,7 @@
 | 2026-10-30 | `in-progress` (step 5 done) | sdd-execute sequential | Step 5: trading fill payloads carry `side`; Step 4 test GREEN |
 | 2026-10-30 | `in-progress` (steps 6-7 done) | sdd-execute sequential | Steps 6+7 merged (standing rule): portfolio ledger fake, shim, fold tests and GetPnL canonical source/side/sequence fold GREEN |
 | 2026-10-30 | `in-progress` (step 8 done) | sdd-execute sequential | Step 8: portfolio wire tests and error-mapping tables added, RED until Step 9 |
+| 2026-10-30 | `in-progress` (step 9 done) | sdd-execute sequential | Step 9: ctx-first classifyGetPnLError and explicit toGRPCError codes, Step 8 GREEN |
 
 ---
 

@@ -734,3 +734,10 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - RED captured: handler package fails to compile (`too many arguments in call to classifyGetPnLError`); wire cases fail at runtime: AC4 gets `Internal` (want FailedPrecondition), AC7 cancel/deadline get `Unavailable` (want Canceled/DeadlineExceeded), F127 AC7 delete guard gets `Internal` (want FailedPrecondition). Cases 2, 6, 7 already pass. GREEN is Step 9.
 - golangci-lint not run: the handler test package cannot compile until Step 9. `gofmt -l` clean; one `func FilledEvent` site.
 - Next: Step 9 (ctx-first classifier, explicit `toGRPCError` codes).
+
+## Session 2026-10-30 — Step 9 executed (GREEN)
+
+- `portfolio_handler.go`: `classifyGetPnLError(ctx, err)` (ctx DeadlineExceeded/Canceled first, then Unavailable for quotes/ledger, FailedPrecondition for `ErrFillUnattributable`, else Internal); call site updated; `toGRPCError` gains FailedPrecondition/DeadlineExceeded/Canceled cases.
+- GREEN: `go test ./... -race -count=1` passes for the portfolio module (Step 8 wire + handler tests). Non-excluded packages coverage 64.4% (>= 40%). RED was Step 8's commit (arity compile failure).
+- golangci-lint unrunnable (built with go1.26, module needs 1.27).
+- Next: Step 10 (UI lineage RED).

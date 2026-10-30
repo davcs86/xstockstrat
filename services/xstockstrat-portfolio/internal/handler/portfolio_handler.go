@@ -124,7 +124,7 @@ func (h *PortfolioHandler) GetPnL(ctx context.Context, req *connect.Request[port
 	}
 	resp, err := h.svc.GetPnL(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(classifyGetPnLError(err), err)
+		return nil, connect.NewError(classifyGetPnLError(ctx, err), err)
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -421,11 +421,21 @@ func classifyGetPositionError(err error) connect.Code {
 	return connect.CodeInternal
 }
 
-// classifyGetPnLError maps GetPnL errors: Unavailable for service.ErrQuotesUnavailable or ErrLedgerUnavailable
-// (a transient dependency gap, retryable), else Internal.
-func classifyGetPnLError(err error) connect.Code {
-	if errors.Is(err, service.ErrQuotesUnavailable) || errors.Is(err, service.ErrLedgerUnavailable) {
+// classifyGetPnLError maps GetPnL errors; the caller's ctx wins so its own deadline or cancel is not
+// misreported as a dependency gap. Then Unavailable for ErrQuotesUnavailable/ErrLedgerUnavailable
+// (retryable), FailedPrecondition for ErrFillUnattributable, else Internal.
+func classifyGetPnLError(ctx context.Context, err error) connect.Code {
+	switch ctx.Err() {
+	case context.DeadlineExceeded:
+		return connect.CodeDeadlineExceeded
+	case context.Canceled:
+		return connect.CodeCanceled
+	}
+	switch {
+	case errors.Is(err, service.ErrQuotesUnavailable), errors.Is(err, service.ErrLedgerUnavailable):
 		return connect.CodeUnavailable
+	case errors.Is(err, service.ErrFillUnattributable):
+		return connect.CodeFailedPrecondition
 	}
 	return connect.CodeInternal
 }
@@ -442,6 +452,12 @@ func toGRPCError(err error) error {
 			return status.Error(codes.PermissionDenied, connectErr.Message())
 		case connect.CodeUnavailable:
 			return status.Error(codes.Unavailable, connectErr.Message())
+		case connect.CodeFailedPrecondition:
+			return status.Error(codes.FailedPrecondition, connectErr.Message())
+		case connect.CodeDeadlineExceeded:
+			return status.Error(codes.DeadlineExceeded, connectErr.Message())
+		case connect.CodeCanceled:
+			return status.Error(codes.Canceled, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())

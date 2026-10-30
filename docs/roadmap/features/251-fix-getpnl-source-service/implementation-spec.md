@@ -562,7 +562,7 @@ grep -rn "func FilledEvent" --include="*.go" internal/   # still 1 declaration s
 
 ### Step 9 — service: ctx-first `classifyGetPnLError` and explicit `toGRPCError` codes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — modify
