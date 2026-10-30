@@ -54,13 +54,14 @@ class WiredClient {
 }
 
 // Borrow-counting pool with max-1 semantics: a second outstanding checkout throws.
-function makeCountingPool(replay: () => Promise<{ rows: any[] }>) {
+function makeCountingPool(replay: () => Promise<{ rows: any[] }>, max: string) {
   const p = {
     queries: 0,
     connects: 0,
     outstanding: 0,
     async query(sql: string) {
       p.queries++;
+      if (/MAX\(sequence\)/.test(sql)) return { rows: [{ max }] };
       if (/^INSERT INTO ledger\.events/.test(sql))
         return { rows: [{ sequence: 99, recorded_at: new Date() }] };
       return replay();
@@ -75,13 +76,16 @@ function makeCountingPool(replay: () => Promise<{ rows: any[] }>) {
   return p;
 }
 
-async function wire(replay: () => Promise<{ rows: any[] }> = async () => ({ rows: [] })) {
+async function wire(
+  replay: () => Promise<{ rows: any[] }> = async () => ({ rows: [] }),
+  max = '0',
+) {
   const client = new WiredClient();
   const notifier = new EventNotifier(() => client, {
     resolveRow: makeResolveRow({ getInt: () => 2000 }),
   });
   await notifier.start();
-  const pool = makeCountingPool(replay);
+  const pool = makeCountingPool(replay, max);
   const impl = new LedgerServiceImpl(pool, {}, notifier);
   return { client, notifier, pool, impl };
 }
@@ -179,6 +183,7 @@ describe('StreamEvents live trimmed-row resolve (wired)', () => {
         new Promise((resolve) => {
           releaseReplay = resolve;
         }),
+      '50',
     );
     const occurredAt = new Date('2026-10-21T11:59:58.000Z');
     const big = makeEventRow({
