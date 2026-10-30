@@ -21,7 +21,9 @@ service NotifyService {
   rpc AcknowledgeAlert(AcknowledgeAlertRequest) returns (AcknowledgeAlertResponse);
 
   // List historical alerts
-  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // Mark one or more alerts read for the calling user (feature 203). Owner resolved from the
   // propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.

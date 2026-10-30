@@ -1,0 +1,164 @@
+# xstockstrat-smoke — CLAUDE.md
+
+Contract freeze for feature 280 (`smoke-check-runtime`). The service core (listener, catalog,
+runner, read policy) landed in slice S1, the trigger/recorder in S2, scoped writes in S8. Design and rationale:
+`docs/roadmap/features/280-smoke-check-runtime/design.md`.
+
+## Role
+
+Staging-only Python service that runs a catalog of named post-deploy smoke checks baked into its
+image and returns per-check outcomes. Checks read the platform through a read-only database role and
+read-only RPCs as a dedicated non-admin smoke user; phase-2 checks may also make allowlisted owner-scoped
+writes behind the `smoke.writes.enabled` kill switch. It is never deployed to production.
+
+## Language
+
+Python 3.13 (asyncio, Starlette on uvicorn, pinned `uvicorn==0.47.0`)
+
+## Docker Build Pattern
+
+Python pattern — follows the ingest Dockerfile pattern (see `docs/patterns/docker-build.md`), plus
+`ARG SMOKE_GIT_SHA` with a build-time `RUN test -n "$SMOKE_GIT_SHA"` and `ENV SMOKE_GIT_SHA=$SMOKE_GIT_SHA`,
+so an image built without the SHA fails to build.
+
+## Ports
+
+| Protocol | Port | Purpose |
+|---|---|---|
+| HTTPS (mutual TLS) | `9110` | Smoke API; not published in production |
+
+The listener is TLS with `CERT_REQUIRED` against the platform CA, built from the service's own `MTLS_*` PEMs.
+Authorization is a client-certificate SAN allowlist `{xstockstrat-agent, xstockstrat-smoke-trigger}`;
+a platform leaf outside it gets 403 and nothing runs, a missing certificate fails the handshake.
+Clients pin the server name `xstockstrat-smoke`. There is no shared API key and no `GetSecret` use.
+
+The SAN hook is a subclass of uvicorn's internal `H11Protocol` (overriding `connection_made`), passed
+**explicitly** to uvicorn: `http='auto'` (e.g. with `uvicorn[standard]`) would pick another protocol and
+bypass it. A startup self-check exits before binding if the hook is not installed. Because the hook
+depends on an internal class, uvicorn is pinned to exactly `==0.47.0`; an upgrade must pass the
+hook-bypass test first.
+
+## Dependencies
+
+| Service | Via | Purpose |
+|---|---|---|
+| xstockstrat-config | gRPC (`WatchConfig`) | Config snapshot at startup (90 s wait) |
+| Any backend | gRPC (read-only, allowlisted) | Check RPCs as the smoke user |
+| xstockstrat-portfolio | gRPC (phase-2 scoped writes) | Watchlist fixtures, only under every write guard |
+
+## Database
+
+Direct connection (`:25060` on DO dev; the homelab overlay uses the homelab DB host on `:5432`) as a dedicated read-only role (`xstockstrat_<env>_smoke_ro`), pool max 1.
+Startup asserts not-superuser, no write privilege and `default_transaction_read_only=on`; failure
+degrades to per-check `ERROR` rather than exiting.
+
+## Config Keys Consumed
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `smoke.rpc.user_id` | string | `''` | Smoke user for every RPC; empty yields `ERROR`, never `PASS` |
+| `smoke.writes.enabled` | bool | `false` | Phase-2 kill switch (migration `036`); re-read on every RPC call, so a flip needs no restart |
+
+## Environment Variables
+
+```text
+DATABASE_URL=                  # read-only role DSN
+SMOKE_ENV=homelab-staging      # homelab-staging | do-dev
+SMOKE_GIT_SHA=                 # baked at build; build fails without it
+MTLS_CERT= MTLS_KEY= MTLS_CA_CERT=   # PEM strings; refuse to start if absent
+CONFIG_ENDPOINT=xstockstrat-config:50060
+<SERVICE>_ENDPOINT=            # e.g. LEDGER_ENDPOINT; an RPC to a service without one is ERROR
+```
+
+`SMOKE_ENV` also selects the watchdog mode: `homelab-staging` is strict, `do-dev` is record-only.
+
+Callers: `SMOKE_ENDPOINT` (`host:port`, HTTPS mTLS), `SMOKE_RESULTS_PAT` (DO job only),
+`SMOKE_BIND_ADDR` (GitHub variable, staging). There is no `MTLS_SCOPE` and no `SMOKE_API_KEY`.
+Mesh cert contract: `docs/patterns/inter-service-mtls.md`.
+
+## Contracts
+
+### HTTP API
+
+- `GET /checks` returns `{deployed_sha, checks:[{id,feature,part,timeout_s,check_hash}], load_errors:[{module,error}]}`.
+- `POST /runs {checks:[id, ...]}` returns 202 `{run_id}`. An unknown check id returns 404 listing the unknown ids; an empty list returns 400; a run already in progress returns 409 `{"error":"run_in_progress","retry_after_s":N}` with a `Retry-After` header, where `N` is at most `RUN_LOCK_HOLD_S + CLEANUP_GRACE_MAX_S`.
+- `GET /runs/{id}` returns `{status, records:[...], file:{path, body}}` or 404 for an unknown or lost run. `status` is `running` or `done`. Each `records[]` item is exactly one record of the run file (see below), in execution order. `file.path` is the run-file path and `file.body` is the complete run-file body; both are present once `status` is `done`.
+
+### Check API
+
+- `@check(id, feature, part, timeout_s=30, janitor=None)` over `async def run(ctx)`; `CHECKS_API_VERSION = 1`.
+- `ctx.db.fetch` / `ctx.db.fetchval` (read-only transaction), `ctx.rpc.call(full_method: str, request)`, `ctx.evidence(key, scalar)`.
+- Phase 2: `ctx.fixture(hint)` returns `smoke-<run_id>-<hint>`; `ctx.on_cleanup(async_fn, deadline_s=10)` registers a cleanup
+  that runs after the check ends with any outcome (`PASS`/`FAIL`/`ERROR`/`TIMEOUT`, including a lost run hold), last
+  registered first, each under its own deadline (a positive number, capped at `CLEANUP_DEADLINE_S`; anything else is
+  `ValueError`). Cleanup time extends only the run **lock** (never the body budget of later checks), by at most
+  `CLEANUP_GRACE_MAX_S` past the run hold per run; a cleanup that runs out of that grace fails. A failed cleanup turns the
+  outcome into `ERROR` and keeps the original evidence plus `original_outcome` and `cleanup_error`. If building a record
+  fails, the fallback `ERROR` record still carries the check's `rpcs_invoked`, `writes_performed` and `cleanup`.
+- `janitor(ctx)` runs before the body inside the check timeout (e.g. `app.fixtures.sweep_watchlists`, which deletes the
+  smoke user's non-system watchlists named `smoke-*`); a janitor failure is `ERROR` and the body does not run.
+- Packages under `checks/` whose name starts with `_` (e.g. `checks/_reference/`) are linted but never loaded into the
+  served catalog; they are reference-only.
+- `CheckFailure(msg)` marks a `FAIL`.
+- `check_hash` is the lowercase hex sha256 (64 chars) over the UTF-8 bytes of `f"{CHECKS_API_VERSION}\n"` followed by the check function's own source text (`inspect.getsource`).
+
+### Run-file schema
+
+One immutable file **per run** (not per check): `smoke-results/<env>/<UTC>-<run_id>.json` on the orphan
+`smoke-results` branch. The service writes `schema/run-file.v2.json` (`schema_version` 2); readers (the trigger and the
+agent's copy) validate each file by its own `schema_version`, so v1 files stay valid and v1 is never edited.
+`<UTC>` is the run start time formatted `%Y%m%dT%H%M%SZ`, so lexicographic filename order equals time
+order within an environment.
+
+- Run-level fields: `schema_version` (1 or 2), `run_id`, `env` (`homelab-staging` | `do-dev`), `deployed_sha`, `started_at`, `trigger`, `triggered_by` (peer SAN), `records`.
+- `records` holds one record per check executed in the run, with `check_id, check_hash, feature, part, outcome` (`PASS|FAIL|ERROR|TIMEOUT`), `started_at`, `duration_ms`, `rpcs_invoked` (call order), `evidence` (flat scalars); v2 adds
+  `writes_performed` (the allowlisted writes sent, call order) and `cleanup` (`NONE|OK|FAILED`).
+
+A check is pending for key `(check_id, check_hash, env)` until a record with outcome `PASS` exists in any
+run file of that env; failed attempts stay in their files.
+
+### Scoped writes (phase 2)
+
+`policy.decide(..., writes=WritePolicy(enabled, env, allowlist=SCOPED_WRITES), request=...)` allows an RPC that is not
+`NO_SIDE_EFFECTS` only if it is in `SCOPED_WRITES` (portfolio `CreateWatchlist`, `UpdateWatchlist`,
+`AddWatchlistSymbols`, `RemoveWatchlistSymbols`, `DeleteWatchlist`) **and** `smoke.writes.enabled` is true **and**
+`SMOKE_ENV` is `homelab-staging` or `do-dev` **and** the request is exactly the method's input type with no unknown
+fields at any depth **and** it carries no non-empty `strategy_id` / `default_strategy_id` at any depth (map values
+included) **and** any non-empty `name` (Create/Update) starts with `smoke-`. A request of the wrong message type is
+refused for reads too. Every refusal raises `MutatingRpcRefused` before a channel opens. Writes carry the
+same header trio with no admin bit. The portfolio owner's approval of this allowlist is pending
+(`docs/runbooks/smoke-user.md`). The privileged denylist exists only as a test oracle.
+
+### SAN allowlist and exit codes
+
+- SAN allowlist: `xstockstrat-agent`, `xstockstrat-smoke-trigger`.
+- Strict mode (homelab): exit 1 on a red result or recorder failure; the watchdog exits 70.
+- Record-only mode (DO): always exit 0, logging `SMOKE_RECORD_FAILED` / `SMOKE_RUN_LOST` / `SMOKE_TRIGGER_FAILED`; the watchdog writes an `ERROR` run file and exits 0.
+- A lost run (404 or dropped connection mid-run) logs `SMOKE_RUN_LOST`, commits nothing and leaves its checks pending; strict mode exits 1 on it.
+- `SMOKE_TRIGGER_FAILED` covers every other trigger-side failure (missing `MTLS_*`, bad PEM, service unreachable, non-202 start); strict exits 1. The push credential is `SMOKE_RESULTS_PAT`, passed to git via environment only.
+
+### Constants
+
+| Name | Value | Meaning |
+|---|---|---|
+| `RUN_LOCK_HOLD_S` | `900` | Body budget of one run; the lock may outlive it by at most `CLEANUP_GRACE_MAX_S` |
+| `LOOP_STALL_S` | `30` | Event-loop stall before the watchdog acts |
+| Evidence cap | `4096` bytes | Flat scalar dict; long strings truncated, secrets redacted |
+| `DB_STATEMENT_TIMEOUT_MS` | `5000` | `SET LOCAL statement_timeout` on every check query |
+| `CLEANUP_DEADLINE_S` | `10` | Default and maximum per-cleanup deadline for `ctx.on_cleanup` |
+| `CLEANUP_GRACE_MAX_S` | `60` | Most cleanup time the run lock may hold past `RUN_LOCK_HOLD_S`; the trigger waits `RUN_LOCK_HOLD_S + CLEANUP_GRACE_MAX_S` (duplicated in `app/trigger/client.py`, drift-tested) |
+
+## Fixture ownership
+
+Fixtures created by phase-2 write checks are named with the `smoke-` prefix (`smoke-<run_id>-<hint>`), which
+is the smoke user's ownership marker (C-10c). Cleanup and the pre-check janitor touch only that prefix.
+
+## Running Tests
+
+DB tests start a throwaway PostgreSQL from local binaries and fail instead of skipping under `CI=true`.
+
+```bash
+uv sync --extra dev
+uv run pytest --cov=app --cov-fail-under=40
+python -m tools.lint_checks checks   # blocking-call / escape-hatch lint over check modules
+```

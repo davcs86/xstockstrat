@@ -3226,7 +3226,7 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x06is_etf\x18\x02 \x01(\bH\x00R\x05isEtf\x88\x01\x01B\t\n" +
 	"\a_is_etf\"O\n" +
 	"\x13GetEtfFlagsResponse\x128\n" +
-	"\x05flags\x18\x01 \x03(\v2\".xstockstrat.marketdata.v1.EtfFlagR\x05flags2\xde\x12\n" +
+	"\x05flags\x18\x01 \x03(\v2\".xstockstrat.marketdata.v1.EtfFlagR\x05flags2\xe8\x12\n" +
 	"\x11MarketDataService\x12\\\n" +
 	"\n" +
 	"StreamBars\x12,.xstockstrat.marketdata.v1.StreamBarsRequest\x1a\x1e.xstockstrat.marketdata.v1.Bar0\x01\x12b\n" +
@@ -3234,8 +3234,8 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\aGetBars\x12).xstockstrat.marketdata.v1.GetBarsRequest\x1a*.xstockstrat.marketdata.v1.GetBarsResponse\x12d\n" +
 	"\x0eGetLatestQuote\x120.xstockstrat.marketdata.v1.GetLatestQuoteRequest\x1a .xstockstrat.marketdata.v1.Quote\x12j\n" +
 	"\x0eGetLatestPrice\x120.xstockstrat.marketdata.v1.GetLatestPriceRequest\x1a&.xstockstrat.marketdata.v1.LatestPrice\x12o\n" +
-	"\fBackfillBars\x12..xstockstrat.marketdata.v1.BackfillBarsRequest\x1a/.xstockstrat.marketdata.v1.BackfillBarsResponse\x12x\n" +
-	"\x0fGetDataCoverage\x121.xstockstrat.marketdata.v1.GetDataCoverageRequest\x1a2.xstockstrat.marketdata.v1.GetDataCoverageResponse\x12\x87\x01\n" +
+	"\fBackfillBars\x12..xstockstrat.marketdata.v1.BackfillBarsRequest\x1a/.xstockstrat.marketdata.v1.BackfillBarsResponse\x12}\n" +
+	"\x0fGetDataCoverage\x121.xstockstrat.marketdata.v1.GetDataCoverageRequest\x1a2.xstockstrat.marketdata.v1.GetDataCoverageResponse\"\x03\x90\x02\x01\x12\x87\x01\n" +
 	"\x14DeleteBackfilledData\x126.xstockstrat.marketdata.v1.DeleteBackfilledDataRequest\x1a7.xstockstrat.marketdata.v1.DeleteBackfilledDataResponse\x12i\n" +
 	"\n" +
 	"ListAssets\x12,.xstockstrat.marketdata.v1.ListAssetsRequest\x1a-.xstockstrat.marketdata.v1.ListAssetsResponse\x12x\n" +
@@ -3243,8 +3243,8 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x14GetFundamentalsMulti\x126.xstockstrat.marketdata.v1.GetFundamentalsMultiRequest\x1a7.xstockstrat.marketdata.v1.GetFundamentalsMultiResponse\x12x\n" +
 	"\x0fGetLatestQuotes\x121.xstockstrat.marketdata.v1.GetLatestQuotesRequest\x1a2.xstockstrat.marketdata.v1.GetLatestQuotesResponse\x12o\n" +
 	"\fBatchGetBars\x12..xstockstrat.marketdata.v1.BatchGetBarsRequest\x1a/.xstockstrat.marketdata.v1.BatchGetBarsResponse\x12\x84\x01\n" +
-	"\x13BatchGetLatestPrice\x125.xstockstrat.marketdata.v1.BatchGetLatestPriceRequest\x1a6.xstockstrat.marketdata.v1.BatchGetLatestPriceResponse\x12\x96\x01\n" +
-	"\x19GetHistoricalFundamentals\x12;.xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest\x1a<.xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse\x12\x87\x01\n" +
+	"\x13BatchGetLatestPrice\x125.xstockstrat.marketdata.v1.BatchGetLatestPriceRequest\x1a6.xstockstrat.marketdata.v1.BatchGetLatestPriceResponse\x12\x9b\x01\n" +
+	"\x19GetHistoricalFundamentals\x12;.xstockstrat.marketdata.v1.GetHistoricalFundamentalsRequest\x1a<.xstockstrat.marketdata.v1.GetHistoricalFundamentalsResponse\"\x03\x90\x02\x01\x12\x87\x01\n" +
 	"\x14BackfillFundamentals\x126.xstockstrat.marketdata.v1.BackfillFundamentalsRequest\x1a7.xstockstrat.marketdata.v1.BackfillFundamentalsResponse\x12{\n" +
 	"\x10GetCurrentSector\x122.xstockstrat.marketdata.v1.GetCurrentSectorRequest\x1a3.xstockstrat.marketdata.v1.GetCurrentSectorResponse\x12r\n" +
 	"\rGetSectorAsOf\x12/.xstockstrat.marketdata.v1.GetSectorAsOfRequest\x1a0.xstockstrat.marketdata.v1.GetSectorAsOfResponse\x12{\n" +

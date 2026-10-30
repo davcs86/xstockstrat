@@ -13,14 +13,20 @@ service PortfolioService {
   rpc GetPosition(GetPositionRequest) returns (Position);
   rpc ListPositions(ListPositionsRequest) returns (ListPositionsResponse);
   rpc GetPnL(GetPnLRequest) returns (PnLResponse);
-  rpc GetSnapshot(GetSnapshotRequest) returns (PortfolioSnapshot);
+  rpc GetSnapshot(GetSnapshotRequest) returns (PortfolioSnapshot) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc StreamPortfolioUpdates(StreamPortfolioUpdatesRequest) returns (stream PortfolioSnapshot);
   rpc ListPortfolios (ListPortfoliosRequest) returns (ListPortfoliosResponse);
   // Watchlist management (feature 058). Additive — ownership is taken from the
   // propagated x-user-id header server-side, never from request fields.
   rpc CreateWatchlist(CreateWatchlistRequest) returns (CreateWatchlistResponse);
-  rpc GetWatchlist(GetWatchlistRequest) returns (GetWatchlistResponse);
-  rpc ListWatchlists(ListWatchlistsRequest) returns (ListWatchlistsResponse);
+  rpc GetWatchlist(GetWatchlistRequest) returns (GetWatchlistResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListWatchlists(ListWatchlistsRequest) returns (ListWatchlistsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc UpdateWatchlist(UpdateWatchlistRequest) returns (UpdateWatchlistResponse);
   rpc DeleteWatchlist(DeleteWatchlistRequest) returns (DeleteWatchlistResponse);
   rpc AddWatchlistSymbols(AddWatchlistSymbolsRequest) returns (AddWatchlistSymbolsResponse);

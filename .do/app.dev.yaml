@@ -372,6 +372,8 @@ services:
         value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
       - key: MARKETDATA_ENDPOINT
         value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
+      - key: SMOKE_ENDPOINT
+        value: ${xstockstrat-smoke.PRIVATE_DOMAIN}:9110
       - key: SERVICE_NAME
         value: agent
       - key: WAIT_FOR
@@ -595,6 +597,62 @@ services:
       - key: SERVICE_NAME
         value: config
 
+  # ── Staging smoke checks (feature 280) ─────────────────────────────────────
+  # Internal-only mTLS API; no http_port and no ingress rule. Staging-only: absent from .do/app.yaml.
+
+  - name: xstockstrat-smoke
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-smoke
+      tag: "YOUR_IMAGE_TAG"
+    internal_ports:
+      - 9110
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_DEV_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_DEV_MTLS_CERT_SMOKE
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_DEV_MTLS_KEY_SMOKE
+        type: SECRET
+      - key: SMOKE_ENV
+        value: do-dev
+      - key: CONFIG_ENDPOINT
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
+      - key: INDICATORS_ENDPOINT
+        value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
+      - key: INGEST_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
+      - key: ANALYSIS_ENDPOINT
+        value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
+      - key: LEDGER_ENDPOINT
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
+      # Direct (:25060) read-only role provisioned by the DBA (docs/runbooks/smoke-db-role.md).
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: postgresql://xstockstrat_staging_smoke_ro:YOUR_DEV_SMOKE_DB_PASSWORD@${xstockstrat.HOSTNAME}:25060/xstockstrat-staging?sslmode=require
+        type: SECRET
+      - key: SERVICE_NAME
+        value: smoke
+
   # ── Consolidated Frontend ──────────────────────────────────────────────────
 
   - name: xstockstrat-ui
@@ -685,6 +743,36 @@ jobs:
       - key: SEED_USER_ID
         scope: RUN_TIME
         value: 80880990-2b79-4d85-8761-d8d9102c2efb
+
+  # Records the post-deploy smoke run on the smoke-results branch; record-only, so it exits 0 on a
+  # red check. Jobs inherit only app-level envs, hence its own trigger-leaf and PAT envs.
+  - name: smoke-record
+    kind: POST_DEPLOY
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-smoke
+      tag: "YOUR_IMAGE_TAG"
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    run_command: python -m app.trigger --mode record-only --env do-dev --endpoint ${xstockstrat-smoke.PRIVATE_DOMAIN}:9110 --git-remote https://github.com/YOUR_GITHUB_ORG/xstockstrat.git
+    envs:
+      - key: MTLS_CA_CERT
+        scope: RUN_TIME
+        value: YOUR_DEV_MTLS_CA_CERT
+      - key: MTLS_CERT
+        scope: RUN_TIME
+        value: YOUR_DEV_SMOKE_TRIGGER_MTLS_CERT
+      - key: MTLS_KEY
+        scope: RUN_TIME
+        value: YOUR_DEV_SMOKE_TRIGGER_MTLS_KEY
+        type: SECRET
+      - key: SMOKE_RESULTS_PAT
+        scope: RUN_TIME
+        value: YOUR_DEV_SMOKE_RESULTS_PAT
+        type: SECRET
+      - key: WAIT_FOR
+        value: ${xstockstrat-smoke.PRIVATE_DOMAIN}:9110
 
 databases:
   - name: xstockstrat

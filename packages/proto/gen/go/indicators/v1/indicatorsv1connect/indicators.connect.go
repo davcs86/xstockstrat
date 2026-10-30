@@ -122,6 +122,7 @@ func NewIndicatorsServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+IndicatorsServiceComputeIndicatorProcedure,
 			connect.WithSchema(indicatorsServiceMethods.ByName("ComputeIndicator")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		executeFormula: connect.NewClient[v1.ExecuteFormulaRequest, v1.ExecuteFormulaResponse](
@@ -134,6 +135,7 @@ func NewIndicatorsServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+IndicatorsServiceListIndicatorsProcedure,
 			connect.WithSchema(indicatorsServiceMethods.ByName("ListIndicators")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		registerFormula: connect.NewClient[v1.RegisterFormulaRequest, v1.RegisterFormulaResponse](
@@ -152,6 +154,7 @@ func NewIndicatorsServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+IndicatorsServiceListFormulasProcedure,
 			connect.WithSchema(indicatorsServiceMethods.ByName("ListFormulas")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateFormula: connect.NewClient[v1.UpdateFormulaRequest, v1.UpdateFormulaResponse](
@@ -170,12 +173,14 @@ func NewIndicatorsServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+IndicatorsServiceListFundamentalMetricsProcedure,
 			connect.WithSchema(indicatorsServiceMethods.ByName("ListFundamentalMetrics")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTemplates: connect.NewClient[v1.ListTemplatesRequest, v1.ListTemplatesResponse](
 			httpClient,
 			baseURL+IndicatorsServiceListTemplatesProcedure,
 			connect.WithSchema(indicatorsServiceMethods.ByName("ListTemplates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		manageTemplate: connect.NewClient[v1.ManageTemplateRequest, v1.FormulaTemplate](
@@ -325,6 +330,7 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 		IndicatorsServiceComputeIndicatorProcedure,
 		svc.ComputeIndicator,
 		connect.WithSchema(indicatorsServiceMethods.ByName("ComputeIndicator")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	indicatorsServiceExecuteFormulaHandler := connect.NewUnaryHandler(
@@ -337,6 +343,7 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 		IndicatorsServiceListIndicatorsProcedure,
 		svc.ListIndicators,
 		connect.WithSchema(indicatorsServiceMethods.ByName("ListIndicators")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	indicatorsServiceRegisterFormulaHandler := connect.NewUnaryHandler(
@@ -355,6 +362,7 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 		IndicatorsServiceListFormulasProcedure,
 		svc.ListFormulas,
 		connect.WithSchema(indicatorsServiceMethods.ByName("ListFormulas")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	indicatorsServiceUpdateFormulaHandler := connect.NewUnaryHandler(
@@ -373,12 +381,14 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 		IndicatorsServiceListFundamentalMetricsProcedure,
 		svc.ListFundamentalMetrics,
 		connect.WithSchema(indicatorsServiceMethods.ByName("ListFundamentalMetrics")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	indicatorsServiceListTemplatesHandler := connect.NewUnaryHandler(
 		IndicatorsServiceListTemplatesProcedure,
 		svc.ListTemplates,
 		connect.WithSchema(indicatorsServiceMethods.ByName("ListTemplates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	indicatorsServiceManageTemplateHandler := connect.NewUnaryHandler(

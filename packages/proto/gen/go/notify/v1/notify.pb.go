@@ -1056,13 +1056,13 @@ const file_notify_v1_notify_proto_rawDesc = "" +
 	"\x13ALERT_SEVERITY_INFO\x10\x01\x12\x1a\n" +
 	"\x16ALERT_SEVERITY_WARNING\x10\x02\x12\x18\n" +
 	"\x14ALERT_SEVERITY_ERROR\x10\x03\x12\x1b\n" +
-	"\x17ALERT_SEVERITY_CRITICAL\x10\x042\xb1\x06\n" +
+	"\x17ALERT_SEVERITY_CRITICAL\x10\x042\xb6\x06\n" +
 	"\rNotifyService\x12^\n" +
 	"\tEmitAlert\x12'.xstockstrat.notify.v1.EmitAlertRequest\x1a(.xstockstrat.notify.v1.EmitAlertResponse\x12Z\n" +
 	"\fStreamAlerts\x12*.xstockstrat.notify.v1.StreamAlertsRequest\x1a\x1c.xstockstrat.notify.v1.Alert0\x01\x12s\n" +
-	"\x10AcknowledgeAlert\x12..xstockstrat.notify.v1.AcknowledgeAlertRequest\x1a/.xstockstrat.notify.v1.AcknowledgeAlertResponse\x12a\n" +
+	"\x10AcknowledgeAlert\x12..xstockstrat.notify.v1.AcknowledgeAlertRequest\x1a/.xstockstrat.notify.v1.AcknowledgeAlertResponse\x12f\n" +
 	"\n" +
-	"ListAlerts\x12(.xstockstrat.notify.v1.ListAlertsRequest\x1a).xstockstrat.notify.v1.ListAlertsResponse\x12j\n" +
+	"ListAlerts\x12(.xstockstrat.notify.v1.ListAlertsRequest\x1a).xstockstrat.notify.v1.ListAlertsResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\rMarkAlertRead\x12+.xstockstrat.notify.v1.MarkAlertReadRequest\x1a,.xstockstrat.notify.v1.MarkAlertReadResponse\x12\x8b\x01\n" +
 	"\x18RegisterPushSubscription\x126.xstockstrat.notify.v1.RegisterPushSubscriptionRequest\x1a7.xstockstrat.notify.v1.RegisterPushSubscriptionResponse\x12\x91\x01\n" +
 	"\x1aUnregisterPushSubscription\x128.xstockstrat.notify.v1.UnregisterPushSubscriptionRequest\x1a9.xstockstrat.notify.v1.UnregisterPushSubscriptionResponseB<Z:github.com/xstockstrat/contracts/gen/go/notify/v1;notifyv1b\x06proto3"

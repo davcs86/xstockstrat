@@ -566,6 +566,7 @@ services:
       TRADING_ENDPOINT: xstockstrat-trading:50051
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       SERVICE_NAME: agent
+      SMOKE_ENDPOINT: ${SMOKE_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: http
@@ -590,4 +591,41 @@ services:
       xstockstrat-notify:
         condition: service_healthy
       xstockstrat-analysis:
+        condition: service_healthy
+
+  # ── Smoke Service (staging checks, feature 280) ─────────────────────────
+  xstockstrat-smoke:
+    <<: *svc
+    build:
+      context: .
+      dockerfile: services/xstockstrat-smoke/Dockerfile
+      args:
+        SMOKE_GIT_SHA: ${SMOKE_GIT_SHA:-local}
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-smoke:latest-dev
+    container_name: xstockstrat-smoke
+    environment:
+      <<: *common-env
+      MTLS_CERT: ${SMOKE_MTLS_CERT:-}
+      MTLS_KEY: ${SMOKE_MTLS_KEY:-}
+      SMOKE_ENV: homelab-staging
+      DATABASE_URL: ${SMOKE_DATABASE_URL:-postgres://xstockstrat:${POSTGRES_PASSWORD:-}@timescaledb:5432/xstockstrat?sslmode=disable}
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      WAIT_FOR: "xstockstrat-config:50060"
+      SERVICE_NAME: smoke
+    ports:
+      - "9110:9110"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9110"]
+    depends_on:
+      xstockstrat-config:
         condition: service_healthy

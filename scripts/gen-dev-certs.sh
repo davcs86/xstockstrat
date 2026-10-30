@@ -8,7 +8,7 @@
 # platform CA, injected as MTLS_CERT/MTLS_KEY/MTLS_CA_CERT env (see docs/patterns/inter-service-mtls.md).
 #
 # Usage:
-#   scripts/gen-dev-certs.sh                 # CA (if absent) + all 12 service leaves
+#   scripts/gen-dev-certs.sh                 # CA (if absent) + all 13 service leaves
 #   scripts/gen-dev-certs.sh --rotate <svc>  # mint a rotated leaf (cert.rotated.pem/key.rotated.pem)
 #                                            # off the SAME CA, for the cert-rotation test (@AC-6)
 #
@@ -28,7 +28,7 @@ DAYS_LEAF=825
 SERVICES="xstockstrat-trading xstockstrat-portfolio xstockstrat-marketdata \
 xstockstrat-indicators xstockstrat-ingest xstockstrat-analysis \
 xstockstrat-ledger xstockstrat-identity xstockstrat-notify xstockstrat-config \
-xstockstrat-ui xstockstrat-agent"
+xstockstrat-ui xstockstrat-agent xstockstrat-smoke"
 
 ensure_ca() {
   mkdir -p "$CA_DIR"
@@ -84,4 +84,4 @@ for svc in $SERVICES; do
   cp "${CA_DIR}/ca.pem" "${svc_dir}/ca.pem"
 done
 
-echo "Generated dev mTLS material under ${CERTS_DIR}/ (CA + 12 service leaves)."
+echo "Generated dev mTLS material under ${CERTS_DIR}/ (CA + 13 service leaves)."

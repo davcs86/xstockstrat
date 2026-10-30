@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { AppendEventRequest, AppendEventResponse, ExportEventsRequest, ExportEventsResponse, GetEventRequest, LedgerEvent, QueryEventsRequest, QueryEventsResponse, StreamEventsRequest } from "./ledger_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * LedgerService — append-only event store.
@@ -32,6 +32,7 @@ export const LedgerService = {
       I: QueryEventsRequest,
       O: QueryEventsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.ledger.v1.LedgerService.StreamEvents
@@ -50,6 +51,7 @@ export const LedgerService = {
       I: GetEventRequest,
       O: LedgerEvent,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Export a caller's events over a time window as a server stream of batched pages,

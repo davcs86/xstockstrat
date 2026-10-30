@@ -31,7 +31,7 @@ export MTLS_CA_CERT
 for pair in \
   "config:CONFIG" "ledger:LEDGER" "identity:IDENTITY" "notify:NOTIFY" \
   "marketdata:MARKETDATA" "indicators:INDICATORS" "ingest:INGEST" "analysis:ANALYSIS" \
-  "portfolio:PORTFOLIO" "trading:TRADING" "ui:UI" "agent:AGENT"; do
+  "portfolio:PORTFOLIO" "trading:TRADING" "ui:UI" "agent:AGENT" "smoke:SMOKE"; do
   svc="${pair%%:*}"
   pfx="${pair##*:}"
   svc_dir="${CERTS_DIR}/xstockstrat-${svc}"
@@ -43,4 +43,4 @@ for pair in \
   export "${pfx}_MTLS_KEY=$(cat "${svc_dir}/key.pem")"
 done
 
-echo "mtls-dev-env: exported MTLS_CA_CERT + 12 per-service MTLS_CERT/MTLS_KEY from ${CERTS_DIR}/"
+echo "mtls-dev-env: exported MTLS_CA_CERT + 13 per-service MTLS_CERT/MTLS_KEY from ${CERTS_DIR}/"

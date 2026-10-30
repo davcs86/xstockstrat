@@ -82,6 +82,7 @@ func NewLedgerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+LedgerServiceQueryEventsProcedure,
 			connect.WithSchema(ledgerServiceMethods.ByName("QueryEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		streamEvents: connect.NewClient[v1.StreamEventsRequest, v1.LedgerEvent](
@@ -94,6 +95,7 @@ func NewLedgerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+LedgerServiceGetEventProcedure,
 			connect.WithSchema(ledgerServiceMethods.ByName("GetEvent")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		exportEvents: connect.NewClient[v1.ExportEventsRequest, v1.ExportEventsResponse](
@@ -168,6 +170,7 @@ func NewLedgerServiceHandler(svc LedgerServiceHandler, opts ...connect.HandlerOp
 		LedgerServiceQueryEventsProcedure,
 		svc.QueryEvents,
 		connect.WithSchema(ledgerServiceMethods.ByName("QueryEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ledgerServiceStreamEventsHandler := connect.NewServerStreamHandler(
@@ -180,6 +183,7 @@ func NewLedgerServiceHandler(svc LedgerServiceHandler, opts ...connect.HandlerOp
 		LedgerServiceGetEventProcedure,
 		svc.GetEvent,
 		connect.WithSchema(ledgerServiceMethods.ByName("GetEvent")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ledgerServiceExportEventsHandler := connect.NewServerStreamHandler(

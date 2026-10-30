@@ -185,24 +185,28 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AnalysisServiceListStrategiesProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("ListStrategies")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getStrategyReport: connect.NewClient[v1.GetStrategyReportRequest, v1.StrategyReport](
 			httpClient,
 			baseURL+AnalysisServiceGetStrategyReportProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("GetStrategyReport")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listBacktests: connect.NewClient[v1.ListBacktestsRequest, v1.ListBacktestsResponse](
 			httpClient,
 			baseURL+AnalysisServiceListBacktestsProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("ListBacktests")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getBacktest: connect.NewClient[v1.GetBacktestRequest, v1.BacktestResult](
 			httpClient,
 			baseURL+AnalysisServiceGetBacktestProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("GetBacktest")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		manageStrategy: connect.NewClient[v1.ManageStrategyRequest, v1.StrategyDefinition](
@@ -233,6 +237,7 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AnalysisServiceScreenSymbolsProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		runFundamentalsScan: connect.NewClient[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary](
@@ -263,6 +268,7 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AnalysisServiceGetStrategyAnalyticsProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("GetStrategyAnalytics")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getIndicatorSeries: connect.NewClient[v1.GetIndicatorSeriesRequest, v1.GetIndicatorSeriesResponse](
@@ -275,12 +281,14 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AnalysisServiceQueryPnLPatternsProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("QueryPnLPatterns")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getAttribution: connect.NewClient[v1.GetAttributionRequest, v1.GetAttributionResponse](
 			httpClient,
 			baseURL+AnalysisServiceGetAttributionProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("GetAttribution")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWatchlistReadiness: connect.NewClient[v1.GetWatchlistReadinessRequest, v1.GetWatchlistReadinessResponse](
@@ -293,6 +301,7 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AnalysisServiceListTemplatesProcedure,
 			connect.WithSchema(analysisServiceMethods.ByName("ListTemplates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		manageTemplate: connect.NewClient[v1.ManageTemplateRequest, v1.StrategyTemplate](
@@ -530,24 +539,28 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		AnalysisServiceListStrategiesProcedure,
 		svc.ListStrategies,
 		connect.WithSchema(analysisServiceMethods.ByName("ListStrategies")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceGetStrategyReportHandler := connect.NewUnaryHandler(
 		AnalysisServiceGetStrategyReportProcedure,
 		svc.GetStrategyReport,
 		connect.WithSchema(analysisServiceMethods.ByName("GetStrategyReport")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceListBacktestsHandler := connect.NewUnaryHandler(
 		AnalysisServiceListBacktestsProcedure,
 		svc.ListBacktests,
 		connect.WithSchema(analysisServiceMethods.ByName("ListBacktests")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceGetBacktestHandler := connect.NewUnaryHandler(
 		AnalysisServiceGetBacktestProcedure,
 		svc.GetBacktest,
 		connect.WithSchema(analysisServiceMethods.ByName("GetBacktest")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceManageStrategyHandler := connect.NewUnaryHandler(
@@ -578,6 +591,7 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		AnalysisServiceScreenSymbolsProcedure,
 		svc.ScreenSymbols,
 		connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceRunFundamentalsScanHandler := connect.NewUnaryHandler(
@@ -608,6 +622,7 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		AnalysisServiceGetStrategyAnalyticsProcedure,
 		svc.GetStrategyAnalytics,
 		connect.WithSchema(analysisServiceMethods.ByName("GetStrategyAnalytics")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceGetIndicatorSeriesHandler := connect.NewUnaryHandler(
@@ -620,12 +635,14 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		AnalysisServiceQueryPnLPatternsProcedure,
 		svc.QueryPnLPatterns,
 		connect.WithSchema(analysisServiceMethods.ByName("QueryPnLPatterns")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceGetAttributionHandler := connect.NewUnaryHandler(
 		AnalysisServiceGetAttributionProcedure,
 		svc.GetAttribution,
 		connect.WithSchema(analysisServiceMethods.ByName("GetAttribution")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceGetWatchlistReadinessHandler := connect.NewUnaryHandler(
@@ -638,6 +655,7 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		AnalysisServiceListTemplatesProcedure,
 		svc.ListTemplates,
 		connect.WithSchema(analysisServiceMethods.ByName("ListTemplates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	analysisServiceManageTemplateHandler := connect.NewUnaryHandler(

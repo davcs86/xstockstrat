@@ -52,6 +52,8 @@ jobs:
             dockerfile: services/xstockstrat-notify/Dockerfile
           - service: xstockstrat-ui
             dockerfile: services/xstockstrat-ui/Dockerfile
+          - service: xstockstrat-smoke
+            dockerfile: services/xstockstrat-smoke/Dockerfile
           - service: xstockstrat-db-migrator
             dockerfile: scripts/Dockerfile.migrate
     steps:
@@ -88,3 +90,5 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           platforms: linux/amd64
+          build-args: |
+            SMOKE_GIT_SHA=${{ github.sha }}

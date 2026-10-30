@@ -56,6 +56,7 @@ jobs:
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
             xstockstrat-analysis:   ['services/xstockstrat-analysis/**']
             xstockstrat-agent:      ['services/xstockstrat-agent/**']
+            xstockstrat-smoke:      ['services/xstockstrat-smoke/**']
             xstockstrat-config:     ['services/xstockstrat-config/**']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
@@ -305,6 +306,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-agent') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-smoke') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -316,6 +318,7 @@ jobs:
           - xstockstrat-ingest
           - xstockstrat-analysis
           - xstockstrat-agent
+          - xstockstrat-smoke
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -344,6 +347,10 @@ jobs:
       - name: uv.lock is in sync with pyproject.toml
         run: uv lock --check
 
+      - name: check modules pass the blocking-call lint (smoke)
+        if: matrix.service == 'xstockstrat-smoke'
+        run: uv run --frozen --no-dev python -m tools.lint_checks checks
+
   python-test:
     name: Python test and coverage (${{ matrix.service }})
     needs: changes
@@ -352,6 +359,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-agent') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-smoke') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -369,6 +377,9 @@ jobs:
             coverage_threshold: 40
             cov_source: app
           - service: xstockstrat-agent
+            coverage_threshold: 40
+            cov_source: app
+          - service: xstockstrat-smoke
             coverage_threshold: 40
             cov_source: app
     defaults:
@@ -400,10 +411,10 @@ jobs:
         if: matrix.service == 'xstockstrat-indicators'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libseccomp2
 
-      # The analysis real_pg tests start a throwaway PostgreSQL from local binaries (tests/conftest.py
-      # local_pg) and fail rather than skip under CI, so the binaries must be present.
-      - name: install postgresql (analysis real_pg tests)
-        if: matrix.service == 'xstockstrat-analysis'
+      # The analysis and smoke DB tests start a throwaway PostgreSQL from local binaries
+      # (tests/conftest.py local_pg) and fail rather than skip under CI, so they must be present.
+      - name: install postgresql (analysis and smoke local_pg tests)
+        if: matrix.service == 'xstockstrat-analysis' || matrix.service == 'xstockstrat-smoke'
         run: ls /usr/lib/postgresql/*/bin/initdb || (sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql)
 
       - name: pytest with coverage

@@ -10,8 +10,12 @@ import "common/v1/common.proto";
 service TradingService {
   rpc PlaceOrder(PlaceOrderRequest) returns (Order);
   rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
-  rpc GetOrder(GetOrderRequest) returns (Order);
-  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc GetOrder(GetOrderRequest) returns (Order) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc StreamOrderUpdates(StreamOrderUpdatesRequest) returns (stream Order);
   // ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
   // this surface and routes by the persisted order's broker_type
@@ -24,14 +28,18 @@ service TradingService {
   // It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
   rpc ConfirmOrder(ConfirmOrderRequest) returns (Order);
   rpc RegisterBrokerAccount (RegisterBrokerAccountRequest) returns (RegisterBrokerAccountResponse);
-  rpc ListBrokerAccounts (ListBrokerAccountsRequest) returns (ListBrokerAccountsResponse);
+  rpc ListBrokerAccounts (ListBrokerAccountsRequest) returns (ListBrokerAccountsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc DeregisterBrokerAccount (DeregisterBrokerAccountRequest) returns (DeregisterBrokerAccountResponse);
   // UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
   // account, re-validates them against the broker, and refreshes credential_status.
   rpc UpdateBrokerAccountCredentials (UpdateBrokerAccountCredentialsRequest) returns (UpdateBrokerAccountCredentialsResponse);
   // GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
   // switch between paper and live — the environment owns this decision.
-  rpc GetTradingEnvironment (GetTradingEnvironmentRequest) returns (GetTradingEnvironmentResponse);
+  rpc GetTradingEnvironment (GetTradingEnvironmentRequest) returns (GetTradingEnvironmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // SnapshotOfflinePositions records brokerage-statement period-end holdings as an
   // effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
   // with FailedPrecondition for broker (Alpaca/IBKR) accounts.

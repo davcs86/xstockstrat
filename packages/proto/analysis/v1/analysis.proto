@@ -12,20 +12,30 @@ import "common/v1/common.proto";
 service AnalysisService {
   rpc RunBacktest(RunBacktestRequest) returns (BacktestResult);
   rpc ScoreStrategy(ScoreStrategyRequest) returns (StrategyScore);
-  rpc ListStrategies(ListStrategiesRequest) returns (ListStrategiesResponse);
-  rpc GetStrategyReport(GetStrategyReportRequest) returns (StrategyReport);
+  rpc ListStrategies(ListStrategiesRequest) returns (ListStrategiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetStrategyReport(GetStrategyReportRequest) returns (StrategyReport) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // List past backtest runs (summary metrics + earned score) for a strategy, newest first.
-  rpc ListBacktests(ListBacktestsRequest) returns (ListBacktestsResponse);
+  rpc ListBacktests(ListBacktestsRequest) returns (ListBacktestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
   // (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
   // INSUFFICIENT_DATA runs).
-  rpc GetBacktest(GetBacktestRequest) returns (BacktestResult);
+  rpc GetBacktest(GetBacktestRequest) returns (BacktestResult) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc ManageStrategy(ManageStrategyRequest) returns (StrategyDefinition);
   rpc GetStrategy(GetStrategyRequest) returns (StrategyDefinition);
   rpc ListStrategyDefinitions(ListStrategyDefinitionsRequest) returns (ListStrategyDefinitionsResponse);
   rpc SetStrategyLive(SetStrategyLiveRequest) returns (SetStrategyLiveResponse);
   // Screen a symbol universe against weighted criteria (feature 060)
-  rpc ScreenSymbols(ScreenSymbolsRequest) returns (ScreenSymbolsResponse);
+  rpc ScreenSymbols(ScreenSymbolsRequest) returns (ScreenSymbolsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
   rpc RunFundamentalsScan(RunFundamentalsScanRequest) returns (FundamentalsScanSummary);
   // ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
@@ -38,7 +48,9 @@ service AnalysisService {
   // Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097).
   rpc SetOpportunityAction(SetOpportunityActionRequest) returns (SetOpportunityActionResponse);
   // Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
-  rpc GetStrategyAnalytics(GetStrategyAnalyticsRequest) returns (StrategyAnalytics);
+  rpc GetStrategyAnalytics(GetStrategyAnalyticsRequest) returns (StrategyAnalytics) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Per-component historical indicator series for a strategy over a caller-supplied bar window,
   // for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
   // evaluator's own _compute_component per declared component in a dedicated handler loop — never
@@ -46,17 +58,23 @@ service AnalysisService {
   rpc GetIndicatorSeries(GetIndicatorSeriesRequest) returns (GetIndicatorSeriesResponse);
   // Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
   // correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
-  rpc QueryPnLPatterns(QueryPnLPatternsRequest) returns (QueryPnLPatternsResponse);
+  rpc QueryPnLPatterns(QueryPnLPatternsRequest) returns (QueryPnLPatternsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Per-source trading-performance attribution over closed positions (feature 029). Read-only;
   // aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
-  rpc GetAttribution(GetAttributionRequest) returns (GetAttributionResponse);
+  rpc GetAttribution(GetAttributionRequest) returns (GetAttributionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
   // pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
   // PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
   rpc GetWatchlistReadiness(GetWatchlistReadinessRequest) returns (GetWatchlistReadinessResponse);
 
   // Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
-  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc ManageTemplate(ManageTemplateRequest) returns (StrategyTemplate);
   // Deep-copies a strategy template (and its formula templates) into private copies owned by the
   // x-user-id caller, atomically (FR-9).

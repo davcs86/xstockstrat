@@ -12,14 +12,14 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `buf-push-dev` | Publishes to BSR as draft on push to `main-dev` | — |
 | `go-lint` (×3) | `golangci-lint` per Go service | — |
 | `go-test` (×3) | `go test -race` + coverage (excludes cmd/handler/repository/telemetry/service packages) | 40% |
-| `python-lint` (×4) | `ruff check` + `ruff format --check` + `uv lock --check` (lock/pyproject sync, added 2026-07-27) | — |
-| `python-test` (×4) | `pytest --cov` | 40% (indicators: 50%) |
+| `python-lint` (×5, incl. `xstockstrat-smoke`) | `ruff check` + `ruff format --check` + `uv lock --check` (lock/pyproject sync, added 2026-07-27) | — |
+| `python-test` (×5, incl. `xstockstrat-smoke`: wiring tests parse `.do/app*.yaml`, workflows and the cert scripts) | `pytest --cov` | 40% (indicators: 50%) |
 | `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
 | `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% declared, not enforced (no `--check-coverage`; follow-up defect) |
 | `ledger-db-test` | Applies all migrations to TimescaleDB, runs ledger `pnpm run test:db` (trigger-stub resolve, replay recovery, resolve bound) | — |
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
-| `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
+| `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` (staging: merged with `compose.smoke.yml`) with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
 | `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
 
 ## Branch Protection — CI Gate
@@ -53,6 +53,11 @@ Some guard rails run **locally** (git hooks / Claude subagent), deliberately **n
 | `main` | push | Homelab **production** VM (`deploy-homelab.yml`, GitHub environment `production`, required reviewers, deployment branches `main` only) |
 
 DO deployment waits up to 15 minutes for the App Platform phase to reach `ACTIVE`.
+
+Smoke checks (feature 280) are staging-only: `docker-build.yml` builds `xstockstrat-smoke` with `SMOKE_GIT_SHA=${{ github.sha }}`
+(the Dockerfile fails without it); `deploy.yml` mints the trigger leaf (`scripts/mint-smoke-trigger-leaf.sh`) only when the spec
+carries its placeholders, and `deploy-dev.yml` alone passes `SMOKE_RESULTS_PAT` and `SMOKE_DB_PASSWORD` (`DEV_` secrets). The DO
+`POST_DEPLOY` job `smoke-record` runs in record-only mode. Operation → `docs/runbooks/smoke-checks.md`.
 
 The homelab jobs run beside the DO deploy from the same `docker-build.yml` images: staging while the repository variable
 `HOMELAB_STAGING_ENABLED` is `true`, production while `HOMELAB_PRODUCTION_ENABLED` is `true` (each switch also builds

@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetAttributionRequest, GetAttributionResponse, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, GetWatchlistReadinessRequest, GetWatchlistReadinessResponse, InstantiateTemplateRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ListTemplatesRequest, ListTemplatesResponse, ManageStrategyRequest, ManageTemplateRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore, StrategyTemplate } from "./analysis_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
@@ -38,6 +38,7 @@ export const AnalysisService = {
       I: ListStrategiesRequest,
       O: ListStrategiesResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetStrategyReport
@@ -47,6 +48,7 @@ export const AnalysisService = {
       I: GetStrategyReportRequest,
       O: StrategyReport,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * List past backtest runs (summary metrics + earned score) for a strategy, newest first.
@@ -58,6 +60,7 @@ export const AnalysisService = {
       I: ListBacktestsRequest,
       O: ListBacktestsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
@@ -71,6 +74,7 @@ export const AnalysisService = {
       I: GetBacktestRequest,
       O: BacktestResult,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageStrategy
@@ -118,6 +122,7 @@ export const AnalysisService = {
       I: ScreenSymbolsRequest,
       O: ScreenSymbolsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
@@ -176,6 +181,7 @@ export const AnalysisService = {
       I: GetStrategyAnalyticsRequest,
       O: StrategyAnalytics,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Per-component historical indicator series for a strategy over a caller-supplied bar window,
@@ -202,6 +208,7 @@ export const AnalysisService = {
       I: QueryPnLPatternsRequest,
       O: QueryPnLPatternsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
@@ -214,6 +221,7 @@ export const AnalysisService = {
       I: GetAttributionRequest,
       O: GetAttributionResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
@@ -238,6 +246,7 @@ export const AnalysisService = {
       I: ListTemplatesRequest,
       O: ListTemplatesResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageTemplate

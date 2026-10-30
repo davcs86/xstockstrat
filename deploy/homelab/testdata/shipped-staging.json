@@ -1,0 +1,739 @@
+{
+  "services": {
+    "db-migrator": {
+      "environment": {
+        "DATABASE_URL": "postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require",
+        "SEED_USER_ID": "${SEED_USER_ID:?SEED_USER_ID is required}"
+      },
+      "image": "${IMAGE_DB_MIGRATOR:?IMAGE_DB_MIGRATOR is required}",
+      "networks": {
+        "default": null
+      },
+      "restart": "no"
+    },
+    "xstockstrat-agent": {
+      "depends_on": {
+        "xstockstrat-analysis": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": [
+        "AGENT_PUBLIC_URL=${APP_URL}/agent",
+        "ANALYSIS_ENDPOINT=xstockstrat-analysis:50056",
+        "APPLICATION_ENV=${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT=xstockstrat-config:50060",
+        "IDENTITY_ENDPOINT=xstockstrat-identity:50058",
+        "INDICATORS_ENDPOINT=xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT=xstockstrat-ingest:50055",
+        "JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}",
+        "MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053",
+        "MCP_HTTP_PORT=9000",
+        "MCP_TRANSPORT=http",
+        "MTLS_CA_CERT=${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT=${AGENT_MTLS_CERT:?AGENT_MTLS_CERT is required}",
+        "MTLS_KEY=${AGENT_MTLS_KEY:?AGENT_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT=xstockstrat-notify:50059",
+        "OTEL_ENABLED=false",
+        "PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052",
+        "SERVICE_NAME=agent",
+        "TRADING_ENDPOINT=xstockstrat-trading:50051",
+        "TRADING_MODE=${TRADING_MODE:?TRADING_MODE is required}",
+        "UI_BASE_URL=${APP_URL}",
+        "WAIT_FOR=xstockstrat-config:50060 xstockstrat-identity:50058",
+        "SMOKE_ENDPOINT=xstockstrat-smoke:9110"
+      ],
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/9000"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_AGENT:?IMAGE_AGENT is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "protocol": "tcp",
+          "published": "9000",
+          "target": 9000
+        }
+      ],
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-analysis": {
+      "depends_on": {
+        "xstockstrat-ingest": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-trading": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50056",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${ANALYSIS_MTLS_CERT:?ANALYSIS_MTLS_CERT is required}",
+        "MTLS_KEY": "${ANALYSIS_MTLS_KEY:?ANALYSIS_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "analysis",
+        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054 xstockstrat-trading:50051"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/50056"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_ANALYSIS:?IMAGE_ANALYSIS is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-config": {
+      "depends_on": {
+        "db-migrator": {
+          "condition": "service_completed_successfully",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_SECRETS_ENCRYPTION_KEY": "${CONFIG_SECRETS_ENCRYPTION_KEY:?CONFIG_SECRETS_ENCRYPTION_KEY is required}",
+        "DATABASE_URL": "postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require",
+        "DB_POOL_MAX": "2",
+        "GRPC_PORT": "50060",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${CONFIG_MTLS_CERT:?CONFIG_MTLS_CERT is required}",
+        "MTLS_KEY": "${CONFIG_MTLS_KEY:?CONFIG_MTLS_KEY is required}",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "config",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50060"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_CONFIG:?IMAGE_CONFIG is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-identity": {
+      "depends_on": {
+        "xstockstrat-ledger": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require",
+        "DB_POOL_MAX": "2",
+        "GRPC_PORT": "50058",
+        "JWT_SECRET": "${JWT_SECRET:?JWT_SECRET is required}",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${IDENTITY_MTLS_CERT:?IDENTITY_MTLS_CERT is required}",
+        "MTLS_KEY": "${IDENTITY_MTLS_KEY:?IDENTITY_MTLS_KEY is required}",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "identity",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50058"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_IDENTITY:?IMAGE_IDENTITY is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-indicators": {
+      "depends_on": {
+        "xstockstrat-ledger": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50054",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${INDICATORS_MTLS_CERT:?INDICATORS_MTLS_CERT is required}",
+        "MTLS_KEY": "${INDICATORS_MTLS_KEY:?INDICATORS_MTLS_KEY is required}",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "indicators",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/50054"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_INDICATORS:?IMAGE_INDICATORS is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-ingest": {
+      "depends_on": {
+        "xstockstrat-identity": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-marketdata": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50055",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${INGEST_MTLS_CERT:?INGEST_MTLS_CERT is required}",
+        "MTLS_KEY": "${INGEST_MTLS_KEY:?INGEST_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "ingest",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/50055"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_INGEST:?IMAGE_INGEST is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-ledger": {
+      "depends_on": {
+        "xstockstrat-config": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "GRPC_PORT": "50057",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${LEDGER_MTLS_CERT:?LEDGER_MTLS_CERT is required}",
+        "MTLS_KEY": "${LEDGER_MTLS_KEY:?LEDGER_MTLS_KEY is required}",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "ledger",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "WAIT_FOR": "xstockstrat-config:50060"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50057"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_LEDGER:?IMAGE_LEDGER is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-marketdata": {
+      "depends_on": {
+        "xstockstrat-notify": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50053",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${MARKETDATA_MTLS_CERT:?MARKETDATA_MTLS_CERT is required}",
+        "MTLS_KEY": "${MARKETDATA_MTLS_KEY:?MARKETDATA_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "marketdata",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "/app/service",
+          "healthcheck"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_MARKETDATA:?IMAGE_MARKETDATA is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-notify": {
+      "depends_on": {
+        "xstockstrat-ledger": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "GRPC_PORT": "50059",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${NOTIFY_MTLS_CERT:?NOTIFY_MTLS_CERT is required}",
+        "MTLS_KEY": "${NOTIFY_MTLS_KEY:?NOTIFY_MTLS_KEY is required}",
+        "OTEL_ENABLED": "false",
+        "SENDGRID_API_KEY": "${SENDGRID_API_KEY:-}",
+        "SERVICE_NAME": "notify",
+        "SLACK_WEBHOOK_URL": "${SLACK_WEBHOOK_URL:-}",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "VAPID_PRIVATE_KEY": "${VAPID_PRIVATE_KEY:-}",
+        "VAPID_PUBLIC_KEY": "${VAPID_PUBLIC_KEY:-}",
+        "VAPID_SUBJECT": "${VAPID_SUBJECT:-}",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50059"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_NOTIFY:?IMAGE_NOTIFY is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-portfolio": {
+      "depends_on": {
+        "xstockstrat-notify": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50052",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${PORTFOLIO_MTLS_CERT:?PORTFOLIO_MTLS_CERT is required}",
+        "MTLS_KEY": "${PORTFOLIO_MTLS_KEY:?PORTFOLIO_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "portfolio",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "/app/service",
+          "healthcheck"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_PORTFOLIO:?IMAGE_PORTFOLIO is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-smoke": {
+      "depends_on": {
+        "xstockstrat-analysis": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-config": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "ANALYSIS_ENDPOINT": "xstockstrat-analysis:50056",
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging_smoke_ro:${SMOKE_DB_PASSWORD:?SMOKE_DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "IDENTITY_ENDPOINT": "xstockstrat-identity:50058",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${SMOKE_MTLS_CERT:?SMOKE_MTLS_CERT is required}",
+        "MTLS_KEY": "${SMOKE_MTLS_KEY:?SMOKE_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "smoke",
+        "SMOKE_ENV": "homelab-staging",
+        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "WAIT_FOR": "xstockstrat-config:50060"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/9110"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_SMOKE:?IMAGE_SMOKE is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        "${SMOKE_BIND_ADDR:?SMOKE_BIND_ADDR is required}:9110:9110"
+      ],
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-trading": {
+      "depends_on": {
+        "xstockstrat-indicators": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-marketdata": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-portfolio": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "BROKER_ACCOUNTS_ENCRYPTION_KEY": "${BROKER_ACCOUNTS_ENCRYPTION_KEY:?BROKER_ACCOUNTS_ENCRYPTION_KEY is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50051",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${TRADING_MTLS_CERT:?TRADING_MTLS_CERT is required}",
+        "MTLS_KEY": "${TRADING_MTLS_KEY:?TRADING_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "trading",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "/app/service",
+          "healthcheck"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_TRADING:?IMAGE_TRADING is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "unless-stopped"
+    },
+    "xstockstrat-ui": {
+      "depends_on": {
+        "xstockstrat-analysis": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "environment": {
+        "AGENT_PUBLIC_URL": "${APP_URL}/agent",
+        "ANALYSIS_ENDPOINT": "xstockstrat-analysis:50056",
+        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "APP_URL": "${APP_URL:?APP_URL is required}",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "HOSTNAME": "0.0.0.0",
+        "IDENTITY_ENDPOINT": "xstockstrat-identity:50058",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
+        "JWT_SECRET": "${JWT_SECRET:?JWT_SECRET is required}",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT": "${UI_MTLS_CERT:?UI_MTLS_CERT is required}",
+        "MTLS_KEY": "${UI_MTLS_KEY:?UI_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "xstockstrat-ui",
+        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
+        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
+        "VAPID_PUBLIC_KEY": "${VAPID_PUBLIC_KEY:-}"
+      },
+      "healthcheck": {
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "120s",
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "3000"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${IMAGE_UI:?IMAGE_UI is required}",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "protocol": "tcp",
+          "published": "3000",
+          "target": 3000
+        }
+      ],
+      "restart": "unless-stopped"
+    }
+  },
+  "x-common-env": {
+    "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
+    "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+    "OTEL_ENABLED": "false",
+    "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}"
+  },
+  "x-db-direct": {
+    "DATABASE_URL": "postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require"
+  },
+  "x-db-pooled": {
+    "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require",
+    "DB_PGBOUNCER": "true"
+  },
+  "x-hc": {
+    "interval": "5s",
+    "retries": 6,
+    "start_period": "120s",
+    "timeout": "5s"
+  },
+  "x-svc": {
+    "logging": {
+      "driver": "local",
+      "options": {
+        "max-file": "3",
+        "max-size": "10m"
+      }
+    },
+    "restart": "unless-stopped"
+  }
+}

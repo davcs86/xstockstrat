@@ -29,9 +29,9 @@ interpolates.
 ### 0.1 Deploy-secret provisioning (CI/CD) — one CA per environment, leaves minted in-workflow
 
 `.do/app.dev.yaml` / `.do/app.yaml` carry **placeholders** (`YOUR_{DEV,PROD}_MTLS_CA_CERT`,
-`…_MTLS_CERT_<SVC>`, `…_MTLS_KEY_<SVC>`) for all 12 components. The deploy stores **only the CA**
+`…_MTLS_CERT_<SVC>`, `…_MTLS_KEY_<SVC>`) for all 12 production components (13 in dev: + the staging-only `xstockstrat-smoke`). The deploy stores **only the CA**
 (cert + key) as **one GitHub secret per environment** — a `base64(JSON {ca_cert, ca_key})` — and
-`.github/workflows/deploy.yml` mints the 12 per-service leaves off it **on every deploy**:
+`.github/workflows/deploy.yml` mints the 13 per-service leaves off it **on every deploy**:
 
 | Secret | Used by | Produced by |
 |---|---|---|
@@ -61,7 +61,7 @@ fills the CA + every per-service `MTLS_*` placeholder from the freshly-minted le
 - **Trade-off (accepted):** the **CA signing key lives in CI** (the secret + the runner's temp dir
   during the mint step). This is the operator's chosen convenience/security balance — same secret
   class as `JWT_SECRET` / DB creds already in CI — in exchange for zero per-deploy manual steps and
-  automatic leaf rotation. The alternative (store the 12 leaves, keep the CA key off CI) is a larger,
+  automatic leaf rotation. The alternative (store the 13 leaves, keep the CA key off CI) is a larger,
   per-rotation manual secret; keep that in mind if the threat model tightens.
 - Dev and prod use **separate CAs** (`./certs` vs `./certs-prod`, both git-ignored). The dev CA also
   backs local docker-compose (via `mtls-dev-env.sh`), so local and the dev deploy share one trust root.

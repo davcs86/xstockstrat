@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistBindingRequest, UpdateWatchlistBindingResponse, UpdateWatchlistBindingsRequest, UpdateWatchlistBindingsResponse, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * @generated from service xstockstrat.portfolio.v1.PortfolioService
@@ -56,6 +56,7 @@ export const PortfolioService = {
       I: GetSnapshotRequest,
       O: PortfolioSnapshot,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates
@@ -95,6 +96,7 @@ export const PortfolioService = {
       I: GetWatchlistRequest,
       O: GetWatchlistResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.ListWatchlists
@@ -104,6 +106,7 @@ export const PortfolioService = {
       I: ListWatchlistsRequest,
       O: ListWatchlistsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist

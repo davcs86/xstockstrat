@@ -85,6 +85,7 @@ func NewConfigServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ConfigServiceGetConfigProcedure,
 			connect.WithSchema(configServiceMethods.ByName("GetConfig")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setConfig: connect.NewClient[v1.SetConfigRequest, v1.SetConfigResponse](
@@ -97,6 +98,7 @@ func NewConfigServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ConfigServiceListKeysProcedure,
 			connect.WithSchema(configServiceMethods.ByName("ListKeys")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getSecret: connect.NewClient[v1.GetSecretRequest, v1.GetSecretResponse](
@@ -177,6 +179,7 @@ func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOp
 		ConfigServiceGetConfigProcedure,
 		svc.GetConfig,
 		connect.WithSchema(configServiceMethods.ByName("GetConfig")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	configServiceSetConfigHandler := connect.NewUnaryHandler(
@@ -189,6 +192,7 @@ func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOp
 		ConfigServiceListKeysProcedure,
 		svc.ListKeys,
 		connect.WithSchema(configServiceMethods.ByName("ListKeys")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	configServiceGetSecretHandler := connect.NewUnaryHandler(

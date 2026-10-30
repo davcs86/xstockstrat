@@ -142,7 +142,7 @@ After .next/standalone: ~80MB (90% reduction)
 
 ## Python Pattern
 
-**Services:** xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
+**Services:** xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent, xstockstrat-smoke
 
 **Characteristics:**
 - Single-stage Dockerfile (no builder needed — Python doesn't require separate build phase)
@@ -172,6 +172,10 @@ EXPOSE 50XXX
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["python", "-m", "app.main"]
 ```
+
+**`xstockstrat-smoke` variant:** adds `ARG SMOKE_GIT_SHA` + `RUN test -n "$SMOKE_GIT_SHA"` + `ENV SMOKE_GIT_SHA=$SMOKE_GIT_SHA`
+(an image built without the SHA fails), `git` for the record-only `POST_DEPLOY` job, and `EXPOSE 9110`. `docker-build.yml`
+passes `build-args: SMOKE_GIT_SHA=${{ github.sha }}`; local compose passes `${SMOKE_GIT_SHA:-local}`.
 
 ### Key Points
 
@@ -563,6 +567,7 @@ x-hc-defaults: &hc-defaults
 | `xstockstrat-ingest` | ✅ (Python, port 50055) | config, ledger, identity |
 | `xstockstrat-analysis` | ✅ (Python, port 50056) | config, ledger, indicators |
 | `xstockstrat-agent` | ✅ (Python, port 9000) | config, identity, ingest, notify, analysis |
+| `xstockstrat-smoke` | ✅ (Python, port 9110, staging-only) | config |
 | `xstockstrat-marketdata` | ❌ locally (✅ `/app/service healthcheck` in `deploy/homelab/compose.yml`) | config, ledger, notify via `service_healthy` |
 | `xstockstrat-portfolio` | ❌ locally (✅ `/app/service healthcheck` in `deploy/homelab/compose.yml`) | config, ledger via `service_healthy` |
 | `xstockstrat-trading` | ❌ locally (✅ `/app/service healthcheck` in `deploy/homelab/compose.yml`) | config, ledger, notify, indicators via `service_healthy` |

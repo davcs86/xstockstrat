@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { ConfigSnapshot, GetConfigRequest, GetSecretRequest, GetSecretResponse, ListKeysRequest, ListKeysResponse, SetConfigRequest, SetConfigResponse, WatchConfigRequest } from "./config_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.
@@ -41,6 +41,7 @@ export const ConfigService = {
       I: GetConfigRequest,
       O: ConfigSnapshot,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Admin: set or update a config value
@@ -63,6 +64,7 @@ export const ConfigService = {
       I: ListKeysRequest,
       O: ListKeysResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers

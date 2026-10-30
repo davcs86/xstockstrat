@@ -28,11 +28,15 @@ CERTS_DIR="$work/ca" CA_CN=xstockstrat-homelab-test-ca bash "$REPO_ROOT/scripts/
 ca_b64="$(python3 -I -c 'import base64,json,sys; d=sys.argv[1]; print(base64.b64encode(json.dumps({"ca_cert":open(d+"/_ca/ca.pem").read(),"ca_key":open(d+"/_ca/ca-key.pem").read()}).encode()).decode())' "$work/ca")"
 
 host=db.ts.natanddavehouse.com
-grep -oE '[$][{]IMAGE_[A-Z_]+' "$REPO_ROOT/deploy/homelab/compose.yml" | cut -c3- | sort -u | while read -r var; do
+images_of() { grep -ohE '[$][{]IMAGE_[A-Z_]+' "$@" | cut -c3- | sort -u | while read -r var; do
   svc="$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')"
   printf '%s=ghcr.io/davcs86/xstockstrat/xstockstrat-%s@sha256:%s\n' "$var" "$svc" "$hex"
-done >"$work/images.env"
+done; }
+images_of "$REPO_ROOT/deploy/homelab/compose.yml" >"$work/images.env"
 [ "$(wc -l <"$work/images.env")" -eq 13 ] || fail "0: compose.yml does not name 13 images"
+images_of "$REPO_ROOT/deploy/homelab/compose.yml" "$REPO_ROOT/deploy/homelab/compose.smoke.yml" >"$work/images14.env"
+[ "$(wc -l <"$work/images14.env")" -eq 14 ] || fail "0: compose.yml + compose.smoke.yml do not name 14 images"
+smoke_bind=100.64.0.7
 
 base_env="DB_PASSWORD=pw
 JWT_SECRET=$hex
@@ -40,15 +44,19 @@ BROKER_ACCOUNTS_ENCRYPTION_KEY=$hex
 CONFIG_SECRETS_ENCRYPTION_KEY=$hex
 SEED_USER_ID=00000000-0000-4000-8000-0000000000c1
 APP_URL=https://xstockstrat.example.test
+SMOKE_DB_PASSWORD=pw
 SLACK_WEBHOOK_URL=$probe"
 
-# build <target> <app_env> <out> [mtls_ca]
+# build <target> <app_env> <out> [mtls_ca]; staging gets the 14-image set and the smoke bind address
 build() {
-  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV="$1" APP_ENV="$2" MTLS_CA="${4:-$ca_b64}" \
-    bash "$REPO_ROOT/scripts/homelab-release-env.sh" "$work/images.env" "$3" 2>"$work/err"
+  imgs="$work/images.env"
+  [ "$1" != staging ] || imgs="$work/images14.env"
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV="$1" APP_ENV="$2" MTLS_CA="${4:-$ca_b64}" SMOKE_BIND_ADDR="$smoke_bind" \
+    bash "$REPO_ROOT/scripts/homelab-release-env.sh" "$imgs" "$3" 2>"$work/err"
 }
 check() { bash "$REPO_ROOT/scripts/homelab-render-check.sh" "$1" "$2" 2>"$work/err"; }
 render() { env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$1" -f "$REPO_ROOT/deploy/homelab/compose.yml" config --format json 2>/dev/null; }
+render_staging() { env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$1" -f "$REPO_ROOT/deploy/homelab/compose.yml" -f "$REPO_ROOT/deploy/homelab/compose.smoke.yml" config --format json 2>/dev/null; }
 envv() { jq -r --arg s "$2" --arg k "$3" '.services[$s].environment[$k] // "MISSING"' "$1"; }
 no_probe() { if grep -q "$probe" "$work/err"; then fail "$1: output carries the probe value"; fi; }
 tmp_clean() { [ -z "$(ls -A "$work/tmp")" ] || fail "$1: temp files left behind"; }
@@ -64,7 +72,7 @@ build staging "$base_env" "$work/staging.env" || fail "1: build failed ($(cat "$
 # shellcheck disable=SC2012 # the permission string is the assertion
 [ "$(ls -l "$work/staging.env" | cut -c1-10)" = "-rw-------" ] || fail "1: .env is not owner-only"
 check "$work/staging.env" staging || fail "1: render check failed ($(cat "$work/err"))"
-render "$work/staging.env" >"$work/staging.json" || fail "1: render failed"
+render_staging "$work/staging.env" >"$work/staging.json" || fail "1: render failed"
 [ "$(envv "$work/staging.json" xstockstrat-trading DATABASE_URL)" = "postgresql://xstockstrat_staging:pw@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require" ] || fail "1: trading DATABASE_URL"
 [ "$(envv "$work/staging.json" xstockstrat-trading DB_PGBOUNCER)" = "true" ] || fail "1: trading DB_PGBOUNCER"
 [ "$(envv "$work/staging.json" xstockstrat-config DATABASE_URL)" = "postgresql://xstockstrat_staging:pw@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require" ] || fail "1: config DATABASE_URL"
@@ -72,11 +80,14 @@ render "$work/staging.env" >"$work/staging.json" || fail "1: render failed"
 mode_all "$work/staging.json" development paper "1"
 [ "$(envv "$work/staging.json" xstockstrat-ui HOSTNAME)" = "0.0.0.0" ] || fail "1: ui HOSTNAME"
 [ "$(envv "$work/staging.json" xstockstrat-trading OTEL_ENABLED)" = "false" ] || fail "1: OTel"
-[ "$(jq '.services | length' "$work/staging.json")" = "13" ] || fail "1: not 13 services"
+[ "$(jq '.services | length' "$work/staging.json")" = "14" ] || fail "1: not 14 services"
+[ "$(envv "$work/staging.json" xstockstrat-smoke DATABASE_URL)" = "postgresql://xstockstrat_staging_smoke_ro:pw@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require" ] || fail "1: smoke DATABASE_URL"
+[ "$(jq -r '.services["xstockstrat-smoke"].ports[0].host_ip' "$work/staging.json")" = "$smoke_bind" ] || fail "1: smoke port not bound to SMOKE_BIND_ADDR"
+if grep -q "SMOKE_BIND_ADDR" "$work/prod.env" 2>/dev/null; then fail "1: production env carries SMOKE_BIND_ADDR"; fi
 [ "$(jq '[.services[] | select(has("build") or ((.volumes // []) | length > 0))] | length' "$work/staging.json")" = "0" ] || fail "1: build or volumes present"
 [ "$(jq '[.services[].image | select(test("@sha256:[0-9a-f]{64}$") | not)] | length' "$work/staging.json")" = "0" ] || fail "1: image not pinned by digest"
 [ "$(jq '[.services | to_entries[] | select(.key != "db-migrator" and .value.healthcheck.test == null)] | length' "$work/staging.json")" = "0" ] || fail "1: missing healthcheck"
-[ "$(jq -c '[.services | to_entries[] | select((.value.ports // []) | length > 0) | "\(.key)=\([.value.ports[].published | tostring] | join(","))"] | sort' "$work/staging.json")" = '["xstockstrat-agent=9000","xstockstrat-ui=3000"]' ] || fail "1: published ports"
+[ "$(jq -c '[.services | to_entries[] | select((.value.ports // []) | length > 0) | "\(.key)=\([.value.ports[].published | tostring] | join(","))"] | sort' "$work/staging.json")" = '["xstockstrat-agent=9000","xstockstrat-smoke=9110","xstockstrat-ui=3000"]' ] || fail "1: published ports"
 
 # 2. production
 build production "$base_env" "$work/prod.env" || fail "2: build failed"
@@ -84,6 +95,9 @@ check "$work/prod.env" production || fail "2: render check failed ($(cat "$work/
 render "$work/prod.env" >"$work/prod.json"
 [ "$(envv "$work/prod.json" xstockstrat-config DATABASE_URL)" = "postgresql://xstockstrat_production:pw@db.ts.natanddavehouse.com:5432/xstockstrat-production?sslmode=require" ] || fail "2: config DATABASE_URL"
 mode_all "$work/prod.json" production live "2"
+[ "$(jq '.services | length' "$work/prod.json")" = "13" ] || fail "2: not 13 services"
+if grep -q "SMOKE_BIND_ADDR" "$work/prod.env"; then fail "2: production env carries SMOKE_BIND_ADDR"; fi
+jq -e '.services | has("xstockstrat-smoke") | not' "$work/prod.json" >/dev/null || fail "2: production renders smoke"
 
 # 3. APP_ENV cannot override pipeline-owned values (incl. the compose-go `KEY: value` form)
 override="$base_env
@@ -162,6 +176,21 @@ mutate pool-budget '.services["xstockstrat-config"].environment.DB_POOL_MAX = "5
 mutate pool-budget 'del(.services["xstockstrat-notify"].environment.DB_POOL_MAX)'
 mutate pool-budget:xstockstrat-trading '.services["xstockstrat-trading"].environment.DB_POOL_MAX = "2"'
 mutate application-env: '.' staging
+mutate smoke-in-production '.services["xstockstrat-smoke"] = {image: "x"}'
+smutate() { # smutate <label> <jq filter>: staging fixture with the overlay asserted
+  out="$(jq "$2" "$work/staging.json" | jq -c --arg target staging --arg host "$host" --arg bind "$smoke_bind" --arg overlay yes -f "$JQ" 2>/dev/null)" || out="ERR"
+  case "$out" in *"\"$1"*) ;; *) fail "7: '$2' did not report $1 (got $out)" ;; esac
+}
+[ "$(jq -c --arg target staging --arg host "$host" --arg bind "$smoke_bind" --arg overlay yes -f "$JQ" "$work/staging.json")" = "[]" ] || fail "7: unmodified staging render does not pass"
+smutate smoke-dsn '.services["xstockstrat-smoke"].environment.DATABASE_URL |= sub("_smoke_ro"; "")'
+smutate smoke-dsn '.services["xstockstrat-smoke"].environment.DB_PGBOUNCER = "true"'
+smutate smoke-pool '.services["xstockstrat-smoke"].environment.DB_POOL_MAX = "2"'
+smutate smoke-bind 'del(.services["xstockstrat-smoke"].ports[0].host_ip)'
+smutate smoke-bind '.services["xstockstrat-smoke"].ports[0].host_ip = "0.0.0.0"'
+smutate smoke-healthcheck '.services["xstockstrat-smoke"].healthcheck.start_period = "30s"'
+smutate smoke-restart '.services["xstockstrat-smoke"].restart = "no"'
+smutate smoke-missing 'del(.services["xstockstrat-smoke"])'
+smutate ports '.services["xstockstrat-smoke"].ports = []'
 mutate target '.' qa
 out="$(jq -c --arg target production --arg host "x/$probe" -f "$JQ" "$work/prod.json" 2>/dev/null)" || out="ERR"
 case "$out" in *'"db-host"'*) ;; *) fail "7: a malformed DB host was not reported (got $out)" ;; esac

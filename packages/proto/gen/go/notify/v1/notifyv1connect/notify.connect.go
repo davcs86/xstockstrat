@@ -109,6 +109,7 @@ func NewNotifyServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+NotifyServiceListAlertsProcedure,
 			connect.WithSchema(notifyServiceMethods.ByName("ListAlerts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		markAlertRead: connect.NewClient[v1.MarkAlertReadRequest, v1.MarkAlertReadResponse](
@@ -228,6 +229,7 @@ func NewNotifyServiceHandler(svc NotifyServiceHandler, opts ...connect.HandlerOp
 		NotifyServiceListAlertsProcedure,
 		svc.ListAlerts,
 		connect.WithSchema(notifyServiceMethods.ByName("ListAlerts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	notifyServiceMarkAlertReadHandler := connect.NewUnaryHandler(

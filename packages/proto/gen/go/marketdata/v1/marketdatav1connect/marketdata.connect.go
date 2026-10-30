@@ -194,6 +194,7 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+MarketDataServiceGetDataCoverageProcedure,
 			connect.WithSchema(marketDataServiceMethods.ByName("GetDataCoverage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteBackfilledData: connect.NewClient[v1.DeleteBackfilledDataRequest, v1.DeleteBackfilledDataResponse](
@@ -242,6 +243,7 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+MarketDataServiceGetHistoricalFundamentalsProcedure,
 			connect.WithSchema(marketDataServiceMethods.ByName("GetHistoricalFundamentals")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		backfillFundamentals: connect.NewClient[v1.BackfillFundamentalsRequest, v1.BackfillFundamentalsResponse](
@@ -497,6 +499,7 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		MarketDataServiceGetDataCoverageProcedure,
 		svc.GetDataCoverage,
 		connect.WithSchema(marketDataServiceMethods.ByName("GetDataCoverage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	marketDataServiceDeleteBackfilledDataHandler := connect.NewUnaryHandler(
@@ -545,6 +548,7 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		MarketDataServiceGetHistoricalFundamentalsProcedure,
 		svc.GetHistoricalFundamentals,
 		connect.WithSchema(marketDataServiceMethods.ByName("GetHistoricalFundamentals")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	marketDataServiceBackfillFundamentalsHandler := connect.NewUnaryHandler(

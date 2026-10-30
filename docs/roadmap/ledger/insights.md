@@ -3758,3 +3758,13 @@ reusing.
   homelab-edge `inventories/prod/group_vars/all/main.yml:118-133`, `roles/stack/templates/gatus-config.yaml.j2:77,95`.
 - **Rule it implies**: For cross-repo infra features, the other repo's provisioning code outranks an earlier verbal
   value; re-read it at the last design gate and record which commit the design was grounded in.
+
+### 2026-10-30 — smoke-check-runtime — design
+- **Pattern**: Prove a transport-auth design with a runnable spike on the pinned library versions before writing the
+  acceptance criteria. A 60-line script (real openssl CA and leaves, uvicorn 0.47.0 `H11Protocol.connection_made` override
+  mapping `scope['client']` to the peer SAN, httpx `sni_hostname` pinning) turned the "biggest risk" into five checked
+  facts and removed the need for conditional ACs and a weaker fallback.
+- **Evidence**: `docs/roadmap/features/280-smoke-check-runtime/design.md` § Chosen Approach (SAN spike);
+  `context.md` "Session 2026-10-30T03:40:00Z"/"04:10:00Z".
+- **Rule it implies**: When an AC depends on an unverified mechanism, spike it in the sandbox during design instead of
+  carrying a fallback variant into the spec.

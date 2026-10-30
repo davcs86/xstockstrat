@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, ListAlertsRequest, ListAlertsResponse, MarkAlertReadRequest, MarkAlertReadResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * NotifyService — gRPC server-streaming alert delivery.
@@ -59,6 +59,7 @@ export const NotifyService = {
       I: ListAlertsRequest,
       O: ListAlertsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Mark one or more alerts read for the calling user (feature 203). Owner resolved from the

@@ -1239,12 +1239,12 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\tValueType\x12\x1a\n" +
 	"\x16VALUE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x14VALUE_TYPE_FLOAT_MAP\x10\x01\x1a\x02\b\x01\x12\x1b\n" +
-	"\x17VALUE_TYPE_FLOAT_SCALAR\x10\x022\xec\x03\n" +
+	"\x17VALUE_TYPE_FLOAT_SCALAR\x10\x022\xf6\x03\n" +
 	"\rConfigService\x12a\n" +
-	"\vWatchConfig\x12).xstockstrat.config.v1.WatchConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot0\x01\x12[\n" +
-	"\tGetConfig\x12'.xstockstrat.config.v1.GetConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot\x12^\n" +
-	"\tSetConfig\x12'.xstockstrat.config.v1.SetConfigRequest\x1a(.xstockstrat.config.v1.SetConfigResponse\x12[\n" +
-	"\bListKeys\x12&.xstockstrat.config.v1.ListKeysRequest\x1a'.xstockstrat.config.v1.ListKeysResponse\x12^\n" +
+	"\vWatchConfig\x12).xstockstrat.config.v1.WatchConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot0\x01\x12`\n" +
+	"\tGetConfig\x12'.xstockstrat.config.v1.GetConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot\"\x03\x90\x02\x01\x12^\n" +
+	"\tSetConfig\x12'.xstockstrat.config.v1.SetConfigRequest\x1a(.xstockstrat.config.v1.SetConfigResponse\x12`\n" +
+	"\bListKeys\x12&.xstockstrat.config.v1.ListKeysRequest\x1a'.xstockstrat.config.v1.ListKeysResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\tGetSecret\x12'.xstockstrat.config.v1.GetSecretRequest\x1a(.xstockstrat.config.v1.GetSecretResponseB<Z:github.com/xstockstrat/contracts/gen/go/config/v1;configv1b\x06proto3"
 
 var (

@@ -158,6 +158,7 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceValidateTokenProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("ValidateToken")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		refreshToken: connect.NewClient[v1.RefreshTokenRequest, v1.AuthTokenResponse](
@@ -182,6 +183,7 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceGetOAuthClientProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("GetOAuthClient")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		issueAuthCode: connect.NewClient[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse](
@@ -218,6 +220,7 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceGetUserMetadataProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("GetUserMetadata")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateUserMetadata: connect.NewClient[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse](
@@ -474,6 +477,7 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceValidateTokenProcedure,
 		svc.ValidateToken,
 		connect.WithSchema(identityServiceMethods.ByName("ValidateToken")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceRefreshTokenHandler := connect.NewUnaryHandler(
@@ -498,6 +502,7 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceGetOAuthClientProcedure,
 		svc.GetOAuthClient,
 		connect.WithSchema(identityServiceMethods.ByName("GetOAuthClient")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceIssueAuthCodeHandler := connect.NewUnaryHandler(
@@ -534,6 +539,7 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceGetUserMetadataProcedure,
 		svc.GetUserMetadata,
 		connect.WithSchema(identityServiceMethods.ByName("GetUserMetadata")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceUpdateUserMetadataHandler := connect.NewUnaryHandler(

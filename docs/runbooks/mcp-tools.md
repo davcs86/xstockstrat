@@ -1618,6 +1618,30 @@ Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:
 
 ---
 
+## Staging-only tools
+
+Registered only on an agent whose `SMOKE_ENDPOINT` env var is set (staging); a production agent never
+advertises them and they are not part of the forty-five-tool count.
+
+### `smoke_checks`
+
+Run and read the post-deploy smoke checks of `xstockstrat-smoke` (**ADMIN only**, feature 280). The
+call is mutual-TLS with the agent's own leaf and a pinned server name `xstockstrat-smoke`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `action` | `list` \| `run` \| `get_run` | _(required)_ | `list` the catalog; `run` start a run; `get_run` read one |
+| `checks` | string[] | `null` | Check ids for `run` (required, non-empty) |
+| `run_id` | string | `null` | Run id for `get_run` (required) |
+
+Returns the smoke API body: `list` → `{deployed_sha, checks, load_errors}`; `run` → `{run_id}`;
+`get_run` → `{status, records, file}` (`file.body` is checked against the run-file schema once
+`status` is `done`). A run already in progress returns `{error: "run_in_progress", retry_after_s}`
+instead of raising. **Errors:** `PermissionError` → non-admin; `ValueError` → missing `checks` /
+`run_id`; `RuntimeError` → service unreachable, HTTP error, or an invalid run-file body.
+
+---
+
 ## Usage Patterns
 
 ### Email newsletter ingestion

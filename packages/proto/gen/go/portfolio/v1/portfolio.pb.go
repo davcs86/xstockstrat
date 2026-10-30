@@ -3024,18 +3024,18 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\x14WatchlistEntrySource\x12&\n" +
 	"\"WATCHLIST_ENTRY_SOURCE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dWATCHLIST_ENTRY_SOURCE_MANUAL\x10\x01\x12!\n" +
-	"\x1dWATCHLIST_ENTRY_SOURCE_SIGNAL\x10\x022\x9f\x11\n" +
+	"\x1dWATCHLIST_ENTRY_SOURCE_SIGNAL\x10\x022\xae\x11\n" +
 	"\x10PortfolioService\x12b\n" +
 	"\fGetPortfolio\x12-.xstockstrat.portfolio.v1.GetPortfolioRequest\x1a#.xstockstrat.portfolio.v1.Portfolio\x12_\n" +
 	"\vGetPosition\x12,.xstockstrat.portfolio.v1.GetPositionRequest\x1a\".xstockstrat.portfolio.v1.Position\x12p\n" +
 	"\rListPositions\x12..xstockstrat.portfolio.v1.ListPositionsRequest\x1a/.xstockstrat.portfolio.v1.ListPositionsResponse\x12X\n" +
-	"\x06GetPnL\x12'.xstockstrat.portfolio.v1.GetPnLRequest\x1a%.xstockstrat.portfolio.v1.PnLResponse\x12h\n" +
-	"\vGetSnapshot\x12,.xstockstrat.portfolio.v1.GetSnapshotRequest\x1a+.xstockstrat.portfolio.v1.PortfolioSnapshot\x12\x80\x01\n" +
+	"\x06GetPnL\x12'.xstockstrat.portfolio.v1.GetPnLRequest\x1a%.xstockstrat.portfolio.v1.PnLResponse\x12m\n" +
+	"\vGetSnapshot\x12,.xstockstrat.portfolio.v1.GetSnapshotRequest\x1a+.xstockstrat.portfolio.v1.PortfolioSnapshot\"\x03\x90\x02\x01\x12\x80\x01\n" +
 	"\x16StreamPortfolioUpdates\x127.xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest\x1a+.xstockstrat.portfolio.v1.PortfolioSnapshot0\x01\x12s\n" +
 	"\x0eListPortfolios\x12/.xstockstrat.portfolio.v1.ListPortfoliosRequest\x1a0.xstockstrat.portfolio.v1.ListPortfoliosResponse\x12v\n" +
-	"\x0fCreateWatchlist\x120.xstockstrat.portfolio.v1.CreateWatchlistRequest\x1a1.xstockstrat.portfolio.v1.CreateWatchlistResponse\x12m\n" +
-	"\fGetWatchlist\x12-.xstockstrat.portfolio.v1.GetWatchlistRequest\x1a..xstockstrat.portfolio.v1.GetWatchlistResponse\x12s\n" +
-	"\x0eListWatchlists\x12/.xstockstrat.portfolio.v1.ListWatchlistsRequest\x1a0.xstockstrat.portfolio.v1.ListWatchlistsResponse\x12v\n" +
+	"\x0fCreateWatchlist\x120.xstockstrat.portfolio.v1.CreateWatchlistRequest\x1a1.xstockstrat.portfolio.v1.CreateWatchlistResponse\x12r\n" +
+	"\fGetWatchlist\x12-.xstockstrat.portfolio.v1.GetWatchlistRequest\x1a..xstockstrat.portfolio.v1.GetWatchlistResponse\"\x03\x90\x02\x01\x12x\n" +
+	"\x0eListWatchlists\x12/.xstockstrat.portfolio.v1.ListWatchlistsRequest\x1a0.xstockstrat.portfolio.v1.ListWatchlistsResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x0fUpdateWatchlist\x120.xstockstrat.portfolio.v1.UpdateWatchlistRequest\x1a1.xstockstrat.portfolio.v1.UpdateWatchlistResponse\x12v\n" +
 	"\x0fDeleteWatchlist\x120.xstockstrat.portfolio.v1.DeleteWatchlistRequest\x1a1.xstockstrat.portfolio.v1.DeleteWatchlistResponse\x12\x82\x01\n" +
 	"\x13AddWatchlistSymbols\x124.xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest\x1a5.xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse\x12\x8b\x01\n" +

@@ -2510,19 +2510,19 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x18FUNDAMENTAL_METRIC_PRICE\x10\t\x12 \n" +
 	"\x1cFUNDAMENTAL_METRIC_YEAR_HIGH\x10\n" +
 	"\x12\x1f\n" +
-	"\x1bFUNDAMENTAL_METRIC_YEAR_LOW\x10\v2\xc3\f\n" +
-	"\x11IndicatorsService\x12{\n" +
-	"\x10ComputeIndicator\x122.xstockstrat.indicators.v1.ComputeIndicatorRequest\x1a3.xstockstrat.indicators.v1.ComputeIndicatorResponse\x12u\n" +
-	"\x0eExecuteFormula\x120.xstockstrat.indicators.v1.ExecuteFormulaRequest\x1a1.xstockstrat.indicators.v1.ExecuteFormulaResponse\x12u\n" +
-	"\x0eListIndicators\x120.xstockstrat.indicators.v1.ListIndicatorsRequest\x1a1.xstockstrat.indicators.v1.ListIndicatorsResponse\x12x\n" +
+	"\x1bFUNDAMENTAL_METRIC_YEAR_LOW\x10\v2\xdd\f\n" +
+	"\x11IndicatorsService\x12\x80\x01\n" +
+	"\x10ComputeIndicator\x122.xstockstrat.indicators.v1.ComputeIndicatorRequest\x1a3.xstockstrat.indicators.v1.ComputeIndicatorResponse\"\x03\x90\x02\x01\x12u\n" +
+	"\x0eExecuteFormula\x120.xstockstrat.indicators.v1.ExecuteFormulaRequest\x1a1.xstockstrat.indicators.v1.ExecuteFormulaResponse\x12z\n" +
+	"\x0eListIndicators\x120.xstockstrat.indicators.v1.ListIndicatorsRequest\x1a1.xstockstrat.indicators.v1.ListIndicatorsResponse\"\x03\x90\x02\x01\x12x\n" +
 	"\x0fRegisterFormula\x121.xstockstrat.indicators.v1.RegisterFormulaRequest\x1a2.xstockstrat.indicators.v1.RegisterFormulaResponse\x12h\n" +
 	"\n" +
-	"GetFormula\x12,.xstockstrat.indicators.v1.GetFormulaRequest\x1a,.xstockstrat.indicators.v1.FormulaDefinition\x12o\n" +
-	"\fListFormulas\x12..xstockstrat.indicators.v1.ListFormulasRequest\x1a/.xstockstrat.indicators.v1.ListFormulasResponse\x12r\n" +
+	"GetFormula\x12,.xstockstrat.indicators.v1.GetFormulaRequest\x1a,.xstockstrat.indicators.v1.FormulaDefinition\x12t\n" +
+	"\fListFormulas\x12..xstockstrat.indicators.v1.ListFormulasRequest\x1a/.xstockstrat.indicators.v1.ListFormulasResponse\"\x03\x90\x02\x01\x12r\n" +
 	"\rUpdateFormula\x12/.xstockstrat.indicators.v1.UpdateFormulaRequest\x1a0.xstockstrat.indicators.v1.UpdateFormulaResponse\x12r\n" +
-	"\rDeleteFormula\x12/.xstockstrat.indicators.v1.DeleteFormulaRequest\x1a0.xstockstrat.indicators.v1.DeleteFormulaResponse\x12\x8d\x01\n" +
-	"\x16ListFundamentalMetrics\x128.xstockstrat.indicators.v1.ListFundamentalMetricsRequest\x1a9.xstockstrat.indicators.v1.ListFundamentalMetricsResponse\x12r\n" +
-	"\rListTemplates\x12/.xstockstrat.indicators.v1.ListTemplatesRequest\x1a0.xstockstrat.indicators.v1.ListTemplatesResponse\x12n\n" +
+	"\rDeleteFormula\x12/.xstockstrat.indicators.v1.DeleteFormulaRequest\x1a0.xstockstrat.indicators.v1.DeleteFormulaResponse\x12\x92\x01\n" +
+	"\x16ListFundamentalMetrics\x128.xstockstrat.indicators.v1.ListFundamentalMetricsRequest\x1a9.xstockstrat.indicators.v1.ListFundamentalMetricsResponse\"\x03\x90\x02\x01\x12w\n" +
+	"\rListTemplates\x12/.xstockstrat.indicators.v1.ListTemplatesRequest\x1a0.xstockstrat.indicators.v1.ListTemplatesResponse\"\x03\x90\x02\x01\x12n\n" +
 	"\x0eManageTemplate\x120.xstockstrat.indicators.v1.ManageTemplateRequest\x1a*.xstockstrat.indicators.v1.FormulaTemplate\x12\x84\x01\n" +
 	"\x13InstantiateTemplate\x125.xstockstrat.indicators.v1.InstantiateTemplateRequest\x1a6.xstockstrat.indicators.v1.InstantiateTemplateResponse\x12\x8a\x01\n" +
 	"\x15ResolveTemplateIntent\x127.xstockstrat.indicators.v1.ResolveTemplateIntentRequest\x1a8.xstockstrat.indicators.v1.ResolveTemplateIntentResponseBDZBgithub.com/xstockstrat/contracts/gen/go/indicators/v1;indicatorsv1b\x06proto3"

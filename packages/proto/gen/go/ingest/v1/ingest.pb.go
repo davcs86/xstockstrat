@@ -2127,19 +2127,19 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	" SIGNAL_SOURCE_OPERATION_REGISTER\x10\x01\x12\"\n" +
 	"\x1eSIGNAL_SOURCE_OPERATION_UPDATE\x10\x02\x12&\n" +
 	"\"SIGNAL_SOURCE_OPERATION_REACTIVATE\x10\x03\x12&\n" +
-	"\"SIGNAL_SOURCE_OPERATION_DEACTIVATE\x10\x042\xc0\n" +
+	"\"SIGNAL_SOURCE_OPERATION_DEACTIVATE\x10\x042\xde\n" +
 	"\n" +
 	"\rIngestService\x12p\n" +
-	"\x0fTriggerBackfill\x12-.xstockstrat.ingest.v1.TriggerBackfillRequest\x1a..xstockstrat.ingest.v1.TriggerBackfillResponse\x12h\n" +
-	"\x11GetBackfillStatus\x12/.xstockstrat.ingest.v1.GetBackfillStatusRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\x12s\n" +
-	"\x10ListBackfillJobs\x12..xstockstrat.ingest.v1.ListBackfillJobsRequest\x1a/.xstockstrat.ingest.v1.ListBackfillJobsResponse\x12b\n" +
-	"\x0eCancelBackfill\x12,.xstockstrat.ingest.v1.CancelBackfillRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\x12s\n" +
-	"\x10NormalizeRawData\x12..xstockstrat.ingest.v1.NormalizeRawDataRequest\x1a/.xstockstrat.ingest.v1.NormalizeRawDataResponse\x12g\n" +
-	"\fIngestSignal\x12*.xstockstrat.ingest.v1.IngestSignalRequest\x1a+.xstockstrat.ingest.v1.IngestSignalResponse\x12g\n" +
-	"\fQuerySignals\x12*.xstockstrat.ingest.v1.QuerySignalsRequest\x1a+.xstockstrat.ingest.v1.QuerySignalsResponse\x12v\n" +
-	"\x11ListSignalSources\x12/.xstockstrat.ingest.v1.ListSignalSourcesRequest\x1a0.xstockstrat.ingest.v1.ListSignalSourcesResponse\x12y\n" +
-	"\x12ManageSignalSource\x120.xstockstrat.ingest.v1.ManageSignalSourceRequest\x1a1.xstockstrat.ingest.v1.ManageSignalSourceResponse\x12j\n" +
-	"\rListTemplates\x12+.xstockstrat.ingest.v1.ListTemplatesRequest\x1a,.xstockstrat.ingest.v1.ListTemplatesResponse\x12e\n" +
+	"\x0fTriggerBackfill\x12-.xstockstrat.ingest.v1.TriggerBackfillRequest\x1a..xstockstrat.ingest.v1.TriggerBackfillResponse\x12m\n" +
+	"\x11GetBackfillStatus\x12/.xstockstrat.ingest.v1.GetBackfillStatusRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\"\x03\x90\x02\x01\x12x\n" +
+	"\x10ListBackfillJobs\x12..xstockstrat.ingest.v1.ListBackfillJobsRequest\x1a/.xstockstrat.ingest.v1.ListBackfillJobsResponse\"\x03\x90\x02\x01\x12b\n" +
+	"\x0eCancelBackfill\x12,.xstockstrat.ingest.v1.CancelBackfillRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\x12x\n" +
+	"\x10NormalizeRawData\x12..xstockstrat.ingest.v1.NormalizeRawDataRequest\x1a/.xstockstrat.ingest.v1.NormalizeRawDataResponse\"\x03\x90\x02\x01\x12g\n" +
+	"\fIngestSignal\x12*.xstockstrat.ingest.v1.IngestSignalRequest\x1a+.xstockstrat.ingest.v1.IngestSignalResponse\x12l\n" +
+	"\fQuerySignals\x12*.xstockstrat.ingest.v1.QuerySignalsRequest\x1a+.xstockstrat.ingest.v1.QuerySignalsResponse\"\x03\x90\x02\x01\x12{\n" +
+	"\x11ListSignalSources\x12/.xstockstrat.ingest.v1.ListSignalSourcesRequest\x1a0.xstockstrat.ingest.v1.ListSignalSourcesResponse\"\x03\x90\x02\x01\x12y\n" +
+	"\x12ManageSignalSource\x120.xstockstrat.ingest.v1.ManageSignalSourceRequest\x1a1.xstockstrat.ingest.v1.ManageSignalSourceResponse\x12o\n" +
+	"\rListTemplates\x12+.xstockstrat.ingest.v1.ListTemplatesRequest\x1a,.xstockstrat.ingest.v1.ListTemplatesResponse\"\x03\x90\x02\x01\x12e\n" +
 	"\x0eManageTemplate\x12,.xstockstrat.ingest.v1.ManageTemplateRequest\x1a%.xstockstrat.ingest.v1.SourceTemplate\x12m\n" +
 	"\x13InstantiateTemplate\x121.xstockstrat.ingest.v1.InstantiateTemplateRequest\x1a#.xstockstrat.ingest.v1.SignalSourceB<Z:github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1b\x06proto3"
 

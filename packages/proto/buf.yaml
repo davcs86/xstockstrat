@@ -10,3 +10,9 @@ lint:
     - PACKAGE_DIRECTORY_MATCH
     - RPC_RESPONSE_STANDARD_NAME
     - RPC_REQUEST_RESPONSE_UNIQUE
+breaking:
+  use:
+    - FILE
+  except:
+    # Feature 280 annotates pure reads NO_SIDE_EFFECTS; the smoke policy relies on future additions.
+    - RPC_SAME_IDEMPOTENCY_LEVEL

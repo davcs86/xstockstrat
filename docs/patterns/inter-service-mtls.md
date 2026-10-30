@@ -95,7 +95,7 @@ docker compose up -d              # compose interpolates ${<SVC>_MTLS_*} from th
 
 For the DO deploy (dev/prod), only the **CA** (cert + key) is stored — one GitHub secret per env
 (`DEV_MTLS_CA` / `PROD_MTLS_CA`, a `base64(JSON {ca_cert, ca_key})` produced by
-`scripts/mtls-provision.sh`). `.github/workflows/deploy.yml` mints the 12 per-service leaves off that
+`scripts/mtls-provision.sh`). `.github/workflows/deploy.yml` mints the 13 per-service leaves off that
 CA on every deploy (stable CA, auto-rotating leaves) and fills the `MTLS_*` placeholders in
 `.do/app*.yaml` (fail-closed — a missing CA aborts the deploy). The CA signing key therefore lives in
 CI; see the runbook §0.1 for that trade-off. Rollout, rotation, rollback, and the deploy-secret

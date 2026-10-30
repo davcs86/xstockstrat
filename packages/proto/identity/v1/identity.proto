@@ -9,14 +9,18 @@ import "google/protobuf/timestamp.proto";
 
 service IdentityService {
   rpc AuthenticateUser(AuthenticateUserRequest) returns (AuthTokenResponse);
-  rpc ValidateToken(ValidateTokenRequest) returns (TokenClaims);
+  rpc ValidateToken(ValidateTokenRequest) returns (TokenClaims) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc RefreshToken(RefreshTokenRequest) returns (AuthTokenResponse);
   rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
 
   // OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
   // OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
   rpc RegisterOAuthClient(RegisterOAuthClientRequest) returns (OAuthClient);
-  rpc GetOAuthClient(GetOAuthClientRequest) returns (OAuthClient);
+  rpc GetOAuthClient(GetOAuthClientRequest) returns (OAuthClient) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc IssueAuthCode(IssueAuthCodeRequest) returns (IssueAuthCodeResponse);
   rpc ExchangeAuthCode(ExchangeAuthCodeRequest) returns (OAuthTokenResponse);
   rpc RefreshOAuthToken(RefreshOAuthTokenRequest) returns (OAuthTokenResponse);
@@ -27,7 +31,9 @@ service IdentityService {
   rpc RevokeAuthorizedApp(RevokeAuthorizedAppRequest) returns (RevokeAuthorizedAppResponse);
 
   // User profile metadata self-management (feature 130)
-  rpc GetUserMetadata(GetUserMetadataRequest) returns (GetUserMetadataResponse);
+  rpc GetUserMetadata(GetUserMetadataRequest) returns (GetUserMetadataResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc UpdateUserMetadata(UpdateUserMetadataRequest) returns (UpdateUserMetadataResponse);
 
   // Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request

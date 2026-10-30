@@ -12,9 +12,13 @@ import "common/v1/common.proto";
 // All services write events here. Events are immutable once written.
 service LedgerService {
   rpc AppendEvent(AppendEventRequest) returns (AppendEventResponse);
-  rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse);
+  rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc StreamEvents(StreamEventsRequest) returns (stream LedgerEvent);
-  rpc GetEvent(GetEventRequest) returns (LedgerEvent);
+  rpc GetEvent(GetEventRequest) returns (LedgerEvent) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Export a caller's events over a time window as a server stream of batched pages,
   // ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
   // never returns another user's or a pre-migration NULL-user_id event.

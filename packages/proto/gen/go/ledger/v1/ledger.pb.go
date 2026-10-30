@@ -753,12 +753,12 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\n" +
 	"event_type\x18\x03 \x01(\tR\teventType\"R\n" +
 	"\x14ExportEventsResponse\x12:\n" +
-	"\x06events\x18\x01 \x03(\v2\".xstockstrat.ledger.v1.LedgerEventR\x06events2\x80\x04\n" +
+	"\x06events\x18\x01 \x03(\v2\".xstockstrat.ledger.v1.LedgerEventR\x06events2\x8a\x04\n" +
 	"\rLedgerService\x12d\n" +
-	"\vAppendEvent\x12).xstockstrat.ledger.v1.AppendEventRequest\x1a*.xstockstrat.ledger.v1.AppendEventResponse\x12d\n" +
-	"\vQueryEvents\x12).xstockstrat.ledger.v1.QueryEventsRequest\x1a*.xstockstrat.ledger.v1.QueryEventsResponse\x12`\n" +
-	"\fStreamEvents\x12*.xstockstrat.ledger.v1.StreamEventsRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent0\x01\x12V\n" +
-	"\bGetEvent\x12&.xstockstrat.ledger.v1.GetEventRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent\x12i\n" +
+	"\vAppendEvent\x12).xstockstrat.ledger.v1.AppendEventRequest\x1a*.xstockstrat.ledger.v1.AppendEventResponse\x12i\n" +
+	"\vQueryEvents\x12).xstockstrat.ledger.v1.QueryEventsRequest\x1a*.xstockstrat.ledger.v1.QueryEventsResponse\"\x03\x90\x02\x01\x12`\n" +
+	"\fStreamEvents\x12*.xstockstrat.ledger.v1.StreamEventsRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent0\x01\x12[\n" +
+	"\bGetEvent\x12&.xstockstrat.ledger.v1.GetEventRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent\"\x03\x90\x02\x01\x12i\n" +
 	"\fExportEvents\x12*.xstockstrat.ledger.v1.ExportEventsRequest\x1a+.xstockstrat.ledger.v1.ExportEventsResponse0\x01B<Z:github.com/xstockstrat/contracts/gen/go/ledger/v1;ledgerv1b\x06proto3"
 
 var (
