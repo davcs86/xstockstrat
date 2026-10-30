@@ -1241,3 +1241,10 @@ Feature: xstockstrat-agent - backend gRPC calls are deadline-bounded
 - Source scenarios: 11 (AC-1 to AC-11, with AC-5 a single Scenario Outline of 9 rows). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. No scenario skipped. Counts match.
 - I could not read the source on origin/feature/fix-agent-client-deadlines. The plan was built from the working-tree copy at /home/user/xstockstrat/docs/roadmap/features/273-fix-agent-client-deadlines/acceptance.feature. The caller should confirm the branch copy is identical before writing.
 ```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

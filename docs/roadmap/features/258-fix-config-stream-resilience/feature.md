@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1, 4, 5, 6, 9 re-aligned with the codebase after the second main-dev merge (configServiceImpl.ts anchors shifted about 85 lines by Steps 1–3; Step 1 evidence now describes the implemented tree) |
 | 2026-10-29 | `in-progress` → `code-completed` | operator decision (session_01NpS3HShZK6pSnogA7CFo2f) | Step 1's pg_terminate_backend gate converted to post-merge verification ("B: Post-merge, unit-tested"); all 9 steps done |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

@@ -490,3 +490,10 @@ Feature: fix-legacy-formula-authors (indicators)
 - The promotion plan above was confirmed under the operator's standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, auto-confirm C-16 promotion) and applied exactly as written. It created `services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature` with 8 scenarios. @AC-6 was skipped as an OVERLAP with feature 224 @AC-1.
 - `merge-order.md` has no entry for this feature, so no merge-order gate applies.
 - `status.md`: `in-progress` → `code-completed`, with a feature.md history row. The integration PR `feature/fix-legacy-formula-authors` → `main-dev` was opened. Merge is held for the operator, because the DB repair is an operator-only step.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

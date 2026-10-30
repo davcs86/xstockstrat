@@ -129,6 +129,7 @@ All config changes must comply with the governance rules in the root `CLAUDE.md`
 ```text
 GRPC_PORT=50060
 APPLICATION_ENV=development  # development | production — default environment scope for this instance
+DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed
 CONFIG_SECRETS_ENCRYPTION_KEY=<hex, 32 bytes>  # required (feature 147) — AES-256-GCM master key for secret rows; service FAILS TO BOOT if unset. Same custody as BROKER_ACCOUNTS_ENCRYPTION_KEY
 # TRADING_MODE is no longer used for config scope (feature 147 removed the trading_mode axis; paper/live is derived from environment)
 ```

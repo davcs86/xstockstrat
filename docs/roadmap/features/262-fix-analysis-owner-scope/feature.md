@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -28,6 +30,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done — analysis `CLAUDE.md` trading row now names the owner-scoped `ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id`/per-pass `x-trace-id`; manual context teardown (context-forge `context-constitution` unavailable) found no further drift |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 8 steps done; C-16 promotion applied (9 NEW scenarios → `services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature`, auto-confirmed by operator standing authorization); integration PR opened to `main-dev` |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

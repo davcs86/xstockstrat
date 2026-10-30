@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -33,6 +35,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 12 done: context teardown. AGENT-5 rewritten (every gRPC-calling tool maps through `_grpc_error_message` with `deadline_s`, `write=` in mutating tools, "outcome unknown, verify before retrying" write text, server-detail pass-through); AGENT-4 shared auth/tool trace id; AGENT-1 channel count and client.py/tools.py line hints re-stamped. context-forge plugin unavailable, manual reconciliation recorded in context.md |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential | All 12 steps done; C-16 promotion applied (operator standing authorization): 11 scenarios (AC-1..AC-11) promoted to `services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature` (CREATE); integration PR to `main-dev` opened |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -37,6 +39,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 16 done — C-14 follow-up: defect report `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md` + `.status` (`open`) for trading's untargeted per-account halt/reconciliation alerts (systemic escalation excluded); provisional slug `fix-trading-account-alert-targeting` recorded in context.md; verification green |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 16 steps done; C-16 promotion plan applied (operator standing authorization, auto-confirm): 11 `@AC-*` scenarios promoted as NEW into `services/xstockstrat-{notify,portfolio,analysis,identity}/acceptance/fix-push-untargeted-broadcast.feature` (5/2/2/2); integration PR opened to `main-dev` |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

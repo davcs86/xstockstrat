@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -27,6 +29,7 @@
 | 2026-10-29 | step 5 done (status retained at `in-progress`) | /sdd-execute | Step 5 — two follow-up defect reports (`agent-config-snapshot-read`, `agent-dcr-fail-closed`) + `open` sidecars and agent findings index; `agent-rpc-deadlines` dropped as a duplicate of the feature-273 report (operator Option A, cross-reference added); manual teardown audit |
 | 2026-10-29 | step 6 done; status → `code-completed` | /sdd-execute (operator-recorded) | Step 6 — dev `GetConfig` latency baseline: 27 spans, p50 24 ms, p99 ≤ 134 ms (bucket bound), max 83.4 ms; D = 3.0 s stands. Integration PR #1338 merge no longer held |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute | `sequential` mode via /sdd-batch-execute; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29) |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–9 done; C-16 promotion already landed in Step 9 (per-service `fix-template-update-metadata.feature`), batch `platform.feature` plan not applied (would duplicate the (feature, AC) identity); integration PR opened, merge held for operator |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

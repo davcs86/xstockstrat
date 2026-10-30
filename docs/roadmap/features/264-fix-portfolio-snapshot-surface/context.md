@@ -809,3 +809,14 @@ Feature: xstockstrat-config - portfolio.snapshot.interval_minutes is a retired k
 - Merged as `9bd923f3` (#1345). It was deployed to dev by DO deployment `db6ee608`, which went ACTIVE at 23:38:03Z.
 - The staging agent call `list_config_keys(namespace="portfolio")` returns only `portfolio.watchlist.max_per_user` and `portfolio.watchlist.max_symbols_per_list`. `portfolio.snapshot.interval_minutes` is absent, so migration 034 applied. Item (1) of the owed list is closed.
 - Still owed: item (2), the same check on production at the next `/promote`.
+
+## Session 2026-10-30 — Production check waived
+
+- Operator decision 2026-10-30 (own words): "Prod is not running. Staging is enough". The production check owed at `/promote` is **waived**. The staging/dev verification already recorded above is the final rollout verification for this feature.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

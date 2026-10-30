@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -31,6 +33,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 10 done — analysis findings row `:20` marked RESOLVED (feature 245); constitution `:42` sort key → `(score_unavailable, eval_failed, -score)`; teardown reconciled by hand (context-forge `context-constitution` unavailable), UI-6 anchor/wording fixed |
 | 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; next: merge-order check, then the integration PR → `main-dev` (PR body records the manual context-constitution teardown) |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

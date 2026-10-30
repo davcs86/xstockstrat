@@ -1,34 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { getSessionFromRequest, hasAdminScope } from '@/lib/auth';
+import { resolveDbConnection } from '@/lib/dbTls';
+import { HEADER_TRACE_ID } from '@/lib/headers';
 
 let pool: Pool | null = null;
 
 function getPool(): Pool {
   if (!pool) {
-    // Follow the platform SSL convention (config/identity/ledger/notify services):
-    // strip sslmode from the URL and pass an explicit ssl option so DO managed-DB
-    // connections use TLS without rejecting the DO-signed certificate.
-    let connectionString = process.env.DATABASE_URL ?? '';
-    const sslDisabled = connectionString.includes('sslmode=disable');
-    if (!sslDisabled && connectionString) {
-      try {
-        const u = new URL(connectionString);
-        u.searchParams.delete('sslmode');
-        connectionString = u.toString();
-      } catch {
-        /* keep original if URL parsing fails */
-      }
-    }
-    const caCert = process.env.DATABASE_CA_CERT;
+    const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);
     pool = new Pool({
-      connectionString,
+      connectionString: dbConn.connectionString,
       // Admin-only audit endpoint, light use. Kept to 1 so the UI fits within
       // DigitalOcean's shared 20-connection budget (see root CLAUDE.md).
       max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
-      ssl: sslDisabled
-        ? false
-        : { rejectUnauthorized: !!caCert, ...(caCert ? { ca: caCert } : {}) },
+      ssl: dbConn.ssl,
     });
   }
   return pool;
@@ -79,9 +65,11 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (err: unknown) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 },
-    );
+    console.error('config-ui audit: database error', {
+      traceId: req.headers.get(HEADER_TRACE_ID) ?? '',
+      code: (err as { code?: string })?.code,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json({ error: 'Audit log unavailable' }, { status: 500 });
   }
 }

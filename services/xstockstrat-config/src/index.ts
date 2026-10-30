@@ -3,6 +3,7 @@ initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
 import * as mtls from './mtls';
+import { resolveDbConnection } from './dbTls';
 import { Pool } from 'pg';
 import { getLogger } from './services/logger';
 import { ConfigServiceImpl } from './grpc/configServiceImpl';
@@ -12,8 +13,11 @@ import { loadMasterKey } from './crypto';
 const log = getLogger('config:server');
 
 async function main() {
+  const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);
+  if (dbConn.ssl !== false) {
+    log.info('db-tls: verifying server cert against DATABASE_CA_CERT');
+  }
   const grpcPort = process.env.GRPC_PORT ?? '50060';
-  const databaseUrl = process.env.DATABASE_URL ?? '';
 
   // Fail fast: the service must never boot able to serve GetSecret with a missing/short master key.
   loadMasterKey();
@@ -22,24 +26,11 @@ async function main() {
   // Config source of truth — never subscribes to itself.
   log.info('xstockstrat-config is the config source — no self-subscription');
 
-  const sslDisabled = databaseUrl.includes('sslmode=disable');
-  let dbUrl = databaseUrl;
-  if (!sslDisabled) {
-    try {
-      const u = new URL(databaseUrl);
-      u.searchParams.delete('sslmode');
-      dbUrl = u.toString();
-    } catch { /* keep original if URL parsing fails */ }
-  }
-  const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
-    connectionString: dbUrl,
+    connectionString: dbConn.connectionString,
     // Cap pool size for DigitalOcean's shared DB connection budget (root CLAUDE.md).
     max: parseInt(process.env.DB_POOL_MAX ?? '2', 10),
-    ssl: sslDisabled ? false : {
-      rejectUnauthorized: !!caCert,
-      ...(caCert ? { ca: caCert } : {}),
-    },
+    ssl: dbConn.ssl,
   });
   await pool.query('SELECT 1');
   log.info('Database connected');

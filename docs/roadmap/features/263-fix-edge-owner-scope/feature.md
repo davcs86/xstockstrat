@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -23,6 +25,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute (re-spec) | Steps 9, 10, 11 and 12 re-aligned with the codebase after the second 2026-10-29 main-dev merge (line drift only; Files unchanged) |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 12 steps done; C-16 promotion applied (8 scenarios → `services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature` AC-1/2/3/7, `services/xstockstrat-config/acceptance/fix-edge-owner-scope.feature` AC-4/5/6/8); integration PR opened |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

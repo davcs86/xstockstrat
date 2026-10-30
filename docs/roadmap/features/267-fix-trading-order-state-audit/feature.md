@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -26,6 +28,7 @@
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — `order_intent.reclaimed_unknown` row added to trading CLAUDE.md; findings `:13` resolved, bare-`orderID` stream doc-lie and `emitLedgerEvent` NewStruct latent-bug rows added. All 7 steps done |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | C-16 promotion applied (9 NEW scenarios → `services/xstockstrat-trading/acceptance/fix-trading-order-state-audit.feature`); integration PR opened |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

@@ -776,3 +776,10 @@ Feature: xstockstrat-analysis - entry-backfill is owner-scoped and failure-isola
 ### Coverage check
 - Source scenarios: 9 (AC-1 to AC-9). Planned NEW+DUP+OVERLAP: 9 (9 NEW, 0 DUP, 0 OVERLAP). None skipped.
 ```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

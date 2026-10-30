@@ -836,3 +836,10 @@ Feature: xstockstrat-identity - ListAdminUserIds is an admin-ID lookup for the n
 - Integration PR opened to `main-dev` (merge held for the operator). The C-14 follow-up
   (`/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`) and the
   manual Teardown note are recorded in the PR body.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

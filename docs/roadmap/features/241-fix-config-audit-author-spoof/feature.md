@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -30,6 +32,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute | Step 13 done: config/agent/ui service context files updated; teardown reconciled by hand (context-forge refresh unavailable) — all 3 verification greps as expected |
 | 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done; C-16 promotion applied (AC-1..AC-3 → config suite, AC-4 → agent suite); integration PR opened |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

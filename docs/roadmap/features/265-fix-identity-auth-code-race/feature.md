@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -27,6 +29,7 @@
 | 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6 — identity context constitution re-grounded (IDENTITY-1/2/4 to `mintAccessToken`, all line hints re-stamped); manual reconciliation, context-forge refresh plugin unavailable |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (operator session) | Step 5 marked done by operator decision ("Run it after deploy."): the 20-caller repro runs post-merge on dev; merge hold lifted |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

@@ -154,6 +154,25 @@ concurrency knob that does not consume cluster slots. Only the **direct** servic
 only a few backends per pool and the two pools share the cluster with the direct services; raise it
 only after re-checking the ~22-slot cluster budget.
 
+## Node DB TLS (fail-closed)
+
+The five direct Node `pg.Pool` callers (config, ledger, identity, notify, and the ui config-ui audit
+route) build their pool from `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` in `dbTls.ts`
+(`services/xstockstrat-{ledger,config,identity,notify}/src/dbTls.ts`,
+`services/xstockstrat-ui/src/lib/dbTls.ts`, byte-identical; feature 266). Rules, in order:
+
+1. `DATABASE_URL` unset or unparseable → refuse.
+2. `sslmode` given more than once → refuse.
+3. Any other `ssl*` parameter, or `uselibpqcompat`, → refuse (TLS is configured only by `DATABASE_CA_CERT`).
+4. `sslmode=disable` exactly → plaintext (local compose only). This carve-out is DB-only and never
+   relaxes gRPC mTLS.
+5. Otherwise `DATABASE_CA_CERT` is required (refuse when absent); `sslmode` is stripped from the URL
+   and the pool gets `ssl: { rejectUnauthorized: true, ca }`.
+
+A refusal makes the four backend services exit at boot naming the variable; the ui audit route logs
+it and returns a generic 500. The six PgBouncer-pooled Go/Python services and the `db-migrator` job
+are out of scope.
+
 ## Approval
 
 DB schema migrations require DBA review + service owner approval (see `docs/runbooks/approval-flow.md`).

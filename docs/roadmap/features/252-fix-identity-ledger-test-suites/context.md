@@ -393,3 +393,10 @@ Feature: ledger unit suite executes the real implementation
 - Deviation from the plan's ready-to-write text: the plan's blocks for AC-1, AC-4 and AC-5 carried the pre-Step-1 wording, and the plan omitted AC-6, although it said its blocks were "verbatim from its reviewed acceptance.feature". I promoted the current, Step-1-amended `acceptance.feature` text (AC-1 mutation clause without line numbers; AC-4 `c8 check-coverage --lines 40`; AC-5 "0 failed tests"). I also appended AC-6 to `platform.feature`, routed as AC-3 is (it spans both services), so no amended guarantee is left unpromoted. Routing is unchanged apart from adding AC-6. Coverage: 6 source scenarios, 6 promoted, no DUP/OVERLAP.
 - Merge-order gate: 252 appears only as a blocker (`merge-order.md:79,86,87`), never in the Feature column, so nothing blocks it. The `:156` note is rebase-only.
 - status.md `in-progress` → `code-completed` (feature.md history row). Integration PR opened to `main-dev`. Per the operator, the merge is held.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30
