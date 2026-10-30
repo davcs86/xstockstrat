@@ -1,6 +1,6 @@
 # packages/otel — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 doc-lie (OTLP headers comment), +1 open question (RPC histogram never exported); hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — metrics/logs rows narrowed or resolved, collector hints re-stamped). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 doc-lie (OTLP headers comment), +1 open question (RPC histogram never exported); hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — export-gap rows narrowed or resolved, collector hints re-stamped). For triage/fixing, not
 governance. The `observability.md` doc-lie about the OTLP port is recorded at the root (cross-cutting).
 
 ## Documentation that lies (docs claim behavior the code lacks)

@@ -867,7 +867,7 @@ No coverage threshold applies to bash. The fixture-backed cases are the coverage
 
 ### Step 11 — service: `scripts/check-otel-produced-signals.sh [ROOT]`, the produced-set guard (GREEN)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.sh` — create
@@ -1028,3 +1028,13 @@ _Populated by /sdd-execute as implementation proceeds._
   and `uvx --from shfmt-py shfmt -d -i 2` (unpinned PyPI wheels, not CI's pinned installs). Both exit 0, and the
   pre-change `main-dev` copy of the file also exits 0 under the same tools.
 - **Disposition**: CI-equivalent fallback; the `shell-lint` CI job re-runs the real tools on this PR.
+
+### Deviation 3 — Step 11 staged a Step 9 file (wording fix found by the guard)
+- **Spec said**: Step 11's Files is only `scripts/check-otel-produced-signals.sh`; Step 9 owns the context files (Step 9
+  Instruction 3: "the Step 11 guard is the final check" for any refresh rewording).
+- **Actual**: the first guard run on the real tree reported one hit, `AC-3 P2-generic` on line 3 of
+  `packages/otel/docs/context-constitution-findings.md`: the Step 9 refresh stamp said "metrics/logs rows narrowed or
+  resolved", which matches the generic token `metrics.{0,12}logs`. All 58 red cases already passed; the 8 failing cases were
+  green cases tripping on this single hit. The stamp now reads "export-gap rows narrowed or resolved".
+- **Disposition**: operator decision (AskUserQuestion, option "Fix now, expand scope"). One-phrase edit to a file Step 9
+  already owns, staged with Step 11 as a sanctioned F-08 exception for this deviation.

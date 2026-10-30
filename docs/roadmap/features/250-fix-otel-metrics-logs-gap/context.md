@@ -397,3 +397,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   appends its own Loki line).
 - Files modified: `scripts/check-otel-produced-signals.test.sh`, `scripts/testdata/otel-produced-signals/{alert-rules.prefix.yaml,service-health.prefix.json,fr4.prefix.tsv}`
 - Deviations: none (lint tooling per Deviation 2)
+
+### Step 11 — scripts/check-otel-produced-signals.sh, the produced-set guard (GREEN) [done]
+- Guard implements design.md §4: Part 1 (alerts/dashboards), Part 2 (SPECIFIC over SCOPE, GENERIC over GEN_SCOPE, case-exact
+  strip of the sanctioned literal and the 274 path, findings-row exemption keyed on the defect basename), Part 3 (value-line
+  existence set, P3-name/file/count, removed-assets fence grammar with nested/unclosed/still-existing checks). Parts 1-2
+  use `grep -E`; Part 3 uses one awk pass per file; existence sets are newline-delimited strings checked with `case` (no
+  per-token spawns). bash 3.2 compatible constructs only. Runs in about 1.3s on the real tree.
+- **GREEN**: `bash scripts/check-otel-produced-signals.sh` rc=0 on the real tree; `bash scripts/check-otel-produced-signals.test.sh`
+  `cases=66 failed=0` (about 50s, dominated by per-case tree copies); shellcheck + shfmt clean (uvx wheels, Deviation 2);
+  `bash -n` ok. `/bin/bash` 3.2 (macOS) not available here: bash 3.2 compatibility is by construction, not run.
+- Deviation 3: the guard's first real-tree run caught a wording slip of mine in Step 9's stamp; fixed (operator decision).
+- Files modified: `scripts/check-otel-produced-signals.sh` (and, per Deviation 3,
+  `packages/otel/docs/context-constitution-findings.md`)
+- Deviations: Deviation 3
