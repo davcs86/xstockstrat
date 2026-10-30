@@ -532,7 +532,7 @@ pnpm run lint
 
 ### Step 8 — service: Identity — resolve first, boot `SELECT 1` probe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/index.ts` — modify
@@ -584,7 +584,7 @@ grep -n "ssl: dbConn.ssl\|pool.query('SELECT 1')" src/index.ts  # → both prese
 
 ### Step 9 — test: Identity boot test + Pool-level TLS stub
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/dbTlsBoot.test.ts` — create
@@ -1075,3 +1075,14 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
   a wrong CA once a CA was set, and `sslmode=disable` was already plaintext). GREEN: 4/4. The pre-declared
   "AC-3 narrowed (config)" entry above is confirmed: gRPC serving is not asserted. **Disposition**: operator
   standing rule.
+- **Steps 8 and 9 executed as one commit (2026-10-29, sequential).** Step 8's TDD gate is `red-green required
+  (paired with Step 9)`: its RED test is Step 9's identity `dbTlsBoot.test.ts`, so Step 8 cannot complete a red→green
+  cycle alone. Applied the standing operator rule (operator, 2026-10-29, in their own words: 'Merge pairs + standing
+  rule'): "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step (e.g. ... the RED test is that next step's test), do NOT return a blocker. Execute this
+  step and the next one together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps
+  done, and add a Deviation Log entry quoting the rule." Gate (instruction 0): the crash-loop sign-off is recorded in
+  `context.md` § "Session 2026-10-22 (operator decision — fail-closed boot)", so the boot `SELECT 1` probe landed.
+  RED: AC-1 failed — the boot child exited on `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`, not
+  `DATABASE_CA_CERT`. The two Pool-level AC-2 tests were green at RED (the resolver from Step 1 already exists).
+  GREEN: 3/3. **Disposition**: operator standing rule.

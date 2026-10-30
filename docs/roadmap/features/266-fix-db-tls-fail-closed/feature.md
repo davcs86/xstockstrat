@@ -23,6 +23,7 @@
 | 2026-10-29 | `in-progress` (step 3 done) | /sdd-execute sequential | CI `xstockstrat-ui` filter gains `.do/**`; UI devDependency `yaml@^2.9.0` |
 | 2026-10-29 | `in-progress` (steps 4–5 done) | /sdd-execute sequential | Ledger resolves DB TLS first in `main()` (Pool + EventNotifier); boot + Pool-level TLS-stub tests, one commit per the merge-pairs standing rule |
 | 2026-10-29 | `in-progress` (steps 6–7 done) | /sdd-execute sequential | Config resolves DB TLS first in `main()` (before `loadMasterKey`); boot tests through `main()` for AC-1, AC-2 (wrong CA + positive control) and AC-3, one commit per the merge-pairs standing rule |
+| 2026-10-29 | `in-progress` (steps 8–9 done) | /sdd-execute sequential | Identity resolves DB TLS first in `main()` (before `ConfigWatcher`) and probes `SELECT 1` at boot; boot + Pool-level TLS-stub tests, one commit per the merge-pairs standing rule |
 
 ---
 
