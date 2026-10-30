@@ -48,7 +48,7 @@ hook-bypass test first.
 
 ## Database
 
-Direct connection (`:25060`) as a dedicated read-only role (`xstockstrat_<env>_smoke_ro`), pool max 1.
+Direct connection (`:25060` on DO dev; the homelab overlay uses the homelab DB host on `:5432`) as a dedicated read-only role (`xstockstrat_<env>_smoke_ro`), pool max 1.
 Startup asserts not-superuser, no write privilege and `default_transaction_read_only=on`; failure
 degrades to per-check `ERROR` rather than exiting.
 

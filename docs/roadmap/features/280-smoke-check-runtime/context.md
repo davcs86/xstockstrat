@@ -134,3 +134,78 @@
   `get_run` of a finished run would fail validation.
 - Kill switch off also refuses cleanup deletes: such a check ends `ERROR` with `cleanup: FAILED`; leftovers are swept by
   the next janitor once writes are re-enabled.
+
+## Session 2026-10-30 — execution complete (plan Tasks 1-11), pending CI and operator prerequisites
+
+Status stays `design-approved` (`status.md` untouched): the operator/controller decides the transition. All code and doc
+slices S0-S8 are implemented on `claude/smoke-test-deployment-0f1z5j` (PR #1359); nothing below the code is provisioned.
+
+### Deviations from the design/plan, per task
+
+- T1: run files are **per run** with `records[]` (design.md Records / AC-11), not per check; schema and contract text changed accordingly.
+- T2: check modules live in the top-level package `checks/` (API in `app/check_api.py`); watchdog record-only ERROR file is a
+  local-temp, best-effort artifact (accepted gap below).
+- T3: strict mode exits **1** on a lost run; new marker `SMOKE_TRIGGER_FAILED` (not in the frozen contract) covers every other
+  trigger-side failure; the PAT travels only via `SMOKE_RESULTS_PAT` -> `GIT_CONFIG_*` env (never argv/remote URL); lost run commits nothing (AC-35).
+- T4: migration `035_smoke_rpc_user_id` gated behind feature 264's `034` (on origin/main-dev, not on this branch until merged);
+  `consuming_service` seeded as `xstockstrat-smoke`.
+- T5: unrequested `SMOKE_DB_PASSWORD` secret (`DEV_SMOKE_DB_PASSWORD`, placeholder `YOUR_DEV_SMOKE_DB_PASSWORD`); role/db names
+  `xstockstrat_staging_smoke_ro` / `xstockstrat-staging` are implementation choices for the DBA to confirm; `git` installed in the smoke
+  image for the `POST_DEPLOY` job; pool budget 8 -> 9.
+- T6: all three BFF segments share `createDispatch`, so one 405 guard covers them; the `GET` export in the route files is now redundant.
+- T7: 37 RPCs annotated `NO_SIDE_EFFECTS`; `config.WatchConfig` left **unannotated** (server stream); `ScreenSymbols` annotation means
+  own side effects only (keep it out of smoke checks); `ValidateToken`/`GetOrder` become Connect GETs (revisit if the BFF guard relaxes);
+  stubs regenerated with Go 1.27 for protoc-gen-go (older Go reformats `analysis.pb.go`).
+- T8: homelab strict step collects only the NEW run file into artifact `smoke-run-<attempt>`; a separate `record` job (`contents: write`, no
+  tailnet secrets) pushes with `GITHUB_TOKEN`; trigger child env drops the CA key. Deferred minors: SHA-pin `actions/{upload,download}-artifact@v7`,
+  validate artifact JSON in `record`, skip `record` when no artifact, tighten the AC-47 allow-list.
+- T9: agent `smoke_checks` registered only when `SMOKE_ENDPOINT` is set (uncounted; staging 46, production 45); agent pool-total test
+  updated to 9; `jsonschema>=4.23.0` declared directly (already locked transitively).
+- T10: agent `smoke_client` validates `get_run` bodies by `schema_version` (new byte copy `smoke_run_file.v2.json`); `_`-prefixed packages under
+  `checks/` are linted but never served (`_reference/watchlist_roundtrip.py`); "no strategy_id bindings" predicate is the conservative
+  superset (any `*strategy_id` at any depth, incl. `default_strategy_id`); cleanup grace holds the run **lock** only, bounded by
+  `CLEANUP_GRACE_MAX_S` 60, so Retry-After is at most **960** (`RUN_LOCK_HOLD_S` 900 + 60); `SCOPED_WRITES` name predicate (`smoke-` prefix).
+  Minor left: descriptor-name predicate (identity via `full_name`), non-message request `AttributeError`, `rpc.close` has no timeout,
+  `check_hash` covers the check function only (not its janitor).
+
+### Accepted gaps
+
+- Record-only watchdog `ERROR` run file is local-temp, best-effort (AC-39 end-to-end is not claimed).
+- Shipped-staging agent `environment` renders as a list (compose normalization) instead of a map; semantically equal, but it is part of the
+  open "VM gate accepts the normalized file" risk.
+- `hadolint`, `docker` (daemon), `shellcheck` were not run here; CI had not been confirmed on the final head when this was written.
+- Durable acceptance text of `@AC-1 @feature-214` is not rewritten here (C-16 re-scope at launch).
+- jscpd report-only clones: v1/v2 schemas and the agent byte-copies are inherent to "never edit v1".
+
+### UNVERIFIED-HERE
+
+GitHub/PAT auth against a real remote; DO job runtime (python, git in job image), `POST_DEPLOY` failure semantics and `PRIVATE_DOMAIN`
+reachability from a job and from the agent component; DSN against the real DO host; actions behaviour on GitHub and artifact hand-off;
+homelab-edge gate accepting the normalized shipped file; secret-scan on fixture PEM placeholders; real portfolio owner-scoping and paging
+behaviour for the reference write check; live config flip over a real `WatchConfig`; migrations 035/036 with `scripts/db-migrate.sh` and 034
+present; agent -> smoke call over the tailnet; docker image build (baked SHA).
+
+### External-prerequisite checklist state (ALL PENDING; owners in `docs/runbooks/smoke-checks.md`)
+
+- [ ] `DEV_SMOKE_RESULTS_PAT` + `smoke-results` ruleset (repo admin)
+- [ ] `DEV_SMOKE_DB_PASSWORD` / `SMOKE_DB_PASSWORD` and the two `smoke_ro` roles (DBA)
+- [ ] `SMOKE_BIND_ADDR` variable, tailnet ACL `tag:ci` -> VM:9110, homelab-edge gate acceptance (homelab/tailnet operators)
+- [ ] Smoke user + `smoke.rpc.user_id`; migrations 035/036 after 034 (operator, DBA)
+- [ ] Portfolio-owner approval of the write allowlist (FR-9) — **PENDING**; `smoke.writes.enabled` stays `false`
+
+First-deploy proof (checklist above): **PENDING**, no item observed.
+
+### Teardown reconciliation (feeds the PR body)
+
+The `/context-forge:context-constitution refresh` skill is **unavailable** in this environment (not in the skill list). Manual
+equivalent: re-read every context file touched by this branch (`git diff --name-only origin/main-dev...HEAD | grep -E 'CLAUDE.md|docs/(patterns|runbooks)/'`:
+root `CLAUDE.md`, `services/xstockstrat-smoke/CLAUDE.md`, `services/xstockstrat-agent/CLAUDE.md`, `docs/patterns/{ci-overview,config-governance,docker-build,inter-service-mtls}.md`,
+`docs/runbooks/{CLAUDE,inter-service-mtls-rollout,mcp-tools,smoke-checks,smoke-db-role,smoke-user}.md`) against the code.
+Checked and confirmed: port 9110 and SAN allowlist; constants `RUN_LOCK_HOLD_S` 900, `CLEANUP_GRACE_MAX_S` 60, `CLEANUP_DEADLINE_S` 10,
+`LOOP_STALL_S` 30, `DB_STATEMENT_TIMEOUT_MS` 5000 (grep of `app/`); 13 leaves (`gen-dev-certs.sh` SERVICES has 13; trigger leaf not in it); direct pool
+total 9 (2+2+2+1+1+1); agent 45/46 tool wording; migrations 035/036 present; python-lint/test x5 matches the `ci.yml` matrix; run-file schemas v1/v2
+exist; env var names `SMOKE_RESULTS_PAT`, `DEV_SMOKE_DB_PASSWORD`, `SMOKE_BIND_ADDR` match the workflows/specs.
+Drift fixed: `smoke-checks.md` still said the agent tool was a "later slice" and lacked results-reading, prerequisite owners and first-deploy
+proof (rewritten); root `CLAUDE.md` and `services/xstockstrat-smoke/CLAUDE.md` stated smoke DB access as `:25060` only, but the homelab overlay
+uses `:5432` (clarified); Context Guide row now also lists `smoke-user.md`; runbook index row updated. Not changed: `docs/setup/digitalocean.md`
+"13 services" wording (pre-existing, counts the staging app).

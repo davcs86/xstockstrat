@@ -19,3 +19,7 @@ nothing in this repo creates it or holds its password.
 - As the role, `INSERT`/`UPDATE` fails with SQLSTATE `25006`.
 
 An absent role or wrong password degrades DB checks to `ERROR`; the service still boots.
+
+Owner: DBA. Status of the DO dev and homelab roles: PENDING (checklist in `docs/runbooks/smoke-checks.md`). The role and
+database names (`xstockstrat_staging_smoke_ro`, `xstockstrat-staging`) were chosen by the implementation; the DBA confirms or renames
+them in `.do/app.dev.yaml` and `deploy/homelab/compose.smoke.yml`.

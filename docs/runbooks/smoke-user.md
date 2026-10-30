@@ -37,7 +37,7 @@ access-scope bit.
 - **Never** set it in the `production` environment; the smoke service does not run there, and the env-label guard
   refuses writes anyway.
 
-## Allowlist approval — PENDING
+## Allowlist approval — PENDING (owner: portfolio owner)
 
 `FR-9` requires the portfolio owner to approve the initial allowlist (`CreateWatchlist`, `UpdateWatchlist`,
 `AddWatchlistSymbols`, `RemoveWatchlistSymbols`, `DeleteWatchlist`, request predicate "no strategy_id bindings").

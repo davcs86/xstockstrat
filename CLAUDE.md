@@ -93,7 +93,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
-| Running, adding or troubleshooting staging smoke checks; the smoke DB role; the DO `POST_DEPLOY` recorder | `docs/runbooks/smoke-checks.md`, `docs/runbooks/smoke-db-role.md`, `services/xstockstrat-smoke/CLAUDE.md` |
+| Running, adding or troubleshooting staging smoke checks; the smoke DB role; the DO `POST_DEPLOY` recorder | `docs/runbooks/smoke-checks.md`, `docs/runbooks/smoke-db-role.md`, `docs/runbooks/smoke-user.md`, `services/xstockstrat-smoke/CLAUDE.md` |
 | Changing `run_backtest`, `manage_strategy`, `trigger_backfill`/`get_backfill_status` or `set_strategy_live` — this repo ships the `strat-lab` plugin (`plugins/strat-lab/`) whose `backtest` skill encodes these APIs' current quirks, and a change to them must update the skill in the **same** PR | `docs/patterns/strat-lab-plugin.md` |
 
 ---
@@ -241,7 +241,7 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 | xstockstrat-identity | Node | direct `:25060` | 2 | |
 | xstockstrat-config | Node | direct `:25060` | 2 | |
 | xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history only) |
-| xstockstrat-smoke | Python | direct `:25060` | 1 | Staging-only; read-only role `xstockstrat_<env>_smoke_ro` (`docs/runbooks/smoke-db-role.md`); not deployed to production |
+| xstockstrat-smoke | Python | direct `:25060` | 1 | Staging-only (DO dev `:25060`; homelab staging connects to its own DB host on `:5432`); read-only role `xstockstrat_<env>_smoke_ro` (`docs/runbooks/smoke-db-role.md`); not deployed to production |
 | xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
 | **Direct backend total** | | | **9** | Real cluster connections held by the direct services (per environment; smoke counts only where it is deployed — staging) |
 | **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
