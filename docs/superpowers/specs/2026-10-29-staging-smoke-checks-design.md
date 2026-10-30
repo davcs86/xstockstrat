@@ -23,13 +23,16 @@ carries a manual "smoke-tested on dev" checkbox.
 ## Non-goals
 
 - Arbitrary SQL or script bodies over the wire. Production verification. Load/perf tests. Replacing CI e2e.
-- Mutating RPCs (a later phase). Auto-rollback on smoke failure.
+- Platform-wide or privileged writes (global config, backfill, data deletion, restarts, secrets), and system
+  or admin identities. Auto-rollback on smoke failure.
 - `doctl apps console` / container shells as a trigger path.
 - Authoring checks during `/sdd-execute` and splitting features into gated parts (Project B).
 
 ## Anti-goals (failure even if it "works")
 
 - A phase-1 check that mutates staging, in the DB or through any service RPC.
+- A phase-2 write that escapes the smoke user's scope, writes to the DB directly, touches a real-money
+  broker account, or leaves a fixture behind after a failed or timed-out run.
 - A leaked key that yields data exfiltration or code execution. With cross-service reads in scope the key
   gates read access to every internal service, so catalog-only execution, read-only enforcement, mTLS and
   no public listener are all load-bearing.
@@ -55,6 +58,15 @@ carries a manual "smoke-tested on dev" checkbox.
 - Staging deploys can skip intermediate SHAs: `deploy-homelab.yml` uses a per-environment concurrency group
   (GitHub keeps one pending run per group), so a part's merge commit may never deploy on its own.
 
+## Evidence
+
+`docs/reports/2026-10-30-smoke-verification-needs.md` classified 1,209 acceptance scenarios (blind re-rating
+κ 0.67). Of the live-verifiable ones, read-only suffices for 26–34%, scoped writes are needed for 42–44% and
+platform/privileged writes for 23–30%; half the read-only ones depend on pre-existing data. Among read-only
+scenarios 91% need no user or one ordinary user; system identity is 3% and admin 7%, and the system cases
+concern a specific peer service, which a generic system user cannot stand in for. Hence: phase 2 scoped
+writes under the same non-admin identity, and no system or admin identity.
+
 ## Approaches considered
 
 1. Route inside `xstockstrat-agent`: least new infrastructure, native MCP, but the same image ships to
@@ -69,8 +81,10 @@ carries a manual "smoke-tested on dev" checkbox.
 
 - The service accepts **names + parameters of registered checks only**; the catalog ships in the runner image
   of the deployed commit. Auth is a secret key in a request header.
-- Checks may **read the DB and call any internal service**. **Phase 1 is read RPCs only**; mutating RPCs are
-  a later phase.
+- Checks may **read the DB and call any internal service**. **Phase 1 is read RPCs only.** **Phase 2, right
+  after phase 1, adds scoped writes**: owner-scoped mutating RPCs as the smoke user against disposable
+  fixtures.
+- Identity: one **dedicated non-admin smoke user**. No system user and no admin identity (see Evidence).
 - Checks are added to the catalog by feature execution (merge of the feature/part PR). **Run once** per
   environment; failures are **tracked and logged** so the next part can fix them.
 - Triggers: GitHub Actions, Claude, post-deploy jobs. Claude reaches the service through a **tool on the
@@ -117,6 +131,29 @@ carries a manual "smoke-tested on dev" checkbox.
   join the tailnet as `deploy-homelab.yml` already does. DO dev: the service is internal-only, triggered by a
   `POST_DEPLOY` job and by Claude through the agent's public route. The agent tools are never registered on
   a prod agent.
+
+## Phase 2 — scoped writes (follows phase 1 directly; mechanics are my proposals)
+
+- **Scope:** owner-scoped mutating RPCs called as the smoke user (non-admin) against fixtures the check
+  creates. The DB role stays read-only; services own every write.
+- **Enforcement:** a reviewed allowlist of scoped-write RPC names (`app/scoped_writes.py`), seeded from the
+  RPCs the W2 scenarios exercise. An RPC that is neither annotated `NO_SIDE_EFFECTS` nor allowlisted is
+  refused. Platform or privileged RPCs (`SetConfig`, `GetSecret`, backfill and deletion RPCs,
+  `RunFundamentalsScan`, user and role management, `AppendEvent`) are never allowlisted.
+- **Guards (all must hold or the write is refused and the check reports ERROR):** config key
+  `smoke.writes.enabled` is true (default false, switchable live without a redeploy); the environment label
+  is staging; every call carries the smoke user's id with no admin access-scope bit; trading fixtures use an
+  offline or paper account only (to verify in recon).
+- **Fixture lifecycle:** fixture names carry `smoke-<run_id>`; every created fixture registers a cleanup
+  that runs last-in-first-out after PASS, FAIL, ERROR and TIMEOUT; each check may declare a janitor that
+  removes leftover `smoke-*` fixtures owned by the smoke user before the check runs. A failed cleanup is
+  recorded and makes the check ERROR, so leaks surface.
+- **Records** gain `writes_performed` (mutating RPC names) and `cleanup` (`OK|FAILED|NONE`). Run-once still
+  applies, and a write check must be safe to re-run because a FAIL stays pending.
+- **Accepted residue:** append-only ledger and audit events from smoke writes accumulate under the smoke
+  user.
+- **Smoke user:** created once per environment by an operator (identity user creation is admin-only),
+  recorded in `smoke.rpc.user_id`; runbook, not automation.
 
 ## Results location and writers (decided; mechanics are my proposals)
 

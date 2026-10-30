@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A staging-only `xstockstrat-smoke` service that runs a catalog of named, read-only checks (DB reads + read-only RPCs to every backend), plus the writers that commit run records to a `smoke-results` branch and the triggers (homelab post-deploy, DO `POST_DEPLOY` job, Claude agent tool).
+**Goal:** A staging-only `xstockstrat-smoke` service that runs a catalog of named checks (phase 1: DB reads + read-only RPCs to every backend; phase 2: scoped writes as a non-admin smoke user), plus the writers that commit run records to a `smoke-results` branch and the triggers (homelab post-deploy, DO `POST_DEPLOY` job, Claude agent tool).
 
-**Architecture:** One Python/Starlette service per the approved design; checks are Python modules baked into its image; the service keeps only a bounded in-memory run buffer, and the durable record is JSON files on `smoke-results` written by the caller (`scripts/smoke/run_and_record.py`). "Read-only" is enforced by refusing any RPC whose protobuf method lacks `idempotency_level = NO_SIDE_EFFECTS`.
+**Architecture:** One Python/Starlette service per the approved design; checks are Python modules baked into its image; the service keeps only a bounded in-memory run buffer, and the durable record is JSON files on `smoke-results` written by the caller (`scripts/smoke/run_and_record.py`). Phase 1 enforces "read-only" by refusing any RPC whose protobuf method lacks `idempotency_level = NO_SIDE_EFFECTS`; phase 2 adds a reviewed allowlist of owner-scoped writes behind a live kill switch.
 
 **Tech Stack:** Python 3.13/uv, Starlette+uvicorn, grpc.aio with the platform mTLS helpers, asyncpg (read-only role), pytest (`asyncio_mode=auto`), protobuf option annotations, GitHub Actions, DO App Platform, homelab compose.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Phase 1 checks are read-only: no mutating RPC, no DB write. Not in production, ever; the service is absent from `.do/app.yaml` and from production homelab renders.
+- Phase 1 (Tasks 1–13) checks are read-only: no mutating RPC, no DB write. Phase 2 (Tasks 14–18) adds only allowlisted owner-scoped RPCs as the non-admin smoke user: never a DB write, never a platform or privileged RPC. Not in production, ever; the service is absent from `.do/app.yaml` and from production homelab renders.
 - No public listener. HTTP stays on the tailnet (homelab) or DO private networking; no app-layer TLS in v1.
 - Auth: header `x-smoke-key`, constant-time compare, key from the encrypted config secret `smoke` / `api.key` via `GetSecret` (`x-internal-caller: smoke`, `peerSan: xstockstrat-smoke`).
 - Run-once key is `(check_id, check_hash, env)`; `check_hash` = sha256 of the check module source. Outcomes: `PASS|FAIL|ERROR|TIMEOUT`; only `PASS` clears pending.
@@ -23,7 +23,7 @@
 
 ## Plan-time calls (grounded in the repo; veto any)
 
-1. RPC identity: checks call RPCs as one configured smoke user (`smoke.rpc.user_id`, non-secret config key). Ingest, indicators, analysis, portfolio, notify and identity reject a missing `x-user-id`, and `system` is honoured only for analysis's fundamentals producer.
+1. RPC identity: checks call RPCs as one configured smoke user (`smoke.rpc.user_id`, non-secret config key). Ingest, indicators, analysis, portfolio, notify and identity reject a missing `x-user-id`, and `system` is honoured only for analysis's fundamentals producer. `docs/reports/2026-10-30-smoke-verification-needs.md` found no case for a system identity (3% of read-only scenarios) or an admin identity (7%) in v1.
 2. DB: direct `:25060`, pool max 1 (direct total 8→9), reads inside `readonly=True` transactions with `SET LOCAL statement_timeout` (precedent: `services/xstockstrat-analysis/app/repositories/read_budget.py`).
 3. The read-only role is DBA-provisioned (no role-creation mechanism exists; features 169/208 never created one): a SQL file + runbook, not a migration.
 4. Only pure-read RPCs are annotated. Read-looking RPCs with side effects stay unannotated and are refused: `marketdata.GetFundamentals`, `GetFundamentalsMulti`, `GetLatestQuote`, `GetLatestPrice`, `analysis.ListOpportunities`, `EvaluateReadiness`, `GetWatchlistReadiness`, `config.GetSecret`.
@@ -31,6 +31,8 @@
 6. Homelab: `xstockstrat-smoke` is a compose `profiles: [smoke]` service activated for staging only, with its port published for the tailnet. The tailnet ACL allowing `tag:ci` to that port lives in the external homelab-edge repo and is a prerequisite.
 7. The agent tool registers only when `SMOKE_ENDPOINT` is set and is excluded from the 45-tool parity surfaces.
 8. Cut from phase 1: an on-demand GitHub workflow (it would duplicate the tailnet-join steps of `deploy-homelab.yml`). On-demand runs go through the agent tool or `run_and_record.py` from a tailnet host.
+9. Phase 2 (scoped writes) follows phase 1 directly (user decision; the analysis shows scoped writes unlock 42–44% of live-verifiable scenarios with the same non-admin identity).
+10. Scoped writes use a reviewed RPC allowlist, a live kill switch (`smoke.writes.enabled`, default false), mandatory cleanup plus a start-of-run janitor, and never touch the DB directly.
 
 ## Review Focus
 
@@ -39,6 +41,8 @@
 - Two concurrent `POST /runs` must yield one run and a `409`, never two interleaved runs.
 - A writer push race, or a first run before `smoke-results` exists, must end with the file committed exactly once.
 - Missing key, missing `smoke.rpc.user_id` or an unannotated RPC must produce `ERROR`/refusal, never a `PASS`; evidence containing secret-like keys must be redacted and size-bounded.
+- (Phase 2) A write check that fails or times out mid-way must still run its cleanups, and the next run's janitor must remove anything left behind.
+- (Phase 2) A write RPC outside the allowlist, or any write while `smoke.writes.enabled` is false or the environment label is not staging, must be refused before a channel opens.
 
 ---
 
@@ -80,7 +84,7 @@
 - Create: `services/xstockstrat-smoke/app/rpc.py`; Test `tests/test_read_only_rpc.py`
 
 **Interfaces:**
-- Produces: `class MutatingRpcRefused(Exception)`; `class ReadOnlyRpc` with `__init__(self, *, user_id: str, endpoints: Mapping[str, str])` and `async call(self, full_method: str, request: Message, *, timeout: float = 10.0) -> Message`; `.invoked: list[str]` (audit trail). `full_method` is `"xstockstrat.ledger.v1.LedgerService/QueryEvents"`; headers sent: `x-user-id`, `x-trace-id`, `x-access-scope` (non-admin).
+- Produces: `class MutatingRpcRefused(Exception)`; `@dataclass(frozen=True) RpcPolicy(scoped_writes: frozenset[str] = frozenset(), writes_enabled: bool = False, env: str = "")` (phase 1 uses the defaults); `class Rpc` with `__init__(self, *, user_id: str, endpoints: Mapping[str, str], policy: RpcPolicy = RpcPolicy())` and `async call(self, full_method: str, request: Message, *, timeout: float = 10.0) -> Message`; `.invoked: list[str]` (audit trail). `full_method` is `"xstockstrat.ledger.v1.LedgerService/QueryEvents"`; headers sent: `x-user-id`, `x-trace-id`, `x-access-scope` (non-admin).
 
 - [ ] **Step 1:** Tests against the generated descriptors: `test_ledger_query_events_is_allowed`, `test_ledger_append_event_is_refused`, `test_config_get_secret_is_refused`, `test_marketdata_get_fundamentals_is_refused`, `test_unknown_method_is_refused`, `test_refused_call_never_opens_a_channel` (assert the channel factory mock not called), `test_invoked_lists_called_methods`.
 - [ ] **Step 2:** Run → FAIL (no annotations). **Step 3:** Annotate protos; resolve the method via the default descriptor pool and compare `GetOptions().idempotency_level`; reuse the ingest `mtls.secure_channel` helper with `target_override` per target service. If the Python runtime does not expose the option, stop and raise it (design fallback: convention + audit).
@@ -165,6 +169,51 @@
 
 - [ ] **Step 1:** `scripts/check-context-map.sh` and the markdown/DRY checks pass. **Step 2:** Run `/context-forge:context-constitution refresh` scoped to the touched context files; if the plugin is unavailable, re-read each touched context file against the code and record both facts in the PR body. **Step 3:** Commit; open the integration PR to `main-dev`.
 
+## Phase 2 — scoped writes (start only after Task 13 is merged and phase 1 is green on staging)
+
+### Task 14: Write policy and guards
+
+**Files:** Modify `services/xstockstrat-smoke/app/rpc.py`, `app/config/watcher.py`, `app/main.py`; Create `app/scoped_writes.py`, `services/xstockstrat-config/migrations/035_smoke_writes_flag.{up,down}.sql`; Modify `docs/patterns/config-governance.md` (registered keys); Test `tests/test_write_policy.py`
+
+**Interfaces:**
+- Consumes: Task 3 `Rpc`/`RpcPolicy`; Task 6 settings. Produces: `SCOPED_WRITES: frozenset[str]` (full method names, seeded from the RPCs the owner-scoped W2 acceptance scenarios exercise, reviewed per target-service owner); `Rpc.writes: list[str]` (mutating calls made); `Settings.writes_enabled: bool` from config key `smoke.writes.enabled` (bool, default `false`, staging and production rows).
+- Decision order in `Rpc.call`: annotated `NO_SIDE_EFFECTS` → allow; else allowlisted AND `policy.writes_enabled` AND `policy.env == "staging"` → allow and append to `.writes`; else `MutatingRpcRefused(reason)` before any channel opens. Every call sends `x-user-id` = the smoke user and an `x-access-scope` without the admin bit (`0x04`).
+
+- [ ] **Step 1:** Tests: `test_allowlisted_write_allowed_when_enabled_in_staging`; `test_write_refused_when_flag_off`; `test_write_refused_when_env_not_staging`; `test_unlisted_write_refused_without_opening_channel`; `test_reads_still_allowed_when_flag_off`; `test_admin_bit_never_sent`; `test_privileged_rpcs_never_in_allowlist` (asserts `SetConfig`, `GetSecret`, `TriggerBackfill`, `BackfillBars`, `DeleteBackfilledData`, `RunFundamentalsScan`, `CreateUser`, `SetUserRoles`, `AppendEvent` are absent from `SCOPED_WRITES`); `test_every_allowlist_entry_exists_in_descriptors`.
+- [ ] **Step 2–4:** Fail → implement (config watcher live-updates `writes_enabled`) → pass; Node test for the new config row if the config suite asserts seeded keys. **Step 5:** Commit.
+
+### Task 15: Fixture lifecycle and janitor
+
+**Files:** Create `app/fixtures.py`; Modify `app/checks.py`, `app/runner.py`; Test `tests/test_fixtures.py`
+
+**Interfaces:** Produces `ctx.fixture(hint: str) -> str` (returns `smoke-<run_id>-<hint>`); `ctx.on_cleanup(fn: Callable[[], Awaitable[None]]) -> None`; `CheckSpec.janitor: Callable[[CheckContext], Awaitable[None]] | None`. The runner runs the janitor before a check, and the cleanups last-in-first-out after it in a `finally`, each under `cleanup_timeout_s = 10`.
+
+- [ ] **Step 1:** Tests: `test_cleanup_runs_after_pass_fail_error_and_timeout` (Review Focus phase 2); `test_cleanups_run_in_lifo_order`; `test_cleanup_failure_makes_outcome_error_and_keeps_original_failure_evidence`; `test_janitor_runs_before_check_and_removes_prefixed_leftovers`; `test_fixture_names_carry_run_id_prefix`.
+- [ ] **Step 2–4:** Fail → implement → pass. **Step 5:** Commit.
+
+### Task 16: Record schema and writer for writes
+
+**Files:** Modify `app/runner.py`, `scripts/smoke/run_and_record.py`; Test `tests/test_runner.py`, `scripts/smoke/tests/test_run_and_record.py`
+
+**Interfaces:** Records gain `writes_performed: list[str]` and `cleanup: Literal["OK","FAILED","NONE"]`; the writer persists them unchanged; pending logic is unchanged.
+
+- [ ] **Step 1:** Tests: `test_record_lists_mutating_rpcs_and_cleanup_status`; `test_read_only_check_records_empty_writes_and_cleanup_none`; `test_writer_preserves_new_fields`. **Step 2–4:** Fail → implement → pass. **Step 5:** Commit.
+
+### Task 17: Reference scoped-write checks
+
+**Files:** Create `services/xstockstrat-smoke/checks/_reference/watchlist_roundtrip.py`, `strategy_roundtrip.py`; Test `tests/test_reference_checks.py`
+
+**Interfaces:** Two checks (`feature="smoke-check-runtime"`, `part="phase-2"`) that create a fixture through an allowlisted RPC, read it back, assert, and register a cleanup — portfolio watchlist create/read/delete, analysis `ManageStrategy` create/`GetStrategy`/delete. They are the templates Project B copies and must be added to `SCOPED_WRITES`.
+
+- [ ] **Step 1:** Tests with a fake `Rpc`: `test_watchlist_roundtrip_passes_and_cleans_up`; `test_watchlist_roundtrip_cleans_up_when_assertion_fails`; same pair for the strategy check; `test_reference_checks_use_only_allowlisted_rpcs`.
+- [ ] **Step 2–4:** Fail → implement → pass. **Step 5:** On the compose stack with `smoke.writes.enabled=true`, run both via `POST /runs`: both PASS and the smoke user ends with no `smoke-*` fixtures. Commit.
+
+### Task 18: Smoke user, kill switch and docs
+
+**Files:** Create `docs/runbooks/smoke-user.md`; Modify `docs/runbooks/smoke-checks.md`, `services/xstockstrat-smoke/CLAUDE.md`, `docs/runbooks/approval-flow.md` reference if needed, root `CLAUDE.md` (Config Governance mention only if the registered-key rule requires it)
+
+- [ ] **Step 1:** Runbook covers creating the non-admin smoke user per environment (`scripts/manage-users.py`), setting `smoke.rpc.user_id`, enabling and disabling `smoke.writes.enabled`, the janitor, and what to do when `cleanup=FAILED` records appear. **Step 2:** `scripts/check-context-map.sh` and markdown lint pass; run the context-forge refresh scoped to the touched context files (or record the manual reconciliation). **Step 3:** Commit.
+
 ## Not in this plan
 
-Project B (check authoring in `/sdd-execute`, part-splitting and gating); mutating-RPC phase; an on-demand GitHub workflow; identity-issued tokens; GitHub App token for the writer.
+Project B (check authoring in `/sdd-execute`, part-splitting and gating); platform-wide or privileged writes; system and admin identities; an on-demand GitHub workflow; identity-issued tokens; GitHub App token for the writer.
