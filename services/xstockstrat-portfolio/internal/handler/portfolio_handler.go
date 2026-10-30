@@ -421,10 +421,10 @@ func classifyGetPositionError(err error) connect.Code {
 	return connect.CodeInternal
 }
 
-// classifyGetPnLError maps GetPnL errors: Unavailable only for service.ErrQuotesUnavailable (a transient quote
-// gap, retryable), else Internal.
+// classifyGetPnLError maps GetPnL errors: Unavailable for service.ErrQuotesUnavailable or ErrLedgerUnavailable
+// (a transient dependency gap, retryable), else Internal.
 func classifyGetPnLError(err error) connect.Code {
-	if errors.Is(err, service.ErrQuotesUnavailable) {
+	if errors.Is(err, service.ErrQuotesUnavailable) || errors.Is(err, service.ErrLedgerUnavailable) {
 		return connect.CodeUnavailable
 	}
 	return connect.CodeInternal
