@@ -712,3 +712,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `HEADER_TRACE_ID` and `ssl: dbConn.ssl` present; the test imports `HEADER_TRACE_ID` from `@/lib/headers`;
   `vitest run route.test.ts` 4/4; `test:coverage` exit 0, 333/333 in 60 files, all files 75.91% lines (≥40).
 
+## Session 2026-10-29 — sdd-execute sequential, Step 14
+
+- No tooling install needed (YAML-only step).
+- `.do/app.yaml` and `.do/app.dev.yaml`: the `xstockstrat-ui` block now binds `DATABASE_CA_CERT`
+  (`scope: RUN_TIME`, `value: ${xstockstrat.CA_CERT}`) directly after its `DATABASE_URL` entry, copied verbatim from
+  the ledger entry. `db-migrator` and every other line are untouched. `${xstockstrat.CA_CERT}` is a DO DB binding,
+  so `deploy.yml` needs no substitution.
+- TDD: N/A (deploy-spec env binding). Step 15's AC-5 YAML-parse guard proves it.
+- Verification: `git diff --unified=0 .do/app.yaml .do/app.dev.yaml | grep '^[+-][^+-]'` shows only the 3 added
+  lines per file; `git diff .do/ | grep -c MCP_AGENT_SECRET` → 0. An extra `yaml.safe_load` sanity parse of both
+  files succeeded.

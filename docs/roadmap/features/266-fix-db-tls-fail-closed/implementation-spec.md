@@ -816,7 +816,7 @@ grep -n "from '@/lib/headers'" src/app/config-ui/api/audit/route.test.ts
 
 ### Step 14 — config: Bind `DATABASE_CA_CERT` for `xstockstrat-ui` in both `.do` specs (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` (deploy env; not a WatchConfig key)
 **Files**:
 - `.do/app.yaml` — modify
