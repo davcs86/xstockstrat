@@ -255,3 +255,24 @@ async def test_heartbeat_pump_beats():
     await asyncio.sleep(0.05)
     task.cancel()
     assert time.monotonic() - hb.last < 1
+
+
+async def test_record_build_failure_yields_error_record(monkeypatch):
+    import app.runner as runner_mod
+
+    calls = []
+
+    def flaky_sanitize(evidence):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ValueError("boom")
+        return sanitize(evidence)
+
+    monkeypatch.setattr(runner_mod, "sanitize", flaky_sanitize)
+    runner = make_runner(CHECKS)
+    run = await wait_done(runner, await runner.start(["c.pass", "c.pass"], triggered_by="a"))
+    assert [r["outcome"] for r in run["records"]] == ["ERROR", "PASS"]
+    assert run["records"][0]["evidence"] == {"error": "record build failed: ValueError"}
+    assert_run_file(run["file"]["body"])
+    task = next(iter(runner._runs.values())).task
+    assert task.done() and task.exception() is None

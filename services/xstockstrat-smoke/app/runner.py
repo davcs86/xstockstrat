@@ -126,8 +126,12 @@ class Runner:
             "records": list(records),
         }
 
+    @classmethod
+    def _record(cls, check, outcome, started_at, duration_ms, rpcs, evidence) -> dict:
+        return cls._raw_record(check, outcome, started_at, duration_ms, rpcs, sanitize(evidence))
+
     @staticmethod
-    def _record(check, outcome, started_at, duration_ms, rpcs, evidence) -> dict:
+    def _raw_record(check, outcome, started_at, duration_ms, rpcs, evidence) -> dict:
         return {
             "check_id": check.id,
             "check_hash": check.check_hash,
@@ -137,7 +141,7 @@ class Runner:
             "started_at": started_at,
             "duration_ms": duration_ms,
             "rpcs_invoked": rpcs,
-            "evidence": sanitize(evidence),
+            "evidence": evidence,
         }
 
     async def _execute(self, run: _Run) -> None:
@@ -145,14 +149,19 @@ class Runner:
         try:
             for cid in run.ids:
                 check = self.catalog.checks[cid]
-                remaining = run.deadline - loop.time()
-                if remaining <= 0:
-                    now = _iso(datetime.now(UTC))
-                    run.records.append(
-                        self._record(check, "TIMEOUT", now, 0, [], {"error": "run hold exceeded"})
-                    )
-                    continue
-                run.records.append(await self._run_one(run, check, remaining))
+                started_at = _iso(datetime.now(UTC))
+                try:
+                    remaining = run.deadline - loop.time()
+                    if remaining <= 0:
+                        rec = self._record(
+                            check, "TIMEOUT", started_at, 0, [], {"error": "run hold exceeded"}
+                        )
+                    else:
+                        rec = await self._run_one(run, check, remaining)
+                except Exception as e:  # noqa: BLE001 — every check must leave exactly one record
+                    error = {"error": f"record build failed: {type(e).__name__}"}
+                    rec = self._raw_record(check, "ERROR", started_at, 0, [], error)
+                run.records.append(rec)
         finally:
             run.status = "done"
 

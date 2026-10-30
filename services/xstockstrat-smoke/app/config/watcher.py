@@ -1,8 +1,3 @@
-"""
-Config watcher for xstockstrat-smoke.
-Subscribes to xstockstrat-config WatchConfig stream at startup.
-"""
-
 import asyncio
 import logging
 
@@ -16,10 +11,7 @@ log = logging.getLogger(__name__)
 
 
 class ConfigWatcher:
-    """
-    Subscribes to xstockstrat-config WatchConfig gRPC stream.
-    Smoke is staging-only, so it always reads the staging environment's rows.
-    """
+    # Smoke is staging-only: always request the staging environment's rows.
 
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint

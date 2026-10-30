@@ -149,3 +149,26 @@ def test_san_hook_installed_by_default(pki):
     server = tls_server.make_server(app, ctx, host="127.0.0.1", port=9110)
     assert issubclass(server.config.http_protocol_class, tls_server.SanProtocol)
     assert server.config.ssl is ctx
+
+
+async def test_san_gate_passes_lifespan_and_denies_websocket_and_unknown():
+    reached = []
+
+    async def app(scope, receive, send):
+        reached.append(scope["type"])
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    gate = tls_server.san_gate(app)
+    await gate({"type": "lifespan"}, receive, send)
+    assert reached == ["lifespan"]
+    await gate({"type": "websocket", "client": ("127.0.0.1", 1)}, receive, send)
+    await gate({"type": "other"}, receive, send)
+    assert reached == ["lifespan"]
+    assert sent == [{"type": "websocket.close", "code": 1008}]

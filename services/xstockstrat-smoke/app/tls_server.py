@@ -56,8 +56,13 @@ def build_ssl_context(cert_pem: str, key_pem: str, ca_pem: str) -> ssl.SSLContex
 
 def san_gate(app):
     async def gated(scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] == "lifespan":
             return await app(scope, receive, send)
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        if scope["type"] != "http":
+            return
         client = scope.get("client")
         san = PEER_SAN.get(tuple(client)) if client else None
         if san is None:

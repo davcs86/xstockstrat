@@ -1,13 +1,5 @@
-"""Mutual-TLS transport credentials for inter-service gRPC (feature 210).
-
-Cert material is read from boot-time env PEM strings (MTLS_CERT / MTLS_KEY / MTLS_CA_CERT), never
-over WatchConfig. Absent material raises at import/call (fail-closed — the server/client must not
-start without it). Clients pin the verified server authority to the TARGET SERVICE NAME (never the
-dialed host) via grpc.ssl_target_name_override, so verification is env-independent across
-docker-compose (bare service name) and DO App Platform (PRIVATE_DOMAIN FQDN). Dialing
-xstockstrat-<svc>:<port> already presents xstockstrat-<svc> as the authority, so the override makes
-the match explicit and correct regardless of env. See docs/patterns/inter-service-mtls.md.
-"""
+"""Fail-closed gRPC mTLS credentials from the MTLS_* env PEMs (docs/patterns/inter-service-mtls.md).
+Clients pin the server authority to the target service name, never the dialed host."""
 
 import os
 
@@ -26,7 +18,6 @@ def _load() -> tuple[bytes, bytes, bytes]:
 
 
 def channel_credentials() -> grpc.ChannelCredentials:
-    """Present this service's leaf and verify the server cert chains to the platform CA."""
     key, cert, ca = _load()
     return grpc.ssl_channel_credentials(
         root_certificates=ca, private_key=key, certificate_chain=cert
@@ -34,5 +25,4 @@ def channel_credentials() -> grpc.ChannelCredentials:
 
 
 def target_override(target_service: str) -> list[tuple[str, str]]:
-    """Channel options pinning the verified server authority to target_service (env-independent)."""
     return [("grpc.ssl_target_name_override", target_service)]
