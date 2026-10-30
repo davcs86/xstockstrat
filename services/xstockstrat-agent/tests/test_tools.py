@@ -1994,6 +1994,63 @@ def test_grpc_error_message_deadline_exceeded_without_deadline_s():
     assert "within" not in msg
 
 
+def test_grpc_error_message_write_deadline_says_outcome_unknown():
+    import grpc  # noqa: PLC0415
+
+    from app.tools import _grpc_error_message  # noqa: PLC0415
+
+    err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "Deadline Exceeded")
+    msg = _grpc_error_message(err, deadline_s=10.0, write=True)
+    assert "within 10s" in msg
+    assert "outcome unknown, verify before retrying" in msg
+    assert "retry shortly" not in msg
+
+
+def test_grpc_error_message_read_deadline_keeps_retry_text():
+    import grpc  # noqa: PLC0415
+
+    from app.tools import _grpc_error_message  # noqa: PLC0415
+
+    err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "Deadline Exceeded")
+    msg = _grpc_error_message(err, deadline_s=45.0)
+    assert "within 45s" in msg
+    assert "retry shortly" in msg
+
+
+def test_grpc_error_message_passes_through_server_deadline_detail():
+    import grpc  # noqa: PLC0415
+
+    from app.tools import _grpc_error_message  # noqa: PLC0415
+
+    details = "backtest exceeded max_duration_seconds"
+    err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, details)
+    assert _grpc_error_message(err, deadline_s=45.0) == details
+    assert _grpc_error_message(err, deadline_s=None) == details
+    assert _grpc_error_message(err, deadline_s=45.0, write=True) == details
+
+
+def test_grpc_error_message_client_sentinel_is_not_passed_through():
+    import grpc  # noqa: PLC0415
+
+    from app.tools import _grpc_error_message  # noqa: PLC0415
+
+    err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "Deadline Exceeded")
+    msg = _grpc_error_message(err, deadline_s=45.0)
+    assert msg != "Deadline Exceeded"
+    assert "within 45s" in msg
+
+
+def test_grpc_error_message_write_without_deadline_s():
+    import grpc  # noqa: PLC0415
+
+    from app.tools import _grpc_error_message  # noqa: PLC0415
+
+    err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "Deadline Exceeded")
+    msg = _grpc_error_message(err, write=True)
+    assert "outcome unknown" in msg
+    assert "within" not in msg
+
+
 # ── SSRF egress hardening (feature 207) — extract_* fetch path ────────────────
 #
 # respx patches AsyncHTTPTransport.handle_async_request, so it intercepts the pinned client ABOVE

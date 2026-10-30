@@ -389,3 +389,410 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Batch peers with no feature directory on this checkout (fix-marketdata-secret-exposure,
     fix-offline-book-consistency, fix-python-loop-supervision, fix-fundsignal-emit-accounting), and 257/263/266,
     were not overlap-scanned. Re-scan them when they reach implementation-ready.
+
+---
+
+## Session 2026-10-29 (/sdd-execute sequential — branch setup + re-spec)
+
+- Branch setup (§5.3): merged `origin/main-dev` into `feature/fix-config-stream-resilience` (normal merge, no
+  conflicts). The ledger-guard check (`--own-slug fix-config-stream-resilience --base origin/main-dev --fix`)
+  reported clean, so the merge commit needed no repair.
+- Re-spec of Steps 3, 4, 5, 8, 2, 1 and 9 (bodies only) against the merged tree:
+  - Steps 3/4: the `setConfig` anchors moved +2 because main-dev added the `platform.trading_state`
+    INVALID_ARGUMENT block (`configServiceImpl.ts:418-430`). The gates are now `:449-465`, NOT_FOUND `:468-474`,
+    and the write try `:502-524`. Symbols and code shapes are unchanged. `getConfig` `:315-328` / `:319` and
+    `getSecret` `:335-369` match.
+  - Step 5: no mismatch; it is marked re-verified. Step 6's ledger fake-call anchors were re-stamped as well
+    (`:597-598`, `:609`).
+  - Step 8: feature 252 has landed on this branch. Ledger `test:coverage` is `tsc && c8 … node --test
+    dist/__tests__/*.test.js` (`package.json:14`), the `before()` import is unguarded (`:10-12`, asserted at
+    `:18`), and no `if (!impl) return;` skip remains. So the Step 8 precondition gate now passes. The
+    § Step Dependencies "Step 8 hard dependency" paragraph and the open item "Step 8 blocked until 252…" above
+    are therefore satisfied. They were left as written, because this re-spec covers step bodies only.
+  - Step 2: ledger `FakeClient` anchors re-stamped (`eventNotifier.test.ts:22/27/47`). The log-sink spike still
+    needs `pnpm install` first.
+  - Step 1: all anchors match. The pg_terminate_backend check cannot run in this worktree session, because
+    starting a database is barred. It takes the spec's own fallback (dev app, integration-PR blocker).
+  - Step 9: CONFIG-1's line hints are already stale (`reloadNamespace` `:203`, `changedKeys` `:220`).
+    Instruction 2's re-stamp covers this.
+
+---
+
+## Session 2026-10-29 (sdd-execute sequential (sdd-batch-execute))
+
+- Up-front confirmation (sequential mode): the operator approved the plan by standing authorization in operator
+  chat 2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f). The authorization covers:
+  - "Start executing features 241-276" via batch-execute;
+  - unattended checkpoints with `report`, and merge-train authorized; 255 and 275 deferred;
+  - C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
+  - operator-only DB/prod steps: open the PR and hold the merge;
+  - the blocker decisions of 2026-10-29, recorded per feature.
+- Status `implementation-ready` → `in-progress`.
+- Carry-forward: the Step 1 pg_terminate_backend check is pending, and goes to the dev app as an integration-PR
+  blocker unless a session can run it. The merge-order rows (258↔241/263/248) are still owed at integration.
+
+### Step 1 — service: config LISTEN lifecycle (reconnect with backoff, serial chain, guarded notifications) [blocked]
+- Implemented Instructions 1–10 in `configServiceImpl.ts`:
+  - `connectListener` runs LISTEN before `reloadAll`, with `pool.connect()` inside the try.
+  - `dropListener` has an identity guard and a single `release(err)`.
+  - `scheduleReconnect` uses a single timer and backs off 1 s → 30 s.
+  - `resyncAll` and the guarded `onNotification` both run through the `serial` chain.
+  - `initialize()` now calls `connectListener()`.
+- Verification passed:
+  - build exit 0;
+  - lint exit 0 (0 errors, 158 pre-existing warnings, unchanged);
+  - one `pool.connect()` at `:188`, constants at `:156-157`;
+  - existing suite 182/182 pass (`test:coverage` exit 0).
+- TDD (throwaway probe; Step 2 owns the committed proof). Both runs used the same uncommitted fake-pool probe
+  against `dist/`:
+  - RED: `listenBeforeReloadAll:false, connects:1, listens:1, releases:[]`; unhandled: the `"not json"`
+    JSON.parse rejection and the unhandled `error` event; and one namespace SELECT for a payload without a
+    namespace.
+  - GREEN: `listenBeforeReloadAll:true, connects:2, listens:2`, one release carrying the error, no unhandled
+    rejections, and 0 namespace SELECTs.
+- Blocked only on the operator-only pg_terminate_backend check (Deviation Log). Step **Status** stays `pending`, and
+  the integration-PR merge is held until that check passes on the dev app. Steps 2–6 may proceed.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: Step 1 deferred to operator (pg_terminate_backend check); RED captured by a throwaway probe because the
+  paired test is Step 2. Full detail is in the Deviation Log.
+- Two constraint comments were added beyond the spec text: the `chain` field (it serializes reloads) and the
+  LISTEN-before-reload line.
+
+### Step 2 — test: LISTEN reconnect, retry, resync and notification-failure cases (AC-1, AC-2, AC-9) [done]
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` (config + root) ⬇.
+- Log sink (Instruction 0): winston 3.19.0 Console writes every level to `console._stdout` = `process.stdout`;
+  the probe passed and was deleted. Step 6 reuses the `process.stdout.write` capture (Deviation Log).
+- Added `describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)')` with 8 cases: boot order, @AC-1, @AC-9,
+  connect rejects twice (backoff 1 s → 2 s → 4 s, then reset to 1 s), reloadAll rejects once, interleave (chain
+  order 300 then 600), @AC-2, malformed payload. Local `FakeClient`/routing pool/`fakeCall` helpers (C-13 inline;
+  no fixtures home).
+- TDD: RED against the pre-Step-1 `configServiceImpl.ts` (a482eae2, restored temporarily): 8/8 new cases fail as
+  predicted. GREEN on the Step 1 code: 11/11 in the file, 5 repeated runs with 0 failures.
+- Verification: `pnpm run test:coverage` exit 0 (190/190 pass, c8 lines 92.04% ≥ 40); `pnpm run lint` exit 0 with
+  0 errors (168 warnings: 158 pre-existing plus 10 `no-explicit-any` in the new test helpers); the AC greps hit;
+  the fixtures grep has no hits.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
+
+### Step 3 — service: config getConfig / setConfig gate queries return a gRPC error on DB rejection [done]
+- `getConfig`: `resolveOverlayValues` wrapped; a rejection logs `getConfig failed` and calls back code 13.
+- `setConfig`: `existing`/`globalRow` declared above one try that holds only the two existence-gate queries; a
+  rejection logs `setConfig existence gate failed` and calls back code 13. PERMISSION_DENIED, MISSING_AUTHOR,
+  INVALID_ARGUMENT, NOT_FOUND, the encryption catch and the write try are unchanged and outside the new try.
+- TDD (throwaway probe; Step 4 owns the committed proof). RED: three handlers rejected `connection terminated`
+  with no callback. GREEN: callback code 13 for all, no INSERT after a gate failure; write-try pin code 13 both runs.
+- Verification: build exit 0; lint exit 0 (0 errors, 172 warnings = 168 + 4 spec-mandated `any`); one hit each for
+  both log strings (`:408`, `:561`); existing suite 190/190 pass, c8 lines 91.44%.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Environment note: the host disk was at 100% (about 40 MB free) during this step; one Edit failed with ENOSPC and
+  was retried with no partial write.
+
+
+## Session 2026-10-29 (/sdd-execute sequential (sdd-batch-execute) — second main-dev merge + re-spec)
+
+- Authorization: operator's standing up-front authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints
+  reported, C-16 promotion auto-confirmed unless it changes an existing @AC rule; operator-only DB/prod steps:
+  open the PR and hold the merge). Status was already `in-progress`, so no transition.
+- Merged `origin/main-dev` into the branch (`7759f2b0`, a normal merge with no conflicts); ledger-guard clean.
+- Re-spec of Steps 1, 4, 5, 6 and 9 (the step bodies' evidence/line hints only; no instruction changes):
+  - Step 1: Codebase Evidence now describes the implemented tree (`907fa340`): `pool.connect()` at `:188` inside
+    `connectListener`, backoff constants at `:156-157`, `reloadNamespace` `:288`, `broadcastToSubscribers` `:345`.
+    The false "every Step 1 anchor still matches" line is replaced. Step 1 stays `pending` on the operator
+    pg_terminate_backend check (Deviation Log).
+  - Step 4: `getConfig` `:400` / overlay call `:406`; overlay SELECT `:318-322`; setConfig gates `:541-563`
+    (catch/code 13 `:559-563`); NOT_FOUND `:566-572`.
+  - Step 5: `lastVersion: '0'` `:387`; broadcast `:345-359` (catch `:353-356`); `watchConfig` `:365-398`;
+    `first()` declared at `authz.ts:15`; call form `:499`. The false "every Step 5 anchor still matches" line is
+    replaced.
+  - Step 6: reuse `FakeClient` (test `:104`) and `makeRig()` (`:123`); log capture is the inline
+    `process.stdout.write` mock (about `:358-360`), not a shared helper.
+  - Step 9: CONFIG-1 hints now `reloadNamespace` `:288` / `changedKeys` `:305` (pre-Step-5).
+- Next: Step 4.
+
+### Step 1 — re-run after the respec (2026-10-29) [blocked — operator-only]
+- The code is unchanged since `907fa340`. Verification was re-run on the post-merge tree: build exit 0; lint 0 errors
+  (174 warnings); `test:coverage` 191/191 pass; one `pool.connect()` (`:188`); both backoff constants (`:156-157`).
+- The only open item is still the operator-only pg_terminate_backend check. The existing Deviation Log entry
+  ("Step 1 deferred to operator") stands, so no new spec entry was added. Step **Status** stays `pending`.
+
+### Step 4 — test: unary handlers return an error status and keep their specific codes (AC-3, AC-4, AC-11) [done]
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` (config + root) ⬇ (the main worktree has
+  no `node_modules`, so it was installed in this worktree rather than symlinked).
+- Added `describe('ConfigServiceImpl — unary DB failures (feature 258)')` with 6 cases: @AC-3, @AC-4, @AC-11 and the
+  INVALID_ARGUMENT / NOT_FOUND / PERMISSION_DENIED pins. It uses a local regex-failing pool and `unhandled()`
+  helper (C-13 inline), and imports `ADMIN_SCOPE_ERROR`, `HEADER_ACCESS_SCOPE` and `HEADER_USER_ID` from
+  `../grpc/authz`.
+- TDD: RED against the pre-Step-3 `configServiceImpl.ts` (907fa340, restored temporarily). @AC-3 and @AC-4 failed
+  with `connection terminated` rejecting from the handler, and the four pins passed. GREEN on the Step 3 code: 6/6,
+  and the whole file passed with 0 failures in 3 repeated runs.
+- Verification: `pnpm run test:coverage` exit 0 (197/197 pass, c8 lines 92.34% ≥ 40). `pnpm run lint` exit 0 with
+  0 errors (182 warnings = 174 + 8 `no-explicit-any` in the new test helpers). The AC grep hits `:448`, `:460` and
+  `:470`.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
+
+### Step 5 — service: WatchConfig registers pending before the snapshot; failures end the call (D-35, D-58) [done]
+- `Subscriber`: `lastVersion` was replaced by `pending`, `missedDelta` and `traceId?`.
+- New `endSubscriber(id, sub, err)`:
+  - It is identity-guarded.
+  - It logs `WatchConfig subscriber terminated` at error level, with the trace id and `err`.
+  - It calls `call.destroy({ code: 13 })` inside a try.
+  - Its only callers are the broadcast catch and the watchConfig chain.
+- `broadcastToSubscribers`: a pending subscriber gets `missedDelta = true` and no write.
+- `watchConfig` now registers before the snapshot read. It writes the SNAPSHOT, drains `missedDelta` with DELTA
+  catch-ups, then clears `pending`. The `cancelled`/`error` handlers stay delete-only.
+- TDD (a throwaway probe; Step 6 owns the committed proof):
+  - RED: AC-6 and AC-8 had no `destroy` (code undefined). AC-7 lost the in-flight change: the only write was
+    `[SNAPSHOT 300]`.
+  - GREEN: 3/3.
+  - Step 6 must subscribe with a non-empty `user_id` to hold a snapshot in flight, because the global path issues no
+    SELECT.
+- Verification:
+  - Build exit 0.
+  - Lint 0 errors. 183 warnings = 182 + 1 spec-mandated `err: any` on `endSubscriber`.
+  - `lastVersion` has 0 hits.
+  - `this.endSubscriber(` has exactly 2 call sites: `:360` (broadcast) and `:427` (chain).
+  - The existing suite passes 197/197, with c8 lines at 90.55%.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+
+### Step 6 — test: snapshot failure, in-flight change, broadcast failure, cancel during catch-up (AC-6, AC-7, AC-8) [done]
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` (config + root) ⬇. The main worktree
+  has no `node_modules`, so it was installed in this worktree rather than symlinked.
+- Added 6 cases to `describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)')`, reusing `FakeClient`/`makeRig()`:
+  @AC-6, @AC-7, @AC-8, cancel during catch-up, idempotent end and trace id (`x-trace-id: t-258`). All six subscribe
+  with `user_id: 'u-1'` so the overlay SELECT can be held or rejected.
+- Rig changes: `makeRig()` gained a `hooks.overlay` queue; `fakeCall(userId)` gained a `destroys` counter; a
+  describe-local `captureStdout(t)` wraps the Step 2 stdout capture (Deviation Log).
+- TDD: RED against the pre-Step-5 `configServiceImpl.ts` (ec5d13d0^, swapped in temporarily): 6/6 new cases failed
+  for the predicted reasons. GREEN on the Step 5 code: 203/203 pass, and 2 repeat runs had 0 failures.
+- Verification: `pnpm run test:coverage` exit 0 (203/203, c8 lines 92.89% ≥ 40). `pnpm run lint` 0 errors (185
+  warnings = 183 + 2 `no-explicit-any` in `captureStdout`). The AC grep hits `:410`, `:427`, `:447`, `:471`.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`
+- Next: Step 7.
+
+### Step 7 — service: ledger appendEvent acquires the client inside the try and releases it with the error [done]
+- `ledgerServiceImpl.ts`:
+  - Added `import type { PoolClient } from 'pg';` (`:2`).
+  - `let client: PoolClient | undefined; let failure: unknown;` replaces the pre-try connect.
+    `client = await this.pool.connect();` is now the first statement in the try (`:78`).
+  - The catch sets `failure = err` and guards the ROLLBACK with `if (client)`.
+  - The finally runs `client?.release(failure instanceof Error ? failure : undefined)` (`:121`).
+  - The success path, dedup branch (LEDGER-1), insert SQL and plain no-key path are unchanged. tsc narrowing
+    made `client!` unnecessary.
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓. `pnpm install --frozen-lockfile` ran in this worktree, because the main
+  worktree has no `node_modules`.
+- TDD (a throwaway probe; Step 8 owns the committed proof):
+  - AC-5 red: `appendEvent` rejected with `timeout exceeded when trying to connect` and never called back → green:
+    `cb` was called once with code 13 and nothing was released.
+  - AC-10 red: `assert.ok(releases[0] instanceof Error)` failed → green: released with `connection terminated`, and
+    ROLLBACK was issued.
+  - Success pin: `release(undefined)`.
+- Verification:
+  - `pnpm run build` exit 0.
+  - `pnpm run lint` 0 errors, 97 warnings; the file has 24 warnings both before and after the change.
+  - `pnpm run test:coverage` 47/47 pass, with c8 lines at 73.55%.
+  - The 3 greps hit once each: `:2`, `:78` (after `try {` at `:77`) and `:121`.
+- Line shift: `appendEvent`'s idempotent block moved by +2 to +3 lines. LEDGER-1's `~L73-118` anchor and
+  `fix-identity-ledger-test-suites.feature:9` (`:84-105`) are approximate now. Refresh them in Step 9 or in the
+  teardown.
+- Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`
+- Next: Step 8.
+
+### Step 8 — test: idempotent AppendEvent connect and mid-transaction failures (AC-5, AC-10) [done]
+- `ledgerServiceImpl.test.ts`:
+  - `makeIdempotentPool` gained `connectThrows?` and `throwOn?` options and returns a `releases` array; existing
+    callers pass neither option.
+  - The two existing idempotent cases now pin `releases` to `[undefined]`.
+  - New `describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)')` with `@AC-5` and `@AC-10`, each
+    opening with the `never skip silently` import assertion. The 252 `before()` block and runner are untouched.
+- Tooling: node 24.20.0 ✓ · pnpm 9.15.9 ✓. `pnpm install --frozen-lockfile --filter xstockstrat-ledger...` ran in this
+  worktree (the main worktree has no `node_modules`).
+- TDD: RED against the pre-Step-7 source (a9197ef2~1, swapped in temporarily): `# pass 30 / # fail 2`, both `@AC-*`
+  `not ok` for the predicted reasons. GREEN: `# pass 32 / # fail 0`, exactly 2 `ok … @AC-(5|10)` hits.
+- Verification: precondition grep hit `package.json:14`; `pnpm run test:coverage` 49/49 pass, c8 lines 74.51%;
+  `pnpm run lint` 0 errors, 100 warnings (97 → 100, new `no-explicit-any` in the test helper).
+- Files modified: `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`
+- Next: Step 9.
+
+### Step 9 — docs: config service docs, CONFIG-1 anchors, limitations [done]
+- `services/xstockstrat-config/CLAUDE.md`:
+  - Invariant #4 now says LISTEN runs before the boot `reloadAll`, work runs on one serial chain, and the client
+    is released on `error`/`end` and reconnects with 1 s → 30 s backoff, then re-broadcasts.
+  - § WatchConfig Flow gained the pending registration with its catch-up DELTA, a LISTEN-lost branch, the
+    `INTERNAL` (13) end-of-call rule (cancel and transport error only unregister), and a "Known limitations
+    (feature 258)" list. The stale pg_notify payload `trading_mode` was corrected to `user_id`.
+- `services/xstockstrat-config/docs/context-constitution.md`: CONFIG-1 was re-stamped (`reloadNamespace` `~L290-314`,
+  `changedKeys` `~L307`). `#resyncAll` (`~L234`) and the `watchConfig` catch-up loop (`~L420`) were added as
+  full-namespace DELTA producers. Every other `configServiceImpl.ts` hint was re-stamped as teardown (Deviation Log).
+- Limitations (recorded here per design.md § Open Risks):
+  - **Half-open socket.** `index.ts` sets no keepAlive, so a half-open or silently dropped LISTEN socket may never
+    emit `error`/`end`. The reconnect path would then never fire, and AC-1/AC-9 are proven only against the
+    FakeClient. **Step 1 pg_terminate_backend check outcome: not yet run.** A worktree session may not start a
+    database, so the check is an operator-only integration-PR merge blocker (Deviation Log, Step 1). If it shows the
+    pooled client emits no `error`/`end`, return to `/sdd-design` for fork (b), the dedicated client.
+  - **Stale namespace.** A namespace whose rows were all deleted during an outage keeps its stale snapshot.
+    `reloadAll` only sets the namespaces it finds. This is an accepted limitation.
+  - Propagation can lag about 30 s after a long outage, and the listener competes for the 2 pool slots while
+    pg-pool's `connect()` wait is unbounded. Both are now documented in config `CLAUDE.md`.
+- F-07 rationale (code-constant backoff, not config keys): see the 2026-10-22 sdd-design session above ("F-07
+  rationale: …", precedent `eventNotifier.ts:35`).
+- TDD: N/A (docs, non-code-bearing).
+- Verification: `grep -n "reconnect\|LISTEN before\|catch-up"` on config `CLAUDE.md` hits `:35`, `:72`, `:94`, `:95`,
+  `:99` and `:103`. `grep -n "private async reloadNamespace\|changedKeys: Object.keys(values)"` gives `:290`, `:307`
+  and `:340`, which match the CONFIG-1 hints.
+- Teardown: the `context-constitution` skill is unavailable in this session (only `context-forge:context-scrubber`
+  is loaded). A manual reconciliation of both touched context files against the code was done (Deviation Log).
+  The PR body must state both facts.
+- Open, out of this step's Files: LEDGER-1's `~L73-118` anchor in `services/xstockstrat-ledger/docs/` and
+  `fix-identity-ledger-test-suites.feature:9` are approximate after Step 7. Refresh them at the integration PR or in a
+  ledger teardown.
+- Files modified: `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-config/docs/context-constitution.md`
+- Next: Step 1's operator check, then the integration PR.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-config-stream-resilience (feature 258)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-config/acceptance/fix-config-stream-resilience.feature | CREATE | NEW | LISTEN reconnect, subject is config WatchConfig delta |
+| AC-2 | same | CREATE | NEW | notification handler error is logged, no crash |
+| AC-3 | same | CREATE | NEW | GetConfig error status |
+| AC-4 | same | CREATE | NEW | SetConfig existence-gate error status |
+| AC-5 | services/xstockstrat-ledger/acceptance/fix-config-stream-resilience.feature | CREATE | NEW | AppendEvent pool.connect failure; ledger owns it |
+| AC-6 | config suite | CREATE | NEW | failed initial snapshot ends stream |
+| AC-7 | config suite | CREATE | NEW | change during snapshot build is not lost |
+| AC-8 | config suite | CREATE | NEW | failed broadcast tells subscriber to reconnect |
+| AC-9 | config suite | CREATE | NEW | NOTIFY lost while LISTEN is down, resync after reconnect |
+| AC-10 | ledger suite | CREATE | NEW | AppendEvent in-transaction failure releases client |
+| AC-11 | config suite | CREATE | NEW | SetConfig value-write failure error status |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-config-stream-resilience.feature (CREATE) ---
+# Promoted from docs/roadmap/features/258-fix-config-stream-resilience/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-258` tag.
+# Durable business rules xstockstrat-config guarantees for change propagation and DB-error handling.
+
+Feature: xstockstrat-config - config stream resilience and DB-error handling
+  What xstockstrat-config guarantees: change propagation survives a dropped LISTEN connection, and handler DB errors surface as logged errors or gRPC error statuses rather than silent failures.
+
+  @AC-1 @FR-1 @regression @feature-258
+  Scenario: Config change propagation resumes after the LISTEN connection drops
+    Given xstockstrat-config is running with a WatchConfig subscriber on namespace "analysis" environment "staging"
+    And the config LISTEN connection to Postgres is terminated
+    When a SetConfig writes global key "analysis.backtest.max_duration_seconds" = 600 in "staging"
+    Then the subscriber receives a DELTA carrying "analysis.backtest.max_duration_seconds" = 600
+    And the config process was not restarted
+
+  @AC-2 @FR-2 @regression @feature-258
+  Scenario: A failing reload inside the notification handler does not crash config
+    Given the config LISTEN client receives a "config_changed" notification for namespace "analysis"
+    And the reload query for that namespace rejects with "connection terminated"
+    When the notification is handled
+    Then a log record at error level containing "connection terminated" is captured
+    And no unhandled promise rejection is raised and the process keeps serving GetConfig
+
+  @AC-3 @FR-3 @regression @feature-258
+  Scenario: GetConfig returns an error status when the per-user overlay query fails
+    Given the per-user overlay query for namespace "analysis" user "u-1" rejects with "connection terminated"
+    When GetConfig is called with namespace "analysis" and user_id "u-1"
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+  @AC-4 @FR-3 @regression @feature-258
+  Scenario: SetConfig returns an error status when the existence-gate query fails
+    Given the existence-gate query for namespace "analysis" key "analysis.backtest.max_duration_seconds" rejects with "connection terminated"
+    When an admin calls SetConfig for that key with value 600
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+  @AC-6 @FR-4 @regression @feature-258
+  Scenario: A failed initial WatchConfig snapshot ends the stream with an error status
+    Given the per-user overlay query for namespace "analysis" user "u-1" rejects
+    When a client opens WatchConfig for namespace "analysis" user_id "u-1"
+    Then the stream is ended with a gRPC error status
+    And a later SetConfig of "analysis.backtest.max_duration_seconds" = 600 sends no message to that stream
+
+  @AC-7 @FR-4 @regression @feature-258
+  Scenario: A change committed while the initial snapshot is being built still reaches the new subscriber
+    Given a client opens WatchConfig for namespace "analysis" user_id "u-1" and the snapshot read is still in flight
+    When "analysis.backtest.max_duration_seconds" is changed to 600 and "config_changed" is broadcast before the snapshot resolves
+    Then the subscriber's first SNAPSHOT or a following DELTA carries "analysis.backtest.max_duration_seconds" = 600
+
+  @AC-8 @FR-5 @regression @feature-258
+  Scenario: A subscriber whose broadcast fails is told to reconnect instead of silently dropped
+    Given a WatchConfig subscriber on namespace "analysis" user_id "u-1"
+    And the per-user overlay query rejects once during a broadcast for "analysis"
+    When "config_changed" is broadcast for namespace "analysis"
+    Then a log record at error level containing the overlay query's rejection message is captured
+    And that subscriber's call is ended with a gRPC error status
+
+  @AC-9 @FR-1 @regression @feature-258
+  Scenario: A change committed while the LISTEN connection is down reaches subscribers after reconnect
+    Given xstockstrat-config is running with a WatchConfig subscriber on namespace "analysis" environment "staging"
+    And the config LISTEN connection to Postgres is terminated
+    And while it is down global key "analysis.backtest.max_duration_seconds" is set to 600 in "staging" and its NOTIFY is lost
+    When the config LISTEN connection is re-established
+    Then the subscriber receives a message carrying "analysis.backtest.max_duration_seconds" = 600
+
+  @AC-11 @FR-3 @regression @feature-258
+  Scenario: SetConfig returns an error status when the value write fails after the existence gate passes
+    Given global key "analysis.backtest.max_duration_seconds" is registered in "staging"
+    And the INSERT/UPDATE of config.config_values for that key rejects with "connection terminated"
+    When an admin calls SetConfig for that key with value 600
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-config-stream-resilience.feature (CREATE) ---
+# Promoted from docs/roadmap/features/258-fix-config-stream-resilience/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-258` tag.
+# Durable business rules xstockstrat-ledger guarantees for idempotent AppendEvent DB failures.
+
+Feature: xstockstrat-ledger - idempotent AppendEvent surfaces DB failures
+  What xstockstrat-ledger guarantees: a pool or in-transaction failure on the idempotent append path returns a gRPC error status, releases its client, and raises no unhandled rejection.
+
+  @AC-5 @FR-3 @regression @feature-258
+  Scenario: Idempotent AppendEvent returns an error status when no pool connection can be acquired
+    Given ledger pool.connect rejects with "timeout exceeded when trying to connect"
+    When AppendEvent is called with stream_key "account:a-1" and idempotency_key "k-1"
+    Then the callback is invoked with a gRPC error status
+    And no unhandled promise rejection is raised
+
+  @AC-10 @FR-3 @regression @feature-258
+  Scenario: Idempotent AppendEvent returns an error status and releases its client when a query in the transaction fails
+    Given ledger pool.connect succeeds and the INSERT inside the idempotent transaction rejects with "connection terminated"
+    When AppendEvent is called with stream_key "account:a-1" and idempotency_key "k-2"
+    Then the callback is invoked with a gRPC error status
+    And the acquired pool client is released
+    And no unhandled promise rejection is raised
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1..4, 6..9, 11 assert on config's LISTEN/WatchConfig/GetConfig/SetConfig, so they go to services/xstockstrat-config/acceptance/. AC-5 and AC-10 assert on ledger AppendEvent, so they go to services/xstockstrat-ledger/acceptance/. None is cross-cutting, so docs/sdd/business-rules/platform.feature is untouched.
+- Dedup: I grepped the config and ledger suites and platform.feature for feature-258, LISTEN, unhandled, AppendEvent and config_changed. I found no same-outcome scenario. The nearest are config-secrets-and-scoping.feature and fix-python-config-stored-zero.feature, which cover redaction and zero values on the WatchConfig wire. They do not overlap, and nothing contradicts them. The ledger fix-identity-ledger-test-suites.feature only mentions the duplicate-key branch, which is unrelated.
+- No existing promoted @AC rule is changed or contradicted. This is additive.
+- Neither new file name exists yet. The ledger acceptance/ directory already exists. Only those two services appear in the Reviewers table.
+
+### Coverage check
+- Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW (9 config, 2 ledger), 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
+```
+
+## Session 2026-10-29 — operator decision: Step 1 gate becomes post-merge verification
+
+- The operator said: "I don't have a way to run DB queries". This session may not start a database either, so the
+  Step 1 `pg_terminate_backend` forced-drop check has no one to run it.
+- Options offered: (A) a real-TimescaleDB CI integration test copying the `Ledger DB test (TimescaleDB)` job,
+  (B) post-merge, unit-tested, (C) keep holding. The operator chose **"B: Post-merge, unit-tested"**.
+- Step 1 is `done` and status is `code-completed`, recorded in the Deviation Log. The merge hold on #1357 is lifted.
+- Accepted residual risk: the real half-open-socket path, where the pooled client might not emit `error`/`end`, is
+  never exercised. Option A remains the remedy if a production config freeze is ever observed.
+- Post-merge (operator's session): check Grafana for the config `listening for config_changed` boot log on dev, and a
+  staging `set_config` change propagating.
+
+## Session 2026-10-29 — post-merge dev verification (pass)
+
+- Merged as `1f341870` (#1357). It was deployed to dev by the `9bd923f3` run (DO deployment `db6ee608`, ACTIVE 23:38:03Z). The `1f341870` deploy run failed only because DO marked it `SUPERSEDED` by that newer deployment.
+- Boot: the config RUN log at 23:37:32Z shows `Config service initialised, listening for config_changed notifications`. There are no `error` lines, and 11 WatchConfig subscribers reconnected by 23:40:04Z.
+- Propagation: a same-value staging write `portfolio.watchlist.max_per_user` 50→50 at 23:54:24.756Z was followed 11 ms later by `Broadcast config update namespace=portfolio env=staging subscribers=1`. `broadcastToSubscribers` is called only from `onNotification` and the reconnect `resyncAll`, so this proves NOTIFY → LISTEN → broadcast end to end.
+- Still not exercised, as accepted at the Step 1 decision: a real forced drop of the LISTEN connection.
+- Loki held no log streams in the 6 h window, so the DO App Platform RUN logs were used instead.

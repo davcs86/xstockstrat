@@ -49,6 +49,8 @@ ListOfflineAccountIdsByUser` set the all-accounts branch trusts). `GetSnapshot` 
 `PermissionDenied` unless `portfolio_id == caller` — a snapshot's `portfolio_id` **is** the owning
 `user_id` (snapshots are written as `InsertSnapshot(userID, userID, …)`), so a caller can read only
 their own. Previously both returned another user's equity/positions for any supplied id.
+`StreamPortfolioUpdates` delivers only snapshots whose `portfolio_id == x-user-id`; an empty caller is
+rejected `InvalidArgument` on both paths before subscribing (feature 264).
 
 **Cross-user watchlist enumeration & first authz gate (feature 154).** `ListAllWatchlistSymbols`
 returns the **distinct union of watchlist symbols across ALL users** (`SELECT DISTINCT symbol FROM
@@ -96,7 +98,6 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `portfolio.snapshot.interval_minutes` | int | `5` | How often to write portfolio snapshots |
 | `portfolio.risk.max_drawdown_pct` | float | `0.10` | Per-account drawdown alert — a WARNING alert is emitted when an account's peak-to-current drawdown (broker `account_balances.equity` vs persisted `peak_equity` HWM) exceeds this pct (feature 172) |
 | `portfolio.risk.concentration_limit_pct` | float | `0.20` | Alert if single position > 20% of portfolio |
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
@@ -136,7 +137,7 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 | `portfolio.position.opened` | New position created |
 | `portfolio.position.closed` | Position fully closed |
 | `portfolio.risk.drawdown_breach` | Max drawdown exceeded |
-| `portfolio.snapshot` | Periodic snapshot written |
+| `portfolio.snapshot` | Snapshot written after each processed fill |
 
 **`portfolio.position.closed` payload — producer contract (feature 042).** The full-close emit in
 `ConsumeOrderFills` carries `{user_id, symbol, account_id, trading_mode, realized_pnl}`, where

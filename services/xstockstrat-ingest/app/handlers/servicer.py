@@ -1537,6 +1537,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return
         op = request.operation
         meta = request.template.meta
+        if op == common_pb2.TEMPLATE_OPERATION_CREATE and not meta.template_id:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "template_id required")
+            return
         if op == common_pb2.TEMPLATE_OPERATION_RETIRE:
             row = await source_templates.retire(self._db, meta.template_id)
         elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
@@ -1555,7 +1558,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 try:
                     row = await source_templates.create(
                         self._db,
-                        template_id=meta.template_id or str(uuid.uuid4()),
+                        template_id=meta.template_id,
                         name=meta.name,
                         description=meta.description,
                         payload=payload,

@@ -32,7 +32,7 @@ startup; the Docker healthcheck probes `50060` directly.
 1. **This service does NOT subscribe to itself** — it is the config source.
 2. **All other services must call WatchConfig at startup** and block until they receive the initial SNAPSHOT before accepting traffic. They must pass `environment` (and, where a per-user value is needed, an optional `user_id`) in the request. The `trading_mode` field is deprecated (feature 147, deprecate-don't-delete in proto) and ignored by the server.
 3. **Config values are scoped** by two dimensions (feature 147): `environment` (`production`/`staging`) × `global`/per-user (`user_id`, NULL = global). A per-user value overrides the global value on both `GetConfig` and `WatchConfig`. The deprecated `ENVIRONMENT_DEV` maps to the `staging` scope; the removed `trading_mode` axis is no longer read (paper/live is derived from environment). Proto gained `ENVIRONMENT_STAGING` and `user_id` fields on the config request messages.
-4. **Config changes trigger pg_notify** → reloads namespace in memory → broadcasts DELTA to all active WatchConfig subscribers (same env scope; per-user values override the global value for a subscriber that passed a matching `user_id`).
+4. **Config changes trigger pg_notify** → reloads namespace in memory → broadcasts DELTA to all active WatchConfig subscribers (same env scope; per-user values override the global value for a subscriber that passed a matching `user_id`). The LISTEN client issues `LISTEN` before the boot `reloadAll`, and all notification/reload work runs on one serial chain; on `error`/`end` the client is released with the error and the listener reconnects with backoff (1 s doubling to a 30 s cap — code constants, not config keys, because config cannot watch itself, invariant #1), then `reloadAll`s and re-broadcasts a full-namespace DELTA to every subscribed `(namespace, environment)` (feature 258).
 5. **`SetConfig` is scope-gated (global → admin; per-user → owner-only); reads are not.** The write gate branches on the target's scope (`src/grpc/authz.ts`, feature 074 + PR #994):
    - **Global write** (`user_id` empty): rejected `PERMISSION_DENIED` ("admin scope required") unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`) **or** an internal-caller write is authorized (invariant #7).
    - **Per-user write** (`user_id` set): **self-service** — allowed only when the propagated `x-user-id` **equals** the target `user_id`, otherwise `PERMISSION_DENIED` ("per-user config is self-service…", `PER_USER_SCOPE_ERROR`). An ADMIN bit grants **no** override here: admins reach only globals and their own per-user rows, never another user's (operator decision, PR #994). No admin bit is required for an owner's own per-user write. Secrets **may be per-user** (feature 224, an operator override of feature 147, which allowed global secrets only): an owner may write their own `is_secret` row under the same self-service gate, and it is encrypted exactly like a global secret (the `is_secret` flag falls back to the global row's when no exact-scope row exists).
@@ -70,6 +70,8 @@ startup; the Docker healthcheck probes `50060` directly.
 Service startup
   └── ConfigWatcher.WaitForSnapshot()
         └── gRPC WatchConfig(namespace="<service>") → streams ConfigSnapshot
+              ├── Registration: the subscriber is registered pending BEFORE its snapshot read; a change
+              │     broadcast meanwhile is recorded and sent as a catch-up DELTA right after the SNAPSHOT
               ├── First message: update_type=SNAPSHOT (full config dump)
               └── Subsequent messages: update_type=DELTA (carries the FULL namespace — `changedKeys=Object.keys(values)` — a wholesale replace, not just changed keys)
 
@@ -85,11 +87,24 @@ Config change (via SetConfig RPC)
               ├── UPDATE: config_value_audit (BEFORE UPDATE, on a value change) — old→new
               └── CREATE: config_value_audit_insert (AFTER INSERT, migration 010, feature 091)
                     — one row with the caller identity + value, old_value NULL
-        └── pg_notify('config_changed', {namespace, key, environment, trading_mode})
+        └── pg_notify('config_changed', {namespace, key, environment, user_id})
               └── ConfigServiceImpl receives LISTEN notification
                     └── Reloads namespace from DB
                           └── Broadcasts DELTA to all WatchConfig subscribers
+
+LISTEN connection lost (error/end)
+  └── release client with the error → reconnect with backoff (1 s → 30 s cap)
+        └── LISTEN before reloadAll → re-broadcast DELTA to every subscribed (namespace, environment)
 ```
+
+A snapshot or broadcast failure ends that subscriber's call with `INTERNAL` (13), so the client's
+reconnect path runs; a client cancel or transport error only unregisters the subscriber.
+
+**Known limitations (feature 258):**
+
+- Propagation can lag by up to about 30 s after a long DB outage (the reconnect backoff cap).
+- During recovery the LISTEN client competes with queries for the 2 pool slots, and pg-pool's `connect()` wait is unbounded.
+- A namespace whose rows were all deleted during an outage keeps its stale snapshot.
 
 ## Config Keys Managed
 

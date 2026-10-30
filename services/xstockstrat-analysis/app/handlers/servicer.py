@@ -3178,7 +3178,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     definition_json,
                 )
             except asyncpg.UniqueViolationError:
-                # Atomic backstop for a concurrent duplicate that raced the get_by_id check.
+                # Atomic backstop for a concurrent duplicate that raced get_by_owner_and_id.
                 await context.abort(
                     grpc.StatusCode.ALREADY_EXISTS,
                     f"strategy '{definition.strategy_id}' already exists",
@@ -3585,7 +3585,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                     return
             else:
-                row = await self._strategy_templates_repo.update(meta.template_id, payload_json)
+                row = await self._strategy_templates_repo.update(meta, payload_json)
         else:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unsupported template operation")
             return

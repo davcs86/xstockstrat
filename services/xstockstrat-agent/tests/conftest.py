@@ -143,6 +143,77 @@ def hung_config_server(monkeypatch):
 
 
 @pytest.fixture
+def hung_backend(monkeypatch):
+    """Start an in-process gRPC server that serves ANY method and point one endpoint at it (273).
+
+    ``start(endpoint_attr, *, module=None, answers=None)`` redirects ``module.<endpoint_attr>``
+    (default module ``app.client``). Per method name, ``answers`` maps to ``(delay_s, msg)`` (answer
+    ``msg`` after the delay) or ``(delay_s, grpc.StatusCode)`` (abort after the delay); an absent
+    method hangs until the caller's deadline. The handle exposes ``port``, ``calls`` (a list of
+    ``(method, metadata_dict)``) and ``entered``. Config paths keep 247's ``hung_config_server``
+    (typed ConfigService); this fixture serves every other service, untyped (raw bytes).
+    """
+    import grpc  # noqa: PLC0415
+
+    from app import client  # noqa: PLC0415
+
+    stop = threading.Event()
+    servers = []
+
+    def start(endpoint_attr: str, *, module=None, answers: dict | None = None):
+        lock = threading.Lock()
+        calls: list[tuple[str, dict]] = []
+        replies = answers or {}
+
+        def _handle(method: str, context) -> bytes:
+            with lock:
+                calls.append((method, dict(context.invocation_metadata())))
+            reply = replies.get(method)
+            if reply is None:
+                while context.is_active() and not stop.is_set():
+                    stop.wait(0.05)
+                return b""
+            delay_s, outcome = reply
+            stop.wait(delay_s)
+            if isinstance(outcome, grpc.StatusCode):
+                context.abort(outcome, "rejected")
+            return outcome.SerializeToString()
+
+        class _AnyMethod(grpc.GenericRpcHandler):
+            def service(self, details):
+                method = details.method.rsplit("/", 1)[-1]
+                return grpc.unary_unary_rpc_method_handler(lambda _req, ctx: _handle(method, ctx))
+
+        server = grpc.server(ThreadPoolExecutor(max_workers=8))
+        server.add_generic_rpc_handlers((_AnyMethod(),))
+        port = server.add_insecure_port("127.0.0.1:0")
+        server.start()
+        servers.append(server)
+
+        monkeypatch.setattr(module or client, endpoint_attr, f"127.0.0.1:{port}")
+        monkeypatch.setattr(
+            client.mtls, "secure_channel", lambda ep, _svc: grpc.aio.insecure_channel(ep)
+        )
+
+        class _Handle:
+            def __init__(self) -> None:
+                self.port = port
+                self.calls = calls
+
+            @property
+            def entered(self) -> int:
+                with lock:
+                    return len(calls)
+
+        return _Handle()
+
+    yield start
+    stop.set()
+    for server in servers:
+        server.stop(0).wait()
+
+
+@pytest.fixture
 def bound_admin():
     """Bind ADMIN as the outbound caller, as CallerPropagationMiddleware does at the edge."""
     from app import client  # local import: gen path is set up above
