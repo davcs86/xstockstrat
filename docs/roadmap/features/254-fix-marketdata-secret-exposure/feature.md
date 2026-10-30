@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -31,6 +33,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 9 marked done by operator decision: the dev smoke of marketdata credential resolution is post-merge verification, run and recorded by the operator's session after the integration PR deploys to dev (not yet performed) |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential | All 9 steps done; next: integration PR to `main-dev`, then the post-merge dev smoke (Step 9) by the operator's session |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

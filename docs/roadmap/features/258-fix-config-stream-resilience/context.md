@@ -788,3 +788,18 @@ Feature: xstockstrat-ledger - idempotent AppendEvent surfaces DB failures
   never exercised. Option A remains the remedy if a production config freeze is ever observed.
 - Post-merge (operator's session): check Grafana for the config `listening for config_changed` boot log on dev, and a
   staging `set_config` change propagating.
+
+## Session 2026-10-29 — post-merge dev verification (pass)
+
+- Merged as `1f341870` (#1357). It was deployed to dev by the `9bd923f3` run (DO deployment `db6ee608`, ACTIVE 23:38:03Z). The `1f341870` deploy run failed only because DO marked it `SUPERSEDED` by that newer deployment.
+- Boot: the config RUN log at 23:37:32Z shows `Config service initialised, listening for config_changed notifications`. There are no `error` lines, and 11 WatchConfig subscribers reconnected by 23:40:04Z.
+- Propagation: a same-value staging write `portfolio.watchlist.max_per_user` 50→50 at 23:54:24.756Z was followed 11 ms later by `Broadcast config update namespace=portfolio env=staging subscribers=1`. `broadcastToSubscribers` is called only from `onNotification` and the reconnect `resyncAll`, so this proves NOTIFY → LISTEN → broadcast end to end.
+- Still not exercised, as accepted at the Step 1 decision: a real forced drop of the LISTEN connection.
+- Loki held no log streams in the 6 h window, so the DO App Platform RUN logs were used instead.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

@@ -91,6 +91,7 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 JWT_SECRET=<secret>                    # .env — generate: openssl rand -hex 32
 APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper                     # paper | live
+DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed; the service now needs the DB to boot (SELECT 1 probe)
 ```
 
 ## Operations

@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-22
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done (docs: indicators `## Maintenance`, `INDICATORS-12`); Steps 1-9 done |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE PATH) | C-16 promotion applied (8 scenarios to `services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature`; @AC-6 skipped as OVERLAP with 224 @AC-1); integration PR opened |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Artifacts

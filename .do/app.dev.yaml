@@ -660,6 +660,9 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${xstockstrat.CA_CERT}
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.

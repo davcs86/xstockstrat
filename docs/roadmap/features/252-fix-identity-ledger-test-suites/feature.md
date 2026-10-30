@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -27,6 +29,7 @@
 | 2026-10-28 | (no status change) | /sdd-execute step 6 | Teardown: Node-leaf "40% enforced" claims narrowed (`lang-node.md`, `ci-overview.md`, `spec-template.md`, root `CLAUDE.md`); follow-up defect `2026-10-28-node-leaf-c8-check-coverage-unenforced-defect` filed (SEV-3, `open`) and logged in the four Node-leaf findings logs; merge-order rebase-only note added; manual context audit (plugin unavailable) |
 | 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute, ALL-DONE) | All 6 steps done; C-16 promotion applied (AC-1, AC-2 to the identity/ledger suites; AC-3..AC-6 to `platform.feature`); integration PR opened to `main-dev` |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

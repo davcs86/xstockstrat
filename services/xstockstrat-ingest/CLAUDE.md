@@ -103,8 +103,10 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
-  reconciles any job left `RUNNING`/`QUEUED` by a previous process to `FAILED` ("interrupted by
-  restart", FR-3 — no automatic resume). Chunk-plan progress is tracked by the `chunks_total` /
+  reconciles every job left `RUNNING`/`QUEUED` by a previous process to `FAILED` ("interrupted by
+  restart"), then `resume_incomplete_jobs` re-drives each job that still has `PENDING`/`FAILED` chunks,
+  skipping a job whose persisted status is `CANCELED` (feature 261). A job canceled while `QUEUED`
+  never starts: it is not flipped to `RUNNING` once a backfill slot frees. Chunk-plan progress is tracked by the `chunks_total` /
   `chunks_completed` columns (added in migration 005 — feature 054 shipped the proto fields and the
   servicer writes but originally omitted the backing columns, which left jobs stuck in `queued`).
 - Migration: `migrations/003_backfill_jobs.up.sql`, `migrations/005_add_backfill_job_chunk_counts.up.sql`

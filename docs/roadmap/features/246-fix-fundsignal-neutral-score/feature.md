@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -24,6 +26,7 @@
 | 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 (docs) done: analysis producer docs (idempotency, unscored symbols), `dry_run` doc drift (agent docstring, `mcp-tools.md`), `analysis.proto:554` findings row, manual teardown (context-constitution refresh unavailable) |
 | 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 3 steps done; C-16 promotion applied per the operator-confirmed plan (AC-1..AC-3 → `services/xstockstrat-analysis/acceptance/fix-fundsignal-neutral-score.feature`, `@feature-246`); integration PR opened to `main-dev` |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

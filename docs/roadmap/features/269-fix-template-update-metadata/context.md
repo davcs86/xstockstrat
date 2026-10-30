@@ -591,3 +591,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   under the plan's own dedup rule and nothing new is written. `docs/sdd/business-rules/platform.feature` is unchanged.
 - Open for the operator: if the cross-service `platform.feature` home is preferred, move (not copy) the three blocks
   there and delete the per-service files; flagged in the integration PR body.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

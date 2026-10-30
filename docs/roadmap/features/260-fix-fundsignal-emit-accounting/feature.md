@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -31,6 +33,7 @@
 | 2026-10-29 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done: analysis `CLAUDE.md` documents the `partial` status and the claim/release, accepted-only count, date-anchored `valid_until` and day-wide direction-cut rules; the MCP runbook lists `"partial"`; merge-order row confirmed |
 | 2026-10-29 | `code-completed` | /sdd-execute sequential | All 9 steps done |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

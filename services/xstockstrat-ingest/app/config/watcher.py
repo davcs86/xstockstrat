@@ -147,7 +147,9 @@ class ConfigWatcher:
             return default
         return v.float_val if v.HasField("float_val") else default
 
-    async def resolve_secret(self, key: str, user_id: str = "") -> tuple[str, bool]:
+    async def resolve_secret(
+        self, key: str, user_id: str = "", timeout: float | None = None
+    ) -> tuple[str, bool]:
         """Resolve an encrypted config secret (feature 166) via the config GetSecret RPC.
 
         Propagates this service's internal-caller identity so the config allow-list authorizes the
@@ -155,16 +157,23 @@ class ConfigWatcher:
         means the key is unset — the caller treats that as degraded, never a crash (AC-5). Mirrors
         the marketdata ResolveSecret shape. RPC errors (e.g. an un-granted key → PERMISSION_DENIED)
         propagate to the caller's per-source guard. `user_id` is an exact scope: "" reads only the
-        global row, never a per-user one (feature 224)."""
-        resp = await self._stub.GetSecret(
-            config_pb2.GetSecretRequest(
-                namespace=self.namespace,
-                key=key,
-                environment=self._environment,
-                user_id=user_id,
-            ),
-            metadata=((HEADER_INTERNAL_CALLER, INGEST_INTERNAL_CALLER_ID),),
-        )
+        global row, never a per-user one (feature 224). `timeout` bounds the RPC (seconds); an
+        expired deadline raises RuntimeError("GetSecret deadline exceeded ...") naming no key."""
+        try:
+            resp = await self._stub.GetSecret(
+                config_pb2.GetSecretRequest(
+                    namespace=self.namespace,
+                    key=key,
+                    environment=self._environment,
+                    user_id=user_id,
+                ),
+                metadata=((HEADER_INTERNAL_CALLER, INGEST_INTERNAL_CALLER_ID),),
+                timeout=timeout,
+            )
+        except grpc.aio.AioRpcError as e:
+            if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+                raise RuntimeError(f"GetSecret deadline exceeded after {timeout}s") from e
+            raise
         return resp.value, resp.found
 
     # Backfill config helpers — ingest.backfill.*

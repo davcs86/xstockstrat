@@ -673,3 +673,10 @@ Feature: fix-config-audit-author-spoof (agent)
 ### Coverage check
 - Source scenarios: 4 (AC-1, AC-2, AC-3, AC-4). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped.
 ```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

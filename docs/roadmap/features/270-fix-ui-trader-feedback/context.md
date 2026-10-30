@@ -1040,3 +1040,10 @@ Feature: fix-ui-trader-feedback (bug fix)
   passed 315/315, `next lint` passed, and `tsc` is clean apart from the known `backfills.spec.ts` defect.
 - Follow-up for the operator: other unflagged mutations outside the audited directories may also double-report,
   for example `useFormulas` and `useBackfills` callers. No current e2e covers them, and they were left unchanged.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

@@ -125,6 +125,7 @@ dedup).
 ```text
 GRPC_PORT=50057
 CONFIG_ENDPOINT=xstockstrat-config:50060
+DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed
 DB_POOL_MAX=1                          # query pool size; live streaming uses a separate dedicated LISTEN connection (1 + 1 = 2 total, see Live Streaming Architecture)
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live

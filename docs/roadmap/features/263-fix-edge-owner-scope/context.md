@@ -861,3 +861,10 @@ Feature: fix-edge-owner-scope (bug fix)
 ### Coverage check
 - Source scenarios: 8 (AC-1..AC-8). Planned: 8 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. All accounted for, none skipped.
 ```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

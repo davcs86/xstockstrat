@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -24,6 +26,7 @@
 | 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate §5.3 after `origin/main-dev` merge (`0099647f`): Step 10 Codebase Evidence gate-state bullet updated (main-dev now tops out at `031`, 243 merged via #1334); (a) passes, (b) still unmet (032/033 only on 244/248 branches); step stays operator-held |
 | 2026-10-29 | `in-progress` → `code-completed` | operator decision (session_01NpS3HShZK6pSnogA7CFo2f) | Step 10 gate (a)/(b) passed at main-dev `0ba6a8b7`; the post-deploy ListKeys smoke becomes post-merge verification ("Post-merge verification (Recommended)"); all 10 steps done |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers
@@ -58,4 +61,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-All 10 steps done. Merge integration PR #1345. After the dev deploy, run `list_config_keys(namespace="portfolio")` on staging and record that `portfolio.snapshot.interval_minutes` is absent. The production check goes on the next `/promote` checklist.
+Done: merged (#1345) and staging-verified. The production check is waived by operator decision (2026-10-30: prod is not running).
