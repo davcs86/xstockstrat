@@ -603,3 +603,46 @@ Feature: Platform-wide guarantees
       | analysis   |
       | indicators |
       | ingest     |
+
+  # ─── Database TLS fail-closed (feature 266) ───────────────────────────────
+  # Node backends and the UI audit route never connect to a TLS database without verifying the certificate. Provenance: @feature-266.
+
+  @AC-1 @FR-1 @feature-266
+  Scenario Outline: A Node backend refuses to boot against a TLS database with no CA configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT is unset
+    When <service> starts
+    Then it exits non-zero before serving gRPC
+    And it logs that DATABASE_CA_CERT is required for a TLS database connection
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-2 @FR-2 @feature-266
+  Scenario Outline: A Node backend verifies the database certificate when a CA is configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT holds a CA that did not sign the server's certificate
+    When <service> starts
+    Then the database connection is rejected with a certificate verification error
+    And it exits non-zero and logs the certificate verification error
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-5 @FR-5 @feature-266
+  Scenario Outline: Every deployed component that reaches the database directly is given the CA
+    Given the DigitalOcean app spec <spec>
+    Then every component with DATABASE_URL among xstockstrat-ledger, xstockstrat-config, xstockstrat-identity, xstockstrat-notify and xstockstrat-ui also has DATABASE_CA_CERT bound to "${xstockstrat.CA_CERT}"
+
+    Examples:
+      | spec              |
+      | .do/app.yaml      |
+      | .do/app.dev.yaml  |
