@@ -256,3 +256,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Third re-review (spec-reviewer, 2026-10-23): PASS, 0 blockers, 0 warnings. Non-blocking notes carried to
   `/sdd-execute`: Step 3 and Step 8 verification lack the sed-stripped generic-token grep (Step 11 is the backstop).
   P-0 is complete: 250 may now execute; 274 `/sdd-spec` follows 250's merge.
+
+## Session 2026-10-30 — sdd-execute (sequential)
+
+- Branch layout (operator-approved): all commits on session branch `ccr-4f43fb65-lagupv` (= `origin/main-dev` at
+  start), one commit per step, one integration PR into `main-dev`. Logged as Deviation 1. The 250 artifacts on
+  `origin/feature/fix-otel-metrics-logs-gap` were byte-identical to main-dev, so nothing was lost.
+- Read-only re-validation of all 12 steps' Codebase Evidence: LINE-DRIFT ONLY, no content mismatch, no re-spec.
+  Drift: `ci.yml` cites in Steps 7/11/12 are re-anchored by job/symbol name at execution (filter block, `context-map`
+  job now with two `run:` steps, `ci-gate` needs/echo list, `shell-lint`, `markdown-lint`). Step 8: root findings
+  `:18` resolution cell already reads "Narrowed to traces by feature 250 ... filed as feature 274" (changed by 274
+  after `06faaeb5`); the step still applies on top of it.
+- Operator context: the observability review of 2026-10-30 found the staging stack exports traces only; operator
+  chose to keep 274 as approved (SDK RPC histogram + log bridge) and not pursue Grafana-side span-metrics.
+- Tooling setup (steps 1-12): docs/config/test/script/CI steps only. git ✓, bash ✓, grep ✓, python3 ✓. Nothing installed.
+
+### Step 1 — Verify the 274 follow-up dir is on the 250 branch [done]
+- `docs/roadmap/features/274-otel-metrics-logs-export` is on `origin/main-dev` and in this tree; `status.md` present
+  (`design-approved`). Verification-only; no source files changed.
+- Files modified: none (spec/feature/status/context bookkeeping only)
+- Deviations: Deviation 1 (branch layout)

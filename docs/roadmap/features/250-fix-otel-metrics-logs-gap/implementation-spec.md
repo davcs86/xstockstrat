@@ -1,6 +1,6 @@
 # Implementation Spec: fix-otel-metrics-logs-gap
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/feature.md`
 **Total Steps**: 12
@@ -94,7 +94,7 @@ and logs, so every follow-up citation in this spec points at
 
 ### Step 1 — docs: Verify the 274 follow-up dir is on the 250 branch (marker)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/` (read-only check on `feature/fix-otel-metrics-logs-gap`)
 **Files**:
 - None. Verification only.
@@ -1012,3 +1012,12 @@ bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation 1 — Branch layout (session branch instead of `feature/fix-otel-metrics-logs-gap`)
+- **Spec said**: work on `feature/fix-otel-metrics-logs-gap`, merging `origin/main-dev` into it (BRANCH SYNC).
+- **Actual**: the harness assigns this session `ccr-4f43fb65-lagupv` (equal to `origin/main-dev` at start), and
+  pushes elsewhere are not permitted. All step commits land on that branch; the single integration PR targets
+  `main-dev` from it. Every 250 artifact was byte-identical between `origin/feature/fix-otel-metrics-logs-gap`
+  and `main-dev`, so no content is missing; the feature branch (51 ahead / 26 behind) is left untouched.
+- **Disposition**: operator-approved layout (AskUserQuestion, 2026-10-30). F-03 is not engaged: no step PR
+  targets `main-dev`.
