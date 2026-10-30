@@ -534,3 +534,37 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open item: the runbook's `update_credentials` bullet and `**Errors:**` line do not yet mention the incomplete-IBKR
   `INVALID_ARGUMENT` (Step 15 instruction 3 limits the edit to the row). Step 17 or a later pass may add it.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 17
+
+### Step 17 — docs: IBKR auth docs, TRADING-3 widening, findings closure, teardown [done]
+- `services/xstockstrat-trading/docs/ibkr.md` gains the section `### IBKR: OAuth 1.0a + Live Session Token (feature 249)`.
+  It covers:
+  - the 7-field blob and the legacy 4-field INVALID behaviour;
+  - the handshake order (LST, then `ssodh/init` with `compete=false`) and the negative cache;
+  - LST-keyed HMAC-SHA256 with `realm="limited_poa"` and the ibind-pinned `QueryEscape` encoding;
+  - the 401/no-bridge retry rule, the bracket-leg `noResend` and `ErrOutcomeUncertain`;
+  - the three `trading.ibkr.*` keys;
+  - the unverified-contract caveat (ibind @ `759ec3a1…`) and the FR-3 ruling ("Include params (FR-3)");
+  - the follow-ups `ibkr-session-keepalive` and `ibkr-fleet-invalid-alert`.
+  The two existing sections are unchanged.
+- Trading `CLAUDE.md` credential-health paragraph: for IBKR, the LST handshake and `ssodh/init` now run before
+  `GET /portfolio/accounts`, and a legacy 4-field account reads INVALID until it is updated.
+- TRADING-3 is widened: HTTP 401/403, or deterministically unusable credentials, from any IBKR call. The Why gains
+  the converse risk, and the anchors are re-stamped (`credentialStatusFromError` ~L3020, the IBKR sentinel sites in
+  `ibkr_session.go`, and the `reconcileTick` skip).
+- Findings:
+  - The `signRequest` query-param open question is removed from Open questions and recorded under Resolved
+    (feature 249). It cites `do` ~L362, `authorize` ~L644 and `buildBaseString` ~L600.
+  - The stale `instantiateBrokerLocked (~L3027)` anchors in the IBKR timeout and accessor-mismatch rows are fixed.
+- Teardown: the context-forge `context-constitution` refresh skill is unavailable. A manual reconciliation of the
+  Steps 10/15/17 context files against the code found no further drift (details in the spec's Deviation Log). **The
+  integration PR body must state both that the plugin was unavailable and what manual reconciliation was done.**
+- TDD: N/A (docs). Verification: all three greps hit (`ibkr.md` lines 30-47; the TRADING-3 count is 1; findings
+  `:50`).
+- Files modified: `services/xstockstrat-trading/{docs/ibkr.md,CLAUDE.md,docs/context-constitution.md,
+  docs/context-constitution-findings.md}`.
+- Open items:
+  - The paper smoke against a real IBKR account (FR-3 vs ibind; unverified contract).
+  - The `mcp-tools.md` `update_credentials`/Errors lines (from Steps 15+16).
+  - Defect report sidecar resolution at launch.
+

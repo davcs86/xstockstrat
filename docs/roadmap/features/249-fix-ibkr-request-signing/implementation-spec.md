@@ -1108,7 +1108,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_broker_account_clie
 
 ### Step 17 — docs: IBKR auth docs, TRADING-3 widening, findings closure, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-trading/docs/ibkr.md` — modify
@@ -1415,3 +1415,28 @@ _Populated by /sdd-execute as implementation proceeds._
   asserts a value only the 7-key blob carries. **GREEN**: 520 passed, coverage 81.23% (threshold 40%).
 - **Runbook parity scope.** Only the `credentials_json` row was edited (Step 15 instruction 3). The
   `update_credentials` result bullet and the `**Errors:**` line still name only "invalid JSON" for `INVALID_ARGUMENT`.
+
+### Step 17 — 2026-10-29 (sdd-execute sequential)
+
+- **Anchors re-stamped to the current branch, not the spec's literals.** The spec cites `trading.go:2951` and
+  `:3084`. After Steps 8+9, `credentialStatusFromError` is at `trading.go:3020` and `instantiateBrokerLocked` at
+  `:3153`, with the `GetInt("trading.broker.timeout_ms")` read at `:3182`. TRADING-3 and the findings rows cite those
+  lines. Verification grep 2 matches on "deterministic". The open question sat at findings `:46` (not `:44`) and the
+  IBKR timeout row at `:29` (not `:28`).
+- **Findings hint fix widened within the same file.** The stale `~L3027` appeared twice: in the IBKR timeout row
+  and in the `GetInt`/`GetFloat` accessor-mismatch row. Both now cite current lines. Stale neighbours in those two
+  rows were fixed too: `IBKRRequestTimeout` const/applied `~L46/~L61` became `~L68/~L83`, and `brokerCallTimeout`
+  `GetFloat` `~L2359` became `~L2476`. The "Filed as defect reports" row for the signature defect stays, because its
+  report sidecar is `triaged`, not resolved.
+- **Teardown: the context-forge `context-constitution` refresh skill is unavailable in this session.** Only
+  `context-forge:context-scrubber` is listed. A manual reconciliation was performed instead, re-reading each context
+  file that Steps 10, 15 and 17 touched against the code:
+  - trading `CLAUDE.md` Config Keys rows match `ibkrTiming` (`trading.go:2484-2495`; 60000/10000/30000, `≤0` →
+    default).
+  - The `config-governance.md` feature 249 entry matches the same reads.
+  - The `mcp-tools.md:1392` row matches the 7 `ibkrCreds` JSON tags.
+  - The trading `CLAUDE.md` credential-health paragraph, the TRADING-3 row and the `ibkr.md` auth section match
+    `ibkr_session.go` and `ibkr.go`.
+  No further drift was found. The integration PR body must record both facts (root `CLAUDE.md` § Teardown).
+- **Not changed:** the `mcp-tools.md` `update_credentials` bullet and `**Errors:**` line, carried from Steps 15+16.
+  They are outside Step 17's **Files**.
