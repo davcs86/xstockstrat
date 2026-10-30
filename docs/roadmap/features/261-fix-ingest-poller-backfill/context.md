@@ -727,3 +727,27 @@ halt). design.md is not written and status stays `spec-ready`.
 - Verification: `test_ingest_servicer.py` + `test_cancel_backfill.py` 119 passed; full suite 364 passed, coverage
   84.19% (≥40%); `ruff check` + `ruff format --check` clean; `_job_row` import grep hits `:26`.
 - Deviations: none. The standing "merge pairs" rule did not apply.
+
+### Step 9 — docs: teardown (resume drift, single-instance invariant, findings) (done 2026-10-29)
+
+- `services/xstockstrat-ingest/CLAUDE.md` § Database (`ingest.backfill_jobs`): startup reconciles every
+  RUNNING/QUEUED job to FAILED, then `resume_incomplete_jobs` re-drives jobs with PENDING/FAILED chunks, skipping a
+  persisted `CANCELED` job; a job canceled while QUEUED never starts. The "FR-3 — no automatic resume" claim is gone.
+- `services/xstockstrat-ingest/docs/context-constitution.md`: **INGEST-10** — cancel guards read only the in-memory
+  `_canceled_jobs` set; valid only with `instance_count: 1` (`.do/app.yaml` and `.do/app.dev.yaml`, both checked) and
+  `CancelBackfill` as the sole CANCELED writer (grep: the only `status=…CANCELED` write in `app/`), set-add before
+  write; guard test `test_o3_cancel_registers_set_before_canceled_write` (present at `tests/test_ingest_servicer.py:842`,
+  landed in Step 8). Scaling past one instance re-opens D-34.
+- `services/xstockstrat-ingest/docs/context-constitution-findings.md`: "Documentation that lies" rows for the
+  `app/main.py` ~L66 / ~L117-118 comment drift (fix when `main.py` is next touched; `main.py` untouched) and for the
+  inert seeded `mcp_client.request_timeout_seconds` (re-confirmed: both 025 rows bare at `:34`/`:37`; config
+  `reloadNamespace` keys by raw `row.key` `configServiceImpl.ts:204-213`; only 025 mentions the key among config
+  migrations; 029 excludes `ingest`), citing the existing `wont-fix` report
+  `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md`. No new report filed (re-spec 2026-10-29).
+- Teardown: the context-forge `context-constitution` skill is not available in this session (only
+  `context-scrubber`), so the scoped refresh was manual — drifted `~L` hints into `servicer.py`,
+  `mcp_client_loop.py` and `config/watcher.py` re-resolved and re-stamped in both constitution docs; header stamps
+  updated. The integration PR body must state this (root CLAUDE.md § Teardown).
+- TDD: N/A (docs). Verification: all four greps hit and the duplicate report path is absent.
+- Deviations: manual teardown reconciliation (Deviation Log). The standing "merge pairs" rule did not apply.
+

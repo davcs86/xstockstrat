@@ -548,7 +548,7 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_ingest_servicer.py te
 
 ### Step 9 — docs: teardown (resume drift, single-instance invariant, findings)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-ingest/` docs + `docs/reports/`)
 **Files**:
 - `services/xstockstrat-ingest/CLAUDE.md` — modify
@@ -629,3 +629,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **2026-10-29 — Step 6 C-13 helper home.** The `AioRpcError` builder is used by both `test_mcp_client.py` and
   `test_mcp_client_loop.py`, so per Step 6 Instruction 4 it lives in `tests/_helpers.py` as `rpc_error(code, details)`
   (file added to the commit).
+- **2026-10-29 — Step 9 teardown: manual reconciliation (context-forge `context-constitution` unavailable).** Only
+  `context-forge:context-scrubber` is loaded in this session, so Instruction 5's refresh was done by hand, scoped to
+  the two touched constitution docs: every `~L` hint in `services/xstockstrat-ingest/docs/context-constitution.md`
+  that points into `servicer.py`, `mcp_client_loop.py` or `config/watcher.py` (shifted by Steps 3/5/7 and the
+  main-dev merge) was re-resolved and re-stamped, as were the open-row hints in `context-constitution-findings.md`;
+  both header refresh stamps updated. The key-form citation is its own findings row (pointing at the existing
+  `wont-fix` report) rather than a clause in the `main.py` row. The integration PR body must record the plugin's
+  absence and this reconciliation (root CLAUDE.md § Teardown).

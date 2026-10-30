@@ -54,4 +54,4 @@ deadline), and ingests nothing when the result's first list key is not the signa
 
 ## Next Action
 
-`/sdd-execute fix-ingest-poller-backfill sequential` — Step 9 onward on `feature/fix-ingest-poller-backfill` (Steps 1–8 done 2026-10-29)
+`/sdd-execute fix-ingest-poller-backfill sequential` — all 9 steps done 2026-10-29; next: C-16 promotion + integration PR (record the manual context-constitution reconciliation in its body)
