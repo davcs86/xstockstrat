@@ -662,3 +662,117 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
       does not address it.
   - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
     was not used.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-analysis-owner-scope (feature 262)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature | CREATE | NEW | entry-backfill ListOrders carries owner |
+| AC-2 | same | CREATE | NEW | other owner's fills never seed state |
+| AC-3 | same | CREATE | NEW | one owner's drain failure (ValueError, system owner) isolated |
+| AC-8 | same | CREATE | NEW | non-ValueError drain failure isolated |
+| AC-4 | same | CREATE | NEW | failed live-strategies read ends quietly |
+| AC-5 | same | CREATE | NEW | failed system-signal drain does not stop backfill |
+| AC-6 | same | CREATE | NEW | repo has no get_by_id / update |
+| AC-7 | same | CREATE | NEW | test hygiene, no mocks of removed methods |
+| AC-9 | same | CREATE | NEW | failed blend-universe resolve skips only blend pairs |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature (CREATE) ---
+# Promoted from docs/roadmap/features/262-fix-analysis-owner-scope/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-262` tag.
+
+Feature: xstockstrat-analysis - entry-backfill is owner-scoped and failure-isolated; strategies repository has no owner-agnostic access
+
+  @AC-1 @FR-1 @regression @feature-262
+  Scenario: The entry-backfill asks trading only for the strategy owner's orders
+    Given live strategy "s-1" owned by "u-a" whose universe includes "AAPL"
+    When the boot entry-backfill runs
+    Then the ListOrders request for ("s-1", "AAPL") carries user_id "u-a"
+    And it is sent with metadata x-user-id "u-a"
+
+  @AC-2 @FR-2 @regression @feature-262
+  Scenario: Another owner's fills never seed an owner's entry state
+    Given live strategy "s-1" owned by "u-a" whose universe includes "AAPL"
+    And trading holds a filled BUY 10 "AAPL" on strategy "s-1" for user "u-b" and no orders for user "u-a"
+    And the trading stub filters ListOrders by the request user_id
+    When the boot entry-backfill runs
+    Then the live loop has no entry time for ("u-a", "s-1", "AAPL")
+    And the live loop's last state for ("u-a", "s-1", "AAPL") is not True
+    And no entry cooldown is written for ("u-a", "s-1", "AAPL")
+
+  @AC-3 @FR-3 @regression @feature-262
+  Scenario: One owner whose drains fail does not stop the backfill for other owners
+    Given live strategy "s-sys" owned by "system" and live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And a warning naming strategy "s-sys" and owner "system" is logged
+
+  @AC-8 @FR-3 @regression @feature-262
+  Scenario: A non-ValueError drain failure for one owner does not stop the backfill for other owners
+    Given live strategy "s-3" owned by "u-b" whose held-symbols drain raises a portfolio RPC error
+    And live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And a warning naming strategy "s-3" and owner "u-b" is logged
+
+  @AC-4 @FR-4 @regression @feature-262
+  Scenario: A failed live-strategies read ends the backfill quietly
+    Given the analysis database raises on the live-strategies query
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And a warning naming the failed live-strategies read is logged
+    And no ListOrders request is sent
+
+  @AC-5 @FR-4 @regression @feature-262
+  Scenario: A failed system-signal drain does not stop the backfill
+    Given live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    And the system-signal drain raises
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And a warning naming the failed system-signal drain is logged
+
+  @AC-6 @FR-5 @regression @feature-262
+  Scenario: The strategies repository offers no owner-agnostic read or write
+    Given the analysis StrategiesRepository
+    Then it has no method named "get_by_id"
+    And it has no method named "update"
+
+  @AC-7 @FR-6 @regression @feature-262
+  Scenario: Servicer tests mock only repository methods the servicer calls
+    Given the analysis test suite under services/xstockstrat-analysis/tests
+    Then no test references "_strategies_repo.get_by_id" or "_strategies_repo.update("
+    And the analysis test suite passes
+
+  @AC-9 @FR-4 @regression @feature-262
+  Scenario: A failed blend-universe resolve skips only the blend pairs
+    Given the fundamentals blend is enabled and the blend strategy is live
+    And live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    And the fundamentals-universe resolve raises
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And no ListOrders request is sent for the blend strategy
+    And a warning naming the failed fundamentals-universe resolve is logged
+
+### Notes / ambiguities / conflicts
+- All 9 scenarios attributed to xstockstrat-analysis: the observable subject (entry_backfill, StrategiesRepository, analysis tests) lives there. Trading appears only as a stub, so nothing is cross-cutting and platform.feature gets no write.
+- Nearest existing suite: /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-blend-queue-fundamentals-universe.feature (lines ~31-35) asserts blend pairs are anchored only inside the fundamentals universe. AC-9 asserts a different outcome (a failed resolve is isolated), so it is not an OVERLAP. Recorded for a human to see.
+- No existing suite in that directory mentions StrategiesRepository, get_by_id, or the owner-scoped ListOrders request. No @feature-262 tags exist anywhere, so there are no DUPs.
+- No CONFLICT. AC-6 and AC-7 agree with the standing ownership rule in analysis CLAUDE.md, which says strategies are resolved via get_by_owner_and_id.
+- AC-6 and AC-7 are structural and test-hygiene scenarios, not behavior. They are promoted verbatim as reviewed. Curation is a human decision.
+
+### Coverage check
+- Source scenarios: 9 (AC-1 to AC-9). Planned NEW+DUP+OVERLAP: 9 (9 NEW, 0 DUP, 0 OVERLAP). None skipped.
+```
