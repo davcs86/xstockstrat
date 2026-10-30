@@ -618,3 +618,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - C-13: the openssl helpers (`mintCa`, `mintLeaf`) are declared once in `dbTlsBoot.test.ts` (single consumer); CA
   minting is split into `mintCa` rather than a `mintPki` bundle because the test needs two independent CAs.
 
+## Session 2026-10-29 — sdd-execute sequential, Steps 6+7
+
+- Tooling setup (steps 6–7): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`
+  (worktree-local; the main worktree has no `node_modules` to symlink) · openssl ✓ (system).
+- Steps 6 and 7 landed as one commit under the operator's standing merge-pairs rule (Step 6's RED test is Step 7's
+  boot test); Deviation Log entry added.
+- Config `src/index.ts`: `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` is the first statement of `main()`,
+  before `loadMasterKey()`, with the value-free `db-tls:` canary log when TLS is on; `databaseUrl`, the inline
+  `sslDisabled`/`rejectUnauthorized: !!caCert` block and the `DATABASE_CA_CERT` read are gone; the Pool takes
+  `dbConn.connectionString` / `dbConn.ssl` and keeps `max` and its comment.
+- Test `src/__tests__/dbTlsBoot.test.ts` spawns `dist/index.js` with an explicit env (`PATH`,
+  `CONFIG_SECRETS_ENCRYPTION_KEY='0'.repeat(64)`, `DATABASE_URL`, CA only when the case sets it). It reuses `sh` and
+  `mintLeaf` from `./mtlsTestPki` (leaf named `localhost`, so SAN `DNS:localhost`) as Step 7's evidence allows; the
+  TLS stub and two-CA minting stay inline (single consumer, C-13). Assertions read the child's stderr+stdout
+  combined: the fatal error is on stderr, the winston `db-tls:` canary is on stdout, so AC-3's "no `db-tls:`" check
+  covers both streams.
+- TDD: AC-1 red (old `main()` exited on `getaddrinfo ENOTFOUND db.example`, no `DATABASE_CA_CERT`) → green.
+  AC-2 wrong-CA + positive control and AC-3 were green before and after, as Step 7's TDD note predicts.
+- Verification: `build` exit 0; `lint` 0 errors (206 pre-existing warnings; `eslint` on the two touched files is
+  clean); greps: no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` ×1;
+  `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 4/4 named tests pass (P-06);
+  `test:coverage` exit 0, 241/241, all files 90.37% lines (≥40).

@@ -432,7 +432,7 @@ pnpm run lint
 
 ### Step 6 — service: Config — resolve first, replace inline TLS block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/index.ts` — modify
@@ -475,7 +475,7 @@ grep -c "ssl: dbConn.ssl" src/index.ts                          # → 1
 
 ### Step 7 — test: Config boot tests through `main()` (AC-1, AC-2 end to end, AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/dbTlsBoot.test.ts` — create
@@ -1063,3 +1063,15 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
   `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`, not `DATABASE_CA_CERT`. The two Pool-level AC-2
   tests were already green at RED, because Step 1 had landed the resolver they import (Step 5's "fails to compile
   before Step 1" RED no longer applies). GREEN: 4/4. **Disposition**: operator standing rule.
+- **Steps 6 and 7 executed as one commit (2026-10-29, sequential).** Step 6's TDD gate is `red-green required
+  (paired with Step 7)`: its RED test is Step 7's config `dbTlsBoot.test.ts`, so Step 6 cannot complete a red→green
+  cycle alone. Applied the standing operator rule (operator, 2026-10-29, in their own words: 'Merge pairs + standing
+  rule'): "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step (e.g. ... the RED test is that next step's test), do NOT return a blocker. Execute this
+  step and the next one together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps
+  done, and add a Deviation Log entry quoting the rule." RED: AC-1 failed — the old `main()` dialled `db.example`
+  and exited on `getaddrinfo ENOTFOUND`, with no `DATABASE_CA_CERT` in its output. AC-2 (wrong CA, positive control)
+  and AC-3 were green at RED, as Step 7's TDD note predicts (the old `rejectUnauthorized: !!caCert` already rejected
+  a wrong CA once a CA was set, and `sslmode=disable` was already plaintext). GREEN: 4/4. The pre-declared
+  "AC-3 narrowed (config)" entry above is confirmed: gRPC serving is not asserted. **Disposition**: operator
+  standing rule.
