@@ -27,6 +27,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 10 done: three `trading.ibkr.*` keys (`lst_refresh_margin_ms` 60000, `handshake_timeout_ms` 10000, `reauth_min_interval_ms` 30000) registered in the trading CLAUDE.md Config Keys table and the config-governance Per-Feature Registered Keys log (unseeded, feature 102 precedent) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 11 done: `trading.proto` `RegisterBrokerAccountRequest.credentials_json` comment lists the 7-key IBKR shape (`signature_key`, `encryption_key`, `dh_prime` added); comment-only, `buf lint`/`buf breaking` clean |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 12 done: `./scripts/buf-gen.sh` regenerated exactly the 5 `gen/` stubs (Go `trading.pb.go`, TS `trading_pb.ts`/`trading.ts` and their `dist` `.d.ts`), with comment-only diffs; Go plugins rebuilt with go1.27 to match CI `proto-freshness` |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 13+14 done in one commit (standing operator rule; operator "B: Keep native" for the empty-key assertion): `/trader` IBKR form collects `signatureKey`/`encryptionKey`/`dhPrime` as PEM `Textarea`s, 7-key `credentials_json`, `CREDENTIAL_KEYS`-derived watch/set/map, `FieldError` per input; e2e AC-7 register/blocked-submit/edit-no-echo + Offline guard |
 
 ---
 

@@ -923,7 +923,7 @@ git diff --stat packages/proto/gen/ && git diff packages/proto/gen/ | grep '^[-+
 
 ### Step 13 — service: `/trader` IBKR credential form — key-material inputs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify
@@ -977,7 +977,7 @@ grep -n "#[0-9a-fA-F]\{3,6\}\|oklch(\|hsl(" src/components/trader/accountShared.
 
 ### Step 14 — test: `/trader` IBKR register/edit e2e (AC-7 UI half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts` — modify
@@ -1007,7 +1007,9 @@ grep -n "#[0-9a-fA-F]\{3,6\}\|oklch(\|hsl(" src/components/trader/accountShared.
    - `JSON.parse(credentialsJson)` has exactly the 7 keys, and the PEM newlines are preserved;
    - the modal closes.
 3. `@AC-7 IBKR register blocks submit when a key field is empty`: leave `Encryption key (PEM)` empty and submit.
-   The `FieldError` text "This field is required" is visible and no `RegisterBrokerAccount` request was sent.
+   The `Encryption key (PEM)` textarea is `:invalid` (non-empty `validationMessage`), the dialog stays open, and no
+   `RegisterBrokerAccount` request was sent. `FieldError` is not e2e-asserted: native `required` blocks the submit
+   first (operator decision 2026-10-30, Deviation Log "Steps 13 + 14").
 4. `IBKR Edit keys never renders stored values`: open Edit keys on `BROKER_ACCOUNT_IBKR`; all 7 inputs are empty,
    then save, and the request carries 7 keys.
 5. Offline guard: assert the Add form's Offline option renders no credential inputs, and keep
@@ -1367,3 +1369,33 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec evidence corrections.** `buf` 1.72.0 *is* installed on this host (`~/go/bin/buf`), so the "`which buf` → none"
   note is stale. Both `gen/ts/dist/trading/v1/*.d.ts` files did carry the comment and were regenerated, as the
   **Files** list says.
+
+### Steps 13 + 14 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 13 and 14 land in one commit (standing operator rule, widened).** Operator, session question tool,
+  2026-10-29, in their own words: "Merge pairs + standing rule" ("if this step's Verification fails ONLY because the
+  consumers or tests of its new code live in the immediately following step … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done"). Step 13's RED
+  test is Step 14's e2e. No file outside the two steps' **Files** was touched.
+- **Step 14 instruction 3's assertion changed (operator decision).** Operator, session question tool, 2026-10-30, in
+  their own words: "B: Keep native". Step 13 keeps native `required` on the PEM `Textarea`s (no `noValidate`), so the
+  browser blocks the submit before react-hook-form validates and the `FieldError` text never renders on that path.
+  The test asserts instead that the `Encryption key (PEM)` textarea is `:invalid` with a non-empty
+  `validationMessage`, the dialog stays open, and no `RegisterBrokerAccount` request was sent. `FieldError` is wired
+  (Step 13 instruction 4) but not e2e-asserted.
+- **RED** (built from the pre-Step-13 source): the 3 IBKR tests failed waiting for
+  `getByPlaceholder('Signature key (PEM)', { exact: true })`; the Offline guard and the 7 existing tests passed.
+  **GREEN** (after Step 13, `CI=1` production build, `--retries=0`): `account-selector.spec.ts` +
+  `offline-accounts.spec.ts` 20 passed.
+- **Placeholders are matched with `exact: true`.** `Access Token` is a substring of `Access Token Secret`, so a
+  default `getByPlaceholder` hits a strict-mode violation.
+- **Step 14 instruction 5's Offline guard lives in `account-selector.spec.ts`** (`Add form Offline option renders
+  no credential inputs`). `offline-accounts.spec.ts` is unchanged (PRESERVE) and was run.
+- **`CredentialFields` renders from two input tables** (`IBKR_INPUTS`, `ALPACA_INPUTS`), each input wrapped in
+  `Field` with a `FieldError` under it. The Alpaca inputs therefore gain the same `Field`/`FieldError` wrapper;
+  placeholders, `type="password"` and `required` are unchanged. `credsFromWatch` rebuilds `CredentialState` from the
+  `useWatch({ name: CREDENTIAL_KEYS })` tuple, replacing both index maps.
+- **Verification notes.** `pnpm exec tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts:135-136`
+  (`dataKind`/`timeframeEnum` on `never`). That file is untouched here; no error is in a changed file.
+  Playwright ran with `CI=1` (production build) because the `pnpm dev` first-hit compile times out the 10s local
+  warm-up in this sandbox.

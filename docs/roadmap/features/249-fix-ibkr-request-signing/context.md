@@ -485,3 +485,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open item (for the host, not the repo): rebuild `~/go/bin` protoc plugins with Go 1.27, or later regenerations will
   reintroduce the `analysis.pb.go` comment drift.
 
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 13 + 14
+
+### Steps 13 + 14 — `/trader` IBKR credential form + e2e [done, one commit]
+- Merged under the standing operator rule ("Merge pairs + standing rule"): Step 13's RED test is Step 14's e2e.
+  Operator decision 2026-10-30, in their own words: "B: Keep native" — the PEM `Textarea`s keep native `required`
+  (no `noValidate`), so Step 14 instruction 3 now asserts the `Encryption key (PEM)` textarea is `:invalid` with a
+  non-empty `validationMessage`, the dialog stays open and no `RegisterBrokerAccount` request is sent. `FieldError`
+  is wired under every credential input but not e2e-asserted (it cannot render while native validation blocks).
+- `accountShared.tsx`: `CredentialState`/`EMPTY_CREDENTIALS` gain `signatureKey`/`encryptionKey`/`dhPrime`;
+  `CREDENTIAL_KEYS` drives both forms' `useWatch`, `handleCredsChange` and (via `credsFromWatch`) creds maps;
+  IBKR `credentials_json` carries 7 keys; the IBKR schema requires the 3 new fields; `CredentialFields` renders from
+  `IBKR_INPUTS`/`ALPACA_INPUTS` (PEM rows are `Textarea` with `autoComplete="off"`, `spellCheck={false}`,
+  `required`, `rows={4}`), each in `Field` + `FieldError`, with an optional `errors` prop fed `formState.errors` by
+  both forms. Edit-form copy adds the IBKR seven-values sentence. Offline branches unchanged in behaviour.
+- e2e: `IBKR_TEST_CREDENTIALS_INPUT` fixture (PEM-shaped `-----BEGIN TEST-----` placeholders, no gitleaks rule) +
+  INVENTORY row; `account-selector.spec.ts` adds AC-7 register (exact 7-key blob, PEM newlines), AC-7 blocked submit,
+  IBKR Edit keys no-echo + 7-key save, and the Add-form Offline guard. Placeholders use `exact: true`.
+- TDD: RED (pre-Step-13 build) — the 3 IBKR tests fail waiting for `Signature key (PEM)`; GREEN — 20 passed across
+  `account-selector.spec.ts` and `offline-accounts.spec.ts` (`CI=1`, `--retries=0`).
+- Verification: `pnpm run lint` no errors; `lint:dup` 0 clones; color-literal grep empty; vitest 237/237;
+  `tsc --noEmit` clean for changed files (two pre-existing errors in untouched `e2e/insights/backfills.spec.ts:135-136`).
+- Files modified: `services/xstockstrat-ui/src/components/trader/accountShared.tsx`,
+  `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/accounts.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
+- Open items: `backfills.spec.ts` tsc errors pre-exist (not this feature); local `pnpm dev` first-hit compile times
+  out the 10s warm-up in this sandbox, so e2e ran on the `CI=1` production build.
