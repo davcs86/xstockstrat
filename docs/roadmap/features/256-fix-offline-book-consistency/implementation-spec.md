@@ -945,10 +945,11 @@ grep -n 'PORTFOLIO_OFFLINE_DEGRADED\|POSITION_OFFLINE_AAPL_DEGRADED' services/xs
 
 ### Step 15 — test: agent pass-through of the marker and the FR-5/FR-6 errors (no agent code change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_offline_client.py` — modify
+- `services/xstockstrat-agent/tests/test_position_parity.py` — modify (added by operator decision, Deviation Log)
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape)
 
@@ -1179,3 +1180,8 @@ _Populated by /sdd-execute as implementation proceeds._
   `--retries=0`. **Disposition**: CI-equivalent fallback. RED: the 5 new `@AC-3` cases failed; GREEN: 23/23 in the two
   specs plus 83/83 in the other affected specs. `tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts`
   (`:135-136`), a file this commit does not touch; they are carried as an open item.
+- Step 15 (2026-10-30): Files widened by the operator (session question tool, in their own words: 'A: Widen Step 15
+  (Recommended)') to also edit `services/xstockstrat-agent/tests/test_position_parity.py`: `offline_state_unavailable`
+  added to `_POSITION_FIELD_SET`, the field-count comment is now 26, and guard B's fully-populated `Position` sets
+  `offline_state_unavailable=True`. No assert statement changed. This records the decision that the marker surfaces
+  through `get_positions` and `manage_offline_account list_positions`. No agent code changed.

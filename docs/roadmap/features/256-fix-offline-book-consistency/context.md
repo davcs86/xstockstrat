@@ -948,3 +948,16 @@ Each item names the step where it is resolved.
   affected specs 83/83 (`CI=1` server, Deviation Log). Lint reports 0 errors.
 - Open item: `tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts:135-136`, a file outside this feature.
 - Next: Step 15 (agent pass-through test). It is the ui→agent surface boundary, so a checkpoint is due.
+
+## Session 2026-10-30 — Step 15 (agent test, AC-3/AC-4/AC-5)
+
+- Operator decision (session question tool, 2026-10-30): "A: Widen Step 15 (Recommended)". Files now also include
+  `tests/test_position_parity.py` (`offline_state_unavailable` in `_POSITION_FIELD_SET`, count comment 26, guard B
+  Position sets it True; no assert changed). The marker surfaces through `get_positions` and
+  `manage_offline_account list_positions`.
+- Tests added to `tests/test_offline_client.py`: `test_list_positions_passes_offline_state_unavailable` (True with
+  `day_pnl` 0, healthy False) and a parametrized `manage_offline_account` `confirm_order` test: `INVALID_ARGUMENT` and
+  `UNAVAILABLE` details surface verbatim through the real client wrapper and the tool's error mapping.
+- TDD: N/A per spec (characterization; stubs from Step 2 already exist). Verification: full agent suite 524 passed,
+  81% coverage (>= 40); `ruff check` and `ruff format --check` clean.
+- Next: Step 16 (docs).
