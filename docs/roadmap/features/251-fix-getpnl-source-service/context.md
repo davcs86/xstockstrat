@@ -837,3 +837,12 @@ Same provenance comment, then "Feature: xstockstrat-ui - /trader/positions fill 
 ### Coverage check
 Source scenarios: 22. Planned: 21 NEW + 0 DUP + 1 OVERLAP = 22.
 ```
+
+## Session 2026-10-30 — Staging checks (PG-1 not run)
+
+- **Deployed:** staging deployment `b306cd82` (main-dev `484896de`) carries 251, 257 and 256 together, so the 257-before-251
+  rollout ordering holds. Trading, portfolio and ledger run logs show no ERROR lines after the rollout.
+- **Reads healthy:** `get_positions` and offline `list_positions` return valuations as before.
+- **PG-1 not run, still blocks promotion:** it needs read-only SQL against the ledger (per-type counts, `EXPLAIN ANALYZE`,
+  side-less fill stream keys), a `GetPnL` call and a malformed-token call on the real gRPC path. This session has no database
+  access (egress to `:25060` is blocked) and the staging agent exposes no `GetPnL` or `QueryEvents` tool. The operator runs it.
