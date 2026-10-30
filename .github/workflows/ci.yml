@@ -349,7 +349,7 @@ jobs:
 
       - name: check modules pass the blocking-call lint (smoke)
         if: matrix.service == 'xstockstrat-smoke'
-        run: python -m tools.lint_checks checks
+        run: uv run --frozen --no-dev python -m tools.lint_checks checks
 
   python-test:
     name: Python test and coverage (${{ matrix.service }})
