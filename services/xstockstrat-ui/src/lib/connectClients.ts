@@ -11,6 +11,7 @@ import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_p
 import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { DEFAULT_UNARY_TIMEOUT_MS } from './deadlines';
 
 // ── gRPC endpoints (host:port, no protocol) ───────────────────────────────
 const TRADING_ENDPOINT = process.env.TRADING_ENDPOINT ?? 'xstockstrat-trading:50051';
@@ -65,7 +66,14 @@ function makeTransport(endpoint: string, targetService: string): Transport {
   };
   return {
     unary(method, signal, timeoutMs, header, input, contextValues) {
-      return get().unary(method, signal, timeoutMs, header, input, contextValues);
+      return get().unary(
+        method,
+        signal,
+        timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS,
+        header,
+        input,
+        contextValues,
+      );
     },
     stream(method, signal, timeoutMs, header, input, contextValues) {
       return get().stream(method, signal, timeoutMs, header, input, contextValues);

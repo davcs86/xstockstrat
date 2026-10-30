@@ -30,6 +30,7 @@ class OrderSnapshotsRepository:
         ohlcv_bar: dict | None,
         indicators: dict | None,
         signals: list | None,
+        timeout: float | None = None,
     ) -> None:
         await db.execute(
             """
@@ -52,20 +53,26 @@ class OrderSnapshotsRepository:
             json.dumps(ohlcv_bar) if ohlcv_bar is not None else None,
             json.dumps(indicators or {}),
             json.dumps(signals or []),
+            timeout=timeout,
         )
 
-    async def count_for_position(self, position_id: str) -> int:
+    async def count_for_position(self, position_id: str, *, timeout: float | None = None) -> int:
         """Snapshot count for a position — the seal-time completeness diagnostic (v1)."""
         return await self._db.fetchval(
-            "SELECT COUNT(*) FROM analysis.order_snapshots WHERE position_id=$1", position_id
+            "SELECT COUNT(*) FROM analysis.order_snapshots WHERE position_id=$1",
+            position_id,
+            timeout=timeout,
         )
 
-    async def list_for_position(self, position_id: str) -> list[dict]:
+    async def list_for_position(
+        self, position_id: str, *, timeout: float | None = None
+    ) -> list[dict]:
         """Entry/exit snapshots for a sealed position — the factor source for pattern samples."""
         rows = await self._db.fetch(
             "SELECT indicators, signals FROM analysis.order_snapshots "
             "WHERE position_id=$1 ORDER BY event_ts ASC",
             position_id,
+            timeout=timeout,
         )
         return [dict(r) for r in rows]
 

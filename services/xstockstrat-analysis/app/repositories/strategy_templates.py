@@ -51,16 +51,20 @@ class StrategyTemplatesRepository:
         )
         return _to_dict(row)
 
-    async def update(self, template_id: str, payload_json: dict) -> dict | None:
-        """Replace the payload and bump ``version`` in one UPDATE; None if missing or retired."""
+    async def update(self, meta, payload_json: dict) -> dict | None:
+        """Replace name, description and payload and bump ``version`` in one UPDATE; None if
+        missing or retired."""
         row = await self._db.fetchrow(
             """
             UPDATE analysis.strategy_templates
-               SET payload = $2::jsonb, version = version + 1, updated_at = NOW()
+               SET name = $2, description = $3, payload = $4::jsonb,
+                   version = version + 1, updated_at = NOW()
              WHERE template_id = $1 AND retired_at IS NULL
             RETURNING *
             """,
-            template_id,
+            meta.template_id,
+            meta.name,
+            meta.description,
             json.dumps(payload_json),
         )
         return _to_dict(row)

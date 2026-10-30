@@ -98,15 +98,25 @@ class FakeTemplates:
 
     async def create(self, meta, payload_json, created_by):
         row = _tpl_row(meta.template_id)
-        row.update(name=meta.name, payload=payload_json, created_by=created_by)
+        row.update(
+            name=meta.name,
+            description=meta.description,
+            payload=payload_json,
+            created_by=created_by,
+        )
         self.rows[meta.template_id] = row
         return row
 
-    async def update(self, template_id, payload_json):
-        row = self.rows.get(template_id)
+    async def update(self, meta, payload_json):
+        row = self.rows.get(meta.template_id)
         if row is None or row["retired_at"] is not None:
             return None
-        row.update(payload=payload_json, version=row["version"] + 1)
+        row.update(
+            name=meta.name,
+            description=meta.description,
+            payload=payload_json,
+            version=row["version"] + 1,
+        )
         return row
 
     async def retire(self, template_id):
@@ -282,12 +292,17 @@ def _formula_templates(*, zscore_fundamentals=False):
     )
 
 
-async def _manage(svc, payload, op=common_pb2.TEMPLATE_OPERATION_CREATE, template_id="tpl-new"):
+async def _manage(
+    svc, payload, op=common_pb2.TEMPLATE_OPERATION_CREATE, template_id="tpl-new", description=""
+):
     ctx = ctx_with(_ADMIN)
     req = analysis_pb2.ManageTemplateRequest(
         operation=op,
         template=analysis_pb2.StrategyTemplate(
-            meta=common_pb2.TemplateMeta(template_id=template_id, name="New"), payload=payload
+            meta=common_pb2.TemplateMeta(
+                template_id=template_id, name="New", description=description
+            ),
+            payload=payload,
         ),
     )
     try:
@@ -356,6 +371,46 @@ async def test_manage_template_update_bumps_version_and_retire_hides():
     assert out.meta.retired
     listed = await svc.ListTemplates(analysis_pb2.ListTemplatesRequest(), ctx_with(_BOB))
     assert [t.meta.template_id for t in listed.templates] == []
+
+
+async def test_ac1_manage_template_update_passes_meta_and_maps_row():
+    templates = FakeTemplates(_tpl_row())
+    real_update = templates.update
+    templates.update = AsyncMock(
+        return_value={**_tpl_row(), "name": "New", "description": "d2", "version": 2}
+    )
+    svc = _svc(templates=templates, indicators=_indicators(ListTemplates=_formula_templates()))
+    out, ctx = await _manage(
+        svc,
+        _payload(),
+        op=common_pb2.TEMPLATE_OPERATION_UPDATE,
+        template_id="tpl-meanrev",
+        description="d2",
+    )
+    ctx.abort.assert_not_awaited()
+    sent = templates.update.await_args.args[0]
+    assert (sent.template_id, sent.name, sent.description) == ("tpl-meanrev", "New", "d2")
+    assert (out.meta.name, out.meta.description, out.meta.version) == ("New", "d2", 2)
+
+    templates.update = real_update
+    _out, ctx = await _manage(
+        svc,
+        _payload(),
+        op=common_pb2.TEMPLATE_OPERATION_UPDATE,
+        template_id="tpl-meanrev",
+        description="d2",
+    )
+    ctx.abort.assert_not_awaited()
+    listed = await svc.ListTemplates(analysis_pb2.ListTemplatesRequest(), ctx_with(_BOB))
+    assert [(t.meta.name, t.meta.description) for t in listed.templates] == [("New", "d2")]
+
+
+async def test_ac3_create_with_empty_template_id_is_invalid_argument():
+    templates = FakeTemplates(_tpl_row())
+    svc = _svc(templates=templates, indicators=_indicators(ListTemplates=_formula_templates()))
+    _out, ctx = await _manage(svc, _payload(), template_id="")
+    _aborted_with(ctx, grpc.StatusCode.INVALID_ARGUMENT)
+    assert list(templates.rows) == ["tpl-meanrev"]
 
 
 async def test_list_templates_returns_active_strategy_templates():
@@ -686,10 +741,23 @@ async def test_intent_cas_is_state_and_owner_guarded_on_given_conn():
 async def test_template_update_bumps_version_in_one_statement():
     pool = AsyncMock()
     pool.fetchrow = AsyncMock(return_value=None)
-    await StrategyTemplatesRepository(pool).update("tpl", {"strategy_id": "x"})
+    meta = common_pb2.TemplateMeta(template_id="tpl", name="New", description="d2")
+    await StrategyTemplatesRepository(pool).update(meta, {"strategy_id": "x"})
     pool.fetchrow.assert_awaited_once()
     sql = pool.fetchrow.await_args.args[0]
-    assert "version = version + 1" in sql and "updated_at" in sql
+    assert "SET name = $2, description = $3, payload = $4::jsonb" in sql
+    assert "version = version + 1" in sql and "updated_at = NOW()" in sql
+    assert "retired_at IS NULL" in sql
+    assert pool.fetchrow.await_args.args[1:4] == ("tpl", "New", "d2")
+    assert json.loads(pool.fetchrow.await_args.args[4]) == {"strategy_id": "x"}
+
+
+async def test_template_update_binds_empty_name_as_full_replace():
+    pool = AsyncMock()
+    pool.fetchrow = AsyncMock(return_value=None)
+    meta = common_pb2.TemplateMeta(template_id="tpl", name="", description="")
+    await StrategyTemplatesRepository(pool).update(meta, {"strategy_id": "x"})
+    assert pool.fetchrow.await_args.args[2:4] == ("", "")
 
 
 async def test_template_latest_versions_is_one_batched_query():

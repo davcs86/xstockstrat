@@ -3065,7 +3065,6 @@ ambiguity is logged here).
 - **Mistake**: Two design rounds treated the sweeper's `order_intent.reclaimed_unknown` payload as a known-good template to copy into three new emit sites. That payload holds a `time.Time`, which `structpb.NewStruct` rejects, and `emitLedgerEvent` discards that error (`p, _ :=`), so the event already reaches the ledger with a nil payload. The r3 adversary caught it, not a test.
 - **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:3662`; `internal/repository/order_intent_repo.go:31`; `docs/roadmap/features/267-fix-trading-order-state-audit/design.md` § D-62 (b).
 - **Rule it implies**: a ledger payload built for `structpb.NewStruct` uses only JSON-native values (timestamps as RFC3339 strings), and every new emit test asserts `req.Payload != nil` plus the field values, not just the event type.
-
 ### 2026-10-22 — fix-ui-trader-feedback — assumption
 - **Mistake**: A design round proposed a global TanStack `MutationCache.onError` fallback that skipped any mutation whose options set `onError`, treating that as "handled".
   - The no-op hook-level `onError`s (`return err`) in `useBacktest.ts:12-15` and `useScreenSymbols.ts:13-16` would have silently suppressed the fallback.
@@ -3083,3 +3082,29 @@ ambiguity is logged here).
 - **Mistake**: A client mapped an upstream refusal by a single gRPC status code. Indicators `ExecuteFormula` reports the same refusal ("the owner cannot run this formula") as NOT_FOUND to a non-admin caller and as PERMISSION_DENIED to an admin caller. Analysis `_execute_formula` mapped only NOT_FOUND. As a result, the admin-run case fell through to a catch-all and disappeared, and the round-3 design would have given the two cases different `NoTradeReason` values.
 - **Evidence**: `services/xstockstrat-indicators/app/handlers/servicer.py:243-253`; `services/xstockstrat-analysis/app/services/evaluator.py:260-263`; `docs/roadmap/features/275-fix-backtest-silent-symbol-skip/design.md` § Chosen Approach 2 (operator option (a)).
 - **Rule it implies**: Before a caller maps an owner-scoped RPC's error, enumerate every status code that RPC can return for one refusal across all caller scopes (admin, owner, system). Map all of them to one outcome, and use only the status code name in client-visible text.
+
+### 2026-10-29 — sdd-batch-execute — tooling
+- **Mistake**: The batch executor's branch setup merged `main-dev` into each feature branch with
+  `git merge -X ours`. When the branch and `main-dev` had both appended at the end of a ledger file, the conflict
+  resolved silently to the branch side and `main-dev`'s newer entries vanished. Later 3-way merges then kept the
+  deletion (branch-side change vs unchanged base), so it reached `main-dev` through two squash merges with no
+  conflict ever shown: #1336 dropped 12 `fails.md` entries and #1338 dropped 5 `insights.md` entries (restored by
+  #1340 and #1341), and 5 more in-flight branches carried the same loss.
+- **Evidence**: `.claude/workflows/sdd-batch-execute.js` setup prompt (pre-fix); squash commits `816593e8`
+  (−80 lines `fails.md`) and `c5595526` (−55 lines `insights.md`).
+- **Rule it implies**: Never merge a shared append-only doc with `-X ours`/`-X theirs`; merge normally and keep both
+  sides. A deletion the branch never meant to make is invisible to later merges, so check for it explicitly:
+  `scripts/ledger-guard.py` (CI `ledger-guard`, and before any batch merge).
+
+### 2026-10-29 — fix-push-untargeted-broadcast — assumption
+- **Mistake**: The 2026-09-06 `mcp-user-profile-roles` entry claims CI escapes the vacuous identity suite because
+  Node 24 strip-types "handles both". That is false. On Node 24.20.0 (the CI pin), `--experimental-strip-types`
+  still rejects the parameter property in `identityServiceImpl.ts` (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). It also
+  still fails to resolve the `../grpc/*.js` specifier (`ERR_MODULE_NOT_FOUND`). So `identityServiceImpl.test.ts`
+  is vacuous in CI as well: 70 pass, with its impl/authz-dependent cases returning early. This corrects that entry.
+- **Evidence**: `docs/roadmap/features/242-fix-push-untargeted-broadcast/context.md` 2026-10-29 Step 4 entry
+  (direct `import()` of both specifiers on v24.20.0); the `before()` try/catch in
+  `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.
+- **Rule it implies**: In a strip-types Node suite, import the target statically with a `.ts` specifier and
+  keep the target free of parameter properties. One example is `adminDirectory.test.ts`. Treat any
+  try/catch-guarded import as unexecuted until a load check proves otherwise, on every Node version.
