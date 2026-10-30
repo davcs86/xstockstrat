@@ -421,3 +421,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   the doc; guard rc=0 and test `cases=66 failed=0` on the final tree (about 50s, so the job runs about 1 minute).
 - Files modified: `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`
 - Deviations: none
+
+### Integration — C-16 promotion (operator confirmed 2026-10-30)
+- `@AC-1`, `@AC-2`, `@AC-3` appended verbatim to `docs/sdd/business-rules/platform.feature`, each tagged `@feature-250`
+  (all three are cross-cutting: `packages/otel` + docs have no service suite; no dedup needed). Scenarios 66 -> 69. They
+  contain "Loki" and a time-bound "today" sentence that feature 274 supersedes under its recorded C-16 CHANGE sign-off
+  (274 `context.md` R1 gate); `.feature` files are outside the guard's glob (guard rc=0 after the write).
+- Merge-order gate: passes (`merge-order.md` row 78 makes 274 wait on 250, not the reverse).
+
+## Session 2026-10-30 — sdd-execute (sequential, complete)
+**Steps this session**: 1-12
+**Progress**: 12 done / 12 total
+**Stopped at**: all complete (status `code-completed`; implementation-spec header `complete`)
+**Next**: merge PR #1377 into `main-dev` when CI is green, then `/sdd-spec otel-metrics-logs-export` for feature 274
+Accountability:
+- Out-of-scope changes: none beyond Deviation 3 (one Step 9 stamp phrase, operator-approved) and the Step 4 gate dashboard
+  created in the Grafana Cloud stack (operator-approved).
+- Open questions / items: panel (b) also lists the agent's long-lived `subscriptions/listen` spans (kept as specced); Grafana
+  UI rendering and a live `deleteRules`/`deleteMuteTimes` import are unproven; the macOS `/bin/bash` 3.2 run was not possible
+  here; removed alert rules, mute timing and three dashboards must be deleted by hand in Grafana Cloud (listed in the fenced
+  READMEs); `product-features.pdf` is a rendered copy and was not regenerated; `grafana-cloud.md` Step 4b still says the app
+  specs ship `OTEL_ENABLED: "false"` (dev is `"true"`; env-config wording, outside FR-4); no ledger entries were added.
+- Unaddressed review warnings: Step 7 touches 6 files (not split, operator call); guard heuristics are vocabulary-bound (C-18).
+- Deviations this session: Deviation 1 (session-branch layout), 2 (lint tooling via uvx wheels), 3 (Step 9 stamp phrase).
