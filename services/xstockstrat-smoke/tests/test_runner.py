@@ -14,7 +14,7 @@ from app.runner import RunInProgress
 from tests._helpers import make_runner, wait_done, with_peer
 from tests.conftest import SERVICE_ROOT
 
-SCHEMA = json.loads((SERVICE_ROOT / "schema" / "run-file.v1.json").read_text())
+SCHEMA = json.loads((SERVICE_ROOT / "schema" / "run-file.v2.json").read_text())
 
 
 @check("c.pass", feature="f", part="p")
@@ -54,7 +54,7 @@ CHECKS = [from_function(f) for f in (c_pass, c_fail, c_hang, c_slow, c_boom, c_l
 def assert_run_file(body):
     for field in SCHEMA["required"]:
         assert field in body, field
-    assert body["schema_version"] == 1
+    assert body["schema_version"] == 2
     for rec in body["records"]:
         for field in SCHEMA["$defs"]["record"]["required"]:
             assert field in rec, field

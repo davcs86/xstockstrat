@@ -20,4 +20,5 @@ Step-by-step procedures for recurring platform operations. Each file is self-con
 | `operator-db-access.md` | Sanctioned out-of-band admin/DB SQL access (direct `psql` via SSH / `doctl` / bastion) — no SQL-over-MCP surface exists (feature 214 removed postgres-mcp) | Operator needs to run admin SQL |
 | `smoke-checks.md` | Staging-only post-deploy smoke checks (`xstockstrat-smoke`): triggers, results branch, DO dev prerequisites, troubleshooting | Running or debugging staging smoke checks |
 | `smoke-db-role.md` | DBA procedure for the smoke read-only database role (`services/xstockstrat-smoke/db/smoke_readonly_role.sql`) | Provisioning or auditing the smoke DB role |
+| `smoke-user.md` | Smoke RPC user provisioning, the `smoke.writes.enabled` kill switch, and the pending portfolio-owner allowlist approval | Provisioning the smoke user or enabling/disabling smoke writes |
 | `proto-versioning.md` | v1→v2 proto migration workflow; when to create v2; parallel-feature safety | Breaking proto change required |

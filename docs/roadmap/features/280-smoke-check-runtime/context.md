@@ -116,3 +116,21 @@
 - [ ] The built image carries the baked `SMOKE_GIT_SHA`.
 - [ ] The VM gate accepts the normalized shipped compose file (staging dry run) with the same project name.
 - [ ] Live halves of AC-14, 15, 17, 18, 26 and 46–48 observed on a real staging deploy; a run file lands on `smoke-results` with the deployed SHA, from both homelab and DO dev.
+
+## Session 2026-10-30 — S8 phase-2 scoped writes (plan Task 10)
+
+- **Portfolio-owner allowlist approval (FR-9): PENDING.** Not granted by the implementing session. Until it is recorded
+  here, `smoke.writes.enabled` stays `false` everywhere and the only write check is the reference-only
+  `checks/_reference/watchlist_roundtrip.py`, which the catalog never serves (`_`-prefixed packages are linted, not
+  loaded). Procedure: `docs/runbooks/smoke-user.md`.
+- Config migration `036_smoke_writes_enabled` (bool, default `false`, staging + production, global), after `035`.
+  The flag is re-read through the config watcher on every RPC call (`policy.live`), so a flip needs no restart.
+- Predicate decision: "no `strategy_id` bindings" refuses any non-empty field named `*strategy_id` at any depth, i.e.
+  `bindings[].strategy_id` **and** `default_strategy_id` (Create/Update), because the latter stamps strategy bindings on
+  added symbols (portfolio.proto feature 170). Conservative superset of the design wording.
+- Run files are now `schema_version: 2` (`writes_performed`, `cleanup`); `run-file.v1.json` unchanged. Readers select
+  the schema by `schema_version`: the trigger recorder and, because the agent validated `get_run` bodies against a v1
+  copy only, the agent's `smoke_client` (new byte copy `smoke_run_file.v2.json`). Without the agent change every
+  `get_run` of a finished run would fail validation.
+- Kill switch off also refuses cleanup deletes: such a check ends `ERROR` with `cleanup: FAILED`; leftovers are swept by
+  the next janitor once writes are re-enabled.

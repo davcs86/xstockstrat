@@ -27,11 +27,12 @@ class Rpc:
         self._policy = policy
         self._channels: dict[str, object] = {}
         self.invoked: list[str] = []
+        self.writes: list[str] = []
 
     async def call(self, full_method: str, request, *, timeout: float = 10.0):
         if not self.user_id:
             raise SmokeUserUnset("smoke.rpc.user_id unset")
-        decision = self._policy(full_method)
+        decision = self._policy(full_method, request=request)
         if not decision.allowed:
             raise MutatingRpcRefused(decision.reason)
         if decision.guard is not None:
@@ -53,6 +54,8 @@ class Rpc:
             response_deserializer=message_factory.GetMessageClass(output).FromString,
         )
         self.invoked.append(full_method)
+        if decision.write:
+            self.writes.append(full_method)
         return await stub(
             request,
             timeout=timeout,

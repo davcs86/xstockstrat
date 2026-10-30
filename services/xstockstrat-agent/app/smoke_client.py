@@ -21,8 +21,12 @@ MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_CHECKS = 200
 _RUN_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _CHECK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
-_SCHEMA = json.loads((Path(__file__).parent / "smoke_run_file.v1.json").read_text())
-_VALIDATOR = Draft202012Validator(_SCHEMA)
+_VALIDATORS = {
+    v: Draft202012Validator(
+        json.loads((Path(__file__).parent / f"smoke_run_file.v{v}.json").read_text())
+    )
+    for v in (1, 2)
+}
 
 
 def build_ssl_context() -> ssl.SSLContext:
@@ -57,7 +61,11 @@ def build_client() -> httpx.AsyncClient:
 
 
 def validate_run_file(body: object) -> None:
-    errors = sorted(_VALIDATOR.iter_errors(body), key=lambda e: list(e.path))
+    version = body.get("schema_version") if isinstance(body, dict) else None
+    validator = _VALIDATORS.get(version) if isinstance(version, int) else None
+    if validator is None:
+        raise RuntimeError(f"smoke: run-file body has unsupported schema_version {version!r}")
+    errors = sorted(validator.iter_errors(body), key=lambda e: list(e.path))
     if errors:
         e = errors[0]
         where = "/".join(str(p) for p in e.path) or "<root>"

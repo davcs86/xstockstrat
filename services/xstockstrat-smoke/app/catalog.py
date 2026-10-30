@@ -24,6 +24,7 @@ class Check:
     timeout_s: float
     run: Callable[..., Awaitable[None]]
     check_hash: str
+    janitor: Callable[..., Awaitable[None]] | None = None
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ def check_hash(fn) -> str:
 
 def from_function(fn) -> Check:
     meta = fn.__smoke_check__
-    return Check(meta.id, meta.feature, meta.part, meta.timeout_s, fn, check_hash(fn))
+    return Check(meta.id, meta.feature, meta.part, meta.timeout_s, fn, check_hash(fn), meta.janitor)
 
 
 def lint_source(source: str, module: str) -> list[str]:
@@ -88,7 +89,10 @@ def load_catalog(package: str = "checks") -> Catalog:
     blocked: list[pathlib.Path] = []
     for path in sorted(root.rglob("*.py")):
         module = _module_name(package, root, path)
-        if any(b in path.parents for b in blocked):
+        # `_`-prefixed packages (e.g. checks/_reference) are reference-only: linted, never served.
+        if any(b in path.parents for b in blocked) or any(
+            p.startswith("_") for p in path.relative_to(root).parts[:-1]
+        ):
             continue
         try:
             problems = lint_source(path.read_text(), module)

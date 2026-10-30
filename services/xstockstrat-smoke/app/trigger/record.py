@@ -9,7 +9,8 @@ import subprocess
 from datetime import UTC, datetime
 
 BRANCH = "smoke-results"
-SCHEMA = pathlib.Path(__file__).resolve().parents[2] / "schema" / "run-file.v1.json"
+_SCHEMA_DIR = pathlib.Path(__file__).resolve().parents[2] / "schema"
+SCHEMAS = {v: _SCHEMA_DIR / f"run-file.v{v}.json" for v in (1, 2)}
 
 
 class PushError(Exception):
@@ -22,12 +23,15 @@ def record_path(env: str, started_at: str, run_id: str) -> str:
 
 
 def write_run_file(out_dir, body: dict) -> pathlib.Path:
+    schema = SCHEMAS.get(body.get("schema_version"))
+    if schema is None:
+        raise ValueError(f"unsupported run-file schema_version {body.get('schema_version')!r}")
     try:
         import jsonschema  # dev-only dependency; the runtime image stays stdlib-only
     except ImportError:
         jsonschema = None
     if jsonschema is not None:
-        jsonschema.validate(body, json.loads(SCHEMA.read_text()))
+        jsonschema.validate(body, json.loads(schema.read_text()))
     path = pathlib.Path(out_dir) / record_path(body["env"], body["started_at"], body["run_id"])
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "x") as f:

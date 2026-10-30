@@ -1,7 +1,6 @@
 """xstockstrat-smoke entry point: the HTTP API and the fail-closed boot sequence."""
 
 import asyncio
-import functools
 import importlib
 import logging
 import os
@@ -133,7 +132,11 @@ async def serve(environ, *, host=HOST, port=PORT, watcher_factory=None, catalog=
     catalog = catalog or load_catalog()
     for err in catalog.load_errors:
         log.error("SMOKE_CHECK_LOAD_ERROR %s: %s", err.module, err.error)
-    decide = functools.partial(policy.decide, descriptors=load_descriptors())
+    decide = policy.live(
+        descriptors=load_descriptors(),
+        env=env["SMOKE_ENV"],
+        writes_enabled=lambda: watcher.get_bool("smoke.writes.enabled"),
+    )
     endpoints = {
         svc: environ[f"{svc.upper()}_ENDPOINT"]
         for svc in RPC_SERVICES

@@ -60,3 +60,11 @@ class ConfigWatcher:
         if v is None:
             return default
         return v.string_val if v.HasField("string_val") else default
+
+    def get_bool(self, key: str, default: bool = False) -> bool:
+        if self._snapshot is None:
+            return default
+        v = self._snapshot.values.get(key)
+        if v is None:
+            return default
+        return v.bool_val if v.HasField("bool_val") else default

@@ -1,14 +1,15 @@
 # xstockstrat-smoke — CLAUDE.md
 
 Contract freeze for feature 280 (`smoke-check-runtime`). The service core (listener, catalog,
-runner, read policy) landed in slice S1; the trigger/recorder lands in S2. Design and rationale:
+runner, read policy) landed in slice S1, the trigger/recorder in S2, scoped writes in S8. Design and rationale:
 `docs/roadmap/features/280-smoke-check-runtime/design.md`.
 
 ## Role
 
 Staging-only Python service that runs a catalog of named post-deploy smoke checks baked into its
 image and returns per-check outcomes. Checks read the platform through a read-only database role and
-read-only RPCs as a dedicated non-admin smoke user. It is never deployed to production.
+read-only RPCs as a dedicated non-admin smoke user; phase-2 checks may also make allowlisted owner-scoped
+writes behind the `smoke.writes.enabled` kill switch. It is never deployed to production.
 
 ## Language
 
@@ -43,6 +44,7 @@ hook-bypass test first.
 |---|---|---|
 | xstockstrat-config | gRPC (`WatchConfig`) | Config snapshot at startup (90 s wait) |
 | Any backend | gRPC (read-only, allowlisted) | Check RPCs as the smoke user |
+| xstockstrat-portfolio | gRPC (phase-2 scoped writes) | Watchlist fixtures, only under every write guard |
 
 ## Database
 
@@ -55,7 +57,7 @@ degrades to per-check `ERROR` rather than exiting.
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `smoke.rpc.user_id` | string | `''` | Smoke user for every RPC; empty yields `ERROR`, never `PASS` |
-| `smoke.writes.enabled` | bool | `false` | Phase 2 only |
+| `smoke.writes.enabled` | bool | `false` | Phase-2 kill switch (migration `036`); re-read on every RPC call, so a flip needs no restart |
 
 ## Environment Variables
 
@@ -84,23 +86,43 @@ Mesh cert contract: `docs/patterns/inter-service-mtls.md`.
 
 ### Check API
 
-- `@check(id, feature, part, timeout_s=30)` over `async def run(ctx)`; `CHECKS_API_VERSION = 1`.
+- `@check(id, feature, part, timeout_s=30, janitor=None)` over `async def run(ctx)`; `CHECKS_API_VERSION = 1`.
 - `ctx.db.fetch` / `ctx.db.fetchval` (read-only transaction), `ctx.rpc.call(full_method: str, request)`, `ctx.evidence(key, scalar)`.
+- Phase 2: `ctx.fixture(hint)` returns `smoke-<run_id>-<hint>`; `ctx.on_cleanup(async_fn, deadline_s=10)` registers a cleanup
+  that runs after the check ends with any outcome (`PASS`/`FAIL`/`ERROR`/`TIMEOUT`, including a lost run hold), last
+  registered first, each under its own deadline; the run lock is extended by the sum of the cleanup deadlines. A failed
+  cleanup turns the outcome into `ERROR` and keeps the original evidence plus `original_outcome` and `cleanup_error`.
+- `janitor(ctx)` runs before the body inside the check timeout (e.g. `app.fixtures.sweep_watchlists`, which deletes the
+  smoke user's non-system watchlists named `smoke-*`); a janitor failure is `ERROR` and the body does not run.
+- Packages under `checks/` whose name starts with `_` (e.g. `checks/_reference/`) are linted but never loaded into the
+  served catalog; they are reference-only.
 - `CheckFailure(msg)` marks a `FAIL`.
 - `check_hash` is the lowercase hex sha256 (64 chars) over the UTF-8 bytes of `f"{CHECKS_API_VERSION}\n"` followed by the check function's own source text (`inspect.getsource`).
 
 ### Run-file schema
 
 One immutable file **per run** (not per check): `smoke-results/<env>/<UTC>-<run_id>.json` on the orphan
-`smoke-results` branch, validated by `schema/run-file.v1.json` (`additionalProperties: true`).
+`smoke-results` branch. The service writes `schema/run-file.v2.json` (`schema_version` 2); readers (the trigger and the
+agent's copy) validate each file by its own `schema_version`, so v1 files stay valid and v1 is never edited.
 `<UTC>` is the run start time formatted `%Y%m%dT%H%M%SZ`, so lexicographic filename order equals time
 order within an environment.
 
-- Run-level fields: `schema_version` (const 1), `run_id`, `env` (`homelab-staging` | `do-dev`), `deployed_sha`, `started_at`, `trigger`, `triggered_by` (peer SAN), `records`.
-- `records` holds one record per check executed in the run, with `check_id, check_hash, feature, part, outcome` (`PASS|FAIL|ERROR|TIMEOUT`), `started_at`, `duration_ms`, `rpcs_invoked` (call order), `evidence` (flat scalars).
+- Run-level fields: `schema_version` (1 or 2), `run_id`, `env` (`homelab-staging` | `do-dev`), `deployed_sha`, `started_at`, `trigger`, `triggered_by` (peer SAN), `records`.
+- `records` holds one record per check executed in the run, with `check_id, check_hash, feature, part, outcome` (`PASS|FAIL|ERROR|TIMEOUT`), `started_at`, `duration_ms`, `rpcs_invoked` (call order), `evidence` (flat scalars); v2 adds
+  `writes_performed` (the allowlisted writes sent, call order) and `cleanup` (`NONE|OK|FAILED`).
 
 A check is pending for key `(check_id, check_hash, env)` until a record with outcome `PASS` exists in any
 run file of that env; failed attempts stay in their files.
+
+### Scoped writes (phase 2)
+
+`policy.decide(..., writes=WritePolicy(enabled, env, allowlist=SCOPED_WRITES), request=...)` allows an RPC that is not
+`NO_SIDE_EFFECTS` only if it is in `SCOPED_WRITES` (portfolio `CreateWatchlist`, `UpdateWatchlist`,
+`AddWatchlistSymbols`, `RemoveWatchlistSymbols`, `DeleteWatchlist`) **and** `smoke.writes.enabled` is true **and**
+`SMOKE_ENV` is `homelab-staging` or `do-dev` **and** the request carries no non-empty `strategy_id` /
+`default_strategy_id` at any depth. Every refusal raises `MutatingRpcRefused` before a channel opens. Writes carry the
+same header trio with no admin bit. The portfolio owner's approval of this allowlist is pending
+(`docs/runbooks/smoke-user.md`). The privileged denylist exists only as a test oracle.
 
 ### SAN allowlist and exit codes
 
@@ -118,10 +140,11 @@ run file of that env; failed attempts stay in their files.
 | `LOOP_STALL_S` | `30` | Event-loop stall before the watchdog acts |
 | Evidence cap | `4096` bytes | Flat scalar dict; long strings truncated, secrets redacted |
 | `DB_STATEMENT_TIMEOUT_MS` | `5000` | `SET LOCAL statement_timeout` on every check query |
+| `CLEANUP_DEADLINE_S` | `10` | Default per-cleanup deadline for `ctx.on_cleanup` |
 
 ## Fixture ownership
 
-Fixtures created by phase-2 write checks are named with the `smoke-` prefix (`smoke-<run_id>`), which
+Fixtures created by phase-2 write checks are named with the `smoke-` prefix (`smoke-<run_id>-<hint>`), which
 is the smoke user's ownership marker (C-10c). Cleanup and the pre-check janitor touch only that prefix.
 
 ## Running Tests

@@ -116,7 +116,7 @@ class Runner:
 
     def _body(self, run: _Run, records: list[dict]) -> dict:
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "run_id": run.run_id,
             "env": self._env,
             "deployed_sha": self._deployed_sha,
@@ -127,11 +127,14 @@ class Runner:
         }
 
     @classmethod
-    def _record(cls, check, outcome, started_at, duration_ms, rpcs, evidence) -> dict:
-        return cls._raw_record(check, outcome, started_at, duration_ms, rpcs, sanitize(evidence))
+    def _record(cls, check, outcome, started_at, duration_ms, rpcs, evidence, **kw) -> dict:
+        evidence = sanitize(evidence)
+        return cls._raw_record(check, outcome, started_at, duration_ms, rpcs, evidence, **kw)
 
     @staticmethod
-    def _raw_record(check, outcome, started_at, duration_ms, rpcs, evidence) -> dict:
+    def _raw_record(
+        check, outcome, started_at, duration_ms, rpcs, evidence, *, writes=(), cleanup="NONE"
+    ) -> dict:
         return {
             "check_id": check.id,
             "check_hash": check.check_hash,
@@ -141,6 +144,8 @@ class Runner:
             "started_at": started_at,
             "duration_ms": duration_ms,
             "rpcs_invoked": rpcs,
+            "writes_performed": list(writes),
+            "cleanup": cleanup,
             "evidence": evidence,
         }
 
@@ -168,31 +173,67 @@ class Runner:
     async def _run_one(self, run: _Run, check, remaining: float) -> dict:
         hold_bound = remaining < check.timeout_s
         rpc = self._rpc_factory(run.run_id)
-        ctx = CheckContext(db=self._db, rpc=rpc)
+        ctx = CheckContext(db=self._db, rpc=rpc, run_id=run.run_id)
         started_at = _iso(datetime.now(UTC))
         t0 = time.monotonic()
         system: dict = {}
         timer = asyncio.timeout(min(check.timeout_s, remaining))
         outcome = "PASS"
+        stage = "janitor"
         try:
             async with timer:
+                if check.janitor is not None:
+                    await check.janitor(ctx)
+                stage = "body"
                 await check.run(ctx)
         except CheckFailure as e:
             outcome, system["failure"] = "FAIL", str(e)
         except Exception as e:  # noqa: BLE001 — any check error is an ERROR record
-            outcome, system["error"] = "ERROR", f"{type(e).__name__}: {e}"
+            prefix = "janitor: " if stage == "janitor" else ""
+            outcome, system["error"] = "ERROR", f"{prefix}{type(e).__name__}: {e}"
             if getattr(e, "sqlstate", None):
                 system["sqlstate"] = e.sqlstate
+        if timer.expired():
+            outcome = "TIMEOUT"
+            system = {"error": "run hold exceeded" if hold_bound else "check timeout exceeded"}
+        try:
+            cleanup, cleanup_error = await self._cleanup(run, ctx)
         finally:
             try:
                 await rpc.close()
             except Exception:  # noqa: BLE001 — a close failure must not change the outcome
                 pass
-        if timer.expired():
-            outcome = "TIMEOUT"
-            system = {"error": "run hold exceeded" if hold_bound else "check timeout exceeded"}
+        if cleanup == "FAILED":
+            system["original_outcome"], outcome = outcome, "ERROR"
+            system["cleanup_error"] = cleanup_error
         evidence = dict(system)
         for key, value in ctx.evidence_items.items():
             evidence.setdefault(key, value)
         duration_ms = int((time.monotonic() - t0) * 1000)
-        return self._record(check, outcome, started_at, duration_ms, list(rpc.invoked), evidence)
+        return self._record(
+            check,
+            outcome,
+            started_at,
+            duration_ms,
+            list(rpc.invoked),
+            evidence,
+            writes=list(getattr(rpc, "writes", [])),
+            cleanup=cleanup,
+        )
+
+    @staticmethod
+    async def _cleanup(run: _Run, ctx) -> tuple[str, str | None]:
+        if not ctx.cleanups:
+            return "NONE", None
+        loop = asyncio.get_running_loop()
+        # The lock stays held through cleanup: grace = the sum of the cleanup deadlines.
+        grace = sum(deadline for _, deadline in ctx.cleanups)
+        run.deadline = max(run.deadline, loop.time() + grace)
+        errors = []
+        for fn, deadline in reversed(ctx.cleanups):
+            try:
+                async with asyncio.timeout(deadline):
+                    await fn()
+            except Exception as e:  # noqa: BLE001 — every cleanup runs; failures are collected
+                errors.append(f"{type(e).__name__}: {e}")
+        return ("FAILED", "; ".join(errors)) if errors else ("OK", None)

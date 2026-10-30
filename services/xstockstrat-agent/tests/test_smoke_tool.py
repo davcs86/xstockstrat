@@ -156,9 +156,22 @@ async def test_agent_validates_run_file_against_schema_copy(monkeypatch):
     assert (await fn(ctx=_ctx(ADMIN), action="get_run", run_id="abc"))["status"] == "running"
 
 
-def test_schema_copy_matches_smoke_schema():
-    src = _REPO / "services/xstockstrat-smoke/schema/run-file.v1.json"
-    assert (_APP / "smoke_run_file.v1.json").read_bytes() == src.read_bytes()
+@pytest.mark.parametrize("version", [1, 2])
+def test_schema_copy_matches_smoke_schema(version):
+    src = _REPO / f"services/xstockstrat-smoke/schema/run-file.v{version}.json"
+    assert (_APP / f"smoke_run_file.v{version}.json").read_bytes() == src.read_bytes()
+
+
+def test_run_file_validated_by_its_schema_version():
+    v2 = _run_file(schema_version=2)
+    v2["records"][0].update(writes_performed=[], cleanup="NONE")
+    smoke_client.validate_run_file(_run_file())
+    smoke_client.validate_run_file(v2)
+    del v2["records"][0]["cleanup"]
+    with pytest.raises(RuntimeError, match="cleanup"):
+        smoke_client.validate_run_file(v2)
+    with pytest.raises(RuntimeError, match="schema_version"):
+        smoke_client.validate_run_file(_run_file(schema_version=9))
 
 
 def test_no_secret_material_in_module():
