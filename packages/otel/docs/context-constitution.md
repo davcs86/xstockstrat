@@ -1,6 +1,6 @@
 # packages/otel — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped; OTEL-2 evidence-weakened note: no service exports metrics). Captures the **non-obvious**
+Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — OTEL-1 re-grounded on Tempo, OTEL-2 retired, collector line hints re-stamped). Captures the **non-obvious**
 invariants of the OTel package (Collector config + checked-in Grafana provisioning; local-dev only —
 production pushes OTLP straight to Grafana Cloud). Does not restate documented/CI-enforced rules
 (see `## Pointers`).
@@ -24,8 +24,8 @@ production pushes OTLP straight to Grafana Cloud). Does not restate documented/C
 
 | What | Where |
 |---|---|
-| Grafana Cloud OTLP exporter (single endpoint, gzip, retry) via `${env:…}` | `otel-collector-config.yaml#otlphttp/grafana (~L48-62)` |
-| Prod has no collector; services push OTLP direct to Grafana Cloud | `otel-collector-config.yaml#no collector deployment is needed there (~L17-18)` |
+| Grafana Cloud OTLP exporter (single endpoint, gzip, retry) via `${env:…}` | `otel-collector-config.yaml#otlphttp/grafana (~L49-63)` |
+| Prod has no collector; services push OTLP direct to Grafana Cloud | `otel-collector-config.yaml#no collector deployment is needed there (~L18-19)` |
 | Alert-rule cleanup and the Tempo dashboard (purpose, import, removed assets) | `alerts/README.md`, `dashboards/README.md` |
 
 ---

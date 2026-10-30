@@ -359,3 +359,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `packages/otel/docs/context-constitution.md`, `packages/otel/docs/context-constitution-findings.md`,
   `docs/context-constitution-findings.md`
 - Deviations: none
+
+### Step 9 — Teardown: context-constitution refresh over the touched context files [done]
+- Teardown: `/context-forge:context-constitution refresh` is **plugin unavailable** in this session (the skill list carries
+  `context-forge:context-scrubber` only), so the equivalent was done by hand: every file below was re-read against the
+  post-Step-8 tree (`alert-rules.yaml`, `service-health.json`, both READMEs, `grafana-cloud.md`, the collector config).
+  This must also be stated in the PR body (plugin unavailable + the reconciliations below).
+- packages/otel/CLAUDE.md: none needed (pointer block and description were corrected in Step 7 and match the tree)
+- docs/setup/CLAUDE.md: none needed (`grafana-cloud.md` row corrected in Step 7; the row matches the rewritten doc)
+- packages/otel/docs/context-constitution.md: reconciled (refresh stamp added; collector line hints re-stamped +1 after the
+  Step 7 comment edit: `otlphttp/grafana` ~L49-63, no-collector note ~L18-19)
+- packages/otel/docs/context-constitution-findings.md: reconciled (refresh stamp added; collector hints re-stamped +1:
+  headers comment ~L14-16, exporter header line ~L56, `memory_limiter` ~L37-46)
+- docs/context-constitution-findings.md: none needed (row narrowed in Step 8; no other row concerns the touched assets)
+- Not touched, by design: root `docs/context-constitution.md` and other modules' constitutions (no drift found
+  against the files edited here). `.agents/context-forge.json` `scrubberExtraTargets` (`README.md`,
+  `docs/patterns/ui-ux-governance.md`) untouched.
+- markdownlint-cli2 (npx, repo `.markdownlint.yaml`) on `packages/otel/CLAUDE.md` and `docs/setup/CLAUDE.md`: 0 issues.
+- Files modified: `packages/otel/docs/context-constitution.md`, `packages/otel/docs/context-constitution-findings.md`
+- Deviations: none

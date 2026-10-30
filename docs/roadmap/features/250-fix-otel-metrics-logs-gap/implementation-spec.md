@@ -692,7 +692,7 @@ grep -l -E 'docs/roadmap/features/274-otel-metrics-logs-export/' packages/otel/a
 
 ### Step 9 — docs: Teardown, the context-constitution refresh over the touched context files
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: context files touched in Steps 3-8
 **Files**:
 - `packages/otel/CLAUDE.md` — modify (only if the refresh reports grounded drift)
