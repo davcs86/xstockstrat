@@ -770,3 +770,70 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - `merge-order.md`: added a rebase-only blockquote `Note on 251 fix-getpnl-source-service ↔ 249` after the 252 note (before the `---`). 241 is `launched` so it is dropped per the step; 249 is `code-completed`, kept. The 252 context note is dropped (252 launched, per re-spec). The existing 257 hard row at `:81` is unchanged.
 - Verification: `grep -n "fix-getpnl-source-service" merge-order.md` shows the `:81` row and the new note. TDD N/A (docs).
 - Next: integration PR; PG-1 stays an operator gate.
+
+## Session 2026-10-30 - sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-getpnl-source-service (feature 251)
+
+Source: docs/roadmap/features/251-fix-getpnl-source-service/acceptance.feature (22 scenarios, AC-1..AC-22).
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| 1,2,4,5,6,7,8,9,11,14,15,16,17 | services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts on the GetPnL RPC (realized_pnl or status code) |
+| 18 | services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | Straddles portfolio and ui. The first Then is GetPnL realized_pnl, so portfolio owns it; the second Then is the ui fill lineage. Not duplicated in ui. |
+| 10 | services/xstockstrat-trading/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts trading's emitted ledger event payload |
+| 12,13 | services/xstockstrat-ledger/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts the ledger's QueryEvents paging and page_token handling |
+| 3,19,21,22 | services/xstockstrat-ui/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts the /trader/positions Fill lineage table |
+| 20 | services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature | none | OVERLAP | Feature 263 @AC-1/@AC-2 already guarantee the trader BFF QueryEvents never returns another user's events. Skipped and recorded for human consolidation. |
+
+No scenario is DUP or CONFLICT. Portfolio GetPnL rules from features 229, 231 and 240 cover quote availability and unrealized P&L only.
+
+### Ready-to-write blocks
+Scenario text verbatim from the source, with @feature-251 added to each tag line.
+
+--- services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Header comment: "# Promoted from docs/roadmap/features/251-fix-getpnl-source-service/acceptance.feature on launch (C-16). Scenarios are verbatim; each carries its source @AC-* and a @feature-251 tag. A rule enters only by promotion."
+Feature: xstockstrat-portfolio - GetPnL reads trading's fills from the ledger and folds them correctly
+Each scenario tag line: "@AC-n <original @FR tags> @regression @feature-251":
+- @AC-1 @FR-1 @FR-2: Realized P&L folds a sell that trading wrote with an unsigned qty (source lines 10-18)
+- @AC-2 @FR-1 @FR-2: A partially filled sell that trading wrote with an unsigned filled_qty is included in realized P&L (lines 21-30)
+- @AC-4 @FR-2: A caller's fill whose side cannot be resolved refuses GetPnL instead of fabricating a figure (lines 44-50)
+- @AC-5 @FR-4: Another user's unresolvable fill does not affect the caller and costs no side lookup (lines 53-59)
+- @AC-6 @FR-5: A ledger read failure mid-drain returns UNAVAILABLE, never a partial realized figure (lines 62-66)
+- @AC-7 @FR-5: Scenario Outline: The caller's own deadline or cancellation maps to its own status code, including its Examples table (lines 69-78)
+- @AC-8 @FR-5: Scenario Outline: A replaying ledger fails GetPnL closed, including its Examples table (lines 81-90)
+- @AC-9 @FR-5: More than one page of fills folds every fill exactly once (lines 93-98)
+- @AC-11 @FR-2: A fill whose payload carries side folds without a sibling lookup (lines 114-119)
+- @AC-14 @FR-4: Fills on different accounts do not net against each other (lines 135-141)
+- @AC-15 @FR-4: A symbol group mixing fills with and without account_id is refused (lines 144-147)
+- @AC-16 @FR-2: Scenario Outline: Fills fold in ledger sequence order whatever order the ledger returns them in, including its two-row Examples table (lines 150-159)
+- @AC-17 @FR-2: A partially filled sell that later fills folds once, from its order.filled event (lines 162-167)
+- @AC-18 @FR-4 @FR-3: A LIVE fill is excluded from paper GetPnL and from the paper fill lineage (lines 170-175)
+
+--- services/xstockstrat-trading/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Same provenance comment, then "Feature: xstockstrat-trading - fill events carry side, canonical source_service and fees".
+- @AC-10 @FR-1 @FR-2 @regression @feature-251: Scenario Outline: Trading's fill events carry the order side, the canonical source_service and the fee, including its Examples table (lines 101-111)
+
+--- services/xstockstrat-ledger/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Same provenance comment, then "Feature: xstockstrat-ledger - QueryEvents pages each event exactly once and rejects bad cursors".
+- @AC-12 @FR-5 @regression @feature-251: The ledger pages QueryEvents exactly once per event, including recorded_at ties (lines 122-126)
+- @AC-13 @FR-5 @regression @feature-251: A malformed page_token is rejected (lines 129-132)
+
+--- services/xstockstrat-ui/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Same provenance comment, then "Feature: xstockstrat-ui - /trader/positions fill lineage lists the trader's own fills".
+- @AC-3 @FR-3 @regression @feature-251: The position fill lineage lists the trader's own fills that trading wrote to the ledger (lines 33-39)
+- @AC-19 @FR-3 @regression @feature-251: The fill lineage finds the trader's fill even when it is not in the first platform-wide page (lines 178-182)
+- @AC-21 @FR-3 @regression @feature-251: The fill lineage caps at 50 orders and says so (lines 191-195)
+- @AC-22 @FR-3 @regression @feature-251: A fill whose order row still shows a non-filled status is listed (lines 198-202)
+
+### Notes
+- AC-18 is attributed to portfolio: the only scenario with two observable subjects; the ui half is carried by the same scenario.
+- AC-20 is OVERLAP with services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature (@AC-1, @AC-2, @feature-263). AC-20 uses an order-id stream_key, 263 AC-1 uses an account: key and AC-2 no key. If the reviewer thinks the order-id key is a distinct guarantee, promote as NEW instead.
+- Feature 257 (fix-ledger-query-pagination) GetPnL paging scenarios are not promoted yet and will probably OVERLAP 251 AC-8/AC-9 and ledger AC-12/AC-13 when 257 launches.
+- AC-4 asserts FAILED_PRECONDITION and AC-6 asserts UNAVAILABLE; neither contradicts the quote-unavailable UNAVAILABLE rule in services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature.
+
+### Coverage check
+Source scenarios: 22. Planned: 21 NEW + 0 DUP + 1 OVERLAP = 22.
+```
