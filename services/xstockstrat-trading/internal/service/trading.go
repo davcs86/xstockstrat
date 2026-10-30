@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,6 +90,36 @@ type ibkrCreds struct {
 	AccessToken       string `json:"access_token"`
 	AccessTokenSecret string `json:"access_token_secret"`
 	IBKRAccountID     string `json:"ibkr_account_id"`
+	SignatureKey      string `json:"signature_key"`
+	EncryptionKey     string `json:"encryption_key"`
+	DHPrime           string `json:"dh_prime"`
+}
+
+// validateIBKRCreds rejects an IBKR blob missing any field the LST handshake needs; it names the
+// missing fields only and never echoes a submitted value.
+func validateIBKRCreds(raw string) error {
+	var c ibkrCreds
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return grpcstatus.Errorf(codes.InvalidArgument, "IBKR credentials_json must be a JSON object of string fields")
+	}
+	var missing []string
+	for _, f := range []struct{ name, val string }{
+		{"consumer_key", c.ConsumerKey},
+		{"access_token", c.AccessToken},
+		{"access_token_secret", c.AccessTokenSecret},
+		{"ibkr_account_id", c.IBKRAccountID},
+		{"signature_key", c.SignatureKey},
+		{"encryption_key", c.EncryptionKey},
+		{"dh_prime", c.DHPrime},
+	} {
+		if f.val == "" {
+			missing = append(missing, f.name)
+		}
+	}
+	if len(missing) > 0 {
+		return grpcstatus.Errorf(codes.InvalidArgument, "IBKR credentials_json missing required field(s): %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // TradingService implements business logic for order placement, cancellation,
@@ -600,7 +631,7 @@ func (s *TradingService) submitOrder(
 			default: // intentActionRejectPending
 				if isStale {
 					// Best-effort — the caller need not distinguish "not yet stale" from "just reclaimed".
-					_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+					s.reclaimStaleIntent(ctx, intentID, existing.UpdatedAt, existing.UpdatedAt.Add(staleThreshold(s.cfgW)), "reactive_place", accountEntry.userID)
 				}
 				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 					"order intent %q is still pending", intentID)
@@ -646,23 +677,23 @@ func (s *TradingService) submitOrder(
 		slog.Warn("db upsert order failed", "order_id", orderID, "error", err)
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.created", orderID, order.UserId, map[string]interface{}{
+	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.created", orderID, order.UserId, map[string]interface{}{
 		"symbol": order.Symbol, "side": order.Side.String(), "qty": order.Qty,
 		"status": orderStatus.String(), "trading_mode": mode.String(),
 	})
 
 	if requiresApproval {
-		go s.emitLedgerEvent(context.Background(), "order.approval_requested", orderID, order.UserId, map[string]interface{}{
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.approval_requested", orderID, order.UserId, map[string]interface{}{
 			"order_id": orderID, "symbol": order.Symbol, "qty": order.Qty,
 			"limit_price": order.LimitPrice, "user_id": order.UserId,
 		})
-		go s.emitApprovalAlert(context.Background(), order)
+		go s.emitApprovalAlert(context.WithoutCancel(ctx), order)
 		slog.Info("order pending approval", "order_id", orderID, "symbol", req.Symbol)
 		return order, nil
 	}
 
 	// Emit order.submitted before calling the broker.
-	go s.emitLedgerEvent(context.Background(), "order.submitted", orderID, order.UserId, map[string]interface{}{
+	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.submitted", orderID, order.UserId, map[string]interface{}{
 		"order_id": orderID, "symbol": order.Symbol, "side": order.Side.String(),
 		"qty": order.Qty, "trading_mode": mode.String(),
 	})
@@ -680,13 +711,11 @@ func (s *TradingService) submitOrder(
 	}
 	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
-		var netErr net.Error
-		isTimeout := errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
-		if isTimeout {
+		if isUncertainBrokerOutcome(err) {
 			// Uncertain outcome: leave order.Status pre-call and the intent PENDING for reclaim —
 			// don't mark REJECTED, which conflates "definitely rejected" with "unknown".
-			_ = s.repo.UpsertOrder(context.Background(), order)
-			go s.emitLedgerEvent(context.Background(), "order.broker_call_uncertain", orderID, order.UserId, map[string]interface{}{
+			s.persistOrderBestEffort(ctx, order, "broker_timeout")
+			go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.broker_call_uncertain", orderID, order.UserId, map[string]interface{}{
 				"order_id": orderID, "intent_id": intentID, "error": err.Error(),
 			})
 			slog.Warn("broker call uncertain (timeout)", "order_id", orderID, "intent_id", intentID, "error", err)
@@ -697,13 +726,13 @@ func (s *TradingService) submitOrder(
 			o.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
 			o.UpdatedAt = timestamppb.New(time.Now())
 		})
-		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, order.UserId, map[string]interface{}{
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.broker_rejected", orderID, order.UserId, map[string]interface{}{
 			"order_id": orderID, "error": err.Error(), "trading_mode": mode.String(),
 		})
-		_ = s.repo.UpsertOrder(context.Background(), order)
+		s.persistOrderBestEffort(ctx, order, "broker_reject")
 		if ownsIntent {
 			if marshaled, mErr := proto.Marshal(order); mErr == nil {
-				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, orderID, repository.IntentStateRejected, marshaled); fErr != nil {
+				if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, orderID, repository.IntentStateRejected, marshaled); fErr != nil {
 					slog.Warn("finalize order intent (rejected) failed", "intent_id", intentID, "error", fErr)
 				}
 			}
@@ -737,22 +766,22 @@ func (s *TradingService) submitOrder(
 		if order.FilledAvgPrice > 0 {
 			entryProxy = order.FilledAvgPrice
 		}
-		s.maybeSubmitBracket(context.Background(), order, accountEntry, brokerOrder, order.StopPrice, entryProxy,
+		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, accountEntry, brokerOrder, order.StopPrice, entryProxy,
 			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 	}
 
-	if err := s.repo.UpsertOrder(context.Background(), order); err != nil {
+	if err := s.repo.UpsertOrder(context.WithoutCancel(ctx), order); err != nil {
 		slog.Warn("db upsert after broker submit failed", "order_id", orderID, "error", err)
 	}
 	if ownsIntent {
 		if marshaled, mErr := proto.Marshal(order); mErr == nil {
-			if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, orderID, repository.IntentStateCompleted, marshaled); fErr != nil {
+			if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, orderID, repository.IntentStateCompleted, marshaled); fErr != nil {
 				slog.Warn("finalize order intent (completed) failed", "intent_id", intentID, "error", fErr)
 			}
 		}
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.broker_submitted", orderID, order.UserId, map[string]interface{}{
+	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.broker_submitted", orderID, order.UserId, map[string]interface{}{
 		"order_id": orderID, "broker_order_id": brokerOrder.BrokerOrderID,
 		"broker_status": brokerOrder.Status, "trading_mode": mode.String(),
 	})
@@ -839,7 +868,7 @@ func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.
 		}
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.created", orderID, order.UserId, map[string]interface{}{
+	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.created", orderID, order.UserId, map[string]interface{}{
 		"symbol": order.Symbol, "side": order.Side.String(), "qty": order.Qty,
 		"status": order.Status.String(), "trading_mode": mode.String(), "account_id": accountID,
 	})
@@ -1298,7 +1327,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 				"cancel intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
 		default: // intentActionRejectPending
 			if isStale {
-				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+				s.reclaimStaleIntent(ctx, intentID, existing.UpdatedAt, existing.UpdatedAt.Add(staleThreshold(s.cfgW)), "reactive_cancel", order.UserId)
 			}
 			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 				"cancel on order %s is still pending", req.OrderId)
@@ -1350,7 +1379,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 			if uErr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uErr != nil {
 				slog.Warn("cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
 			}
-			go s.emitLedgerEvent(context.Background(), "order.bracket_updated", req.OrderId, order.UserId, bracketUpdatedPayload(order, "", ""))
+			go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", req.OrderId, order.UserId, bracketUpdatedPayload(order, "", ""))
 		}
 	}
 
@@ -1364,10 +1393,10 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		}
 	})
 
-	_ = s.repo.UpsertOrder(ctx, order)
-	s.finalizeCancelIntent(intentID, order, finalIntentState)
+	s.persistOrderBestEffort(ctx, order, "cancel_final")
+	s.finalizeCancelIntent(ctx, intentID, order, finalIntentState)
 
-	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, order.UserId, map[string]interface{}{
+	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.canceled", req.OrderId, order.UserId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
@@ -1383,7 +1412,7 @@ func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *trad
 	if err != nil {
 		slog.Warn("cancel: order not cancelable and broker re-read failed", "order_id", order.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 		order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN })
-		s.finalizeCancelIntent(intentID, order, repository.IntentStateUnknown)
+		s.finalizeCancelIntent(ctx, intentID, order, repository.IntentStateUnknown)
 		return nil, true, grpcstatus.Errorf(codes.Unavailable,
 			"order %s is already terminal at the broker and its status could not be read; the fill poller will reconcile it", order.OrderId)
 	}
@@ -1393,16 +1422,16 @@ func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *trad
 	slog.Warn("cancel: order already terminal at broker, adopting broker status", "order_id", order.OrderId, "broker_status", brokerOrder.Status)
 	order = s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
 	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED })
-	s.finalizeCancelIntent(intentID, order, repository.IntentStateCompleted)
+	s.finalizeCancelIntent(ctx, intentID, order, repository.IntentStateCompleted)
 	return &tradingv1.CancelOrderResponse{Success: false, Order: order}, true, nil
 }
 
-func (s *TradingService) finalizeCancelIntent(intentID string, order *tradingv1.Order, state int16) {
+func (s *TradingService) finalizeCancelIntent(ctx context.Context, intentID string, order *tradingv1.Order, state int16) {
 	marshaled, err := proto.Marshal(order)
 	if err != nil {
 		return
 	}
-	if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, order.OrderId, state, marshaled); fErr != nil {
+	if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, order.OrderId, state, marshaled); fErr != nil {
 		slog.Warn("finalize cancel intent failed", "intent_id", intentID, "error", fErr)
 	}
 }
@@ -1495,7 +1524,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 				"replace intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
 		default: // intentActionRejectPending
 			if isStale {
-				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+				s.reclaimStaleIntent(ctx, intentID, existing.UpdatedAt, existing.UpdatedAt.Add(staleThreshold(s.cfgW)), "reactive_replace", order.UserId)
 			}
 			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 				"replace on order %s is still pending", req.OrderId)
@@ -1517,11 +1546,9 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
-		var netErr net.Error
-		isTimeout := errors.Is(replaceErr, context.DeadlineExceeded) || (errors.As(replaceErr, &netErr) && netErr.Timeout())
-		if !isTimeout && ownsIntent {
+		if !isUncertainBrokerOutcome(replaceErr) && ownsIntent {
 			if marshaled, mErr := proto.Marshal(order); mErr == nil {
-				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateRejected, marshaled); fErr != nil {
+				if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, req.OrderId, repository.IntentStateRejected, marshaled); fErr != nil {
 					slog.Warn("finalize replace intent (rejected) failed", "intent_id", intentID, "error", fErr)
 				}
 			}
@@ -1547,16 +1574,16 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
 	})
 
-	_ = s.repo.UpsertOrder(ctx, order)
+	s.persistOrderBestEffort(ctx, order, "replace_final")
 	if ownsIntent {
 		if marshaled, mErr := proto.Marshal(order); mErr == nil {
-			if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateCompleted, marshaled); fErr != nil {
+			if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, req.OrderId, repository.IntentStateCompleted, marshaled); fErr != nil {
 				slog.Warn("finalize replace intent (completed) failed", "intent_id", intentID, "error", fErr)
 			}
 		}
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, order.UserId, map[string]interface{}{
+	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.replaced", req.OrderId, order.UserId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
@@ -1802,7 +1829,7 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 
 	switch newStatus {
 	case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
-		go s.emitLedgerEvent(context.Background(), "order.filled", order.OrderId, order.UserId, map[string]interface{}{
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.filled", order.OrderId, order.UserId, map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 			"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
@@ -1810,16 +1837,16 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 			// Per-fill fee (0 when the broker exposes none).
 			"fees": brokerOrder.Fees,
 		})
-		go s.emitFillAlert(context.Background(), order)
+		go s.emitFillAlert(context.WithoutCancel(ctx), order)
 		slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
 			"qty", order.Qty, "fill_price", order.FilledAvgPrice)
 		// Fill detected asynchronously — order.StopPrice is nonzero only for an auto-sized
 		// MARKET/LIMIT entry; a no-op for every other order (see maybeSubmitBracket's guard).
-		s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
+		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
 			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
-		go s.emitLedgerEvent(context.Background(), "order.partially_filled", order.OrderId, order.UserId, map[string]interface{}{
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.partially_filled", order.OrderId, order.UserId, map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 			"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
@@ -1829,16 +1856,16 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 		})
 		// First partial fill creates the bracket; a later partial fill on an
 		// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).
-		s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
+		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
 			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 	case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
-		go s.emitLedgerEvent(context.Background(), "order.canceled", order.OrderId, order.UserId, map[string]interface{}{
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.canceled", order.OrderId, order.UserId, map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 		})
 
 	case tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
-		go s.emitLedgerEvent(context.Background(), "order.rejected", order.OrderId, order.UserId, map[string]interface{}{
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.rejected", order.OrderId, order.UserId, map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 		})
 	}
@@ -1989,6 +2016,10 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		brokerOrders, err := entry.client.ListOrders(listCtx)
 		cancel()
 		if err != nil {
+			if errors.Is(err, broker.ErrInvalidCredentials) {
+				slog.Warn("reconcileTick: broker rejected credentials; skipping account this tick", "account_id", accountID, "call", "ListOrders")
+				continue
+			}
 			slog.Warn("reconcileTick: ListOrders failed", "account_id", accountID, "error", err)
 			systemicCount++
 			continue
@@ -2074,6 +2105,10 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		brokerPositions, posErr := entry.client.GetPositions(posCtx)
 		posCancel()
 		if posErr != nil {
+			if errors.Is(posErr, broker.ErrInvalidCredentials) {
+				slog.Warn("reconcileTick: broker rejected credentials; skipping account this tick", "account_id", accountID, "call", "GetPositions")
+				continue
+			}
 			slog.Warn("reconcileTick: GetPositions failed", "account_id", accountID, "error", posErr)
 			systemicCount++
 			continue
@@ -2173,7 +2208,6 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 		Key:         "platform.trading_state",
 		Value:       &configv1.ConfigValue{Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
 		Reason:      fmt.Sprintf("reconciliation: %d/%d accounts unreachable/unprotected this tick", systemicCount, totalAccounts),
-		Author:      "system:reconciliation-poller",
 		Environment: env,
 	})
 	if err != nil {
@@ -2445,6 +2479,30 @@ func (s *TradingService) brokerCallTimeout() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// ibkrTiming is the IBKR LST session lifecycle from trading.ibkr.*, read live on every use (≤0 → default).
+func (s *TradingService) ibkrTiming() broker.IBKRTiming {
+	ms := func(key string, def int64) time.Duration {
+		v := s.cfgW.GetInt(key, def)
+		if v <= 0 {
+			v = def
+		}
+		return time.Duration(v) * time.Millisecond
+	}
+	return broker.IBKRTiming{
+		LSTRefreshMargin:  ms("trading.ibkr.lst_refresh_margin_ms", 60000),
+		HandshakeTimeout:  ms("trading.ibkr.handshake_timeout_ms", 10000),
+		ReauthMinInterval: ms("trading.ibkr.reauth_min_interval_ms", 30000),
+	}
+}
+
+// isUncertainBrokerOutcome reports a broker call that may have been processed (timeout or a failed
+// resend), so the order must stay PENDING for reclaim instead of being marked REJECTED.
+func isUncertainBrokerOutcome(err error) bool {
+	var netErr net.Error
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) ||
+		errors.Is(err, broker.ErrOutcomeUncertain)
+}
+
 // haltedPollInterval is how often reconcileTick re-polls an already-halted account's broker
 // state (trading.reconciliation.halted_poll_interval_ms, default 300000 ms / 5 min), read live.
 func (s *TradingService) haltedPollInterval() float64 {
@@ -2495,6 +2553,11 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 
 	if !json.Valid([]byte(req.CredentialsJson)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
+	}
+	if req.BrokerType == commonv1.BrokerType_BROKER_TYPE_IBKR {
+		if err := validateIBKRCreds(req.CredentialsJson); err != nil {
+			return nil, err
+		}
 	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(req.CredentialsJson))
@@ -2547,6 +2610,11 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 	// Offline accounts (feature 157) have no credentials to update.
 	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "offline accounts have no broker credentials to update")
+	}
+	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_IBKR) {
+		if err := validateIBKRCreds(credentialsJSON); err != nil {
+			return nil, err
+		}
 	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(credentialsJSON))
@@ -2614,7 +2682,7 @@ func (s *TradingService) validateAndRecordCredential(ctx context.Context, accoun
 
 	if changed {
 		logCredentialStatusTransition(accountID, seen, prev, status)
-		if err := s.accountRepo.UpdateCredentialStatus(context.Background(), accountID, status, checkedAt); err != nil {
+		if err := s.accountRepo.UpdateCredentialStatus(context.WithoutCancel(ctx), accountID, status, checkedAt); err != nil {
 			slog.Warn("validateAndRecordCredential: persist status failed", "account_id", accountID, "error", err)
 			// Roll back the cached value so the next check retries the write.
 			s.credStatusMu.Lock()
@@ -3094,6 +3162,10 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			AccessTokenSecret: creds.AccessTokenSecret,
 			IBKRAccountID:     creds.IBKRAccountID,
 			IsPaper:           rec.IsPaper,
+			SignatureKey:      creds.SignatureKey,
+			EncryptionKey:     creds.EncryptionKey,
+			DHPrime:           creds.DHPrime,
+			Timing:            s.ibkrTiming,
 		}), nil
 	default:
 		var creds alpacaCreds
@@ -3394,7 +3466,7 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 	}
 	if err := s.bracketRepo.CreateBracket(ctx, rec); err != nil {
 		slog.Warn("create bracket failed", "order_id", order.OrderId, "error", err)
-		go s.emitBracketFailureAlert(context.Background(), order, fmt.Sprintf("bracket row creation failed: %v", err))
+		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket row creation failed: %v", err))
 		return
 	}
 
@@ -3405,7 +3477,7 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, ""); err != nil {
 			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
 		}
-		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId, order.UserId,
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID))
 	case commonv1.BrokerType_BROKER_TYPE_IBKR:
 		resp, err := accountEntry.client.SubmitBracketLegs(ctx, order.BrokerOrderId, order.ClientOrderId, broker.BracketLegsRequest{
@@ -3416,13 +3488,13 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 			if uerr := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
 				slog.Warn("update bracket status (failed) failed", "order_id", order.OrderId, "error", uerr)
 			}
-			go s.emitBracketFailureAlert(context.Background(), order, fmt.Sprintf("bracket leg submission failed: %v", err))
+			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket leg submission failed: %v", err))
 			return
 		}
 		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
 			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
 		}
-		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId, order.UserId,
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
 	}
 }
@@ -3458,13 +3530,13 @@ func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Ord
 		if uerr := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
 			slog.Warn("update bracket status (failed, resize) failed", "order_id", order.OrderId, "error", uerr)
 		}
-		go s.emitBracketFailureAlert(context.Background(), order, fmt.Sprintf("bracket resize failed: %v", err))
+		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket resize failed: %v", err))
 		return
 	}
 	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
 		slog.Warn("update bracket status (active, resize) failed", "order_id", order.OrderId, "error", err)
 	}
-	go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId, order.UserId,
+	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 		bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
 }
 
@@ -3655,6 +3727,16 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 // ledgerEmitTimeout bounds a single AppendEvent so a half-open connection or a server stalled
 // mid-RPC surfaces as a logged error instead of silently wedging the calling goroutine.
 const ledgerEmitTimeout = 10 * time.Second
+
+// persistOrderBestEffort writes order state after a broker side effect; log-only, never surfaced.
+func (s *TradingService) persistOrderBestEffort(ctx context.Context, order *tradingv1.Order, path string) {
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ledgerEmitTimeout)
+	defer cancel()
+	if err := s.repo.UpsertOrder(wctx, order); err != nil {
+		slog.Error("order state write failed", "order_id", order.OrderId, "user_id", order.UserId,
+			"status", order.Status.String(), "path", path, "error", err)
+	}
+}
 
 // emitLedgerEvent appends an event to the ledger. Pass the order/account owner as userID for
 // user-owned events (background pollers have no inbound x-user-id); pass "" for platform-scoped events.

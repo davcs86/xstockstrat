@@ -1,4 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIResponse } from '@playwright/test';
+import { REFRESH_STALL_TOKEN, signExpiredTestJwt } from './helpers/auth';
+import { REFRESH_TIMEOUT_MS } from '../src/lib/deadlines';
 
 /**
  * E2E tests for the unified login flow (feature 019).
@@ -192,6 +194,92 @@ test.describe('Unified auth — protected routes redirect to /auth/login', () =>
       expect(res.headers()['location'] ?? '').toContain('/auth/login');
     });
   }
+});
+
+test.describe('Segment health routes are reachable without a session (feature 271 @AC-3)', () => {
+  for (const [path, status] of [
+    ['/trader/health', 200],
+    ['/trader/api/health', 200],
+    ['/insights/health', 200],
+    ['/insights/api/health', 200],
+    ['/config-ui/health', 200],
+    ['/config-ui/api/health', 200],
+    ['/accounts/api/health', 200],
+    ['/accounts/api/agent-health', 401],
+  ] as const) {
+    test(`GET ${path} without a session responds ${status}`, async ({ page }) => {
+      const res = await page.request.get(path, { maxRedirects: 0 });
+      expect(res.status()).toBe(status);
+      expect(res.headers()['location']).toBeUndefined();
+      const body = await res.json();
+      if (status === 200) expect(body.status).toBe('ok');
+      else expect(body.error).toBe('Unauthorized');
+    });
+  }
+});
+
+test.describe('Non-health routes still require a session (feature 271 @AC-4)', () => {
+  for (const path of [
+    '/trader/orders',
+    '/trader/healthcheck-x',
+    '/insights/api/health-extra',
+    '/config-ui',
+    '/accounts',
+    '/healthcheck-x',
+    '/health/anything',
+  ]) {
+    test(`GET ${path} without a session redirects to /auth/login`, async ({ page }) => {
+      const res = await page.request.get(path, { maxRedirects: 0 });
+      expect([302, 307]).toContain(res.status());
+      expect(res.headers()['location'] ?? '').toContain('/auth/login');
+    });
+  }
+});
+
+test.describe('Session refresh against a stalled identity (feature 271 @AC-2)', () => {
+  test.setTimeout(REFRESH_TIMEOUT_MS + 20_000);
+
+  function expectSessionCookiesCleared(res: APIResponse): void {
+    const cookies = res
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie')
+      .map((h) => h.value);
+    for (const name of ['access_token=', 'refresh_token=']) {
+      const cookie = cookies.find((v) => v.startsWith(name));
+      expect(cookie).toBeTruthy();
+      expect(cookie!.toLowerCase()).toContain('max-age=0');
+    }
+  }
+
+  test('middleware refresh fails closed: redirects to login and clears cookies', async ({
+    page,
+  }) => {
+    const started = Date.now();
+    const res = await page.request.get('/trader', {
+      maxRedirects: 0,
+      timeout: REFRESH_TIMEOUT_MS + 15_000,
+      headers: {
+        cookie: `access_token=${await signExpiredTestJwt()}; refresh_token=${REFRESH_STALL_TOKEN}`,
+      },
+    });
+    const elapsed = Date.now() - started;
+    expect([302, 307]).toContain(res.status());
+    expect(res.headers()['location'] ?? '').toContain('/auth/login?redirect=%2Ftrader');
+    expectSessionCookiesCleared(res);
+    expect(elapsed).toBeLessThanOrEqual(REFRESH_TIMEOUT_MS + 5_000);
+  });
+
+  test('POST /api/auth/refresh fails closed: 401 and clears cookies', async ({ request }) => {
+    const started = Date.now();
+    const res = await request.post('/api/auth/refresh', {
+      timeout: REFRESH_TIMEOUT_MS + 15_000,
+      headers: { cookie: `refresh_token=${REFRESH_STALL_TOKEN}` },
+    });
+    const elapsed = Date.now() - started;
+    expect(res.status()).toBe(401);
+    expectSessionCookiesCleared(res);
+    expect(elapsed).toBeLessThanOrEqual(REFRESH_TIMEOUT_MS + 5_000);
+  });
 });
 
 test.describe('Unified auth — per-basePath login pages are gone', () => {

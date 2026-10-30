@@ -298,7 +298,9 @@ export interface RegisterBrokerAccountRequest {
     /**
      * credentials_json: broker-type-specific JSON blob.
      * Alpaca: {"api_key":"...","api_secret":"..."}
-     * IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"..."}
+     * IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"...",
+     *          "signature_key":"<PEM RSA private key>","encryption_key":"<PEM RSA private key>",
+     *          "dh_prime":"<PEM DH parameters>"}
      */
     credentialsJson: string;
 }

@@ -77,3 +77,10 @@ When the rail flags a duplicate, consolidate into the existing home instead of r
   'force-dynamic'` (Next.js route-segment config) — are not "fixable" duplication.
 - ESLint literal bans are turned off for the canonical source files (`headers.ts`,
   `auth.ts`) via `overrides`.
+- Per-service security copies (feature 266): the five `dbTls.ts` files
+  (`services/xstockstrat-{ledger,config,identity,notify}/src/dbTls.ts`,
+  `services/xstockstrat-ui/src/lib/dbTls.ts`) and the four `src/mtls.ts` copies
+  (`services/xstockstrat-{ledger,config,identity,notify}/src/mtls.ts`). They stay per-service
+  because each service has its own Docker build context. `dbTls.ts` byte-identity is enforced by the
+  hash check in `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts`. This exemption names
+  only these files — it is **not** general permission to copy security code.

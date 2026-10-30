@@ -233,7 +233,7 @@
   - **Not fixing:** a latent cross-owner overwrite.
   - **Fixing:** test churn only.
 
-### D-12 `PortfolioService.StartSnapshotWriter` has zero callers, so `portfolio.snapshot.interval_minutes` is a dead key — SEV-3 · leverage M÷XS  *(carried, open)*
+### D-12 `PortfolioService.StartSnapshotWriter` has zero callers, so `portfolio.snapshot.interval_minutes` is a dead key — SEV-3 · leverage M÷XS  *(fixed by feature 264)*
 - **Evidence:** `services/xstockstrat-portfolio/internal/service/portfolio_service.go:894` is the definition only.
 - **LOE:** XS (estimate). Wire it or delete it together with the key.
 - **Trade-off:**
@@ -414,6 +414,7 @@
 - **Intent asserted:** The RPC accepts a full `TemplateMeta`, and the config-ui admin page (`/config-ui/templates`) offers rename.
 - **Impact:** An admin rename on formula or strategy templates "succeeds" and bumps `version`, which shows "update available" to every instance holder, yet nothing changes.
 - **Routing:** Human triage. Decide whether metadata is mutable, then make the three repositories agree (D-20 family).
+- **Status (feature 269):** fixed in indicators, analysis and ingest. **Residual proof gap (accepted, follow-up):** indicators (`formula_templates_repository.py`) and ingest (`source_templates.py`) template SQL is proven only by SQL-text plus bound-argument tests, because neither service has a real-PG harness; only analysis does (`tests/conftest.py` `local_pg`, `tests/test_strategy_templates_real_pg.py`). A column or bind-order mistake mirrored in both a query and its assertion would pass. Follow-up: a shared Python real-PG test fixture (platform, D-20 family; fails.md:2255 rule 3), not a per-service copy.
 
 ### D-45 UI symbol-page backtest omits `strategyId`, so the run earns no evidence and never appears in history — SEV-2
 - **Evidence:**
@@ -444,7 +445,7 @@
   - The task is unretained (`main.py:174`, D-07).
 - **Routing:** Human triage.
 
-### D-24 ⚠ security — Portfolio snapshot stream fans out every user's snapshot to every subscriber — SEV-2 (latent)  *(carried, open)*
+### D-24 ⚠ security — Portfolio snapshot stream fans out every user's snapshot to every subscriber — SEV-2 (latent)  *(fixed by feature 264)*
 - **Evidence:** `services/xstockstrat-portfolio/internal/service/portfolio_service.go:937`, and `internal/handler/portfolio_handler.go:129`, `:292-302` (the TradingMode filter only, with no empty-userID guard on gRPC). There is still no client caller.
 - **Routing:** Human triage before any consumer is wired.
 
@@ -570,3 +571,36 @@ These are counted as part of D-65's toolchain family for prioritisation, and lis
     - `NamespaceEditor` refusing per-user secrets (`NamespaceEditor.tsx:256-258`) and `KNOWN_NAMESPACES` omitting `ui`/`agent` (`configNamespaces.ts:3-14`).
     - The `PortfolioPanel` hand-rolled sign (`PortfolioPanel.tsx:122-127`, `$-50.00`).
     - `triggerBackfill` not admin-gated in the BFF (`insightsBff.ts:80` vs `:92`).
+
+## Triage status  (2026-10-21, main-dev @ a053b0e)
+
+Every open finding was re-verified at `a053b0e`, filed as one defect report per service/theme group (`docs/reports/2026-10-21-<group>-defect.md`) and routed to Track C. The feature dir is authoritative for each item's lifecycle from here.
+
+| Feature | D-ids |
+|---|---|
+| `254-fix-marketdata-secret-exposure` | D-39, D-40 |
+| `255-fix-marketdata-fundamentals-cache` | D-19, D-50, D-51, D-52, D-53 |
+| `256-fix-offline-book-consistency` | D-47, D-48, D-49, D-63 |
+| `257-fix-ledger-query-pagination` | D-13, D-27, D-46 (sequence before/with 251) |
+| `258-fix-config-stream-resilience` | D-05, D-06, D-35, D-58 |
+| `259-fix-python-loop-supervision` | D-07, D-08, D-56 |
+| `260-fix-fundsignal-emit-accounting` | D-43, D-57 |
+| `261-fix-ingest-poller-backfill` | D-09, D-34, D-42, D-59 |
+| `262-fix-analysis-owner-scope` | D-44, D-55, D-60 |
+| `263-fix-edge-owner-scope` | D-25, D-31 |
+| `264-fix-portfolio-snapshot-surface` | D-12, D-24 |
+| `265-fix-identity-auth-code-race` | D-21, D-23 (auth-code half) |
+| `266-fix-db-tls-fail-closed` | D-32 |
+| `267-fix-trading-order-state-audit` | D-04, D-62 |
+| `268-fix-indicators-formula-correctness` | D-10, D-18, D-54 |
+| `269-fix-template-update-metadata` | D-41 |
+| `270-fix-ui-trader-feedback` | D-11, D-17, D-45, D-64 |
+| `271-fix-ui-transport-hardening` | D-37, D-38 |
+| `272-fix-analysis-backtest-bounds` | D-28, D-29 |
+| `273-fix-agent-client-deadlines` | D-16 (all calls except the one feature 247 covers) |
+
+Not routed:
+- **Resolved before triage:** D-33 (hotfix `fix-sandbox-overrides-unclamped`, `3340a7c`), and D-23's refresh-rotation half (hotfix `fix-refresh-token-rotation`, `5bd271d`).
+- **Covered by open reports:** D-14 (`2026-10-19-orphaned-code-defect`, `2026-10-19-trading-mode-axis-retained-defect`).
+- **Deferred by the operator (duplication or refactor, not a defect):** D-15, D-20, D-22, D-61, D-65, and the scripts drift item.
+- **Still open questions, not filed:** NC-A…NC-I. NC-D is recorded as an open question in 270.

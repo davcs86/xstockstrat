@@ -21,6 +21,7 @@ import (
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/testdata"
 )
@@ -3910,4 +3911,31 @@ func TestBatchGetBars_PartialWaiterSurvivesLeaderCancel(t *testing.T) {
 	if len(resp.GetResults()) != 2 || src.calls.Load() != 1 {
 		t.Errorf("waiter results = %v, calls = %d; want AAPL+MSFT from the leader's surviving fetch", resp.GetResults(), src.calls.Load())
 	}
+}
+
+// D-39: a vendor transport failure surfaces as Unavailable on both RPCs without the FMP key (AC-5, AC-7).
+func TestFundamentals_TransportErrorStatusIsKeyFree_feature254(t *testing.T) {
+	client := fmp.NewClient(fmp.ClientConfig{BaseURL: "http://127.0.0.1:1", APIKey: "k-secret", Metrics: []string{"core"}})
+	svc := newFundSvc(enabledCfg("fmp"), newFakeFundRepo(), client, &fakeNotify{}, "fmp")
+	assertKeyFree := func(t *testing.T, err error) {
+		t.Helper()
+		if connect.CodeOf(err) != connect.CodeUnavailable {
+			t.Fatalf("code = %v (%v), want Unavailable", connect.CodeOf(err), err)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "fmp") {
+			t.Fatalf("status %q does not name the provider", msg)
+		}
+		if strings.Contains(msg, "k-secret") || strings.Contains(msg, "apikey=") {
+			t.Fatalf("status leaked api key: %q", msg)
+		}
+	}
+	t.Run("single (AC-5)", func(t *testing.T) {
+		_, err := svc.GetFundamentals(context.Background(), "AAPL")
+		assertKeyFree(t, err)
+	})
+	t.Run("batch (AC-7)", func(t *testing.T) {
+		_, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
+		assertKeyFree(t, err)
+	})
 }

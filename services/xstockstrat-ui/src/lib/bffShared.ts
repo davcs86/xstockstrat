@@ -50,10 +50,6 @@ export function requireAdminScope(claims: JwtClaims): void {
   }
 }
 
-// Bounded deadline for snapshot-fundamentals reads: a stalled upstream must reject (→ the card's error
-// state), never leave the browser's query pending forever (feature 220).
-export const FUNDAMENTALS_TIMEOUT_MS = 15_000;
-
 /**
  * Build a Connect handler for the common case: verify the session, then forward the request
  * to a backend gRPC method with the propagated identity headers. Handlers that inject a
@@ -76,11 +72,12 @@ export function forward<Req, Res>(
   };
 }
 
-/** Like {@link forward}, but gated on admin scope (throws PermissionDenied otherwise). */
+/** Like {@link forward} (same `timeoutMs` option), but gated on admin scope (PermissionDenied). */
 export function forwardAdmin<Req, Res>(
-  call: (req: Req, opts: { headers: Headers }) => Promise<Res>,
+  call: (req: Req, opts: { headers: Headers; timeoutMs?: number }) => Promise<Res>,
+  options: { timeoutMs?: number } = {},
 ): (req: Req, ctx: HandlerContext) => Promise<Res> {
-  return forward(call, { admin: true });
+  return forward(call, { ...options, admin: true });
 }
 
 /** A Connect router preconfigured with the platform's accepted compressions. */

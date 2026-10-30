@@ -62,7 +62,7 @@ Order of work:
 
 ### Step 1 — test: DB assertions for migration 031 (`config-031.sql`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (harness `scripts/migration-assertions/`)
 **Files**:
 - `scripts/migration-assertions/config-031.sql` — create
@@ -71,12 +71,13 @@ Order of work:
 
 **Codebase Evidence**:
 - Runner: `scripts/migration-rerun.sh:183-190` runs every non-`fixtures-*` file in `scripts/migration-assertions/`
-  with `psql -v ON_ERROR_STOP=1` (no `-1`), after pass 0 (`:46-83`), pass 1 (`:85-87`) and pass 3 (`:173-181`).
+  with `psql -v ON_ERROR_STOP=1` (no `-1`), after pass 0 (`:46-83`), pass 1 (`:85-87`), pass 2 (`:91`) and pass 3 (`:111-181`). Pass 4 (`:192+`) runs after
+  the assertion loop and touches only marketdata, so it does not affect this file.
 - Config takes the catch-all `*) migrate … up` at `migration-rerun.sh:78`, so 031 is already applied when the
   assertions run. No script edit is needed (design.md § 4; the `goto 30` option is rejected).
-- CI: job `migration-rerun` (`.github/workflows/ci.yml:633`). Path filter `migrations` includes
+- CI: job `migration-rerun` (`.github/workflows/ci.yml:643`). Path filter `migrations` includes
   `scripts/migration-assertions/**` and `services/*/migrations/**` (`ci.yml:70-77`). The repo is mounted at
-  `/repo` (`ci.yml:668`). CI runs on every `pull_request` (`ci.yml:3-4`).
+  `/repo` (`ci.yml:678`). CI runs on every `pull_request` (`ci.yml:3-4`).
 - Template: `scripts/migration-assertions/indicators-007.sql:3-23`, `DO $$ … RAISE EXCEPTION 'AC-N: …' $$` blocks.
 - **Not found**: no existing assertion file uses `\ir`. psql `\ir` resolves relative to the including file, so
   `../../services/…` from `scripts/migration-assertions/` reaches the repo root.
@@ -98,7 +99,7 @@ RED and GREEN come from the `migration-rerun` job log of the step PR.
 **Covers**: `AC-1, AC-3, AC-4, AC-5`
 
 **Instructions**:
-1. Header: one line, `-- config 031 (AC-1, AC-3, AC-4, AC-5): run by migration-rerun.sh after all passes.`
+1. Header: one line, `-- config 031 (AC-1, AC-3, AC-4, AC-5): run by migration-rerun.sh after passes 0-3.`
    Add one constraint line: the file replays the historical 031 up-file, so a later migration that changes these
    rows or the `config_values` columns must update or retire it (design confirmation (iii)).
 2. **Block 1 — AC-1.** A `DO $$` block that raises `'AC-1: …'` when any of these hold:
@@ -162,7 +163,7 @@ Coverage threshold: N/A, SQL harness, no coverage metric; gate = `migration-reru
 
 ### Step 2 — migration: `031_heal_indicators_sandbox_keys_full_dotted` (twin-wins heal, forward-only down)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.up.sql` — create
@@ -179,7 +180,7 @@ Coverage threshold: N/A, SQL harness, no coverage metric; gate = `migration-reru
   - `002_config_environment.up.sql:61-63`: production 3000 / `67108864` "Formula memory cap bytes (64MB)" /
     imports, with `default_value` mirroring.
 - Rename shape: `029_heal_config_keys_full_dotted.up.sql:24-28` (`SET key = namespace || '.' || key`, `is_secret = false`).
-  As written it is not conflict-safe (ledger `fails.md:2953-2957`).
+  As written it is not conflict-safe (ledger `fails.md:2969-2975`, `:2972`).
 - Snapshot precedent: `017:31-33` (`CREATE TABLE config.config_values_premigration_017 AS SELECT *`). 031 uses
   `IF NOT EXISTS` and an explicit column list instead (design.md § 1 step 0).
 - Insert idiom: `030_…up.sql:22-23,55` (also `017:121`), including `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
@@ -270,7 +271,7 @@ CI GREEN.
 
 ### Step 3 — test: AC-2 indicators watcher getter-contract test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify
@@ -319,7 +320,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_config_watcher.py  
 
 ### Step 4 — docs: headroom wording, full-dotted key, findings row, sentinel convention, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `services/xstockstrat-indicators/` (docs only)
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -393,15 +394,26 @@ grep -n "system:config-migration-" docs/patterns/config-governance.md           
 - Snapshot table `config.config_values_premigration_031` (Step 2) records the production pre-state.
 - Ledger `fails.md:642-644`: a flagged manual AC was never run before promotion. Hence the human confirms this
   gate before the merge, and the rejected manual prod gate with a freeze is not used (design.md:165).
+- NNN collision (re-spec 2026-10-28): `origin/main-dev` still ends at `030_marketdata_edgar_snapshot_keys`, but
+  `origin/feature/fix-python-config-stored-zero` (244, commit `d2002841`) adds
+  `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.{up,down}.sql`. If 032 reaches
+  an environment before 031, golang-migrate there skips 031 silently (`fails.md:2909-2912`). This supersedes the
+  Step Dependencies claim that the 243/244 soft ordering needs no `merge-order.md` row.
 
 **TDD**: `N/A (operational read-only gate)`
 
 **Covers**: —
 
 **Instructions**:
-1. **Re-verify the NNN.** Run `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`.
-   If anything at or above `031` exists, stop and renumber Step 2's files to the next free number
-   (`fails.md:2909-2912`). Renaming them is a deviation, recorded in the Deviation Log.
+1. **Re-verify the NNN, on `main-dev` and on every remote branch.** Run
+   `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`
+   and `git log --remotes --name-only --format= -- 'services/xstockstrat-config/migrations/03[1-9]*' | sort -u`.
+   - If `origin/main-dev` holds anything at or above `031`, stop and renumber Step 2's files to the next free
+     number (`fails.md:2909-2912`). Renaming them is a deviation, recorded in the Deviation Log.
+   - If another branch holds a higher config migration that is not yet on `main-dev` (today: 244's `032`), 243
+     must merge into `main-dev` first. Before the integration PR merges, confirm that no `032`+ config migration
+     has reached `main-dev`; otherwise this is a blocker for the operator: renumber 031 above it, or hold 244.
+     The ordering 243 → 244 needs a `merge-order.md` row (an operator decision; record it in context.md).
 2. **Staging G1**, just before the integration PR merges. The operator runs this read-only query (the executor
    holds no DB access; `operator-db-access.md:58`: no credentials in an agent prompt) and pastes the output into
    context.md under `G1 staging`:
@@ -424,10 +436,60 @@ grep -n "system:config-migration-" docs/patterns/config-governance.md           
 Pass condition: the operator's pasted staging output is in context.md and
 `grep -n "G1 staging" docs/roadmap/features/243-fix-sandbox-seed-keys/context.md` shows it with a PASS verdict, or a
 recorded operator decision. The NNN check prints `030_…` as the highest config migration on
-`origin/main-dev`.
+`origin/main-dev`, and any higher config migration on another remote branch (244's `032`) is recorded in
+context.md together with the operator's 243-before-244 ordering decision.
 
 ---
 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — RED/GREEN capture moved from a step PR to the integration PR (2026-10-28)
+- **Expected**: Step 1 **TDD** takes RED a and GREEN from "the `migration-rerun` job log of the step PR".
+- **Actual**: sequential mode opens no per-step PR (sequential-mode.md §5.5), and the executor never starts a
+  database. Step 1 was verified offline: the spec's **Verification** greps all pass, and `pglast` 7.x parses the
+  file (10 statements, 3 PL/pgSQL `DO` bodies; the `\ir` line is stripped for parsing).
+  RED a is static: the 031 up-file is absent and the bare seeds at `001:62-64` / `002:61-63` remain, so block 1
+  raises `AC-1:` first. Steps 1-2 both land before the integration PR, so CI shows only GREEN. The live RED is
+  not captured in CI.
+- **Disposition**: CI-equivalent fallback. GREEN (and RED b, if a draft 031 is pushed in Step 2) comes from the
+  integration PR's `migration-rerun` job.
+
+### Step 2 — RED b not pushed as a draft; captured statically (2026-10-28)
+- **Expected**: Step 2 **TDD** says to commit and push a draft up-file without S1, then capture the
+  `config_values_scope_uniq` violation from the step PR's `migration-rerun` log.
+- **Actual**: sequential mode has no step PR, and committing a draft would be a commit before verification
+  passes (SKILL.md HARD CONSTRAINT). No draft was pushed. RED b is static: without S1, the S2 rename hits
+  `config_values_scope_uniq` (`017:101-102`) on Step 1 fixture (i) (production bare `sandbox.timeout_ms`
+  beside its global twin) and fixture (ii) (`u-243` bare `sandbox.memory_bytes` beside its per-user twin).
+- **Disposition**: CI-equivalent fallback. GREEN comes from the integration PR's `migration-rerun` job. Offline
+  check: the step's **Verification** greps pass, `pglast` 7.21 parses the up-file (5 statements, S0-S4) and the
+  down-file (1 statement), and no other `031*` exists on `origin/main-dev`.
+
+### Step 2 — S0 constraint comment names the column indirectly (2026-10-28)
+- **Expected**: Instruction 1 S0 asks for a comment saying the snapshot "excludes `value_encrypted`".
+  **Verification** requires `grep -c "value_encrypted"` = 0 on the up-file.
+- **Actual**: the two conflict. The comment says "omits the secret ciphertext column", which keeps the
+  constraint and passes the grep.
+- **Disposition**: wording only; no behaviour change.
+
+### Step 5 deferred to operator — integration PR merge held until G1 staging output and 243→244 ordering are recorded (2026-10-28)
+- **Expected**: Step 5 ends with the operator's G1 staging output and a PASS verdict (or a recorded operator
+  decision) in context.md, plus the 243-before-244 ordering decision.
+- **Actual**: the code-side NNN re-check ran (instruction 1). `origin/main-dev` still ends at
+  `030_marketdata_edgar_snapshot_keys`; on other remotes, `031_heal_indicators_sandbox_keys_full_dotted` (this
+  branch) and `032_analysis_zero_trap_descriptions` (244, `d2002841`). No renumber is needed. The executor holds
+  no DB access (`operator-db-access.md:58`), so the staging query and the ordering decision are operator-only.
+- **Disposition**: Step 5 **Status** stays `pending`. Integration PR merge held until the operator:
+  1. runs, read-only against staging,
+     `psql "<staging-connection-uri>?sslmode=require" -v ON_ERROR_STOP=1 -c "SELECT namespace, key, environment, user_id, is_secret, value_type, value_data, default_value, updated_by, updated_at FROM config.config_values WHERE namespace = 'indicators' AND key LIKE '%sandbox.%' ORDER BY key, environment, user_id;"`
+     and pastes the output into context.md under `G1 staging` with a verdict. Pass: only the 3 bare global rows
+     with the `001:62-64` seeds (5000 / 134217728 / `numpy,pandas,math,statistics`), `is_secret = false`, no
+     full-dotted twin, no `user_id` row. Anything else (twin, per-user, secret, or a bare value differing from
+     its seed, including `""` for `allowed_imports`) escalates and blocks the merge;
+  2. records the 243-before-244 merge ordering (and the `merge-order.md` row) in context.md, or chooses to
+     renumber/hold 244;
+  3. re-runs `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`
+     right before merging and confirms no `031`+/`032`+ config migration has reached `main-dev`.
+  The production advisory read-back (instruction 3) follows the promotion deploy and does not gate `done`.

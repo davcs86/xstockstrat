@@ -1,0 +1,966 @@
+# Context Log: fix-db-tls-fail-closed
+
+Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+
+---
+
+## Session 2026-10-21 (/sdd-triage)
+
+- Bug recorded as defect report `docs/reports/2026-10-21-db-tls-fail-closed-defect.md` (Issues disabled), sidecar
+  `triaged` / `ref: feature:266-fix-db-tls-fail-closed`.
+- Source: repo-surveyor debt-radar scan (`docs/repo-surveyor/debt-radar-findings.md` @ 4535695), finding D-32
+  (flagged security, "Human triage. Fail closed in production.").
+- Severity: SEV-2. Impact type: db-tls-unverified. Environment: dev (main-dev) @ a053b0e. Config-only: no.
+- Operator decisions (2026-10-21): grouped by service+theme from the debt-radar scan; Track C for all SEV-2
+  (precedent #1264); batch launched via /sdd-batch with designGate halt.
+- Routed to SDD path (Track C).
+- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1..5), context.md.
+- Affected services: xstockstrat-ledger, xstockstrat-config, xstockstrat-identity, xstockstrat-notify, xstockstrat-ui.
+- Root cause hypothesis: CA treated as optional hardening; copy-pasted pool setup (D-20) spread the fail-open default;
+  UI never wired with the CA.
+- D-32 reproduces on a053b0e. Line drift vs the scan: none — `rejectUnauthorized: !!caCert` at ledger `index.ts:37`,
+  config `:40`, identity `:39`, notify `:41`, ui `config-ui/api/audit/route.ts:31`.
+- **New evidence at triage (escalates the scan's latent framing):** `.do/app.yaml` and `.do/app.dev.yaml` bind
+  `DATABASE_CA_CERT` (`${xstockstrat.CA_CERT}`) only for ledger, identity, notify and config; `xstockstrat-ui` gets
+  `DATABASE_URL` but no CA, so the audit route's pool is unverified in both deployed environments now. A naive
+  fail-closed change without the spec edit would break `/config-ui/api/audit` on deploy — the `.do` change must land
+  in the same PR (or first).
+- **Overlap check:** no feature 240–253 or open report touches `DATABASE_CA_CERT` / DB TLS. `252-fix-identity-ledger-test-suites`
+  (implementation-ready) repairs the identity/ledger unit suites; any new boot-time test there needs 252 or must be
+  proven to execute (P-06). Debt-radar D-20 (copy-pasted shared infra) is the adjacent refactor, not included.
+- Design forks to settle: fail-closed scope — every non-`sslmode=disable` URL vs only when `APPLICATION_ENV` is
+  production/staging (no Node service reads `APPLICATION_ENV` today except telemetry); whether to extract a shared
+  pool-ssl helper (DRY guard rail: five identical copies) vs five surgical edits; UI behaviour — fail the route vs
+  fail the Next.js boot; local Docker docs (`docker-compose.yml:27` uses `sslmode=disable`, so local is unaffected).
+- Recommended design depth: full → `/sdd-design fix-db-tls-fail-closed` (rationale: SEV-2 security, 5 affected
+  services plus deploy-spec change — the C-0 full trigger; no proto/migration).
+- Development branch: feature/fix-db-tls-fail-closed
+
+## Session 2026-10-21 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS). Status: draft → spec-ready. Next: `/sdd-design fix-db-tls-fail-closed`.
+- OPERATOR DECISIONS (binding, recorded 2026-10-21):
+  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C.
+  - Scope is D-32.
+- Warnings:
+  - C-15/criterion 8: FR-2 ("every affected pool") had no UI wrong-CA scenario. **Resolved:** added `@AC-7` (audit
+    route rejects a cert not signed by the configured CA). FR-2 not narrowed.
+  - Criterion 8: AC-3 (sslmode=disable) covered config only; UI route has its own path (`route.ts:13,29-30`).
+    **Resolved:** added `@AC-8` (audit route with sslmode=disable reads without a CA).
+  - Criterion 2: sslmode parse left to design; UI uses substring `includes('sslmode=disable')` (`route.ts:13`).
+    **Resolved in spec text:** FR-1 now requires one parse shared by the backends and the UI route; the exact parse
+    (edge cases such as `sslmode=disabled`, URL-encoded values) is still pinned at design.
+  - Fix Scope leftover template line. **Resolved:** removed.
+  - Criterion 5/6/7: "No config key changes" checkbox carries rationale prose (minor wording; left as-is).
+  - db-migrator job has `DATABASE_URL` without a CA; scoped out only implicitly. **Resolved:** named explicitly in
+    Out of Scope.
+  - Trading-domain checks skipped (non-trading feature).
+- Code-checkable claims verified by the reviewer: `rejectUnauthorized: !!caCert` at ledger `index.ts:37`, config
+  `:40`, identity `:39`, notify `:41`, UI `route.ts:31`; `DATABASE_CA_CERT` bound for the four backends at
+  `.do/app.yaml:434,481,528,586` and `.do/app.dev.yaml:431,478,525,583`, absent for `xstockstrat-ui`.
+- Overlap findings (WARN, no FAIL; no config-key/proto/migration collision):
+  - `services/xstockstrat-notify/src/index.ts` — also modified by `242-fix-push-untargeted-broadcast`
+    (implementation-ready).
+  - `.do/app.yaml` / `.do/app.dev.yaml` — 242 also modifies (notify `LEDGER_ENDPOINT`); different keys, same file.
+  - `services/xstockstrat-ledger/src/index.ts` — also modified by `248-fix-ledger-trimmed-notify-payload`
+    (implementation-ready).
+  - `services/xstockstrat-ui/src/app/config-ui/api/audit/route.ts` — also under change by
+    `241-fix-config-audit-author-spoof` (implementation-ready).
+  - Non-blocking merge-order recommendation: sequence 266 after 242, 248 and 241, or rebase on whichever merges
+    first. No `merge-order.md` row written (no FAIL-level overlap).
+  - Low-risk shared context only: 250 (OTEL lines in `.do`), 084 (hand-synced `.do`/compose); draft batch peers
+    name none of these files.
+
+## Session 2026-10-22 — sdd-batch design state recovered (round 1)
+
+- The batch run that produced round 1 was cut off by the session usage limit before its gate writer persisted the debate state. This block is the round-1 synthesis restored verbatim from the run journal (`synth:fix-db-tls-fail-closed:r1`), so the next /sdd-batch run resumes from it instead of redoing the debate.
+
+```sdd-batch-design-state
+{
+  "round": 1,
+  "synth": {
+    "approach": "Round-1 synthesis. The r1 proposal is the base. The two fixes the adversary asked for are folded in below; the next proposer must confirm them concretely and cite evidence.\n\n1. RESOLVER: one pure function, copied byte-identically to five places: `services/xstockstrat-{ledger,config,identity,notify}/src/dbTls.ts` and `services/xstockstrat-ui/src/lib/dbTls.ts`. This follows the per-service `src/mtls.ts` precedent (`services/xstockstrat-config/src/mtls.ts:11-19`).\n   - Signature: `resolveDbConnection(databaseUrl: string, caCert: string | undefined): { connectionString: string; ssl: false | { rejectUnauthorized: true; ca: string } }`.\n   - (a) An empty or unparseable `DATABASE_URL` (`new URL` throws) raises `db-tls: DATABASE_URL is unset or invalid`. The URL itself is never echoed because it holds credentials. Today's `catch { /* keep original */ }` at `services/xstockstrat-ledger/src/index.ts:33` and `services/xstockstrat-ui/src/app/config-ui/api/audit/route.ts:19-21` is fail-open, and this replaces it.\n   - (b) `searchParams.get('sslmode') === 'disable'` is an exact match. In that case return the URL unchanged with `ssl: false` (FR-3, AC-3, AC-8).\n   - (c) Any other value, including a missing `sslmode` (AC-6) or `disabled`: if `caCert` is empty, throw `db-tls: DATABASE_CA_CERT is required for a TLS database connection (fail-closed); set it or use sslmode=disable`.\n   - (d) Otherwise, delete every TLS-bearing URL parameter that `pg` reads: `sslmode`, `ssl`, `sslcert`, `sslkey`, `sslrootcert`, `uselibpqcompat`. Return `ssl: { rejectUnauthorized: true, ca }`. This closes the adversary's `?ssl=0` / `sslrootcert` override hole (fails.md:601-603, allow-list not deny-one). Stripping is the tentative pick over throwing because it keeps working URLs booting, which matches \"preserve / low rework\". The spec must confirm the `pg` merge precedence by reading `pg/lib/connection-parameters.js` (P-03).\n   - Test table: one row asserting the output `connectionString` has no `ssl*` parameter left, plus rows for `disable` / `disabled` / missing / `require` / `verify-full`.\n\n2. BACKENDS: call the resolver at the top of `main()`, before `waitForSnapshot(90_000)` (ledger `index.ts:23`, identity `:21`, notify `:22`, config equivalent).\n   - A throw reaches the existing `main().catch(... process.exit(1))` (identity `src/index.ts:72`, ledger `:85-88`, config `:79`, notify `:70`). No new exit path is added.\n   - Ledger passes the resolved `ssl` to both `Pool` and the `EventNotifier` `Client` (`index.ts:45,51`). The export cursor keeps inheriting it through `pool.options.ssl` (`grpc/ledgerServiceImpl.ts:338-339`).\n   - Identity and notify each gain a boot `await pool.query('SELECT 1')` before `bindAsync`, mirroring ledger `:47` and config `:44`. It runs inside the existing pool `max` (notify `max` 1 at `src/index.ts:39`), so F-06 holds.\n   - mTLS (`mtls.serverCredentials()`, ledger `index.ts:62`) is untouched.\n\n3. UI AUDIT ROUTE (`route.ts`):\n   - Keep the order 401 \u2192 403 \u2192 `!DATABASE_URL \u2192 { entries: [] }` (`:52-54`).\n   - Then call the resolver before `getPool()`. On a throw: `console.error`, then return 500 with the resolver's operator-safe message, and build no `Pool` (FR-4, AC-4). Cache the pool only after a successful resolve.\n   - The existing `catch` (`:81-85`) logs the full error server-side with `console.error`, including the inbound `x-trace-id` per the standing trace-propagation decision. It returns a generic `database TLS verification failed` / `internal error` body to the client instead of raw `err.message`, because hostname-mismatch text leaks the DB host and SANs.\n   - The existing 500 e2e at `e2e/config-ui/audit.spec.ts:70,75` must still pass (status only).\n\n4. DEPLOY: add `DATABASE_CA_CERT: ${xstockstrat.CA_CERT}` to the `xstockstrat-ui` block of `.do/app.yaml` (after `:658`) and `.do/app.dev.yaml` (after `:660`), copied verbatim from `.do/app.yaml:434-436`. The diff adds those lines only, so `@AC-8 @feature-147` is preserved.\n\n5. GUARD TEST: one repo-level vitest in the UI suite (`vitest.config.ts:20,25`; CI runs from the checkout, `ci.yml:586`). It is explicitly documented as a platform check that lives in the UI suite. It must (a) parse both `.do` specs with a YAML parser, not grep (fails.md:2836), and assert AC-5 for every direct-DB component; (b) hash the five `dbTls.ts` files and fail if they differ (C-18 drift guard). If the `yaml` devDependency is added, update `pnpm-lock`.\n\n6. TESTS for AC-2 and AC-7 on the backends: a fake-Postgres TLS stub answers `'S'` to the SSLRequest and upgrades with a cert from a different throwaway openssl CA (fixture from each `src/__tests__/mtls.test.ts`).\n   - Assert a specific verification error code (`UNABLE_TO_VERIFY_LEAF_SIGNATURE` / `SELF_SIGNED_CERT_IN_CHAIN`).\n   - Add a positive control: the correct CA completes the handshake.\n   - The UI AC-7 uses a mocked `pg` and is recorded in the Deviation Log (fails.md 2026-10-07).\n   - AC-1 and AC-6 boot behaviour: either a cheap child-process test per backend (spawn the entry with `DATABASE_CA_CERT` unset, assert non-zero exit plus stderr text, no config service needed because the check precedes `waitForSnapshot`), or record it as a Deviation. The proposer must pick one.\n\n7. ROLLOUT ORDER (canary):\n   - Before the backend change merges, prove the CA binding, the hostname and the chain on dev. Use `openssl s_client -starttls postgres -CAfile` against the dev host, or ship FR-5 plus the UI route first and confirm `/config-ui/api/audit` returns 200 with verification on.\n   - Then ship the four backends.\n   - Build order: helper and tests \u2192 backends \u2192 UI route and `.do` specs and guard test \u2192 docs.\n\n8. DOCS:\n   - Each of the five services' `CLAUDE.md` env section: the `sslmode=disable` carve-out is DB-only and never touches gRPC mTLS. Identity and notify now need the DB to boot.\n   - `docs/patterns/database.md`.\n   - `services/xstockstrat-identity/docs/operations.md:20`.\n   - `docs/setup/digitalocean.md:555`: add the CA alongside `?sslmode=require`.\n   - Teardown (context-constitution refresh) applies.\n\nTouchpoints: no proto, no migration, no config key (`DATABASE_CA_CERT` stays a boot env var, F-07).",
+    "open_objections": [
+      {
+        "text": "[BLOCKING] The fail-closed rule must cover every TLS-bearing URL parameter, not only sslmode. With only sslmode stripped, a DATABASE_URL carrying ssl=0|false or sslrootcert/sslcert/sslkey/uselibpqcompat could override the explicit {rejectUnauthorized:true, ca} object, so the pool runs fail-open while the resolver reports fail-closed (fails.md:601-603). The synthesis adopts strip-all as tentative. The proposer must (a) commit to strip-all or throw-on-present with a rationale, (b) cite pg's connection-parameters.js merge precedence (P-03, unverified because node_modules is absent in the worktree), and (c) add a test row asserting no ssl* parameter survives in the output connectionString. r1 did not answer this.",
+        "blocking": true
+      },
+      {
+        "text": "[BLOCKING][C-18] Nothing enforces that the five dbTls.ts copies (and their test tables) stay byte-identical. A future fix to one copy would leave four fail-open. The synthesis adopts a hash-equality assertion inside the repo-level AC-5 vitest. The proposer must also confirm how jscpd and the .husky pre-commit hook treat the copies: minTokens 100 and test-file ignore are at .jscpd.json:4,23,29, and the strip list likely pushes the resolver past 100 tokens. The 4x mtls.ts copies have no recorded exception, so the precedent is unverified. Record a DRY exception in docs/patterns/dry-guard-rail.md if one is needed.",
+        "blocking": true
+      },
+      {
+        "text": "[NON-BLOCKING][C-15/C-08] AC-1, AC-2 and AC-6 are worded as service boot behaviour (exit non-zero before serving gRPC, plus a log line), but the plan tests the resolver and Pool, not main(). Either add one child-process boot test per backend (the check precedes waitForSnapshot, so no config service is needed) or record a Deviation up front (fails.md 2026-10-07).",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING][C-15] The wrong-CA stub test could pass on any rejection (reset, hostname, stub bug). Assert a specific verification error code and add a positive-control handshake with the correct CA.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] The UI route catch returns raw err.message. After this change, hostname-mismatch errors would leak the DB host and SANs to the browser. Log the full error server-side (with x-trace-id) and return a generic message. Confirm audit.spec.ts:70,75 asserts only status/shape.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] Operational change: identity and notify will crash-loop when the DB is down, where today they boot. State this in the spec and in both services' CLAUDE.md. Today's operator decisions do not explicitly sanction it.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] Rollout canary: 'smoke-test on dev' happens only after all four backends deploy together. Prove the ${xstockstrat.CA_CERT} binding, chain and hostname on dev first (openssl s_client -starttls postgres, or UI route first) so a bad CA cannot take config down and block everything at waitForSnapshot.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] The AC-5 + hash guard lives in the UI vitest suite but checks repo-root files (.do specs, backend dbTls.ts). Document it as a platform check housed there, and add the yaml devDependency with a lockfile update if it is absent from services/xstockstrat-ui/package.json.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] Docs teardown is missing docs/setup/digitalocean.md:555 (?sslmode=require with no CA).",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-6",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-7",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-210 (docs/sdd/business-rules/platform.feature:230,235)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-147",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Shared packages/db-tls workspace package (D-20): it gives one real copy and no drift, but it needs Dockerfile and pnpm-deploy wiring in all five services, D-20 is out of scope, and it contradicts the user's low-rework instruction. Lost to per-service copies plus a hash-equality guard.",
+      "Substring/contains match on 'disable': lets sslmode=disabled and similar values opt out (fails.md 2026-08-06). Lost to the exact searchParams.get('sslmode') === 'disable' match.",
+      "Keeping today's catch-and-keep-original on an unparseable URL: fail-open (ledger index.ts:33, route.ts:19-21). Lost to throwing with a credential-safe message.",
+      "Fail the Next.js boot instead of the audit route: louder, but it takes down all three UI segments for one admin route, and FR-4 asks for route-level failure.",
+      "Validate only at pool construction, after waitForSnapshot: smaller diff, but a missing CA would surface only after 90s. Lost to the top-of-main() placement.",
+      "Stripping only sslmode (r1 as written): ssl=0 / sslrootcert in the URL could silently override verification. Superseded by strip-all (or throw-on-present, which the next round must decide).",
+      "grep-based .do spec check: fails.md:2836. Lost to a YAML-parse vitest.",
+      "Leaving identity/notify without a boot probe: a wrong CA (AC-2) would surface only on the first query, not at boot. Lost to SELECT 1 before bindAsync within the existing pool max."
+    ],
+    "open_risks": [
+      "Rollout blast radius: rejectUnauthorized:true now enforces chain and hostname verification against the DO cluster host. A bad, empty or unresolved ${xstockstrat.CA_CERT} binding or a hostname mismatch in an environment takes down ledger, config, identity and notify together. Config's outage then blocks every service at waitForSnapshot. Mitigate with the pre-merge dev canary.",
+      "pg merge precedence between URL parameters and the explicit ssl object is assumed, not verified (no node_modules in the worktree). If precedence differs, the strip list may be insufficient or unnecessary.",
+      "jscpd and the pre-commit hook may flag five resolver copies once they exceed minTokens 100. Treatment of the existing mtls.ts copies is unconfirmed.",
+      "Identity and notify become DB-dependent at boot (crash-loop when the DB is down). This is an operational behaviour change not explicitly sanctioned by the operator decisions.",
+      "Strip-all silently discards operator-provided sslrootcert/sslcert in a URL. Throw-on-present would surface that but could break a URL that works today. The choice is still open.",
+      "Merge order: notify index.ts and both .do specs overlap with 242, ledger index.ts with 248, route.ts with 241. Sequence 266 after them or rebase.",
+      "New identity and ledger tests depend on feature 252 repairing those suites (P-06). They must be shown to actually run in CI, not skip.",
+      "The UI AC-7 is asserted via a mocked pg, narrower than the scenario wording. It must go in the Deviation Log.",
+      "Trace-id: the UI error log should carry the inbound x-trace-id per the standing operator decision. Boot-time failures have no originating request, so no trace id applies."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-06",
+      "F-07",
+      "P-02",
+      "P-03",
+      "P-06"
+    ],
+    "rationale": "The adversary found no Floor breach. F-06 holds because the boot probe sits inside the existing pool max. F-07 holds because DATABASE_CA_CERT stays a boot env var. The r1 shape fits the user's \"preserve as much as you can while having low rework\" instruction: per-service copies like mtls.ts, reuse of the existing main().catch exit, no change to the UI's unconfigured-URL path, and .do changes that only add lines. Two gaps stay blocking because r1 did not answer them concretely. (1) Stripping only sslmode leaves other pg-parsed ssl* URL parameters able to defeat verification, which repeats the fails.md:601-603 allow-list mistake. (2) Nothing enforces that the five copies stay identical, which C-18 calls drift-prone. The synthesis folds in the adversary's cheapest fixes for both: strip-all with a test row, and a hash guard placed in the AC-5 YAML-parse vitest that is already needed. The next proposer must confirm them with pg-source and jscpd/hook evidence. The remaining items (boot-level test fidelity, error-code assertions, client-safe UI error bodies with x-trace-id logging, a canary rollout, and the digitalocean.md doc) are non-blocking refinements. The feature's own ACs implement the D-32 scope the operator sanctioned. Existing durable rules @AC-4 @feature-210 and @AC-8 @feature-147 are preserved."
+  },
+  "floor_breaches": []
+}
+```
+
+## Session 2026-10-22 — sdd-batch design gate (round 2)
+
+- `/sdd-design fix-db-tls-fail-closed` (full debate) is halted at its approval gate after round 2 (gate policy: halt).
+  Per the grilling protocol, `design.md` is not written and `status.md` stays `spec-ready`. The debate state below
+  lets the next /sdd-batch run resume from round 2.
+
+## Open Threads
+
+- **Approach (round-2 synthesis):** five byte-identical, zero-import, erasable-TS `dbTls.ts` resolvers (four backends
+  under `src/`, UI under `src/lib/`), following the per-service `mtls.ts` precedent.
+  - `resolveDbConnection` throws on an empty or unparseable `DATABASE_URL` without echoing it. An exact
+    `sslmode=disable` returns `ssl: false`. Any other `ssl*` key, or `uselibpqcompat`, throws (throw-on-present
+    allow-list). A missing CA throws. Otherwise `sslmode` is stripped and `{ rejectUnauthorized: true, ca }` is returned.
+  - The resolver is the first statement of each backend's `main()`, before `waitForSnapshot`, so a throw reaches the
+    existing `main().catch → exit(1)`. Identity and notify gain a boot `SELECT 1` inside the existing pool `max` (F-06).
+  - The UI audit route resolves after 401 → 403 → `!DATABASE_URL`. On failure it logs the trace id (via
+    `HEADER_TRACE_ID`) with `err.code`/`err.message` only, and returns a generic 500 body.
+  - `DATABASE_CA_CERT: ${xstockstrat.CA_CERT}` is added to the UI block of both `.do` specs. The change only adds lines.
+  - One UI vitest acts as a platform guard: an AC-5 YAML parse, a SHA-256 equality check across the five copies, and a
+    static wiring assertion. It needs a `yaml` devDependency and a lockfile update.
+  - A child-process boot test per backend covers AC-1/AC-6. Config gets an end-to-end AC-2 test through `main()`
+    against a wrong-CA TLS stub. Ledger, identity and notify get Pool-level stub tests plus the wiring assertion.
+  - A scoped DRY exception goes in `dry-guard-rail.md`, and the canary is re-aimed at the UI route.
+  - No proto, no migration, no config key (F-07).
+  - r1's two blocking objections (the ssl* override hole and the C-18 drift) are closed.
+- **Strongest open objection (BLOCKING, C-15):**
+  - `.github/workflows/ci.yml:39-66` has no `.do/**` paths-filter entry, so the AC-5 guard never runs on a `.do`-only
+    PR, which is exactly the kind of PR most likely to break it.
+  - Adopted fix: add `'.do/**'` to the `xstockstrat-ui` filter (`ci.yml:62`), plus a negative fixture row.
+  - Second BLOCKING objection (C-15/P-03): AC-2 does not prove per-service wiring. The config `main()` AC-2 test and
+    the static wiring assertion are adopted.
+  - Both stay open until the next proposer confirms them with path:line evidence.
+  - Non-blocking: the mTLS/DB check order (record the reorder or throw one combined error), the erasable-syntax
+    constraint, safe log fields, the canary target, and the boot-probe sign-off scope.
+- **Floor status:** no Floor breaches. F-06 holds because the probe stays inside the pool `max`. F-07 holds because
+  `DATABASE_CA_CERT` stays a boot env var.
+- **Uncovered @AC changes:** none. AC-1, AC-2, AC-4, AC-6 and AC-7 are CHANGE, and AC-5 is EXTEND, all covered by the
+  operator's D-32 scope decision. AC-3 and AC-8 are PRESERVE, as are `@AC-4 @feature-210` and `@AC-8 @feature-147`.
+- **Operator items for the spec gate:**
+  - Sign-off on the new identity/notify crash-loop when the DB is down.
+  - Deviation Log entries for the narrowed AC-2 (ledger/identity/notify) and the mocked-pg UI AC-7.
+  - Confirming pg merge precedence (P-03).
+  - The pre-merge dev canary for the `${xstockstrat.CA_CERT}` and `DATABASE_URL` formats.
+  - Rebase after 242/248/241.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round-2 synthesis. The r2 proposal is the base. It concretely closes both r1 blocking objections. The adversary's two new blocking fixes are folded in below as the adopted shape, but they stay open until the next proposer confirms them with evidence.\n\n1. RESOLVER (r2 as written, adopted).\n   - Signature: `resolveDbConnection(databaseUrl, caCert) → { connectionString, ssl: false | { rejectUnauthorized: true, ca } }`.\n   - Five byte-identical copies: `services/xstockstrat-{ledger,config,identity,notify}/src/dbTls.ts` and `services/xstockstrat-ui/src/lib/dbTls.ts`. This follows the per-service `src/mtls.ts` precedent (`services/xstockstrat-config/src/mtls.ts:16`).\n   - Rules, in order:\n     - (a) An empty `DATABASE_URL`, or one where `new URL` throws, raises `db-tls: DATABASE_URL is unset or invalid`. The URL is never echoed.\n     - (b) An exact `searchParams.get('sslmode') === 'disable'` returns the URL unchanged with `ssl: false`.\n     - (c) **Throw-on-present allow-list.** Any URL key starting with `ssl` other than `sslmode`, or `uselibpqcompat`, throws. The error names the key, never its value.\n     - (d) An empty `caCert` throws `db-tls: DATABASE_CA_CERT is required for a TLS database connection (fail-closed); set it or use sslmode=disable`.\n     - (e) Otherwise, delete `sslmode` and return `{ rejectUnauthorized: true, ca }`.\n   - Pinned file constraints (from the adversary, non-blocking):\n     - Erasable TypeScript only (no enums, no parameter properties), because ledger and identity run under `--experimental-strip-types` (`services/xstockstrat-ledger/package.json:13`).\n     - Zero imports.\n     - Valid under both CJS `tsc` and the Next bundler.\n   - **P-03 gate.** `/sdd-spec` reads `node_modules/pg/lib/connection-parameters.js` and `pg-connection-string` after `pnpm install` and records the merge precedence in `context.md`. The design is safe under either precedence, because no `ssl*` key survives in the URL.\n   - Test-table rows, identical in every `src/__tests__/dbTls.test.ts`:\n     - `require`, missing `sslmode` and `verify-full`, each with a CA: the output has no `ssl*` or `uselibpqcompat` key.\n     - `?ssl=0`, `?sslrootcert=/x` and `?uselibpqcompat=true`: each throws.\n     - `disabled` without a CA: throws.\n     - `disable`: returns `ssl: false`.\n     - A malformed URL: throws, and the message does not contain the password.\n\n2. BACKEND WIRING. The resolver is the first statement of `main()`, before `waitForSnapshot` (ledger `index.ts:23`).\n   - A throw reaches the existing `main().catch → exit(1)` (ledger `:85-88`, config `:79`, identity `:72`, notify `:70`).\n   - Ledger passes the resolved `ssl` to both `Pool` and the `EventNotifier` client (`index.ts:40-46,51`). The export cursor inherits it (`ledgerServiceImpl.ts:338-339`).\n   - Config replaces its inline `databaseUrl.includes('sslmode=disable')` (`services/xstockstrat-config/src/index.ts:25`) and `rejectUnauthorized: !!caCert` (`:40`).\n   - Identity and notify add a boot `SELECT 1` before `bindAsync`, inside the existing pool `max` (F-06).\n   - **The mTLS/DB check order must be decided.** Today ledger, identity and notify hit the `MTLS_*` throw first, in the `ConfigWatcher` constructor (`services/xstockstrat-ledger/src/services/configWatcher.ts:33`, constructed at ledger `index.ts:22`). Either record the reorder in `context.md` as deliberate, or check both env sets up front and throw one combined error. Both stay fail-closed, so `@AC-4 @feature-210` holds either way.\n\n3. AC-2 COVERAGE (adopted from the adversary, still to be confirmed):\n   - **Config:** AC-2 is tested end to end through `main()`, because config has no `waitForSnapshot` (verified: no match in `services/xstockstrat-config/src/index.ts`). Spawn it with `CONFIG_SECRETS_ENCRYPTION_KEY` set, `DATABASE_CA_CERT` set to a wrong CA, and the fake-Postgres TLS stub as the DB. Assert a non-zero exit plus a specific verification error, with a positive control using the correct CA. Drop the config Deviation.\n   - **Ledger, identity and notify:** keep the Pool-level stub test, which asserts `UNABLE_TO_VERIFY_LEAF_SIGNATURE` or `SELF_SIGNED_CERT_IN_CHAIN` and has a positive control. Add a static wiring assertion beside the hash guard:\n     - No `rejectUnauthorized` and no `includes('sslmode` anywhere outside `dbTls.ts` in the five services' `src/`.\n     - Every backend `index.ts` and the UI `route.ts` import `resolveDbConnection`.\n   - The narrowed AC-2 for these three services goes in the Deviation Log.\n\n4. BOOT TESTS for AC-1 and AC-6, one child-process test per backend.\n   - Ledger and identity spawn via `--experimental-strip-types src/index.ts`. Config and notify spawn via `dist/index.js` after `tsc`.\n   - Each runs with `DATABASE_CA_CERT` unset and a `sslmode=require` URL, and asserts a non-zero exit **and** stderr containing `DATABASE_CA_CERT`.\n   - If the combined-check option in item 2 is chosen, `MTLS_*` must be set in the env so the stderr assertion stays specific.\n\n5. CI AND GUARDS (C-15/C-18). There is one UI vitest file, documented as a platform check housed in the UI suite. It does three things:\n   - (a) Parses both `.do` specs with a YAML parser and asserts AC-5 for every direct-DB component. `yaml` is not in `services/xstockstrat-ui/package.json` today, so add it as a devDependency and update `pnpm-lock.yaml`.\n   - (b) SHA-256-compares the five `dbTls.ts` files.\n   - (c) Runs the static wiring assertion from item 3.\n   - **Path-filter fix (blocking).** Add `'.do/**'` to the `xstockstrat-ui` paths filter (`.github/workflows/ci.yml:62`). Verified: the filter block at `ci.yml:39-66` has no `.do` entry.\n     - The `node-test` matrix runs all five Node services whenever any of their filters matches (`ci.yml:537-564`).\n     - So a backend-only `dbTls.ts` edit already triggers the UI vitest. A `.do`-only PR is the only gap.\n   - Add a test row (fixture YAML) proving the AC-5 check fails when the UI `DATABASE_CA_CERT` binding is removed.\n   - DRY: add one exception entry to `docs/patterns/dry-guard-rail.md`. It names exactly the five `dbTls.ts` files and the four `mtls.ts` copies, and names the hash guard as the enforcement. It must not read as general permission to copy security code.\n   - jscpd blocks only within `services/xstockstrat-ui/src` (`.husky/pre-commit:10-13`). The backend copies fall under the report-only scan (`.husky/pre-commit:18`).\n\n6. UI ROUTE (`services/xstockstrat-ui/src/app/config-ui/api/audit/route.ts`).\n   - The order stays 401 → 403 → `!DATABASE_URL → { entries: [] }` → resolver → pool. The pool is cached only after a successful resolve.\n   - On failure, `console.error` logs the inbound trace id, read via `HEADER_TRACE_ID` (`services/xstockstrat-ui/src/lib/headers.ts:7`, not a raw literal), plus `err.code` and `err.message` only, never the whole pg error object.\n   - The client gets a generic 500 body. `e2e/config-ui/audit.spec.ts:70,75` still passes.\n   - The UI AC-7 is tested with a mocked `pg` and goes in the Deviation Log.\n\n7. DEPLOY. Add `DATABASE_CA_CERT: ${xstockstrat.CA_CERT}`, copied verbatim from `.do/app.yaml:434-436`, to the UI block of `.do/app.yaml` (after `:658`) and `.do/app.dev.yaml` (after `:660`). The change only adds lines.\n\n8. CANARY (re-aimed, from the adversary).\n   - The UI route is the only component whose deployed behaviour changes. The four backends already evaluate `rejectUnauthorized: !!caCert` to true, unless the `${xstockstrat.CA_CERT}` binding expands to an empty string.\n   - Ship a value-free `log.info('db-tls: verifying server cert against DATABASE_CA_CERT')`.\n   - Before the backend change merges, confirm on running dev backends (or with `openssl s_client -starttls postgres -CAfile`) that the CA binding is non-empty and verifies.\n   - Then ship the UI route and the `.do` change, then the backends.\n\n9. DOCS and teardown:\n   - The five services' `CLAUDE.md` env sections: the `sslmode=disable` carve-out is DB-only, and identity and notify now need the DB to boot.\n   - `docs/patterns/database.md`.\n   - `services/xstockstrat-identity/docs/operations.md:20`.\n   - `docs/setup/digitalocean.md:555`.\n   - The context-constitution refresh (fails.md:670).\n\nTouchpoints: no proto, no migration, no config key (`DATABASE_CA_CERT` stays a boot env var, F-07). In addition: `.github/workflows/ci.yml` (one filter line) and the UI `package.json` plus `pnpm-lock.yaml` (the `yaml` devDependency).",
+    "open_objections": [
+      {
+        "text": "[BLOCKING][C-15] The AC-5 YAML-parse guard (and hash/wiring guard) never runs on a PR that changes only .do/** — verified: ci.yml:39-66 paths filters have no .do entry, and node-test is gated on service/proto/node-shared/ci filters (ci.yml:537-548). Synthesis adopts adding '.do/**' to the xstockstrat-ui filter in the same PR plus a test row showing the AC-5 check fails when the UI DATABASE_CA_CERT binding is removed. The r2 proposal does not address this; proposer must commit to the filter edit with path:line.",
+        "blocking": true
+      },
+      {
+        "text": "[BLOCKING][C-15/P-03] AC-2 is only proven for pg's behaviour given {rejectUnauthorized:true, ca}, not that each service passes the resolver's output to every consumer (ledger Pool index.ts:40-46 and EventNotifier :51). An inline `rejectUnauthorized: !!caCert` left in or reintroduced would pass every proposed test. The config Deviation is unjustified: config has no waitForSnapshot (verified), so AC-2 can be tested through main() with the wrong-CA TLS stub. Synthesis adopts: (a) config AC-2 via main() spawn, Deviation dropped; (b) a static wiring assertion (no `rejectUnauthorized` and no `includes('sslmode` outside dbTls.ts in the five services' src/; every index.ts and route.ts imports resolveDbConnection). Proposer must confirm both concretely.",
+        "blocking": true
+      },
+      {
+        "text": "[NON-BLOCKING][C-16 @AC-4 @feature-210] Putting the resolver first in main() means the DB-TLS error is now reported before the MTLS_* throw in the ConfigWatcher constructor (configWatcher.ts:33, ledger index.ts:22). With both vars missing, the operator sees only the DB error on that boot. Either record the reorder as deliberate in context.md, or check both up front and throw one combined error. Proposer must pick.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING][C-18] The byte-identical dbTls.ts must use only erasable syntax (ledger/identity run under --experimental-strip-types, package.json:13), have zero imports, and work under both CJS tsc and the Next bundler. The dry-guard-rail.md exception must name these specific files and the hash guard, not grant a general copy licence.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] UI route log: read the trace id via HEADER_TRACE_ID (headers.ts:7), not a raw 'x-trace-id' literal (DRY guard rail). Log only err.code and err.message, never the whole pg error object.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] Canary is aimed at the wrong component. The deployed backends already verify unless ${xstockstrat.CA_CERT} expands to an empty string, and the UI route is the real behaviour change. Add a value-free 'db-tls: verifying server cert' log line and check it on dev backends before the merge.",
+        "blocking": false
+      },
+      {
+        "text": "[NON-BLOCKING] At the spec gate, present the identity/notify boot-probe sign-off as covering only runtime behaviour (FR-2 exit-at-boot). If it is refused, the Deviation covers only FR-2's exit-at-boot clause for those two services, not AC-2 as a whole.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-6",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-7",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-210 (docs/sdd/business-rules/platform.feature:230,235)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-147",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Shared workspace package (packages/node-db-tls): one source and no hash guard, but the UI Dockerfile copies only proto gen and the UI tree (Dockerfile:11-19), the backends use pnpm deploy, and the change would touch five Dockerfiles plus docker-build.md for a ~20-line function. D-20 is out of scope. Lost to five copies plus a hash guard.",
+      "Strip every ssl* URL key instead of throwing: it silently discards operator intent such as sslrootcert while reporting that verification is on (fails.md:600-603). Lost to throw-on-present. No live URL carries such keys (.do/app.yaml:433,480,527,585,658; docker-compose.yml:27).",
+      "Strip only sslmode (r1): ssl=0, sslrootcert and similar could override verification. Superseded.",
+      "Substring match on 'disable': lets sslmode=disabled opt out. Lost to an exact searchParams match.",
+      "Keep catch-and-keep-original on an unparseable URL: fail-open (ledger index.ts:33, route.ts:19-21). Lost to a throw with a credential-safe message.",
+      "Put the AC-5 and hash checks in scripts/workflow-tests/*.test.mjs (node --test): context-map is gated on its own filter (ci.yml:713-715), so it needs the same .do fix, and it has no YAML parser. No better than the UI suite.",
+      "Run the DB probe before waitForSnapshot in ledger/identity/notify so AC-2 can be tested via main(): changes boot order and holds a DB connection through the 90s config wait. Lost to the static wiring assertion. Config gets a real main() test because it has no snapshot wait.",
+      "Keep the config AC-2 Deviation: unjustified, because config's main() has no waitForSnapshot and can be spawned against the TLS stub.",
+      "grep-based .do spec check: fails.md:2836. Lost to a YAML-parse vitest.",
+      "Fail the Next.js boot instead of the audit route: takes down all three UI segments for one admin route. FR-4 asks for route-level failure.",
+      "Validate after waitForSnapshot: a missing CA would surface only after 90s.",
+      "Leave identity/notify without a boot probe: a wrong CA would surface only on the first query."
+    ],
+    "open_risks": [
+      "If the ${xstockstrat.CA_CERT} binding expands to an empty string in any environment, the backends are silently unverified today, and 266 takes ledger, config, identity and notify down together. Config down then blocks everything at waitForSnapshot. Mitigation is the pre-merge dev canary (value-free verification log plus openssl s_client).",
+      "The UI route is the only deployed component whose behaviour definitely changes (it is newly verifying). A hostname or SAN mismatch there breaks /config-ui/api/audit.",
+      "pg URL-versus-ssl merge precedence is unverified (no node_modules). The design is safe under either order, but the spec must cite the source.",
+      "The DO ${xstockstrat.DATABASE_URL} expansion is assumed to carry only sslmode=require. If it carries another ssl* key, throw-on-present crash-loops the backends. The dev canary must confirm the format.",
+      "Identity and notify crash-loop when the DB is down (new operational behaviour). This needs explicit operator sign-off at the spec gate.",
+      "Byte-identical copies under three module and runtime regimes (strip-types, CJS tsc, Next bundler) may force awkward syntax. The hash guard catches drift but not a copy that fails to build in one service.",
+      "Merge-order overlap: notify index.ts and both .do specs with 242, ledger index.ts with 248, route.ts with 241. Rebase after them. ci.yml filter edits may also conflict with peer features.",
+      "New identity and ledger tests depend on feature 252 making those suites run (P-06).",
+      "The narrowed AC-2 (ledger/identity/notify at Pool level plus static wiring) and the UI AC-7 (mocked pg) must go in the Deviation Log."
+    ],
+    "constitution_rules_touched": [
+      "C-03",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-06",
+      "F-07",
+      "P-02",
+      "P-03",
+      "P-06"
+    ],
+    "rationale": "Both r1 blocking objections are closed.\n\n- The allow-list objection is answered with throw-on-present, an explicit P-03 spec gate, and test rows proving no ssl* key survives. This follows fails.md:600-603.\n- The C-18 drift objection is answered with the hash guard, a jscpd and hook analysis that cites `.husky/pre-commit:10-18` and `.jscpd.json`, and a scoped dry-guard-rail exception.\n- I checked that the hash guard actually runs. The node-test matrix runs all five Node services whenever any Node service filter matches (`ci.yml:537-564`), so a backend-only `dbTls.ts` edit still runs the UI vitest.\n\nThe adversary raised two new blocking gaps. I verified both against the code, and the r2 proposal does not answer either.\n\n1. **The `.do` changes are unguarded.** The CI paths filter (`ci.yml:39-66`) has no `.do/**` entry, so the AC-5 guard skips exactly the PRs most likely to break it.\n2. **AC-2 does not prove per-service wiring.** No test catches a service that keeps an inline `!!caCert`. The config Deviation is also unnecessary, since config's `main()` has no `waitForSnapshot`.\n\nThe cheapest fixes for both are folded into the approach: a one-line filter addition with a negative test row, a config `main()` AC-2 test, and a static wiring assertion. Both stay open until the next proposer confirms them concretely.\n\nThere are no Floor breaches:\n- F-06 holds because the boot probe runs inside the existing pool `max`.\n- F-07 holds because `DATABASE_CA_CERT` stays a boot env var.\n\nThe remaining items are non-blocking refinements: the mTLS/DB error-order decision, erasable-syntax and zero-import constraints, the trace-id header constant, safe log fields, and a re-aimed canary. The feature's ACs implement the D-32 scope the operator sanctioned. `@AC-4 @feature-210` and `@AC-8 @feature-147` are preserved. Per the standing decision, the UI failure log carries the inbound trace id. Boot failures have no originating request, so they carry none."
+  },
+  "floor_breaches": []
+}
+```
+
+## Session 2026-10-22 — sdd-design
+
+- Phase 0 Recon: recon.md was written in an earlier session and reused as-is. Services: ledger, config, identity,
+  notify, ui. Key reuse patterns: the per-service `mtls.ts` fail-closed throw, and the existing `main().catch → exit(1)`.
+- Phase 1 Grilling: 2 rounds (full). The operator approved at the design gate on 2026-10-22 ("APPROVED as synthesized,
+  including both folded-in fixes").
+  - Chosen approach: five byte-identical `dbTls.ts` resolvers.
+    - Throw-on-present `ssl*` allow-list; an exact `sslmode=disable` is the only opt-out; a missing CA throws.
+    - The resolver runs first in `main()`. Identity and notify get a boot probe.
+    - The UI audit route fails at the route level with a generic 500.
+    - `.do` adds a UI `DATABASE_CA_CERT`.
+    - One UI vitest guard covers the AC-5 YAML parse, the hash check and the static wiring check, with `.do/**` added
+      to the UI CI filter.
+  - Rejected: a shared workspace package, strip-instead-of-throw, a substring parse, failing the Next.js boot, and
+    workflow-tests or grep guards.
+- Both round-2 blocking objections are resolved by the operator's approval of the folded-in fixes:
+  - the `'.do/**'` UI filter plus a negative AC-5 fixture row;
+  - the config AC-2 test through `main()` plus the static wiring assertion, covering the ledger Pool and the
+    EventNotifier.
+- Constitution rules touched: C-03, C-08, C-11, C-15, C-16, C-18, F-06, F-07, P-02, P-03, P-06. Floor breaches: none
+  (F-06 and F-07 honored).
+- C-16: AC-1, 2, 4, 6 and 7 are CHANGE and AC-5 is EXTEND, all covered by the D-32 scope decision and the 2026-10-22
+  gate approval. AC-3, AC-8, `@AC-4 @feature-210` and `@AC-8 @feature-147` are PRESERVE.
+- Ledger: no new line. The traps applied here (parse not grep, allow-list fail-closed, Deviation Log for a narrowed
+  assertion) are already recorded in `fails.md`.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- The design in `design.md` § Chosen Approach (items 1–9) is binding for `/sdd-spec`.
+- The adversary's non-blocking refinements are adopted:
+  - erasable TypeScript only, with zero imports;
+  - the trace id is read via `HEADER_TRACE_ID`, and only `err.code`/`err.message` are logged;
+  - the canary is re-aimed at the UI route, with a value-free verification log line.
+
+### Open Threads
+
+- [ ] P-03: read the pg / `pg-connection-string` URL-versus-`ssl` merge precedence after `pnpm install` and record it
+  here. Target: `/sdd-spec` (resolver step).
+- [ ] mTLS/DB check order: record the reorder as deliberate, or throw one combined error. Target: `/sdd-spec`
+  (backend wiring step).
+- [ ] Operator sign-off on the identity/notify crash-loop when the DB is down. It covers only FR-2's exit-at-boot
+  clause. Target: the `/sdd-spec` gate.
+- [ ] Pre-merge dev canary: confirm `${xstockstrat.CA_CERT}` is non-empty and verifies, and that
+  `${xstockstrat.DATABASE_URL}` carries only `sslmode=require`. Target: the rollout step, before the backend PR merges.
+- [ ] UI route SAN/hostname verification against the managed DB. Target: the UI route step and canary.
+- [ ] Byte-identical copy must build under strip-types, CJS `tsc` and the Next bundler. Target: the resolver step
+  (build all five).
+- [ ] Deviation Log: the narrowed AC-2 (ledger, identity and notify at Pool level plus the wiring check) and the
+  mocked-pg UI AC-7. Target: the test steps.
+- [ ] P-06: the new identity and ledger tests depend on 252. Prove that they execute. Target: the test steps.
+- [ ] Merge order: rebase after 242, 248 and 241, and watch for `ci.yml` filter conflicts with peers. Target: the
+  integration PR.
+
+## Session 2026-10-22 — sdd-spec
+
+- Generated `implementation-spec.md` with 17 steps. Status: design-approved → implementation-ready.
+- Resumed after a cut session. Nothing from a prior /sdd-spec attempt existed on the branch, so recon.md and
+  design.md were reused as-is and only the gaps were re-discovered.
+- Key codebase findings:
+  - **P-03 gate closed** (pg@8.20.0 and pg-connection-string@2.12.0, read from the packed sources):
+    - The fields parsed from the URL override the explicit config (`connection-parameters.js:59-60`).
+    - Any `sslcert`, `sslkey`, `sslrootcert` or `sslmode` key replaces `ssl` with `{}` (`index.js:77-78`).
+    - `ssl=0` gives `false`. `no-verify` and `uselibpqcompat` drop verification.
+    - The **last** duplicate key wins (`index.js:39-41`).
+    - So the explicit `{ rejectUnauthorized: true, ca }` survives only if no `ssl*`/`uselibpqcompat` key stays in
+      the URL, which confirms design rules (c)+(e).
+  - **New edge case: a repeated `sslmode`** (`?sslmode=disable&sslmode=no-verify`). The resolver's `get` would see
+    `disable` while pg applies `no-verify`. The resolver now throws on any repeated `sslmode`. This adds fail-closed
+    strictness within the approved rules and changes none of them.
+  - **The boot tests spawn `node dist/index.js` for all four backends.** The design said strip-types `src/index.ts`
+    for ledger and identity, but the extensionless ESM imports (`./telemetry`, ledger `index.ts:1`) fail to resolve
+    under strip-types. This was verified with a two-file reproduction and matches the fails.md:2238 dual-runner trap.
+    `dist/index.js` is also the production `CMD`.
+  - The `ci.yml` UI filter is at `:63`, not `:62` as recon said. `yaml@2.9.0` is already in the lockfile
+    transitively.
+  - **Correction to recon.md:104 and design item 9.** These two docs are not Node pools and do not fail to boot after
+    266, so they are confirm-only (out of D-32 scope):
+    - `services/xstockstrat-identity/docs/operations.md:20` is the Python/psycopg `manage-users.py`;
+    - `docs/setup/digitalocean.md:555` is golang-migrate.
+
+### Decisions
+
+- **mTLS/DB check order:** the reorder is recorded as deliberate.
+  - The resolver is the first statement of `main()` in all four backends: before `new ConfigWatcher`, which throws
+    on `MTLS_*`, and in config before `loadMasterKey()`.
+  - With both env sets missing, the `DATABASE_CA_CERT` error is shown first.
+  - Both gates stay fail-closed, so `@AC-4 @feature-210` holds. A combined error was declined (YAGNI, C-18).
+- Every call site binds the resolver output as `dbConn`. The Step 15 wiring guard asserts that every `ssl:` in the
+  five entry files is `dbConn.ssl`, with at least 2 in ledger (Pool + EventNotifier). The only other allowed hit is
+  ledger's export cursor, `ssl: opts.ssl`.
+- Pre-declared Deviation Log entries in the spec:
+  - AC-2 narrowed for ledger, identity and notify (Pool level plus the wiring guard);
+  - AC-3 narrowed for config (plaintext startup only, "serves gRPC" not asserted);
+  - AC-7 tested with a mocked `pg`.
+
+### Open Threads
+
+- [x] P-03 pg merge precedence: closed (see above).
+- [x] mTLS/DB check order: closed (reorder recorded as deliberate).
+- [ ] Operator sign-off on the identity/notify crash-loop when the DB is down. It covers only FR-2's exit-at-boot
+  clause. This gates Steps 8 and 10.
+- [ ] Pre-merge dev canary: Step 17, before the integration PR merges.
+- [ ] Build under strip-types, CJS `tsc` and the Next bundler: Step 1 verification.
+- [ ] P-06: prove the new ledger and identity tests execute (`--test-reporter=spec`). Steps 2, 5 and 9.
+- [ ] Merge order: rebase after 242, 248 and 241, and watch the `ci.yml` filter block.
+
+## Session 2026-10-22 — sdd-review impl-spec
+
+- Mode B (advisory; lifecycle unchanged at `implementation-ready`). Criteria verdict: PASS WITH WARNINGS (0 FAIL).
+  Overlap verdict: WARN (file-level only; no migration, proto or config-key collision).
+
+### Addressed (in `implementation-spec.md`)
+
+- Steps 2 and 15 Verification now state the 40% coverage threshold (B2).
+- Step 15 TDD order (C-08/P-06): execute order is 13 → 15 (RED) → 14 → 15 (GREEN); Step Dependencies now says
+  Step 15 requires Steps 4–13 and runs before Step 14.
+- Step 12 deployment-file parity: `docker-compose.yml` stays unchanged because its `DATABASE_URL` uses
+  `?sslmode=disable` (`docker-compose.yml:27`); `.do` bindings are Step 14.
+- Resolver edge (`?sslmode=disable&ssl=...`): pg sources could not be re-read this session, so Step 1 now runs the
+  `ssl*`/`uselibpqcompat` key scan before the `disable` early return, and Step 2 adds a
+  `?sslmode=disable&ssl=true` throws row. Fail-closed strictness within the approved rules; local compose unaffected.
+- Merge-order note: the 241 entry was removed (241's impl-spec touches `configUiBff.ts`/`insightsBff.ts`, not the
+  audit route); 248/250 `ci.yml` and 252 `package.json` overlaps are named.
+
+### Open Threads
+
+- [ ] Operator sign-off on the identity/notify crash-loop when the DB is down (Steps 8/10 boot `SELECT 1`). Still
+  pending; gates Steps 8 and 10 at the /sdd-execute checkpoint.
+- [ ] merge-order.md has no row for 266. Proposed: 266 blocked by 248 (ledger `index.ts`, `ci.yml`) and 242
+  (notify `index.ts`, `.do` specs), 266 merging second. Router-owned write; needs the operator's yes/no.
+- [ ] P-03 pg source line numbers and the UI `.eslintrc.json:17-18` banned-literal claim were not re-verified by
+  the review (pg sources absent from this checkout). Re-check at Step 1 / Step 12 discovery.
+- [ ] Re-run the overlap scan once the draft batch peers (254–273) have implementation specs.
+- Accepted as compliant (no change): the five byte-identical `dbTls.ts` copies (C-18 trade-off, hash guard + scoped
+  DRY exemption in Steps 15/16).
+
+## Session 2026-10-22 (operator decision — fail-closed boot)
+
+- **Signed off:** when DB TLS cannot be verified, identity and notify fail their boot `SELECT 1` and crash-loop rather
+  than start against an unverified database (gates Steps 8/10). The deploy smoke check is the detection point.
+
+## Session 2026-10-29 — re-spec after main-dev merge (sdd-batch-execute)
+
+- §5.3 branch setup: merged `origin/main-dev` into the detached checkout (normal merge, no conflicts, `56561b39`);
+  ledger-guard clean.
+- Re-spec of Steps 1–17 (step bodies only; directive conditional):
+  - **Feature 252** moved ledger and identity to tsc-first CJS (`tsc && node --test dist/__tests__/*.test.js`,
+    `tsconfig.json` includes `src/**/*`). The new ledger/identity tests now import `'../dbTls'` (a `.ts` specifier
+    would be TS5097) and verify via `pnpm run build && node --test --test-reporter=spec dist/__tests__/<file>.test.js`.
+    The erasable-syntax constraint on `dbTls.ts` is now harmless, not required; the P-06 skip-guard risk is moot.
+  - **Feature 248** routes the ledger listener through `makeListenerClient(connectionString, ssl, config)`
+    (`src/services/eventRowResolver.ts:40-47`). Step 4 instruction 5 becomes
+    `makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)`; its grep expects 1 `ssl: dbConn.ssl`
+    plus 1 `makeListenerClient(...)`. Step 15 asserts exactly 1 `ssl:` match in ledger `index.ts` plus the listener
+    call, and allow-lists exactly two other `ssl:` hits: `ledgerServiceImpl.ts:356` (`ssl: opts.ssl`) and
+    `eventRowResolver.ts:42` (`ssl: ClientConfig['ssl']`).
+  - Line drift refreshed (ledger/notify `index.ts`, `ci.yml` node-test `:547-577`, `.do` UI blocks — Step 14 now
+    inserts after `.do/app.yaml:660` / `.do/app.dev.yaml:662`, service `CLAUDE.md` env sections, `database.md`
+    `## Approval` `:157`).
+  - Steps 6, 11, 12, 13, 17: no mismatches.
+- Note: the header sections (§ Spec-time decisions "boot-test entry", § Step Dependencies P-06 line) still describe
+  the pre-252 strip-types regime and `'../dbTls.ts'`; they were outside the re-spec scope. The step bodies are
+  authoritative where they differ.
+- Steps 8/10 gate: the operator crash-loop sign-off is already recorded (§ "Session 2026-10-22 (operator decision —
+  fail-closed boot)"); the earlier unchecked open-thread items predate it.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`.
+- **Up-front confirmation (sequential mode entry):** given by operator standing authorization — operator chat
+  2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute;
+  unattended checkpoints (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
+  merge-train authorized; 255/275 deferred; operator-only DB/prod steps: open the PR, hold the merge. Per-feature
+  blocker decisions of 2026-10-29 were given by the operator in their own words through the session's question
+  tool; none was recorded specifically for 266 beyond this directive.
+- Steps 8/10 crash-loop gate: satisfied by the 2026-10-22 operator sign-off above.
+- Step 17's pre-merge dev canary is operator-only (running dev backends); the integration PR is opened and its merge
+  held for the operator.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 1+2
+
+- Tooling setup (steps 1–2): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`.
+- Steps 1 and 2 landed as one commit under the operator's standing merge-pairs rule (Step 1's RED test is Step 2's
+  test table); Deviation Log entry added.
+- TDD (AC-3, AC-6, AC-8 at resolver level) red: ledger `tsc` TS2307 `Cannot find module '../dbTls'`, UI vitest
+  import failure → green: 14/14 resolver tests pass in ledger, identity, config, notify (`--test-reporter=spec`
+  lists every name; P-06) and UI vitest.
+- Verification: the five `dbTls.ts` copies share one sha256; 0 imports; backend `build`/`lint`/`test:coverage` all
+  exit 0 (dbTls 100% lines; all-files ≥83%); UI `test:coverage` and `lint` exit 0 (dbTls 100% lines).
+- Formatting note: prettier (lint-staged for the UI copy, same rules as the backend `.prettierrc`) wraps the
+  `parameter "${key}" is not allowed` throw onto three lines. All five copies were formatted identically so the
+  hash guard holds; no token of the spec's resolver changed.
+- Pre-existing, out of scope: UI `pnpm exec tsc --noEmit` reports two TS2339 errors, both in the untouched
+  `e2e/insights/backfills.spec.ts:135-136` (last changed by feature 198); `src/` compiles clean. Not fixed here.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 3
+
+- Tooling setup (step 3): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install` (worktree-local).
+- TDD: N/A (CI filter + dependency manifest; no code).
+- `ci.yml:63` `xstockstrat-ui` filter now `['services/xstockstrat-ui/**', '.do/**']`; no new filter name. Accepted
+  side effect: the other jobs gated on that filter (`ci.yml:431`, `:472`, `:508`) also run on `.do`-only PRs.
+- `pnpm --filter xstockstrat-ui add -D yaml@^2.9.0` → importer entry `yaml: ^2.9.0 → 2.9.0` (the existing transitive
+  package, no new resolution). The registry also stamped `deprecated:` metadata on six untouched
+  `@opentelemetry/*` lockfile entries; those lines were dropped to keep the diff to this step's change.
+- Verification: both greps match (`ci.yml:63`, `package.json:79`); `pnpm install --frozen-lockfile` exit 0;
+  `ci.yml` parses with `yaml`; `require('yaml')` resolves from `services/xstockstrat-ui`.
+- Spec line drift (no behaviour change): the filter block spans `ci.yml:39-73`, not `:39-71`.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 4+5
+
+- Tooling setup (steps 4–5): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`
+  (worktree-local; the main worktree had no `node_modules` to symlink) · openssl ✓ (system).
+- Steps 4 and 5 landed as one commit under the operator's standing merge-pairs rule (Step 4's RED test is Step 5's
+  boot test); Deviation Log entry added.
+- Ledger `src/index.ts`: `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` is the first statement of `main()`,
+  before `ConfigWatcher`; the inline `sslDisabled`/`rejectUnauthorized: !!caCert` block is gone; Pool and
+  `makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)` take the resolver output. The export
+  cursor (`ledgerServiceImpl.ts:355-356`) still inherits through `pool.options`; untouched.
+- TDD: AC-1/AC-6 red: the boot child exited on `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`
+  (no `DATABASE_CA_CERT` in stderr) → green: exits non-zero naming `DATABASE_CA_CERT`, no `mtls:`. AC-2 (Pool level)
+  was green before and after: Step 1 already provides the resolver the test imports, and the test exercises pg +
+  resolver, not `index.ts` (wiring is re-asserted by Step 15).
+- Verification: `build` exit 0; `lint` 0 errors (205 pre-existing warnings, none in the touched files); greps:
+  no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` ×1, `makeListenerClient(dbConn...)`
+  ×1; `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 4/4 named tests pass (P-06);
+  `test:coverage` exit 0, 106/106, all files 75.53% lines (≥40).
+- C-13: the openssl helpers (`mintCa`, `mintLeaf`) are declared once in `dbTlsBoot.test.ts` (single consumer); CA
+  minting is split into `mintCa` rather than a `mintPki` bundle because the test needs two independent CAs.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 6+7
+
+- Tooling setup (steps 6–7): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`
+  (worktree-local; the main worktree has no `node_modules` to symlink) · openssl ✓ (system).
+- Steps 6 and 7 landed as one commit under the operator's standing merge-pairs rule (Step 6's RED test is Step 7's
+  boot test); Deviation Log entry added.
+- Config `src/index.ts`: `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` is the first statement of `main()`,
+  before `loadMasterKey()`, with the value-free `db-tls:` canary log when TLS is on; `databaseUrl`, the inline
+  `sslDisabled`/`rejectUnauthorized: !!caCert` block and the `DATABASE_CA_CERT` read are gone; the Pool takes
+  `dbConn.connectionString` / `dbConn.ssl` and keeps `max` and its comment.
+- Test `src/__tests__/dbTlsBoot.test.ts` spawns `dist/index.js` with an explicit env (`PATH`,
+  `CONFIG_SECRETS_ENCRYPTION_KEY='0'.repeat(64)`, `DATABASE_URL`, CA only when the case sets it). It reuses `sh` and
+  `mintLeaf` from `./mtlsTestPki` (leaf named `localhost`, so SAN `DNS:localhost`) as Step 7's evidence allows; the
+  TLS stub and two-CA minting stay inline (single consumer, C-13). Assertions read the child's stderr+stdout
+  combined: the fatal error is on stderr, the winston `db-tls:` canary is on stdout, so AC-3's "no `db-tls:`" check
+  covers both streams.
+- TDD: AC-1 red (old `main()` exited on `getaddrinfo ENOTFOUND db.example`, no `DATABASE_CA_CERT`) → green.
+  AC-2 wrong-CA + positive control and AC-3 were green before and after, as Step 7's TDD note predicts.
+- Verification: `build` exit 0; `lint` 0 errors (206 pre-existing warnings; `eslint` on the two touched files is
+  clean); greps: no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` ×1;
+  `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 4/4 named tests pass (P-06);
+  `test:coverage` exit 0, 241/241, all files 90.37% lines (≥40).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 8+9
+
+- Tooling setup (steps 8–9): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ✓ (worktree `node_modules` present) ·
+  openssl ✓ (system). `bcrypt@5.1.1`'s native binding was absent (its prebuilt download is from github.com, blocked),
+  so `dist/index.js` could not load; built it locally with `node-pre-gyp install --build-from-source` using
+  `node-gyp@11.2.0` installed in the session scratchpad. No repo file changed; CI is unaffected.
+- Gate: the identity crash-loop sign-off is recorded (§ "Session 2026-10-22 (operator decision — fail-closed boot)"),
+  so the boot `SELECT 1` probe landed.
+- Steps 8 and 9 landed as one commit under the operator's standing merge-pairs rule (Step 8's RED test is Step 9's
+  boot test); Deviation Log entry added.
+- Identity `src/index.ts`: `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` is the first statement of `main()`,
+  before `ConfigWatcher`, with the value-free `db-tls:` canary log when TLS is on; `databaseUrl`, the inline
+  `sslDisabled`/`rejectUnauthorized: !!caCert` block and the `DATABASE_CA_CERT` read are gone; the Pool takes
+  `dbConn.connectionString` / `dbConn.ssl` (keeps `max` and its comment), then `await pool.query('SELECT 1')` +
+  `log.info('Database connected')` before `createLedgerAudit()`.
+- Test `src/__tests__/dbTlsBoot.test.ts` mirrors ledger's (AC-1 boot case only — Step 9 covers AC-1/AC-2, not AC-6);
+  openssl helpers `mintCa`/`mintLeaf` declared once in the file (single consumer, C-13).
+- TDD: AC-1 red (boot child exited on `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`) → green. AC-2
+  wrong-CA + positive control green before and after.
+- Verification: `build` exit 0; `lint` 0 errors (208 pre-existing warnings; `eslint` on the two touched files is
+  clean); greps: no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` and
+  `pool.query('SELECT 1')` present; `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 3/3 named
+  tests pass (P-06); `test:coverage` exit 0, 117/117, all files 75.75% lines (≥40).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 10+11
+
+- Tooling setup (steps 10–11): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps installed with
+  `pnpm install --frozen-lockfile --filter xstockstrat-notify... --filter xstockstrat` (no lockfile change) ·
+  openssl ✓ (system).
+- Gate: the notify crash-loop sign-off is recorded (§ "Session 2026-10-22 (operator decision — fail-closed boot)"),
+  so the boot `SELECT 1` probe landed.
+- Steps 10 and 11 landed as one commit under the operator's standing merge-pairs rule (Step 10's RED test is Step 11's
+  boot test); Deviation Log entry added.
+- Notify `src/index.ts`: `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` is the first statement of `main()`,
+  before `ConfigWatcher`, with the value-free `db-tls:` canary log when TLS is on; `databaseUrl`, the inline
+  `sslDisabled`/`rejectUnauthorized: !!caCert` block and the `DATABASE_CA_CERT` read are gone; the Pool takes
+  `dbConn.connectionString` / `dbConn.ssl` (keeps `max` and its comment), then `await pool.query('SELECT 1')` +
+  `log.info('Database connected')` before `new FanoutDispatcher`.
+- Test `src/__tests__/dbTlsBoot.test.ts` mirrors identity's (AC-1 boot case + AC-2 wrong-CA and positive control),
+  with `import { Pool } from 'pg'` per Step 11; openssl helpers declared once in the file (single consumer, C-13).
+- TDD: AC-1 red (boot child exited on `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`) → green. AC-2
+  wrong-CA + positive control green before and after.
+- Verification: `build` exit 0; `lint` 0 errors (233 pre-existing warnings; `eslint` on the two touched files is
+  clean); greps: no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` and
+  `pool.query('SELECT 1')` present; `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 3/3 named
+  tests pass (P-06); `test:coverage` exit 0, 105/105, all files 78.29% lines (≥40).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 12+13
+
+- Tooling setup (steps 12–13): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps installed with
+  `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter xstockstrat` (worktree-local; the main worktree
+  has no `node_modules` to symlink; no lockfile change).
+- Steps 12 and 13 landed as one commit under the operator's standing merge-pairs rule (Step 12's RED test is Step 13's
+  route vitest); Deviation Log entry added.
+- `src/app/config-ui/api/audit/route.ts`: `getPool()` calls `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` and
+  assigns `pool` only after a successful resolve; the stale "without rejecting the DO-signed certificate" comment, the
+  inline sslmode strip and `rejectUnauthorized: !!caCert` are gone (the `max` comment stays). The `catch` logs
+  `console.error('config-ui audit: database error', { traceId, code, message })` with the trace id read via
+  `HEADER_TRACE_ID`, and returns `{ error: 'Audit log unavailable' }` with status 500. Order 401 → 403 →
+  `!DATABASE_URL → { entries: [] }` → `getPool()` inside the `try` is unchanged.
+- Test `src/app/config-ui/api/audit/route.test.ts`: mocks `@/lib/auth` and `pg` (`vi.hoisted` `Pool`/`query`),
+  `vi.resetModules()` + dynamic import per case; cases AC-4, AC-7, AC-8 and the unset-`DATABASE_URL` regression. No
+  domain fixture (C-12 exempt; `INVENTORY.md` unchanged).
+- TDD: AC-4 red (old route constructed `Pool` and queried; body was the raw TypeError message) → green. AC-7 red (body
+  echoed `self-signed certificate in certificate chain`) → green. AC-8 and the regression case green before and after.
+- Verification: `tsc --noEmit` reports only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` TS2339
+  errors (recorded at Step 3); `pnpm run lint` exit 0 (pre-existing warnings only); grep for
+  `rejectUnauthorized`/`includes('sslmode`/`err.message }` in `route.ts` → no output; `resolveDbConnection`,
+  `HEADER_TRACE_ID` and `ssl: dbConn.ssl` present; the test imports `HEADER_TRACE_ID` from `@/lib/headers`;
+  `vitest run route.test.ts` 4/4; `test:coverage` exit 0, 333/333 in 60 files, all files 75.91% lines (≥40).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 14
+
+- No tooling install needed (YAML-only step).
+- `.do/app.yaml` and `.do/app.dev.yaml`: the `xstockstrat-ui` block now binds `DATABASE_CA_CERT`
+  (`scope: RUN_TIME`, `value: ${xstockstrat.CA_CERT}`) directly after its `DATABASE_URL` entry, copied verbatim from
+  the ledger entry. `db-migrator` and every other line are untouched. `${xstockstrat.CA_CERT}` is a DO DB binding,
+  so `deploy.yml` needs no substitution.
+- TDD: N/A (deploy-spec env binding). Step 15's AC-5 YAML-parse guard proves it.
+- Verification: `git diff --unified=0 .do/app.yaml .do/app.dev.yaml | grep '^[+-][^+-]'` shows only the 3 added
+  lines per file; `git diff .do/ | grep -c MCP_AGENT_SECRET` → 0. An extra `yaml.safe_load` sanity parse of both
+  files succeeded.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 15
+
+- Tooling setup (step 15): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps installed with
+  `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter xstockstrat` (worktree-local; no lockfile change).
+- New `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` (13 tests): AC-5 `missingCa` over `services`/
+  `workers`/`jobs` of both parsed `.do` specs plus the `structuredClone` negative row; one-SHA-256 guard over the five
+  `dbTls.ts` copies; static wiring scan of the five services' non-test `src/` trees (UI: the whole `src/`), asserting
+  the exact `resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT)` call and only `dbConn.ssl`
+  captures in each entry file, ledger's single Pool match + `makeListenerClient(dbConn.connectionString, dbConn.ssl,
+  configWatcher)`, and the two-entry ledger allow-list (`ssl: opts.ssl`, `ssl: ClientConfig['ssl']`); synthetic
+  negative on `rejectUnauthorized: !!caCert`.
+- Scan scope: the resolver files `dbTls.ts` are excluded from both the inline-TLS and the `ssl:` allow-list scans
+  (they are the sanctioned implementation, pinned by the hash guard); the re-spec's "exactly two other hits" count
+  only holds with that exclusion.
+- TDD: Step 14 had already landed, so per Step 15's TDD note its hunk was reverted for the RED run with a
+  checkout of `.do/app.yaml` and `.do/app.dev.yaml` from `HEAD~1` (no stash), then restored from `HEAD`.
+  RED: 2 failed / 11 passed — both AC-5 cases `expected [ 'xstockstrat-ui' ] to deeply equal []`; hash, wiring and
+  negative rows green. GREEN: 13/13 after restoring Step 14.
+- Verification: `vitest run src/lib/dbTlsPlatformGuard.test.ts` 13/13; `test:coverage` exit 0, 346/346 in 61 files,
+  all files 75.91% lines (>=40); `pnpm run lint` exit 0 (pre-existing warnings only, none in the new file); `tsc
+  --noEmit` shows only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` TS2339 errors.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 16
+
+- Docs-only (TDD: N/A). Added a `DATABASE_CA_CERT` row to the env blocks of the four backend `CLAUDE.md` files
+  (required unless `DATABASE_URL` has exactly `sslmode=disable`; boot exits naming the variable; `ssl*`/`uselibpqcompat`
+  refused; the carve-out is DB-only and never relaxes gRPC mTLS). Identity and notify add the boot `SELECT 1` DB
+  dependency. Ledger and config also run a boot `SELECT 1` (`src/index.ts:38`/`:35`), but the spec scoped that note to
+  identity/notify, so it was not added there.
+- UI `CLAUDE.md`: `DATABASE_CA_CERT` row beside `DATABASE_URL`, scoped to the config-ui audit route (log + generic 500).
+- `docs/patterns/database.md`: new `## Node DB TLS (fail-closed)` before `## Approval`, listing the resolver rule order as
+  implemented in `dbTls.ts`; PgBouncer Go/Python services and `db-migrator` out of scope.
+- `docs/patterns/dry-guard-rail.md` § Exemptions: one bullet naming exactly the five `dbTls.ts` and four `src/mtls.ts`
+  copies, the per-service Docker build-context reason, the `dbTlsPlatformGuard.test.ts` hash enforcement, and that it is
+  not general permission to copy security code.
+- Confirm-only: re-read `services/xstockstrat-identity/docs/operations.md:7-24` (Python/psycopg `manage-users.py`) and
+  `docs/setup/digitalocean.md:551-559` (golang-migrate `db-migrate.sh force`); neither is a Node `pg.Pool`; no edit.
+- Verification: `DATABASE_CA_CERT` present in all five `CLAUDE.md` files and `database.md`; `dbTls.ts` present in
+  `dry-guard-rail.md`; diff of the two confirm-only files is empty.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 17 (deferred to operator)
+
+- **Pre-merge dev canary: not run, operator-only.** This session cannot reach the running dev backends, the dev DB
+  host or the DO-console CA. Step 17 **Status** stays `pending`. The integration PR may be opened, but its merge is
+  held until the operator runs the checks listed in the implementation-spec.md Deviation Log entry "Step 17 deferred
+  to operator":
+  - an `openssl s_client -starttls postgres … -verify_return_error` result of `0 (ok)` with a SAN match;
+  - the dev `${xstockstrat.CA_CERT}` binding is non-empty;
+  - `${xstockstrat.DATABASE_URL}` carries no `ssl*`/`uselibpqcompat` key other than a single `sslmode=require`.
+
+  The operator appends the canary result here, with no secret values. The open thread at "Pre-merge dev canary:
+  Step 17, before the integration PR merges" stays open until then.
+- Code-side readiness for the canary, checked on this branch:
+  - the value-free `db-tls: verifying server cert against DATABASE_CA_CERT` log is in ledger `src/index.ts:20`,
+    config `:18`, identity `:19` and notify `:21`;
+  - the five `dbTls.ts` copies share one SHA-256 (`8cd5d805…`);
+  - `.do/app.yaml` and `.do/app.dev.yaml` each bind `DATABASE_CA_CERT` five times, to `${xstockstrat.CA_CERT}`.
+- Rollout order (instruction 2) re-confirmed: the UI route (Step 12), the `.do` binding (Step 14) and the four
+  backends (Steps 4/6/8/10) are all on this one branch, so they ship in one integration PR. That PR merges only
+  after the canary passes (design item 8).
+- **Teardown (instruction 3), manual.** The context-forge `context-constitution refresh` skill is not available in
+  this session; only `context-forge:context-scrubber` is listed. I re-read each Step 16 file against the code:
+  - `docs/patterns/database.md` § Node DB TLS (fail-closed): rules 1–5 match `resolveDbConnection` in order. Those
+    are unset/invalid URL, duplicate `sslmode`, other `ssl*`/`uselibpqcompat` (case-insensitive prefix),
+    `sslmode=disable` exactly, then CA required with `sslmode` stripped. The five paths exist. No drift.
+  - `docs/patterns/dry-guard-rail.md` § Exemptions: the five `dbTls.ts` paths, the four `src/mtls.ts` paths and
+    `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` all exist. The hash claim holds: one SHA-256.
+    No drift. The report-only jscpd run on commit lists the `dbTls.ts`/`mtls.ts` clones, as the exemption expects.
+  - The ledger, config, identity and notify `CLAUDE.md` `DATABASE_CA_CERT` rows match the resolver's refusals and
+    the boot exit. The identity/notify `SELECT 1` note matches the Steps 8/10 probe. No drift.
+  - The UI `CLAUDE.md` `DATABASE_CA_CERT` row (audit route only, log plus generic 500) matches Step 12. No drift.
+  - `docs/context-constitution-findings.md`: not touched, because no grounded drift was found.
+
+  The integration PR body must record both facts: the plugin was unavailable, and this reconciliation list.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-db-tls-fail-closed (feature 266)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Outline across ledger/config/identity/notify; no single owner |
+| AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Same four-service outline |
+| AC-3 | services/xstockstrat-config/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | Subject is config only |
+| AC-4 | services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | config-ui audit route |
+| AC-5 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Deploy surface (.do/app*.yaml) |
+| AC-6 | services/xstockstrat-ledger/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | Subject is ledger only |
+| AC-7 | services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | |
+| AC-8 | services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  # ─── Database TLS fail-closed (feature 266) ───────────────────────────────
+  # Node backends and the UI audit route never connect to a TLS database without verifying the certificate. Provenance: @feature-266.
+
+  @AC-1 @FR-1 @feature-266
+  Scenario Outline: A Node backend refuses to boot against a TLS database with no CA configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT is unset
+    When <service> starts
+    Then it exits non-zero before serving gRPC
+    And it logs that DATABASE_CA_CERT is required for a TLS database connection
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-2 @FR-2 @feature-266
+  Scenario Outline: A Node backend verifies the database certificate when a CA is configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT holds a CA that did not sign the server's certificate
+    When <service> starts
+    Then the database connection is rejected with a certificate verification error
+    And it exits non-zero and logs the certificate verification error
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-5 @FR-5 @feature-266
+  Scenario Outline: Every deployed component that reaches the database directly is given the CA
+    Given the DigitalOcean app spec <spec>
+    Then every component with DATABASE_URL among xstockstrat-ledger, xstockstrat-config, xstockstrat-identity, xstockstrat-notify and xstockstrat-ui also has DATABASE_CA_CERT bound to "${xstockstrat.CA_CERT}"
+
+    Examples:
+      | spec              |
+      | .do/app.yaml      |
+      | .do/app.dev.yaml  |
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-db-tls-fail-closed.feature (CREATE) ---
+# Promoted from docs/roadmap/features/266-fix-db-tls-fail-closed/acceptance.feature
+# Source feature 266 (fix-db-tls-fail-closed). Config service DB TLS behavior.
+Feature: fix-db-tls-fail-closed (config)
+  Acceptance scenarios for the xstockstrat-config service promoted from feature 266.
+
+  @AC-3 @FR-3 @feature-266
+  Scenario: Local compose with sslmode=disable still boots without a CA
+    Given DATABASE_URL is "postgres://xstockstrat:pw@timescaledb:5432/xstockstrat?sslmode=disable"
+    And DATABASE_CA_CERT is unset
+    When xstockstrat-config starts
+    Then it connects without TLS and serves gRPC
+
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-db-tls-fail-closed.feature (CREATE) ---
+# Promoted from docs/roadmap/features/266-fix-db-tls-fail-closed/acceptance.feature
+# Source feature 266 (fix-db-tls-fail-closed). Ledger DB TLS behavior.
+Feature: fix-db-tls-fail-closed (ledger)
+  Acceptance scenarios for the xstockstrat-ledger service promoted from feature 266.
+
+  @AC-6 @FR-1 @feature-266
+  Scenario: A DATABASE_URL with no sslmode is treated as TLS and still requires a CA
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat"
+    And DATABASE_CA_CERT is unset
+    When xstockstrat-ledger starts
+    Then it exits non-zero before serving gRPC
+    And it logs that DATABASE_CA_CERT is required for a TLS database connection
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature (CREATE) ---
+# Promoted from docs/roadmap/features/266-fix-db-tls-fail-closed/acceptance.feature
+# Source feature 266 (fix-db-tls-fail-closed). config-ui audit route DB TLS behavior.
+Feature: fix-db-tls-fail-closed (ui)
+  Acceptance scenarios for the xstockstrat-ui audit route promoted from feature 266.
+
+  @AC-4 @FR-4 @feature-266
+  Scenario: The config-ui audit route never queries over unverified TLS
+    Given the xstockstrat-ui DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT is unset
+    When an admin requests /config-ui/api/audit
+    Then the route responds with an error status and logs that DATABASE_CA_CERT is required
+    And no database query is sent
+
+  @AC-7 @FR-2 @feature-266
+  Scenario: The config-ui audit route rejects a database certificate not signed by the configured CA
+    Given the xstockstrat-ui DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT holds a CA that did not sign the server's certificate
+    When an admin requests /config-ui/api/audit
+    Then the database connection is rejected with a certificate verification error
+    And the route responds with an error status and logs the certificate verification error
+
+  @AC-8 @FR-3 @feature-266
+  Scenario: The config-ui audit route with sslmode=disable still reads without a CA
+    Given the xstockstrat-ui DATABASE_URL is "postgres://xstockstrat:pw@timescaledb:5432/xstockstrat?sslmode=disable"
+    And DATABASE_CA_CERT is unset
+    When an admin requests /config-ui/api/audit
+    Then the route connects without TLS and responds with status 200
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1/AC-2 are Scenario Outlines across four Node services with no single owner, so they go to platform.feature and are not split per service. AC-5 is the deploy surface, also platform.
+- Dedup: grep for DATABASE_CA_CERT, DATABASE_URL, sslmode and verify-full across all services/*/acceptance/*.feature and platform.feature found no related scenario (the one DATABASE_URL hit, indicators-sandbox-os-isolation.feature, is unrelated). No DUP, OVERLAP or CONFLICT. The platform mTLS section (feature 210) covers inter-service gRPC, not DB transport.
+- The ledger, config and ui acceptance/ dirs already exist, so only new files are created. The platform file is appended after its last section, and I did not read its tail to confirm the end of file.
+- Not verified: I read acceptance.feature from the working tree on this branch, not from origin/feature/fix-db-tls-fail-closed.
+
+### Coverage check
+- Source scenarios: 8 (AC-1 to AC-8; AC-1, AC-2 and AC-5 are Outlines). Planned: 8 NEW, 0 DUP, 0 OVERLAP. All accounted for, none skipped.
+```
+
+## Session 2026-10-30 — Step 17 canary (operator decision: post-merge on dev)
+
+- Static canary passed. The `${xstockstrat.CA_CERT}` binding resolves to the DO cluster's project CA: non-empty, PEM,
+  valid until 2031-08-03. DO's cluster connection string has a single TLS key, `sslmode=require`. No secret values
+  were recorded.
+- The live `openssl s_client -starttls postgres … -verify_return_error` timed out from this session, because egress to
+  `:25060` is blocked.
+- Options offered: operator runs openssl locally, post-merge on dev, or keep holding. The operator chose
+  **"Post-merge on dev (Recommended)"**.
+- Owed after merge: on the dev deploy, the DO RUN logs of ledger, config, identity and notify each show
+  `db-tls: verifying server cert against DATABASE_CA_CERT`, there is no `db-tls:` boot exit, and
+  `/config-ui/api/audit` returns 200. Revert the squash commit on any failure.
+- The canary check is recorded here for Step 17 Verification (`grep -n "canary"`).
+
+## Session 2026-10-30 — Post-merge dev canary (PASSED)
+
+- PR #1365 was squash-merged as `bcde6648`. Deploy dev run 41000008472 succeeded, and DO deployment `28eb6fb6` is ACTIVE.
+- The RUN logs of ledger, config, identity and notify each show `db-tls: verifying server cert against DATABASE_CA_CERT`,
+  then `Database connected` and gRPC listening (04:02:31–04:02:36Z). No `db-tls:` boot exit, and no restarts.
+- The operator loaded Config UI → Audit on dev as an admin. It "loads perfectly", which means the audit route's fail-closed
+  pool verified the CA and returned 200. The UI logs show no `db-tls` or audit-route error.
+- Unrelated noise: a single `[Error: aborted] ECONNRESET` uncaughtException in the UI (a client-aborted HTTP request,
+  not a `pg` error, and not in the route's own error-log format). A config-stream drop at 04:05:04Z on the
+  backends was the old config instance draining at the end of the rollout, and each watcher logged a reconnect attempt.
+- No revert needed. Prod: repeat the same boot-log check on the prod deploy at `/promote`.
+
+## Session 2026-10-30 — Production check waived
+
+- Operator decision 2026-10-30 (own words): "Prod is not running. Staging is enough". The production check owed at `/promote` is **waived**. The staging/dev verification already recorded above is the final rollout verification for this feature.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

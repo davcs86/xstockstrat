@@ -103,6 +103,11 @@ export interface QueryEventsRequest {
     | undefined;
   /** replay from sequence */
   fromSequence: number;
+  /**
+   * When true, only rows whose user_id equals the caller's x-user-id (never NULL rows).
+   * Every user-facing edge MUST set it; internal callers leave it false.
+   */
+  ownerOnly: boolean;
 }
 
 export interface QueryEventsResponse {
@@ -938,7 +943,15 @@ export const AppendEventResponse: MessageFns<AppendEventResponse> = {
 };
 
 function createBaseQueryEventsRequest(): QueryEventsRequest {
-  return { streamKey: "", eventType: "", sourceService: "", timeRange: undefined, page: undefined, fromSequence: 0 };
+  return {
+    streamKey: "",
+    eventType: "",
+    sourceService: "",
+    timeRange: undefined,
+    page: undefined,
+    fromSequence: 0,
+    ownerOnly: false,
+  };
 }
 
 export const QueryEventsRequest: MessageFns<QueryEventsRequest> = {
@@ -960,6 +973,9 @@ export const QueryEventsRequest: MessageFns<QueryEventsRequest> = {
     }
     if (message.fromSequence !== 0) {
       writer.uint32(48).int64(message.fromSequence);
+    }
+    if (message.ownerOnly !== false) {
+      writer.uint32(56).bool(message.ownerOnly);
     }
     return writer;
   },
@@ -1019,6 +1035,14 @@ export const QueryEventsRequest: MessageFns<QueryEventsRequest> = {
           message.fromSequence = longToNumber(reader.int64());
           continue;
         }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.ownerOnly = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1056,6 +1080,11 @@ export const QueryEventsRequest: MessageFns<QueryEventsRequest> = {
         : isSet(object.from_sequence)
         ? globalThis.Number(object.from_sequence)
         : 0,
+      ownerOnly: isSet(object.ownerOnly)
+        ? globalThis.Boolean(object.ownerOnly)
+        : isSet(object.owner_only)
+        ? globalThis.Boolean(object.owner_only)
+        : false,
     };
   },
 
@@ -1079,6 +1108,9 @@ export const QueryEventsRequest: MessageFns<QueryEventsRequest> = {
     if (message.fromSequence !== 0) {
       obj.fromSequence = Math.round(message.fromSequence);
     }
+    if (message.ownerOnly !== false) {
+      obj.ownerOnly = message.ownerOnly;
+    }
     return obj;
   },
 
@@ -1097,6 +1129,7 @@ export const QueryEventsRequest: MessageFns<QueryEventsRequest> = {
       ? PageRequest.fromPartial(object.page)
       : undefined;
     message.fromSequence = object.fromSequence ?? 0;
+    message.ownerOnly = object.ownerOnly ?? false;
     return message;
   },
 };
