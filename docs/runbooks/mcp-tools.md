@@ -1389,7 +1389,7 @@ credential field. Offline accounts are **not** created here — use `manage_offl
 | `account_id` | string | update/deregister/resume | The broker account to act on |
 | `display_name` | string | `register` | Name for the new account |
 | `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
-| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…,"signature_key":…,"encryption_key":…,"dh_prime":…}`, the last three as PEM strings) |
 | `reason` | string | no | Operator-supplied context for why the halt is being cleared (resume only; default `""`) |
 
 - **register** → `{"account": …}` with `credential_status`; the submitted credentials are never

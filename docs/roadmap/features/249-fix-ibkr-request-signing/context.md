@@ -512,3 +512,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
 - Open items: `backfills.spec.ts` tsc errors pre-exist (not this feature); local `pnpm dev` first-hit compile times
   out the 10s warm-up in this sandbox, so e2e ran on the `CI=1` production build.
+
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 15 + 16
+
+### Steps 15 + 16 — agent `manage_account` IBKR shape + tests [done, one commit]
+- Merged under the standing operator rule ("Merge pairs + standing rule"): Step 15's RED test is Step 16's docstring
+  assertion.
+- `tools.py` `manage_account` docstring: the IBKR blob lists 7 keys (the last three are PEM strings), and
+  update_credentials names the incomplete-IBKR `INVALID_ARGUMENT`. Validation, parameters and return shape are
+  unchanged; trading stays the only validator (C-10). `mcp-tools.md:1392` row carries the same shape.
+- Tests: `_assert_no_credentials` also rejects `consumer_key`/`access_token`/`signature_key`/`encryption_key`/
+  `dh_prime`/`BEGIN`; new `test_update_broker_account_credentials_ibkr_seven_fields_forwarded_and_hidden`,
+  `test_update_credentials_ibkr_incomplete_maps_invalid_argument` (@AC-7) and
+  `test_manage_account_docstring_lists_ibkr_key_material`.
+- TDD: AC-7 red: `'signature_key' in description` failed → green: 520 passed, coverage 81.23%.
+- Verification: `ruff check .` and `ruff format --check .` clean; `grep signature_key` hits both files.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`,
+  `services/xstockstrat-agent/tests/test_broker_account_client.py`,
+  `services/xstockstrat-agent/tests/test_account_tools.py`.
+- Open item: the runbook's `update_credentials` bullet and `**Errors:**` line do not yet mention the incomplete-IBKR
+  `INVALID_ARGUMENT` (Step 15 instruction 3 limits the edit to the row). Step 17 or a later pass may add it.
+

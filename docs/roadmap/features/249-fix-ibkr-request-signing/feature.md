@@ -28,6 +28,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 11 done: `trading.proto` `RegisterBrokerAccountRequest.credentials_json` comment lists the 7-key IBKR shape (`signature_key`, `encryption_key`, `dh_prime` added); comment-only, `buf lint`/`buf breaking` clean |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 12 done: `./scripts/buf-gen.sh` regenerated exactly the 5 `gen/` stubs (Go `trading.pb.go`, TS `trading_pb.ts`/`trading.ts` and their `dist` `.d.ts`), with comment-only diffs; Go plugins rebuilt with go1.27 to match CI `proto-freshness` |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 13+14 done in one commit (standing operator rule; operator "B: Keep native" for the empty-key assertion): `/trader` IBKR form collects `signatureKey`/`encryptionKey`/`dhPrime` as PEM `Textarea`s, 7-key `credentials_json`, `CREDENTIAL_KEYS`-derived watch/set/map, `FieldError` per input; e2e AC-7 register/blocked-submit/edit-no-echo + Offline guard |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 15+16 done in one commit (standing operator rule): agent `manage_account` docstring and `mcp-tools.md` `credentials_json` row list the 7-key IBKR shape (`signature_key`/`encryption_key`/`dh_prime` as PEM) and the incomplete-IBKR `INVALID_ARGUMENT`; tests add IBKR no-echo, 7-key verbatim forwarding, `INVALID_ARGUMENT` surfacing and the docstring assertion |
 
 ---
 

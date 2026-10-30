@@ -1027,7 +1027,7 @@ grep -n "IBKR_TEST_CREDENTIALS_INPUT" e2e/fixtures/INVENTORY.md
 
 ### Step 15 — service: agent `manage_account` IBKR shape + runbook parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -1065,7 +1065,7 @@ grep -n "signature_key" app/tools.py ../../docs/runbooks/mcp-tools.md   # both p
 
 ### Step 16 — test: agent IBKR rotation no-echo + InvalidArgument surfacing (AC-7 agent half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_broker_account_client.py` — modify
@@ -1399,3 +1399,19 @@ _Populated by /sdd-execute as implementation proceeds._
   (`dataKind`/`timeframeEnum` on `never`). That file is untouched here; no error is in a changed file.
   Playwright ran with `CI=1` (production build) because the `pnpm dev` first-hit compile times out the 10s local
   warm-up in this sandbox.
+
+### Steps 15 + 16 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 15 and 16 land in one commit (standing operator rule).** Operator, 2026-10-29, in their own words: "Merge
+  pairs + standing rule" ("if this step's Verification fails ONLY because the consumers or tests of its new code live
+  in the immediately following step … or the RED test is that next step's test … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done"). Step 15's RED test
+  is Step 16's docstring assertion. No file outside the two steps' **Files** was touched.
+- **Spec evidence corrections.** The line numbers held on this branch (`manage_account` at `tools.py:2153`, runbook
+  row at `mcp-tools.md:1392`). The `register` docstring sentence was reflowed so the 7-key shape fits the line limit.
+  `dh_prime` is a PEM `DH PARAMETERS` block (`internal/broker/ibkr.go:35`), so "the last three as PEM strings" holds.
+- **RED** (before Step 15): `test_manage_account_docstring_lists_ibkr_key_material` failed (`'signature_key' in
+  description`). The no-echo and `INVALID_ARGUMENT` tests characterize the existing passthrough and passed; each
+  asserts a value only the 7-key blob carries. **GREEN**: 520 passed, coverage 81.23% (threshold 40%).
+- **Runbook parity scope.** Only the `credentials_json` row was edited (Step 15 instruction 3). The
+  `update_credentials` result bullet and the `**Errors:**` line still name only "invalid JSON" for `INVALID_ARGUMENT`.
