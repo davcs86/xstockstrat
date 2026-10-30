@@ -296,9 +296,9 @@ Behavior is verified in Step 4.
   - `_sym_bars(symbol, n_prefix, n_window, base)` `:29`;
   - `_mkt_def(period=5)` `:56`: a `source_symbol="VOO"` benchmark component.
   It already imports `make_servicer`, `_owned_ctx`, `_windowed_req` and `_EOF_PAGE` from
-  `tests/test_analysis_servicer.py` (`make_servicer` `:36`, `_owned_ctx` `:63`, `_EOF_PAGE` `:136`,
-  `_windowed_req` `:3685`, which still takes `symbols=`; re-spec 2026-10-29).
-- Persistence seams: `_persist_backtest_run` (`servicer.py:2855`) and `_persist_symbol_cells` (`:2934`).
+  `tests/test_analysis_servicer.py` (`make_servicer` `:36`, `_owned_ctx` `:63`, `_EOF_PAGE` `:135`,
+  `_windowed_req` `:3671`, which still takes `symbols=`; re-spec 2026-10-29).
+- Persistence seams: `_persist_backtest_run` (`servicer.py:2861`) and `_persist_symbol_cells` (`:2940`).
   `AsyncMock` replacement precedent: `svc._persist_symbol_cells = AsyncMock()`
   (`tests/test_backtest_fundamentals_guard.py:132`).
 - `make_servicer()` already stubs `cfg.get_int_present` to return the default (`test_analysis_servicer.py:49`;
@@ -356,15 +356,15 @@ grep -n "from .test_backtest_source_symbol\|from .test_analysis_servicer" servic
   (`:111-117`) is itself presence-aware. It returns the stored `int_val`, including 0, when the field is set, else
   the default. `get_int_present` is now an alias, `get_int_present = get_int` (`:119`). Calling `get_int_present`
   keeps the semantics this step needs (stored 0 = no limit), and it matches the name every `RunBacktest` test
-  harness already stubs (Step 6 harness audit). Call-site precedent: `servicer.py:3897`
+  harness already stubs (Step 6 harness audit). Call-site precedent: `servicer.py:3903`
   `get_int_present("analysis.readiness.stale_after_seconds", 30)`.
 - `int_positive(cfg, key, default)` (`watcher.py:142-144`) is **not** used for this key. It maps 0 and negatives
   to the default, but here 0 must mean "no limit" (`@AC-5`), and a negative must log a WARN, which
   `int_positive` does not do.
-- Screener idiom, mirrored but **not edited** (feature 245), at `servicer.py:3793-3803`:
-  `deadline = int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)` (`:3793`),
+- Screener idiom, mirrored but **not edited** (feature 245), at `servicer.py:3799-3809`:
+  `deadline = int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)` (`:3799`),
   `asyncio.wait_for(...)`, `except TimeoutError: await context.abort(grpc.StatusCode.DEADLINE_EXCEEDED,
-  f"screen exceeded {deadline}s deadline")` (`:3800-3802`), then `return`.
+  f"screen exceeded {deadline}s deadline")` (`:3805-3808`), then `return` (`:3809`).
 - Disarm anchor: `self._backtests[backtest_id] = result` at `:1274`. The only awaited call between compute and that
   anchor is `await self._fundamentals_gap_labels(refused_diags, propagation_meta)` at `:1253`, a read RPC.
   Everything after the anchor is persistence and the completion emit:
@@ -375,7 +375,7 @@ grep -n "from .test_backtest_source_symbol\|from .test_analysis_servicer" servic
   - `analysis.backtest.completed` AppendEvent `:1351-1359` (`event_type` at `:1353`)
 - `import asyncio` is at `:13`. Python is 3.13 (`python3 --version` → 3.13.17; root CLAUDE.md), so
   `asyncio.timeout`, `Timeout.expired()` and `Timeout.reschedule(None)` are available.
-- CPU cores run via `run_in_executor(self._compute_executor, _core)` at `:1724`, `:2236` and `:2407`. They stay
+- CPU cores run via `run_in_executor(self._compute_executor, _core)` at `:1730`, `:2242` and `:2413`. They stay
   there (`@AC-4 @feature-176`).
 - The `default_fill_model` read at `:797-801` (`self._cfg.get_int("analysis.backtest.default_fill_model", 0)`) stays
   untouched (`@AC-9 @feature-151`). Since 244, `get_int` no longer zero-traps, but 0 maps to the legacy fill
@@ -467,6 +467,9 @@ The second grep must still show the screener read at the unchanged
   - `_servicer()` (`test_owner_dimension.py:34`)
   - `_backtest_servicer()` (`test_fundamentals_formula_servicer.py:186`)
   - `test_blend_guard.py:34`
+  - `test_config_zero_clamps.py:161` (`test_ac6_default_fill_model_zero_is_legacy`, feature 244, `9b20cb66`;
+    re-spec 2026-10-29) replaces `svc._cfg` with a real `snapshot_watcher` from `_all_fr3_zero()` (`:86`). That key
+    set has no `analysis.backtest.max_duration_seconds`, so `get_int_present` falls back to 300.
 
   The other RunBacktest suites (`test_backtest_fundamentals_guard.py`, `test_backtest_source_symbol.py`,
   `test_fill_model.py`, `test_grade_fundamentals_exclusion.py`, `test_sector_params.py`, `test_unreadable_formula.py`)
@@ -475,7 +478,7 @@ The second grep must still show the screener read at the unchanged
 - Stall seams:
   - `_backtest_symbol_evaluated`, awaited at `servicer.py:1012`;
   - `svc._marketdata.GetBars`, an `AsyncMock` (`_wire_per_symbol`);
-  - `_persist_backtest_run` (`:2855`), which runs after the disarm anchor;
+  - `_persist_backtest_run` (`:2861`), which runs after the disarm anchor;
   - `self._compute_executor` (`:563`, a `ThreadPoolExecutor`).
 
 **TDD**: `red-green required`
