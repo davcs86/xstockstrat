@@ -807,7 +807,7 @@ grep -rn "statusWrites" --include="*_test.go" internal/service | grep "struct\|\
 
 ### Step 10 — config: register `trading.ibkr.*` keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify

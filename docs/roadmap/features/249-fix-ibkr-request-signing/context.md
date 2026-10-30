@@ -437,3 +437,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The husky hook is not installed in this environment: `.husky/_` is absent and there is no root `node_modules`.
     The hook's only gating checks are scoped to the UI.
   - Step 10 must register the three `trading.ibkr.*` keys that Step 8 now reads.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 10
+
+### Step 10 — config: register `trading.ibkr.*` keys [done]
+- `services/xstockstrat-trading/CLAUDE.md`: three `int` rows after `trading.broker.timeout_ms` —
+  `trading.ibkr.lst_refresh_margin_ms` (60000), `trading.ibkr.handshake_timeout_ms` (10000),
+  `trading.ibkr.reauth_min_interval_ms` (30000); read live per handshake, `<= 0` reads as the default.
+- `docs/patterns/config-governance.md`: `### feature 249 — fix-ibkr-request-signing (`xstockstrat-trading`)` prepended
+  as the newest Per-Feature Registered Keys entry. On this branch the previous top entry is feature 240 (features 264
+  and 248 have not merged here), so 249 sits directly above 240. Unseeded (feature 102 precedent), no
+  `SCALAR_BOUNDS_REGISTRY` entry, not tied to `IBKRRequestTimeout`.
+- Spec line refs had drifted (log header, feature 102 precedent now at `:610`); placement followed the spec's
+  re-read instruction. No key-name collision.
+- TDD: N/A (docs/config registration). Verification: the grep shows each key with the same default in `CLAUDE.md`,
+  `config-governance.md` and `trading.go` (`ibkrTiming`, Step 8).
+- Files modified: `services/xstockstrat-trading/CLAUDE.md`, `docs/patterns/config-governance.md`.
+- Open item: when features 264/248 merge with this branch, keep the log newest-first (rebase only, append-only).

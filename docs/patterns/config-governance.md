@@ -106,6 +106,19 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 249 — fix-ibkr-request-signing (`xstockstrat-trading`)
+
+Bounds the IBKR live-session-token (LST) lifecycle that now signs every IBKR call. All three keys follow feature
+102's "no config-service seed migration" pattern: **unseeded** (consumed-with-default), read live per handshake via
+`s.cfgW.GetInt` with the default supplied in Go code (`ibkrTiming`); `≤ 0` reads as the default. No
+`SCALAR_BOUNDS_REGISTRY` entry. Not tied to the broker's `IBKRRequestTimeout` (the per-request HTTP timeout).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh the cached LST this long before `live_session_token_expiration`. |
+| `trading.ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one LST + `ssodh/init` handshake. |
+| `trading.ibkr.reauth_min_interval_ms` | int | `30000` | Negative-cache and 401-invalidation throttle (one LST request per interval per bad account). |
+
 ### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
 
 Bounds the last-close search window behind offline marks and Day P&L. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
