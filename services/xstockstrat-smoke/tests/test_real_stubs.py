@@ -1,5 +1,5 @@
-"""AC-43 / FR-12: the committed generated stubs carry `idempotency_level = NO_SIDE_EFFECTS` on exactly
-the pure-read RPCs of feature 280 (recon.md § RPC read/write classification, "Pure READ" bullet)."""
+"""AC-43 / FR-12: the committed stubs carry `idempotency_level = NO_SIDE_EFFECTS` on exactly the
+pure-read RPCs of feature 280 (recon.md § RPC read/write classification, "Pure READ" bullet)."""
 
 import importlib
 import os
@@ -12,22 +12,45 @@ NSE = descriptor_pb2.MethodOptions.NO_SIDE_EFFECTS
 # recon.md "Pure READ (annotate NO_SIDE_EFFECTS)" minus the streaming WatchConfig (a unary-only
 # runner cannot call it and a stream is not a valid Connect GET; left for controller decision).
 ANNOTATED = {
-    "trading": ("TradingService", ["ListBrokerAccounts", "GetOrder", "ListOrders", "GetTradingEnvironment"]),
+    "trading": (
+        "TradingService",
+        ["ListBrokerAccounts", "GetOrder", "ListOrders", "GetTradingEnvironment"],
+    ),
     "portfolio": ("PortfolioService", ["GetSnapshot", "GetWatchlist", "ListWatchlists"]),
     "marketdata": ("MarketDataService", ["GetDataCoverage", "GetHistoricalFundamentals"]),
     "indicators": (
         "IndicatorsService",
-        ["ComputeIndicator", "ListIndicators", "ListFundamentalMetrics", "ListFormulas", "ListTemplates"],
+        [
+            "ComputeIndicator",
+            "ListIndicators",
+            "ListFundamentalMetrics",
+            "ListFormulas",
+            "ListTemplates",
+        ],
     ),
     "ingest": (
         "IngestService",
-        ["GetBackfillStatus", "ListBackfillJobs", "NormalizeRawData", "QuerySignals", "ListSignalSources", "ListTemplates"],
+        [
+            "GetBackfillStatus",
+            "ListBackfillJobs",
+            "NormalizeRawData",
+            "QuerySignals",
+            "ListSignalSources",
+            "ListTemplates",
+        ],
     ),
     "analysis": (
         "AnalysisService",
         [
-            "ListStrategies", "GetStrategyReport", "ListBacktests", "GetBacktest", "ScreenSymbols",
-            "GetStrategyAnalytics", "QueryPnLPatterns", "GetAttribution", "ListTemplates",
+            "ListStrategies",
+            "GetStrategyReport",
+            "ListBacktests",
+            "GetBacktest",
+            "ScreenSymbols",
+            "GetStrategyAnalytics",
+            "QueryPnLPatterns",
+            "GetAttribution",
+            "ListTemplates",
         ],
     ),
     "ledger": ("LedgerService", ["QueryEvents", "GetEvent"]),
@@ -36,27 +59,60 @@ ANNOTATED = {
     "config": ("ConfigService", ["GetConfig", "ListKeys"]),
 }
 
-# recon.md "READ-SIDE-EFFECT", "OWNER-WRITE" and "PRIVILEGED / unsafe writes" bullets (representative
-# members), plus WatchConfig/streaming reads (out of scope, see above). Must never be annotated.
+# recon.md "READ-SIDE-EFFECT", "OWNER-WRITE" and "PRIVILEGED / unsafe writes" bullets (sample),
+# plus WatchConfig/streaming reads (out of scope, see above). Must never be annotated.
 UNANNOTATED = {
     "ledger": ("LedgerService", ["AppendEvent", "StreamEvents", "ExportEvents"]),
     "marketdata": (
         "MarketDataService",
-        ["GetFundamentals", "GetBars", "GetLatestPrice", "BackfillBars", "BackfillFundamentals", "DeleteBackfilledData"],
+        [
+            "GetFundamentals",
+            "GetBars",
+            "GetLatestPrice",
+            "BackfillBars",
+            "BackfillFundamentals",
+            "DeleteBackfilledData",
+        ],
     ),
     "config": ("ConfigService", ["GetSecret", "SetConfig", "WatchConfig"]),
     "notify": ("NotifyService", ["EmitAlert", "AcknowledgeAlert", "MarkAlertRead", "StreamAlerts"]),
-    "identity": ("IdentityService", ["IssueAuthCode", "RevokeAuthorizedApp", "UpdateUserMetadata", "AdminGetUserMetadata", "CreateUser"]),
+    "identity": (
+        "IdentityService",
+        [
+            "IssueAuthCode",
+            "RevokeAuthorizedApp",
+            "UpdateUserMetadata",
+            "AdminGetUserMetadata",
+            "CreateUser",
+        ],
+    ),
     "trading": ("TradingService", ["PlaceOrder", "ConfirmOrder", "CancelOrder"]),
     "portfolio": ("PortfolioService", ["GetPortfolio", "ListPositions", "CreateWatchlist"]),
-    "analysis": ("AnalysisService", ["RunBacktest", "SetStrategyLive", "RunFundamentalsScan", "ManageTemplate", "ListOpportunities"]),
-    "ingest": ("IngestService", ["IngestSignal", "TriggerBackfill", "CancelBackfill", "ManageSignalSource"]),
+    "analysis": (
+        "AnalysisService",
+        [
+            "RunBacktest",
+            "SetStrategyLive",
+            "RunFundamentalsScan",
+            "ManageTemplate",
+            "ListOpportunities",
+        ],
+    ),
+    "ingest": (
+        "IngestService",
+        ["IngestSignal", "TriggerBackfill", "CancelBackfill", "ManageSignalSource"],
+    ),
 }
 
 
 def _level(pkg: str, service: str, method: str):
     mod = importlib.import_module(f"{pkg}.v1.{pkg}_pb2")
-    return mod.DESCRIPTOR.services_by_name[service].methods_by_name[method].GetOptions().idempotency_level
+    return (
+        mod.DESCRIPTOR.services_by_name[service]
+        .methods_by_name[method]
+        .GetOptions()
+        .idempotency_level
+    )
 
 
 def _cases(table):
