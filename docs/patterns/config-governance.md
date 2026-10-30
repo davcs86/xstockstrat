@@ -110,6 +110,15 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 280 — smoke-check-runtime (xstockstrat-smoke / xstockstrat-config)
+
+The smoke runner's RPC identity. **Seeded** (staging + production, global) by config migration `035_smoke_rpc_user_id`
+(ordering gate: no environment applies 035 before feature 264's 034), stored as `string`.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `smoke.rpc.user_id` | string | `''` | none | Identity of the smoke RPC user; empty = RPC checks ERROR (never PASS). Owner: feature 280. |
+
 ### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)
 
 Bounds the `EventNotifier` LISTEN-connection read that resolves a NOTIFY row trimmed over ~7000 chars before live
