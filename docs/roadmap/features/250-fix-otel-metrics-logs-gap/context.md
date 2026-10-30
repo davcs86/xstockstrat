@@ -411,3 +411,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `scripts/check-otel-produced-signals.sh` (and, per Deviation 3,
   `packages/otel/docs/context-constitution-findings.md`)
 - Deviations: Deviation 3
+
+### Step 12 — Add the otel-signals CI job and wire it into ci-gate [done]
+- `.github/workflows/ci.yml`: new `otel-signals` paths filter (`packages/otel/**`, `docs/**`, `.do/**`, the two scripts,
+  the fixtures), new job `OTel produced-signal guard` running the guard and its test (shaped like `context-map`; NOT
+  appended to `shell-lint`, which skips docs-only PRs), `otel-signals` added to `ci-gate.needs` and the echo list.
+  `docs/patterns/ci-overview.md`: one `otel-signals` row (other omitted jobs not backfilled).
+- Verification: pyyaml structure assertions pass; script name only in the filter and the new job; markdownlint clean on
+  the doc; guard rc=0 and test `cases=66 failed=0` on the final tree (about 50s, so the job runs about 1 minute).
+- Files modified: `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`
+- Deviations: none

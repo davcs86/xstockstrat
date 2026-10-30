@@ -1,6 +1,6 @@
 # Implementation Spec: fix-otel-metrics-logs-gap
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/feature.md`
 **Total Steps**: 12
@@ -956,7 +956,7 @@ No coverage threshold applies to bash. The fixture-backed cases are the coverage
 
 ### Step 12 — config: Add the dedicated `otel-signals` CI job and wire it into `ci-gate`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/`
 **Files**:
 - `.github/workflows/ci.yml` — modify
