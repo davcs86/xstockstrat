@@ -491,6 +491,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             # A job above max_concurrent_jobs blocks on the semaphore here, staying QUEUED
             # until it is free, then transitions to RUNNING.
             async with self._backfill_sem:
+                # Relies on single-instance ingest and on CancelBackfill adding to
+                # _canceled_jobs before its CANCELED write.
+                if job_id in self._canceled_jobs:
+                    self._canceled_jobs.discard(job_id)
+                    log.info("backfill job %s canceled while queued; not starting", job_id)
+                    return
                 await backfill_jobs.update_job(
                     self._db,
                     job_id,
@@ -508,6 +514,10 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 else:
                     await self._execute_backfill(job_id, request, symbols, propagation_meta)
         except Exception as e:
+            if job_id in self._canceled_jobs:
+                self._canceled_jobs.discard(job_id)
+                log.info("backfill job %s canceled; not marking failed: %s", job_id, e)
+                return
             log.error("backfill job %s failed: %s", job_id, e)
             await backfill_jobs.update_job(
                 self._db,
@@ -538,6 +548,10 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             metadata=propagation_meta,
         )
         failed = list(resp.failed_symbols)
+        if job_id in self._canceled_jobs:
+            self._canceled_jobs.discard(job_id)
+            log.info("fundamentals backfill job %s canceled mid-run; not finalizing", job_id)
+            return
         status = (
             ingest_pb2.BACKFILL_STATUS_PARTIAL if failed else ingest_pb2.BACKFILL_STATUS_COMPLETED
         )
@@ -724,6 +738,10 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         row = await backfill_jobs.get_job(self._db, job_id)
         if row is None:
             return
+        if row["status"] == ingest_pb2.BACKFILL_STATUS_CANCELED:
+            log.info("skipping resume of canceled job %s", job_id)
+            return
+        meta = (("x-trace-id", str(uuid.uuid4())),)
         # backfill_jobs has no timeframe_enum column, so the stored string is the only source.
         # _ENUM_TO_STR stays because _canonical_timeframe reads it on the write path.
         timeframe = _row_timeframe(row.get("timeframe") or "") or "1d"
@@ -734,8 +752,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         await backfill_jobs.update_job(self._db, job_id, status=ingest_pb2.BACKFILL_STATUS_RUNNING)
         chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
         log.info("resuming backfill job %s with %d incomplete chunk(s)", job_id, len(chunks))
-        state = await self._run_chunks(job_id, req, timeframe, chunks, ())
-        await self._finalize_backfill(job_id, state, len(chunks), ())
+        state = await self._run_chunks(job_id, req, timeframe, chunks, meta)
+        await self._finalize_backfill(job_id, state, len(chunks), meta)
 
     def _effective_max_attempts(self) -> int:
         return self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0

@@ -397,7 +397,7 @@ cd services/xstockstrat-ingest && uv run pytest tests/test_mcp_client.py tests/t
 
 ### Step 7 — service: FR-2/FR-3/FR-4 cancel guards and resumed-job trace id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify

@@ -688,3 +688,23 @@ halt). design.md is not written and status stays `spec-ready`.
 - Verification: Step 5 greps hit (call-site grep in its ruff-wrapped form, per operator); full suite 358 passed,
   coverage 84.29% (≥40%); `ruff check` + `ruff format --check` clean; `DEADLINE_EXCEEDED` present in `tests/`.
 - Deviations: Steps 5+6 merged; Step 5 grep form (both logged in the Deviation Log).
+
+### Step 7 — service: FR-2/FR-3/FR-4 cancel guards and resumed-job trace id (done 2026-10-29)
+
+- `services/xstockstrat-ingest/app/handlers/servicer.py`: FR-2 guard is the first statement inside
+  `async with self._backfill_sem:` in `_run_backfill` (discard + `canceled while queued; not starting` + return, no DB
+  read; 2-line constraint comment: single-instance ingest, `CancelBackfill` adds to `_canceled_jobs` before its
+  CANCELED write); the same guard is the first statement of its blanket `except` (no FAILED write/event/alert for a
+  canceled job); FR-3 guard in `_execute_fundamentals_backfill` between `failed = ...` and the COMPLETED/PARTIAL
+  `update_job`; FR-4 in `_resume_job` skips a persisted `CANCELED` row after the `row is None` return, then mints
+  `meta = (("x-trace-id", str(uuid.uuid4())),)` and passes it to `_run_chunks` / `_finalize_backfill`. No `await`
+  between any check and the write it guards. `resume_incomplete_jobs`, `_finalize_backfill`, `run_one` and the
+  `data_kind` dispatch untouched.
+- TDD: scratch probe (not committed; Step 8 owns the real tests) — queued cancel bars/fundamentals (RUNNING written,
+  `assert 2 not in [2, 4]` / `[2, 3]`), fundamentals cancel mid-run (`[2, 3] == [2]`), cancel-then-error (`assert 4
+  not in [2, 4]`, FAILED written), canceled job resumed (`TypeError` from the unpatched chunk path — resume ran),
+  resumed-job trace id (`{}.get('x-trace-id')` → None) → 6 failed on the pre-implementation tree → green: 6 passed.
+  Scratch file removed.
+- Verification: `_canceled_jobs` / `skipping resume of canceled job` / `x-trace-id", str(uuid.uuid4())` greps hit;
+  full suite 358 passed, coverage 83.65% (≥40%); `ruff check` + `ruff format --check` clean.
+- Deviations: none. The standing "merge pairs" rule did not apply: Step 7's Verification passes on its own.
