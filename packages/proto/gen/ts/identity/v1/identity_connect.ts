@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { AdminGetUserMetadataRequest, AdminUpdateUserMetadataRequest, AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * @generated from service xstockstrat.identity.v1.IdentityService
@@ -29,6 +29,7 @@ export const IdentityService = {
       I: ValidateTokenRequest,
       O: TokenClaims,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.identity.v1.IdentityService.RefreshToken
@@ -68,6 +69,7 @@ export const IdentityService = {
       I: GetOAuthClientRequest,
       O: OAuthClient,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.identity.v1.IdentityService.IssueAuthCode
@@ -127,6 +129,7 @@ export const IdentityService = {
       I: GetUserMetadataRequest,
       O: GetUserMetadataResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.identity.v1.IdentityService.UpdateUserMetadata

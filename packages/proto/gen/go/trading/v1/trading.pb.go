@@ -2573,22 +2573,22 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"HaltSource\x12\x1b\n" +
 	"\x17HALT_SOURCE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eHALT_SOURCE_BRACKET_PROTECTION\x10\x01\x12\x1e\n" +
-	"\x1aHALT_SOURCE_RECONCILIATION\x10\x022\xe3\f\n" +
+	"\x1aHALT_SOURCE_RECONCILIATION\x10\x022\xf8\f\n" +
 	"\x0eTradingService\x12V\n" +
 	"\n" +
 	"PlaceOrder\x12).xstockstrat.trading.v1.PlaceOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12f\n" +
-	"\vCancelOrder\x12*.xstockstrat.trading.v1.CancelOrderRequest\x1a+.xstockstrat.trading.v1.CancelOrderResponse\x12R\n" +
-	"\bGetOrder\x12'.xstockstrat.trading.v1.GetOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12c\n" +
+	"\vCancelOrder\x12*.xstockstrat.trading.v1.CancelOrderRequest\x1a+.xstockstrat.trading.v1.CancelOrderResponse\x12W\n" +
+	"\bGetOrder\x12'.xstockstrat.trading.v1.GetOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\"\x03\x90\x02\x01\x12h\n" +
 	"\n" +
-	"ListOrders\x12).xstockstrat.trading.v1.ListOrdersRequest\x1a*.xstockstrat.trading.v1.ListOrdersResponse\x12h\n" +
+	"ListOrders\x12).xstockstrat.trading.v1.ListOrdersRequest\x1a*.xstockstrat.trading.v1.ListOrdersResponse\"\x03\x90\x02\x01\x12h\n" +
 	"\x12StreamOrderUpdates\x121.xstockstrat.trading.v1.StreamOrderUpdatesRequest\x1a\x1d.xstockstrat.trading.v1.Order0\x01\x12Z\n" +
 	"\fReplaceOrder\x12+.xstockstrat.trading.v1.ReplaceOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12Z\n" +
 	"\fConfirmOrder\x12+.xstockstrat.trading.v1.ConfirmOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12\x84\x01\n" +
-	"\x15RegisterBrokerAccount\x124.xstockstrat.trading.v1.RegisterBrokerAccountRequest\x1a5.xstockstrat.trading.v1.RegisterBrokerAccountResponse\x12{\n" +
-	"\x12ListBrokerAccounts\x121.xstockstrat.trading.v1.ListBrokerAccountsRequest\x1a2.xstockstrat.trading.v1.ListBrokerAccountsResponse\x12\x8a\x01\n" +
+	"\x15RegisterBrokerAccount\x124.xstockstrat.trading.v1.RegisterBrokerAccountRequest\x1a5.xstockstrat.trading.v1.RegisterBrokerAccountResponse\x12\x80\x01\n" +
+	"\x12ListBrokerAccounts\x121.xstockstrat.trading.v1.ListBrokerAccountsRequest\x1a2.xstockstrat.trading.v1.ListBrokerAccountsResponse\"\x03\x90\x02\x01\x12\x8a\x01\n" +
 	"\x17DeregisterBrokerAccount\x126.xstockstrat.trading.v1.DeregisterBrokerAccountRequest\x1a7.xstockstrat.trading.v1.DeregisterBrokerAccountResponse\x12\x9f\x01\n" +
-	"\x1eUpdateBrokerAccountCredentials\x12=.xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest\x1a>.xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse\x12\x84\x01\n" +
-	"\x15GetTradingEnvironment\x124.xstockstrat.trading.v1.GetTradingEnvironmentRequest\x1a5.xstockstrat.trading.v1.GetTradingEnvironmentResponse\x12\x8d\x01\n" +
+	"\x1eUpdateBrokerAccountCredentials\x12=.xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest\x1a>.xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse\x12\x89\x01\n" +
+	"\x15GetTradingEnvironment\x124.xstockstrat.trading.v1.GetTradingEnvironmentRequest\x1a5.xstockstrat.trading.v1.GetTradingEnvironmentResponse\"\x03\x90\x02\x01\x12\x8d\x01\n" +
 	"\x18SnapshotOfflinePositions\x127.xstockstrat.trading.v1.SnapshotOfflinePositionsRequest\x1a8.xstockstrat.trading.v1.SnapshotOfflinePositionsResponse\x12l\n" +
 	"\rResumeAccount\x12,.xstockstrat.trading.v1.ResumeAccountRequest\x1a-.xstockstrat.trading.v1.ResumeAccountResponseB>Z<github.com/xstockstrat/contracts/gen/go/trading/v1;tradingv1b\x06proto3"
 

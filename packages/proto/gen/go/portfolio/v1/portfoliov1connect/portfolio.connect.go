@@ -164,6 +164,7 @@ func NewPortfolioServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+PortfolioServiceGetSnapshotProcedure,
 			connect.WithSchema(portfolioServiceMethods.ByName("GetSnapshot")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		streamPortfolioUpdates: connect.NewClient[v1.StreamPortfolioUpdatesRequest, v1.PortfolioSnapshot](
@@ -188,12 +189,14 @@ func NewPortfolioServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+PortfolioServiceGetWatchlistProcedure,
 			connect.WithSchema(portfolioServiceMethods.ByName("GetWatchlist")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listWatchlists: connect.NewClient[v1.ListWatchlistsRequest, v1.ListWatchlistsResponse](
 			httpClient,
 			baseURL+PortfolioServiceListWatchlistsProcedure,
 			connect.WithSchema(portfolioServiceMethods.ByName("ListWatchlists")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateWatchlist: connect.NewClient[v1.UpdateWatchlistRequest, v1.UpdateWatchlistResponse](
@@ -432,6 +435,7 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 		PortfolioServiceGetSnapshotProcedure,
 		svc.GetSnapshot,
 		connect.WithSchema(portfolioServiceMethods.ByName("GetSnapshot")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	portfolioServiceStreamPortfolioUpdatesHandler := connect.NewServerStreamHandler(
@@ -456,12 +460,14 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 		PortfolioServiceGetWatchlistProcedure,
 		svc.GetWatchlist,
 		connect.WithSchema(portfolioServiceMethods.ByName("GetWatchlist")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	portfolioServiceListWatchlistsHandler := connect.NewUnaryHandler(
 		PortfolioServiceListWatchlistsProcedure,
 		svc.ListWatchlists,
 		connect.WithSchema(portfolioServiceMethods.ByName("ListWatchlists")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	portfolioServiceUpdateWatchlistHandler := connect.NewUnaryHandler(

@@ -2369,20 +2369,20 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"ROLE_ADMIN\x10\x01\x12\x0f\n" +
 	"\vROLE_TRADER\x10\x02\x12\x0f\n" +
-	"\vROLE_VIEWER\x10\x032\xe9\x12\n" +
+	"\vROLE_VIEWER\x10\x032\xf8\x12\n" +
 	"\x0fIdentityService\x12p\n" +
-	"\x10AuthenticateUser\x120.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12d\n" +
-	"\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
+	"\x10AuthenticateUser\x120.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12i\n" +
+	"\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\"\x03\x90\x02\x01\x12h\n" +
 	"\fRefreshToken\x12,.xstockstrat.identity.v1.RefreshTokenRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12h\n" +
 	"\vRevokeToken\x12+.xstockstrat.identity.v1.RevokeTokenRequest\x1a,.xstockstrat.identity.v1.RevokeTokenResponse\x12p\n" +
-	"\x13RegisterOAuthClient\x123.xstockstrat.identity.v1.RegisterOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12f\n" +
-	"\x0eGetOAuthClient\x12..xstockstrat.identity.v1.GetOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12n\n" +
+	"\x13RegisterOAuthClient\x123.xstockstrat.identity.v1.RegisterOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12k\n" +
+	"\x0eGetOAuthClient\x12..xstockstrat.identity.v1.GetOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\"\x03\x90\x02\x01\x12n\n" +
 	"\rIssueAuthCode\x12-.xstockstrat.identity.v1.IssueAuthCodeRequest\x1a..xstockstrat.identity.v1.IssueAuthCodeResponse\x12q\n" +
 	"\x10ExchangeAuthCode\x120.xstockstrat.identity.v1.ExchangeAuthCodeRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12s\n" +
 	"\x11RefreshOAuthToken\x121.xstockstrat.identity.v1.RefreshOAuthTokenRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12}\n" +
 	"\x12ListAuthorizedApps\x122.xstockstrat.identity.v1.ListAuthorizedAppsRequest\x1a3.xstockstrat.identity.v1.ListAuthorizedAppsResponse\x12\x80\x01\n" +
-	"\x13RevokeAuthorizedApp\x123.xstockstrat.identity.v1.RevokeAuthorizedAppRequest\x1a4.xstockstrat.identity.v1.RevokeAuthorizedAppResponse\x12t\n" +
-	"\x0fGetUserMetadata\x12/.xstockstrat.identity.v1.GetUserMetadataRequest\x1a0.xstockstrat.identity.v1.GetUserMetadataResponse\x12}\n" +
+	"\x13RevokeAuthorizedApp\x123.xstockstrat.identity.v1.RevokeAuthorizedAppRequest\x1a4.xstockstrat.identity.v1.RevokeAuthorizedAppResponse\x12y\n" +
+	"\x0fGetUserMetadata\x12/.xstockstrat.identity.v1.GetUserMetadataRequest\x1a0.xstockstrat.identity.v1.GetUserMetadataResponse\"\x03\x90\x02\x01\x12}\n" +
 	"\x12UpdateUserMetadata\x122.xstockstrat.identity.v1.UpdateUserMetadataRequest\x1a3.xstockstrat.identity.v1.UpdateUserMetadataResponse\x12~\n" +
 	"\x14AdminGetUserMetadata\x124.xstockstrat.identity.v1.AdminGetUserMetadataRequest\x1a0.xstockstrat.identity.v1.GetUserMetadataResponse\x12\x87\x01\n" +
 	"\x17AdminUpdateUserMetadata\x127.xstockstrat.identity.v1.AdminUpdateUserMetadataRequest\x1a3.xstockstrat.identity.v1.UpdateUserMetadataResponse\x12e\n" +

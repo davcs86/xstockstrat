@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetEtfFlagsRequest, GetEtfFlagsResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * MarketDataService — sole Alpaca integration point.
@@ -91,6 +91,7 @@ export const MarketDataService = {
       I: GetDataCoverageRequest,
       O: GetDataCoverageResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
@@ -181,6 +182,7 @@ export const MarketDataService = {
       I: GetHistoricalFundamentalsRequest,
       O: GetHistoricalFundamentalsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches

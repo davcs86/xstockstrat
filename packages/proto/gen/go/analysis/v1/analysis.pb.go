@@ -6884,29 +6884,29 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"FactorType\x12\x1b\n" +
 	"\x17FACTOR_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15FACTOR_TYPE_INDICATOR\x10\x01\x12\x16\n" +
-	"\x12FACTOR_TYPE_SIGNAL\x10\x022\xa4\x15\n" +
+	"\x12FACTOR_TYPE_SIGNAL\x10\x022\xd1\x15\n" +
 	"\x0fAnalysisService\x12c\n" +
 	"\vRunBacktest\x12+.xstockstrat.analysis.v1.RunBacktestRequest\x1a'.xstockstrat.analysis.v1.BacktestResult\x12f\n" +
-	"\rScoreStrategy\x12-.xstockstrat.analysis.v1.ScoreStrategyRequest\x1a&.xstockstrat.analysis.v1.StrategyScore\x12q\n" +
-	"\x0eListStrategies\x12..xstockstrat.analysis.v1.ListStrategiesRequest\x1a/.xstockstrat.analysis.v1.ListStrategiesResponse\x12o\n" +
-	"\x11GetStrategyReport\x121.xstockstrat.analysis.v1.GetStrategyReportRequest\x1a'.xstockstrat.analysis.v1.StrategyReport\x12n\n" +
-	"\rListBacktests\x12-.xstockstrat.analysis.v1.ListBacktestsRequest\x1a..xstockstrat.analysis.v1.ListBacktestsResponse\x12c\n" +
-	"\vGetBacktest\x12+.xstockstrat.analysis.v1.GetBacktestRequest\x1a'.xstockstrat.analysis.v1.BacktestResult\x12m\n" +
+	"\rScoreStrategy\x12-.xstockstrat.analysis.v1.ScoreStrategyRequest\x1a&.xstockstrat.analysis.v1.StrategyScore\x12v\n" +
+	"\x0eListStrategies\x12..xstockstrat.analysis.v1.ListStrategiesRequest\x1a/.xstockstrat.analysis.v1.ListStrategiesResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x11GetStrategyReport\x121.xstockstrat.analysis.v1.GetStrategyReportRequest\x1a'.xstockstrat.analysis.v1.StrategyReport\"\x03\x90\x02\x01\x12s\n" +
+	"\rListBacktests\x12-.xstockstrat.analysis.v1.ListBacktestsRequest\x1a..xstockstrat.analysis.v1.ListBacktestsResponse\"\x03\x90\x02\x01\x12h\n" +
+	"\vGetBacktest\x12+.xstockstrat.analysis.v1.GetBacktestRequest\x1a'.xstockstrat.analysis.v1.BacktestResult\"\x03\x90\x02\x01\x12m\n" +
 	"\x0eManageStrategy\x12..xstockstrat.analysis.v1.ManageStrategyRequest\x1a+.xstockstrat.analysis.v1.StrategyDefinition\x12g\n" +
 	"\vGetStrategy\x12+.xstockstrat.analysis.v1.GetStrategyRequest\x1a+.xstockstrat.analysis.v1.StrategyDefinition\x12\x8c\x01\n" +
 	"\x17ListStrategyDefinitions\x127.xstockstrat.analysis.v1.ListStrategyDefinitionsRequest\x1a8.xstockstrat.analysis.v1.ListStrategyDefinitionsResponse\x12t\n" +
-	"\x0fSetStrategyLive\x12/.xstockstrat.analysis.v1.SetStrategyLiveRequest\x1a0.xstockstrat.analysis.v1.SetStrategyLiveResponse\x12n\n" +
-	"\rScreenSymbols\x12-.xstockstrat.analysis.v1.ScreenSymbolsRequest\x1a..xstockstrat.analysis.v1.ScreenSymbolsResponse\x12|\n" +
+	"\x0fSetStrategyLive\x12/.xstockstrat.analysis.v1.SetStrategyLiveRequest\x1a0.xstockstrat.analysis.v1.SetStrategyLiveResponse\x12s\n" +
+	"\rScreenSymbols\x12-.xstockstrat.analysis.v1.ScreenSymbolsRequest\x1a..xstockstrat.analysis.v1.ScreenSymbolsResponse\"\x03\x90\x02\x01\x12|\n" +
 	"\x13RunFundamentalsScan\x123.xstockstrat.analysis.v1.RunFundamentalsScanRequest\x1a0.xstockstrat.analysis.v1.FundamentalsScanSummary\x12z\n" +
 	"\x11ListOpportunities\x121.xstockstrat.analysis.v1.ListOpportunitiesRequest\x1a2.xstockstrat.analysis.v1.ListOpportunitiesResponse\x12z\n" +
 	"\x11EvaluateReadiness\x121.xstockstrat.analysis.v1.EvaluateReadinessRequest\x1a2.xstockstrat.analysis.v1.EvaluateReadinessResponse\x12\x83\x01\n" +
-	"\x14SetOpportunityAction\x124.xstockstrat.analysis.v1.SetOpportunityActionRequest\x1a5.xstockstrat.analysis.v1.SetOpportunityActionResponse\x12x\n" +
-	"\x14GetStrategyAnalytics\x124.xstockstrat.analysis.v1.GetStrategyAnalyticsRequest\x1a*.xstockstrat.analysis.v1.StrategyAnalytics\x12}\n" +
-	"\x12GetIndicatorSeries\x122.xstockstrat.analysis.v1.GetIndicatorSeriesRequest\x1a3.xstockstrat.analysis.v1.GetIndicatorSeriesResponse\x12w\n" +
-	"\x10QueryPnLPatterns\x120.xstockstrat.analysis.v1.QueryPnLPatternsRequest\x1a1.xstockstrat.analysis.v1.QueryPnLPatternsResponse\x12q\n" +
-	"\x0eGetAttribution\x12..xstockstrat.analysis.v1.GetAttributionRequest\x1a/.xstockstrat.analysis.v1.GetAttributionResponse\x12\x86\x01\n" +
-	"\x15GetWatchlistReadiness\x125.xstockstrat.analysis.v1.GetWatchlistReadinessRequest\x1a6.xstockstrat.analysis.v1.GetWatchlistReadinessResponse\x12n\n" +
-	"\rListTemplates\x12-.xstockstrat.analysis.v1.ListTemplatesRequest\x1a..xstockstrat.analysis.v1.ListTemplatesResponse\x12k\n" +
+	"\x14SetOpportunityAction\x124.xstockstrat.analysis.v1.SetOpportunityActionRequest\x1a5.xstockstrat.analysis.v1.SetOpportunityActionResponse\x12}\n" +
+	"\x14GetStrategyAnalytics\x124.xstockstrat.analysis.v1.GetStrategyAnalyticsRequest\x1a*.xstockstrat.analysis.v1.StrategyAnalytics\"\x03\x90\x02\x01\x12}\n" +
+	"\x12GetIndicatorSeries\x122.xstockstrat.analysis.v1.GetIndicatorSeriesRequest\x1a3.xstockstrat.analysis.v1.GetIndicatorSeriesResponse\x12|\n" +
+	"\x10QueryPnLPatterns\x120.xstockstrat.analysis.v1.QueryPnLPatternsRequest\x1a1.xstockstrat.analysis.v1.QueryPnLPatternsResponse\"\x03\x90\x02\x01\x12v\n" +
+	"\x0eGetAttribution\x12..xstockstrat.analysis.v1.GetAttributionRequest\x1a/.xstockstrat.analysis.v1.GetAttributionResponse\"\x03\x90\x02\x01\x12\x86\x01\n" +
+	"\x15GetWatchlistReadiness\x125.xstockstrat.analysis.v1.GetWatchlistReadinessRequest\x1a6.xstockstrat.analysis.v1.GetWatchlistReadinessResponse\x12s\n" +
+	"\rListTemplates\x12-.xstockstrat.analysis.v1.ListTemplatesRequest\x1a..xstockstrat.analysis.v1.ListTemplatesResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\x0eManageTemplate\x12..xstockstrat.analysis.v1.ManageTemplateRequest\x1a).xstockstrat.analysis.v1.StrategyTemplate\x12w\n" +
 	"\x13InstantiateTemplate\x123.xstockstrat.analysis.v1.InstantiateTemplateRequest\x1a+.xstockstrat.analysis.v1.StrategyDefinitionB@Z>github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1b\x06proto3"
 

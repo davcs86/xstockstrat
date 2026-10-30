@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { ComputeIndicatorRequest, ComputeIndicatorResponse, DeleteFormulaRequest, DeleteFormulaResponse, ExecuteFormulaRequest, ExecuteFormulaResponse, FormulaDefinition, FormulaTemplate, GetFormulaRequest, InstantiateTemplateRequest, InstantiateTemplateResponse, ListFormulasRequest, ListFormulasResponse, ListFundamentalMetricsRequest, ListFundamentalMetricsResponse, ListIndicatorsRequest, ListIndicatorsResponse, ListTemplatesRequest, ListTemplatesResponse, ManageTemplateRequest, RegisterFormulaRequest, RegisterFormulaResponse, ResolveTemplateIntentRequest, ResolveTemplateIntentResponse, UpdateFormulaRequest, UpdateFormulaResponse } from "./indicators_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
@@ -25,6 +25,7 @@ export const IndicatorsService = {
       I: ComputeIndicatorRequest,
       O: ComputeIndicatorResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Execute a custom Python formula in a sandboxed environment
@@ -48,6 +49,7 @@ export const IndicatorsService = {
       I: ListIndicatorsRequest,
       O: ListIndicatorsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Register a custom formula definition
@@ -81,6 +83,7 @@ export const IndicatorsService = {
       I: ListFormulasRequest,
       O: ListFormulasResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Update a formula's name, description, source, or is_public flag
@@ -116,6 +119,7 @@ export const IndicatorsService = {
       I: ListFundamentalMetricsRequest,
       O: ListFundamentalMetricsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
@@ -127,6 +131,7 @@ export const IndicatorsService = {
       I: ListTemplatesRequest,
       O: ListTemplatesResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ManageTemplate

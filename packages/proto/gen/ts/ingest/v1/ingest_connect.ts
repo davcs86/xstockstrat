@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { BackfillJob, CancelBackfillRequest, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, InstantiateTemplateRequest, ListBackfillJobsRequest, ListBackfillJobsResponse, ListSignalSourcesRequest, ListSignalSourcesResponse, ListTemplatesRequest, ListTemplatesResponse, ManageSignalSourceRequest, ManageSignalSourceResponse, ManageTemplateRequest, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, SignalSource, SourceTemplate, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * @generated from service xstockstrat.ingest.v1.IngestService
@@ -29,6 +29,7 @@ export const IngestService = {
       I: GetBackfillStatusRequest,
       O: BackfillJob,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.ingest.v1.IngestService.ListBackfillJobs
@@ -38,6 +39,7 @@ export const IngestService = {
       I: ListBackfillJobsRequest,
       O: ListBackfillJobsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
@@ -58,6 +60,7 @@ export const IngestService = {
       I: NormalizeRawDataRequest,
       O: NormalizeRawDataResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
@@ -80,6 +83,7 @@ export const IngestService = {
       I: QuerySignalsRequest,
       O: QuerySignalsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.ingest.v1.IngestService.ListSignalSources
@@ -89,6 +93,7 @@ export const IngestService = {
       I: ListSignalSourcesRequest,
       O: ListSignalSourcesResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageSignalSource
@@ -109,6 +114,7 @@ export const IngestService = {
       I: ListTemplatesRequest,
       O: ListTemplatesResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageTemplate

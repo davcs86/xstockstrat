@@ -113,12 +113,14 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceGetBackfillStatusProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("GetBackfillStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listBackfillJobs: connect.NewClient[v1.ListBackfillJobsRequest, v1.ListBackfillJobsResponse](
 			httpClient,
 			baseURL+IngestServiceListBackfillJobsProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("ListBackfillJobs")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		cancelBackfill: connect.NewClient[v1.CancelBackfillRequest, v1.BackfillJob](
@@ -131,6 +133,7 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceNormalizeRawDataProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("NormalizeRawData")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		ingestSignal: connect.NewClient[v1.IngestSignalRequest, v1.IngestSignalResponse](
@@ -143,12 +146,14 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceQuerySignalsProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("QuerySignals")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listSignalSources: connect.NewClient[v1.ListSignalSourcesRequest, v1.ListSignalSourcesResponse](
 			httpClient,
 			baseURL+IngestServiceListSignalSourcesProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("ListSignalSources")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		manageSignalSource: connect.NewClient[v1.ManageSignalSourceRequest, v1.ManageSignalSourceResponse](
@@ -161,6 +166,7 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceListTemplatesProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("ListTemplates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		manageTemplate: connect.NewClient[v1.ManageTemplateRequest, v1.SourceTemplate](
@@ -292,12 +298,14 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceGetBackfillStatusProcedure,
 		svc.GetBackfillStatus,
 		connect.WithSchema(ingestServiceMethods.ByName("GetBackfillStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceListBackfillJobsHandler := connect.NewUnaryHandler(
 		IngestServiceListBackfillJobsProcedure,
 		svc.ListBackfillJobs,
 		connect.WithSchema(ingestServiceMethods.ByName("ListBackfillJobs")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceCancelBackfillHandler := connect.NewUnaryHandler(
@@ -310,6 +318,7 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceNormalizeRawDataProcedure,
 		svc.NormalizeRawData,
 		connect.WithSchema(ingestServiceMethods.ByName("NormalizeRawData")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceIngestSignalHandler := connect.NewUnaryHandler(
@@ -322,12 +331,14 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceQuerySignalsProcedure,
 		svc.QuerySignals,
 		connect.WithSchema(ingestServiceMethods.ByName("QuerySignals")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceListSignalSourcesHandler := connect.NewUnaryHandler(
 		IngestServiceListSignalSourcesProcedure,
 		svc.ListSignalSources,
 		connect.WithSchema(ingestServiceMethods.ByName("ListSignalSources")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceManageSignalSourceHandler := connect.NewUnaryHandler(
@@ -340,6 +351,7 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceListTemplatesProcedure,
 		svc.ListTemplates,
 		connect.WithSchema(ingestServiceMethods.ByName("ListTemplates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceManageTemplateHandler := connect.NewUnaryHandler(

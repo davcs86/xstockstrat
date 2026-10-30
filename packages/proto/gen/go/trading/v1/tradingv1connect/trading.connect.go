@@ -139,12 +139,14 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TradingServiceGetOrderProcedure,
 			connect.WithSchema(tradingServiceMethods.ByName("GetOrder")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listOrders: connect.NewClient[v1.ListOrdersRequest, v1.ListOrdersResponse](
 			httpClient,
 			baseURL+TradingServiceListOrdersProcedure,
 			connect.WithSchema(tradingServiceMethods.ByName("ListOrders")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		streamOrderUpdates: connect.NewClient[v1.StreamOrderUpdatesRequest, v1.Order](
@@ -175,6 +177,7 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TradingServiceListBrokerAccountsProcedure,
 			connect.WithSchema(tradingServiceMethods.ByName("ListBrokerAccounts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deregisterBrokerAccount: connect.NewClient[v1.DeregisterBrokerAccountRequest, v1.DeregisterBrokerAccountResponse](
@@ -193,6 +196,7 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TradingServiceGetTradingEnvironmentProcedure,
 			connect.WithSchema(tradingServiceMethods.ByName("GetTradingEnvironment")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		snapshotOfflinePositions: connect.NewClient[v1.SnapshotOfflinePositionsRequest, v1.SnapshotOfflinePositionsResponse](
@@ -358,12 +362,14 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		TradingServiceGetOrderProcedure,
 		svc.GetOrder,
 		connect.WithSchema(tradingServiceMethods.ByName("GetOrder")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tradingServiceListOrdersHandler := connect.NewUnaryHandler(
 		TradingServiceListOrdersProcedure,
 		svc.ListOrders,
 		connect.WithSchema(tradingServiceMethods.ByName("ListOrders")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tradingServiceStreamOrderUpdatesHandler := connect.NewServerStreamHandler(
@@ -394,6 +400,7 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		TradingServiceListBrokerAccountsProcedure,
 		svc.ListBrokerAccounts,
 		connect.WithSchema(tradingServiceMethods.ByName("ListBrokerAccounts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tradingServiceDeregisterBrokerAccountHandler := connect.NewUnaryHandler(
@@ -412,6 +419,7 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		TradingServiceGetTradingEnvironmentProcedure,
 		svc.GetTradingEnvironment,
 		connect.WithSchema(tradingServiceMethods.ByName("GetTradingEnvironment")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tradingServiceSnapshotOfflinePositionsHandler := connect.NewUnaryHandler(

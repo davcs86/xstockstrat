@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { CancelOrderRequest, CancelOrderResponse, ConfirmOrderRequest, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, ResumeAccountRequest, ResumeAccountResponse, SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
-import { MethodKind } from "@bufbuild/protobuf";
+import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
  * @generated from service xstockstrat.trading.v1.TradingService
@@ -38,6 +38,7 @@ export const TradingService = {
       I: GetOrderRequest,
       O: Order,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.trading.v1.TradingService.ListOrders
@@ -47,6 +48,7 @@ export const TradingService = {
       I: ListOrdersRequest,
       O: ListOrdersResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.trading.v1.TradingService.StreamOrderUpdates
@@ -102,6 +104,7 @@ export const TradingService = {
       I: ListBrokerAccountsRequest,
       O: ListBrokerAccountsResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * @generated from rpc xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount
@@ -135,6 +138,7 @@ export const TradingService = {
       I: GetTradingEnvironmentRequest,
       O: GetTradingEnvironmentResponse,
       kind: MethodKind.Unary,
+      idempotency: MethodIdempotency.NoSideEffects,
     },
     /**
      * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
