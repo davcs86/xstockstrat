@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
@@ -513,5 +515,177 @@ func TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock: %v", err)
+	}
+}
+
+// Feature 251 — GetPnL reads the canonical trading source, resolves each fill's side and folds in ledger order.
+
+const (
+	buy   = "ORDER_SIDE_BUY"
+	sell  = "ORDER_SIDE_SELL"
+	paper = "TRADING_MODE_PAPER"
+	live  = "TRADING_MODE_LIVE"
+)
+
+func filled(seq int64, order, symbol, acct string, qty, price float64, side string) *ledgerv1.LedgerEvent {
+	return testdata.FilledEvent(seq, order, "u-1", symbol, acct, paper, qty, price, side)
+}
+
+func partial(seq int64, order, symbol, acct string, qty, price float64, side string) *ledgerv1.LedgerEvent {
+	return testdata.PartialEvent(seq, order, "u-1", symbol, acct, paper, qty, price, side)
+}
+
+func runPnL251(t *testing.T, l ledgerv1.LedgerServiceClient, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
+	t.Helper()
+	svc := NewWireTestService(t, l)
+	var resp *portfoliov1.PnLResponse
+	var err error
+	Guard(t, func() { resp, err = svc.GetPnL(CtxWithUser(t, "u-1"), req) })
+	return resp, err
+}
+
+func wantRealized(t *testing.T, l *testdata.Ledger, want float64) {
+	t.Helper()
+	resp, err := runPnL251(t, l, &portfoliov1.GetPnLRequest{})
+	if err != nil {
+		t.Fatalf("GetPnL: %v", err)
+	}
+	if math.Abs(resp.GetRealizedPnl()-want) > 1e-9 {
+		t.Fatalf("RealizedPnl = %v, want %v", resp.GetRealizedPnl(), want)
+	}
+}
+
+func TestGetPnL251_AC1_SidelessFillsResolvedFromSiblings(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		testdata.CreatedEvent(1, "o-b", "AAPL", buy, 10), testdata.CreatedEvent(2, "o-s", "AAPL", sell, 10),
+		filled(3, "o-b", "AAPL", "a1", 10, 100, ""), filled(4, "o-s", "AAPL", "a1", 10, 150, ""),
+	}}, 500)
+}
+
+func TestGetPnL251_AC2_PartialOnlySell(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), partial(2, "o-s", "AAPL", "a1", 4, 150, sell),
+	}}, 200)
+}
+
+func TestGetPnL251_AC4_UnresolvableSideFailsClosed(t *testing.T) {
+	resp, err := runPnL251(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{filled(1, "o-x", "AAPL", "a1", 10, 100, "")}}, &portfoliov1.GetPnLRequest{})
+	if resp != nil || !errors.Is(err, ErrFillUnattributable) {
+		t.Fatalf("want ErrFillUnattributable and no response, got resp=%v err=%v", resp, err)
+	}
+}
+
+func TestGetPnL251_AC5_OtherUsersOrphanIgnored(t *testing.T) {
+	l := &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), filled(2, "o-s", "AAPL", "a1", 10, 150, sell),
+		testdata.FilledEvent(3, "o-u2", "u-2", "AAPL", "a2", paper, 5, 90, ""),
+	}}
+	wantRealized(t, l, 500)
+	for _, r := range l.Requests() {
+		if r.GetStreamKey() == "o-u2" {
+			t.Fatal("looked up another user's order")
+		}
+	}
+}
+
+func TestGetPnL251_AC6_LaterPageErrorFailsClosed(t *testing.T) {
+	evs := make([]*ledgerv1.LedgerEvent, 0, 1001)
+	for i := 1; i <= 1001; i++ {
+		evs = append(evs, filled(int64(i), "o-"+strconv.Itoa(i), "AAPL", "a1", 1, 100, buy))
+	}
+	l := &testdata.Ledger{Events: evs}
+	l.OnQuery = func(context.Context, *ledgerv1.QueryEventsRequest) error {
+		if l.Calls() == 2 {
+			return errors.New("ledger down")
+		}
+		return nil
+	}
+	resp, err := runPnL251(t, l, &portfoliov1.GetPnLRequest{})
+	if resp != nil || !errors.Is(err, ErrLedgerUnavailable) {
+		t.Fatalf("want ErrLedgerUnavailable and no response, got resp=%v err=%v", resp, err)
+	}
+}
+
+type stubLedger struct {
+	ledgerv1.LedgerServiceClient
+	pages []*ledgerv1.QueryEventsResponse
+	n     int
+}
+
+func (s *stubLedger) QueryEvents(context.Context, *ledgerv1.QueryEventsRequest, ...grpc.CallOption) (*ledgerv1.QueryEventsResponse, error) {
+	r := s.pages[min(s.n, len(s.pages)-1)]
+	s.n++
+	return r, nil
+}
+
+func TestGetPnL251_AC8_RepeatedEventAndEmptyPageWithToken(t *testing.T) {
+	ev := filled(1, "o-b", "AAPL", "a1", 10, 100, buy)
+	tok := func(s string) *commonv1.PageResponse { return &commonv1.PageResponse{NextPageToken: s} }
+	for name, pages := range map[string][]*ledgerv1.QueryEventsResponse{
+		"repeated event_id": {{Events: []*ledgerv1.LedgerEvent{ev}, Page: tok("1")}, {Events: []*ledgerv1.LedgerEvent{ev}, Page: tok("")}},
+		"empty page, token": {{Events: nil, Page: tok("1")}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, err := runPnL251(t, &stubLedger{pages: pages}, &portfoliov1.GetPnLRequest{})
+			if resp != nil || !errors.Is(err, ErrLedgerUnavailable) {
+				t.Fatalf("want ErrLedgerUnavailable and no response, got resp=%v err=%v", resp, err)
+			}
+		})
+	}
+}
+
+func TestGetPnL251_AC11_PayloadSideNeedsNoLookup(t *testing.T) {
+	l := &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), filled(2, "o-s", "AAPL", "a1", 10, 150, sell),
+	}}
+	wantRealized(t, l, 500)
+	for _, r := range l.Requests() {
+		if r.GetStreamKey() != "" {
+			t.Fatalf("unexpected side lookup for stream %q", r.GetStreamKey())
+		}
+	}
+}
+
+func TestGetPnL251_AC14_AccountGrainFold(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o1", "AAPL", "acct-1", 10, 100, buy), filled(2, "o2", "AAPL", "acct-2", 10, 120, buy),
+		filled(3, "o3", "AAPL", "acct-1", 10, 150, sell),
+	}}, 500)
+}
+
+func TestGetPnL251_AC15_MixedAccountAttributionFailsClosed(t *testing.T) {
+	resp, err := runPnL251(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o1", "AAPL", "acct-1", 10, 100, buy), filled(2, "o2", "AAPL", "", 10, 150, sell),
+	}}, &portfoliov1.GetPnLRequest{})
+	if resp != nil || !errors.Is(err, ErrFillUnattributable) {
+		t.Fatalf("want ErrFillUnattributable and no response, got resp=%v err=%v", resp, err)
+	}
+}
+
+func TestGetPnL251_AC16_LedgerSequenceOrder(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o1", "AAPL", "a1", 10, 100, buy), partial(2, "o2", "AAPL", "a1", 4, 150, sell), filled(3, "o3", "AAPL", "a1", 10, 200, buy),
+	}}, 200)
+	// F2: partials live in a map, so only the sequence sort makes the fold order deterministic.
+	for i := 0; i < 20; i++ {
+		a, s, b := partial(1, "A", "AAPL", "a1", 10, 100, buy), partial(2, "S", "AAPL", "a1", 4, 150, sell), partial(3, "B", "AAPL", "a1", 10, 200, buy)
+		wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{a, b, s}}, 200)
+	}
+}
+
+func TestGetPnL251_AC17_PartialDroppedWhenOrderFilled(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), partial(2, "o-s", "AAPL", "a1", 4, 150, sell), filled(3, "o-s", "AAPL", "a1", 10, 150, sell),
+	}}, 500)
+}
+
+func TestGetPnL251_AC18_LiveFillsExcludedFromPaper(t *testing.T) {
+	l := &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), filled(2, "o-s", "AAPL", "a1", 10, 150, sell),
+		testdata.FilledEvent(3, "o-l", "u-1", "AAPL", "a1", live, 10, 300, sell),
+	}}
+	resp, err := runPnL251(t, l, &portfoliov1.GetPnLRequest{TradingMode: commonv1.TradingMode_TRADING_MODE_PAPER})
+	if err != nil || math.Abs(resp.GetRealizedPnl()-500) > 1e-9 {
+		t.Fatalf("want 500, got resp=%v err=%v", resp, err)
 	}
 }

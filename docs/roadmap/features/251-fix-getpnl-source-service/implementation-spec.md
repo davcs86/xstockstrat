@@ -329,7 +329,7 @@ New logic is in the `service` package, excluded from COVERPKGS; the Step 4 test 
 
 ### Step 6 — test: portfolio ledger fake, test shim, 257 test migration and RED GetPnL fold tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/testdata/ledger.go` — create
@@ -433,7 +433,7 @@ grep -rn "func FilledEvent\|func PartialEvent\|func CreatedEvent" --include="*.g
 
 ### Step 7 — service: GetPnL canonical source, side resolution, account-grain sequence-ordered fold
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -889,4 +889,5 @@ _Populated by /sdd-execute as implementation proceeds._
 - 2026-10-30 (re-spec): `ErrRealizedUnavailable` dropped; `ErrLedgerUnavailable` (257) is reused. Added only `ErrFillUnattributable`.
 - 2026-10-30 (re-spec): acceptance wording drift to amend in `acceptance.feature` at Step 6 (own commits): AC-9 ("pages of 500", "exactly 2 calls"; the page size is now 1000) and AC-12 ("ordered by recorded_at then event_id"; the order is `sequence`).
 - 2026-10-30 (step 5): Lint gate unrunnable (golangci-lint built with go1.26, module targets 1.27); `gofmt -l` and `go vet ./internal/service/` clean instead. The spec's `context.Background()` wording was already corrected to `context.WithoutCancel(ctx)`; `"side"` grep also hits the pre-existing `:872`.
+- 2026-10-30 (steps 6+7 merged): Operator standing rule (2026-10-29, "Merge pairs + standing rule"): Step 6's RED tests reference `tradingSourceService` and `ErrFillUnattributable`, which exist only after Step 7, so the `internal/service` test package cannot compile between them. Executed as ONE commit with one red (compile failure) to green cycle; both steps marked done. No files outside the two steps' Files. Other deltas: `acceptance.feature` AC-9/AC-12 amended in their own commit first; the parity-test comment cites `trading.go:3676` (spec said `:3749`); `NewWireTestService` registers 3-arg and 4-arg `FROM portfolio.positions` expectations because a trading-mode filter adds an argument; Step 7 logic lives in new helpers `realizedPnL`/`orderSide` called from `GetPnL`; golangci-lint is unrunnable (built with go1.25, module targets 1.27), so `gofmt -l` and `go test ./... -race` were run instead.
 - 2026-10-30 (re-spec): UI BFF backstop and `isForeignFillEvent` dropped (feature 263 forces `ownerOnly: true` in `traderBff.ts`); AC-20 becomes a preserve guard.

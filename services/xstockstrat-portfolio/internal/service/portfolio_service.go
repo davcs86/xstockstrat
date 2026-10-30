@@ -57,6 +57,10 @@ type PortfolioService struct {
 	// correct only while those consumers run single-instance (instance_count: 1).
 	positionsMu sync.Mutex
 
+	// sideCache memoises order id → side resolved from order.created/submitted; zero value is usable.
+	sideCacheMu sync.Mutex
+	sideCache   map[string]string
+
 	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
 	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
 	stops *stopStore
@@ -251,6 +255,7 @@ type orderFillPayload struct {
 	Mode      string  `json:"trading_mode"` // "TRADING_MODE_PAPER" | "TRADING_MODE_LIVE"
 	AccountId string  `json:"account_id"`
 	OrderID   string  `json:"order_id"`
+	Side      string  `json:"side"` // "ORDER_SIDE_BUY" | "ORDER_SIDE_SELL"; absent on pre-feature-251 events
 	// StopPrice is carried by a stop/stop-limit order event; zero on plain market/limit fills.
 	// Learned into the in-memory stop store for the Exposure surface.
 	StopPrice float64 `json:"stop_price"`
@@ -743,43 +748,10 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		unrealized += (p.CurrentPrice - p.AvgEntryPrice) * p.Qty
 	}
 
-	// Collect fills in application order and fold once through the shared pnl package. Batching the fold
-	// is behavior-identical to the former incremental applyFill (no state read between passes).
-	var fills []pnl.Fill
-	filledOrderIDs := make(map[string]bool)
-	latestPartials := make(map[string]orderFillPayload)
-
-	// Pass 1 — order.filled events; accumulate realized P&L and track completed order IDs.
-	filled, err := s.collectFills(ctx, "order.filled", userID, req.TradingMode)
+	realized, err := s.realizedPnL(ctx, userID, req.TradingMode)
 	if err != nil {
 		return nil, err
 	}
-	for _, fill := range filled {
-		filledOrderIDs[fill.OrderID] = true
-		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
-	}
-
-	// Pass 2 — order.partially_filled events; keep one cumulative partial per order ID.
-	partials, err := s.collectFills(ctx, "order.partially_filled", userID, req.TradingMode)
-	if err != nil {
-		return nil, err
-	}
-	for _, fill := range partials {
-		// Keep the largest |cumulative FilledQty| (first seen wins a tie); abs() is load-bearing:
-		// sell partials may be negative, so a plain > would keep the smallest fill.
-		if prev, ok := latestPartials[fill.OrderID]; !ok || math.Abs(fill.FilledQty) > math.Abs(prev.FilledQty) {
-			latestPartials[fill.OrderID] = fill
-		}
-	}
-	// Apply partial fills only for orders that never reached order.filled status.
-	for orderID, fill := range latestPartials {
-		if filledOrderIDs[orderID] {
-			continue
-		}
-		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.FilledQty, Price: fill.FillPrice})
-	}
-
-	realized := pnl.Fold(fills).Realized
 
 	return &portfoliov1.PnLResponse{
 		RealizedPnl:   realized,
@@ -792,20 +764,173 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 // ledgerPnLPageSize matches the ledger's QUERY_EVENTS_MAX_PAGE_SIZE; a larger request is clamped there.
 const ledgerPnLPageSize = 1000
 
-// collectFills walks every ledger page of eventType and returns the caller's mode-matching payloads in page order.
-func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID string, mode commonv1.TradingMode) ([]orderFillPayload, error) {
-	var out []orderFillPayload
+// tradingSourceService is the source_service the trading producer stamps on its order events.
+const tradingSourceService = "xstockstrat-trading"
+
+// ErrFillUnattributable marks a fill GetPnL cannot fold: its side or account cannot be established.
+// The handler maps it to FailedPrecondition; it is permanent because the ledger is immutable.
+var ErrFillUnattributable = errors.New("fill unattributable")
+
+// sequencedFill is a kept fill with the ledger sequence that orders the fold.
+type sequencedFill struct {
+	orderFillPayload
+	seq int64
+}
+
+// realizedPnL folds the caller's fills, ordered by ledger sequence, at (mode, account, symbol) grain.
+func (s *PortfolioService) realizedPnL(ctx context.Context, userID string, mode commonv1.TradingMode) (float64, error) {
+	filled, err := s.collectFills(ctx, "order.filled", userID, mode)
+	if err != nil {
+		return 0, err
+	}
+	partials, err := s.collectFills(ctx, "order.partially_filled", userID, mode)
+	if err != nil {
+		return 0, err
+	}
+	filledOrderIDs := make(map[string]bool, len(filled))
+	kept := make([]sequencedFill, 0, len(filled))
+	for _, f := range filled {
+		filledOrderIDs[f.OrderID] = true
+		f.Qty = math.Abs(f.Qty)
+		kept = append(kept, f)
+	}
+	// One cumulative partial per order, the largest |FilledQty| (first seen wins a tie), only for orders
+	// that never reached order.filled. Order-id first-seen order keeps ties on equal sequences stable.
+	latest := make(map[string]sequencedFill)
+	var partialOrder []string
+	for _, f := range partials {
+		prev, ok := latest[f.OrderID]
+		if !ok {
+			partialOrder = append(partialOrder, f.OrderID)
+		}
+		if !ok || math.Abs(f.FilledQty) > math.Abs(prev.FilledQty) {
+			latest[f.OrderID] = f
+		}
+	}
+	for _, id := range partialOrder {
+		if filledOrderIDs[id] {
+			continue
+		}
+		f := latest[id]
+		f.Qty = math.Abs(f.FilledQty)
+		kept = append(kept, f)
+	}
+
+	// Resolve every side before the account rule so an unattributable fill fails the same way regardless of order.
+	for i := range kept {
+		if kept[i].Side != "" {
+			continue
+		}
+		side, err := s.orderSide(ctx, kept[i].OrderID)
+		if err != nil {
+			return 0, err
+		}
+		kept[i].Side = side
+	}
+	accountsBySymbol := make(map[string]map[bool]bool)
+	for _, f := range kept {
+		g := normalisedMode(f.Mode) + "|" + f.Symbol
+		if accountsBySymbol[g] == nil {
+			accountsBySymbol[g] = map[bool]bool{}
+		}
+		accountsBySymbol[g][f.AccountId != ""] = true
+	}
+	for g, has := range accountsBySymbol {
+		if has[true] && has[false] {
+			return 0, fmt.Errorf("GetPnL: %s mixes fills with and without account_id: %w", g, ErrFillUnattributable)
+		}
+	}
+
+	sort.SliceStable(kept, func(i, j int) bool { return kept[i].seq < kept[j].seq })
+	fills := make([]pnl.Fill, 0, len(kept))
+	for _, f := range kept {
+		signed, ok := signedQty(f.Side, f.Qty)
+		if !ok {
+			return 0, fmt.Errorf("GetPnL: order %s has side %q: %w", f.OrderID, f.Side, ErrFillUnattributable)
+		}
+		key := normalisedMode(f.Mode) + "|" + f.AccountId + "|" + f.Symbol
+		fills = append(fills, pnl.Fill{Symbol: key, Qty: signed, Price: f.FillPrice})
+	}
+	return pnl.Fold(fills).Realized, nil
+}
+
+func normalisedMode(m string) string {
+	if m == "TRADING_MODE_LIVE" {
+		return m
+	}
+	return "TRADING_MODE_PAPER"
+}
+
+// signedQty maps a trading order side to a signed fill quantity; any other side is unattributable.
+func signedQty(side string, qty float64) (float64, bool) {
+	switch side {
+	case "ORDER_SIDE_BUY":
+		return qty, true
+	case "ORDER_SIDE_SELL":
+		return -qty, true
+	}
+	return 0, false
+}
+
+// orderSide resolves an order's side from its order.created, then order.submitted, event (stream_key = order id).
+// Only positive answers are cached.
+func (s *PortfolioService) orderSide(ctx context.Context, orderID string) (string, error) {
+	s.sideCacheMu.Lock()
+	cached, ok := s.sideCache[orderID]
+	s.sideCacheMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	for _, eventType := range []string{"order.created", "order.submitted"} {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			StreamKey:     orderID,
+			EventType:     eventType,
+			SourceService: tradingSourceService,
+			Page:          &commonv1.PageRequest{PageSize: 1},
+		})
+		if err != nil {
+			return "", fmt.Errorf("GetPnL: side lookup (%s): %w: %w", eventType, ErrLedgerUnavailable, err)
+		}
+		for _, ev := range resp.GetEvents() {
+			if side := ev.GetPayload().GetFields()["side"].GetStringValue(); side != "" {
+				s.sideCacheMu.Lock()
+				if s.sideCache == nil {
+					s.sideCache = map[string]string{}
+				}
+				s.sideCache[orderID] = side
+				s.sideCacheMu.Unlock()
+				return side, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("GetPnL: no side for order %s: %w", orderID, ErrFillUnattributable)
+}
+
+// collectFills walks every ledger page of eventType and returns the caller's mode-matching fills in page order.
+// A repeated event_id, or an empty page that still carries a token, fails closed.
+func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID string, mode commonv1.TradingMode) ([]sequencedFill, error) {
+	var out []sequencedFill
+	seen := make(map[string]bool)
 	var token string
 	for {
 		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
 			EventType:     eventType,
-			SourceService: "trading",
+			SourceService: tradingSourceService,
 			Page:          &commonv1.PageRequest{PageSize: ledgerPnLPageSize, PageToken: token},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): %w: %w", eventType, ErrLedgerUnavailable, err)
 		}
+		if len(resp.GetEvents()) == 0 && resp.GetPage().GetNextPageToken() != "" {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): empty page with a next token: %w", eventType, ErrLedgerUnavailable)
+		}
 		for _, ev := range resp.GetEvents() {
+			if id := ev.GetEventId(); id != "" {
+				if seen[id] {
+					return nil, fmt.Errorf("GetPnL: QueryEvents (%s): repeated event %s: %w", eventType, id, ErrLedgerUnavailable)
+				}
+				seen[id] = true
+			}
 			if ev.Payload == nil {
 				continue
 			}
@@ -829,7 +954,7 @@ func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID s
 					continue
 				}
 			}
-			out = append(out, fill)
+			out = append(out, sequencedFill{orderFillPayload: fill, seq: ev.GetSequence()})
 		}
 		next := resp.GetPage().GetNextPageToken()
 		if next == "" {

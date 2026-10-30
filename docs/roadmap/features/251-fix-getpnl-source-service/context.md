@@ -719,3 +719,11 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - GREEN: `TestFillEmit251_AC10_CarriesSideSourceAndFees` passes (both rows); `go test ./... -race` passes for the whole trading module. RED was Step 4's commit (`payload side = ""`).
 - golangci-lint unrunnable (go1.26 build vs go1.27 module); `gofmt -l` and `go vet` clean.
 - Next: Step 6 (portfolio RED tests).
+
+## Session 2026-10-30 — Steps 6+7 executed together (sequential, standing rule)
+
+- Merged per the operator's rule ("Merge pairs + standing rule"): Step 6 tests need `tradingSourceService` / `ErrFillUnattributable` from Step 7, so the package could not compile between them. One commit; RED = compile failure (`undefined: tradingSourceService`, `ErrFillUnattributable`); GREEN = `go test ./... -race` passes for the portfolio module.
+- Added `internal/testdata/ledger.go` (fake ledger, `FilledEvent`/`PartialEvent`/`CreatedEvent`), `export_test.go` shim, parity test, 13 `TestGetPnL251_*` tests; migrated 257's paging fixtures to unsigned qty plus `side`. `acceptance.feature` AC-9/AC-12 amended in a separate commit first.
+- GetPnL: `realizedPnL` folds kept fills sorted by ledger `sequence` at (mode, account, symbol) grain; `orderSide` looks up `order.created` then `order.submitted` (stream_key = order id) with a positive-only cache; `collectFills` fails closed on a repeated event_id or an empty page carrying a token. Producer source literal is at `trading.go:3676`.
+- golangci-lint unrunnable (go1.25 build vs go1.27 module); `gofmt -l` clean.
+- Next: Step 8 (handler/wire RED tests).
