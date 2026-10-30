@@ -110,6 +110,16 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 280 phase 2 — smoke-check-runtime scoped writes (xstockstrat-smoke / xstockstrat-config)
+
+Kill switch for the smoke runner's allowlisted owner-scoped writes (portfolio watchlist RPCs). **Seeded**
+(staging + production, global) by config migration `036_smoke_writes_enabled` (after `035`), stored as `bool`.
+Read on every RPC call through the `WatchConfig` snapshot, so a flip takes effect on the next call without a restart.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `smoke.writes.enabled` | bool | `false` | none | `false` refuses every scoped write before a channel opens (`MutatingRpcRefused`); writes also require a staging env label. Operation: `docs/runbooks/smoke-user.md`. Owner: feature 280. |
+
 ### feature 280 — smoke-check-runtime (xstockstrat-smoke / xstockstrat-config)
 
 The smoke runner's RPC identity. **Seeded** (staging + production, global) by config migration `035_smoke_rpc_user_id`
