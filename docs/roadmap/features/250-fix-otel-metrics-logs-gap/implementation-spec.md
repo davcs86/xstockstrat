@@ -129,7 +129,7 @@ test -f docs/roadmap/features/274-otel-metrics-logs-export/status.md && echo ok 
 
 ### Step 2 — config: Replace every alert rule with `deleteRules`/`deleteMuteTimes`; delete `mute-timings.yaml`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (alerts)
 **Files**:
 - `packages/otel/alerts/alert-rules.yaml` — modify (full rewrite)

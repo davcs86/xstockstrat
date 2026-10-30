@@ -276,3 +276,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (`design-approved`). Verification-only; no source files changed.
 - Files modified: none (spec/feature/status/context bookkeeping only)
 - Deviations: Deviation 1 (branch layout)
+
+### Step 2 — Replace every alert rule with deleteRules/deleteMuteTimes; delete mute-timings.yaml [done]
+- `alert-rules.yaml` rewritten to a 2-line constraint comment + `apiVersion: 1` + `deleteRules` (the three xstk UIDs)
+  + `deleteMuteTimes` (`outside-us-market-hours`), no `groups`. `mute-timings.yaml` removed (orphaned, C-10).
+- Live-boot check skipped (spec marks it optional): the `deleteRules`/`deleteMuteTimes` key names rest on the
+  Context7 Grafana file-provisioning docs evidence recorded at spec time, which is **not a live-boot proof**
+  (fails.md:682-684). The `groups: []` fallback is kept if a real Grafana import rejects them.
+- Files modified: `packages/otel/alerts/alert-rules.yaml`, `packages/otel/alerts/mute-timings.yaml` (deleted)
+- Deviations: none
