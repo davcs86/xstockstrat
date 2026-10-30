@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,6 +90,36 @@ type ibkrCreds struct {
 	AccessToken       string `json:"access_token"`
 	AccessTokenSecret string `json:"access_token_secret"`
 	IBKRAccountID     string `json:"ibkr_account_id"`
+	SignatureKey      string `json:"signature_key"`
+	EncryptionKey     string `json:"encryption_key"`
+	DHPrime           string `json:"dh_prime"`
+}
+
+// validateIBKRCreds rejects an IBKR blob missing any field the LST handshake needs; it names the
+// missing fields only and never echoes a submitted value.
+func validateIBKRCreds(raw string) error {
+	var c ibkrCreds
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return grpcstatus.Errorf(codes.InvalidArgument, "IBKR credentials_json must be a JSON object of string fields")
+	}
+	var missing []string
+	for _, f := range []struct{ name, val string }{
+		{"consumer_key", c.ConsumerKey},
+		{"access_token", c.AccessToken},
+		{"access_token_secret", c.AccessTokenSecret},
+		{"ibkr_account_id", c.IBKRAccountID},
+		{"signature_key", c.SignatureKey},
+		{"encryption_key", c.EncryptionKey},
+		{"dh_prime", c.DHPrime},
+	} {
+		if f.val == "" {
+			missing = append(missing, f.name)
+		}
+	}
+	if len(missing) > 0 {
+		return grpcstatus.Errorf(codes.InvalidArgument, "IBKR credentials_json missing required field(s): %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // TradingService implements business logic for order placement, cancellation,
@@ -680,9 +711,7 @@ func (s *TradingService) submitOrder(
 	}
 	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
-		var netErr net.Error
-		isTimeout := errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
-		if isTimeout {
+		if isUncertainBrokerOutcome(err) {
 			// Uncertain outcome: leave order.Status pre-call and the intent PENDING for reclaim —
 			// don't mark REJECTED, which conflates "definitely rejected" with "unknown".
 			_ = s.repo.UpsertOrder(context.Background(), order)
@@ -1517,9 +1546,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
-		var netErr net.Error
-		isTimeout := errors.Is(replaceErr, context.DeadlineExceeded) || (errors.As(replaceErr, &netErr) && netErr.Timeout())
-		if !isTimeout && ownsIntent {
+		if !isUncertainBrokerOutcome(replaceErr) && ownsIntent {
 			if marshaled, mErr := proto.Marshal(order); mErr == nil {
 				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateRejected, marshaled); fErr != nil {
 					slog.Warn("finalize replace intent (rejected) failed", "intent_id", intentID, "error", fErr)
@@ -1989,6 +2016,10 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		brokerOrders, err := entry.client.ListOrders(listCtx)
 		cancel()
 		if err != nil {
+			if errors.Is(err, broker.ErrInvalidCredentials) {
+				slog.Warn("reconcileTick: broker rejected credentials; skipping account this tick", "account_id", accountID, "call", "ListOrders")
+				continue
+			}
 			slog.Warn("reconcileTick: ListOrders failed", "account_id", accountID, "error", err)
 			systemicCount++
 			continue
@@ -2074,6 +2105,10 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		brokerPositions, posErr := entry.client.GetPositions(posCtx)
 		posCancel()
 		if posErr != nil {
+			if errors.Is(posErr, broker.ErrInvalidCredentials) {
+				slog.Warn("reconcileTick: broker rejected credentials; skipping account this tick", "account_id", accountID, "call", "GetPositions")
+				continue
+			}
 			slog.Warn("reconcileTick: GetPositions failed", "account_id", accountID, "error", posErr)
 			systemicCount++
 			continue
@@ -2445,6 +2480,30 @@ func (s *TradingService) brokerCallTimeout() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// ibkrTiming is the IBKR LST session lifecycle from trading.ibkr.*, read live on every use (≤0 → default).
+func (s *TradingService) ibkrTiming() broker.IBKRTiming {
+	ms := func(key string, def int64) time.Duration {
+		v := s.cfgW.GetInt(key, def)
+		if v <= 0 {
+			v = def
+		}
+		return time.Duration(v) * time.Millisecond
+	}
+	return broker.IBKRTiming{
+		LSTRefreshMargin:  ms("trading.ibkr.lst_refresh_margin_ms", 60000),
+		HandshakeTimeout:  ms("trading.ibkr.handshake_timeout_ms", 10000),
+		ReauthMinInterval: ms("trading.ibkr.reauth_min_interval_ms", 30000),
+	}
+}
+
+// isUncertainBrokerOutcome reports a broker call that may have been processed (timeout or a failed
+// resend), so the order must stay PENDING for reclaim instead of being marked REJECTED.
+func isUncertainBrokerOutcome(err error) bool {
+	var netErr net.Error
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) ||
+		errors.Is(err, broker.ErrOutcomeUncertain)
+}
+
 // haltedPollInterval is how often reconcileTick re-polls an already-halted account's broker
 // state (trading.reconciliation.halted_poll_interval_ms, default 300000 ms / 5 min), read live.
 func (s *TradingService) haltedPollInterval() float64 {
@@ -2495,6 +2554,11 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 
 	if !json.Valid([]byte(req.CredentialsJson)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
+	}
+	if req.BrokerType == commonv1.BrokerType_BROKER_TYPE_IBKR {
+		if err := validateIBKRCreds(req.CredentialsJson); err != nil {
+			return nil, err
+		}
 	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(req.CredentialsJson))
@@ -2547,6 +2611,11 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 	// Offline accounts (feature 157) have no credentials to update.
 	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "offline accounts have no broker credentials to update")
+	}
+	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_IBKR) {
+		if err := validateIBKRCreds(credentialsJSON); err != nil {
+			return nil, err
+		}
 	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(credentialsJSON))
@@ -3094,6 +3163,10 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			AccessTokenSecret: creds.AccessTokenSecret,
 			IBKRAccountID:     creds.IBKRAccountID,
 			IsPaper:           rec.IsPaper,
+			SignatureKey:      creds.SignatureKey,
+			EncryptionKey:     creds.EncryptionKey,
+			DHPrime:           creds.DHPrime,
+			Timing:            s.ibkrTiming,
 		}), nil
 	default:
 		var creds alpacaCreds

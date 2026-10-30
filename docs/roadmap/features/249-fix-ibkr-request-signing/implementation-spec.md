@@ -657,7 +657,7 @@ grep -rn "type IBKRAuthHandler\|func IBKRAuthHandler" --include="*.go" internal 
 
 ### Step 8 — service: trading plumbing — credential shape, Timing keys, IBKR-only validation, uncertain predicate, reconcile skip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -730,7 +730,7 @@ grep -n "TRADING_MODE\|environmentIsPaper" internal/service/trading.go | head   
 
 ### Step 9 — test: service-level credential status, validation, classification, reconcile skip (AC-3..AC-10 service half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_ibkr_auth_test.go` — create
@@ -1303,3 +1303,41 @@ _Populated by /sdd-execute as implementation proceeds._
   stays unchanged.
 - Verification fallback (as in Steps 2+3 and 4+5): golangci-lint v2.14.0 was rebuilt with go1.27 and ran with
   `GOWORK=off`. It reports 0 issues.
+
+### Steps 8 + 9 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 8 and 9 land in one commit (standing operator rule).** Operator, session question tool, 2026-10-29, in
+  their own words: "Merge pairs + standing rule". The rule reads: "if this step's Verification fails ONLY because
+  the consumers or tests of its new code live in the immediately following step … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done". Step 8's RED test
+  is Step 9's (Step Dependencies: "Step 9 [test] covers Step 8"). Step 9's tests were written first. RED came in two
+  parts. First, a compile failure (`svc.ibkrTiming` and `isUncertainBrokerOutcome` undefined). Second, a behavioral
+  failure under a temporary, uncommitted shim that declared only those two symbols with pre-Step-8 behavior (a fixed
+  default `IBKRTiming` and the old timeout-only predicate):
+  - AC-7: `code = OK, want InvalidArgument`, and the update row panics on the unfaked `UpdateCredentials`.
+  - AC-8 / AC-6 row 5: an `ErrOutcomeUncertain`-wrapped error reads `false`.
+  - AC-9: `reconcileTick = (systemic 1, total 2), want (0, 2)` on both rows.
+  - AC-10: `LST requests inside reauth_min_interval = 2, want 1`, because the 120s key was not applied.
+  - The AC-4 `lst_timeout` row took 5s, the hardcoded validate deadline, not the configured 50ms.
+  GREEN: all Step 9 tests pass with `-race`; the AC-10 test is stable over `-count=5`.
+- **The AC-3 strict test signs over the vector base URL, not `BaseURL: srv.URL`.** Step 9 instruction 2 names both a
+  strict `IBKRAuthHandler` and `BaseURL: srv.URL`, but the strict handler only accepts signatures computed over the
+  vector URL. The service test uses the same approach as Step 7 (Steps 6 + 7 log entry): the client keeps the vector
+  base URL and nonce, and `http.DefaultTransport` is swapped for a host-rewriting transport for the test's duration.
+  No `internal/service` test runs in parallel. The same swap serves as the AC-5 no-HTTP guard.
+- **AC-5 is green before Step 8.** Step 4 already fails a legacy 4-field blob locally, with no HTTP call. So the
+  Step 9 AC-5 test is a characterization at the service level, and its RED was the compile failure only.
+- **The AC-4 `lst_timeout` and AC-10 rows read `trading.ibkr.*` through `config.NewSnapshotWatcher`.**
+  `handshake_timeout_ms=50` bounds the timeout row, and `reauth_min_interval_ms=120000` (above the 30s default)
+  proves the reauth key is applied. Both rows exercise `ibkrTiming`, which is passed as `IBKRConfig.Timing`.
+- **`validateIBKRCreds` on a JSON value that is not an object** (for example `[]`) returns `InvalidArgument` with
+  "IBKR credentials_json must be a JSON object of string fields". The spec pins only the missing-field message.
+  Missing fields are listed in the `ibkrCreds` declaration order.
+- **Verification notes.**
+  - Step 9's `-run 'IBKR|Uncertain|InvalidCredentialsNotSystemic|LegacyIBKR'` regex does not match
+    `TestValidateAndRecordCredential_NegativeCacheThenHeal`, so that test was also run by name. It passed.
+  - golangci-lint v2.14.0 was rebuilt with go1.27, as in the earlier steps, and ran with `GOWORK=off`. It reports
+    0 issues.
+- **The husky pre-commit hook did not run.** `core.hooksPath` is `.husky/_`, which does not exist, and the main
+  worktree has no `node_modules` to symlink. The hook's lint-staged glob covers only `services/xstockstrat-ui`, and
+  its duplication scan outside the UI is report-only, so neither check gates this Go-only change.

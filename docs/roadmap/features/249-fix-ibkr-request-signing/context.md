@@ -400,3 +400,40 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     unpinned. Only a non-2xx resend is uncertain.
   - Steps 8/9 consume `ErrOutcomeUncertain` (`trading.go:684`/`:1521`).
 
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 8 + 9
+
+### Steps 8 + 9 — trading plumbing + service-level tests [done]
+- One commit under the standing operator rule ("Merge pairs + standing rule"). Step 8's RED test is Step 9's.
+  Recorded in the spec's Deviation Log.
+- `trading.go` changes:
+  - `ibkrCreds` gains `signature_key`, `encryption_key` and `dh_prime`. `instantiateBrokerLocked` passes them, plus
+    `Timing: s.ibkrTiming`, into `broker.IBKRConfig`. Instantiation stays tolerant.
+  - `ibkrTiming` sits next to `brokerCallTimeout`. It reads `trading.ibkr.lst_refresh_margin_ms` (60000),
+    `handshake_timeout_ms` (10000) and `reauth_min_interval_ms` (30000) live, with `≤0 → default`.
+  - `validateIBKRCreds` returns `InvalidArgument` naming the missing fields and never echoes a value.
+    `RegisterBrokerAccount` calls it only for IBKR (after `json.Valid`), and `UpdateBrokerAccountCredentials` calls it
+    only for IBKR records (after the offline guard).
+  - `isUncertainBrokerOutcome` (timeout, `net.Error` timeout, or `broker.ErrOutcomeUncertain`) replaces both
+    inline classifiers, in `SubmitOrder` and `ReplaceOrder`.
+  - `reconcileTick` skips an account whose `ListOrders`/`GetPositions` returns `ErrInvalidCredentials`. It logs a
+    WARN with `call` and does not count the account as systemic.
+- `credentialStatusFromError`, `validateAndRecordCredential` and the paper/live gate are unchanged.
+- Tests:
+  - `trading_ibkr_auth_test.go` (new) covers AC-3 (strict), AC-4 (9 rows), AC-5, AC-7 (register + update × 3
+    fields), `TestIsUncertainBrokerOutcome` (AC-8 / AC-6 row 5), AC-9 (2 rows) and AC-10.
+  - `fakeAccountRepo` gains `statusWrites` through `UpdateCredentialStatus`.
+- TDD: RED was a compile failure, then behavioral failures (AC-7, AC-8, AC-9, AC-10, and a 5s `lst_timeout`) under
+  a temporary, uncommitted shim. GREEN: all pass with `-race`.
+- Verification:
+  - `go build` and `go vet` are clean, and golangci-lint v2.14.0 (rebuilt with go1.27, `GOWORK=off`) reports
+    0 issues.
+  - `go test ./... -race` passes, with COVERPKGS total 78.7%.
+  - The greps show three `trading.ibkr.*` `GetInt` reads, `isUncertainBrokerOutcome` defined once with 2 call sites,
+    `environmentIsPaper` untouched, and one `statusWrites` declaration.
+- Files modified: `services/xstockstrat-trading/internal/service/{trading.go,trading_bracket_test.go,
+  trading_ibkr_auth_test.go}`.
+- Open items:
+  - The husky hook is not installed in this environment: `.husky/_` is absent and there is no root `node_modules`.
+    The hook's only gating checks are scoped to the UI.
+  - Step 10 must register the three `trading.ibkr.*` keys that Step 8 now reads.
