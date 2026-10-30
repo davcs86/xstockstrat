@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 import { formatLastRun } from '@/lib/formatLastRun';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
 import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
@@ -205,6 +206,8 @@ export default function PositionsPage() {
         cell: ({ row }) =>
           unpriced(row.original) ? (
             dash
+          ) : row.original.offlineStateUnavailable ? (
+            <span className="text-muted-foreground">{PNL_UNAVAILABLE_LABEL}</span>
           ) : (
             <span className={pnlClass(row.original.dayPnl)}>
               {fmtSignedUsd(row.original.dayPnl)}
@@ -219,6 +222,8 @@ export default function PositionsPage() {
         cell: ({ row }) =>
           unpriced(row.original) ? (
             dash
+          ) : row.original.offlineStateUnavailable ? (
+            <span className="text-muted-foreground">{PNL_UNAVAILABLE_LABEL}</span>
           ) : (
             <span className={pnlClass(row.original.dayPnl)}>{fmtPct(row.original.dayPnlPct)}</span>
           ),
@@ -657,7 +662,9 @@ export default function PositionsPage() {
                   <dd className={`text-right tabular-nums ${pnlClass(selected.dayPnl)}`}>
                     {unpriced(selected)
                       ? dash
-                      : `${fmtSignedUsd(selected.dayPnl)} (${fmtPct(selected.dayPnlPct)})`}
+                      : selected.offlineStateUnavailable
+                        ? PNL_UNAVAILABLE_LABEL
+                        : `${fmtSignedUsd(selected.dayPnl)} (${fmtPct(selected.dayPnlPct)})`}
                   </dd>
                   <dt className="text-muted-foreground">Total P/L</dt>
                   <dd className={`text-right tabular-nums ${pnlClass(selected.unrealizedPnl)}`}>

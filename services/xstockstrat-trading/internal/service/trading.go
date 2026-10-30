@@ -887,6 +887,8 @@ func (s *TradingService) confirmLock(accountID string) *sync.Mutex {
 	return lk
 }
 
+func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
+
 // deriveOfflineStatus maps a confirmed fill quantity to an order status server-side (never
 // client-supplied): 0 → NEW, 0 < filled < qty → PARTIALLY_FILLED, filled >= qty → FILLED.
 func deriveOfflineStatus(filledQty, qty float64) tradingv1.OrderStatus {
@@ -920,10 +922,13 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if req.OrderId == "" {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "order_id is required")
 	}
-	if req.FilledQty < 0 {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be >= 0")
+	if !isFinite(req.FilledQty) || req.FilledQty < 0 {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be a finite number >= 0")
 	}
-	if req.Fees != nil && (*req.Fees < 0 || math.IsNaN(*req.Fees) || math.IsInf(*req.Fees, 0)) {
+	if req.FilledQty > 0 && (!isFinite(req.FilledAvgPrice) || req.FilledAvgPrice < 0) {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_avg_price must be a finite number >= 0 when filling")
+	}
+	if req.Fees != nil && (*req.Fees < 0 || !isFinite(*req.Fees)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "fees must be >= 0")
 	}
 
@@ -976,10 +981,11 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	s.orders[order.OrderId] = order
 	s.mu.Unlock()
 
-	// Recompute net positions from ALL confirmed offline orders (seeded by the baseline) — idempotent.
-	if err := s.recomputeAndEmitOfflinePositions(ctx, order.AccountId, order.UserId); err != nil {
-		slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted",
-			"account_id", order.AccountId, "error", err)
+	recomputeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), offlineRecomputeTimeout)
+	defer cancel()
+	if err := s.recomputeAndEmitOfflinePositions(recomputeCtx, order.AccountId, order.UserId); err != nil {
+		slog.Warn("ConfirmOrder: positions.synced not published", "account_id", order.AccountId, "error", err)
+		return nil, grpcstatus.Errorf(codes.Unavailable, "positions not published; re-confirm to retry")
 	}
 	resp := proto.Clone(order).(*tradingv1.Order)
 	hideUnconfirmedFill(resp)
@@ -987,7 +993,8 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 }
 
 // recomputeAndEmitOfflinePositions recomputes an offline account's net positions and emits
-// account.positions.synced. Fail-closed (a query error skips the emit). Caller must hold confirmLock(accountID).
+// account.positions.synced. Fail-closed: a query or ledger-append error is returned and nothing is emitted.
+// Caller must hold confirmLock(accountID).
 func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
 	// --- Load baseline (fail-closed: error → skip emit) ---
 	hdr, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
@@ -1093,7 +1100,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	}
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
 	// portfolio from double-folding. Run on the inbound request ctx for header propagation.
-	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
+	if err := s.appendLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
 		"account_id":          accountID,
 		"user_id":             userID,
 		"trading_mode":        tradingMode,
@@ -1103,7 +1110,9 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 		"realized_carried":    hdr.RealizedCarried,
 		"fees_carried":        hdr.FeesCarried,
 		"recent_fills":        recentFills,
-	})
+	}); err != nil {
+		return fmt.Errorf("emit account.positions.synced: %w", err)
+	}
 	return nil
 }
 
@@ -1182,11 +1191,11 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: "empty symbol",
 			})
-		case math.IsInf(pos.Qty, 0) || math.IsNaN(pos.Qty):
+		case !isFinite(pos.Qty):
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite qty for %s", pos.Symbol),
 			})
-		case math.IsInf(pos.AvgCostPerShare, 0) || math.IsNaN(pos.AvgCostPerShare):
+		case !isFinite(pos.AvgCostPerShare):
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite avg_cost_per_share for %s", pos.Symbol),
 			})
@@ -1250,9 +1259,12 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 		"positions":          baselinePayload,
 	})
 
-	if err := s.recomputeAndEmitOfflinePositions(ctx, req.AccountId, req.UserId); err != nil {
+	recomputeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), offlineRecomputeTimeout)
+	defer cancel()
+	if err := s.recomputeAndEmitOfflinePositions(recomputeCtx, req.AccountId, req.UserId); err != nil {
 		slog.Warn("SnapshotOfflinePositions: recompute failed after baseline persist",
 			"account_id", req.AccountId, "error", err)
+		warnings = append(warnings, "positions not published; re-snapshot to retry")
 	}
 
 	return &tradingv1.SnapshotOfflinePositionsResponse{
@@ -3728,6 +3740,45 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 // mid-RPC surfaces as a logged error instead of silently wedging the calling goroutine.
 const ledgerEmitTimeout = 10 * time.Second
 
+const (
+	appendMaxAttempts           = 2
+	appendRetryBackoff          = 100 * time.Millisecond
+	offlineRecomputeQueryBudget = 5 * time.Second
+	// Must exceed appendMaxAttempts*ledgerEmitTimeout + appendRetryBackoff + offlineRecomputeQueryBudget,
+	// or a slow ledger is cut off before its retry (asserted by TestOfflineRecomputeTimeout_CoversRetryBudget).
+	offlineRecomputeTimeout = 30 * time.Second
+)
+
+// appendLedgerEvent appends an event, retrying only codes.Unavailable under one idempotency key, and
+// returns the last error. It never takes confirmLock: callers may hold it and the lock is non-reentrant.
+func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error {
+	p, err := structpb.NewStruct(payload)
+	if err != nil {
+		return fmt.Errorf("build %s payload: %w", eventType, err)
+	}
+	req := &ledgerv1.AppendEventRequest{
+		EventType:      eventType,
+		SourceService:  "xstockstrat-trading",
+		StreamKey:      streamKey,
+		UserId:         userID,
+		Payload:        p,
+		IdempotencyKey: uuid.NewString(),
+	}
+	for attempt := 1; ; attempt++ {
+		emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
+		_, err = s.ledger.AppendEvent(emitCtx, req)
+		cancel()
+		if err == nil || grpcstatus.Code(err) != codes.Unavailable || attempt >= appendMaxAttempts {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(appendRetryBackoff):
+		}
+	}
+}
+
 // persistOrderBestEffort writes order state after a broker side effect; log-only, never surfaced.
 func (s *TradingService) persistOrderBestEffort(ctx context.Context, order *tradingv1.Order, path string) {
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ledgerEmitTimeout)
@@ -3738,20 +3789,10 @@ func (s *TradingService) persistOrderBestEffort(ctx context.Context, order *trad
 	}
 }
 
-// emitLedgerEvent appends an event to the ledger. Pass the order/account owner as userID for
+// emitLedgerEvent is the fail-soft wrapper of appendLedgerEvent. Pass the order/account owner as userID for
 // user-owned events (background pollers have no inbound x-user-id); pass "" for platform-scoped events.
 func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {
-	p, _ := structpb.NewStruct(payload)
-	emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
-	defer cancel()
-	_, err := s.ledger.AppendEvent(emitCtx, &ledgerv1.AppendEventRequest{
-		EventType:     eventType,
-		SourceService: "xstockstrat-trading",
-		StreamKey:     streamKey,
-		UserId:        userID,
-		Payload:       p,
-	})
-	if err != nil {
+	if err := s.appendLedgerEvent(ctx, eventType, streamKey, userID, payload); err != nil {
 		slog.Warn("ledger emit failed", "event_type", eventType, "error", err)
 	}
 }

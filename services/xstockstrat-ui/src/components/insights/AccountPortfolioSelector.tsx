@@ -12,6 +12,7 @@ import {
 import { useAccountPortfolios } from '@/hooks/useAccountPortfolios';
 import { Stat } from '@/components/shared/Stat';
 import { brokerLabel } from '@/lib/brokers';
+import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 
 interface AccountPortfolioSelectorProps {
   accountId: string;
@@ -32,10 +33,11 @@ export function AccountPortfolioSelector({
   const aggregated = portfolios.reduce(
     (acc, p) => ({
       equity: acc.equity + Number(p.equity ?? 0),
-      dayPnl: acc.dayPnl + Number(p.dayPnl ?? 0),
+      dayPnl: acc.dayPnl + (p.offlineStateUnavailable ? 0 : Number(p.dayPnl ?? 0)),
+      incomplete: acc.incomplete || p.offlineStateUnavailable,
       positions: [...acc.positions, ...(p.positions ?? [])],
     }),
-    { equity: 0, dayPnl: 0, positions: [] as unknown[] },
+    { equity: 0, dayPnl: 0, incomplete: false, positions: [] as unknown[] },
   );
 
   const selectedPortfolio = accountId ? portfolios.find((p) => p.accountId === accountId) : null;
@@ -97,12 +99,26 @@ export function AccountPortfolioSelector({
             />
             <Stat
               label="Day P&L"
-              value={`${Number(selectedPortfolio.dayPnl) >= 0 ? '+' : ''}$${Number(selectedPortfolio.dayPnl).toFixed(2)}`}
-              valueClass={Number(selectedPortfolio.dayPnl) >= 0 ? 'text-buy' : 'text-destructive'}
+              value={
+                selectedPortfolio.offlineStateUnavailable
+                  ? PNL_UNAVAILABLE_LABEL
+                  : `${Number(selectedPortfolio.dayPnl) >= 0 ? '+' : ''}$${Number(selectedPortfolio.dayPnl).toFixed(2)}`
+              }
+              valueClass={
+                selectedPortfolio.offlineStateUnavailable
+                  ? 'text-muted-foreground'
+                  : Number(selectedPortfolio.dayPnl) >= 0
+                    ? 'text-buy'
+                    : 'text-destructive'
+              }
             />
             <Stat
               label="Total P&L"
-              value={`$${Number(selectedPortfolio.totalPnl ?? 0).toFixed(2)}`}
+              value={
+                selectedPortfolio.offlineStateUnavailable
+                  ? PNL_UNAVAILABLE_LABEL
+                  : `$${Number(selectedPortfolio.totalPnl ?? 0).toFixed(2)}`
+              }
             />
             {selectedPortfolio.positions?.length > 0 && (
               <p className="text-xs text-muted-foreground pt-1">
@@ -125,8 +141,18 @@ export function AccountPortfolioSelector({
             />
             <Stat
               label="Day P&L"
-              value={`${aggregated.dayPnl >= 0 ? '+' : ''}$${aggregated.dayPnl.toFixed(2)}`}
-              valueClass={aggregated.dayPnl >= 0 ? 'text-buy' : 'text-destructive'}
+              value={
+                aggregated.incomplete
+                  ? PNL_UNAVAILABLE_LABEL
+                  : `${aggregated.dayPnl >= 0 ? '+' : ''}$${aggregated.dayPnl.toFixed(2)}`
+              }
+              valueClass={
+                aggregated.incomplete
+                  ? 'text-muted-foreground'
+                  : aggregated.dayPnl >= 0
+                    ? 'text-buy'
+                    : 'text-destructive'
+              }
             />
             {aggregated.positions.length > 0 && (
               <p className="text-xs text-muted-foreground pt-1">
