@@ -858,7 +858,7 @@ git diff .do/ | grep -c MCP_AGENT_SECRET                                 # → 0
 
 ### Step 15 — test: Platform guard vitest — AC-5 YAML parse, copy hash, static wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` (platform check housed in the UI suite)
 **Files**:
 - `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` — create

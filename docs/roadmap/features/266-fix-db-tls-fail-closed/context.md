@@ -723,3 +723,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `git diff --unified=0 .do/app.yaml .do/app.dev.yaml | grep '^[+-][^+-]'` shows only the 3 added
   lines per file; `git diff .do/ | grep -c MCP_AGENT_SECRET` → 0. An extra `yaml.safe_load` sanity parse of both
   files succeeded.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 15
+
+- Tooling setup (step 15): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps installed with
+  `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter xstockstrat` (worktree-local; no lockfile change).
+- New `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` (13 tests): AC-5 `missingCa` over `services`/
+  `workers`/`jobs` of both parsed `.do` specs plus the `structuredClone` negative row; one-SHA-256 guard over the five
+  `dbTls.ts` copies; static wiring scan of the five services' non-test `src/` trees (UI: the whole `src/`), asserting
+  the exact `resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT)` call and only `dbConn.ssl`
+  captures in each entry file, ledger's single Pool match + `makeListenerClient(dbConn.connectionString, dbConn.ssl,
+  configWatcher)`, and the two-entry ledger allow-list (`ssl: opts.ssl`, `ssl: ClientConfig['ssl']`); synthetic
+  negative on `rejectUnauthorized: !!caCert`.
+- Scan scope: the resolver files `dbTls.ts` are excluded from both the inline-TLS and the `ssl:` allow-list scans
+  (they are the sanctioned implementation, pinned by the hash guard); the re-spec's "exactly two other hits" count
+  only holds with that exclusion.
+- TDD: Step 14 had already landed, so per Step 15's TDD note its hunk was reverted for the RED run with a
+  checkout of `.do/app.yaml` and `.do/app.dev.yaml` from `HEAD~1` (no stash), then restored from `HEAD`.
+  RED: 2 failed / 11 passed — both AC-5 cases `expected [ 'xstockstrat-ui' ] to deeply equal []`; hash, wiring and
+  negative rows green. GREEN: 13/13 after restoring Step 14.
+- Verification: `vitest run src/lib/dbTlsPlatformGuard.test.ts` 13/13; `test:coverage` exit 0, 346/346 in 61 files,
+  all files 75.91% lines (>=40); `pnpm run lint` exit 0 (pre-existing warnings only, none in the new file); `tsc
+  --noEmit` shows only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` TS2339 errors.
