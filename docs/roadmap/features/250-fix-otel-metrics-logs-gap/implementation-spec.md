@@ -367,7 +367,7 @@ Plus the dev-import gate outcome recorded in `context.md`.
 
 ### Step 5 — docs: Rewrite `packages/otel/dashboards/README.md` to the Tempo dashboard (keep the attribute bullet)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (docs)
 **Files**:
 - `packages/otel/dashboards/README.md` — modify (full rewrite)

@@ -317,3 +317,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `packages/otel/dashboards/service-health.json`, and deleted `signal-pipeline-throughput.json`,
   `infrastructure.json`, `trading-service.json`
 - Deviations: none
+
+### Step 5 — Rewrite packages/otel/dashboards/README.md [done]
+- README describes the single Tempo dashboard (`DS_TEMPO` input, three TraceQL panels), carries the sanctioned
+  literal on its own line, keeps the attribute bullet (`service.name`, `deployment.environment`, `platform`) in
+  Tempo resource-attribute wording with no `trading_mode` (`@AC-3 @feature-171` preserved), and fences the deleted
+  dashboard UIDs/files for manual deletion. Notes that panel (b) still shows non-gRPC long-lived spans.
+- Files modified: `packages/otel/dashboards/README.md`
+- Deviations: none
