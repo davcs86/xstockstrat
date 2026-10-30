@@ -941,3 +941,15 @@ Feature: fix-db-tls-fail-closed (ui)
   `db-tls: verifying server cert against DATABASE_CA_CERT`, there is no `db-tls:` boot exit, and
   `/config-ui/api/audit` returns 200. Revert the squash commit on any failure.
 - The canary check is recorded here for Step 17 Verification (`grep -n "canary"`).
+
+## Session 2026-10-30 — Post-merge dev canary (PASSED)
+
+- PR #1365 was squash-merged as `bcde6648`. Deploy dev run 41000008472 succeeded, and DO deployment `28eb6fb6` is ACTIVE.
+- The RUN logs of ledger, config, identity and notify each show `db-tls: verifying server cert against DATABASE_CA_CERT`,
+  then `Database connected` and gRPC listening (04:02:31–04:02:36Z). No `db-tls:` boot exit, and no restarts.
+- The operator loaded Config UI → Audit on dev as an admin. It "loads perfectly", which means the audit route's fail-closed
+  pool verified the CA and returned 200. The UI logs show no `db-tls` or audit-route error.
+- Unrelated noise: a single `[Error: aborted] ECONNRESET` uncaughtException in the UI (a client-aborted HTTP request,
+  not a `pg` error, and not in the route's own error-log format). A config-stream drop at 04:05:04Z on the
+  backends was the old config instance draining at the end of the rollout, and each watcher logged a reconnect attempt.
+- No revert needed. Prod: repeat the same boot-log check on the prod deploy at `/promote`.

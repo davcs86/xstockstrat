@@ -67,4 +67,4 @@ audit route already connects unverified in both deployed environments.
 
 ## Next Action
 
-Merge PR #1365; then the post-merge dev check: each Node backend logs `db-tls: verifying server cert against DATABASE_CA_CERT`, no `db-tls:` boot exit, `/config-ui/api/audit` returns 200 (revert on failure)
+Merged (#1365, `bcde6648`); post-merge dev canary passed 2026-10-30. Next: `/promote` (prod rollout needs the same boot-log check on the prod app).
