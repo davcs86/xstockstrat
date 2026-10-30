@@ -106,7 +106,9 @@ run file of that env; failed attempts stay in their files.
 
 - SAN allowlist: `xstockstrat-agent`, `xstockstrat-smoke-trigger`.
 - Strict mode (homelab): exit 1 on a red result or recorder failure; the watchdog exits 70.
-- Record-only mode (DO): always exit 0, logging `SMOKE_RECORD_FAILED` / `SMOKE_RUN_LOST`; the watchdog writes an `ERROR` run file and exits 0.
+- Record-only mode (DO): always exit 0, logging `SMOKE_RECORD_FAILED` / `SMOKE_RUN_LOST` / `SMOKE_TRIGGER_FAILED`; the watchdog writes an `ERROR` run file and exits 0.
+- A lost run (404 or dropped connection mid-run) logs `SMOKE_RUN_LOST`, commits nothing and leaves its checks pending; strict mode exits 1 on it.
+- `SMOKE_TRIGGER_FAILED` covers every other trigger-side failure (missing `MTLS_*`, bad PEM, service unreachable, non-202 start); strict exits 1. The push credential is `SMOKE_RESULTS_PAT`, passed to git via environment only.
 
 ### Constants
 

@@ -2,6 +2,8 @@
 
 import argparse
 import logging
+import os
+import shutil
 import sys
 import tempfile
 
@@ -24,58 +26,64 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
-def _execute(args, environ) -> int:
+def _fail(marker, e, pat) -> int:
+    log.error("%s: %s", marker, record.scrub(e, pat))
+    return 1
+
+
+def _execute(args, environ, out) -> int:
+    pat = environ.get("SMOKE_RESULTS_PAT")
     cli = trigger_client.Client(
         args.endpoint,
         cert_pem=environ["MTLS_CERT"],
         key_pem=environ["MTLS_KEY"],
         ca_pem=environ["MTLS_CA_CERT"],
     )
-    out = args.out or (tempfile.mkdtemp(prefix="smoke-") if args.git_remote else ".")
     ids = args.checks.split(",") if args.checks else None
     prepared = False
     try:
         if ids is None:
             if args.git_remote:
-                record.checkout_results(out, args.git_remote)
+                record.checkout_results(out, args.git_remote, pat)
                 prepared = True
             ids = pending.pending(cli.checks(), pending.read_recorded(out), args.env)
             if not ids:
                 log.info("nothing pending for %s", args.env)
                 return 0
     except trigger_client.TriggerError as e:
-        log.error("SMOKE_TRIGGER_FAILED: %s", e)
-        return 1
+        return _fail("SMOKE_TRIGGER_FAILED", e, pat)
     except Exception as e:
-        log.error("SMOKE_RECORD_FAILED: %s", e)
-        return 1
+        return _fail("SMOKE_RECORD_FAILED", e, pat)
     try:
         body = cli.wait_for_run(cli.start_run(ids))
     except trigger_client.RunLost as e:
-        log.error("SMOKE_RUN_LOST: %s", e)
-        return 1
+        return _fail("SMOKE_RUN_LOST", e, pat)
     except Exception as e:
-        log.error("SMOKE_TRIGGER_FAILED: %s", e)
-        return 1
+        return _fail("SMOKE_TRIGGER_FAILED", e, pat)
     try:
         if args.git_remote and not prepared:
-            record.checkout_results(out, args.git_remote)
+            record.checkout_results(out, args.git_remote, pat)
         path = record.write_run_file(out, body)
         if args.git_remote:
-            record.push_with_retry(out, [path])
+            record.push_with_retry(out, [path], pat=pat)
     except Exception as e:
-        log.error("SMOKE_RECORD_FAILED: %s", e)
-        return 1
+        return _fail("SMOKE_RECORD_FAILED", e, pat)
     return 0 if all(r["outcome"] == "PASS" for r in body["records"]) else 1
 
 
 def main(argv=None, environ=None) -> int:
     args = _parser().parse_args(argv)
-    if environ is None:
-        import os
-
-        environ = os.environ
-    rc = _execute(args, environ)
+    environ = os.environ if environ is None else environ
+    tmp = None
+    try:
+        if not args.out and args.git_remote:
+            tmp = tempfile.mkdtemp(prefix="smoke-")
+        rc = _execute(args, environ, args.out or tmp or ".")
+    except Exception as e:
+        rc = _fail("SMOKE_TRIGGER_FAILED", e, environ.get("SMOKE_RESULTS_PAT"))
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
     return rc if args.mode == "strict" else 0
 
 

@@ -172,3 +172,86 @@ async def test_409_retries_after_retry_after(pki, serve_tls):
     cli = trigger_client.Client(base.removeprefix("https://"), **_pems(pki), sleep=sleeps.append)
     assert await asyncio.to_thread(cli.start_run, ["c1"]) == "r1"
     assert sleeps == [7]
+
+
+PAT = "ghp_SECRETPATVALUE"
+URL_PASS = "URLPASSWORD"
+
+
+def test_run_lock_hold_matches_runner():
+    from app import runner
+
+    assert trigger_client.RUN_LOCK_HOLD_S == runner.RUN_LOCK_HOLD_S
+
+
+@pytest.mark.parametrize("mode,expected", [("strict", 1), ("record-only", 0)])
+@pytest.mark.parametrize("bad_env", ["missing", "bad_pem"])
+def test_setup_failures_follow_mode(pki, caplog, mode, expected, bad_env):
+    environ = {} if bad_env == "missing" else {**env_for(pki), "MTLS_CERT": "not a pem"}
+    argv = ["--mode", mode, "--endpoint", "127.0.0.1:1", "--env", "do-dev", "--checks", "c1"]
+    assert main(argv, environ) == expected
+    assert "SMOKE_TRIGGER_FAILED" in caplog.text
+
+
+@pytest.mark.parametrize("mode", ["strict", "record-only"])
+async def test_pat_never_leaks_and_workdir_removed(
+    pki, serve_tls, tmp_path, caplog, monkeypatch, mode
+):
+    import os
+
+    from app.trigger import __main__ as cli_main
+
+    made = []
+    real_mkdtemp = cli_main.tempfile.mkdtemp
+    monkeypatch.setattr(
+        cli_main.tempfile, "mkdtemp", lambda **kw: made.append(real_mkdtemp(**kw)) or made[-1]
+    )
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    monkeypatch.setenv("no_proxy", "127.0.0.1")
+    base = await serve_tls(real_app())
+    remote = f"https://ci:{URL_PASS}@127.0.0.1:1/x.git"
+    environ = {**env_for(pki), "SMOKE_RESULTS_PAT": PAT}
+    argv = ["--mode", mode, "--endpoint", base.removeprefix("https://"), "--env", "do-dev"]
+    argv += ["--checks", "c.count", "--git-remote", remote]
+    await asyncio.to_thread(main, argv, environ)
+    assert "SMOKE_RECORD_FAILED" in caplog.text
+    for secret in (PAT, URL_PASS):
+        assert secret not in caplog.text
+    assert made and not any(os.path.exists(p) for p in made)
+
+
+def test_pat_in_env_not_argv_or_config(tmp_path, monkeypatch):
+    from app.trigger import record
+
+    seen = []
+    real_run = record.subprocess.run
+
+    def spy(cmd, **kw):
+        seen.append((cmd, kw.get("env")))
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(record.subprocess, "run", spy)
+    remote = tmp_path / "r.git"
+    git(tmp_path, "init", "-q", "--bare", str(remote))
+    work = tmp_path / "w"
+    record.checkout_results(work, str(remote), pat=PAT)
+    path = record.write_run_file(work, __import__("tests._trigger_helpers", fromlist=["x"]).body())
+    record.push_with_retry(work, [path], pat=PAT)
+    assert not any(PAT in " ".join(cmd) for cmd, _ in seen)
+    assert PAT not in (work / ".git" / "config").read_text()
+    assert any(
+        env and env.get("GIT_CONFIG_VALUE_0", "").startswith("Authorization: Basic ")
+        for _, env in seen
+    )
+
+
+def test_push_error_text_is_scrubbed(tmp_path):
+    from app.trigger import record
+
+    repo = tmp_path / "r"
+    git(tmp_path, "init", "-q", str(repo))
+    git(repo, "remote", "add", "origin", f"https://ci:{URL_PASS}@127.0.0.1:1/x.git")
+    path = record.write_run_file(repo, __import__("tests._trigger_helpers", fromlist=["x"]).body())
+    with pytest.raises(record.PushError) as e:
+        record.push_with_retry(repo, [path], attempts=1, pat=PAT)
+    assert URL_PASS not in str(e.value) and PAT not in str(e.value)

@@ -1,7 +1,10 @@
 """Run-file writer and the orphan-branch pusher (git CLI; never forces)."""
 
+import base64
 import json
+import os
 import pathlib
+import re
 import subprocess
 from datetime import UTC, datetime
 
@@ -32,34 +35,55 @@ def write_run_file(out_dir, body: dict) -> pathlib.Path:
     return path
 
 
-def _git(repo, *args, check=True):
+def scrub(text, pat=None) -> str:
+    text = str(text)
+    if pat:
+        text = text.replace(pat, "***")
+    return re.sub(r"://[^/@\s]+@", "://***@", text)
+
+
+def _auth_env(pat):
+    if not pat:
+        return None
+    token = base64.b64encode(f"x-access-token:{pat}".encode()).decode()
+    return {
+        **os.environ,
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "http.extraheader",
+        "GIT_CONFIG_VALUE_0": f"Authorization: Basic {token}",
+    }
+
+
+def _git(repo, *args, check=True, pat=None):
     cmd = [
         "git", "-C", str(repo), "-c", "user.name=xstockstrat-smoke-recorder",
         "-c", "user.email=smoke-recorder@xstockstrat.invalid", *args,
     ]  # fmt: skip
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=_auth_env(pat))
     if check and p.returncode:
-        raise PushError(f"git {args[0]} failed: {p.stderr.strip()}")
+        raise PushError(scrub(f"git {args[0]} failed: {p.stderr.strip()}", pat))
     return p
 
 
-def _fetch(repo):
-    _git(repo, "fetch", "-q", "origin", f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}")
+def _fetch(repo, pat):
+    _git(
+        repo, "fetch", "-q", "origin", f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}", pat=pat
+    )
 
 
-def checkout_results(repo, remote: str) -> None:
+def checkout_results(repo, remote: str, pat=None) -> None:
     """Make repo a working copy of the results branch (unborn if the remote has none)."""
     repo = pathlib.Path(repo)
     repo.mkdir(parents=True, exist_ok=True)
     if not (repo / ".git").exists():
         _git(repo, "init", "-q")
         _git(repo, "remote", "add", "origin", remote)
-    ls = _git(repo, "ls-remote", "--exit-code", "--heads", "origin", BRANCH, check=False)
+    ls = _git(repo, "ls-remote", "--exit-code", "--heads", "origin", BRANCH, check=False, pat=pat)
     if ls.returncode == 0:
-        _fetch(repo)
+        _fetch(repo, pat)
         _git(repo, "checkout", "-q", "-B", BRANCH, f"origin/{BRANCH}")
     elif ls.returncode != 2:
-        raise PushError(f"git ls-remote failed: {ls.stderr.strip()}")
+        raise PushError(scrub(f"git ls-remote failed: {ls.stderr.strip()}", pat))
 
 
 def _ensure_branch(repo):
@@ -75,14 +99,14 @@ def _ensure_branch(repo):
         _git(repo, "read-tree", "--empty")
 
 
-def push_with_retry(repo_dir, paths, *, attempts=5) -> None:
+def push_with_retry(repo_dir, paths, *, attempts=5, pat=None) -> None:
     _ensure_branch(repo_dir)
     _git(repo_dir, "add", "--", *map(str, paths))
     _git(repo_dir, "commit", "-q", "-m", "smoke: record run")
     for _ in range(attempts):
-        if _git(repo_dir, "push", "-q", "origin", BRANCH, check=False).returncode == 0:
+        if _git(repo_dir, "push", "-q", "origin", BRANCH, check=False, pat=pat).returncode == 0:
             return
-        _fetch(repo_dir)
+        _fetch(repo_dir, pat)
         if _git(repo_dir, "rebase", "-q", f"origin/{BRANCH}", check=False).returncode:
             _git(repo_dir, "rebase", "--abort", check=False)
             raise PushError("rebase onto the remote results branch failed")
