@@ -58,4 +58,4 @@ with no user id. The producer is live per fill and the consumer is not wired yet
 
 ## Next Action
 
-All 10 steps done. Merge integration PR #1345. After the dev deploy, run `list_config_keys(namespace="portfolio")` on staging and record that `portfolio.snapshot.interval_minutes` is absent. The production check goes on the next `/promote` checklist.
+Done: merged (#1345) and staging-verified. The production check is waived by operator decision (2026-10-30: prod is not running).

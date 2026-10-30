@@ -76,4 +76,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-execute fix-python-config-stored-zero sequential` — Step 18 (docs: rollout audit and consumer-surface verification, C-14)
+Done: staging rollout smoke passed (2026-10-29). The prod audit is waived by operator decision (2026-10-30: prod is not running).
