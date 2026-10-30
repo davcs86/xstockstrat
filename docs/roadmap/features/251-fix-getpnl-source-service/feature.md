@@ -24,6 +24,7 @@
 | 2026-10-30 | `in-progress` (step 8 done) | sdd-execute sequential | Step 8: portfolio wire tests and error-mapping tables added, RED until Step 9 |
 | 2026-10-30 | `in-progress` (step 9 done) | sdd-execute sequential | Step 9: ctx-first classifyGetPnLError and explicit toGRPCError codes, Step 8 GREEN |
 | 2026-10-30 | `in-progress` (step 10 done) | sdd-execute sequential | Step 10: UI lineage RED (vitest + Playwright), lineage fixtures and mock backend, until Step 11 |
+| 2026-10-30 | `in-progress` (step 11 done) | sdd-execute sequential | Step 11: positionLineage.ts per-order lineage via ListOrders, hook and truncation notice, Step 10 GREEN |
 
 ---
 

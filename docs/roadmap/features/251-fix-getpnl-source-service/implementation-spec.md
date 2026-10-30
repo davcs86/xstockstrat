@@ -694,7 +694,7 @@ The coverage threshold (vitest `src/lib/**` lines ≥ 40%) is enforced at paired
 
 ### Step 11 — service: user-pinned lineage via ListOrders and truncation notice
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/positionLineage.ts` — create

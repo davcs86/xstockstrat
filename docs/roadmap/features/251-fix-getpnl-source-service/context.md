@@ -750,3 +750,10 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - Env: root `node_modules` was a dangling tracked symlink; replaced locally by `pnpm install --frozen-lockfile --filter xstockstrat-ui...` (not committed, the symlink entry is left untouched).
 - Next: Step 11 (`positionLineage.ts`, hook, truncation notice) turns these GREEN.
 
+
+## Session 2026-10-30 - Step 11 executed (GREEN)
+
+- Added `src/lib/positionLineage.ts` (`LINEAGE_MAX_ORDERS = 50`, `fetchPositionLineage`: ListOrders pinned by symbol/account/`toPbTradingMode`, page size 51, per-order QueryEvents with `xstockstrat-trading` at concurrency 3). `usePositionLineage` now returns `{events, truncated}` with `staleTime: 60_000`; `page.tsx` reads `.events`, renders a `CardNotice` when truncated.
+- GREEN: `pnpm run test:unit` 351 passed (Step 10 vitest GREEN); `test:coverage` lines 76%; lint clean (warnings pre-existing); tsc clean for touched files (`e2e/insights/backfills.spec.ts` errors pre-exist); `grep "sourceService: 'trading'" src e2e/trader` empty. Playwright `position-lineage` + `positions` + `api-smoke` GREEN once the dev server is warm; AC-3 (the first test of a cold run) times out at 10s on the first compile, as noted for Step 10, and passes on re-run.
+- Env: root `node_modules` dangling symlink replaced locally by `pnpm install --frozen-lockfile --filter xstockstrat-ui...` (not committed).
+- Next: Step 12 (docs teardown reconciliation).
