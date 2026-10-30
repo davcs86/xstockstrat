@@ -676,3 +676,30 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
   spec ever lists orders at page size 51 it would see lineage orders. Accepted; revisit at Step 10 RED if a spec
   regresses.
 - Files written: implementation-spec.md, context.md.
+
+## Session 2026-10-30 (sdd-execute sequential (sdd-batch-execute))
+
+- Up-front confirmation: the operator approved the plan by standing authorization (operator chat 2026-10-28/30,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints,
+  C-16 promotion auto-confirmed unless it changes an existing @AC rule, merge-train authorized, 255/275 deferred;
+  operator-only DB/prod steps: open PR, hold merge; the 2026-10-30 widening allows test fakes/fixtures/test-registry
+  entries outside Files when no assertion or production behavior changes). Checkpoints: `report`. Rollout
+  verification is staging-only (operator 2026-10-30: "Prod is not running. Staging is enough").
+- Dependency 257 merged to main-dev as `079870fa` (#1371). `origin/main-dev` merged into the branch (one conflict in
+  `docs/roadmap/ledger/fails.md`, both sides kept; ledger-guard clean).
+- Re-spec of all step bodies against current code (see implementation-spec.md "Re-spec 2026-10-30"):
+  - Steps 1-3 `superseded`: the ledger `sequence` keyset `page_token` shipped via 257/263
+    (`ledgerServiceImpl.ts:166-240`); AC-12/AC-13 are held by `db/queryPagination.db.test.ts` and
+    `ledgerServiceImpl.test.ts`; CI `ledger-db-test` exists.
+  - Step 4/5: anchors moved (`trading.go:1832`, `:1849`, `emitLedgerEvent` `:3743`); `side` is still absent from both
+    fill payloads.
+  - Step 6/7: 257 added `collectFills` (1000/page, `ErrLedgerUnavailable`); `SourceService: "trading"` remains at
+    `portfolio_service.go:802`. `ErrRealizedUnavailable` is dropped in favour of `ErrLedgerUnavailable`. 257's
+    `portfolio_pnl_paging_test.go` fixtures (side-less, signed sells) must migrate in Step 6 or they turn RED at Step 7.
+  - Step 8/9: `classifyGetPnLError(err)` at `portfolio_handler.go:426`, call site `:127`; `toGRPCError` `:433`.
+  - Step 10/11: feature 263 forces `ownerOnly` in `traderBff.ts`, so the BFF backstop and `isForeignFillEvent` are
+    dropped; `toPbTradingMode` (`src/lib/tradingMode.ts`) is reused.
+  - Step 12/13: the ledger `page_token` doc edit is dropped (`CLAUDE.md:49`); the 252 note is dropped (252 `launched`).
+- Acceptance wording drift (own feature file) to fix at Step 6: AC-9 (page size 1000, not 500 / 2 calls) and AC-12
+  (ordered by `sequence`). Not edited in this re-spec session.
+- Files written: implementation-spec.md, feature.md, context.md, status.md.
