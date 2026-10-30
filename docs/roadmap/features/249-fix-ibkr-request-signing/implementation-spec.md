@@ -852,7 +852,7 @@ grep -n "trading.ibkr\." services/xstockstrat-trading/CLAUDE.md docs/patterns/co
 
 ### Step 11 — proto: comment-only IBKR `credentials_json` shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -1341,3 +1341,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **The husky pre-commit hook did not run.** `core.hooksPath` is `.husky/_`, which does not exist, and the main
   worktree has no `node_modules` to symlink. The hook's lint-staged glob covers only `services/xstockstrat-ui`, and
   its duplication scan outside the UI is report-only, so neither check gates this Go-only change.
+
+### Step 11 — 2026-10-29 (sdd-execute sequential)
+
+- **The `buf breaking` baseline is a `git archive` tarball, not `<repo-root>/.git#branch=…`.** This session runs in
+  an isolated git worktree whose sandbox refuses a `.git` input outside the worktree, and the worktree has no local
+  `feature/fix-ibkr-request-signing` branch. The baseline was
+  `git archive -o <scratch>/base.tar origin/feature/fix-ibkr-request-signing packages/proto`, then
+  `buf breaking --against '<scratch>/base.tar#subdir=packages/proto'`. This compares against the same tree, with the
+  same PLAT-10 `subdir=`. Exit code 0; `buf lint` (1.72.0) is clean.
+- The IBKR comment wraps over three `//` lines and keeps the existing alignment. The field number, type and name of
+  `credentials_json = 4` are unchanged (C-09).

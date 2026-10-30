@@ -454,3 +454,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `config-governance.md` and `trading.go` (`ibkrTiming`, Step 8).
 - Files modified: `services/xstockstrat-trading/CLAUDE.md`, `docs/patterns/config-governance.md`.
 - Open item: when features 264/248 merge with this branch, keep the log newest-first (rebase only, append-only).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 11
+
+### Step 11 — proto: comment-only IBKR `credentials_json` shape [done]
+- `packages/proto/trading/v1/trading.proto`: the `RegisterBrokerAccountRequest` IBKR comment line now lists all
+  7 keys (`consumer_key`, `access_token`, `access_token_secret`, `ibkr_account_id`, `signature_key` and
+  `encryption_key` as PEM RSA private keys, `dh_prime` as PEM DH parameters). It wraps over three `//` lines. No field
+  number, type or name changed (C-09). The `UpdateBrokerAccountCredentialsRequest` "same shape" comment needs no edit.
+- TDD: N/A (proto comment). Verification: `buf lint` is clean, and `buf breaking` returns 0 against a `git archive`
+  tarball of `origin/feature/fix-ibkr-request-signing:packages/proto` (`#subdir=packages/proto`). The worktree
+  sandbox refuses the spec's `<repo-root>/.git#branch=…` form, so this fallback is in the Deviation Log.
+- Files modified: `packages/proto/trading/v1/trading.proto`.
+- Open item: the CI `proto-freshness` gate fails until Step 12 regenerates the 5 `gen/` stubs that carry this comment.
+
