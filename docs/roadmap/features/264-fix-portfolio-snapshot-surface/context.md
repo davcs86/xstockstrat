@@ -803,3 +803,9 @@ Feature: xstockstrat-config - portfolio.snapshot.interval_minutes is a retired k
 - Owed after merge:
   - (1) After the dev deploy, run staging `list_config_keys(namespace="portfolio")` and confirm `portfolio.snapshot.interval_minutes` is absent; record the output here.
   - (2) At the next `/promote`, run the same check on production.
+
+## Session 2026-10-29 — post-merge staging ListKeys smoke (pass)
+
+- Merged as `9bd923f3` (#1345). It was deployed to dev by DO deployment `db6ee608`, which went ACTIVE at 23:38:03Z.
+- The staging agent call `list_config_keys(namespace="portfolio")` returns only `portfolio.watchlist.max_per_user` and `portfolio.watchlist.max_symbols_per_list`. `portfolio.snapshot.interval_minutes` is absent, so migration 034 applied. Item (1) of the owed list is closed.
+- Still owed: item (2), the same check on production at the next `/promote`.
