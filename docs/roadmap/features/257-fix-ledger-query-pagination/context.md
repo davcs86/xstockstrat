@@ -492,3 +492,29 @@ Still open (surface at the /sdd-execute checkpoint):
   hit; `new Client(` 1 hit (`streamExportRows`). `test:db` without `LEDGER_DB_TEST_URL` fails loudly by the tier's
   convention (no DB started locally).
 - Formatting: new/changed lines prettier-formatted only; pre-existing drift left untouched.
+
+### Steps 6+7 — portfolio `GetPnL` fail-closed paging, repeated-token guard, largest partial + tests (2026-10-29)
+
+- **Standing rule applied (operator, own words: "Merge pairs + standing rule", widened "Widen the rule
+  (Recommended)").** Step 6's Verification is "see Step 7", so Steps 6 and 7 land as one commit with one red→green
+  cycle on Step 7's tests. No file outside the two steps' Files; no existing assertion changed. Deviation Log row added.
+- `portfolio_service.go`: `ErrLedgerUnavailable` next to `ErrQuotesUnavailable`; `const ledgerPnLPageSize = 1000`
+  (matches ledger `QUERY_EVENTS_MAX_PAGE_SIZE`, `ledgerServiceImpl.ts:15`); private `collectFills(ctx, eventType,
+  userID, mode)` walks every page with the unchanged payload/user/mode filters, wraps a page error as
+  `%w: %w` (`ErrLedgerUnavailable`, cause) and fails on `next == token`. Pass 1 and pass 2 sit on it (Warn+break
+  removed); pass 2 keeps the largest `|FilledQty|`, first seen wins a tie. Unrealized side and the partial-apply/fold
+  block unchanged. `SourceService: "trading"` kept (251 owns it).
+- `portfolio_handler.go`: `classifyGetPnLError` also maps `ErrLedgerUnavailable` → `CodeUnavailable`; `toGRPCError`
+  unchanged.
+- Tests: new `portfolio_pnl_paging_test.go` (`pagingLedger` fake, 200/page, index token, `failPage`, `ignoreToken`,
+  100-call safety cap; inline `pnlEvent`): AC-3 (250.00, ≥3 calls, PageSize 1000, user `u-1` on every call, first
+  token empty), AC-3 repeated token, AC-6 ascending/descending (501.00), AC-4 pass-1/pass-2 page failure.
+  `computeRealizedPnL` mirror moved to the largest-`|FilledQty|` rule + `TestRealizedPnL_PartialOrderIndependent`;
+  `TestClassifyGetPnLError` extended (ledger error → CodeUnavailable / codes.Unavailable).
+- TDD: RED (sentinel declared, logic not changed): AC-3 "PageSize = 500, want 1000"; repeated token returned an
+  inflated success (`realized_pnl:10000`, err nil); AC-6 descending "RealizedPnl = 1, want 501.00"; AC-4 both passes
+  success with nil error; mirror "got 100, want 300"; classifier "got internal, want CodeUnavailable". GREEN: all
+  `GetPnL|RealizedPnL|ClassifyGetPnL` tests pass (incl. unchanged AC5/AC6/AC28); full `go test ./... -race` ok,
+  CI-scoped coverage total 68.6% (>= 40%); `go build` ok; `golangci-lint` 0 issues; Step 6 greps clean; one `func pnlEvent`.
+- Tooling: the provisioned `~/go/bin/golangci-lint` (v2.14.0) is built with go1.26 and refuses the go1.27 module;
+  the same pinned v2.14.0 was rebuilt with go1.27.0 into the session scratchpad for the lint run. No repo change.

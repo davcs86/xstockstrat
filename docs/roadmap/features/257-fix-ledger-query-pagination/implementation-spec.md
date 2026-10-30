@@ -440,7 +440,7 @@ grep -n "once" src/__tests__/fixtures/INVENTORY.md                     # >= 1 hi
 
 ### Step 6 — service: portfolio `GetPnL` fails closed, rejects a repeated token, pages at 1000, keeps the largest partial
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -523,7 +523,7 @@ GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mod
 
 ### Step 7 — test: portfolio `GetPnL` exactly-once across pages, fail-closed, repeated token, largest partial, classifier
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_pnl_paging_test.go` — create
@@ -768,3 +768,4 @@ grep -n "then subscribes" services/xstockstrat-ledger/CLAUDE.md   # no hit
 | 2026-10-29 | 3 | **Feature-263 exact-SQL expectations updated** in `ledgerServiceImpl.test.ts` (`ownerOnly binds…`, `flag absent…`, `ownerOnly with eventType…`): `ORDER BY recorded_at ASC` → `ORDER BY sequence ASC`. Params and placeholder order unchanged. Step 3 instruction 3 ("leave the existing tests as they are") did not foresee these literal-SQL assertions. | Operator decision 2026-10-30 (session question tool): "A: Fix in same commit (Recommended)" |
 | 2026-10-29 | 4 + 5 | **Steps 4 and 5 executed as ONE commit** with one red→green cycle on Step 5's tests. Step 4's `MAX(sequence)` bound query breaks 248's `makePool`/deferred-pool `streamEvents` fakes, and its `waitForDrain` needs Step 5's `once`/`removeListener`/`emit` call double, so Step 4's verification cannot pass alone. Standing rule (operator, 2026-10-29, own words): "Merge pairs + standing rule"; widened (operator, 2026-10-30, own words): "Widen the rule (Recommended)". | Operator decision 2026-10-30 (session question tool): "A: Include the fake fix (Recommended)" |
 | 2026-10-29 | 4 + 5 | **Files expansion (test fake only):** `services/xstockstrat-ledger/src/__tests__/streamResolveWired.test.ts` — `makeCountingPool` answers the new `MAX(sequence)` bound query (`wire(replay, max = '0')`; the buffered-resolve test passes `'50'`). No assertion changed; no production code outside Step 4's Files changed. | Operator decision 2026-10-30 (session question tool): "A: Include the fake fix (Recommended)" |
+| 2026-10-29 | 6 + 7 | **Steps 6 and 7 executed as ONE commit** with one red→green cycle on Step 7's tests. Step 6's **Verification** is "see Step 7" — its RED/GREEN tests live entirely in Step 7's files, so Step 6 cannot be verified alone. Standing rule (operator, 2026-10-29, own words): "Merge pairs + standing rule"; widened (operator, 2026-10-30, own words): "Widen the rule (Recommended)". No file outside Steps 6–7's **Files** is touched, no existing assertion changed. The `pagingLedger` fake also carries a 100-call safety cap (`pagingCallCap`, answers `ResourceExhausted`) so the pre-fix repeated-token loop ends inside the test run instead of leaking a spinning goroutine; it does not change any asserted behaviour. | Standing rule (operator 2026-10-29 / 2026-10-30) |

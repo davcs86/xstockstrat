@@ -40,6 +40,14 @@ func TestClassifyGetPnLError(t *testing.T) {
 	if got := classifyGetPnLError(fmt.Errorf("GetPnL: no usable quote for MSFT: %w", service.ErrQuotesUnavailable)); got != connect.CodeUnavailable {
 		t.Fatalf("wrapped ErrQuotesUnavailable: got %v, want CodeUnavailable", got)
 	}
+	// feature 257 @AC-4: a failed or looping ledger page is Unavailable too.
+	ledgerErr := fmt.Errorf("GetPnL: QueryEvents (order.filled): %w: %w", service.ErrLedgerUnavailable, status.Error(codes.DeadlineExceeded, "d"))
+	if got := classifyGetPnLError(ledgerErr); got != connect.CodeUnavailable {
+		t.Fatalf("wrapped ErrLedgerUnavailable: got %v, want CodeUnavailable", got)
+	}
+	if code := status.Code(toGRPCError(connect.NewError(classifyGetPnLError(ledgerErr), ledgerErr))); code != codes.Unavailable {
+		t.Fatalf("toGRPCError(ledger unavailable) = %v, want codes.Unavailable", code)
+	}
 	if got := classifyGetPnLError(errors.New("db connection reset")); got != connect.CodeInternal {
 		t.Fatalf("generic error: got %v, want CodeInternal", got)
 	}
