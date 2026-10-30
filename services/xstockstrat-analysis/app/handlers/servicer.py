@@ -1406,10 +1406,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         than 500 bars silently lost its **newest** bars.
 
         Safety properties (a partial series must never be returned silently):
-        - **Strict cursor monotonicity.** Each page must contribute at least one bar strictly
-          newer than the last one seen. marketdata falls back to ``cursor = start`` on an
-          unparseable page token, re-serving the identical page with the identical token; this
-          turns that infinite loop into a loud failure.
+        - **Strict cursor monotonicity.** A page with no bar strictly newer than the last one
+          seen raises when a token was sent **and** the response re-issues a non-empty token
+          (marketdata falls back to ``cursor = start`` on an unparseable page token, re-serving
+          the identical page); with an empty response token it is EOF.
         - **Page cap.** ``_MAX_BAR_PAGES`` bounds the loop. Exhausting it raises.
 
         A full page with an empty ``next_page_token`` is genuine EOF, not a lost tail:
@@ -1437,8 +1437,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 b for b in page if last_seen is None or (b.time.seconds, b.time.nanos) > last_seen
             ]
             if not fresh:
-                # Either genuine EOF, or a server that re-served an already-consumed page.
-                # Both are terminal; neither should loop.
+                # `page_token` is still the token just sent: a sent token answered by a re-issued
+                # token is a re-served page (raise); any other empty-of-fresh page is EOF.
+                if page_token and resp.page.next_page_token:
+                    raise _BarFetchError(
+                        f"{symbol}: page_token {page_token!r} added no newer bar and "
+                        f"re-issued a cursor ({len(bars)} bars so far) "
+                        "— refusing to return a truncated series"
+                    )
                 return bars
 
             bars.extend(fresh)

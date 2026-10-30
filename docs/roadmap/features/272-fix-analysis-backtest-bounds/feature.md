@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; @AC-5..7 added to acceptance.feature |
 | 2026-10-29 | `implementation-ready` (re-spec, no transition) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of steps 1,3,4,5,6,7,8,9 against main-dev @ merge b8b8bac2: line drift; Step 5 post-244 getters; Step 6 reuses `snapshot_watcher`; Step 9 dotted-key premise corrected, operator decision required before G-1 |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing @AC rule |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 1+2 done in one commit (standing operator rule): D-28 two-token re-serve guard in `_fetch_bars_paged`; pager tests AC-1/2/4/7; full suite 1455 passed |
 
 ---
 

@@ -637,3 +637,20 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
   entry) stays open for the operator.
 - Execution order: Steps 1-8 per implementation-spec.md (TDD pairs 1/2, 3/4, 5/6). Step 9 is an operational gate
   after Step 5 is on dev, and it is blocked on the operator decision above.
+
+## Session 2026-10-29 — sdd-execute sequential: Steps 1+2 (D-28)
+
+- Steps 1 and 2 executed together as one commit under the standing operator rule (operator 2026-10-29, 'Merge pairs
+  + standing rule'): Step 1's RED test is Step 2's test. Deviation Log entry in implementation-spec.md.
+- Step 1: `_fetch_bars_paged` raises `_BarFetchError` when a page adds no fresh bar **and** a token was sent **and**
+  the response re-issues a non-empty token; otherwise EOF. Docstring "Strict cursor monotonicity" bullet updated.
+  Located by symbol (spec line numbers had drifted +7/+8 in the discovery digest).
+- Step 2: `test_identical_page_with_identical_token_terminates` inverted to `..._raises` (C-18, deliberate);
+  added `test_three_bar_eof_returns_full_series` (AC-2), `test_empty_page_with_reissued_token_raises` (AC-4),
+  `test_empty_terminal_page_after_sent_token_is_eof` (AC-7). C-13: local helpers only, no conftest change.
+- TDD: AC-1 red: `test_identical_page_with_identical_token_raises` DID NOT RAISE; AC-4 red:
+  `test_empty_page_with_reissued_token_raises` DID NOT RAISE (2 failed, 9 passed) → green: 11 passed
+  (`-k FetchBarsPaged`). AC-2 / AC-7 passed before and after (regression guards).
+- Verification: `grep "re-issued a cursor"` hit; `ruff check` / `ruff format --check` clean; full suite
+  `pytest --cov=app --cov-fail-under=40`: 1455 passed, coverage 90.02%. Tripwire: no other test went red.
+- Files: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_warmup.py`.

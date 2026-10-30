@@ -98,7 +98,7 @@ There is no proto change and no migration. The key is reused with name, type and
 
 ### Step 1 — service: D-28 two-token re-serve guard in `_fetch_bars_paged`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -159,7 +159,7 @@ Behavior is verified in Step 2.
 
 ### Step 2 — test: D-28 pager scenarios (AC-1, AC-2, AC-4, AC-7) + full-suite tripwire
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_warmup.py` — modify
@@ -721,3 +721,17 @@ operator chose, and either a pass or the operator's sign-off.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-10-29 — Steps 1 and 2 executed as one commit (standing operator rule)
+
+- **Step(s)**: 1 (service), 2 (test).
+- **Deviation**: Step 1's RED test is Step 2's test, and Step 1 alone turns the existing
+  `test_identical_page_with_identical_token_terminates` red. Per the STANDING OPERATOR RULE (operator, 2026-10-29,
+  'Merge pairs + standing rule': "if this step's Verification fails ONLY because the consumers or tests of its new
+  code live in the immediately following step ... or the RED test is that next step's test ... Execute this step and
+  the next one together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done"),
+  both steps landed in one commit with one red→green cycle on Step 2's tests.
+- **Formatting note (no spec deviation)**: the `_BarFetchError` message from Instruction 1 is split across three
+  f-string lines to satisfy ruff E501 (100 cols). The literal `re-issued a cursor` stays on one source line, so
+  Step 1's verification grep still matches; the rendered message is unchanged.
+- **Disposition**: applied under the standing rule; no other deviation.
