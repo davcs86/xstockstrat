@@ -703,3 +703,12 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - Acceptance wording drift (own feature file) to fix at Step 6: AC-9 (page size 1000, not 500 / 2 calls) and AC-12
   (ordered by `sequence`). Not edited in this re-spec session.
 - Files written: implementation-spec.md, feature.md, context.md, status.md.
+
+## Session 2026-10-30 — Step 4 executed (sequential)
+
+- Step 4 done: `trading_fill_side_test.go` adds `TestFillEmit251_AC10_CarriesSideSourceAndFees` (2 rows, driven via
+  `CancelOrder` -> `reconcileNotCancelable` -> `applyBrokerOrderStatus`).
+- RED captured: both rows fail with `payload side = "", want ORDER_SIDE_SELL` (source, stream key, qty keys and `fees`
+  assertions come after it and are untested until Step 5). golangci-lint unrunnable here (built with go1.26, module needs 1.27); one `notCancelableSvc` declaration (C-13).
+- Line drift vs the Codebase Evidence in this repo's HEAD: none relied on by the test.
+- Next: Step 5 (add `side` to both fill payloads in `trading.go`) turns this GREEN.

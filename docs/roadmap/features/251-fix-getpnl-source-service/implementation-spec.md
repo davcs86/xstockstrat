@@ -231,7 +231,7 @@ malformed token) is in `ledgerServiceImpl.ts:166-240`, and ledger `CLAUDE.md:49`
 
 ### Step 4 — test: trading fill payloads carry `side`, the canonical source and `fees` (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_fill_side_test.go` — create
