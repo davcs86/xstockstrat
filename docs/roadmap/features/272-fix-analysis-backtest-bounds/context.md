@@ -700,3 +700,37 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
 - Files: `services/xstockstrat-analysis/app/handlers/servicer.py`,
   `services/xstockstrat-analysis/tests/test_backtest_bounds.py`.
 
+## Session 2026-10-29 — sdd-execute sequential: Steps 5+6 (D-29, AC-3, AC-5)
+
+- Steps 5 and 6 executed together as one commit under the standing operator rule (operator 2026-10-29, 'Merge pairs
+  + standing rule'; widened 2026-10-30, 'Widen the rule (Recommended)'): Step 5's RED tests are Step 6's tests.
+  Operator decision on the Step 5 blocker (2026-10-30, 'A: Register key (Recommended)'): register the new read in the
+  feature-244 classification guard. Deviation Log entry in implementation-spec.md (step merge + Files expansion).
+- Step 5: `_BACKTEST_MAX_DURATION_DEFAULT_S = 300` beside `_MAX_BAR_PAGES`. `RunBacktest` reads
+  `get_int_present("analysis.backtest.max_duration_seconds", 300)` at call time (per-user overrides apply); negative
+  → WARN + 300; `async with asyncio.timeout(limit or None) as cm` wraps `_run_backtest`; a `TimeoutError` maps to
+  `context.abort(DEADLINE_EXCEEDED, "backtest exceeded {limit}s deadline")` only when `cm.expired()`, else re-raises.
+  `_run_backtest(self, request, context, disarm)` calls `disarm()` (`cm.reschedule(None)`) immediately before
+  `self._backtests[backtest_id] = result`, so persistence + the completed emit are never cut. `_BarFetchError`
+  handling unchanged. No compute moved out of `run_in_executor`; no new emits (C-03). Screener read untouched.
+- Step 6: `tests/test_backtest_bounds.py` gains AC-3 `test_deadline_exceeded_names_limit`, AC-3b
+  `test_deadline_fires_inside_awaited_getbars`, AC-5 `test_stored_zero_means_no_limit` and
+  `test_negative_limit_falls_back_to_300_with_warn` (monkeypatched `servicer_mod.asyncio.timeout` recorder),
+  `test_inner_timeout_is_not_mapped_to_deadline`, `test_deadline_after_disarm_still_persists` (T-commit),
+  `test_deadline_returns_while_executor_thread_finishes` (T-executor). C-13: uses `tests.conftest.snapshot_watcher`;
+  no new watcher factory; conftest and `test_list_opportunities_deadlines.py` untouched.
+- Files expansion: `tests/test_config_read_classification.py` — key in `HONOUR_KEYS` + `ZERO_IS_LEGIT`
+  `"0 = no limit (feature-272 @AC-5)"` (without it `test_rule2_key_sets_match_classification` fails "unclassified
+  plain reads").
+- TDD: red 4 failed (AC-3, AC-3b, AC-5 negative, T-executor: DID NOT RAISE / no 300 recorded), 5 passed
+  (AC-5 zero, T-inner-timeout, T-commit are regression guards that pass before Step 5, as the spec expects) →
+  green 9 passed (+ classification guard 6 passed).
+- Verification (Python 3.13.17): Step 5 grep hit all five patterns; screener read still
+  `int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)`; `pytest --cov=app --cov-fail-under=40`:
+  1475 passed, coverage 90.08%; `ruff check` / `ruff format --check` clean; watcher-factory grep shows only
+  `conftest.py` (`snapshot_watcher`) and `test_list_opportunities_deadlines.py` (`_watcher`).
+- Files: `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/tests/test_backtest_bounds.py`,
+  `services/xstockstrat-analysis/tests/test_config_read_classification.py`.
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+

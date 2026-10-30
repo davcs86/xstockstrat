@@ -344,7 +344,7 @@ grep -n "from .test_backtest_source_symbol\|from .test_analysis_servicer" servic
 
 ### Step 5 — service: D-29 wall-clock bound with `cm.expired()` check and `disarm()` before persistence
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -444,7 +444,7 @@ The second grep must still show the screener read at the unchanged
 
 ### Step 6 — test: AC-3, AC-3b, AC-5, T-inner-timeout, T-commit, T-executor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_bounds.py` — modify (created in Step 4)
@@ -753,3 +753,25 @@ _Populated by /sdd-execute as implementation proceeds._
   side effect and the shared assertions into two module-local helpers (`_stuck_on`,
   `_assert_failed_precondition_no_persistence`), each used by both tests. Instructions 2–3 assertions are unchanged.
 - **Disposition**: applied under the standing rule; no other deviation.
+
+### 2026-10-29 — Steps 5 and 6 executed as one commit (standing operator rule, widened) + Files expansion
+
+- **Step(s)**: 5 (service), 6 (test).
+- **Deviation 1 — step merge**: Step 5 is `TDD: red-green required`, but its RED tests are Step 6's tests ("Behavior
+  is verified in Step 6"). Per the STANDING OPERATOR RULE (operator, 2026-10-29, 'Merge pairs + standing rule': "if
+  this step's Verification fails ONLY because the consumers or tests of its new code live in the immediately
+  following step ... or the RED test is that next step's test ... Execute this step and the next one together as ONE
+  commit with one red→green cycle on the next step's tests, mark BOTH steps done"), both steps landed in one commit
+  with one red→green cycle on Step 6's tests.
+- **Deviation 2 — Files expansion**: the new presence-aware read of `analysis.backtest.max_duration_seconds` turned
+  the feature-244 read-classification guard red (`test_rule2_key_sets_match_classification`: "unclassified plain
+  reads"). Operator decision (session question tool, 2026-10-30, 'A: Register key (Recommended)'), under the WIDENED
+  rule (operator, 2026-10-30, 'Widen the rule (Recommended)': "the merged commit may ALSO touch test fakes, fixtures
+  or test-registry entries ... in files outside both steps' **Files**, provided no test assertion and no production
+  behaviour outside the steps changes"). Extra file:
+  - `services/xstockstrat-analysis/tests/test_config_read_classification.py` — `analysis.backtest.max_duration_seconds`
+    added to `HONOUR_KEYS`, plus the `ZERO_IS_LEGIT` entry `"0 = no limit (feature-272 @AC-5)"`. No assertion changed.
+- **Spec-text note (no behavior deviation)**: the Step 5 disarm comment is two lines; the stall helpers in Step 6
+  are module-local (`_bounded_svc`, `_stall_evaluated`, `_assert_deadline_abort`), single-file consumers (C-13).
+- **Disposition**: applied under the standing rule (widened); no other deviation.
+

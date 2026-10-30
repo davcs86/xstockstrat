@@ -298,6 +298,8 @@ _BAR_PAGE_SIZE = 1000
 # max_range_days). Exhausting it RAISES — silently truncating would reintroduce the fixed bug.
 _MAX_BAR_PAGES = 32
 
+_BACKTEST_MAX_DURATION_DEFAULT_S = 300
+
 # PIT fundamentals pager bounds (feature 215): 8 × 200 periods covers decades of filings; a
 # stalled cursor or the cap raises so the loader reports UNKNOWN, never a truncated history.
 _FUND_PAGE_SIZE = 200
@@ -790,15 +792,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
     @owner_scoped
     async def RunBacktest(self, request, context):
+        limit = self._cfg.get_int_present(
+            "analysis.backtest.max_duration_seconds", _BACKTEST_MAX_DURATION_DEFAULT_S
+        )
+        if limit < 0:
+            log.warning(
+                "analysis.backtest.max_duration_seconds=%d is negative — using %ds",
+                limit,
+                _BACKTEST_MAX_DURATION_DEFAULT_S,
+            )
+            limit = _BACKTEST_MAX_DURATION_DEFAULT_S
         try:
-            return await self._run_backtest(request, context)
+            async with asyncio.timeout(limit or None) as cm:
+                return await self._run_backtest(request, context, lambda: cm.reschedule(None))
+        except TimeoutError:
+            if not cm.expired():
+                raise
+            await context.abort(
+                grpc.StatusCode.DEADLINE_EXCEEDED, f"backtest exceeded {limit}s deadline"
+            )
+            return None
         except _BarFetchError as e:
             await context.abort(
                 grpc.StatusCode.FAILED_PRECONDITION, f"backtest bar series incomplete: {e}"
             )
             return None
 
-    async def _run_backtest(self, request, context):
+    async def _run_backtest(self, request, context, disarm):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
@@ -1282,6 +1302,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             result.warnings.extend(
                 f"fundamentals fetch failed for {sym} — rerun" for sym in fund_unknown
             )
+        # Deadline ends here so persistence always completes; no awaited state-writing call may
+        # move above this disarm().
+        disarm()
         self._backtests[backtest_id] = result
         self._backtests[(caller_user_id, request.strategy_id)] = result
 
