@@ -19,6 +19,7 @@
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute (sdd-batch-execute) | Steps 1–9 re-aligned with the current codebase after the main-dev merge: line-anchor drift; 244 merged, so Step 5 passes its `int_positive` timeout; Step 9 drops the duplicate key-form defect report |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by the operator's standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing `@AC` rule |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 9 steps done; C-16 promotion applied (8 NEW scenarios → `services/xstockstrat-ingest/acceptance/fix-ingest-poller-backfill.feature`); integration PR opened, merge held for operator |
 
 ---
 
