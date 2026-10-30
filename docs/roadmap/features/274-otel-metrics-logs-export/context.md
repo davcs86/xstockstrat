@@ -176,9 +176,14 @@
   Every `@AC-1..AC-22` scenario is covered by a `**Covers**` line (table in the spec's Scenario Coverage block).
 - Key codebase findings (all re-verified against trunk @ `3968bcea`, feature 250 landed; they supersede stale recon/design premises):
   - **D1** Python locks already at `opentelemetry-sdk`/`exporter-otlp-proto-http` 1.45.1 and `instrumentation-grpc` 0.66b1 in all four
-    services (recon said 1.42.1/0.63b1 and an ingest lag). Design's pin <1.43 / ==0.63b1 / `uv lock` x4 work is void; no pyproject change.
+    services (recon said 1.42.1/0.63b1 and an ingest lag). Design's pin <1.43 / ==0.63b1 version bumps are void (the one dependency change is D8).
     Probe re-run at 1.45.1/0.66b1: no meter code in instrumentation-grpc; `abort`/`set_code` set `rpc.grpc.status_code`; SDK `LoggingHandler`
-    still exists but is deprecated (successor: `opentelemetry-instrumentation-logging` 0.66b1) - default kept per design, escalate if removed.
+    still exists but is deprecated (its constructor warns).
+  - **D8** (operator decision 2026-10-30, answer to the spec-session open question; supersedes the design's "keep the SDK handler"): the four Python
+    services use `opentelemetry.instrumentation.logging.handler.LoggingHandler` from the new dependency `opentelemetry-instrumentation-logging>=0.66b1`
+    (`pyproject.toml` + `uv lock` x4 in steps 16/18/20/24, `uv lock --check` verification). Probed in a throwaway venv at SDK 1.45.1: imports with
+    `DeprecationWarning` as error, same `(level, logger_provider)` constructor, span-correlated `trace_id`/`span_id`, no default attributes
+    (`log_code_attributes=False`), recursion filter works. `warnings.catch_warnings()` suppression dropped.
   - **D2** the three Python gRPC servers call `grpc.aio.server()` with no `interceptors=`; the cancel/deadline interceptor is a new argument
     (the OTel interceptor is inserted first by `GrpcAioInstrumentorServer`, so ours is inner).
   - **D3** all four Node services are CommonJS and `tsc && node --test dist/...` (no strip-types runner) - `createRequire` not needed.
@@ -190,4 +195,7 @@
     one Tempo-only dashboard; pre-250 rule/panel/mute-timing bodies are recoverable with `git show 3968bcea^:<path>` (cited in PR-B steps).
   - Env parity needs no edit: 12 compose `OTEL_EXPORTER_OTLP_ENDPOINT` lines, `OTEL_ENABLED` anchor, global `.do/app*.yaml` envs; no sampler/BLRP env set.
   - Go modules verified resolvable at the design's pin set (otel 1.45.0 line + log 0.21.0 + otelslog 0.20.0); Go 1.27 `slog.NewMultiHandler` present.
-- Open for `/sdd-review impl-spec`: DO SIGKILL grace (step 1), G1 label/series names (step 48), SDK `LoggingHandler` deprecation (D1).
+- **DO SIGKILL grace (step 1), resolved 2026-10-30** from the official page https://docs.digitalocean.com/products/app-platform/how-to/configure-termination/ :
+  `termination.grace_period_seconds` default 120 s (max 600 s), `termination.drain_seconds` default 15 s (max 110 s); no `termination` block in
+  `.do/app.yaml` / `.do/app.dev.yaml`, so 120 s applies and the 10 s shutdown bounds fit. The page does not name component types.
+- Open for `/sdd-review impl-spec`: G1 label/series names (step 48).
