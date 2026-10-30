@@ -91,7 +91,7 @@ second inline copy of a domain literal.
 
 ### Step 1 — service: single-use auth-code redemption in `exchangeAuthCode` (D-23)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -190,7 +190,7 @@ The GREEN run is Step 2's Verification.
 
 ### Step 2 — test: auth-code race, atomicity and non-consumption tests (AC-1, AC-2, AC-3, AC-5, AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -199,21 +199,23 @@ The GREEN run is Step 2's Verification.
 
 **Codebase Evidence**:
 - Analog fake (mandatory reuse of the shape): `function makeTokenDb(row: any, opts: { failInsert?: boolean } = {})`
-  `identityServiceImpl.test.ts:407-442`.
+  `identityServiceImpl.test.ts:374-409` (re-anchored 2026-10-29 after feature 252's rewrite of this file).
   - Its `lockedBy` row-lock model lets a conditional claim held by an open transaction make a concurrent
     conditional claim lose.
-  - The claim applies on COMMIT only (`:411-416`, `:424-432`), and `failInsert` throws on the refresh INSERT
-    (`:419-421`).
-  - The concurrency test is at `:457-466` and the fault-injection test at `:468-476`.
-- `describe('exchangeAuthCode', …)` `:310` holds `verifier` `:311`, `storedRow(overrides)` `:313-326` and
-  `exchangeCall(over)` `:328-337`.
-  - Existing tests: happy path `:339-355` (regex `INSERT INTO identity\.refresh_tokens[^)]*client_id` at `:354`),
-    bad verifier `:357-369`, consumed `:371-380`, expired `:382-391`, redirect mismatch `:393-402`.
-  - All of them stay unchanged and must stay green. `makeSpyPool.connect()` (`:268-270`) returns a client over the
+  - The claim applies on COMMIT only (`:378-383`, `:390-399`), and `failInsert` throws `'insert failed'` on the
+    refresh INSERT (`:386`).
+  - The concurrency test is at `:424` and the fault-injection test at `:434`.
+- `describe('exchangeAuthCode', …)` `:282` holds `verifier` `:283`, `storedRow(overrides)` `:285-298` and
+  `exchangeCall(over)` `:300-309`.
+  - Existing tests: happy path `:311-326` (regex `INSERT INTO identity\.refresh_tokens[^)]*client_id` at `:325`),
+    bad verifier `:328-339`, consumed `:341-349`, expired `:351-359`, redirect mismatch `:361-369`.
+  - All of them stay unchanged and must stay green. `makeSpyPool.connect()` (`:243-245`) returns a client over the
     same `queries`/`rows`, so the new claim gets 1 row.
-- Helpers: `makeCall` `:62`, `implWithPool` `:274-278` (config `getInt` returns the default, so the access TTL is
-  900), `challengeFor` `:280-282`.
-- Env-mutation precedent: save, set, then restore in `finally`, as `process.env.APPLICATION_ENV` does at `:141-157`.
+- Helpers: `makeCall` `:51`, `implWithPool` `:249-252` (config `getInt` returns the default, so the access TTL is
+  900), `challengeFor` `:254-256`.
+- Env-mutation precedent: save, set, then restore in `finally`, as `process.env.APPLICATION_ENV` does at `:125-140`.
+- The file has no `if (!impl) return;` guards since feature 252; the top-level `describe('test harness')` (`:25-27`)
+  asserts the impl imports, so a failed import fails the suite instead of skipping it.
 - C-13 check: identity has no `src/__tests__/fixtures/` home (`ls services/xstockstrat-identity/src/__tests__` →
   `identityServiceImpl.test.ts`, `mtls.test.ts`, `telemetry.export.test.ts`, `telemetry.test.ts`). The new fake has
   one consumer, this file, so inline is compliant.
@@ -224,7 +226,7 @@ The GREEN run is Step 2's Verification.
 
 **Instructions**:
 1. **Add `function makeAuthCodeDb(row: any, opts: { failInsert?: boolean; expireAtClaim?: boolean } = {})`** at
-   module level, directly after `makeTokenDb` (`:442`). It records `sql` and `params` and exposes
+   module level, directly after `makeTokenDb` (`:409`). It records `sql` and `params` and exposes
    `db = { consumedAt: Date | null, committedInserts: Array<{ params: any[] }>, lockedBy }`. Its fidelity rules
    (design.md §3, binding):
    - **(a)** Any `SELECT` returns `[{ ...row, consumed_at: db.consumedAt }]`. It never returns `[]` after
@@ -243,11 +245,11 @@ The GREEN run is Step 2's Verification.
    - **(e)** `opts.expireAtClaim` makes the conditional claim see the code as expired even though the validation
      SELECT returned it live.
    - `opts.failInsert` throws `new Error('connection terminated')` on any `INSERT INTO identity.refresh_tokens`.
-     That is the AC-3 Given.
-   - Each `run` starts with `await Promise.resolve()`, as `makeTokenDb` does at `:410`, so concurrent callers
+     That is the AC-3 Given. (`makeTokenDb` uses `'insert failed'`; the new fake's message is its own, no conflict.)
+   - Each `run` starts with `await Promise.resolve()`, as `makeTokenDb` does at `:377`, so concurrent callers
      interleave.
 2. **Inside `describe('exchangeAuthCode')`, add a small local `exchange(impl, over?)`** that resolves
-   `{ err?: number; message?: string; res?: any }`. Model it on `refresh()` at `:445-449`. Then add these tests,
+   `{ err?: number; message?: string; res?: any }`. Model it on `refresh()` at `:411-415`. Then add these tests,
    reusing `storedRow()`, `exchangeCall()` and `implWithPool`, each setting `process.env.JWT_SECRET` as the
    neighbouring tests do:
 
@@ -264,24 +266,20 @@ The GREEN run is Step 2's Verification.
    - Name each `it(...)` with its `@AC-*` ID so the RED/GREEN captures name the scenario (`tdd-gate.md` step 5).
    - The `JWT_SECRET` restore in `finally` is mandatory (design.md Open Risk). A leaked unset value breaks every
      later signing test in the file.
-3. **Do not edit the existing exchange tests** (`:339-402`) or `makeTokenDb`.
-4. Keep `if (!impl) return;` on the new tests for consistency with the file. The compiled-run guard below is what
-   proves they execute. Removing the guards is feature 252's scope.
+3. **Do not edit the existing exchange tests** (`:311-369`) or `makeTokenDb`.
+4. Do **not** add `if (!impl) return;` guards to the new tests: feature 252 removed them all, and the top-level
+   'test harness' test is what proves the impl loaded.
 
 **Verification**: run from `services/xstockstrat-identity` on Node 24. Capture RED on the pre-Step-1 tree and
-GREEN after Step 1.
+GREEN after Step 1. Since feature 252, `pnpm test` (`package.json:12`, `tsc && node --test dist/__tests__/*.test.js`)
+compiles the test files and is the real RED/GREEN evidence; a `tsc` type error fails the run.
 ```bash
 node --version   # must print v24.x (ci.yml:185); if Node 24 is unavailable, stop and ask, never substitute
-rm -rf .verify && pnpm exec tsc --outDir .verify/dist --rootDir src --module commonjs --target ES2020 \
-  --esModuleInterop --skipLibCheck --resolveJsonModule $(find src -name '*.ts') ; \
-  test -f .verify/dist/__tests__/identityServiceImpl.test.js   # tsc emits on type errors; record any diagnostics in context.md
-node -e "const m=require('./.verify/dist/grpc/identityServiceImpl.js'); if (typeof m.IdentityServiceImpl!=='function'){console.error('RUN GUARD: impl not loaded');process.exit(1)}"
-node --test --test-reporter=tap .verify/dist/__tests__/identityServiceImpl.test.js | tee .verify/run.tap
-grep -E '^# (tests|pass|fail)' .verify/run.tap   # tests > 0; RED: the 4 RED-marked AC tests fail; GREEN: "# fail 0"
-pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40); not RED/GREEN evidence until feature 252 lands
-rm -rf .verify
+pnpm test 2>&1 | tee /tmp/identity-265-step2.log
+grep -E '^# (tests|pass|fail)' /tmp/identity-265-step2.log   # tests > 0; RED: the 4 RED-marked AC tests fail; GREEN: "# fail 0"
+pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40)
 ```
-- `.verify/dist/` falls under the root `.gitignore` `**/dist/` rule, so never stage it.
+- `dist/` falls under the root `.gitignore` `**/dist/` rule, so never stage it.
 - The RED capture must show only the 4 RED-marked tests failing, for the asserted reason. If the pass count is the
   same with and without Step 1, the suite is skipping (`fails.md:2226`).
 
@@ -289,7 +287,7 @@ rm -rf .verify
 
 ### Step 3 — service: one mint helper and one refresh-issue helper for first-party and OAuth (D-21)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -300,8 +298,9 @@ rm -rf .verify
 - `private mintOAuthAccessToken(userId, email, roles, audience: string): { accessToken: string; expiresIn: number }`
   `identityServiceImpl.ts:295-315`.
   - It always writes `aud: audience` (`:309`) and signs with `{ expiresIn: this.accessTtlSeconds }` (`:311-313`).
-  - Its only callers are `exchangeAuthCode` (moved by Step 1) and `refreshOAuthToken` `:534-536`
-    (`grep -rn mintOAuthAccessToken --include=*.ts .` → 3 hits, all in this file).
+  - Its only callers are `exchangeAuthCode` `:533-535` (moved by Step 1) and `refreshOAuthToken` `:560-562`
+    (`grep -rn mintOAuthAccessToken --include=*.ts .` → 3 hits, all in this file: `:295`, `:533`, `:560`;
+    re-anchored 2026-10-29).
 - `authenticateUser`:
   - Inline `now`/`expiresAt` `:163-164`, `claimsPayload` `:166-172`, `(jwt as any).sign(…)` `:174-176`.
   - Inline `uuidv4()` plus `digest('hex')` plus a 3-column `INSERT INTO identity.refresh_tokens (user_id,
@@ -329,7 +328,7 @@ rm -rf .verify
      none (IDENTITY-4).
 2. **Update the two OAuth callers to the new name**, keeping their arguments and `''` fallbacks:
    - `exchangeAuthCode` passes `audience` (Step 1's moved call).
-   - `refreshOAuthToken` passes `resource || ''` (`:534-536`).
+   - `refreshOAuthToken` passes `resource || ''` (`:560-562`).
    - The OAuth `aud: ''` behaviour for an empty resource is preserved (FR-8).
 3. **`authenticateUser`: replace only `:163-185`** with
    `const { accessToken, issuedAt, expiresAt } = this.mintAccessToken(user.user_id, email, user.roles);` (no
@@ -360,7 +359,7 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
 
 ### Step 4 — test: claim-shape and client-tagging parity across login, refresh and OAuth exchange (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -368,19 +367,23 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
 **Reviewers**: `xstockstrat-identity` owner — JWT expiry and rotation, API key scoping, secret store integration (focus here: claim shape and TTL); Security — JWT claims minimal and unchanged by the D-21 dedup
 
 **Codebase Evidence**:
-- `function makeSpyPool(rows: any[] = [])` `identityServiceImpl.test.ts:260-272`.
-  - It records `queries: string[]` only (`query(sql, _params)` drops the params, `:264-266`).
-  - `connect()` returns `{ query: this.query, release() {} }` (`:268-270`).
-  - Existing consumers assert on `pool.queries` (e.g. `:354`, `:495`), so an additive `params` array leaves them
+- `function makeSpyPool(rows: any[] = [])` `identityServiceImpl.test.ts:235-247` (re-anchored 2026-10-29 after
+  feature 252's rewrite).
+  - It records `queries: string[]` only (`query(sql, _params)` drops the params, `:239-242`).
+  - `connect()` returns `{ query: this.query, release() {} }` (`:243-245`).
+  - Existing consumers assert on `pool.queries` (e.g. `:325`, `:607`), so an additive `params` array leaves them
     unaffected.
+  - `routePool` (`:850-861`) already records params but has no `connect()`, so it cannot serve
+    `rotateRefreshToken` or the Step 1 transaction; extending `makeSpyPool` stays the choice.
 - Login fixture with no new bcrypt dependency:
-  - `SEED_ADMIN_PASSWORD_HASH` (`identityServiceImpl.ts:32-33`) is already imported by the test (`:26`, `:33`) and
-    matches password `'admin'` (test `:136-158`).
+  - `SEED_ADMIN_PASSWORD_HASH` (`identityServiceImpl.ts:32-33`) is already imported by the test (`:11`, `:19`) and
+    matches password `'admin'` (test `:121-140`).
   - `isBlockedDefaultAdmin` refuses it only when `APPLICATION_ENV === 'production'` (`identityServiceImpl.ts:38-40`).
 - `refreshToken` runs through `rotateRefreshToken` → `makeSpyPool.connect()`.
   - The claim returns the spy `rows`, so `rotated.row` supplies `user_id`/`email`/`roles`.
   - `issueRefreshToken` then runs on the same client.
-- Test file: `describe('authenticateUser')` `:79`; `describe('exchangeAuthCode')` `:310`.
+- Test file: `describe('authenticateUser')` `:68`; `describe('exchangeAuthCode')` `:282`;
+  `describe('refreshOAuthToken')` `:593-619` (re-anchored 2026-10-29).
 - Today's first-party login INSERT has 3 params (`identityServiceImpl.ts:181-185`), so `params[3]` is `undefined`.
   That is the RED discriminator. Today's first-party refresh already writes `client_id` as `null` through
   `issueRefreshToken`, and no first-party token carries `aud` today, so those assertions are guards.
@@ -394,9 +397,9 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
 1. **Make `makeSpyPool` also record params, additively.** Add `const params: any[][] = []`, return it beside
    `queries`, and in `query(sql, p?)` do `queries.push(sql); params.push(p ?? []);`. Keep the `connect()` shape.
    Every existing assertion stays unchanged.
-2. **Add `describe('token claim-shape parity (AC-4)')`** after `describe('refreshOAuthToken')` (`:480-508`). It has
-   three cases. Each sets `process.env.JWT_SECRET`, saves and restores `APPLICATION_ENV` in `finally` (`:141-157`
-   precedent), and decodes with `jwt.verify`.
+2. **Add `describe('token claim-shape parity (AC-4)')`** after `describe('refreshOAuthToken')` (ends `:619`). It has
+   three cases. Each sets `process.env.JWT_SECRET`, saves and restores `APPLICATION_ENV` in `finally` (`:121-140`
+   precedent), and decodes with `jwt.verify`. No `if (!impl) return;` guard (removed by feature 252).
    - **Login:**
      - Pool: `makeSpyPool([{ user_id: 'u1', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'] }])`, with
        `APPLICATION_ENV` deleted.
@@ -426,27 +429,22 @@ The structural FR-6/FR-7 grep and the GREEN run are Step 4's Verification.
    Run it in this step's Verification and record its output in `context.md`.
 
 **Verification**: run from `services/xstockstrat-identity` on Node 24. Capture RED on the pre-Step-3 tree and
-GREEN after Step 3.
+GREEN after Step 3. `pnpm test` is the real RED/GREEN evidence since feature 252 (see Step 2).
 ```bash
 node --version   # v24.x, else stop and ask
-rm -rf .verify && pnpm exec tsc --outDir .verify/dist --rootDir src --module commonjs --target ES2020 \
-  --esModuleInterop --skipLibCheck --resolveJsonModule $(find src -name '*.ts') ; \
-  test -f .verify/dist/__tests__/identityServiceImpl.test.js
-node -e "const m=require('./.verify/dist/grpc/identityServiceImpl.js'); if (typeof m.IdentityServiceImpl!=='function'){console.error('RUN GUARD: impl not loaded');process.exit(1)}"
-node --test --test-reporter=tap .verify/dist/__tests__/identityServiceImpl.test.js | tee .verify/run.tap
-grep -E '^# (tests|pass|fail)' .verify/run.tap   # tests > 0; RED: the AC-4 login client_id case fails; GREEN: "# fail 0" (Step 2's tests stay green)
+pnpm test 2>&1 | tee /tmp/identity-265-step4.log
+grep -E '^# (tests|pass|fail)' /tmp/identity-265-step4.log   # tests > 0; RED: the AC-4 login client_id case fails; GREEN: "# fail 0" (Step 2's tests stay green)
 # FR-6/FR-7 structural half: exactly one jwt.sign (inside mintAccessToken) and one refresh_tokens INSERT (inside issueRefreshToken)
 grep -n "(jwt as any).sign" src/grpc/identityServiceImpl.ts            # exactly 1 hit, within mintAccessToken
 grep -n "INSERT INTO identity.refresh_tokens" src/grpc/identityServiceImpl.ts   # exactly 1 hit, within issueRefreshToken
-pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40, i.e. line coverage >= 40%); not RED/GREEN evidence until feature 252 lands
-rm -rf .verify
+pnpm run lint && pnpm run test:coverage   # CI parity (c8 --lines 40, i.e. line coverage >= 40%)
 ```
 
 ---
 
 ### Step 5 — test: real-Postgres 20-caller repro of AC-1 (manual, local, recorded)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `docs/roadmap/features/265-fix-identity-auth-code-race/context.md` — modify (repro script verbatim, the command,
@@ -468,7 +466,9 @@ rm -rf .verify
     (`migrations/001_identity_tables.up.sql:6-14`);
   - `identity.oauth_clients(client_id PK, redirect_uris TEXT[])` (`migrations/003_oauth.up.sql:7-12`).
 - `issueAuthCode(call, cb)` takes `{ userId, clientId, redirectUri, codeChallenge, resource }`
-  (`identityServiceImpl.ts:438-468`). It requires the client to exist and the redirect to be registered.
+  (`identityServiceImpl.ts:468`, re-anchored 2026-10-29). It requires the client to exist and the redirect to be registered.
+- As of 2026-10-29 no Postgres listens on `localhost:5432` in the execute environment (`pg_isready` reports no
+  response), and the execute loop may not start one, so the BEFORE/AFTER runs go to the operator (Instruction 2).
 
 **TDD**: `red-green required` (BEFORE = RED: more than 1 grant; AFTER = GREEN: exactly 1)
 
@@ -476,8 +476,7 @@ rm -rf .verify
 
 **Instructions**:
 1. **Write a CommonJS script in the session scratchpad** (never committed), e.g. `repro-265.cjs`. It:
-   - requires `pg` and the compiled `.verify/dist/grpc/identityServiceImpl.js` (built with Step 2's `tsc`
-     command);
+   - requires `pg` and the compiled `dist/grpc/identityServiceImpl.js` (built by `pnpm test`, Step 2);
    - builds `new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.DB_POOL_MAX) })` and
      `new IdentityServiceImpl(pool, { getInt: (_k, d) => d })`;
    - seeds one user (`repro-265-<ts>@example.com`, any `password_hash`) and one client
@@ -518,11 +517,11 @@ The AFTER output must show exactly 1 success and exactly 1 refresh row.
 
 ### Step 6 — docs: teardown context refresh for identity (IDENTITY-1/2/4 anchors, single-use wording)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-identity/docs/`)
 **Files**:
 - `services/xstockstrat-identity/docs/context-constitution.md` — modify
-- `services/xstockstrat-identity/CLAUDE.md` — modify only if the refresh reports drift at `:38`
+- `services/xstockstrat-identity/CLAUDE.md` — modify only if the refresh reports drift at `:37-38`
 
 **Reviewers**: none
 
@@ -534,7 +533,7 @@ The AFTER output must show exactly 1 success and exactly 1 refresh row.
     after Steps 1 and 3.
   - `:21` IDENTITY-4 cites `#mintOAuthAccessToken (~L317, aud: audience ~L331)`. The symbol is renamed to
     `mintAccessToken` in Step 3, so this is symbol drift, not only line drift.
-- `services/xstockstrat-identity/CLAUDE.md:38` reads "`IssueAuthCode`/`ExchangeAuthCode` use
+- `services/xstockstrat-identity/CLAUDE.md:37-38` reads "`IssueAuthCode`/`ExchangeAuthCode` use
   `identity.oauth_auth_codes` (single-use, 60s TTL, PKCE S256, exact redirect match)". After Step 1, "single-use"
   becomes true under concurrency (recon.md Risks).
 - Root `CLAUDE.md` § Teardown requires `/context-forge:context-constitution refresh` scoped to the touched context.
@@ -550,7 +549,7 @@ The AFTER output must show exactly 1 success and exactly 1 refresh row.
 2. Fix the grounded drift it reports:
    - re-anchor IDENTITY-1, IDENTITY-2 and IDENTITY-4 to the current symbols and lines;
    - IDENTITY-4 names `#mintAccessToken` and states that `aud` is written only for OAuth callers.
-3. Change `CLAUDE.md:38` only if the refresh flags it.
+3. Change `CLAUDE.md:37-38` only if the refresh flags it.
 4. If the plugin is unavailable, re-read both files against the code by hand. Record in the PR body that the plugin
    was unavailable **and** the reconciliation performed (root `CLAUDE.md` § Teardown, ledger `fails.md:670`).
 5. Do not add a new IDENTITY-* rule for the auth-code claim unless the refresh proposes one. IDENTITY-8 already
@@ -567,3 +566,58 @@ grep -n "mintAccessToken" services/xstockstrat-identity/docs/context-constitutio
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29 — Step 2 (F-09):** RED/GREEN evidence route is `pnpm test` (`tsc && node --test dist/__tests__/*.test.js`,
+  feature 252), not the scratch `tsc --outDir .verify` compile; the run's output is the node spec reporter
+  (`ℹ tests/pass/fail` lines), not TAP `# tests` lines, so the Verification `grep '^# '` pattern matches nothing —
+  counts were read from the `ℹ` lines instead. Logs written to the session scratchpad, not `/tmp/identity-265-step2.log`.
+- **2026-10-29 — Step 2 (TDD order):** Step 1 was committed before Step 2's tests, so RED was captured by temporarily
+  restoring the pre-Step-1 `identityServiceImpl.ts` from `d6cd9f3c` (uncommitted), running `pnpm test`, then restoring
+  the Step 1 file before GREEN. Result matches the spec table: 86 tests, 4 fail (the 4 RED-marked AC tests).
+- **2026-10-29 — Step 3 (TDD order, C-08 pair with Step 4):** RED/GREEN taken from a temporary, uncommitted probe
+  test (`src/__tests__/zz-step3-red.test.ts`, the AC-4 login case: refresh INSERT `params[3] === null`, no `aud`,
+  `expires_at - issued_at === 900`), deleted after GREEN; Step 4 owns the committed AC-4 tests. Evidence via
+  `pnpm test` spec-reporter `ℹ` lines (same route as Step 2). The `authenticateUser` inline comment "JWT payload
+  uses snake_case claim names" moved into `mintAccessToken`'s 2-line doc comment rather than being dropped.
+- **2026-10-29 — Step 4 (F-09):** RED/GREEN evidence via `pnpm test` spec-reporter `ℹ` lines (no TAP `# ` lines, same
+  route as Step 2); logs written to the session scratchpad, not `/tmp/identity-265-step4.log`. Step 3 was committed
+  first, so RED was captured by temporarily restoring the pre-Step-3 `identityServiceImpl.ts` from `d98f682f~1`
+  (uncommitted), then restoring the Step 3 file before GREEN. The OAuth-exchange AC-4 case is nested in
+  `describe('exchangeAuthCode')` to reuse `storedRow`/`exchangeCall` (the spec's offered option), so
+  `describe('token claim-shape parity (AC-4)')` holds the login and first-party refresh cases; the shared
+  assertions live in module-level helpers `assertSharedClaims`, `refreshInsertClientId` and `withAppEnvUnset`.
+- **2026-10-29 — Step 5 marked `done` by operator decision; the repro itself runs post-merge on dev.** Operator
+  decision 2026-10-29, in their own words: "Run it after deploy." This supersedes the "deferred to operator" entry
+  below for the Status field and the merge hold. The local BEFORE/AFTER run is replaced by an AFTER-only run against the
+  deployed dev stack (real managed Postgres via the `:25060` direct pool), driven through the agent's public OAuth
+  endpoints. It registers a client (`POST /agent/oauth/register`), completes `/oauth/authorize` with an operator browser
+  login, then fires 20 concurrent `POST /agent/oauth/token` (`authorization_code`) with the one code inside its
+  60-second TTL. Expected: exactly 1 HTTP 200 and 19 `invalid_grant`; the 20 `ExchangeAuthCode` spans are confirmed in
+  Tempo. The operator runs the script locally (the code is a live credential with a 60 s TTL and never passes through
+  the session), and the result is recorded in context.md under a `rollout (dev)` session. **Not yet performed.** The
+  BEFORE leg is dropped, because the pre-fix race is already evidenced by the RED unit tests (Step 2) and hotfix
+  `5bd271d`'s identical refresh repro. AC-1's mocked-DB tests remain the merge-time evidence.
+- **2026-10-29 — Step 5 deferred to operator — integration PR merge held until** the operator runs the recorded
+  repro against a local TimescaleDB with identity migrations applied (`./scripts/bootstrap.sh`; no Postgres answers on
+  `localhost:5432` here — `pg_isready` "no response" — and the execute loop may not start one). Exact checks:
+  1. BEFORE (pre-Step-1 tree, base `d6cd9f3c`): `git worktree add --detach ../ident-265-before d6cd9f3c`, then in
+     `../ident-265-before`: `pnpm install --frozen-lockfile --filter "xstockstrat-identity..."` and
+     `pnpm --filter xstockstrat-identity run build`, then from that worktree root
+     `DB_POOL_MAX=20 JWT_SECRET=repro DATABASE_URL='postgres://xstockstrat:<pw>@localhost:5432/xstockstrat?sslmode=disable' timeout 60 node <path>/repro-265.cjs`
+     → expect `successes` > 1 and `refresh_rows` > 1.
+  2. AFTER (this branch at or after `56daa169`): same build and the same command from the repo root → expect exactly
+     `repro-265 successes=1/20 refresh_rows=1`.
+  3. Record both output lines and `node --version` in context.md under the Step 5 note, and confirm there that this
+     recorded repro counts as the AC-1 real-Postgres harness (design.md §3). Then flip Step 5 **Status** to `done`.
+  The script is recorded verbatim in context.md (Step 5 note). Code-side it was syntax-checked (`node --check`) and
+  load-checked against the Step 4 `dist/` (it reached the connect and failed `ECONNREFUSED 127.0.0.1:5432`).
+  F-06 grep `DB_POOL_MAX=20` over `.do/app.yaml` and `.do/app.dev.yaml` → 0 hits.
+- **2026-10-29 — Step 6 (plugin unavailable):** `/context-forge:context-constitution refresh` is not available in this
+  session (only `context-forge:context-scrubber` is loaded), so the refresh was done by hand per root `CLAUDE.md`
+  § Teardown: `services/xstockstrat-identity/docs/context-constitution.md` and `services/xstockstrat-identity/CLAUDE.md`
+  re-read against `identityServiceImpl.ts` @ `0e4fc22d`. The integration PR body must state that the plugin was
+  unavailable and list this reconciliation. Scope: beyond IDENTITY-1/2/4, every `~L` hint in the file was
+  re-stamped (IDENTITY-3/5/6/7/8/9 and the gotchas drifted +6/-49 lines from Steps 1 and 3), and the
+  `refreshOAuthToken` `last_used_at` gotcha was re-anchored to `rotateRefreshToken`'s `touchLastUsed` branch (its
+  "before revoking" wording predated hotfix `5bd271d`). No new IDENTITY-* rule. `CLAUDE.md:37-38` unchanged:
+  "single-use" is now accurate under concurrency, so there is no drift.

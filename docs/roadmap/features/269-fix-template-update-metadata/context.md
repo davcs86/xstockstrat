@@ -411,3 +411,190 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Indicators and ingest have SQL-text and bind proof only, with no real-DB proof. This trade-off was accepted (C-18). It is recorded durably by Step 8 (D-41).
 - [ ] The analysis real-PG red proof (Step 4) runs only under `CI=true` and skips locally. Confirm it in CI and do not rely on a local run.
 - Accepted as-is, no action: Steps 7-9 are docs steps with grep-only verification, so no coverage or lint gate applies to them.
+
+## Session 2026-10-29 — re-spec (sdd-batch-execute branch setup)
+
+- Branch setup: merged `origin/main-dev` into the feature branch (normal merge, no `-X`). One conflict in
+  `docs/roadmap/ledger/fails.md` (append-only): kept both sides, base first; `ledger-guard --fix` reported clean.
+- Re-spec, Steps 3, 4, 6, 7, 8 (bodies only, re-verified against the merged tree):
+  - Step 3: analysis `servicer.py` drift. `meta = request.template.meta` :3542 → :3550, guard :3543-3552 → :3551-3559,
+    UPDATE call :3581 → :3588, `_row_to_strategy_template` :7138-7150 → :7146-7158. `strategy_templates.py` evidence unchanged.
+  - Step 4: `local_pg` `tests/conftest.py:367-368` → :402-403; its `CI=true` fail path is `_unavailable` :407-410;
+    `ci.yml` postgresql install step :393-397 → :405-407. Other evidence unchanged.
+  - Step 6: `_ctx` import :17 → :18.
+  - Step 7: marked `done` with no edit. `merge-order.md:91` already holds a soft, non-blocking 269 row naming 244/245
+    (and the 262/268/272 file-level overlap the impl-spec review asked about). Appending would duplicate it.
+    The open thread "Add the merge-order entry for 244/245" is resolved by that row.
+  - Step 8: stale `local_pg` citation :367-368 → :402-403. D-41 header (:407) unchanged.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`. Mode: `sequential` (one commit per step on `feature/fix-template-update-metadata`, single integration PR at the end).
+- Up-front confirmation: given by the operator's standing authorization in operator chat 2026-10-28/29
+  (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via /sdd-batch-execute. Checkpoints run
+  unattended (`report`). C-16 promotion is auto-confirmed unless it changes an existing @AC rule; Step 9 promotes into
+  a new per-feature suite and leaves `private-by-default-templates.feature` untouched, so it qualifies. Merge-train is
+  authorized. Operator-only DB/prod steps: open the PR and hold the merge. The operator recorded the per-feature blocker
+  decisions on 2026-10-29 through the session's question tool.
+- Severity: SEV-2. Remaining steps: 1–6, 8, 9 (Step 7 is already done, see the re-spec entry above).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 1 + 2 (indicators)
+
+- Steps 1 and 2 landed in one commit, as `## Step Dependencies` requires (Step 1 breaks the old fake and SQL test).
+  Logged in the impl-spec `## Deviation Log`; no behavior deviation.
+- Files: `services/xstockstrat-indicators/app/services/formula_templates_repository.py` (`update(meta, payload_json)`
+  writes name/description with `meta.description or ""`; `retire` adds `updated_at = NOW()`, WHERE stays unfiltered),
+  `app/handlers/servicer.py:652` (`update(meta, payload)`), `tests/test_formula_templates.py` (fake lockstep + tests a–e).
+- TDD red (pre-Step-1 tree, Step 2 tests in place): `uv run pytest tests/test_formula_templates.py -q` → 10 failed,
+  27 passed. AC-1 red: (a) SQL `SET name = $2, description = $3, payload = $4::jsonb` assert failed; (b) empty-name bind
+  failed; (d)/(d′) failed (`'str' object has no attribute 'template_id'` — handler passed the id, not meta). AC-2 red:
+  (c) `updated_at = NOW()` missing from retire SQL. The lockstep fake also turned the existing handler tests that
+  UPDATE (`test_ac14_...`, `test_update_of_missing_template_is_not_found`, three `TestInstantiation` tests) red for
+  the same reason. AC-3 (e) passed on both trees (regression pin, as specced).
+- TDD green: same command → 37 passed. Full suite `uv run pytest --cov=app --cov-fail-under=50` → 369 passed, 84.28%.
+  `ruff check .` and `ruff format --check .` clean. Step 1 grep checks all match.
+- C-13: no new fixtures; `TemplateMeta` literals stay inline (single consumer).
+- Out of scope: none. Open items unchanged (real-PG gap for indicators → Step 8).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 3 + 4 (analysis)
+
+- Steps 3 and 4 landed in one commit, as `## Step Dependencies` requires. Logged in the impl-spec `## Deviation Log`.
+- Files: `services/xstockstrat-analysis/app/repositories/strategy_templates.py` (`update(meta, payload_json)` writes
+  name/description, `meta.description` bound raw like `create`; `retire` untouched), `app/handlers/servicer.py:3588`
+  (`update(meta, payload_json)`), `tests/test_strategy_templates.py` (fake lockstep, `_manage` gains `description=`,
+  tests a–d), new `tests/test_strategy_templates_real_pg.py` (three `real_pg` legs).
+- TDD red (pre-Step-3 tree, Step 4 tests in place, `-m "not real_pg"`): 4 failed, 29 passed. (a) SQL
+  `SET name = $2, description = $3, payload = $4::jsonb` missing; (b) empty-name bind failed; (c) wiring spy failed
+  (`'str' object has no attribute 'template_id'`); the existing `test_manage_template_update_bumps_version_and_retire_hides`
+  also went red through the lockstep fake. (d) AC-3 pin passed on both trees.
+- TDD green: same command → 33 passed. Full suite `uv run pytest -m "not real_pg" --cov=app --cov-fail-under=40`
+  → 1438 passed, 89.82%. `ruff check .` / `ruff format --check .` clean; Step 3 greps match.
+- Real-PG legs NOT run locally (never start a database); proof deferred to the integration PR's CI (Deviation Log).
+- Tooling: `pnpm install --frozen-lockfile --ignore-scripts` in the worktree for the husky hook (main worktree had no
+  `node_modules` to symlink).
+- Out of scope: none.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 5 + 6 (ingest)
+
+- Steps 5 and 6 landed in one commit, as `## Step Dependencies` requires. Logged in the impl-spec `## Deviation Log`.
+- Files: `services/xstockstrat-ingest/app/repositories/source_templates.py` (`retire` → `retired_at =
+  COALESCE(retired_at, NOW())`, WHERE stays unfiltered, docstring wrapped for E501), `app/handlers/servicer.py`
+  (`ManageTemplate`: CREATE-only `template_id required` INVALID_ARGUMENT guard after the ADMIN gate and `meta =`,
+  before payload validation; CREATE binds `meta.template_id` with no uuid mint; `import uuid` kept for `job_id`),
+  `tests/test_source_templates.py` (tests a–e).
+- TDD red (pre-Step-5 tree, Step 6 tests in place): `uv run pytest tests/test_source_templates.py -q` → 3 failed,
+  30 passed. (a) retire SQL lacked `COALESCE(retired_at, NOW())`; (b) empty-id CREATE minted a uuid and reached the
+  mocked `create` (no abort); (c) abort carried `mcp_client requires non-empty mcp_endpoint in config_json` instead of
+  `template_id required`. (d) AC-1 wiring pin and (e) AC-13 ordering pin passed on both trees, as specced.
+- TDD green: same command → 33 passed. Full suite `uv run pytest --cov=app --cov-fail-under=40` → 349 passed, 83.22%.
+  `ruff check .` / `ruff format --check .` clean; Step 5 greps match (`uuid.uuid4` count 1).
+- Tooling: `pnpm install --frozen-lockfile --ignore-scripts` in the worktree for the husky hook.
+- Out of scope: none. Remaining: Step 8 (real-PG gap record), Step 9 (C-16 promotion at integration).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 8 (debt radar D-41)
+
+- File: `docs/repo-surveyor/debt-radar-findings.md` — one **Status (feature 269)** bullet appended after D-41's
+  **Routing** bullet, text verbatim from Step 8 **Instructions**; no other finding edited.
+- TDD: N/A (docs). Verification: `grep -n "Residual proof gap (accepted, follow-up)"` → line 417. Cited files
+  re-checked: both repositories exist, `tests/test_strategy_templates_real_pg.py` exists (Step 4), and indicators/ingest
+  tests still have zero `real_pg`/`local_pg` matches.
+- Line drift only (no deviation): `local_pg` is at analysis `tests/conftest.py:403`; the bullet cites no line numbers.
+- Out of scope: none. Remaining: Step 9 (C-16 promotion at integration).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 9 (C-16 promotion)
+
+- Files: `services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature` created.
+  Each holds `@AC-1..3` verbatim from `acceptance.feature` with only that service's `Examples:` row, `@feature-269`
+  appended to every tag line, and the feature-173 provenance header.
+- Promotion rule applied: the (feature, AC) pair is the identity; no renumbering, and the indicators
+  `private-by-default-templates.feature` `@AC-1..3` (`@feature-224`) are untouched in all three services.
+- TDD: N/A (docs). Verification: `@feature-269` count is 4 per file (3 tag lines + the mandated header line);
+  recorded in the Deviation Log. `git diff --stat` on `private-by-default-templates.feature` is empty.
+- Out of scope: none. Remaining: integration PR (§5.6).
+
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+- Operator note: Step 9 (commit `10f4d61d`) already created `services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature`
+  carrying `@feature-269`, so the plan's "no @feature-269 tag exists anywhere yet" dedup claim and its `platform.feature` routing conflict with that tree; resolve before writing.
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-template-update-metadata (feature 269)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Outline spans indicators/analysis/ingest via Examples |
+| AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | same |
+| AC-3 | docs/sdd/business-rules/platform.feature | APPEND | NEW | same |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  @AC-1 @FR-1 @FR-2 @regression @feature-269
+  Scenario Outline: An admin rename of a template is persisted and bumps the version once
+    Given an admin and a <kind> template "t-1" named "Old" with description "d1" at version 1 in <service>
+    When the admin calls ManageTemplate UPDATE on "t-1" with name "New", description "d2" and the same payload
+    Then the UPDATE response returns "t-1" with name "New", description "d2" and version 2
+    And ListTemplates on <service> returns "t-1" with name "New", description "d2" and version 2
+
+    Examples:
+      | kind          | service                |
+      | FORMULA       | xstockstrat-indicators |
+      | STRATEGY      | xstockstrat-analysis   |
+      | SIGNAL_SOURCE | xstockstrat-ingest     |
+
+  @AC-2 @FR-3 @FR-4 @regression @feature-269
+  Scenario Outline: Retiring a template twice keeps the first retired_at and sets updated_at each time
+    Given an admin and a <kind> template "t-1" in <service>
+    When the admin retires "t-1"
+    And the admin retires "t-1" again
+    Then the second RETIRE succeeds and returns "t-1" as retired
+    And "t-1" in <service> keeps the retired_at set by the first RETIRE
+    And "t-1" in <service> has an updated_at later than that retired_at
+
+    Examples:
+      | kind          | service                |
+      | FORMULA       | xstockstrat-indicators |
+      | STRATEGY      | xstockstrat-analysis   |
+      | SIGNAL_SOURCE | xstockstrat-ingest     |
+
+  @AC-3 @FR-5 @regression @feature-269
+  Scenario Outline: CREATE with an empty template_id is rejected
+    Given an admin
+    When the admin calls ManageTemplate CREATE on <service> with a <kind> template, template_id "" and a valid payload
+    Then the call fails with INVALID_ARGUMENT
+    And ListTemplates on <service> returns no new <kind> template
+
+    Examples:
+      | kind          | service                |
+      | FORMULA       | xstockstrat-indicators |
+      | STRATEGY      | xstockstrat-analysis   |
+      | SIGNAL_SOURCE | xstockstrat-ingest     |
+
+### Notes / ambiguities / conflicts
+- Routing call: each scenario is a single Scenario Outline whose Examples span three services (indicators, analysis, ingest). Splitting per service would break the verbatim rule, and no single service owns the guarantee, so all three go to platform.feature (cross-service contract: the same ManageTemplate UPDATE/RETIRE/CREATE behavior on every template-owning service). Alternative if a human prefers per-service suites: split by Examples row into services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature (not recommended, it alters the scenario text).
+- Dedup: grep for ManageTemplate, retired_at and template_id in all services/*/acceptance/*.feature found only services/xstockstrat-indicators/acceptance/private-by-default-templates.feature lines 38, 51 and 81. These are the private-by-default CREATE and origin-template rules, not UPDATE metadata, double-RETIRE or empty-id behavior, so there is no OVERLAP or CONFLICT. No @feature-269 tag exists anywhere yet, so this is not a re-run.
+- Ingest has no ManageTemplate scenarios in its suite for these behaviors. Only the platform.feature append is needed.
+- Affected services per feature.md Reviewers: indicators, analysis, ingest.
+
+### Coverage check
+- Source scenarios: 3 (AC-1, AC-2, AC-3). Planned (NEW+DUP+OVERLAP): 3 (3 NEW). All accounted for, none skipped. @AC numbers unchanged, @feature-269 added.
+```
+
+## Session 2026-10-29 — sdd-execute ALL-DONE PATH (C-16 promotion + integration PR)
+
+- Status: `in-progress` → `code-completed`.
+- C-16 resolution: the `sdd-batch-promotion-plan` above was **not** applied. Its `platform.feature` APPEND rests on a
+  false premise ("no @feature-269 tag exists anywhere yet"): Step 9 (`10f4d61d`) already promoted `@AC-1..3` verbatim
+  into `services/xstockstrat-{indicators,analysis,ingest}/acceptance/fix-template-update-metadata.feature` under the
+  design/spec-named rule (identity = (feature, AC)). Appending would hold the same identity twice, so every row is DUP
+  under the plan's own dedup rule and nothing new is written. `docs/sdd/business-rules/platform.feature` is unchanged.
+- Open for the operator: if the cross-service `platform.feature` home is preferred, move (not copy) the three blocks
+  there and delete the per-service files; flagged in the integration PR body.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

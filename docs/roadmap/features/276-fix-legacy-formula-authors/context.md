@@ -239,8 +239,261 @@ Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
 - Step 7 `ListFormulas` DB-path test gap (see above).
 - Merge-order with 244/268/243 for `tests/conftest.py` and indicators `CLAUDE.md`.
 
-## Session 2026-10-23 — no production (operator)
+---
 
-- **Fact from the operator:** there is no production deployment. The `Prod legacy-author set and count unknown` risk, OQ-2 and the first-prod-run wording earlier in this log therefore apply to staging: the only database in scope is staging, and its legacy-author set beyond the six known ids is still unknown (the six came from one admin selector, `author_filter="davcs86"`).
-- **Spec edits (wording only, no design change):** product-spec Root cause and OQ-2, and the runbook outline items 1 and 10 in implementation-spec. The CLI, plan/digest flow, restart requirement and the narrowed AC-9 are unchanged. If a production environment is created, the runbook is run there report-first after staging.
-- **Next:** the first staging report run (read-only) answers OQ-2; it is part of verification, not speccing.
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-legacy-formula-authors` (`-X ours`).
+- Re-spec of Steps 1-9 against the current codebase (implementation-spec.md Deviation Log, 2026-10-28):
+  - Line drift fixed: Step 1 (`manage-users.py` `WHERE is_active = TRUE` :287, `ORDER BY created_at` :288), Step 2 (`_mock_conn` :61, `FAKE_UUID`/`FAKE_NOW` :51-52), Step 4 (`OWNER_HEADERS`/`OTHER_HEADERS` :17-18), Step 9 (Migrations list :84-90).
+  - Step 2: no CI job runs `scripts/tests/`; verified locally only.
+  - Step 4: corrected the stale "no real-Postgres harness" claim (analysis `local_pg`, `ci.yml:400-404`). Decision: indicators keeps the `FakeFormulasTable` approach; reusing `local_pg` would add a CI install step and a cross-service fixture copy outside this bug fix's scope.
+  - Step 7: `ctx_with` makes `abort` raise, so assertions expect `grpc.RpcError` rather than "abort not awaited".
+  - Step 8: the runbook must state explicitly that the CLI's pooled `:25061` port deliberately deviates from `operator-db-access.md`'s direct-port guidance (F-06); index row goes in alphabetical position.
+  - Steps 3, 5, 6: evidence held; no change.
+
+---
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`.
+- Up-front confirmation (mode entry): operator standing authorization, operator chat 2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, and "start batch 2 in parallel too". Answers recorded: checkpoints unattended (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps: open the PR, hold the merge.
+- This feature's apply against staging/prod data remains an operator-only DB step (runbook, Step 8); execution here writes code, tests and docs only and never touches a database.
+- Plan: Steps 1-9 in order, one commit per step on `feature/fix-legacy-formula-authors`, single integration PR at the end.
+
+### Step 1 — service: `manage-users.py list-users --json` users export [done]
+- Added `--json` to `list-users`: a separate `SELECT user_id, email, is_active FROM identity.users` (plus `WHERE is_active = TRUE` with `--active-only`) `ORDER BY created_at`, printed via `typer.echo` as a JSON array of `{user_id, email_local, is_active}`; empty result prints `[]`, exit 0. The table query and its 4-tuple path are unchanged; DB errors still go to stderr.
+- TDD (red → green, scratch test mirroring Step 2's cases, not committed; Step 2 owns the committed tests): red `list-users --json` → exit 2 "No such option: --json" (3 failed); green 3 passed + existing `scripts/tests/test_manage_users.py` 41 passed (44 total). Verification: `uv run scripts/manage-users.py list-users --help` lists `--json`.
+- Files modified: `scripts/manage-users.py`
+- Deviations: none. Lint note: `ruff check`/`ruff format --check` on `scripts/manage-users.py` still report pre-existing findings on untouched lines (unused `import sys`, five formatter diffs); the step's own lines are clean. Step 2's Verification runs `ruff format --check` on this file and will fail on those pre-existing lines.
+
+---
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+### Step 2 — test: `list-users --json` output contract [done]
+- Added `TestListUsersJson` (3 tests) to `scripts/tests/test_manage_users.py` plus `import json`: only `{user_id, email_local, is_active}` emitted (no `@`, no `roles`); `--json --active-only` query selects `user_id` and filters `WHERE is_active = TRUE`; empty result prints `[]`, exit 0. The spec's 4th case (table path unchanged) is the unedited `test_lists_users`.
+- TDD: AC-5 (partial) red: run against the pre-Step-1 `manage-users.py` (`91c25c3c~1`, scratch copy) → 3 failed, `assert 2 == 0` (typer "No such option: --json"); green: `uv run --with pytest ... pytest scripts/tests/test_manage_users.py -v` → 44 passed.
+- Files modified: `scripts/tests/test_manage_users.py`
+- Deviation (operator decision, Option C): the specced ruff gate over `scripts/` fails on pre-existing findings; narrowed to "clean on the added lines" (no `ruff check` finding or `ruff format --diff` hunk on them). Logged in implementation-spec.md Deviation Log; cleanup + CI ruff job for `scripts/` filed as `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md`.
+
+### Step 3 — service: legacy-author CLI core (detection, classification, plan, report mode) [done]
+- Created `app/maintenance/__init__.py` (empty) and `app/maintenance/legacy_authors.py`:
+  - Constants: `UUID_RE`, `DETECT_SQL` (no `deleted_at` filter), `CLEAN_COUNT_SQL`, and `REWRITE_SQL`. `REWRITE_SQL` carries the system/UUID guard in the SQL and touches neither `is_public` nor `updated_at`.
+  - `connect`: `DATABASE_URL` is required, with no fallback. It sets `statement_cache_size=0` under `DB_PGBOUNCER` and prints the host and db, never the password.
+  - `load_users`, `detect`, `plan_digest`, `run_report` (SELECTs only) and an argparse `main`.
+  - `classify`: matches active users only, comparing `email_local` case-insensitively. One match is `suggested`, none is `unmappable`, two or more is `ambiguous`. `old_author` is kept byte-exact.
+  - No dependency added, `uv.lock` untouched, `main.py` not edited.
+- TDD (red → green): a scratch test covered Step 4's report, detect, SQL-guard and connect cases. It is not committed, because Step 4 owns the committed tests.
+  - Red: `ModuleNotFoundError: No module named 'app.maintenance'` (collection error).
+  - Green: 6 passed.
+- Verification:
+  - `uv run python -m app.maintenance.legacy_authors --help` lists `--users --out --apply --plan --confirm-digest` (exit 0).
+  - A missing `DATABASE_URL` exits 1.
+  - `ruff check .` and `ruff format --check .` are clean.
+  - `uv run pytest --cov=app --cov-fail-under=50`: 294 passed at 69.49% total. The new module sits at 0% until Step 4.
+- Files modified: `services/xstockstrat-indicators/app/maintenance/__init__.py`, `services/xstockstrat-indicators/app/maintenance/legacy_authors.py`
+- Deviations: keyword-only signature additions (`run_id`, `target`, `clean`), and `--apply` is refused until Step 5. Both are logged in the implementation-spec.md Deviation Log.
+
+### Step 4 — test: classification, plan builder, report mode, SQL guard text [done]
+- `tests/conftest.py`: added `USERS` (users-file entries in the `list-users --json` shape: davcs86, alice, bob, carol, two `sam`, inactive `olduser`), `make_formula_row(formula_id, author, *, deleted=False, **fields)`, and `FakeFormulasTable`. The fake dispatches on `DETECT_SQL`/`CLEAN_COUNT_SQL`/`REWRITE_SQL` (imported lazily so conftest loads without the module), evaluates every predicate (system, case-insensitive UUID regex, byte-exact `old_author`, `formula_id`), raises on any other SQL, logs to `execute_log`, and exposes `update_count()` and `mutate(formula_id, **fields)` (update, or insert when absent) for Steps 6-7.
+- `tests/test_legacy_authors.py`: the 8 specced tests (pgbouncer case parametrized over `true`/`1`/unset → 11 cases). Unmappable/ambiguous tests also assert the report's stdout line naming formula id and author.
+- TDD: AC-2/AC-3/AC-5/AC-7 red: with `app/maintenance/` moved aside (pre-Step-3 tree) → collection error `ModuleNotFoundError: No module named 'app.maintenance'`; green: `uv run pytest tests/test_legacy_authors.py -v` → 11 passed.
+- Verification: `uv run pytest --cov=app --cov-fail-under=50` → 305 passed, 83.62% total (`legacy_authors.py` 75%; apply/main land in Steps 5-6); `ruff check .` and `ruff format --check .` clean.
+- Files modified: `services/xstockstrat-indicators/tests/conftest.py`, `services/xstockstrat-indicators/tests/test_legacy_authors.py`
+- Deviations: none.
+
+### Step 5 — service: apply mode (pre-flight refusals, DB re-derivation, guarded rewrite, result file) [done]
+- `legacy_authors.py` additions:
+  - `APPLY_STATUSES` and `ApplyRefused` (`exit_code = 2`).
+  - `validate_for_apply`, which returns a list of refusal reasons. It refuses on a missing or mismatched digest, any status outside confirmed/unmappable/ambiguous (a leftover `suggested` aborts the run), a confirmed `old_author` that is `system`, a UUID or missing, and a confirmed `new_author` that is not a UUID, is not in the users file, or is inactive.
+  - `run_apply`. It validates before any write, then re-derives the write set as confirmed ∩ live `detect`. Any other confirmed entry counts as `skipped_not_detected`. Each target gets one autocommit `REWRITE_SQL`, with no transaction and no lock; an empty `RETURNING` counts as `skipped_concurrent`.
+  - The result file holds `run_id`, target, counts and the rewritten rows, and it is the undo record. Its default path is `<plan stem>.result.json`.
+  - `main` is wired for `--apply --plan --users --confirm-digest`. A refusal logs each reason and exits 2.
+  - Nothing touches `UpdateFormula`/`DeleteFormula`, `is_public` or `updated_at`.
+- TDD (red → green): a scratch test mirrored Step 6's cases. It is not committed, because Step 6 owns the committed tests. The cases were rewrite plus result file plus idempotent second run, 8 refusals, concurrent skip, hand-widened entry, and `main` refusal exit 2.
+  - Red: 12 failed (`AttributeError: module 'app.maintenance.legacy_authors' has no attribute 'run_apply'` / `'ApplyRefused'`, and `main` exited via the argparse error "--apply is not available in this build").
+  - Green: 12 passed.
+- Verification:
+  - `uv run python -m app.maintenance.legacy_authors --help` shows `--apply` (exit 0).
+  - `uv run pytest --cov=app --cov-fail-under=50`: 305 passed at 73.69% total. `legacy_authors.py` is at 45% until Step 6.
+  - `ruff check .` and `ruff format --check .` are clean, and `uv lock --check` is OK (no dependency added).
+- Files modified: `services/xstockstrat-indicators/app/maintenance/legacy_authors.py`
+- Deviations: keyword-only `run_id`/`target` on `run_apply`, and the result-path naming. Both are logged in the implementation-spec.md Deviation Log. Open item for Step 8 (runbook): apply does not compare the plan's recorded `target` with the connected host/db. The write set is still bounded by live detection and the users file, so the runbook should tell the operator to check the printed target line.
+
+### Step 6 — test: apply refusals, guarded rewrite, idempotence, concurrency [done]
+- `tests/test_legacy_authors.py`: added the 14 specced apply tests. Shared helpers:
+  - `_confirm` hand-edits the plan from suggested to confirmed (plus overrides and extra entries) and returns the digest.
+  - `_entry` builds a confirmed entry.
+  - `_assert_refused` checks `ApplyRefused`, `exit_code == 2`, zero UPDATEs and rows byte-equal.
+  - The tests reuse `USERS`, `FakeFormulasTable` and `make_formula_row` from `conftest.py` (C-13, no inline copies).
+- Idempotence (AC-4): a second report finds no entries, and its apply rewrites 0. Replaying the first, already-applied plan also rewrites 0 (`skipped_not_detected` 1), with no new UPDATE. Author and `updated_at` are unchanged for the system, user-id and rewritten rows.
+- Hand-widened plan (AC-9): the user-id row is excluded by the confirmed ∩ live intersection, and `REWRITE_SQL` alone also returns no row for it.
+- Concurrency (AC-8): a test-local `_InterleavedTable` mutates the rows right after apply's detection. The row comes back `skipped_concurrent` and both the owner's write and the new row survive. The interleaving placement is logged in the Deviation Log.
+- TDD (red → green). AC-1/AC-4/AC-8/AC-9:
+  - Red: the module was reverted to its Step 4 version (`67360c3f`, no apply). 14 failed and 11 passed, each failure `AttributeError: module 'app.maintenance.legacy_authors' has no attribute 'run_apply'`/`'ApplyRefused'`.
+  - Green: `uv run pytest tests/test_legacy_authors.py -v`, 25 passed.
+- Verification:
+  - `uv run pytest --cov=app --cov-fail-under=50`: 319 passed at 83.17% total (`legacy_authors.py` 77%; what is left uncovered is the `main`/`_apply`/`_report` CLI wiring).
+  - `ruff check .` and `ruff format --check .` are clean.
+- Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors.py`
+- Deviations: the AC-8 interleaving point (Deviation Log).
+
+### Step 7 — test: servicer read path after repair (cold cache) and stale-cache negative [done]
+- `tests/test_legacy_authors_read_path.py` (new) drives the real `IndicatorsServicer` read path (`_load_formula` → `FormulasRepository.get_by_id`) over a test-local `_FakePool(FakeFormulasTable)` that serves `get_by_id`'s `fetchrow`. It reuses `USERS`, `make_formula_row`, `FakeFormulasTable` and `ctx_with` from `conftest.py` (C-13). The repair runs the real `run_report`, then the operator confirm, then `run_apply`.
+  - `test_owner_reads_after_repair_cold_cache` (AC-1): before apply, the owner `GetFormula` gets NOT_FOUND. After apply, a fresh servicer returns `author == 80880990-…`, and the owner `ExecuteFormula` succeeds (sandbox stubbed).
+  - `test_non_owner_still_not_found_after_repair` (AC-6): bob gets NOT_FOUND on `ExecuteFormula` and `GetFormula`. An admin (scope 4) `ExecuteFormula` gets PERMISSION_DENIED.
+  - `test_stale_cache_requires_restart`: a servicer whose cache was filled by an admin `GetFormula` before apply still gives the owner NOT_FOUND after apply, and a new servicer serves the repaired author. This is the restart requirement Step 8's runbook must state.
+- TDD (red → green). AC-1/AC-6:
+  - Red: `legacy_authors.py` reverted to its Step 4 version (`67360c3f`). 3 failed, each `AttributeError: module 'app.maintenance.legacy_authors' has no attribute 'run_apply'`. The owner pre-apply NOT_FOUND assertion passed before the failure, which reproduces the defect.
+  - Green: `uv run pytest tests/test_legacy_authors_read_path.py tests/test_formula_read_authz.py -v`, 15 passed.
+- Verification: `uv run pytest --cov=app --cov-fail-under=50` gave 322 passed at 83.17%. `ruff check .` and `ruff format --check .` are clean. The suite ran on both the service's `.python-version` (CPython 3.12.3) and 3.13.17 (`uv run --python 3.13`), with the same results.
+- Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors_read_path.py`
+- Deviations: test-local fake pool, sandbox stub, admin-filled warm cache and the RED reason (Deviation Log).
+
+### Step 8 — docs: runbook `docs/runbooks/legacy-formula-authors.md` [done]
+- `docs/runbooks/legacy-formula-authors.md` (new) covers these sections, in order:
+  - Scope. The prod row count is unknown, and the six staging ids are a floor.
+  - Authority. It comes from the DB credential plus the DBA change record; the digest is integrity, not authority.
+  - Prerequisites and connection. The pooled `:25061` URL with `DB_PGBOUNCER=true`, with the stated deviation from `operator-db-access.md`.
+  - Step A, the users export.
+  - Step B, the report and plan editing (`suggested` → `confirmed`, and `override` entries).
+  - Step C, in the order edit → hash (`shasum -a 256`) → record → apply, with the list of refusals.
+  - Attaching the plan and result files to the change record (PII, storage location, retention, deleting local copies).
+  - Restart every indicators instance, then re-run the report. Verify as the owner via `get_formula`/`test_formula`/`ExecuteFormula`, not `list_formulas` alone. Re-run for any `skipped_concurrent` rows.
+  - Undo by a manual compare-and-set.
+  - Staging first, then prod, recording the observed prod count.
+- `docs/runbooks/CLAUDE.md`: index row added in alphabetical order, before `mcp-tools.md`.
+- Flags, log lines, refusal reasons and the `plan.result.json` default were checked against the built `legacy_authors.py` and its `--help` output, not only the spec text. `list-users --json` exists (`scripts/manage-users.py:281`).
+- TDD: N/A (docs).
+- Verification:
+  - Before the edit, the runbook grep failed (no such file) and the index grep found nothing.
+  - After it, the ordered edit/hash/record/apply lines are present and the index row is at `docs/runbooks/CLAUDE.md:17`.
+  - `grep -nE "grep -P|pip install"` returns nothing (macOS rule).
+- Files modified: `docs/runbooks/legacy-formula-authors.md`, `docs/runbooks/CLAUDE.md`
+- Deviations: the pooled-URL derivation, the named storage location and retention, and the restart command example (Deviation Log).
+- Open item: the repo documents no change-record system, so the operator and DBA pick the concrete system when running the runbook.
+
+### Step 9 — docs: indicators CLAUDE.md Maintenance section and context-constitution invariant [done]
+- `services/xstockstrat-indicators/CLAUDE.md` gets a new `## Maintenance` section after `## Running Locally`. It is one paragraph plus the report and apply commands. It says the tool is operator-run and outside the service process, uses one `asyncpg` connection rather than the `main.py` pool, and needs `DATABASE_URL` with no fallback. It links `docs/runbooks/legacy-formula-authors.md`.
+- `services/xstockstrat-indicators/docs/context-constitution.md` gets the `INDICATORS-12` row, using the spec's rule text. Its Evidence and Example cells anchor `REWRITE_SQL` at `legacy_authors.py:32-36`. A hand-refresh note is added to the header.
+- TDD: N/A (docs). Verification grep before the edit: exit 1, no matches. After the edit: `INDICATORS-12` at `:29` and `## Maintenance` at `:224`, exit 0.
+- Teardown (root CLAUDE.md): `/context-forge:context-constitution` is not available in this session. Manual reconciliation re-checked both touched files against the code: `servicer.py:141`, `REWRITE_SQL`, the CLI `--help` flags, and the runbook's pooled-port and restart text all match, and the Database migrations list is unchanged. The integration PR body must record both that the plugin was unavailable and this reconciliation.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-indicators/docs/context-constitution.md`
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-legacy-formula-authors (feature 276)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature | CREATE | NEW | legacy username author rewritten to user id; owner can Get/List/Execute |
+| AC-2 | same | CREATE | NEW | legacy authors beyond known ids, incl. soft-deleted rows |
+| AC-3 | same | CREATE | NEW | unmappable author left unchanged and reported |
+| AC-4 | same | CREATE | NEW | idempotent re-run; system and user-id rows untouched |
+| AC-5 | same | CREATE | NEW | report-only mode makes no mutation |
+| AC-6 | (none, skipped) | - | OVERLAP | Same outcome as feature 224 @AC-1 in services/xstockstrat-indicators/acceptance/private-by-default-templates.feature (non-owner GetFormula/ExecuteFormula returns NOT_FOUND). Write skipped; see Notes |
+| AC-7 | same as AC-1 | CREATE | NEW | ambiguous author (two users) left unchanged and reported |
+| AC-8 | same | CREATE | NEW | concurrent-write safety between detection and rewrite |
+| AC-9 | same | CREATE | NEW | apply refuses without digest-matched, fully-confirmed plan; system/UUID rows never touched |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature (CREATE) ---
+# Promoted from docs/roadmap/features/276-fix-legacy-formula-authors/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-276` tag.
+# Durable business rules xstockstrat-indicators already guarantees: a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+# Source: @AC-1, @AC-2, @AC-3, @AC-4, @AC-5, @AC-7, @AC-8, @AC-9 (@AC-6 omitted: OVERLAP with feature 224 @AC-1).
+Feature: fix-legacy-formula-authors (indicators)
+  Regression guard for the defect report docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md:
+  formulas stored under a legacy username author are unreadable by their owner.
+
+  @AC-1 @FR-1 @regression @feature-276
+  Scenario: A formula created before ownership moved to user id is owned by its user id
+    Given the formula "31bb8ea6-0f3e-4cf7-8844-ec8294cebf85" is stored with author "davcs86"
+    And the user "davcs86" has user id "80880990-2b79-4d85-8761-d8d9102c2efb"
+    When the legacy-author fix runs
+    Then GetFormula for "31bb8ea6-0f3e-4cf7-8844-ec8294cebf85" returns author "80880990-2b79-4d85-8761-d8d9102c2efb"
+    And ListFormulas called as user "80880990-2b79-4d85-8761-d8d9102c2efb" includes it
+    And GetFormula and ExecuteFormula called as that user succeed
+
+  @AC-2 @FR-2 @regression @feature-276
+  Scenario: Legacy authors beyond the known staging ids are found, including soft-deleted rows
+    Given a formula "f-live" (id "aaaaaaaa-0000-4000-8000-000000000001") stored with author "alice" and a soft-deleted formula "f-gone" (id "aaaaaaaa-0000-4000-8000-000000000002") stored with author "alice"
+    And the user "alice" has user id "11111111-1111-4111-8111-111111111111"
+    When the legacy-author fix runs
+    Then both "f-live" and "f-gone" have author "11111111-1111-4111-8111-111111111111"
+
+  @AC-3 @FR-3 @feature-276
+  Scenario: An author that maps to no user is left unchanged and reported
+    Given the formula "f-orphan" is stored with author "ghost" and no user "ghost" exists
+    When the legacy-author fix runs
+    Then the formula "f-orphan" still has author "ghost"
+    And the run report lists "f-orphan" with author "ghost" as unmappable
+    And ListFormulas called as any user does not include "f-orphan"
+
+  @AC-4 @FR-4 @feature-276
+  Scenario: A second run changes nothing and non-legacy formulas are untouched
+    Given the legacy-author fix has already run once
+    And the formula "f-system" is stored with the system author and "f-owned" is stored with a user id author
+    When the legacy-author fix runs again
+    Then the run report shows 0 rewritten
+    And "f-system" and "f-owned" keep their authors and their updated timestamps
+
+  @AC-5 @FR-5 @feature-276
+  Scenario: The operator can count legacy authors without mutating data
+    Given 2 formulas with mappable legacy authors, 1 with an unmappable author and 3 with user id or system authors exist
+    When the legacy-author fix runs in report-only mode
+    Then the report shows 2 rewritable, 1 unmappable and 3 clean
+    And no formula author has changed
+
+  @AC-7 @FR-3 @feature-276
+  Scenario: An author that maps to more than one user is left unchanged and reported
+    Given the formula "f-ambiguous" is stored with author "sam" and two users match the username "sam"
+    When the legacy-author fix runs
+    Then the formula "f-ambiguous" still has author "sam"
+    And the run report lists "f-ambiguous" with author "sam" as ambiguous
+
+  @AC-8 @FR-7 @feature-276
+  Scenario: A row written between detection and rewrite is not lost or overwritten
+    Given the formula "bbbbbbbb-0000-4000-8000-000000000001" is stored with author "alice" and the user "alice" has user id "11111111-1111-4111-8111-111111111111"
+    And the legacy-author fix has detected "bbbbbbbb-0000-4000-8000-000000000001" but not yet rewritten it
+    When user "33333333-3333-4333-8333-333333333333" registers a new formula "bbbbbbbb-0000-4000-8000-000000000002" before the rewrite applies
+    And the owner "alice" updates "bbbbbbbb-0000-4000-8000-000000000001" so its author is already "11111111-1111-4111-8111-111111111111"
+    Then "bbbbbbbb-0000-4000-8000-000000000002" keeps author "33333333-3333-4333-8333-333333333333" and its content is unchanged
+    And "bbbbbbbb-0000-4000-8000-000000000001" keeps the owner's update and author "11111111-1111-4111-8111-111111111111"
+
+  @AC-9 @FR-7 @feature-276
+  Scenario: Apply refuses without a digest-matched, fully-confirmed plan and never touches system or UUID rows
+    # Authority to run the fix is the DB credential holder plus the DBA change record (process, not code);
+    # operator sign-off 2026-10-22. The digest is integrity, not authority. Order: edit plan -> hash -> record -> apply.
+    Given the formula "bbbbbbbb-0000-4000-8000-000000000003" is stored with the reserved system author and "bbbbbbbb-0000-4000-8000-000000000004" is stored with author "alice"
+    When apply is run with a missing or mismatched digest, or a plan that still holds a "suggested" entry, or a confirmed entry whose old author is the system author or a user id, or a new author that is not an active user id
+    Then the run is refused with zero UPDATEs and no formula author has changed
+    And when apply is run with a digest-matched, fully-confirmed plan, "bbbbbbbb-0000-4000-8000-000000000003" keeps the system author and its updated timestamp
+
+### Notes / ambiguities / conflicts
+- Service attribution: every scenario's observable subject is indicators.formulas authorship and GetFormula/ListFormulas/ExecuteFormula, all xstockstrat-indicators (feature.md Reviewers: indicators owner, DBA, Security; no cross-service guarantee), so no platform.feature entry. The suite directory services/xstockstrat-indicators/acceptance/ already exists; only the new file is created.
+- AC-6 OVERLAP: /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/private-by-default-templates.feature @AC-1 (@feature-224) already asserts that another user's GetFormula and ExecuteFormula return NOT_FOUND. Write skipped per policy. Human option: consolidate, or promote AC-6 anyway as a repair-specific regression guard. The existing scenario was not touched.
+- No CONFLICT: no existing promoted rule contradicts any scenario. Repair only changes the stored author to a user id, which matches the 224 header-only authorship rule.
+- Grep of platform.feature and the indicators suites found no prior @feature-276 or legacy-author scenario, so there are no DUPs.
+- AC-9 keeps its explanatory comment verbatim because it records the operator sign-off.
+
+### Coverage check
+- Source scenarios: 9. Planned (NEW+DUP+OVERLAP): 9 (8 NEW, 0 DUP, 1 OVERLAP). Written scenarios: 8. Skipped deliberately: @AC-6 (OVERLAP with 224 @AC-1). Every @AC-* is accounted for.
+```
+
+## Session 2026-10-29 — sdd-execute ALL-DONE PATH (C-16 promotion applied)
+
+- The promotion plan above was confirmed under the operator's standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, auto-confirm C-16 promotion) and applied exactly as written. It created `services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature` with 8 scenarios. @AC-6 was skipped as an OVERLAP with feature 224 @AC-1.
+- `merge-order.md` has no entry for this feature, so no merge-order gate applies.
+- `status.md`: `in-progress` → `code-completed`, with a feature.md history row. The integration PR `feature/fix-legacy-formula-authors` → `main-dev` was opened. Merge is held for the operator, because the DB repair is an operator-only step.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

@@ -545,9 +545,311 @@ The full /sdd-design debate is halted at its approval gate after round 2 (gate p
 - `implementation-spec.md` updated: Step 1 constant, Step 6 `traderBff.ts` wiring (item 3b, verification grep),
   Step 7 `it.each` over the four mutations, Step 10 docs line. The p99 telemetry gate stays an accepted risk.
 
-## 2026-10-27 — downstream consumer note (from feature 279 homelab-compose-deploy; operator-approved)
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
 
-- homelab-edge Gatus probes `http://<vm>:3000/trader/api/health` with `ignore-redirect`, `[STATUS] == 200` and
-  `[BODY].status == ok`. It relies on `@AC-3`'s `/trader/api/health` row and the handler's `status: 'ok'` JSON.
-  Removing or renaming that path, or changing its body, turns both homelab UI probes red. 279 adds no root
-  `/api/health` and no `PUBLIC_HEALTH_PATHS` entry (merge-order.md "Homelab monitoring ↔ UI health exemption").
+- Branch setup: merged `origin/main-dev` into `feature/fix-ui-transport-hardening` with `-X ours`.
+- Re-specced Steps 1, 3, 7 and 10 against the current codebase. Only line pointers drifted; every claim still holds:
+  - Step 1: `connectClients.ts` lazy `get()` `:50-65`, `unary` wrapper `:67-69` (edit target `:68` unchanged), `stream` wrapper `:70-72`.
+  - Step 3: `alert-stream.spec.ts` "opening the sheet" test `:41-50`, badge-open click sequence `:44-47`.
+  - Step 7: `__tests__/insightsBff.test.ts` `vi.mock('@/lib/auth')` `:11-20` (`hasAdminScope` `:19`), `fakeCtx()` `:27-35`, cases `:37-85`. The file imports only `forward` (`:22`), so the new describe adds the `forwardAdmin` and `hasAdminScope` imports.
+  - Step 10: the open `listOpportunities`-literal finding is `services/xstockstrat-ui/docs/context-constitution-findings.md:36`, not the root findings file (whose `:36` is an unrelated feature-227 finding). The instruction (leave it open) is unchanged.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`. Severity SEV-3.
+- **Up-front confirmation (sequential mode entry):** operator approved the plan by standing authorization in operator chat
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, and "start batch 2 in
+  parallel too". Recorded answers: unattended checkpoints (checkpoint mode `report`); C-16 promotion auto-confirmed unless it
+  changes an existing `@AC` rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps: open the PR and
+  hold the merge.
+- Plan: Steps 1-10 in order as one commit per step on `feature/fix-ui-transport-hardening`, then a single integration PR to `main-dev`.
+
+## Session 2026-10-28 — Step 1 (sdd-execute sequential)
+
+- Tooling setup (steps 1–10): node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile` ⬇ (worktree-local; the main worktree has no `node_modules` to symlink) · Chromium pre-provisioned (Steps 2/3/5/9).
+- Step 1 done: created `src/lib/deadlines.ts` (leaf, no imports: `DEFAULT_UNARY_TIMEOUT_MS` 30_000, `REFRESH_TIMEOUT_MS` 10_000, `LONG_RPC_TIMEOUT_MS` 300_000, `ORDER_MUTATION_TIMEOUT_MS` 60_000, `FUNDAMENTALS_TIMEOUT_MS` 15_000 moved from `bffShared.ts` with its feature-220 comment). `connectClients.ts` unary wrapper forwards `timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS` (relative import); `stream` wrapper and lazy `get()` unchanged. `insightsBff.ts` / `traderBff.ts` import `FUNDAMENTALS_TIMEOUT_MS` from `@/lib/deadlines`; no re-export from `bffShared.ts`.
+- TDD (AC-1): a temporary probe of Step 2 vitest case (b) (mocked `createGrpcTransport`, `identityClient.revokeToken`) — red: `expected undefined to be 30000` → green: passed. The probe was deleted (Step 2 owns the committed `connectClients.test.ts`).
+- Verification: greps pass, `DEFAULT_UNARY_TIMEOUT_MS` count = 2, `pnpm run lint` ✓ (pre-existing warnings only), `pnpm run build` ✓ (`@AC-6 @feature-128`), `pnpm run test:unit` 46 files / 237 tests ✓. `git diff -U0` shows no `stream(` change.
+- Deviation: `pnpm run format:check` fails on 10 pre-existing unformatted files outside Step 1 — scoped prettier check on the Step 1 files passes (Deviation Log).
+
+## Session 2026-10-28 — Step 2 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile` (worktree-local). Chromium came from `/opt/pw-browsers`, which has no Firefox build, so the spec ran on `chromium` only.
+- Step 2 done:
+  - `src/lib/connectClients.test.ts`: 4 cases, with `createGrpcTransport` mocked.
+  - `e2e/transport-deadline.spec.ts`: a browserless black-hole h2 server over `tlsOptions()`/`devCerts()`. `CONFIG_ENDPOINT` is set before the dynamic import.
+- TDD evidence. Step 1 had already landed, so each RED was produced by temporarily mutating `connectClients.ts`. Every mutation was reverted (byte-compared to the committed file).
+  - (b) AC-1 vitest: forward `timeoutMs` unchanged, which is the pre-fix tree. Red `expected undefined to be 30000` → green.
+  - (c) AC-6 vitest, red via mutation (preservation guard): always forward the default. `expected 30000 to be 2000`.
+  - (d) AC-5 vitest, red via mutation (preservation guard): apply the default in `stream`. `expected 30000 to be undefined`.
+  - (a) AC-6 @feature-128 vitest, red via mutation (preservation guard): call `get()` eagerly in `makeTransport`. `expected 10 to be +0`.
+  - Playwright AC-1, pre-fix unary: red `Test timeout of 60000ms exceeded` (the call hangs) → green, DeadlineExceeded at 30.0s.
+  - Playwright AC-6, red via mutation (preservation guard): always forward the default. `Expected: <= 5000, Received: 30001` → green at 2.0s.
+- Verification:
+  - vitest: 4/4 ✓.
+  - `CI=1 playwright test e2e/transport-deadline.spec.ts`: 2/2 ✓, plus setup.
+  - `test:coverage`: 47 files / 241 tests ✓, thresholds met.
+  - `lint` ✓. Prettier and `tsc --noEmit` are clean on both new files.
+  - The devCerts/mock-backend import grep matches.
+- Open Thread "Long wall-clock e2e (Steps 2/3/5)", resolved for Step 2 only: **kept as is**.
+  - CI runs `chromium` only (`includeFirefox` is false under CI), so the ~30s AC-1 case runs once per CI run.
+  - `fullyParallel` puts the two cases in separate workers.
+  - Steps 3 and 5 decide for their own specs.
+- Deviations (Deviation Log):
+  - Playwright ran with `CI=1`, because the local `pnpm dev` warmup exceeded its 10s timeout.
+  - Vitest (a) asserts a call-count snapshot taken right after the import, because vitest clears mock history before each test.
+
+## Session 2026-10-28 — Step 3 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile` (worktree-local). Chromium came from `/opt/pw-browsers`, so the run used `chromium` only.
+- Step 3 done:
+  - `e2e/fixtures/alerts.ts`: `ALERT_STREAM_HOLD_TRACE_ID`, `ALERT_STREAM_HOLD_MS` (= `DEFAULT_UNARY_TIMEOUT_MS` + 5s) and `ALERT_STREAM_HELD` (title `Held stream alert`).
+  - `e2e/mock-backend.ts`: `streamAlerts(_req, ctx)` holds when `x-trace-id` matches. The hold is abort-aware and yields `ALERT_STREAM_HELD` only if the hold completes; the default loop is unchanged.
+  - The `x-trace-id` sentinel reached the mock through `page.setExtraHTTPHeaders`, middleware and `backendHeaders`. The `categories` fallback was not needed.
+  - `alert-stream.spec.ts`: new AC-5 test. INVENTORY Alerts row extended.
+- TDD, AC-5 (red via mutation — preservation guard; the pre-fix tree has no deadline, so AC-5 is already green):
+  - Mutation: the `stream` wrapper in `connectClients.ts` forwards `timeoutMs ?? DEFAULT_UNARY_TIMEOUT_MS`.
+  - Red: `expect(getByText('Held stream alert')).toBeVisible()` timed out (50000ms) in both the run and its retry.
+  - The mutation was reverted; `git status` shows `connectClients.ts` unmodified.
+  - Green on the real tree: passed in 37.4s.
+- Verification:
+  - `CI=1 playwright test e2e/trader/alert-stream.spec.ts --project=chromium`: 7/7 ✓, including setup and the five existing tests.
+  - `lint` exits 0. The `helpers/auth` grep and the `ALERT_STREAM_HOLD_TRACE_ID` grep (INVENTORY, mock-backend) match.
+- Open Threads resolved for Step 3:
+  - "Long wall-clock e2e": **kept as is**. This is one ~37s case on `chromium` only in CI.
+  - "Mutation RED evidence (Steps 2/3)": recorded above and in the Step 2 session. **Closed.**
+- Deviations (Deviation Log): Playwright ran with `CI=1`. `tsc` has 2 pre-existing errors in `e2e/insights/backfills.spec.ts`, which is outside this step.
+
+## Session 2026-10-29 — re-spec Steps 4–10 (sdd-execute sequential, sdd-batch-execute)
+
+- Authorization: the operator approved the up-front plan by standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Checkpoints are unattended and set to `report`. C-16 promotion is auto-confirmed unless it changes an existing @AC rule. The merge-train is authorized. DB/prod steps are operator-only: open the PR and hold the merge.
+- Branch setup (§5.3): merged `origin/main-dev` into the detached checkout with `-X ours` (`fdc5b195`). Status was already `in-progress`, so no status flip.
+- Re-spec (implementation-spec.md only; no code touched):
+  - Step 5: `mock-backend.ts` `refreshToken()` is now `:191-196` (`:184-190` is `authenticateUser`). The stall precedent is `getFundamentals` at `:662-668`. The `helpers/auth` import is at `:38`. The redirect loop is `auth.spec.ts:183-195` (get at `:190`). The INVENTORY sentinel section is at `:53`, header at `:58`.
+  - Step 6: `bffShared.ts` `forward()` is at `:60-73` (admin check `:66`, `timeoutMs` `:70`). `forwardAdmin` is at `:76-80`, JSDoc `:75`. The signature is unchanged.
+  - Step 7: the `connectClients` mock must cover the union of the three BFFs' imports. `traderBff.ts:9-16` adds `tradingClient`, `portfolioClient`, `notifyClient`, `ledgerClient`, `configClient`. `dispatchConnect` is at `insightsBff.ts:209` and `traderBff.ts:151`.
+  - Steps 4, 8, 10: re-verified, no mismatch.
+  - Step 9: the batch directive reported the middleware.test 307 assertion at `:165-166`. Grep shows `:166-167`, which is what the spec already says, so it is left unchanged.
+- Tooling note: the main worktree has no `node_modules` to symlink. `core.hooksPath` points to a non-existent `/home/user/xstockstrat/.husky/_`, so the husky pre-commit hook does not run in this worktree. Implementation steps must run `pnpm install --frozen-lockfile` locally (as Steps 1–3 did) and run lint/format by hand.
+
+## Session 2026-10-29 — Step 4 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter xstockstrat-ui...`, run in this worktree only.
+- Step 4 done. `src/lib/identity.ts` now imports `REFRESH_TIMEOUT_MS` from `@/lib/deadlines`, and `refreshSession` passes `{ timeoutMs: REFRESH_TIMEOUT_MS }` as the second argument to `identityClient.refreshToken`. The `catch` → `null` (fail-closed), `revokeToken` (30s default), `middleware.ts` and the refresh route are unchanged.
+- TDD: a temporary probe of Step 5 vitest case (a), with `@/lib/connectClients` mocked. Red: `toHaveBeenCalledWith({ refreshToken: 'rt' }, { timeoutMs: 10000 })` failed because the call had one argument. Green: passed. The probe was deleted, since Step 5 owns the committed `identity.test.ts`. AC-2 is covered by Step 5.
+- Verification:
+  - The `timeoutMs: REFRESH_TIMEOUT_MS` grep matches (`:17`).
+  - `pnpm run lint` exits 0, with pre-existing warnings only.
+  - `prettier --check src/lib/identity.ts` passes.
+  - `vitest run`: 48 files / 242 tests pass.
+- Deviation: `pnpm run format:check` still fails on the 10 pre-existing files recorded under Step 1. See the Deviation Log.
+
+## Session 2026-10-29 — Step 5 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only. Chromium came from `/opt/pw-browsers`.
+- Step 5 done:
+  - `src/lib/identity.test.ts` (new): mocks `@/lib/connectClients`. Case (a) checks that `refreshToken` gets `({ refreshToken: 'rt' }, { timeoutMs: REFRESH_TIMEOUT_MS })`. Case (b) checks that a `DeadlineExceeded` rejection makes it resolve `null`.
+  - `e2e/helpers/auth.ts`: adds `REFRESH_STALL_TOKEN` and `signExpiredTestJwt()`.
+  - `e2e/mock-backend.ts`: `refreshToken(req, ctx)` stalls on the sentinel until abort, then throws `Canceled`, mirroring `getFundamentals`. Every other token gets the unchanged response.
+  - `e2e/auth.spec.ts`: new describe, "Session refresh against a stalled identity (feature 271 @AC-2)".
+  - INVENTORY: adds a sentinel row and notes `signExpiredTestJwt` in the auth-helper row.
+- TDD, AC-2 (red via mutation, because Step 4 had already landed):
+  - Mutation: `identity.ts` reverted to the one-argument `refreshToken({ refreshToken })`.
+  - Vitest red: `toHaveBeenCalledWith({ refreshToken: 'rt' }, { timeoutMs: 10000 })` failed, because the call had one argument. Case (b) passed, since the `catch` → `null` path predates this feature.
+  - e2e red: both cases hit `apiRequestContext.get/post: Timeout 25000ms exceeded`, in both the run and its retry. The 30s transport default from Step 1 outlasts the 25s request bound.
+  - The mutation was restored from backup. `git status` shows `identity.ts` unmodified.
+  - Green on the real tree: vitest 2/2. `CI=1 playwright test e2e/auth.spec.ts --project=chromium` passed 23/23, with the AC-2 cases at 10.2s and 10.0s.
+- Verification:
+  - `test:coverage`: 49 files / 244 tests pass, and thresholds are met.
+  - `lint` exits 0.
+  - The `helpers/auth` grep (auth.spec, mock-backend) and the INVENTORY `REFRESH_STALL_TOKEN` grep both match.
+- Open Thread "Long wall-clock e2e", resolved for Step 5: **kept as is**. These are two ~10s cases on chromium only in CI.
+- Deviations (Deviation Log):
+  - Playwright ran with `CI=1 --project=chromium`.
+  - Case (b) has an explicit request timeout.
+  - `INVENTORY.md` prettier drift and the 2 `backfills.spec.ts` `tsc` errors are both pre-existing.
+
+## Session 2026-10-29 — Step 6 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only. The main worktree still has no `node_modules` to symlink.
+- Step 6 done:
+  - `bffShared.ts`: `forwardAdmin(call, options: { timeoutMs? } = {})` now returns `forward(call, { ...options, admin: true })`. Because `admin` is spread last, a caller cannot unset it. The `call` opts type was widened to `{ headers; timeoutMs? }`.
+  - `insightsBff.ts`: `scoreStrategy`, `runBacktest`, `screenSymbols` and `triggerBackfill` (`forward`), and `deleteBackfilledData` (`forwardAdmin`), now run at `LONG_RPC_TIMEOUT_MS`.
+  - `configUiBff.ts`: `runFundamentalsScan` (`forwardAdmin`) now runs at `LONG_RPC_TIMEOUT_MS`, with a new `@/lib/deadlines` import.
+  - `traderBff.ts`: `placeOrder`, `cancelOrder`, `replaceOrder` and `confirmOrder` now run at `ORDER_MUTATION_TIMEOUT_MS`.
+  - No other registration changed.
+- TDD: I used a temporary dispatch-level probe (`src/lib/step6probe.test.ts`, deleted after green, since Step 7 owns the committed `bffDeadlines.test.ts`). It covers six representative methods across the three BFFs, sending an admin JWT through `dispatchConnect`.
+  - The six methods: RunBacktest, TriggerBackfill, DeleteBackfilledData, RunFundamentalsScan, PlaceOrder and ConfirmOrder.
+  - Red (pre-fix, `expect(spy.mock.calls[0][1].timeoutMs)`): 6/6 failed with `expected undefined to be 300000` or `expected undefined to be 60000`. The HTTP 200 assertions passed, so the failures came from the missing deadline and nothing else.
+  - Green after the change: 6/6 passed. AC-6 is covered by Step 7.
+- Verification:
+  - `grep -c LONG_RPC_TIMEOUT_MS` gives `insightsBff.ts` 6 and `configUiBff.ts` 2. `traderBff.ts` has 5 `ORDER_MUTATION_TIMEOUT_MS` matches.
+  - The `{ ...options, admin: true }` grep matches at `bffShared.ts:80`.
+  - `lint` exits 0.
+  - `vitest run`: 49 files / 244 tests pass.
+- Deviations (see the Deviation Log):
+  - `format:check` still fails on the 10 pre-existing files. The Step 6 files are clean.
+  - The `bffShared.ts` evidence lines drifted by +4. This is cosmetic.
+  - `tsc --noEmit` still reports only the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` errors.
+
+## Session 2026-10-29 — Step 7 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only.
+- Step 7 done:
+  - `src/lib/__tests__/insightsBff.test.ts`: new describe "forwardAdmin() — timeoutMs threading (feature 271)". Case (a) checks that an admin session gets `timeoutMs === LONG_RPC_TIMEOUT_MS` plus `headers`. Case (b) checks that a non-admin session rejects with `Code.PermissionDenied` and the backend is never called.
+  - `src/lib/bffDeadlines.test.ts` (new): mocks `@/lib/connectClients` with the three-BFF client union and dispatches through `insights`, `config-ui` and `trader` `dispatchConnect` with an admin JWT (`signTestJwt(['admin'])`). It pins 6 long RPCs at `LONG_RPC_TIMEOUT_MS`, 4 order mutations at `ORDER_MUTATION_TIMEOUT_MS`, and preservation: `ListOpportunities` 30_000, `GetFundamentals` `FUNDAMENTALS_TIMEOUT_MS`, `GetBars` undefined.
+- TDD, AC-6 (red via mutation, because Step 6 had already landed):
+  - Mutation: the four Step 6 files (`bffShared.ts`, `insightsBff.ts`, `configUiBff.ts`, `traderBff.ts`) checked out from `dabc40f5~1`.
+  - Red: 11 failed / 7 passed. The `forwardAdmin` case (a) and all 10 long/order cases failed with `expected undefined to be 300000` / `expected undefined to be 60000`. The 7 passes were the 3 pre-existing `forward()` cases, the `forwardAdmin` PermissionDenied case (the gate predates this feature) and the 3 preservation cases.
+  - The mutation was restored with `git checkout HEAD --`. `git status` shows the four files unmodified.
+  - Green on the real tree: 18/18 pass. All 13 `bffDeadlines` cases and both `forwardAdmin` cases ran (verbose reporter).
+- Verification:
+  - `test:coverage`: 50 files / 259 tests pass, and thresholds are met (`src/lib/**` 72% lines).
+  - `lint` exits 0. Prettier is clean on both test files. `tsc --noEmit` still reports only the 2 pre-existing `e2e/insights/backfills.spec.ts` errors.
+- Deviation (Deviation Log): the spec's "9 cases" count predates the order-mutation class, so 13 ran. The admin JWT comes from the shared `e2e/helpers/auth.ts` helper.
+
+## Session 2026-10-29 — Step 8 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile`, run in this worktree only. The main worktree still has no `node_modules` to symlink.
+- Step 8 done:
+  - `src/middleware.ts`: a module-level `PUBLIC_HEALTH_PATHS` set holds exactly the eight segment health paths. The first statement of `middleware()` returns `NextResponse.next()` on an exact match.
+  - The matcher lookahead loses only `api/health|` and `health|`. These are unchanged: the `:18-21` comment, `api/auth/refresh`, the PWA assets and `runtime: 'nodejs'`. `agent-health/route.ts` is untouched.
+- TDD, AC-3/AC-4: I used a temporary probe of Step 9's vitest cases (`src/step8probe.test.ts`, deleted after green, since Step 9 owns the committed `middleware.test.ts`).
+  - Red (pre-fix): 11/20 failed. The 3 root-lookalike matcher cases failed with `expected false to be true`. The 8 health paths failed with `expected 307 to be 200`. The 6 gated non-health paths passed.
+  - Green: 20/20 pass.
+- Verification:
+  - The `PUBLIC_HEALTH_PATHS`, `api/auth/refresh` and `runtime: 'nodejs'` greps match.
+  - The `api/health|health|` grep has no hits.
+  - `lint` exits 0.
+- Open item for Step 9: `middleware.test.ts:60` (`matches('/api/health')` is false) now fails, 1 of 19 cases. Step 9 instruction 1 removes it.
+- Deviations (Deviation Log):
+  - The `:60` red carries over to Step 9.
+  - `format:check` still fails on the 10 pre-existing files. `middleware.ts` is clean.
+
+## Session 2026-10-29 — Step 9 (sdd-execute sequential)
+
+- Tooling: `pnpm install --frozen-lockfile --filter 'xstockstrat-ui...'`, run in this worktree only.
+- Step 9 done:
+  - `src/middleware.test.ts`: the `:58` case is renamed "still excludes the sibling auth paths" and loses its `/api/health` line. New case "no longer prefix-excludes root health lookalikes (feature 271 FR-3)". New describe "segment health exemption (feature 271 @AC-3/@AC-4)": the 8 health paths pass through with no session (200, no `location`, `refreshSession` not called); 6 non-health/lookalike paths redirect 307 to `/auth/login`.
+  - `e2e/auth.spec.ts`: new describes for `@AC-3` (7 rows 200 with `status: 'ok'`, `agent-health` 401 with `error: 'Unauthorized'`, no `location`) and `@AC-4` (the 7 Examples redirect to `/auth/login`).
+- TDD, AC-3/AC-4 (red via a pre-Step-8 `middleware.ts`, since Step 8 had landed): checked out from `a5103815~1`, then restored with `git checkout HEAD --`.
+  - Red: vitest 9 failed / 19 passed; e2e 10 failed (8 health rows got 307; `/healthcheck-x` and `/health/anything` got 404).
+  - Green: vitest 28/28; `auth.spec.ts` 38/38 (`CI=1`, chromium).
+- Verification: `test:coverage` 50 files / 274 tests, thresholds met (`src/lib/**` 72% lines); `lint` exits 0; prettier clean on both files. The Step 8 carry-over red (`middleware.test.ts:60`) is gone.
+- Note: another worktree's e2e run held port 3000; the GREEN e2e run waited for the port to free (the e2e harness has fixed ports).
+
+## Session 2026-10-29 — Step 10 (sdd-execute sequential)
+
+- Step 10 done (docs only, TDD N/A):
+  - `services/xstockstrat-ui/CLAUDE.md:235`: the middleware row now says the eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check, and that `agent-health` keeps its own 401.
+  - `services/xstockstrat-ui/docs/context-constitution.md:40`: the "opt-in and per-handler" gotcha is replaced. The new text covers the 30s `DEFAULT_UNARY_TIMEOUT_MS` unary default, unbounded streams, the per-call overrides (300s / 60s / 15s / 10s / `listOpportunities` `30_000`) and `forwardAdmin`'s `{ timeoutMs }`. `src/lib/deadlines.ts` is cited as authoritative.
+- Verification before the edit: the `deadlines.ts` grep had no match, and the "`forwardAdmin` takes no options" grep matched. After the edit, all three Verification greps pass.
+- Teardown: the context-forge `context-constitution` skill is not available in this session, so the reconciliation was done by hand (see the Deviation Log). The only extra drift was UI-3's `forward`/`forwardAdmin` `~L` hints, which were re-stamped. The integration PR body must record that the plugin was unavailable and describe the manual reconciliation.
+- `services/xstockstrat-ui/docs/context-constitution-findings.md:36` (`listOpportunities` literal) is left open (design item 1).
+- All 10 steps are done. Next: the §5.6 integration PR.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-ui-transport-hardening (feature 271)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature | CREATE | NEW | 30s unary transport default. Related to opportunities-latency-fix.feature (per-RPC ListOpportunities 30s), but this is the transport-wide default, so not an overlap. |
+| AC-6 | same | CREATE | NEW | per-call timeoutMs override |
+| AC-2 | same | CREATE | NEW | 10s session-refresh deadline. Extends ui-middleware-nodejs-runtime.feature (rejected refresh redirects to login). That rule covers rejection, this one covers a hang, so it is not a conflict. |
+| AC-3 | same | CREATE | NEW | health routes reachable without a session (Scenario Outline) |
+| AC-4 | same | CREATE | NEW | non-health routes still require a session (Scenario Outline) |
+| AC-5 | same | CREATE | NEW | streamAlerts exempt from the unary default |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature (CREATE) ---
+# Promoted from docs/roadmap/features/271-fix-ui-transport-hardening/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
+Feature: fix-ui-transport-hardening (bug fix)
+  UI transport default gRPC deadline (30s unary, 10s session refresh) and unauthenticated segment health routes.
+
+  @AC-1 @FR-1 @regression @feature-271
+  Scenario: A server-side gRPC call with no per-call timeout is bounded by the transport default
+    Given the UI server transport for a backend that accepts the connection and never responds
+    When a BFF handler issues a unary call without passing timeoutMs
+    Then the call fails with DEADLINE_EXCEEDED no later than the transport's default deadline (30s)
+
+  @AC-6 @FR-1 @regression @feature-271
+  Scenario: A per-call timeout overrides the transport default
+    Given the UI server transport for a backend that accepts the connection and never responds
+    When a BFF handler issues a unary call with timeoutMs 2000
+    Then the call fails with DEADLINE_EXCEEDED after about 2 seconds, not the transport default
+
+  @AC-2 @FR-1 @regression @feature-271
+  Scenario: Middleware session refresh does not hang on an unresponsive identity service
+    Given an expired access token and a valid refresh-token cookie
+    And an identity endpoint that accepts the connection and never responds
+    When the browser requests "/trader"
+    Then the response arrives no later than the session-refresh deadline (10s)
+    And the response is a redirect to "/auth/login?redirect=%2Ftrader"
+    And the response clears the access-token and refresh-token cookies
+
+  @AC-3 @FR-2 @regression @feature-271
+  Scenario Outline: Segment health routes are reachable without a session
+    Given a request with no session cookies
+    When the client requests "<path>"
+    Then the route handler responds with status <status> (no redirect to "/auth/login")
+
+    Examples:
+      | path                        | status |
+      | /trader/health              | 200    |
+      | /trader/api/health          | 200    |
+      | /insights/health            | 200    |
+      | /insights/api/health        | 200    |
+      | /config-ui/health           | 200    |
+      | /config-ui/api/health       | 200    |
+      | /accounts/api/health        | 200    |
+      | /accounts/api/agent-health  | 401    |
+
+  @AC-4 @FR-3 @regression @feature-271
+  Scenario Outline: Non-health segment routes still require a session
+    Given a request with no session cookies
+    When the client requests "<path>"
+    Then the response is a redirect to "/auth/login"
+
+    Examples:
+      | path                        |
+      | /trader/orders              |
+      | /trader/healthcheck-x       |
+      | /insights/api/health-extra  |
+      | /healthcheck-x              |
+      | /health/anything            |
+      | /config-ui                  |
+      | /accounts                   |
+
+  @AC-5 @FR-1 @regression @feature-271
+  Scenario: The alert stream is not cut off by the unary default deadline
+    Given a signed-in trader with the alert stream open
+    And notify sends no alert for longer than the default deadline
+    When the default deadline elapses
+    Then the streamAlerts connection is still open and delivers the next alert
+
+### Notes / ambiguities / conflicts
+- Single owning service is xstockstrat-ui. feature.md Reviewers lists only the ui owner, and every Then asserts on UI transport, middleware, or route handlers. No platform.feature scenario fits, and platform.feature has no health, deadline or auth/login rules.
+- AC-3's agent-health row expects 401 from the handler's own auth (operator decision 2026-10-22), kept verbatim.
+- Related, not overlapping: /home/user/xstockstrat/services/xstockstrat-ui/acceptance/opportunities-latency-fix.feature (per-RPC 30s), /home/user/xstockstrat/services/xstockstrat-ui/acceptance/ui-middleware-nodejs-runtime.feature (invalid refresh redirects to login), and /home/user/xstockstrat/services/xstockstrat-ui/acceptance/ui-auth-improvements.feature (401 redirect). I found no CONFLICT.
+- No existing @feature-271 scenarios anywhere, so this is a first run and no DUP applies.
+- The acceptance.feature was read from the working tree. I did not confirm that origin/feature/fix-ui-transport-hardening matches it (the ref was not readable here).
+
+### Coverage check
+- Source scenarios: 6 (AC-1 to AC-6, two of them Scenario Outlines). Planned: 6 NEW, 0 DUP, 0 OVERLAP. None skipped.
+```
+
+## Session 2026-10-29 — ALL-DONE PATH (sdd-execute sequential, sdd-batch-execute)
+
+- C-16 promotion applied exactly per the `sdd-batch-promotion-plan` block above (auto-confirmed under the operator's standing authorization, session_01NpS3HShZK6pSnogA7CFo2f): created `services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature` with AC-1–AC-6 (6 NEW, 0 DUP, 0 OVERLAP), `@feature-271` provenance kept.
+- `status.md` → `code-completed`; `feature.md` history row appended.
+- merge-order.md: 271 has no blocking entry (279 ↔ 271 note is non-blocking prose). Next: integration PR `feature/fix-ui-transport-hardening` → `main-dev`; merge held for the operator.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

@@ -65,7 +65,9 @@ The end-to-end connect flow:
    MCP endpoint returns `401` with
    `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which
    triggers discovery. (`GET /sse` returns **404**, not 401 — it is a removed path, not an
-   unauthenticated one, and it never reaches the auth gate.)
+   unauthenticated one, and it never reaches the auth gate.) If identity cannot be reached in time
+   during token validation, the endpoint returns `503` **without** `WWW-Authenticate`, so the client
+   retries instead of re-authorizing; an invalid token still returns `401` with the pointer.
 2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
    returns a `client_id`, no secret.
 3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
@@ -80,6 +82,19 @@ The end-to-end connect flow:
    not match.
 
 ---
+
+### Backend deadlines
+
+Every backend gRPC call the tools make carries a fixed deadline: **10 s** by default, and **45 s** for
+`run_backtest`, `screen_symbols`, `trigger_backfill` and `run_fundamentals_scan`. `list_opportunities`
+keeps its own config-driven deadline (see that tool). These are code constants, not config keys.
+
+On expiry a **read** tool raises `upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A **write** tool raises
+`upstream did not respond within Ns (deadline exceeded); outcome unknown, verify before retrying` —
+the write may have landed, so confirm with the matching read (`get_backfill_status`,
+`get_watchlist`, or the relevant `list_*` tool) before retrying. When the server returned its own
+deadline detail, that detail is passed through instead.
 
 ## Tools
 
@@ -243,7 +258,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111) — the caller can no longer address an alert to an arbitrary other user.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111); a broadcast's Web Push device notification reaches admin-role devices only (feature 242) — the caller can no longer address an alert to an arbitrary other user.
 
 **Parameters**
 
@@ -253,7 +268,7 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 | `category` | `string` | Yes | Alert category, e.g. `"signal"`, `"system"` |
 | `title` | `string` | Yes | Short alert title |
 | `body` | `string` | Yes | Alert body text |
-| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. No default — omitting it is a schema error. |
+| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. With `true` the in-app stream/history reaches every user, but the Web Push device notification reaches admin-role users only (feature 242). No default — omitting it is a schema error. |
 | `source_service` | `string` | No | Emitting service name (default `"xstockstrat-agent"`) |
 | `context` | `object` | No | Structured JSON context stored + fanned out with the alert (feature 087) |
 | `tags` | `string[]` | No | Tags for filtering/grouping (feature 087) |
@@ -843,7 +858,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 { "run_id": "…", "symbols_processed": 42, "signals_emitted": 7, "calls_spent": 3, "deferred_count": 0, "status": "completed", "finished_at": "2026-08-26T05:06:00+00:00" }
 ```
 
-`status` is `"completed"` | `"budget_deferred"` | `"failed"`.
+`status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. `partial` means a fetch chunk failed and its symbols are in `deferred_count`.
 
 **Errors**
 
@@ -1056,7 +1071,7 @@ Read a namespace's current config values from `xstockstrat-config`. **Read-only.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | `marketdata`, `analysis`, `trading`, `platform`, … |
-| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values |
+| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values. For non-admins it is **bound to the caller**: a non-admin asking for another user's id reads their own (bound, not refused); admins may read any user's (feature 263) |
 
 The **environment is always this agent deployment's own** (`production`/`staging`, from
 `APPLICATION_ENV`) — it is a deployment property, not a caller choice, so there is no `environment`
@@ -1064,7 +1079,8 @@ parameter and the tool cannot read another environment's rows (PR #994). `tradin
 (feature 147 — paper/live is derived from environment).
 
 Returns `{namespace, version, environment, user_id, values}`, each value being
-`{value, value_type, is_secret}`.
+`{value, value_type, is_secret}`. `user_id` is the scope actually read — for a bound non-admin
+request, the caller's own id, not the one passed.
 
 **Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
 the key name, so a flagged-but-unprefixed key is still redacted. Secret values are never returned by
@@ -1082,12 +1098,12 @@ nothing here can leak a secret.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | As above |
-| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys |
+| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys. For non-admins it is **bound to the caller**, as for `get_config` (feature 263) |
 
 The environment is always the agent's own deployment env (from `APPLICATION_ENV`) — no `environment`
 parameter, no `trading_mode` (PR #994 / feature 147).
 
-Returns `{namespace, environment, user_id, keys[]}`; each key carries `key`, `description`,
+Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key`, `description`,
 `default_value`, `is_secret`, `consuming_service`.
 
 Use it to discover what exists — and which keys are secret — before calling `set_config`.
@@ -1105,8 +1121,7 @@ Streamable HTTP transport only.**
 | `key` | string | yes | e.g. `marketdata.fmp.enabled` |
 | `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
 | `value` | string | yes | Converted according to `value_type` |
-| `author` | string | yes | Recorded in `config.config_audit` |
-| `reason` | string | yes | Recorded alongside `author` |
+| `reason` | string | yes | Recorded in `config.config_audit` (`update_reason`); the change is attributed to your verified user id (`x-user-id`), never a parameter (feature 241) |
 | `user_id` | string | no | Per-user override. Omit to write the global value. Per-user secret writes are accepted (feature 224); the value stays redacted on every read edge |
 | `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, key, environment, user_id)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
@@ -1149,11 +1164,11 @@ require a PR" is enforced, not merely conventional.)
   does not update the type column, so for an existing key the stored type wins.
 - Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
 - **Key creation is audited** (feature 091): a `create_key=true` create writes a `config.config_audit`
-  row (author + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
+  row (caller identity + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
   existing `BEFORE UPDATE` audit. Rewriting a key to its existing value still writes no row (the
   update trigger fires only on a value change).
 
-**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → "propagated identity required" (your claims carry no `user_id`; the tool also fails fast at the edge);
 `NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
 
 ---

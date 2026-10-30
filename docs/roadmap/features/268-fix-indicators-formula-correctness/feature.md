@@ -5,7 +5,9 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-indicators-formula-correctness-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -17,7 +19,22 @@
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. OQ-1 = Option A; @option-B AC-8/AC-9 deleted |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
+| 2026-10-28 | `implementation-ready` (no change) | /sdd-execute sequential (sdd-batch-execute) | Re-spec: steps 2, 3, 7, 10 aligned with current codebase after merging origin/main-dev (line drift only; no file or symbol missing) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` (Step 1 done) | /sdd-execute sequential (sdd-batch-execute) | D-54 guard: pending-hidden rows → NOT_FOUND on UpdateFormula/DeleteFormula |
+| 2026-10-28 | `in-progress` (Step 2 done) | /sdd-execute sequential (sdd-batch-execute) | D-54 guard-branch tests (`TestPendingHiddenMutation`, AC-6/AC-7) |
+| 2026-10-28 | `in-progress` (Step 3 done) | /sdd-execute sequential (sdd-batch-execute) | D-10: a sandbox run with no parseable `__OUTPUT__:` line fails (`runtime_error`) |
+| 2026-10-29 | `in-progress` (Step 4 done) | /sdd-execute sequential (sdd-batch-execute) | D-10 tests: `TestSandboxNoOutputFails` (AC-1/AC-2/AC-3) + servicer RUNTIME_ERROR mapping |
+| 2026-10-29 | `in-progress` (re-spec steps 5, 6) | /sdd-execute sequential (sdd-batch-execute) | Merged `origin/main-dev` (`-X ours`); steps 5, 6 aligned with the current codebase (line drift only) |
+| 2026-10-29 | `in-progress` (Step 5 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A: honest ATR/VWAP descriptions in `INDICATOR_REGISTRY` and docstrings; math unchanged |
+| 2026-10-29 | `in-progress` (Step 6 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 tests: `TestAtrVwapHonestDescriptions` (AC-4/AC-5) at engine and servicer level; values unchanged |
+| 2026-10-29 | `in-progress` (Step 7 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 Option A in the UI: `BUILTIN_INDICATORS` ATR/VWAP descriptions mirror the engine strings (C-10) |
+| 2026-10-29 | `in-progress` (Step 8 done) | /sdd-execute sequential (sdd-batch-execute) | D-18 UI test: `strategyCatalog.test.ts` asserts no misleading ATR/VWAP names and stable `ATR`/`VWAP` keys (AC-4/AC-5) |
+| 2026-10-29 | `in-progress` (Step 9 done) | /sdd-execute sequential (sdd-batch-execute) | Docs: no-output sandbox failure rule, ATR/VWAP approximation note, findings row for the two "ATR" numbers (Wilder ATR in trading) |
+| 2026-10-29 | `in-progress` (Step 10 done) | /sdd-execute sequential (sdd-batch-execute) | Filed `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` (+ `open` sidecar) for the never-assigns-`result` gap; untriaged |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; integration PR next |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers
@@ -52,4 +69,4 @@ names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga cop
 
 ## Next Action
 
-`/sdd-review fix-indicators-formula-correctness impl-spec` — validate implementation spec, then `/sdd-execute fix-indicators-formula-correctness`
+`/sdd-execute fix-indicators-formula-correctness sequential` — all steps done; open the integration PR (§5.6). Then `/sdd-triage --from-report docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md`

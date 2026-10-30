@@ -101,7 +101,7 @@ integration, `/sdd-execute` promotes AC-1..AC-12 into `services/xstockstrat-ui/a
 
 ### Step 1 — service: D-45 symbol-page backtest sends `strategyId` with `strategyIdRef`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -145,7 +145,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 2 — test: AC-4 symbol-page RunBacktest carries both ids, and the run reaches history
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -153,8 +153,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, Connect-RPC call safety
 
 **Codebase Evidence**:
-- `e2e/trader/position-detail.spec.ts:655-671` already opens `/trader/positions/AMZN?strategy=strat-live-001`
-  and waits for `getByRole('main').getByTestId('run-backtest')`, using a 30 s timeout during hydration.
+- `e2e/trader/position-detail.spec.ts:688` already opens `/trader/positions/AMZN?strategy=strat-live-001`
+  and (`:693`) waits for `getByRole('main').getByTestId('run-backtest')`, using a 30 s timeout during hydration.
 - `analysisClient` uses `makeBrowserTransport('/insights/api')` (`src/lib/browserClients/analysisClient.ts:5`).
   So a `page.route('**/xstockstrat.analysis.v1.AnalysisService/RunBacktest', …)` glob intercepts the call.
   The same glob style is used at `e2e/trader/orders.spec.ts:99`.
@@ -162,7 +162,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
   definitions"). The mock `runBacktest` is at `e2e/mock-backend.ts:977`.
 - The history half of AC-4 is already pinned server-side by
   `services/xstockstrat-analysis/tests/test_analysis_servicer.py::TestRunBacktestCells::test_registered_own_run_stamps_fingerprint`
-  (`:1968`, equal ids → fingerprinted). Its negative pair `test_id_mismatch_stamps_none` is at `:1999`.
+  (`:2044`, in `TestRunBacktestCells` at `:1991`; equal ids → fingerprinted). Its negative pair
+  `test_id_mismatch_stamps_none` is at `:2075`.
 
 **TDD**: `red-green required`
 
@@ -196,7 +197,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py -k "s
 
 ### Step 3 — service: D-64 per-call error handlers on opportunities and signal-sources, plus the `errMessage` hoist
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/errMessage.ts` — create
@@ -273,7 +274,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 4 — test: AC-5 and AC-6 failed opportunity action and failed source toggle show an error
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/errMessage.test.ts` — create
@@ -330,7 +331,7 @@ grep -n "from '../fixtures'\|helpers/auth" services/xstockstrat-ui/e2e/insights/
 
 ### Step 5 — service: D-64 ledger export shows an error on a non-OK response or a rejected request
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx` — modify
@@ -370,7 +371,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 6 — test: AC-7 and AC-11 failed and rejected ledger export show an error with no unhandled rejection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/ledger-export.spec.ts` — modify
@@ -409,7 +410,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
 
 ### Step 7 — service: D-64 global mutation error fallback (MutationCache + single-slot store + meta-only opt-out)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/mutationErrorStore.ts` — create
@@ -467,7 +468,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
   | `useManageSignalSource` | `insights/signal-sources/page.tsx:192` | every `manageMutate` call has `onError`: `:226`, `:296`, `:332`, and Step 3 `handleToggle` |
   | `useRunBacktest` | `trader/positions/[symbol]/page.tsx:1109` | inline `{errorMessage && …}` at `:1187` |
   | `useRunBacktest` | `insights/strategies/[id]/page.tsx:66` | inline `runErrorObj` at `:90-92` |
-  | `useScreenSymbols` | `components/trader/SymbolScreening.tsx:42` | inline at `:228` |
+  | `useScreenSymbols` | `components/trader/SymbolScreening.tsx:43` | inline `symbol-screen-error` at `:230-234` |
   | `useScreenSymbols` | `insights/screener/page.tsx:67` | inline at `:485` |
   | `useSetConfig` | `config-ui/[namespace]/NamespaceEditor.tsx:250` | `Save error: {errMessage(saveError)}` at `:358` |
   | `useSetStrategyLive` | `components/trader/LiveStrategiesPanel.tsx:22` | `{setLive.isError && …}` at `:99` |
@@ -520,7 +521,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test e2e/tra
      design-role tokens only, through the `destructive` variant.
 4. **Mount it** once in each provider. Render `<MutationErrorFallback />` as a sibling after `{children}`:
    - inside `AccountProvider` in `src/app/trader/providers.tsx:13`;
-   - inside `QueryNormalizerProvider` in `src/components/shared/QueryProviders.tsx:32-34`.
+   - inside `QueryNormalizerProvider` in `src/components/shared/QueryProviders.tsx:15-17`.
 5. **Factory passthrough.** In `useInvalidatingMutation.ts`:
    - Widen `:17` to `options?: { mutationKey?: QueryKey; meta?: Record<string, unknown> }`.
    - Add `meta: options?.meta,` beside `mutationKey` at `:22`.
@@ -550,7 +551,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 8 — test: AC-10 a mutation with no handler reaches the global fallback, and flagged ones do not
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/mutationErrorStore.test.ts` — create
@@ -608,7 +609,7 @@ grep -rn "errorHandled: true" services/xstockstrat-ui/src/hooks services/xstocks
 
 ### Step 9 — service: D-17 unknown environment shows no Paper default and sends `TRADING_MODE_UNSPECIFIED`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/tradingMode.ts` — create
@@ -646,7 +647,7 @@ grep -rn "errorHandled: true" services/xstockstrat-ui/src/hooks services/xstocks
   called from `positions/page.tsx:110-114`.
 - Request fields carrying `tradingMode` (verified against proto, per `fails.md:358`):
   - `PlaceOrderRequest.trading_mode = 12` and `ListOrdersRequest.trading_mode = 6`, where UNSPECIFIED means all
-    modes (`packages/proto/trading/v1/trading.proto:127`, `:175`).
+    modes (`packages/proto/trading/v1/trading.proto:128`, `:175`).
   - `GetPortfolioRequest.trading_mode = 2`, `GetPositionRequest.trading_mode = 3` and
     `ListPositionsRequest.trading_mode = 3` (`packages/proto/portfolio/v1/portfolio.proto:177-192`).
 - Server handling of UNSPECIFIED:
@@ -721,7 +722,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 10 — test: AC-3 and AC-12 unknown environment sends UNSPECIFIED and shows no Paper label on any trader page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/tradingMode.test.ts` — create
@@ -730,13 +731,13 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, environment scope correctness
 
 **Codebase Evidence**:
-- The mock `getTradingEnvironment` returns `{ tradingMode: 1 }`, which is PAPER (`e2e/mock-backend.ts:333-335`).
+- The mock `getTradingEnvironment` returns `{ tradingMode: 1 }`, which is PAPER (`e2e/mock-backend.ts:345-347`).
   A per-page `page.route('**/xstockstrat.trading.v1.TradingService/GetTradingEnvironment', …)` 503 makes the
   mode unknown.
 - `e2e/trader/order-form.spec.ts:83-122` already captures the PlaceOrder body (`:87`) and asserts a
   NAME-string `timeInForce` (`@feature-202` AC-5, PRESERVE).
-- `TradingModeBadge` renders the literal mode text (`TradingModeBadge.tsx:20`, uppercase), so the "no Paper
-  label" assertion is `page.getByText(/^paper$/i)` with count 0.
+- `TradingModeBadge` renders the literal mode text (`src/components/shared/TradingModeBadge.tsx:20`, `uppercase`
+  class at `:17`), so the "no Paper label" assertion is `page.getByText(/^paper$/i)` with count 0.
 - Proto3 JSON omits zero-valued enum fields by default. On the wire, `TRADING_MODE_UNSPECIFIED` is therefore
   absent or the NAME-string `TRADING_MODE_UNSPECIFIED`, never the old `TRADING_MODE_PAPER`. This sharpens the
   design's "UNSPECIFIED serializes as TRADING_MODE_UNSPECIFIED".
@@ -775,7 +776,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/order-form.sp
 
 ### Step 11 — service: D-11 freshness, where the order record with the strictly newer `updatedAt` wins
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/orderFreshness.ts` — create
@@ -789,7 +790,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/order-form.sp
 - `timestampToMillis(ts: ProtoTimestamp | undefined): number | undefined` is at `src/lib/protoTime.ts:11-14`.
   It returns `undefined` for an absent timestamp.
 - `Order.updated_at` is field 14 (`packages/proto/trading/v1/trading.proto:60`). The server stamps it on every
-  mutation (`trading.go:632, :698, :722, :825, :941, :1359, :1546`).
+  mutation (`services/xstockstrat-trading/internal/service/trading.go:632, :698, :722, :825, :941, :1359, :1546, :1787`).
 - `insights.md:1551` says an absent Timestamp takes a neutral fallback, never epoch arithmetic.
 
 **TDD**: `red-green required`
@@ -819,7 +820,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 12 — test: AC-1 and AC-8 freshness rules
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/orderFreshness.test.ts` — create
@@ -859,7 +860,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
 
 ### Step 13 — service: D-11 streams reconnect with backoff and show a disconnected indicator (orders and alerts)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/streamBackoff.ts` — create
@@ -877,13 +878,13 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
   - It ends in a silent `catch {}` (`:25-27`) and returns `Record<string, Order>`.
   - Its only consumer is `OrdersTable.tsx:59` (`const liveUpdates = useOrderUpdates();`).
 - `AlertStream.tsx`:
-  - `:67-83` has the same pattern with a silent `catch {}` (`:78-80`).
-  - The merge `setAlerts((prev) => [alert, ...prev].slice(0, 50))` (`:76`) does **not** dedupe. The design's
-    "still dedupes on `alertId` (`:42`, `:96`)" is inaccurate: `alertId` is only the React `key` (`:130`).
-  - The bell `listAlerts` count effect is mount-only (`:52-65`).
-  - The icon-only bell `Button` (`:91`) has no accessible name.
+  - The `streamAlerts` effect (`:33-48`) has the same pattern with a silent `catch {}` (`:44`).
+  - The merge `setAlerts((prev) => [alert, ...prev].slice(0, 50))` (`:42`) does **not** dedupe. The design's
+    "still dedupes on `alertId`" is inaccurate: `alertId` is only the React `key` (`:96`).
+  - The bell `listAlerts` count effect is mount-only (`:18-31`).
+  - The icon-only bell `Button` (`:57`) has no accessible name.
 - Server behavior:
-  - Trading `StreamOrderUpdates` (`trading.go:1667-1685`) sends a snapshot and then blocks until the context is
+  - Trading `StreamOrderUpdates` (`trading.go:1667-1686`) sends a snapshot and then blocks until the context is
     done. A reconnect therefore replays the snapshot, which is idempotent under keyed state plus
     `pickFresherOrder`.
   - Notify `streamAlerts` (`services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:120-140`) registers a
@@ -946,9 +947,9 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
 4. **Orders table.** In `OrdersTable.tsx`:
    - Change `:59` to `const { updates: liveUpdates, disconnected, terminal } = useOrderUpdates();` and keep the
      Step 11 merge.
-   - Under the `QueryStateMessages` at `:202`, render
+   - Under the `QueryStateMessages` at `:203`, render
      `{disconnected && <Alert variant="destructive" role="alert" data-testid="order-stream-disconnected"><AlertDescription>{terminal ? \`Live order updates stopped: ${terminal}\` : 'Live order updates disconnected — reconnecting…'}</AlertDescription></Alert>}`.
-5. **Alerts.** Move `AlertStream.tsx:67-83` onto the hook with key `'alerts'`:
+5. **Alerts.** Move the `AlertStream.tsx:33-48` `streamAlerts` effect onto the hook with key `'alerts'`:
    - `open = (signal) => notifyClient.streamAlerts({ categories: [], severities: [], includeAcknowledged: false }, { signal })`.
    - `onItem` dedupes before prepending: `setAlerts((prev) => prev.some((a) => a.alertId === alert.alertId) ? prev : [alert, ...prev].slice(0, 50))`.
      This is needed because a reconnect may re-deliver an alert, and React keys must stay unique.
@@ -956,12 +957,15 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage
      name (C-17): `aria-label={disconnected ? 'Alerts — live alerts disconnected' : 'Alerts'}`.
    - Add a visible `<span data-testid="alert-stream-disconnected" className="sr-only sm:not-sr-only text-xs text-destructive">Live alerts disconnected</span>`
      beside it.
-   - Keep the mount-only `listAlerts` effect at `:52-65` untouched (PRESERVE `@feature-203`). A reconnect never
+   - Keep the mount-only `listAlerts` effect at `:18-31` untouched (PRESERVE `@feature-203`). A reconnect never
      re-runs it.
 6. **Trace (operator 2026-10-21 decision).** Reconnects call the same `tradingClient` / `notifyClient` (BFF
    `/trader/api`), so `src/middleware.ts` keeps injecting `x-trace-id` and the BFF `backendHeaders` keeps
    forwarding it. No side channel is added. The step adds no new outbound gRPC call, so the header-propagation
    constraint is satisfied by reuse.
+8. **Stale e2e comments.** `e2e/trader/order-parity.spec.ts:118` and the `e2e/trader/orders.spec.ts:11` file
+   header carry the same "stops silently" wording as `orders.spec.ts:128`. They are test files, so Step 14
+   updates all three (comment-only); this step leaves them alone.
 7. **Edge idle timeout (Open Risk).** A quiet stream closed by Cloudflare reconnects through the clean-end path
    and replays the snapshot. This is harmless given keyed orders, alert dedupe and freshness. The step PR must
    record a dev-environment observation: watch `/trader/orders` idle for 5 minutes and note any reconnect churn.
@@ -978,7 +982,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 
 ### Step 14 — test: AC-2, AC-9 and AC-1 streams disconnect, show the indicator, reconnect and recover without a reload
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/streamBackoff.test.ts` — create
@@ -987,27 +991,36 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
 - `services/xstockstrat-ui/e2e/trader/stream-reconnect.spec.ts` — create
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/trader/order-parity.spec.ts` — modify (comment only)
 
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness, Connect-RPC call safety
 
 **Codebase Evidence**:
 - `e2e/mock-backend.ts`:
-  - `router.service(TradingService, {…})` (`:269-341`) has **no** `streamOrderUpdates` handler. Under Step 13
+  - `router.service(TradingService, {…})` (`:281`) has **no** `streamOrderUpdates` handler. Under Step 13
     the client would get `Unimplemented`, which is terminal, and the indicator would show permanently on every
-    `/trader/orders` spec.
-  - `streamAlerts` (`:530-535`) yields `ALERT_STREAM_ALL` and then ends cleanly ("no hang in tests"). Under
-    Step 13 that would reconnect every second.
+    `/trader/orders` spec. (A second `router.service(TradingService, …)` at `:1377` serves the insights mock
+    server with `listBrokerAccounts`/`listPortfolios` only — also no `streamOrderUpdates`; leave it untouched.)
+  - `streamAlerts` (`:541-559`) yields `ALERT_STREAM_ALL` and then ends cleanly ("Stream ends cleanly — no hang
+    in tests", `:558`). Under Step 13 that would reconnect every second.
+  - Feature 271 added a hold-open branch at the top of `streamAlerts` (`:543-554`, PRESERVE `@feature-271`
+    `@AC-5`): when `x-trace-id` equals `ALERT_STREAM_HOLD_TRACE_ID` it waits `ALERT_STREAM_HOLD_MS`
+    (abort-aware), yields `ALERT_STREAM_HELD`, then returns. Under Step 13 that timed return is a clean end
+    and triggers a reconnect after backoff; the feature-271 spec asserts only the held item, so this is
+    tolerated, not changed.
   - `timestampFromDate` is already imported (`:18`).
 - `e2e/trader/orders.spec.ts:127-137` fulfils `StreamOrderUpdates` with a 400 `unavailable` body. Its comment
   "Fail the live stream fast so useOrderUpdates stops silently" goes stale under Step 13: the hook now retries
-  with backoff and shows the indicator. No existing test asserts the indicator is absent.
+  with backoff and shows the indicator. No existing test asserts the indicator is absent. The same wording
+  sits at `e2e/trader/order-parity.spec.ts:118` and in the `orders.spec.ts:11` file header.
 - The `application/connect+json` stream fulfil precedent is `orders.spec.ts:134` and `order-parity.spec.ts:124`.
 - Connect streaming framing: each frame is a 1-byte flag (`0x00` message, `0x02` end-stream), a 4-byte
   big-endian length, then a JSON payload. The end-stream payload is `{"error":{"code":"unavailable","message":…}}`.
   `createConnectTransport` uses JSON by default (`transport.ts:57` sets no `useBinaryFormat`).
 - Fixtures: `ORDERS` and `ORDER_WORKING` (`mock-order-002`, `status: 1`, no `updatedAt`; `e2e/fixtures/orders.ts:36-80`),
-  and `ALERT_STREAM_001..003` (`e2e/fixtures/alerts.ts:9-33`). INVENTORY rows are "Orders (shared mock set)" and
-  "Alerts (feature 203)".
+  and `ALERT_STREAM_001..003` (`e2e/fixtures/alerts.ts:11-35`; feature 271 added `ALERT_STREAM_HOLD_TRACE_ID`,
+  `ALERT_STREAM_HOLD_MS`, `ALERT_STREAM_HELD` at `:39-41`). INVENTORY rows are "Orders (shared mock set)"
+  (`INVENTORY.md:42`) and "Alerts (feature 203)" (`:43`, which already lists the feature-271 symbols).
 - `insights.md:1160` says the stateful mocks must be per-page `page.route`.
 
 **TDD**: `red-green required`
@@ -1024,9 +1037,9 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
    - Add a `streamOrderUpdates` to the trader `TradingService` that yields nothing and holds open until
      `ctx.signal` aborts:
      `await new Promise<void>((r) => ctx.signal.addEventListener('abort', () => r(), { once: true }))`.
-   - Change `streamAlerts(_req, ctx)` to hold open the same way after yielding `ALERT_STREAM_ALL`, replacing the
-     clean end.
-   - Update the `:534` comment to say the stream stays open until the client aborts.
+   - In `streamAlerts(_req, ctx)`, hold open the same way after yielding `ALERT_STREAM_ALL`, replacing the clean
+     end of the default path only. Leave the feature-271 hold branch (`:543-554`) intact.
+   - Update the `:558` comment to say the stream stays open until the client aborts.
 3. **Order fixture (C-12).**
    - In `e2e/fixtures/orders.ts`, add `ORDER_WORKING_STREAMED_AT = '2026-10-21T10:00:00Z'` and
      `ORDER_WORKING_FILLED_AT = '2026-10-21T10:00:05Z'`. These are the AC timestamps for `mock-order-002`.
@@ -1060,10 +1073,12 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
    - Release the gate and assert the name returns to `Alerts`.
    - Open the sheet and assert `ALERT_STREAM_002.title` is visible, and `ALERT_STREAM_001.title` appears exactly
      once (dedupe), with no reload.
-7. **Existing orders spec.** In `orders.spec.ts:127-137`, update only the stale comment so it says the stream
-   failure now retries with backoff behind the disconnected indicator. The stub stays.
+7. **Existing orders specs.** Update only the stale "stops silently" comments so they say the stream failure
+   now retries with backoff behind the disconnected indicator: `orders.spec.ts:128` (in the `:127-137` stub),
+   the `orders.spec.ts:11` file header, and `order-parity.spec.ts:118`. The stubs stay.
 8. **Regression run.** Run the existing `e2e/trader/alert-stream.spec.ts` unchanged. It must stay green with the
-   held-open mock: the badge count and `Clear all` are PRESERVE `@feature-203`.
+   held-open mock: the badge count and `Clear all` are PRESERVE `@feature-203`, and the feature-271 `@AC-5`
+   held-stream scenario is PRESERVE.
 9. **Fallback (Open Risk).** If `page.route` cannot hold a fulfilled stream open, keep attempt 2 a complete body
    (frame and no error). The client then sees a clean end and reconnects after the backoff. The indicator
    assertions still hold because they target the first item. Record whichever variant ran in the Deviation Log.
@@ -1083,3 +1098,223 @@ grep -n "ORDER_WORKING_FILLED_AT" services/xstockstrat-ui/e2e/fixtures/INVENTORY
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — 2026-10-28
+
+- **TDD RED harness (not a code deviation).** Step 1's paired test lives in Step 2's **Files**, so the RED/GREEN
+  cycle ran a throwaway probe spec (`e2e/trader/zz-tdd-probe-step1.spec.ts`, Step 2's AC-4 assertions verbatim)
+  that was deleted before commit; Step 2 authors the real test. The probe ran under `CI=1 E2E_PREBUILT=1`
+  against a `pnpm build` because the local `pnpm dev` harness timed out in `warmup.setup.ts` (10 s cold compile).
+  **Disposition**: CI-equivalent fallback.
+- **Pre-existing `tsc --noEmit` failure, out of scope.** The Verification's `pnpm exec tsc --noEmit` exits 1 on
+  `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type 'never'`),
+  a file this step does not touch (last changed by feature 198). The `src/` tree type-checks clean and
+  `pnpm build` (Next type-check) passes. **Disposition**: not fixed here; handed to `/sdd-qa defect`.
+
+### Step 2 — 2026-10-28
+
+- **Verification run against a prebuilt app.** The Playwright command ran as `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Step 1 used (local `pnpm dev` cold compile times out in `warmup.setup.ts`).
+  **Disposition**: CI-equivalent fallback.
+- **One `expect.poll(...).toMatchObject({ strategyId, strategyIdRef })` instead of two field asserts.** Same
+  assertion, but the RED output now prints the captured body. That proves the request was intercepted and only
+  `strategyId` was missing. **Disposition**: test-shape refinement inside the step's **Files**; no scope change.
+- **Evidence citation drift (no code impact).** `e2e/trader/orders.spec.ts:99` is a TradingService glob, not
+  AnalysisService. The AnalysisService `RunBacktest` glob precedent is `e2e/insights/sector-overrides.spec.ts:76`.
+  **Disposition**: noted only; step body not edited (F-09).
+
+### Step 3 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 3's paired test lives in Step 4's **Files**. The RED/GREEN
+  cycle therefore ran throwaway probes, appended to `e2e/insights/opportunities.spec.ts` and
+  `e2e/insights/signal-sources.spec.ts`. They contain Step 4's `@AC-5`/`@AC-6` 503-route plus
+  `getByRole('alert').filter({ hasText })` assertions verbatim, and were reverted before commit (`git checkout`).
+  Step 4 authors the real tests. The probes ran under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the same
+  harness Steps 1-2 used. **Disposition**: CI-equivalent fallback.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`, and `src/` type-checks clean (`pnpm build` passes).
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 4 — 2026-10-29
+
+- **"Deactivate" is the `Disable` menu item.** The step says to deactivate `SIGNAL_SOURCE_WEIGHTED` through its row
+  action. The page labels that action `Disable` for an active source (`signal-sources/page.tsx:455`), and the
+  fixture is `active: true`, so the test clicks `getByRole('menuitem', { name: 'Disable' })`. **Disposition**:
+  selector wording only; same behavior, no scope change.
+- **The "edit form is closed" assertion is `getByPlaceholder('Display name')` with count 0.** This is the edit
+  form's own field, as used by the existing Edit test. **Disposition**: test-shape choice inside the step's
+  **Files**.
+- **TDD RED ran against the pre-Step-3 tree.** Step 3 had already landed, so the three Step-3 source files were
+  temporarily checked out from `HEAD~1` and `src/lib/errMessage.ts` was moved aside for the RED run, then all four
+  were restored from `HEAD` before GREEN. Playwright ran under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the
+  same harness Steps 1-3 used. **Disposition**: CI-equivalent fallback.
+- **The `-g "@AC-5|@AC-6"` filter also matches two pre-existing tests** (feature 185 `@AC-6` and feature 161
+  `@AC-5`). They passed both in RED and GREEN. **Disposition**: noted only. GREEN ran both spec files in full.
+
+### Step 5 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 5's paired test lives in Step 6's **Files**. The RED/GREEN
+  cycle therefore ran a throwaway probe spec (`e2e/trader/zz-tdd-probe-step5.spec.ts`) holding Step 6's `@AC-7`
+  (500 fulfill) and `@AC-11` (`route.abort('failed')`) assertions verbatim, plus the `pageerror` collection. It
+  was deleted before commit; Step 6 authors the real tests. The probe ran under `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Steps 1-4 used. **Disposition**: CI-equivalent fallback.
+- **Evidence line drift (no code impact).** `onExportEvents` sat at `portfolio/page.tsx:108-123` (cited `:106-122`;
+  the comment starts at `:106`). **Disposition**: noted only; step body not edited (F-09).
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean and `pnpm build` passes.
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 6 — 2026-10-29
+
+- **Verification run against a prebuilt app.** The Playwright command ran as `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Steps 1-5 used. **Disposition**: CI-equivalent fallback.
+- **TDD RED ran against the pre-Step-5 tree.** Step 5 had already landed, so `portfolio/page.tsx` was temporarily
+  checked out from `HEAD~1` for the RED build, then restored from `HEAD` before GREEN. **Disposition**:
+  CI-equivalent fallback.
+- **AC-11 RED failed on the alert assertion, before the `pageerror` check.** The missing alert (`element(s) not
+  found`) is the first failing assertion, so the RED output does not separately show the unhandled-rejection
+  `pageerror` the step predicted. **Disposition**: noted only; GREEN asserts the `pageerror` array is empty.
+
+### Step 7 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 7's paired test lives in Step 8's **Files**, so the RED/GREEN
+  cycle ran a throwaway Vitest probe (`src/lib/zzProbeStep7.test.ts`, Step 8's `queryClient.test.ts` cases (a) and
+  (b) through `MutationObserver`). It was deleted before commit; Step 8 authors the real tests. `mutationErrorStore.ts`
+  was written first so that RED failed on the assertion (`getMutationError()?.message` was `undefined`), not on a
+  missing import. **Disposition**: CI-equivalent fallback.
+- **The `useInvalidatingMutation` JSDoc names the opt-out as `meta.errorHandled === true`.** Writing the literal
+  `{ errorHandled: true }` would add a tenth hit to the Verification grep, which must count exactly the 9 flagged
+  hooks (Step 8 pins the same count). **Disposition**: wording choice inside the step's **Files**.
+- **Prettier wrapped the `MutationCache` `onError` body onto two lines.** Behavior is unchanged.
+  **Disposition**: formatting only.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean and `pnpm build` passes.
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 8 — 2026-10-29
+
+- **The e2e test presses Escape before clicking "Dismiss error".** After the confirm, the row's kebab
+  `DropdownMenu` (Radix, modal) stays open. `body` keeps `pointer-events: none`, so Playwright sees `<html>`
+  intercept the click. The test presses Escape and asserts no `role=menu` remains. **Disposition**: test-shape
+  adaptation inside the step's **Files**. The stuck-open menu is pre-existing `OrdersTable` behavior and out
+  of scope; handed to `/sdd-qa defect`.
+- **The per-call `onError` unit case subscribes a listener to the `MutationObserver`.** TanStack v5 fires
+  per-call `mutate()` callbacks only while the observer has listeners, as `useMutation` does. Without one,
+  the case's own `perCallSaw` check fails. **Disposition**: test-harness detail inside the step's **Files**.
+- **TDD RED ran against the pre-Step-7 tree.** Step 7 had already landed, so `queryClient.ts`,
+  `trader/providers.tsx` and `QueryProviders.tsx` were temporarily checked out from `4a47b924~1`, then restored
+  from `HEAD` before GREEN. The store was kept, so RED failed on the assertion and not on an import. Playwright
+  ran under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the same harness Steps 1-7 used.
+  **Disposition**: CI-equivalent fallback.
+
+### Step 9 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 9's paired test lives in Step 10's **Files**, so the RED/GREEN
+  cycle ran a throwaway probe spec (`e2e/trader/zz-tdd-probe-step9.spec.ts`) holding Step 10's `@AC-3`
+  (503 `GetTradingEnvironment`, captured PlaceOrder body, no `^paper$` text) and `@AC-12` page-loop assertions.
+  It was deleted before commit; Step 10 authors the real tests. RED was built from the pre-Step-9 tree (the
+  implementation was saved as a patch, the files reset to `HEAD`, then re-applied for GREEN). Playwright ran
+  under `CI=1 E2E_PREBUILT=1` against a `pnpm build`, the same harness Steps 1-8 used. **Disposition**:
+  CI-equivalent fallback.
+- **Build output on tmpfs.** The host root filesystem had under 1 GB free (shared with parallel worktrees), and
+  the first `pnpm build` failed with `ENOSPC`. `.next` was bind-mounted onto `/dev/shm` for the RED/GREEN builds;
+  a symlink does not work because Next then cannot resolve externals from `node_modules`. **Disposition**:
+  harness-only; nothing committed.
+- **Probe waits 3 s instead of `networkidle`.** The trader pages hold open streams, so `networkidle` never
+  settles. Step 10 waits for each page's main heading as specified. **Disposition**: probe-only.
+- **Prettier (lint-staged) reformatted the pre-existing long `trading_pb` type import in `useOrders.ts`** and
+  wrapped the new `OrderBook.tsx` empty-state line. Behavior is unchanged. **Disposition**: formatting only.
+- **One comment updated.** `app/trader/page.tsx:17-18` said the mode defaults to 'paper' until the environment
+  is known. That is now false, so it states the null/UNSPECIFIED constraint instead. **Disposition**: inside
+  the step's **Files**; no scope change.
+- **Evidence line drift (no code impact).** `resolveTradingMode` spans `trading.go:3572-3581` (cited
+  `3573-3582`). **Disposition**: noted only; step body not edited (F-09).
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`, and `src/` type-checks clean (`pnpm build` passes).
+  **Disposition**: not fixed here; already handed to `/sdd-qa defect`.
+
+### Step 10 — 2026-10-29
+
+- **TDD RED ran against the pre-Step-9 tree.** Step 9 had already landed, so its eleven source files were
+  checked out from `8a36112d~1` (with `src/lib/tradingMode.ts` removed), built, and restored from `HEAD` before
+  GREEN. The Vitest RED is therefore an unresolved import of `./tradingMode` (the helper did not exist before
+  Step 9). The e2e RED failed on the assertion itself. Playwright ran under `CI=1 E2E_PREBUILT=1` against a
+  `pnpm build`, the same harness Steps 1-9 used. **Disposition**: CI-equivalent fallback.
+- **Heading wait on `/trader`.** The dashboard has no `<h1>`, so the `@AC-12` loop waits for the "Place Order"
+  card title there. The other four pages wait for their level-1 heading (`Orders`, `Exposure`, `AAPL`,
+  `Portfolio`). **Disposition**: test-shape detail inside the step's **Files**.
+- **`@AC-12` is GREEN-only** (regression guard), as the step predicted: it passed on the pre-fix tree because the
+  badge was already null-safe.
+
+### Step 11 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** Step 11's paired test lives in Step 12's **Files**, so the RED/GREEN
+  cycle ran a throwaway Vitest probe (`src/lib/zzProbeStep11.test.ts`, Step 12's six cases built as
+  `{ ...ORDER_WORKING, status, updatedAt }` with `timestampFromDate`). It was deleted before commit; Step 12 authors
+  the real test. For RED, `orderFreshness.ts` first held today's streamed-wins merge (`streamed ?? polled`), so RED
+  failed on the assertion, not on a missing import. **Disposition**: CI-equivalent fallback.
+- **One comment updated.** `OrdersTable.tsx` said streamed updates override the listed snapshot. That is no longer
+  unconditional, so it now states the strictly-newer `updatedAt` exception. **Disposition**: inside the step's
+  **Files**; no scope change.
+- **Evidence citations not re-read.** The `trading.go` stamp lines and `insights.md:1551` back only the field
+  number and the neutral-fallback rule; they were not re-verified. **Disposition**: noted only.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean. **Disposition**: not fixed here; already
+  handed to `/sdd-qa defect`.
+
+### Step 12 — 2026-10-29
+
+- **TDD RED ran against the pre-Step-11 behavior.** Step 11 had already landed, so `orderFreshness.ts` was
+  temporarily swapped for the old streamed-wins merge (`streamed ?? polled`) for the RED run, then restored before
+  GREEN. RED failed on the assertions, not on a missing import. **Disposition**: CI-equivalent fallback.
+- **The fixture spread is cast.** `ORDER_WORKING` is a plain object literal, not a protobuf-es message, so the
+  test builds `{ ...ORDER_WORKING, status, updatedAt } as unknown as Order`. The relative import
+  `../../e2e/fixtures/orders` resolves under Vitest, so the `create(OrderSchema, …)` fallback was not needed.
+  **Disposition**: test-shape detail inside the step's **Files**.
+- **`INVENTORY.md` consumers column not updated.** The new test also uses `ORDER_WORKING`, but INVENTORY.md is not
+  in this step's **Files**. The other `src/lib` tests that import e2e fixtures (`performanceMetrics`,
+  `indicatorChart`, `configUiBff`) are not listed there either. **Disposition**: noted only.
+
+### Step 13 — 2026-10-29
+
+- **TDD RED harness (not a code deviation).** The paired unit test (`streamBackoff.test.ts`) is in Step 14's
+  **Files**, so RED/GREEN ran a throwaway Vitest probe (`src/lib/zzProbeStep13.test.ts`, Step 14's backoff and
+  classification cases plus the remaining terminal codes), deleted before commit. RED ran against a
+  `streamBackoff.ts` stub with today's behavior (no backoff, nothing retryable): 2 of 3 failed on assertions. The
+  hook and component behavior has no node-env unit harness (component tests are out of scope for this service).
+  Step 14's e2e covers it. **Disposition**: CI-equivalent fallback.
+- **The hook resets `terminal` when `key` changes.** A new subscription must not keep the previous one's terminal
+  text. It also re-checks `aborted` after the `finally`, so a cleanly ended stream never sets `disconnected` after
+  unmount. **Disposition**: inside the step's **Files**; no behavior change for a fixed key.
+- **The alerts indicator `<span>` sits inside `<Sheet>`, before `<SheetTrigger>`.** Radix `Sheet` renders no
+  wrapper element, so the span lands beside the bell in the `AppShell` actions flex row. **Disposition**: layout
+  detail.
+- **`errMessage` already exists.** Step 3 created `src/lib/errMessage.ts`, so the hook imports it; no new helper.
+  **Disposition**: noted only.
+- **The existing e2e mocks are not yet updated (expected until Step 14).** The trader mock has no
+  `streamOrderUpdates` (it returns `Unimplemented`, which is terminal), and `streamAlerts` ends cleanly. No
+  existing spec asserts that the indicator is absent. **Disposition**: Step 14 scope; e2e was not run here.
+- **Instruction 7 (5-minute idle observation on dev) is operator-only.** It needs the deployed dev environment.
+  **Disposition**: carried to the integration PR.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`; `src/` type-checks clean. **Disposition**: not fixed here.
+
+### Step 14 — 2026-10-29
+
+- **Instruction 9 fallback ran for the orders stream.** `route.fulfill` cannot hold a body open, so orders attempt 2
+  (behind the gate) is a complete body: the FILLED frame plus a clean end-stream frame. Attempts 3+ `route.continue()`
+  to the held-open `streamOrderUpdates` mock, so the hook stops cycling. The indicator assertions target the first
+  item and the stable timer, so they hold. The alerts attempt 2 `route.continue()`s to the held-open mock as specced.
+  **Disposition**: specced fallback.
+- **TDD RED ran against the pre-Step-13 tree.** Step 13 had already landed, so `AlertStream.tsx`, `OrdersTable.tsx`
+  and `useOrderUpdates.ts` were temporarily restored from `adcd3be0`, and `streamBackoff.ts` was replaced by a stub
+  (no backoff, nothing retryable). Unit RED: 7 of 10 failed on assertions. E2E RED: both new scenarios failed on
+  the missing `order-stream-disconnected` / `alert-stream-disconnected` indicators. Then everything was restored
+  before GREEN. **Disposition**: CI-equivalent fallback.
+- **E2E ran in CI mode (`CI=1`, `next build && next start`).** The local `pnpm dev` server timed out the 10 s
+  warmup on a cold compile. That is the CI harness, not a spec change. A `--repeat-each=4` run of
+  `stream-reconnect.spec.ts` was 8/8 green. **Disposition**: CI-equivalent.
+- **The orders AC-1 render check also asserts no `NEW`.** Polls keep returning the older NEW record at
+  `ORDER_WORKING_STREAMED_AT`, so the row must not fall back to it. **Disposition**: inside the step's **Files**.
+- **Pre-existing `tsc --noEmit` failure, out of scope (unchanged since Step 1).** The failure is still only
+  `e2e/insights/backfills.spec.ts:135-136`. **Disposition**: not fixed here.
