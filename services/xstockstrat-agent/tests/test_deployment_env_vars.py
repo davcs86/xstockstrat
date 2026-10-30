@@ -35,9 +35,9 @@ def test_claude_md_no_agent_postgres_mcp_budget_row():
     )
 
 
-def test_claude_md_direct_total_is_eight():
-    """@AC-3 @feature-214: direct-backend total re-derived to 8 after the removal."""
+def test_claude_md_direct_total_is_nine():
+    """@AC-3 @feature-214: agent slot stays removed; feature 280 adds the staging smoke slot (8 -> 9)."""
     content = _read("CLAUDE.md")
-    assert "**Direct backend total** | | | **8**" in content, (
-        "Root CLAUDE.md direct-backend total must be **8** after feature 214 removed the agent slot"
+    assert "**Direct backend total** | | | **9**" in content, (
+        "Root CLAUDE.md direct-backend total must be **9** (agent slot removed by 214, smoke added by 280)"
     )
