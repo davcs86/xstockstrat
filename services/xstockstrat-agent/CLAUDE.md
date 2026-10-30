@@ -97,6 +97,8 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `list_templates` | List the admin-curated `formula` / `strategy` / `signal_source` templates from the owning service's `ListTemplates` (read-only, feature 224) |
 | `instantiate_template` | Copy a template into a private snapshot owned by the caller (feature 224); a `signal_source` bearer is written secret-first to the caller's per-user config secret |
 
+**Staging-only `smoke_checks` (feature 280, uncounted).** Registered by `register_tools` only when `SMOKE_ENDPOINT` (`host:port`, HTTPS) is set, so a production agent still advertises exactly forty-five tools and a staging agent forty-six. `smoke_checks(action: list|run|get_run, checks?, run_id?)` is ADMIN-only (`_require_admin` before any HTTP) and calls `xstockstrat-smoke` through `app/smoke_client.py`: plain httpx on an `ssl.SSLContext` presenting the agent's own `MTLS_*` leaf and pinning the server name `xstockstrat-smoke` (not `egress.py`). `get_run` validates the run-file body against `app/smoke_run_file.v1.json`, a byte copy of `services/xstockstrat-smoke/schema/run-file.v1.json` (a test enforces equality).
+
 ### Management-tool authorization
 
 One management **write** tool still hits a backend **admin** gate — `trigger_backfill` — and
@@ -225,6 +227,7 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 TRADING_ENDPOINT=xstockstrat-trading:50051
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053   # query_bars / query_fundamentals (feature 204)
+SMOKE_ENDPOINT=                 # staging only (feature 280): xstockstrat-smoke host:port; unset/empty = no smoke_checks tool
 UI_BASE_URL=http://localhost:3000
 AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 ```

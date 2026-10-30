@@ -565,6 +565,7 @@ services:
       TRADING_ENDPOINT: xstockstrat-trading:50051
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       SERVICE_NAME: agent
+      SMOKE_ENDPOINT: ${SMOKE_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: http

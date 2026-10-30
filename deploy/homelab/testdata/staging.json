@@ -43,6 +43,7 @@
         "OTEL_ENABLED": "false",
         "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
         "SERVICE_NAME": "agent",
+        "SMOKE_ENDPOINT": "xstockstrat-smoke:9110",
         "TRADING_ENDPOINT": "xstockstrat-trading:50051",
         "TRADING_MODE": "paper",
         "UI_BASE_URL": "https://xstockstrat.example.test",

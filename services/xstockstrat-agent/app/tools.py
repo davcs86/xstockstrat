@@ -62,16 +62,18 @@ import ipaddress
 import json
 import logging
 import math
+import os
 import uuid
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote, urljoin, urlparse
 
 import grpc
+import httpx
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
-from app import backtest_view, client, egress
+from app import backtest_view, client, egress, smoke_client
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -2302,6 +2304,63 @@ def register_tools(server: MCPServer) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
+
+    if os.environ.get("SMOKE_ENDPOINT"):
+        _register_smoke_tool(server)
+
+
+def _register_smoke_tool(server: MCPServer) -> None:
+    """Staging-only (feature 280): registered iff SMOKE_ENDPOINT is set; not one of the 45 tools."""
+
+    @server.tool()
+    async def smoke_checks(
+        ctx: Context,
+        action: Literal["list", "run", "get_run"],
+        checks: list[str] | None = None,
+        run_id: str | None = None,
+    ) -> dict:
+        """Run and read the staging post-deploy smoke checks (ADMIN only, staging agents only).
+
+        action:
+          'list'    — the catalog: {deployed_sha, checks:[{id,feature,part,timeout_s,check_hash}],
+              load_errors}.
+          'run'     — start a run of the given check ids (`checks`, required, non-empty). Returns
+              {run_id}; if a run is already active returns {error: 'run_in_progress',
+              retry_after_s}.
+          'get_run' — read run `run_id`: {status: running|done, records, file} once done, with
+              `file.body` validated against the run-file schema.
+        """
+        _require_admin(ctx, "smoke_checks")
+        if action == "run" and not checks:
+            raise ValueError("checks is required (non-empty) for action='run'")
+        if action == "get_run" and not run_id:
+            raise ValueError("run_id is required for action='get_run'")
+        base = f"https://{os.environ['SMOKE_ENDPOINT']}"
+        if action == "list":
+            method, url, kw = "GET", f"{base}/checks", {}
+        elif action == "run":
+            method, url, kw = "POST", f"{base}/runs", {"json": {"checks": checks}}
+        else:
+            method, url, kw = "GET", f"{base}/runs/{quote(run_id, safe='')}", {}
+        http = smoke_client.build_client()
+        try:
+            r = await http.request(method, url, extensions=smoke_client.PIN, **kw)
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"smoke service unreachable ({type(e).__name__})") from None
+        finally:
+            await http.aclose()
+        if r.status_code == 409:
+            body = r.json()
+            return {
+                "error": body.get("error", "run_in_progress"),
+                "retry_after_s": body.get("retry_after_s"),
+            }
+        if r.status_code >= 400:
+            raise RuntimeError(f"smoke service returned HTTP {r.status_code}: {r.text[:300]}")
+        data = r.json()
+        if action == "get_run" and data.get("status") == "done":
+            smoke_client.validate_run_file((data.get("file") or {}).get("body"))
+        return data
 
 
 def register_prompts(server: MCPServer) -> None:

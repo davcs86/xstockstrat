@@ -2,6 +2,10 @@
 # Anchors are file-local, so the shared blocks are restated here.
 
 services:
+  xstockstrat-agent:
+    environment:
+      SMOKE_ENDPOINT: xstockstrat-smoke:9110
+
   xstockstrat-smoke:
     image: ${IMAGE_SMOKE:?IMAGE_SMOKE is required}
     restart: unless-stopped

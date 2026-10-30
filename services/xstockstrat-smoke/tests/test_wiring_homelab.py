@@ -57,10 +57,13 @@ def test_prod_render_has_no_smoke():
     )
 
 
-def test_compose_yml_stays_smoke_free_and_overlay_adds_only_smoke():
+def test_compose_yml_stays_smoke_free_and_overlay_adds_smoke_and_agent_endpoint():
     assert "smoke" not in (HOMELAB / "compose.yml").read_text().lower()
     overlay = yaml.safe_load((HOMELAB / "compose.smoke.yml").read_text())
-    assert list(overlay["services"]) == [SMOKE]
+    assert set(overlay["services"]) == {SMOKE, "xstockstrat-agent"}
+    assert overlay["services"]["xstockstrat-agent"] == {
+        "environment": {"SMOKE_ENDPOINT": "xstockstrat-smoke:9110"}
+    }
 
 
 def test_staging_render_has_smoke_ro_dsn_pool_1():

@@ -18,30 +18,31 @@
           "required": true
         }
       },
-      "environment": {
-        "AGENT_PUBLIC_URL": "${APP_URL}/agent",
-        "ANALYSIS_ENDPOINT": "xstockstrat-analysis:50056",
-        "APPLICATION_ENV": "${APPLICATION_ENV:?APPLICATION_ENV is required}",
-        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
-        "IDENTITY_ENDPOINT": "xstockstrat-identity:50058",
-        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
-        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
-        "JWT_SECRET": "${JWT_SECRET:?JWT_SECRET is required}",
-        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
-        "MCP_HTTP_PORT": "9000",
-        "MCP_TRANSPORT": "http",
-        "MTLS_CA_CERT": "${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
-        "MTLS_CERT": "${AGENT_MTLS_CERT:?AGENT_MTLS_CERT is required}",
-        "MTLS_KEY": "${AGENT_MTLS_KEY:?AGENT_MTLS_KEY is required}",
-        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
-        "OTEL_ENABLED": "false",
-        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
-        "SERVICE_NAME": "agent",
-        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
-        "TRADING_MODE": "${TRADING_MODE:?TRADING_MODE is required}",
-        "UI_BASE_URL": "${APP_URL}",
-        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-identity:50058"
-      },
+      "environment": [
+        "AGENT_PUBLIC_URL=${APP_URL}/agent",
+        "ANALYSIS_ENDPOINT=xstockstrat-analysis:50056",
+        "APPLICATION_ENV=${APPLICATION_ENV:?APPLICATION_ENV is required}",
+        "CONFIG_ENDPOINT=xstockstrat-config:50060",
+        "IDENTITY_ENDPOINT=xstockstrat-identity:50058",
+        "INDICATORS_ENDPOINT=xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT=xstockstrat-ingest:50055",
+        "JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}",
+        "MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053",
+        "MCP_HTTP_PORT=9000",
+        "MCP_TRANSPORT=http",
+        "MTLS_CA_CERT=${MTLS_CA_CERT:?MTLS_CA_CERT is required}",
+        "MTLS_CERT=${AGENT_MTLS_CERT:?AGENT_MTLS_CERT is required}",
+        "MTLS_KEY=${AGENT_MTLS_KEY:?AGENT_MTLS_KEY is required}",
+        "NOTIFY_ENDPOINT=xstockstrat-notify:50059",
+        "OTEL_ENABLED=false",
+        "PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052",
+        "SERVICE_NAME=agent",
+        "TRADING_ENDPOINT=xstockstrat-trading:50051",
+        "TRADING_MODE=${TRADING_MODE:?TRADING_MODE is required}",
+        "UI_BASE_URL=${APP_URL}",
+        "WAIT_FOR=xstockstrat-config:50060 xstockstrat-identity:50058",
+        "SMOKE_ENDPOINT=xstockstrat-smoke:9110"
+      ],
       "healthcheck": {
         "interval": "5s",
         "retries": 6,
@@ -50,7 +51,7 @@
           "CMD",
           "bash",
           "-c",
-          "echo > /dev/tcp/127.0.0.1/9000"
+          "echo \u003e /dev/tcp/127.0.0.1/9000"
         ],
         "timeout": "5s"
       },
@@ -115,7 +116,7 @@
           "CMD",
           "bash",
           "-c",
-          "echo > /dev/tcp/127.0.0.1/50056"
+          "echo \u003e /dev/tcp/127.0.0.1/50056"
         ],
         "timeout": "5s"
       },
@@ -257,7 +258,7 @@
           "CMD",
           "bash",
           "-c",
-          "echo > /dev/tcp/127.0.0.1/50054"
+          "echo \u003e /dev/tcp/127.0.0.1/50054"
         ],
         "timeout": "5s"
       },
@@ -310,7 +311,7 @@
           "CMD",
           "bash",
           "-c",
-          "echo > /dev/tcp/127.0.0.1/50055"
+          "echo \u003e /dev/tcp/127.0.0.1/50055"
         ],
         "timeout": "5s"
       },
@@ -560,7 +561,7 @@
           "CMD",
           "bash",
           "-c",
-          "echo > /dev/tcp/127.0.0.1/9110"
+          "echo \u003e /dev/tcp/127.0.0.1/9110"
         ],
         "timeout": "5s"
       },
