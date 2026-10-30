@@ -632,3 +632,10 @@ Feature: xstockstrat-config - the marketdata vendor secret grant is bound to the
 - **Evidence:** Tempo shows 4 `ConfigService/GetSecret` spans at 06:47:56Z on the new config pod `xstockstrat-config-856865669c-zbmgm`. That pod's ReplicaSet is new; the earlier boots ran on `6fbb9bf545`. All four spans have `rpc.grpc.status_code=0` and `deployment.environment=development`. This is the marketdata boot resolving its four vendor credentials while presenting its SAN.
 - A TraceQL search for `GetSecret` spans with `status_code != 0` over 06:40–07:10Z returned **0** spans. So no marketdata request was denied by the new `peerSan` binding.
 - Loki holds no marketdata log streams (no `service_name` values over 24h), so the log grep for `resolving vendor credential from config failed` could not run. The trace check above is the equivalent the step allowed. No revert of the Step 7 `authz.ts` `peerSan` line is needed.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

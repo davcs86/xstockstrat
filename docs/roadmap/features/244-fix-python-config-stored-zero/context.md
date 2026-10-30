@@ -1053,3 +1053,10 @@ reads), `list_opportunities`, `run_backtest`, `list_config_keys`, and Tempo. All
 ## Session 2026-10-30 — Production check waived
 
 - Operator decision 2026-10-30 (own words): "Prod is not running. Staging is enough". The production check owed at `/promote` is **waived**. The staging/dev verification already recorded above is the final rollout verification for this feature.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

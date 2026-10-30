@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -31,6 +33,7 @@
 | 2026-10-29 | `in-progress` (step 16 done) | /sdd-execute sequential | Docs: `DATABASE_CA_CERT` env rows in the ledger/config/identity/notify/ui `CLAUDE.md` (identity/notify note the boot `SELECT 1` DB dependency); `docs/patterns/database.md` § Node DB TLS (fail-closed); scoped `dbTls.ts`/`mtls.ts` exemption in `docs/patterns/dry-guard-rail.md` |
 | 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute sequential | Step 17 canary: static half passed (CA + URL bindings); live TLS verify moved post-merge on dev by operator decision |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

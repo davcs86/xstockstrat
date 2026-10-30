@@ -489,3 +489,10 @@ earlier query window ended before that.
 - Caveat: one ~12-minute burst (02:15–02:28Z) of 12 `ingest_signal`, 3 `extract_website_content` (3 reads each)
   and 1 `get_config` calls. It sizes the healthy path, not tail behaviour under load or a config restart.
 - Step 6 → `done`; status → `code-completed`; the PR #1338 merge hold is lifted.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

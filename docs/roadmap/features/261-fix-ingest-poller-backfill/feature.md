@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by the operator's standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing `@AC` rule |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 9 steps done; C-16 promotion applied (8 NEW scenarios → `services/xstockstrat-ingest/acceptance/fix-ingest-poller-backfill.feature`); integration PR opened, merge held for operator |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

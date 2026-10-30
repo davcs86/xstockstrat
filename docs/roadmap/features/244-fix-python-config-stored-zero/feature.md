@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -41,6 +43,7 @@
 | 2026-10-28 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of pending Step 18 against current codebase after merging `origin/main-dev` (`-X ours`): line drift only — agent `list_opportunities` `tools.py:1518`→`:1527`, `set_config` def `:1642`→`:1651` (params `:1655-1660`, docstring `:1662`); all other evidence still matches |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute (operator session) | Step 18 dev audit recorded (staging MCP, no FR-3 zero rows); post-deploy smoke and prod audit deferred per operator decision "Record audit, merge, I smoke" |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

@@ -846,3 +846,10 @@ Feature: fix-ui-transport-hardening (bug fix)
 - C-16 promotion applied exactly per the `sdd-batch-promotion-plan` block above (auto-confirmed under the operator's standing authorization, session_01NpS3HShZK6pSnogA7CFo2f): created `services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature` with AC-1–AC-6 (6 NEW, 0 DUP, 0 OVERLAP), `@feature-271` provenance kept.
 - `status.md` → `code-completed`; `feature.md` history row appended.
 - merge-order.md: 271 has no blocking entry (279 ↔ 271 note is non-blocking prose). Next: integration PR `feature/fix-ui-transport-hardening` → `main-dev`; merge held for the operator.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

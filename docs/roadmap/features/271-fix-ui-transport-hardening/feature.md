@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -32,6 +34,7 @@
 | 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 10 done — UI `CLAUDE.md` middleware row documents `PUBLIC_HEALTH_PATHS`; UI constitution deadline gotcha rewritten around `deadlines.ts` (30s unary default); teardown reconciled by hand (context-forge `context-constitution` unavailable) |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; AC-1–AC-6 promoted (C-16) to `services/xstockstrat-ui/acceptance/fix-ui-transport-hardening.feature`; integration PR opened |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

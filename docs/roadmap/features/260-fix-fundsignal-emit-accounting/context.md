@@ -752,3 +752,10 @@ Feature: fix-fundsignal-emit-accounting (bug fix)
 
 - Source check (2026-10-29): the main-worktree `acceptance.feature` and the copy on `origin/feature/fix-fundsignal-emit-accounting` (`a3b8635b`) are byte-identical (`diff` empty).
 - Nothing is written to the durable suite until the operator confirms this plan.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30
