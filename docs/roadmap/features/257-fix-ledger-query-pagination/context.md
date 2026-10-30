@@ -534,3 +534,13 @@ Still open (surface at the /sdd-execute checkpoint):
   Open: CI job result must be checked on the pushed branch; if it fails, hard stop per Step 8 instruction 6.
 - Tooling note: the worktree's `node_modules` symlink pointed at a main checkout with no install; replaced by a local
   `pnpm install --frozen-lockfile` (gitignored).
+
+### Step 9 — docs and teardown audit (2026-10-30)
+
+- `services/xstockstrat-ledger/CLAUDE.md`: invariant 4 now "monotonic and may gap (`nextval`; rolled-back inserts burn values) - never decreasing"; Live Streaming section states subscribe -> bounded batched replay (`REPLAY_BATCH_SIZE`, up to a post-subscribe `max(sequence)` bound) -> synchronous flush -> live; one line for the `QueryEvents` keyset token (default 100, cap 1000). Invariant 5 (feature 263) untouched.
+- `services/xstockstrat-ledger/docs/context-constitution.md`: `LEDGER-9` appended (token = decimal last `sequence`, bad token code 3, all compares via `toSeq`, late-commit delivery contract, `pg_snapshot_xmin` follow-up, unbounded notifier buffer accepted, real-pg proof in `queryPagination.db.test.ts`); `LEDGER-5` `StreamEvents` clause amended; header refresh stamp added.
+- `services/xstockstrat-portfolio/CLAUDE.md`: `GetPnL` `UNAVAILABLE` text now also covers ledger page error, deadline and repeated token (`ErrLedgerUnavailable`). The `order.partially_filled` row already matched.
+- Instruction 4: no CI timings are available locally (Step 8 is verified by the CI job); no per-page-ms follow-up recorded. Check the `Ledger DB test (TimescaleDB)` log for the AC-5 numbers before the integration PR merges; if the walk exceeds 50% of the caller deadline, record the user-scoped-walk follow-up (design.md section 3).
+- Teardown: the context-forge plugin was not invoked from this subagent session (availability unconfirmed), so the audit was done by hand. Re-read the three touched files against `ledgerServiceImpl.ts` and `portfolio_handler.go`; re-stamped the stale `~Lnn` hints in the ledger constitution (LEDGER-1..7, gotchas, `toValidDate`) to the current file. The integration PR body must record both facts: plugin unavailable, and this manual reconciliation.
+- Verification greps: `may gap` hit (CLAUDE.md:35); `LEDGER-9` one row mentioning `toSeq`; `ErrLedgerUnavailable` hit in portfolio CLAUDE.md; `then subscribes` no hit.
+

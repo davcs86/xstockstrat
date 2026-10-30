@@ -49,8 +49,7 @@ at the code level. The user-visible effect is the corrected realized P&L that `G
 - **248 (`fix-ledger-trimmed-notify-payload`, `implementation-ready`) is a soft same-function overlap, not a hard
   order.** If 248 is in `main-dev` when Step 4 runs, Step 4 replaces 248 Step 7's `Number(row.sequence)` /
   `Number(req.fromSequence)` comparisons with `toSeq(...)` (BigInt) and keeps 248's flush structure. If 248 lands
-  after 257, 248 rebases onto `toSeq`. Step 9's new invariant takes the next free `LEDGER-N`: 248 Step 11 claims
-  `LEDGER-8`.
+  after 257, 248 rebases onto `toSeq`. Step 9's new invariant is `LEDGER-9` (248 landed `LEDGER-8`).
 - Step 3 [test] covers Step 2 [service]. Step 5 [test] covers Step 4 [service]. Step 7 [test] covers Step 6
   [service]. Per P-06 each test is written and run RED against the pre-implementation tree first.
 - Step 4 requires Step 2 (it reuses `toSeq`).
@@ -695,7 +694,7 @@ No coverage threshold applies: `test:db` stays outside the c8 gate (`ci.yml:704`
 
 ### Step 9 — docs: ledger CLAUDE.md, ledger constitution invariant, portfolio CLAUDE.md, teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-ledger/`, `services/xstockstrat-portfolio/`
 **Files**:
 - `services/xstockstrat-ledger/CLAUDE.md` — modify
@@ -771,3 +770,4 @@ grep -n "then subscribes" services/xstockstrat-ledger/CLAUDE.md   # no hit
 | 2026-10-29 | 4 + 5 | **Files expansion (test fake only):** `services/xstockstrat-ledger/src/__tests__/streamResolveWired.test.ts` — `makeCountingPool` answers the new `MAX(sequence)` bound query (`wire(replay, max = '0')`; the buffered-resolve test passes `'50'`). No assertion changed; no production code outside Step 4's Files changed. | Operator decision 2026-10-30 (session question tool): "A: Include the fake fix (Recommended)" |
 | 2026-10-29 | 6 + 7 | **Steps 6 and 7 executed as ONE commit** with one red→green cycle on Step 7's tests. Step 6's **Verification** is "see Step 7" — its RED/GREEN tests live entirely in Step 7's files, so Step 6 cannot be verified alone. Standing rule (operator, 2026-10-29, own words): "Merge pairs + standing rule"; widened (operator, 2026-10-30, own words): "Widen the rule (Recommended)". No file outside Steps 6–7's **Files** is touched, no existing assertion changed. The `pagingLedger` fake also carries a 100-call safety cap (`pagingCallCap`, answers `ResourceExhausted`) so the pre-fix repeated-token loop ends inside the test run instead of leaking a spinning goroutine; it does not change any asserted behaviour. | Standing rule (operator 2026-10-29 / 2026-10-30) |
 | 2026-10-30 | 8 | **Step 8 Files expanded: `services/xstockstrat-ledger/package.json` `test:db` → `tsc && node --test --test-concurrency=1 dist/__tests__/db/*.test.js`** so the DB-tier files run one after another (both share the CI database and the AC-5 test needs the whole `max: 1` pool latency to itself). Test-only script; no production code or assertion changes. Step 8 is verified by CI job `Ledger DB test (TimescaleDB)` going green; locally only build/lint/`test:coverage` ran (build ok, lint 0 errors, 105 tests pass, coverage 89%) and no database was started. RED/GREEN against a real DB is therefore taken from that CI job, not a local capture. | Operator decision 2026-10-30 (session question tool): "A: --test-concurrency=1 (Recommended)" |
+| 2026-10-30 | 9 | **Step 9 executed as written on the merged tree.** Extra edit inside Step 9's own files: the stale `~Lnn` line hints in the ledger constitution (LEDGER-1/2/3/4/5/6/7, the gotcha rows) were re-stamped against `ledgerServiceImpl.ts` as part of the teardown. The `(~L)` hints for the Step 8 CI timings were not needed (no doc carries numbers). | Teardown reconciliation (root CLAUDE.md § Teardown) |
