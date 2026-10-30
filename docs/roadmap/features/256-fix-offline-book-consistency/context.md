@@ -973,3 +973,152 @@ Each item names the step where it is resolved.
   `readValuation.unavailable` in `offline_valuation.go`, trading.go ConfirmOrder validation and the UNAVAILABLE message.
 - Teardown: `/context-forge:context-constitution refresh` plugin not run in this subagent; manual reconciliation of the three
   touched files against the code was done as above (record in the PR body).
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan - fix-offline-book-consistency (feature 256)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-portfolio/acceptance/fix-offline-book-consistency.feature | CREATE | NEW | Event consumer retry. No existing portfolio rule covers a failed UpsertOfflineRealized. |
+| AC-2 | same portfolio file | CREATE | NEW | Deregistration delete retry. |
+| AC-3 | same portfolio file | CREATE | NEW | offline_state_unavailable on all four reads. Distinct from the quote-error degrade in offline-account-full-pnl.feature (~L146), which is a different failure. |
+| AC-4 | services/xstockstrat-trading/acceptance/fix-offline-book-consistency.feature | CREATE | NEW | ConfirmOrder rejects non-finite or negative fills. Existing trading suites only assert fees >= 0. |
+| AC-5 | same trading file | CREATE | NEW | The emit failure is in trading. |
+| AC-6 | portfolio file | APPEND (same CREATE block) | NEW | Poison event parked after the retry bound. |
+| AC-7 | trading file | APPEND (same CREATE block) | NEW | Weak overlap with feature 240 partial and full confirm scenarios in trading offline-account-full-pnl.feature. Those do not assert the emit. Kept NEW as a regression guard for FR-5 over-rejection. |
+| AC-8 | portfolio file | APPEND (same CREATE block) | NEW | Per-account degradation. |
+| AC-9 | portfolio file | APPEND (same CREATE block) | NEW | Transient failures never park an event. Complements AC-6. |
+| AC-10 | trading file | APPEND (same CREATE block) | NEW | Partial overlap with @AC-48 @feature-240 in trading offline-account-full-pnl.feature (un-confirm with filled_qty 0 gives NEW). AC-10 adds that no price is needed and that the emit still happens. It is consistent with AC-48, so this is not a conflict. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-offline-book-consistency.feature (CREATE) ---
+# Promoted from docs/roadmap/features/256-fix-offline-book-consistency/acceptance.feature (C-16).
+# Scenarios are verbatim. Provenance tag: @feature-256.
+Feature: fix-offline-book-consistency (portfolio)
+  Offline-account books (feature 240) must not drift or misreport P&L on a failed write or a failed state read.
+
+  @AC-1 @FR-1 @regression @feature-256
+  Scenario: A failed offline realized-P&L write is retried, not acked
+    Given user "u-1" has offline account "acct-off-1" with stored realized_pnl 0.00
+    And UpsertOfflineRealized fails once, then succeeds
+    When portfolio consumes an offline "account.positions.synced" event for "acct-off-1" carrying realized_pnl 500.00
+    Then the event cursor does not advance past that event after the first failure
+    And the event is delivered again
+    And the stored realized_pnl for "acct-off-1" is 500.00
+
+  @AC-2 @FR-2 @regression @feature-256
+  Scenario: A failed offline-realized delete on deregistration is retried
+    Given user "u-1" has offline account "acct-off-1" with a realized row
+    And DeleteOfflineRealized fails once, then succeeds
+    When portfolio consumes "account.deregistered" for "acct-off-1"
+    Then the "account.deregistered" event is delivered again after the failed delete
+    And no realized row remains for "acct-off-1"
+    And "acct-off-1" no longer appears in ListPortfolios for "u-1"
+
+  @AC-3 @FR-4 @regression @feature-256
+  Scenario Outline: Offline P&L is never reported as complete when offline state cannot be read
+    Given user "u-1" has offline account "acct-off-1" with realized_pnl 500.00 and an AAPL position with unrealized_pnl 100.00
+    And GetOfflineStates returns an error
+    When <read> is called for "u-1"
+    Then the call succeeds
+    And the "acct-off-1" figures it returns carry offline_state_unavailable true
+    And it does not return total_pnl 100.00, a day_pnl, or a position day_pnl for "acct-off-1" as a complete figure
+
+    Examples:
+      | read           |
+      | ListPortfolios |
+      | GetPortfolio   |
+      | ListPositions  |
+      | GetPosition    |
+
+  @AC-6 @FR-3 @regression @feature-256
+  Scenario: A persistently failing offline sync event is parked and does not block the stream
+    Given user "u-1" has offline account "acct-off-1"
+    And UpsertOfflineRealized always fails for event "evt-1"
+    And event "evt-2" for offline account "acct-off-2" follows "evt-1" on the stream
+    When portfolio consumes "evt-1" and "evt-2"
+    Then "evt-1" is parked with an error log naming "evt-1" once the retry bound is reached
+    And the event cursor advances past "evt-1"
+    And "evt-2" is applied
+
+  @AC-8 @FR-4 @regression @feature-256
+  Scenario: One undecodable offline state degrades only its own account
+    Given user "u-1" has offline account "acct-off-1" whose stored recent_fills cannot be decoded
+    And user "u-1" has offline account "acct-off-2" with realized_pnl 200.00 and no open positions
+    And user "u-1" has broker account "acct-alp-1" with day_pnl 120.00
+    When ListPortfolios is called for "u-1"
+    Then the call succeeds
+    And the "acct-off-1" portfolio carries offline_state_unavailable true
+    And the "acct-off-2" portfolio has total_pnl 200.00 and offline_state_unavailable false
+    And the "acct-alp-1" portfolio has day_pnl 120.00 and offline_state_unavailable false
+
+  @AC-9 @FR-3 @regression @feature-256
+  Scenario: A transient write failure never parks the offline sync event
+    Given user "u-1" has offline account "acct-off-1"
+    And UpsertOfflineRealized fails with a connection error on every attempt for 15 minutes, then succeeds
+    When portfolio consumes an offline "account.positions.synced" event "evt-1" for "acct-off-1"
+    Then "evt-1" is never parked and the event cursor does not advance past it while the write fails
+    And "evt-1" is applied once the write succeeds
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-offline-book-consistency.feature (CREATE) ---
+# Promoted from docs/roadmap/features/256-fix-offline-book-consistency/acceptance.feature (C-16).
+# Scenarios are verbatim. Provenance tag: @feature-256.
+Feature: fix-offline-book-consistency (trading)
+  Offline ConfirmOrder must reject non-finite or negative fills and must not report success when the positions emit fails.
+
+  @AC-4 @FR-5 @regression @feature-256
+  Scenario Outline: ConfirmOrder rejects a non-finite or negative fill
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1"
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty <qty> and filled_avg_price <price>
+    Then the call fails with INVALID_ARGUMENT
+    And order "ord-1" is unchanged and no "account.positions.synced" is emitted
+
+    Examples:
+      | qty  | price |
+      | NaN  | 150.0 |
+      | +Inf | 150.0 |
+      | 10   | NaN   |
+      | 10   | -5.0  |
+      | 10   | +Inf  |
+
+  @AC-5 @FR-6 @regression @feature-256
+  Scenario: ConfirmOrder does not report success when the positions emit fails
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1"
+    And recomputeAndEmitOfflinePositions fails for the account of "ord-1"
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty 10 and filled_avg_price 150.0
+    Then either the emit is retried until "account.positions.synced" is published for the account
+    Or the call returns an error, and a repeat ConfirmOrder with the same values succeeds and emits "account.positions.synced"
+
+  @AC-7 @FR-7 @regression @feature-256
+  Scenario Outline: Valid fills keep the existing offline status derivation
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1"
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty <qty> and filled_avg_price 150.0
+    Then order "ord-1" has status <status>
+    And "account.positions.synced" is emitted for the account of "ord-1"
+
+    Examples:
+      | qty | status           |
+      | 4   | PARTIALLY_FILLED |
+      | 10  | FILLED           |
+
+  @AC-10 @FR-5 @FR-7 @regression @feature-256
+  Scenario: An un-confirm with filled_qty 0 stays valid without a fill price
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1" confirmed with filled_qty 10 and filled_avg_price 150.0
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty 0 and filled_avg_price 0
+    Then the call succeeds and order "ord-1" has status NEW
+    And "account.positions.synced" is emitted for the account of "ord-1"
+
+### Notes / ambiguities / conflicts
+- Attribution follows the observable subject. Portfolio owns AC-1, 2, 3, 6, 8 and 9 (event consumer, offline_state_unavailable on reads). Trading owns AC-4, 5, 7 and 10 (the ConfirmOrder RPC and its emit).
+- feature.md also lists ui and agent as reviewers (steps 13-15). No scenario asserts on their observable surface, so no ui or agent suite gets a write.
+- No CONFLICT found. AC-10 against @AC-48 @feature-240 (services/xstockstrat-trading/acceptance/offline-account-full-pnl.feature L96-103) is consistent: both give status NEW on filled_qty 0. The AC-48 re-confirm with no fees or filled_at is unaffected by the new non-finite and negative rejection.
+- Weak overlap, no write skipped. AC-7 against the partial and full confirms in trading offline-account-full-pnl.feature and offline-account-portfolios.feature. AC-3 against the quote-error scenarios at portfolio offline-account-full-pnl.feature ~L146. Neither asserts the same outcome. Possible later consolidation candidates for a human.
+- I did not check the platform.feature suite or the agent and ui suites beyond a grep for the key terms (UpsertOfflineRealized, ConfirmOrder, offline_state_unavailable). It found nothing there.
+- The 'account.deregistered' consumer is not covered by any existing portfolio suite, per my grep.
+
+### Coverage check
+- Source scenarios: 10 (AC-1 to AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing skipped. Portfolio gets 6 (AC-1, 2, 3, 6, 8, 9). Trading gets 4 (AC-4, 5, 7, 10).
+````
