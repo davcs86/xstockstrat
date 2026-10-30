@@ -10,7 +10,13 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 err="$(mktemp)"
 trap 'rm -f "$err"' EXIT
-r() { env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$1" -f "$REPO_ROOT/deploy/homelab/compose.yml" config "${@:2}"; }
+files=(-f "$REPO_ROOT/deploy/homelab/compose.yml")
+overlay=no
+if [ "$2" = staging ] && [ -f "$REPO_ROOT/deploy/homelab/compose.smoke.yml" ]; then
+  files+=(-f "$REPO_ROOT/deploy/homelab/compose.smoke.yml")
+  overlay=yes
+fi
+r() { env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$1" "${files[@]}" config "${@:2}"; }
 
 if ! r "$1" -q 2>"$err"; then
   grep -oE 'required variable [A-Za-z0-9_]+ is missing a value' "$err" >&2 ||
@@ -18,7 +24,8 @@ if ! r "$1" -q 2>"$err"; then
   exit 1
 fi
 host="$(sed -n 's/^DB_HOST=//p' "$1" | tail -n 1)"
-fails="$(r "$1" --format json 2>/dev/null | jq -c --arg target "$2" --arg host "$host" -f "$REPO_ROOT/deploy/homelab/render-assert.jq" 2>/dev/null)" || fails=""
+bind="$(sed -n 's/^SMOKE_BIND_ADDR=//p' "$1" | tail -n 1)"
+fails="$(r "$1" --format json 2>/dev/null | jq -c --arg target "$2" --arg host "$host" --arg bind "$bind" --arg overlay "$overlay" -f "$REPO_ROOT/deploy/homelab/render-assert.jq" 2>/dev/null)" || fails=""
 if [ "$fails" != "[]" ]; then
   echo "homelab-render-check: render check failed: ${fails:-could not evaluate (details suppressed)}" >&2
   exit 1

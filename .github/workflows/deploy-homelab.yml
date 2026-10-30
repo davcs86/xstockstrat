@@ -49,6 +49,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+    outputs:
+      smoke_ran: ${{ steps.smoke.outputs.ran }}
     env:
       TARGET_ENV: ${{ inputs.environment }}
       DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -79,11 +81,22 @@ jobs:
             || { echo "::error::$tag predates the homelab deploy; it has no deploy/homelab/compose.yml"; exit 1; }
           { echo "IMAGE_TAG=$tag"; echo "SRC_SHA=$src"; } >>"$GITHUB_ENV"
 
+      - name: Detect the staging smoke overlay (older commits without it still deploy)
+        id: overlay
+        run: |
+          smoke=false
+          if [ "$TARGET_ENV" = staging ] && [ -f deploy/homelab/compose.smoke.yml ]; then smoke=true; fi
+          echo "smoke=$smoke" >>"$GITHUB_OUTPUT"
+
       - name: Resolve every image tag to its digest; the VM pulls by digest only
         env:
           GH_TOKEN: ${{ github.token }}
+          SMOKE_OVERLAY: ${{ steps.overlay.outputs.smoke }}
         run: |
           tag="$IMAGE_TAG"
+          files=(deploy/homelab/compose.yml)
+          want=13
+          if [ "$SMOKE_OVERLAY" = true ]; then files+=(deploy/homelab/compose.smoke.yml); want=14; fi
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           out="$RUNNER_TEMP/images.env"
           : >"$out"
@@ -94,8 +107,8 @@ jobs:
               || { echo "::error::$ref not found; was docker-build.yml run for $tag?"; exit 1; }
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$ref resolved to '$digest'"; exit 1; }
             printf '%s=%s@%s\n' "$var" "$REGISTRY/xstockstrat-$svc" "$digest" >>"$out"
-          done < <(grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u)
-          [ "$(wc -l <"$out")" -ge 13 ] || { echo "::error::deploy/homelab/compose.yml names only $(wc -l <"$out") images"; exit 1; }
+          done < <(grep -ohE '[$][{]IMAGE_[A-Z_]+' "${files[@]}" | cut -c3- | sort -u)
+          [ "$(wc -l <"$out")" -ge "$want" ] || { echo "::error::${files[*]} name only $(wc -l <"$out") images"; exit 1; }
           { echo "### Images ($tag)"; echo; sed 's/^/- /' "$out"; } >>"$GITHUB_STEP_SUMMARY"
           echo "IMAGES_ENV=$out" >>"$GITHUB_ENV"
 
@@ -185,6 +198,7 @@ jobs:
 
       - name: Build the release .env (pipeline-owned keys replace any APP_ENV copy)
         env:
+          SMOKE_BIND_ADDR: ${{ vars.SMOKE_BIND_ADDR }}
           APP_ENV: ${{ steps.op.outputs.APP_ENV || secrets.APP_ENV }}
           MTLS_CA: ${{ steps.op.outputs.MTLS_CA || secrets.MTLS_CA }}
         run: |
@@ -225,18 +239,72 @@ jobs:
             || { echo "::error::$DEPLOY_HOST is not on the tailnet (check DEPLOY_HOST and the VM)"; exit 1; }
           echo "VM_IP=$ip" >>"$GITHUB_ENV"
 
+      - name: Smoke port must bind the VM's tailnet address
+        if: steps.overlay.outputs.smoke == 'true'
+        env:
+          SMOKE_BIND_ADDR: ${{ vars.SMOKE_BIND_ADDR }}
+        run: |
+          [ -n "$SMOKE_BIND_ADDR" ] && [ "$SMOKE_BIND_ADDR" = "$VM_IP" ] \
+            || { echo "::error::vars.SMOKE_BIND_ADDR must equal the VM tailnet address $VM_IP"; exit 1; }
+
       - name: Ship the release and deploy it; the VM rolls back if it is not healthy
         env:
           GHCR_TOKEN: ${{ github.token }}
+          SMOKE_OVERLAY: ${{ steps.overlay.outputs.smoke }}
         run: |
           rel="${SRC_SHA::12}-$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))"
           gate() { ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o HostKeyAlias="$DEPLOY_HOST" "app@$VM_IP" "$@"; }
-          gate put "$rel" compose.yml <deploy/homelab/compose.yml
+          if [ "$SMOKE_OVERLAY" = true ]; then
+            # The gate keys the project on compose.yml alone; name/networks would change it.
+            (cd deploy/homelab && docker compose -f compose.yml -f compose.smoke.yml config --no-interpolate --format json) \
+              | jq 'del(.name,.networks)' >"$RUNNER_TEMP/compose.shipped.json"
+            [ "$(grep -o '[$][{]IMAGE_' "$RUNNER_TEMP/compose.shipped.json" | wc -l)" -eq 14 ] \
+              || { echo "::error::shipped staging file lost an image reference"; exit 1; }
+            gate put "$rel" compose.yml <"$RUNNER_TEMP/compose.shipped.json"
+          else
+            gate put "$rel" compose.yml <deploy/homelab/compose.yml
+          fi
           gate put "$rel" .env <"$RELEASE_ENV"
           rm -f "$RELEASE_ENV"
           printf '%s\n' "$GHCR_TOKEN" | gate deploy "$rel" "$GITHUB_ACTOR"
           { echo "### Deployed $TARGET_ENV"; echo; echo "- release \`$rel\`"; } >>"$GITHUB_STEP_SUMMARY"
           gate status
+
+      - name: Smoke checks (staging; a red result fails this job, the release stays)
+        id: smoke
+        if: steps.overlay.outputs.smoke == 'true'
+        env:
+          MTLS_CA: ${{ steps.op.outputs.MTLS_CA || secrets.MTLS_CA }}
+        run: |
+          echo "ran=true" >>"$GITHUB_OUTPUT"
+          certs="$RUNNER_TEMP/smoke-ca"; trig="$RUNNER_TEMP/smoke-trigger"; out="$RUNNER_TEMP/smoke-work"
+          export MTLS_CA
+          bash scripts/mtls-provision.sh decode-ca "$certs"
+          bash scripts/mint-smoke-trigger-leaf.sh "$certs" "$trig"
+          rm -rf "$certs"
+          mkdir -p "$out/smoke-results"
+          if git rev-parse -q --verify refs/remotes/origin/smoke-results >/dev/null; then
+            git archive origin/smoke-results | tar -x -C "$out"
+          fi
+          (cd "$out" && find smoke-results -name '*.json' | sort >"$RUNNER_TEMP/smoke-before.txt")
+          export SMOKE_ENDPOINT="$VM_IP:9110"
+          export MTLS_CERT="$(cat "$trig/cert.pem")" MTLS_KEY="$(cat "$trig/key.pem")" MTLS_CA_CERT="$(cat "$trig/ca.pem")"
+          rc=0
+          (cd services/xstockstrat-smoke && python3 -m app.trigger --mode strict --endpoint "$SMOKE_ENDPOINT" \
+            --env homelab-staging --out "$out") || rc=$?
+          rm -rf "$trig"
+          mkdir -p "$RUNNER_TEMP/smoke-run"
+          (cd "$out" && find smoke-results -name '*.json' | sort) | comm -13 "$RUNNER_TEMP/smoke-before.txt" - \
+            | while read -r f; do (cd "$out" && cp --parents "$f" "$RUNNER_TEMP/smoke-run/"); done
+          exit "$rc"
+
+      - name: Upload the smoke run file
+        if: always() && steps.overlay.outputs.smoke == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-run-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/smoke-run
+          if-no-files-found: ignore
 
       - name: Leave the tailnet
         if: always()
@@ -244,3 +312,46 @@ jobs:
           rm -f "$RUNNER_TEMP/release.env" ~/.ssh/deploy
           sudo tailscale logout 2>/dev/null || true
           sudo pkill tailscaled 2>/dev/null || true
+
+  record:
+    needs: deploy
+    if: always() && needs.deploy.outputs.smoke_ran == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: services/xstockstrat-smoke
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: smoke-run-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/smoke-run
+
+      - name: Push the run file to the smoke-results branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_DIR: ${{ runner.temp }}/smoke-run
+        run: |
+          cd services/xstockstrat-smoke
+          python3 - <<'PY'
+          import os, pathlib, shutil, sys, tempfile
+          from app.trigger import record
+          run = pathlib.Path(os.environ["RUN_DIR"])
+          files = sorted(run.glob("smoke-results/*/*.json"))
+          if not files:
+              sys.exit("no run file to record")
+          work = tempfile.mkdtemp(prefix="smoke-")
+          pat = os.environ["GH_TOKEN"]
+          record.checkout_results(work, f"https://github.com/{os.environ['GITHUB_REPOSITORY']}.git", pat)
+          paths = []
+          for f in files:
+              dest = pathlib.Path(work) / f.relative_to(run)
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy(f, dest)
+              paths.append(dest)
+          record.push_with_retry(work, paths, pat=pat)
+          PY

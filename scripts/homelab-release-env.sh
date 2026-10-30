@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/homelab-release-env.sh <images_env> <out_env>; reads TARGET_ENV, APP_ENV, MTLS_CA from the environment.
+# scripts/homelab-release-env.sh <images_env> <out_env>; reads TARGET_ENV, APP_ENV, MTLS_CA (and SMOKE_BIND_ADDR, staging only) from the environment.
 # Pipeline-owned keys are dropped from APP_ENV and written last; never print a value.
 set -euo pipefail
 umask 077
@@ -21,6 +21,17 @@ staging) db=xstockstrat-staging role=xstockstrat_staging appenv=development mode
   exit 1
   ;;
 esac
+# Staging only; a wildcard would publish the smoke API beyond the tailnet address.
+smoke_bind=""
+if [ "$TARGET_ENV" = staging ] && [ -n "${SMOKE_BIND_ADDR:-}" ]; then
+  case "$SMOKE_BIND_ADDR" in
+  0.0.0.0 | *[!0-9.]*)
+    echo "homelab-release-env: SMOKE_BIND_ADDR must be a specific IPv4 address" >&2
+    exit 1
+    ;;
+  esac
+  smoke_bind="$SMOKE_BIND_ADDR"
+fi
 [ -s "$images" ] || {
   echo "homelab-release-env: $images is empty" >&2
   exit 1
@@ -31,11 +42,12 @@ certs="$(mktemp -d)"
 trap 'rm -rf "$certs" "$out.tmp"' EXIT
 bash "$REPO_ROOT/scripts/mtls-provision.sh" decode-ca "$certs"
 CERTS_DIR="$certs" bash "$REPO_ROOT/scripts/gen-dev-certs.sh" >/dev/null
-owned='^[[:space:]]*(export[[:space:]]+)?(DB_HOST|DB_NAME|DB_USER|APPLICATION_ENV|TRADING_MODE|IMAGE_[A-Z_]+|MTLS_CA_CERT|[A-Z]+_MTLS_(CERT|KEY))[[:space:]]*[=:]'
+owned='^[[:space:]]*(export[[:space:]]+)?(DB_HOST|DB_NAME|DB_USER|APPLICATION_ENV|TRADING_MODE|SMOKE_BIND_ADDR|IMAGE_[A-Z_]+|MTLS_CA_CERT|[A-Z]+_MTLS_(CERT|KEY))[[:space:]]*[=:]'
 {
   printf '%s\n' "$APP_ENV" | { grep -Ev "$owned" || true; }
   printf 'DB_HOST=%s\nDB_NAME=%s\nDB_USER=%s\n' "$DB_HOST" "$db" "$role"
   printf 'APPLICATION_ENV=%s\nTRADING_MODE=%s\n' "$appenv" "$mode"
+  [ -z "$smoke_bind" ] || printf 'SMOKE_BIND_ADDR=%s\n' "$smoke_bind"
   cat "$images"
   CERTS_DIR="$certs" python3 "$REPO_ROOT/scripts/homelab-mtls-env.py"
 } >"$out.tmp"

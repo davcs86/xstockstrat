@@ -8,7 +8,7 @@ absent from `.do/app.yaml` and the production homelab render. Contract and const
 | Trigger | Mode | Where |
 |---|---|---|
 | DO dev `smoke-record` `POST_DEPLOY` job | record-only (exit 0 always) | `.do/app.dev.yaml` |
-| Homelab staging deploy step | strict (exit 1 on red) | `deploy-homelab.yml` (later slice) |
+| Homelab staging deploy step | strict (exit 1 on red) | `deploy-homelab.yml` (staging only; overlay `deploy/homelab/compose.smoke.yml`) |
 | Staging agent `smoke_checks` tool | on demand | `docs/runbooks/mcp-tools.md` (later slice) |
 
 Results are one JSON file per run on the orphan `smoke-results` branch: `smoke-results/<env>/<UTC>-<run_id>.json`.
@@ -26,6 +26,14 @@ SAN allowlist `xstockstrat-agent`, `xstockstrat-smoke-trigger`).
 - The DB role: `docs/runbooks/smoke-db-role.md`; config key `smoke.rpc.user_id` set to the smoke user.
 - The trigger leaf (`xstockstrat-smoke-trigger`) is minted on each deploy by `scripts/mint-smoke-trigger-leaf.sh` from the
   CA the deploy already holds; it is never in `gen-dev-certs.sh` `SERVICES`.
+
+## Homelab staging prerequisites (operator, not in this repo)
+
+- GitHub variable `SMOKE_BIND_ADDR` on the `staging` environment, equal to the VM tailnet address (the deploy fails otherwise);
+  `SMOKE_DB_PASSWORD` in the staging `APP_ENV`; the DB role per `docs/runbooks/smoke-db-role.md`.
+- Tailnet ACL `tag:ci` -> VM:9110 and the homelab-edge gate accepting the normalized shipped file (`name`/`networks` removed).
+- Without the overlay file (older image tags) or for production, every smoke step is skipped. The `record` job pushes the run file
+  with `GITHUB_TOKEN` (`contents: write`, no tailnet secrets); a red result fails the deploy job but leaves the release in place.
 
 ## Troubleshooting
 

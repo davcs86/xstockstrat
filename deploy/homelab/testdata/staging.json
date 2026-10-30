@@ -1,0 +1,779 @@
+{
+  "name": "homelab",
+  "networks": {
+    "default": {
+      "name": "homelab_default",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "db-migrator": {
+      "restart": "no",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require",
+        "SEED_USER_ID": "00000000-0000-4000-8000-0000000000c1"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-DB_MIGRATOR@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "networks": {
+        "default": null
+      }
+    },
+    "xstockstrat-agent": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "AGENT_PUBLIC_URL": "https://xstockstrat.example.test/agent",
+        "ANALYSIS_ENDPOINT": "xstockstrat-analysis:50056",
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "IDENTITY_ENDPOINT": "xstockstrat-identity:50058",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
+        "JWT_SECRET": "fixture",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MCP_HTTP_PORT": "9000",
+        "MCP_TRANSPORT": "http",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "agent",
+        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
+        "TRADING_MODE": "paper",
+        "UI_BASE_URL": "https://xstockstrat.example.test",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-identity:50058"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-AGENT@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-analysis": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/9000"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "target": 9000,
+          "published": "9000",
+          "protocol": "tcp"
+        }
+      ]
+    },
+    "xstockstrat-analysis": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50056",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "analysis",
+        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
+        "TRADING_MODE": "paper",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054 xstockstrat-trading:50051"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-ANALYSIS@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-ingest": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-trading": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/50056"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-config": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_SECRETS_ENCRYPTION_KEY": "fixture",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require",
+        "DB_POOL_MAX": "2",
+        "GRPC_PORT": "50060",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "config",
+        "TRADING_MODE": "paper"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-CONFIG@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "db-migrator": {
+          "condition": "service_completed_successfully",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50060"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-identity": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require",
+        "DB_POOL_MAX": "2",
+        "GRPC_PORT": "50058",
+        "JWT_SECRET": "fixture",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "identity",
+        "TRADING_MODE": "paper",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-IDENTITY@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-ledger": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50058"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-indicators": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50054",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "indicators",
+        "TRADING_MODE": "paper",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-INDICATORS@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-ledger": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/50054"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-ingest": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50055",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "ingest",
+        "TRADING_MODE": "paper",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-INGEST@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-identity": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-marketdata": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/50055"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-ledger": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "GRPC_PORT": "50057",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "ledger",
+        "TRADING_MODE": "paper",
+        "WAIT_FOR": "xstockstrat-config:50060"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-LEDGER@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-config": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50057"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-marketdata": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50053",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "marketdata",
+        "TRADING_MODE": "paper"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-MARKETDATA@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-notify": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "/app/service",
+          "healthcheck"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-notify": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "GRPC_PORT": "50059",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "OTEL_ENABLED": "false",
+        "SENDGRID_API_KEY": "fixture",
+        "SERVICE_NAME": "notify",
+        "SLACK_WEBHOOK_URL": "fixture",
+        "TRADING_MODE": "paper",
+        "VAPID_PRIVATE_KEY": "fixture",
+        "VAPID_PUBLIC_KEY": "fixture",
+        "VAPID_SUBJECT": "fixture",
+        "WAIT_FOR": "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-NOTIFY@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-ledger": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "50059"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-portfolio": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50052",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "SERVICE_NAME": "portfolio",
+        "TRADING_MODE": "paper"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-PORTFOLIO@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-notify": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "/app/service",
+          "healthcheck"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-smoke": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "ANALYSIS_ENDPOINT": "xstockstrat-analysis:50056",
+        "APPLICATION_ENV": "development",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging_smoke_ro:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "IDENTITY_ENDPOINT": "xstockstrat-identity:50058",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "smoke",
+        "SMOKE_ENV": "homelab-staging",
+        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
+        "TRADING_MODE": "paper",
+        "WAIT_FOR": "xstockstrat-config:50060"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-SMOKE@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-analysis": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-config": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bash",
+          "-c",
+          "echo \u003e /dev/tcp/127.0.0.1/9110"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "100.64.0.7",
+          "target": 9110,
+          "published": "9110",
+          "protocol": "tcp"
+        }
+      ]
+    },
+    "xstockstrat-trading": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "APPLICATION_ENV": "development",
+        "BROKER_ACCOUNTS_ENCRYPTION_KEY": "fixture",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require",
+        "DB_PGBOUNCER": "true",
+        "GRPC_PORT": "50051",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "trading",
+        "TRADING_MODE": "paper"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-TRADING@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-indicators": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-marketdata": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "xstockstrat-portfolio": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "/app/service",
+          "healthcheck"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      }
+    },
+    "xstockstrat-ui": {
+      "restart": "unless-stopped",
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "AGENT_PUBLIC_URL": "https://xstockstrat.example.test/agent",
+        "ANALYSIS_ENDPOINT": "xstockstrat-analysis:50056",
+        "APPLICATION_ENV": "development",
+        "APP_URL": "https://xstockstrat.example.test",
+        "CONFIG_ENDPOINT": "xstockstrat-config:50060",
+        "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require",
+        "DB_POOL_MAX": "1",
+        "HOSTNAME": "0.0.0.0",
+        "IDENTITY_ENDPOINT": "xstockstrat-identity:50058",
+        "INDICATORS_ENDPOINT": "xstockstrat-indicators:50054",
+        "INGEST_ENDPOINT": "xstockstrat-ingest:50055",
+        "JWT_SECRET": "fixture",
+        "LEDGER_ENDPOINT": "xstockstrat-ledger:50057",
+        "MARKETDATA_ENDPOINT": "xstockstrat-marketdata:50053",
+        "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_CERT": "-----BEGIN FIXTURE-----",
+        "MTLS_KEY": "-----BEGIN FIXTURE-----",
+        "NOTIFY_ENDPOINT": "xstockstrat-notify:50059",
+        "OTEL_ENABLED": "false",
+        "PORTFOLIO_ENDPOINT": "xstockstrat-portfolio:50052",
+        "SERVICE_NAME": "xstockstrat-ui",
+        "TRADING_ENDPOINT": "xstockstrat-trading:50051",
+        "TRADING_MODE": "paper",
+        "VAPID_PUBLIC_KEY": "fixture"
+      },
+      "image": "ghcr.io/davcs86/xstockstrat/x-UI@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-file": "3",
+          "max-size": "10m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "depends_on": {
+        "xstockstrat-analysis": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "nc",
+          "-z",
+          "127.0.0.1",
+          "3000"
+        ],
+        "timeout": "5s",
+        "interval": "5s",
+        "retries": 6,
+        "start_period": "2m0s"
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "target": 3000,
+          "published": "3000",
+          "protocol": "tcp"
+        }
+      ]
+    }
+  },
+  "x-common-env": {
+    "APPLICATION_ENV": "development",
+    "MTLS_CA_CERT": "-----BEGIN FIXTURE-----",
+    "OTEL_ENABLED": "false",
+    "TRADING_MODE": "paper"
+  },
+  "x-db-direct": {
+    "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require"
+  },
+  "x-db-pooled": {
+    "DATABASE_URL": "postgresql://xstockstrat_staging:fixture@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require",
+    "DB_PGBOUNCER": "true"
+  },
+  "x-hc": {
+    "interval": "5s",
+    "retries": 6,
+    "start_period": "120s",
+    "timeout": "5s"
+  },
+  "x-svc": {
+    "logging": {
+      "driver": "local",
+      "options": {
+        "max-file": "3",
+        "max-size": "10m"
+      }
+    },
+    "restart": "unless-stopped"
+  }
+}

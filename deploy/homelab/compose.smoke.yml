@@ -1,0 +1,45 @@
+# Staging-only overlay: deploy-homelab.yml merges it onto compose.yml; production never renders it.
+# Anchors are file-local, so the shared blocks are restated here.
+
+services:
+  xstockstrat-smoke:
+    image: ${IMAGE_SMOKE:?IMAGE_SMOKE is required}
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: 10m, max-file: "3"}
+    environment:
+      APPLICATION_ENV: ${APPLICATION_ENV:?APPLICATION_ENV is required}
+      TRADING_MODE: ${TRADING_MODE:?TRADING_MODE is required}
+      OTEL_ENABLED: "false"
+      MTLS_CA_CERT: ${MTLS_CA_CERT:?MTLS_CA_CERT is required}
+      MTLS_CERT: ${SMOKE_MTLS_CERT:?SMOKE_MTLS_CERT is required}
+      MTLS_KEY: ${SMOKE_MTLS_KEY:?SMOKE_MTLS_KEY is required}
+      DATABASE_URL: postgresql://xstockstrat_staging_smoke_ro:${SMOKE_DB_PASSWORD:?SMOKE_DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require
+      DB_POOL_MAX: "1"
+      SMOKE_ENV: homelab-staging
+      SERVICE_NAME: smoke
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      WAIT_FOR: "xstockstrat-config:50060"
+    ports:
+      - "${SMOKE_BIND_ADDR:?SMOKE_BIND_ADDR is required}:9110:9110"
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9110"]
+    depends_on:
+      xstockstrat-config:
+        condition: service_healthy
+      xstockstrat-analysis:
+        condition: service_healthy

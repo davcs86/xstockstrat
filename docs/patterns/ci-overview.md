@@ -19,7 +19,7 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `ledger-db-test` | Applies all migrations to TimescaleDB, runs ledger `pnpm run test:db` (trigger-stub resolve, replay recovery, resolve bound) | — |
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
-| `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
+| `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` (staging: merged with `compose.smoke.yml`) with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
 | `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
 
 ## Branch Protection — CI Gate
