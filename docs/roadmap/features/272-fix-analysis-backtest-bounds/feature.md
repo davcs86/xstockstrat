@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-analysis-backtest-bounds-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -17,6 +17,15 @@
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN, no FAIL) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator gate approval: D-28 option (a) + new AC-7; I-2 owned by 273 (merge 273 before 272) |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; @AC-5..7 added to acceptance.feature |
+| 2026-10-29 | `implementation-ready` (re-spec, no transition) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of steps 1,3,4,5,6,7,8,9 against main-dev @ merge b8b8bac2: line drift; Step 5 post-244 getters; Step 6 reuses `snapshot_watcher`; Step 9 dotted-key premise corrected, operator decision required before G-1 |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front confirmation by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing @AC rule |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 1+2 done in one commit (standing operator rule): D-28 two-token re-serve guard in `_fetch_bars_paged`; pager tests AC-1/2/4/7; full suite 1455 passed |
+| 2026-10-29 | `in-progress` (re-spec, no transition) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of steps 3-9 after merging origin/main-dev (e266b4ae): line drift in steps 4/5/6; Step 6 harness audit adds `test_config_zero_clamps.py:161`; steps 3/7/8/9 re-verified unchanged |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 3+4 done in one commit (standing operator rule): `RunBacktest` → thin `@owner_scoped` wrapper over `_run_backtest`; `_BarFetchError` → FAILED_PRECONDITION `backtest bar series incomplete: …` (symbol + benchmark); AC-6 tests; full suite 1468 passed |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 5+6 done in one commit (standing operator rule, widened): D-29 wall-clock bound — `asyncio.timeout(limit or None)` on `RunBacktest`, `cm.expired()` → DEADLINE_EXCEEDED `backtest exceeded Ns deadline`, `disarm()` before persistence; 0 = no limit, negative = 300 + WARN; AC-3/AC-5/T-inner-timeout/T-commit/T-executor tests; key registered in `HONOUR_KEYS`; full suite 1475 passed |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done: analysis `CLAUDE.md` row for `analysis.backtest.max_duration_seconds` now carries the design §5 semantics (type `int`, default `300` unchanged; screener row untouched) |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done: strat-lab `backtest` skill (SKILL.md Phase 2 failure modes, output-handling, aggregation, README) and `mcp-tools.md` Errors rows for `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` and `FAILED_PRECONDITION` `backtest bar series incomplete: …` + MCP 60 s-cap note; @AC-32 guard unchanged |
+| 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 9 (G-1) closed by operator sign-off: threshold 60 s, no measurements (no analysis traces, no ledger access, prod not running). All 9 steps done. |
 
 ---
 
@@ -53,4 +62,4 @@ but nothing reads it.
 
 ## Next Action
 
-`/sdd-review fix-analysis-backtest-bounds impl-spec` — validate implementation spec, then `/sdd-execute fix-analysis-backtest-bounds`. Merge order: 273 (fix-agent-client-deadlines) before 272.
+Merge the integration PR (#1369). After the staging deploy: create `analysis.backtest.max_duration_seconds = 60` on staging via `set_config`, read it back with `get_config`, and record it in context.md.

@@ -592,3 +592,298 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
     conflict only), analysis `CLAUDE.md` (246, 244, 215; different sections) and `mcp-tools.md` (249; different
     row). Re-grep anchors at every rebase.
   - Router note, not 272's: peers 244 and 248 both claim config migration `032`.
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-analysis-backtest-bounds`, normal merge of `origin/main-dev`
+  (`b8b8bac2`, no conflicts); ledger-guard `--fix` reported clean (no repair).
+- Re-spec of step bodies 1, 3, 4, 5, 6, 7, 8 and 9 only (implementation-spec.md), each claim re-grepped:
+  - Steps 1, 3, 4, 7, 8: line drift only (e.g. `_fetch_bars_paged` `:1401`, `RunBacktest` `:792`, loop handlers
+    `:1134-1139`, disarm anchor `:1274`, `_windowed_req` `:3685`, analysis CLAUDE.md row `:509`, mcp-tools Errors
+    `:421`). Content matches.
+  - Step 5: feature 244 landed on main-dev. `get_int` (`watcher.py:111-117`) is now presence-aware and
+    `get_int_present = get_int` (`:119`), so the call keeps its semantics. `int_positive` (`:142`) is not usable
+    (0 must mean no limit; a negative must WARN). The screener read is now `int_positive(..., 120)` at `:3793`, and
+    the verification text says so. The `default_fill_model` note is no longer called a zero-trap.
+  - Step 6 (C-13): reuse the existing `tests/conftest.py:61` `snapshot_watcher` instead of adding `config_watcher`.
+    `tests/conftest.py` and `test_list_opportunities_deadlines.py` are dropped from Files. Migrating that file's
+    local `_watcher` onto `snapshot_watcher` is a separate decision, out of scope here.
+  - Step 9: the prior evidence was wrong. `029` heals only platform/trading/portfolio/marketdata. The analysis rows
+    are still the bare `backtest.max_duration_seconds` (001:69 `'300'`, 002:71 `'120'` production), so the dotted read
+    gets the 300 s code default everywhere unless an operator creates dotted rows. Step 9 now carries an
+    **operator-decision blocker** (A: reword G-1 / set dotted rows via set_config; B: heal migration — a new DB gate
+    and a re-spec; C: other). No choice was made on the operator's behalf.
+  - Step 8 docs rows no longer name "prod 120 s, staging 300 s". They say "default 300 s; 0 = no limit", which is
+    true under any Step 9 decision.
+- Not re-specced (outside the directive's step-body scope, non-normative): the Execution Summary's "first-enforced
+  prod value of 120 s" sentence and the Step Dependencies line hints (244 / 245 anchors). The step bodies above
+  supersede them.
+
+### Open Threads (carried)
+
+- [ ] **Step 9 operator decision (A/B/C) on the bare-vs-dotted key.** Needed before G-1 runs. Does not block
+  Steps 1-8.
+- [ ] C-10 merge-order pin (273 before 272) and I-1..I-3 in 273's context.md: still outside this writer's scope.
+- [ ] G-1 measurements and the operator threshold, after Step 5 is on dev.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Lifecycle: `implementation-ready` → `in-progress`.
+- **Up-front confirmation (sequential mode entry):** given by the operator's standing authorization (operator chat
+  2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute;
+  unattended checkpoints; merge-train authorized; operator-only DB/prod steps are to open a PR and hold the merge).
+  Checkpoints are `report`. C-16 promotion is auto-confirmed unless it changes an existing @AC rule. No
+  feature-specific blocker decision for 272 was relayed in this unit, so the Step 9 key-scope decision (previous
+  entry) stays open for the operator.
+- Execution order: Steps 1-8 per implementation-spec.md (TDD pairs 1/2, 3/4, 5/6). Step 9 is an operational gate
+  after Step 5 is on dev, and it is blocked on the operator decision above.
+
+## Session 2026-10-29 — sdd-execute sequential: Steps 1+2 (D-28)
+
+- Steps 1 and 2 executed together as one commit under the standing operator rule (operator 2026-10-29, 'Merge pairs
+  + standing rule'): Step 1's RED test is Step 2's test. Deviation Log entry in implementation-spec.md.
+- Step 1: `_fetch_bars_paged` raises `_BarFetchError` when a page adds no fresh bar **and** a token was sent **and**
+  the response re-issues a non-empty token; otherwise EOF. Docstring "Strict cursor monotonicity" bullet updated.
+  Located by symbol (spec line numbers had drifted +7/+8 in the discovery digest).
+- Step 2: `test_identical_page_with_identical_token_terminates` inverted to `..._raises` (C-18, deliberate);
+  added `test_three_bar_eof_returns_full_series` (AC-2), `test_empty_page_with_reissued_token_raises` (AC-4),
+  `test_empty_terminal_page_after_sent_token_is_eof` (AC-7). C-13: local helpers only, no conftest change.
+- TDD: AC-1 red: `test_identical_page_with_identical_token_raises` DID NOT RAISE; AC-4 red:
+  `test_empty_page_with_reissued_token_raises` DID NOT RAISE (2 failed, 9 passed) → green: 11 passed
+  (`-k FetchBarsPaged`). AC-2 / AC-7 passed before and after (regression guards).
+- Verification: `grep "re-issued a cursor"` hit; `ruff check` / `ruff format --check` clean; full suite
+  `pytest --cov=app --cov-fail-under=40`: 1455 passed, coverage 90.02%. Tripwire: no other test went red.
+- Files: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_warmup.py`.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute): branch setup + re-spec of steps 3-9
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints; merge-train authorized; defer
+  255/275; operator-only DB/prod steps: open PR, hold merge). Checkpoints `report`; C-16 promotion auto-confirmed
+  unless it changes an existing @AC rule. Status was already `in-progress`, so no transition this session.
+- §5.3 branch setup: `git merge --no-edit origin/main-dev` into the detached checkout → merge `e266b4ae`, no
+  conflicts. Ledger guard (`--own-slug fix-analysis-backtest-bounds --base origin/main-dev --fix`): clean, no repair.
+  The merge brought feature 262 (owner scope) changes to analysis tests and `CLAUDE.md`; no anchor this feature
+  cites in `servicer.py` moved (the only servicer.py change was a comment at `:3187`).
+- Re-spec (implementation-spec.md, step bodies only):
+  - Step 4: `_EOF_PAGE` `:135`, `_windowed_req` `:3671`, `_persist_backtest_run` `servicer.py:2861`,
+    `_persist_symbol_cells` `:2940`.
+  - Step 5: screener idiom `:3799-3809` (`int_positive` `:3799`, abort `:3805-3808`, `return` `:3809`);
+    `stale_after_seconds` precedent `:3903`; `run_in_executor` sites `:1730`/`:2242`/`:2413`.
+  - Step 6: harness audit adds `tests/test_config_zero_clamps.py:161` (`test_ac6_default_fill_model_zero_is_legacy`,
+    feature 244), which sets `svc._cfg = _all_fr3_zero()` (a real `snapshot_watcher`). Its key table (`AC6_ROWS`)
+    has no `analysis.backtest.max_duration_seconds`, so `get_int_present` returns 300 and the "existing runs keep
+    the 300 s default" conclusion holds. `_persist_backtest_run` seam → `:2861`.
+  - Steps 3, 7, 8, 9: every cited anchor re-greps at its stated line; no change.
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+
+## Session 2026-10-29 — sdd-execute sequential: Steps 3+4 (R-1, AC-6)
+
+- Steps 3 and 4 executed together as one commit under the standing operator rule (operator 2026-10-29, 'Merge pairs
+  + standing rule'): Step 3's RED test is Step 4's test. Deviation Log entry in implementation-spec.md.
+- Step 3: `RunBacktest` is now a thin `@owner_scoped` wrapper that awaits `_run_backtest` (the former body,
+  byte-identical, decorator removed) and maps `_BarFetchError` to `context.abort(FAILED_PRECONDITION,
+  "backtest bar series incomplete: <e>")` then `return None`. The per-symbol loop gained `except _BarFetchError:
+  raise` before `except grpc.RpcError`. The abort uses the inbound `context`; no emit, no minted context (C-03).
+  Located by symbol (spec line numbers had drifted).
+- Step 4: new `services/xstockstrat-analysis/tests/test_backtest_bounds.py` —
+  `test_truncated_symbol_fails_run_failed_precondition` (AAPL re-serves with token `"stuck"`) and
+  `test_truncated_benchmark_fails_run_failed_precondition` (SPY benchmark re-serves). Both assert the
+  FAILED_PRECONDITION code, the message prefix, and that neither `_persist_symbol_cells` nor
+  `_persist_backtest_run` was awaited. C-13: reuses `_wire_per_symbol`/`_sym_bars`/`_mkt_def` and
+  `make_servicer`/`_owned_ctx`/`_windowed_req`/`_EOF_PAGE`; no conftest change.
+- TDD: AC-6 red: symbol test `DID NOT RAISE` (the loop skipped AAPL and the run returned); benchmark test regex
+  mismatch (the uncaught `_BarFetchError` "SPY: page_token 'stuck' added no newer bar and re-issued a cursor …"
+  escaped) → 2 failed. Green: 2 passed.
+- Verification: Step 3 grep hit (`:795`, `:797`, `:801`, `:1143`); `ruff check` / `ruff format --check` clean;
+  `pytest --cov=app --cov-fail-under=40`: 1468 passed, coverage 90.08%; Step 4 import grep hit both lines.
+- Files: `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/tests/test_backtest_bounds.py`.
+
+## Session 2026-10-29 — sdd-execute sequential: Steps 5+6 (D-29, AC-3, AC-5)
+
+- Steps 5 and 6 executed together as one commit under the standing operator rule (operator 2026-10-29, 'Merge pairs
+  + standing rule'; widened 2026-10-30, 'Widen the rule (Recommended)'): Step 5's RED tests are Step 6's tests.
+  Operator decision on the Step 5 blocker (2026-10-30, 'A: Register key (Recommended)'): register the new read in the
+  feature-244 classification guard. Deviation Log entry in implementation-spec.md (step merge + Files expansion).
+- Step 5: `_BACKTEST_MAX_DURATION_DEFAULT_S = 300` beside `_MAX_BAR_PAGES`. `RunBacktest` reads
+  `get_int_present("analysis.backtest.max_duration_seconds", 300)` at call time (per-user overrides apply); negative
+  → WARN + 300; `async with asyncio.timeout(limit or None) as cm` wraps `_run_backtest`; a `TimeoutError` maps to
+  `context.abort(DEADLINE_EXCEEDED, "backtest exceeded {limit}s deadline")` only when `cm.expired()`, else re-raises.
+  `_run_backtest(self, request, context, disarm)` calls `disarm()` (`cm.reschedule(None)`) immediately before
+  `self._backtests[backtest_id] = result`, so persistence + the completed emit are never cut. `_BarFetchError`
+  handling unchanged. No compute moved out of `run_in_executor`; no new emits (C-03). Screener read untouched.
+- Step 6: `tests/test_backtest_bounds.py` gains AC-3 `test_deadline_exceeded_names_limit`, AC-3b
+  `test_deadline_fires_inside_awaited_getbars`, AC-5 `test_stored_zero_means_no_limit` and
+  `test_negative_limit_falls_back_to_300_with_warn` (monkeypatched `servicer_mod.asyncio.timeout` recorder),
+  `test_inner_timeout_is_not_mapped_to_deadline`, `test_deadline_after_disarm_still_persists` (T-commit),
+  `test_deadline_returns_while_executor_thread_finishes` (T-executor). C-13: uses `tests.conftest.snapshot_watcher`;
+  no new watcher factory; conftest and `test_list_opportunities_deadlines.py` untouched.
+- Files expansion: `tests/test_config_read_classification.py` — key in `HONOUR_KEYS` + `ZERO_IS_LEGIT`
+  `"0 = no limit (feature-272 @AC-5)"` (without it `test_rule2_key_sets_match_classification` fails "unclassified
+  plain reads").
+- TDD: red 4 failed (AC-3, AC-3b, AC-5 negative, T-executor: DID NOT RAISE / no 300 recorded), 5 passed
+  (AC-5 zero, T-inner-timeout, T-commit are regression guards that pass before Step 5, as the spec expects) →
+  green 9 passed (+ classification guard 6 passed).
+- Verification (Python 3.13.17): Step 5 grep hit all five patterns; screener read still
+  `int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)`; `pytest --cov=app --cov-fail-under=40`:
+  1475 passed, coverage 90.08%; `ruff check` / `ruff format --check` clean; watcher-factory grep shows only
+  `conftest.py` (`snapshot_watcher`) and `test_list_opportunities_deadlines.py` (`_watcher`).
+- Files: `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/tests/test_backtest_bounds.py`,
+  `services/xstockstrat-analysis/tests/test_config_read_classification.py`.
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+
+## Session 2026-10-29 — sdd-execute sequential: Step 7 (docs)
+
+- Step 7: `services/xstockstrat-analysis/CLAUDE.md:509` description cell for `analysis.backtest.max_duration_seconds`
+  replaced with the design §5 text (evaluation bound up to result assembly; persistence/grade recompute unbounded;
+  `0` = no limit, negative = 300 + WARN; `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline`; executor threads not
+  interrupted; presence-aware call-time read, per-user overrides apply). Type `int` and default `300` unchanged;
+  screener row (`:538`) untouched. No deviation.
+- TDD: N/A (docs).
+- Verification: `grep -n "analysis.backtest.max_duration_seconds"` → `:509` (new text); `grep -c "Max backtest run
+  time"` → 0.
+- Files: `services/xstockstrat-analysis/CLAUDE.md`.
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+
+## Session 2026-10-29 — sdd-execute sequential: Step 8 (docs)
+
+- Step 8 (C-14 consumer surfaces, same PR per `docs/patterns/strat-lab-plugin.md`):
+  - `docs/runbooks/mcp-tools.md` `run_backtest` Errors table: two rows after the `max_range_days` row
+    (`DEADLINE_EXCEEDED` `backtest exceeded Ns deadline`, default 300 s / 0 = no limit, do not retry immediately;
+    `FAILED_PRECONDITION` `backtest bar series incomplete: …`, report it) plus a sentence under the table on the MCP
+    60 s tool cap and feature 273's pass-through. No per-environment value named.
+  - `plugins/strat-lab/skills/backtest/SKILL.md` Phase 2: "Failure modes (feature 272)" paragraph (same two cases,
+    one truncated symbol fails the whole multi-symbol run, 60 s-cap fact), before `### Fill model`.
+  - `reference/output-handling.md`: bullet after the fundamentals-outage bullet — RPC errors, no result file; the
+    fundamentals "rerun" warning kept distinct.
+  - `reference/aggregation.md` § Combine independent runs: failed basket member is reported, never aggregated as
+    zero trades.
+  - `plugins/strat-lab/README.md`: one line after the three-failure list naming the two loud failures.
+- Anchor drift only (discovery): mcp-tools Errors table at `:421-430`, SKILL.md Fill-model heading at `:195` — text
+  anchors used, matching the 2026-10-29 re-spec. No deviation.
+- TDD: N/A (docs).
+- Verification: `validate.py --self-test` OK and `validate.py` passed all checks; message grep hits all five files;
+  `list_templates|instantiate_template` counts mcp-tools.md 7, SKILL.md 5 (unchanged); `is_public|include_public`
+  no match (@AC-32 @feature-224 guard holds).
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+
+## Session 2026-10-29 — sdd-execute sequential: Step 9 (config, G-1 gate) — operator decision, deferred
+
+- G-1 operator decision (A/B/C), in their own words (session question tool, 2026-10-30): 'A: Reword G-1, hold the merge (Recommended)'.
+  Option A: G-1 measures against the effective limit, which is the 300 s code default in every environment. The seeded bare
+  key `backtest.max_duration_seconds=120` (prod) is not read by Step 5's dotted `analysis.backtest.max_duration_seconds`.
+  This holds unless the operator creates dotted `analysis.backtest.max_duration_seconds` rows via `set_config` or `/config-ui`
+  (no migration; F-01). Option B (heal migration) not chosen.
+- G-1 measurements not yet taken: ledger `QueryEvents` p50/p95/p99/max of (completed - started) plus orphan counts (dev and
+  prod, trailing 30 days), the confirmed effective limit per environment, and the operator threshold are all outstanding. They
+  need production/dev ledger access this session cannot perform.
+- Step 9 Status stays `pending` (deferred to operator). The integration PR is opened as draft/held and must not be merged
+  until the G-1 numbers and the operator threshold (or sign-off quoting them) are recorded here.
+- Anchor drift (discovery, no deviation): `analysis.backtest.started` append `servicer.py:827`, `completed` `:1353`.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-backtest-bounds (feature 272)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-backtest-bounds.feature | CREATE | NEW | bar pagination re-served page raises error |
+| AC-2 | same | CREATE | NEW | genuine end of data returns full series |
+| AC-4 | same | CREATE | NEW | empty page on token-bearing request is loud failure |
+| AC-3 | same | CREATE | NEW | RunBacktest wall-clock enforced (DEADLINE_EXCEEDED) |
+| AC-5 | same | CREATE | NEW | stored 0 disables limit; negative falls back to 300s |
+| AC-6 | same | CREATE | NEW | truncated series fails backtest FAILED_PRECONDITION |
+| AC-7 | same | CREATE | NEW | empty terminal page after sent token is end of data |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-backtest-bounds.feature (CREATE) ---
+# Promoted business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 272's
+# acceptance.feature at launch; @feature-272 marks provenance. These are the guarantees a future
+# feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: Analysis backtest — bar pagination and wall-clock bounds
+  Behavioral rules the analysis backtest engine must preserve across features.
+
+  @AC-1 @FR-1 @regression @feature-272
+  Scenario: A re-served bar page is a loud failure, not a truncated series
+    Given marketdata answers every GetBars for "AAPL" with bars at t=1 and t=2 and next_page_token "stuck"
+    When analysis fetches the paged daily bars for "AAPL"
+    Then a bar-fetch error "refusing to return a truncated series" is raised
+    And no bar series is returned
+
+  @AC-2 @FR-2 @regression @feature-272
+  Scenario: Genuine end of data still returns the full series
+    Given marketdata answers the first GetBars for "AAPL" with bars at t=1 and t=2 and next_page_token "t1"
+    And answers the request with page_token "t1" with bars at t=3 and an empty next_page_token
+    When analysis fetches the paged daily bars for "AAPL"
+    Then the returned bar times are 1, 2, 3
+
+  @AC-4 @FR-1 @regression @feature-272
+  Scenario: An empty page on a token-bearing request is a loud failure, not end of data
+    Given marketdata answers the first GetBars for "AAPL" with bars at t=1 and t=2 and next_page_token "t1"
+    And answers the request with page_token "t1" with no bars and next_page_token "t1"
+    When analysis fetches the paged daily bars for "AAPL"
+    Then a bar-fetch error "refusing to return a truncated series" is raised
+    And no bar series is returned
+
+  @AC-3 @FR-3 @regression @feature-272
+  Scenario: RunBacktest enforces the backtest wall-clock limit
+    Given analysis.backtest.max_duration_seconds is set to 1
+    And a backtest whose evaluation takes 3 seconds
+    When RunBacktest is called
+    Then RunBacktest fails with DEADLINE_EXCEEDED within 2 seconds
+    And the error message names the 1 second limit
+
+  @AC-5 @FR-3 @regression @feature-272
+  Scenario: A stored 0 disables the backtest limit and a negative value falls back to 300 seconds
+    Given analysis.backtest.max_duration_seconds is stored as 0
+    And a backtest whose evaluation takes 2 seconds
+    When RunBacktest is called
+    Then RunBacktest returns a result with status BACKTEST_STATUS_OK
+    When analysis.backtest.max_duration_seconds is stored as -5 and RunBacktest is called
+    Then the run is bounded by 300 seconds
+    And a WARN log names analysis.backtest.max_duration_seconds and the value -5
+
+  @AC-6 @FR-1 @regression @feature-272
+  Scenario: A truncated bar series fails the backtest instead of dropping the symbol
+    Given marketdata re-serves the bars for "AAPL" with next_page_token "stuck"
+    When RunBacktest is called for "AAPL" and "MSFT"
+    Then RunBacktest fails with FAILED_PRECONDITION and a message starting "backtest bar series incomplete:"
+    And no evidence cell and no run-history row are written
+    When the same re-served page is returned for the run's benchmark symbol "SPY"
+    Then RunBacktest fails with FAILED_PRECONDITION and a message starting "backtest bar series incomplete:"
+
+  @AC-7 @FR-2 @regression @feature-272
+  Scenario: An empty terminal page after a sent token is end of data
+    Given marketdata answers the first GetBars for "AAPL" with bars at t=1 and t=2 and next_page_token "t1"
+    And answers the request with page_token "t1" with no bars and an empty next_page_token
+    When analysis fetches the paged daily bars for "AAPL"
+    Then the returned bar times are 1, 2
+
+### Notes / ambiguities / conflicts
+- All 7 scenarios are attributed to xstockstrat-analysis (observable subject: analysis bar fetch and RunBacktest). None spans services, so nothing goes to /home/user/xstockstrat/docs/sdd/business-rules/platform.feature. The acceptance/ dir already exists.
+- Dedup: grep for "truncated series", "series incomplete", "analysis.backtest.max_duration_seconds" and "@feature-272" across /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/ and /home/user/xstockstrat/docs/sdd/business-rules/ found no prior assertion of these outcomes.
+- Near-misses reviewed, not overlaps:
+  - block-fundamentals-strategy-on-etf.feature @AC-12 @feature-215 (line 91) covers the fundamentals PIT pager, an UNKNOWN verdict on a page-cap hit. Different RPC and different outcome.
+  - fix-screener-symbol-isolation.feature (line 27) covers the screener deadline key, not the backtest key.
+  - block-fundamentals-strategy-on-etf.feature @AC-13 (line 100) covers a BatchGetBars outage on the opportunity compute path, not RunBacktest.
+- Closest tension, not a contradiction: AC-6 makes a truncated bar series fail RunBacktest with FAILED_PRECONDITION. The older suites do not assert that a backtest silently drops a symbol whose bars are short or missing, and I found no scenario that does. Provenance order in the source is preserved (AC-4 before AC-3).
+
+### Coverage check
+- Source scenarios: 7 (AC-1 to AC-7). Planned: 7 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for and none were skipped.
+```
+
+## Session 2026-10-30 — Step 9 / G-1 closed (operator sign-off)
+
+- Operator decision (own words, session question tool): "Use 1m threshold for backtests"; Step 9 closed with
+  "Sign off w/o measurements, merge (Recommended)"; staging row with "Set staging row to 60 now".
+- G-1 record: decision **(A)**. Threshold **60 s**. Effective limit per environment: the 300 s code default (the seeded
+  bare key `backtest.max_duration_seconds` is not read by Step 5's dotted key). Percentiles and orphan counts: **not
+  available** (no `xstockstrat-analysis` spans in Tempo, no ledger `QueryEvents` access, prod not running). Result:
+  operator sign-off, no numbers quoted.
+- After merge and the staging deploy: set `analysis.backtest.max_duration_seconds = 60` on staging (with an audit
+  reason), verify with `get_config`, and append the result here in a follow-up docs PR.

@@ -506,7 +506,7 @@ Namespace: `analysis`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.backtest.max_duration_seconds` | int | `300` | Max backtest run time |
+| `analysis.backtest.max_duration_seconds` | int | `300` | Wall-clock bound on backtest evaluation up to result assembly; persistence and grade recompute are not bounded (total RPC time can exceed it). `0` = no limit, negative = 300 (WARN). Exceeded → `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline`; executor threads are not interrupted — do not retry immediately. Read presence-aware at call time (per-user overrides apply). |
 | `analysis.backtest.default_commission_pct` | float | `0.001` | Assumed commission per trade |
 | `analysis.backtest.default_slippage_pct` | float | `0.0005` | Assumed slippage |
 | `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years, feature 064); a request whose `range` exceeds it is rejected with `INVALID_ARGUMENT`, an unset bound is defaulted to the last `max_range_days`. Applies to all `RunBacktest` callers. |
