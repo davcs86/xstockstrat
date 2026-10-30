@@ -76,11 +76,11 @@ func (f *pagingLedger) callsFor(eventType string) []*ledgerv1.QueryEventsRequest
 	return out
 }
 
-func pnlEvent(t *testing.T, typ, user, orderID string, qty, filledQty, price float64) *ledgerv1.LedgerEvent {
+func pnlEvent(t *testing.T, typ, user, orderID, side string, qty, filledQty, price float64) *ledgerv1.LedgerEvent {
 	t.Helper()
 	p, err := structpb.NewStruct(map[string]interface{}{
 		"user_id": user, "symbol": "AAPL", "qty": qty, "filled_qty": filledQty, "fill_price": price,
-		"trading_mode": "TRADING_MODE_PAPER", "account_id": "acc-1", "order_id": orderID,
+		"trading_mode": "TRADING_MODE_PAPER", "account_id": "acc-1", "order_id": orderID, "side": side,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -103,11 +103,11 @@ func runPagedPnL(t *testing.T, ledger *pagingLedger) (*portfoliov1.PnLResponse, 
 func alternatingFills(t *testing.T) []*ledgerv1.LedgerEvent {
 	evs := make([]*ledgerv1.LedgerEvent, 0, 501)
 	for i := 0; i < 501; i++ {
-		qty, price := 1.0, 100.0
+		side, price := "ORDER_SIDE_BUY", 100.0
 		if i%2 == 1 {
-			qty, price = -1.0, 101.0
+			side, price = "ORDER_SIDE_SELL", 101.0
 		}
-		evs = append(evs, pnlEvent(t, "order.filled", "u-1", "o-"+strconv.Itoa(i), qty, 0, price))
+		evs = append(evs, pnlEvent(t, "order.filled", "u-1", "o-"+strconv.Itoa(i), side, 1, 0, price))
 	}
 	return evs
 }
@@ -164,10 +164,10 @@ func TestGetPnL_AC6_LargestPartialAcrossPages(t *testing.T) {
 				if desc {
 					cum = float64(502 - i)
 				}
-				partials = append(partials, pnlEvent(t, "order.partially_filled", "u-1", "o-s", 0, -cum, 101))
+				partials = append(partials, pnlEvent(t, "order.partially_filled", "u-1", "o-s", "ORDER_SIDE_SELL", 0, cum, 101))
 			}
 			ledger := &pagingLedger{events: map[string][]*ledgerv1.LedgerEvent{
-				"order.filled":           {pnlEvent(t, "order.filled", "u-1", "o-b", 600, 0, 100)},
+				"order.filled":           {pnlEvent(t, "order.filled", "u-1", "o-b", "ORDER_SIDE_BUY", 600, 0, 100)},
 				"order.partially_filled": partials,
 			}}
 			resp, err := runPagedPnL(t, ledger)
@@ -186,8 +186,8 @@ func TestGetPnL_AC4_PageErrorFailsClosed(t *testing.T) {
 	fills := make([]*ledgerv1.LedgerEvent, 0, 400)
 	partials := make([]*ledgerv1.LedgerEvent, 0, 400)
 	for i := 0; i < 400; i++ {
-		fills = append(fills, pnlEvent(t, "order.filled", "u-1", "o-"+strconv.Itoa(i), 1, 0, 100))
-		partials = append(partials, pnlEvent(t, "order.partially_filled", "u-1", "p-"+strconv.Itoa(i), 0, 1, 100))
+		fills = append(fills, pnlEvent(t, "order.filled", "u-1", "o-"+strconv.Itoa(i), "ORDER_SIDE_BUY", 1, 0, 100))
+		partials = append(partials, pnlEvent(t, "order.partially_filled", "u-1", "p-"+strconv.Itoa(i), "ORDER_SIDE_BUY", 0, 1, 100))
 	}
 	for _, eventType := range []string{"order.filled", "order.partially_filled"} {
 		t.Run(eventType, func(t *testing.T) {

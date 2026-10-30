@@ -143,20 +143,20 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 
 | Event Type | Stream Key | Trigger |
 |---|---|---|
-| `order.created` | `order:{order_id}` | New order placed |
-| `order.submitted` | `order:{order_id}` | Order sent to broker |
-| `order.filled` | `order:{order_id}` | Order fully filled |
-| `order.partially_filled` | `order:{order_id}` | Partial fill received |
-| `order.canceled` | `order:{order_id}` | Order canceled |
-| `order.replaced` | `order:{order_id}` | Working order modified via `ReplaceOrder` (qty/price/TIF) |
-| `order.rejected` | `order:{order_id}` | Broker rejected order |
-| `order.approval_requested` | `approval:{order_id}` | Approval required |
+| `order.created` | `{order_id}` | New order placed |
+| `order.submitted` | `{order_id}` | Order sent to broker |
+| `order.filled` | `{order_id}` | Order fully filled |
+| `order.partially_filled` | `{order_id}` | Partial fill received |
+| `order.canceled` | `{order_id}` | Order canceled |
+| `order.replaced` | `{order_id}` | Working order modified via `ReplaceOrder` (qty/price/TIF) |
+| `order.rejected` | `{order_id}` | Broker rejected order |
+| `order.approval_requested` | `{order_id}` | Approval required |
 | `order.approved` | `approval:{order_id}` | **Documented, not yet implemented** — intended manual-approval grant event; no emit site / Approve RPC exists yet |
-| `order.broker_submitted` | `order:{order_id}` | Order accepted by Alpaca broker |
-| `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
+| `order.broker_submitted` | `{order_id}` | Order accepted by Alpaca broker |
+| `order.broker_rejected` | `{order_id}` | Alpaca broker rejected the order |
 | `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller), or an offline recompute — which alone also carries `realized_pnl`, `fees_since_snapshot`, `realized_carried`, `fees_carried` and `recent_fills` (fills of the last 10 calendar days, a fixed window covering the longest NYSE gap; feature 240); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
-| `order.bracket_updated` | `order:{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
+| `order.bracket_updated` | `{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
 | `reconciliation.mismatch_found` | `account:{account_id}` | Non-propagation-delay mismatch found by the reconciliation poller (feature 102) |
 | `order_intent.resolved_by_reconciliation` | `order:{order_id}` | A `101` `UNKNOWN` order intent resolved against broker truth by the reconciliation poller (feature 102) |
 | `order_intent.reclaimed_unknown` | `order:{order_id}` | A stale PENDING order intent reclaimed to UNKNOWN. `trigger`: `sweep` (sweeper, `user_id` `""`), `reactive_place` (PlaceOrder retry, including the internal flatten retry, which carries no trace id and may carry `user_id` `""`), `reactive_cancel`, `reactive_replace` (owner `user_id`). Payload: `trigger`, `order_id`, `intent_id`, `was_pending_since` (RFC3339Nano string, the pre-reclaim pending time) |

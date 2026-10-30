@@ -176,6 +176,13 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 > - **250 `fix-otel-metrics-logs-gap`** — fix (b) is out of scope in its product-spec; no overlap on the telemetry tests.
 > - **241 `fix-config-audit-author-spoof`** — no overlap (config + agent only).
 
+> **Note on 251 `fix-getpnl-source-service` ↔ 249 — rebase-only, no hard ordering row** (the hard row for 257 stays above).
+> No field-number / migration / config-key collision.
+>
+> - **249 `fix-ibkr-request-signing` ↔ 251 on `trading.go`, trading `CLAUDE.md` and `INVENTORY.md`.** The edits are
+>   line-disjoint (251 touches only `applyBrokerOrderStatus`); line anchors in either spec shift, so whoever lands
+>   second rebases and re-greps. 241 (`fix-config-audit-author-spoof`) is `launched` and needs no row.
+
 ---
 
 **Live-Capital Safety program (added 2026-08-04 from an external risk review, cut down 2026-08-04

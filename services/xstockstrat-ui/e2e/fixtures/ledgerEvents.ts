@@ -5,6 +5,7 @@
 // and the per-event wire shape (incl. user_id + payload). See INVENTORY.md.
 import type { JsonObject } from '@bufbuild/protobuf';
 import { TEST_USER_ID, TEST_USER_B_ID } from './users';
+import { BROKER_ACCOUNT_ALPACA } from './accounts';
 
 export interface LedgerExportFixtureRow {
   eventId: string;
@@ -252,3 +253,46 @@ export const OWNER_SCOPE_ORDER_FILLED_EVENTS: LedgerExportFixtureRow[] = [
 /** AC-3 copilot isolation: the caller appends the own note; the mock seeds the foreign one. */
 export const OWNER_SCOPE_COPILOT_NOTE_TEXT = 'Owner-scope check: own copilot note.';
 export const OWNER_SCOPE_FOREIGN_COPILOT_NOTE_TEXT = 'Owner-scope check: foreign copilot note.';
+
+// ── Feature 251: position fill lineage (AC-3/18/19/20/21/22) ──
+// Bare-id streamKeys and the canonical ledger source_service; the mock's `order.filled` branch
+// returns these only for a matching `streamKey`, honouring `ownerOnly` like the 263 default.
+const lineageFill = (
+  orderId: string,
+  userId: string,
+  qty: number,
+  fillPrice: number,
+  tradingMode: 'TRADING_MODE_PAPER' | 'TRADING_MODE_LIVE',
+  sequence: number,
+): LedgerExportFixtureRow => ({
+  eventId: `evt-lineage-${orderId}`,
+  eventType: 'order.filled',
+  sourceService: 'xstockstrat-trading',
+  correlationId: `corr-lineage-${orderId}`,
+  streamKey: orderId,
+  sequence: BigInt(sequence),
+  userId,
+  occurredAtIso: '2026-02-02T15:00:00.000Z',
+  payload: {
+    order_id: orderId,
+    symbol: 'AAPL',
+    qty,
+    fill_price: fillPrice,
+    account_id: BROKER_ACCOUNT_ALPACA.id,
+    trading_mode: tradingMode,
+    user_id: userId,
+  },
+});
+
+export const LINEAGE_FILL_EVENTS: LedgerExportFixtureRow[] = [
+  lineageFill('o-buy', TEST_USER_ID, 10, 100, 'TRADING_MODE_PAPER', 1),
+  lineageFill('o-other', TEST_USER_B_ID, 5, 120, 'TRADING_MODE_PAPER', 2),
+  lineageFill('o-live', TEST_USER_ID, 7, 130, 'TRADING_MODE_LIVE', 3),
+  lineageFill('o-stale', TEST_USER_ID, 3, 101, 'TRADING_MODE_PAPER', 4),
+];
+
+/** AC-19: a platform-wide `order.filled` page holding only other users' fills (none is u-1's). */
+export const lineageOtherUserFills = (n: number): LedgerExportFixtureRow[] =>
+  Array.from({ length: n }, (_, i) =>
+    lineageFill(`o-foreign-${i}`, TEST_USER_B_ID, 1, 50, 'TRADING_MODE_PAPER', 100 + i),
+  );

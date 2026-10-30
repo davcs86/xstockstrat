@@ -83,9 +83,13 @@ import {
   EXPORT_DISABLED_SENTINEL,
   CLOSED_POSITION_ROWS,
   OWNER_SCOPE_ORDER_FILLED_EVENTS,
+  LINEAGE_FILL_EVENTS,
+  lineageOtherUserFills,
+  type LedgerExportFixtureRow,
   OWNER_SCOPE_FOREIGN_USER_ID,
   OWNER_SCOPE_FOREIGN_COPILOT_NOTE_TEXT,
 } from './fixtures/ledgerEvents';
+import { LINEAGE_ORDERS, LINEAGE_LIST_PAGE_SIZE } from './fixtures/orders';
 import { copilotStreamKey } from '../src/lib/copilot';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
@@ -93,6 +97,20 @@ import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
 import { PNL_PATTERNS_AAPL } from './fixtures/pnlPatterns';
 import { SOURCE_ATTRIBUTION } from './fixtures/attribution';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+
+function ledgerEventMsg(r: LedgerExportFixtureRow) {
+  return {
+    eventId: r.eventId,
+    eventType: r.eventType,
+    sourceService: r.sourceService,
+    correlationId: r.correlationId,
+    streamKey: r.streamKey,
+    sequence: r.sequence,
+    userId: r.userId,
+    occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
+    payload: r.payload,
+  };
+}
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
@@ -328,7 +346,17 @@ export async function startMockBackend(): Promise<void> {
           // Server-side symbol filter (feature 096): the per-symbol Orders & fills table on the
           // Position page issues ListOrders with a symbol; the unfiltered Orders list omits it.
           const orders = req.symbol ? ORDERS.filter((o) => o.symbol === req.symbol) : ORDERS;
-          return { orders };
+          // feature 251 — the position-lineage read (page size 51) also sees LINEAGE_ORDERS.
+          const lineage =
+            req.page?.pageSize === LINEAGE_LIST_PAGE_SIZE
+              ? LINEAGE_ORDERS.filter(
+                  (o) =>
+                    (!req.symbol || o.symbol === req.symbol) &&
+                    (!req.accountId || o.accountId === req.accountId) &&
+                    (!req.tradingMode || o.tradingMode === req.tradingMode),
+                )
+              : [];
+          return { orders: [...orders, ...lineage] };
         },
         async getOrder(req) {
           // Single-order read for the order-ticket page (feature 096).
@@ -473,22 +501,29 @@ export async function startMockBackend(): Promise<void> {
               page: { nextPageToken: '' },
             };
           }
+          // feature 251 — position-lineage reads. A streamKey returns that order's fills; a
+          // sourceService-scoped read without one is a platform-wide page of other users' fills.
+          if (req.eventType === 'order.filled' && (req.streamKey || req.sourceService)) {
+            if (!req.streamKey) {
+              return {
+                events: lineageOtherUserFills(100).map(ledgerEventMsg),
+                page: { nextPageToken: 'p2' },
+              };
+            }
+            return {
+              events: LINEAGE_FILL_EVENTS.filter(
+                (r) =>
+                  r.streamKey === req.streamKey && (!req.ownerOnly || r.userId === TEST_USER_ID),
+              ).map(ledgerEventMsg),
+              page: { nextPageToken: '' },
+            };
+          }
           // feature 263 — mirrors the ledger owner predicate: ownerOnly keeps only the caller's rows,
           // so a BFF that does not force it leaks the foreign and NULL-owned fixture rows.
           return {
             events: OWNER_SCOPE_ORDER_FILLED_EVENTS.filter(
               (r) => !req.ownerOnly || r.userId === TEST_USER_ID,
-            ).map((r) => ({
-              eventId: r.eventId,
-              eventType: r.eventType,
-              sourceService: r.sourceService,
-              correlationId: r.correlationId,
-              streamKey: r.streamKey,
-              sequence: r.sequence,
-              userId: r.userId,
-              occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
-              payload: r.payload,
-            })),
+            ).map(ledgerEventMsg),
             page: { nextPageToken: '' },
           };
         },

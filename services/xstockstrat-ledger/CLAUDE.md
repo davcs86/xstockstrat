@@ -31,7 +31,7 @@ was removed.
 
 1. **Events are immutable.** The database enforces `NO UPDATE`, `NO DELETE` via `deny_mutation` **triggers** on `ledger.events` (`migrations/001_ledger_events_hypertable.up.sql:47,54,58`).
 2. **All services write here.** The ledger is the system's audit trail and event replay source.
-3. **stream_key** is the logical partition for event replay (`order:{id}`, `portfolio:{user_id}`, etc.)
+3. **stream_key** is the logical partition for event replay (bare `{order_id}` for trading `order.*`, `order:{id}` for `order_intent.*`, `portfolio:{user_id}`, etc.)
 4. **sequence** is globally monotonic and may gap (`nextval`; rolled-back inserts burn values) — never decreasing.
 5. **`QueryEvents.owner_only` scopes the read to `user_id = x-user-id`** (feature 263); NULL-owned rows are never returned under it. Every user-facing edge MUST set it (the trader BFF does, except on the copilot key it forces and on `account:` keys it ownership-checks); internal callers leave it false. The field defaults to false, so an edge that forgets it fails **open**.
 
@@ -109,7 +109,7 @@ dedup).
 
 | Pattern | Used By |
 |---|---|
-| `order:{order_id}` | xstockstrat-trading |
+| `{order_id}` (bare; `order.*`) / `order:{order_id}` (`order_intent.*`) | xstockstrat-trading |
 | `portfolio:{user_id}` | xstockstrat-portfolio |
 | `backfill:{job_id}` | xstockstrat-ingest |
 | `formula:{formula_id}` | xstockstrat-indicators |

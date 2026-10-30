@@ -1841,14 +1841,18 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 
 	switch newStatus {
 	case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
-		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.filled", order.OrderId, order.UserId, map[string]interface{}{
+		filledPayload := map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 			"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 			"account_id": order.AccountId,
 			// Per-fill fee (0 when the broker exposes none).
 			"fees": brokerOrder.Fees,
-		})
+		}
+		if order.Side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED {
+			filledPayload["side"] = order.Side.String()
+		}
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.filled", order.OrderId, order.UserId, filledPayload)
 		go s.emitFillAlert(context.WithoutCancel(ctx), order)
 		slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
 			"qty", order.Qty, "fill_price", order.FilledAvgPrice)
@@ -1858,14 +1862,18 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
-		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.partially_filled", order.OrderId, order.UserId, map[string]interface{}{
+		partialPayload := map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 			"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 			"account_id": order.AccountId,
 			// Per-fill fee (0 when the broker exposes none).
 			"fees": brokerOrder.Fees,
-		})
+		}
+		if order.Side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED {
+			partialPayload["side"] = order.Side.String()
+		}
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.partially_filled", order.OrderId, order.UserId, partialPayload)
 		// First partial fill creates the bracket; a later partial fill on an
 		// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).
 		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,

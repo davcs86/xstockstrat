@@ -83,6 +83,20 @@ export const ORDER_UNKNOWN_INTENT = {
 /** The orders the mock ListOrders returns (Orders list / per-symbol Orders & fills). */
 export const ORDERS = [ORDER_FILLED, ORDER_WORKING, ORDER_UNKNOWN_INTENT];
 
+/**
+ * Feature 251 position-lineage orders (AAPL, paper Alpaca account unless noted). The mock ListOrders
+ * appends them only to the lineage's page-size-51 read, so `ORDERS` consumers are unaffected.
+ * `o-stale` is NEW (AC-22); `o-live` is LIVE, tradingMode 2 (AC-18).
+ */
+export const LINEAGE_ORDERS = [
+  { ...ORDER_FILLED, orderId: 'o-buy', qty: 10, filledQty: 10, filledAvgPrice: 100 },
+  { ...ORDER_FILLED, orderId: 'o-live', qty: 7, filledQty: 7, filledAvgPrice: 130, tradingMode: 2 },
+  { ...ORDER_FILLED, orderId: 'o-stale', qty: 3, filledQty: 3, filledAvgPrice: 101, status: 1 },
+];
+
+/** `LINEAGE_MAX_ORDERS + 1` (src/lib/positionLineage.ts): the ListOrders page size marking a lineage read. */
+export const LINEAGE_LIST_PAGE_SIZE = 51;
+
 /** Lookup used by the mock GetOrder handler; defaults to the filled order. */
 export function orderForId(orderId: string | undefined) {
   return ORDERS.find((o) => o.orderId === orderId) ?? ORDER_FILLED;
