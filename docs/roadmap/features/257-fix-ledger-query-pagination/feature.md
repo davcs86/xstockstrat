@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` | /sdd-execute | Steps 6+7 done (one commit, standing merge-pairs rule): portfolio `GetPnL` fails closed (`ErrLedgerUnavailable` → `UNAVAILABLE`), rejects a repeated page token, pages at 1000 via one `collectFills` walk, keeps the largest \|cumulative `FilledQty`\| partial; AC-3/AC-4/AC-6 paging tests, mirror + classifier tests |
 | 2026-10-30 | `in-progress` | /sdd-execute | Step 8 done (code-side): `queryPagination.db.test.ts` (AC-1 real-pg token walk, AC-5 non-starvation over `max: 1` pool) added to the CI real-DB tier; `test:db` runs with `--test-concurrency=1` (operator 2026-10-30 "A: --test-concurrency=1"). Verified by CI job `Ledger DB test (TimescaleDB)` going green |
 | 2026-10-30 | `in-progress` | /sdd-execute | Step 9 done (docs): ledger CLAUDE.md invariant 4 (may gap) + subscribe-first batched-replay order + `QueryEvents` token line, ledger constitution `LEDGER-9` (LEDGER-5 amended, line hints re-stamped), portfolio CLAUDE.md `ErrLedgerUnavailable` -> `UNAVAILABLE`; teardown reconciled by hand |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done; C-16 promotion applied; integration PR to `main-dev` opened. Step 8 is verified by CI job `Ledger DB test (TimescaleDB)` going green |
 
 ---
 
