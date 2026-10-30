@@ -42,7 +42,7 @@
 - A writer push race, or a first run before `smoke-results` exists, must end with the file committed exactly once.
 - Missing key, missing `smoke.rpc.user_id` or an unannotated RPC must produce `ERROR`/refusal, never a `PASS`; evidence containing secret-like keys must be redacted and size-bounded.
 - (Phase 2) A write check that fails or times out mid-way must still run its cleanups, and the next run's janitor must remove anything left behind.
-- (Phase 2) A write RPC outside the allowlist, or any write while `smoke.writes.enabled` is false or the environment label is not staging, must be refused before a channel opens.
+- (Phase 2) A write RPC outside the allowlist, or any write while `smoke.writes.enabled` is false or the environment label is not a staging label, must be refused before a channel opens.
 
 ---
 
@@ -63,7 +63,7 @@
 
 - [ ] **Step 1:** Write `tests/test_auth.py`: `test_checks_without_key_is_401`, `test_checks_with_wrong_key_is_401`, `test_checks_with_key_is_200` (Starlette `TestClient`, header `x-smoke-key`), and `test_compare_is_constant_time` (patch `hmac.compare_digest`, assert it is called).
 - [ ] **Step 2:** `cd services/xstockstrat-smoke && uv sync --extra dev && uv run pytest tests/test_auth.py -v` → FAIL (module missing).
-- [ ] **Step 3:** Implement the skeleton to the signatures above; `main()` binds `0.0.0.0:${HTTP_PORT:-9100}`, calls `init_telemetry()` first, and exits non-zero if `MTLS_*` env is missing (copy ingest's fail-closed `mtls.py`). Dockerfile copies ingest's pattern and adds `ARG GIT_SHA` / `ENV SMOKE_GIT_SHA=$GIT_SHA`.
+- [ ] **Step 3:** Implement the skeleton to the signatures above; `main()` binds `0.0.0.0:${HTTP_PORT:-9110}`, calls `init_telemetry()` first, and exits non-zero if `MTLS_*` env is missing (copy ingest's fail-closed `mtls.py`). Dockerfile copies ingest's pattern and adds `ARG GIT_SHA` / `ENV SMOKE_GIT_SHA=$GIT_SHA`.
 - [ ] **Step 4:** Re-run: PASS. Run `uv lock` and `uv run ruff check . && uv run ruff format --check .`.
 - [ ] **Step 5:** Commit `feat(smoke): service skeleton with key-authenticated /checks`.
 
@@ -114,7 +114,7 @@
 ### Task 6: Startup wiring, config key and secret grant
 
 **Files:**
-- Create: `app/config/{__init__,watcher}.py` (copy of ingest's pattern, namespace `smoke`), `services/xstockstrat-config/migrations/034_smoke_keys.{up,down}.sql`
+- Create: `app/config/{__init__,watcher}.py` (copy of ingest's pattern, namespace `smoke`), `services/xstockstrat-config/migrations/035_smoke_keys.{up,down}.sql`
 - Modify: `app/main.py`; `services/xstockstrat-config/src/grpc/authz.ts` (add to `SECRET_CALLER_ALLOWLIST`: `{callerID:'smoke', namespace:'smoke', keys:['api.key'], peerSan:'xstockstrat-smoke'}`); `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts`; `docs/patterns/config-governance.md` (Per-Feature Registered Keys, newest first)
 - Test: `tests/test_startup.py`
 
@@ -127,7 +127,7 @@
 
 **Files:** Create `scripts/smoke/run_and_record.py` (stdlib only), `scripts/smoke/tests/test_run_and_record.py`
 
-**Interfaces:** CLI `run_and_record.py --endpoint URL --env staging [--checks id,id] [--strict]`, key from `SMOKE_API_KEY`, git remote/credentials from the environment (`GITHUB_TOKEN` or `SMOKE_RESULTS_PAT`). Functions: `pending(catalog: list[dict], recorded: list[dict], env: str) -> list[str]`; `record_path(env: str, started_at: str, run_id: str) -> str`; `push_with_retry(repo_dir, files, attempts=5)`. Exit 0 unless `--strict` and any outcome ≠ PASS.
+**Interfaces:** CLI `run_and_record.py --endpoint host:port (HTTP scheme implied) --env <label> [--checks id,id] [--strict]`, key from `SMOKE_API_KEY`, git remote/credentials from the environment (`GITHUB_TOKEN` or `SMOKE_RESULTS_PAT`). Functions: `pending(catalog: list[dict], recorded: list[dict], env: str) -> list[str]`; `record_path(env: str, started_at: str, run_id: str) -> str`; `push_with_retry(repo_dir, files, attempts=5)`. Exit 0 unless `--strict` and any outcome ≠ PASS.
 
 - [ ] **Step 1:** Tests with a temporary local bare repo as remote: `test_pending_excludes_pass_for_same_check_hash_env`; `test_edited_check_hash_is_pending_again`; `test_fail_does_not_clear_pending`; `test_first_run_creates_orphan_smoke_results_branch`; `test_push_race_rebases_and_commits_once` (second clone pushes first); `test_default_exit_is_0_on_red_and_strict_is_1`; `test_never_logs_key_or_token`.
 - [ ] **Step 2–4:** Fail → implement (fetch branch, read `smoke-results/<env>/*.json`, `POST /runs`, poll `GET /runs/{id}`, write files, commit, push) → pass. **Step 5:** Commit.
@@ -140,19 +140,19 @@
 
 ### Task 9: Homelab staging-only service
 
-**Files:** Modify `deploy/homelab/compose.yml` (service with `profiles: ["smoke"]`, `IMAGE_SMOKE`, `SMOKE_MTLS_*` required, published port `9100`), `deploy/homelab/render-assert.jq` (`:5-8` classify smoke as `direct`; `:28` allow; staging must render exactly the smoke service, production must not; `:46` ports assertion becomes `agent=9000, ui=3000` plus `smoke=9100` for staging only), `scripts/homelab-render.test.sh` (counts at `:75`/`:79`: 13 production, 14 staging; add mutation cases `smoke-in-production`, `smoke-port-in-production`), `scripts/homelab-release-env.sh` (staging sets `COMPOSE_PROFILES=smoke` and `IMAGE_SMOKE`), `.github/workflows/deploy-homelab.yml` (digest-pin `IMAGE_SMOKE` for staging)
+**Files:** Modify `deploy/homelab/compose.yml` (service with `profiles: ["smoke"]`, `IMAGE_SMOKE`, `SMOKE_MTLS_*` required, published port `9110`), `deploy/homelab/render-assert.jq` (`:5-8` classify smoke as `direct`; `:28` allow; staging must render exactly the smoke service, production must not; `:46` ports assertion becomes `agent=9000, ui=3000` plus `smoke=9110` for staging only), `scripts/homelab-render.test.sh` (counts at `:75`/`:79`: 13 production, 14 staging; add mutation cases `smoke-in-production`, `smoke-port-in-production`), `scripts/homelab-release-env.sh` (staging sets `COMPOSE_PROFILES=smoke` and `IMAGE_SMOKE`), `.github/workflows/deploy-homelab.yml` (digest-pin `IMAGE_SMOKE` for staging)
 
 - [ ] **Step 1:** Extend `homelab-render.test.sh` first; run `bash scripts/homelab-render.test.sh` → FAIL. **Step 2–4:** Implement → PASS for both environments and every mutation. **Step 5:** Commit.
 
 ### Task 10: DO dev component, `POST_DEPLOY` job and secrets
 
-**Files:** Modify `.do/app.dev.yaml` (component copied from the ingest block `:230`, `internal_ports: [9100]`, MTLS placeholders `YOUR_DEV_MTLS_CERT_SMOKE` / `YOUR_DEV_MTLS_KEY_SMOKE`; `jobs:` gains `smoke-record`, `kind: POST_DEPLOY`, `dockerfile_path: scripts/smoke/Dockerfile.post-deploy`, env `SMOKE_ENDPOINT=http://${xstockstrat-smoke.PRIVATE_DOMAIN}:9100`, `SMOKE_API_KEY` and `SMOKE_RESULTS_PAT` as `type: SECRET`); Create `scripts/smoke/Dockerfile.post-deploy` (python slim + git, runs `run_and_record.py --env staging`); Modify `.github/workflows/deploy.yml:14-75,105-203` and `deploy-dev.yml` (declare and pass `SMOKE_API_KEY`, `SMOKE_RESULTS_PAT`, substitute their placeholders); `.do/app.yaml` is **not** touched.
+**Files:** Modify `.do/app.dev.yaml` (component copied from the ingest block `:230`, `internal_ports: [9110]`, MTLS placeholders `YOUR_DEV_MTLS_CERT_SMOKE` / `YOUR_DEV_MTLS_KEY_SMOKE`; `jobs:` gains `smoke-record`, `kind: POST_DEPLOY`, `dockerfile_path: scripts/smoke/Dockerfile.post-deploy`, env `SMOKE_ENDPOINT=${xstockstrat-smoke.PRIVATE_DOMAIN}:9110`, `SMOKE_API_KEY` and `SMOKE_RESULTS_PAT` as `type: SECRET`); Create `scripts/smoke/Dockerfile.post-deploy` (python slim + git, runs `run_and_record.py --env do-dev`); Modify `.github/workflows/deploy.yml:14-75,105-203` and `deploy-dev.yml` (declare and pass `SMOKE_API_KEY`, `SMOKE_RESULTS_PAT`, substitute their placeholders); `.do/app.yaml` is **not** touched.
 
 - [ ] **Step 1:** Add a lint check in `scripts/` or CI (`yq`/python) asserting `.do/app.yaml` contains no `xstockstrat-smoke`, no `smoke-record`, and `.do/app.dev.yaml` smoke component has no `http_port`/ingress route. Run → FAIL on dev. **Step 2–4:** Implement → PASS. **Step 5:** Verify (DO docs or a dev deploy) that a non-zero POST_DEPLOY exit fails the deployment and that private-domain reachability works from a job; adjust this task if not. Commit.
 
 ### Task 11: Homelab post-deploy trigger
 
-**Files:** Modify `.github/workflows/deploy-homelab.yml` (new step after the `gate status` step at `:239`, before "Leave the tailnet" `:241`; condition `inputs.environment == 'staging'`; env `SMOKE_ENDPOINT=http://${VM_IP}:9100`, `SMOKE_API_KEY`; runs `scripts/smoke/run_and_record.py --env staging --strict` with `GITHUB_TOKEN` + `permissions: contents: write`; step failure marks the deployment check red but does not roll back); extend `scripts/workflow-tests` or add a workflow lint test asserting the step exists only for staging.
+**Files:** Modify `.github/workflows/deploy-homelab.yml` (new step after the `gate status` step at `:239`, before "Leave the tailnet" `:241`; condition `inputs.environment == 'staging'`; env `SMOKE_ENDPOINT=${VM_IP}:9110`, `SMOKE_API_KEY`; runs `scripts/smoke/run_and_record.py --env homelab-staging --strict` with `GITHUB_TOKEN` + `permissions: contents: write`; step failure marks the deployment check red but does not roll back); extend `scripts/workflow-tests` or add a workflow lint test asserting the step exists only for staging.
 
 - [ ] **Step 1:** Write the workflow-structure test (parse YAML: step present, ordered between the two anchors, staging-guarded). **Step 2:** FAIL. **Step 3–4:** Implement → PASS. **Step 5:** Commit.
 
@@ -173,11 +173,11 @@
 
 ### Task 14: Write policy and guards
 
-**Files:** Modify `services/xstockstrat-smoke/app/rpc.py`, `app/config/watcher.py`, `app/main.py`; Create `app/scoped_writes.py`, `services/xstockstrat-config/migrations/035_smoke_writes_flag.{up,down}.sql`; Modify `docs/patterns/config-governance.md` (registered keys); Test `tests/test_write_policy.py`
+**Files:** Modify `services/xstockstrat-smoke/app/rpc.py`, `app/config/watcher.py`, `app/main.py`; Create `app/scoped_writes.py`, `services/xstockstrat-config/migrations/036_smoke_writes_flag.{up,down}.sql`; Modify `docs/patterns/config-governance.md` (registered keys); Test `tests/test_write_policy.py`
 
 **Interfaces:**
 - Consumes: Task 3 `Rpc`/`RpcPolicy`; Task 6 settings. Produces: `SCOPED_WRITES: frozenset[str]` (full method names, seeded from the RPCs the owner-scoped W2 acceptance scenarios exercise, reviewed per target-service owner); `Rpc.writes: list[str]` (mutating calls made); `Settings.writes_enabled: bool` from config key `smoke.writes.enabled` (bool, default `false`, staging and production rows).
-- Decision order in `Rpc.call`: annotated `NO_SIDE_EFFECTS` → allow; else allowlisted AND `policy.writes_enabled` AND `policy.env == "staging"` → allow and append to `.writes`; else `MutatingRpcRefused(reason)` before any channel opens. Every call sends `x-user-id` = the smoke user and an `x-access-scope` without the admin bit (`0x04`).
+- Decision order in `Rpc.call`: annotated `NO_SIDE_EFFECTS` → allow; else allowlisted AND `policy.writes_enabled` AND `policy.env in STAGING_ENVS` (`{"homelab-staging","do-dev"}`) → allow and append to `.writes`; else `MutatingRpcRefused(reason)` before any channel opens. Every call sends `x-user-id` = the smoke user and an `x-access-scope` without the admin bit (`0x04`).
 
 - [ ] **Step 1:** Tests: `test_allowlisted_write_allowed_when_enabled_in_staging`; `test_write_refused_when_flag_off`; `test_write_refused_when_env_not_staging`; `test_unlisted_write_refused_without_opening_channel`; `test_reads_still_allowed_when_flag_off`; `test_admin_bit_never_sent`; `test_privileged_rpcs_never_in_allowlist` (asserts `SetConfig`, `GetSecret`, `TriggerBackfill`, `BackfillBars`, `DeleteBackfilledData`, `RunFundamentalsScan`, `CreateUser`, `SetUserRoles`, `AppendEvent` are absent from `SCOPED_WRITES`); `test_every_allowlist_entry_exists_in_descriptors`.
 - [ ] **Step 2–4:** Fail → implement (config watcher live-updates `writes_enabled`) → pass; Node test for the new config row if the config suite asserts seeded keys. **Step 5:** Commit.
