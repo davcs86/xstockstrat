@@ -708,3 +708,22 @@ halt). design.md is not written and status stays `spec-ready`.
 - Verification: `_canceled_jobs` / `skipping resume of canceled job` / `x-trace-id", str(uuid.uuid4())` greps hit;
   full suite 358 passed, coverage 83.65% (≥40%); `ruff check` + `ruff format --check` clean.
 - Deviations: none. The standing "merge pairs" rule did not apply: Step 7's Verification passes on its own.
+
+### Step 8 — test: cancel durability (AC-2 outline, AC-3, AC-6) + O-3 ordering guard (done 2026-10-29)
+
+- `services/xstockstrat-ingest/tests/test_ingest_servicer.py`: new `TestCancelDurability` (after the resume tests) with
+  `test_ac2_queued_cancel_never_runs[bars|fundamentals]`, `test_ac3_canceled_job_not_resumed_after_restart`,
+  `test_ac6_fundamentals_canceled_mid_run_stays_canceled`, `test_o3_cancel_registers_set_before_canceled_write`,
+  `test_resume_job_sends_minted_trace_id`, plus module helpers `_status_writes` / `_events_for` / `_until`. Cancels go
+  through `CancelBackfill(_ctx("4"))` + repo fakes; `_canceled_jobs` is never mutated, and is read only by the O-3
+  fake at the CANCELED write (the invariant itself). `job_row` reused via the existing `_job_row` alias (C-13);
+  event-gated marketdata fakes stay inline. Existing resume tests untouched and green.
+- TDD: Step 7 had already landed, so RED was taken against a temporarily restored pre-Step-7 `servicer.py` (then
+  restored): 5 failed / 1 passed — AC-2 bars `assert 2 not in [6, 2]` and fundamentals `assert 2 not in [6, 2, 3]`
+  (job-B written RUNNING), AC-3 `update_job` "Awaited 4 times" (canceled job resumed), AC-6 `assert 3 not in [2, 6, 3]`
+  (COMPLETED over CANCELED), trace id `{}.get('x-trace-id')` → None; O-3 passed (regression guard). O-3 RED (P-06):
+  set-add moved after the CANCELED `update_job` in `CancelBackfill` → `assert [False] == [True]`; order restored,
+  `servicer.py` unchanged by this commit. GREEN: 6 passed.
+- Verification: `test_ingest_servicer.py` + `test_cancel_backfill.py` 119 passed; full suite 364 passed, coverage
+  84.19% (≥40%); `ruff check` + `ruff format --check` clean; `_job_row` import grep hits `:26`.
+- Deviations: none. The standing "merge pairs" rule did not apply.

@@ -468,7 +468,7 @@ cd services/xstockstrat-ingest && grep -n "_canceled_jobs" app/handlers/servicer
 
 ### Step 8 — test: cancel durability (AC-2 outline, AC-3, AC-6) + O-3 ordering guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify

@@ -673,6 +673,220 @@ class TestRunBackfill:
 
 
 # ---------------------------------------------------------------------------
+# Feature 261 — cancel durability (AC-2, AC-3, AC-6) + O-3 ordering guard. Driven through
+# CancelBackfill and repo fakes, never by mutating _canceled_jobs (fails.md 2026-08-06).
+# ---------------------------------------------------------------------------
+
+
+def _status_writes(update_job, job_id):
+    return [
+        c.kwargs["status"]
+        for c in update_job.await_args_list
+        if c.args[1] == job_id and "status" in c.kwargs
+    ]
+
+
+def _events_for(svc, job_id):
+    return [
+        c.args[0].event_type
+        for c in svc._ledger.AppendEvent.call_args_list
+        if c.args[0].payload["job_id"] == job_id
+    ]
+
+
+async def _until(predicate, spins=200):
+    for _ in range(spins):
+        if predicate():
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("condition not reached")
+
+
+class TestCancelDurability:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("kind", ["bars", "fundamentals"])
+    async def test_ac2_queued_cancel_never_runs(self, kind):
+        svc = make_servicer(db=MagicMock(), max_concurrent=1)
+        a_started, release_a = asyncio.Event(), asyncio.Event()
+        bars_symbols: list[list[str]] = []
+
+        async def _bars(req, metadata=None):
+            bars_symbols.append(list(req.symbols))
+            a_started.set()
+            await release_a.wait()
+            return _mk_backfill_resp(10, [])
+
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillBars = _bars
+        svc._marketdata.BackfillFundamentals = AsyncMock(return_value=_mk_fund_resp(5, []))
+        chunks = {"job-A": [_chunk(["AAPL"], "a1")], "job-B": [_chunk(["TSLA"], "b1")]}
+        req_b = _make_backfill_req(["TSLA"]) if kind == "bars" else _make_fund_req(["TSLA"])
+
+        with (
+            patch(f"{_CHUNKS}.insert_chunks", AsyncMock(return_value=["x"])),
+            patch(
+                f"{_CHUNKS}.get_incomplete_chunks",
+                AsyncMock(side_effect=lambda _db, jid: chunks[jid]),
+            ),
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_failed", AsyncMock()),
+            patch(
+                f"{_REPO}.get_job",
+                AsyncMock(
+                    side_effect=[
+                        _job_row("job-B", ingest_pb2.BACKFILL_STATUS_QUEUED),
+                        _job_row("job-B", ingest_pb2.BACKFILL_STATUS_CANCELED),
+                    ]
+                ),
+            ),
+            patch(f"{_REPO}.update_job", AsyncMock()) as uj,
+        ):
+            task_a = asyncio.create_task(svc._run_backfill("job-A", _make_backfill_req(["AAPL"])))
+            await _until(a_started.is_set)
+            task_b = asyncio.create_task(svc._run_backfill("job-B", req_b))
+            for _ in range(10):
+                await asyncio.sleep(0)
+            assert svc._backfill_sem.locked()  # job-B is parked on the job semaphore
+            await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="job-B"), _ctx("4"))
+            release_a.set()
+            await asyncio.gather(task_a, task_b)
+
+        b_writes = _status_writes(uj, "job-B")
+        assert ingest_pb2.BACKFILL_STATUS_RUNNING not in b_writes
+        assert b_writes[-1] == ingest_pb2.BACKFILL_STATUS_CANCELED
+        assert "ingest.backfill.running" not in _events_for(svc, "job-B")
+        assert ["TSLA"] not in bars_symbols
+        svc._marketdata.BackfillFundamentals.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ac3_canceled_job_not_resumed_after_restart(self):
+        svc = make_servicer(db=MagicMock())  # fresh servicer = restart: _canceled_jobs empty
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(7, []))
+        real_create_task = asyncio.create_task
+        created: list[asyncio.Task] = []
+
+        def _record(coro):
+            created.append(real_create_task(coro))
+            return created[-1]
+
+        with (
+            patch(
+                f"{_CHUNKS}.list_jobs_with_incomplete_chunks",
+                AsyncMock(return_value=["job-C"]),
+            ),
+            patch(
+                f"{_REPO}.get_job",
+                AsyncMock(return_value=_job_row("job-C", ingest_pb2.BACKFILL_STATUS_CANCELED)),
+            ),
+            patch(f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=[])) as gic,
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()) as mcr,
+            patch(f"{_REPO}.update_job", AsyncMock()) as uj,
+        ):
+            await svc._resume_job("job-C")
+            with patch("asyncio.create_task", MagicMock(side_effect=_record)):
+                count = await svc.resume_incomplete_jobs()
+            await asyncio.gather(*created)
+
+        assert count == 1  # discovery count is unchanged; the skip happens per job
+        uj.assert_not_awaited()
+        gic.assert_not_awaited()
+        mcr.assert_not_awaited()
+        svc._marketdata.BackfillBars.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_ac6_fundamentals_canceled_mid_run_stays_canceled(self):
+        svc = make_servicer(db=MagicMock())
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def _fund(_req, metadata=None):
+            started.set()
+            await release.wait()
+            return _mk_fund_resp(11, [])
+
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillFundamentals = _fund
+        canceled = _job_row("job-D", ingest_pb2.BACKFILL_STATUS_CANCELED)
+
+        with (
+            patch(
+                f"{_REPO}.get_job",
+                AsyncMock(
+                    side_effect=[
+                        _job_row("job-D", ingest_pb2.BACKFILL_STATUS_RUNNING),
+                        canceled,
+                        canceled,
+                    ]
+                ),
+            ),
+            patch(f"{_REPO}.update_job", AsyncMock()) as uj,
+        ):
+            task = asyncio.create_task(svc._run_backfill("job-D", _make_fund_req(["AAPL"])))
+            await _until(started.is_set)
+            await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="job-D"), _ctx("4"))
+            release.set()
+            await task
+            status = await svc.GetBackfillStatus(
+                ingest_pb2.GetBackfillStatusRequest(job_id="job-D"), _ctx("4")
+            )
+
+        writes = _status_writes(uj, "job-D")
+        assert ingest_pb2.BACKFILL_STATUS_COMPLETED not in writes
+        assert ingest_pb2.BACKFILL_STATUS_PARTIAL not in writes
+        assert writes[-1] == ingest_pb2.BACKFILL_STATUS_CANCELED
+        assert "ingest.backfill.completed" not in _events_for(svc, "job-D")
+        assert status.status == ingest_pb2.BACKFILL_STATUS_CANCELED
+
+    @pytest.mark.asyncio
+    async def test_o3_cancel_registers_set_before_canceled_write(self):
+        # Invariant the FR-2/FR-3 guards rely on: the set-add precedes the CANCELED write.
+        svc = make_servicer(db=MagicMock())
+        seen: list[bool] = []
+
+        async def _update(_db, job_id, **kw):
+            if kw.get("status") == ingest_pb2.BACKFILL_STATUS_CANCELED:
+                seen.append(job_id in svc._canceled_jobs)
+
+        with (
+            patch(
+                f"{_REPO}.get_job",
+                AsyncMock(
+                    side_effect=[
+                        _job_row("j1", ingest_pb2.BACKFILL_STATUS_QUEUED),
+                        _job_row("j1", ingest_pb2.BACKFILL_STATUS_CANCELED),
+                    ]
+                ),
+            ),
+            patch(f"{_REPO}.update_job", AsyncMock(side_effect=_update)),
+        ):
+            await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="j1"), _ctx("4"))
+
+        assert seen == [True]
+
+    @pytest.mark.asyncio
+    async def test_resume_job_sends_minted_trace_id(self):
+        svc = make_servicer(db=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(7, []))
+
+        with (
+            patch(
+                f"{_REPO}.get_job",
+                AsyncMock(return_value=_job_row("resume-1", ingest_pb2.BACKFILL_STATUS_RUNNING)),
+            ),
+            patch(f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=[_chunk(["AAPL"])])),
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()),
+            patch(f"{_REPO}.update_job", AsyncMock()),
+        ):
+            await svc._resume_job("resume-1")
+
+        meta = dict(svc._marketdata.BackfillBars.await_args.kwargs["metadata"])
+        assert meta.get("x-trace-id")
+
+
+# ---------------------------------------------------------------------------
 # IngestSignal — db=None path
 # ---------------------------------------------------------------------------
 
