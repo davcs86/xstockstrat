@@ -277,3 +277,65 @@ def test_missing_mtls_material_fails_closed(monkeypatch):
         monkeypatch.delenv(v, raising=False)
     with pytest.raises(RuntimeError, match="fail-closed"):
         smoke_client.build_ssl_context()
+
+
+# ── hardening: bounded input and output, robust 409 ──
+
+
+class _RawRecorder(_Recorder):
+    async def request(self, method, url, **kw):
+        self.calls.append((method, url, kw))
+        status, content, headers = self.responses.pop(0)
+        return httpx.Response(
+            status, content=content, headers=headers, request=httpx.Request(method, url)
+        )
+
+
+async def test_non_json_409_still_reports_run_in_progress(monkeypatch):
+    fn = _fn(_server(monkeypatch, "xstockstrat-smoke:9110"))
+    rec = _RawRecorder([(409, b"<html>busy</html>", {})])
+    monkeypatch.setattr(smoke_client, "build_client", lambda: rec)
+    out = await fn(ctx=_ctx(ADMIN), action="run", checks=["c1"])
+    assert out == {"error": "run_in_progress", "retry_after_s": None}
+
+
+async def test_oversized_response_is_refused(monkeypatch):
+    fn = _fn(_server(monkeypatch, "xstockstrat-smoke:9110"))
+    rec = _RawRecorder([(200, b"x" * (smoke_client.MAX_RESPONSE_BYTES + 1), {})])
+    monkeypatch.setattr(smoke_client, "build_client", lambda: rec)
+    with pytest.raises(RuntimeError, match="too large"):
+        await fn(ctx=_ctx(ADMIN), action="list")
+
+
+async def test_non_json_success_is_a_clean_error(monkeypatch):
+    fn = _fn(_server(monkeypatch, "xstockstrat-smoke:9110"))
+    rec = _RawRecorder([(200, b"not json", {})])
+    monkeypatch.setattr(smoke_client, "build_client", lambda: rec)
+    with pytest.raises(RuntimeError, match="non-JSON"):
+        await fn(ctx=_ctx(ADMIN), action="list")
+
+
+@pytest.mark.parametrize("bad", ["..", "../x", "a/b", "", "a" * 65, "a b"])
+async def test_run_id_charset_enforced_before_http(monkeypatch, bad):
+    fn = _fn(_server(monkeypatch, "xstockstrat-smoke:9110"))
+    rec = _install(monkeypatch, [])
+    with pytest.raises(ValueError):
+        await fn(ctx=_ctx(ADMIN), action="get_run", run_id=bad)
+    assert rec.calls == []
+
+
+@pytest.mark.parametrize("bad", [["a b"], ["x" * 129], ["a/b"], [""], ["ok", "$"]])
+async def test_check_id_charset_enforced_before_http(monkeypatch, bad):
+    fn = _fn(_server(monkeypatch, "xstockstrat-smoke:9110"))
+    rec = _install(monkeypatch, [])
+    with pytest.raises(ValueError):
+        await fn(ctx=_ctx(ADMIN), action="run", checks=bad)
+    assert rec.calls == []
+
+
+async def test_check_count_is_capped(monkeypatch):
+    fn = _fn(_server(monkeypatch, "xstockstrat-smoke:9110"))
+    rec = _install(monkeypatch, [])
+    with pytest.raises(ValueError, match="at most"):
+        await fn(ctx=_ctx(ADMIN), action="run", checks=[f"c{i}" for i in range(201)])
+    assert rec.calls == []

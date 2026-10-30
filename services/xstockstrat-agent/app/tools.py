@@ -2335,13 +2335,17 @@ def _register_smoke_tool(server: MCPServer) -> None:
             raise ValueError("checks is required (non-empty) for action='run'")
         if action == "get_run" and not run_id:
             raise ValueError("run_id is required for action='get_run'")
+        if checks:
+            smoke_client.check_ids(checks)
+        if run_id is not None:
+            smoke_client.check_run_id(run_id)
         base = f"https://{os.environ['SMOKE_ENDPOINT']}"
         if action == "list":
             method, url, kw = "GET", f"{base}/checks", {}
         elif action == "run":
             method, url, kw = "POST", f"{base}/runs", {"json": {"checks": checks}}
         else:
-            method, url, kw = "GET", f"{base}/runs/{quote(run_id, safe='')}", {}
+            method, url, kw = "GET", f"{base}/runs/{run_id}", {}
         http = smoke_client.build_client()
         try:
             r = await http.request(method, url, extensions=smoke_client.PIN, **kw)
@@ -2350,14 +2354,17 @@ def _register_smoke_tool(server: MCPServer) -> None:
         finally:
             await http.aclose()
         if r.status_code == 409:
-            body = r.json()
+            try:
+                body = smoke_client.parse_json(r)
+            except RuntimeError:
+                body = {}
             return {
                 "error": body.get("error", "run_in_progress"),
                 "retry_after_s": body.get("retry_after_s"),
             }
         if r.status_code >= 400:
             raise RuntimeError(f"smoke service returned HTTP {r.status_code}: {r.text[:300]}")
-        data = r.json()
+        data = smoke_client.parse_json(r)
         if action == "get_run" and data.get("status") == "done":
             smoke_client.validate_run_file((data.get("file") or {}).get("body"))
         return data

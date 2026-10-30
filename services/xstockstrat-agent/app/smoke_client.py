@@ -6,6 +6,7 @@ Verification is never relaxed: the server name is pinned to `xstockstrat-smoke` 
 
 import json
 import os
+import re
 import ssl
 import tempfile
 from pathlib import Path
@@ -16,6 +17,10 @@ from jsonschema import Draft202012Validator
 SERVER_NAME = "xstockstrat-smoke"
 PIN = {"sni_hostname": SERVER_NAME}
 _TIMEOUT_S = 30
+MAX_RESPONSE_BYTES = 1024 * 1024
+MAX_CHECKS = 200
+_RUN_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_CHECK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _SCHEMA = json.loads((Path(__file__).parent / "smoke_run_file.v1.json").read_text())
 _VALIDATOR = Draft202012Validator(_SCHEMA)
 
@@ -57,3 +62,31 @@ def validate_run_file(body: object) -> None:
         e = errors[0]
         where = "/".join(str(p) for p in e.path) or "<root>"
         raise RuntimeError(f"smoke: run-file body failed schema validation at {where}: {e.message}")
+
+
+def check_run_id(run_id: str) -> str:
+    if not _RUN_ID.fullmatch(run_id):
+        raise ValueError("run_id must match [A-Za-z0-9_-]{1,64}")
+    return run_id
+
+
+def check_ids(checks: list[str]) -> list[str]:
+    if len(checks) > MAX_CHECKS:
+        raise ValueError(f"checks has at most {MAX_CHECKS} ids")
+    for c in checks:
+        if not _CHECK_ID.fullmatch(c):
+            raise ValueError("check ids must match [A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+    return checks
+
+
+def parse_json(r: httpx.Response) -> dict:
+    """Bounded, tolerant body parse: oversize or non-JSON bodies become clean errors."""
+    if len(r.content) > MAX_RESPONSE_BYTES:
+        raise RuntimeError("smoke response too large")
+    try:
+        data = r.json()
+    except ValueError:
+        raise RuntimeError(f"smoke service returned non-JSON body (HTTP {r.status_code})") from None
+    if not isinstance(data, dict):
+        raise RuntimeError("smoke service returned a non-object body")
+    return data
