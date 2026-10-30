@@ -654,3 +654,25 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
 - Verification: `grep "re-issued a cursor"` hit; `ruff check` / `ruff format --check` clean; full suite
   `pytest --cov=app --cov-fail-under=40`: 1455 passed, coverage 90.02%. Tripwire: no other test went red.
 - Files: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_warmup.py`.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute): branch setup + re-spec of steps 3-9
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints; merge-train authorized; defer
+  255/275; operator-only DB/prod steps: open PR, hold merge). Checkpoints `report`; C-16 promotion auto-confirmed
+  unless it changes an existing @AC rule. Status was already `in-progress`, so no transition this session.
+- §5.3 branch setup: `git merge --no-edit origin/main-dev` into the detached checkout → merge `e266b4ae`, no
+  conflicts. Ledger guard (`--own-slug fix-analysis-backtest-bounds --base origin/main-dev --fix`): clean, no repair.
+  The merge brought feature 262 (owner scope) changes to analysis tests and `CLAUDE.md`; no anchor this feature
+  cites in `servicer.py` moved (the only servicer.py change was a comment at `:3187`).
+- Re-spec (implementation-spec.md, step bodies only):
+  - Step 4: `_EOF_PAGE` `:135`, `_windowed_req` `:3671`, `_persist_backtest_run` `servicer.py:2861`,
+    `_persist_symbol_cells` `:2940`.
+  - Step 5: screener idiom `:3799-3809` (`int_positive` `:3799`, abort `:3805-3808`, `return` `:3809`);
+    `stale_after_seconds` precedent `:3903`; `run_in_executor` sites `:1730`/`:2242`/`:2413`.
+  - Step 6: harness audit adds `tests/test_config_zero_clamps.py:161` (`test_ac6_default_fill_model_zero_is_legacy`,
+    feature 244), which sets `svc._cfg = _all_fr3_zero()` (a real `snapshot_watcher`). Its key table (`AC6_ROWS`)
+    has no `analysis.backtest.max_duration_seconds`, so `get_int_present` returns 300 and the "existing runs keep
+    the 300 s default" conclusion holds. `_persist_backtest_run` seam → `:2861`.
+  - Steps 3, 7, 8, 9: every cited anchor re-greps at its stated line; no change.
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
