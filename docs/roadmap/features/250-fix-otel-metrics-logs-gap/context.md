@@ -325,3 +325,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   dashboard UIDs/files for manual deletion. Notes that panel (b) still shows non-gRPC long-lived spans.
 - Files modified: `packages/otel/dashboards/README.md`
 - Deviations: none
+
+### Step 6 — Correct docs/setup/grafana-cloud.md [done]
+- Traces-only wording (scoped by `OTEL_ENABLED=true`), sanctioned literal on its own line, signal list reduced to
+  Traces, Loki/Prometheus verification and the derived-fields troubleshooting removed, Step 6 now describes the single
+  Tempo dashboard (`DS_TEMPO`), Step 7 states no rules are provisioned and cites
+  `docs/roadmap/features/274-otel-metrics-logs-export/`, both cleanup lists are fenced, TraceQL example is
+  `{ name =~ ".*/PlaceOrder" }`, Step 8 uses `resource.service.name` in Tempo.
+- Observation (out of scope, not edited): Step 4b still says the app specs ship `OTEL_ENABLED: "false"`; `.do/app.dev.yaml`
+  is `"true"` and only `.do/app.yaml` is `"false"`. It is an env-config statement, not a signal claim (FR-4).
+- Files modified: `docs/setup/grafana-cloud.md`
+- Deviations: none

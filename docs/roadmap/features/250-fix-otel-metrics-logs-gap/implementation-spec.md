@@ -431,7 +431,7 @@ grep -c -E 'service\.name' "$f" && grep -c 'deployment.environment' "$f" && grep
 
 ### Step 6 — docs: Correct `docs/setup/grafana-cloud.md` (traces only; fenced cleanup; follow-up cite)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/setup/`
 **Files**:
 - `docs/setup/grafana-cloud.md` — modify
