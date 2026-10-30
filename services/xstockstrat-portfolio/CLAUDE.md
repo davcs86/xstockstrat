@@ -26,7 +26,7 @@ required"`.
 across all accounts (one deadline, one price per symbol). `GetPnL` values broker-synced positions from the broker
 `current_price` and the rest through the shared `applyQuotes` rule; if a needed quote is unavailable it returns
 gRPC **`UNAVAILABLE`** (`ErrQuotesUnavailable` → `classifyGetPnLError`) instead of a silent 0 — so one
-un-quotable offline holding (e.g. a delisted symbol) makes that user's `GetPnL` `UNAVAILABLE` (accepted).
+un-quotable offline holding (e.g. a delisted symbol) makes that user's `GetPnL` `UNAVAILABLE` (accepted). A ledger page error, a deadline or a repeated page token also makes `GetPnL` return `UNAVAILABLE` (`ErrLedgerUnavailable`) rather than a partial fold.
 Every path values a position broker-first, then marketdata `mark_price`, then a two-sided mid (`markOf`; a one-sided
 quote is never averaged, feature 231). `broadcastSnapshot` and the concentration check in `checkRiskLimits` are
 **skipped with a WARN when any position is unpriced** (no understated equity); the drawdown check is unaffected. A

@@ -2314,12 +2314,14 @@ def register_tools(server: MCPServer) -> None:
           'register'          — register a new broker account. Requires display_name, broker_type
               ('alpaca' or 'ibkr'), and credentials_json (broker-specific blob:
               Alpaca {"api_key":…,"api_secret":…}; IBKR {"consumer_key":…,"access_token":…,
-              "access_token_secret":…,"ibkr_account_id":…}). Returns {"account": …} (with
-              credential_status). Offline accounts are NOT created here — use
-              manage_offline_account.
+              "access_token_secret":…,"ibkr_account_id":…,"signature_key":…,
+              "encryption_key":…,"dh_prime":…}, the last three as PEM strings).
+              Returns {"account": …} (with credential_status). Offline accounts are NOT
+              created here — use manage_offline_account.
           'update_credentials' — rotate an account's credentials. Requires account_id and
               credentials_json. Returns {"account": …}. The backend rejects offline accounts
-              (FAILED_PRECONDITION) and invalid JSON (INVALID_ARGUMENT).
+              (FAILED_PRECONDITION), invalid JSON (INVALID_ARGUMENT), and an IBKR blob missing
+              any required field (INVALID_ARGUMENT).
           'deregister'        — deactivate an account. Requires account_id. Works for broker and
               offline accounts. Returns {"deregistered": true, "account_id": …}.
           'resume'            — clear a reconciliation halt on a broker account (admin-only,

@@ -728,6 +728,10 @@ var ErrQuotesUnavailable = errors.New("quotes unavailable")
 // ErrOfflineStateUnavailable tags offline-state read failures in logs; no read returns it to a caller.
 var ErrOfflineStateUnavailable = errors.New("offline state unavailable")
 
+// ErrLedgerUnavailable marks a GetPnL ledger page that failed or repeated its token; the handler maps it to
+// Unavailable, and GetPnL never returns a partial realized sum.
+var ErrLedgerUnavailable = errors.New("ledger unavailable")
+
 // GetPnL computes realized + unrealized P&L over a time range. Realized uses the shared pnl package
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
@@ -756,94 +760,27 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 	filledOrderIDs := make(map[string]bool)
 	latestPartials := make(map[string]orderFillPayload)
 
-	// Pass 1 — query order.filled events; accumulate realized P&L and track completed order IDs.
-	var pageToken string
-	for {
-		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
-			EventType:     "order.filled",
-			SourceService: "trading",
-			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
-		})
-		if err != nil {
-			slog.Warn("GetPnL: QueryEvents (filled) failed", "error", err)
-			break
-		}
-		for _, ev := range resp.GetEvents() {
-			if ev.Payload == nil {
-				continue
-			}
-			raw, err := ev.Payload.MarshalJSON()
-			if err != nil {
-				continue
-			}
-			var fill orderFillPayload
-			if err := json.Unmarshal(raw, &fill); err != nil {
-				continue
-			}
-			if fill.UserID != userID {
-				continue
-			}
-			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
-				if fill.Mode == "TRADING_MODE_LIVE" {
-					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
-				}
-				if fillMode != req.TradingMode {
-					continue
-				}
-			}
-			filledOrderIDs[fill.OrderID] = true
-			fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
-		}
-		if resp.GetPage().GetNextPageToken() == "" {
-			break
-		}
-		pageToken = resp.GetPage().GetNextPageToken()
+	// Pass 1 — order.filled events; accumulate realized P&L and track completed order IDs.
+	filled, err := s.collectFills(ctx, "order.filled", userID, req.TradingMode)
+	if err != nil {
+		return nil, err
+	}
+	for _, fill := range filled {
+		filledOrderIDs[fill.OrderID] = true
+		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
 	}
 
-	// Pass 2 — query order.partially_filled events; keep last per order ID (highest cumulative FilledQty).
-	pageToken = ""
-	for {
-		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
-			EventType:     "order.partially_filled",
-			SourceService: "trading",
-			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
-		})
-		if err != nil {
-			slog.Warn("GetPnL: QueryEvents (partially_filled) failed", "error", err)
-			break
-		}
-		for _, ev := range resp.GetEvents() {
-			if ev.Payload == nil {
-				continue
-			}
-			raw, err := ev.Payload.MarshalJSON()
-			if err != nil {
-				continue
-			}
-			var fill orderFillPayload
-			if err := json.Unmarshal(raw, &fill); err != nil {
-				continue
-			}
-			if fill.UserID != userID {
-				continue
-			}
-			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
-				if fill.Mode == "TRADING_MODE_LIVE" {
-					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
-				}
-				if fillMode != req.TradingMode {
-					continue
-				}
-			}
-			// Events arrive in recorded_at order; overwrite = keep last (highest cumulative FilledQty).
+	// Pass 2 — order.partially_filled events; keep one cumulative partial per order ID.
+	partials, err := s.collectFills(ctx, "order.partially_filled", userID, req.TradingMode)
+	if err != nil {
+		return nil, err
+	}
+	for _, fill := range partials {
+		// Keep the largest |cumulative FilledQty| (first seen wins a tie); abs() is load-bearing:
+		// sell partials may be negative, so a plain > would keep the smallest fill.
+		if prev, ok := latestPartials[fill.OrderID]; !ok || math.Abs(fill.FilledQty) > math.Abs(prev.FilledQty) {
 			latestPartials[fill.OrderID] = fill
 		}
-		if resp.GetPage().GetNextPageToken() == "" {
-			break
-		}
-		pageToken = resp.GetPage().GetNextPageToken()
 	}
 	// Apply partial fills only for orders that never reached order.filled status.
 	for orderID, fill := range latestPartials {
@@ -861,6 +798,59 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		TotalPnl:      realized + unrealized,
 		Range:         req.Range,
 	}, nil
+}
+
+// ledgerPnLPageSize matches the ledger's QUERY_EVENTS_MAX_PAGE_SIZE; a larger request is clamped there.
+const ledgerPnLPageSize = 1000
+
+// collectFills walks every ledger page of eventType and returns the caller's mode-matching payloads in page order.
+func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID string, mode commonv1.TradingMode) ([]orderFillPayload, error) {
+	var out []orderFillPayload
+	var token string
+	for {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			EventType:     eventType,
+			SourceService: "trading",
+			Page:          &commonv1.PageRequest{PageSize: ledgerPnLPageSize, PageToken: token},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): %w: %w", eventType, ErrLedgerUnavailable, err)
+		}
+		for _, ev := range resp.GetEvents() {
+			if ev.Payload == nil {
+				continue
+			}
+			raw, err := ev.Payload.MarshalJSON()
+			if err != nil {
+				continue
+			}
+			var fill orderFillPayload
+			if err := json.Unmarshal(raw, &fill); err != nil {
+				continue
+			}
+			if fill.UserID != userID {
+				continue
+			}
+			if mode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
+				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
+				if fill.Mode == "TRADING_MODE_LIVE" {
+					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
+				}
+				if fillMode != mode {
+					continue
+				}
+			}
+			out = append(out, fill)
+		}
+		next := resp.GetPage().GetNextPageToken()
+		if next == "" {
+			return out, nil
+		}
+		if next == token {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): repeated page token: %w", eventType, ErrLedgerUnavailable)
+		}
+		token = next
+	}
 }
 
 // GetSnapshot retrieves a historical portfolio snapshot.

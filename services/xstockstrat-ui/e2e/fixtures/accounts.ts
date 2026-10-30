@@ -30,6 +30,20 @@ export const BROKER_ACCOUNT_IBKR = {
   credentialStatus: CREDENTIAL_STATUS_VALID,
 };
 
+/**
+ * IBKR credential-form inputs (feature 249), keyed by the form's CredentialState names. The
+ * PEM-shaped values are deliberately not keys (no "PRIVATE KEY" header) so no gitleaks rule fires.
+ */
+export const IBKR_TEST_CREDENTIALS_INPUT = {
+  consumerKey: 'TESTCONSUMER',
+  accessToken: 'test-access-token',
+  accessTokenSecret: 'test-access-token-secret',
+  ibkrAccountId: 'DU0000000',
+  signatureKey: '-----BEGIN TEST-----\nnot-a-signature-key\n-----END TEST-----',
+  encryptionKey: '-----BEGIN TEST-----\nnot-an-encryption-key\n-----END TEST-----',
+  dhPrime: '-----BEGIN TEST-----\nnot-a-dh-prime\n-----END TEST-----',
+};
+
 /** Response to a successful RegisterBrokerAccount in registration flows. */
 export const BROKER_ACCOUNT_NEW = {
   id: 'new-account-001',
