@@ -443,3 +443,27 @@ Still open (surface at the /sdd-execute checkpoint):
   251 lands (announce as a correction, insights.md:176-188).
 - TDD: N/A (docs). Verification: `grep -c fix-ledger-query-pagination` = 4 (>= 3); "field number after 263" no hit;
   `UNAVAILABLE` 1 hit (`:101`).
+
+### Steps 2+3 — ledger `queryEvents` keyset token, page clamp, BigInt helper + tests (2026-10-29)
+
+- **Operator decision (2026-10-30, own words via the session question tool): "A: Fix in same commit
+  (Recommended)".** Under the standing rule ("Merge pairs + standing rule", 2026-10-29), Steps 2 and 3 land as one
+  commit with one red→green cycle. Step 2's `ORDER BY sequence ASC` broke the three feature-263 exact-SQL
+  expectations in `ledgerServiceImpl.test.ts`, which were updated from `ORDER BY recorded_at ASC` (params and
+  placeholder order unchanged). Both deviations are in the Deviation Log.
+- `src/grpc/ledgerServiceImpl.ts`: exported `QUERY_EVENTS_DEFAULT_PAGE_SIZE = 100`, `QUERY_EVENTS_MAX_PAGE_SIZE = 1000`,
+  `toSeq`, `parseSequenceToken` (module-private `InvalidPageTokenError` marker and `MAX_BIGINT`). `queryEvents` parses
+  the token first (bad → code 3, no query), appends `sequence > $n::bigint` (string param) after 263's `ownerOnly`,
+  clamps the page size, orders by `sequence`, and encodes the next token via `toSeq(...)`. `streamEvents`,
+  `getEvent`, `exportEvents`, `rowToEvent` untouched.
+- `src/__tests__/ledgerServiceImpl.test.ts`: inline `makeKeysetPool` (single consumer, C-13) + `queryPage`; tests for
+  @AC-1 (string sequences `9`/`10`/`11`), @AC-2 (cap 1000, LIMIT 1001), @AC-7 (default 100, shuffled insert, sequence
+  order), exactly-full last page, four bad tokens → code 3 with no query, owner+token compose, `toSeq` /
+  `parseSequenceToken` units.
+- TDD: RED 12 failing of 53 in the file (3 x 263 SQL literals + 9 new; tsc also reported missing `toSeq` /
+  `parseSequenceToken` exports). GREEN: `pnpm test` 98/98; `test:coverage` 98 pass, ledgerServiceImpl 86.47% lines,
+  `npx c8 check-coverage --lines 40` exit 0; `pnpm run build` and `pnpm run lint` exit 0 (warnings only, 0 errors).
+- Formatting: only the new/changed lines were prettier-formatted; the two files carry pre-existing prettier drift
+  that was left untouched (surgical diff).
+- Worktree tooling: the root `node_modules` symlink broke `pnpm install` (ENOTDIR), so it was replaced by a real
+  install filtered to root + ledger (`--frozen-lockfile`); no manifest or lockfile changed.

@@ -20,6 +20,7 @@
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute | Steps 1–9 re-spec'd against the main-dev-merged tree (263/252/248 in); Step 8 moved from a manual real-TimescaleDB run into the CI real-DB tier (`src/__tests__/db/queryPagination.db.test.ts`, job `Ledger DB test (TimescaleDB)`), operator decision 2026-10-29 |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute | `sequential` mode via `/sdd-batch-execute`; up-front confirmation by the operator's standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f), checkpoints `report` |
 | 2026-10-29 | `in-progress` | /sdd-execute | Step 1 done (docs): merge-order row 257←263 reworded (257 adds no `QueryEventsRequest` field) and the 257 rolling-deploy note added under the Blocking Dependencies table |
+| 2026-10-29 | `in-progress` | /sdd-execute | Steps 2+3 done (one commit, operator 2026-10-30 "A: Fix in same commit"): ledger `queryEvents` keyset token on `sequence`, 100/1000 page clamp, `toSeq`/`parseSequenceToken`; keyset/cap/default/bad-token tests; 263 exact-SQL expectations moved to `ORDER BY sequence ASC` |
 
 ---
 

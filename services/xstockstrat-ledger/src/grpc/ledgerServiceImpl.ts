@@ -11,10 +11,36 @@ const log = getLogger('ledger:impl');
 // ExportEvents cursor page size — one response message per page.
 const EXPORT_BATCH_SIZE = 1000;
 
+export const QUERY_EVENTS_DEFAULT_PAGE_SIZE = 100;
+export const QUERY_EVENTS_MAX_PAGE_SIZE = 1000;
+
+const MAX_BIGINT = 9223372036854775807n;
+
+class InvalidPageTokenError extends Error {}
+
 function readCursor(cursor: Cursor, rowCount: number): Promise<any[]> {
   return new Promise((resolve, reject) => {
     cursor.read(rowCount, (err: Error | undefined, rows: any[]) => (err ? reject(err) : resolve(rows)));
   });
+}
+
+// pg returns BIGINT `sequence` as a string, and string `>` is lexicographic ("10" < "9"):
+// every sequence compare or encode must go through this helper.
+export function toSeq(v: number | string | bigint): bigint {
+  if (typeof v === 'bigint') return v;
+  if (typeof v === 'number' && Number.isSafeInteger(v)) return BigInt(v);
+  if (typeof v === 'string' && /^\d+$/.test(v)) return BigInt(v);
+  throw new Error(`invalid sequence: ${String(v)}`);
+}
+
+// '' → null (first page). Anything but a non-negative int64 decimal throws — including an
+// old-build event_id token, which must be rejected rather than misread.
+export function parseSequenceToken(token: string): bigint | null {
+  if (token === '') return null;
+  if (!/^\d{1,19}$/.test(token)) throw new InvalidPageTokenError('invalid page_token');
+  const seq = BigInt(token);
+  if (seq > MAX_BIGINT) throw new InvalidPageTokenError('invalid page_token');
+  return seq;
 }
 
 export class LedgerServiceImpl {
@@ -127,6 +153,13 @@ export class LedgerServiceImpl {
    */
   async queryEvents(call: any, callback: any) {
     const req = call.request;
+    let cursor: bigint | null;
+    try {
+      cursor = parseSequenceToken(req.page?.pageToken ?? '');
+    } catch {
+      callback({ code: 3, message: 'invalid page_token' });
+      return;
+    }
     const conditions: string[] = [];
     const params: any[] = [];
     let p = 1;
@@ -160,14 +193,22 @@ export class LedgerServiceImpl {
       conditions.push(`user_id = $${p++}`);
       params.push(callerUserId(call));
     }
+    if (cursor !== null) {
+      conditions.push(`sequence > $${p++}::bigint`);
+      params.push(cursor.toString());
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const limit = req.page?.pageSize || 100;
+    const requested = req.page?.pageSize ?? 0;
+    const limit =
+      requested > 0
+        ? Math.min(requested, QUERY_EVENTS_MAX_PAGE_SIZE)
+        : QUERY_EVENTS_DEFAULT_PAGE_SIZE;
     params.push(limit + 1);
 
     try {
       const result = await this.pool.query(
-        `SELECT * FROM ledger.events ${where} ORDER BY recorded_at ASC LIMIT $${p}`,
+        `SELECT * FROM ledger.events ${where} ORDER BY sequence ASC LIMIT $${p}`,
         params,
       );
 
@@ -176,7 +217,10 @@ export class LedgerServiceImpl {
 
       callback(null, {
         events: rows.map(rowToEvent),
-        page: { nextPageToken: hasMore ? rows[rows.length - 1].event_id : '', totalCount: rows.length },
+        page: {
+          nextPageToken: hasMore ? toSeq(rows[rows.length - 1].sequence).toString() : '',
+          totalCount: rows.length,
+        },
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });

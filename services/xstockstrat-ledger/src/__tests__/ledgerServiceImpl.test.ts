@@ -6,6 +6,8 @@ import { makeRecordingCall as makeStreamCall } from './fixtures/streamCall';
 
 let LedgerServiceImpl: any;
 let rowToEvent: any;
+let toSeq: any;
+let parseSequenceToken: any;
 
 // This import must throw on failure — never wrap it in try/catch or early-return on a
 // missing subject; a swallowed import turns every case into a silent pass.
@@ -13,6 +15,8 @@ before(async () => {
   const mod = await import('../grpc/ledgerServiceImpl.js');
   LedgerServiceImpl = mod.LedgerServiceImpl;
   rowToEvent = mod.rowToEvent;
+  toSeq = mod.toSeq;
+  parseSequenceToken = mod.parseSequenceToken;
 });
 
 describe('test harness', () => {
@@ -53,6 +57,39 @@ function captureQuery(rows: any[] = []) {
 
 function makeCall(req: any) {
   return { request: req };
+}
+
+// makeKeysetPool emulates the WHERE/ORDER/LIMIT the impl emits over pg-style string sequences.
+// C-13: single consumer (queryEvents keyset tests in this file), so it stays inline.
+function makeKeysetPool(rows: any[]) {
+  const calls: Array<{ sql: string; params: any[] }> = [];
+  const pool = {
+    async query(sql: string, params: any[] = []) {
+      calls.push({ sql, params });
+      const param = (re: RegExp) => {
+        const m = re.exec(sql);
+        return m ? params[Number(m[1]) - 1] : undefined;
+      };
+      let out = rows.slice();
+      const eventType = param(/event_type = \$(\d+)/);
+      if (eventType !== undefined) out = out.filter((r) => r.event_type === eventType);
+      const userId = param(/user_id = \$(\d+)/);
+      if (userId !== undefined) out = out.filter((r) => r.user_id === userId);
+      const after = param(/sequence > \$(\d+)::bigint/);
+      if (after !== undefined) out = out.filter((r) => toSeq(r.sequence) > BigInt(after));
+      if (/ORDER BY sequence ASC/.test(sql)) {
+        out.sort((a, b) => (toSeq(a.sequence) < toSeq(b.sequence) ? -1 : 1));
+      }
+      return { rows: out.slice(0, params[params.length - 1]) };
+    },
+  };
+  return { pool, calls };
+}
+
+function queryPage(impl: any, call: any): Promise<{ err: any; resp: any }> {
+  return new Promise((resolve) => {
+    impl.queryEvents(call, (err: any, resp: any) => resolve({ err, resp }));
+  });
 }
 
 // makeIdempotentPool builds a pool whose query() (and transactional client.query())
@@ -217,7 +254,7 @@ describe('queryEvents', () => {
     await runQuery(impl, makeStreamCall({ ownerOnly: true, page: { pageSize: 100 } }, 'u-a'));
     assert.strictEqual(
       captured.sql,
-      'SELECT * FROM ledger.events WHERE user_id = $1 ORDER BY recorded_at ASC LIMIT $2',
+      'SELECT * FROM ledger.events WHERE user_id = $1 ORDER BY sequence ASC LIMIT $2',
     );
     assert.deepStrictEqual(captured.params, ['u-a', 101]);
   });
@@ -237,7 +274,7 @@ describe('queryEvents', () => {
     );
     assert.strictEqual(
       captured.sql,
-      'SELECT * FROM ledger.events WHERE stream_key = $1 AND event_type = $2 ORDER BY recorded_at ASC LIMIT $3',
+      'SELECT * FROM ledger.events WHERE stream_key = $1 AND event_type = $2 ORDER BY sequence ASC LIMIT $3',
     );
     assert.deepStrictEqual(captured.params, ['order:1', 'order.filled', 101]);
     assert.doesNotMatch(captured.sql ?? '', /user_id/);
@@ -251,9 +288,132 @@ describe('queryEvents', () => {
     );
     assert.strictEqual(
       captured.sql,
-      'SELECT * FROM ledger.events WHERE event_type = $1 AND user_id = $2 ORDER BY recorded_at ASC LIMIT $3',
+      'SELECT * FROM ledger.events WHERE event_type = $1 AND user_id = $2 ORDER BY sequence ASC LIMIT $3',
     );
     assert.deepStrictEqual(captured.params, ['order.filled', 'u-a', 11]);
+  });
+
+  // Feature 257 — keyset page token on sequence (pg returns BIGINT sequence as a string).
+  it('@AC-1 token walk returns each event once across the 9→10 digit boundary', async () => {
+    const rows = [
+      makeRow({ event_id: 'e1', sequence: '9' }),
+      makeRow({ event_id: 'e2', sequence: '10' }),
+      makeRow({ event_id: 'e3', sequence: '11' }),
+    ];
+    const { pool, calls } = makeKeysetPool(rows);
+    const impl = new LedgerServiceImpl(pool, {});
+    const p1 = await queryPage(impl, makeCall({ page: { pageSize: 2 } }));
+    assert.ifError(p1.err);
+    assert.deepStrictEqual(
+      p1.resp.events.map((e: any) => e.eventId),
+      ['e1', 'e2'],
+    );
+    assert.strictEqual(p1.resp.page.nextPageToken, '10');
+    const p2 = await queryPage(
+      impl,
+      makeCall({ page: { pageSize: 2, pageToken: p1.resp.page.nextPageToken } }),
+    );
+    assert.ifError(p2.err);
+    assert.deepStrictEqual(
+      p2.resp.events.map((e: any) => e.eventId),
+      ['e3'],
+    );
+    assert.strictEqual(p2.resp.page.nextPageToken, '');
+    assert.match(calls[1].sql, /sequence > \$/);
+    assert.ok(calls[1].params.includes('10'));
+  });
+
+  it('@AC-2 an oversized page_size is capped at 1000', async () => {
+    const rows = Array.from({ length: 20_000 }, (_, i) =>
+      makeRow({ event_id: `e${i + 1}`, sequence: String(i + 1) }),
+    );
+    const { pool, calls } = makeKeysetPool(rows);
+    const { err, resp } = await queryPage(
+      new LedgerServiceImpl(pool, {}),
+      makeCall({ page: { pageSize: 1_000_000 } }),
+    );
+    assert.ifError(err);
+    assert.strictEqual(resp.events.length, 1000);
+    assert.notStrictEqual(resp.page.nextPageToken, '');
+    assert.strictEqual(calls[0].params[calls[0].params.length - 1], 1001);
+  });
+
+  it('@AC-7 an omitted page_token returns the oldest page in sequence order', async () => {
+    const rows = Array.from({ length: 150 }, (_, i) =>
+      makeRow({
+        event_id: `e${i + 1}`,
+        sequence: String(i + 1),
+        recorded_at: new Date(Date.UTC(2024, 0, 1, 0, 0, (i * 37) % 150)),
+      }),
+    );
+    for (let i = rows.length - 1; i > 0; i--) {
+      const j = (i * 7919) % (i + 1);
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+    }
+    const want = (n: number) => Array.from({ length: n }, (_, i) => `e${i + 1}`);
+    const { pool, calls } = makeKeysetPool(rows);
+    const impl = new LedgerServiceImpl(pool, {});
+    const first = await queryPage(impl, makeCall({}));
+    assert.ifError(first.err);
+    assert.deepStrictEqual(
+      first.resp.events.map((e: any) => e.eventId),
+      want(100),
+    );
+    assert.notStrictEqual(first.resp.page.nextPageToken, '');
+    const all = await queryPage(impl, makeCall({ page: { pageSize: 500 } }));
+    assert.deepStrictEqual(
+      all.resp.events.map((e: any) => e.eventId),
+      want(150),
+    );
+    assert.strictEqual(all.resp.page.nextPageToken, '');
+    assert.match(calls[0].sql, /ORDER BY sequence ASC/);
+  });
+
+  it('an exactly-full last page returns an empty token (FR-2)', async () => {
+    const { pool } = makeKeysetPool([
+      makeRow({ event_id: 'e1', sequence: '1' }),
+      makeRow({ event_id: 'e2', sequence: '2' }),
+    ]);
+    const { resp } = await queryPage(
+      new LedgerServiceImpl(pool, {}),
+      makeCall({ page: { pageSize: 2 } }),
+    );
+    assert.strictEqual(resp.events.length, 2);
+    assert.strictEqual(resp.page.nextPageToken, '');
+  });
+
+  for (const bad of ['abc', '-1', '9223372036854775808', '0b9c6f1e-2d3a-4b5c-8d7e-1f2a3b4c5d6e']) {
+    it(`a bad page_token ${JSON.stringify(bad)} → code 3 and no query`, async () => {
+      const { pool, calls } = makeKeysetPool([makeRow()]);
+      const { err } = await queryPage(
+        new LedgerServiceImpl(pool, {}),
+        makeCall({ page: { pageSize: 10, pageToken: bad } }),
+      );
+      assert.strictEqual(err?.code, 3);
+      assert.strictEqual(calls.length, 0);
+    });
+  }
+
+  it('ownerOnly and a page token compose as ANDed predicates with LIMIT last (263)', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(
+      impl,
+      makeStreamCall(
+        { ownerOnly: true, eventType: 't', page: { pageSize: 10, pageToken: '10' } },
+        'u-a',
+      ),
+    );
+    assert.match(captured.sql ?? '', /user_id = \$\d+ AND sequence > \$\d+::bigint/);
+    assert.deepStrictEqual(captured.params, ['t', 'u-a', '10', 11]);
+    assert.match(captured.sql ?? '', /LIMIT \$4$/);
+  });
+
+  it('toSeq compares numerically and parseSequenceToken treats empty as first page', () => {
+    assert.ok(toSeq('10') > toSeq('9'));
+    assert.strictEqual(toSeq(10), toSeq('10'));
+    assert.strictEqual(toSeq(10n), toSeq('10'));
+    assert.throws(() => toSeq('1e3'));
+    assert.strictEqual(parseSequenceToken(''), null);
   });
 });
 
