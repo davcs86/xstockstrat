@@ -757,3 +757,10 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - GREEN: `pnpm run test:unit` 351 passed (Step 10 vitest GREEN); `test:coverage` lines 76%; lint clean (warnings pre-existing); tsc clean for touched files (`e2e/insights/backfills.spec.ts` errors pre-exist); `grep "sourceService: 'trading'" src e2e/trader` empty. Playwright `position-lineage` + `positions` + `api-smoke` GREEN once the dev server is warm; AC-3 (the first test of a cold run) times out at 10s on the first compile, as noted for Step 10, and passes on re-run.
 - Env: root `node_modules` dangling symlink replaced locally by `pnpm install --frozen-lockfile --filter xstockstrat-ui...` (not committed).
 - Next: Step 12 (docs teardown reconciliation).
+
+## Session 2026-10-30 - Step 12 executed (docs)
+
+- Portfolio `CLAUDE.md`: ctx-first `classifyGetPnLError` wording; `order.filled` row gains the `GetPnL` query-time consumer with `side` resolution (payload, `order.created`, `order.submitted`); `order.partially_filled` row gets the same rule plus the account-grain sequence-ordered fold. PORTFOLIO-16 updated; three findings rows added (`req.Range` echo-only, `HydrateStops` page 1, intended wire-code changes).
+- Trading `CLAUDE.md`: stream key of the 11 emitted `order.*` rows is the bare `{order_id}`; `order.approved` (no emit site) and `order_intent.*` keep their prefixes. Ledger `CLAUDE.md` `:34` and `:112` reworded for bare id vs `order_intent.*`. Ledger `page_token` already documented (`:49`).
+- Teardown: the context-forge plugin is not run in this worktree; reconciled by hand against `classifyGetPnLError`, `orderSide`, and `trading.go` emit sites. Record both facts in the PR body.
+- Next: Step 13 (merge-order note).

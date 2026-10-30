@@ -744,7 +744,7 @@ grep -rn "sourceService: 'trading'" src e2e/trader; test $? -eq 1   # e2e/fixtur
 
 ### Step 12 — docs: teardown reconciliation (stream-key drift, ctx-first wording, side resolution, findings)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (service CLAUDE.md files and module constitutions)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
