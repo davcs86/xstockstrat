@@ -347,3 +347,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `docs/patterns/observability.md`, `docs/setup/CLAUDE.md`, `docs/launch-pdfs/product-features.md`,
   `packages/otel/CLAUDE.md`, `packages/otel/otel-collector-config.yaml`, `scripts/setup-env.sh`
 - Deviations: Deviation 2 (lint tooling fallback)
+
+### Step 8 — Re-ground OTEL-1, retire OTEL-2, NARROW the findings rows [done]
+- `packages/otel/docs/context-constitution.md`: OTEL-1 re-grounded on `resource.service.name` with panel (c) as
+  evidence; OTEL-2 replaced by a retired marker citing feature 250 only (no `rpc_server_duration`, no defect
+  basename); pointer row repointed to the two READMEs; intro line reworded.
+- `packages/otel/docs/context-constitution-findings.md`: "Latent bug?" row NARROWED by content (basename + 274 path),
+  Resolved row carries the basename, and the defect-report table row moved to `## Resolved` per that file's lifecycle
+  rule. Root `docs/context-constitution-findings.md` row `:18` marked **NARROWED (feature 250)** with the basename and the
+  274 path (274's session had already begun narrowing it).
+- Files modified: `packages/otel/docs/context-constitution.md`, `packages/otel/docs/context-constitution-findings.md`,
+  `docs/context-constitution-findings.md`
+- Deviations: none

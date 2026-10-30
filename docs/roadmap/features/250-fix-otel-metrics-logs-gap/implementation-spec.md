@@ -611,7 +611,7 @@ shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh
 
 ### Step 8 — docs: Re-ground OTEL-1, retire OTEL-2, NARROW the findings rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (constitution) + root findings
 **Files**:
 - `packages/otel/docs/context-constitution.md` — modify
