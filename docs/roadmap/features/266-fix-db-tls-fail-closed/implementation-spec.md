@@ -1,6 +1,6 @@
 # Implementation Spec: fix-db-tls-fail-closed
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/266-fix-db-tls-fail-closed/feature.md`
 **Total Steps**: 17
@@ -991,7 +991,7 @@ git diff --stat services/xstockstrat-identity/docs/operations.md docs/setup/digi
 
 ### Step 17 — docs: Rollout canary record + context teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/266-fix-db-tls-fail-closed/`
 **Files**:
 - `docs/roadmap/features/266-fix-db-tls-fail-closed/context.md` — modify
@@ -1133,3 +1133,14 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
 
   The PR body must carry the teardown record: that the plugin was unavailable, and the manual reconciliation list
   from `context.md`. **Disposition**: operator-only.
+- **Step 17 canary — static half passed; live verify moved post-merge by operator decision (2026-10-30).**
+  - Check 2 passed. Both `.do` specs bind DigitalOcean's managed `${xstockstrat.CA_CERT}`. The cluster CA from the DO
+    API is non-empty: a PEM with subject `<project-id> Project CA`, valid until 2031-08-03. DO's connection string for
+    the cluster carries exactly one TLS query key, `sslmode=require`, and no `uselibpqcompat`.
+  - Check 1 (the live `openssl s_client … -verify_return_error`) cannot run from this session, because egress to
+    `:25060` times out. The operator chose **"Post-merge on dev (Recommended)"**. The integration PR merges, and the
+    check becomes instruction 4 of the deferral entry above: each backend's DO RUN log must show
+    `db-tls: verifying server cert against DATABASE_CA_CERT`, there must be no `db-tls:` boot exit, and
+    `/config-ui/api/audit` must return 200.
+  - Rollback: if any backend fails that check, revert the squash commit on `main-dev`. Dev only.
+  - Step 17 is `done` and status is `code-completed`. **Disposition**: operator decision.

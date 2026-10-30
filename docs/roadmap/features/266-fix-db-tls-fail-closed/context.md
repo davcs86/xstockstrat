@@ -927,3 +927,17 @@ Feature: fix-db-tls-fail-closed (ui)
 ### Coverage check
 - Source scenarios: 8 (AC-1 to AC-8; AC-1, AC-2 and AC-5 are Outlines). Planned: 8 NEW, 0 DUP, 0 OVERLAP. All accounted for, none skipped.
 ```
+
+## Session 2026-10-30 — Step 17 canary (operator decision: post-merge on dev)
+
+- Static canary passed. The `${xstockstrat.CA_CERT}` binding resolves to the DO cluster's project CA: non-empty, PEM,
+  valid until 2031-08-03. DO's cluster connection string has a single TLS key, `sslmode=require`. No secret values
+  were recorded.
+- The live `openssl s_client -starttls postgres … -verify_return_error` timed out from this session, because egress to
+  `:25060` is blocked.
+- Options offered: operator runs openssl locally, post-merge on dev, or keep holding. The operator chose
+  **"Post-merge on dev (Recommended)"**.
+- Owed after merge: on the dev deploy, the DO RUN logs of ledger, config, identity and notify each show
+  `db-tls: verifying server cert against DATABASE_CA_CERT`, there is no `db-tls:` boot exit, and
+  `/config-ui/api/audit` returns 200. Revert the squash commit on any failure.
+- The canary check is recorded here for Step 17 Verification (`grep -n "canary"`).
