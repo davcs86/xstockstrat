@@ -264,7 +264,7 @@ grep -n "function makeKeysetPool" src/__tests__/*.test.ts   # exactly 1 declarat
 
 ### Step 4 — service: ledger `streamEvents` bounded batched replay, drain backpressure and BigInt `maxSeq`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -356,7 +356,7 @@ pnpm run build && pnpm run lint
 
 ### Step 5 — test: ledger replay FIFO interleave, string-sequence dedupe, drain and cancellation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -766,3 +766,5 @@ grep -n "then subscribes" services/xstockstrat-ledger/CLAUDE.md   # no hit
 | 2026-10-29 | 8 (+ Execution Summary, Step Dependencies, Scenario Coverage AC-5/AC-1 rows) | **Step 8 moved from a manual real-TimescaleDB run into the CI real-DB tier**: new `src/__tests__/db/queryPagination.db.test.ts`, run by `pnpm run test:db` in CI job `Ledger DB test (TimescaleDB)` (`ci.yml:706-762`). It is verified by that job going green, not by a manual run, and is no longer an operator-only or tooling blocker. No database is started locally; local verification is compile-only (the tier fails loudly without `LEDGER_DB_TEST_URL`, by convention). The context.md literal-line greps (`p100_ms`/`token_walk_count`/`per_page_ms`) are dropped; timings go to the CI log. The 2 s p100 target becomes a non-flaky `< 5000` ms ceiling and the 200 000-row seed becomes 2500 rows per test scoped by `randomUUID()` stream key. Where the Execution Summary, Step Dependencies and Scenario Coverage still say "manual run", the Step 8 body governs. Supersedes design.md's "CI TimescaleDB job" rejected alternative. | Operator decision 2026-10-29 (session question tool): "Move it into CI real-DB tier" |
 | 2026-10-29 | 2 + 3 | **Steps 2 and 3 executed as ONE commit** with one red→green cycle on Step 3's tests. Step 2's change to `ORDER BY sequence ASC` breaks the three feature-263 exact-SQL expectations in `ledgerServiceImpl.test.ts` (Step 3's file), so Step 2's verification cannot pass alone. Standing rule (operator, 2026-10-29, own words): "Merge pairs + standing rule". | Operator decision 2026-10-30 (session question tool): "A: Fix in same commit (Recommended)" |
 | 2026-10-29 | 3 | **Feature-263 exact-SQL expectations updated** in `ledgerServiceImpl.test.ts` (`ownerOnly binds…`, `flag absent…`, `ownerOnly with eventType…`): `ORDER BY recorded_at ASC` → `ORDER BY sequence ASC`. Params and placeholder order unchanged. Step 3 instruction 3 ("leave the existing tests as they are") did not foresee these literal-SQL assertions. | Operator decision 2026-10-30 (session question tool): "A: Fix in same commit (Recommended)" |
+| 2026-10-29 | 4 + 5 | **Steps 4 and 5 executed as ONE commit** with one red→green cycle on Step 5's tests. Step 4's `MAX(sequence)` bound query breaks 248's `makePool`/deferred-pool `streamEvents` fakes, and its `waitForDrain` needs Step 5's `once`/`removeListener`/`emit` call double, so Step 4's verification cannot pass alone. Standing rule (operator, 2026-10-29, own words): "Merge pairs + standing rule"; widened (operator, 2026-10-30, own words): "Widen the rule (Recommended)". | Operator decision 2026-10-30 (session question tool): "A: Include the fake fix (Recommended)" |
+| 2026-10-29 | 4 + 5 | **Files expansion (test fake only):** `services/xstockstrat-ledger/src/__tests__/streamResolveWired.test.ts` — `makeCountingPool` answers the new `MAX(sequence)` bound query (`wire(replay, max = '0')`; the buffered-resolve test passes `'50'`). No assertion changed; no production code outside Step 4's Files changed. | Operator decision 2026-10-30 (session question tool): "A: Include the fake fix (Recommended)" |

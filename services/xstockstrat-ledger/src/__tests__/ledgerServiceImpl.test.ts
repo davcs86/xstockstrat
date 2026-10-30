@@ -958,6 +958,73 @@ function makeFakeNotifier() {
   return n;
 }
 
+// A one-connection pool: queries run strictly FIFO and each is logged in `dispatched` when issued.
+// Answers MAX(sequence), INSERT and the replay SELECT (emulating its WHERE/ORDER/LIMIT).
+function makeSingleSlotPool(
+  rows: any[],
+  opts: {
+    holdReplay?: () => Promise<void>;
+    failReplay?: Error;
+    onReplay?: () => void;
+  } = {},
+) {
+  const max = rows.reduce(
+    (m: bigint, r: any) => (toSeq(r.sequence) > m ? toSeq(r.sequence) : m),
+    0n,
+  );
+  let next = max + 1n;
+  let chain: Promise<unknown> = Promise.resolve();
+  const isReplay = (sql: string) => /SELECT \* FROM ledger\.events/.test(sql);
+  const answer = async (sql: string, params: any[]) => {
+    if (/MAX\(sequence\)/.test(sql)) return { rows: [{ max: max.toString() }] };
+    if (/INSERT INTO ledger\.events/.test(sql)) {
+      return { rows: [{ sequence: (next++).toString(), recorded_at: new Date() }] };
+    }
+    if (!isReplay(sql)) return { rows: [] };
+    opts.onReplay?.();
+    if (opts.holdReplay) await opts.holdReplay();
+    if (opts.failReplay) throw opts.failReplay;
+    const param = (re: RegExp) => {
+      const m = re.exec(sql);
+      return m ? params[Number(m[1]) - 1] : undefined;
+    };
+    const gt = param(/sequence > \$(\d+)/);
+    const gte = param(/sequence >= \$(\d+)/);
+    const lte = param(/sequence <= \$(\d+)/);
+    const limit = param(/LIMIT \$(\d+)/);
+    let out = rows.filter(
+      (r: any) =>
+        (gt === undefined || toSeq(r.sequence) > BigInt(gt)) &&
+        (gte === undefined || toSeq(r.sequence) >= BigInt(gte)) &&
+        (lte === undefined || toSeq(r.sequence) <= BigInt(lte)),
+    );
+    out.sort((a: any, b: any) => (toSeq(a.sequence) < toSeq(b.sequence) ? -1 : 1));
+    if (limit !== undefined) out = out.slice(0, Number(limit));
+    return { rows: out };
+  };
+  const pool = {
+    dispatched: [] as string[],
+    replaySelects: () => pool.dispatched.filter(isReplay).length,
+    query(sql: string, params: any[] = []) {
+      pool.dispatched.push(sql);
+      const p = chain.then(() => answer(sql, params));
+      chain = p.catch(() => undefined);
+      return p;
+    },
+  };
+  return pool;
+}
+
+function deferred() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+const settle = () => new Promise((r) => setImmediate(r));
+
 describe('streamEvents onGap', () => {
   for (const [label, notFound, code] of [
     ['AC-7: no row → INTERNAL (13)', true, 13],
@@ -965,7 +1032,7 @@ describe('streamEvents onGap', () => {
   ] as const) {
     it(`${label}, never a clean end()`, async () => {
       const notifier = makeFakeNotifier();
-      const impl = new LedgerServiceImpl(makePool([]), {}, notifier);
+      const impl = new LedgerServiceImpl(makeSingleSlotPool([]), {}, notifier);
       const call = makeStreamCall({ fromSequence: 10 });
       await impl.streamEvents(call);
       notifier.captured.onGap({ notFound, message: 'm' });
@@ -979,7 +1046,7 @@ describe('streamEvents onGap', () => {
     const rows = [11, 12].map((s) =>
       makeRow({ event_id: `e${s}`, sequence: s, payload: { n: s } }),
     );
-    const impl = new LedgerServiceImpl(makePool(rows), {}, makeFakeNotifier());
+    const impl = new LedgerServiceImpl(makeSingleSlotPool(rows), {}, makeFakeNotifier());
     const call = makeStreamCall({ fromSequence: 11 });
     await impl.streamEvents(call);
     assert.deepStrictEqual(
@@ -994,19 +1061,15 @@ describe('streamEvents onGap', () => {
   });
 
   it('onGap during the replay query writes nothing to the destroyed call', async () => {
-    let release: (r: any) => void = () => {};
-    const pool = {
-      query: () =>
-        new Promise((resolve) => {
-          release = resolve;
-        }),
-    };
+    const gate = deferred();
+    const rows = [8, 9, 10].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
+    const pool = makeSingleSlotPool(rows, { holdReplay: () => gate.promise });
     const notifier = makeFakeNotifier();
     const impl = new LedgerServiceImpl(pool, {}, notifier);
     const call = makeStreamCall({ fromSequence: 8 });
     const done = impl.streamEvents(call);
     notifier.captured.onGap({ notFound: false, message: 'm' });
-    release({ rows: [8, 9, 10].map((s) => makeRow({ event_id: `e${s}`, sequence: s })) });
+    gate.resolve();
     await done;
     assert.deepStrictEqual(call.destroyed, { code: 14, message: 'm' });
     assert.strictEqual(notifier.unsubscribed, true);
@@ -1024,7 +1087,7 @@ describe('streamEvents sequence normalisation', () => {
   it('AC-2: a resolved "100" after replayed "98"/"99" is delivered, and NOTIFY 100 is not duplicated', async () => {
     const rows = ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
     const notifier = makeFakeNotifier();
-    const impl = new LedgerServiceImpl(makePool(rows), {}, notifier);
+    const impl = new LedgerServiceImpl(makeSingleSlotPool(rows), {}, notifier);
     const call = makeStreamCall({ fromSequence: 98 });
     await impl.streamEvents(call);
     assert.deepStrictEqual(seqs(call), [98, 99]);
@@ -1038,19 +1101,15 @@ describe('streamEvents sequence normalisation', () => {
   });
 
   it('AC-5: a resolved "100" buffered during replay is flushed exactly once', async () => {
-    let release: (r: any) => void = () => {};
-    const pool = {
-      query: () =>
-        new Promise((resolve) => {
-          release = resolve;
-        }),
-    };
+    const gate = deferred();
+    const rows = ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
+    const pool = makeSingleSlotPool(rows, { holdReplay: () => gate.promise });
     const notifier = makeFakeNotifier();
     const impl = new LedgerServiceImpl(pool, {}, notifier);
     const call = makeStreamCall({ fromSequence: 98 });
     const done = impl.streamEvents(call);
     notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: '100' }));
-    release({ rows: ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s })) });
+    gate.resolve();
     await done;
     assert.deepStrictEqual(seqs(call), [98, 99, 100]);
     assert.strictEqual(call.destroyed, null);
@@ -1064,5 +1123,153 @@ describe('streamEvents sequence normalisation', () => {
       bytes = LedgerEvent.encode(event).finish();
     });
     assert.strictEqual(Number(LedgerEvent.decode(bytes).sequence), 100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// streamEvents — bounded batched replay on a one-connection pool (feature 257)
+// ---------------------------------------------------------------------------
+
+describe('streamEvents bounded replay', () => {
+  const seqs = (call: any) => call.writes.map((w: any) => Number(w.sequence));
+  const strRows = (from: number, to: number) => {
+    const out = [];
+    for (let s = from; s <= to; s++) out.push(makeRow({ event_id: `e${s}`, sequence: String(s) }));
+    return out;
+  };
+
+  it('AC-5: a queued AppendEvent runs between replay batches (FIFO interleave)', async () => {
+    let appended: any = null;
+    let enqueued = false;
+    const pool = makeSingleSlotPool(strRows(1, 2500), {
+      onReplay: () => {
+        if (enqueued) return;
+        enqueued = true;
+        impl.appendEvent(
+          makeCall({
+            eventType: 'order.filled',
+            sourceService: 's',
+            streamKey: 'order:1',
+            idempotencyKey: '',
+          }),
+          (err: any, res: any) => {
+            appended = err ?? res;
+          },
+        );
+      },
+    });
+    const impl = new LedgerServiceImpl(pool, {}, makeFakeNotifier());
+    const call = makeStreamCall({ fromSequence: 1 });
+    await impl.streamEvents(call);
+
+    const kinds = pool.dispatched.map((sql) =>
+      /INSERT INTO ledger\.events/.test(sql)
+        ? 'insert'
+        : /SELECT \* FROM ledger\.events/.test(sql)
+          ? 'select'
+          : 'other',
+    );
+    const insertAt = kinds.indexOf('insert');
+    const selectAts = kinds.flatMap((k, i) => (k === 'select' ? [i] : []));
+    assert.ok(selectAts.length >= 3, `expected >= 3 replay batches, got ${selectAts.length}`);
+    assert.ok(
+      insertAt > selectAts[0] && insertAt < selectAts[1],
+      `INSERT must dispatch before the 2nd batch: ${kinds}`,
+    );
+    assert.strictEqual(appended?.sequence, '2501');
+    const written = seqs(call);
+    assert.strictEqual(written.length, 2500);
+    assert.ok(
+      written.every((s: number, i: number) => i === 0 || s > written[i - 1]),
+      'strictly ascending, unique',
+    );
+    assert.strictEqual(call.destroyed, null);
+  });
+
+  it('subscribes before the first query (LEDGER-2)', async () => {
+    const pool = makeSingleSlotPool(strRows(1, 3));
+    let dispatchedAtSubscribe = -1;
+    const notifier = makeFakeNotifier();
+    const subscribe = notifier.subscribe;
+    notifier.subscribe = (sub: any) => {
+      dispatchedAtSubscribe = pool.dispatched.length;
+      return subscribe(sub);
+    };
+    await new LedgerServiceImpl(pool, {}, notifier).streamEvents(
+      makeStreamCall({ fromSequence: 1 }),
+    );
+    assert.strictEqual(dispatchedAtSubscribe, 0);
+  });
+
+  it('dedupes a buffered NOTIFY duplicate across a digit boundary ("9","10","11" + 11, 12)', async () => {
+    const gate = deferred();
+    const pool = makeSingleSlotPool(strRows(9, 11), { holdReplay: () => gate.promise });
+    const notifier = makeFakeNotifier();
+    const call = makeStreamCall({ fromSequence: 9 });
+    const done = new LedgerServiceImpl(pool, {}, notifier).streamEvents(call);
+    await settle();
+    notifier.captured.onEvent(makeRow({ event_id: 'e11', sequence: 11 }));
+    notifier.captured.onEvent(makeRow({ event_id: 'e12', sequence: 12 }));
+    gate.resolve();
+    await done;
+    assert.deepStrictEqual(seqs(call), [9, 10, 11, 12]);
+  });
+
+  it('keeps fromSequence semantics (>= fromSequence)', async () => {
+    const call = makeStreamCall({ fromSequence: 10 });
+    await new LedgerServiceImpl(
+      makeSingleSlotPool(strRows(9, 11)),
+      {},
+      makeFakeNotifier(),
+    ).streamEvents(call);
+    assert.deepStrictEqual(seqs(call), [10, 11]);
+  });
+
+  it('waits for drain before writing on, and before the next batch', async () => {
+    const pool = makeSingleSlotPool(strRows(1, 1001));
+    const call = makeStreamCall({ fromSequence: 1 }, { writeReturns: false });
+    const done = new LedgerServiceImpl(pool, {}, makeFakeNotifier()).streamEvents(call);
+    await settle();
+    assert.strictEqual(call.writes.length, 1, 'no write past a false write() until drain');
+    for (let i = 0; i < 999; i++) {
+      call.emit('drain');
+      await settle();
+    }
+    assert.strictEqual(call.writes.length, 1000);
+    assert.strictEqual(pool.replaySelects(), 1, 'no next batch while the last write awaits drain');
+    call.emit('drain');
+    await settle();
+    assert.strictEqual(pool.replaySelects(), 2);
+    assert.strictEqual(call.writes.length, 1001);
+    call.emit('drain');
+    await done;
+    assert.deepStrictEqual(call.handlers.drain ?? [], [], 'drain listeners removed');
+    assert.deepStrictEqual(call.handlers.cancelled?.length, 1, 'only the cleanup hook is left');
+  });
+
+  it('a cancel while awaiting drain stops the replay and unsubscribes', async () => {
+    const pool = makeSingleSlotPool(strRows(1, 1001));
+    const notifier = makeFakeNotifier();
+    const call = makeStreamCall({ fromSequence: 1 }, { writeReturns: false });
+    const done = new LedgerServiceImpl(pool, {}, notifier).streamEvents(call);
+    await settle();
+    call.emit('cancelled');
+    await done;
+    assert.strictEqual(call.writes.length, 1);
+    assert.strictEqual(pool.replaySelects(), 1);
+    assert.strictEqual(notifier.unsubscribed, true);
+    notifier.captured.onEvent(makeRow({ event_id: 'e5000', sequence: 5000 }));
+    assert.strictEqual(call.writes.length, 1, 'no live write after cancel');
+  });
+
+  it('a failing replay SELECT destroys the call with that error after cleanup', async () => {
+    const boom = new Error('replay failed');
+    const notifier = makeFakeNotifier();
+    const call = makeStreamCall({ fromSequence: 1 });
+    const pool = makeSingleSlotPool(strRows(1, 3), { failReplay: boom });
+    await new LedgerServiceImpl(pool, {}, notifier).streamEvents(call);
+    assert.strictEqual(call.destroyed, boom);
+    assert.strictEqual(notifier.unsubscribed, true);
+    assert.deepStrictEqual(call.writes, []);
   });
 });

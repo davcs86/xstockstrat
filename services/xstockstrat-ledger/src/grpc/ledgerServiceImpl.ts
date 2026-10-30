@@ -13,6 +13,7 @@ const EXPORT_BATCH_SIZE = 1000;
 
 export const QUERY_EVENTS_DEFAULT_PAGE_SIZE = 100;
 export const QUERY_EVENTS_MAX_PAGE_SIZE = 1000;
+export const REPLAY_BATCH_SIZE = 1000;
 
 const MAX_BIGINT = 9223372036854775807n;
 
@@ -41,6 +42,17 @@ export function parseSequenceToken(token: string): bigint | null {
   const seq = BigInt(token);
   if (seq > MAX_BIGINT) throw new InvalidPageTokenError('invalid page_token');
   return seq;
+}
+
+export function waitForDrain(call: any): Promise<void> {
+  const events = ['drain', 'cancelled', 'close', 'error'];
+  return new Promise((resolve) => {
+    const done = () => {
+      for (const e of events) call.removeListener(e, done);
+      resolve();
+    };
+    for (const e of events) call.once(e, done);
+  });
 }
 
 export class LedgerServiceImpl {
@@ -240,14 +252,14 @@ export class LedgerServiceImpl {
     }
 
     // Seeded just below fromSequence so the first replayed row (== fromSequence) is delivered.
-    let maxSeq = req.fromSequence ? Number(req.fromSequence) - 1 : 0;
+    let maxSeq: bigint = req.fromSequence ? toSeq(req.fromSequence) - 1n : 0n;
     let live = false;
     let buffer: any[] = [];
 
-    const writeRow = (row: any) => {
-      const seq = Number(row.sequence);
+    const writeRow = (row: any): boolean => {
+      const seq = toSeq(row.sequence);
       if (seq > maxSeq) maxSeq = seq;
-      call.write(rowToEvent(row));
+      return call.write(rowToEvent(row));
     };
 
     // Subscribe BEFORE replaying: events inserted during replay are buffered, then
@@ -260,7 +272,7 @@ export class LedgerServiceImpl {
           buffer.push(row);
           return;
         }
-        if (Number(row.sequence) > maxSeq) writeRow(row);
+        if (toSeq(row.sequence) > maxSeq) writeRow(row);
       },
       onReconnect: () => {
         // Missed NOTIFYs during reconnect — end the stream so the client reconnects and replays the gap.
@@ -291,18 +303,38 @@ export class LedgerServiceImpl {
     call.on('close', cleanup);
     call.on('error', cleanup);
 
-    // Replay history (borrow + release a pool connection — no long-held conn).
+    // Replay history in bounded batches, each its own pool query, so a queued AppendEvent runs between them.
     try {
-      const result = await this.pool.query(
-        `SELECT * FROM ledger.events
-         WHERE ($1::text IS NULL OR stream_key = $1)
-           AND ($2::text IS NULL OR event_type = $2)
-           AND sequence >= $3
-         ORDER BY sequence ASC`,
-        [req.streamKey || null, req.eventType || null, req.fromSequence || 0],
+      // Rows committing at a sequence <= the walk position after the walk passed it are not replayed
+      // (operator sign-off (a)); a pg_snapshot_xmin bound is the named follow-up.
+      const bound = toSeq(
+        (await this.pool.query('SELECT COALESCE(MAX(sequence), 0) AS max FROM ledger.events'))
+          .rows[0].max,
       );
-      if (cleaned) return;
-      for (const row of result.rows) writeRow(row);
+      let cursor = maxSeq;
+      for (;;) {
+        if (cleaned) return;
+        const { rows } = await this.pool.query(
+          `SELECT * FROM ledger.events
+           WHERE ($1::text IS NULL OR stream_key = $1)
+             AND ($2::text IS NULL OR event_type = $2)
+             AND sequence > $3::bigint AND sequence <= $4::bigint
+           ORDER BY sequence ASC LIMIT $5`,
+          [
+            req.streamKey || null,
+            req.eventType || null,
+            cursor.toString(),
+            bound.toString(),
+            REPLAY_BATCH_SIZE,
+          ],
+        );
+        for (const row of rows) {
+          if (!writeRow(row)) await waitForDrain(call);
+          if (cleaned) return;
+        }
+        if (rows.length < REPLAY_BATCH_SIZE) break;
+        cursor = toSeq(rows[rows.length - 1].sequence);
+      }
     } catch (err: any) {
       cleanup();
       call.destroy(err);
@@ -315,7 +347,7 @@ export class LedgerServiceImpl {
     // Flush buffered events (dedup by sequence) then go live; synchronous so no NOTIFY
     // interleaves before live=true.
     for (const row of buffer) {
-      if (Number(row.sequence) > maxSeq) writeRow(row);
+      if (toSeq(row.sequence) > maxSeq) writeRow(row);
     }
     buffer = [];
     live = true;

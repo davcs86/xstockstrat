@@ -467,3 +467,28 @@ Still open (surface at the /sdd-execute checkpoint):
   that was left untouched (surgical diff).
 - Worktree tooling: the root `node_modules` symlink broke `pnpm install` (ENOTDIR), so it was replaced by a real
   install filtered to root + ledger (`--frozen-lockfile`); no manifest or lockfile changed.
+
+### Steps 4+5 — ledger `streamEvents` bounded batched replay, drain backpressure, BigInt `maxSeq` + tests (2026-10-29)
+
+- **Operator decision (2026-10-30, own words via the session question tool): "A: Include the fake fix
+  (Recommended)".** Under the standing rule ("Merge pairs + standing rule", widened 2026-10-30: "Widen the rule
+  (Recommended)"), Steps 4 and 5 land as one commit with one red→green cycle on Step 5's tests. The commit also
+  touches `streamResolveWired.test.ts` (`makeCountingPool` answers `MAX(sequence)`; assertions unchanged). Both are in
+  the Deviation Log.
+- `src/grpc/ledgerServiceImpl.ts`: `REPLAY_BATCH_SIZE = 1000`, exported `waitForDrain(call)` (first of
+  `drain`/`cancelled`/`close`/`error`, listeners removed). `streamEvents`: BigInt `maxSeq` via `toSeq` (seed,
+  `writeRow`, live dedupe, flush); `writeRow` returns `write()`'s result; the replay captures a
+  `COALESCE(MAX(sequence), 0)` bound after subscribe, then walks `sequence > cursor AND <= bound ORDER BY sequence
+  LIMIT 1000` batches on `this.pool`, awaiting drain on a false write. Catch path, `if (cleaned) return;` guard,
+  synchronous flush and `onGap` unchanged.
+- Tests: `streamCall.ts` gains `once`/`removeListener`/`emit` (+ `INVENTORY.md` row); `makeSingleSlotPool` (FIFO
+  one-slot fake answering MAX/INSERT/replay SELECT) + `deferred`/`settle`; 248's streamEvents tests moved onto it
+  (assertions unchanged); new `describe('streamEvents bounded replay')`: AC-5 FIFO interleave (INSERT between batches
+  1 and 2, >= 3 batches, 2500 ascending rows), LEDGER-2 subscribe-before-first-query, `"9"/"10"/"11"` + buffered
+  11/12 dedupe, `fromSequence` kept, drain gating, cancel during drain, failing replay SELECT.
+- TDD: RED (tests applied, impl not): 105 tests, 3 failing (FIFO interleave, drain, cancel-during-drain). GREEN:
+  `test:coverage` 105/105, ledgerServiceImpl 88.52% lines, `npx c8 check-coverage --lines 40` exit 0; `pnpm run build`
+  and `pnpm run lint` exit 0 (warnings only). Step 4 greps: `Number(row.sequence)` / `Number(req.fromSequence)` no
+  hit; `new Client(` 1 hit (`streamExportRows`). `test:db` without `LEDGER_DB_TEST_URL` fails loudly by the tier's
+  convention (no DB started locally).
+- Formatting: new/changed lines prettier-formatted only; pre-existing drift left untouched.
