@@ -763,3 +763,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `docs/setup/digitalocean.md:551-559` (golang-migrate `db-migrate.sh force`); neither is a Node `pg.Pool`; no edit.
 - Verification: `DATABASE_CA_CERT` present in all five `CLAUDE.md` files and `database.md`; `dbTls.ts` present in
   `dry-guard-rail.md`; diff of the two confirm-only files is empty.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 17 (deferred to operator)
+
+- **Pre-merge dev canary: not run, operator-only.** This session cannot reach the running dev backends, the dev DB
+  host or the DO-console CA. Step 17 **Status** stays `pending`. The integration PR may be opened, but its merge is
+  held until the operator runs the checks listed in the implementation-spec.md Deviation Log entry "Step 17 deferred
+  to operator":
+  - an `openssl s_client -starttls postgres … -verify_return_error` result of `0 (ok)` with a SAN match;
+  - the dev `${xstockstrat.CA_CERT}` binding is non-empty;
+  - `${xstockstrat.DATABASE_URL}` carries no `ssl*`/`uselibpqcompat` key other than a single `sslmode=require`.
+
+  The operator appends the canary result here, with no secret values. The open thread at "Pre-merge dev canary:
+  Step 17, before the integration PR merges" stays open until then.
+- Code-side readiness for the canary, checked on this branch:
+  - the value-free `db-tls: verifying server cert against DATABASE_CA_CERT` log is in ledger `src/index.ts:20`,
+    config `:18`, identity `:19` and notify `:21`;
+  - the five `dbTls.ts` copies share one SHA-256 (`8cd5d805…`);
+  - `.do/app.yaml` and `.do/app.dev.yaml` each bind `DATABASE_CA_CERT` five times, to `${xstockstrat.CA_CERT}`.
+- Rollout order (instruction 2) re-confirmed: the UI route (Step 12), the `.do` binding (Step 14) and the four
+  backends (Steps 4/6/8/10) are all on this one branch, so they ship in one integration PR. That PR merges only
+  after the canary passes (design item 8).
+- **Teardown (instruction 3), manual.** The context-forge `context-constitution refresh` skill is not available in
+  this session; only `context-forge:context-scrubber` is listed. I re-read each Step 16 file against the code:
+  - `docs/patterns/database.md` § Node DB TLS (fail-closed): rules 1–5 match `resolveDbConnection` in order. Those
+    are unset/invalid URL, duplicate `sslmode`, other `ssl*`/`uselibpqcompat` (case-insensitive prefix),
+    `sslmode=disable` exactly, then CA required with `sslmode` stripped. The five paths exist. No drift.
+  - `docs/patterns/dry-guard-rail.md` § Exemptions: the five `dbTls.ts` paths, the four `src/mtls.ts` paths and
+    `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts` all exist. The hash claim holds: one SHA-256.
+    No drift. The report-only jscpd run on commit lists the `dbTls.ts`/`mtls.ts` clones, as the exemption expects.
+  - The ledger, config, identity and notify `CLAUDE.md` `DATABASE_CA_CERT` rows match the resolver's refusals and
+    the boot exit. The identity/notify `SELECT 1` note matches the Steps 8/10 probe. No drift.
+  - The UI `CLAUDE.md` `DATABASE_CA_CERT` row (audit route only, log plus generic 500) matches Step 12. No drift.
+  - `docs/context-constitution-findings.md`: not touched, because no grounded drift was found.
+
+  The integration PR body must record both facts: the plugin was unavailable, and this reconciliation list.
