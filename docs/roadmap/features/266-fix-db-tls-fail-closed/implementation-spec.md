@@ -925,7 +925,7 @@ pnpm run test:coverage && pnpm run lint   # vitest src/lib thresholds (40%) pass
 
 ### Step 16 — docs: Service env docs, database pattern, scoped DRY exception
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `services/*/CLAUDE.md`
 **Files**:
 - `services/xstockstrat-ledger/CLAUDE.md` — modify

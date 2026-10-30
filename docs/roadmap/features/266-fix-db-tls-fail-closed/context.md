@@ -745,3 +745,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `vitest run src/lib/dbTlsPlatformGuard.test.ts` 13/13; `test:coverage` exit 0, 346/346 in 61 files,
   all files 75.91% lines (>=40); `pnpm run lint` exit 0 (pre-existing warnings only, none in the new file); `tsc
   --noEmit` shows only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` TS2339 errors.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 16
+
+- Docs-only (TDD: N/A). Added a `DATABASE_CA_CERT` row to the env blocks of the four backend `CLAUDE.md` files
+  (required unless `DATABASE_URL` has exactly `sslmode=disable`; boot exits naming the variable; `ssl*`/`uselibpqcompat`
+  refused; the carve-out is DB-only and never relaxes gRPC mTLS). Identity and notify add the boot `SELECT 1` DB
+  dependency. Ledger and config also run a boot `SELECT 1` (`src/index.ts:38`/`:35`), but the spec scoped that note to
+  identity/notify, so it was not added there.
+- UI `CLAUDE.md`: `DATABASE_CA_CERT` row beside `DATABASE_URL`, scoped to the config-ui audit route (log + generic 500).
+- `docs/patterns/database.md`: new `## Node DB TLS (fail-closed)` before `## Approval`, listing the resolver rule order as
+  implemented in `dbTls.ts`; PgBouncer Go/Python services and `db-migrator` out of scope.
+- `docs/patterns/dry-guard-rail.md` § Exemptions: one bullet naming exactly the five `dbTls.ts` and four `src/mtls.ts`
+  copies, the per-service Docker build-context reason, the `dbTlsPlatformGuard.test.ts` hash enforcement, and that it is
+  not general permission to copy security code.
+- Confirm-only: re-read `services/xstockstrat-identity/docs/operations.md:7-24` (Python/psycopg `manage-users.py`) and
+  `docs/setup/digitalocean.md:551-559` (golang-migrate `db-migrate.sh force`); neither is a Node `pg.Pool`; no edit.
+- Verification: `DATABASE_CA_CERT` present in all five `CLAUDE.md` files and `database.md`; `dbTls.ts` present in
+  `dry-guard-rail.md`; diff of the two confirm-only files is empty.

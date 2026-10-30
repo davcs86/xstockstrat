@@ -28,6 +28,7 @@
 | 2026-10-29 | `in-progress` (steps 12–13 done) | /sdd-execute sequential | Config-ui audit route resolves DB TLS fail-closed before building its pool, logs trace id + code + message only, returns a generic 500; route vitest for AC-4, AC-7, AC-8, one commit per the merge-pairs standing rule |
 | 2026-10-29 | `in-progress` (step 14 done) | /sdd-execute sequential | `xstockstrat-ui` binds `DATABASE_CA_CERT` (`${xstockstrat.CA_CERT}`, `RUN_TIME`) after its `DATABASE_URL` in `.do/app.yaml` and `.do/app.dev.yaml` (FR-5); `db-migrator` untouched |
 | 2026-10-29 | `in-progress` (step 15 done) | /sdd-execute sequential | Platform guard vitest `dbTlsPlatformGuard.test.ts`: AC-5 YAML parse of both `.do` specs (+ negative row), SHA-256 copy guard over the five `dbTls.ts`, static resolver-wiring scan (AC-2) with a two-entry ledger `ssl:` allow-list and a synthetic negative |
+| 2026-10-29 | `in-progress` (step 16 done) | /sdd-execute sequential | Docs: `DATABASE_CA_CERT` env rows in the ledger/config/identity/notify/ui `CLAUDE.md` (identity/notify note the boot `SELECT 1` DB dependency); `docs/patterns/database.md` § Node DB TLS (fail-closed); scoped `dbTls.ts`/`mtls.ts` exemption in `docs/patterns/dry-guard-rail.md` |
 
 ---
 
