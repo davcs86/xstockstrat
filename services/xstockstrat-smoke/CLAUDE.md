@@ -26,9 +26,16 @@ so an image built without the SHA fails to build.
 |---|---|---|
 | HTTPS (mutual TLS) | `9110` | Smoke API; not published in production |
 
+The listener is TLS with `CERT_REQUIRED` against the platform CA, built from the service's own `MTLS_*` PEMs.
 Authorization is a client-certificate SAN allowlist `{xstockstrat-agent, xstockstrat-smoke-trigger}`;
 a platform leaf outside it gets 403 and nothing runs, a missing certificate fails the handshake.
 Clients pin the server name `xstockstrat-smoke`. There is no shared API key and no `GetSecret` use.
+
+The SAN hook is a subclass of uvicorn's internal `H11Protocol` (overriding `connection_made`), passed
+**explicitly** to uvicorn: `http='auto'` (e.g. with `uvicorn[standard]`) would pick another protocol and
+bypass it. A startup self-check exits before binding if the hook is not installed. Because the hook
+depends on an internal class, uvicorn is pinned to exactly `==0.47.0`; an upgrade must pass the
+hook-bypass test first.
 
 ## Dependencies
 
@@ -68,23 +75,28 @@ Mesh cert contract: `docs/patterns/inter-service-mtls.md`.
 ### HTTP API
 
 - `GET /checks` returns `{deployed_sha, checks:[{id,feature,part,timeout_s,check_hash}], load_errors:[{module,error}]}`.
-- `POST /runs {checks:[id, ...]}` returns 202 `{run_id}`, or 409 `{"error":"run_in_progress","retry_after_s":N}` with a `Retry-After` header.
-- `GET /runs/{id}` returns `{status, records:[...], file:{path, body}}`, or 404 for an unknown or lost run.
+- `POST /runs {checks:[id, ...]}` returns 202 `{run_id}`. An unknown check id returns 404 listing the unknown ids; an empty list returns 400; a run already in progress returns 409 `{"error":"run_in_progress","retry_after_s":N}` with a `Retry-After` header, where `N` is at most `RUN_LOCK_HOLD_S`.
+- `GET /runs/{id}` returns `{status, records:[...], file:{path, body}}` or 404 for an unknown or lost run. `status` is `running` or `done`. Each `records[]` item is exactly one record of the run file (see below), in execution order. `file.path` is the run-file path and `file.body` is the complete run-file body; both are present once `status` is `done`.
 
 ### Check API
 
 - `@check(id, feature, part, timeout_s=30)` over `async def run(ctx)`; `CHECKS_API_VERSION = 1`.
 - `ctx.db.fetch` / `ctx.db.fetchval` (read-only transaction), `ctx.rpc.call(full_method: str, request)`, `ctx.evidence(key, scalar)`.
 - `CheckFailure(msg)` marks a `FAIL`.
-- `check_hash = sha256(CHECKS_API_VERSION || the check's own source)`.
+- `check_hash` is the lowercase hex sha256 (64 chars) over the UTF-8 bytes of `f"{CHECKS_API_VERSION}\n"` followed by the check function's own source text (`inspect.getsource`).
 
 ### Run-file schema
 
-One immutable file per check result at `smoke-results/<env>/<UTC>-<run_id>.json` on the orphan
+One immutable file **per run** (not per check): `smoke-results/<env>/<UTC>-<run_id>.json` on the orphan
 `smoke-results` branch, validated by `schema/run-file.v1.json` (`additionalProperties: true`).
-Fields: `schema_version, run_id, check_id, check_hash, feature, part, env, deployed_sha, outcome,
-started_at, duration_ms, trigger, triggered_by, rpcs_invoked, evidence`. A check is pending for key
-`(check_id, check_hash, env)` until a `PASS` is recorded.
+`<UTC>` is the run start time formatted `%Y%m%dT%H%M%SZ`, so lexicographic filename order equals time
+order within an environment.
+
+- Run-level fields: `schema_version` (const 1), `run_id`, `env` (`homelab-staging` | `do-dev`), `deployed_sha`, `started_at`, `trigger`, `triggered_by` (peer SAN), `records`.
+- `records` holds one record per check executed in the run, with `check_id, check_hash, feature, part, outcome` (`PASS|FAIL|ERROR|TIMEOUT`), `started_at`, `duration_ms`, `rpcs_invoked` (call order), `evidence` (flat scalars).
+
+A check is pending for key `(check_id, check_hash, env)` until a record with outcome `PASS` exists in any
+run file of that env; failed attempts stay in their files.
 
 ### SAN allowlist and exit codes
 
@@ -106,6 +118,8 @@ Fixtures created by phase-2 write checks are named with the `smoke-` prefix (`sm
 is the smoke user's ownership marker (C-10c). Cleanup and the pre-check janitor touch only that prefix.
 
 ## Running Tests
+
+Applicable once the service code lands (slice S1); nothing to run in the contract-only slice.
 
 ```bash
 uv sync --extra dev
