@@ -12,6 +12,7 @@ import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { resolveChartColor } from '@/lib/chartColors';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import {
   POSITION_RISK_FLAG,
@@ -795,9 +796,15 @@ function PositionPanel({
                 {fmtUsd(position.currentPrice)}
               </span>
               <MarkBadge position={position} />
-              <span className={`font-mono text-sm tabular-nums ${pnlClass(position.dayPnl)}`}>
-                {fmtSignedUsd(position.dayPnl)} ({fmtPct(position.dayPnlPct)})
-              </span>
+              {position.offlineStateUnavailable ? (
+                <span className="font-mono text-sm text-muted-foreground">
+                  {PNL_UNAVAILABLE_LABEL}
+                </span>
+              ) : (
+                <span className={`font-mono text-sm tabular-nums ${pnlClass(position.dayPnl)}`}>
+                  {fmtSignedUsd(position.dayPnl)} ({fmtPct(position.dayPnlPct)})
+                </span>
+              )}
               {weightPct !== null && (
                 <Badge variant="secondary" className="font-mono">
                   {(weightPct * 100).toFixed(1)}% of equity
@@ -845,8 +852,18 @@ function PositionPanel({
           <StatTile
             size="md"
             label="Day P&L"
-            value={fmtSignedUsd(position.dayPnl)}
-            tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+            value={
+              position.offlineStateUnavailable
+                ? PNL_UNAVAILABLE_LABEL
+                : fmtSignedUsd(position.dayPnl)
+            }
+            tone={
+              position.offlineStateUnavailable
+                ? undefined
+                : Number(position.dayPnl ?? 0) >= 0
+                  ? 'gain'
+                  : 'loss'
+            }
           />
         </div>
       </CardContent>
@@ -895,8 +912,18 @@ function RiskExitPanel({ position }: { position: Position }) {
           <StatTile
             size="md"
             label="Day P&L"
-            value={fmtSignedUsd(position.dayPnl)}
-            tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+            value={
+              position.offlineStateUnavailable
+                ? PNL_UNAVAILABLE_LABEL
+                : fmtSignedUsd(position.dayPnl)
+            }
+            tone={
+              position.offlineStateUnavailable
+                ? undefined
+                : Number(position.dayPnl ?? 0) >= 0
+                  ? 'gain'
+                  : 'loss'
+            }
           />
         </div>
         <dl className="space-y-1.5 text-sm">

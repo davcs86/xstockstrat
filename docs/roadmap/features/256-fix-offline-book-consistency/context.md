@@ -929,3 +929,22 @@ Each item names the step where it is resolved.
   - `golangci-lint` v2.14.0 (go1.27.0 build) reported 0 issues.
 - Next: Step 13 (UI gating on `offlineStateUnavailable`). It is the backend→ui surface boundary, so a checkpoint is
   due.
+
+## Session 2026-10-30 — Steps 13 + 14 (ui service + test, AC-3/AC-4/AC-5)
+
+- Operator decision (session question tool, 2026-10-30): "A: Gate it, drop e2e (Recommended)". Under the standing
+  rule "Merge pairs + standing rule", Steps 13 and 14 are one commit and both are marked done (Deviation Log).
+  `OrderBook.tsx` `PortfolioSummary` is gated, but it is mounted by no route (grep hits only its definition), so its
+  e2e bullet is dropped and `tsc` + lint cover it.
+- `portfolioTotals.ts`: `PNL_UNAVAILABLE_LABEL`, `PortfolioFigures.offlineStateUnavailable` and
+  `PortfolioTotals.incomplete`. A degraded account adds equity/cash/BP but skips the P&L, realized and fee sums.
+- Gated surfaces: PortfolioPanel (single card, combined card, per-account card, with a muted `CardNotice`), the Book
+  page (combined tiles, per-account cards, positions-table Day cell), `/trader/positions` (Day $ and % cells, sheet),
+  `/trader/positions/[symbol]` (header and both Day P&L tiles), and `AccountPortfolioSelector` (selected Day/Total,
+  aggregate Day, with degraded portfolios skipped in the aggregate sum).
+- Tests: a vitest degraded case; 5 `@AC-3` e2e cases in `offline-pnl.spec.ts`; `@AC-4` and `@AC-5` confirm-dialog error
+  cases in `offline-accounts.spec.ts`; two fixtures plus INVENTORY rows (C-12/C-13).
+- TDD: RED was 2 vitest failures and 5 `@AC-3` e2e failures. GREEN: vitest 239/239, the two specs 23/23, and the other
+  affected specs 83/83 (`CI=1` server, Deviation Log). Lint reports 0 errors.
+- Open item: `tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts:135-136`, a file outside this feature.
+- Next: Step 15 (agent pass-through test). It is the ui→agent surface boundary, so a checkpoint is due.

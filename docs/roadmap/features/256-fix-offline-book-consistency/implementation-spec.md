@@ -800,7 +800,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 
 ### Step 13 — service: UI gating on `offlineStateUnavailable` (consumer grep + every P&L surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/portfolioTotals.ts` — modify
@@ -882,7 +882,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 14 — test: UI vitest + Playwright for every gated surface and the confirm-fill error path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/portfolioTotals.test.ts` — modify
@@ -922,7 +922,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
    - `@AC-3` Book page `/trader/portfolio` combined and per-account cards.
    - `@AC-3` positions table and `/trader/positions/AAPL` detail show `P&L unavailable` for the degraded offline
      position while a broker row stays visible.
-   - `@AC-3` OrderBook `PortfolioSummary` (route `GetPortfolio` with the degraded portfolio).
+   - ~~`@AC-3` OrderBook `PortfolioSummary` (route `GetPortfolio` with the degraded portfolio).~~ Dropped
+     (operator, 2026-10-30): `PortfolioSummary` is mounted by no route; see the Deviation Log.
 4. `offline-accounts.spec.ts`: two confirm-dialog error cases — route `CONFIRM_ORDER` to a Connect error
    (`status: 400`, body `{"code":"invalid_argument","message":"filled_avg_price must be a finite number >= 0 when filling"}`)
    → `@AC-4` the dialog stays open and shows that message; and `{"code":"unavailable","message":"positions not published; re-confirm to retry"}`
@@ -1157,3 +1158,24 @@ _Populated by /sdd-execute as implementation proceeds._
   asserts offline P&L under `expectAllAccounts`.
 - Steps 11 + 12 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
   `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-10, reported 0 issues. **Disposition**: CI-equivalent fallback.
+- Steps 13 + 14 (2026-10-30, standing operator rule "Merge pairs + standing rule", plus operator decision "A: Gate it,
+  drop e2e (Recommended)"): the two steps land as **one** lint-green commit with one red→green cycle on Step 14's
+  tests, and both are marked done. Standing rule, quoted: "if this step's Verification fails ONLY because the consumers
+  or tests of its new code live in the immediately following step [...] Execute this step and the next one together as
+  ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done". Step 13 alone breaks the
+  existing `portfolioTotals.test.ts` `toEqual` (new `incomplete` key), which Step 14 updates. Unmounted-component
+  finding: `grep -rn 'PortfolioSummary' services/xstockstrat-ui/src services/xstockstrat-ui/e2e` hits only its own
+  definition (`OrderBook.tsx:98`); `app/trader/page.tsx` mounts `OrderBook`, not `PortfolioSummary`. Its gating
+  (instruction 3) is done and is covered by `tsc --noEmit` and lint only; Step 14's `@AC-3 OrderBook PortfolioSummary`
+  e2e bullet is dropped. No extra files outside both steps' **Files**.
+- Steps 13 + 14 (2026-10-30, implementation detail, no spec change): the degraded card reuses `CardNotice
+  variant="muted"` ("Offline P&L temporarily unavailable") inside the PortfolioPanel single-account card and the
+  combined view's per-account card, as instruction 2 says. Gated values render in `text-muted-foreground` (StatTile
+  `tone` is left unset). Total P/L cells on `/trader/positions` stay as they are: they show `unrealizedPnl`, which the
+  backend does not zero. The `@AC-4` / `@AC-5` confirm-dialog e2e cases pass before and after the change by design
+  (instruction 7: `ConfirmFillDialog` needs no change), so they are non-regression guards.
+- Steps 13 + 14 (2026-10-30, verification method only, no spec change): the host `pnpm dev` harness timed out in the
+  10s warmup project, so Playwright ran with `CI=1` (the CI `pnpm build && pnpm start` server and timeouts) and
+  `--retries=0`. **Disposition**: CI-equivalent fallback. RED: the 5 new `@AC-3` cases failed; GREEN: 23/23 in the two
+  specs plus 83/83 in the other affected specs. `tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts`
+  (`:135-136`), a file this commit does not touch; they are carried as an open item.

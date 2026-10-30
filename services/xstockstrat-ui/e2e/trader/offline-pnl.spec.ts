@@ -4,8 +4,11 @@ import {
   BROKER_ACCOUNT_ALPACA,
   BROKER_ACCOUNT_OFFLINE,
   PORTFOLIO_ALPACA_AC30,
+  PORTFOLIO_OFFLINE_DEGRADED,
   PORTFOLIO_OFFLINE_FULL_PNL,
+  POSITION_MSFT,
   POSITION_OFFLINE_AAPL,
+  POSITION_OFFLINE_AAPL_DEGRADED,
   POSITION_OFFLINE_TSLA_SHORT,
   POSITION_OFFLINE_XYZ,
   POSITION_OFFLINE_ZZZZ,
@@ -32,11 +35,11 @@ async function routeJson(page: Page, path: string, body: unknown) {
   });
 }
 
-async function openOfflinePanel(page: Page) {
+async function openOfflinePanel(page: Page, portfolio: object = PORTFOLIO_OFFLINE_FULL_PNL) {
   await routeJson(page, LIST_ACCOUNTS, {
     accounts: [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE],
   });
-  await routeJson(page, LIST_PORTFOLIOS, { portfolios: [PORTFOLIO_OFFLINE_FULL_PNL] });
+  await routeJson(page, LIST_PORTFOLIOS, { portfolios: [portfolio] });
   await addAuthCookie(page);
   await page.goto('/trader');
   await page.getByRole('combobox').first().click();
@@ -166,5 +169,104 @@ test.describe('Offline account full P&L (feature 240)', () => {
     await expect(page.getByText('+$50.00').first()).toBeVisible();
     await expect(page.getByText('+$200.00').first()).toBeVisible();
     await expect(page.getByText('+10.00%').first()).toBeVisible();
+  });
+});
+
+test.describe('Offline state unavailable (feature 256)', () => {
+  const UNAVAILABLE = 'P&L unavailable';
+
+  test('@AC-3 the trader card shows P&L unavailable, never the zeroed or unrealized-only figure', async ({
+    page,
+  }) => {
+    const card = await openOfflinePanel(page, PORTFOLIO_OFFLINE_DEGRADED);
+    await expect(card.getByText('Day P&L', { exact: true })).toBeVisible({ timeout: 8000 });
+    expect(await statValue(card, 'Day P&L')).toContain(UNAVAILABLE);
+    expect(await statValue(card, 'Total P&L')).toContain(UNAVAILABLE);
+    await expect(card.getByText('Offline P&L temporarily unavailable')).toBeVisible();
+    await expect(card.getByText('+$1,300.00')).toHaveCount(0);
+    await expect(card.getByText('+$0.00')).toHaveCount(0);
+  });
+
+  test('@AC-3 the combined panel shows P&L unavailable; the broker card keeps its Day P&L', async ({
+    page,
+  }) => {
+    await routeJson(page, LIST_ACCOUNTS, {
+      accounts: [
+        { ...BROKER_ACCOUNT_ALPACA, isActive: false },
+        { ...BROKER_ACCOUNT_OFFLINE, isActive: false },
+      ],
+    });
+    await routeJson(page, LIST_PORTFOLIOS, {
+      portfolios: [PORTFOLIO_ALPACA_AC30, PORTFOLIO_OFFLINE_DEGRADED],
+    });
+    await addAuthCookie(page);
+    await page.goto('/trader');
+
+    const summary = page.locator('[data-slot="card"]', { hasText: 'All accounts' });
+    await expect(summary).toBeVisible({ timeout: 8000 });
+    expect(await statValue(summary, 'Day P&L')).toContain(UNAVAILABLE);
+    expect(await statValue(summary, 'Total P&L')).toContain(UNAVAILABLE);
+    const broker = page.locator('[data-slot="card"]', { hasText: 'Alpaca Paper' });
+    expect(await statValue(broker, 'Day P&L')).toContain('+$120.00');
+    const offline = page.locator('[data-slot="card"]', { hasText: 'Offline Book' }).first();
+    expect(await statValue(offline, 'Day P&L')).toContain(UNAVAILABLE);
+  });
+
+  test('@AC-3 the Book page combined and per-account cards and positions table show P&L unavailable', async ({
+    page,
+  }) => {
+    await routeJson(page, LIST_ACCOUNTS, {
+      accounts: [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE],
+    });
+    await routeJson(page, LIST_PORTFOLIOS, {
+      portfolios: [PORTFOLIO_ALPACA_AC30, PORTFOLIO_OFFLINE_DEGRADED],
+    });
+    await routeJson(page, LIST_POSITIONS, {
+      positions: [POSITION_OFFLINE_AAPL_DEGRADED, POSITION_MSFT],
+    });
+    await addAuthCookie(page);
+    await page.goto('/trader/portfolio');
+
+    const offline = page.locator('[data-slot="card"]', { hasText: 'Offline Book' });
+    await expect(offline).toBeVisible({ timeout: 8000 });
+    await expect(offline.getByText(UNAVAILABLE)).toHaveCount(2);
+    const broker = page.locator('[data-slot="card"]', { hasText: 'Alpaca Paper' });
+    await expect(broker.getByText('+$120.00 (+0.30%)')).toBeVisible();
+    // Combined Day + Total tiles, the offline card's Day + Total, and the degraded AAPL row.
+    await expect(page.getByText(UNAVAILABLE)).toHaveCount(5);
+    await expect(positionRow(page, 'AAPL').getByText(UNAVAILABLE)).toBeVisible();
+    await expect(positionRow(page, 'MSFT')).toBeVisible();
+  });
+
+  test('@AC-3 the positions table and detail sheet show P&L unavailable; a broker row stays', async ({
+    page,
+  }) => {
+    await routeJson(page, LIST_ACCOUNTS, { accounts: [BROKER_ACCOUNT_OFFLINE] });
+    await routeJson(page, LIST_POSITIONS, {
+      positions: [POSITION_OFFLINE_AAPL_DEGRADED, POSITION_MSFT],
+    });
+    await addAuthCookie(page);
+    await page.goto('/trader/positions');
+
+    const aapl = positionRow(page, 'AAPL');
+    await expect(aapl).toBeVisible({ timeout: 8000 });
+    await expect(aapl.getByText(UNAVAILABLE)).toHaveCount(2);
+    await expect(aapl.getByText('+$0.00')).toHaveCount(0);
+    await expect(positionRow(page, 'MSFT')).toBeVisible();
+
+    await aapl.getByRole('cell', { name: '100', exact: true }).click();
+    await expect(page.getByRole('dialog').getByText(UNAVAILABLE)).toBeVisible({ timeout: 5000 });
+  });
+
+  test('@AC-3 the position page shows P&L unavailable for the degraded offline position', async ({
+    page,
+  }) => {
+    await routeJson(page, LIST_ACCOUNTS, { accounts: [BROKER_ACCOUNT_OFFLINE] });
+    await routeJson(page, GET_POSITION, POSITION_OFFLINE_AAPL_DEGRADED);
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/AAPL');
+
+    await expect(page.getByText(UNAVAILABLE).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('+$0.00')).toHaveCount(0);
   });
 });
