@@ -3,10 +3,23 @@
 **Status**: `pending`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/251-fix-getpnl-source-service/feature.md`
-**Total Steps**: 13 (plus promotion gate PG-1, outside the step counter)
+**Total Steps**: 13 (Steps 1-3 `superseded` by features 257/263 at the 2026-10-30 re-spec; 10 active; plus promotion gate PG-1, outside the step counter)
 **Feature Branch**: `feature/fix-getpnl-source-service`
 
 ---
+
+## Re-spec 2026-10-30
+
+Re-specced (sdd-execute sequential) against `origin/main-dev` after feature 257 merged (`079870fa`, #1371) and feature
+263 (ledger `ownerOnly`, BFF owner scoping). Step numbers are kept so prior references stay valid. Changes:
+- Steps 1-3 are `superseded`: the ledger keyset `page_token` (by `sequence`, code 3 on a bad token) is already
+  implemented and tested; `ledger-db-test` already exists in CI. 251 makes no ledger or `ci.yml` change.
+- GetPnL already has a fail-closed 1000-row drain (`collectFills`, `ErrLedgerUnavailable`); Step 7 reuses that sentinel
+  (no `ErrRealizedUnavailable`) and adds the canonical source, side resolution and the account-grain sequence fold.
+  Step 6 also migrates feature 257's `portfolio_pnl_paging_test.go` fixtures to side-bearing payloads.
+- UI: the BFF backstop and `isForeignFillEvent` are dropped (feature 263 forces `ownerOnly`); `traderBff.ts` is no
+  longer in Step 11's Files.
+- Step 12 drops the ledger `page_token` edit (already documented); Step 13 drops the 252 context note (252 launched).
 
 ## Execution Summary
 
@@ -95,6 +108,8 @@ therefore does not apply. Any step that touches a `.proto` is a deviation and mu
 
 ## Step Dependencies
 
+- **Re-spec 2026-10-30:** Steps 1-3 are superseded and carry no dependency. Step 6 depends on nothing at runtime.
+  The ledger and `ci.yml` bullets below that mention Steps 1-3, `ledger-pg-test` or 252 are historical.
 - Step 2 requires Step 1. The RED tests import `src/grpc/queryEventsPage.ts`, which Step 1 creates with today's
   semantics, so they fail on behaviour, not on import (design.md §1 "RED").
 - Step 3 requires Step 2 (GREEN target).
@@ -140,201 +155,77 @@ therefore does not apply. Any step that touches a `.proto` is a deviation and mu
 
 ---
 
-### Step 1 — service: extract ledger QueryEvents into a strip-safe `queryEventsPage.ts` (behaviour-preserving)
+### Step 1 — SUPERSEDED: ledger `queryEventsPage.ts` extraction (not needed)
 
-**Status**: `pending`
+**Status**: `superseded`
 **Service**: `xstockstrat-ledger`
-**Files**:
-- `services/xstockstrat-ledger/src/grpc/queryEventsPage.ts` — create
-- `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
+**Files**: none
 
-**Reviewers**: `xstockstrat-ledger` owner — append-only invariant (no deletes or updates), event ordering, hypertable
-partition safety
+**Codebase Evidence** (re-spec 2026-10-30, against `origin/main-dev` after feature 257 merged as `079870fa`):
+- Keyset paging already landed in the ledger via features 257 and 263, so the extraction has no purpose.
+  `queryEvents` is at `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:166-240`.
+  - `InvalidPageTokenError` (`:20`), `toSeq` (`:30`), `parseSequenceToken` (`:39`).
+  - The request token is read at `:170`; a bad token returns `{ code: 3 }` with no query.
+  - `ORDER BY sequence ASC` (`:223`); `QUERY_EVENTS_DEFAULT_PAGE_SIZE` / `QUERY_EVENTS_MAX_PAGE_SIZE` (`:14-15`);
+    `nextPageToken` is the last row's `sequence` (`:233`); the `ownerOnly` predicate is at `:204`.
+  - `rowToEvent` is exported at `:462`.
+- The ledger test runner is now compile-then-test (`package.json`: `tsc && node --test dist/__tests__/*.test.js`;
+  `test:db` runs `dist/__tests__/db/*.test.js`), so a strip-safe module is no longer a constraint.
 
-**Codebase Evidence**:
-- `queryEvents` lives at `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:124-176`.
-  - The predicate builder is at `:126-153`: `stream_key` `:130-132`, `event_type` `:134-137`, `source_service`
-    `:138-141`, `occurred_at` `:143-150`, `sequence >=` `:151-153`.
-  - Limit is `req.page?.pageSize || 100` (`:157`), fetched as limit+1.
-  - The query is `SELECT * FROM ledger.events ${where} ORDER BY recorded_at ASC LIMIT $${p}` (`:162`).
-  - `nextPageToken` = the last `event_id` when `hasMore`; `totalCount: rows.length` (`:171`).
-  - Errors are `callback({ code: 13, message: err.message })` (`:173-174`).
-  - grep `pageToken|page_token` over `services/xstockstrat-ledger/src` finds only the response line, so the
-    request token is never read.
-- `rowToEvent` is exported at `ledgerServiceImpl.ts:364-378` and stays there (overlap with 248, design.md §1).
-- The class uses TS parameter properties (`ledgerServiceImpl.ts:20-25`), so this file cannot load under
-  `--experimental-strip-types` (fails.md:1942-1953). A new module must avoid enums, parameter properties,
-  namespaces and relative runtime imports (`import type` only; fails.md:2239-2241).
-- The strip-loaded test precedent `src/__tests__/mtls.test.ts:13` imports `'../mtls.ts'` with the `.ts` extension.
-  `tsconfig.json` excludes `src/**/*.test.ts`.
-- Callers that send `page_token` (grep 2026-10-21): only portfolio `GetPnL` (`portfolio_service.go:754`, `:799`).
-  - UI `CopilotRail.tsx:65`, `PerformanceDashboard.tsx` and `useReconciliationStatus.ts` send `pageToken: ''`.
-  - Trading `trading.go:2222` and portfolio `HydrateStops` (`portfolio_service.go:534`) send no page.
-
-**TDD**: `red-green required`. This step is the behaviour-preserving extraction the Step 2 RED runs against. RED is
-captured at Step 2, GREEN at Step 3.
+**TDD**: `N/A (superseded)`
 
 **Covers**: —
 
-**Instructions**:
-1. Create `src/grpc/queryEventsPage.ts`. Its only import is `import type { Pool } from 'pg';`. Export:
-   - `queryEventsPage(pool: Pool, req: any): Promise<{ rows: any[]; page: { nextPageToken: string; totalCount: number } }>`.
-     It holds the predicate builder moved verbatim from `ledgerServiceImpl.ts:126-156` and today's SQL from `:162`.
-     It returns the full `page` object exactly as `:171` builds it.
-   - `queryEventsErrorStatus(err: unknown): { code: number; message: string }`. Today it always returns code 13
-     with `err.message`.
-2. Reduce `queryEvents` (`ledgerServiceImpl.ts:124-176`) to a thin delegate:
-   `const { rows, page } = await queryEventsPage(this.pool, call.request); callback(null, { events: rows.map(rowToEvent), page });`
-   inside `try`, with `catch (err) { callback(queryEventsErrorStatus(err)); }`.
-3. Use no enum, parameter property or namespace, and no relative runtime import in `queryEventsPage.ts`.
+**Instructions**: Do not execute. 251 makes no ledger source change. Record the supersession in context.md.
 
-**Verification**:
-```bash
-cd services/xstockstrat-ledger && pnpm run build && pnpm run lint && pnpm run test:coverage
-node --experimental-strip-types -e "import('./src/grpc/queryEventsPage.ts').then(m => { if (typeof m.queryEventsPage !== 'function') process.exit(1) })"
-```
-The strip-load check must exit 0.
+**Verification**: none.
 
 ---
 
-### Step 2 — test: ledger keyset paging RED (unit + real-PG) and the `ledger-pg-test` CI job
+### Step 2 — SUPERSEDED: ledger keyset RED tests and `ledger-pg-test` CI job (already GREEN, job exists)
 
-**Status**: `pending`
+**Status**: `superseded`
 **Service**: `xstockstrat-ledger`
-**Files**:
-- `services/xstockstrat-ledger/src/__tests__/queryEventsPage.test.ts` — create
-- `services/xstockstrat-ledger/src/__tests__/pg/queryEventsKeyset.test.ts` — create
-- `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
-- `.github/workflows/ci.yml` — modify
+**Files**: none
 
-**Reviewers**: `xstockstrat-ledger` owner — append-only invariant (no deletes or updates), event ordering, hypertable
-partition safety
+**Codebase Evidence** (re-spec 2026-10-30):
+- AC-12 is held by `src/__tests__/db/queryPagination.db.test.ts` (`AC-1`, `:110`: the page-token walk returns every
+  seeded row exactly once, ascending, against real TimescaleDB). It is stronger than 251's `(recorded_at, event_id)`
+  ordering, because `sequence` is unique: the recorded_at-tie case cannot occur.
+- AC-13 is held by `src/__tests__/ledgerServiceImpl.test.ts` (bad `page_token` rows at `~:386-396` → code 3 and no
+  query; `@AC-7` omitted-token and `ownerOnly` + token cases nearby).
+- A real-PG CI job already exists: `.github/workflows/ci.yml` `ledger-db-test` (`:705`), wired into `ci-gate`
+  (`:895`, echo `:917`). The planned `ledger-pg-test` job, `queryEventsPage.test.ts` and
+  `pg/queryEventsKeyset.test.ts` do not exist and must not be created: they would be GREEN on arrival, so they can
+  never be a RED.
 
-**Codebase Evidence**:
-- `test:coverage` runs `c8 … --lines 40 node --experimental-strip-types --test src/__tests__/*.test.ts`
-  (`services/xstockstrat-ledger/package.json`). The glob does not descend into `src/__tests__/pg/`, so the real-PG
-  test runs only in the new CI job.
-- `ledgerServiceImpl.test.ts`:
-  - The guarded lazy import is at `:21-29`; the tests skip when the import throws (fails.md:1942).
-  - `makeRow` is at `:88-103` and has no `cursor_us`.
-  - The hasMore case (`:172-187`) asserts only `nextPageToken !== ''` (`:183`).
-  - The totalCount case is at `:208-221`.
-- Hypertable: `recorded_at` partition column, `PRIMARY KEY (event_id, recorded_at)`
-  (`services/xstockstrat-ledger/migrations/001_ledger_events_hypertable.up.sql:22`, `:27-29`). `(recorded_at,
-  event_id)` is therefore unique, which is the cursor-uniqueness argument (insights.md:3547-3549).
-- `appendEvent` stamps `recorded_at` from JS `new Date()` (`ledgerServiceImpl.ts:35`, `:56`), so production rows
-  have ms precision.
-- CI precedents in `.github/workflows/ci.yml`:
-  - `migration-rerun` job at `:633-669`: TimescaleDB service `timescale/timescaledb:latest-pg16` (`:640-653`),
-    migrator image `scripts/Dockerfile.migrate` (`:657-658`), `SEED_USER_ID="00000000-0000-4000-8000-0000000000c1"`
-    (`:667`).
-  - `ci-gate` `needs:` list at `:773-788`, echo block `:792-807`.
-  - `changes` filter `xstockstrat-ledger: ['services/xstockstrat-ledger/**']` (`:60`).
-  - `node-test` Node setup at `:566-580` (pnpm 9.15.9, node 24).
-- `scripts/db-migrate.sh` applies all pending migrations with no argument (`scripts/db-migrate.sh:8-9`).
+**TDD**: `N/A (superseded)`
 
-**TDD**: `red-green required`. RED against the Step 1 extraction, GREEN after Step 3.
+**Covers**: `AC-12, AC-13` are covered by the existing tests above. The AC-12 wording "ordered by recorded_at then
+event_id" is stale (the order is `sequence`); amend it per the Deviation Log.
 
-**Covers**: `AC-12, AC-13`
+**Instructions**: Do not execute.
 
-**Instructions**:
-1. `queryEventsPage.test.ts` is unguarded: a plain top-level
-   `import { queryEventsPage, queryEventsErrorStatus } from '../grpc/queryEventsPage.ts';` with no try/catch. It uses
-   a capturing fake pool `{ query: async (sql, params) => ({ rows }) }`. Assert:
-   - (a) A request with no token emits `ORDER BY recorded_at ASC, event_id ASC` and selects a `cursor_us` column.
-   - (b) With limit+1 rows, `page.nextPageToken` is non-empty and decodes (base64url) to
-     `<last.cursor_us>.<last.event_id>` of the last returned row, not the over-fetched row.
-   - (c) Feeding that token back adds the keyset predicate
-     `recorded_at >= $n AND (recorded_at > $n OR event_id > $m::uuid)`, and the params carry the decoded
-     microseconds and id (AC-12 unit half).
-   - (d) The malformed tokens `'not-base64!'`, a base64url of `'abc'` and a base64url of `'1.notauuid'` make
-     `queryEventsPage` reject, and `queryEventsErrorStatus` of that rejection returns `code: 3` (AC-13).
-   - (e) `queryEventsErrorStatus` maps a PG error with `code` `22007`, `22008` or `22P02` to 3, and anything else
-     to 13.
-   - (f) `page.totalCount` equals the rows returned.
-   - Name each `it` with its `@AC-*`.
-2. `pg/queryEventsKeyset.test.ts`:
-   - If `process.env.LEDGER_PG_TEST_URL` is unset, throw `Error('LEDGER_PG_TEST_URL is required')` at the top
-     level. It fails, it does not skip.
-   - Insert 7 rows into `ledger.events` with one explicit `recorded_at`, a run-unique `source_service`
-     (`pg-test-<uuid>`) and `event_type` `pg.test`. Also insert rows split across two `recorded_at` values a month
-     apart (separate chunks), plus 3 rows sharing one millisecond.
-   - Drain `queryEventsPage(pool, {sourceService, eventType, page: {pageSize: 3, pageToken}})` under an iteration
-     cap of 20.
-   - Assert ≥ 2 pages, each inserted `event_id` exactly once, in `(recorded_at, event_id)` order (AC-12). Assert a
-     malformed token returns `code: 3` through `queryEventsErrorStatus` (AC-13).
-   - Scope every read by the run-unique `source_service`. The ledger's `deny_mutation` trigger blocks cleanup, so
-     isolation comes from the unique source.
-3. `ledgerServiceImpl.test.ts` (B8, design.md §1). `makeRow` (`:88-103`) gains `cursor_us: '1704067200000000'`.
-   The hasMore case (`:172-187`) decodes `resp.page.nextPageToken` and asserts it equals
-   `1704067200000000.<rows[1].event_id>`. Both stay behind `if (!impl) return;` until 252 lands (accepted
-   residual).
-4. `.github/workflows/ci.yml`: add job `ledger-pg-test`.
-   - `needs: changes`; `if:` matched `xstockstrat-ledger` or `ci`.
-   - The `timescaledb` service block is copied from `:640-653`.
-   - Steps: checkout; build `scripts/Dockerfile.migrate`; run `scripts/db-migrate.sh` in the migrator container
-     with `DATABASE_URL=postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable` and the
-     `:667` `SEED_USER_ID`.
-   - Then pnpm/node setup as `node-test` `:566-580`, `pnpm --filter @xstockstrat/proto run build`, and in
-     `services/xstockstrat-ledger` run `node --experimental-strip-types --test src/__tests__/pg/queryEventsKeyset.test.ts`
-     with `LEDGER_PG_TEST_URL` set to the same URL.
-   - Add `ledger-pg-test` to `ci-gate.needs` (`:773-788`) and an echo line in `:792-807`.
-
-**Verification**:
-```bash
-cd services/xstockstrat-ledger && pnpm run lint
-node --experimental-strip-types --test src/__tests__/queryEventsPage.test.ts   # RED now (Step 1 semantics); GREEN after Step 3
-node --experimental-strip-types --test src/__tests__/pg/queryEventsKeyset.test.ts; test $? -ne 0   # unset URL → fails, not skips
-cd ../.. && grep -n "ledger-pg-test" .github/workflows/ci.yml   # job key, ci-gate needs entry, echo line (≥ 3 hits)
-```
-CI `ledger-pg-test` on the step PR: RED at this step (page 2 repeats page 1), GREEN after Step 3. The coverage
-threshold (`c8 --lines 40`) is enforced at paired GREEN Step 3, not here.
+**Verification**: none (the existing `pnpm run test:coverage` and the `ledger-db-test` CI job already run).
 
 ---
 
-### Step 3 — service: ledger keyset `page_token` (FR-5)
+### Step 3 — SUPERSEDED: ledger keyset `page_token` (FR-5) (already implemented)
 
-**Status**: `pending`
+**Status**: `superseded`
 **Service**: `xstockstrat-ledger`
-**Files**:
-- `services/xstockstrat-ledger/src/grpc/queryEventsPage.ts` — modify
+**Files**: none
 
-**Reviewers**: `xstockstrat-ledger` owner — append-only invariant (no deletes or updates), event ordering, hypertable
-partition safety
+**Codebase Evidence** (re-spec 2026-10-30): see Step 1. The keyset `page_token` (opaque `sequence`, code 3 on a
+malformed token) is in `ledgerServiceImpl.ts:166-240`, and ledger `CLAUDE.md:49` already documents it.
 
-**Codebase Evidence**:
-- The Step 1 module (`src/grpc/queryEventsPage.ts`) holds today's SQL (`ledgerServiceImpl.ts:162` moved).
-- `PageRequest.page_token` arrives as `req.page.pageToken` (the request shape `req.page?.pageSize`,
-  `ledgerServiceImpl.ts:157`). `QueryEventsRequest.page = 5` (`packages/proto/ledger/v1/ledger.proto:65`).
-- `rowToEvent` (`ledgerServiceImpl.ts:364-378`) maps named columns only, so an extra `cursor_us` column is ignored.
+**TDD**: `N/A (superseded)`
 
-**TDD**: `red-green required`. GREEN for Step 2.
+**Covers**: `AC-12, AC-13` (via existing tests; see Step 2)
 
-**Covers**: `AC-12, AC-13`
+**Instructions**: Do not execute.
 
-**Instructions**:
-1. SELECT `*, (extract(epoch from recorded_at) * 1000000)::bigint AS cursor_us`, then
-   `ORDER BY recorded_at ASC, event_id ASC`.
-2. Cursor: opaque base64url of `<cursor_us>.<event_id>`, built from the last returned row.
-   - Decode a request `page.pageToken`: base64url → split on the first `.`. Require an integer microsecond string
-     (`/^\d+$/`) and a UUID-shaped id; else throw an exported `class InvalidPageTokenError extends Error`.
-   - Append `recorded_at >= $ts AND (recorded_at > $ts OR event_id > $id::uuid)`, where
-     `$ts = 'epoch'::timestamptz + $us * interval '1 microsecond'`. Never use `to_timestamp(double)`.
-3. Encoding: if `cursor_us` is missing or not a decimal string, throw a plain `Error`, which maps to 13.
-4. `queryEventsErrorStatus`: `InvalidPageTokenError`, PG `22007`, `22008` and `22P02` map to code 3. Anything else
-   maps to 13.
-5. Keep the module strip-safe (Step 1 constraint 3).
-
-**Verification**:
-```bash
-cd services/xstockstrat-ledger && pnpm run build && pnpm run lint && pnpm run test:coverage
-node --experimental-strip-types --test src/__tests__/queryEventsPage.test.ts   # GREEN
-```
-- CI `ledger-pg-test` must be GREEN.
-- Record a one-off compiled run in context.md as evidence, not a CI guard (design.md §1 B8): a scratch tsconfig
-  excluding `mtls.test.ts` and `queryEventsPage.test.ts`, then `tsc -p`, a `node -e` import of the compiled impl, and
-  `node --test` on the compiled `ledgerServiceImpl.test.js`. Record pass or fail (design.md Open Risks: unverified
-  against the ledger's module settings).
+**Verification**: none.
 
 ---
 
@@ -348,32 +239,32 @@ node --experimental-strip-types --test src/__tests__/queryEventsPage.test.ts   #
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only
 dev invariant, position limit enforcement
 
-**Codebase Evidence**:
-- Fill emits live in `applyBrokerOrderStatus` (`services/xstockstrat-trading/internal/service/trading.go:1772`):
-  - `order.filled` at `:1805-1812`: keys `order_id`, `symbol`, `qty`, `fill_price`, `user_id`, `trading_mode`,
+**Codebase Evidence** (re-grepped 2026-10-30):
+- Fill emits live in `applyBrokerOrderStatus` (`services/xstockstrat-trading/internal/service/trading.go:1799`):
+  - `order.filled` at `:1832`: keys `order_id`, `symbol`, `qty`, `fill_price`, `user_id`, `trading_mode`,
     `account_id`, `fees`. No `side`.
-  - `order.partially_filled` at `:1822-1829`, with `filled_qty`.
-  - Both are fired with `go s.emitLedgerEvent(...)`.
-- `emitLedgerEvent` (`:3661-3674`) stamps `SourceService: "xstockstrat-trading"` (`:3667`) and
-  `StreamKey: streamKey` (`:3668`, the bare `order.OrderId`).
-- Drive path: `reconcileNotCancelable` (`:1381-1395`) calls `applyBrokerOrderStatus` at `:1394`.
-  - Fixture `notCancelableSvc` (`trading_cancel_not_cancelable_test.go:22-35`) builds order `ord-1`, `Qty: 10` on
-    `acct-1` (ALPACA), with `ledger: &fakeLedgerClient{}`.
-  - Driver precedent `TestCancelOrder_NotCancelable_BrokerFilled_AdoptsFillNotCanceled` (`:39-73`).
-  - Broker status string `"partially_filled"` (`trading.go:3636`; precedent `trading_order_race_test.go:17`).
-- Recorder: `recordingLedger` / `requestsByType` (`trading_offline_test.go:60-94`).
-- Async wait precedent: `waitForAlert` (`trading_bracket_test.go:397-408`).
-- `trading_fees_test.go:20-50` and `trading_ledger_userid_test.go:23` copy the payload map by hand, so they cannot
-  catch a producer regression (recon.md Patterns to REUSE). They are not extended.
+  - `order.partially_filled` at `:1849`, with `filled_qty`, the same other keys and no `side`.
+  - Both are fired with `go s.emitLedgerEvent(context.WithoutCancel(ctx), …)`.
+- `emitLedgerEvent` (`:3743`) stamps `SourceService: "xstockstrat-trading"` (`:3749`) and `StreamKey: streamKey` (the
+  bare `order.OrderId`). The other `"xstockstrat-trading"` literals (`:1970`, `:2222`, `:2824`, `:3136`, `:3419`) are
+  direct `AppendEvent` sites, not fill payloads.
+- `order.created` (`:680-681`) and `order.submitted` (`:696-697`) already carry `"side": order.Side.String()`.
+- Drive path (symbols verified to exist): `notCancelableSvc` (`trading_cancel_not_cancelable_test.go:22`) with
+  `reconcileNotCancelable` calling `applyBrokerOrderStatus`; driver precedent
+  `TestCancelOrder_NotCancelable_BrokerFilled_AdoptsFillNotCanceled`; `recordingLedger` (`trading_offline_test.go:60`)
+  and `requestsByType` (`:84`); `waitForAlert` (`trading_bracket_test.go:397`); `ctxAsUser`
+  (`trading_ownership_test.go:21`).
+- `trading_fees_test.go` and `trading_ledger_userid_test.go` copy the payload map by hand, so they cannot catch a
+  producer regression. They are not extended.
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-10` (and durable platform @AC-10 @feature-029: `fees` kept)
 
 **Instructions**:
-1. Add `TestFillEmit251_AC10_CarriesSideSourceAndFees`, table-driven over
-   `{"filled", 10, "order.filled", "qty"}` and `{"partially_filled", 4, "order.partially_filled", "filled_qty"}`.
-   Each row:
+1. `trading_fill_side_test.go` is absent (verified). Add `TestFillEmit251_AC10_CarriesSideSourceAndFees`,
+   table-driven over `{"filled", 10, "order.filled", "qty"}` and
+   `{"partially_filled", 4, "order.partially_filled", "filled_qty"}`. Each row:
    - Build `svc, order := notCancelableSvc(fb, nil)`, set `order.Side = tradingv1.OrderSide_ORDER_SIDE_SELL` and
      `order.Symbol = "AAPL"`, and replace `svc.ledger` with `rec := &recordingLedger{}`.
    - The `fb.getOrderFn` returns the row's status and `FilledQty`.
@@ -381,9 +272,9 @@ dev invariant, position limit enforcement
    - Poll `rec.requestsByType(eventType)` for up to 2s (the `waitForAlert` shape) until one request appears.
    - Assert `SourceService == "xstockstrat-trading"` (the trading half of the Step 6 parity test) and
      `StreamKey == "ord-1"`.
-   - Assert the payload `side == "ORDER_SIDE_SELL"`, the row's qty key equals the unsigned value, and the `fees`
-     key is present.
-2. C-13: the order literal comes from `notCancelableSvc` (existing). The test adds no second inline domain literal.
+   - Assert the payload `side == "ORDER_SIDE_SELL"`, the row's qty key equals the unsigned value, and the `fees` key
+     is present.
+2. C-13: the order literal comes from `notCancelableSvc`. The test adds no second inline domain literal.
 
 **Verification**:
 ```bash
@@ -391,7 +282,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run T
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "func notCancelableSvc" --include="*_test.go" internal/service   # 1 declaration site (C-13)
 ```
-The coverage threshold (≥ 40%, CI `ci.yml:256-257` shape) is enforced at paired GREEN Step 5, not here.
+The coverage threshold (≥ 40%) is enforced at paired GREEN Step 5, not here.
 
 ---
 
@@ -405,26 +296,24 @@ The coverage threshold (≥ 40%, CI `ci.yml:256-257` shape) is enforced at paire
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, broker API safety, fill detection, paper-only
 dev invariant, position limit enforcement
 
-**Codebase Evidence**:
-- `trading.go:1805-1812` and `:1822-1829` (fill payload maps). `order` is `*tradingv1.Order` (`:1772`), so
-  `order.Side` is in scope.
-- `order.created` and `order.submitted` already emit `"side": order.Side.String()` (`:650`, `:666`).
-- Trading-domain constraints (`step-constraints.md` §A):
-  - Broker coverage: fills reach the ledger only via `applyBrokerOrderStatus` for ALPACA and IBKR alike (callers
-    `pollFills` `:1713`/`:1766`, `reconcileNotCancelable` `:1394`). OFFLINE accounts never emit fills
-    (`:1715-1721`).
-  - Fill state: both `FILLED` and `PARTIALLY_FILLED` branches are changed.
-  - Order type, trading-mode gate and order placement are unaffected (no `PlaceOrder` path is touched).
+**Codebase Evidence** (re-grepped 2026-10-30):
+- `trading.go:1832` (`order.filled`) and `:1849` (`order.partially_filled`) payload maps, inside the `switch newStatus`
+  of `applyBrokerOrderStatus` (`:1799`). `order` is `*tradingv1.Order`, so `order.Side` is in scope.
+- `order.created` / `order.submitted` already emit `"side": order.Side.String()` (`:681`, `:697`); the other
+  `order.Side.String()` hit at `:872` is not a fill payload.
+- Trading-domain constraints (`step-constraints.md` §A): fills reach the ledger only via `applyBrokerOrderStatus` for
+  ALPACA and IBKR alike; OFFLINE accounts never emit fills; both `FILLED` and `PARTIALLY_FILLED` branches change; no
+  `PlaceOrder` path is touched.
 
 **TDD**: `red-green required`. GREEN for Step 4.
 
 **Covers**: —
 
 **Instructions**:
-1. In both branches, lift the payload map to a local `payload := map[string]interface{}{…}` (keys unchanged,
-   `fees` kept). Then `if order.Side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED { payload["side"] = order.Side.String() }`,
-   then `go s.emitLedgerEvent(context.Background(), "<type>", order.OrderId, order.UserId, payload)`.
-2. `emitLedgerEvent` (`:3661`) stays unchanged. Persisted `filled_qty` and the reconciliation path are untouched
+1. In both branches, lift the payload map to a local `payload := map[string]interface{}{…}` (keys unchanged, `fees`
+   kept). Then `if order.Side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED { payload["side"] = order.Side.String() }`,
+   then `go s.emitLedgerEvent(context.WithoutCancel(ctx), "<type>", order.OrderId, order.UserId, payload)`.
+2. `emitLedgerEvent` (`:3743`) stays unchanged. Persisted `filled_qty` and the reconciliation path are untouched
    (trading `@AC-1` @feature-206 PRESERVE).
 
 **Verification**:
@@ -432,14 +321,13 @@ dev invariant, position limit enforcement
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run 'TestFillEmit251_AC10|TestCancelOrder_NotCancelable|TestFillEmitsCarryBrokerFees' -race -count=1
 export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n '"side"' internal/service/trading.go   # hits at the two fill emits plus :650, :666
+grep -n '"side"' internal/service/trading.go   # the two fill emits plus the pre-existing :681, :697, :872
 ```
-New logic is in the `service` package, which is excluded from COVERPKGS, so the total is unaffected. The Step 4 test
-is the gate.
+New logic is in the `service` package, excluded from COVERPKGS; the Step 4 test is the gate.
 
 ---
 
-### Step 6 — test: portfolio ledger fake, test shim and RED GetPnL fold tests
+### Step 6 — test: portfolio ledger fake, test shim, 257 test migration and RED GetPnL fold tests
 
 **Status**: `pending`
 **Service**: `xstockstrat-portfolio`
@@ -448,128 +336,102 @@ is the gate.
 - `services/xstockstrat-portfolio/internal/service/export_test.go` — create
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — modify
 - `services/xstockstrat-portfolio/internal/service/getpnl_source_parity_test.go` — create
+- `services/xstockstrat-portfolio/internal/service/portfolio_pnl_paging_test.go` — modify (feature 257 tests)
 
 **Reviewers**: `xstockstrat-portfolio` owner — P&L calculation accuracy, position snapshot consistency, concurrent write
 safety
 
-**Codebase Evidence**:
-- Go fixture home `internal/testdata/` holds `marks.go` and `offline_pnl.go`. `offline_pnl.go` imports only
-  protobuf, marketdatav1 and `internal/marketsession`, never `internal/service`; it is the no-cycle precedent.
-- `newQuoteSvc` (`internal/service/portfolio_quote_deadline_test.go:93-112`) builds `PortfolioService{repo, marketdata,
-  ledger: &fakeLedger{}, subs}` over `pgxmock` with `MatchExpectationsInOrder(false)`.
-- `guard` is at `:70-82` (5s hang guard). `posRow` (`:84-87`); `pnlRows` (`:263-266`).
-- `TestGetPnL_AC5_QuotesUnavailable` (`:268-291`, feature 229) and `TestGetPnL_AC6_BrokerValuedWithoutQuoteFetch`
-  (`:293-306`) are the GetPnL tests in this file. Positions are mocked via
-  `mock.ExpectQuery(\`FROM portfolio.positions\`).WithArgs(anyArgs(3)...)`.
-- `anyArgs` is at `portfolio_fill_errors_test.go:36`, `positionCols` at `:45`, and in-package `fillEvent` at `:24`.
-  `fillEvent` is the live-fold shape and stays inline (design.md §6A).
-- `fakeLedger` (`watchlist_service_test.go:254-272`): its `QueryEvents` ignores the request (`:269-271`).
-  `ctxWithUser` is at `:280-292`, `newFakeStore` at `:37`, `wideCaps` at `:362`.
-- `stopLedger` (`portfolio_risk_test.go:143-150`) returns `f.events` regardless of request. It is reviewed and
-  unchanged.
-- `stubMarketData` (`portfolio_service_test.go:18`). A zero-value `&stubMarketData{}` answers `GetLatestQuotes` with
-  no quotes (`:53-63`).
-- `LedgerEvent.sequence = 9` is global-monotonic (`packages/proto/ledger/v1/ledger.proto:33`).
-  `QueryEventsRequest.time_range = 4` and `from_sequence = 6` (`:64`, `:66`).
-- Fake behaviours to mirror:
-  - filter-only-when-set (`ledgerServiceImpl.ts:130-141`);
-  - recorded_at slice order (`:162`);
-  - PageSize 0 → 100 (`:157`);
-  - `Unimplemented` for unsupported fields (fails.md:577).
-- Producer stream keys are bare order ids (`trading.go:649`, `:1805`). The producer source literal is at
-  `trading.go:3667`.
-- AC-name convention: `TestGetPnL_AC5_*` (`portfolio_quote_deadline_test.go:268`). 251's tests use the `251`
-  qualifier so they do not collide with feature 229's `AC5`/`AC6`.
+**Codebase Evidence** (re-grepped 2026-10-30; GetPnL already changed on `main-dev` by feature 257):
+- `testdata/ledger.go`, `export_test.go`, `getpnl_source_parity_test.go` are absent (verified). `internal/testdata/`
+  holds `marks.go` and `offline_pnl.go`; `offline_pnl.go` never imports `internal/service` (no-cycle precedent).
+- Current GetPnL: `portfolio_service.go:726-790`, two `collectFills` passes (`:796`) at `ledgerPnLPageSize = 1000`
+  (`:793`) with `SourceService: "trading"` (`:802`, the bug) and fail-closed errors (`ErrLedgerUnavailable`, `:722`;
+  `ErrQuotesUnavailable`, `:718`). `HydrateStops` is at `:530`. `orderFillPayload` is at `:245`.
+- Feature 257's `portfolio_pnl_paging_test.go` (`TestGetPnL_AC3_*`, `AC4_*`, `AC6_*`) has its own `pagingLedger`
+  (offset tokens, 200-row pages, ignores `SourceService` / `StreamKey`) and `pnlEvent` (no `side`; sells carry a
+  signed `qty` / `filled_qty`). After Step 7, side-less fills are unattributable and the qty is unsigned plus `side`,
+  so these tests must migrate here. They are the existing proof for AC-9 (multi-page fold-once) and the
+  repeated-token row of AC-8.
+- `newQuoteSvc` (`portfolio_quote_deadline_test.go:93`), `guard` (`:70`), `posRow` (`:84`), `pnlRows` (`:263`),
+  `TestGetPnL_AC5_QuotesUnavailable` (`:268`), `TestGetPnL_AC6_BrokerValuedWithoutQuoteFetch` (`:293`); `anyArgs`
+  (`portfolio_fill_errors_test.go:36`), `positionCols`, in-package `fillEvent` (`:24`); `fakeLedger`
+  (`watchlist_service_test.go:254`), `ctxWithUser` (`:280`), `newFakeStore` (`:37`), `wideCaps` (`:362`), `stopLedger`
+  (`portfolio_risk_test.go:143`); `stubMarketData` (`portfolio_service_test.go`).
+- `LedgerEvent.sequence = 9` is global-monotonic; `QueryEventsRequest.time_range = 4`, `from_sequence = 6`
+  (`packages/proto/ledger/v1/ledger.proto`). The ledger paginates by `sequence` (opaque token, code 3 on a bad one) and
+  clamps the page at 1000.
+- Producer stream keys are bare order ids; the producer source literal is `trading.go:3749`.
+- AC-name convention: 251's tests use the `251` qualifier (`TestGetPnL251_AC<n>_…`) so they do not collide with the
+  `AC3..AC6` names of 229/257.
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-1, AC-2, AC-4, AC-5, AC-6, AC-8, AC-9, AC-11, AC-14, AC-15, AC-16, AC-17, AC-18`
 
 **Instructions**:
-1. **`internal/testdata/ledger.go`** (A, design.md §6A). It imports only ledgerv1, commonv1, grpc, status/codes and
-   structpb, never `internal/service`.
+1. **`internal/testdata/ledger.go`** (design.md §6A). Imports only ledgerv1, commonv1, grpc, status/codes, structpb.
    - `const TradingSourceService = "xstockstrat-trading"`.
-   - `type Ledger struct { ledgerv1.LedgerServiceClient; Events []*ledgerv1.LedgerEvent; OnQuery func(ctx context.Context, req *ledgerv1.QueryEventsRequest) error; calls atomic.Int64 }`
-     plus `Calls() int64` and a `Requests()` accessor (mutex-guarded slice of received requests, for the
-     zero-lookup and 2-call assertions).
-   - `AppendEvent` is a no-op returning `&ledgerv1.AppendEventResponse{}`.
-   - `QueryEvents` order:
-     1. Increment calls and record the request.
-     2. If `req.TimeRange != nil || req.FromSequence != 0`, return `status.Error(codes.Unimplemented, …)`.
-     3. If `OnQuery` is non-nil and returns an error, return it.
-     4. If `ctx.Err() != nil`, return `status.FromContextError(ctx.Err()).Err()`.
-     5. Filter `EventType` / `SourceService` / `StreamKey` only when set.
-     6. Keep slice order.
-     7. PageSize 0 → 100. Paginate with the fake's own opaque token (an offset string). A malformed token returns
-        `codes.InvalidArgument`.
-   - Builders: `FilledEvent(seq int64, orderID, userID, symbol, accountID, mode string, qty, price float64, side string) *ledgerv1.LedgerEvent`.
-     `side == ""` omits the key. It mirrors the `trading.go:1805-1812` keys with StreamKey = orderID and
-     SourceService `TradingSourceService`.
-     - `PartialEvent(...)` takes the same arguments with `filled_qty`.
-     - `CreatedEvent(seq, orderID, symbol, side string, qty float64)` mirrors `trading.go:649-652`: no `order_id`,
-       no `user_id` key.
-2. **`internal/service/export_test.go`** (B, design.md §6B), `package service`.
-   - Carry a 2-line constraint comment: an in-package `_test.go` must never import `internal/handler` (import
-     cycle); `service_test` files use this shim instead.
-   - `type WirePosition struct { Symbol, Account string; Qty, Avg, Current float64 }`.
-   - `func NewWireTestService(t *testing.T, ledger ledgerv1.LedgerServiceClient, positions ...WirePosition) *PortfolioService`:
-     - start from `newQuoteSvc(t, &stubMarketData{}, 0)` and set `svc.ledger = ledger`,
-       `svc.watchlists = newFakeStore()`, `svc.wlCfg = wideCaps()`;
-     - always register `mock.ExpectQuery(\`FROM portfolio.positions\`).WithArgs(anyArgs(3)...)` returning `posRow`
-       rows for `positions`. With none, it returns an empty `positionCols` row set.
-   - `var CtxWithUser = ctxWithUser` and `var Guard = guard`. No source-service export: the parity test (item 3)
-     is in-package and no `service_test` file consumes one (C-18).
-   - Reviewed-unchanged literals: `portfolio_quote_deadline_test.go:102`, `portfolio_fill_errors_test.go:64`,
-     `watchlist_service_test.go:276`, plus `fakeLedger` / `stopLedger` / `fillEvent`.
+   - `type Ledger struct { ledgerv1.LedgerServiceClient; Events []*ledgerv1.LedgerEvent; OnQuery func(ctx context.Context, req *ledgerv1.QueryEventsRequest) error; … }`
+     with `Calls() int64` and `Requests()` (mutex-guarded copy of received requests, for the zero-lookup assertions).
+   - `AppendEvent` is a no-op. `QueryEvents`: record the request; `Unimplemented` when `req.TimeRange != nil ||
+     req.FromSequence != 0`; run `OnQuery`; return `status.FromContextError` when `ctx.Err() != nil`; filter
+     `EventType` / `SourceService` / `StreamKey` only when set; keep slice order; PageSize 0 → 100 and clamp to 1000;
+     paginate with an offset token; a malformed token → `codes.InvalidArgument`.
+   - Builders `FilledEvent(seq int64, orderID, userID, symbol, accountID, mode string, qty, price float64, side string)`
+     (`side == ""` omits the key; StreamKey = orderID; SourceService `TradingSourceService`), `PartialEvent(...)` with
+     `filled_qty`, and `CreatedEvent(seq, orderID, symbol, side string, qty float64)` mirroring `order.created`
+     (`trading.go:680`: no `order_id`, no `user_id` key).
+2. **`internal/service/export_test.go`** (`package service`, 2-line constraint comment: an in-package `_test.go` must
+   never import `internal/handler`). `WirePosition`, `NewWireTestService(t, ledger, positions...)` (based on
+   `newQuoteSvc(t, &stubMarketData{}, 0)`, setting `svc.ledger`, `svc.watchlists = newFakeStore()`,
+   `svc.wlCfg = wideCaps()`, always registering the `FROM portfolio.positions` expectation), `var CtxWithUser =
+   ctxWithUser`, `var Guard = guard`.
 3. **`getpnl_source_parity_test.go`**: `TestGetPnL251_SourceServiceParity` asserts
-   `tradingSourceService == testdata.TradingSourceService == "xstockstrat-trading"`. The comment cites the producer
-   at `services/xstockstrat-trading/internal/service/trading.go:3667`; the trading half is Step 4 (fails.md:1700-1712).
-4. **Fold tests** in `portfolio_quote_deadline_test.go` (D, design.md §6D). Each builds
-   `NewWireTestService(t, &testdata.Ledger{Events: …})`, calls `svc.GetPnL(CtxWithUser(t, "u-1"), req)` under
-   `guard`, and is named `TestGetPnL251_AC<n>_…`:
-   - **AC-1**: `CreatedEvent` buy/sell siblings plus side-less `FilledEvent` buy 10@100 and sell 10@150 →
-     `RealizedPnl == 500`.
-   - **AC-2**: buy filled 10@100; sell `PartialEvent` filled_qty 4@150; no sell `order.filled` → 200.
-   - **AC-4**: side-less fill, no sibling → `errors.Is(err, ErrFillUnattributable)` and a nil response.
-   - **AC-5**: u-1 fills carry `side`; u-2's orphan side-less fill is present → 500, and no recorded request has
+   `tradingSourceService == testdata.TradingSourceService == "xstockstrat-trading"`. The comment cites the producer at
+   `trading.go:3749`; the trading half is Step 4.
+4. **Migrate feature 257's tests** in `portfolio_pnl_paging_test.go`: `pnlEvent` gains a `side` argument and carries an
+   unsigned `qty` / `filled_qty`; `alternatingFills`, the `AC6` partials (sell side, positive cumulative) and the `AC4`
+   rows set `side`. Expected results are unchanged (250.00, 501.00). The `PageSize == 1000` assertion stays. Do not
+   merge `pagingLedger` into `testdata.Ledger`: it needs no stream-key lookups, and the migration is the smaller diff.
+5. **Fold tests** in `portfolio_quote_deadline_test.go` (design.md §6D), each `NewWireTestService(t, &testdata.Ledger{Events: …})`
+   → `svc.GetPnL(CtxWithUser(t, "u-1"), req)` under `guard`, named `TestGetPnL251_AC<n>_…`:
+   - **AC-1** side-less fills with `CreatedEvent` siblings (buy 10@100, sell 10@150) → 500.
+   - **AC-2** buy filled 10@100; sell `PartialEvent` filled_qty 4@150; no sell `order.filled` → 200.
+   - **AC-4** side-less fill, no sibling → `errors.Is(err, ErrFillUnattributable)` and a nil response.
+   - **AC-5** u-1 fills carry `side`; u-2's orphan side-less fill is present → 500, and no recorded request has
      `StreamKey == "o-u2"`.
-   - **AC-6**: `OnQuery` errors on the 2nd call while the first page carries a token →
-     `errors.Is(err, ErrRealizedUnavailable)`.
-   - **AC-8**: three sub-tests, each `ErrRealizedUnavailable`: a repeated token, a repeated event_id across pages,
-     and an empty page carrying a token. Each uses an `OnQuery`-free custom `ledgerv1.LedgerServiceClient` stub
-     inline (scenario one-off, C-13 exempt).
-   - **AC-9** (drain): 501 `FilledEvent`s with `side` and PageSize 500 (`portfolio_service.go:754`). Each fill is
-     folded once: 250 buy 1@100 interleaved with 250 sell 1@101, plus one extra buy, so the expected realized is
-     exact. The call terminates under `Guard`, and exactly 2 `order.filled` QueryEvents calls are made.
-   - **AC-11**: payload-`side` fills, no siblings → 500, and no recorded request has a non-empty `StreamKey`.
-   - **AC-14**: acct-1 buy 10@100, acct-2 buy 10@120, acct-1 sell 10@150 → 500 (a symbol-only fold gives 400).
-   - **AC-15**: AAPL fills with `account_id` "acct-1" and "" → `ErrFillUnattributable`.
-   - **AC-16**, F1: filled buy 10@100 (seq 1), partial-only sell 4@150 (seq 2), filled buy 10@200 (seq 3) → 200.
-   - **AC-16**, F2: partial-only A buy 10@100 (seq 1), S sell 4@150 (seq 2), B buy 10@200 (seq 3). Events slice
-     order A,B,S, a fresh shim plus fake per iteration, and exactly 200 on all 20 runs. Carry the F2 risk text
-     verbatim from design.md §6D as the test comment's constraint (≤ 2 lines, cite design.md:168-171).
-   - **AC-17**: sell partial 4@150 then sell filled 10@150 → 500.
-   - **AC-18**: paper round trip plus a LIVE sell 10@300, with `GetPnLRequest{TradingMode: TRADING_MODE_PAPER}` →
-     500.
-5. Existing `TestGetPnL_AC5_QuotesUnavailable` / `TestGetPnL_AC6_*` keep `newQuoteSvc` and `fakeLedger` unchanged
-   and must stay green (240 overlap, context.md overlap findings).
-6. C-13 verdict: the fill/order builders have ≥ 2 consumers (this step plus Step 8), so they live in `testdata`.
-   AC-8's replay stubs are single-consumer scenario one-offs and stay inline.
+   - **AC-6** `OnQuery` errors on the 2nd call while the first page carries a token → `errors.Is(err, ErrLedgerUnavailable)`
+     (the 257 sentinel is reused; no new sentinel).
+   - **AC-8** (delta over 257's repeated-token test): two sub-tests, each `ErrLedgerUnavailable` — an event_id already
+     returned on an earlier page, and an empty page that still carries a next token. Inline one-off stubs.
+   - **AC-9**: covered by the migrated `TestGetPnL_AC3_FoldsEachFillOnceAcrossPages` (501 fills over 200-row pages,
+     folded once). The scenario text "pages of 500 / exactly 2 calls" is stale: the page size is 1000 (257).
+   - **AC-11** payload-`side` fills, no siblings → 500, and no recorded request has a non-empty `StreamKey`.
+   - **AC-14** acct-1 buy 10@100, acct-2 buy 10@120, acct-1 sell 10@150 → 500 (a symbol-only fold gives 400).
+   - **AC-15** AAPL fills with `account_id` "acct-1" and "" → `ErrFillUnattributable`.
+   - **AC-16** F1: filled buy 10@100 (seq 1), partial-only sell 4@150 (seq 2), filled buy 10@200 (seq 3) → 200. F2:
+     partial-only A buy 10@100 (seq 1), S sell 4@150 (seq 2), B buy 10@200 (seq 3), slice order A,B,S, fresh shim per
+     iteration, 200 on all 20 runs; the F2 risk text from design.md §6D goes in a ≤ 2-line comment.
+   - **AC-17** sell partial 4@150 then sell filled 10@150 → 500.
+   - **AC-18** paper round trip plus a LIVE sell 10@300, `TradingMode: TRADING_MODE_PAPER` → 500.
+6. Existing `TestGetPnL_AC5_*` / `AC6_*` keep `newQuoteSvc` and `fakeLedger` and stay green.
+7. C-13: `FilledEvent` / `PartialEvent` / `CreatedEvent` have ≥ 2 consumers (this step plus Step 8) → `testdata`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go vet ./internal/testdata/   # explicit path: ./... skips testdata
-GOWORK=off go test ./internal/service/ -run 'TestGetPnL251' -race -count=1   # RED: compile (tradingSourceService, ErrFillUnattributable, ErrRealizedUnavailable undefined) then behaviour (realized 0)
-GOWORK=off golangci-lint run --modules-download-mode=mod   # does not lint internal/testdata (testdata dirs skipped)
-grep -rn "func FilledEvent\|func PartialEvent\|func CreatedEvent" --include="*.go" internal/   # exactly 1 declaration site each (internal/testdata/ledger.go)
+GOWORK=off go test ./internal/service/ -run 'TestGetPnL251' -race -count=1   # RED: compile (tradingSourceService, ErrFillUnattributable undefined) then behaviour
+GOWORK=off golangci-lint run --modules-download-mode=mod
+grep -rn "func FilledEvent\|func PartialEvent\|func CreatedEvent" --include="*.go" internal/   # 1 declaration site each
 ```
-- The compile RED fails the whole `internal/service` test package until Step 7; say so in the step PR description
-  (P-06/F-05).
-- The coverage threshold (≥ 40%) is enforced at paired GREEN Step 7, not here.
+- The compile RED fails the whole `internal/service` test package until Step 7; say so in the step description
+  (P-06/F-05). The coverage threshold is enforced at paired GREEN Step 7.
+- Amend `acceptance.feature` AC-9 (page size 1000) and AC-12 (ordered by sequence) in separate single-file commits
+  before this step's implementation commit (Deviation Log).
 
 ---
 
-### Step 7 — service: GetPnL fail-closed drain, side resolution, account-grain sequence-ordered fold
+### Step 7 — service: GetPnL canonical source, side resolution, account-grain sequence-ordered fold
 
 **Status**: `pending`
 **Service**: `xstockstrat-portfolio`
@@ -579,79 +441,57 @@ grep -rn "func FilledEvent\|func PartialEvent\|func CreatedEvent" --include="*.g
 **Reviewers**: `xstockstrat-portfolio` owner — P&L calculation accuracy, position snapshot consistency, concurrent write
 safety
 
-**Codebase Evidence**:
-- `GetPnL` is at `portfolio_service.go:722-853`.
-  - Pass 1 (`:749-790`): the literal `SourceService: "trading"` is at `:753` (`:752` is `EventType`), and the query
-    error is silenced with `slog.Warn` + `break` (`:756-759`).
-  - User filter `:772`; mode filter `:775-783`; `filledOrderIDs[fill.OrderID] = true` (`:784`); unsigned
-    `Qty: fill.Qty` (`:785`).
-  - Pass 2 (`:793-835`): literal at `:798`, mode filter `:820-828`, `latestPartials[fill.OrderID] = fill` (`:830`).
-  - Partial dedup at `:837-843`, using unsigned `Qty: fill.FilledQty` (`:842`); `pnl.Fold(fills).Realized` (`:845`).
-- `orderFillPayload` (`:245-260`) has no `Side`. `ErrQuotesUnavailable` is at `:718`.
-- The "nil means default" field precedent is `quoteCfg` (`:50-51`) and `now` (`:64-65`). `positionsMu sync.Mutex`
-  is at `:56-58`.
-- The ledger client is wired with `middleware.UnaryClientInterceptor` (`portfolio_service.go:124`), so new
-  `QueryEvents` calls on the existing edge propagate `x-user-id` / `x-access-scope` / `x-trace-id` (C-03). There is
-  no new edge.
-- `pnl.Fill.Qty` is signed and `Fold` keys by `Symbol` (`packages/proto/pnl/pnl.go:23-27`, `:48`, `:63`). The
-  fold is unchanged; the composite key goes into `Symbol`.
-- The side-sign precedent is `offlineFillsFromOrders` (`services/xstockstrat-trading/internal/service/trading.go:876-886`).
-  The new helper is deliberately stricter: UNSPECIFIED is unattributable.
-- `golang.org/x/sync v0.22.0 // indirect` (`go.mod:34`): no errgroup, so lookups are sequential (F-08, go.mod
-  untouched).
-- Side-bearing siblings: `order.created` (`trading.go:649-652`) and `order.submitted` (`:665-668`), with
-  stream_key = bare order id. A pending-approval order has only `order.created` (`:654-662`).
+**Codebase Evidence** (re-grepped 2026-10-30):
+- `GetPnL` is at `portfolio_service.go:726-790`: it calls `s.collectFills(ctx, "order.filled", …)` (Pass 1) and
+  `"order.partially_filled"` (Pass 2), builds `filledOrderIDs` / `latestPartials` (keeping the largest `|FilledQty|`;
+  `abs()` is load-bearing) and folds unsigned `fill.Qty` / `fill.FilledQty` through `pnl.Fold(fills).Realized`.
+- `collectFills` (`:796-846`) already drains fail-closed: `ErrLedgerUnavailable` on a QueryEvents error (`:806`) or a
+  repeated page token (`:839`), `ledgerPnLPageSize = 1000` (`:793`), user filter, mode filter. It still passes
+  `SourceService: "trading"` (`:802`), returns only payloads (no sequence or event_id), and has no seen-set.
+- `orderFillPayload` (`:245`) has no `Side`; `pnl.Fill` has `Symbol`, signed `Qty`, `Price`
+  (`packages/proto/pnl/pnl.go`); `Fold` keys by `Symbol`, so the composite key goes into `Symbol`.
+- The ledger client uses `middleware.UnaryClientInterceptor`, so the side lookups on the existing edge propagate
+  `x-user-id` / `x-access-scope` / `x-trace-id` (C-03). There is no new edge.
+- Side-sign precedent: `offlineFillsFromOrders` in `trading.go` (grep `func offlineFillsFromOrders`); the new helper
+  is stricter (UNSPECIFIED is unattributable).
+- `golang.org/x/sync` is indirect only: lookups are sequential (F-08, `go.mod` untouched).
+- Side-bearing siblings: `order.created` and `order.submitted` (Step 4 evidence), stream_key = bare order id.
 
 **TDD**: `red-green required`. GREEN for Step 6.
 
 **Covers**: —
 
 **Instructions**:
-1. Add `const tradingSourceService = "xstockstrat-trading"` and use it in both passes. Add the sentinels
-   `ErrRealizedUnavailable` (doc: the handler maps it to Unavailable, retryable) and `ErrFillUnattributable` (doc:
-   FailedPrecondition, permanent; the ledger is immutable).
+1. Add `const tradingSourceService = "xstockstrat-trading"` and use it in `collectFills` and the sibling lookups. Add
+   only `ErrFillUnattributable` (doc: FailedPrecondition, permanent; the ledger is immutable). Do not add
+   `ErrRealizedUnavailable`: `ErrLedgerUnavailable` (257) is the retryable sentinel.
 2. `orderFillPayload` gains `Side string \`json:"side"\``.
-3. Add a method `drainTradingEvents(ctx, eventType string, visit func(ev *ledgerv1.LedgerEvent, fill orderFillPayload)) error`
-   to replace both loops. It sends `QueryEvents{EventType, SourceService: tradingSourceService, Page{PageSize: 500, PageToken}}`.
-   - On a transport error, a repeated next token, a repeated event_id (seen set) or an empty page that still
-     carries a token, return `fmt.Errorf("GetPnL: …: %w", ErrRealizedUnavailable)` after `slog.Error`.
-   - Unmarshal failures are skipped, as today. There is no page cap.
-4. The visit pipeline runs in order (design.md §2):
-   1. decode;
-   2. user filter (`:772`);
-   3. mode filter (`:775-783`);
-   4. dedup (`:784` / `:838-840`, unchanged);
-   5. buffer the kept fill with its `ev.GetSequence()`.
-   A partial in `latestPartials` stores its own latest sequence.
-5. Side resolution runs over the caller's buffered fills only.
-   - A payload `side` is used directly.
-   - Otherwise call `s.orderSide(ctx, orderID)`. It is sequential over distinct order ids and queries
-     `QueryEvents{StreamKey: orderID, EventType: "order.created", SourceService: tradingSourceService, Page{PageSize: 1}}`,
-     then `"order.submitted"`, and reads the payload `side`.
-   - Cache positive answers only, in a new zero-value-safe field `sideCache map[string]string` guarded by its own
-     `sideCacheMu sync.Mutex`, lazily initialised. Never use a package-level cache. Empty answers and transport
-     errors are never cached.
-   - A lookup transport error returns `ErrRealizedUnavailable`. The first order with no resolvable side returns
-     `ErrFillUnattributable`.
-   - `signedQty(side string, qty float64) (float64, bool)` accepts only `"ORDER_SIDE_BUY"` (+qty) and
-     `"ORDER_SIDE_SELL"` (−qty).
-6. Account rule per (normalised mode, symbol) group of the caller's fills:
-   - all fills have a non-empty `account_id` → key `mode|account|symbol`;
-   - none have one → key `mode||symbol`;
-   - mixed → `ErrFillUnattributable`.
-7. Sort the kept fills with `sort.SliceStable` by sequence, then build `[]pnl.Fill{Symbol: key, Qty: signed, Price}`
-   and `pnl.Fold` it. The unrealized computation (`:724-743`) stays unchanged and still runs first.
-8. Do not touch `HydrateStops` (`:530-560`) or `processOrderFill` (live fold, out of scope).
+3. Extend `collectFills` to return each kept fill with its `ev.GetSequence()` and event_id. Add fail-closed detection of
+   a repeated event_id (seen set) and an empty page that still carries a token, both wrapping `ErrLedgerUnavailable`.
+   Unmarshal failures stay skipped. No page cap.
+4. Keep the pipeline order: decode, user filter, mode filter, dedup (`filledOrderIDs` / `latestPartials`, unchanged),
+   buffer with sequence. A partial in `latestPartials` stores its own latest sequence.
+5. Side resolution runs over the caller's buffered fills only: a payload `side` is used directly; otherwise
+   `s.orderSide(ctx, orderID)` queries `QueryEvents{StreamKey: orderID, EventType: "order.created", SourceService:
+   tradingSourceService, Page{PageSize: 1}}`, then `"order.submitted"`, sequentially per distinct order id. Cache
+   positive answers only in a zero-value-safe `sideCache map[string]string` under its own `sideCacheMu sync.Mutex`.
+   A lookup transport error wraps `ErrLedgerUnavailable`; the first order with no resolvable side returns
+   `ErrFillUnattributable`. `signedQty(side string, qty float64) (float64, bool)` accepts only `"ORDER_SIDE_BUY"`
+   (+qty) and `"ORDER_SIDE_SELL"` (−qty).
+6. Account rule per (normalised mode, symbol) group of the caller's fills: all non-empty `account_id` → key
+   `mode|account|symbol`; none → `mode||symbol`; mixed → `ErrFillUnattributable`.
+7. `sort.SliceStable` the kept fills by sequence, build `[]pnl.Fill{Symbol: key, Qty: signed, Price}` and `pnl.Fold`.
+   The unrealized computation stays unchanged and still runs first.
+8. Do not touch `HydrateStops` (`:530`) or `processOrderFill`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -run 'TestGetPnL' -race -count=1 -v   # 251 GREEN + feature-229/240 GetPnL tests green
+cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -run 'TestGetPnL' -race -count=1 -v   # 251 + 229 + 257 GetPnL tests green
 export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n 'SourceService: "trading"' internal/service/portfolio_service.go; test $? -eq 1
 ```
-New GetPnL logic is in `service`, which is excluded from COVERPKGS. `internal/testdata` is not in COVERPKGS either
-(`go list ./...` skips `testdata`; the design drift is recorded in the Execution Summary).
+New GetPnL logic is in `service`, excluded from COVERPKGS; `internal/testdata` is not in COVERPKGS either.
 
 ---
 
@@ -666,57 +506,48 @@ New GetPnL logic is in `service`, which is excluded from COVERPKGS. `internal/te
 **Reviewers**: `xstockstrat-portfolio` owner — P&L calculation accuracy, position snapshot consistency, concurrent write
 safety
 
-**Codebase Evidence**:
-- Handler and adapter:
-  - `PortfolioHandler{svc *service.PortfolioService}` (`internal/handler/portfolio_handler.go:43-46`) and
-    `NewPortfolioHandler` (`:49-51`).
-  - `GetPnL` checks `callerUserID(ctx) == ""` → InvalidArgument (`:89-91`), then
-    `connect.NewError(classifyGetPnLError(err), err)` (`:96`).
-  - `GRPCHandler()` (`:242-244`); adapter `GetPnL` → `toGRPCError` (`:276-282`).
-  - Adapter `DeleteWatchlist` (`:362-368`) and `EnsureSignalWatchlist` (`:370-376`).
-  - `classifyGetPnLError(err error)` (`:425-430`).
-  - `toGRPCError` (`:432-447`) maps InvalidArgument/NotFound/PermissionDenied/Unavailable only, so
-    FailedPrecondition/DeadlineExceeded/Canceled become `codes.Internal`.
-- `TestClassifyGetPnLError` (`internal/handler/portfolio_handler_test.go:39-49`):
-  - one-arg calls at `:40` (wrapped ErrQuotesUnavailable → CodeUnavailable) and `:43` (generic → CodeInternal);
-  - the `toGRPCError(Unavailable)` assertion at `:46`.
-  - It backs durable portfolio @AC-5 (`services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature:6-8`).
-  - grep `func TestToGRPCError` finds none.
-- `DeleteWatchlist` returns `CodeFailedPrecondition` for a system-managed list (`portfolio_service.go:1921-1933`).
-  `EnsureSignalWatchlist` (`:1718-1729`) seeds it via `watchlists.EnsureSystemManaged`; the fake is
-  `watchlist_service_test.go:230`.
-- Durable platform @AC-7 @feature-127 (`docs/sdd/business-rules/platform.feature:34-41`).
-- pgxmock's random select can skip the ledger stage on a pre-done ctx (design.md §6C,
-  `pgxmock expectations.go:71-77`), so cases 3 and 4 start from a live ctx.
+**Codebase Evidence** (re-grepped 2026-10-30):
+- `portfolio_grpc_wire_test.go` is absent (verified); `portfolio_handler_test.go` exists.
+- Handler: `GetPnL` checks `callerUserID(ctx) == ""` → InvalidArgument, then
+  `connect.NewError(classifyGetPnLError(err), err)` (`portfolio_handler.go:127`); `classifyGetPnLError(err error)` is
+  at `:426` (maps `ErrQuotesUnavailable` and `ErrLedgerUnavailable` to Unavailable, else Internal); `toGRPCError` is
+  at `:433` and maps only InvalidArgument / NotFound / PermissionDenied / Unavailable, so everything else is
+  `codes.Internal`. For `GRPCHandler()` and the `DeleteWatchlist` / `EnsureSignalWatchlist` adapters grep those names
+  in the handler.
+- `TestClassifyGetPnLError` (`portfolio_handler_test.go:~37-57`): one-arg calls at `:40` (wrapped
+  `ErrQuotesUnavailable`), `:45` and `:48` (wrapped `ErrLedgerUnavailable`, feature 257 @AC-4), `:51` (generic →
+  CodeInternal); `toGRPCError(Unavailable)` at `:54`. It backs durable portfolio @AC-5. grep `func TestToGRPCError`
+  finds none.
+- `DeleteWatchlist` returns `CodeFailedPrecondition` for a system-managed list; the fake is in
+  `watchlist_service_test.go` (`fakeWatchlistStore`). Durable platform @AC-7 @feature-127
+  (`docs/sdd/business-rules/platform.feature`).
+- pgxmock's random select can skip the ledger stage on a pre-done ctx (design.md §6C), so the cancel and deadline cases
+  start from a live ctx.
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-4, AC-6, AC-7` (plus durable portfolio @AC-5 EXTEND and platform @AC-7 @feature-127 PRESERVE)
 
 **Instructions**:
-1. `portfolio_grpc_wire_test.go` is `package service_test`. It imports `internal/handler`, `internal/service`
-   (shim) and `internal/testdata`. Build `a := handler.NewPortfolioHandler(svc).GRPCHandler()` and call
-   `a.GetPnL(ctx, &portfoliov1.GetPnLRequest{})` / `a.DeleteWatchlist` / `a.EnsureSignalWatchlist`. Assert with
-   `status.Code(err)`.
-   - (1) `TestWire251_AC4_UnresolvedSideFailedPrecondition`: side-less fill, no sibling → `codes.FailedPrecondition`.
-   - (2) `TestWire251_AC6_LedgerErrorUnavailable`: `OnQuery` returns a plain error → `codes.Unavailable`.
-   - (3) `TestWire251_AC7_CallerCancel`: live ctx; `OnQuery` calls `cancel()` then returns `ctx.Err()` →
-     `codes.Canceled`, `Calls() >= 1`.
-   - (4) `TestWire251_AC7_CallerDeadline`: 200ms timeout (design.md Open Risks: 50ms under -race is a flake surface),
-     `OnQuery` blocks on `<-ctx.Done()`, run under `service.Guard` → `codes.DeadlineExceeded`, `Calls() >= 1`.
-   - (5) `TestWire_DeleteSystemManagedWatchlist_F127AC7`: seed via adapter `EnsureSignalWatchlist`, then
-     `DeleteWatchlist` → `codes.FailedPrecondition`.
-   - (6) `TestWire251_MissingUserIDInvalidArgument`: `context.Background()` → `codes.InvalidArgument`.
-   - (7) `TestWire_GetPnLQuoteGap_F229AC5`: `WirePosition{Current: 0}` with the zero-value `stubMarketData` and a
-     live ctx → `codes.Unavailable`.
-2. `portfolio_handler_test.go`, `TestClassifyGetPnLError`: keep the name.
-   - Change `:40` and `:43` to `classifyGetPnLError(context.Background(), …)` with the same expectations; keep `:46`.
-   - Add rows: (live ctx, wrapped ErrQuotesUnavailable) → CodeUnavailable; (expired ctx, same error) →
-     CodeDeadlineExceeded; (cancelled ctx) → CodeCanceled; (live ctx, wrapped `service.ErrRealizedUnavailable`) →
-     CodeUnavailable; (live ctx, wrapped `service.ErrFillUnattributable`) → CodeFailedPrecondition.
-   - Add table-driven `TestToGRPCError`: the 4 existing codes, plus FailedPrecondition / DeadlineExceeded /
-     Canceled, plus a non-connect error → `codes.Internal`.
-3. C-13: the fixtures come from `internal/testdata` (Step 6); there is no second inline copy.
+1. `portfolio_grpc_wire_test.go` (`package service_test`; imports `internal/handler`, `internal/service` shim,
+   `internal/testdata`): `a := handler.NewPortfolioHandler(svc).GRPCHandler()`; assert `status.Code(err)`.
+   - (1) `TestWire251_AC4_UnresolvedSideFailedPrecondition`: side-less fill, no sibling → `FailedPrecondition`.
+   - (2) `TestWire251_AC6_LedgerErrorUnavailable`: `OnQuery` returns a plain error → `Unavailable`.
+   - (3) `TestWire251_AC7_CallerCancel`: live ctx; `OnQuery` calls `cancel()` then returns `ctx.Err()` → `Canceled`.
+   - (4) `TestWire251_AC7_CallerDeadline`: 200ms timeout, `OnQuery` blocks on `<-ctx.Done()`, under `service.Guard` →
+     `DeadlineExceeded`.
+   - (5) `TestWire_DeleteSystemManagedWatchlist_F127AC7`: seed via `EnsureSignalWatchlist`, then `DeleteWatchlist` →
+     `FailedPrecondition`.
+   - (6) `TestWire251_MissingUserIDInvalidArgument`: `context.Background()` → `InvalidArgument`.
+   - (7) `TestWire_GetPnLQuoteGap_F229AC5`: `WirePosition{Current: 0}` with the zero-value `stubMarketData` and a live
+     ctx → `Unavailable`.
+2. `portfolio_handler_test.go`, `TestClassifyGetPnLError` (keep the name): change the calls at `:40`, `:45`, `:48`,
+   `:51` to `classifyGetPnLError(context.Background(), …)` with the same expectations; keep the `toGRPCError`
+   assertions. Add rows: (expired ctx, wrapped `ErrQuotesUnavailable`) → CodeDeadlineExceeded; (cancelled ctx) →
+   CodeCanceled; (live ctx, wrapped `service.ErrFillUnattributable`) → CodeFailedPrecondition. The live-ctx
+   `ErrLedgerUnavailable` → CodeUnavailable row already exists (257). Add table-driven `TestToGRPCError`: the 4
+   existing codes, FailedPrecondition / DeadlineExceeded / Canceled, and a non-connect error → `codes.Internal`.
+3. C-13: fixtures come from `internal/testdata` (Step 6).
 
 **Verification**:
 ```bash
@@ -724,9 +555,8 @@ cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/... -run 'Tes
 GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "func FilledEvent" --include="*.go" internal/   # still 1 declaration site
 ```
-- The arity change fails the `internal/handler` test package, and the wire test fails the `service_test` package,
-  until Step 9; say so in the step PR description (P-06/F-05).
-- The coverage threshold (≥ 40%) is enforced at paired GREEN Step 9, not here.
+- The arity change fails the `internal/handler` test package, and the wire test fails `service_test`, until Step 9
+  (P-06/F-05). The coverage threshold is enforced at paired GREEN Step 9.
 
 ---
 
@@ -740,30 +570,26 @@ grep -rn "func FilledEvent" --include="*.go" internal/   # still 1 declaration s
 **Reviewers**: `xstockstrat-portfolio` owner — P&L calculation accuracy, position snapshot consistency, concurrent write
 safety
 
-**Codebase Evidence**:
-- `portfolio_handler.go:96` is the ONLY `classifyGetPnLError` call site. The definition is at `:425-430` and
-  `toGRPCError` at `:432-447`.
-- Precedent: `services/xstockstrat-trading/internal/handler/trading.go:223-238` (explicit `CodeFailedPrecondition`
-  case).
-- Behaviour changes, intended per design.md §3:
-  - `DeleteWatchlist` on a system-managed list now reaches the wire as FAILED_PRECONDITION (`portfolio_service.go:1933`).
-    In the browser it goes 500 → 400 (`services/xstockstrat-ui/src/lib/connectClients.ts:119-124`).
-  - A caller whose deadline is ≤ `quote_timeout_ms` now sees DEADLINE_EXCEEDED.
+**Codebase Evidence** (re-grepped 2026-10-30):
+- `portfolio_handler.go:127` is the ONLY `classifyGetPnLError` call site; the definition is at `:426` (takes only
+  `err`, not ctx-first) and `toGRPCError` at `:433`.
+- Precedent: `services/xstockstrat-trading/internal/handler/trading.go` (explicit `CodeFailedPrecondition` case; grep
+  `CodeFailedPrecondition` there for the current line).
+- Behaviour changes, intended per design.md §3: `DeleteWatchlist` on a system-managed list reaches the wire as
+  FAILED_PRECONDITION (browser 500 → 400, `services/xstockstrat-ui/src/lib/connectClients.ts`); a caller whose
+  deadline is ≤ `quote_timeout_ms` now sees DEADLINE_EXCEEDED.
 
 **TDD**: `red-green required`. GREEN for Step 8.
 
 **Covers**: —
 
 **Instructions**:
-1. `classifyGetPnLError(ctx context.Context, err error) connect.Code`, with precedence:
-   1. `ctx.Err()`: DeadlineExceeded → `CodeDeadlineExceeded`, Canceled → `CodeCanceled`;
-   2. `ErrQuotesUnavailable` → `CodeUnavailable`;
-   3. `service.ErrRealizedUnavailable` → `CodeUnavailable`;
-   4. `service.ErrFillUnattributable` → `CodeFailedPrecondition`;
-   5. otherwise `CodeInternal`.
-   Update the doc comment and call site `:96` to `classifyGetPnLError(ctx, err)`.
-2. `toGRPCError` keeps its `(err error)` signature and adds explicit `CodeFailedPrecondition`,
-   `CodeDeadlineExceeded` and `CodeCanceled` cases. There is no numeric pass-through.
+1. `classifyGetPnLError(ctx context.Context, err error) connect.Code`, precedence: `ctx.Err()` DeadlineExceeded →
+   `CodeDeadlineExceeded`, Canceled → `CodeCanceled`; `ErrQuotesUnavailable` or `ErrLedgerUnavailable` →
+   `CodeUnavailable`; `ErrFillUnattributable` → `CodeFailedPrecondition`; otherwise `CodeInternal`. Update the doc
+   comment and the call site `:127` to `classifyGetPnLError(ctx, err)`.
+2. `toGRPCError` keeps its `(err error)` signature and adds explicit `CodeFailedPrecondition`, `CodeDeadlineExceeded`
+   and `CodeCanceled` cases. No numeric pass-through.
 
 **Verification**:
 ```bash
@@ -794,164 +620,129 @@ The logic is in the excluded `handler` package; the Step 8 tests are the gate.
 Connect-RPC call safety, environment (`production`/`staging`) scope correctness, no secret values rendered in UI, no
 direct DB access (except audit log)
 
-**Codebase Evidence**:
-- Hook: `src/hooks/usePositionLineage.ts:16-20` queries `{eventType: 'order.filled', sourceService: 'trading',
-  page: {pageSize: 100, pageToken: ''}}`, filters client-side (`:22-29`), and its comment at `:5` says `"trading"`.
-  It is called from `src/app/trader/positions/page.tsx:110-114`.
-- Page: the empty state "No order.filled events for this position." is at `page.tsx:681-685`; `lineageColumns` at
-  `:330`; the table at `:686-692`.
-- BFF `queryEvents` (`src/lib/traderBff.ts:118-127`) rewrites only copilot keys. BFF `listOrders` (`:34-40`) pins
-  `userId: claims.user_id`.
-- The trading repo honours `symbol` / `account_id` / `trading_mode` filters
-  (`services/xstockstrat-trading/internal/repository/trading_repo.go:229-268`). `ListOrdersRequest` fields are
-  `trading_mode = 6`, `symbol = 7`, `account_id = 10` (`packages/proto/trading/v1/trading.proto:168-182`).
-- Mock backend:
-  - `queryEvents`' default `order.filled` branch (`e2e/mock-backend.ts:450-470`) has an inline literal with
-    `sourceService: 'trading'` (`:456`).
-  - `listOrders` (`:311-316`) filters `symbol` only.
-- Fixtures and catalog:
-  - Canonical home `e2e/fixtures/ledgerEvents.ts` (`LEDGER_EXPORT_EVENTS` `:22`, already `xstockstrat-trading`
-    `:26`). `INVENTORY.md:81` lists the `order.filled` branch as still inline; rows `:22-23` are the ledger
-    catalog. `e2e/fixtures/orders.ts` has `ORDER_FILLED` `:17`, `ORDERS` `:80`; `TEST_USER_ID` is at
-    `e2e/fixtures/users.ts:9`.
-  - Auth helper: `addAuthCookie` (used at `e2e/trader/api-smoke.spec.ts:200`).
-- Existing lineage specs:
-  - `e2e/trader/positions.spec.ts:117-180` intercepts "the lineage query (no streamKey)" (`:129-138`) with an
-    inline `sourceService: 'trading'` row (`:147`). After the fix the lineage query carries a `streamKey`, so the
-    interception key must change.
-  - `e2e/trader/api-smoke.spec.ts:195-215` posts `sourceService: 'trading'` (`:207`).
-- vitest scope is `src/**/*.test.ts`, with coverage over `src/lib/**` excluding `*Bff.ts` (`vitest.config.ts`).
-  The lineage logic therefore lives in `src/lib/positionLineage.ts` (Step 11) so it is unit-testable.
-- `TradingMode` import pattern: `src/hooks/usePortfolio.ts:3`. `CardNotice` is at
-  `src/components/shared/CardNotice.tsx:5`.
+**Codebase Evidence** (re-grepped 2026-10-30; feature 263 changed the BFF):
+- Hook `src/hooks/usePositionLineage.ts:19` still queries `{eventType: 'order.filled', sourceService: 'trading',
+  page: {pageSize: 100, pageToken: ''}}` and filters client-side; the `:7` comment says `"trading"`. Called from
+  `src/app/trader/positions/page.tsx:110`.
+- **BFF already owner-scopes (feature 263).** `src/lib/traderBff.ts` `queryEvents` (`:129-147`) forces
+  `ownerOnly: true` on every non-copilot, non-account stream, so other users' `order.filled` events are already dropped
+  server-side. The planned BFF backstop and `isForeignFillEvent` are redundant and are removed from this feature
+  (Deviation Log). `e2e/trader/ledger-owner-scope.spec.ts` and the mock's `ownerOnly` filter (default `order.filled`
+  branch of `mock-backend.ts` `queryEvents`, `OWNER_SCOPE_ORDER_FILLED_EVENTS`) already cover it.
+- `src/lib/tradingMode.ts` exports `toPbTradingMode(mode: EnvironmentMode | null)` (null → UNSPECIFIED); the lineage
+  uses it. `CardNotice` is at `src/components/shared/CardNotice.tsx`.
+- Trading proto: `ListOrdersRequest` has `trading_mode = 6`, `symbol = 7`, `account_id = 10`
+  (`packages/proto/trading/v1/trading.proto`); BFF `listOrders` (`traderBff.ts:39`) pins the caller's user.
+- Mock backend: `listOrders` is at `e2e/mock-backend.ts:327-332` (symbol-only filter over `ORDERS`). The default
+  `queryEvents` branch no longer has an inline `sourceService: 'trading'` literal (grep finds none in the file).
+- Fixtures: `e2e/fixtures/ledgerEvents.ts` (`LEDGER_EXPORT_EVENTS`, `OWNER_SCOPE_ORDER_FILLED_EVENTS` with a
+  `TEST_USER_B_ID` foreign row), `e2e/fixtures/orders.ts` (`ORDER_FILLED` `:17`, `ORDERS` `:84`), `INVENTORY.md` ledger
+  row `:24` and the inline-branches row `:83`.
+- Existing lineage specs: `e2e/trader/positions.spec.ts:112-160` intercepts "the lineage query (no streamKey)" with
+  an inline `sourceService: 'trading'` row (`:147`) and `streamKey: 'order:…'`; `e2e/trader/api-smoke.spec.ts:192-215`
+  posts `sourceService: 'trading'` (`:207`). Other `sourceService: 'trading'` hits (`e2e/fixtures/alerts.ts`) are
+  alert fixtures, unrelated.
+- `e2e/trader/position-lineage.spec.ts` and `src/lib/positionLineage*.ts` are absent (verified). vitest scope is
+  `src/**/*.test.ts` with coverage over `src/lib/**` excluding `*Bff.ts`.
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-3, AC-18, AC-19, AC-20, AC-21, AC-22`
 
 **Instructions**:
-1. **`src/lib/positionLineage.test.ts`** (vitest, RED: the module does not exist yet). It imports
-   `{ LINEAGE_MAX_ORDERS, fetchPositionLineage, isForeignFillEvent }` from `./positionLineage`.
-   - Stub responses are built from `LINEAGE_ORDERS` (`e2e/fixtures/orders.ts`) and `LINEAGE_FILL_EVENTS`
-     (`e2e/fixtures/ledgerEvents.ts`), imported by relative path (C-12: vitest tests using domain objects). The
-     51-order and NEW-status cases are `{ ...LINEAGE_ORDERS[0], orderId }` / `{ ..., status: 1 }` spreads.
-   - `fetchPositionLineage` with stub `listOrders` / `queryEvents` functions:
-     - (a) it passes `{symbol, accountId, tradingMode}` plus `page.pageSize = LINEAGE_MAX_ORDERS + 1` to
-       `listOrders`;
-     - (b) it issues one `queryEvents({streamKey: orderId, eventType: 'order.filled', sourceService: 'xstockstrat-trading'})`
-       per order, for at most 50 orders, with in-flight ≤ 3 (instrumented stub counter);
-     - (c) 51 orders → `truncated: true`, and 50 queried (AC-21);
-     - (d) an order with status NEW is still queried and its fill returned (AC-22).
-   - `isForeignFillEvent(event, userId)` is true for `order.filled` / `order.partially_filled` whose
-     `payload.user_id` ≠ `userId`, and false for other event types (AC-20 unit half).
-2. **Fixtures** (C-12). Add to `e2e/fixtures/ledgerEvents.ts`:
-   - `LINEAGE_FILL_EVENTS`: u-1 = `TEST_USER_ID` `o-buy` AAPL 10@100 acct `BROKER_ACCOUNT_ALPACA.id` paper; u-2
-     `o-other` AAPL 5@120 acct-2; a LIVE u-1 fill; `o-stale`. All have
-     `sourceService: 'xstockstrat-trading'` and bare-id `streamKey`.
-   - `lineageOtherUserFills(n)`: generates 100 other-user rows for AC-19.
-   - Add `LINEAGE_ORDERS` to `e2e/fixtures/orders.ts`, the order domain's home, as spreads of `ORDER_FILLED`. It
-     includes `o-stale` with status 1 = NEW and the LIVE order with `tradingMode: 2`. `ORDERS` (`:80`) is unchanged.
-   - Add `INVENTORY.md` rows for `LINEAGE_FILL_EVENTS` (next to `:22-23`) and `LINEAGE_ORDERS`, and update `:81` to
-     say the `order.filled` branch is centralized.
-3. **`e2e/mock-backend.ts`**. Existing specs must see unchanged default responses:
-   - `listOrders` (`:311-316`): the `ORDERS` path stays symbol-only, as today. Request shape alone cannot tell a
-     lineage call apart: `useOrders` (`src/hooks/useOrders.ts:36-45`, page size 50) always sends `tradingMode`,
-     and the per-symbol page (`src/app/trader/positions/[symbol]/page.tsx:114`) sends `symbol`. The mock therefore
-     appends `LINEAGE_ORDERS` only when `req.page?.pageSize === LINEAGE_MAX_ORDERS + 1` (the lineage call's page
-     size), filtering them by `symbol`, `accountId` and `tradingMode` when set.
-   - `queryEvents`: the final return (`:450-470`) is an event-type-agnostic fallthrough. Other callers that reach it
-     keep it. Add a new branch before it, scoped to `req.eventType === 'order.filled'`:
-     - with `req.streamKey`, it returns the matching `LINEAGE_FILL_EVENTS` rows, including u-2's, so the BFF
-       backstop is what drops them;
-     - without one, it returns `lineageOtherUserFills(100)` and `nextPageToken: 'p2'`, so the old platform-wide
-       read misses u-1.
-   - The fallthrough's literal `sourceService: 'trading'` (`:456`) becomes `'xstockstrat-trading'`. The Step 11
-     grep requires this; the payload is otherwise unchanged.
-4. **`e2e/trader/position-lineage.spec.ts`** (new), using `addAuthCookie`:
-   - AC-3: the AAPL/acct position sheet lists `o-buy` qty 10 @ 100, and no intercepted QueryEvents response body
-     contains u-2.
-   - AC-18: the paper sheet omits the LIVE fill.
-   - AC-19: `o-buy` is listed although the unfiltered page holds 100 other-user events.
-   - AC-20: a `page.evaluate` fetch to `/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents` with
-     `{streamKey: 'o-other', eventType: 'order.filled'}` returns no event with `payload.user_id` u-2.
-   - AC-21: `page.route` on ListOrders returns 51 `{...ORDER_FILLED, orderId}` spreads (scenario one-off). The
-     truncation notice is visible, and ≤ 50 lineage QueryEvents requests are observed.
-   - AC-22: `o-stale` is listed.
-5. **`positions.spec.ts:129-138`**: intercept on `body.eventType === 'order.filled'` instead of "no streamKey", and
-   take the long-id row from a `{...LINEAGE_FILL_EVENTS[0], …}` spread, not the `:147` literal.
-   **`api-smoke.spec.ts:207`**: post `{eventType: 'order.filled', sourceService: 'xstockstrat-trading', streamKey: 'o-buy'}`.
-   Assert the join keys as before.
+1. **`src/lib/positionLineage.test.ts`** (vitest, RED: module missing). Imports `{ LINEAGE_MAX_ORDERS,
+   fetchPositionLineage }` from `./positionLineage`; stub data from `LINEAGE_ORDERS` / `LINEAGE_FILL_EVENTS` by
+   relative path (C-12).
+   - (a) it passes `{symbol, accountId, tradingMode}` plus `page.pageSize = LINEAGE_MAX_ORDERS + 1` to `listOrders`;
+   - (b) one `queryEvents({streamKey: orderId, eventType: 'order.filled', sourceService: 'xstockstrat-trading'})` per
+     order, at most 50, in-flight ≤ 3;
+   - (c) 51 orders → `truncated: true`, 50 queried (AC-21);
+   - (d) an order with status NEW is still queried and its fill returned (AC-22).
+2. **Fixtures** (C-12). Reuse `OWNER_SCOPE_*` rows and `TEST_USER_B_ID` where they fit. Add to `ledgerEvents.ts`
+   `LINEAGE_FILL_EVENTS` (u-1 `o-buy` AAPL 10@100 on `BROKER_ACCOUNT_ALPACA.id` paper; u-2 `o-other` AAPL 5@120; a LIVE
+   u-1 fill; `o-stale`; all `sourceService: 'xstockstrat-trading'` with bare-id `streamKey` and a row `userId`) and
+   `lineageOtherUserFills(n)` for AC-19. Add `LINEAGE_ORDERS` to `orders.ts` as spreads of `ORDER_FILLED`, including
+   `o-stale` status 1 and the LIVE order `tradingMode: 2`; `ORDERS` is unchanged. Add `INVENTORY.md` rows next to `:24`
+   and update `:83`.
+3. **`e2e/mock-backend.ts`**: `listOrders` appends `LINEAGE_ORDERS` only when `req.page?.pageSize ===
+   LINEAGE_MAX_ORDERS + 1`, filtered by `symbol` / `accountId` / `tradingMode` when set. `queryEvents`: add a branch
+   before the `ownerOnly` default for `req.eventType === 'order.filled'` with `req.streamKey`, returning the matching
+   `LINEAGE_FILL_EVENTS` rows filtered like the 263 default (`!req.ownerOnly || r.userId === TEST_USER_ID`); without a
+   `streamKey` it returns `lineageOtherUserFills(100)` and `nextPageToken: 'p2'` so the old platform-wide read misses
+   u-1. Existing specs' default responses stay unchanged.
+4. **`e2e/trader/position-lineage.spec.ts`** (new, `addAuthCookie`): AC-3 sheet lists `o-buy` 10@100 and no
+   intercepted QueryEvents body contains u-2; AC-18 paper sheet omits the LIVE fill; AC-19 `o-buy` is listed although
+   the unfiltered page holds 100 other-user events; AC-20 a `page.evaluate` fetch to
+   `/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents` with `{streamKey: 'o-other', eventType: 'order.filled'}`
+   returns no u-2 event (server-side `ownerOnly`: a PRESERVE guard, GREEN at once); AC-21 `page.route` on ListOrders
+   returns 51 `{...ORDER_FILLED, orderId}` spreads, the truncation notice is visible and ≤ 50 lineage QueryEvents
+   requests are seen; AC-22 `o-stale` is listed.
+5. **`positions.spec.ts:~129-138`**: intercept on `body.eventType === 'order.filled'` instead of "no streamKey", and
+   take the row from a `{...LINEAGE_FILL_EVENTS[0], …}` spread instead of the `:147` literal. **`api-smoke.spec.ts:207`**:
+   post `{eventType: 'order.filled', sourceService: 'xstockstrat-trading', streamKey: 'o-buy'}`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run test:unit -- src/lib/positionLineage.test.ts   # RED (module missing)
-pnpm exec playwright test e2e/trader/position-lineage.spec.ts   # RED on AC-3/19/20/21/22 (old hook reads the platform page; BFF unscoped)
+pnpm exec playwright test e2e/trader/position-lineage.spec.ts   # RED on AC-3/19/21/22 (AC-20 is a GREEN preserve guard)
 pnpm run lint
-grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth" e2e/trader/position-lineage.spec.ts e2e/trader/positions.spec.ts e2e/mock-backend.ts
 grep -n "LINEAGE_FILL_EVENTS\|LINEAGE_ORDERS" e2e/fixtures/INVENTORY.md
 ```
-The coverage threshold (vitest `src/lib/**` lines ≥ 40%) is enforced at paired GREEN Step 11, not here.
+The coverage threshold (vitest `src/lib/**` lines ≥ 40%) is enforced at paired GREEN Step 11.
 
 ---
 
-### Step 11 — service: user-pinned lineage via ListOrders, BFF backstop and truncation notice
+### Step 11 — service: user-pinned lineage via ListOrders and truncation notice
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/positionLineage.ts` — create
 - `services/xstockstrat-ui/src/hooks/usePositionLineage.ts` — modify
-- `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy, config mutation safety,
 Connect-RPC call safety, environment (`production`/`staging`) scope correctness, no secret values rendered in UI, no
 direct DB access (except audit log)
 
-**Codebase Evidence**:
-- `usePositionLineage.ts:7-32`.
-- Browser clients: `ledgerClient` (`src/lib/browserClients/ledgerClient.ts`) and `tradingClient`
-  (`src/lib/browserClients/tradingClient.ts:6`). The `ListOrders` call precedent is `src/hooks/useOrders.ts:36-45`.
-- BFF `queryEvents` (`traderBff.ts:118-127`) calls `requireSession(ctx)` → `claims.user_id`. The LEDGER-6 empty-caller
-  posture means it matches none, never all (recon.md Patterns to REUSE, `ledgerServiceImpl.ts:311`).
-- `staleTime` precedent: `src/hooks/useLiveStrategies.ts:51`. A concurrency helper is **Not found**
-  (grep `concurren|pLimit|mapLimit` over `src`), so a minimal worker loop goes in `positionLineage.ts`.
-- `CardNotice` (`src/components/shared/CardNotice.tsx:5-23`, import precedent
-  `src/components/trader/OrderBook.tsx:13`) is the canonical notice primitive (C-17). Page sites are
-  `page.tsx:110-114`, `:330`, `:676-692`.
+**Codebase Evidence** (re-grepped 2026-10-30):
+- `usePositionLineage.ts` (whole file, 33 lines). Browser clients: `ledgerClient`
+  (`src/lib/browserClients/ledgerClient.ts`) and `tradingClient` (`src/lib/browserClients/tradingClient.ts`); the
+  `listOrders` call precedent is `src/hooks/useOrders.ts:39`.
+- `traderBff.ts` is NOT changed (owner scoping landed in feature 263; see Step 10).
+- A concurrency helper is **Not found** (grep `concurren|pLimit|mapLimit` over `src`), so a minimal worker loop goes in
+  `positionLineage.ts`. `toPbTradingMode` is in `src/lib/tradingMode.ts`.
+- `CardNotice` (`src/components/shared/CardNotice.tsx`, import precedent `src/components/trader/OrderBook.tsx`) is the
+  canonical notice primitive (C-17). Page sites: `page.tsx:110` (hook call), `:330` (`lineageColumns`), `:676-692`
+  (sheet section; empty state "No order.filled events for this position.").
 
 **TDD**: `red-green required`. GREEN for Step 10.
 
 **Covers**: —
 
 **Instructions**:
-1. Create `src/lib/positionLineage.ts`.
-   - `export const LINEAGE_MAX_ORDERS = 50`.
-   - `export async function fetchPositionLineage(deps: { listOrders; queryEvents }, args: { symbol; accountId; mode })`.
-     It calls `listOrders({symbol, ...(accountId ? {accountId} : {}), tradingMode: PbTradingMode.PAPER|LIVE, page: {pageSize: LINEAGE_MAX_ORDERS + 1, pageToken: ''}})`
-     and takes the first 50 orders. Then it runs `queryEvents({streamKey: o.orderId, eventType: 'order.filled', sourceService: 'xstockstrat-trading', page: {pageSize: 10, pageToken: ''}})`
-     at concurrency 3 and returns `{ events, truncated }`.
-   - `export function isForeignFillEvent(e, userId: string)`.
+1. Create `src/lib/positionLineage.ts`: `export const LINEAGE_MAX_ORDERS = 50` and
+   `export async function fetchPositionLineage(deps: { listOrders; queryEvents }, args: { symbol; accountId; mode })`.
+   It calls `listOrders({symbol, ...(accountId ? {accountId} : {}), tradingMode: toPbTradingMode(mode), page: {pageSize: LINEAGE_MAX_ORDERS + 1, pageToken: ''}})`,
+   takes the first 50 orders, then runs `queryEvents({streamKey: o.orderId, eventType: 'order.filled', sourceService: 'xstockstrat-trading', page: {pageSize: 10, pageToken: ''}})`
+   at concurrency 3, and returns `{ events, truncated }`.
 2. `usePositionLineage.ts` calls `fetchPositionLineage({listOrders: tradingClient.listOrders, queryEvents: ledgerClient.queryEvents}, …)`
-   with `staleTime: 60_000`. Fix the `:5` comment to the 2-line constraint form (no `"trading"`).
-3. `traderBff.ts` `queryEvents` (`:118-127`): after `ledgerClient.queryEvents(…)`, return the response with
-   `events` filtered by `!isForeignFillEvent(e, claims.user_id)`. Other event types stay unscoped; state this in
-   a ≤ 2-line comment.
-4. `page.tsx`: read `lineage.data?.events`. When `lineage.data?.truncated`, render
-   `<CardNotice>Showing fills for the latest 50 orders only.</CardNotice>` above the table. Update the
-   `lineageColumns` element type at `:330`.
+   with `staleTime: 60_000`. Replace the `:7` comment with a ≤ 2-line constraint form that omits the old literal.
+3. `page.tsx`: read `lineage.data?.events`; when `lineage.data?.truncated`, render
+   `<CardNotice>Showing fills for the latest 50 orders only.</CardNotice>` above the table; update the
+   `lineageColumns` element type (`:330`).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run test:coverage   # vitest src/lib threshold ≥ 40%, Step 10 unit GREEN
 pnpm exec playwright test e2e/trader/position-lineage.spec.ts e2e/trader/positions.spec.ts e2e/trader/api-smoke.spec.ts   # GREEN
 pnpm run lint
-grep -rn "sourceService: 'trading'" src e2e; test $? -eq 1
+grep -rn "sourceService: 'trading'" src e2e/trader; test $? -eq 1   # e2e/fixtures/alerts.ts alert rows are unrelated
 ```
 
 ---
 
-### Step 12 — docs: teardown reconciliation (stream-key drift, ctx-first wording, page_token, findings)
+### Step 12 — docs: teardown reconciliation (stream-key drift, ctx-first wording, side resolution, findings)
 
 **Status**: `pending`
 **Service**: `docs` (service CLAUDE.md files and module constitutions)
@@ -964,22 +755,20 @@ grep -rn "sourceService: 'trading'" src e2e; test $? -eq 1
 
 **Reviewers**: none
 
-**Codebase Evidence**:
-- Portfolio:
-  - `services/xstockstrat-portfolio/CLAUDE.md:28` says `ErrQuotesUnavailable` → `classifyGetPnLError` → UNAVAILABLE.
-  - The § Ledger Events Consumed `order.filled` row is at `:117` (live consumer only); the
-    `order.partially_filled` row is at `:118`.
-  - PORTFOLIO-16 is at `services/xstockstrat-portfolio/docs/context-constitution.md:34`.
-- Trading: `services/xstockstrat-trading/CLAUDE.md:143-156` documents `order:{order_id}` for `order.*` events.
-  Production writes the bare id (`trading.go:649`, `:665`, `:1805`, `:1822`; `order.bracket_updated` at `:1353`).
-  - `order.approval_requested` (`:150`) documents `approval:{order_id}`, but `trading.go:655` emits the bare id too.
-  - `order.approved` (`:151`) has no emit site, and the row says so.
-  - `order_intent.resolved_by_reconciliation` (`:158`) does use the prefix (`trading.go:2247`, `:2278`).
-- Ledger: `services/xstockstrat-ledger/CLAUDE.md:34` (`order:{id}`), `:101` (`order:{order_id}`), and `:26`
-  (QueryEvents).
-- Findings candidates (design.md §7): `GetPnL` ignores `req.Range` for realized (`portfolio_service.go:851`
-  echoes it only); `HydrateStops` reads page 1 only (`portfolio_service.go:534`); DeleteWatchlist 500 → 400 and
-  short-deadline DEADLINE_EXCEEDED are intended.
+**Codebase Evidence** (re-grepped 2026-10-30):
+- Portfolio `CLAUDE.md`: `:28-29` already says `ErrQuotesUnavailable` → `classifyGetPnLError` → UNAVAILABLE and that a
+  ledger page error / deadline / repeated token is UNAVAILABLE (`ErrLedgerUnavailable`, 257). The § Ledger Events
+  Consumed `order.filled` row is `:118` (live consumer only); `order.partially_filled` is `:119`. PORTFOLIO-16 is at
+  `services/xstockstrat-portfolio/docs/context-constitution.md:34`.
+- Trading `CLAUDE.md:146-162` documents `order:{order_id}` for `order.*` events; production writes the bare id
+  (`emitLedgerEvent` callers pass `order.OrderId` / `orderID`). `order.approval_requested` (`:153`) documents
+  `approval:{order_id}` but emits the bare id; `order.approved` (`:154`) has no emit site; `order_intent.*`
+  (`:161-162`) does use the prefix.
+- Ledger `CLAUDE.md:34` (`order:{id}`) and `:112` (`order:{order_id}`). `QueryEvents` `page_token` is already
+  documented at `:49`; no edit needed for it.
+- Findings candidates (design.md §7): `GetPnL` ignores `req.Range` for realized (echoes it only); `HydrateStops` reads
+  page 1 only (`portfolio_service.go:530`); DeleteWatchlist 500 → 400 and short-deadline DEADLINE_EXCEEDED are
+  intended.
 - Root `CLAUDE.md` § Teardown requires `/context-forge:context-constitution refresh`, or a manual reconciliation
   recorded in the PR body.
 
@@ -988,82 +777,58 @@ grep -rn "sourceService: 'trading'" src e2e; test $? -eq 1
 **Covers**: —
 
 **Instructions**:
-1. Portfolio `CLAUDE.md`:
-   - `:28`: ctx-first mapping (DEADLINE_EXCEEDED/CANCELED first; UNAVAILABLE for quote gaps and ledger read gaps;
-     FAILED_PRECONDITION for unattributable fills).
-   - `:117`: add `GetPnL` (query time) as a second `order.filled` consumer, with the `side` resolution order:
-     payload, then `order.created`, then `order.submitted`.
-   - `:118`: same side rule, plus the account-grain sequence-ordered fold.
+1. Portfolio `CLAUDE.md`: `:28-29` ctx-first mapping (DEADLINE_EXCEEDED/CANCELED first; UNAVAILABLE for quote and
+   ledger read gaps; FAILED_PRECONDITION for unattributable fills). `:118` add `GetPnL` (query time) as a second
+   `order.filled` consumer with the `side` resolution order (payload, `order.created`, `order.submitted`). `:119` same
+   side rule plus the account-grain sequence-ordered fold.
 2. PORTFOLIO-16 (`context-constitution.md:34`): reflect `classifyGetPnLError(ctx, err)` precedence. Add findings
    entries for the `req.Range`, HydrateStops page-1 and wire-code changes.
-3. Trading `CLAUDE.md:143-156`: change the stream-key column of every emitted `order.*` row to the bare
-   `{order_id}`, including `order.approval_requested` (`:150`). Leave `order.approved` (`:151`, no emit site) and
-   `:158` unchanged.
-4. Ledger `CLAUDE.md:34` (`order:{id}`) and `:101`: bare order id for trading `order.*` events; `order:{order_id}`
-   stays for `order_intent.*`. Near `:26`, document that
-   `QueryEvents.page.page_token` is an opaque keyset cursor and that a malformed token returns INVALID_ARGUMENT.
-5. Run `/context-forge:context-constitution refresh` scoped to these files. If unavailable, reconcile by hand and
+3. Trading `CLAUDE.md:146-159`: stream-key column of every emitted `order.*` row to the bare `{order_id}`, including
+   `order.approval_requested`; leave `order.approved` (no emit site) and `order_intent.*` (`:161-162`) unchanged.
+4. Ledger `CLAUDE.md:34` and `:112`: bare order id for trading `order.*` events; `order:{order_id}` stays for
+   `order_intent.*`.
+5. Run `/context-forge:context-constitution refresh` scoped to these files; if unavailable, reconcile by hand and
    record both facts in the PR body (root `CLAUDE.md` § Teardown).
 
 **Verification**:
 ```bash
-grep -n "order:{order_id}\|order:{id}\|approval:{order_id}" services/xstockstrat-trading/CLAUDE.md services/xstockstrat-ledger/CLAUDE.md   # only order_intent.* rows and order.approved (:151) remain
-grep -n "page_token" services/xstockstrat-ledger/CLAUDE.md
+grep -n "order:{order_id}\|order:{id}\|approval:{order_id}" services/xstockstrat-trading/CLAUDE.md services/xstockstrat-ledger/CLAUDE.md   # only order_intent.* rows and order.approved remain
 grep -n "classifyGetPnLError" services/xstockstrat-portfolio/CLAUDE.md services/xstockstrat-portfolio/docs/context-constitution.md
 ```
 
 ---
 
-### Step 13 — docs: peer reconciliation (rebase-only merge-order note + 252 context note)
+### Step 13 — docs: peer reconciliation note in merge-order.md
 
 **Status**: `pending`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/merge-order.md` — modify
-- `docs/roadmap/features/252-fix-identity-ledger-test-suites/context.md` — modify
 
 **Reviewers**: none
 
-**Codebase Evidence**:
-- The soft-row precedent is `docs/roadmap/features/merge-order.md:35` (`open-positions-ui` ↔ `orders-management-ui`,
-  "soft/rebase dependency"). grep `252|fix-identity-ledger` finds no row today.
-- 252 is `implementation-ready` (`origin/feature/fix-identity-ledger-test-suites` `status.md`). 252 owns the ledger
-  runner that un-guards `ledgerServiceImpl.test.ts` (design.md §1 B8).
-- 252 Step 6 inserts its own rebase-only blockquote after `merge-order.md:138` (before the `---` at `:140`), in
-  the `:121-138` format.
-- Peer overlaps to record: Step Dependencies § Overlap (252, 248, 249, 250, 241). None is a field-number,
-  migration or config-key collision, so none needs a hard ordering row.
+**Codebase Evidence** (re-grepped 2026-10-30):
+- `merge-order.md:81` already holds the hard row `fix-getpnl-source-service (251)` after `fix-ledger-query-pagination (257)`
+  (257 merged as `079870fa`, #1371). 252 `fix-identity-ledger-test-suites` is `launched`, so the planned 252 context
+  note and the 252 rebase duties are moot; 251 no longer edits the ledger runner, ledger tests or `ci.yml`.
+- Rebase-only note precedent: `merge-order.md:166` (252 ↔ 248 …); the last note is followed by `---` at `:179`.
+- Remaining peer overlaps (shared files, no field/migration/key collision): 249 and 241 on `trading.go` and trading
+  `CLAUDE.md` / `INVENTORY.md`. Verify each peer's `status.md` at execute time and skip a peer that is `launched`.
 
 **TDD**: `N/A (docs)`
 
 **Covers**: —
 
 **Instructions**:
-1. Insert a blockquote in the `:121-138` format, titled `Note on 251 fix-getpnl-source-service ↔ 252 / 248 / 249 /
-   250 / 241 — rebase-only, no hard ordering row.`
-   - Place it after the last note before the `---` at `:140`. If 252's note is already on the base, place it after
-     that note. The textual conflict at this anchor is accepted and resolved by rebase.
-   - Bullets:
-     - **252 ↔ 251 on the ledger test runner and `ledgerServiceImpl.test.ts`.** Whichever merges second:
-       - reconciles `makeRow.cursor_us` and the hasMore token decode (251 Step 2) with 252's de-guarded file;
-       - drops the `.ts` extension from 251's `queryEventsPage` test imports once 252's `tsc` runner compiles
-         tests;
-       - keeps `ledger-pg-test` running `src/__tests__/pg/queryEventsKeyset.test.ts` in strip mode, or repoints
-         it at the compiled `dist/__tests__/pg/queryEventsKeyset.test.js`;
-       - keeps the `queryEvents` delegate (251 Step 1) covered.
-     - **248 ↔ 251 on `ledgerServiceImpl.ts`/`.test.ts`, `ci.yml` and ledger `CLAUDE.md`.** The methods are
-       disjoint (`streamEvents`/`getEvent` vs the `queryEvents` delegate), and `rowToEvent` stays in place. Both add
-       a TimescaleDB ledger job to `ci-gate.needs`; keep the union.
-     - **249 ↔ 251 on `trading.go`, trading `CLAUDE.md` and `INVENTORY.md`.** Line-disjoint; only the anchors
-       shift.
-     - **250 ↔ 251 on `ci.yml` `ci-gate`.** Keep the union of the added jobs.
-     - **241 ↔ 251 on `trading.go`.** 241 edits `escalateSystemic` (`:2163-2190`); 251 edits only
-       `applyBrokerOrderStatus`. 241's `implementation-spec.md:70-71` claim that 251 edits `:2188` is stale.
-2. Append a dated session note to 252's `context.md` stating the 252 ↔ 251 reconciliation duty.
+1. Insert a blockquote in the `:166` format after the last note and before the `---` at `:179`, titled
+   `Note on 251 fix-getpnl-source-service ↔ 249 / 241 — rebase-only, no hard ordering row.` Bullets: 249 ↔ 251 on
+   `trading.go` / trading `CLAUDE.md` / `INVENTORY.md` (line-disjoint, anchors shift); 241 ↔ 251 on `trading.go`
+   (241 edits `escalateSystemic`; 251 edits only `applyBrokerOrderStatus`, so 241's `implementation-spec.md` claim
+   that 251 edits the `SourceService` literal there is stale). Drop any peer that is already `launched`.
 
 **Verification**:
 ```bash
-grep -n "fix-getpnl-source-service" docs/roadmap/features/merge-order.md docs/roadmap/features/252-fix-identity-ledger-test-suites/context.md
+grep -n "fix-getpnl-source-service" docs/roadmap/features/merge-order.md
 ```
 
 ---
@@ -1119,3 +884,8 @@ The (i)-(iv) results are recorded, each within threshold or escalated.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- 2026-10-30 (re-spec): Steps 1-3 superseded by features 257/263 (ledger `sequence` keyset already shipped).
+- 2026-10-30 (re-spec): `ErrRealizedUnavailable` dropped; `ErrLedgerUnavailable` (257) is reused. Added only `ErrFillUnattributable`.
+- 2026-10-30 (re-spec): acceptance wording drift to amend in `acceptance.feature` at Step 6 (own commits): AC-9 ("pages of 500", "exactly 2 calls"; the page size is now 1000) and AC-12 ("ordered by recorded_at then event_id"; the order is `sequence`).
+- 2026-10-30 (re-spec): UI BFF backstop and `isForeignFillEvent` dropped (feature 263 forces `ownerOnly: true` in `traderBff.ts`); AC-20 becomes a preserve guard.
