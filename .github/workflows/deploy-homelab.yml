@@ -281,7 +281,7 @@ jobs:
           export MTLS_CA
           bash scripts/mtls-provision.sh decode-ca "$certs"
           bash scripts/mint-smoke-trigger-leaf.sh "$certs" "$trig"
-          rm -rf "$certs"
+          rm -rf "$certs"; unset MTLS_CA
           mkdir -p "$out/smoke-results"
           if git rev-parse -q --verify refs/remotes/origin/smoke-results >/dev/null; then
             git archive origin/smoke-results | tar -x -C "$out"
