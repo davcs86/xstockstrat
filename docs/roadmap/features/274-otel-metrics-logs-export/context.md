@@ -169,3 +169,25 @@
   (PR-A spec step 0); UI Next.js span correlation (PR-A AC-11 ui row); unwrapped UI health/auth/oauth/audit routes
   (accepted); cost budget (G1 q7, prod flip out of scope); P-0 F-09 re-check (P-0).
 - Status: spec-ready → design-approved.
+
+## Session 2026-10-30 — sdd-spec
+
+- Generated implementation-spec.md with 59 steps (PR-A steps 1-47, G1 gate step 48, PR-B steps 49-59). Status -> implementation-ready.
+  Every `@AC-1..AC-22` scenario is covered by a `**Covers**` line (table in the spec's Scenario Coverage block).
+- Key codebase findings (all re-verified against trunk @ `3968bcea`, feature 250 landed; they supersede stale recon/design premises):
+  - **D1** Python locks already at `opentelemetry-sdk`/`exporter-otlp-proto-http` 1.45.1 and `instrumentation-grpc` 0.66b1 in all four
+    services (recon said 1.42.1/0.63b1 and an ingest lag). Design's pin <1.43 / ==0.63b1 / `uv lock` x4 work is void; no pyproject change.
+    Probe re-run at 1.45.1/0.66b1: no meter code in instrumentation-grpc; `abort`/`set_code` set `rpc.grpc.status_code`; SDK `LoggingHandler`
+    still exists but is deprecated (successor: `opentelemetry-instrumentation-logging` 0.66b1) - default kept per design, escalate if removed.
+  - **D2** the three Python gRPC servers call `grpc.aio.server()` with no `interceptors=`; the cancel/deadline interceptor is a new argument
+    (the OTel interceptor is inserted first by `GrpcAioInstrumentorServer`, so ours is inner).
+  - **D3** all four Node services are CommonJS and `tsc && node --test dist/...` (no strip-types runner) - `createRequire` not needed.
+  - **D4** Go `main.go` lines drifted from recon (re-cited in steps); slog bridge + bounded shutdown live in `internal/telemetry`
+    (`WrapLogHandler`, `StopServer`) so they are testable (cmd/ is excluded from CI coverage).
+  - **D5** notify fanout code is `src/fanout/{fanout,webPush}.ts`. **D6** UI lockfile is the repo-root `pnpm-lock.yaml`.
+    **D7** the agent already has a `ServerMiddleware` precedent (`CallerPropagationMiddleware`, `tools.py:194`, appended `:381`).
+  - Feature 250 landed state: guard Parts 1-3 + `.test.sh` + fixtures + `otel-signals` CI job; alerts file holds only `deleteRules`/`deleteMuteTimes`;
+    one Tempo-only dashboard; pre-250 rule/panel/mute-timing bodies are recoverable with `git show 3968bcea^:<path>` (cited in PR-B steps).
+  - Env parity needs no edit: 12 compose `OTEL_EXPORTER_OTLP_ENDPOINT` lines, `OTEL_ENABLED` anchor, global `.do/app*.yaml` envs; no sampler/BLRP env set.
+  - Go modules verified resolvable at the design's pin set (otel 1.45.0 line + log 0.21.0 + otelslog 0.20.0); Go 1.27 `slog.NewMultiHandler` present.
+- Open for `/sdd-review impl-spec`: DO SIGKILL grace (step 1), G1 label/series names (step 48), SDK `LoggingHandler` deprecation (D1).
