@@ -701,7 +701,7 @@ pnpm run lint
 
 ### Step 12 — service: UI audit route — fail-closed resolve, safe error log, generic 500
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/api/audit/route.ts` — modify
@@ -759,7 +759,7 @@ grep -n "resolveDbConnection\|HEADER_TRACE_ID\|ssl: dbConn.ssl" src/app/config-u
 
 ### Step 13 — test: UI audit route vitest (AC-4, AC-7, AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/api/audit/route.test.ts` — create
@@ -1098,3 +1098,13 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
   not name; it is dead once the resolver takes the CA. RED: AC-1 failed — the boot child exited on `mtls: MTLS_CERT,
   MTLS_KEY and MTLS_CA_CERT must all be set`, not `DATABASE_CA_CERT`. The two Pool-level AC-2 tests were green at RED
   (the resolver from Step 1 already exists). GREEN: 3/3. **Disposition**: operator standing rule.
+- **Steps 12 and 13 executed as one commit (2026-10-29, sequential).** Step 12's TDD gate is `red-green required
+  (paired with Step 13)`: its RED test is Step 13's `route.test.ts`, so Step 12 cannot complete a red→green cycle
+  alone. Applied the standing operator rule (operator, 2026-10-29, in their own words: 'Merge pairs + standing
+  rule'): "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step (e.g. ... the RED test is that next step's test), do NOT return a blocker. Execute this
+  step and the next one together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps
+  done, and add a Deviation Log entry quoting the rule." RED: AC-4 failed (the old route built a `Pool` and queried,
+  body `Cannot read properties of undefined (reading 'rows')`) and AC-7 failed (body echoed `self-signed certificate
+  in certificate chain`); AC-8 and the unset-URL regression were green at RED. GREEN: 4/4. The pre-declared
+  "AC-7 narrowed (UI)" entry above is confirmed: `pg` is mocked. **Disposition**: operator standing rule.

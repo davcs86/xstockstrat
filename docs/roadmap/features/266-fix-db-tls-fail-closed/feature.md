@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (steps 6–7 done) | /sdd-execute sequential | Config resolves DB TLS first in `main()` (before `loadMasterKey`); boot tests through `main()` for AC-1, AC-2 (wrong CA + positive control) and AC-3, one commit per the merge-pairs standing rule |
 | 2026-10-29 | `in-progress` (steps 8–9 done) | /sdd-execute sequential | Identity resolves DB TLS first in `main()` (before `ConfigWatcher`) and probes `SELECT 1` at boot; boot + Pool-level TLS-stub tests, one commit per the merge-pairs standing rule |
 | 2026-10-29 | `in-progress` (steps 10–11 done) | /sdd-execute sequential | Notify resolves DB TLS first in `main()` (before `ConfigWatcher`) and probes `SELECT 1` at boot; boot + Pool-level TLS-stub tests, one commit per the merge-pairs standing rule |
+| 2026-10-29 | `in-progress` (steps 12–13 done) | /sdd-execute sequential | Config-ui audit route resolves DB TLS fail-closed before building its pool, logs trace id + code + message only, returns a generic 500; route vitest for AC-4, AC-7, AC-8, one commit per the merge-pairs standing rule |
 
 ---
 

@@ -687,3 +687,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   clean); greps: no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` and
   `pool.query('SELECT 1')` present; `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 3/3 named
   tests pass (P-06); `test:coverage` exit 0, 105/105, all files 78.29% lines (≥40).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 12+13
+
+- Tooling setup (steps 12–13): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps installed with
+  `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter xstockstrat` (worktree-local; the main worktree
+  has no `node_modules` to symlink; no lockfile change).
+- Steps 12 and 13 landed as one commit under the operator's standing merge-pairs rule (Step 12's RED test is Step 13's
+  route vitest); Deviation Log entry added.
+- `src/app/config-ui/api/audit/route.ts`: `getPool()` calls `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` and
+  assigns `pool` only after a successful resolve; the stale "without rejecting the DO-signed certificate" comment, the
+  inline sslmode strip and `rejectUnauthorized: !!caCert` are gone (the `max` comment stays). The `catch` logs
+  `console.error('config-ui audit: database error', { traceId, code, message })` with the trace id read via
+  `HEADER_TRACE_ID`, and returns `{ error: 'Audit log unavailable' }` with status 500. Order 401 → 403 →
+  `!DATABASE_URL → { entries: [] }` → `getPool()` inside the `try` is unchanged.
+- Test `src/app/config-ui/api/audit/route.test.ts`: mocks `@/lib/auth` and `pg` (`vi.hoisted` `Pool`/`query`),
+  `vi.resetModules()` + dynamic import per case; cases AC-4, AC-7, AC-8 and the unset-`DATABASE_URL` regression. No
+  domain fixture (C-12 exempt; `INVENTORY.md` unchanged).
+- TDD: AC-4 red (old route constructed `Pool` and queried; body was the raw TypeError message) → green. AC-7 red (body
+  echoed `self-signed certificate in certificate chain`) → green. AC-8 and the regression case green before and after.
+- Verification: `tsc --noEmit` reports only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` TS2339
+  errors (recorded at Step 3); `pnpm run lint` exit 0 (pre-existing warnings only); grep for
+  `rejectUnauthorized`/`includes('sslmode`/`err.message }` in `route.ts` → no output; `resolveDbConnection`,
+  `HEADER_TRACE_ID` and `ssl: dbConn.ssl` present; the test imports `HEADER_TRACE_ID` from `@/lib/headers`;
+  `vitest run route.test.ts` 4/4; `test:coverage` exit 0, 333/333 in 60 files, all files 75.91% lines (≥40).
+
