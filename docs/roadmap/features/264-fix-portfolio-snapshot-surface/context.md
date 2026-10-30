@@ -454,3 +454,358 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     Consider a debt-radar note or deleting the Connect stream arm in a later feature.
   - [ ] **Same-file rebase with 242/251/256/257.** Re-grep the cited lines at execute time (unchanged guidance).
 - Ledger: no new line. The existing entries already cover these traps (fails.md:613, :2909).
+
+## Session 2026-10-28 — sdd-execute re-spec gate (§5.3)
+- Branch setup: detached at `origin/feature/fix-portfolio-snapshot-surface`, merged `origin/main-dev` with
+  `-X ours` (e786d2b5), pushed.
+- Directive: conditional. Re-spec'd step bodies 1, 3, 4, 5, 6, 8 only (line-ref drift; no behavior change).
+  - Steps 1/3/4: the gRPC `StreamPortfolioUpdates` signature is at `portfolio_handler.go:292` (`Sprintf` `:293`).
+    `cmd/server/main.go` refs moved: `NewPortfolioHandler` `:78`, `RegisterPortfolioServiceServer` `:101`.
+  - Step 5: consumer goroutines at `main.go:71-76`; `s.cfg.FactorMap` at `:492`.
+  - Step 6: `031_heal_indicators_sandbox_keys_full_dotted` (243, d8b7a8df) and `032_analysis_zero_trap_descriptions`
+    (244, d2002841) are now committed on their feature branches. They match the claims, so reserving 034 still holds.
+    No 033_/034_ file exists on any remote ref. 277's 033 mention is moot (demoted/canceled). The blockquote is at
+    `merge-order.md:213`.
+  - Step 8: `pnpm run test:coverage` is at `.github/workflows/ci.yml:594`.
+- Steps 2, 7, 9, 10 were not in the validation's drift list, so they were not edited.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+- **Up-front confirmation (§5.1b/§5.4):** given by operator standing authorization in the operator chat on
+  2026-10-28 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, and later
+  "start batch 2 in parallel too". The operator's answers were:
+  - checkpoints are unattended, reported only;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred;
+  - DB and prod steps are operator-only: open the PR and hold the merge.
+- Lifecycle: `implementation-ready` → `in-progress`. Severity SEV-2.
+- Consumer surface (C-14): none or internal. All steps are portfolio backend, the config migration, or docs.
+- Open review warnings carried forward: the `[ ]` items in the 2026-10-22 sdd-review impl-spec note.
+
+### Step 1 — service: Owner-scope the snapshot subscriber map and fan-out (fail-closed) [done]
+- Added `snapshotSubscriber{ch, userID}`; `subs` is now `map[string]snapshotSubscriber`; `Subscribe(id, userID)`;
+  `Unsubscribe` closes `sub.ch`; `broadcastSnapshot` skips any subscriber with `sub.userID != userID` (strict, so an
+  empty owner receives nothing). Valuation, the unpriced skip, `InsertSnapshot` and `emitEvent` are unchanged and stay
+  before the loop on the fill `ctx`. Both handler call sites pass the caller id; the gRPC adapter hoists `userID`.
+  The three feature-231 tests subscribe as `"u1"`.
+- TDD (Step 2 RED evidence, @AC-1/@AC-3 producer): with Part A only,
+  `GOWORK=off go test ./internal/service/ -run 'TestBroadcastSnapshot_' -count=1 -v` →
+  `portfolio_snapshot_scope_test.go:38: other user's stream received 1 of u-1's snapshots` /
+  `--- FAIL: TestBroadcastSnapshot_AC1_OnlyOwnerReceives` and
+  `portfolio_snapshot_scope_test.go:56: empty-owner stream received 1 snapshots` /
+  `--- FAIL: TestBroadcastSnapshot_EmptyOwnerSubscriberReceivesNothing`. After Part B (`-race`): all five
+  `TestBroadcastSnapshot_*` PASS, including the 231 `SkipsWhenUnpriced`/`AC2_BrokerFirstEquity`/`AC8_AnyUnpricedSkips`.
+  The probe test file is not committed here; Step 2 creates it.
+- Verification: `go build ./...` + `go vet ./...` clean; the grep shows the struct, map and skip; the old-signature
+  grep exits 1; `GOWORK=off go test ./... -race -count=1` all packages ok.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`,
+  `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`,
+  `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go`
+- Deviations: RED probe file not committed with Step 1; `:292`→`:293` line drift (Deviation Log).
+- Open: `golangci-lint` in `~/go/bin` refuses this module (`built with go1.25 < go 1.27.0`), so Step 2's lint
+  verification needs a lint binary built with Go ≥ 1.27, or a CI-equivalent fallback.
+
+### Step 2 — test: Owner isolation at the producer (@AC-1, @AC-3 producer half) [done]
+- Created `portfolio_snapshot_scope_test.go` with two tests:
+  - `TestBroadcastSnapshot_AC1_OnlyOwnerReceives`: the u-1 stream gets one snapshot (`PortfolioId u-1`,
+    `Equity 1000`), the u-2 stream stays empty, and `ledger.calls == 1`.
+  - `TestBroadcastSnapshot_EmptyOwnerSubscriberReceivesNothing`: the fail-closed case.
+  - Both share a file-local mock setup (`newScopedSnapshotSvc`) built on `newQuoteSvc`. They reuse `testdata.Aapl` and
+    add no new testdata symbol (C-13).
+- TDD, AC-1/AC-3 RED: the Step-1 owner skip was disabled in the working tree only, never committed. Output:
+  - `portfolio_snapshot_scope_test.go:39: other user's stream received 1 of u-1's snapshots` (FAIL);
+  - `portfolio_snapshot_scope_test.go:56: empty-owner stream received 1 snapshots` (FAIL).
+- GREEN, with the skip restored: all five `TestBroadcastSnapshot_*` pass under `-race`.
+- Verification:
+  - `go test ./... -race` is ok across all packages;
+  - CI-scoped coverage total is 68.6% (threshold 40%);
+  - golangci-lint v2.14.0 reports `0 issues` (rebuilt with go1.27; see the Deviation Log);
+  - the C-13 grep finds exactly one declaration.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_snapshot_scope_test.go` (new).
+- Deviations: lint binary rebuilt at the CI pin (Deviation Log). Out-of-scope changes: none.
+
+### Step 3 — service: Shared `streamSnapshots` helper, `snapshotHub` seam, gRPC empty-caller rejection [done]
+- `portfolio_handler.go`:
+  - unexported `snapshotHub` interface, plus the `*service.PortfolioService` compile-time assertion;
+  - `hub` field, set in `NewPortfolioHandler`;
+  - `streamSnapshots` holds the single subscribe/send loop and the unchanged TradingMode filter, and both
+    `StreamPortfolioUpdates` paths call it;
+  - the gRPC adapter now returns `InvalidArgument "user_id required"` before it builds `subID` or subscribes;
+  - `req.UserId` stays unread.
+- TDD, @AC-2 RED (Part A only, using a probe test). Output (FAIL):
+  - `want InvalidArgument, got context deadline exceeded`;
+  - `anonymous stream must never subscribe; recorded 1 Subscribe calls`.
+- GREEN after Part B: PASS.
+- Verification:
+  - `go build` and `go vet` are clean;
+  - the four greps match: helper, `hub: svc` and the gRPC check found; loop count 1; Connect wiring count 1;
+  - `go test ./... -race` is ok;
+  - golangci-lint v2.14.0 reports `0 issues`.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`.
+- Deviations: RED probe not committed (Deviation Log). Out-of-scope changes: none.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+- **Up-front confirmation:** standing operator authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute. Checkpoints are
+  unattended ("report"). C-16 promotion is auto-confirmed unless it changes an existing @AC rule. Merge-train is
+  authorized; 255/275 are deferred. DB/prod steps are operator-only: open the PR and hold the merge. Status was
+  already `in-progress` (set 2026-10-28), so there is no status flip this session.
+- **Branch setup:** `git merge -X ours origin/main-dev` into the detached checkout of `origin/feature/fix-portfolio-snapshot-surface` (8ddff283).
+- **Re-spec gate §5.3:** step bodies 4, 5, 6, 7, 8, 9 and 10 were re-checked against the merged tree.
+  - Step 4: the gRPC adapter signature is at `portfolio_handler.go:305`. The Step-3 wiring (`:43`, `:54`, `:63`,
+    `:151`, `:312`) is recorded.
+  - Step 5: `StartSnapshotWriter` comment is at `:898`, func at `:899-911`, reader at `:900`. Other `s.cfg` uses are
+    at `:492` and `:973-974`. Delete by symbol.
+  - Step 6: 248's branch now commits `033_ledger_stream_resolve_timeout` (990ceb0b). Claims are 031 = 243,
+    032 = 244, 033 = 248; the double claim is resolved. 034 is still free on every remote ref. The row reason text was
+    updated, and the blockquote anchor moved to `merge-order.md:226`.
+  - Steps 7 and 8: no mismatch; a re-verified note was added.
+  - Step 9: `InsertSnapshot` is at `:936` and `max_drawdown_pct` at `:973`. config-governance anchors moved to
+    `:426`/`:108` after the main-dev merge.
+  - Step 10: gate state recorded. (a) passes because main-dev tops out at 030. (b) is not yet met because
+    031/032/033 exist only on the 243/244/248 branches.
+
+### Step 4 — test: Stream handler identity gate and helper wiring (@AC-2, @AC-6, @AC-3 Connect half) [done]
+- Created `portfolio_stream_test.go` with inline `fakeHub` (owner-filtered `push`, which mirrors the Step 1 producer
+  contract) and `fakeGRPCStream`. C-13: there is a single consumer, so nothing goes into testdata. It holds five tests:
+  - `TestStreamPortfolioUpdates_GRPC_AC2_RejectsEmptyCaller`;
+  - `TestStreamPortfolioUpdates_Connect_AC6_RejectsEmptyCaller`, which sets the deprecated body `UserId` and confirms
+    it is ignored;
+  - `TestStreamSnapshots_AC3_DeliversOnlyToCallersStream`;
+  - `TestStreamPortfolioUpdates_GRPC_AC1_WiresCallerIdentity`, end to end through the mounted adapter;
+  - `TestStreamSnapshots_TradingModeFilterPreserved`.
+- TDD, @AC-2 RED: the gRPC check was reverted in the working tree only. Output (FAIL):
+  - `portfolio_stream_test.go:162: want InvalidArgument, got context deadline exceeded`;
+  - `portfolio_stream_test.go:165: anonymous stream must never subscribe; recorded 1 Subscribe calls`.
+  - @AC-6 and the @AC-1/@AC-3 wiring cases passed on that tree, which is expected (red N/A per the spec).
+- GREEN with the handler restored: all five pass under `-race`.
+- Verification:
+  - `go test ./... -race` is ok;
+  - CI-scoped coverage total is 68.6% (threshold 40%);
+  - golangci-lint v2.14.0 (go1.27 rebuild) reports `0 issues`;
+  - the C-13 grep finds one declaration each of `fakeHub` and `fakeGRPCStream`.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_stream_test.go` (new).
+- Deviations: RED via a working-tree revert; lint fallback (Deviation Log). Out-of-scope changes: none.
+
+### Step 5 — service: Delete the zero-caller `StartSnapshotWriter` [done]
+- Deleted `StartSnapshotWriter` (doc comment + func, `portfolio_service.go:898-911`). `broadcastSnapshot` stays: its
+  production caller is the per-fill path (`:376`), plus its unit tests. `s.cfg`, `"time"` and `commonv1` stay in use.
+- TDD: N/A (dead-code deletion, no caller). Pre-deletion, the verification grep found 3 hits (`:898-900`).
+- Verification:
+  - `grep -rn "StartSnapshotWriter\|snapshot.interval_minutes" --include=*.go services/` exits 1;
+  - `GOWORK=off go build ./...` and `go test ./... -race -count=1` are ok across all packages;
+  - golangci-lint v2.14.0 (go1.27 rebuild) reports `0 issues`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`.
+- Deviations: lint fallback (Deviation Log). Out-of-scope changes: none.
+- Open: `portfolio.snapshot.interval_minutes` now has no Go reader; the service CLAUDE.md config row and the findings
+  row are handled by the later doc steps.
+
+### Step 6 — docs: Reserve config migration 034 and sequence 264 in merge-order.md [done]
+- Added the 264 row after the 231 row (`merge-order.md:77`): 264 after 243 (`031`), 244 (`032`) and 248 (`033`),
+  reserving `034_retire_portfolio_snapshot_interval`; Resolved `No`. The 243/244/248 rows and claims are untouched.
+- TDD: N/A (docs). Pre-edit, `grep -n "034_retire_portfolio_snapshot_interval" merge-order.md` found 0 hits.
+- Verification: the same grep now returns exactly one row (`:77`). The pre-assignment blockquote cite `:226` holds.
+- Files modified: `docs/roadmap/features/merge-order.md`.
+- Deviations: none. Out-of-scope changes: none.
+- Open: the Step 10 two-sided gate must be re-run before merge, after 243/244/248 land.
+
+### Step 7 — migration: `034_retire_portfolio_snapshot_interval.{up,down}.sql` [done]
+- Pre-check (ordering): `grep -rn "snapshot.interval_minutes" --include=*.go services/` exits 1, so Step 5 has landed
+  (3e531aaf) and no Go reader remains.
+- Up: `DELETE FROM config.config_values WHERE namespace = 'portfolio' AND key IN ('portfolio.snapshot.interval_minutes',
+  'snapshot.interval_minutes')`, so every environment, every `user_id` and both stored key forms. Header follows 020.
+- Down: the 020 layout (clobber NOTE, column list with `is_secret`, `ON CONFLICT … DO NOTHING`). It restores exactly the
+  two seeded rows: staging/5 (001:68, renamed by 017:38) and production/1 (002:69), full-dotted key, `user_id` NULL.
+  Per-user overrides are not restored, which is accepted as in 020.
+- TDD: N/A (migration). Pre-state: the 034 files were absent, and the only `snapshot.interval_minutes` matches in the
+  config migrations were the 001/002 INSERT seeds.
+- Verification (offline, no DB): both files are listed; `^03[1-9]_` shows only the 034 pair locally; the up has the
+  DELETE (`:6`); the down count is `2`. By inspection, the down re-inserts exactly the rows the up deletes.
+- Files modified: `services/xstockstrat-config/migrations/034_retire_portfolio_snapshot_interval.{up,down}.sql` (new).
+- Deviations: none. Out-of-scope changes: none.
+- Open: the Step 8 @AC-5 scan is the paired test. Its RED (the highest match being the 002 INSERT) can no longer be
+  captured on this tree; Step 8 must re-capture it by moving the 034 files aside in the working tree only. The Step 10
+  two-sided gate is still owed before merge.
+
+### Step 8 — test: @AC-5 static scan of the config migration set [done]
+- Created `retiredPortfolioSnapshotInterval.test.ts`. It reads `migrations/*.up.sql`, sorts by numeric prefix, splits
+  on `;` (comment lines dropped, whitespace normalised, lower-cased) and asserts: (i) some up file names either quoted
+  key form; (ii) the highest match has a `DELETE FROM config.config_values` statement that itself holds
+  `namespace = 'portfolio'` and a key literal; (iii) no `INSERT INTO config.config_values` naming either form at or
+  after that file. File names are in every assertion message; no runner-output assertions; no fixture (C-13 N/A).
+- TDD: RED with the 034 pair moved aside in the working tree only — fails on (ii) at `002_config_environment.up.sql`.
+  GREEN with 034 restored — the highest match is `034_…up.sql`.
+- Verification: the single test file passes (1/1, not skipped); `pnpm run test:coverage` 183/183 pass, c8 lines
+  86.77% (≥40); `pnpm run lint` 0 errors (158 pre-existing warnings, none in the new file).
+- Files modified: `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts` (new).
+- Deviations: RED re-capture method (Deviation Log). Out-of-scope changes: none.
+- Open: Step 10 still owes the dev-smoke `ListKeys` check (applied state) and the two-sided migration-number gate.
+
+### Step 9 — docs: Retire the key and record stream isolation in context docs, then the teardown refresh [done]
+- Portfolio `CLAUDE.md`: deleted the `portfolio.snapshot.interval_minutes` row; `portfolio.snapshot` event reworded to
+  "Snapshot written after each processed fill"; appended the `StreamPortfolioUpdates` isolation sentence to the H-3
+  paragraph (owner-only delivery; empty caller `InvalidArgument` on both paths before subscribing). That keeps the
+  `:21-22` "missing header yields `InvalidArgument`" claim true (gRPC adapter `portfolio_handler.go:309`, Connect `:148`).
+- Portfolio findings `:29`: `StartSnapshotWriter` row marked `~~…~~ **RESOLVED 2026-10-29 (feature 264)**` (240-row
+  convention); evidence now cites config migration 034 and `#broadcastSnapshot`.
+- Debt radar D-12 (`:236`) and D-24 (`:447`): suffix `*(carried, open)*` → `*(fixed by feature 264)*`.
+- config-governance: new `### feature 264` entry at the top of § Per-Feature Registered Keys (newest-first), with
+  "**Removes** `portfolio.snapshot.interval_minutes` (migration 034)".
+- PLAT-6 (`docs/context-constitution.md:40`): evidence now `portfolio_service.go#portfolio.risk.max_drawdown_pct`
+  (~L958, `s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)`); rule text unchanged.
+- **Teardown: the context-forge `context-constitution` refresh skill is unavailable in this session** (only
+  `context-forge:context-scrubber` is listed). Manual reconciliation: re-read each touched file against current code.
+  - `grep -rn "StartSnapshotWriter|interval_minutes" --include=*.go services/xstockstrat-portfolio` returns no hits.
+  - `broadcastSnapshot` (`portfolio_service.go:898`) skips subscribers whose `userID` differs from the owner (`:928`);
+    `InsertSnapshot` is at `:921`.
+  - Portfolio `docs/context-constitution.md` (PORTFOLIO-1/-16 and the 231 note) cites `broadcastSnapshot` only for
+    valuation and skip behaviour, which is unchanged, so there is no grounded drift. Root findings have no
+    snapshot-stream entry.
+  - `scrubberExtraTargets` (`README.md`, `docs/patterns/ui-ux-governance.md`) were not touched and describe no changed behaviour.
+  - The integration PR body must record both that the plugin was unavailable and this reconciliation.
+- TDD: N/A (docs).
+- Verification: (1) the `snapshot.interval_minutes` grep over portfolio `CLAUDE.md` and `docs/context-constitution.md`
+  exits 1; (2) config-governance `:114` matches `**Removes** \`portfolio.snapshot.interval_minutes\``; (3) D-12
+  and D-24 both show "fixed by feature 264"; (4) portfolio `CLAUDE.md:52` holds the `StreamPortfolioUpdates` sentence.
+- Files modified: `services/xstockstrat-portfolio/CLAUDE.md`,
+  `services/xstockstrat-portfolio/docs/context-constitution-findings.md`, `docs/repo-surveyor/debt-radar-findings.md`,
+  `docs/patterns/config-governance.md`, `docs/context-constitution.md`.
+- Deviations: governance entry placement, PLAT-6 line (~L958, not ~L973), and the manual teardown (Deviation Log).
+  Out-of-scope changes: none.
+- Open: Step 10 (the two-sided migration-number gate before merge, plus dev-smoke `ListKeys`).
+
+## Session 2026-10-29 — sdd-execute re-spec gate (§5.3), sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints; C-16 promotion auto-confirmed unless it
+  changes an existing @AC rule; merge-train authorized; 255/275 deferred; operator-only DB/prod steps: open PR, hold merge).
+- Status already `in-progress`; no status flip.
+- Branch setup: `git merge --no-edit origin/main-dev` → `f01acaa` (no conflicts). ledger-guard
+  (`--own-slug fix-portfolio-snapshot-surface --base origin/main-dev --fix`) reported clean; no repair needed.
+- Re-spec (Step 10 body only):
+  - Evidence now cites fails.md:2909 (Mistake) / :2911 (Rule).
+  - Adds `config.proto:29` `rpc ListKeys` and agent `list_config_keys(namespace, user_id="")` at `tools.py:1628` (was :1620).
+  - Adds `merge-order.md:77`.
+  - Gate state re-verified: `origin/main-dev` config migrations top out at `030`, so (a) passes and (b) is still unmet.
+  - Instructions item 2 and the Verification smoke line now use the real tool signature. The smoke is marked as an operator/post-deploy action.
+- Step 10 stays `pending`. It is held for the operator per the existing Deviation Log entry; nothing local remains to run.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 10 (operator-deferred)
+
+- Ran the Step 10 item-1 gate on `origin/main-dev` @ `22001134`.
+  - Config migrations top out at `031`: 243 merged in #1334.
+  - The `/0(3[4-9]|[4-9][0-9])_` grep is empty, so (a) passes.
+  - (b) is unmet: `032` (244) and `033` (248) are still only on their feature branches.
+- The post-deploy `list_config_keys(namespace="portfolio")` smoke on the staging and production agents is an operator action.
+- Step 10 stays `pending`; the Deviation Log hold entry now carries the re-run.
+- Open: merge-order.md:77 still names 243 as unmerged. Update it when 244 and 248 land and the row resolves.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan: fix-portfolio-snapshot-surface (feature 264)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| @AC-1 | services/xstockstrat-portfolio/acceptance/fix-portfolio-snapshot-surface.feature | CREATE | NEW | gRPC subscriber isolation |
+| @AC-2 | same | CREATE | NEW | gRPC empty x-user-id rejected |
+| @AC-3 | same | CREATE | NEW | Connect subscriber isolation |
+| @AC-6 | same | CREATE | NEW | Connect empty-caller non-regression |
+| @AC-5 | services/xstockstrat-config/acceptance/fix-portfolio-snapshot-surface.feature | CREATE | NEW | key retirement via config migration 034 |
+
+Neither target file exists. A repo-wide grep of `**/acceptance/*.feature` and `docs/sdd/business-rules/platform.feature` for `StreamPortfolioUpdates` and `snapshot.interval_minutes` returned no matches. So there are no DUP, OVERLAP or CONFLICT cases.
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-portfolio-snapshot-surface.feature (CREATE) ---
+~~~gherkin
+# Promoted from docs/roadmap/features/264-fix-portfolio-snapshot-surface/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-264` tag.
+# Durable business rules xstockstrat-portfolio already guarantees. A rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-portfolio - StreamPortfolioUpdates is owner-scoped and fail-closed
+  A snapshot stream delivers only the subscriber's own snapshots (a snapshot's portfolio_id is the owning
+  user_id) and rejects a subscriber with no caller identity.
+
+  @AC-1 @FR-1 @regression @feature-264
+  Scenario: A snapshot stream subscriber receives only its own snapshots
+    Given a gRPC StreamPortfolioUpdates stream "A" opened with x-user-id "u-1"
+    And a gRPC StreamPortfolioUpdates stream "B" opened with x-user-id "u-2"
+    When a snapshot is broadcast for user "u-1" holding 10 "AAPL" priced at 100.00
+    Then stream "A" receives a snapshot with portfolio_id "u-1"
+    And stream "B" receives no snapshot
+
+  @AC-2 @FR-2 @regression @feature-264
+  Scenario: A snapshot stream with no caller identity is rejected on the gRPC path
+    When a gRPC StreamPortfolioUpdates stream is opened with no x-user-id
+    Then the stream fails with INVALID_ARGUMENT
+    And it is not registered as a subscriber
+
+  @AC-3 @FR-3 @regression @feature-264
+  Scenario: The Connect path also isolates subscribers
+    Given a Connect StreamPortfolioUpdates stream "A" opened with x-user-id "u-1"
+    And a Connect StreamPortfolioUpdates stream "B" opened with x-user-id "u-2"
+    When portfolio broadcasts a snapshot for user "u-1"
+    Then stream "A" receives a snapshot with portfolio_id "u-1"
+    And stream "B" receives no snapshot
+
+  @AC-6 @FR-3 @non-regression @feature-264
+  Scenario: A snapshot stream with no caller identity stays rejected on the Connect path
+    When a Connect StreamPortfolioUpdates stream is opened with no x-user-id
+    Then the stream fails with INVALID_ARGUMENT
+    And it is not registered as a subscriber
+~~~
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-portfolio-snapshot-surface.feature (CREATE) ---
+~~~gherkin
+# Promoted from docs/roadmap/features/264-fix-portfolio-snapshot-surface/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-264` tag.
+# Durable business rules xstockstrat-config already guarantees. A rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-config - portfolio.snapshot.interval_minutes is a retired key
+  The dead key (its periodic writer was never started) is deleted by migration and must not be re-seeded.
+
+  @AC-5 @FR-4 @regression @feature-264
+  Scenario: portfolio.snapshot.interval_minutes is retired (FR-4 branch b)
+    Given the xstockstrat-config migration set
+    When the up migrations are scanned in numeric order for "portfolio.snapshot.interval_minutes" and "snapshot.interval_minutes"
+    Then the highest-numbered match deletes the key from config.config_values in namespace "portfolio"
+    And no migration from that one onward inserts either key form
+    And after the migrations are applied, neither the "production" nor the "staging" listing for service "portfolio" contains "portfolio.snapshot.interval_minutes"
+~~~
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1, 2, 3 and 6 assert on StreamPortfolioUpdates behavior, which lives in portfolio, so they go to the portfolio suite. AC-5 asserts on config.config_values and the config migration set (migration 034), so it goes to the config suite even though the key's namespace is `portfolio`. The feature.md Reviewers table lists both owners.
+- AC-4 was deleted at design (operator, 2026-10-22). The source file has no AC-4, and the gap is intentional, so nothing was renumbered.
+- No contradiction with promoted rules. The retired key still appears in `services/xstockstrat-portfolio/CLAUDE.md` § Config Keys Consumed. The step that executes migration 034 should remove that row. This is a doc-drift note, not a promotion issue.
+- The suites have no "Backed by" comment, because test names are not known at plan time. The orchestrator may add one after execution, as in `fix-book-portfolio-page.feature`.
+
+### Coverage check
+- Source scenarios: 5 (AC-1, 2, 3, 5, 6). Planned: 5 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None were skipped.
+```
+
+## Session 2026-10-29 — sdd-execute re-spec gate (§5.3), sdd-execute sequential (sdd-batch-execute)
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f — "Start executing features 241-276" via batch-execute; unattended checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing @AC rule; operator-only DB/prod steps: open PR, hold merge). Status already `in-progress`, so no status flip.
+- Branch setup: `git merge --no-edit origin/main-dev` (`0099647f`) merged cleanly (merge commit `1b440eab`); ledger-guard `--fix` reported clean.
+- Re-spec (Step 10 only, still `pending`): Codebase Evidence gate-state bullet updated. `origin/main-dev` config migrations now top out at `031_heal_indicators_sandbox_keys_full_dotted` (243 merged via #1334). Gate (a) passes (`/0(3[4-9]|[4-9][0-9])_` grep: no output). Gate (b) unmet: `032` only on `origin/feature/fix-python-config-stored-zero`, `033` only on `origin/feature/fix-ledger-trimmed-notify-payload`. Other evidence re-verified: `scripts/db-migrate.sh`, `config.proto:29` `rpc ListKeys`, `tools.py:1628` `list_config_keys`, `merge-order.md:77`, `fails.md:613/2909/2911`; local `034_retire_portfolio_snapshot_interval.{up,down}.sql` present. Step 10 stays an operator-held gate (integration PR draft, merge held).
+- Step 10 execute (2026-10-29): gate item 1 run against `origin/main-dev` @ `0099647f`. Config migrations list `…028 029 030 031`; the `/0(3[4-9]|[4-9][0-9])_` grep prints nothing (exit 1), so (a) passes. (b) is unmet: 244 (`032`) and 248 (`033`) are not yet on `main-dev`, and merge-order.md:77 stays `Resolved: No`. The post-deploy `list_config_keys(namespace="portfolio")` smoke on the staging and production agents needs a deployed build. Step 10 is deferred to the operator per the Deviation Log entry and stays `pending`; open the integration PR as a draft with the (a)/(b) checklist and hold the merge.
+
+## Session 2026-10-29 — operator decision: Step 10 becomes post-merge verification
+
+- Gate (a): `git ls-tree origin/main-dev services/xstockstrat-config/migrations/` tops out at `033_ledger_stream_resolve_timeout`; nothing is numbered `034` or higher. **Pass.**
+- Gate (b): `031_heal_indicators_sandbox_keys_full_dotted`, `032_analysis_zero_trap_descriptions` and `033_ledger_stream_resolve_timeout` are all on main-dev (`0ba6a8b7`), so 243, 244 and 248 have landed. **Pass.** No renumber is needed.
+- The ListKeys smoke needs migration 034 applied by a deploy, so it is post-merge by construction. The operator chose **"Post-merge verification (Recommended)"**.
+- Step 10 is `done` and status is `code-completed`. merge-order.md row 77 is set to `Resolved: Yes`.
+- Owed after merge:
+  - (1) After the dev deploy, run staging `list_config_keys(namespace="portfolio")` and confirm `portfolio.snapshot.interval_minutes` is absent; record the output here.
+  - (2) At the next `/promote`, run the same check on production.
+
+## Session 2026-10-29 — post-merge staging ListKeys smoke (pass)
+
+- Merged as `9bd923f3` (#1345). It was deployed to dev by DO deployment `db6ee608`, which went ACTIVE at 23:38:03Z.
+- The staging agent call `list_config_keys(namespace="portfolio")` returns only `portfolio.watchlist.max_per_user` and `portfolio.watchlist.max_symbols_per_list`. `portfolio.snapshot.interval_minutes` is absent, so migration 034 applied. Item (1) of the owed list is closed.
+- Still owed: item (2), the same check on production at the next `/promote`.

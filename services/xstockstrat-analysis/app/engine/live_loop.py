@@ -843,6 +843,7 @@ class LiveEvaluationLoop:
                 source_service="xstockstrat-analysis",
                 tags=[f"strategy_id:{definition.strategy_id}"],
                 context=ctx,
+                target_user_id=definition.user_id,
             )
         )
 
@@ -859,6 +860,7 @@ class LiveEvaluationLoop:
                 source_service="xstockstrat-analysis",
                 tags=[f"strategy_id:{definition.strategy_id}"],
                 context=ctx,
+                target_user_id=definition.user_id,
             )
         )
 

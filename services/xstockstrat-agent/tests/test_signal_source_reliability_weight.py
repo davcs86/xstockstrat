@@ -44,7 +44,7 @@ async def _capture_manage_request(**tool_kwargs):
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
 
     # Echo the request's reliability_weight back on the response so the projection can be asserted.
-    def _respond(req, metadata=None):
+    def _respond(req, metadata=None, timeout=None):
         return ingest_pb2.ManageSignalSourceResponse(source=req.source)
 
     mock_stub = MagicMock()
