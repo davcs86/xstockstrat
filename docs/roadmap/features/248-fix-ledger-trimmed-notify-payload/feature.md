@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -34,6 +36,7 @@
 | 2026-10-29 | `in-progress` (Step 11 done) | /sdd-execute sequential (sdd-batch-execute) | Step 11: docs teardown. Ledger constitution LEDGER-2 extended and LEDGER-8 added, the NOTIFY-trim gotcha marked resolved, findings rows resolved (`TRADING_MODE` left open), ledger `CLAUDE.md` says **five** subscriptions and documents the resolve plus `ledger.stream.resolve_timeout_ms`, config `CLAUDE.md` proto-PR drift removed, config-governance log entry, `ledger-db-test` CI row, Node fixture home marked materialized. context-forge refresh unavailable; manual anchor reconciliation done. `check-context-map.sh` exit 0 |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 11 steps done. C-16 promotion (operator standing authorization, auto-confirm): AC-1..AC-9 created verbatim (+`@feature-248`) in `services/xstockstrat-ledger/acceptance/fix-ledger-trimmed-notify-payload.feature`; 9 NEW, 0 DUP/OVERLAP/CONFLICT. Integration PR opened against `main-dev`; merge held for the operator |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

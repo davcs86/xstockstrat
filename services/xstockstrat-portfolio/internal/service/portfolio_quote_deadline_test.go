@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
@@ -34,7 +36,7 @@ type warnRecorder struct {
 
 func (h *warnRecorder) Enabled(context.Context, slog.Level) bool { return true }
 func (h *warnRecorder) Handle(_ context.Context, r slog.Record) error {
-	if r.Level != slog.LevelWarn {
+	if r.Level < slog.LevelWarn {
 		return nil
 	}
 	rec := map[string]string{"msg": r.Message}
@@ -103,7 +105,7 @@ func newQuoteSvc(t *testing.T, stub *stubMarketData, timeoutMs int64) (*Portfoli
 		repo:       repository.NewPortfolioRepoWithDB(mock),
 		marketdata: stub,
 		ledger:     ledger,
-		subs:       map[string]chan *portfoliov1.PortfolioSnapshot{},
+		subs:       map[string]snapshotSubscriber{},
 	}
 	if timeoutMs > 0 {
 		svc.quoteCfg = &fakeConfig{vals: map[string]int64{"portfolio.marketdata.quote_timeout_ms": timeoutMs}}
@@ -111,8 +113,8 @@ func newQuoteSvc(t *testing.T, stub *stubMarketData, timeoutMs int64) (*Portfoli
 	return svc, mock, ledger
 }
 
-// expectAllAccounts registers the all-accounts ListPortfolios reads: balance accounts, their positions, and
-// offline accounts with their positions. GetOfflineStates is left unexpected (its error is non-fatal).
+// expectAllAccounts registers the all-accounts ListPortfolios reads. GetOfflineStates is left unexpected, which marks
+// every offline account degraded (offline_state_unavailable); a caller asserting offline P&L must expect it itself.
 func expectAllAccounts(mock pgxmock.PgxPoolIface, balance []string, offline []string, positions map[string]*pgxmock.Rows) {
 	bal := mock.NewRows([]string{"account_id", "cash", "buying_power", "equity", "last_equity"})
 	for _, id := range balance {
@@ -318,7 +320,7 @@ func TestBroadcastSnapshot_SkipsWhenUnpriced(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, mock, ledger := newQuoteSvc(t, tc.stub, 0)
-			ch := svc.Subscribe("t")
+			ch := svc.Subscribe("t", "u1")
 			mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).
 				WillReturnRows(posRow(mock.NewRows(positionCols), "AAPL", "acc-1", 1, 100, 0))
 			if tc.insert {
@@ -342,17 +344,19 @@ func TestBroadcastSnapshot_SkipsWhenUnpriced(t *testing.T) {
 
 // ── feature 231: broker-first snapshot and concentration, skip on any unpriced position ──
 
-// recordingNotify records every alert body checkRiskLimits emits.
+// recordingNotify records every alert checkRiskLimits emits.
 type recordingNotify struct {
 	notifyv1.NotifyServiceClient
 	mu     sync.Mutex
 	bodies []string
+	reqs   []*notifyv1.EmitAlertRequest
 }
 
 func (n *recordingNotify) EmitAlert(_ context.Context, in *notifyv1.EmitAlertRequest, _ ...grpc.CallOption) (*notifyv1.EmitAlertResponse, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.bodies = append(n.bodies, in.Body)
+	n.reqs = append(n.reqs, in)
 	return &notifyv1.EmitAlertResponse{}, nil
 }
 
@@ -393,7 +397,7 @@ func sameSet(got, want []string) bool {
 func TestBroadcastSnapshot_AC2_BrokerFirstEquity(t *testing.T) {
 	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote()}}
 	svc, mock, ledger := newQuoteSvc(t, stub, 0)
-	ch := svc.Subscribe("t")
+	ch := svc.Subscribe("t", "u1")
 	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-off", testdata.LyftQty, testdata.LyftAvgEntry, 0)
 	rows = posRow(rows, testdata.Msft, "brk-1", testdata.MsftQty, 500, testdata.MsftBrokerPrice)
 	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
@@ -421,7 +425,7 @@ func TestBroadcastSnapshot_AC8_AnyUnpricedSkips(t *testing.T) {
 	rec := recordWarns(t)
 	stub := &stubMarketData{quotes: []*marketdatav1.Quote{lyftMarkQuote(), elwtOneSidedQuote()}}
 	svc, mock, ledger := newQuoteSvc(t, stub, 0)
-	ch := svc.Subscribe("t")
+	ch := svc.Subscribe("t", "u1")
 	rows := posRow(mock.NewRows(positionCols), testdata.Lyft, "acc-off", testdata.LyftQty, testdata.LyftAvgEntry, 0)
 	rows = posRow(rows, testdata.Elwt, "acc-off", testdata.ElwtQty, 6.00, 0)
 	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(rows)
@@ -455,6 +459,11 @@ func TestCheckRiskLimits_AC3_SumsAcrossAccounts(t *testing.T) {
 	if !sameSet(notify.bodies, want) {
 		t.Fatalf("alerts = %v, want exactly %v", notify.bodies, want)
 	}
+	for _, req := range notify.reqs {
+		if req.TargetUserId != "u1" || req.Category != "risk" || req.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING {
+			t.Fatalf("alert %q: target=%q category=%q severity=%v, want target u1, category risk, WARNING", req.Body, req.TargetUserId, req.Category, req.Severity)
+		}
+	}
 }
 
 // @AC-9: any unpriced position skips concentration (WARN names it); drawdown still alerts on broker equity.
@@ -475,7 +484,208 @@ func TestCheckRiskLimits_AC9_UnpricedSkipsConcentrationDrawdownStillAlerts(t *te
 	if !sameSet(notify.bodies, want) {
 		t.Fatalf("alerts = %v, want exactly %v", notify.bodies, want)
 	}
+	if got := notify.reqs[0].TargetUserId; got != "u1" {
+		t.Fatalf("drawdown alert TargetUserId = %q, want u1", got)
+	}
 	if w := rec.find("concentration check skipped: positions unpriced"); w == nil || !strings.Contains(w["unpriced"], testdata.Elwt) {
 		t.Fatalf("want WARN naming ELWT, got %v", w)
+	}
+}
+
+// @AC-6: a drawdown breach alert targets the account owner, not an untargeted broadcast.
+func TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner(t *testing.T) {
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	notify := &recordingNotify{}
+	svc.cfg, svc.notify = &config.Watcher{}, notify
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(mock.NewRows(positionCols))
+	balances := mock.NewRows([]string{"account_id", "equity", "peak_equity"}).AddRow("acct-1", 8500.0, 10000.0)
+	mock.ExpectQuery(`FROM portfolio.account_balances`).WithArgs("user-42", "TRADING_MODE_PAPER").WillReturnRows(balances)
+
+	svc.checkRiskLimits(ctxWithUser(t, "user-42"), "user-42", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	if len(notify.reqs) != 1 {
+		t.Fatalf("want exactly 1 alert, got %d: %v", len(notify.reqs), notify.bodies)
+	}
+	req := notify.reqs[0]
+	if want := "drawdown limit breach: account acct-1 at 15.0% (peak 10000.00, current 8500.00)"; req.Body != want {
+		t.Fatalf("body = %q, want %q", req.Body, want)
+	}
+	if req.Category != "risk" || req.Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING || req.TargetUserId != "user-42" {
+		t.Fatalf("category=%q severity=%v target=%q, want risk, WARNING, user-42", req.Category, req.Severity, req.TargetUserId)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock: %v", err)
+	}
+}
+
+// Feature 251 — GetPnL reads the canonical trading source, resolves each fill's side and folds in ledger order.
+
+const (
+	buy   = "ORDER_SIDE_BUY"
+	sell  = "ORDER_SIDE_SELL"
+	paper = "TRADING_MODE_PAPER"
+	live  = "TRADING_MODE_LIVE"
+)
+
+func filled(seq int64, order, symbol, acct string, qty, price float64, side string) *ledgerv1.LedgerEvent {
+	return testdata.FilledEvent(seq, order, "u-1", symbol, acct, paper, qty, price, side)
+}
+
+func partial(seq int64, order, symbol, acct string, qty, price float64, side string) *ledgerv1.LedgerEvent {
+	return testdata.PartialEvent(seq, order, "u-1", symbol, acct, paper, qty, price, side)
+}
+
+func runPnL251(t *testing.T, l ledgerv1.LedgerServiceClient, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
+	t.Helper()
+	svc := NewWireTestService(t, l)
+	var resp *portfoliov1.PnLResponse
+	var err error
+	Guard(t, func() { resp, err = svc.GetPnL(CtxWithUser(t, "u-1"), req) })
+	return resp, err
+}
+
+func wantRealized(t *testing.T, l *testdata.Ledger, want float64) {
+	t.Helper()
+	resp, err := runPnL251(t, l, &portfoliov1.GetPnLRequest{})
+	if err != nil {
+		t.Fatalf("GetPnL: %v", err)
+	}
+	if math.Abs(resp.GetRealizedPnl()-want) > 1e-9 {
+		t.Fatalf("RealizedPnl = %v, want %v", resp.GetRealizedPnl(), want)
+	}
+}
+
+func TestGetPnL251_AC1_SidelessFillsResolvedFromSiblings(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		testdata.CreatedEvent(1, "o-b", "AAPL", buy, 10), testdata.CreatedEvent(2, "o-s", "AAPL", sell, 10),
+		filled(3, "o-b", "AAPL", "a1", 10, 100, ""), filled(4, "o-s", "AAPL", "a1", 10, 150, ""),
+	}}, 500)
+}
+
+func TestGetPnL251_AC2_PartialOnlySell(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), partial(2, "o-s", "AAPL", "a1", 4, 150, sell),
+	}}, 200)
+}
+
+func TestGetPnL251_AC4_UnresolvableSideFailsClosed(t *testing.T) {
+	resp, err := runPnL251(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{filled(1, "o-x", "AAPL", "a1", 10, 100, "")}}, &portfoliov1.GetPnLRequest{})
+	if resp != nil || !errors.Is(err, ErrFillUnattributable) {
+		t.Fatalf("want ErrFillUnattributable and no response, got resp=%v err=%v", resp, err)
+	}
+}
+
+func TestGetPnL251_AC5_OtherUsersOrphanIgnored(t *testing.T) {
+	l := &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), filled(2, "o-s", "AAPL", "a1", 10, 150, sell),
+		testdata.FilledEvent(3, "o-u2", "u-2", "AAPL", "a2", paper, 5, 90, ""),
+	}}
+	wantRealized(t, l, 500)
+	for _, r := range l.Requests() {
+		if r.GetStreamKey() == "o-u2" {
+			t.Fatal("looked up another user's order")
+		}
+	}
+}
+
+func TestGetPnL251_AC6_LaterPageErrorFailsClosed(t *testing.T) {
+	evs := make([]*ledgerv1.LedgerEvent, 0, 1001)
+	for i := 1; i <= 1001; i++ {
+		evs = append(evs, filled(int64(i), "o-"+strconv.Itoa(i), "AAPL", "a1", 1, 100, buy))
+	}
+	l := &testdata.Ledger{Events: evs}
+	l.OnQuery = func(context.Context, *ledgerv1.QueryEventsRequest) error {
+		if l.Calls() == 2 {
+			return errors.New("ledger down")
+		}
+		return nil
+	}
+	resp, err := runPnL251(t, l, &portfoliov1.GetPnLRequest{})
+	if resp != nil || !errors.Is(err, ErrLedgerUnavailable) {
+		t.Fatalf("want ErrLedgerUnavailable and no response, got resp=%v err=%v", resp, err)
+	}
+}
+
+type stubLedger struct {
+	ledgerv1.LedgerServiceClient
+	pages []*ledgerv1.QueryEventsResponse
+	n     int
+}
+
+func (s *stubLedger) QueryEvents(context.Context, *ledgerv1.QueryEventsRequest, ...grpc.CallOption) (*ledgerv1.QueryEventsResponse, error) {
+	r := s.pages[min(s.n, len(s.pages)-1)]
+	s.n++
+	return r, nil
+}
+
+func TestGetPnL251_AC8_RepeatedEventAndEmptyPageWithToken(t *testing.T) {
+	ev := filled(1, "o-b", "AAPL", "a1", 10, 100, buy)
+	tok := func(s string) *commonv1.PageResponse { return &commonv1.PageResponse{NextPageToken: s} }
+	for name, pages := range map[string][]*ledgerv1.QueryEventsResponse{
+		"repeated event_id": {{Events: []*ledgerv1.LedgerEvent{ev}, Page: tok("1")}, {Events: []*ledgerv1.LedgerEvent{ev}, Page: tok("")}},
+		"empty page, token": {{Events: nil, Page: tok("1")}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, err := runPnL251(t, &stubLedger{pages: pages}, &portfoliov1.GetPnLRequest{})
+			if resp != nil || !errors.Is(err, ErrLedgerUnavailable) {
+				t.Fatalf("want ErrLedgerUnavailable and no response, got resp=%v err=%v", resp, err)
+			}
+		})
+	}
+}
+
+func TestGetPnL251_AC11_PayloadSideNeedsNoLookup(t *testing.T) {
+	l := &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), filled(2, "o-s", "AAPL", "a1", 10, 150, sell),
+	}}
+	wantRealized(t, l, 500)
+	for _, r := range l.Requests() {
+		if r.GetStreamKey() != "" {
+			t.Fatalf("unexpected side lookup for stream %q", r.GetStreamKey())
+		}
+	}
+}
+
+func TestGetPnL251_AC14_AccountGrainFold(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o1", "AAPL", "acct-1", 10, 100, buy), filled(2, "o2", "AAPL", "acct-2", 10, 120, buy),
+		filled(3, "o3", "AAPL", "acct-1", 10, 150, sell),
+	}}, 500)
+}
+
+func TestGetPnL251_AC15_MixedAccountAttributionFailsClosed(t *testing.T) {
+	resp, err := runPnL251(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o1", "AAPL", "acct-1", 10, 100, buy), filled(2, "o2", "AAPL", "", 10, 150, sell),
+	}}, &portfoliov1.GetPnLRequest{})
+	if resp != nil || !errors.Is(err, ErrFillUnattributable) {
+		t.Fatalf("want ErrFillUnattributable and no response, got resp=%v err=%v", resp, err)
+	}
+}
+
+func TestGetPnL251_AC16_LedgerSequenceOrder(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o1", "AAPL", "a1", 10, 100, buy), partial(2, "o2", "AAPL", "a1", 4, 150, sell), filled(3, "o3", "AAPL", "a1", 10, 200, buy),
+	}}, 200)
+	// F2: partials live in a map, so only the sequence sort makes the fold order deterministic.
+	for i := 0; i < 20; i++ {
+		a, s, b := partial(1, "A", "AAPL", "a1", 10, 100, buy), partial(2, "S", "AAPL", "a1", 4, 150, sell), partial(3, "B", "AAPL", "a1", 10, 200, buy)
+		wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{a, b, s}}, 200)
+	}
+}
+
+func TestGetPnL251_AC17_PartialDroppedWhenOrderFilled(t *testing.T) {
+	wantRealized(t, &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), partial(2, "o-s", "AAPL", "a1", 4, 150, sell), filled(3, "o-s", "AAPL", "a1", 10, 150, sell),
+	}}, 500)
+}
+
+func TestGetPnL251_AC18_LiveFillsExcludedFromPaper(t *testing.T) {
+	l := &testdata.Ledger{Events: []*ledgerv1.LedgerEvent{
+		filled(1, "o-b", "AAPL", "a1", 10, 100, buy), filled(2, "o-s", "AAPL", "a1", 10, 150, sell),
+		testdata.FilledEvent(3, "o-l", "u-1", "AAPL", "a1", live, 10, 300, sell),
+	}}
+	resp, err := runPnL251(t, l, &portfoliov1.GetPnLRequest{TradingMode: commonv1.TradingMode_TRADING_MODE_PAPER})
+	if err != nil || math.Abs(resp.GetRealizedPnl()-500) > 1e-9 {
+		t.Fatalf("want 500, got resp=%v err=%v", resp, err)
 	}
 }

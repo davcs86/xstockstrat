@@ -891,3 +891,10 @@ Feature: fix-ledger-trimmed-notify-payload (bug fix)
 - Integration PR `feature/fix-ledger-trimmed-notify-payload` → `main-dev` opened; merge held for the operator.
   The PR body records the context-forge "plugin unavailable" note plus the Step 11 manual reconciliation (fails.md:670)
   and that the Step 9 `ledger-db-test` GREEN is owed on the PR's CI run.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

@@ -92,10 +92,10 @@ Feature: fix-getpnl-source-service (bug fix)
   @AC-9 @FR-5 @regression
   Scenario: More than one page of fills folds every fill exactly once
     Given user "u-1" has 501 "order.filled" events whose payloads carry side
-    And GetPnL requests "order.filled" pages of 500
+    And the ledger serves them in several pages of 200 rows, requested at page size 1000
     When GetPnL runs for user "u-1"
     Then each of the 501 fills is folded exactly once
-    And the ledger received exactly 2 "order.filled" QueryEvents calls
+    And GetPnL follows next_page_token until the ledger returns an empty one
 
   @AC-10 @FR-1 @FR-2 @regression
   Scenario Outline: Trading's fill events carry the order side, the canonical source_service and the fee
@@ -123,7 +123,7 @@ Feature: fix-getpnl-source-service (bug fix)
     Given a TimescaleDB ledger holding 7 events with one recorded_at and one source_service
     When a client drains QueryEvents filtered by that source_service with page size 3, following next_page_token
     Then it receives at least 2 pages
-    And it receives every event_id exactly once, ordered by recorded_at then event_id
+    And it receives every event_id exactly once, ordered by sequence
 
   @AC-13 @FR-5 @regression
   Scenario: A malformed page_token is rejected

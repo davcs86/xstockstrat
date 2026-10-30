@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AdminGetUserMetadataRequest, AdminUpdateUserMetadataRequest, AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
+import { AdminGetUserMetadataRequest, AdminUpdateUserMetadataRequest, AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAdminUserIdsRequest, ListAdminUserIdsResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodIdempotency, MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -216,6 +216,18 @@ export const IdentityService = {
       name: "SetUserActive",
       I: SetUserActiveRequest,
       O: SetUserActiveResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+     * xstockstrat-notify only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ListAdminUserIds
+     */
+    listAdminUserIds: {
+      name: "ListAdminUserIds",
+      I: ListAdminUserIdsRequest,
+      O: ListAdminUserIdsResponse,
       kind: MethodKind.Unary,
     },
   }

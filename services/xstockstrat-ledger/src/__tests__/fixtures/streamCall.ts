@@ -28,5 +28,27 @@ export function makeRecordingCall(
       (this.handlers[event] ||= []).push(cb);
       return this;
     },
+    // EventEmitter-compatible: removeListener(e, cb) also drops a once(e, cb) wrapper.
+    once(event: string, cb: (...a: any[]) => void) {
+      const wrapper = Object.assign(
+        (...a: any[]) => {
+          this.removeListener(event, wrapper);
+          cb(...a);
+        },
+        { listener: cb },
+      );
+      return this.on(event, wrapper);
+    },
+    removeListener(event: string, cb: (...a: any[]) => void) {
+      const list = this.handlers[event] || [];
+      const i = list.findIndex((h: any) => h === cb || h.listener === cb);
+      if (i >= 0) list.splice(i, 1);
+      return this;
+    },
+    emit(event: string, ...args: any[]) {
+      const list = (this.handlers[event] || []).slice();
+      for (const h of list) h(...args);
+      return list.length > 0;
+    },
   };
 }

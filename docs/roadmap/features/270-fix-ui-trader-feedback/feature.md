@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -37,6 +39,7 @@
 | 2026-10-29 | `in-progress` (Step 14 done) | /sdd-execute sequential (sdd-batch-execute) | Step 14 — `@AC-2`/`@AC-9`/`@AC-1` tests: Vitest `streamBackoff.test.ts` (backoff schedule + retryable/terminal codes) and e2e `stream-reconnect.spec.ts` (drop → indicator → gated reconnect → FILLED / alerts recover and dedupe, no reload); the mock holds `streamOrderUpdates`/`streamAlerts` open; new `ORDER_WORKING_STREAMED_AT`/`ORDER_WORKING_FILLED_AT` fixtures |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 14 steps done; C-16 promotion of AC-1..AC-12 to `services/xstockstrat-ui/acceptance/fix-ui-trader-feedback.feature` (12 NEW, operator standing authorization); integration PR opened to `main-dev` |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

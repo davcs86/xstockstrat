@@ -65,7 +65,9 @@ The end-to-end connect flow:
    MCP endpoint returns `401` with
    `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which
    triggers discovery. (`GET /sse` returns **404**, not 401 — it is a removed path, not an
-   unauthenticated one, and it never reaches the auth gate.)
+   unauthenticated one, and it never reaches the auth gate.) If identity cannot be reached in time
+   during token validation, the endpoint returns `503` **without** `WWW-Authenticate`, so the client
+   retries instead of re-authorizing; an invalid token still returns `401` with the pointer.
 2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
    returns a `client_id`, no secret.
 3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
@@ -80,6 +82,19 @@ The end-to-end connect flow:
    not match.
 
 ---
+
+### Backend deadlines
+
+Every backend gRPC call the tools make carries a fixed deadline: **10 s** by default, and **45 s** for
+`run_backtest`, `screen_symbols`, `trigger_backfill` and `run_fundamentals_scan`. `list_opportunities`
+keeps its own config-driven deadline (see that tool). These are code constants, not config keys.
+
+On expiry a **read** tool raises `upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A **write** tool raises
+`upstream did not respond within Ns (deadline exceeded); outcome unknown, verify before retrying` —
+the write may have landed, so confirm with the matching read (`get_backfill_status`,
+`get_watchlist`, or the relevant `list_*` tool) before retrying. When the server returned its own
+deadline detail, that detail is passed through instead.
 
 ## Tools
 
@@ -243,7 +258,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111) — the caller can no longer address an alert to an arbitrary other user.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111); a broadcast's Web Push device notification reaches admin-role devices only (feature 242) — the caller can no longer address an alert to an arbitrary other user.
 
 **Parameters**
 
@@ -253,7 +268,7 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 | `category` | `string` | Yes | Alert category, e.g. `"signal"`, `"system"` |
 | `title` | `string` | Yes | Short alert title |
 | `body` | `string` | Yes | Alert body text |
-| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. No default — omitting it is a schema error. |
+| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. With `true` the in-app stream/history reaches every user, but the Web Push device notification reaches admin-role users only (feature 242). No default — omitting it is a schema error. |
 | `source_service` | `string` | No | Emitting service name (default `"xstockstrat-agent"`) |
 | `context` | `object` | No | Structured JSON context stored + fanned out with the alert (feature 087) |
 | `tags` | `string[]` | No | Tags for filtering/grouping (feature 087) |
@@ -410,9 +425,15 @@ run gains a `warnings` entry `fundamentals fetch failed for <SYM> — rerun`.
 | Unknown `strategy_id` | `strategy not found` (NOT_FOUND) from analysis |
 | `start` after `end` | `ValueError` raised by the client before any RPC |
 | Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
+| Backtest evaluation exceeds `analysis.backtest.max_duration_seconds` (default 300 s; 0 = no limit) | `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` — narrow the range or symbols; do not retry immediately (the compute thread keeps running) |
+| marketdata re-served a bar page, or bar pagination hit its page cap | `FAILED_PRECONDITION` `backtest bar series incomplete: …` — retrying will not fix it; report it |
 | History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
 | Fundamentals-requiring strategy on a symbol with no usable fundamentals (e.g. an ETF) | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` + `fundamentals_gap` on that symbol (not an RPC error) |
 | Analysis service unreachable | `httpx` connection error propagated |
+
+Through the agent, the MCP 60 s tool cap fires before any server deadline above 60 s (the default is
+300 s), so agent users see the `backtest exceeded Ns deadline` message only when the limit is below
+60 s, and only once feature 273's error pass-through lands.
 
 ---
 
@@ -1389,7 +1410,7 @@ credential field. Offline accounts are **not** created here — use `manage_offl
 | `account_id` | string | update/deregister/resume | The broker account to act on |
 | `display_name` | string | `register` | Name for the new account |
 | `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
-| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…,"signature_key":…,"encryption_key":…,"dh_prime":…}`, the last three as PEM strings) |
 | `reason` | string | no | Operator-supplied context for why the halt is being cleared (resume only; default `""`) |
 
 - **register** → `{"account": …}` with `credential_status`; the submitted credentials are never

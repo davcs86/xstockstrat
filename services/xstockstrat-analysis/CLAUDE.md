@@ -268,7 +268,7 @@ triggers backtests via the `RunBacktest` gRPC RPC.
 | xstockstrat-indicators | gRPC read/write | SMA/EMA/indicator computation; formula reads as the strategy owner; strategy-template saga copies (`InstantiateTemplate`/`ResolveTemplateIntent`, feature 224) |
 | xstockstrat-ingest | gRPC read/write | QuerySignals for signal-weighted backtesting; `IngestSignal`/`ManageSignalSource` for the fundamentals signal producer (feature 062) |
 | xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062); held positions for the `ListOpportunities` queue + `ScreenResult.held` cross-ref (feature 083) |
-| xstockstrat-trading | gRPC read | `ListOrders(strategy_id)` for the `GetStrategyAnalytics` "taken" count (feature 083 — new non-cyclic analysis→trading edge; `TRADING_ENDPOINT`); `ListOrders(strategy_id, symbol)` boot-time-only for the exit-cooldown entry-time backfill (feature 116, `app/engine/entry_backfill.py`) — reuses the same edge/stub, no new channel |
+| xstockstrat-trading | gRPC read | `ListOrders(strategy_id)` for the `GetStrategyAnalytics` "taken" count (feature 083 — new non-cyclic analysis→trading edge; `TRADING_ENDPOINT`); `ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id` (and a per-pass `x-trace-id`) boot-time-only for the exit-cooldown entry-time backfill (feature 116, `app/engine/entry_backfill.py`) — reuses the same edge/stub, no new channel |
 | xstockstrat-ledger | gRPC write | Store backtest lifecycle events |
 | xstockstrat-notify | gRPC write | Alert on completed backtests |
 
@@ -506,7 +506,7 @@ Namespace: `analysis`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.backtest.max_duration_seconds` | int | `300` | Max backtest run time |
+| `analysis.backtest.max_duration_seconds` | int | `300` | Wall-clock bound on backtest evaluation up to result assembly; persistence and grade recompute are not bounded (total RPC time can exceed it). `0` = no limit, negative = 300 (WARN). Exceeded → `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline`; executor threads are not interrupted — do not retry immediately. Read presence-aware at call time (per-user overrides apply). |
 | `analysis.backtest.default_commission_pct` | float | `0.001` | Assumed commission per trade |
 | `analysis.backtest.default_slippage_pct` | float | `0.0005` | Assumed slippage |
 | `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years, feature 064); a request whose `range` exceeds it is rejected with `INVALID_ARGUMENT`, an unset bound is defaulted to the last `max_range_days`. Applies to all `RunBacktest` callers. |

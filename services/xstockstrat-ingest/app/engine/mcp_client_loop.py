@@ -31,24 +31,41 @@ _DEFAULT_POLL_INTERVAL_SECONDS = 300
 _DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 
 
+def _select_signal_list(d: dict) -> list:
+    """Pick a dict result's signal list; 2+ candidate lists raise ValueError("ambiguous result")."""
+    if isinstance(d.get("signals"), list):
+        return d["signals"]
+    candidates = sorted(
+        k for k, v in d.items() if isinstance(v, list) and v and all(isinstance(x, dict) for x in v)
+    )
+    if len(candidates) == 1:
+        return d[candidates[0]]
+    if len(candidates) >= 2:
+        raise ValueError(f"ambiguous result: multiple candidate lists {candidates}")
+    list_values = [v for v in d.values() if isinstance(v, list)]
+    if list_values and not any(list_values) and "symbol" not in d:
+        return []
+    return [d]
+
+
 def _extract_result_items(result: Any) -> list[dict]:
-    """Pull the JSON list of signal objects from a CallToolResult: prefer structured_content
-    (a list, or a dict wrapping the list), fall back to JSON-decoding the first text content block.
-    Non-list/non-dict content yields []; the extractor then skips whatever is malformed."""
+    """Pull the signal list from a CallToolResult's structured_content, else its first text block;
+    a dict result is resolved by _select_signal_list. Malformed items are left to the extractor."""
     sc = getattr(result, "structured_content", None)
     if isinstance(sc, list):
         return sc
     if isinstance(sc, dict):
-        for value in sc.values():
-            if isinstance(value, list):
-                return value
-        return [sc]
+        return _select_signal_list(sc)
     content = getattr(result, "content", None) or []
     if content:
         text = getattr(content[0], "text", None)
         if text:
             decoded = json.loads(text)
-            return decoded if isinstance(decoded, list) else [decoded]
+            if isinstance(decoded, list):
+                return decoded
+            if isinstance(decoded, dict):
+                return _select_signal_list(decoded)
+            return [decoded]
     return []
 
 
@@ -113,7 +130,9 @@ async def poll_one_source(
         await mark_source_error(servicer._db, owner, slug, "bearer not configured")
         return
     _namespace, key = split_credentials_ref(credentials_ref)
-    bearer, found = await cfg_watcher.resolve_secret(key, user_id=owner)
+    bearer, found = await cfg_watcher.resolve_secret(
+        key, user_id=owner, timeout=float(timeout_seconds)
+    )
     if not (found and bearer):
         await mark_source_error(servicer._db, owner, slug, "bearer not configured")
         return
@@ -121,8 +140,21 @@ async def poll_one_source(
     result = await mcp_client.fetch(endpoint, tool, arguments, bearer, float(timeout_seconds))
     items = _extract_result_items(result)
     parsed = await extractor.extract(McpClientInput(result_items=items))
+    ingested = 0
+    skipped = 0
+    first_err: Exception | None = None
     for item in parsed:
-        await servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)
+        try:
+            await servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)
+            ingested += 1
+        except Exception as e:
+            log.warning("mcp_client loop: source %s item skipped: %s", slug, e)
+            skipped += 1
+            if first_err is None:
+                first_err = e
+    log.info("mcp_client loop: source %s polled ingested=%d skipped=%d", slug, ingested, skipped)
+    if parsed and skipped == len(parsed):
+        raise RuntimeError(f"all {len(parsed)} items failed: {first_err}")
 
 
 async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) -> None:

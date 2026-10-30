@@ -86,6 +86,31 @@ def snapshot_watcher(**values):
     return w
 
 
+def real_live_loop(ingest, indicators, rows, *, config_watcher, marketdata_stub):
+    """A real ``LiveEvaluationLoop`` over ``rows`` with empty portfolio pages; no cooldowns repo."""
+    from app.engine.live_loop import LiveEvaluationLoop
+    from app.services.evaluator import StrategyEvaluator
+
+    eof = types.SimpleNamespace(next_page_token="")
+    db = MagicMock()
+    db.fetch = AsyncMock(return_value=rows)
+    portfolio = MagicMock()
+    portfolio.ListPositions = AsyncMock(return_value=types.SimpleNamespace(positions=[], page=eof))
+    portfolio.ListWatchlists = AsyncMock(
+        return_value=types.SimpleNamespace(watchlists=[], page=eof)
+    )
+    return LiveEvaluationLoop(
+        config_watcher=config_watcher,
+        db_pool=db,
+        marketdata_stub=marketdata_stub,
+        ingest_stub=ingest,
+        notify_stub=AsyncMock(),
+        ledger_stub=AsyncMock(),
+        evaluator=StrategyEvaluator(indicators, ()),
+        portfolio_stub=portfolio,
+    )
+
+
 # Feature 215 PIT fixtures: SCHD (an ETF) has no SEC filings; AAPL has quarterly filings carrying
 # all six seeded fscore inputs (pe, pb, dividend_yield, roe, debt_to_equity, eps).
 SCHD_PIT_PERIODS = []

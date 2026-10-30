@@ -229,6 +229,7 @@ services:
       GRPC_PORT: "50059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: notify
       DB_POOL_MAX: "1"

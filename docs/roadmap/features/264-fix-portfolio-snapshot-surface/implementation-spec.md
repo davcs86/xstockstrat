@@ -1,6 +1,6 @@
 # Implementation Spec: fix-portfolio-snapshot-surface
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/264-fix-portfolio-snapshot-surface/feature.md`
 **Total Steps**: 10
@@ -80,7 +80,7 @@ context.md, Session 2026-10-22 — sdd-spec.
 
 ### Step 1 — service: Owner-scope the snapshot subscriber map and fan-out (fail-closed)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -116,7 +116,8 @@ context.md, Session 2026-10-22 — sdd-spec.
   arm (design.md § Rejected Alternatives).
 - Call sites, from `grep -rn "Subscribe(\|subs:" --include=*.go services/xstockstrat-portfolio`:
   - `internal/handler/portfolio_handler.go:120` `ch := h.svc.Subscribe(subID)` (Connect; `userID` is in scope from `:115`);
-  - `:294` `ch := a.h.svc.Subscribe(subID)` (gRPC; the id comes from `streamUserID(grpcStream.Context())` at `:292`);
+  - `:294` `ch := a.h.svc.Subscribe(subID)` (gRPC; the adapter signature is at `:292`, and the id comes from
+    `streamUserID(grpcStream.Context())` inside the `Sprintf` at `:293`);
   - `internal/service/portfolio_quote_deadline_test.go:106` (literal `subs: map[string]chan *portfoliov1.PortfolioSnapshot{}`
     inside `newQuoteSvc`);
   - `:321`, `:396`, `:424` `svc.Subscribe("t")`. Each test then calls `svc.broadcastSnapshot(ctxWithUser(t, "u1"), "u1", …)`
@@ -146,7 +147,7 @@ context.md, Session 2026-10-22 — sdd-spec.
 5. Update the loop at `:937` to range over `sub` and send on `sub.ch`. Do not filter yet.
 6. In `portfolio_handler.go`:
    - Connect `:120` → `h.svc.Subscribe(subID, userID)`.
-   - gRPC: hoist `userID := streamUserID(grpcStream.Context())` above `:292`, use it in the existing `Sprintf`, and
+   - gRPC: hoist `userID := streamUserID(grpcStream.Context())` above the `Sprintf` at `:293`, use it there, and
      call `a.h.svc.Subscribe(subID, userID)`. Step 3 replaces both bodies; this is only the minimum needed to compile.
 7. In `portfolio_quote_deadline_test.go`:
    - `:106` → `subs: map[string]snapshotSubscriber{}`;
@@ -180,7 +181,7 @@ grep -rn "Subscribe(\"t\")\|Subscribe(subID)$" --include=*.go . ; test $? -eq 1 
 
 ### Step 2 — test: Owner isolation at the producer (@AC-1, @AC-3 producer half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_snapshot_scope_test.go` — create
@@ -242,7 +243,7 @@ applies to it. The suite-wide total must still meet the threshold.
 
 ### Step 3 — service: Shared `streamSnapshots` helper, `snapshotHub` seam, gRPC empty-caller rejection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — modify
@@ -251,7 +252,7 @@ applies to it. The suite-wide total must still meet the threshold.
 
 **Codebase Evidence**:
 - `PortfolioHandler` struct at `:43-46`: `UnimplementedPortfolioServiceHandler` plus `svc *service.PortfolioService`.
-  `NewPortfolioHandler` at `:49-51` returns `&PortfolioHandler{svc: svc}`. `cmd/server/main.go:71` calls
+  `NewPortfolioHandler` at `:49-51` returns `&PortfolioHandler{svc: svc}`. `cmd/server/main.go:78` calls
   `handler.NewPortfolioHandler(svc)`.
 - `streamUserID(ctx)` at `:28-38` reads `x-user-id` from incoming metadata and returns `""` if it is absent.
 - Connect `StreamPortfolioUpdates` (`:113-138`):
@@ -259,9 +260,9 @@ applies to it. The suite-wide total must still meet the threshold.
   - `subID := fmt.Sprintf("portfolio-%s-%p", userID, stream)` at `:119`;
   - the subscribe / defer-unsubscribe / select loop at `:120-138`, with the TradingMode filter
     `req.Msg.TradingMode != 0 && snap.TradingMode != req.Msg.TradingMode` at `:129`.
-- gRPC `(a *grpcPortfolioAdapter) StreamPortfolioUpdates` (`:291-311`): no empty-caller check, the same loop shape,
+- gRPC `(a *grpcPortfolioAdapter) StreamPortfolioUpdates` (signature `:292`, body through `:311`): no empty-caller check, the same loop shape,
   filter `req.TradingMode` at `:302`, and `grpcStream.Context()` used for `Done()`/`Err()`.
-- Only the gRPC adapter is mounted: `cmd/server/main.go:94` `portfoliov1.RegisterPortfolioServiceServer(grpcServer, hdl.GRPCHandler())`.
+- Only the gRPC adapter is mounted: `cmd/server/main.go:101` `portfoliov1.RegisterPortfolioServiceServer(grpcServer, hdl.GRPCHandler())`.
 - Imports already present: `codes`, `status`, `fmt`, `connect` (`:3-18`). `commonv1` is **not** imported. Its path
   is `commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"` (`internal/service/portfolio_service.go:26`).
 - Body `user_id` is `[deprecated = true]` and "body value ignored" (`packages/proto/portfolio/v1/portfolio.proto:215`).
@@ -325,7 +326,7 @@ grep -c "streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.
 
 ### Step 4 — test: Stream handler identity gate and helper wiring (@AC-2, @AC-6, @AC-3 Connect half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_stream_test.go` — create
@@ -337,7 +338,13 @@ grep -c "streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.
   package. The nil-service, header-gate test shape is at `:27-35`, including the
   `//nolint:staticcheck` deprecated-body pattern at `:29`.
 - The generated server-stream interface is `portfoliov1.PortfolioService_StreamPortfolioUpdatesServer` (used at
-  `portfolio_handler.go:291`). It embeds `grpc.ServerStream` and adds `Send(*PortfolioSnapshot) error`.
+  `portfolio_handler.go:305`, the gRPC adapter `StreamPortfolioUpdates` signature). It embeds `grpc.ServerStream`
+  and adds `Send(*PortfolioSnapshot) error`.
+- Step-3 wiring this step pins (re-verified 2026-10-29): `snapshotHub` interface at `portfolio_handler.go:43`, the
+  `hub snapshotHub` field at `:54`, `func streamSnapshots` at `:63`, the Connect call
+  `streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.Send)` at `:151`, and the gRPC call through
+  `a.h.hub` at `:312`. Only the gRPC route is registered (`cmd/server/main.go:101`); connect is v1.16.2.
+- `portfolio_stream_test.go` does not exist and no `fakeHub`/`fakeGRPCStream` is declared anywhere (correct for a create).
 - No `StreamPortfolioUpdates` handler test exists (recon.md § Risks: **Not found**). These are the first fakes for
   this RPC.
 
@@ -388,7 +395,7 @@ isolation RED is in Step 2).
    - `hub.push("u-1", …)`: `sA` records one snapshot with `PortfolioId == "u-1"` within 1s; `sB` records none within
      100ms. Cancel both; each call returns `context.Canceled` and both subIDs are unsubscribed.
    - **The Connect arm cannot be driven the same way.** `connect.ServerStream` has no exported constructor
-     (`go doc connectrpc.com/connect.ServerStream`, v1.16.2), and the Connect route is unmounted (`main.go:94`). Its
+     (`go doc connectrpc.com/connect.ServerStream`, v1.16.2), and the Connect route is unmounted (`main.go:101`). Its
      wiring is pinned by the Step 3 grep for `streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.Send)`,
      plus case 4, which runs the helper exactly as that line calls it.
 5. **`TestStreamSnapshots_TradingModeFilterPreserved`** (non-regression for the moved filter):
@@ -409,7 +416,7 @@ applies to it. The suite-wide total must still meet the threshold.
 
 ### Step 5 — service: Delete the zero-caller `StartSnapshotWriter`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -418,11 +425,12 @@ applies to it. The suite-wide total must still meet the threshold.
 
 **Codebase Evidence**:
 - `grep -rn StartSnapshotWriter --include=*.go services/xstockstrat-portfolio` finds only the definition: comment
-  `:893`, func `:894-906`.
-- `cmd/server/main.go:64-69` starts only `ConsumeOrderFills`, `ConsumePositionSyncs`, `ConsumeBalanceSyncs`,
+  `:898`, func `:899-911` (re-verified 2026-10-29; lines drifted after Steps 1-3, so delete by symbol).
+- `cmd/server/main.go:71-76` starts only `ConsumeOrderFills`, `ConsumePositionSyncs`, `ConsumeBalanceSyncs`,
   `ConsumeBracketUpdates`, `ConsumeAccountDeregistrations` and `HydrateStops`.
-- The only reader of `portfolio.snapshot.interval_minutes` is `:895`. `s.cfg` stays in use (`:491-492`, `:965-966`),
-  and `"time"` stays imported (11 other `time.` uses), so no import or field becomes orphaned.
+- The only reader of `portfolio.snapshot.interval_minutes` is `:900`. `s.cfg` stays in use (`:492`, `:973-974`),
+  and `"time"` stays imported (16 `time.` occurrences in the file, most outside the writer), so no import or field
+  becomes orphaned.
 
 **TDD**: `N/A (red N/A — dead-code deletion with no caller, no behavior change; tdd-gate escape stated)`. The
 characterization is the full suite staying green. The paired test is Step 8.
@@ -430,7 +438,7 @@ characterization is the full suite staying green. The paired test is Step 8.
 **Covers**: —
 
 **Instructions**:
-1. Delete the `StartSnapshotWriter` doc comment and function (`:893-906`).
+1. Delete the `StartSnapshotWriter` doc comment and function, located by symbol (`:898-911` at re-spec time).
 2. Remove nothing else. `broadcastSnapshot` stays: it is the live per-fill path.
 
 **Verification**:
@@ -443,7 +451,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 
 ### Step 6 — docs: Reserve config migration 034 and sequence 264 in merge-order.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/merge-order.md` — modify
@@ -453,14 +461,22 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 **Codebase Evidence**:
 - `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/` shows that the tip is
   `030_marketdata_edgar_snapshot_keys`. `git log --remotes --name-only -- services/xstockstrat-config/migrations/`
-  shows no `031`+ file on any remote ref (re-run 2026-10-22).
+  (re-run 2026-10-29) shows `031_heal_indicators_sandbox_keys_full_dotted` committed on
+  `origin/feature/fix-sandbox-seed-keys` (d8b7a8df), `032_analysis_zero_trap_descriptions` committed on
+  `origin/feature/fix-python-config-stored-zero` (d2002841), and `033_ledger_stream_resolve_timeout.{up,down}.sql`
+  committed on `origin/feature/fix-ledger-trimmed-notify-payload` (990ceb0b). No `03[4-9]_` file exists on any
+  remote ref. Feature 277's context.md mentions a 033 claim, but 277 is `demoted/canceled`, so it is moot.
 - Claims:
   - `031_heal_indicators_sandbox_keys_full_dotted` belongs to 243 (`243-fix-sandbox-seed-keys/design.md:13`);
   - `032_analysis_zero_trap_descriptions` belongs to 244 (`implementation-spec.md:1067`);
-  - `032_ledger_stream_resolve_timeout` belongs to 248 (`implementation-spec.md:133`).
+  - `033_ledger_stream_resolve_timeout` belongs to 248. Its branch implementation-spec renumbered it to `033_`
+    (lines 119/129-130/148-149 on `origin/feature/fix-ledger-trimmed-notify-payload`), and that branch adds its own
+    243/244 merge-order rows. main-dev's copy of 248's spec still says `032_` (`:133`); the branch is authoritative.
+    The former 244/248 double claim on 032 is resolved (244 = 032, 248 = 033).
 
   None of the eight batch peers' branches (`git grep` on each `origin/feature/<peer>`) claims a config migration.
-- Pre-assignment precedent: the "Config-service seed-migration NNN pre-assignment" blockquote at `merge-order.md:197`.
+- Pre-assignment precedent: the "Config-service seed-migration NNN pre-assignment" blockquote at `merge-order.md:226`
+  (line after the 2026-10-29 main-dev merge).
   The table rows use the form `| <later> | <earlier> | **reason** | Resolved |` (e.g. the 223↔217 row at `:74`).
 
 **TDD**: `N/A (docs)`
@@ -471,12 +487,11 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 1. Add a table row to the main table, after the `fix-after-hours-positions-priced` (231) row at `:76`:
    - Column 1: `fix-portfolio-snapshot-surface` (264).
    - Column 2: `fix-sandbox-seed-keys` (243), `fix-python-config-stored-zero` (244), `fix-ledger-trimmed-notify-payload` (248).
-   - Reason: **config migration-NNN ordering**. 264 reserves `034_retire_portfolio_snapshot_interval`; 243 holds 031;
-     the 244/248 double claim on 032 must resolve to 032 and 033. golang-migrate skips a lower version that lands
-     after a higher one. 264 merges after all three, and its Step 10 two-sided gate is re-run before merge.
+   - Reason: **config migration-NNN ordering**. 264 reserves `034_retire_portfolio_snapshot_interval`; 243 holds 031,
+     244 holds 032 and 248 holds 033. golang-migrate skips a lower version that lands after a higher one. 264 merges
+     after all three, and its Step 10 two-sided gate is re-run before merge.
    - Resolved: `No`.
-2. Do not edit the 244/248 rows or claims. That collision is routed outside this feature (context.md,
-   2026-10-21 sdd-review).
+2. Do not edit the 243/244/248 rows or claims; 248's branch carries its own rows for those.
 
 **Verification**:
 ```bash
@@ -487,7 +502,7 @@ grep -n "034_retire_portfolio_snapshot_interval" docs/roadmap/features/merge-ord
 
 ### Step 7 — migration: `034_retire_portfolio_snapshot_interval.{up,down}.sql`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/034_retire_portfolio_snapshot_interval.up.sql` — create
@@ -511,6 +526,9 @@ grep -n "034_retire_portfolio_snapshot_interval" docs/roadmap/features/merge-ord
 - Key form: `029_heal_config_keys_full_dotted.up.sql:24-28` rewrites `key` to `namespace || '.' || key`, so the
   rows are stored as `portfolio.snapshot.interval_minutes` (recon.md).
 - Next free number: 034 (Step 6 evidence). Do not edit the applied 001/002/017/029 files (F-01).
+- Re-verified 2026-10-29: the 020 up/down layout, the 001:68 / 017:38 / 002:69 seeds, 029's key rewrite (portfolio is
+  in its namespace list) and `config-rollout.md:246` all match. The local `^03[1-9]_` check below still expects only
+  034, because 031-033 exist only on the 243/244/248 branches, not on main-dev or this branch.
 
 **TDD**: `N/A (migration)`
 
@@ -549,7 +567,7 @@ grep -c "'portfolio', 'portfolio.snapshot.interval_minutes'" services/xstockstra
 
 ### Step 8 — test: @AC-5 static scan of the config migration set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts` — create
@@ -558,7 +576,7 @@ grep -c "'portfolio', 'portfolio.snapshot.interval_minutes'" services/xstockstra
 
 **Codebase Evidence**:
 - `services/xstockstrat-config/package.json:12` `"test": "tsc && node --test dist/__tests__/*.test.js"`; `:13`
-  `test:coverage` (`c8 … --lines 40`). The CI job runs `pnpm run test:coverage` (`.github/workflows/ci.yml:587`).
+  `test:coverage` (`c8 … --lines 40`). The CI job runs `pnpm run test:coverage` (`.github/workflows/ci.yml:594`).
 - `tsconfig.json`: `rootDir: ./src`, `outDir: ./dist`, `module: commonjs`. The compiled test lives in
   `dist/__tests__/`, so `join(__dirname, '..', '..', 'migrations')` resolves to `services/xstockstrat-config/migrations`.
 - Import style: `import { describe, it } from 'node:test'; import assert from 'node:assert/strict';`
@@ -568,6 +586,7 @@ grep -c "'portfolio', 'portfolio.snapshot.interval_minutes'" services/xstockstra
   was rejected).
 - Precedent: feature-161 @AC-8, "the dead source-weights key is gone"
   (`services/xstockstrat-config/acceptance/surface-signal-weight-decay-config.feature`).
+- All anchors above re-verified 2026-10-29; the target test file does not exist yet (correct for a create).
 
 **TDD**: `red-green required`. RED before Step 7: the highest match is `002_config_environment.up.sql`, an INSERT,
 so check (ii) fails. GREEN after Step 7.
@@ -602,7 +621,7 @@ cd services/xstockstrat-config && npx tsc && node --test dist/__tests__/retiredP
 
 ### Step 9 — docs: Retire the key and record stream isolation in context docs, then the teardown refresh
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (portfolio, platform)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
@@ -617,18 +636,18 @@ cd services/xstockstrat-config && npx tsc && node --test dist/__tests__/retiredP
 - Portfolio `CLAUDE.md`:
   - `:99` is the key row `portfolio.snapshot.interval_minutes | int | 5 | How often to write portfolio snapshots`;
   - `:139` is `portfolio.snapshot | Periodic snapshot written`, which is inaccurate because snapshots are written
-    per fill (`portfolio_service.go:376`);
+    per fill (`broadcastSnapshot` → `InsertSnapshot` at `portfolio_service.go:936`);
   - `:21-22` says "A missing header still yields `InvalidArgument "user_id required"`". That was false for the gRPC
     stream until Step 3;
   - `:45-52` is the H-3 ownership-gate paragraph (`GetSnapshot` `portfolio_id == caller`).
 - `services/xstockstrat-portfolio/docs/context-constitution-findings.md:29` is the "**`StartSnapshotWriter` has no
   caller**" row.
 - `docs/repo-surveyor/debt-radar-findings.md`: `:236` `### D-12 … *(carried, open)*` and `:447` `### D-24 … *(carried, open)*`.
-- `docs/patterns/config-governance.md:423` uses the form "**Removes** `analysis.signals.source_weights` (migration 020) — …"
-  inside § Per-Feature Registered Keys (`:105`).
+- `docs/patterns/config-governance.md:426` uses the form "**Removes** `analysis.signals.source_weights` (migration 020) — …"
+  inside § Per-Feature Registered Keys (`:108`) (lines after the 2026-10-29 main-dev merge).
 - `docs/context-constitution.md:40`, **PLAT-6**: its evidence cell cites the deleted reader
   `portfolio_service.go#portfolio.snapshot.interval_minutes (~L814, s.cfg.GetInt("portfolio.snapshot.interval_minutes", 5))`.
-  A surviving example of the same pattern is `portfolio_service.go:965`
+  A surviving example of the same pattern is `portfolio_service.go:973`
   `s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)`.
 - `.agents/context-forge.json` `scrubberExtraTargets`: `README.md`, `docs/patterns/ui-ux-governance.md`. Neither is
   touched.
@@ -649,11 +668,11 @@ cd services/xstockstrat-config && npx tsc && node --test dist/__tests__/retiredP
 3. **`debt-radar-findings.md`:** change the `:236` (D-12) and `:447` (D-24) status suffix from `*(carried, open)*`
    to `*(fixed by feature 264)*`.
 4. **`config-governance.md`:** add a "**Removes** `portfolio.snapshot.interval_minutes` (migration 034) — feature 264;
-   its only reader `StartSnapshotWriter` had zero callers…" entry in the `:423-427` form, in § Per-Feature Registered
+   its only reader `StartSnapshotWriter` had zero callers…" entry in the `:426` form, in § Per-Feature Registered
    Keys.
 5. **`context-constitution.md:40` (PLAT-6):** replace the deleted-reader evidence with
    `services/xstockstrat-portfolio/internal/service/portfolio_service.go#portfolio.risk.max_drawdown_pct`
-   (`~L965`, `s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)`; re-grep the line at execute time). The rule
+   (`~L973`, `s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)`; re-grep the line at execute time). The rule
    text is unchanged.
 6. **Teardown (root `CLAUDE.md`):** run `/context-constitution refresh` scoped to the files above and fix the
    grounded drift it reports. If the plugin is unavailable, re-read each touched file against the code by hand and
@@ -671,7 +690,7 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
 
 ### Step 10 — test: Pre-merge two-sided migration-number gate and dev-smoke `ListKeys` (@AC-5 applied state)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - none (a verification gate; record its output in context.md and the integration PR body)
@@ -680,10 +699,18 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
 
 **Codebase Evidence**:
 - golang-migrate never applies a version lower than the current one. A sibling that lands a higher number first
-  silently skips this migration (fails.md:2909 "re-verify the next-free number against main-dev and merge-order.md
-  immediately before merge"; fails.md:613).
+  silently skips this migration (fails.md:2909 Mistake / :2911 Rule: "Re-verify the next-free migration number
+  against `main-dev` and `merge-order.md` immediately before merge"; fails.md:613 reserve/announce next-free numbers).
 - `scripts/db-migrate.sh` is the migration runner (root `CLAUDE.md` § Database). `ListKeys` is redacted and
-  environment-scoped (config `ListKeys`; agent `list_config_keys`).
+  environment-scoped (`packages/proto/config/v1/config.proto:29` `rpc ListKeys`). The agent tool is
+  `list_config_keys(namespace, user_id="")` (`services/xstockstrat-agent/app/tools.py:1628`); its environment is
+  fixed to the agent deployment's own `APPLICATION_ENV`, with no `service`/`environment` argument.
+- `docs/roadmap/features/merge-order.md:77` sequences 264 after 243/244/248.
+- Gate state on 2026-10-29 (re-verified against `origin/main-dev` @ `0099647f`, merged into this branch): config
+  migrations top out at `031_heal_indicators_sandbox_keys_full_dotted` (243 merged via #1334); nothing ≥ 034, so (a)
+  passes. (b) is not met yet: `032` exists only on `origin/feature/fix-python-config-stored-zero` (244) and `033` only
+  on `origin/feature/fix-ledger-trimmed-notify-payload` (248), so 264 stays sequenced after them per the Step 6 row.
+  This feature's own `034_retire_portfolio_snapshot_interval.{up,down}.sql` is present on the branch.
 
 **TDD**: `N/A (verification gate; no code)`
 
@@ -700,9 +727,10 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
      after 264 in `docs/roadmap/features/merge-order.md`.
    - If (a) or (b) fails, **hold the merge** or renumber 034 to the next free number. A renumber is a deviation: it
      needs a Deviation Log entry plus a merge-order.md update, and the Step 8 scan needs no change.
-2. After the dev deploy, run `scripts/db-migrate.sh` (or confirm the deploy ran it). Then list the config keys for
-   service `portfolio` in `staging` and in `production` (`ListKeys` / the agent `list_config_keys` tool). Neither
-   listing may contain `portfolio.snapshot.interval_minutes`.
+2. **Operator / post-deploy action** (needs a deployed build; not runnable locally). After the dev deploy, run
+   `scripts/db-migrate.sh` (or confirm the deploy ran it). Then call `list_config_keys(namespace="portfolio")`
+   against the staging and the production agent deployments (or config `ListKeys` with `environment` set to each).
+   Neither listing may contain `portfolio.snapshot.interval_minutes`.
 3. Record the gate output and both listings in context.md and the integration PR body.
 4. **Enforcement.** The gate is a process control; no CI job checks it. Open the integration PR as a **draft**, with
    a gate checklist (a)/(b) in its body. Mark it ready only after the item-1 output, captured that day, passes. The
@@ -711,7 +739,7 @@ grep -n "StreamPortfolioUpdates" services/xstockstrat-portfolio/CLAUDE.md
 **Verification**:
 ```bash
 git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | grep -E '/0(3[4-9]|[4-9][0-9])_'   # expect no output before 264 merges
-# dev smoke: list_config_keys(service="portfolio", environment="staging"|"production") → no portfolio.snapshot.interval_minutes
+# post-deploy smoke (operator): list_config_keys(namespace="portfolio") on the staging and production agents → no portfolio.snapshot.interval_minutes
 ```
 
 ---
@@ -719,3 +747,88 @@ git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-10-28 — Step 1: RED probe file not committed with Step 1
+- **Spec said**: the Step 1 STOP block writes Step 2's `portfolio_snapshot_scope_test.go` to capture RED between Part A and Part B.
+- **Done**: the file was written and run for RED (fail) and GREEN (pass), then removed from the Step 1 commit. F-08 limits the
+  Step 1 commit to its own **Files**; Step 2 creates and commits that file.
+- **Disposition**: no behavior change. The gRPC `Sprintf` hoist sits at `portfolio_handler.go:293` (spec text says `:292`, the
+  signature line); line drift only.
+
+### 2026-10-28 — Step 2: lint binary rebuilt at the CI pin
+- **Spec said**: `GOWORK=off golangci-lint run --modules-download-mode=mod`.
+- **Done**: the provisioned `~/go/bin/golangci-lint` is v2.5.0, built with go1.25, and it refuses this `go 1.27.0`
+  module. The CI-pinned v2.14.0 was built from proxy.golang.org with `GOTOOLCHAIN=go1.27.0` into the session
+  scratchpad. The same command then reported `0 issues.`
+- **Disposition**: CI-equivalent fallback. Same version and flags as `golangci-lint-action@v9`; no repo change.
+
+### 2026-10-28 — Step 3: RED probe file not committed with Step 3
+- **Spec said**: the Step 3 STOP block writes Step 4's test file to capture RED between Part A and Part B.
+- **Done**: a probe holding the fakes and `TestStreamPortfolioUpdates_GRPC_AC2_RejectsEmptyCaller` was written, run
+  for RED (fail) and GREEN (pass), then removed from the Step 3 commit (F-08: Step 3's **Files** is the handler only).
+  Step 4 creates and commits `portfolio_stream_test.go`. Lint used the same CI-pinned v2.14.0 rebuild as Step 2.
+- **Disposition**: no behavior change. The gRPC adapter range was `:292-312` (spec says `:291-311`); line drift only.
+
+### 2026-10-29 — Step 4: RED re-captured by reverting Part B in the working tree; lint binary at the CI pin
+- **Spec said**: capture RED at Step 3 Part A (before the gRPC empty-caller check exists).
+- **Done**: Step 3 is already committed, so the gRPC check was removed from the working tree only, RED was captured,
+  and the handler was restored byte-for-byte from a scratch copy before GREEN. Nothing from the revert was committed.
+  The AC-2 status assertion uses `t.Errorf` so the RED shows both failures (status code and Subscribe count). Lint
+  used the same CI-pinned v2.14.0 go1.27 rebuild as Steps 2-3, because `~/go/bin/golangci-lint` is built with go1.26.
+- **Disposition**: no behavior change; CI-equivalent lint fallback.
+
+### 2026-10-29 — Step 5: line drift; lint binary at the CI pin
+- **Spec said**: delete the doc comment and function at `:898-911`; lint with `GOWORK=off golangci-lint run`.
+- **Done**: deleted by symbol at `:898-911` plus the following blank line (no drift). The discovery digest's
+  `main.go:64-69` reference was already corrected to `:71-76` by the re-spec. Lint used the same CI-pinned v2.14.0
+  go1.27 rebuild as Steps 2-4, because `~/go/bin/golangci-lint` is built with go1.26.
+- **Disposition**: no behavior change; CI-equivalent lint fallback.
+
+### 2026-10-29 — Step 8: RED captured by moving the 034 files aside in the working tree
+- **Spec said**: write and run Step 8 before Step 7's files exist (RED: the highest match is the 002 INSERT).
+- **Done**: Step 7 was already committed (ebdb0209), so both 034 files were moved to the session scratchpad, RED was
+  captured (`002_config_environment.up.sql: highest-numbered match must DELETE …`), and the files were moved back
+  unchanged (clean `git status` apart from the new test) before GREEN. Nothing from the move was committed.
+- **Disposition**: no behavior change; same RED as specified.
+
+### 2026-10-29 — Step 9: governance entry placement, PLAT-6 line, manual teardown
+- **Spec said**: add the config-governance entry "in the `:426` form" in § Per-Feature Registered Keys; cite
+  `max_drawdown_pct` at `~L973`; run `/context-constitution refresh` for the teardown.
+- **Done**: the entry uses the `**Removes**` form under a new `### feature 264` heading at the top of the section,
+  because that log is newest-first and append-only (editing 161's entry would rewrite a past entry). The PLAT-6
+  evidence cites `~L958`, the re-grepped line after Step 5's deletion. The context-forge `context-constitution`
+  skill is not available in this session, so the teardown was done by hand (context.md, Step 9).
+- **Disposition**: docs-only; no behavior change. The integration PR body must state that the plugin was
+  unavailable and list the manual reconciliation (context.md, Step 9).
+
+### 2026-10-29 — Step 10: gate (a)/(b) passed; ListKeys smoke becomes post-merge verification (operator decision)
+**Spec said**: hold the integration-PR merge until (a) main-dev has no config migration numbered `034` or higher, (b) `031`, `032` and `033` are all on main-dev, and the post-deploy `list_config_keys(namespace="portfolio")` smoke on the staging and production agents shows no `portfolio.snapshot.interval_minutes`.
+**Actual**: (a) and (b) pass at `origin/main-dev` `0ba6a8b7`: the highest config migration there is `033_ledger_stream_resolve_timeout` (from 248), and `031_heal_indicators_sandbox_keys_full_dotted`, `032_analysis_zero_trap_descriptions` and `033_ledger_stream_resolve_timeout` are all present. This branch's `034_retire_portfolio_snapshot_interval` does not collide, and `git merge-tree` against main-dev is conflict-free. The ListKeys smoke can only run after migration 034 is applied by a deploy, so it can never pass before the merge. The operator chose "Post-merge verification (Recommended)": Step 10 is `done`, the operator's session runs the staging smoke after the dev deploy and records it in context.md, and the production smoke moves to the next `/promote` checklist.
+**Reason**: the remaining check is post-deploy by construction. The 254 Step 9, 258 Step 1 and 265 Step 5 precedent applies.
+**Disposition**: merge hold lifted. merge-order.md row 77 is set to Resolved `Yes`, since 243, 244 and 248 have all merged and the numbering is verified. This entry supersedes the one below.
+
+### 2026-10-29 — Step 10 deferred to operator — integration PR merge held until the two-sided gate passes and the post-deploy `ListKeys` smoke is clean
+- **Spec said**: run the item-1 gate immediately before merge, then after the dev deploy list `portfolio` keys in
+  `staging` and `production` and confirm `portfolio.snapshot.interval_minutes` is absent.
+- **Done (2026-10-29, this session)**: gate run against `origin/main-dev`. Its highest config migration is `030`, and
+  the `/0(3[4-9]|[4-9][0-9])_` grep returns nothing (exit 1), so (a) passes. (b) fails today: `031`/`032`/`033` exist only on
+  `origin/feature/fix-sandbox-seed-keys`, `fix-python-config-stored-zero` and `fix-ledger-trimmed-notify-payload`,
+  and merge-order.md:77 sequences 264 after all three (`Resolved: No`). The dev smoke needs a deployed build, which this session cannot do.
+- **Integration PR merge held until** (open it as a draft with an (a)/(b) checklist):
+  1. 243, 244 and 248 have merged into `main-dev`; then `git fetch origin` and
+     `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | grep -oE '/[0-9]{3}_' | tr -d '/_' | sort -u`
+     shows `031`, `032`, `033` and nothing ≥ `034` (else renumber 034 → next free and log a deviation here).
+  2. After the dev deploy has run `scripts/db-migrate.sh`, the `list_config_keys(namespace="portfolio")` agent tool
+     returns no `portfolio.snapshot.interval_minutes`. Run it against both the staging and the production agent
+     deployments, because the tool's environment is fixed to its own deployment and has no `service`/`environment`
+     argument. Config `ListKeys` with `environment` set to `staging` and then `production` works too.
+  3. Record both outputs in context.md and the PR body; mark the PR ready; flip merge-order.md:77 to `Resolved: Yes`.
+- **Also**: the spec's smoke line `list_config_keys(service=…, environment=…)` does not match the real tool
+  signature `list_config_keys(namespace, user_id="")` (`services/xstockstrat-agent/app/tools.py:1620`). Item 2 uses the real one.
+- **Gate re-run 2026-10-29 (`origin/main-dev` @ `22001134`)**: config migrations now top out at `031`, because 243 merged
+  via #1334 (`031_heal_indicators_sandbox_keys_full_dotted`). The `/0(3[4-9]|[4-9][0-9])_` grep returns nothing (exit 1),
+  so (a) passes. (b) is still unmet: `032` and `033` are only on `origin/feature/fix-python-config-stored-zero` and
+  `origin/feature/fix-ledger-trimmed-notify-payload`. The hold conditions 1-3 above are unchanged, and only 244 and 248 remain to merge.
+- **Gate re-run 2026-10-29 (`origin/main-dev` @ `0099647f`, Step 10 execute pass)**: config migrations still top out at
+  `031`; the `/0(3[4-9]|[4-9][0-9])_` grep returns nothing (exit 1), so (a) passes. (b) is still unmet (`032`/`033`
+  only on the 244 and 248 feature branches). Step 10 stays `pending`; hold conditions 1-3 above are unchanged.

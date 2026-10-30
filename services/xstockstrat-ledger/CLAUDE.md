@@ -31,8 +31,8 @@ was removed.
 
 1. **Events are immutable.** The database enforces `NO UPDATE`, `NO DELETE` via `deny_mutation` **triggers** on `ledger.events` (`migrations/001_ledger_events_hypertable.up.sql:47,54,58`).
 2. **All services write here.** The ledger is the system's audit trail and event replay source.
-3. **stream_key** is the logical partition for event replay (`order:{id}`, `portfolio:{user_id}`, etc.)
-4. **sequence** is globally monotonic — never gaps, never decreasing.
+3. **stream_key** is the logical partition for event replay (bare `{order_id}` for trading `order.*`, `order:{id}` for `order_intent.*`, `portfolio:{user_id}`, etc.)
+4. **sequence** is globally monotonic and may gap (`nextval`; rolled-back inserts burn values) — never decreasing.
 5. **`QueryEvents.owner_only` scopes the read to `user_id = x-user-id`** (feature 263); NULL-owned rows are never returned under it. Every user-facing edge MUST set it (the trader BFF does, except on the copilot key it forces and on `account:` keys it ownership-checks); internal callers leave it false. The field defaults to false, so an edge that forgets it fails **open**.
 
 ## Live Streaming Architecture (connection budget)
@@ -42,7 +42,11 @@ single dedicated LISTEN connection — `EventNotifier` (`src/services/eventNotif
 outside the query pool — tails the `ledger_stream_all` channel (the DB trigger emits every insert
 there in addition to the per-`stream_key` channel) and fans each event out to in-process
 subscribers, filtered per-subscriber by `stream_key`/`event_type`. Each `StreamEvents` handler
-replays history with a borrow-and-release pool query, then subscribes to the notifier.
+subscribes to the notifier first, then replays history in bounded pool batches (`REPLAY_BATCH_SIZE`, up to a
+`max(sequence)` bound captured after subscribe, releasing the connection between batches), then flushes the
+buffered live rows synchronously and goes live.
+
+`QueryEvents` pages by an opaque `sequence` keyset token (`page_token`); page size defaults to 100 and is capped at 1000.
 
 This decoupling is load-bearing: `xstockstrat-portfolio` holds **five** permanent `StreamEvents`
 subscriptions (`order.filled`, `account.positions.synced`, `account.deregistered`,
@@ -105,7 +109,7 @@ dedup).
 
 | Pattern | Used By |
 |---|---|
-| `order:{order_id}` | xstockstrat-trading |
+| `{order_id}` (bare; `order.*`) / `order:{order_id}` (`order_intent.*`) | xstockstrat-trading |
 | `portfolio:{user_id}` | xstockstrat-portfolio |
 | `backfill:{job_id}` | xstockstrat-ingest |
 | `formula:{formula_id}` | xstockstrat-indicators |
@@ -121,6 +125,7 @@ dedup).
 ```text
 GRPC_PORT=50057
 CONFIG_ENDPOINT=xstockstrat-config:50060
+DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed
 DB_POOL_MAX=1                          # query pool size; live streaming uses a separate dedicated LISTEN connection (1 + 1 = 2 total, see Live Streaming Architecture)
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live

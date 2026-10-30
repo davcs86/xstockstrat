@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -32,6 +34,7 @@
 | 2026-10-29 | `in-progress` (Step 10 done) | /sdd-execute sequential (sdd-batch-execute) | Filed `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` (+ `open` sidecar) for the never-assigns-`result` gap; untriaged |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; integration PR next |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

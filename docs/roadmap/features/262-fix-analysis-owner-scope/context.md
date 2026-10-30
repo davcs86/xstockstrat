@@ -519,3 +519,267 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   checkpoint.
 - [ ] Step 4: if the `run_once` row loop gets hard to read after the guards land, extract the
   per-row logic into a helper (advisory, no FR impact).
+
+## Session 2026-10-29 (/sdd-execute re-spec, sdd-batch-execute)
+
+- Branch setup (§5.3): merged `origin/main-dev` into the feature branch (clean, no conflicts; merge
+  commit `41462525`). Ledger guard: clean.
+- Re-spec of Steps 2–8 (commit `6244b100`): evidence re-verified against the merged tree. Drift is
+  line numbers only: 244's `int_positive` semaphore clamp (`entry_backfill.py:57-59`) shifted
+  `run_once` by +1; 259's `spawn(..., "entry-backfill", forever=False)` now starts the backfill
+  (`app/main.py:174-180`, not edited); 244/246 `fundamentals_row`/`snapshot_watcher` are already in
+  `tests/conftest.py`, so the Step 5 conftest-collision fallback is no longer expected; the
+  analysis `CLAUDE.md` trading row moved to `:271`. Instructions, Files and Verification are
+  unchanged in scope.
+- Open Thread update: the 244 `entry_backfill.py` ADJACENT conflict has effectively happened
+  (244 merged to main-dev); edits are indented against the current tree. The merge-order soft row
+  for 244 is moot.
+
+## Session 2026-10-29 (sdd-execute sequential (sdd-batch-execute))
+
+- Status `implementation-ready` → `in-progress`.
+- Up-front plan confirmation: given by operator standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute;
+  unattended checkpoints, C-16 promotion auto-confirmed unless it changes an existing `@AC` rule,
+  merge-train authorized; operator-only DB/prod steps: open PR, hold merge). Per-feature blocker
+  decisions were given by the operator through the session's question tool on 2026-10-29.
+  Checkpoints: `report`.
+- Mode: sequential, one commit per step on `feature/fix-analysis-owner-scope`; single integration
+  PR at the end. Steps 2–8 pending (Step 1 done at /sdd-spec).
+- Step 2 done (service, `app/engine/entry_backfill.py`): `run_once` mints `pass_trace_id`
+  once per pass; `_backfill_pair` sends `ListOrdersRequest(user_id=…, strategy_id=…, symbol=…)`
+  with `metadata=owner_metadata(user_id) + [("x-trace-id", pass_trace_id)]`; the failure warning
+  and completion log carry the trace id. A `ValueError` from `owner_metadata` stays pair-local.
+  - TDD (AC-1 shape, scratch test not committed — Step 3 owns the real tests): red:
+    `assert req.user_id == "u1"` failed (`'' == 'u1'`) → green: passed after the change.
+  - Verification: grep hits for body `user_id`, `metadata=md`, `owner_metadata(user_id)` and
+    `pass_trace_id`; `ruff check .` + `ruff format --check .` clean.
+  - Deviation: the first comment line was reworded to fit ruff's 100-char limit (Deviation Log).
+  - Expected interim breakage until Step 3: `test_run_once_swallows_per_pair_rpc_failure` and
+    `test_blend_backfill_restricted_to_fundamentals_universe` fail because their `_list_orders(req)`
+    fakes reject `metadata=`; Step 3 instruction 1 changes both signatures.
+- Step 3 done (test, `tests/test_entry_backfill.py`, `tests/test_owner_header_guard.py`): both
+  `_list_orders` fakes take `metadata=None`; added `test_list_orders_carries_owner_in_body_and_metadata`
+  (`@AC-1`) and `test_other_owner_fills_never_seed` (`@AC-2`); `test_entry_backfill_run_once` now
+  uses a `RecordingStub` trading stub and asserts non-vacuous `x-user-id: bob`, one `x-trace-id`
+  and body `user_id`.
+  - TDD (run against the pre-Step-2 `entry_backfill.py` from `0833f0e3`): AC-1 red:
+    `assert '' == 'u-a'` → green; AC-2 red: `('u-a','s-1','AAPL') not in {...: 2026-01-01}` → green;
+    header guard red: `assert [] == ['bob']` → green. 3 failed / 35 passed → 38 passed.
+  - Verification: the two files 38 passed; full suite 1446 passed, coverage 89.82% (≥40);
+    `ruff check .` + `ruff format --check .` clean. The Step 2 interim breakage is resolved.
+  - Deviation: the `@AC-2` fake mirrors trading's empty-`user_id` fail-open so RED is real
+    (Deviation Log).
+- Step 4 done (service, `app/engine/entry_backfill.py`): `run_once` guards the strategies read
+  (warn + return), the blend-universe resolve and system drain (warn + empty set), the row parse
+  and `resolve_universe` (warn + skip row), the held/watch pair (locals committed together; a
+  failure records the owner in `failed_owners` and skips its later rows, one summary warning per
+  owner), and the owner-signal drain (warn + `own_cache[owner] = set()`, owner not poisoned). The
+  blend skip stays ahead of `resolve_universe`; gather results are logged per failed task. All
+  warnings carry `pass_trace_id`; only `Exception` is caught. Docstring rewritten.
+  - TDD (scratch tests, not committed — Step 5 owns the real tests): red, 5 failed —
+    `@AC-4` `RuntimeError: db down`, `@AC-5` `RuntimeError: x`, `@AC-8` `RuntimeError: portfolio
+    rpc`, malformed row `KeyError: 'display_name'`, `@AC-9` `RuntimeError: fund` → green: all 5
+    passed (with `test_entry_backfill.py` + `test_owner_header_guard.py`: 43 passed).
+  - Verification: grep hits for `failed_owners`/`except Exception`/`pass_trace_id`/
+    `return_exceptions=True`; no `except BaseException`/bare `except:`; `ruff check .` +
+    `ruff format --check .` clean; full suite 1446 passed, coverage 89.48% (≥40).
+  - No deviations. The pre-commit hook is inert in this worktree (`core.hooksPath` points at
+    `/home/user/xstockstrat/.husky/_`, which does not exist, and the main worktree has no
+    `node_modules` to link); nothing was bypassed with `--no-verify`.
+- Step 5 done (test: `tests/conftest.py`, `tests/test_owner_header_guard.py`,
+  `tests/test_entry_backfill.py`). `_live_loop` now lives in conftest as
+  `real_live_loop(ingest, indicators, rows, *, config_watcher, marketdata_stub)`, with the page built
+  inline. `test_owner_header_guard._live_loop` delegates to it, and its now-unused
+  `LiveEvaluationLoop` import was dropped. The conftest fallback was not needed. Added 8 tests in
+  `TestRunOnceFailureIsolation`: `@AC-3` (real loop, `system` row), `@AC-8`, the malformed row,
+  the owner-signal fallback, `@AC-4`, `@AC-5`, `@AC-9` and the gather logging.
+  - TDD: run against the pre-Step-4 `entry_backfill.py` from `7c44df04`. RED, 8 failed:
+    - `@AC-3`: `ValueError: owner-scoped call needs a real owner, got 'system'`.
+    - `@AC-8`: `RuntimeError: portfolio rpc`.
+    - Malformed row: `KeyError: 'display_name'`.
+    - Owner-signal fallback: `RuntimeError: ingest owner`.
+    - `@AC-4`: `db down`.
+    - `@AC-5`: `ingest down`.
+    - `@AC-9` and gather logging: their WARNING assertions failed.
+
+    GREEN: 46 passed.
+  - Verification:
+    - The two files: 46 passed. The full suite: 1454 passed, coverage 89.83% (≥40).
+    - `LiveEvaluationLoop(` count in the guard file is 0.
+    - `ruff check .` and `ruff format --check .` are clean.
+    - The 193 PRESERVE guard `test_blend_backfill_restricted_to_fundamentals_universe` is
+      unchanged and green.
+  - Deviation: the malformed-row WARNING assertion is narrowed so it is never vacuous (Deviation Log).
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.
+- Step 6 done (service, `app/repositories/strategies.py`, `app/handlers/servicer.py`): deleted
+  `get_by_id` and `update` (no callers in `app/`); the `get_by_owner_and_id` docstring opens
+  "Resolve the row only under its owner (feature 133)"; the `UniqueViolationError` comment at
+  `servicer.py:3181` now reads "...raced get_by_owner_and_id." `import json` stays (`update_locked`).
+  - TDD (scratch `@AC-6` test, not committed — Step 7 owns it): RED
+    `True = hasattr(StrategiesRepository, 'get_by_id')` → GREEN 1 passed.
+  - Verification: both greps empty; `ruff check .` + `ruff format --check .` clean; full suite
+    1454 passed (servicer tests mock `_strategies_repo` as a bare `AsyncMock`, so the dead
+    `get_by_id` mock lines Step 7 deletes are still present but inert).
+  - The spec's example comment wording is 102 chars (E501), so the shorter form above was used;
+    the spec offered it as "e.g.", same meaning. No deviation.
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.
+- Step 7 done (test, `tests/test_analysis_servicer.py`, `tests/test_readiness_opportunities_source_symbol.py`):
+  deletion-first cleanup — 24 + 2 single-line `get_by_id` mocks deleted (each next line already sets
+  `get_by_owner_and_id`), the two multi-line mocks renamed with their alias lines deleted, the
+  owner-agnostic side_effect mock deleted and its comment reworded (single owner `u1`, so the
+  owner-scoped mock ignores `uid`), the disable-path `assert_not_awaited` retargeted to
+  `get_by_owner_and_id`, the two feature-089 comments reworded. New
+  `TestStrategiesRepositoryOwnerScopedOnly` (`@AC-6`) after `TestListLiveEnabled`.
+  - TDD: AC-6 red: `assert not hasattr(StrategiesRepository, "get_" + "by_id")` failed
+    (`True = hasattr(...)`) against the pre-Step-6 `strategies.py` (`0db51bcc`, temporary swap,
+    restored) → green: 1 passed. AC-7 red: `_strategies_repo.(get_by_id|update)` grep = 30 → green: 0.
+  - Verification: grep 1 = 0, grep 2 = 0; full suite 1455 passed; coverage 89.88% (≥40);
+    `ruff check .` + `ruff format --check .` clean.
+  - Deviations (Deviation Log): operator decision 'B: obfuscate the name' for the `@AC-6`
+    assertion; E501 wrapping of the reworded comments.
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.
+- Step 8 done (docs, `services/xstockstrat-analysis/CLAUDE.md`): the `xstockstrat-trading`
+  dependency row (`:271`) now reads "`ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id`
+  (and a per-pass `x-trace-id`) boot-time-only ..."; the feature-083 `ListOrders(strategy_id)` part
+  and the rest of the row are unchanged.
+  - TDD: N/A (docs). Before: new-form grep 0 hits, old-form grep 1 hit. After: new-form 1 hit
+    (`:271`), old-form no output.
+  - Context teardown: `/context-forge:context-constitution` is not available in this session (only
+    `context-forge:context-scrubber` is listed), so it was done by hand against the post-Step-7 code.
+    The integration PR body must record both facts:
+    - `CLAUDE.md` § Dependencies: the edited row matches `entry_backfill.py:81-85` (body `user_id`,
+      `owner_metadata(user_id)` + `x-trace-id`). No `StrategiesRepository`/`get_by_id` mention
+      remains in `CLAUDE.md`. The `:531` `max_concurrent_entry_backfill` row is still accurate.
+    - ANALYSIS-7 (`docs/context-constitution.md:23`): still true. `entry_backfill.py:67` still
+      re-types the live-gate literal, `LIVE_ENABLED_PREDICATE_SQL` and `list_live_enabled` are
+      still in `strategies.py`. The `~L5817` anchor for `_load_strategy_definition` is now `:5822`,
+      within its "~" tolerance, so it was left alone.
+    - Findings `:28` (live-gate literal question): still accurate and still **open**; this feature
+      does not address it.
+  - The main worktree still has no `node_modules`, so the pre-commit hook stays inert. `--no-verify`
+    was not used.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-analysis-owner-scope (feature 262)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature | CREATE | NEW | entry-backfill ListOrders carries owner |
+| AC-2 | same | CREATE | NEW | other owner's fills never seed state |
+| AC-3 | same | CREATE | NEW | one owner's drain failure (ValueError, system owner) isolated |
+| AC-8 | same | CREATE | NEW | non-ValueError drain failure isolated |
+| AC-4 | same | CREATE | NEW | failed live-strategies read ends quietly |
+| AC-5 | same | CREATE | NEW | failed system-signal drain does not stop backfill |
+| AC-6 | same | CREATE | NEW | repo has no get_by_id / update |
+| AC-7 | same | CREATE | NEW | test hygiene, no mocks of removed methods |
+| AC-9 | same | CREATE | NEW | failed blend-universe resolve skips only blend pairs |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature (CREATE) ---
+# Promoted from docs/roadmap/features/262-fix-analysis-owner-scope/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-262` tag.
+
+Feature: xstockstrat-analysis - entry-backfill is owner-scoped and failure-isolated; strategies repository has no owner-agnostic access
+
+  @AC-1 @FR-1 @regression @feature-262
+  Scenario: The entry-backfill asks trading only for the strategy owner's orders
+    Given live strategy "s-1" owned by "u-a" whose universe includes "AAPL"
+    When the boot entry-backfill runs
+    Then the ListOrders request for ("s-1", "AAPL") carries user_id "u-a"
+    And it is sent with metadata x-user-id "u-a"
+
+  @AC-2 @FR-2 @regression @feature-262
+  Scenario: Another owner's fills never seed an owner's entry state
+    Given live strategy "s-1" owned by "u-a" whose universe includes "AAPL"
+    And trading holds a filled BUY 10 "AAPL" on strategy "s-1" for user "u-b" and no orders for user "u-a"
+    And the trading stub filters ListOrders by the request user_id
+    When the boot entry-backfill runs
+    Then the live loop has no entry time for ("u-a", "s-1", "AAPL")
+    And the live loop's last state for ("u-a", "s-1", "AAPL") is not True
+    And no entry cooldown is written for ("u-a", "s-1", "AAPL")
+
+  @AC-3 @FR-3 @regression @feature-262
+  Scenario: One owner whose drains fail does not stop the backfill for other owners
+    Given live strategy "s-sys" owned by "system" and live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And a warning naming strategy "s-sys" and owner "system" is logged
+
+  @AC-8 @FR-3 @regression @feature-262
+  Scenario: A non-ValueError drain failure for one owner does not stop the backfill for other owners
+    Given live strategy "s-3" owned by "u-b" whose held-symbols drain raises a portfolio RPC error
+    And live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And a warning naming strategy "s-3" and owner "u-b" is logged
+
+  @AC-4 @FR-4 @regression @feature-262
+  Scenario: A failed live-strategies read ends the backfill quietly
+    Given the analysis database raises on the live-strategies query
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And a warning naming the failed live-strategies read is logged
+    And no ListOrders request is sent
+
+  @AC-5 @FR-4 @regression @feature-262
+  Scenario: A failed system-signal drain does not stop the backfill
+    Given live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    And the system-signal drain raises
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And a warning naming the failed system-signal drain is logged
+
+  @AC-6 @FR-5 @regression @feature-262
+  Scenario: The strategies repository offers no owner-agnostic read or write
+    Given the analysis StrategiesRepository
+    Then it has no method named "get_by_id"
+    And it has no method named "update"
+
+  @AC-7 @FR-6 @regression @feature-262
+  Scenario: Servicer tests mock only repository methods the servicer calls
+    Given the analysis test suite under services/xstockstrat-analysis/tests
+    Then no test references "_strategies_repo.get_by_id" or "_strategies_repo.update("
+    And the analysis test suite passes
+
+  @AC-9 @FR-4 @regression @feature-262
+  Scenario: A failed blend-universe resolve skips only the blend pairs
+    Given the fundamentals blend is enabled and the blend strategy is live
+    And live strategy "s-2" owned by "u-a" whose universe includes "MSFT"
+    And trading holds a filled BUY 5 "MSFT" on strategy "s-2" for user "u-a" at 2026-10-01T14:30:00Z
+    And the fundamentals-universe resolve raises
+    When the boot entry-backfill runs
+    Then it completes without raising
+    And the live loop's entry time for ("u-a", "s-2", "MSFT") is 2026-10-01T14:30:00Z
+    And no ListOrders request is sent for the blend strategy
+    And a warning naming the failed fundamentals-universe resolve is logged
+
+### Notes / ambiguities / conflicts
+- All 9 scenarios attributed to xstockstrat-analysis: the observable subject (entry_backfill, StrategiesRepository, analysis tests) lives there. Trading appears only as a stub, so nothing is cross-cutting and platform.feature gets no write.
+- Nearest existing suite: /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-blend-queue-fundamentals-universe.feature (lines ~31-35) asserts blend pairs are anchored only inside the fundamentals universe. AC-9 asserts a different outcome (a failed resolve is isolated), so it is not an OVERLAP. Recorded for a human to see.
+- No existing suite in that directory mentions StrategiesRepository, get_by_id, or the owner-scoped ListOrders request. No @feature-262 tags exist anywhere, so there are no DUPs.
+- No CONFLICT. AC-6 and AC-7 agree with the standing ownership rule in analysis CLAUDE.md, which says strategies are resolved via get_by_owner_and_id.
+- AC-6 and AC-7 are structural and test-hygiene scenarios, not behavior. They are promoted verbatim as reviewed. Curation is a human decision.
+
+### Coverage check
+- Source scenarios: 9 (AC-1 to AC-9). Planned NEW+DUP+OVERLAP: 9 (9 NEW, 0 DUP, 0 OVERLAP). None skipped.
+```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

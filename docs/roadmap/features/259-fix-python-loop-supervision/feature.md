@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -40,6 +42,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential (sdd-batch-execute) | Step 15 done — docs: analysis `CLAUDE.md` (supervision, P&L retry/park invariants and limitations, `analysis.pnl.event_parked` row), `config-startup.md` Python watcher line, findings:23 addressed note, merge-order 259 row; teardown by hand (context-forge refresh unavailable) |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 15 steps done; next: merge-order gate and integration PR |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

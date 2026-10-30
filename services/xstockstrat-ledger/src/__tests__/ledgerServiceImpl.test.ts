@@ -6,6 +6,8 @@ import { makeRecordingCall as makeStreamCall } from './fixtures/streamCall';
 
 let LedgerServiceImpl: any;
 let rowToEvent: any;
+let toSeq: any;
+let parseSequenceToken: any;
 
 // This import must throw on failure — never wrap it in try/catch or early-return on a
 // missing subject; a swallowed import turns every case into a silent pass.
@@ -13,6 +15,8 @@ before(async () => {
   const mod = await import('../grpc/ledgerServiceImpl.js');
   LedgerServiceImpl = mod.LedgerServiceImpl;
   rowToEvent = mod.rowToEvent;
+  toSeq = mod.toSeq;
+  parseSequenceToken = mod.parseSequenceToken;
 });
 
 describe('test harness', () => {
@@ -55,16 +59,53 @@ function makeCall(req: any) {
   return { request: req };
 }
 
+// makeKeysetPool emulates the WHERE/ORDER/LIMIT the impl emits over pg-style string sequences.
+// C-13: single consumer (queryEvents keyset tests in this file), so it stays inline.
+function makeKeysetPool(rows: any[]) {
+  const calls: Array<{ sql: string; params: any[] }> = [];
+  const pool = {
+    async query(sql: string, params: any[] = []) {
+      calls.push({ sql, params });
+      const param = (re: RegExp) => {
+        const m = re.exec(sql);
+        return m ? params[Number(m[1]) - 1] : undefined;
+      };
+      let out = rows.slice();
+      const eventType = param(/event_type = \$(\d+)/);
+      if (eventType !== undefined) out = out.filter((r) => r.event_type === eventType);
+      const userId = param(/user_id = \$(\d+)/);
+      if (userId !== undefined) out = out.filter((r) => r.user_id === userId);
+      const after = param(/sequence > \$(\d+)::bigint/);
+      if (after !== undefined) out = out.filter((r) => toSeq(r.sequence) > BigInt(after));
+      if (/ORDER BY sequence ASC/.test(sql)) {
+        out.sort((a, b) => (toSeq(a.sequence) < toSeq(b.sequence) ? -1 : 1));
+      }
+      return { rows: out.slice(0, params[params.length - 1]) };
+    },
+  };
+  return { pool, calls };
+}
+
+function queryPage(impl: any, call: any): Promise<{ err: any; resp: any }> {
+  return new Promise((resolve) => {
+    impl.queryEvents(call, (err: any, resp: any) => resolve({ err, resp }));
+  });
+}
+
 // makeIdempotentPool builds a pool whose query() (and transactional client.query())
 // route by SQL so the idempotent appendEvent path can be exercised without a real DB.
 function makeIdempotentPool(opts: {
   claimRows: any[]; // rows returned by INSERT ... idempotency_keys ... RETURNING
   insertRow?: any; // row returned by the ledger.events insert (first-time path)
   existingRows?: any[]; // rows returned by the SELECT join (duplicate path)
+  connectThrows?: Error; // pool.connect() rejects with this
+  throwOn?: RegExp; // client.query() throws when the SQL matches
 }) {
   const calls: string[] = [];
+  const releases: unknown[] = [];
   const handle = (sql: string) => {
     calls.push(sql);
+    if (opts.throwOn?.test(sql)) throw new Error('connection terminated');
     if (/INSERT INTO ledger\.idempotency_keys/.test(sql)) return { rows: opts.claimRows };
     if (/INSERT INTO ledger\.events/.test(sql))
       return { rows: [opts.insertRow ?? { sequence: 1, recorded_at: new Date() }] };
@@ -75,17 +116,20 @@ function makeIdempotentPool(opts: {
     async query(sql: string, _params?: any[]) {
       return handle(sql);
     },
-    release() {},
+    release(err?: unknown) {
+      releases.push(err);
+    },
   };
   const pool = {
     async connect() {
+      if (opts.connectThrows) throw opts.connectThrows;
       return client;
     },
     async query(sql: string, _params?: any[]) {
       return handle(sql);
     },
   };
-  return { pool, calls };
+  return { pool, calls, releases };
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +254,7 @@ describe('queryEvents', () => {
     await runQuery(impl, makeStreamCall({ ownerOnly: true, page: { pageSize: 100 } }, 'u-a'));
     assert.strictEqual(
       captured.sql,
-      'SELECT * FROM ledger.events WHERE user_id = $1 ORDER BY recorded_at ASC LIMIT $2',
+      'SELECT * FROM ledger.events WHERE user_id = $1 ORDER BY sequence ASC LIMIT $2',
     );
     assert.deepStrictEqual(captured.params, ['u-a', 101]);
   });
@@ -230,7 +274,7 @@ describe('queryEvents', () => {
     );
     assert.strictEqual(
       captured.sql,
-      'SELECT * FROM ledger.events WHERE stream_key = $1 AND event_type = $2 ORDER BY recorded_at ASC LIMIT $3',
+      'SELECT * FROM ledger.events WHERE stream_key = $1 AND event_type = $2 ORDER BY sequence ASC LIMIT $3',
     );
     assert.deepStrictEqual(captured.params, ['order:1', 'order.filled', 101]);
     assert.doesNotMatch(captured.sql ?? '', /user_id/);
@@ -244,9 +288,132 @@ describe('queryEvents', () => {
     );
     assert.strictEqual(
       captured.sql,
-      'SELECT * FROM ledger.events WHERE event_type = $1 AND user_id = $2 ORDER BY recorded_at ASC LIMIT $3',
+      'SELECT * FROM ledger.events WHERE event_type = $1 AND user_id = $2 ORDER BY sequence ASC LIMIT $3',
     );
     assert.deepStrictEqual(captured.params, ['order.filled', 'u-a', 11]);
+  });
+
+  // Feature 257 — keyset page token on sequence (pg returns BIGINT sequence as a string).
+  it('@AC-1 token walk returns each event once across the 9→10 digit boundary', async () => {
+    const rows = [
+      makeRow({ event_id: 'e1', sequence: '9' }),
+      makeRow({ event_id: 'e2', sequence: '10' }),
+      makeRow({ event_id: 'e3', sequence: '11' }),
+    ];
+    const { pool, calls } = makeKeysetPool(rows);
+    const impl = new LedgerServiceImpl(pool, {});
+    const p1 = await queryPage(impl, makeCall({ page: { pageSize: 2 } }));
+    assert.ifError(p1.err);
+    assert.deepStrictEqual(
+      p1.resp.events.map((e: any) => e.eventId),
+      ['e1', 'e2'],
+    );
+    assert.strictEqual(p1.resp.page.nextPageToken, '10');
+    const p2 = await queryPage(
+      impl,
+      makeCall({ page: { pageSize: 2, pageToken: p1.resp.page.nextPageToken } }),
+    );
+    assert.ifError(p2.err);
+    assert.deepStrictEqual(
+      p2.resp.events.map((e: any) => e.eventId),
+      ['e3'],
+    );
+    assert.strictEqual(p2.resp.page.nextPageToken, '');
+    assert.match(calls[1].sql, /sequence > \$/);
+    assert.ok(calls[1].params.includes('10'));
+  });
+
+  it('@AC-2 an oversized page_size is capped at 1000', async () => {
+    const rows = Array.from({ length: 20_000 }, (_, i) =>
+      makeRow({ event_id: `e${i + 1}`, sequence: String(i + 1) }),
+    );
+    const { pool, calls } = makeKeysetPool(rows);
+    const { err, resp } = await queryPage(
+      new LedgerServiceImpl(pool, {}),
+      makeCall({ page: { pageSize: 1_000_000 } }),
+    );
+    assert.ifError(err);
+    assert.strictEqual(resp.events.length, 1000);
+    assert.notStrictEqual(resp.page.nextPageToken, '');
+    assert.strictEqual(calls[0].params[calls[0].params.length - 1], 1001);
+  });
+
+  it('@AC-7 an omitted page_token returns the oldest page in sequence order', async () => {
+    const rows = Array.from({ length: 150 }, (_, i) =>
+      makeRow({
+        event_id: `e${i + 1}`,
+        sequence: String(i + 1),
+        recorded_at: new Date(Date.UTC(2024, 0, 1, 0, 0, (i * 37) % 150)),
+      }),
+    );
+    for (let i = rows.length - 1; i > 0; i--) {
+      const j = (i * 7919) % (i + 1);
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+    }
+    const want = (n: number) => Array.from({ length: n }, (_, i) => `e${i + 1}`);
+    const { pool, calls } = makeKeysetPool(rows);
+    const impl = new LedgerServiceImpl(pool, {});
+    const first = await queryPage(impl, makeCall({}));
+    assert.ifError(first.err);
+    assert.deepStrictEqual(
+      first.resp.events.map((e: any) => e.eventId),
+      want(100),
+    );
+    assert.notStrictEqual(first.resp.page.nextPageToken, '');
+    const all = await queryPage(impl, makeCall({ page: { pageSize: 500 } }));
+    assert.deepStrictEqual(
+      all.resp.events.map((e: any) => e.eventId),
+      want(150),
+    );
+    assert.strictEqual(all.resp.page.nextPageToken, '');
+    assert.match(calls[0].sql, /ORDER BY sequence ASC/);
+  });
+
+  it('an exactly-full last page returns an empty token (FR-2)', async () => {
+    const { pool } = makeKeysetPool([
+      makeRow({ event_id: 'e1', sequence: '1' }),
+      makeRow({ event_id: 'e2', sequence: '2' }),
+    ]);
+    const { resp } = await queryPage(
+      new LedgerServiceImpl(pool, {}),
+      makeCall({ page: { pageSize: 2 } }),
+    );
+    assert.strictEqual(resp.events.length, 2);
+    assert.strictEqual(resp.page.nextPageToken, '');
+  });
+
+  for (const bad of ['abc', '-1', '9223372036854775808', '0b9c6f1e-2d3a-4b5c-8d7e-1f2a3b4c5d6e']) {
+    it(`a bad page_token ${JSON.stringify(bad)} → code 3 and no query`, async () => {
+      const { pool, calls } = makeKeysetPool([makeRow()]);
+      const { err } = await queryPage(
+        new LedgerServiceImpl(pool, {}),
+        makeCall({ page: { pageSize: 10, pageToken: bad } }),
+      );
+      assert.strictEqual(err?.code, 3);
+      assert.strictEqual(calls.length, 0);
+    });
+  }
+
+  it('ownerOnly and a page token compose as ANDed predicates with LIMIT last (263)', async () => {
+    const { impl, captured } = captureQuery();
+    await runQuery(
+      impl,
+      makeStreamCall(
+        { ownerOnly: true, eventType: 't', page: { pageSize: 10, pageToken: '10' } },
+        'u-a',
+      ),
+    );
+    assert.match(captured.sql ?? '', /user_id = \$\d+ AND sequence > \$\d+::bigint/);
+    assert.deepStrictEqual(captured.params, ['t', 'u-a', '10', 11]);
+    assert.match(captured.sql ?? '', /LIMIT \$4$/);
+  });
+
+  it('toSeq compares numerically and parseSequenceToken treats empty as first page', () => {
+    assert.ok(toSeq('10') > toSeq('9'));
+    assert.strictEqual(toSeq(10), toSeq('10'));
+    assert.strictEqual(toSeq(10n), toSeq('10'));
+    assert.throws(() => toSeq('1e3'));
+    assert.strictEqual(parseSequenceToken(''), null);
   });
 });
 
@@ -435,7 +602,7 @@ describe('appendEvent', () => {
 
   // Idempotency: a first-seen key claims the row and inserts the event normally.
   it('idempotent path: claims the key and inserts the event', async () => {
-    const { pool, calls } = makeIdempotentPool({
+    const { pool, calls, releases } = makeIdempotentPool({
       claimRows: [{ event_id: 'new' }],
       insertRow: { sequence: 7, recorded_at: new Date() },
     });
@@ -457,13 +624,14 @@ describe('appendEvent', () => {
       });
     });
     assert.ok(calls.some((s) => /INSERT INTO ledger\.events/.test(s)), 'first call must insert');
+    assert.deepStrictEqual(releases, [undefined], 'success path releases the client without an error');
   });
 
   // Idempotency: a duplicate key returns the originally-stored event and does NOT
   // insert a second ledger.events row.
   it('idempotent path: returns the stored event on a duplicate key (no second insert)', async () => {
     const now = new Date();
-    const { pool, calls } = makeIdempotentPool({
+    const { pool, calls, releases } = makeIdempotentPool({
       claimRows: [], // ON CONFLICT DO NOTHING → no row → duplicate
       existingRows: [{ event_id: 'orig', sequence: 3, recorded_at: now }],
     });
@@ -488,6 +656,7 @@ describe('appendEvent', () => {
       !calls.some((s) => /INSERT INTO ledger\.events/.test(s)),
       'duplicate key must not insert a second event',
     );
+    assert.deepStrictEqual(releases, [undefined], 'duplicate path releases the client without an error');
   });
 
   // Feature 021 — owning user_id is stamped on the write path (AC-8/AC-11 write side).
@@ -730,6 +899,47 @@ describe('rowToEvent serialization (regression)', () => {
   });
 });
 
+describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)', () => {
+  function appendIdempotent(pool: any, idempotencyKey: string) {
+    const impl = new LedgerServiceImpl(pool, {});
+    const cbArgs: any[][] = [];
+    const done = impl.appendEvent(
+      makeCall({ streamKey: 'account:a-1', idempotencyKey, eventType: 'x', payload: {} }),
+      (...args: any[]) => cbArgs.push(args),
+    );
+    return { done, cbArgs };
+  }
+
+  it('@AC-5 returns code 13 when pool.connect rejects', async () => {
+    assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');
+    const { pool, releases } = makeIdempotentPool({
+      claimRows: [],
+      connectThrows: new Error('timeout exceeded when trying to connect'),
+    });
+    const { done, cbArgs } = appendIdempotent(pool, 'k-1');
+    await assert.doesNotReject(done);
+    assert.strictEqual(cbArgs.length, 1);
+    assert.strictEqual(cbArgs[0][0]?.code, 13);
+    assert.deepStrictEqual(releases, [], 'nothing was acquired, so nothing is released');
+  });
+
+  it('@AC-10 releases the client with the error when a query in the transaction fails', async () => {
+    assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');
+    const { pool, calls, releases } = makeIdempotentPool({
+      claimRows: [{ event_id: 'e' }],
+      throwOn: /INSERT INTO ledger\.events/,
+    });
+    const { done, cbArgs } = appendIdempotent(pool, 'k-2');
+    await assert.doesNotReject(done);
+    assert.strictEqual(cbArgs.length, 1);
+    assert.strictEqual(cbArgs[0][0]?.code, 13);
+    assert.strictEqual(releases.length, 1);
+    assert.ok(releases[0] instanceof Error, 'release must receive the caught Error');
+    assert.strictEqual((releases[0] as Error).message, 'connection terminated');
+    assert.ok(calls.includes('ROLLBACK'), 'the failed transaction is rolled back');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // streamEvents — onGap ends the call non-OK (feature 248)
 // ---------------------------------------------------------------------------
@@ -748,6 +958,73 @@ function makeFakeNotifier() {
   return n;
 }
 
+// A one-connection pool: queries run strictly FIFO and each is logged in `dispatched` when issued.
+// Answers MAX(sequence), INSERT and the replay SELECT (emulating its WHERE/ORDER/LIMIT).
+function makeSingleSlotPool(
+  rows: any[],
+  opts: {
+    holdReplay?: () => Promise<void>;
+    failReplay?: Error;
+    onReplay?: () => void;
+  } = {},
+) {
+  const max = rows.reduce(
+    (m: bigint, r: any) => (toSeq(r.sequence) > m ? toSeq(r.sequence) : m),
+    0n,
+  );
+  let next = max + 1n;
+  let chain: Promise<unknown> = Promise.resolve();
+  const isReplay = (sql: string) => /SELECT \* FROM ledger\.events/.test(sql);
+  const answer = async (sql: string, params: any[]) => {
+    if (/MAX\(sequence\)/.test(sql)) return { rows: [{ max: max.toString() }] };
+    if (/INSERT INTO ledger\.events/.test(sql)) {
+      return { rows: [{ sequence: (next++).toString(), recorded_at: new Date() }] };
+    }
+    if (!isReplay(sql)) return { rows: [] };
+    opts.onReplay?.();
+    if (opts.holdReplay) await opts.holdReplay();
+    if (opts.failReplay) throw opts.failReplay;
+    const param = (re: RegExp) => {
+      const m = re.exec(sql);
+      return m ? params[Number(m[1]) - 1] : undefined;
+    };
+    const gt = param(/sequence > \$(\d+)/);
+    const gte = param(/sequence >= \$(\d+)/);
+    const lte = param(/sequence <= \$(\d+)/);
+    const limit = param(/LIMIT \$(\d+)/);
+    let out = rows.filter(
+      (r: any) =>
+        (gt === undefined || toSeq(r.sequence) > BigInt(gt)) &&
+        (gte === undefined || toSeq(r.sequence) >= BigInt(gte)) &&
+        (lte === undefined || toSeq(r.sequence) <= BigInt(lte)),
+    );
+    out.sort((a: any, b: any) => (toSeq(a.sequence) < toSeq(b.sequence) ? -1 : 1));
+    if (limit !== undefined) out = out.slice(0, Number(limit));
+    return { rows: out };
+  };
+  const pool = {
+    dispatched: [] as string[],
+    replaySelects: () => pool.dispatched.filter(isReplay).length,
+    query(sql: string, params: any[] = []) {
+      pool.dispatched.push(sql);
+      const p = chain.then(() => answer(sql, params));
+      chain = p.catch(() => undefined);
+      return p;
+    },
+  };
+  return pool;
+}
+
+function deferred() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+const settle = () => new Promise((r) => setImmediate(r));
+
 describe('streamEvents onGap', () => {
   for (const [label, notFound, code] of [
     ['AC-7: no row → INTERNAL (13)', true, 13],
@@ -755,7 +1032,7 @@ describe('streamEvents onGap', () => {
   ] as const) {
     it(`${label}, never a clean end()`, async () => {
       const notifier = makeFakeNotifier();
-      const impl = new LedgerServiceImpl(makePool([]), {}, notifier);
+      const impl = new LedgerServiceImpl(makeSingleSlotPool([]), {}, notifier);
       const call = makeStreamCall({ fromSequence: 10 });
       await impl.streamEvents(call);
       notifier.captured.onGap({ notFound, message: 'm' });
@@ -769,7 +1046,7 @@ describe('streamEvents onGap', () => {
     const rows = [11, 12].map((s) =>
       makeRow({ event_id: `e${s}`, sequence: s, payload: { n: s } }),
     );
-    const impl = new LedgerServiceImpl(makePool(rows), {}, makeFakeNotifier());
+    const impl = new LedgerServiceImpl(makeSingleSlotPool(rows), {}, makeFakeNotifier());
     const call = makeStreamCall({ fromSequence: 11 });
     await impl.streamEvents(call);
     assert.deepStrictEqual(
@@ -784,19 +1061,15 @@ describe('streamEvents onGap', () => {
   });
 
   it('onGap during the replay query writes nothing to the destroyed call', async () => {
-    let release: (r: any) => void = () => {};
-    const pool = {
-      query: () =>
-        new Promise((resolve) => {
-          release = resolve;
-        }),
-    };
+    const gate = deferred();
+    const rows = [8, 9, 10].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
+    const pool = makeSingleSlotPool(rows, { holdReplay: () => gate.promise });
     const notifier = makeFakeNotifier();
     const impl = new LedgerServiceImpl(pool, {}, notifier);
     const call = makeStreamCall({ fromSequence: 8 });
     const done = impl.streamEvents(call);
     notifier.captured.onGap({ notFound: false, message: 'm' });
-    release({ rows: [8, 9, 10].map((s) => makeRow({ event_id: `e${s}`, sequence: s })) });
+    gate.resolve();
     await done;
     assert.deepStrictEqual(call.destroyed, { code: 14, message: 'm' });
     assert.strictEqual(notifier.unsubscribed, true);
@@ -814,7 +1087,7 @@ describe('streamEvents sequence normalisation', () => {
   it('AC-2: a resolved "100" after replayed "98"/"99" is delivered, and NOTIFY 100 is not duplicated', async () => {
     const rows = ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
     const notifier = makeFakeNotifier();
-    const impl = new LedgerServiceImpl(makePool(rows), {}, notifier);
+    const impl = new LedgerServiceImpl(makeSingleSlotPool(rows), {}, notifier);
     const call = makeStreamCall({ fromSequence: 98 });
     await impl.streamEvents(call);
     assert.deepStrictEqual(seqs(call), [98, 99]);
@@ -828,19 +1101,15 @@ describe('streamEvents sequence normalisation', () => {
   });
 
   it('AC-5: a resolved "100" buffered during replay is flushed exactly once', async () => {
-    let release: (r: any) => void = () => {};
-    const pool = {
-      query: () =>
-        new Promise((resolve) => {
-          release = resolve;
-        }),
-    };
+    const gate = deferred();
+    const rows = ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s }));
+    const pool = makeSingleSlotPool(rows, { holdReplay: () => gate.promise });
     const notifier = makeFakeNotifier();
     const impl = new LedgerServiceImpl(pool, {}, notifier);
     const call = makeStreamCall({ fromSequence: 98 });
     const done = impl.streamEvents(call);
     notifier.captured.onEvent(makeRow({ event_id: 'e100', sequence: '100' }));
-    release({ rows: ['98', '99'].map((s) => makeRow({ event_id: `e${s}`, sequence: s })) });
+    gate.resolve();
     await done;
     assert.deepStrictEqual(seqs(call), [98, 99, 100]);
     assert.strictEqual(call.destroyed, null);
@@ -854,5 +1123,153 @@ describe('streamEvents sequence normalisation', () => {
       bytes = LedgerEvent.encode(event).finish();
     });
     assert.strictEqual(Number(LedgerEvent.decode(bytes).sequence), 100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// streamEvents — bounded batched replay on a one-connection pool (feature 257)
+// ---------------------------------------------------------------------------
+
+describe('streamEvents bounded replay', () => {
+  const seqs = (call: any) => call.writes.map((w: any) => Number(w.sequence));
+  const strRows = (from: number, to: number) => {
+    const out = [];
+    for (let s = from; s <= to; s++) out.push(makeRow({ event_id: `e${s}`, sequence: String(s) }));
+    return out;
+  };
+
+  it('AC-5: a queued AppendEvent runs between replay batches (FIFO interleave)', async () => {
+    let appended: any = null;
+    let enqueued = false;
+    const pool = makeSingleSlotPool(strRows(1, 2500), {
+      onReplay: () => {
+        if (enqueued) return;
+        enqueued = true;
+        impl.appendEvent(
+          makeCall({
+            eventType: 'order.filled',
+            sourceService: 's',
+            streamKey: 'order:1',
+            idempotencyKey: '',
+          }),
+          (err: any, res: any) => {
+            appended = err ?? res;
+          },
+        );
+      },
+    });
+    const impl = new LedgerServiceImpl(pool, {}, makeFakeNotifier());
+    const call = makeStreamCall({ fromSequence: 1 });
+    await impl.streamEvents(call);
+
+    const kinds = pool.dispatched.map((sql) =>
+      /INSERT INTO ledger\.events/.test(sql)
+        ? 'insert'
+        : /SELECT \* FROM ledger\.events/.test(sql)
+          ? 'select'
+          : 'other',
+    );
+    const insertAt = kinds.indexOf('insert');
+    const selectAts = kinds.flatMap((k, i) => (k === 'select' ? [i] : []));
+    assert.ok(selectAts.length >= 3, `expected >= 3 replay batches, got ${selectAts.length}`);
+    assert.ok(
+      insertAt > selectAts[0] && insertAt < selectAts[1],
+      `INSERT must dispatch before the 2nd batch: ${kinds}`,
+    );
+    assert.strictEqual(appended?.sequence, '2501');
+    const written = seqs(call);
+    assert.strictEqual(written.length, 2500);
+    assert.ok(
+      written.every((s: number, i: number) => i === 0 || s > written[i - 1]),
+      'strictly ascending, unique',
+    );
+    assert.strictEqual(call.destroyed, null);
+  });
+
+  it('subscribes before the first query (LEDGER-2)', async () => {
+    const pool = makeSingleSlotPool(strRows(1, 3));
+    let dispatchedAtSubscribe = -1;
+    const notifier = makeFakeNotifier();
+    const subscribe = notifier.subscribe;
+    notifier.subscribe = (sub: any) => {
+      dispatchedAtSubscribe = pool.dispatched.length;
+      return subscribe(sub);
+    };
+    await new LedgerServiceImpl(pool, {}, notifier).streamEvents(
+      makeStreamCall({ fromSequence: 1 }),
+    );
+    assert.strictEqual(dispatchedAtSubscribe, 0);
+  });
+
+  it('dedupes a buffered NOTIFY duplicate across a digit boundary ("9","10","11" + 11, 12)', async () => {
+    const gate = deferred();
+    const pool = makeSingleSlotPool(strRows(9, 11), { holdReplay: () => gate.promise });
+    const notifier = makeFakeNotifier();
+    const call = makeStreamCall({ fromSequence: 9 });
+    const done = new LedgerServiceImpl(pool, {}, notifier).streamEvents(call);
+    await settle();
+    notifier.captured.onEvent(makeRow({ event_id: 'e11', sequence: 11 }));
+    notifier.captured.onEvent(makeRow({ event_id: 'e12', sequence: 12 }));
+    gate.resolve();
+    await done;
+    assert.deepStrictEqual(seqs(call), [9, 10, 11, 12]);
+  });
+
+  it('keeps fromSequence semantics (>= fromSequence)', async () => {
+    const call = makeStreamCall({ fromSequence: 10 });
+    await new LedgerServiceImpl(
+      makeSingleSlotPool(strRows(9, 11)),
+      {},
+      makeFakeNotifier(),
+    ).streamEvents(call);
+    assert.deepStrictEqual(seqs(call), [10, 11]);
+  });
+
+  it('waits for drain before writing on, and before the next batch', async () => {
+    const pool = makeSingleSlotPool(strRows(1, 1001));
+    const call = makeStreamCall({ fromSequence: 1 }, { writeReturns: false });
+    const done = new LedgerServiceImpl(pool, {}, makeFakeNotifier()).streamEvents(call);
+    await settle();
+    assert.strictEqual(call.writes.length, 1, 'no write past a false write() until drain');
+    for (let i = 0; i < 999; i++) {
+      call.emit('drain');
+      await settle();
+    }
+    assert.strictEqual(call.writes.length, 1000);
+    assert.strictEqual(pool.replaySelects(), 1, 'no next batch while the last write awaits drain');
+    call.emit('drain');
+    await settle();
+    assert.strictEqual(pool.replaySelects(), 2);
+    assert.strictEqual(call.writes.length, 1001);
+    call.emit('drain');
+    await done;
+    assert.deepStrictEqual(call.handlers.drain ?? [], [], 'drain listeners removed');
+    assert.deepStrictEqual(call.handlers.cancelled?.length, 1, 'only the cleanup hook is left');
+  });
+
+  it('a cancel while awaiting drain stops the replay and unsubscribes', async () => {
+    const pool = makeSingleSlotPool(strRows(1, 1001));
+    const notifier = makeFakeNotifier();
+    const call = makeStreamCall({ fromSequence: 1 }, { writeReturns: false });
+    const done = new LedgerServiceImpl(pool, {}, notifier).streamEvents(call);
+    await settle();
+    call.emit('cancelled');
+    await done;
+    assert.strictEqual(call.writes.length, 1);
+    assert.strictEqual(pool.replaySelects(), 1);
+    assert.strictEqual(notifier.unsubscribed, true);
+    notifier.captured.onEvent(makeRow({ event_id: 'e5000', sequence: 5000 }));
+    assert.strictEqual(call.writes.length, 1, 'no live write after cancel');
+  });
+
+  it('a failing replay SELECT destroys the call with that error after cleanup', async () => {
+    const boom = new Error('replay failed');
+    const notifier = makeFakeNotifier();
+    const call = makeStreamCall({ fromSequence: 1 });
+    const pool = makeSingleSlotPool(strRows(1, 3), { failReplay: boom });
+    await new LedgerServiceImpl(pool, {}, notifier).streamEvents(call);
+    assert.strictEqual(call.destroyed, boom);
+    assert.strictEqual(notifier.unsubscribed, true);
+    assert.deepStrictEqual(call.writes, []);
   });
 });

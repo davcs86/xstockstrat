@@ -1532,7 +1532,9 @@ type RegisterBrokerAccountRequest struct {
 	IsPaper bool `protobuf:"varint,3,opt,name=is_paper,json=isPaper,proto3" json:"is_paper,omitempty"`
 	// credentials_json: broker-type-specific JSON blob.
 	// Alpaca: {"api_key":"...","api_secret":"..."}
-	// IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"..."}
+	// IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"...",
+	//          "signature_key":"<PEM RSA private key>","encryption_key":"<PEM RSA private key>",
+	//          "dh_prime":"<PEM DH parameters>"}
 	CredentialsJson string `protobuf:"bytes,4,opt,name=credentials_json,json=credentialsJson,proto3" json:"credentials_json,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

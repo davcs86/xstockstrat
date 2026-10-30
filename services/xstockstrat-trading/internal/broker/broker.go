@@ -5,9 +5,13 @@ import (
 	"errors"
 )
 
-// ErrInvalidCredentials is returned by ValidateCredentials on a definitive broker auth
-// rejection (HTTP 401/403); transient/network failures are returned as wrapped errors instead.
+// ErrInvalidCredentials is returned on a definitive broker auth rejection (HTTP 401/403) or
+// deterministically unusable credentials; may come from any broker call, not only ValidateCredentials.
 var ErrInvalidCredentials = errors.New("broker rejected credentials")
+
+// ErrOutcomeUncertain marks a write whose resend failed after the broker may already have processed it;
+// callers must treat it like a timeout, never as a definitive rejection.
+var ErrOutcomeUncertain = errors.New("broker outcome uncertain: request may have been processed")
 
 // ErrOrderNotCancelable is returned by CancelOrder when the broker refuses because the order is
 // already terminal there; the order's real outcome (possibly FILLED) must be re-read via GetOrder.

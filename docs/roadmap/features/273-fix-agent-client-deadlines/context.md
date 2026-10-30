@@ -780,3 +780,471 @@ Once the operator rules on the three gated items, the design is approvable witho
     reference when both features land (Step 12 teardown).
   - [ ] Feature 272's lifecycle state was unverified by the overlap scan. Confirm it before Step 11 amends its
     merge-order row.
+
+## Session 2026-10-29 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup: `git merge --no-edit origin/main-dev` into the detached `origin/feature/fix-agent-client-deadlines`
+  checkout (merge `723964ae`). The one conflict was `docs/roadmap/ledger/insights.md`. The branch side was empty,
+  so main-dev's `homelab-compose-deploy` entry was kept after the base. `ledger-guard --fix` reported clean, so no
+  repair went into the merge commit.
+- **247 precondition met**: 247 is merged into main-dev. After the merge, `client.py:33` has
+  `_CONFIG_READ_TIMEOUT_S = 3.0`, and `tests/conftest.py` has `HANG_GUARD_S` (`:19`) and `hung_config_server`
+  (`:83`).
+- Re-spec of Step bodies 2, 3, 6, 7, 8 and 11 only (commit `eb7cc507`). Every named symbol resolves; only the
+  anchors moved.
+  - Step 2: conftest anchors moved (`set_env` `:57`, `MTLS_*` `:69-71`). The AST walk still finds 73 stub calls.
+    Exactly two carry `timeout`: `ListOpportunities` (`:871`) and `get_config_value`'s `GetConfig`
+    (`_CONFIG_READ_TIMEOUT_S`, `:1756`), which matches the @AC-10 allow-list.
+  - Step 3: the call-site table was regenerated from the post-247 AST walk (about +4/+5 lines). The
+    `metadata=` baseline is still 73.
+  - Step 6: the cited tool-body lines moved. The BacktestResult cite is corrected to `analysis.proto:123`; `:13`
+    is the `rpc RunBacktest` line. There are still 40 catch sites, and `list_opportunities` (`:1572-1573`) is the
+    only one passing `deadline_s`.
+  - Step 7: the catch-site table was regenerated. It is the same 40-site set, so the expected 41/4 grep counts
+    stand. Verb literals are at `:1959/:1970/:1982` and `:2100-2135`.
+  - Step 8: the test_oauth anchors moved (`:97-102`, `:105-131`). The auth.py, test_auth.py and main.py cites
+    still hold.
+  - Step 11: both merge-order rows already exist (`:84`, `:85`), so the step now only rewords the 272 row, which
+    still carries the old `deadline_s is None → exc.details()` text. The SEV-3 sidecar is still `open`. 272 is
+    `implementation-ready`, which closes the "272 lifecycle unverified" open thread from the impl-spec review.
+- The Execution Summary still says "pre-247 line numbers". Only step bodies were in re-spec scope, and the step
+  bodies are now authoritative.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- **Mode-entry confirmation (up-front plan)**: given by operator standing authorization. In operator chat
+  2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f), the operator said "Start executing features 241-276" via
+  batch-execute. The terms of that authorization:
+  - checkpoints are unattended, in `report` mode;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred;
+  - DB and prod steps stay operator-only: open the PR and hold the merge;
+  - blocker decisions are recorded per feature as of 2026-10-29.
+- Status `implementation-ready` → `in-progress`.
+- Severity: SEV-2. Branch: `feature/fix-agent-client-deadlines`. The detached worktree pushes to that ref after
+  every commit.
+- Preconditions: 247 is merged and the re-spec of Steps 2/3/6/7/8/11 is committed (session above). Step 1, the
+  R1/R5 latency baseline, gates Step 3 and runs first.
+
+## Session 2026-10-29 — Deadline latency baseline (Step 1, R1/R5)
+
+- Operator decision (2026-10-29, session question tool): "Query Grafana". Measured with read-only Grafana Cloud
+  Tempo queries, datasource uid `grafanacloud-traces`. Window (UTC): 2026-10-28T07:21:00Z → 2026-10-29T07:21:00Z
+  (24 h), `deployment.environment=development`, agent client spans (`resource.service.name = "agent"`).
+- Queries:
+  - Count: `{ resource.service.name = "agent" && resource.deployment.environment = "development" && kind = client } | count_over_time() by (name)` (instant).
+  - Quantiles: `{ resource.service.name = "agent" && resource.deployment.environment = "development" && kind = client && name = "<RPC>" } | quantile_over_time(duration, .5, .99, 1)` (instant).
+  - Exact max cross-check: TraceQL search `{ ... && name = "<RPC>" && duration > 100ms }`.
+  - Zero-span cross-check across every service and span kind: `{ resource.deployment.environment = "development" && name =~ ".*(RunBacktest|RunFundamentalsScan|ScreenSymbols|TriggerBackfill)" } | count_over_time() by (name, resource.service.name)` returned no series.
+- `quantile_over_time` reports power-of-two bucket bounds. The p99 and max below are bucket upper bounds
+  (2^27 ns = 134.2 ms), and the p50 is interpolated inside its bucket. The exact max comes from the trace search.
+
+| RPC | Count | p50 | p99 | Max | Margin |
+|---|---|---|---|---|---|
+| `/xstockstrat.analysis.v1.AnalysisService/RunBacktest` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.ingest.v1.IngestService/TriggerBackfill` | 0 | Not measured — no spans | — | — | vs 45 s: unknown |
+| `/xstockstrat.identity.v1.IdentityService/ValidateToken` | 58 | ≈27.4 ms | ≤134.2 ms (bucket bound) | 121.9 ms (exact, trace `a425ce4e739f451231b2c3f78a2ac1b5`) | vs 10 s: ≥9.86 s (p99 < 1.4 % of budget) |
+
+- R5 (ValidateToken): p99 is comfortably below 10 s, so the 10 s budget stands.
+- R1 (long RPCs): there are no agent client spans for any of the four long RPCs, and `analysis` emitted no spans
+  in this window (it is absent from dev's `resource.service.name` values). The 45 s budget therefore cannot be
+  checked against observed latency. The server bounds that would cap it are all above 45 s (R2): 120 s for the
+  screener default and for backtest in production, and 300 s for the backtest default.
+- Per Step 1 instruction 4, "Not measured" counts as HALT until the operator signs off here. Step 3 must not be
+  committed until that sign-off is recorded or a re-measurement with spans present gives PASS.
+
+Baseline verdict: HALT — RunBacktest/RunFundamentalsScan/ScreenSymbols/TriggerBackfill not measured (0 dev spans in 24 h); ValidateToken p99 ≤134 ms passes R5
+
+## Session 2026-10-29 — Step 2 — test: Generic hung-backend fixture and client-level deadline RED tests
+
+- Files: `services/xstockstrat-agent/tests/conftest.py` (fixture `hung_backend`: sync
+  `grpc.server(ThreadPoolExecutor(max_workers=8))` with one `GenericRpcHandler` serving any method as raw bytes;
+  records `(method, metadata)` under a lock; `answers` → answer `(delay_s, msg)` or abort `(delay_s, StatusCode)`,
+  absent → 247's `is_active()` hang loop; redirects `module.<endpoint_attr>` and `client.mtls.secure_channel`;
+  `stop.set()` + `server.stop(0).wait()` teardown). 247's `hung_config_server` is untouched.
+  `services/xstockstrat-agent/tests/test_client_deadlines.py` (new): @AC-5 live (9 rows; GetConfig row on
+  `hung_config_server`), @AC-5 production-kwarg (9 rows), constant pins, @AC-10 AST guard (≥73 calls,
+  allow-list `ListOpportunities`→`timeout`, `get_config_value.GetConfig`→`_CONFIG_READ_TIMEOUT_S`, LONG set ==
+  the four long RPCs).
+- TDD red (pre-Step-3 tree), each for the specified reason:
+  - AC-5 live red (9/9): `TimeoutError` from the `HANG_GUARD_S` guard — no deadline on the call.
+  - AC-5 kwarg red (9/9): `AssertionError: <RPC> is issued without a deadline`.
+  - `test_deadline_constants_are_pinned` red: `AttributeError: module 'app.client' has no attribute '_RPC_TIMEOUT_S'`.
+  - AC-10 red: `stub calls without timeout: [...]` listing the 71 untimed calls.
+- Green is Step 3's run. A temporary, reverted probe of the Step 3 change gave 20/20 passed, so the harness is sound.
+- Verification: ruff check + format clean; full suite 20 failed (the RED file) / 530 passed, coverage 81.78%
+  (≥40); `def hung_backend` / `def hung_config_server` / `HANG_GUARD_S` greps and
+  `from tests.conftest import HANG_GUARD_S` present.
+- Deviations (see Deviation Log): generic mocked-channel shape for the kwarg test; method name bound in
+  `service(details)`.
+- Still open: `Baseline verdict: HALT` (Step 1) gates Step 3's commit until an operator sign-off is recorded.
+
+## Session 2026-10-29 — Step 3 operator sign-off (R1 baseline HALT override)
+
+- R1 operator sign-off (2026-10-29, session question tool), in the operator's own words: "A: Sign off, expand
+  scope". The operator accepts the 45 s LONG deadline budget (`_LONG_RPC_TIMEOUT_S`) for RunBacktest and
+  RunFundamentalsScan, and for the other LONG RPCs (ScreenSymbols, TriggerBackfill), without a measured p99. The
+  operator knowingly accepts the risk that runs of 45-60 s are cancelled (198 @AC-8). This overrides Step 1's
+  `Baseline verdict: HALT` for Step 3's commit gate.
+- Scope expansion, same decision: Step 3's **Files** gain `tests/test_config_tools.py`,
+  `tests/test_signal_source_reliability_weight.py` and `tests/test_template_tools.py`. Only each capture stub's
+  signature widens, to `(req, metadata=None, timeout=None)`. See the Deviation Log.
+
+## Session 2026-10-29 — Step 3 — service: Deadline constants and `timeout=` on every agent → backend unary call
+
+- Files: `services/xstockstrat-agent/app/client.py`: `_RPC_TIMEOUT_S = 10.0` and `_LONG_RPC_TIMEOUT_S = 45.0`
+  below 247's `_CONFIG_READ_TIMEOUT_S`; `timeout=` added as the last keyword on 71 awaited stub calls, applied
+  by an AST walk keyed on RPC name and then `ruff format`. LONG goes on RunBacktest, ScreenSymbols,
+  RunFundamentalsScan and TriggerBackfill. `ListOpportunities` and `get_config_value`'s GetConfig are untouched.
+  No function parameter, channel option or helper was added. The only other diff lines are ruff's re-wraps of
+  the edited calls.
+- Tests: the capture stubs in `tests/test_config_tools.py` (×2), `tests/test_signal_source_reliability_weight.py`
+  and `tests/test_template_tools.py` are widened to `(req, metadata=None, timeout=None)`. This is the operator
+  scope expansion.
+- TDD: RED on the pre-Step-3 tree gave `tests/test_client_deadlines.py` 20 failed (92.9 s, hang-guard
+  timeouts plus missing-kwarg/constant/AST failures). GREEN gives 20 passed in 2.87 s.
+- Verification: grep counts are `timeout=_RPC_TIMEOUT_S` 67, `timeout=_LONG_RPC_TIMEOUT_S` 4 and
+  `metadata=_metadata|metadata=meta` 73. ruff check and format are clean. The full suite passed 550, coverage
+  81.80% (≥40). Before the stub widening it showed 6 `TypeError` failures in the three files above.
+- R1 risk accepted by the operator (session entry above): runs longer than 45 s on the LONG RPCs are now cancelled
+  client-side.
+
+## Session 2026-10-29 — Step 4 — test: Mapper `write` branch and 272 pass-through RED tests (P-06)
+
+- Files: `services/xstockstrat-agent/tests/test_tools.py`. Five sync tests were added directly after the two 227
+  `_grpc_error_message` tests, which stay unchanged: `write_deadline_says_outcome_unknown`,
+  `read_deadline_keeps_retry_text`, `passes_through_server_deadline_detail` (three call shapes),
+  `client_sentinel_is_not_passed_through` and `write_without_deadline_s`. They use the existing `_rpc_error`
+  helper and keep literals inline (C-13).
+- TDD RED: 3 failed. The two `write=` tests fail with `TypeError: _grpc_error_message() got an unexpected keyword
+  argument 'write'`. Pass-through fails with `AssertionError: 'upstream did...retry shortly' ==
+  'backtest exc...ation_seconds'`. The read-retry and client-sentinel tests already pass because they guard
+  behaviour Step 5 must preserve. GREEN is Step 5's run.
+- Verification: ruff check and format are clean. The full suite is 3 failed (by design) / 552 passed, coverage
+  81.80% (≥40).
+- Deviation: the spec's `tests/test_tools.py` line anchors drifted by +2. See the Deviation Log.
+
+## Session 2026-10-29 — Step 5 — service: `_grpc_error_message` `write` flag and server-detail pass-through
+
+- Files: `services/xstockstrat-agent/app/tools.py`. Only the DEADLINE_EXCEEDED branch changed. Non-empty details
+  other than grpc's `"Deadline Exceeded"` sentinel are returned as is (272, operator r3 (c), regardless of
+  `deadline_s`). Otherwise the message is `head; tail`, where the tail is `outcome unknown, verify before retrying`
+  when `write=True`. The `deadline_s=None, write=False` text is byte-identical (227). The other branches are
+  untouched, and every existing caller still works because `write` defaults to `False`.
+- TDD RED (Step 4 tests before the change): 3 failed / 5 passed (two `TypeError: unexpected keyword argument
+  'write'`, one pass-through `AssertionError`). GREEN: `-k grpc_error_message` 8 passed.
+  `test_list_opportunities_deadline.py` 7 passed (the 227 "within 0.2s" text is unchanged).
+- Verification: ruff check and format are clean. The full suite is 555 passed, coverage 81.84% (≥40).
+- Tooling: `uv sync --frozen --extra dev` ran in this worktree. The lockfile is unchanged.
+
+## Session 2026-10-29 — Step 6 — test: Tool-level deadline RED tests and catch-site guards (@AC-1..4, @AC-6..9)
+
+- Files: `services/xstockstrat-agent/tests/test_tool_deadlines.py` (new). It uses `hung_backend` (Step 2),
+  247's `hung_config_server`, and `ADMIN`/`_ctx`/`HANG_GUARD_S` from conftest. Budgets are patched to
+  0.2/0.6/0.2 s. `_rpc_error` is defined locally (C-13: one consumer). The AST guards key on the innermost
+  enclosing function and require at least 40 mapper calls, so they cannot pass vacuously.
+- TDD RED: 14 failed / 5 passed. AC-1, AC-2, AC-9, AC-6 and the instantiate_template case fail on
+  `'upstream did not respond (deadline exceeded); retry shortly'` (no "within Ns", no "outcome unknown"). AC-3
+  and the six-wrap cases raise a raw `AioRpcError`. The `deadline_s` guard lists all 39 non-227 sites, and the
+  `write` guard lists 16 mutating sites. Early passes: AC-4, AC-7, FR-3 (as the spec allows), plus AC-8 and the
+  127 @AC-4 watchlist guard, which Step 3's client `timeout=` already bounds (Deviation Log). GREEN is Step 7's
+  run.
+- Verification: ruff check and format are clean. The full suite is 14 failed (by design) / 560 passed, coverage
+  82.32% (≥40).
+- Tooling: `uv sync --frozen --extra dev` in this worktree; lockfile unchanged. The main worktree has no root
+  `node_modules` to symlink and `core.hooksPath` (`.husky/_`) does not exist, so the husky hook does not run
+  (same as Steps 1-5); no `--no-verify` was used.
+
+## Session 2026-10-29 — Step 7 — service: Catch-site `deadline_s` / `write`, plus the six new wraps
+
+- Files: `services/xstockstrat-agent/app/tools.py`, and only that file.
+  - `deadline_s` is added to all 39 `_grpc_error_message` catch sites, keyed by enclosing function name:
+    - LONG: `run_backtest`, `trigger_backfill`, `run_fundamentals_scan`.
+    - RPC: the other 36. `list_opportunities` keeps `timeout_s`.
+  - `write=True` is added at the 14 table rows. Two sites use a verb-derived expression instead:
+    - `manage_watchlist`: `operation != "update"`.
+    - `manage_offline_account`: `operation not in ("get_order", "list_orders", "list_positions")`.
+  - `not_found=` is unchanged at every site.
+- Six new `except grpc.aio.AioRpcError` wraps:
+  - `list_signal_sources` and `_get_source`: RPC.
+  - `screen_symbols`: LONG.
+  - `emit_alert`: RPC, `write=True`.
+  - `_write_source_bearer`: only the `client.set_config` call, RPC, `write=True`.
+  - `ingest_signal`: only the primary `client.ingest_signal` call, RPC, `write=True`. The three follow-ups stay in
+    their own `except Exception` blocks (127 @AC-4), and the docstring SIDE EFFECT text is untouched (127 @AC-5).
+- No new helper or middleware catch (C-18).
+- TDD RED (pre-Step-7 tree), `tests/test_tool_deadlines.py`: 14 failed / 5 passed. The failures are the Step 6
+  set: missing "within Ns" / "outcome unknown" wording, raw `AioRpcError` from the six wraps, and the AST guards
+  listing every site. GREEN: the five-file Step 7 verification run passed 175.
+- Verification:
+  - grep `deadline_s=client._RPC_TIMEOUT_S` = 41, and `deadline_s=client._LONG_RPC_TIMEOUT_S` = 4. Both match the
+    spec.
+  - ruff check and format are clean.
+  - The full suite passed 574, coverage 82.47% (≥40).
+- Deviation: line anchors were re-anchored by function name. See the Deviation Log.
+
+## Session 2026-10-29 — Step 8 — test: Auth deadline and three-way result RED tests (@AC-11)
+
+- Files:
+  - `services/xstockstrat-agent/tests/test_auth.py`: four tests in the `:21-28` mocked-stub shape, with the
+    sentinel test parametrised over DEADLINE_EXCEEDED and UNAVAILABLE (real `AioRpcError`, built inline).
+  - `services/xstockstrat-agent/tests/test_auth_deadline.py` (new): three ASGI tests through
+    `TestClient(build_http_app())` against `hung_backend("IDENTITY_ENDPOINT", module=app.auth)`, with
+    `client._RPC_TIMEOUT_S` patched to 0.2 and `app.main._new_trace_id` patched to `"trace-273"`
+    (`create=True`). Each request runs in a worker thread bounded by `HANG_GUARD_S`.
+- TDD RED (AC-11): 6 failed / 5 passed. The stall test hits the 10 s hang guard (`TimeoutError`) because
+  ValidateToken has no deadline. The claims test shows no `trace_id` key. The sentinel tests give
+  `None is 'missing sentinel'`, the deadline tests `None == 10.0`, and the trace test `TypeError` on `trace_id`.
+  The invalid-token `None` / 401 tests already pass (guards). GREEN is Step 9's run. A temporary, reverted
+  probe of Step 9 gave 44/44 passed across the four auth/oauth/propagation files.
+- Note for Step 9: import `_new_trace_id` into `app.main`'s module namespace (Instruction 4); the test patches it
+  there.
+- Verification: ruff check and format are clean. The full suite is 6 failed (by design) / 576 passed, coverage
+  83.05% (≥40).
+- Tooling: `uv sync --frozen --extra dev` in this worktree; lockfile unchanged. No root `node_modules` exists in
+  the main worktree to symlink, so the husky hook does not run (as in Steps 1-7); no `--no-verify` was used.
+- Deviation: three test mechanics (`create=True` patch, elapsed timed around `tc.post`, `getattr` sentinel read).
+  See the Deviation Log.
+
+## Session 2026-10-29 — Step 9 — service: Bounded ValidateToken, three-way result, 503 on an identity stall, shared trace id
+
+- Files:
+  - `services/xstockstrat-agent/app/auth.py`: imports `client`; adds the `IDENTITY_UNAVAILABLE` sentinel;
+    `_metadata(trace_id="")` sends `x-trace-id` when set; both ValidateToken calls pass
+    `timeout=client._RPC_TIMEOUT_S`; `validate_bearer_claims(token, trace_id="")` returns the sentinel with a
+    WARNING on DEADLINE_EXCEEDED / UNAVAILABLE and keeps INFO + `None` for every other code.
+  - `services/xstockstrat-agent/app/main.py`: imports `_new_trace_id` at module level and `IDENTITY_UNAVAILABLE`
+    in `build_http_app`. `_authorized` mints the trace id, passes it to ValidateToken, returns the sentinel, and
+    stamps `claims["trace_id"]`. New `_send_identity_unavailable` gives 503 text/plain without
+    WWW-Authenticate. `handle_mcp` checks the sentinel before `if not verdict`.
+- TDD RED (before the change): `tests/test_auth.py` + `tests/test_auth_deadline.py` gave 6 failed / 5 passed,
+  the same six failures Step 8 recorded (for example `None == 'trace-273'` on the claims stamp).
+- TDD GREEN: the five-file Verification run (auth, auth_deadline, oauth, streamable_http_auth,
+  header_propagation) gave 45 passed. The grep shows the timeout, `x-trace-id` and sentinel sites.
+- Verification: ruff check and format are clean. The full suite passed 582, coverage 83.12% (≥40).
+- Tooling: `uv sync --frozen --extra dev`; lockfile unchanged. No root `node_modules` exists in the main worktree,
+  so the husky hook does not run (as in Steps 1-8); no `--no-verify` was used.
+- Deviation: return annotations and the comment wrap only. See the Deviation Log.
+
+## Session 2026-10-29 — Step 10 — docs: mcp-tools.md, oauth.md and strat-lab backtest skill (same PR)
+
+- Files:
+  - `docs/runbooks/mcp-tools.md`: new `### Backend deadlines` subsection directly before `## Tools`; the
+    503-without-WWW-Authenticate sentence appended to the Discovery list item.
+  - `services/xstockstrat-agent/docs/oauth.md`: the same 503 sentence after the 401 discovery-pointer text.
+  - `plugins/strat-lab/skills/backtest/SKILL.md`: Phase 1 bullet (`trigger_backfill` "outcome unknown" → check
+    `get_backfill_status` first); Phase 2 bullet (`run_backtest` 45 s budget, retry after narrowing).
+- Grounding: wording checked against `app/client.py` `_RPC_TIMEOUT_S`/`_LONG_RPC_TIMEOUT_S` (10.0/45.0),
+  `app/tools.py` `_grpc_error_message` (read/write tails, server-detail pass-through) and `app/main.py`
+  `_send_identity_unavailable` (503 text/plain, no WWW-Authenticate).
+- TDD: N/A (docs).
+- Verification: the four greps hit `Backend deadlines`, the write-message literal and `503` in mcp-tools.md;
+  `503` in oauth.md; `45 s`/`45s`/`outcome unknown` in SKILL.md; zero `is_public`/`include_public` hits.
+  `list_templates`/`instantiate_template` and the `ingest_signal` watchlist text are untouched (C-16).
+- Same-PR constraint: Steps 3 and 7 are already on this branch; the single integration PR carries all three.
+- Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
+  Steps 1-9); no `--no-verify` was used.
+
+## Session 2026-10-29 — Step 11 — docs: Report sidecar, merge-order rows and follow-up defect reports
+
+- Files:
+  - `docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.status`: now `triaged` with
+    `ref: feature:273-fix-agent-client-deadlines`. The report body is unchanged.
+  - `docs/roadmap/features/merge-order.md`: the 272 row now states the widened pass-through and the PLAT-13
+    nesting note (about 40 s, under the agent's 45 s). The 273 → 247 row is unchanged. No row was added.
+  - Follow-up defect reports, each with an `open` sidecar:
+    - R4: `docs/reports/2026-10-29-agent-list-opportunities-over-mcp-timeout-defect.md`
+    - R10, plus the R7 residual: `docs/reports/2026-10-29-agent-extract-tools-no-mcp-cap-defect.md`
+- Deviation: both reports use SEV-2, not the lowest tier the spec asks for, under this run's severity-token constraint. See the
+  Deviation Log.
+- TDD: N/A (docs).
+- Verification:
+  - Spec greps: the sidecar reads `triaged` and `ref:`; each row grep counts 1; the old pass-through phrase has
+    no hits; `about 40 s` hits the 272 row; `ls` lists both reports.
+  - The defect-filing format check gives one severity token per report and `open` on each sidecar.
+- Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
+  Steps 1-10). No `--no-verify` was used.
+
+
+## Session 2026-10-29 — Step 12 — docs: Context teardown (AGENT-5 drift and the context-forge refresh)
+
+- Teardown result: the `/context-forge:context-constitution` plugin is **unavailable** in this session (only
+  `context-forge:context-scrubber` is loaded), so the refresh was done by hand. The integration PR body must say
+  so and list the reconciliation below.
+- Files: `services/xstockstrat-agent/docs/context-constitution.md` only.
+  - AGENT-5 rewritten: every gRPC-calling tool maps through `_grpc_error_message` and passes `deadline_s` (the
+    budget the call carries), plus `write=` in mutating tools (`write=True`, or verb-derived at
+    `manage_watchlist` / `manage_offline_account`). The write text is "outcome unknown, verify before
+    retrying". Non-sentinel server deadline details pass through. The false "the older tools don't have it"
+    clause is gone. Anchor `app/tools.py#_grpc_error_message` kept; branch hint ~L232-243.
+  - AGENT-4: added that `_authorized` mints the trace id before `ValidateToken` and stamps it on the claims,
+    so the auth call and tool calls share one trace (Step 9).
+  - AGENT-1: channel count corrected to 71 (69 in `client.py` + 2 in `auth.py`; unchanged by this feature, the
+    old "69 across both" was already off by 2).
+  - Line hints this feature shifted were re-stamped: AGENT-2 (`client.py` ~L137), AGENT-4 (`_metadata` ~L67,
+    `set_caller` ~L49, `reset_caller` ~L57), and every Gotchas `client.py`/`tools.py` hint. Header gains a
+    2026-10-29 refresh entry.
+- Manual reconciliation, checked against the code with no edit needed:
+  - AGENT-3/3b/4 `tools.py` hints (`_require_claims` L116, `_caller_access_scope` L134, `_caller_user_id`
+    L155, `_claims_from_scope_state` L178, `CallerPropagationMiddleware` L190) still resolve.
+  - AGENT-2's `auth.py` top-level `from gen.identity.v1` is still L13; AGENT-6 is untouched by this feature.
+  - `services/xstockstrat-agent/CLAUDE.md`: the `_CONFIG_READ_TIMEOUT_S` paragraph and the
+    `agent.opportunities.read_timeout_seconds` row match the code (read expiry text still "retry shortly").
+  - `services/xstockstrat-agent/docs/oauth.md`: its 503 sentence matches `_send_identity_unavailable`; no
+    AGENT-* references.
+  - Steps 10-11 docs (`docs/runbooks/mcp-tools.md` § Backend deadlines, the strat-lab backtest SKILL.md,
+    merge-order, the report sidecar) match `_RPC_TIMEOUT_S`/`_LONG_RPC_TIMEOUT_S` (10.0/45.0) and the mapper.
+  - The findings table row for `2026-10-19-agent-tools-missing-grpc-error-mapping-defect` stays: its sidecar is
+    `triaged` (not resolved) until this feature launches.
+- Open item, not edited (outside Step 12 **Files**): root `docs/context-constitution.md` PLAT-13 cites
+  `services/xstockstrat-agent/app/tools.py#opportunities.read_timeout_seconds (~L1552)`; the anchor resolves but
+  now sits at ~L1643. Leave for the next root refresh.
+- TDD: N/A (docs).
+- Verification: `AGENT-5` hits `context-constitution.md:22`; `outcome unknown` hits the AGENT-5 row; the last
+  `teardown` hit in this file is this entry.
+- Tooling: none. No root `node_modules` exists in the main worktree, so the husky hook does not run (as in
+  Steps 1-11). No `--no-verify` was used.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+- C-16 promotion plan for this feature's acceptance scenarios. Nothing is written to a durable suite until the
+  operator confirms. The branch copy of `acceptance.feature` was checked and is identical to the working-tree
+  copy the plan was built from.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-agent-client-deadlines (feature 273)
+
+### Verdicts
+All 11 scenarios have the single observable subject "agent MCP tool or client call fails or returns within a deadline budget". Every one routes to services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature (CREATE). No @AC-* in feature 273 is already in that file, and the dedup grep of services/xstockstrat-agent/acceptance/*.feature and docs/sdd/business-rules/platform.feature found no scenario asserting the same outcomes.
+
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature | CREATE | NEW | get_positions, portfolio stall |
+| AC-2 | same | CREATE | NEW | get_config tool, 10.5 s. Distinct from 247 AC-1, which covers get_config_value at 3 s |
+| AC-3 | same | CREATE | NEW | ingest_signal, ingest stall |
+| AC-4 | same | CREATE | NEW | 20 s RunBacktest still succeeds |
+| AC-5 | same | CREATE | NEW | Scenario Outline over 9 RPCs. The GetConfig row is the 10.5 s client-function budget, not the 3 s get_config_value deadline |
+| AC-6 | same | CREATE | NEW | run_backtest answers within 57 s |
+| AC-7 | same | CREATE | NEW | responsive backend unchanged |
+| AC-8 | same | CREATE | NEW | sequential calls stay under 57 s |
+| AC-9 | same | CREATE | NEW | RunBacktest never responds, 45.5 s |
+| AC-10 | same | CREATE | NEW | static check that no stub call lacks a timeout |
+| AC-11 | same | CREATE | NEW | identity stall gives 503 with no WWW-Authenticate |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature (CREATE) ---
+# Promoted from docs/roadmap/features/273-fix-agent-client-deadlines/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-273` tag.
+# Durable business rules xstockstrat-agent already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-agent - backend gRPC calls are deadline-bounded
+  Agent backend gRPC calls carry a deadline so a stalled backend cannot hang MCP tool calls.
+  Budgets: 10 s default (FR-1), 45 s for long-running RPCs (FR-2), every tool at least 3 s under the
+  MCP client's 60 s request timeout (FR-3). Every "within N seconds" bound is asserted with an injected
+  or fake clock (or a measured elapsed time with the stated tolerance), never with raw wall-clock sleeps.
+
+  @AC-1 @regression @FR-1 @FR-4 @feature-273
+  Scenario: A stalled portfolio backend surfaces a deadline error from get_positions instead of hanging
+    Given a portfolio gRPC server that accepts ListPositions but never responds
+    When an authenticated MCP caller invokes get_positions
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 10.5 seconds
+    And the error message says the upstream did not respond within the deadline
+
+  @AC-2 @regression @FR-1 @FR-4 @feature-273
+  Scenario: A stalled config backend surfaces a deadline error from the get_config tool
+    Given a config gRPC server that accepts GetConfig but never responds
+    When an authenticated MCP caller invokes the get_config tool with namespace "analysis"
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 10.5 seconds
+
+  @AC-3 @regression @FR-1 @FR-3 @FR-4 @feature-273
+  Scenario: A stalled ingest backend surfaces a deadline error from ingest_signal
+    Given an ingest gRPC server that accepts IngestSignal but never responds
+    When an authenticated MCP caller invokes ingest_signal for symbol "AAPL"
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 10.5 seconds
+
+  @AC-4 @regression @FR-2 @FR-4 @FR-5 @feature-273
+  Scenario: A long-running RPC slower than the default deadline still succeeds
+    Given an analysis gRPC server whose RunBacktest responds after 20 seconds
+    When an authenticated MCP caller invokes run_backtest
+    Then the tool returns the backtest result
+
+  @AC-5 @regression @FR-1 @FR-2 @FR-4 @feature-273
+  Scenario Outline: Every agent backend RPC is bounded by its budget
+    Given a backend gRPC server that accepts <rpc> but never responds
+    When the agent client function that issues <rpc> is invoked
+    Then the call fails with DEADLINE_EXCEEDED within <budget> seconds
+
+    Examples:
+      | rpc                 | budget |
+      | IngestSignal        | 10.5   |
+      | EmitAlert           | 10.5   |
+      | ListPositions       | 10.5   |
+      | GetConfig           | 10.5   |
+      | RegisterOAuthClient | 10.5   |
+      | RunBacktest         | 45.5   |
+      | ScreenSymbols       | 45.5   |
+      | RunFundamentalsScan | 45.5   |
+      | TriggerBackfill     | 45.5   |
+
+  @AC-6 @regression @FR-3 @feature-273
+  Scenario: A tool whose backends all stall still answers before the MCP client gives up
+    Given every backend the run_backtest tool calls accepts requests but never responds
+    When an authenticated MCP caller invokes run_backtest
+    Then the tool returns an error derived from DEADLINE_EXCEEDED within 57 seconds
+
+  @AC-7 @regression @FR-5 @feature-273
+  Scenario: A responsive backend returns the same result as before the fix
+    Given a portfolio gRPC server that answers ListPositions with one AAPL position within 100 milliseconds
+    When an authenticated MCP caller invokes get_positions
+    Then the tool returns that one AAPL position
+
+  @AC-8 @regression @FR-3 @FR-4 @feature-273
+  Scenario: A tool with several sequential backend calls stays under the MCP request timeout when its follow-up calls stall
+    Given an ingest gRPC server that answers IngestSignal with signal_id 42
+    And a config gRPC server and a notify gRPC server that accept requests but never respond
+    When an authenticated MCP caller invokes ingest_signal for symbol "AAPL" with conviction 0.9
+    Then the tool returns signal_id 42 within 57 seconds
+
+  @AC-9 @regression @FR-2 @FR-4 @feature-273
+  Scenario: A long-running RPC that never responds is bounded by its own budget
+    Given an analysis gRPC server that accepts RunBacktest but never responds
+    When an authenticated MCP caller invokes run_backtest
+    Then the tool fails with an error derived from DEADLINE_EXCEEDED within 45.5 seconds
+
+  @AC-10 @regression @FR-1 @FR-2 @feature-273
+  Scenario: No agent backend stub call is issued without a deadline
+    Given the source of services/xstockstrat-agent/app/client.py
+    When every unary gRPC stub call in it is enumerated statically
+    Then each call passes a timeout argument, including get_config_value once feature 247 has merged ahead of this one
+
+  @AC-11 @regression @FR-6 @feature-273
+  Scenario: A stalled identity yields a bounded fail-closed 503 that keeps the session
+    Given an identity gRPC server that accepts ValidateToken but never responds
+    When an MCP caller sends a request with a bearer token to the agent's MCP endpoint
+    Then the agent responds 503 within 10.5 seconds
+    And the response carries no WWW-Authenticate header
+    And the ValidateToken call carries the same x-trace-id as the rest of the request
+    And a request with a genuinely invalid token still receives 401 with a WWW-Authenticate header
+
+### Notes / ambiguities / conflicts
+- Service attribution: every Then asserts on the agent's MCP tools, client functions or HTTP edge (app/client.py, app/main.py). The stalled backends in the Givens are test fixtures, so a single agent suite is correct. platform.feature is not used.
+- No CONFLICT. Feature 247's suite (services/xstockstrat-agent/acceptance/fix-agent-getconfig-deadline.feature) fixes get_config_value at 3.0 s. Feature 273 AC-2 and AC-5 bound the get_config tool and the GetConfig client function at 10.5 s. Those are different call paths, so this is not a contradiction. AC-10 only requires that get_config_value pass a timeout, which 247 already guarantees.
+- No OVERLAP. services/xstockstrat-agent/acceptance/fix-opportunities-read-hangs.feature (feature 227) covers list_opportunities, which feature 273 does not touch. 227's 40 s default and 60 s ceiling are consistent with the 45 s long-running budget.
+- AC-10 says "once feature 247 has merged ahead of this one". 247's suite is already in the tree, so the condition holds. The text is promoted verbatim.
+- Nothing in the existing suites is deleted or rewritten.
+
+### Coverage check
+- Source scenarios: 11 (AC-1 to AC-11, with AC-5 a single Scenario Outline of 9 rows). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. No scenario skipped. Counts match.
+- I could not read the source on origin/feature/fix-agent-client-deadlines. The plan was built from the working-tree copy at /home/user/xstockstrat/docs/roadmap/features/273-fix-agent-client-deadlines/acceptance.feature. The caller should confirm the branch copy is identical before writing.
+```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

@@ -331,6 +331,7 @@ xstockstrat-ui (UI — trader/insights/config-ui segments)
 All services → xstockstrat-config (WatchConfig stream at startup)
 All services → xstockstrat-ledger (event writes)
 All services → xstockstrat-notify (alert emissions)
+xstockstrat-notify → xstockstrat-identity (ListAdminUserIds, untargeted push audience)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
@@ -342,7 +343,7 @@ xstockstrat-agent (staging only) → xstockstrat-smoke (HTTPS mTLS, admin-gated 
 
 ## Header Propagation Convention
 
-Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls that need this trio, so the unused `src/middleware/propagation.ts` helper each carried was removed (feature 175). identity's admin-audit calls to ledger forward the trio via `ledgerAudit.ts`'s own `PROPAGATED_HEADERS` const, not that helper. **Recorded exception (feature 224):** analysis's fundamentals producer (loop and `RunFundamentalsScan`) replaces `x-user-id` with the reserved `system` identity plus `x-internal-caller: analysis-fundsignal`, keeping `x-trace-id`; ingest and indicators honour `x-user-id: system` only with an allow-listed `x-internal-caller` grant **and** an mTLS peer SAN of `xstockstrat-analysis`; analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225).
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. Of the Node leaf services (ledger, identity, notify, config), two make outbound per-request calls and forward the trio via an inline `PROPAGATED_HEADERS` const: identity's admin-audit calls to ledger (`ledgerAudit.ts`) and notify's untargeted-push admin lookup, notify → identity `ListAdminUserIds` (`src/services/adminDirectory.ts`, feature 242). The unused `src/middleware/propagation.ts` helper each leaf carried was removed (feature 175). **Recorded exception (feature 224):** analysis's fundamentals producer (loop and `RunFundamentalsScan`) replaces `x-user-id` with the reserved `system` identity plus `x-internal-caller: analysis-fundsignal`, keeping `x-trace-id`; ingest and indicators honour `x-user-id: system` only with an allow-listed `x-internal-caller` grant **and** an mTLS peer SAN of `xstockstrat-analysis`; analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225).
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 

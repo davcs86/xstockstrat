@@ -129,6 +129,25 @@ The smoke runner's RPC identity. **Seeded** (staging + production, global) by co
 |---|---|---|---|---|
 | `smoke.rpc.user_id` | string | `''` | none | Identity of the smoke RPC user; empty = RPC checks ERROR (never PASS). Owner: feature 280. |
 
+### feature 249 — fix-ibkr-request-signing (`xstockstrat-trading`)
+
+Bounds the IBKR live-session-token (LST) lifecycle that now signs every IBKR call. All three keys follow feature
+102's "no config-service seed migration" pattern: **unseeded** (consumed-with-default), read live per handshake via
+`s.cfgW.GetInt` with the default supplied in Go code (`ibkrTiming`); `≤ 0` reads as the default. No
+`SCALAR_BOUNDS_REGISTRY` entry. Not tied to the broker's `IBKRRequestTimeout` (the per-request HTTP timeout).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh the cached LST this long before `live_session_token_expiration`. |
+| `trading.ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one LST + `ssodh/init` handshake. |
+| `trading.ibkr.reauth_min_interval_ms` | int | `30000` | Negative-cache and 401-invalidation throttle (one LST request per interval per bad account). |
+
+### feature 264 — fix-portfolio-snapshot-surface (`xstockstrat-config` / `xstockstrat-portfolio`)
+
+**Removes** `portfolio.snapshot.interval_minutes` (migration 034) — its only reader, `StartSnapshotWriter`,
+had zero callers and was deleted; snapshots are written per fill only. The up deletes every environment and
+`user_id` row in both stored key forms; the down restores only the two seeded global rows.
+
 ### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)
 
 Bounds the `EventNotifier` LISTEN-connection read that resolves a NOTIFY row trimmed over ~7000 chars before live
