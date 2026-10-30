@@ -360,7 +360,7 @@ channel (no `.enabled`-style guard, same as the fundamentals credentials above).
 Set on: **every** component (all 12 services require `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, fail-closed)
 
 Backends run **mutual TLS** on every inter-service gRPC hop. The deploy stores **only the CA**
-(cert + key) as **one secret per environment**; `.github/workflows/deploy.yml` mints the 12 per-service
+(cert + key) as **one secret per environment**; `.github/workflows/deploy.yml` mints the 13 per-service
 leaves off it on every deploy. Generate and install the CA with the provisioning script — this is
 **required**, or the deploy aborts fail-closed (a placeholder would crash-loop every service):
 

@@ -5,6 +5,10 @@ ARG SMOKE_GIT_SHA
 RUN test -n "$SMOKE_GIT_SHA"
 ENV SMOKE_GIT_SHA=$SMOKE_GIT_SHA
 
+# git: the record-only POST_DEPLOY job pushes run files from this image.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY services/xstockstrat-smoke/pyproject.toml services/xstockstrat-smoke/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project

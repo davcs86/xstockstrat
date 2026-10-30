@@ -64,11 +64,19 @@ on:
         # Callers pass DEV_OTEL_EXPORTER_OTLP_HEADERS or PROD_OTEL_EXPORTER_OTLP_HEADERS from
         # GitHub Secrets. Optional — OTel auth header value, e.g. Basic <base64(instanceId:apiKey)>.
         # Stored as type: SECRET in the DO app spec; set as encrypted env var.
+      SMOKE_RESULTS_PAT:
+        required: false
+        # Dev only. Callers pass DEV_SMOKE_RESULTS_PAT: a PAT confined by a ruleset to the smoke-results
+        # branch; filled into the POST_DEPLOY job env (type: SECRET). Empty leaves the job unable to push.
+      SMOKE_DB_PASSWORD:
+        required: false
+        # Dev only. Callers pass DEV_SMOKE_DB_PASSWORD: the password of the DBA-created smoke_ro role.
+        # Empty degrades every DB check to ERROR; the service still boots.
       MTLS_CA:
         required: false
         # Feature 210 inter-service mTLS. Callers pass DEV_MTLS_CA or PROD_MTLS_CA from GitHub Secrets:
         # a base64(JSON {ca_cert, ca_key}) of the platform CA, produced by scripts/mtls-provision.sh.
-        # The "Mint mTLS leaves" step mints the 12 per-service leaves off this CA on every deploy
+        # The "Mint mTLS leaves" step mints the 13 per-service leaves off this CA on every deploy
         # (stable CA → no rolling-deploy handshake mismatch; leaves auto-rotate), and the substitution
         # step fills the per-service MTLS_* placeholders. Declared optional here, but FAIL-CLOSED at
         # substitution time: if the spec carries MTLS_* placeholders and no CA was provided, the deploy
@@ -86,7 +94,7 @@ jobs:
 
       - name: Mint inter-service mTLS leaves from the CA secret (feature 210)
         # Writes the CA (from the MTLS_CA secret) to a temp dir, then reuses scripts/gen-dev-certs.sh
-        # to mint the 12 per-service leaves off it. gen-dev-certs.sh reuses an existing CA (its ensure_ca
+        # to mint the 13 per-service leaves off it. gen-dev-certs.sh reuses an existing CA (its ensure_ca
         # only generates when _ca/ca.pem is absent), so the CA stays stable across deploys. Exposes
         # MTLS_CERTS_DIR to the substitution step. No-op when MTLS_CA is empty — substitution fail-closes.
         env:
@@ -100,10 +108,22 @@ jobs:
           bash scripts/mtls-provision.sh decode-ca "$certs_dir"
           CERTS_DIR="$certs_dir" bash scripts/gen-dev-certs.sh >/dev/null
           echo "MTLS_CERTS_DIR=$certs_dir" >> "$GITHUB_ENV"
-          echo "Minted 12 mTLS leaves off the provided CA into $certs_dir"
+          echo "Minted 13 mTLS leaves off the provided CA into $certs_dir"
+
+      - name: Mint the smoke trigger leaf (only when the spec carries its placeholders)
+        # Separate dir keeps the leaf out of the per-service glob; it is never in gen-dev-certs.sh SERVICES.
+        run: |
+          if [ -z "${MTLS_CERTS_DIR:-}" ] || ! grep -q 'SMOKE_TRIGGER_MTLS_' "${{ inputs.app_spec }}"; then
+            exit 0
+          fi
+          trigger_dir="$RUNNER_TEMP/smoke-trigger"
+          bash scripts/mint-smoke-trigger-leaf.sh "$MTLS_CERTS_DIR" "$trigger_dir"
+          echo "SMOKE_TRIGGER_DIR=$trigger_dir" >> "$GITHUB_ENV"
 
       - name: Substitute app spec placeholders
         env:
+          SMOKE_RESULTS_PAT: ${{ secrets.SMOKE_RESULTS_PAT }}
+          SMOKE_DB_PASSWORD: ${{ secrets.SMOKE_DB_PASSWORD }}
           BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.BROKER_ACCOUNTS_ENCRYPTION_KEY }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.CONFIG_SECRETS_ENCRYPTION_KEY }}
@@ -127,6 +147,8 @@ jobs:
             VAPID_PRIVATE_KEY="$VAPID_PRIVATE_KEY" \
             VAPID_PUBLIC_KEY="$VAPID_PUBLIC_KEY" \
             VAPID_SUBJECT="$VAPID_SUBJECT" \
+            SMOKE_RESULTS_PAT="$SMOKE_RESULTS_PAT" \
+            SMOKE_DB_PASSWORD="$SMOKE_DB_PASSWORD" \
             python3 -c "
           import os, sys
           content = sys.stdin.read()
@@ -162,7 +184,9 @@ jobs:
               otel_headers = 'Authorization=' + otel_headers
           content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
           content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
-          # Feature 210 inter-service mTLS: the CA + 12 leaves were minted by the prior step into
+          content = content.replace('YOUR_DEV_SMOKE_RESULTS_PAT', os.environ.get('SMOKE_RESULTS_PAT', ''))
+          content = content.replace('YOUR_DEV_SMOKE_DB_PASSWORD', os.environ.get('SMOKE_DB_PASSWORD', ''))
+          # Feature 210 inter-service mTLS: the CA + 13 leaves were minted by the prior step into
           # MTLS_CERTS_DIR. Fill the CA + every per-service leaf placeholder. Fail-closed — if the spec
           # carries MTLS_* placeholders but no CA was provided, abort before pushing (a placeholder value
           # would crash-loop every service on boot).
@@ -183,6 +207,18 @@ jobs:
                   return q + body + q
               ca_q = yaml_pem(open(ca_path).read())
               content = content.replace('YOUR_DEV_MTLS_CA_CERT', ca_q).replace('YOUR_PROD_MTLS_CA_CERT', ca_q)
+              # Trigger leaf first and under a non-prefixed name: YOUR_DEV_MTLS_CERT_SMOKE below must never match it.
+              if re.search(r'YOUR_(?:DEV|PROD)_SMOKE_TRIGGER_MTLS_', content):
+                  trig_dir = os.environ.get('SMOKE_TRIGGER_DIR', '')
+                  trig_cert = os.path.join(trig_dir, 'cert.pem') if trig_dir else ''
+                  if not trig_cert or not os.path.isfile(trig_cert):
+                      sys.stderr.write('ERROR: SMOKE_TRIGGER leaf missing (SMOKE_TRIGGER_DIR unset) for the smoke job placeholders.\n')
+                      sys.exit(1)
+                  trig_cert_q = yaml_pem(open(trig_cert).read())
+                  trig_key_q = yaml_pem(open(os.path.join(trig_dir, 'key.pem')).read())
+                  for e in ('DEV', 'PROD'):
+                      content = content.replace('YOUR_%s_SMOKE_TRIGGER_MTLS_CERT' % e, trig_cert_q)
+                      content = content.replace('YOUR_%s_SMOKE_TRIGGER_MTLS_KEY' % e, trig_key_q)
               for svc_dir in glob.glob(os.path.join(certs_dir, 'xstockstrat-*')):
                   sfx = os.path.basename(svc_dir).replace('xstockstrat-', '').upper()
                   cert_q = yaml_pem(open(os.path.join(svc_dir, 'cert.pem')).read())
@@ -190,7 +226,7 @@ jobs:
                   for e in ('DEV', 'PROD'):
                       content = content.replace('YOUR_%s_MTLS_CERT_%s' % (e, sfx), cert_q)
                       content = content.replace('YOUR_%s_MTLS_KEY_%s' % (e, sfx), key_q)
-              leftover = sorted(set(re.findall(r'YOUR_(?:DEV|PROD)_MTLS_[A-Z_]+', content)))
+              leftover = sorted(set(re.findall(r'YOUR_(?:DEV|PROD)_(?:MTLS|SMOKE)_[A-Z_]+', content)))
               if leftover:
                   sys.stderr.write('ERROR: unfilled MTLS placeholders remain (CA minted too few leaves): %s\n' % leftover)
                   sys.exit(1)

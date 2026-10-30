@@ -3,7 +3,7 @@
 #
 # The deploy stores ONLY the platform CA (cert + key) as one GitHub secret per environment
 # (DEV_MTLS_CA / PROD_MTLS_CA, a base64(JSON {ca_cert, ca_key})). .github/workflows/deploy.yml then
-# mints the 12 per-service leaves off that CA on every deploy (reusing gen-dev-certs.sh) and substitutes
+# mints the 13 per-service leaves off that CA on every deploy (reusing gen-dev-certs.sh) and substitutes
 # them into the MTLS_* placeholders in .do/app*.yaml. The CA stays stable across deploys (no rolling-
 # deploy handshake mismatch); leaves auto-rotate each deploy. Trade-off: the CA signing key lives in CI
 # — acceptable for this operator's threat model (same class as JWT_SECRET / DB creds already in CI).
@@ -101,7 +101,7 @@ local)
     echo "mtls-provision: cert generation failed" >&2
     exit 1
   }
-  echo "Dev mTLS material ready under ${CERTS_DIR}/ (CA + 12 service leaves). Next:"
+  echo "Dev mTLS material ready under ${CERTS_DIR}/ (CA + 13 service leaves). Next:"
   echo "  source scripts/mtls-dev-env.sh && docker compose up -d"
   ;;
 ca)

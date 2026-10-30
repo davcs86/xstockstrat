@@ -93,6 +93,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
+| Running, adding or troubleshooting staging smoke checks; the smoke DB role; the DO `POST_DEPLOY` recorder | `docs/runbooks/smoke-checks.md`, `docs/runbooks/smoke-db-role.md`, `services/xstockstrat-smoke/CLAUDE.md` |
 | Changing `run_backtest`, `manage_strategy`, `trigger_backfill`/`get_backfill_status` or `set_strategy_live` — this repo ships the `strat-lab` plugin (`plugins/strat-lab/`) whose `backtest` skill encodes these APIs' current quirks, and a change to them must update the skill in the **same** PR | `docs/patterns/strat-lab-plugin.md` |
 
 ---
@@ -117,6 +118,10 @@ to the frontends and the agent.
 | xstockstrat-config | Node.js | Live config WatchConfig stream | 50060 | — |
 | xstockstrat-ui | Next.js | Consolidated UI: trader dashboard, insights analytics, config management | — | 3000 |
 | xstockstrat-agent | Python | MCP server — AI agent tools for signal ingestion, alerting, backtesting | — | 9000 (Streamable HTTP) |
+| xstockstrat-smoke | Python | Staging-only post-deploy smoke checks (never in production; `.do/app.yaml` and the production homelab render exclude it) | — | 9110 (internal HTTPS, mutual TLS) |
+
+`xstockstrat-smoke` is a **recorded exception to gRPC-only**: its API is HTTPS with a client-certificate SAN allowlist
+(`xstockstrat-agent`, `xstockstrat-smoke-trigger`), never exposed publicly. Contract → `services/xstockstrat-smoke/CLAUDE.md`.
 
 ---
 
@@ -188,6 +193,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 | Pattern | Format | Used for | Example |
 |---|---|---|---|
 | `<SERVICE>_ENDPOINT` | `host:port` (no protocol) | gRPC connections | `IDENTITY_ENDPOINT=xstockstrat-identity:50058` |
+| `SMOKE_ENDPOINT` | `host:port` (no protocol) | HTTPS mutual-TLS connection to `xstockstrat-smoke` (the only non-gRPC `_ENDPOINT`) | `SMOKE_ENDPOINT=xstockstrat-smoke:9110` |
 
 > **Removed (historical):** `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` was the nginx-container-only `envsubst` upstream var. Nginx was removed by feature 045 (`ui-consolidation-nextjs`); these vars no longer exist and must not be reintroduced. See `docs/patterns/nginx-routing.md` (deprecated).
 
@@ -235,11 +241,12 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 | xstockstrat-identity | Node | direct `:25060` | 2 | |
 | xstockstrat-config | Node | direct `:25060` | 2 | |
 | xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history only) |
+| xstockstrat-smoke | Python | direct `:25060` | 1 | Staging-only; read-only role `xstockstrat_<env>_smoke_ro` (`docs/runbooks/smoke-db-role.md`); not deployed to production |
 | xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
-| **Direct backend total** | | | **8** | Real cluster connections held by the direct services (per environment) |
+| **Direct backend total** | | | **9** | Real cluster connections held by the direct services (per environment; smoke counts only where it is deployed — staging) |
 | **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
 
-Effective backend usage per environment ≈ **8 direct + ≤5 pool = ~13**, leaving headroom under the
+Effective backend usage per environment ≈ **9 direct + ≤5 pool = ~14**, leaving headroom under the
 ~22-slot cluster even with both environments live. The six pooled rows no longer count 1:1 against the
 budget — that was the point of the PgBouncer split.
 
@@ -327,6 +334,8 @@ All services → xstockstrat-notify (alert emissions)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
+xstockstrat-smoke (staging only) → xstockstrat-config (WatchConfig), read-only RPCs on any backend, read-only DB role
+xstockstrat-agent (staging only) → xstockstrat-smoke (HTTPS mTLS, admin-gated smoke_checks tool)
 ```
 
 ---
@@ -432,6 +441,8 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Generated TS stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/ts/` (compiled JS in `gen/ts/dist/`) |
 | Go services | `services/xstockstrat-{trading,portfolio,marketdata}/` |
 | Python services | `services/xstockstrat-{indicators,ingest,analysis}/` |
+| Staging smoke checks (service contract, DB role SQL) | `services/xstockstrat-smoke/`, `services/xstockstrat-smoke/db/smoke_readonly_role.sql` |
+| Smoke trigger-leaf minting (deploy jobs) | `scripts/mint-smoke-trigger-leaf.sh` |
 | Node.js services | `services/xstockstrat-{ledger,identity,notify,config}/` |
 | Next.js UI | `services/xstockstrat-ui/` |
 | Docker Compose | `docker-compose.yml` |
