@@ -22,6 +22,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 1 done: IBKR reference fixtures (ibind vectors, test keys, DH params) + gitleaks scope incl. the operator-approved `vectors.json` path allowlist |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 2+3 done in one commit (operator decision): LST signer `authorize`/`authorizeLST`/`buildBaseString` + ibind known-answer tests; FR-3 ruled include query params |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 4+5 done in one commit (standing operator rule "Merge pairs + standing rule"): coalesced LST session (`ensureSession`, handshake, `ssodh/init`, negative cache, `invalidate`/`reinit`) + `testdata.IBKRAuthHandler` and session tests (AC-3/4/5/10 broker half) |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 6+7 done in one commit (standing operator rule "Merge pairs + standing rule"): `c.do` send seam (11 call sites migrated, `signRequest` deleted, 401 retry, no-bridge re-init, `ErrOutcomeUncertain`) + wire-level/retry-matrix/AC-8 tests and existing IBKR tests migrated to `IBKRAuthHandler` (AC-1/2/6/8 broker half) |
 
 ---
 

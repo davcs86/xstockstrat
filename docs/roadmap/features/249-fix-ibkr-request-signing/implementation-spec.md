@@ -500,7 +500,7 @@ grep -rn "func ibkrAuthServer\|live_session_token" --include="*_test.go" interna
 
 ### Step 6 — service: `c.do` send seam — migrate 11 call sites, 401 retry, lapsed-session re-init, uncertain resend
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -595,7 +595,7 @@ grep -n "TRADING_MODE\|TradingMode" internal/broker/ibkr.go   # expect none (no 
 
 ### Step 7 — test: wire-level signing, 401 retry matrix, order-path classification; migrate existing IBKR tests (AC-1/2/6/8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr_do_test.go` — create (package `broker_test`)
@@ -1264,3 +1264,42 @@ _Populated by /sdd-execute as implementation proceeds._
 - `go mod tidy` also touched the root `go.work.sum`. That change was reverted as out of scope; `go.sum` was
   unchanged.
 - Verification fallback (as in Steps 2+3): golangci-lint v2.14.0 rebuilt with go1.27; 0 issues.
+
+### Steps 6 + 7 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 6 and 7 land in one commit (standing operator rule).** Operator, session question tool, 2026-10-29, in
+  their own words: "Merge pairs + standing rule". The rule reads: "if this step's Verification fails ONLY because
+  the consumers or tests of its new code live in the immediately following step … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done". Step 6's paired RED
+  test is Step 7's (Step Dependencies: "Step 7 [test] covers Step 6"). Step 6 also breaks every existing IBKR test,
+  because their fakes serve no LST handshake, and Step 7 is the step that migrates them. Step 7's tests were written
+  first. RED came in two parts. First, a compile failure (`broker.ErrOutcomeUncertain` undefined). Second, with a
+  temporary, uncommitted shim declaring only that sentinel, a behavioral failure: AC-1 `GetOrder: status 401` from the
+  strict handler, an AC-8 `order POSTs = 1, want none`, the retry-matrix rows, and `TestReplaceOrder_IBKR` "expected
+  the realm-prefixed LST header". GREEN: the whole broker package passes with `-race` and is stable over `-count=10`.
+- **Strict wire tests reach the handler by swapping `http.DefaultTransport` in `package broker_test`.** This closes
+  the open item from Steps 4+5. `IBKRClient.httpClient` has a nil `Transport`, so it uses `http.DefaultTransport`. The
+  `strictIBKRClient` helper (`ibkr_do_test.go`) points that at a host-rewriting transport for the test's duration and
+  restores it in `t.Cleanup`. The client keeps signing over the vector base URL. No production seam was added, and no
+  broker test runs in parallel.
+- **Helpers not named in the spec.** `do` lives in `ibkr_session.go` alongside `currentSession` (reads the session
+  under `sessMu`), `sendSigned` (signs, sends, reads and closes the body; the body read stays unbounded as before) and
+  `ibkrFinalAuthErr` (the instruction 2.4 error). The single `session: %v` flatten point is a closure inside `do`.
+  `ibkr_do_test.go` adds `ibkrTestConfig`, a vector-keyed config with a fixed clock that keeps the vector LST
+  unexpired. All migrated tests build their clients through it.
+- **Literal readings (no spec text changed):**
+  - The uncertain-resend rule (instruction 2.5) applies only to a resend after a **401**. A resend after a 400
+    no-bridge re-init that fails returns an ordinary error, because the 400 already proved the first send was not
+    processed.
+  - `noResend` blocks only the 401 resend (instruction 2.3). A bracket-leg POST answered 400 no-bridge is still
+    re-inited and resent once.
+  - A "`cOID` duplicate rejection" is detected as a non-2xx resend reply. A 2xx reply that carries a duplicate error
+    is not detected, because its format is not pinned (the AC-6 row uses a 400 body). Carried as an open item.
+  - Every final 401/403 now surfaces from `do` as the wrapped sentinel, so the callers' status switches no longer see
+    401/403. Callers keep their `…: http: %w` wrap unchanged (instruction 4), so a session failure reads
+    `ibkr X: http: ibkr X: session: …`. This is cosmetic only.
+- **Partial-fill coverage is a new test**, `TestGetOrder_IBKRPartialFill` (`filledQuantity` 4 of 10, status
+  `Submitted`). It sits next to `TestGetOrder_IBKRAvgPrice` instead of being a case inside it, so the existing test
+  stays unchanged.
+- Verification fallback (as in Steps 2+3 and 4+5): golangci-lint v2.14.0 was rebuilt with go1.27 and ran with
+  `GOWORK=off`. It reports 0 issues.

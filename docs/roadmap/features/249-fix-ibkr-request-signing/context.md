@@ -353,3 +353,50 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open item for Step 7: the strict handler matches signatures over the vector base URL. `package broker_test`
   cannot swap `httpClient`, so Step 7 needs a way to route `https://api.ibkr.com/v1/api` to the test server, for
   example an exported transport seam. Decide at Step 6/7.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 6 + 7
+
+### Steps 6 + 7 — `c.do` send seam + wire-level/retry tests [done]
+- One commit under the standing operator rule ("Merge pairs + standing rule"). Step 6's RED test is Step 7's, and
+  Step 6 breaks the existing IBKR fakes that Step 7 migrates. Recorded in the spec's Deviation Log.
+- `broker.go`: reworded the `ErrInvalidCredentials` doc and added `ErrOutcomeUncertain`.
+- `ibkr_session.go` adds `do(req, op, noResend)`:
+  - session errors are flattened `%v` in one closure, and only the sentinel keeps `%w`;
+  - a 401 is final when the session was just minted or `noResend` is set;
+  - otherwise a stale generation resends with the current session, and a successful `invalidate` re-handshakes and
+    resends once with a rebuilt body (`GetBody`);
+  - a 400 `no bridge` on `/iserver/` runs `reinit` and resends once;
+  - a failed resend of a POST/DELETE after a 401 is `ErrOutcomeUncertain`;
+  - a final 401/403 is the wrapped sentinel.
+  `do` uses the new helpers `currentSession`, `sendSigned` and `ibkrFinalAuthErr`.
+- `ibkr.go`: all 11 sign+Do pairs are now `c.do`, with `noResend=true` only for `SubmitBracketLegs`.
+  `ValidateCredentials` is `c.do` plus a 200 check. `signRequest` (and with it the `"&"+secret` key) is deleted.
+- Tests:
+  - `ibkr_do_test.go` adds AC-1 strict `GetOrder`, AC-2 strict GET/POST/DELETE, the AC-6 7-row matrix plus the
+    generation-guard and throttle subtests, and AC-8 (LST 503 and blocked past `HandshakeTimeout`: no order POST,
+    not a timeout, not uncertain).
+  - `ibkr_test.go`/`ibkr_reply_test.go` now run every server behind `testdata.IBKRAuthHandler{Next: …}` with
+    `ibkrTestConfig`. `TestReplaceOrder_IBKR` asserts the realm prefix, and `TestGetOrder_IBKRPartialFill` was
+    added.
+- TDD:
+  - AC-1 red: `GetOrder: status 401` (strict handler rejects the legacy signature) → green: header equals vector.
+  - AC-2 red: realm missing → green.
+  - AC-6 red: every row fails, since a 401 was never retried and there was no `ErrOutcomeUncertain` → green.
+  - AC-8 red: `order POSTs = 1, want none` → green.
+  - RED was taken with a temporary uncommitted shim declaring only `ErrOutcomeUncertain`, after a plain compile
+    failure.
+- Verification:
+  - `go build`/`go vet` are clean, and golangci-lint v2.14.0 (rebuilt with go1.27, `GOWORK=off`) reports 0 issues.
+  - `go test ./... -race` passes, with COVERPKGS total 78.3%, and the broker package is stable at `-count=10`.
+  - The greps show no `signRequest`, `c.do(` × 11, `session: %v` only inside `do`, no `TRADING_MODE`, and one
+    `IBKRAuthHandler` declaration.
+- Files modified: `services/xstockstrat-trading/internal/broker/{broker.go,ibkr.go,ibkr_session.go,ibkr_test.go,
+  ibkr_reply_test.go,ibkr_do_test.go}`.
+- Deviations: steps merged (standing rule). There were also notes with no spec change: the strict tests swap
+  `http.DefaultTransport`, which resolves the Steps 4+5 open item; some helpers are not named in the spec; and the
+  literal readings of the 401-only uncertain rule and the 401-only `noResend`.
+- Open items:
+  - A 2xx reply that carries a duplicate-`cOID` error is not classified as uncertain, because the reply format is
+    unpinned. Only a non-2xx resend is uncertain.
+  - Steps 8/9 consume `ErrOutcomeUncertain` (`trading.go:684`/`:1521`).
+

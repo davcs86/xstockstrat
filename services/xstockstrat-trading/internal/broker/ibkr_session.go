@@ -350,3 +350,106 @@ func (c *IBKRClient) reinit(ctx context.Context, gen uint64) error {
 		return r.Err
 	}
 }
+
+func (c *IBKRClient) currentSession() session {
+	c.sessMu.Lock()
+	defer c.sessMu.Unlock()
+	return c.sess
+}
+
+// do is the single signed send for every regular IBKR request; it reads and closes the body. A 401 is
+// resent at most once, and a 400 "no bridge" on /iserver/ re-inits the brokerage session and resends once.
+func (c *IBKRClient) do(req *http.Request, op string, noResend bool) (*http.Response, []byte, error) {
+	ctx := req.Context()
+	// Nothing was sent, so a session failure is definite: only the sentinel keeps %w, never a deadline.
+	sessionErr := func(err error) error {
+		if errors.Is(err, ErrInvalidCredentials) {
+			return fmt.Errorf("ibkr %s: %w", op, err)
+		}
+		return fmt.Errorf("ibkr %s: session: %v", op, err)
+	}
+	snap, minted, err := c.ensureSession(ctx)
+	if err != nil {
+		return nil, nil, sessionErr(err)
+	}
+	resp, body, err := c.sendSigned(req, snap.lst)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	noBridge := resp.StatusCode == http.StatusBadRequest && strings.Contains(req.URL.Path, "/iserver/") &&
+		strings.Contains(string(body), "no bridge")
+	var resendLST []byte
+	switch {
+	case noBridge:
+		if err := c.reinit(ctx, snap.gen); err != nil {
+			return nil, nil, sessionErr(err)
+		}
+		s, _, err := c.ensureSession(ctx)
+		if err != nil {
+			return nil, nil, sessionErr(err)
+		}
+		resendLST = s.lst
+	case resp.StatusCode != http.StatusUnauthorized || noResend || minted:
+	default:
+		if cur := c.currentSession(); cur.lst != nil && cur.gen != snap.gen {
+			resendLST = cur.lst
+		} else if c.invalidate(snap.gen) {
+			s, _, err := c.ensureSession(ctx)
+			if err != nil {
+				return nil, nil, sessionErr(err)
+			}
+			resendLST = s.lst
+		}
+	}
+	if resendLST == nil {
+		if ferr := ibkrFinalAuthErr(op, req, resp.StatusCode); ferr != nil {
+			return nil, nil, ferr
+		}
+		return resp, body, nil
+	}
+
+	retry := req.Clone(ctx)
+	if req.GetBody != nil {
+		if retry.Body, err = req.GetBody(); err != nil {
+			return nil, nil, fmt.Errorf("ibkr %s: rebuild body: %w", op, err)
+		}
+	}
+	resp, body, err = c.sendSigned(retry, resendLST)
+	if err == nil {
+		if ferr := ibkrFinalAuthErr(op, req, resp.StatusCode); ferr != nil {
+			return nil, nil, ferr
+		}
+	}
+	// The first send was answered 401, but the resend of a write may have been processed before it failed.
+	if !noBridge && (req.Method == http.MethodPost || req.Method == http.MethodDelete) {
+		if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+			err = fmt.Errorf("status %d: %s", resp.StatusCode, body)
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("ibkr %s: resend after 401: %v: %w", op, err, ErrOutcomeUncertain)
+		}
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return resp, body, nil
+}
+
+func ibkrFinalAuthErr(op string, req *http.Request, code int) error {
+	if code == http.StatusUnauthorized || code == http.StatusForbidden {
+		return fmt.Errorf("ibkr %s %s: status %d: %w", op, req.URL.Path, code, ErrInvalidCredentials)
+	}
+	return nil
+}
+
+func (c *IBKRClient) sendSigned(req *http.Request, lst []byte) (*http.Response, []byte, error) {
+	req.Header.Set("Authorization", c.authorize(req, lst))
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	body, _ := io.ReadAll(resp.Body)
+	return resp, body, nil
+}
