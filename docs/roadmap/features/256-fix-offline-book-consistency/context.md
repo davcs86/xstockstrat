@@ -1122,3 +1122,18 @@ Feature: fix-offline-book-consistency (trading)
 ### Coverage check
 - Source scenarios: 10 (AC-1 to AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing skipped. Portfolio gets 6 (AC-1, 2, 3, 6, 8, 9). Trading gets 4 (AC-4, 5, 7, 10).
 ````
+
+## Session 2026-10-30 — Staging smoke (partial pass; run via the staging agent MCP + DO run logs)
+
+Staging deployment `b306cd82` (main-dev `484896de`, ACTIVE 11:08Z) carries 256.
+- **D-49 pass:** `manage_offline_account confirm_order` with `filled_qty=-1` and, separately, `filled_avg_price=-5`, against a
+  nonexistent order id. The tool returned a bare `Error executing tool`. The agent run logs (11:20Z) show the underlying
+  gRPC status for both: `INVALID_ARGUMENT` ("filled_qty must be a finite number >= 0" / "filled_avg_price must be a finite
+  number >= 0 when filling"). The order was never loaded (no NOT_FOUND), so the validation runs before the load.
+  A NaN fill cannot be expressed through the MCP's JSON number argument, so it was not exercised here (covered by Step 4's unit tests).
+- **Reads healthy:** `list_positions` for a Schwab offline account and `get_positions` page 1 return valuations and
+  `offline_state_unavailable: false` on every row (the new field is live end to end). Portfolio logs show the five
+  event-stream consumers (fill, bracket, position sync, balance sync, account deregistration) reconnecting with their
+  resume sequences after the rollout; no ERROR lines in trading, portfolio or ledger.
+- **Not run:** the `GetOfflineStates`-failing path (D-48 marker). Staging offers no way to make the offline-state read fail,
+  so it remains covered by Step 12's tests only.
