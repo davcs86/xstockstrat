@@ -596,3 +596,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: both greps match (`ci.yml:63`, `package.json:79`); `pnpm install --frozen-lockfile` exit 0;
   `ci.yml` parses with `yaml`; `require('yaml')` resolves from `services/xstockstrat-ui`.
 - Spec line drift (no behaviour change): the filter block spans `ci.yml:39-73`, not `:39-71`.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 4+5
+
+- Tooling setup (steps 4–5): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`
+  (worktree-local; the main worktree had no `node_modules` to symlink) · openssl ✓ (system).
+- Steps 4 and 5 landed as one commit under the operator's standing merge-pairs rule (Step 4's RED test is Step 5's
+  boot test); Deviation Log entry added.
+- Ledger `src/index.ts`: `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` is the first statement of `main()`,
+  before `ConfigWatcher`; the inline `sslDisabled`/`rejectUnauthorized: !!caCert` block is gone; Pool and
+  `makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)` take the resolver output. The export
+  cursor (`ledgerServiceImpl.ts:355-356`) still inherits through `pool.options`; untouched.
+- TDD: AC-1/AC-6 red: the boot child exited on `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`
+  (no `DATABASE_CA_CERT` in stderr) → green: exits non-zero naming `DATABASE_CA_CERT`, no `mtls:`. AC-2 (Pool level)
+  was green before and after: Step 1 already provides the resolver the test imports, and the test exercises pg +
+  resolver, not `index.ts` (wiring is re-asserted by Step 15).
+- Verification: `build` exit 0; `lint` 0 errors (205 pre-existing warnings, none in the touched files); greps:
+  no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` ×1, `makeListenerClient(dbConn...)`
+  ×1; `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 4/4 named tests pass (P-06);
+  `test:coverage` exit 0, 106/106, all files 75.53% lines (≥40).
+- C-13: the openssl helpers (`mintCa`, `mintLeaf`) are declared once in `dbTlsBoot.test.ts` (single consumer); CA
+  minting is split into `mintCa` rather than a `mintPki` bundle because the test needs two independent CAs.
+

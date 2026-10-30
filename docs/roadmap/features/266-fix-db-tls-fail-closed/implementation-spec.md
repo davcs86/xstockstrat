@@ -310,7 +310,7 @@ pnpm install --frozen-lockfile
 
 ### Step 4 — service: Ledger — resolve first, wire Pool + EventNotifier
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/index.ts` — modify
@@ -368,7 +368,7 @@ grep -c "makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher)"
 
 ### Step 5 — test: Ledger boot test + Pool-level TLS stub
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/dbTlsBoot.test.ts` — create
@@ -1053,3 +1053,13 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
   done, and add a Deviation Log entry quoting the rule." RED: `tsc` TS2307 `Cannot find module '../dbTls'` (ledger)
   and vitest "no tests" import failure (UI). GREEN: 14/14 resolver tests in each of the five services.
   **Disposition**: operator standing rule.
+- **Steps 4 and 5 executed as one commit (2026-10-29, sequential).** Step 4's TDD gate is `red-green required
+  (paired with Step 5)`: its RED test is Step 5's `dbTlsBoot.test.ts`, so Step 4 cannot complete a red→green cycle
+  alone. Applied the standing operator rule (operator, 2026-10-29, in their own words: 'Merge pairs + standing
+  rule'): "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step (e.g. ... the RED test is that next step's test), do NOT return a blocker. Execute this
+  step and the next one together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps
+  done, and add a Deviation Log entry quoting the rule." RED: both boot tests (AC-1, AC-6) failed — stderr was
+  `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`, not `DATABASE_CA_CERT`. The two Pool-level AC-2
+  tests were already green at RED, because Step 1 had landed the resolver they import (Step 5's "fails to compile
+  before Step 1" RED no longer applies). GREEN: 4/4. **Disposition**: operator standing rule.

@@ -21,6 +21,7 @@
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (steps 1–2 done) | /sdd-execute sequential | Resolver `dbTls.ts` + test table in five services, one commit per the operator's merge-pairs standing rule |
 | 2026-10-29 | `in-progress` (step 3 done) | /sdd-execute sequential | CI `xstockstrat-ui` filter gains `.do/**`; UI devDependency `yaml@^2.9.0` |
+| 2026-10-29 | `in-progress` (steps 4–5 done) | /sdd-execute sequential | Ledger resolves DB TLS first in `main()` (Pool + EventNotifier); boot + Pool-level TLS-stub tests, one commit per the merge-pairs standing rule |
 
 ---
 
