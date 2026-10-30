@@ -75,8 +75,9 @@ jobs:
             git merge-base --is-ancestor "$src" origin/main || { echo "::error::$tag is not on main"; exit 1; }
           fi
           git checkout --quiet --detach "$src"
-          [ -f deploy/homelab/compose.yml ] && [ -f scripts/homelab-release-env.sh ] \
-            || { echo "::error::$tag predates the homelab deploy; it has no deploy/homelab/compose.yml"; exit 1; }
+          if [ ! -f deploy/homelab/compose.yml ] || [ ! -f scripts/homelab-release-env.sh ]; then
+            echo "::error::$tag predates the homelab deploy; it has no deploy/homelab/compose.yml"; exit 1
+          fi
           { echo "IMAGE_TAG=$tag"; echo "SRC_SHA=$src"; } >>"$GITHUB_ENV"
 
       - name: Resolve every image tag to its digest; the VM pulls by digest only
@@ -221,8 +222,10 @@ jobs:
           install -d -m 0700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
-          ip=$(sudo tailscale ip -4 "$DEPLOY_HOST") && [ -n "$ip" ] \
-            || { echo "::error::$DEPLOY_HOST is not on the tailnet (check DEPLOY_HOST and the VM)"; exit 1; }
+          ip=$(sudo tailscale ip -4 "$DEPLOY_HOST" || true)
+          if [ -z "$ip" ]; then
+            echo "::error::$DEPLOY_HOST is not on the tailnet (check DEPLOY_HOST and the VM)"; exit 1
+          fi
           echo "VM_IP=$ip" >>"$GITHUB_ENV"
 
       - name: Ship the release and deploy it; the VM rolls back if it is not healthy
