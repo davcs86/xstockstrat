@@ -36,3 +36,19 @@
   needs operator confirmation) — proposed row: `smoke-check-runtime (280) | fix-portfolio-snapshot-surface
   (264) | config migration ordering: 280 takes 035/036, after 264's 034 | No`.
 - No demoted-feature duplicate (checked 22 demoted/canceled features).
+
+## Session 2026-10-30T03:30:00Z — sdd-design (round 1 gate)
+
+- Phase 0 recon written (`recon.md`). Round 1: proposer + adversary; adversary found no Floor breach, 5 blocking objections.
+- Operator gate answers: read policy = strict `NO_SIDE_EFFECTS` + an owner-signed benign-reads list (explicit
+  override of the phase-1 anti-goal / FR-5 for named cache-fill reads, with runtime guard + descriptor tests);
+  check execution = in-process, async-only checks (AST lint + watchdog), not a subprocess per run; key handling =
+  operator asked "Do we need a secret if the smoke service is in the same mesh?" (open fork, carried to round 2);
+  approval = "Run another round" (no sign-off yet for re-scoping `@AC-1 @feature-214`).
+- Adopted from the adversary without operator input: flat-scalar evidence with value redaction on messages and
+  error details; async-only cleanups with deadlines; read-only DB role startup assertions + fetch/fetchval only;
+  orphan `smoke-results` branch + ruleset confining the PAT; baked deployed SHA (refuse to start without it);
+  separate homelab record job (artifact handoff); `check_hash` over own source + API version; compose smoke
+  block with `:-` defaults only; UI BFF 405 guard for non-POST (annotated reads would otherwise be valid GETs —
+  verified: trader/insights/config-ui `route.ts` export GET and `dispatchConnect` forwards `req.method`).
+- New affected service from the adversary: `xstockstrat-ui` (`src/lib/bffShared.ts` + test).
