@@ -268,7 +268,7 @@ cd ../xstockstrat-ui && pnpm exec vitest run src/lib/dbTls.test.ts && pnpm run t
 
 ### Step 3 — config: CI `.do/**` filter and UI `yaml` devDependency (no config key)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` (CI wiring + devDependency)
 **Files**:
 - `.github/workflows/ci.yml` — modify

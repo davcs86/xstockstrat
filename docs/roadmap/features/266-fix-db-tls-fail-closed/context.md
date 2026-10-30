@@ -583,3 +583,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   hash guard holds; no token of the spec's resolver changed.
 - Pre-existing, out of scope: UI `pnpm exec tsc --noEmit` reports two TS2339 errors, both in the untouched
   `e2e/insights/backfills.spec.ts:135-136` (last changed by feature 198); `src/` compiles clean. Not fixed here.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 3
+
+- Tooling setup (step 3): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install` (worktree-local).
+- TDD: N/A (CI filter + dependency manifest; no code).
+- `ci.yml:63` `xstockstrat-ui` filter now `['services/xstockstrat-ui/**', '.do/**']`; no new filter name. Accepted
+  side effect: the other jobs gated on that filter (`ci.yml:431`, `:472`, `:508`) also run on `.do`-only PRs.
+- `pnpm --filter xstockstrat-ui add -D yaml@^2.9.0` → importer entry `yaml: ^2.9.0 → 2.9.0` (the existing transitive
+  package, no new resolution). The registry also stamped `deprecated:` metadata on six untouched
+  `@opentelemetry/*` lockfile entries; those lines were dropped to keep the diff to this step's change.
+- Verification: both greps match (`ci.yml:63`, `package.json:79`); `pnpm install --frozen-lockfile` exit 0;
+  `ci.yml` parses with `yaml`; `require('yaml')` resolves from `services/xstockstrat-ui`.
+- Spec line drift (no behaviour change): the filter block spans `ci.yml:39-73`, not `:39-71`.

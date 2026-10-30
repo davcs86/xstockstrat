@@ -20,6 +20,7 @@
 | 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1–17 re-grounded after main-dev merge (252 tsc-first runners, 248 `makeListenerClient`, line drift) |
 | 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-29 | `in-progress` (steps 1–2 done) | /sdd-execute sequential | Resolver `dbTls.ts` + test table in five services, one commit per the operator's merge-pairs standing rule |
+| 2026-10-29 | `in-progress` (step 3 done) | /sdd-execute sequential | CI `xstockstrat-ui` filter gains `.do/**`; UI devDependency `yaml@^2.9.0` |
 
 ---
 

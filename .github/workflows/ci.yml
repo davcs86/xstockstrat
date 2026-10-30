@@ -60,7 +60,7 @@ jobs:
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
             xstockstrat-notify:     ['services/xstockstrat-notify/**']
-            xstockstrat-ui:         ['services/xstockstrat-ui/**']
+            xstockstrat-ui:         ['services/xstockstrat-ui/**', '.do/**']
             dockerfiles:
               - '**/Dockerfile*'
               - '.hadolint.yaml'
