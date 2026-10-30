@@ -1,6 +1,6 @@
 # Implementation Spec: fix-analysis-backtest-bounds
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/272-fix-analysis-backtest-bounds/feature.md`
 **Total Steps**: 9
@@ -660,7 +660,7 @@ grep -n "is_public\|include_public" docs/runbooks/mcp-tools.md plugins/strat-lab
 
 ### Step 9 — config: G-1 launch-checklist gate — measure backtest durations against the first-enforced limit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` / `xstockstrat-config` (operational gate; no source change)
 **Files**:
 - `docs/roadmap/features/272-fix-analysis-backtest-bounds/context.md` — modify (record the measurements)
@@ -788,3 +788,17 @@ _Populated by /sdd-execute as implementation proceeds._
   (3) record n, p50, p95, p99, max and orphan counts in `context.md`; (4) operator threshold plus pass or quoted sign-off.
   Then `grep -n "G-1" context.md` shows them and Step 9 flips to `done`.
 - **Disposition**: operator-only; no code change.
+
+### 2026-10-30 — Step 9 (G-1) closed by operator sign-off, threshold 60 s, no measurements
+
+- **Step(s)**: 9 (operational gate; no source change).
+- **Deviation**: Instruction 1-2 (30-day ledger `started`/`completed` percentiles and orphan counts, dev and prod) were not
+  run. Tempo holds no `xstockstrat-analysis` traces (services present: config, portfolio, agent, ingest, marketdata,
+  notify, identity, trading, ledger), this session has no ledger `QueryEvents` access, and production is not running.
+- **Decision (operator, own words, session question tool, 2026-10-30)**: option (A) of the Step 9 decision, with
+  "Use 1m threshold for backtests" and "Sign off w/o measurements, merge (Recommended)". Threshold = **60 s**. The
+  effective limit stays the 300 s code default until the dotted key exists; the operator also chose "Set staging row to
+  60 now": after this feature deploys to staging, `analysis.backtest.max_duration_seconds = 60` is created on staging via
+  `set_config` and read back with `get_config`.
+- **Disposition**: Step 4's pass condition (prod p99 at or below the threshold) is moot while prod is not running; the
+  operator's sign-off replaces it. Staging backtests longer than 60 s will fail with `DEADLINE_EXCEEDED` once the row exists.

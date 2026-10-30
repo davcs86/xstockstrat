@@ -25,6 +25,7 @@
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 5+6 done in one commit (standing operator rule, widened): D-29 wall-clock bound — `asyncio.timeout(limit or None)` on `RunBacktest`, `cm.expired()` → DEADLINE_EXCEEDED `backtest exceeded Ns deadline`, `disarm()` before persistence; 0 = no limit, negative = 300 + WARN; AC-3/AC-5/T-inner-timeout/T-commit/T-executor tests; key registered in `HONOUR_KEYS`; full suite 1475 passed |
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done: analysis `CLAUDE.md` row for `analysis.backtest.max_duration_seconds` now carries the design §5 semantics (type `int`, default `300` unchanged; screener row untouched) |
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done: strat-lab `backtest` skill (SKILL.md Phase 2 failure modes, output-handling, aggregation, README) and `mcp-tools.md` Errors rows for `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` and `FAILED_PRECONDITION` `backtest bar series incomplete: …` + MCP 60 s-cap note; @AC-32 guard unchanged |
+| 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 9 (G-1) closed by operator sign-off: threshold 60 s, no measurements (no analysis traces, no ledger access, prod not running). All 9 steps done. |
 
 ---
 
@@ -61,4 +62,4 @@ but nothing reads it.
 
 ## Next Action
 
-`/sdd-review fix-analysis-backtest-bounds impl-spec` — validate implementation spec, then `/sdd-execute fix-analysis-backtest-bounds`. Merge order: 273 (fix-agent-client-deadlines) before 272.
+Merge the integration PR (#1369). After the staging deploy: create `analysis.backtest.max_duration_seconds = 60` on staging via `set_config`, read it back with `get_config`, and record it in context.md.

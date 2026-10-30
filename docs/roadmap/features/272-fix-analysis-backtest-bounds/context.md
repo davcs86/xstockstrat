@@ -876,3 +876,14 @@ Feature: Analysis backtest — bar pagination and wall-clock bounds
 ### Coverage check
 - Source scenarios: 7 (AC-1 to AC-7). Planned: 7 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC-* is accounted for and none were skipped.
 ```
+
+## Session 2026-10-30 — Step 9 / G-1 closed (operator sign-off)
+
+- Operator decision (own words, session question tool): "Use 1m threshold for backtests"; Step 9 closed with
+  "Sign off w/o measurements, merge (Recommended)"; staging row with "Set staging row to 60 now".
+- G-1 record: decision **(A)**. Threshold **60 s**. Effective limit per environment: the 300 s code default (the seeded
+  bare key `backtest.max_duration_seconds` is not read by Step 5's dotted key). Percentiles and orphan counts: **not
+  available** (no `xstockstrat-analysis` spans in Tempo, no ledger `QueryEvents` access, prod not running). Result:
+  operator sign-off, no numbers quoted.
+- After merge and the staging deploy: set `analysis.backtest.max_duration_seconds = 60` on staging (with an audit
+  reason), verify with `get_config`, and append the result here in a follow-up docs PR.
