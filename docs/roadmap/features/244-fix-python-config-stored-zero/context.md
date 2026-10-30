@@ -1049,3 +1049,7 @@ reads), `list_opportunities`, `run_backtest`, `list_config_keys`, and Tempo. All
 - UI-only checks (`/insights` backtest view, `/trader` AlertStream, `/accounts/notifications`, `/config-ui`) were
   verified through the API that backs them, per the operator decision above.
 - Outstanding: the prod audit (Instruction 1) before the prod promotion. No prod MCP is available to this session.
+
+## Session 2026-10-30 — Production check waived
+
+- Operator decision 2026-10-30 (own words): "Prod is not running. Staging is enough". The production check owed at `/promote` is **waived**. The staging/dev verification already recorded above is the final rollout verification for this feature.

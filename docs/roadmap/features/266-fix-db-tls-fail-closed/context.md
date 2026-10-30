@@ -953,3 +953,7 @@ Feature: fix-db-tls-fail-closed (ui)
   not a `pg` error, and not in the route's own error-log format). A config-stream drop at 04:05:04Z on the
   backends was the old config instance draining at the end of the rollout, and each watcher logged a reconnect attempt.
 - No revert needed. Prod: repeat the same boot-log check on the prod deploy at `/promote`.
+
+## Session 2026-10-30 — Production check waived
+
+- Operator decision 2026-10-30 (own words): "Prod is not running. Staging is enough". The production check owed at `/promote` is **waived**. The staging/dev verification already recorded above is the final rollout verification for this feature.

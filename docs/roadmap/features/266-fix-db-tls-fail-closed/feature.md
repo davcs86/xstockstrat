@@ -67,4 +67,4 @@ audit route already connects unverified in both deployed environments.
 
 ## Next Action
 
-Merged (#1365, `bcde6648`); post-merge dev canary passed 2026-10-30. Next: `/promote` (prod rollout needs the same boot-log check on the prod app).
+Done: merged (#1365, `bcde6648`) and the post-merge dev canary passed (2026-10-30). The prod boot-log check is waived by operator decision (2026-10-30: prod is not running).
