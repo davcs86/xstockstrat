@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ingest-poller-backfill-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-10-29
 
 ---
 
@@ -17,6 +17,9 @@
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN vs 244/259) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. FR-1 amended + `@AC-8` appended (operator gate decision) |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-10-29 | `implementation-ready` (re-spec) | /sdd-execute (sdd-batch-execute) | Steps 1–9 re-aligned with the current codebase after the main-dev merge: line-anchor drift; 244 merged, so Step 5 passes its `int_positive` timeout; Step 9 drops the duplicate key-form defect report |
+| 2026-10-29 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by the operator's standing authorization (session_01NpS3HShZK6pSnogA7CFo2f, 2026-10-28/29); checkpoints `report`; C-16 promotion auto-confirmed unless it changes an existing `@AC` rule |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 9 steps done; C-16 promotion applied (8 NEW scenarios → `services/xstockstrat-ingest/acceptance/fix-ingest-poller-backfill.feature`); integration PR opened, merge held for operator |
 
 ---
 
@@ -52,4 +55,4 @@ deadline), and ingests nothing when the result's first list key is not the signa
 
 ## Next Action
 
-`/sdd-review fix-ingest-poller-backfill impl-spec` — validate implementation spec, then `/sdd-execute fix-ingest-poller-backfill`
+`/sdd-execute fix-ingest-poller-backfill sequential` — all 9 steps done 2026-10-29; next: C-16 promotion + integration PR (record the manual context-constitution reconciliation in its body)
