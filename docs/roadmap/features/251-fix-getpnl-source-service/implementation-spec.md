@@ -800,7 +800,7 @@ grep -n "classifyGetPnLError" services/xstockstrat-portfolio/CLAUDE.md services/
 
 ### Step 13 — docs: peer reconciliation note in merge-order.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/`
 **Files**:
 - `docs/roadmap/features/merge-order.md` — modify

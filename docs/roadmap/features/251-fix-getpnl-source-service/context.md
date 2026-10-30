@@ -764,3 +764,9 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - Trading `CLAUDE.md`: stream key of the 11 emitted `order.*` rows is the bare `{order_id}`; `order.approved` (no emit site) and `order_intent.*` keep their prefixes. Ledger `CLAUDE.md` `:34` and `:112` reworded for bare id vs `order_intent.*`. Ledger `page_token` already documented (`:49`).
 - Teardown: the context-forge plugin is not run in this worktree; reconciled by hand against `classifyGetPnLError`, `orderSide`, and `trading.go` emit sites. Record both facts in the PR body.
 - Next: Step 13 (merge-order note).
+
+## Session 2026-10-30 - Step 13 executed (docs)
+
+- `merge-order.md`: added a rebase-only blockquote `Note on 251 fix-getpnl-source-service ↔ 249` after the 252 note (before the `---`). 241 is `launched` so it is dropped per the step; 249 is `code-completed`, kept. The 252 context note is dropped (252 launched, per re-spec). The existing 257 hard row at `:81` is unchanged.
+- Verification: `grep -n "fix-getpnl-source-service" merge-order.md` shows the `:81` row and the new note. TDD N/A (docs).
+- Next: integration PR; PG-1 stays an operator gate.
