@@ -1,8 +1,11 @@
 """The API check modules are written against (contract: services/xstockstrat-smoke/CLAUDE.md)."""
 
+import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
+
+from app.policy import FIXTURE_PREFIX
 
 CHECKS_API_VERSION = 1
 CLEANUP_DEADLINE_S = 10.0
@@ -43,8 +46,12 @@ class CheckContext:
         self.evidence_items[key] = value
 
     def fixture(self, hint: str) -> str:
-        return f"smoke-{self.run_id}-{hint}"
+        return f"{FIXTURE_PREFIX}{self.run_id}-{hint}"
 
     def on_cleanup(self, fn, *, deadline_s: float = CLEANUP_DEADLINE_S) -> None:
-        """`fn()` runs after the check ends with any outcome, last registered first."""
-        self.cleanups.append((fn, deadline_s))
+        """`fn()` runs after the check ends with any outcome, last registered first; the deadline
+        is capped at CLEANUP_DEADLINE_S."""
+        valid = isinstance(deadline_s, int | float) and not isinstance(deadline_s, bool)
+        if not valid or not math.isfinite(deadline_s) or deadline_s <= 0:
+            raise ValueError(f"cleanup deadline_s must be a positive number, got {deadline_s!r}")
+        self.cleanups.append((fn, min(float(deadline_s), CLEANUP_DEADLINE_S)))

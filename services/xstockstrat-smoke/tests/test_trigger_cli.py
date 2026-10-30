@@ -182,6 +182,7 @@ def test_run_lock_hold_matches_runner():
     from app import runner
 
     assert trigger_client.RUN_LOCK_HOLD_S == runner.RUN_LOCK_HOLD_S
+    assert trigger_client.CLEANUP_GRACE_MAX_S == runner.CLEANUP_GRACE_MAX_S
 
 
 @pytest.mark.parametrize("mode,expected", [("strict", 1), ("record-only", 0)])

@@ -4,7 +4,7 @@ approved benign reads, and (phase 2) allowlisted owner-scoped writes under every
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 
-from google.protobuf import descriptor_pb2
+from google.protobuf import descriptor_pb2, unknown_fields
 
 HARD_DENIED = frozenset({"xstockstrat.config.v1.ConfigService/GetSecret"})
 
@@ -30,24 +30,52 @@ class ScopedWrite:
     predicate: Callable[[object], str | None]
 
 
+def _submessages(fd, value):
+    if fd.message_type is None:
+        return []
+    if fd.message_type.GetOptions().map_entry:
+        return [v for v in value.values() if hasattr(v, "ListFields")]
+    return list(value) if fd.is_repeated else [value]
+
+
+def has_unknown_fields(message) -> bool:
+    if len(unknown_fields.UnknownFieldSet(message)):
+        return True
+    return any(
+        has_unknown_fields(sub)
+        for fd, value in message.ListFields()
+        for sub in _submessages(fd, value)
+    )
+
+
 def no_strategy_bindings(request) -> str | None:
     for fd, value in request.ListFields():
         if fd.name.endswith("strategy_id") and value:
             return f"carries a strategy_id binding ({fd.name})"
-        if fd.message_type is not None:
-            items = value if fd.is_repeated else [value]
-            for item in items:
-                if hasattr(item, "ListFields"):
-                    reason = no_strategy_bindings(item)
-                    if reason:
-                        return reason
+        for sub in _submessages(fd, value):
+            reason = no_strategy_bindings(sub)
+            if reason:
+                return reason
+    return None
+
+
+FIXTURE_PREFIX = "smoke-"
+
+
+def watchlist_fixture_write(request) -> str | None:
+    reason = no_strategy_bindings(request)
+    if reason:
+        return reason
+    if "name" in request.DESCRIPTOR.fields_by_name and request.name:
+        if not request.name.startswith(FIXTURE_PREFIX):
+            return f"name {request.name!r} lacks the {FIXTURE_PREFIX!r} fixture prefix"
     return None
 
 
 _PORTFOLIO = "xstockstrat.portfolio.v1.PortfolioService/"
 # Portfolio-owner approval of this allowlist is pending (feature 280 context.md); flag defaults off.
 SCOPED_WRITES: dict[str, ScopedWrite] = {
-    _PORTFOLIO + m: ScopedWrite(no_strategy_bindings)
+    _PORTFOLIO + m: ScopedWrite(watchlist_fixture_write)
     for m in (
         "CreateWatchlist",
         "UpdateWatchlist",
@@ -87,6 +115,12 @@ def decide(
         desc = None
     if desc is None:
         return Decision(False, f"{full_method}: unknown method")
+    if request is not None and request.DESCRIPTOR.full_name != desc.input_type.full_name:
+        return Decision(
+            False,
+            f"{full_method}: request type {request.DESCRIPTOR.full_name} "
+            f"is not {desc.input_type.full_name}",
+        )
     if desc.GetOptions().idempotency_level == descriptor_pb2.MethodOptions.NO_SIDE_EFFECTS:
         return Decision(True, "NO_SIDE_EFFECTS")
     entry = benign.get(full_method)
@@ -101,6 +135,8 @@ def decide(
         return Decision(False, f"{full_method}: env {writes.env!r} is not a staging label")
     if request is None:
         return Decision(False, f"{full_method}: no request to check")
+    if has_unknown_fields(request):
+        return Decision(False, f"{full_method}: request carries unknown fields")
     refusal = scoped.predicate(request)
     if refusal:
         return Decision(False, f"{full_method}: {refusal}")

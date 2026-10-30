@@ -16,12 +16,17 @@ while `smoke.writes.enabled` is `true`. Contracts: `services/xstockstrat-smoke/C
    service (`docs/runbooks/config-rollout.md`, admin-gated `SetConfig`). An empty value makes every RPC check `ERROR`.
 3. The smoke user must own no broker account and nothing but `smoke-` fixtures: the janitor deletes the smoke user's
    watchlists whose name starts with `smoke-`, and fixtures are named `smoke-<run_id>-<hint>`.
+4. `smoke.rpc.user_id` must be this dedicated smoke user and nobody else: the janitor deletes every non-system
+   `smoke-*` watchlist owned by whatever id that key holds.
+5. The smoke user's watchlists must carry no default strategy (`default_strategy_id`): it would stamp strategy
+   bindings onto symbols the smoke checks add, which the write predicate exists to prevent.
 
 ## Kill switch `smoke.writes.enabled`
 
 Seeded `false` (staging and production rows, global) by config migration `036_smoke_writes_enabled`. Writes are
 allowed only when **all** hold: the RPC is in `SCOPED_WRITES` (`app/policy.py`), the request carries no
-`strategy_id` / `default_strategy_id` binding, the flag is `true`, and `SMOKE_ENV` is `homelab-staging` or `do-dev`.
+`strategy_id` / `default_strategy_id` binding, its message type is exactly the method's input (no unknown fields), any
+watchlist `name` it sets starts with `smoke-`, the flag is `true`, and `SMOKE_ENV` is `homelab-staging` or `do-dev`.
 Anything else is refused with `MutatingRpcRefused` before a gRPC channel opens. Calls never carry the admin
 access-scope bit.
 

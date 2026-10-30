@@ -14,6 +14,8 @@ from app.check_api import CheckContext, CheckFailure
 from app.evidence import sanitize
 
 RUN_LOCK_HOLD_S = 900
+# Most cleanup time the lock may outlive the body budget by; the trigger waits for both.
+CLEANUP_GRACE_MAX_S = 60
 RUN_BUFFER_SIZE = 50
 TRIGGER_BY_SAN = {"xstockstrat-agent": "agent", "xstockstrat-smoke-trigger": "post-deploy"}
 
@@ -45,7 +47,10 @@ class _Run:
     started_at: datetime
     triggered_by: str
     deadline: float
+    lock_until: float
     records: list[dict] = field(default_factory=list)
+    rpc: object | None = None
+    cleanup: str = "NONE"
     status: str = "running"
     task: asyncio.Task | None = None
 
@@ -67,15 +72,16 @@ class Runner:
             raise UnknownChecks(unknown)
         loop = asyncio.get_running_loop()
         active = self._active
-        if active is not None and active.status == "running" and loop.time() < active.deadline:
-            wait = math.ceil(active.deadline - loop.time())
-            raise RunInProgress(max(1, min(wait, math.ceil(self._hold_s))))
+        if active is not None and active.status == "running" and loop.time() < active.lock_until:
+            wait = math.ceil(active.lock_until - loop.time())
+            raise RunInProgress(max(1, min(wait, math.ceil(self._hold_s + CLEANUP_GRACE_MAX_S))))
         run = _Run(
             run_id=uuid.uuid4().hex,
             ids=list(ids),
             started_at=datetime.now(UTC),
             triggered_by=triggered_by,
             deadline=loop.time() + self._hold_s,
+            lock_until=loop.time() + self._hold_s,
         )
         self._runs[run.run_id] = run
         while len(self._runs) > RUN_BUFFER_SIZE:
@@ -155,6 +161,7 @@ class Runner:
             for cid in run.ids:
                 check = self.catalog.checks[cid]
                 started_at = _iso(datetime.now(UTC))
+                run.rpc, run.cleanup = None, "NONE"
                 try:
                     remaining = run.deadline - loop.time()
                     if remaining <= 0:
@@ -165,14 +172,25 @@ class Runner:
                         rec = await self._run_one(run, check, remaining)
                 except Exception as e:  # noqa: BLE001 — every check must leave exactly one record
                     error = {"error": f"record build failed: {type(e).__name__}"}
-                    rec = self._raw_record(check, "ERROR", started_at, 0, [], error)
+                    rpcs = list(getattr(run.rpc, "invoked", []))
+                    writes = list(getattr(run.rpc, "writes", []))
+                    rec = self._raw_record(
+                        check,
+                        "ERROR",
+                        started_at,
+                        0,
+                        rpcs,
+                        error,
+                        writes=writes,
+                        cleanup=run.cleanup,
+                    )
                 run.records.append(rec)
         finally:
             run.status = "done"
 
     async def _run_one(self, run: _Run, check, remaining: float) -> dict:
         hold_bound = remaining < check.timeout_s
-        rpc = self._rpc_factory(run.run_id)
+        rpc = run.rpc = self._rpc_factory(run.run_id)
         ctx = CheckContext(db=self._db, rpc=rpc, run_id=run.run_id)
         started_at = _iso(datetime.now(UTC))
         t0 = time.monotonic()
@@ -198,6 +216,7 @@ class Runner:
             system = {"error": "run hold exceeded" if hold_bound else "check timeout exceeded"}
         try:
             cleanup, cleanup_error = await self._cleanup(run, ctx)
+            run.cleanup = cleanup
         finally:
             try:
                 await rpc.close()
@@ -226,13 +245,13 @@ class Runner:
         if not ctx.cleanups:
             return "NONE", None
         loop = asyncio.get_running_loop()
-        # The lock stays held through cleanup: grace = the sum of the cleanup deadlines.
-        grace = sum(deadline for _, deadline in ctx.cleanups)
-        run.deadline = max(run.deadline, loop.time() + grace)
+        # Grace holds the lock only (never run.deadline, the body budget) and is capped per run.
+        wanted = loop.time() + sum(deadline for _, deadline in ctx.cleanups)
+        run.lock_until = max(run.lock_until, min(wanted, run.deadline + CLEANUP_GRACE_MAX_S))
         errors = []
         for fn, deadline in reversed(ctx.cleanups):
             try:
-                async with asyncio.timeout(deadline):
+                async with asyncio.timeout(min(deadline, max(0.0, run.lock_until - loop.time()))):
                     await fn()
             except Exception as e:  # noqa: BLE001 — every cleanup runs; failures are collected
                 errors.append(f"{type(e).__name__}: {e}")

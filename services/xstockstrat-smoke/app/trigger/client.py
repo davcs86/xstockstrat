@@ -9,6 +9,8 @@ import time
 
 SERVER_NAME = "xstockstrat-smoke"
 RUN_LOCK_HOLD_S = 900
+CLEANUP_GRACE_MAX_S = 60
+RUN_WAIT_S = RUN_LOCK_HOLD_S + CLEANUP_GRACE_MAX_S
 POLL_S = 2.0
 
 
@@ -77,7 +79,7 @@ class Client:
         return data["checks"]
 
     def start_run(self, ids: list[str]) -> str:
-        deadline = time.monotonic() + RUN_LOCK_HOLD_S
+        deadline = time.monotonic() + RUN_WAIT_S
         while True:
             status, retry_after, data = self._request("POST", "/runs", {"checks": ids})
             if status == 202:
@@ -85,13 +87,13 @@ class Client:
             if status != 409 or time.monotonic() >= deadline:
                 raise TriggerError(f"POST /runs returned {status}: {data}")
             try:
-                wait = min(int(retry_after), RUN_LOCK_HOLD_S)
+                wait = min(int(retry_after), RUN_WAIT_S)
             except (TypeError, ValueError):
                 wait = 1
             self._sleep(wait)
 
     def wait_for_run(self, run_id: str) -> dict:
-        deadline = time.monotonic() + RUN_LOCK_HOLD_S
+        deadline = time.monotonic() + RUN_WAIT_S
         while True:
             try:
                 status, _, data = self._request("GET", f"/runs/{run_id}")
@@ -104,5 +106,5 @@ class Client:
             if data.get("status") == "done":
                 return data["file"]["body"]
             if time.monotonic() >= deadline:
-                raise TriggerError(f"{run_id}: not done within {RUN_LOCK_HOLD_S}s")
+                raise TriggerError(f"{run_id}: not done within {RUN_WAIT_S}s")
             self._sleep(self._poll_s)

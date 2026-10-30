@@ -3,7 +3,8 @@ runs (a crash, a lost hold, a failed cleanup) before a check body runs."""
 
 from gen.portfolio.v1 import portfolio_pb2 as pb
 
-FIXTURE_PREFIX = "smoke-"
+from app.policy import FIXTURE_PREFIX
+
 _PORTFOLIO = "xstockstrat.portfolio.v1.PortfolioService/"
 _MAX_PAGES = 20
 

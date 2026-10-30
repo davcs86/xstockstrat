@@ -129,7 +129,7 @@ async def test_cleanup_grace_extends_the_run_hold():
         async def wait():
             await gate.wait()
 
-        ctx.on_cleanup(wait, deadline_s=60)
+        ctx.on_cleanup(wait)
 
     runner = write_runner([from_function(run)], FakePortfolio())
     runner._hold_s = 0.5

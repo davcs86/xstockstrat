@@ -81,7 +81,7 @@ Mesh cert contract: `docs/patterns/inter-service-mtls.md`.
 ### HTTP API
 
 - `GET /checks` returns `{deployed_sha, checks:[{id,feature,part,timeout_s,check_hash}], load_errors:[{module,error}]}`.
-- `POST /runs {checks:[id, ...]}` returns 202 `{run_id}`. An unknown check id returns 404 listing the unknown ids; an empty list returns 400; a run already in progress returns 409 `{"error":"run_in_progress","retry_after_s":N}` with a `Retry-After` header, where `N` is at most `RUN_LOCK_HOLD_S`.
+- `POST /runs {checks:[id, ...]}` returns 202 `{run_id}`. An unknown check id returns 404 listing the unknown ids; an empty list returns 400; a run already in progress returns 409 `{"error":"run_in_progress","retry_after_s":N}` with a `Retry-After` header, where `N` is at most `RUN_LOCK_HOLD_S + CLEANUP_GRACE_MAX_S`.
 - `GET /runs/{id}` returns `{status, records:[...], file:{path, body}}` or 404 for an unknown or lost run. `status` is `running` or `done`. Each `records[]` item is exactly one record of the run file (see below), in execution order. `file.path` is the run-file path and `file.body` is the complete run-file body; both are present once `status` is `done`.
 
 ### Check API
@@ -90,8 +90,11 @@ Mesh cert contract: `docs/patterns/inter-service-mtls.md`.
 - `ctx.db.fetch` / `ctx.db.fetchval` (read-only transaction), `ctx.rpc.call(full_method: str, request)`, `ctx.evidence(key, scalar)`.
 - Phase 2: `ctx.fixture(hint)` returns `smoke-<run_id>-<hint>`; `ctx.on_cleanup(async_fn, deadline_s=10)` registers a cleanup
   that runs after the check ends with any outcome (`PASS`/`FAIL`/`ERROR`/`TIMEOUT`, including a lost run hold), last
-  registered first, each under its own deadline; the run lock is extended by the sum of the cleanup deadlines. A failed
-  cleanup turns the outcome into `ERROR` and keeps the original evidence plus `original_outcome` and `cleanup_error`.
+  registered first, each under its own deadline (a positive number, capped at `CLEANUP_DEADLINE_S`; anything else is
+  `ValueError`). Cleanup time extends only the run **lock** (never the body budget of later checks), by at most
+  `CLEANUP_GRACE_MAX_S` past the run hold per run; a cleanup that runs out of that grace fails. A failed cleanup turns the
+  outcome into `ERROR` and keeps the original evidence plus `original_outcome` and `cleanup_error`. If building a record
+  fails, the fallback `ERROR` record still carries the check's `rpcs_invoked`, `writes_performed` and `cleanup`.
 - `janitor(ctx)` runs before the body inside the check timeout (e.g. `app.fixtures.sweep_watchlists`, which deletes the
   smoke user's non-system watchlists named `smoke-*`); a janitor failure is `ERROR` and the body does not run.
 - Packages under `checks/` whose name starts with `_` (e.g. `checks/_reference/`) are linted but never loaded into the
@@ -119,8 +122,10 @@ run file of that env; failed attempts stay in their files.
 `policy.decide(..., writes=WritePolicy(enabled, env, allowlist=SCOPED_WRITES), request=...)` allows an RPC that is not
 `NO_SIDE_EFFECTS` only if it is in `SCOPED_WRITES` (portfolio `CreateWatchlist`, `UpdateWatchlist`,
 `AddWatchlistSymbols`, `RemoveWatchlistSymbols`, `DeleteWatchlist`) **and** `smoke.writes.enabled` is true **and**
-`SMOKE_ENV` is `homelab-staging` or `do-dev` **and** the request carries no non-empty `strategy_id` /
-`default_strategy_id` at any depth. Every refusal raises `MutatingRpcRefused` before a channel opens. Writes carry the
+`SMOKE_ENV` is `homelab-staging` or `do-dev` **and** the request is exactly the method's input type with no unknown
+fields at any depth **and** it carries no non-empty `strategy_id` / `default_strategy_id` at any depth (map values
+included) **and** any non-empty `name` (Create/Update) starts with `smoke-`. A request of the wrong message type is
+refused for reads too. Every refusal raises `MutatingRpcRefused` before a channel opens. Writes carry the
 same header trio with no admin bit. The portfolio owner's approval of this allowlist is pending
 (`docs/runbooks/smoke-user.md`). The privileged denylist exists only as a test oracle.
 
@@ -136,11 +141,12 @@ same header trio with no admin bit. The portfolio owner's approval of this allow
 
 | Name | Value | Meaning |
 |---|---|---|
-| `RUN_LOCK_HOLD_S` | `900` | Upper bound on one run-lock hold |
+| `RUN_LOCK_HOLD_S` | `900` | Body budget of one run; the lock may outlive it by at most `CLEANUP_GRACE_MAX_S` |
 | `LOOP_STALL_S` | `30` | Event-loop stall before the watchdog acts |
 | Evidence cap | `4096` bytes | Flat scalar dict; long strings truncated, secrets redacted |
 | `DB_STATEMENT_TIMEOUT_MS` | `5000` | `SET LOCAL statement_timeout` on every check query |
-| `CLEANUP_DEADLINE_S` | `10` | Default per-cleanup deadline for `ctx.on_cleanup` |
+| `CLEANUP_DEADLINE_S` | `10` | Default and maximum per-cleanup deadline for `ctx.on_cleanup` |
+| `CLEANUP_GRACE_MAX_S` | `60` | Most cleanup time the run lock may hold past `RUN_LOCK_HOLD_S`; the trigger waits `RUN_LOCK_HOLD_S + CLEANUP_GRACE_MAX_S` (duplicated in `app/trigger/client.py`, drift-tested) |
 
 ## Fixture ownership
 
