@@ -468,3 +468,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `packages/proto/trading/v1/trading.proto`.
 - Open item: the CI `proto-freshness` gate fails until Step 12 regenerates the 5 `gen/` stubs that carry this comment.
 
+## Session 2026-10-29 — sdd-execute sequential, Step 12
+
+### Step 12 — proto-gen: regenerate stubs [done]
+- `./scripts/buf-gen.sh` regenerated the IBKR `credentials_json` comment into exactly the 5 listed stubs.
+  `gen/go/trading/v1/trading.pb.go`, `gen/ts/trading/v1/trading_pb.ts`, `gen/ts/trading/v1/trading.ts`,
+  `gen/ts/dist/trading/v1/trading_pb.d.ts` and `gen/ts/dist/trading/v1/trading.d.ts` changed. Every diff line is
+  comment-only. Python stubs and descriptors are unchanged.
+- Toolchain: the host `~/go/bin` Go plugins were built with go1.24.7 and reflowed a comment in
+  `gen/go/analysis/v1/analysis.pb.go`. That is unrelated churn, so it was discarded. The pinned plugins were rebuilt
+  with go1.27.0 (the CI `proto-freshness` Go) into a scratch `GOBIN`. `pnpm install --frozen-lockfile` supplied the
+  pinned `tsc`. This is recorded in the Deviation Log (CI-equivalent fallback). No repo pin changed.
+- TDD: N/A (codegen). Verification: `git diff --name-only packages/proto/gen/` lists exactly the 5 paths, and the
+  non-comment changed-line grep is empty.
+- Files modified: the 5 `gen/` stubs above.
+- Open item (for the host, not the repo): rebuild `~/go/bin` protoc plugins with Go 1.27, or later regenerations will
+  reintroduce the `analysis.pb.go` comment drift.
+

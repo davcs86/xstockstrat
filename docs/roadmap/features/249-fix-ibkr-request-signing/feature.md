@@ -26,6 +26,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Steps 8+9 done in one commit (standing operator rule "Merge pairs + standing rule"): trading plumbing (7-field `ibkrCreds`, `ibkrTiming` from `trading.ibkr.*`, IBKR-only `validateIBKRCreds`, `isUncertainBrokerOutcome`, `reconcileTick` credential-rejected skip) + service-level tests (AC-3..AC-10 service half) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 10 done: three `trading.ibkr.*` keys (`lst_refresh_margin_ms` 60000, `handshake_timeout_ms` 10000, `reauth_min_interval_ms` 30000) registered in the trading CLAUDE.md Config Keys table and the config-governance Per-Feature Registered Keys log (unseeded, feature 102 precedent) |
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 11 done: `trading.proto` `RegisterBrokerAccountRequest.credentials_json` comment lists the 7-key IBKR shape (`signature_key`, `encryption_key`, `dh_prime` added); comment-only, `buf lint`/`buf breaking` clean |
+| 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 12 done: `./scripts/buf-gen.sh` regenerated exactly the 5 `gen/` stubs (Go `trading.pb.go`, TS `trading_pb.ts`/`trading.ts` and their `dist` `.d.ts`), with comment-only diffs; Go plugins rebuilt with go1.27 to match CI `proto-freshness` |
 
 ---
 

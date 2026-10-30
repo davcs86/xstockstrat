@@ -884,7 +884,7 @@ cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch
 
 ### Step 12 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/trading.pb.go` — modify (generated; comment only)
@@ -1352,3 +1352,18 @@ _Populated by /sdd-execute as implementation proceeds._
   same PLAT-10 `subdir=`. Exit code 0; `buf lint` (1.72.0) is clean.
 - The IBKR comment wraps over three `//` lines and keeps the existing alignment. The field number, type and name of
   `credentials_json = 4` are unchanged (C-09).
+
+### Step 12 — 2026-10-29 (sdd-execute sequential)
+
+- **The Go proto plugins were rebuilt with Go 1.27 on the host before regenerating.** **Disposition**: CI-equivalent
+  fallback. The preinstalled `~/go/bin/protoc-gen-go` v1.36.11 was built with go1.24.7. Its `go/format` reflowed an
+  indented doc comment in `gen/go/analysis/v1/analysis.pb.go`, which is unrelated churn. Following the step's
+  "fix the toolchain, don't commit churn" instruction, `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2` and
+  `protoc-gen-connect-go@v1.19.2` were rebuilt with go1.27.0 into a scratch `GOBIN`, matching the CI
+  `proto-freshness` job. `pnpm install --frozen-lockfile` supplied the lockfile-pinned `tsc`; the global one fails
+  with TS5107. `grpcio-tools` is 1.80.0, as in CI. No repo pin changed.
+- After regeneration `git diff --name-only packages/proto/gen/` lists exactly the 5 **Files**, and every changed line is
+  the IBKR comment. The Python stubs and the serialized descriptors are unchanged.
+- **Spec evidence corrections.** `buf` 1.72.0 *is* installed on this host (`~/go/bin/buf`), so the "`which buf` → none"
+  note is stale. Both `gen/ts/dist/trading/v1/*.d.ts` files did carry the comment and were regenerated, as the
+  **Files** list says.
