@@ -189,13 +189,15 @@ The agent authenticates to Claude.ai via OAuth 2.1 (RFC 8414/9728); its outbound
 
 ## Section 8 — Observability
 
-OpenTelemetry SDK in every service exports OTLP traces, metrics, and logs to Grafana Cloud (or any OTLP receiver). Toggle: `OTEL_ENABLED=true`.
+OpenTelemetry SDK in every service exports OTLP traces to Grafana Cloud (or any OTLP receiver) when `OTEL_ENABLED=true`.
+
+Metrics and logs are not exported (feature 226).
 
 - Distributed traces span all 15 services via `x-trace-id` header propagation
 - Per-language instrumentation: `internal/telemetry/` (Go), `app/telemetry.py` (Python), `src/telemetry.ts` (Node.js)
 - OTel init errors **never** prevent service startup — observability is best-effort
 
-Configured dashboards: trade flow (order → fill → ledger event), config stream health, indicator latency percentiles, alert delivery latency.
+Checked-in dashboard: `service-health.json` (Tempo): server error spans, slow server spans, analysis scoring RPC activity.
 
 ---
 

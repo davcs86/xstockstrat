@@ -3,47 +3,32 @@
 File-based Grafana **unified alerting** provisioning for Phase 7
 (feature `033-phase7-observability`, FR-4).
 
-| File | Contents |
-|---|---|
-| `alert-rules.yaml` | Three alert rules in the `xstockstrat` folder |
-| `mute-timings.yaml` | `outside-us-market-hours` mute timing used by the no-scoring alert |
+`alert-rules.yaml` provisions no rules; it only deletes earlier ones. Runtimes export traces only
+(feature 226 Operator Decision 3), and no produced series backs a rule (feature 250).
 
-## Rules (FR-4)
+Metrics and logs are not exported (feature 226).
 
-| UID | Title | Condition | For | Severity |
-|---|---|---|---|---|
-| `xstk-error-rate-high` | Service error rate > 1% | non-OK gRPC calls / total > 1% per `service_name` | 5m | critical |
-| `xstk-p99-latency-high` | Service P99 latency > 2s | `histogram_quantile(0.99, …) > 2000 ms` per `service_name` | 3m | warning |
-| `xstk-analysis-no-scoring` | Analysis produced no scoring events for 30m | zero `ScoreStrategy`/`RunBacktest` log events in 30m | 0m | critical |
-
-## Substitutions before provisioning
-
-`alert-rules.yaml` references datasource UIDs by placeholder — replace them before applying:
-
-| Placeholder | Replace with |
-|---|---|
-| `${DS_PROMETHEUS_UID}` | UID of your Grafana Cloud Prometheus/Mimir datasource |
-| `${DS_LOKI_UID}` | UID of your Grafana Cloud Loki datasource |
-
-Find a UID at **Grafana → Connections → Data sources → <name>** (it appears in the page URL).
-The `__expr__` datasource UID is Grafana's built-in expression engine — leave it as-is.
+Detection of gRPC error rate, latency and analysis scoring stalls returns with
+`docs/roadmap/features/274-otel-metrics-logs-export/`. Until it lands, nothing pages for those failures.
 
 ## Applying
 
-**File-based provisioning (self-hosted Grafana / Grafana Agent):** place both files under the
-provisioning `alerting/` path and restart, or call the provisioning reload endpoint.
+**File-based provisioning (self-hosted Grafana / Grafana Agent):** place `alert-rules.yaml` under the
+provisioning `alerting/` path and restart, or call the provisioning reload endpoint. Grafana applies
+`deleteRules` and `deleteMuteTimes` and removes the listed items.
 
-**Grafana Cloud:** Alerting → Alert rules → **New → Import**, paste the rule, and select the
-datasources. Create the `outside-us-market-hours` mute timing under Alerting → Notification
-policies → Mute timings (mirror `mute-timings.yaml`).
+**Grafana Cloud:** the file is not applied automatically. Delete the items below by hand under
+Alerting → Alert rules and Alerting → Notification policies → Mute timings.
 
-## Market-hours gating
+## Removed assets
 
-`xstk-analysis-no-scoring` carries the label `mute_outside_market_hours: "true"`. Attach the
-`outside-us-market-hours` mute timing to the notification policy that matches that label so the
-alert only pages during the regular US session (09:30–16:00 America/New_York, Mon–Fri). The
-rule itself still evaluates 24/7 (visible on dashboards); only **notifications** are muted
-off-hours.
+<!-- otel-guard:removed-assets -->
+- `xstk-error-rate-high` — alert rule
+- `xstk-p99-latency-high` — alert rule
+- `xstk-analysis-no-scoring` — alert rule
+- `outside-us-market-hours` — mute timing
+- `mute-timings.yaml` — file
+<!-- /otel-guard:removed-assets -->
 
 ## Notification routing
 
