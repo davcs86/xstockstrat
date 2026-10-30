@@ -3184,7 +3184,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     definition_json,
                 )
             except asyncpg.UniqueViolationError:
-                # Atomic backstop for a concurrent duplicate that raced the get_by_id check.
+                # Atomic backstop for a concurrent duplicate that raced get_by_owner_and_id.
                 await context.abort(
                     grpc.StatusCode.ALREADY_EXISTS,
                     f"strategy '{definition.strategy_id}' already exists",
