@@ -1,6 +1,6 @@
 # Implementation Spec: fix-config-stream-resilience
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-10-22
 **Feature**: `docs/roadmap/features/258-fix-config-stream-resilience/feature.md`
 **Total Steps**: 9
@@ -97,7 +97,7 @@ request, logs without a trace id.
 
 ### Step 1 — service: config LISTEN lifecycle (reconnect with backoff, serial chain, guarded notifications)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -105,23 +105,25 @@ request, logs without a trace id.
 **Reviewers**: `xstockstrat-config` owner — WatchConfig stream stability, environment / global-per-user scoping,
 secret redaction on every broadcast
 
-**Codebase Evidence**:
-- `configServiceImpl.ts:1` `import { Pool } from 'pg';`. `PoolClient` is not imported anywhere in config `src`
-  (grep).
+**Codebase Evidence** (re-spec 2026-10-29: the step is implemented in `907fa340`; the anchors describe the
+current tree, and the pre-Step-1 sites are in recon.md):
+- `configServiceImpl.ts:1` already reads `import { Pool, PoolClient } from 'pg';`.
 - `:19` `const log = getLogger('config:impl');`.
-- `:155` `export class ConfigServiceImpl {`. The fields are at `:156` (`subscribers`) and `:158` (`snapshots`). The
-  constructor is at `:160`: `constructor(private readonly pool: Pool) {}`.
-- **D-05**, `:162-174` `initialize()`:
-  - `:163` `await this.reloadAll();`
-  - `:164` `const pgClient = await this.pool.connect();`
-  - `:165` `await pgClient.query('LISTEN config_changed');`
-  - `:166-172` an `async` `notification` handler with no try. It does `JSON.parse(msg.payload)` (`:168`), defaults
-    env to `'staging'` (`:169`), then calls `reloadNamespace` (`:170`) and `broadcastToSubscribers` (`:171`).
-  - `:173` `log.info(...)`.
-- `reloadAll()` `:176-201` reads global rows only (`:181`) and writes snapshots at `:190-199`. It does not broadcast.
-- `reloadNamespace()` `:203-223` writes the full-namespace DELTA snapshot (`:214-222`; CONFIG-1).
-- `broadcastToSubscribers(namespace, env)` `:260-274` builds each payload through `snapshotForSubscriber` (`:265`).
-  Calling it after `reloadAll` therefore puts no `updateType: 1` on the wire (recon.md § Patterns to REUSE).
+- `:156-157` `LISTENER_BACKOFF_INITIAL_MS = 1000` / `LISTENER_BACKOFF_MAX_MS = 30000`.
+- `:159` `export class ConfigServiceImpl {`. The fields `subscribers` (`:160`) and `snapshots` (`:162`) are followed
+  by the Step 1 fields `listener`, `connectedOnce`, `reconnectTimer`, `backoffMs` (`:163-166`) and `chain` (`:168`).
+  The constructor is at `:170`.
+- `initialize()` `:172-174` is now `await this.connectListener();`. The old `:162-174` body (the unguarded
+  `pool.connect` at `:164` and the notification handler with no try) is gone.
+- `serial()` `:176-183`. `connectListener()` `:185-205`: `pool.connect()` at `:188` inside the try,
+  `LISTEN config_changed` at `:195` before the serial `reloadAll`/`resyncAll` at `:196`, the `log.info` at `:199`,
+  and the catch at `:200-204`.
+- `dropListener()` `:207-218`; `scheduleReconnect()` `:220-230`; `resyncAll()` `:232-241`; `onNotification()`
+  `:243-259`.
+- `reloadAll()` `:261-286` reads global rows only and does not broadcast. `reloadNamespace()` `:288-312` writes the
+  full-namespace DELTA snapshot (`changedKeys: Object.keys(values)` at `:305`; CONFIG-1).
+- `broadcastToSubscribers(namespace, env)` `:345-359` builds each payload through `snapshotForSubscriber` (`:350`),
+  so calling it after `reloadAll` puts no `updateType: 1` on the wire.
 - Reference to port (mandatory reuse, recon.md § Patterns to REUSE): ledger
   `services/xstockstrat-ledger/src/services/eventNotifier.ts`.
   - `:71-108` `connect()`: `connect()`/`LISTEN` sit inside one try (`:82`), and the catch reschedules
@@ -130,6 +132,8 @@ secret redaction on every broadcast
     The timer callback clears `this.reconnectTimer = null` (`:114`) before reconnecting.
   - `:119-137` `dispatch()`: a guarded `JSON.parse`, and a malformed payload is ignored.
   - `:35` `reconnectDelayMs = 2000`, a hardcoded constant. This is the F-07 precedent for code-constant backoff.
+- Re-verified 2026-10-29 after the second main-dev merge: the ledger `eventNotifier.ts` anchors still match, and the
+  configServiceImpl.ts anchors above are re-stamped against the post-Step-3 tree.
 - Boot path: `src/index.ts:47-48` (`new ConfigServiceImpl(pool)`, `await configImpl.initialize()`). A rejection
   from `initialize()` makes `main()` exit (recon.md:20-22). That fail-fast behaviour is kept, and `index.ts` is not
   edited.
@@ -143,7 +147,7 @@ secret redaction on every broadcast
 
 **Covers**: —
 
-**Instructions**:
+**Instructions** (already applied in `907fa340`; kept as the record of what the step does — do not re-apply):
 1. Change `:1` to `import { Pool, PoolClient } from 'pg';`.
 2. Next to `:156-158`, add the private fields and two module-level code constants (F-07: config cannot watch itself,
    invariant #1; precedent `eventNotifier.ts:35`):
@@ -209,7 +213,7 @@ secret redaction on every broadcast
 **Verification**:
 ```bash
 cd services/xstockstrat-config && pnpm run build && pnpm run lint
-grep -n "pool.connect()" src/grpc/configServiceImpl.ts      # expect: exactly one hit, inside connectListener's try
+grep -n "pool.connect()" src/grpc/configServiceImpl.ts      # expect: exactly one hit (:188), inside connectListener's try
 grep -n "LISTENER_BACKOFF_INITIAL_MS = 1000\|LISTENER_BACKOFF_MAX_MS = 30000" src/grpc/configServiceImpl.ts
 ```
 
@@ -230,12 +234,15 @@ docker compose logs --since 1m xstockstrat-config | grep -E "config LISTEN conne
   Deviation Log. The check then moves to the dev app (`main-dev` deploy) as a blocker on the integration PR. It is
   never silently waived. Step 1 cannot be marked `done` until this check has passed, locally or on the dev app.
   Steps 2–6 may proceed while it is pending, because their fakes do not depend on it.
+- Tooling note (2026-10-29): the `docker` / `dockerd` binaries and Compose v5.6.1 are present on the execute host,
+  but a batch-execute worktree session is barred from starting a database (sdd-execute HARD CONSTRAINT). In that
+  case the check takes the fallback above (dev app, integration-PR blocker). It is not hard-blocked by tooling.
 
 ---
 
 ### Step 2 — test: LISTEN reconnect, retry, resync and notification-failure cases (AC-1, AC-2, AC-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
@@ -251,8 +258,8 @@ secret redaction on every broadcast
     inert client with no `release`/`removeAllListeners`.
 - The suite runs against compiled output: `package.json:12-13`
   (`tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js`).
-- Fake model: ledger `FakeClient` (`services/xstockstrat-ledger/src/__tests__/eventNotifier.test.ts:27-55`). It has
-  `on`/`emit`/`notify`/`listens`/`failConnect`.
+- Fake model: ledger `FakeClient` (`services/xstockstrat-ledger/src/__tests__/eventNotifier.test.ts`; `class FakeClient` at `:22`,
+  `failConnect` at `:27`, `notify` at `:47`). It has `on`/`emit`/`notify`/`listens`/`failConnect`.
 - Timer precedent: `t.mock.timers.enable({ apis: ['setTimeout'] })` and `t.mock.timers.tick(...)`
   (`src/__tests__/configWatcher.test.ts:139-144`).
 - AC fixture data: `buildConfigValue` maps a `value_type: 'int'` row to `{ int_val }` (`configServiceImpl.ts:582`).
@@ -260,7 +267,8 @@ secret redaction on every broadcast
   `'CONFIG_UPDATE_TYPE_DELTA'` (string enums; `:37-41`).
 - Log capture. `log` is a module-private winston logger (`src/services/logger.ts:10-19`, a
   `transports.Console()` sink), and no config/ledger test captures logs today (grep for `stdout.write`/`winston` in
-  `src/__tests__`: no hits). Winston is not installed in this checkout, so the sink is **Not verified** here.
+  `src/__tests__`: no hits). Winston is not installed until `pnpm install` runs (no `node_modules` in a fresh
+  checkout), so the sink is **Not verified** here.
   Capture with `t.mock.method(process.stdout, 'write', …)`, which is where winston 3's Console transport writes by
   default. At execute, confirm that against the installed `winston/lib/winston/transports/console.js`. If the sink
   differs, mock what that file actually calls (`console._stdout`, `console.log` or `console.error`) and record the
@@ -356,7 +364,7 @@ grep -rn "__tests__/fixtures" src/__tests__/configServiceImpl.test.ts           
 
 ### Step 3 — service: config `getConfig` / `setConfig` gate queries return a gRPC error on DB rejection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -367,21 +375,22 @@ secret redaction on every broadcast
 **Codebase Evidence**:
 - **D-06** `getConfig` `:315-328`. `const values = await this.resolveOverlayValues(namespace, env, userId);` at
   `:319` is outside any try. The success callback is at `:321-327`.
-- **D-06** `setConfig` `:371`:
-  - `:446` `const createKey = …`
-  - `:447-451` `const existing = await this.pool.query(...)` — outside any try.
-  - `:455` `let globalRow: any = null;`
-  - `:457-462` `const globalExisting = await this.pool.query(...)` — outside any try.
-  - `:465` `keyRegistered`, which reads `existing` and `globalRow`.
-  - NOT_FOUND `code: 5` at `:466-472`.
-  - `:476-482` `isSecret`, which reads `existing.rows`.
-  - The encryption catch, `code: 13`, at `:490-493` (`encryptSecret` at `:489`).
-  - The write try at `:500-522`. Its catch `callback({ code: 13, message: err.message })` at `:521` is the reuse
+- **D-06** `setConfig` (anchors re-stamped 2026-10-29: +2 after the main-dev merge brought the
+  `platform.trading_state` INVALID_ARGUMENT block at `:418-430`; match by symbol, the code shapes are unchanged):
+  - `:448` `const createKey = …`
+  - `:449-453` `const existing = await this.pool.query(...)` — outside any try.
+  - `:457` `let globalRow: any = null;`
+  - `:458-465` the `if` block holding `const globalExisting = await this.pool.query(...)` — outside any try.
+  - `:467` `keyRegistered`, which reads `existing` and `globalRow`.
+  - NOT_FOUND `code: 5` at `:468-474`.
+  - `:478-484` `isSecret`, which reads `existing.rows`.
+  - The encryption catch, `code: 13`, at `:492-495`.
+  - The write try at `:502-524`. Its catch `callback({ code: 13, message: err.message })` at `:523` is the reuse
     convention (recon.md § Patterns to REUSE).
 - These checks stay **outside** the new try, so their specific codes survive:
-  - PERMISSION_DENIED `:391`/`:402`
-  - MISSING_AUTHOR `:411-414`
-  - INVALID_ARGUMENT `:418-441`
+  - PERMISSION_DENIED callbacks `:393`/`:405`; `first(call.metadata, HEADER_INTERNAL_CALLER)` at `:407`
+  - MISSING_AUTHOR `:413-416`
+  - INVALID_ARGUMENT, including the `platform.trading_state` block `:418-430`, up to the gate
 - `getSecret` `:335-369` is not touched, and no shared helper is added (PRESERVE config-secrets `@AC-16`).
 
 **TDD**: `red-green required` (Step 4 is the paired test)
@@ -391,10 +400,10 @@ secret redaction on every broadcast
 **Instructions**:
 1. `getConfig`: wrap `:319` in `let values: Record<string, any>; try { values = await this.resolveOverlayValues(namespace, env, userId); } catch (err: any) { log.error('getConfig failed', { namespace, env, userId, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
    Leave `:320-327` unchanged.
-2. `setConfig`: declare `let existing: any; let globalRow: any = null;` above `:447`. Then wrap only the two gate
-   queries (`:447-451` and the `if` block `:456-463`) in `try { … } catch (err: any) { log.error('setConfig existence gate failed', { namespace, key, env, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
-   Remove the original `const`/`let` on those lines. `:465` onward reads the same names.
-3. Do not move the NOT_FOUND gate, the encryption catch or the write try (`:500-522`). AC-11 is a regression pin on
+2. `setConfig`: declare `let existing: any; let globalRow: any = null;` above `:449`. Then wrap only the two gate
+   queries (`:449-453` and the `if` block `:458-465`) in `try { … } catch (err: any) { log.error('setConfig existence gate failed', { namespace, key, env, error: err.message }); callback({ code: 13, message: err.message }); return; }`.
+   Remove the original `const`/`let` on those lines. `:467` onward reads the same names.
+3. Do not move the NOT_FOUND gate, the encryption catch or the write try (`:502-524`). AC-11 is a regression pin on
    that unchanged try.
 
 **Verification**:
@@ -407,7 +416,7 @@ grep -n "getConfig failed\|setConfig existence gate failed" src/grpc/configServi
 
 ### Step 4 — test: unary handlers return an error status and keep their specific codes (AC-3, AC-4, AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
@@ -416,15 +425,18 @@ grep -n "getConfig failed\|setConfig existence gate failed" src/grpc/configServi
 secret redaction on every broadcast
 
 **Codebase Evidence**:
-- Step 3's sites: `getConfig` `:319`, and the `setConfig` gates `:447-462`.
+- Step 3's sites (re-stamped 2026-10-29 against the post-Step-3 tree): `getConfig` `:400`, with its overlay call
+  `resolveOverlayValues(namespace, env, userId)` at `:406` inside the try. The overlay SELECT (`user_id = $3`) is
+  at `:318-322`. The `setConfig` existence gates are at `:541-563`: the exact-scope `SELECT is_secret` at
+  `:545-549`, the per-user global-row fallback at `:553-558`, and the catch / code 13 at `:559-563`.
 - Admin-scope metadata shape: `setConfigAuthz.test.ts` uses `HEADER_ACCESS_SCOPE`/`HEADER_USER_ID` imported from
   `../grpc/authz` (`authz.ts:10-11`). The inline literals are banned by `.eslintrc.json:13-27`. Scope `'4'` passes
   `hasAdminAccessScope`.
 - The bounds registry has no entry for `analysis.backtest.max_duration_seconds` (`configServiceImpl.ts:100-146`;
-  grep), so a write of 600 reaches the existence gate.
+  grep, re-verified 2026-10-29), so a write of 600 reaches the existence gate.
 - INVALID_ARGUMENT source: `'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 }`
   (`:101`).
-- NOT_FOUND source: `:466-472`.
+- NOT_FOUND source: `:566-572`.
 - C-13: inline scenario values in this file only; compliant inline.
 
 **TDD**: `red-green required`. Against the pre-Step-3 tree, AC-3 and AC-4 reject from the handler instead of
@@ -466,7 +478,7 @@ grep -n "AC-3\|AC-4\|AC-11" src/__tests__/configServiceImpl.test.ts
 
 ### Step 5 — service: WatchConfig registers pending before the snapshot; failures end the call (D-35, D-58)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -475,25 +487,28 @@ grep -n "AC-3\|AC-4\|AC-11" src/__tests__/configServiceImpl.test.ts
 secret redaction on every broadcast
 
 **Codebase Evidence**:
-- `interface Subscriber` `:87-94`. `lastVersion: string` (`:93`) is set at `:302` and read nowhere in
+- `interface Subscriber` `:87-94`. `lastVersion: string` (`:93`) is set at `:387` and read nowhere in
   `services/xstockstrat-config/src` (grep; recon.md:181-183).
-- **D-58** `broadcastToSubscribers` `:260-274`:
-  - The loop is at `:262`.
-  - The catch `:268-271` is `log.warn('Failed to write to subscriber', { clientId: sub.clientId })` followed by
+- **D-58** `broadcastToSubscribers` `:345-359`:
+  - The loop is at `:347`.
+  - The catch `:353-356` is `log.warn('Failed to write to subscriber', { clientId: sub.clientId })` followed by
     `this.subscribers.delete(id)`. It drops `err` and never ends the call.
-- **D-35** `watchConfig(call)` `:280-313`:
-  - `subId` is built at `:284`.
-  - The `cancelled`/`error` handlers at `:288-294` only delete.
-  - The `Subscriber` literal is at `:296-303`.
-  - `.then(...)` at `:305-309` registers only after the snapshot write.
-  - `.catch(...)` at `:310-312` only warns.
-- `first(md, key): string` — `src/grpc/authz.ts:14`, already imported (`configServiceImpl.ts:9`). The call form is
-  at `:405` (C-18; not the array-returning `metadata.get`). There is no `x-trace-id` header constant in config
-  (grep), so the literal is used once.
+- **D-35** `watchConfig(call)` `:365-398`:
+  - `subId` is built at `:369`.
+  - The `cancelled`/`error` handlers at `:373-379` only delete.
+  - The `Subscriber` literal is at `:381-388`.
+  - `.then(...)` at `:390-394` registers only after the snapshot write.
+  - `.catch(...)` at `:395-397` only warns.
+- `first(md, key): string` is declared at `src/grpc/authz.ts:15` (its doc comment is `:14`). It is already imported
+  (`configServiceImpl.ts:9`, inside the `./authz` import at `:3-14`). The call form is at `:499` (C-18; not the
+  array-returning `metadata.get`). Config `src` outside tests has no `x-trace-id` header constant or literal (grep),
+  so the literal is used once.
 - Stream-termination pattern to reuse: ledger `call.destroy({ code: 13, message: \`Internal error: ${err.message}\` })`
   (`services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:325`; also `:285`, `:297`). Config has no
   `call.destroy` today (grep).
-- `ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT` / `_DELTA` are used at `:305` and `:265`.
+- `ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT` / `_DELTA` are used at `:390` and `:350`.
+- Re-verified 2026-10-29 after the second main-dev merge: the anchors above are re-stamped against the post-Step-3
+  tree (Steps 1–3 added about 85 lines above them).
 
 **TDD**: `red-green required` (Step 6 is the paired test)
 
@@ -509,18 +524,18 @@ secret redaction on every broadcast
    - `try { sub.call.destroy({ code: 13, message: \`Internal error: ${err?.message}\` }); } catch { /* call already closed */ }`
    - It is reachable **only** from the `watchConfig` snapshot/catch-up chain and the per-subscriber broadcast catch
      (C-16: PRESERVE platform `@AC-6 @FR-6 @feature-210`).
-3. `broadcastToSubscribers` (`:262-271`):
+3. `broadcastToSubscribers` (`:347-356`):
    - After the namespace/env filter, add `if (sub.pending) { sub.missedDelta = true; continue; }`.
-   - Replace the catch body (`:269-270`) with `this.endSubscriber(id, sub, err);`.
-4. `watchConfig` (`:296-312`):
+   - Replace the catch body (`:354-355`) with `this.endSubscriber(id, sub, err);`.
+4. `watchConfig` (`:381-397`):
    - The literal becomes `{ namespace, environment, userId, clientId, call, pending: true, missedDelta: false, traceId: first(call.metadata, 'x-trace-id') || undefined }`.
    - Register it **before** the snapshot read: `this.subscribers.set(subId, sub);`.
-   - Replace `:305-312` with an async chain:
+   - Replace `:390-397` with an async chain:
      1. `const snap = await this.snapshotForSubscriber(sub, SNAPSHOT); if (this.subscribers.get(subId) !== sub) return; call.write(snap);`
      2. `while (sub.missedDelta && this.subscribers.get(subId) === sub) { sub.missedDelta = false; const d = await this.snapshotForSubscriber(sub, DELTA); if (this.subscribers.get(subId) !== sub) break; call.write(d); }`
      3. `sub.pending = false;`
      4. Route any rejection to `this.endSubscriber(subId, sub, err)`.
-5. Leave the `cancelled`/`error` handlers (`:288-294`) as delete-only. A certificate rotation therefore never
+5. Leave the `cancelled`/`error` handlers (`:373-379`) as delete-only. A certificate rotation therefore never
    triggers `destroy`.
 6. All payloads still come from `snapshotForSubscriber` → `resolveOverlayValues` → `buildConfigValue`. No new SELECT
    is added (PRESERVE `@AC-2`/`@AC-13`/`@AC-14`, platform `@AC-35`). SNAPSHOT-first (service invariant #2) holds,
@@ -537,7 +552,7 @@ grep -n "this.endSubscriber(" src/grpc/configServiceImpl.ts   # expect: exactly 
 
 ### Step 6 — test: snapshot failure, in-flight change, broadcast failure, cancel during catch-up (AC-6, AC-7, AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
@@ -546,11 +561,16 @@ grep -n "this.endSubscriber(" src/grpc/configServiceImpl.ts   # expect: exactly 
 secret redaction on every broadcast
 
 **Codebase Evidence**:
-- Step 5's sites: `watchConfig` `:280-313`, `broadcastToSubscribers` `:260-274`.
-- `broadcastToSubscribers` is private. Tests drive it through the Step 1 `notification` path, using Step 2's
-  `FakeClient` and the routing pool, which are reused in this file (no second copy).
-- Fake-call model: ledger stream tests assert `call.destroyed.code` (`ledgerServiceImpl.test.ts:551-559`, `:630-631`).
-- Per-user overlay SELECT: `configServiceImpl.ts:233-238` (`user_id = $3`).
+- Step 5's sites in the pre-Step-5 tree (re-stamped 2026-10-29): `watchConfig` `:365-398` and
+  `broadcastToSubscribers` `:345-359`. Step 5 shifts both, so locate them by symbol.
+- `broadcastToSubscribers` is private. Tests drive it through the Step 1 `notification` path. They reuse Step 2's
+  `class FakeClient` (`configServiceImpl.test.ts:104`) and the routing pool from `makeRig()` (`:123`) in this file
+  (no second copy).
+- Log capture: there is no shared helper. Step 2's `@AC-2` case mocks `process.stdout.write` inline (about
+  `:358-360`, with `t.mock.method`, passing each chunk through; the sink is recorded in the Deviation Log). Step 6
+  uses the same inline pattern in each case that asserts a log line.
+- Fake-call model: ledger stream tests assert `call.destroyed.code` (`ledgerServiceImpl.test.ts:597-598`, `:609`; fake call `destroyed` field at `:520`, set at `:528`).
+- Per-user overlay SELECT: `configServiceImpl.ts:318-322` (`user_id = $3`, in `resolveOverlayValues`).
 
 **TDD**: `red-green required`. Against the pre-Step-5 tree:
 - AC-6 fails: there is no `destroy`, and the stream gets no status.
@@ -577,7 +597,8 @@ secret redaction on every broadcast
    - Register a `u-1` subscriber and let its snapshot complete.
    - Make the overlay SELECT reject once with `new Error('overlay rejected')`, then notify for `analysis`.
    - Assert `call.destroyed.code === 13`.
-   - Assert a captured error-level record containing `overlay rejected` (Step 2's log capture).
+   - Assert a captured error-level record containing `overlay rejected`, using the inline
+     `process.stdout.write` capture from Step 2's `@AC-2` case.
    - A second notify writes nothing to that call.
 4. **Cancel during catch-up.**
    - With a held snapshot SELECT and a notify, emit `cancelled` on the call before releasing the SELECT.
@@ -596,7 +617,7 @@ grep -n "AC-6\|AC-7\|AC-8\|cancel during catch-up" src/__tests__/configServiceIm
 
 ### Step 7 — service: ledger `appendEvent` acquires the client inside the try and releases it with the error
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -645,7 +666,7 @@ grep -n "client?.release(failure" src/grpc/ledgerServiceImpl.ts              # o
 
 ### Step 8 — test: idempotent AppendEvent connect and mid-transaction failures (AC-5, AC-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -654,20 +675,16 @@ grep -n "client?.release(failure" src/grpc/ledgerServiceImpl.ts              # o
 hypertable partition safety
 
 **Codebase Evidence**:
-- The import swallow is at `ledgerServiceImpl.test.ts:21-29` (`try { await import('../grpc/ledgerServiceImpl.js') … } catch { … skipped }`).
-  The `if (!impl) return;` skip appears at 9 sites (grep count).
-- `makeIdempotentPool(opts)` is at `:56-84`. It routes SQL by regex (`:63-68`). Its client has
-  `release() {}` (`:73`), and its `connect()` (`:77-79`) always resolves.
-- **Runner (blocking; see § Step Dependencies).** Today the script is `node --experimental-strip-types --test
-  src/__tests__/*.test.ts` (`package.json:13-14`). `LedgerServiceImpl` uses constructor parameter properties
-  (`ledgerServiceImpl.ts:20-25`). Strip-only mode rejects those on every Node version, so under the current runner
-  the import is always swallowed. This is the reason the file header gives at `ledgerServiceImpl.test.ts:5-8`.
-  Under that runner, `assert.ok(LedgerServiceImpl, …)` fails both before and after Step 7, and the step cannot go
-  green. Feature 252 Step 4 replaces the runner with `tsc && … node --test dist/__tests__/*.test.js`. The test's
-  `'../grpc/ledgerServiceImpl.js'` specifier then resolves to the compiled `dist/grpc/ledgerServiceImpl.js`.
-  Step 8 runs only on that runner.
-- Line hints above are from the pre-252 file. After rebasing onto 252 (whose Step 5 de-guards this file), re-grep
-  `makeIdempotentPool` and the `before()` import before editing.
+- Re-stamped 2026-10-29 — feature 252 has landed on this branch (via the main-dev merge):
+  - `ledgerServiceImpl.test.ts` (707 lines) no longer swallows the import: the `before()` import at `:10-12` is
+    unguarded, and `:18` asserts `typeof LedgerServiceImpl === 'function'` with the message `'… never skip
+    silently'`. There are 0 `if (!impl) return;` sites (grep).
+  - `makeIdempotentPool(opts)` is at `:46` (doc comment `:44`). Its client has `release() {}` (`:64`), and its
+    `async connect()` (`:67`) always resolves. Existing callers are at `:391` and `:419`.
+- **Runner (precondition met).** `services/xstockstrat-ledger/package.json:14` `test:coverage` is now
+  `tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js` (252 Step 4). The
+  test's `'../grpc/ledgerServiceImpl.js'` specifier resolves to the compiled `dist/grpc/ledgerServiceImpl.js`, so
+  `LedgerServiceImpl`'s constructor parameter properties load. The Step 0 gate below passes; re-grep it anyway.
 - No `src/__tests__/fixtures/` home exists in ledger (ls). `makeIdempotentPool` has one consumer file. C-13
   verdict: compliant inline.
 
@@ -688,7 +705,8 @@ These failing runs are the proof that the cases **execute**. A vacuous skip cann
    `describe('LedgerServiceImpl.appendEvent — DB failures (feature 258)')`.
    - Its first statement in each case is `assert.ok(LedgerServiceImpl, 'ledgerServiceImpl must import — never skip silently');`.
    - Do **not** use `if (!impl) return;`.
-   - Do not edit the `before()` import block or the runner. They belong to `252-fix-identity-ledger-test-suites`.
+   - Do not edit the `before()` import block (`:10-12`) or the runner. They belong to
+     `252-fix-identity-ledger-test-suites`.
    - Name the two cases with `@AC-5` and `@AC-10` in their titles, so the TAP check below can find them.
 2. Extend `makeIdempotentPool`'s `opts` with `connectThrows?: Error` and `throwOn?: RegExp`, and record releases:
    - `connect()` rejects with `connectThrows` when it is set.
@@ -730,7 +748,7 @@ design.md § Build order requires.
 
 ### Step 9 — docs: config service docs, CONFIG-1 anchors, limitations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-config/`, feature directory)
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
@@ -742,10 +760,13 @@ design.md § Build order requires.
 **Codebase Evidence**:
 - `services/xstockstrat-config/CLAUDE.md`:
   - Invariant #4 at `:35`: "Config changes trigger pg_notify → reloads namespace in memory → broadcasts DELTA…".
-  - § WatchConfig Flow at `:64-89`. Its tail is "ConfigServiceImpl receives LISTEN notification → Reloads
-    namespace from DB → Broadcasts DELTA" (`:86-88`).
+  - § WatchConfig Flow starts at `:65`. Its tail is "ConfigServiceImpl receives LISTEN notification → Reloads
+    namespace from DB → Broadcasts DELTA" (`:87-89`).
 - `services/xstockstrat-config/docs/context-constitution.md:18` CONFIG-1 cites
-  `configServiceImpl.ts#reloadNamespace (~L197-217; … ~L214)`. These line hints drift with Steps 1, 3 and 5.
+  `configServiceImpl.ts#reloadNamespace (~L197-217; … ~L214)`. This is stale: after Steps 1–3 the code has
+  `private async reloadNamespace` at `:288` and `changedKeys: Object.keys(values)` at `:305`. A second
+  `changedKeys: Object.keys(values)` at `:338` belongs to `snapshotForSubscriber`. Step 5 shifts these again, and
+  instruction 2's grep re-stamp covers that.
 - The root CLAUDE.md pool-budget table needs no change. The pooled LISTEN client is unchanged (F-06; design.md
   § Constitution Rules Touched).
 
@@ -791,3 +812,159 @@ cd services/xstockstrat-config && grep -n "private async reloadNamespace\|change
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — forced-drop check becomes post-merge verification (operator decision, 2026-10-29)
+**Spec said**: "Step 1 cannot be marked `done` until this check has passed, locally or on the dev app."
+**Actual**: the operator has no way to run SQL against the dev database, and this session may not start a database.
+Asked how to satisfy the gate, the operator chose "B: Post-merge, unit-tested". Step 1 is marked `done` on the
+strength of Step 2's committed suite (AC-1/AC-2/AC-9: reconnect with 1 s→30 s backoff, retry, re-snapshot and
+re-broadcast, guarded notifications, against a fake pool that emits `error`/`end`). Following the 254 Step 9 and 265
+Step 5 precedent, the operator's session runs a post-deploy check on dev after the merge, using Grafana logs and the
+staging MCP: config logs `listening for config_changed` at boot, and a `set_config` change propagates to a consumer.
+**Reason**: the only actor with database access is unavailable; the reconnect logic is covered by committed tests.
+**Disposition**: residual risk accepted by the operator. The forced `pg_terminate_backend` socket drop is never
+exercised against a real Postgres backend, so a pooled client that fails to emit `error`/`end` on a half-open socket
+(the design's dedicated-client fallback trigger) would go unnoticed until a real drop. Superseded the entry below.
+
+### Deviation: Step 1 — config LISTEN lifecycle (deferred to operator)
+**Spec said**: "If Docker is unavailable in the executing session, the step is **blocked** on this check. … The check
+then moves to the dev app (`main-dev` deploy) as a blocker on the integration PR. … Step 1 cannot be marked `done`
+until this check has passed, locally or on the dev app. Steps 2–6 may proceed while it is pending."
+**Actual**: Step 1 deferred to operator — integration PR merge held until, on the dev app (or a local stack an
+operator starts), `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query ILIKE 'LISTEN config_changed%';`
+is followed in the xstockstrat-config logs by `config LISTEN connection lost` and, within about 1 s, a new
+`listening for config_changed`, and a `SetConfig` of a registered global key then reaches an open WatchConfig
+stream. The code is implemented and committed so Steps 2–6 can proceed. The **Verification** block passed
+(`pnpm run build` exit 0; `pnpm run lint` exit 0 with 0 errors and the same 158 pre-existing warnings; exactly one
+`pool.connect()` at `:188` inside `connectListener`'s try; both backoff constants at `:156-157`). Step **Status**
+stays `pending`.
+**Reason**: a batch-execute worktree session may not start a database (sdd-execute HARD CONSTRAINT), so the
+pg_terminate_backend check cannot run here. The spec's own fallback was applied.
+**Disposition**: operator-only check, integration-PR merge blocker.
+
+### Deviation: Step 1 — RED captured with a throwaway probe
+**Spec said**: "**TDD**: `red-green required` (Step 2 is the paired test)".
+**Actual**: Step 2's suite does not exist yet. RED and GREEN were captured with an uncommitted fake-pool probe run
+against the compiled `dist/grpc/configServiceImpl.js`. It checks five things: LISTEN runs before the reloadAll
+SELECT; a second connect and a second LISTEN follow `error`+`end`; exactly one `release(err)` occurs; a malformed or
+namespace-less payload causes no unhandled rejection; and such a payload issues no namespace query. Step 2 still owns
+the committed red→green proof against the pre-Step-1 tree.
+**Reason**: the paired test step follows the service step in the spec's order.
+
+### Deviation: Step 2 — log sink recorded (Instruction 0)
+**Spec said**: "read the installed `node_modules/winston/lib/winston/transports/console.js` and note which writer its
+`log()` calls for `error`-level records. Record that writer in the Deviation Log before any case is written; Step 6
+reuses it."
+**Actual**: winston 3.19.0 `Console` transport (`console.js:52-89`): `stderrLevels` and `consoleWarnLevels` are empty
+by default (`logger.ts` passes no options), so every level, `error` included, goes to `console._stdout.write(...)`,
+which Node maps to `process.stdout`. The tests mock `process.stdout.write` with `t.mock.method` and pass each chunk
+through to the original. A throwaway probe (`getLogger('t').error('probe')`) passed and was deleted before AC-2 was
+written. Step 6 reuses this capture.
+**Reason**: the spec required the sink to be confirmed against the installed package; it matched the spec's default.
+**Disposition**: as specced (recorded per Instruction 0).
+
+### Deviation: Step 2 — RED captured against the pre-Step-1 source
+**Spec said**: "**TDD**: `red-green required`. Against the pre-Step-1 tree".
+**Actual**: Step 1 had already landed (907fa340), so RED was run by temporarily restoring
+`configServiceImpl.ts` from a482eae2 (the pre-Step-1 commit), compiling, and running the new suite: 8 of 8 new
+cases failed for the predicted reasons (boot order `false`; unhandled `error` event on the drop; AC-2's
+`connection terminated` escaping as a test failure; the malformed payload's `JSON.parse` throw). The file was then
+restored with `git checkout` (no diff) and GREEN run.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced (procedure note).
+
+### Deviation: Step 3 — RED captured with a throwaway probe; anchors drifted after Step 1
+**Spec said**: "**TDD**: `red-green required` (Step 4 is the paired test)"; anchors `getConfig` `:319`, `setConfig`
+gates `:449-465`.
+**Actual**: Step 4's cases do not exist yet, so RED/GREEN were captured with an uncommitted fake-pool probe against
+the compiled `dist/grpc/configServiceImpl.js`. RED: `getConfig` (overlay SELECT rejects), the `setConfig` exact-scope
+gate and the per-user global-row gate each rejected from the handler with `connection terminated` and never invoked
+the callback; the write-try pin already returned code 13. GREEN: all four invoke the callback with code 13, and no
+INSERT is issued after a gate failure. Step 1 had shifted the anchors (now `getConfig` `:400`, gates `:534-550`
+pre-edit), so the edits were applied by symbol as the spec allows. Lint warnings rose 168 → 172, all
+`no-explicit-any` from the spec-mandated `Record<string, any>`, `let existing: any` and two `err: any` catches
+(0 errors). Step 4 owns the committed red→green proof.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced (procedure note).
+
+### Deviation: Step 4 — RED captured against the pre-Step-3 source
+**Spec said**: "**TDD**: `red-green required`. Against the pre-Step-3 tree, AC-3 and AC-4 reject from the handler
+instead of invoking the callback".
+**Actual**: Step 3 had already landed (4720488a), so RED was run by temporarily restoring `configServiceImpl.ts` from
+907fa340 (the pre-Step-3 commit), compiling, and running the suite: exactly @AC-3 and @AC-4 failed, each with
+`Error: connection terminated` rejecting from the handler; @AC-11 and the INVALID_ARGUMENT / NOT_FOUND /
+PERMISSION_DENIED pins passed, as predicted. The file was restored with `git checkout` (no diff) and GREEN run.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced (procedure note).
+
+### Deviation: Step 5 — RED/GREEN via a throwaway probe; Step 6 owns the committed proof
+**Spec said**: "**TDD**: `red-green required` (Step 6 is the paired test)".
+**Actual**: an uncommitted probe test drove the three Step 6 scenarios. It was deleted before commit, along with its
+dist output. RED on the pre-Step-5 tree:
+- @AC-6 snapshot failure: `call.destroyed?.code` was undefined (expected 13).
+- @AC-7: the only write was `[SNAPSHOT 300]`, so the in-flight change to 600 was lost.
+- @AC-8 broadcast write failure: `call.destroyed?.code` was undefined, and the failure was logged at warn.
+
+GREEN after the change: 3/3. The probe subscribes with a non-empty `user_id`. A global subscriber's snapshot issues no
+SELECT, because `resolveOverlayValues` returns early on `''`. Only a per-user subscriber can therefore hold a
+snapshot read in flight, and Step 6 needs the same choice.
+**Reason**: the paired test step follows its service step in the spec's order (same as Step 3).
+**Disposition**: as specced (procedure note).
+
+### Deviation: Step 6 — RED captured against the pre-Step-5 source; log capture is a describe-local helper
+**Spec said**: "**TDD**: `red-green required`. Against the pre-Step-5 tree…" and "Step 6 uses the same inline
+pattern in each case that asserts a log line."
+**Actual**: Step 5 had already landed (ec5d13d0), so RED was run by temporarily swapping in `configServiceImpl.ts`
+from ec5d13d0^ and running the suite: all 6 new cases failed (AC-6/AC-8/trace id: no `destroy`; AC-7: 1 write, not
+2; cancel: a write after cancel; idempotent end: 0 termination logs). The file was restored (no diff) and GREEN run.
+The Step 2 `process.stdout.write` capture is used unchanged, but it is wrapped once as a describe-local
+`captureStdout(t)` for the four cases that read logs, rather than repeated inline four times (DRY guard rail). The
+`@AC-2` case was left as is. `makeRig()` gained an `overlay` hook queue, and `fakeCall()` gained a `userId` argument
+and a `destroys` counter.
+**Reason**: the paired test step follows its service step in the spec's order; four inline copies would trip the DRY
+guard rail.
+**Disposition**: as specced in substance (procedure and helper-shape note).
+
+### Deviation: Step 7 — RED/GREEN via a throwaway probe; no `client!` needed
+**Spec said**: "**TDD**: `red-green required` (Step 8 is the paired test)" and "use `client!` or a narrowed local
+(`const c = client`), as lint and tsc allow".
+**Actual**: Step 8's cases do not exist yet. RED and GREEN were captured with an uncommitted fake-pool probe run
+against the compiled `dist/grpc/ledgerServiceImpl.js`. Pre-change, AC-5 failed (`appendEvent` rejected with
+`timeout exceeded when trying to connect`, no callback) and AC-10 failed (`release()` got no Error). Post-change,
+3/3 passed, including a success-path pin of `release(undefined)`. tsc narrows `client` after
+`client = await this.pool.connect()`, so the try body uses `client.` unchanged, with no `!` and no local alias.
+Step 8 still owns the committed red→green proof.
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced in substance (procedure note).
+
+### Deviation: Step 8 — RED captured against the pre-Step-7 source; success pins assert `releases`
+**Spec said**: "**TDD**: `red-green required`… Against the pre-Step-7 tree" and "Success pin. The existing first-time
+and duplicate idempotent cases still pass. Their release is called with `undefined`."
+**Actual**: Step 7 had already landed (a9197ef2), so RED was run by temporarily swapping in `ledgerServiceImpl.ts`
+from a9197ef2~1, compiling, and running the TAP command: `not ok … @AC-5` (`timeout exceeded when trying to connect`
+rejected from the handler) and `not ok … @AC-10` (`release must receive the caught Error`), `# pass 30 / # fail 2`.
+The file was restored (no diff) and GREEN run: `# pass 32 / # fail 0`, both `@AC-*` cases `ok`. The two existing
+idempotent cases gained `assert.deepStrictEqual(releases, [undefined])` to pin the success-path release. The two new
+cases share a describe-local `appendIdempotent(pool, key)` helper. Lint warnings rose 97 → 100, all
+`no-explicit-any` in the new helper's `any` signatures, matching the file's existing style (0 errors).
+**Reason**: the paired test step follows its service step in the spec's order.
+**Disposition**: as specced in substance (procedure note).
+
+### Deviation: Step 9 — Step 1 check outcome recorded as pending; teardown re-stamped the other hints
+**Spec said**: "Append to the feature `context.md`: the half-open-socket limitation and the outcome of Step 1's
+pg_terminate_backend check" and "Teardown … Run `/context-forge:context-constitution refresh` scoped to
+`services/xstockstrat-config/`. If the plugin is unavailable, do the manual reconciliation of both touched context
+files against the code".
+**Actual**: the pg_terminate_backend check has not run (Step 1 stays `pending`, operator-only), so context.md records
+its outcome as "not yet run — integration-PR merge blocker", not a pass. The `context-constitution` skill is not
+loaded in this session (only `context-forge:context-scrubber` is), so the teardown was done by hand. Every
+`configServiceImpl.ts` line hint in `docs/context-constitution.md` was re-grepped and re-stamped, not only
+CONFIG-1, because Steps 1–5 shifted them all by about 85–140 lines. That covers CONFIG-2/3/4/6/7/8/11, the Gotchas
+and the Pointers. CONFIG-4's LISTEN handler cite moved to `#connectListener`/`#onNotification`. `authz.ts` and
+`index.ts` hints were re-verified unchanged. In config `CLAUDE.md` § WatchConfig Flow, the stale pg_notify payload
+`{…, trading_mode}` was corrected to `{…, user_id}` (the `setConfig` producer at `:646-648`). The three limitations
+went into a "Known limitations (feature 258)" list under § WatchConfig Flow.
+**Reason**: an outcome that has not happened cannot be recorded as a pass. The teardown requires the grounded drift
+in touched context files to be fixed.
+**Disposition**: within the step's Files; PR body must state that the plugin was unavailable and that the manual
+reconciliation above was performed.

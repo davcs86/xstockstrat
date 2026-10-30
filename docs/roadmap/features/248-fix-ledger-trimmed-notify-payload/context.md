@@ -317,3 +317,584 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Step 1 writes two merge-order rows (252, 243). Confirm with the user before writing (context.md:61-63).
   - [ ] Step 10 greps assume `portfolio_service.go:185-233` is stable; 240 and 251 edit that file. Re-grep by
     content at execute time.
+
+## Session 2026-10-28 — sdd-execute sequential §5.3 re-spec (sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload`, `git merge -X ours origin/main-dev`
+  → `fe047901`, pushed. Re-spec directive: conditional.
+- Re-spec'd (implementation-spec.md, commit `1838cba2`):
+  - § Step Dependencies: the 252 precondition was re-checked and is **NOT met**. 252 is still
+    `implementation-ready`. `package.json:13` still runs `--experimental-strip-types` on `src/`,
+    `tsconfig.json:19-22` still excludes tests, and there are still 7 skip guards. Steps 3-11 stay blocked until
+    252 is in `main-dev`. Steps 1-2 do not depend on it.
+  - Config migration renumbered `032` → `033`. 244 holds `032_analysis_zero_trap_descriptions` (commit `d2002841`
+    on its branch), 243 holds `031`, and 264 reserves `034`. 277's planned `033` is void (`demoted/canceled`).
+    Steps 1, 2 and 11 follow, and the change is in the Deviation Log.
+  - Step 1 adds a third row (248 after 244), notes that the existing 266 → 248 row stays as it is, and moves the
+    last-row anchor to `:92`.
+  - Step 2: down-template anchor `:4-6`. The `migration-rerun` evidence now cites `scripts/migration-rerun.sh:89-102`,
+    which replays only the 224/225 files.
+  - Steps 4, 6, 8, 9: the 252-runner gate is noted, and the `dist/` commands must not be adapted to the old
+    runner. Step 9 CI anchors were re-grepped (`node-test` toolchain `:574-590`, `migration-rerun` `:643-679`,
+    `ci-gate` `:799-835`), along with `db-migrate.sh` `:89`/`:152`/`:155`.
+  - Steps 3, 5, 7, 10: evidence still matches, so they were not edited.
+- product-spec.md still says `032` (`:61-63`). This re-spec supersedes that number and does not edit the product
+  spec.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan by standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). The answers given:
+  - checkpoints run unattended, in `report` mode;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - the merge-train is authorized;
+  - 255 and 275 are deferred;
+  - operator-only DB/prod steps: open the PR and hold the merge.
+- Status: `implementation-ready` → `in-progress` (commit `723375ad`).
+- **Blocker for the step loop:** the hard 252 precondition is unmet (see the re-spec entry above). Steps 3-11 must
+  not start until 252 `fix-identity-ledger-test-suites` is merged into `main-dev` and this branch is merged up
+  again. Steps 1-2 (merge-order rows; config `033` seed) are not executed in this session. Resume with
+  `/sdd-execute fix-ledger-trimmed-notify-payload sequential` after 252 lands.
+- Open items carried from the impl-spec review (still unaddressed): the C-18 dual bound mechanism, no queue-depth
+  cap, the Step 9 RED mutation outside Files, and the Step 10 re-grep of `portfolio_service.go`. The Step 1
+  merge-order confirmation is covered by standing authorization.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- Step 1 done: three rows appended to `merge-order.md` § Blocking Dependencies after the `fix-etf-flag-fill` (230)
+  row (located by content; it sat at `:92` as the spec said), so the new rows are `:93-95`: 248 after 252 (hard,
+  runner/de-guarded suites), 248 after 243 (config `031`), 248 after 244 (config `032`). The 266 → 248 row and
+  252's rebase-only note were not edited.
+- Migration claims were re-checked with `git ls-tree` against the branches. `031_heal_indicators_sandbox_keys_full_dotted` is on
+  `origin/feature/fix-sandbox-seed-keys`, and `032_analysis_zero_trap_descriptions` is on
+  `origin/feature/fix-python-config-stored-zero`. The local config tip is `030`.
+- TDD: N/A (docs). Verification: each of the three greps returned 1 hit, and `git status` showed only merge-order.md
+  plus the feature docs.
+- The task prompt titled this step "252 and 243". The re-spec'd implementation-spec.md (authoritative) also requires
+  the 244 row, and that row was added.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+- Step 2 done: created `services/xstockstrat-config/migrations/033_ledger_stream_resolve_timeout.{up,down}.sql`,
+  copied from the `022_ledger_export_keys` pair. The up file inserts two global rows (`staging`, `production`):
+  namespace `ledger`, full dotted key `ledger.stream.resolve_timeout_ms`, `value_type` `int`, value and default
+  `2000`, consumer `xstockstrat-ledger`, with the 022 `ON CONFLICT … DO NOTHING` clause. The down file deletes that
+  key.
+- Number re-checked with `git ls-tree`: `origin/main-dev` and the local tip end at `030`. `031` is on
+  `origin/feature/fix-sandbox-seed-keys`, and `032` is on `origin/feature/fix-python-config-stored-zero`. `033`
+  stands, and the merge-order rows from Step 1 cover the order.
+- Reader cross-check: `ConfigWatcher.getInt` returns `snapshot.values[key]?.intVal ?? def`
+  (`configWatcher.ts:112-115`), so the `int` type and the full dotted key are the ones it needs.
+- TDD: N/A (migration). No database was started. Verification: both files exist, `^033_` count is 2, the key/type/value
+  tuple appears 2 times, `staging`/`production` appear 2 times, the `ON CONFLICT` clause is present, and the down
+  names the key. By inspection the down removes exactly the rows the up inserts.
+- The task prompt titled this step "config `032`". The re-spec'd implementation-spec.md (authoritative) says `033`
+  (Deviation Log 2026-10-28), and `033` was used, including in the commit subject.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec §5.3
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  "Start executing features 241-276" via batch-execute; unattended checkpoints, C-16 promotion auto-confirmed unless
+  it changes an existing @AC rule, merge-train authorized, 255/275 deferred; operator-only DB/prod steps: open the PR,
+  hold the merge; checkpoints "report"). Status was already `in-progress` (flipped 2026-10-28), so no status change.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` `b6e518a7`. `git merge --no-edit
+  origin/main-dev` reported "Already up to date" (`8082157a` is already contained). `ledger-guard.py --own-slug
+  fix-ledger-trimmed-notify-payload --base origin/main-dev --fix` reported clean, so there was no merge commit and
+  no repair.
+- Re-spec (implementation-spec.md, Steps 3-11 bodies only):
+  - **The 252 precondition is now met.** 252 is `code-completed`. `package.json:13-14` runs `tsc && node --test
+    dist/__tests__/*.test.js` (and the c8 `--lines 40` variant). `tsconfig.json` excludes only `node_modules` and
+    `dist`. The `if (!EventNotifier) return;` count is `0`. The "NOT met"/"blocked" notes were removed from Steps 3,
+    4, 6, 8 and 9. Step 3 says that this supersedes the 2026-10-28 note in § Step Dependencies, which was left as
+    written because this re-spec only touches step bodies.
+  - Anchors that moved after 252: in `eventNotifier.test.ts`, FakeClient `:22-50`, `row()` `:52-61`, `tick` `:63`,
+    constructions `:68/:78/:90/:105/:118/:130` + `:142-151`, and the `any` binding `:5`/`:10`. In
+    `ledgerServiceImpl.test.ts`, `makePool :26`, `makeIdempotentPool :46`, `makeRow :78-93`,
+    `makeStreamCall :514-534`, and the rowToEvent regression describe `:686` with its import already extensionless
+    at `:688`.
+  - Step 5: in `index.ts`, ConfigWatcher is at `:22` and dbUrl/sslOption at `:27-39`. Step 6: since the exclude is
+    gone, test files and fixtures both compile into the production `dist/`. Step 9: the Node toolchain is at
+    `:574-590`, and `test:db` and `src/__tests__/db/` are still absent, as expected.
+  - Step 11: config `CLAUDE.md` drift line is `:104`. In `config-governance.md`, the log header is at `:108` and
+    the feature 240 entry at `:112`. The insert point is located by content.
+  - Steps 7 and 10: anchors unchanged, noted as re-checked.
+- Not re-checked: the pg-internal line numbers in Step 3 (`client.js`, `connection-parameters.js`, `index.d.ts`),
+  because `node_modules` is not installed in this worktree. They need `pnpm install`, which does not block. Step 3
+  records this.
+- Next: Step 3 (`eventRowResolver.ts`), with Step 4's RED captured first.
+
+### Step 3 — service: Resolver module (`resolveEventRow`, bound, listener factories) [done]
+- Created `eventRowResolver.ts`. It holds `RESOLVE_TIMEOUT_KEY`, `streamResolveTimeoutMs` (`getInt(key, 2000)`;
+  values that are not finite or ≤0 read as 2000, and others are floored), and `resolveEventRow`. That function does a
+  PK `SELECT … WHERE event_id = $1 AND recorded_at = $2::timestamptz` with the stub's text `recorded_at`, and
+  `query_timeout` 2B. Before the read it runs `SET statement_timeout = B` only when the WeakMap-tracked B changes.
+  `resolveEventRow` returns `rows[0] ?? null` and lets errors propagate. The module also exports
+  `makeListenerClient` (startup `statement_timeout`) and `makeResolveRow`. Nothing imports it yet; Step 5 wires it.
+- Tooling: ran `pnpm install --no-frozen-lockfile` at the worktree root (same as CI node-test), which installed
+  pg 8.20.0 and @types/pg 8.20.0. No lockfile changed. Re-checked pg evidence: `client.js:525-526` (startup
+  `statement_timeout`), `:613,623` (`query_timeout`), `:641` (`'Query read timeout'`), `index.d.ts:21,23,60`.
+- TDD (AC-7 no-row → null, AC-9 bound): red: `tsc` TS2307 "Cannot find module '../services/eventRowResolver.js'"
+  from an uncommitted probe test. Green: `pnpm test` 49/49 pass, probe included. The probe was then deleted and the
+  committed tree's `pnpm test` is 47/47.
+- Verification: `pnpm build` exit 0. `pnpm run lint` exit 0, with 4 `no-explicit-any` warnings on the spec-mandated
+  `any` stub/row types and 0 errors. The new file is prettier-formatted. The export grep gives 3+1 hits (see
+  Deviation Log). The `$2::timestamptz` grep hits. There is no `BEGIN`/`SET LOCAL` and no pool.
+- Files modified: `services/xstockstrat-ledger/src/services/eventRowResolver.ts`
+- Deviations: the export-grep defect and the probe-based RED (Deviation Log 2026-10-29).
+
+### Step 4 — test: Resolver unit tests [done]
+- Created `eventRowResolver.test.ts`, 12 cases with a recording fake `{ query(cfg) }` and an inline single-consumer
+  stub (C-13; the fixtures home is Step 6's). It covers the PK SELECT text/values (string `recorded_at`) and
+  `query_timeout` 2B, `rows[0]` and `null` on miss, unchanged propagation of `'Query read timeout'` and `57014`,
+  SET-on-change (first call, same B, new B, new client), the `streamResolveTimeoutMs` clamp, and
+  `makeListenerClient` building an unconnected `pg.Client` with `connectionParameters.statement_timeout` 300.
+- TDD (AC-7 no-row → null, AC-9 bound/clamp): red: `pnpm test` exit 2, `tsc` TS2307 "Cannot find module
+  '../services/eventRowResolver.js'" with Step 3's module withheld. Green: `pnpm run test:coverage` exit 0, 59/59
+  pass, 0 fail/cancelled/skipped/todo; the file alone runs 12 pass / 0 fail. All files 74.88% lines;
+  `eventRowResolver.js` 92.68%.
+- Verification: `pnpm run lint` exit 0 (0 errors, `no-explicit-any` warnings only); prettier clean; the unguarded
+  grep reports OK; `src/__tests__/fixtures` is absent, as planned. pg 8.20.0 `connection-parameters.js:109` was
+  re-checked after `pnpm install --frozen-lockfile`. No lockfile changed.
+- Open: `makeResolveRow` (dist lines 39-41) is not executed here. Step 6's wired tier (ii) uses the real
+  `makeResolveRow`.
+- Files modified: `services/xstockstrat-ledger/src/__tests__/eventRowResolver.test.ts`
+- Deviations: RED captured by withholding the already-landed Step 3 module (Deviation Log 2026-10-29).
+
+### Step 5 — service: `EventNotifier` resolve-once FIFO, `onGap`, wiring [done]
+- `eventNotifier.ts`:
+  - `NotifySubscription` gains a required `onGap({ notFound, message })`.
+  - The constructor is `(makeClient, { resolveRow, channel?, reconnectDelayMs? })`.
+  - `dispatch` takes the fast path only iff `!draining && queue.length === 0 && row.payload !== undefined`.
+    Otherwise it enqueues `{ row, subs: matching(row) }` (snapshot at enqueue) and starts `drain()`.
+  - `drain()` is serial and never rejects. It fans out a full head to `subs ∩ live`, skips a stub with no matching
+    subs without a read, and resolves a stub on `this.client` (a null client counts as an error).
+  - After the await, a `gen` change discards the result and `finally` restarts the drain. On `null` or an error,
+    each live sub is deleted and then `onGap`'d, and `log.warn('trimmed row resolve failed', {…})` is emitted with
+    reason `not_found`/`timeout` (`'Query read timeout'` or `57014`)/`error`.
+  - On `'Query read timeout'` the client that ran the query is `end()`ed. The existing `'end'` → reconnect →
+    `onReconnect` path then resyncs.
+  - `gen++; queue = []` runs in `connect()` before the `onReconnect` loop and in `stop()` before `subscribers.clear()`.
+- `ledgerServiceImpl.ts#streamEvents`: `onGap` calls `cleanup()`, then `call.destroy({ code: notFound ? 13 : 14,
+  message })` (never `end()`). A new `if (cleaned) return;` sits right after the replay `await`, before the replay
+  loop. No new `await` (LEDGER-2 holds); `Number()` is left to Step 7.
+- `index.ts`: `new EventNotifier(makeListenerClient(dbUrl, sslOption, configWatcher), { resolveRow:
+  makeResolveRow(configWatcher) })`. The now-unused `Client` import was dropped and the pool is unchanged (F-06).
+- Tooling: the worktree has no `node_modules` (and neither has the main checkout). A `pnpm install` filled the disk
+  (41 MB free), so the partial install was removed and the root and ledger `node_modules` were symlinked from the
+  sibling worktree `wf_5c0abdf9-d94-123`. That tree has the same lockfile and pg 8.20.0. No lockfile changed.
+- TDD (probe, Deviation Log 2026-10-29): red: 0/3 pass on runtime assertions. Green: 3/3 pass. The probe was then
+  deleted.
+- Verification:
+  - `pnpm build` exit 0. `pnpm run lint` exit 0 (0 errors, 147 `no-explicit-any` warnings).
+  - The new code is prettier-clean. The prettier drift in `ledgerServiceImpl.ts`/`index.ts` is pre-existing and was
+    left untouched.
+  - Fast-path grep: 1 hit. `onGap` greps hit. `code: notFound ? 13 : 14`: 1 hit. `if (cleaned) return;` count in
+    `streamEvents`: 3. The wiring grep hits, and the `DB_POOL_MAX` line is unchanged.
+  - The `pool` grep hits only the class JSDoc.
+- Open (Step 6): with the committed tree the suite is 55 pass / 7 fail. The 7 legacy `eventNotifier.test.ts` cases
+  use the old constructor, and `row()` has no `payload`. Step 6 A.1 migrates them. Unit-only items for Step 6 are
+  the backstop teardown (AC-9 notifier side) and the stale-drain guard.
+- Files modified: `services/xstockstrat-ledger/src/services/eventNotifier.ts`,
+  `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`, `services/xstockstrat-ledger/src/index.ts`
+- Deviations: probe-based RED, interim red legacy cases, and the `pool` grep note (Deviation Log 2026-10-29).
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), re-spec §5.3 after Step 5
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  'Start executing features 241-276' via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge). Per-feature blocker
+  decisions were given by the operator through the session's question tool on 2026-10-29. Checkpoints: 'report'.
+  C-16 promotion is auto-confirmed unless it changes an existing @AC rule. Up-front confirmation recorded; status
+  stays `in-progress` (no transition).
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`e36265af`), normal
+  `git merge --no-edit origin/main-dev` → `bf0cedc2`, no conflicts; `ledger-guard.py --fix` reported clean.
+- Re-spec (implementation-spec.md Deviation Log 2026-10-29 "after Step 5 + main-dev merge-up"):
+  - Step 6: `makeStreamCall(req, userId?)` takes userId positionally and the 7 `exportEvents` sites pass `'u_42'`
+    positionally. Decision: `makeRecordingCall(req, opts?: string | { userId?, writeReturns? })` normalises a string
+    to `{ userId }`, so the plain alias keeps "no line other than the import" true. Rejected: editing the 7 call
+    sites (widens the diff) or a local wrapper (a second double, against C-13). Anchors refreshed.
+  - Step 7: flush site `:265`, `cleaned` guards `:251`/`:260`, `rowToEvent` `sequence` `:384`.
+  - Step 9: `ci.yml` anchors refreshed; `ledger-db-test` goes after the new `migration-contract-gate` job.
+  - Step 11: `config-governance.md` anchors `:109`/`:113`.
+- Next: Step 6.
+
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), resume re-spec
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  'Start executing features 241-276' via batch-execute; unattended checkpoints, auto-confirm C-16 promotion,
+  merge-train authorized, defer 255/275; operator-only DB/prod steps: open PR, hold merge). Per-feature blocker
+  decisions were given by the operator through the session's question tool on 2026-10-29. Checkpoints: 'report'.
+  C-16 promotion is auto-confirmed unless it changes an existing @AC rule. Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`5bfb9b23`); `git merge --no-edit
+  origin/main-dev` was already up to date; `ledger-guard.py --fix` reported clean.
+- Re-spec (Deviation Log 2026-10-29 "resume"): line drift only. Step 6 `LedgerServiceImpl` class `:19`,
+  constructor `:20`, `buffer.push(row)` `:207`; Step 11 `test-data-inventory.md` `:74-75`.
+- Next: Step 6.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 6
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f:
+  'Start executing features 241-276' via batch-execute; checkpoints 'report'). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`648dd93c`). The launcher's
+  discovery digest said Steps 3-5 were missing; it had read a stale tree. On the branch they are present and `done`.
+- Tooling: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-79` (identical
+  `pnpm-lock.yaml`, pg 8.20.0). No install, no lockfile change.
+
+### Step 6 — test: Notifier tier (i), wired tier (ii), `streamEvents` `onGap` tier (iii) [done]
+- Fixture home (C-13, Node `src/__tests__/fixtures/`, first materialization):
+  - `ledgerEvents.ts`: `makeEventRow` (moved verbatim from `ledgerServiceImpl.test.ts#makeRow`), `LARGE_PAYLOAD`
+    (serializes to exactly 8000 chars), `TRIMMED_RECORDED_AT`, `toTrimmedStub` (the trigger's 5 stub keys, no
+    `payload`).
+  - `streamCall.ts`: `makeRecordingCall(req, opts)`. A string `opts` is the caller's userId, so the 7 positional
+    `exportEvents` sites are unchanged. `write()` returns `writeReturns ?? true`, and `on()` records handlers.
+  - `INVENTORY.md`: one row per export.
+  - `ledgerServiceImpl.test.ts` imports them aliased as `makeRow` / `makeStreamCall`; only the import lines and the
+    two removed local functions change. `eventRowResolver.test.ts`'s inline `STUB` became
+    `toTrimmedStub(makeEventRow())` with no assertion change.
+- Tier (i) `eventNotifier.test.ts`: all 7 constructions migrated to `{ resolveRow }` (`reconnectDelayMs: 1` for the
+  reconnect case); `row()` defaults `payload: {}`. 13 new cases: AC-2 order behind an in-flight resolve, AC-3 and
+  AC-8 filtered subscribers (and zero reads for non-matching stubs), AC-6/AC-7 `onGap` once + removal from fan-out
+  while another sub still gets seq 12, AC-9 backstop timeout → `end()` → replacement listener → `onReconnect` once,
+  late-subscribed sub, sub removed during the await, queue cleared on reconnect and on `stop()`, the stale-drain
+  guard, and warn reasons `not_found`/`timeout`/`error` with no `unhandledRejection`.
+- Tier (ii) `streamResolveWired.test.ts` (real `EventNotifier` + `makeResolveRow` + `LedgerServiceImpl`):
+  - AC-1: the delivered message deep-equals `rowToEvent(full)`, with the 8000-char payload.
+  - AC-4: zero pool checkouts on the resolve path, and `appendEvent` calls back while the SELECT is held and
+    `write()` returns false.
+  - AC-5: 50 held replay rows plus a trimmed seq 51 produce 51 ascending writes with no duplicate.
+  - This also closes Step 4's open item: `makeResolveRow` is now executed (`eventRowResolver.js` 100% lines).
+- Tier (iii) `ledgerServiceImpl.test.ts` `streamEvents onGap`:
+  - AC-7 gives `{code: 13}` and AC-6 gives `{code: 14}`; neither calls `end()`, and both unsubscribe.
+  - Recovery from `fromSequence: 11` replays 11 and 12 in full.
+  - An `onGap` during a held replay leaves zero writes.
+- Unit-only (design 5): the AC-9 backstop teardown and the stale-drain guard. Step 9 owns the real-DB bound.
+- TDD (AC-1..AC-9):
+  - Red: post-Step-4 source restored from `1ef791b3` (Deviation Log 2026-10-29 "Step 6 execution"). `tsc` was
+    clean, and the suite gave 79 tests, 59 pass, 20 fail, all runtime. Examples:
+    - AC-2 "nothing past the stub before it resolves";
+    - AC-1 `client.selects[0]` undefined (no resolve);
+    - AC-6/AC-7 tier (iii) `TypeError: notifier.captured.onGap is not a function`;
+    - AC-4 "the resolve is in flight on the LISTEN client".
+  - Green: `pnpm run test:coverage` exit 0, with 79/79 pass and 0 fail/cancelled/skipped/todo. All files are at
+    86.38% lines (`eventNotifier.js` 91.26, `ledgerServiceImpl.js` 82.4, `eventRowResolver.js` 100).
+  - Per file: eventNotifier 20/0, streamResolveWired 4/0, ledgerServiceImpl 34/0. Three repeat runs were each
+    79/0, so nothing is flaky.
+- Verification greps: 0 legacy constructions; the wired file is unguarded; there are 4 fixture-importing test
+  files; local `makeRow`/`makeStreamCall` are gone; `typeof opts === 'string'` is present; fixtures import no dev
+  deps; `INVENTORY.md` exists. `pnpm run lint` exit 0 (173 warnings, 0 errors).
+- Open (Step 11): `docs/patterns/test-data-inventory.md:74-75` still says the Node home is "Not materialized". It is
+  now materialized for ledger; Step 11 owns that doc line.
+- Files modified: `services/xstockstrat-ledger/src/__tests__/{eventNotifier,ledgerServiceImpl,eventRowResolver}.test.ts`,
+  `services/xstockstrat-ledger/src/__tests__/streamResolveWired.test.ts` (new),
+  `services/xstockstrat-ledger/src/__tests__/fixtures/{ledgerEvents.ts,streamCall.ts,INVENTORY.md}` (new)
+- Deviations: RED order, the characterization recovery case, the warn spy, and lint warning count (Deviation Log
+  2026-10-29 "Step 6 execution").
+- Next: Step 7.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 7
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f,
+  'Start executing features 241-276' via batch-execute). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`63b02758`). The launcher's
+  discovery digest reported Step 5's `onGap` as missing because it had read a stale tree. On the branch, Step 5 is
+  present and `done`, and the flush site is at `:265`, as re-spec'd.
+- Tooling: the main worktree has no root `node_modules`, so `pnpm install --frozen-lockfile --filter
+  xstockstrat-ledger...` ran here (pnpm 9.15.9). The lockfile is unchanged.
+
+### Step 7 — service: Normalise `sequence` with `Number()` in `streamEvents` [done]
+- `maxSeq` is seeded with `Number(req.fromSequence) - 1`.
+- `writeRow` sets `const seq = Number(row.sequence)` and keeps the max numerically.
+- The live `onEvent` and the buffer flush both gate on `Number(row.sequence) > maxSeq`.
+- Untouched: `rowToEvent`, the replay SQL, the `cleaned` guards, and the synchronous flush. `streamEvents` still has
+  exactly 1 `await`.
+- TDD (AC-2, AC-5), using an uncommitted probe (Deviation Log 2026-10-29 "Step 7 execution"):
+  - RED: replayed `"98"`/`"99"` then a resolved `"100"` gave writes `[98, 99]`, not `[98, 99, 100]`; the buffered
+    `"100"` flush gave the same. 0/2 pass.
+  - GREEN: 2/2 pass.
+- Verification:
+  - `pnpm build` exit 0; `pnpm run lint` exit 0 (173 warnings, 0 errors, unchanged).
+  - `grep -c "Number(row.sequence)"` returns 3; `Number(req.fromSequence)` is at `:191`; the awk `await` count is 1.
+  - `pnpm run test:coverage` exit 0, 79/79 pass, 0 fail/cancelled/skipped/todo; All files 86.39% lines.
+- Note for Step 8 case 1: on the current code, case 1 fails only if it checks the writes right after the string
+  `"100"` event. If it checks only after both events, it passes, because NOTIFY's number `100` compares
+  numerically (Deviation Log).
+- Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`
+- Next: Step 8.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 8
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f,
+  'Start executing features 241-276' via batch-execute). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`db8633e1`). The launcher's digest
+  said Steps 5-7 were pending; it had read a stale tree. On the branch they are `done`.
+- Tooling: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90`. No install.
+
+### Step 8 — test: `streamEvents` sequence normalisation and string-`sequence` encoding (tier iii) [done]
+- New `describe('streamEvents sequence normalisation')` in `ledgerServiceImpl.test.ts`, built on `makeRow` /
+  `makeStreamCall` fixtures and the shared `makeFakeNotifier` (hoisted to module scope):
+  - AC-2: replayed `"98"`/`"99"` then a resolved `"100"` gives `[98, 99, 100]` immediately; a NOTIFY number `100`
+    adds no duplicate.
+  - AC-5: a resolved `"100"` buffered during a held replay is flushed exactly once.
+  - Encoding: `LedgerEvent.encode(rowToEvent({sequence: '100'}))` does not throw and decodes to `100`.
+- TDD (AC-2, AC-5): RED with pre-Step-7 source from `db8633e1^`: 35 pass / 2 fail, both `actual [98, 99]` vs
+  `[98, 99, 100]` → GREEN: 37/37. The encoding case is a characterization (passes either way; ts-proto accepts a
+  string int64), so no `rowToEvent` change was needed.
+- Verification: `pnpm run lint` exit 0 (176 warnings, 0 errors); `pnpm run test:coverage` exit 0, 82/82 pass,
+  0 fail/cancelled/skipped/todo, All files 86.39% lines; tap `ledgerServiceImpl` 37/0; C-13 grep clean.
+- Files modified: `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`
+- Deviations: Deviation Log 2026-10-29 "Step 8 execution" (RED order, characterization, helper hoist, lint count).
+- Next: Step 9.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 9
+
+- Authorization: operator standing authorization (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f,
+  'Start executing features 241-276' via batch-execute). Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`af225990`). The launcher's digest
+  said Steps 3-8 and the fixture home were missing because it had read a stale tree. On the branch, all of them are
+  present and `done`.
+- Tooling: root and ledger `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90` (identical
+  `pnpm-lock.yaml`). No install, no lockfile change.
+
+### Step 9 — test: Real-TimescaleDB tier (iv) — `test:db` script, DB tests, `ledger-db-test` CI job [done]
+- `package.json`: `"test:db": "tsc && node --test dist/__tests__/db/*.test.js"` after `test:coverage`; no other
+  script changed.
+- `src/__tests__/db/streamResolve.db.test.ts` imports only `node:*`, `pg`, `src` modules and the C-13 fixtures
+  (`LARGE_PAYLOAD`, `makeRecordingCall`; both INVENTORY rows now list it). Its `before()` throws
+  `LEDGER_DB_TEST_URL is required` when the URL is unset. It runs on a real `EventNotifier` built from
+  `makeListenerClient(url, false, cfg)` and `makeResolveRow(cfg)`, with `LedgerServiceImpl` over `pg.Pool({max: 1})`.
+  - AC-1: the live write deep-equals `GetEvent`. The raw `LISTEN ledger_stream_all` body has exactly the 5 stub keys
+    and no `payload`. `EXPLAIN` of the PK read shows one chunk scan, and the stub `recorded_at` text returns exactly
+    1 row.
+  - AC-6 / AC-7: a rejecting or `null` first resolve gives `destroy({code: 14 | 13})`, no `end()`, and writes
+    `[10]` only. A stream from seq 11 replays 11 and 12, with 11 in full.
+  - AC-9: with B = 200, a `pg_sleep(1)` wrapper ends the unfiltered stream with code 14 in under 2B, with no write for
+    11 or 12. The `account.balance.synced` stream stays open. A replay from 11 recovers both rows.
+- `ci.yml`: job `ledger-db-test` placed after `migration-contract-gate`.
+  - `if:` matches any of the `xstockstrat-ledger`, `migrations`, `proto`, `ci` and `node-shared` filters.
+  - Its TimescaleDB service is copied from `migration-rerun`, and its Node toolchain from `node-test`.
+  - Steps: build the migrator image, run `docker run` on the default `db-migrate.sh` entrypoint, then run
+    `pnpm run test:db` with `LEDGER_DB_TEST_URL`.
+  - It is listed in `ci-gate.needs` with an echo.
+- TDD:
+  - RED was not captured: the DB is CI-only. `LEDGER_DB_TEST_URL` is unset here, and no container may be started.
+  - The item-4 mutation of `src/services/eventNotifier.ts` was not applied, and `git status` shows that file
+    unmodified. The unit REDs of Steps 4, 6 and 8 stand for these ACs.
+  - GREEN is owed on the integration PR's `ledger-db-test` run (sequential mode opens no step PR).
+- Verification:
+  - `pnpm build` exit 0; `pnpm run lint` exit 0 (195 warnings, 0 errors).
+  - `dist/__tests__/db/streamResolve.db.test.js` is emitted, and the `test:db` grep matches.
+  - With no URL, `node --test dist/__tests__/db/*.test.js` exits 1 and names `LEDGER_DB_TEST_URL`.
+  - `pnpm run test:coverage` exit 0: 82/82 pass, 0 fail, All files 86.39% lines, 0 `streamResolve.db` lines.
+  - The runtime-deps grep reports OK, and the three `ci.yml` greps hit at `:705`, `:895` and `:917`.
+- Open: paste the `ledger-db-test` run URL and its summary into the integration PR body and here. If it fails, the
+  real-DB assumptions in the Deviation Log (chunk naming, stream start point, AC-9 timing) are the first suspects.
+- Files modified: `services/xstockstrat-ledger/package.json`,
+  `services/xstockstrat-ledger/src/__tests__/db/streamResolve.db.test.ts` (new),
+  `services/xstockstrat-ledger/src/__tests__/fixtures/INVENTORY.md`, `.github/workflows/ci.yml`
+- Deviations: Deviation Log 2026-10-29 "Step 9 execution".
+- Next: Step 10.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 10
+
+- Authorization: the same operator standing authorization as Step 9. Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`dcfeac34`). Root `node_modules` is
+  symlinked from the main worktree for the husky hook.
+
+### Step 10 — test: Consumer verification — analysis and portfolio (no code change) [done]
+- Re-read result: unchanged, so there is no stop-and-ask.
+  - Portfolio: `consumeEventStream` (`portfolio_service.go:185-202`) returns only when `ctx.Err() != nil` and
+    otherwise sleeps 2 s (`:199`) and reconnects. `isGracefulStreamClose` only selects the log line.
+  - Portfolio: in `streamEventsFrom` (`:206-233`), `io.EOF` (`:220`) is the only clean close. Codes 13 and 14 return
+    `lastSeq` at `:223-224`. The cursor moves after `handle` succeeds (`:229-230`), and the resume point is
+    `lastSeq + 1` (`:207-210`).
+  - Analysis: `run_forever` (`pnl_pattern_consumer.py:147-162`) re-reads the cursor on every reconnect and sleeps 2 s
+    after any stream exception. `process_event` drops `sequence <= cursor` (`:167`). The cursor is advanced inside the
+    handler's transaction (`:240`, `:287`).
+  - There is no consumer source diff since `b6e518a7`; only `analysis/uv.lock` changed.
+- TDD: N/A. This is verification only, a characterization of unchanged consumers.
+- Verification:
+  - The three greps hit at `portfolio_service.go:199` and `:220`, and at `pnl_pattern_consumer.py:162`.
+  - Portfolio: `GOWORK=off go test ./... -race -count=1 -coverpkg=<non-service pkgs>` exited 0, with total 68.6%.
+    This is a smoke check only, because `/service` is excluded from `COVERPKGS`.
+  - Portfolio: `TestStreamEventsFrom_HandlerError_DoesNotAdvanceCursor` passed.
+  - Analysis: `uv run --no-sync pytest -m "not real_pg"` passed 1296, with 4 deselected. Those `real_pg` tests need a
+    local PostgreSQL, which the executor may not start; CI runs them. `tests/test_pnl_pattern_consumer.py` passed
+    10/10.
+- Observations, not fixed (outside scope, existing behaviour):
+  - Analysis `run_forever` reconnects with no sleep when the stream ends cleanly. A ledger that closes cleanly in a
+    tight loop would cause rapid reconnects.
+  - A per-event exception (`:158-159`) is logged and skipped. A later successful event can then move the cursor past
+    the failed one.
+- Files modified: none (verification only).
+- Deviations: Deviation Log 2026-10-29 "Step 10 execution" (analysis `real_pg` deselected; docs-only commit).
+- Next: Step 11.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+- Authorization: the same operator standing authorization as Steps 9-10. Status stays `in-progress`.
+- Branch setup: detached at `origin/feature/fix-ledger-trimmed-notify-payload` (`69845c87`). The launcher's digest
+  said Steps 1-10 were missing because it read a stale tree; on the branch they are present and `done`. Root
+  `node_modules` symlinked from sibling worktree `wf_5c0abdf9-d94-90` (the main worktree has none).
+
+### Step 11 — docs: Teardown — invariants, CLAUDE.md, findings, config log, CI table [done]
+- Ledger constitution: LEDGER-2 extended (resolve-before-fan-out, serial FIFO, `!draining` fast-path; cites
+  `eventNotifier.ts#dispatch`/`#drain`); LEDGER-8 added (LISTEN client = single-statement PK read + session SET only,
+  cites `eventRowResolver.ts#resolveEventRow`); the trimmed-row gotcha rewritten as resolved (13/14 + client replay);
+  the split-pool pointer names the resolve.
+- Ledger findings: latent-bug row and the open question marked **RESOLVED (feature 248)**; the "three" row's
+  subscription half resolved, `TRADING_MODE` left open.
+- Ledger `CLAUDE.md`: **five** subscriptions listed plus analysis's unfiltered P&L stream; 3 lines on the PK resolve
+  and 13/14 ending; `ledger.stream.resolve_timeout_ms` row (migration 033); the constitution pointer no longer lists
+  the NOTIFY-trim defect (closes the router carry item "three → five").
+- Config `CLAUDE.md`: the `packages/proto/` PR drift line replaced. `config-governance.md`: feature 248 entry inserted
+  before feature 240. `ci-overview.md`: `ledger-db-test` row after `node-test`. `test-data-inventory.md`: Node row
+  "Materialized in ledger (feature 248)", Exemptions sentence no longer predicts no ledger home.
+- Teardown audit: `/context-forge:context-constitution refresh` is not available in this session (only
+  `context-scrubber` is listed). Manual reconciliation: every touched file re-read against the code; the ledger
+  constitution/findings `~Lnn` hints that this feature moved were re-stamped (Deviation Log "Step 11 execution").
+  The integration PR body must record "plugin unavailable" plus this reconciliation (fails.md:670).
+- TDD: N/A (docs).
+- Verification: all 8 greps hit as specified (`**three**` count 0; proto drift line absent); `check-context-map.sh`
+  exit 0.
+- Open: the defect report sidecar `docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.status` is
+  still `triaged` (outside **Files**; resolve at launch or via `/sdd-archiver`); the findings "Filed as defect
+  reports" row stays until then.
+- Files modified: `services/xstockstrat-ledger/docs/context-constitution.md`,
+  `services/xstockstrat-ledger/docs/context-constitution-findings.md`, `services/xstockstrat-ledger/CLAUDE.md`,
+  `services/xstockstrat-config/CLAUDE.md`, `docs/patterns/config-governance.md`, `docs/patterns/ci-overview.md`,
+  `docs/patterns/test-data-inventory.md`
+- Deviations: Deviation Log 2026-10-29 "Step 11 execution".
+- Next: all steps done — `status.md` → `code-completed`, then the integration PR.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-ledger-trimmed-notify-payload (feature 248)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ledger/acceptance/fix-ledger-trimmed-notify-payload.feature | CREATE | NEW | StreamEvents live payload (ledger) |
+| AC-2 | same | CREATE | NEW | ordering |
+| AC-3 | same | CREATE | NEW | event_type filter |
+| AC-4 | same | CREATE | NEW | pool=1 non-blocking |
+| AC-5 | same | CREATE | NEW | replay buffer flush |
+| AC-6 | same | CREATE | NEW | DB error, no stub |
+| AC-7 | same | CREATE | NEW | row not found, no stub |
+| AC-8 | same | CREATE | NEW | stream_key filter |
+| AC-9 | same | CREATE | NEW | resolve timeout bound |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-ledger-trimmed-notify-payload.feature (CREATE) ---
+# Promoted from docs/roadmap/features/248-fix-ledger-trimmed-notify-payload/acceptance.feature (C-16). Do not hand-edit; scenarios verbatim.
+Feature: fix-ledger-trimmed-notify-payload (bug fix)
+  Regression guard for docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md:
+  live StreamEvents delivers a payload-less stub for events over ~7000 chars.
+
+  @AC-1 @FR-1 @regression @feature-248
+  Scenario: A live event whose row exceeds the NOTIFY trim threshold is delivered with its full payload
+    Given a StreamEvents subscriber with no stream_key or event_type filter has caught up and is live
+    And an event "order.filled" with stream_key "order-42" and a JSON payload of 8000 chars is appended
+    And that event has source_service "xstockstrat-trading", correlation_id "corr-42", metadata {"broker": "alpaca"} and user_id "user-7"
+    When the subscriber receives the live message for that event
+    Then the message payload equals the appended 8000-char payload
+    And the message occurred_at equals the appended occurred_at and is a valid timestamp
+    And the message has source_service "xstockstrat-trading", correlation_id "corr-42", metadata {"broker": "alpaca"} and user_id "user-7"
+    And the message equals GetEvent for the same event_id
+
+  @AC-2 @FR-3 @regression @feature-248
+  Scenario: A trimmed event keeps its place in the live sequence
+    Given a StreamEvents subscriber with no filters is live
+    When three events are appended back-to-back, without waiting for delivery, with payload sizes 100, 8000 and 100 chars
+    Then the subscriber receives exactly three messages, in ascending sequence order, with no duplicate sequence
+    And each message carries its full payload
+
+  @AC-3 @FR-1 @regression @feature-248
+  Scenario: A filtered live subscriber receives the full payload of a trimmed event
+    Given a StreamEvents subscriber filtered on event_type "order.filled" is live
+    When an "order.filled" event with a JSON payload of 8000 chars is appended
+    Then the subscriber's message payload equals the appended 8000-char payload
+
+  @AC-4 @FR-2 @regression @feature-248
+  Scenario: Resolving a trimmed live event does not hold the single query-pool connection
+    Given the ledger query pool max is 1 (DB_POOL_MAX=1)
+    And a StreamEvents subscriber with no filters is live and has stopped reading its stream
+    When an "order.filled" event with a JSON payload of 8000 chars is appended
+    And a second "order.filled" event with a 100-char payload is appended
+    Then the second AppendEvent returns its event_id before the subscriber resumes reading
+    And after the subscriber resumes it receives both events with their full payloads in ascending sequence order
+
+  @AC-5 @FR-1 @FR-3 @regression @feature-248
+  Scenario: A trimmed event appended during replay is flushed from the buffer with its full payload
+    Given the ledger holds 50 events with 100-char payloads
+    And a StreamEvents subscriber with no filters opens from sequence 0
+    When an "order.filled" event with a JSON payload of 8000 chars is appended after the subscriber's replay query has read its rows and before the subscriber goes live
+    Then the subscriber receives that event exactly once, with the appended 8000-char payload and a valid occurred_at
+    And the subscriber receives 51 messages in ascending sequence order with no duplicate sequence
+
+  @AC-6 @FR-4 @regression @feature-248
+  Scenario: A trimmed live event whose full row cannot be read is never delivered as a stub
+    Given a StreamEvents subscriber with no filters is live and its last delivered sequence is 10
+    And the live stream's read of the full row for the next trimmed event fails with a database error until that error clears
+    When an "order.filled" event with a JSON payload of 8000 chars is appended as sequence 11
+    And an event with a 100-char payload is appended as sequence 12
+    Then the subscriber receives no message for sequence 11 or 12 on that stream
+    And the stream ends with a non-OK gRPC status
+    And once the database error clears, a new StreamEvents opened from sequence 11 receives sequences 11 and 12 with their full payloads, in that order
+
+  @AC-7 @FR-4 @regression @feature-248
+  Scenario: A trimmed live event whose full row is not found is never delivered as a stub
+    Given a StreamEvents subscriber with no filters is live and its last delivered sequence is 10
+    And the live stream's read of the full row by event_id for the next trimmed event returns no row
+    When an "order.filled" event with a JSON payload of 8000 chars is appended as sequence 11
+    And an event with a 100-char payload is appended as sequence 12
+    Then the subscriber receives no message for sequence 11 or 12 on that stream
+    And the stream ends with a non-OK gRPC status
+    And a new StreamEvents opened from sequence 11 receives sequences 11 and 12 with their full payloads, in that order
+
+  @AC-8 @FR-1 @regression @feature-248
+  Scenario: A stream_key-filtered live subscriber receives the full payload of a trimmed event
+    Given a StreamEvents subscriber filtered on stream_key "order-42" is live
+    When an "order.filled" event with stream_key "order-42" and a JSON payload of 8000 chars is appended
+    Then the subscriber's message payload equals the appended 8000-char payload
+    And the message occurred_at equals the appended occurred_at and is a valid timestamp
+
+  @AC-9 @FR-2 @FR-4 @regression @feature-248
+  Scenario: A trimmed event whose full-row read exceeds the resolve bound ends only matching streams non-OK
+    Given ledger.stream.resolve_timeout_ms is 200
+    And a StreamEvents subscriber with no filters is live and its last delivered sequence is 10
+    And a StreamEvents subscriber filtered on event_type "account.balance.synced" is live
+    And the full-row read for the next trimmed event takes longer than 200 ms
+    When an "order.filled" event with a JSON payload of 8000 chars is appended as sequence 11
+    And an event with a 100-char payload is appended as sequence 12
+    Then the unfiltered subscriber receives no message for sequence 11 or 12 on that stream
+    And that stream ends with a non-OK gRPC status within 400 ms
+    And the "account.balance.synced" subscriber's stream is not ended
+    And a new StreamEvents opened from sequence 11 receives sequences 11 and 12 with their full payloads, in that order
+
+### Notes / ambiguities / conflicts
+- All 9 scenarios assert on ledger StreamEvents/AppendEvent/GetEvent, so the single owner is xstockstrat-ledger. The `ledger.stream.resolve_timeout_ms` key in AC-9 is ledger config.
+- Dedup: grepped all `*/acceptance/*.feature` for StreamEvents and for @feature-248. The only hit is a comment in /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/order-snapshots-pnl-patterns.feature, not an assertion. The ledger suites (ledger-event-export, snapshot-offline-positions, fix-identity-ledger-test-suites) assert nothing on live-stream payloads. /home/user/xstockstrat/docs/business-rules/platform.feature (docs/sdd/business-rules/platform.feature) has no NOTIFY or trimmed-payload rule. No OVERLAP or CONFLICT.
+- Only the new `@feature-248` tag was added to each tag line. Source text is otherwise verbatim, and I added a provenance comment line at the top.
+
+### Coverage check
+- Source scenarios: 9. Planned: 9 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped.
+```
+
+## Session 2026-10-29 — C-16 promotion applied + integration PR
+
+- Promotion plan above applied exactly (auto-confirm under operator standing authorization): created
+  `services/xstockstrat-ledger/acceptance/fix-ledger-trimmed-notify-payload.feature` with AC-1..AC-9 verbatim
+  plus `@feature-248` (step-text diff against `acceptance.feature`: identical). 9 NEW, 0 DUP/OVERLAP/CONFLICT.
+- `status.md` → `code-completed`; feature.md history row added.
+- Integration PR `feature/fix-ledger-trimmed-notify-payload` → `main-dev` opened; merge held for the operator.
+  The PR body records the context-forge "plugin unavailable" note plus the Step 11 manual reconciliation (fails.md:670)
+  and that the Step 9 `ledger-db-test` GREEN is owed on the PR's CI run.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

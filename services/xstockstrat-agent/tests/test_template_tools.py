@@ -178,7 +178,7 @@ async def test_instantiate_template_set_config_carries_no_author(bound_admin):
 
     captured = {}
 
-    async def _capture(req, metadata=None):
+    async def _capture(req, metadata=None, timeout=None):
         captured["req"], captured["metadata"] = req, metadata
         return config_pb2.SetConfigResponse(version="1")
 

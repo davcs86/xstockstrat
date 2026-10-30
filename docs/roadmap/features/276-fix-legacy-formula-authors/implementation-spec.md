@@ -55,7 +55,7 @@ Out of scope: feature 275 reporting surfaces; `_can_read_formula`; `UpdateFormul
 
 ### Step 1 — service: `manage-users.py list-users --json` users export
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (operator tooling; identity data export)
 **Files**:
 - `scripts/manage-users.py` — modify
@@ -63,7 +63,7 @@ Out of scope: feature 275 reporting surfaces; `_can_read_formula`; `UpdateFormul
 **Reviewers**: Security — PII minimisation (email local part only, no roles); no service owner (identity is not an affected service)
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n 'list-users' scripts/manage-users.py` → `@app.command("list-users")` at `:270`; options `--active-only` at `:272-277`; query `"SELECT email, roles, is_active, created_at FROM identity.users "` at `:283-286`, `WHERE is_active = TRUE ` appended at `:288`, `ORDER BY created_at` at `:289`.
+- Confirmed via: `grep -n 'list-users' scripts/manage-users.py` → `@app.command("list-users")` at `:270`; option `--active-only` at `:272-277` (flag string at `:274`); query `"SELECT email, roles, is_active, created_at FROM identity.users "` at `:282-285` (`SELECT email` at `:283`), `WHERE is_active = TRUE ` appended at `:287`, `ORDER BY created_at` at `:288`. No `import json` exists yet (expected; added here). Re-verified 2026-10-28.
 - `identity.users` has `user_id UUID PRIMARY KEY`, `email TEXT NOT NULL UNIQUE`, `is_active` — `services/xstockstrat-identity/migrations/001_identity_tables.up.sql:7-12`. Identity has no username field (`packages/proto/identity/v1/identity.proto:174-180`, recon.md), so the export carries the email local part only.
 - Existing table path unpacks 4-tuples `(email, roles, is_active, created_at)` and is asserted by `scripts/tests/test_manage_users.py:371-411` (`TestListUsersCmd`). It must not change.
 - `_load_db_url` fallback (`.env`/localhost) at `:62-78` is deliberately NOT reused by the new CLI (Step 3); `list-users` keeps its existing behavior.
@@ -84,7 +84,7 @@ Out of scope: feature 275 reporting surfaces; `_can_read_formula`; `UpdateFormul
 
 ### Step 2 — test: `list-users --json` output contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/tests/`
 **Files**:
 - `scripts/tests/test_manage_users.py` — modify (add a class `TestListUsersJson`)
@@ -92,7 +92,8 @@ Out of scope: feature 275 reporting surfaces; `_can_read_formula`; `UpdateFormul
 **Reviewers**: none beyond Security — PII minimisation
 
 **Codebase Evidence**:
-- Existing pattern: `TestListUsersCmd` at `scripts/tests/test_manage_users.py:371` uses `@patch("psycopg.connect")`, `_mock_conn()` (`:60-73`), `conn.execute.return_value.fetchall.return_value = [...]` and `runner.invoke(mu.app, ["list-users", ...])`; the `FAKE_UUID`/`FAKE_NOW` constants at `:52-53`.
+- Existing pattern: `TestListUsersCmd` at `scripts/tests/test_manage_users.py:371` uses `@patch("psycopg.connect")`, `_mock_conn()` (`:61`), `conn.execute.return_value.fetchall.return_value = [...]` and `runner.invoke(mu.app, ["list-users", ...])`; the `FAKE_UUID`/`FAKE_NOW` constants at `:51-52`.
+- CI: no job runs `scripts/tests/` (`grep -n "scripts/tests" .github/workflows/ci.yml` finds nothing), so this step is verified locally only (re-verified 2026-10-28).
 - Test-data (C-13): single consumer (this class); inline rows compliant.
 
 **TDD**: `red-green required`
@@ -113,7 +114,7 @@ Add tests (RED against the tree where `--json` does not exist; exit code 2 from 
 
 ### Step 3 — service: legacy-author CLI core (detection, classification, plan, report mode)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/__init__.py` — create (empty)
@@ -157,7 +158,7 @@ Create `legacy_authors.py` with these pieces (names are the contract the tests i
 
 ### Step 4 — test: classification, plan builder, report mode, SQL guard text
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify (add `FakeFormulasTable`, `make_formula_row`, `USERS`)
@@ -166,9 +167,9 @@ Create `legacy_authors.py` with these pieces (names are the contract the tests i
 **Reviewers**: xstockstrat-indicators owner — no side-effects from formula execution; DB data-change safety
 
 **Codebase Evidence**:
-- Existing pattern: `tests/conftest.py:21` `ctx_with(metadata, peer_sans=())`, constants `OWNER_HEADERS`/`OTHER_HEADERS` at `:14-15`; `asyncio_mode = "auto"` (`pyproject.toml` `[tool.pytest.ini_options]`), so `async def test_*` needs no marker.
+- Existing pattern: `tests/conftest.py:21` `ctx_with(metadata, peer_sans=())`, constants `OWNER_HEADERS`/`OTHER_HEADERS` at `:17-18`; `asyncio_mode = "auto"` (`pyproject.toml:35`, `[tool.pytest.ini_options]`), so `async def test_*` needs no marker.
 - Existing pattern: `tests/test_formula_read_authz.py:1-30` (module docstring citing the defect report, `_servicer()` helper, `IndicatorsServicer(config_watcher=_cfg())`).
-- No real-Postgres harness exists (CI's only Postgres is the migration rerun, `.github/workflows/ci.yml:636-656`, recon/design): the fake must therefore evaluate every predicate of the real SQL.
+- Indicators has no real-Postgres test harness. (Correction 2026-10-28: one exists repo-wide — `xstockstrat-analysis` `tests/conftest.py:368-406` `local_pg` starts a throwaway `initdb` cluster, and `.github/workflows/ci.yml:400-404` installs postgresql for that matrix entry only; the TimescaleDB migration service is at `ci.yml:651-656`.) Reusing `local_pg` for indicators would need a new CI install step plus a cross-service fixture copy (C-13), which this bug fix does not take on; the design's `FakeFormulasTable` approach stands, so the fake must evaluate every predicate of the real SQL and `test_sql_text_carries_both_guards` pins the SQL text.
 - Test data (C-13): `FakeFormulasTable` and the user list have consumers in Steps 4, 6 and 7 → canonical home `tests/conftest.py` (created here, not inline per file).
 
 **TDD**: `red-green required`
@@ -195,7 +196,7 @@ Create `legacy_authors.py` with these pieces (names are the contract the tests i
 
 ### Step 5 — service: apply mode (pre-flight refusals, DB re-derivation, guarded rewrite, result file)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/legacy_authors.py` — modify
@@ -233,7 +234,7 @@ Add to `legacy_authors.py`:
 
 ### Step 6 — test: apply refusals, guarded rewrite, idempotence, concurrency
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_legacy_authors.py` — modify
@@ -267,7 +268,7 @@ Add tests (red against the Step 5-less tree: `run_apply` is absent):
 
 ### Step 7 — test: servicer read path after repair (cold cache) and stale-cache negative
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_legacy_authors_read_path.py` — create
@@ -286,7 +287,7 @@ Add tests (red against the Step 5-less tree: `run_apply` is absent):
 
 **Instructions**:
 - Build `FakeFormulasTable` row for `31bb8ea6-0f3e-4cf7-8844-ec8294cebf85` with `author="davcs86"`; wrap it in a minimal fake pool that adds `fetchrow` for `SELECT * FROM indicators.formulas WHERE formula_id = $1::uuid` (returns the full row dict incl. `name`, `source`, `description`, `input_schema`, `pending_intent_id=None`).
-- `test_owner_reads_after_repair_cold_cache` (AC-1): before apply `GetFormula` as `80880990-2b79-4d85-8761-d8d9102c2efb` aborts NOT_FOUND (the defect); run the Step 5 `run_apply`; with a FRESH `IndicatorsServicer` (cold cache) `GetFormula` returns `author == "80880990-…"`, and `ExecuteFormula` as the owner passes the read guard (assert `abort` not awaited with NOT_FOUND; follow `TestExecuteFormulaAuthz` at `test_formula_read_authz.py:102`).
+- `test_owner_reads_after_repair_cold_cache` (AC-1): before apply `GetFormula` as `80880990-2b79-4d85-8761-d8d9102c2efb` aborts NOT_FOUND (the defect); run the Step 5 `run_apply`; with a FRESH `IndicatorsServicer` (cold cache) `GetFormula` returns `author == "80880990-…"`, and `ExecuteFormula` as the owner passes the read guard (follow `TestExecuteFormulaAuthz` at `test_formula_read_authz.py:102`). Note: `conftest.ctx_with` makes `context.abort` raise, so a denied call surfaces as `grpc.RpcError` (assert with `pytest.raises(grpc.RpcError)` plus the recorded code, as the existing tests do); a passing guard is asserted by the call NOT raising a NOT_FOUND `RpcError`.
 - `test_non_owner_still_not_found_after_repair` (AC-6): after repair, `ExecuteFormula` and `GetFormula` as `22222222-2222-4222-8222-222222222222` abort `NOT_FOUND`; an admin (`x-access-scope: 4`) `ExecuteFormula` still gets `PERMISSION_DENIED` (read guard not loosened, FR-6).
 - `test_stale_cache_requires_restart` (documents the runbook requirement): a servicer whose `_formulas` already cached the legacy-author row before apply (admin `GetFormula` caches foreign rows, `servicer.py:448-452`) still returns the old author to the owner as NOT_FOUND after apply; a new `IndicatorsServicer` instance returns it. Asserts both.
 
@@ -297,7 +298,7 @@ Add tests (red against the Step 5-less tree: `run_apply` is absent):
 
 ### Step 8 — docs: runbook `docs/runbooks/legacy-formula-authors.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/legacy-formula-authors.md` — create
@@ -306,8 +307,8 @@ Add tests (red against the Step 5-less tree: `run_apply` is absent):
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Confirmed via: `docs/runbooks/CLAUDE.md` table (`| File | Purpose | Key trigger |`), last rows `operator-db-access.md`, `proto-versioning.md`.
-- `docs/runbooks/operator-db-access.md:25-30` names `:25060` direct and `:25061` PgBouncer pool; macOS-first install instructions (`brew install libpq`) — the runbook follows the macOS-first rule from the root `CLAUDE.md`.
+- Confirmed via: `docs/runbooks/CLAUDE.md` table (`| File | Purpose | Key trigger |`, alphabetical), last rows `operator-db-access.md` (`:19`), `proto-versioning.md` (`:20`); the new row goes in alphabetical position, between `indicator-builder.md` and `mcp-tools.md`.
+- `docs/runbooks/operator-db-access.md:27-30` names `:25060` direct and `:25061` PgBouncer pool and says "For admin SQL use the **direct** port `:25060`"; macOS-first install instructions (`brew install libpq`, `:20`) — the runbook follows the macOS-first rule from the root `CLAUDE.md`.
 - Cache/restart facts: `_load_formula` reads `self._formulas` first with no TTL; admin `GetFormula` caches foreign rows (`servicer.py:448-452`); `ListFormulas` DB path does not read the cache — so `ListFormulas` alone would pass on a stale cache. Analysis formula caches are per-request (`xstockstrat-analysis` servicer, design.md), so no analysis restart.
 
 **TDD**: `N/A (docs)`
@@ -316,18 +317,18 @@ Add tests (red against the Step 5-less tree: `run_apply` is absent):
 
 **Instructions**:
 The runbook must contain, in order (macOS/Homebrew-compatible commands, `uv run`, no GNU-only flags; `shasum -a 256` on macOS):
-1. Purpose, scope, and the statement that the row count and usernames beyond the six known staging ids are UNKNOWN; the six are a floor, not a bound. There is no production deployment today (operator, 2026-10-23), so the target is staging; if a production environment is created, never run against it before step 3 (report) and DBA approval.
+1. Purpose, scope, and the statement that prod row count and usernames are UNKNOWN; the six staging ids are a floor, not a bound. Never run against prod before step 3 (report) and DBA approval.
 2. Authority statement (AC-9, operator sign-off 2026-10-22): authority to run is the DB credential holder plus the DBA change record (process, not code). The digest is integrity, not authority; the code enforces only a digest-matched, fully-confirmed plan and never touches `system` or UUID rows.
-3. Prerequisites and connection: required `DATABASE_URL`, no fallback; use the pooled `:25061` URL with `DB_PGBOUNCER=true` (F-06, off the direct `:25060` budget); workstation must be in the cluster's trusted sources; a DO-console session is NOT used (no file durability).
+3. Prerequisites and connection: required `DATABASE_URL`, no fallback; use the pooled `:25061` URL with `DB_PGBOUNCER=true` (F-06, off the direct `:25060` budget). State explicitly that this deliberately deviates from `operator-db-access.md`'s "admin SQL uses direct `:25060`" guidance, and why (the CLI holds no session state: autocommit statements only, no advisory lock or LISTEN); the manual undo `UPDATE` in item 9 may use either port; workstation must be in the cluster's trusted sources; a DO-console session is NOT used (no file durability).
 4. Step A, users export: `uv run scripts/manage-users.py list-users --json > users.json`.
 5. Step B, report: `uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json`; read counts; edit the plan: `suggested` → `confirmed`, set an explicit override `new_author` (a user id) on an `unmappable`/`ambiguous` entry and confirm it (OQ-3 disposition), set `source: "override"`; leave the rest.
 6. Step C, order is strictly edit → hash → record → apply: finish editing; `shasum -a 256 plan.json`; record the digest, `plan.json` and `users.json` in the DBA change record; then `... --apply --plan plan.json --users users.json --confirm-digest <sha256>`. Any later edit invalidates the digest.
 7. After apply: attach `plan.json` and the `*.result.json` to the DBA change record BEFORE the redeploy; they are the only undo/audit record and contain email local parts (PII): name the storage location and retention, and delete the local `users.json`.
 8. Restart and verify: redeploy/restart EVERY indicators instance (cache has no TTL); re-run report mode (0 rewritable for the confirmed authors); verify AC-1 as the owner through `get_formula`/`test_formula` (or `ExecuteFormula`) on one rewritten id, NOT `list_formulas` alone; analysis needs no restart; `skipped_concurrent` rows need a re-run.
 9. Undo: apply cannot undo (it refuses a UUID `old_author`). Use the result file to build a DBA-reviewed manual `UPDATE indicators.formulas SET author=<old> WHERE formula_id=<id> AND author=<new>` per row via `docs/runbooks/operator-db-access.md`, recorded in the change record, followed by the restart-and-verify step.
-10. Run on staging (the only environment today); record the observed row count in the change record. If a production environment is created later, run staging first, then production, report-first, and record its observed row count too.
+10. Staging first, then prod; record the observed prod row count in the change record.
 
-Add to `docs/runbooks/CLAUDE.md` a row: `legacy-formula-authors.md | Report and repair indicators formulas whose author is a legacy username (operator CLI, digest-confirmed apply, restart-and-verify) | Owner cannot see/execute their formulas; non-UUID authors in indicators.formulas`.
+Add to `docs/runbooks/CLAUDE.md` (alphabetical position, before `mcp-tools.md`) a row: `legacy-formula-authors.md | Report and repair indicators formulas whose author is a legacy username (operator CLI, digest-confirmed apply, restart-and-verify) | Owner cannot see/execute their formulas; non-UUID authors in indicators.formulas`.
 
 **Verification**:
 `grep -n "edit\|hash\|record\|apply" docs/runbooks/legacy-formula-authors.md` shows the ordered steps; `grep -n "legacy-formula-authors" docs/runbooks/CLAUDE.md`; `grep -nE "grep -P|pip install" docs/runbooks/legacy-formula-authors.md` returns nothing (macOS rule).
@@ -336,7 +337,7 @@ Add to `docs/runbooks/CLAUDE.md` a row: `legacy-formula-authors.md | Report and 
 
 ### Step 9 — docs: indicators CLAUDE.md Maintenance section and context-constitution invariant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators` (docs)
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify (new "## Maintenance" section after "## Running Locally")
@@ -347,7 +348,7 @@ Add to `docs/runbooks/CLAUDE.md` a row: `legacy-formula-authors.md | Report and 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "^## " services/xstockstrat-indicators/CLAUDE.md` → "## Database" `:68`, "## Environment Variables" `:196`, "## Running Tests" `:209`, "## Running Locally" `:217` (last section).
 - Confirmed via: `grep -n "INDICATORS-" services/xstockstrat-indicators/docs/context-constitution.md` → last rule is `INDICATORS-11` (`:28`); rules table header `| ID | Rule | Why | Evidence | Example (canonical path:line) |` at `:16`.
-- Migrations list in indicators `CLAUDE.md` § Database (`:80-88`) is NOT changed: no migration is added.
+- Migrations list in indicators `CLAUDE.md` § Database (`:84-90`) is NOT changed: no migration is added.
 
 **TDD**: `N/A (docs)`
 
@@ -366,3 +367,12 @@ Add to `docs/runbooks/CLAUDE.md` a row: `legacy-formula-authors.md | Report and 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- 2026-10-28 (re-spec, sdd-batch-execute): Steps 1-9 Codebase Evidence re-verified after merging `origin/main-dev`. Line drift corrected (Steps 1, 2, 4, 9); Step 4 stale "no real-Postgres harness" claim corrected (analysis `local_pg` exists; indicators keeps the fake, rationale recorded); Step 7 abort-assertion note aligned with `ctx_with` raising `grpc.RpcError`; Step 8 runbook must state the pooled-port deviation from `operator-db-access.md` and insert the index row alphabetically. Steps 3, 5, 6 evidence held unchanged.
+- 2026-10-29 (Step 2, sdd-execute sequential): Verification narrowed per operator decision (Option C, binding operator note on the Step 2 blocker). The specced `ruff check scripts/ && ruff format --check scripts/manage-users.py scripts/tests/test_manage_users.py` fails on pre-existing findings on lines this feature did not touch (`ruff check scripts/`: 9 findings across `build-launch-pdfs.py`, `do-inject-prod-secrets.py`, `manage-users.py`, `test_manage_users.py`; `ruff format --check`: 4 of 5 `scripts/` files would be reformatted). Step 2 is verified as clean on its own lines instead: no `ruff check` finding and no `ruff format --diff` hunk falls on the added lines (`import json`, `TestListUsersJson`). The cited CI line `.github/workflows/ci.yml:324-327` is stale (real `:331-335`), and that ruff job runs only per Python service (`working-directory: services/${{ matrix.service }}`), so no CI job lints `scripts/`. Cleanup and a CI ruff job for `scripts/` are filed as `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md`. The spec's fourth case (`test_table_path_unchanged`) is satisfied by the unedited `TestListUsersCmd::test_lists_users`, so no new test was added for it.
+- 2026-10-29 (Step 3, sdd-execute sequential): signatures carry keyword-only additions beyond the spec's named arguments, so the plan and log lines share one `run_id` and target: `connect(env=os.environ, run_id="-")` returns `(conn, (host, db))`; `classify(rows, users, *, clean=0, run_id=None, target=None)` (the `clean` count comes from `CLEAN_COUNT_SQL`, which `classify` cannot run); `run_report(conn, users, out_path, *, run_id=None, target=None)`. Until Step 5, `--apply` is parsed but refused (argparse error, exit 2); report mode requires `--out`. A public `is_uuid()` helper wraps `UUID_RE` for Step 5's validation. Log lines go to stdout prefixed `[run_id=<uuid>]`; refusals (missing `DATABASE_URL`, malformed users file) exit 1 via `SystemExit(<message>)`.
+- 2026-10-29 (Step 5, sdd-execute sequential): signatures carry keyword-only additions so plan and log lines share one `run_id` and target, as in Step 3: `run_apply(conn, users, plan_path, digest, result_path=None, *, run_id=None, target=None)`. The default result path is `Path(plan).with_suffix(".result.json")` (`plan.json` → `plan.result.json`); no `--result` flag is added. `ApplyRefused(reasons)` carries `exit_code = 2`, and an unreadable plan file is also a refusal. Rewrites run in plan-entry order via `conn.fetchrow(REWRITE_SQL, ...)`; `None` means `skipped_concurrent`. `--apply` without `--plan` is an argparse error (exit 2). Refusal reasons print to stdout as `[run_id=…] refused: <reason>` lines.
+- 2026-10-29 (Step 6, sdd-execute sequential): AC-8's interleaving is injected after apply's own live re-derivation and before its rewrite. A test-local `_InterleavedTable(FakeFormulasTable)` runs the `mutate` hook once, right after `DETECT_SQL`. A row changed before apply starts never reaches `REWRITE_SQL`: re-derivation drops it as `skipped_not_detected`. Only a change landing between detection and the rewrite exercises the compare-and-set (`skipped_concurrent`) that the spec asserts. The pre-apply path is covered by the replay leg of `test_second_run_changes_nothing`. `conftest.py` is unchanged. `test_hand_widened_plan_cannot_extend_write_set` also calls `REWRITE_SQL` directly against the fake with both the made-up and the real (UUID) `old_author`, to show the SQL guard rejects the row independently of the intersection.
+- 2026-10-29 (Step 7, sdd-execute sequential): the fake pool is a test-local `_FakePool(FakeFormulasTable)` that answers only `get_by_id`'s `SELECT * FROM indicators.formulas WHERE formula_id = $1::uuid` and delegates every other statement to the fake, so `conftest.py` is unchanged. The owner `ExecuteFormula` leg stubs `sandbox.execute_formula` (the `test_execute_formula_override_clamp.py` pattern) and asserts `success`, which is stronger than the specced "does not raise NOT_FOUND". The stale-cache test fills the warm cache through an admin `GetFormula` (scope 4) with a mocked ledger `AppendEvent`, so the `audit.admin_read` append succeeds. The RED reason differs from the spec's "module does not exist": Steps 3-5 already landed, so RED was captured with `legacy_authors.py` reverted to its Step 4 version (`67360c3f`) — 3 failed with `AttributeError: ... no attribute 'run_apply'`.
+- 2026-10-29 (Step 8, sdd-execute sequential): the runbook fills in three details the spec leaves open. (1) The pooled URL comes from the direct `doctl databases connection` URI: change the port to `25061` and the path to the pool name (`staging`/`production`), per `docs/patterns/database.md` § Connection pooling. No `doctl databases pool` command is cited. (2) The PII storage location is the DBA change record's attachments only (never git, `docs/`, a channel or an agent prompt). Retention is the change record's own lifetime, and at minimum until owner access is verified in both environments. The repo documents no specific change-record system, so the runbook names none. (3) The restart example is `doctl apps create-deployment <app-id>`, which has no repo precedent; any redeploy that restarts every indicators instance satisfies the step. The runbook also tells the operator to check the printed `target host=… db=…` line, because apply does not compare the plan's recorded target with the connected database (the Step 5 open item).
+- 2026-10-29 (Step 9, sdd-execute sequential): teardown done by hand. `context-forge:context-constitution` is not loaded in this session; only `context-forge:context-scrubber` is. The two touched context files were re-read against the code. `servicer.py:141` (`_can_read_formula`), `REWRITE_SQL` (`legacy_authors.py:32-36`), the `--help` flags, and the runbook's `:25061`/`DB_PGBOUNCER=true` and restart-every-instance text all match. The integration PR body must record both facts. Two additions beyond the spec text: the `INDICATORS-12` Example cell anchors `app/maintenance/legacy_authors.py:32-36`, and the constitution header gets a hand-refresh note matching its earlier refresh entries.

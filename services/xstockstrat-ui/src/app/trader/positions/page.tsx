@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { JsonObject } from '@bufbuild/protobuf';
 import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/trader/AppShell';
-import { useAccountContext } from '@/context/AccountContext';
+import { useAccountContext, type EnvironmentMode } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
 import { useReconciliationStatus } from '@/hooks/useReconciliationStatus';
 import { POSITION_RISK_FLAG, HALT_SOURCE, EnumBadge } from '@/lib/opportunityShared';
@@ -36,7 +36,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DataTable } from '@/components/ui/data-table';
 
-type TradingMode = 'paper' | 'live';
+type TradingMode = EnvironmentMode | null;
 type PnlFilter = 'all' | 'winners' | 'losers';
 
 // An unpriced position (no quote, no recent close) has no value or P&L to show — never a fake $0 (FR-5).
@@ -46,7 +46,7 @@ const dash = '—';
 export default function PositionsPage() {
   const { selectedAccountId, environmentMode, accounts } = useAccountContext();
   // Trading mode is fixed by the deployment environment — not user-selectable.
-  const mode: TradingMode = environmentMode ?? 'paper';
+  const mode: TradingMode = environmentMode;
   const [symbol, setSymbol] = useState('');
   const [side, setSide] = useState<PositionSide>(PositionSide.UNSPECIFIED);
   const [pnlFilter, setPnlFilter] = useState<PnlFilter>('all');
@@ -511,7 +511,7 @@ export default function PositionsPage() {
             {error && <p className="text-sm text-destructive">Failed to load positions</p>}
             {!isLoading && !error && positions.length === 0 && (
               <EmptyState
-                title={`No open ${mode} positions`}
+                title={`No open ${mode ? `${mode} ` : ''}positions`}
                 description={
                   selectedAccountId
                     ? 'Positions you hold in this account will show here.'

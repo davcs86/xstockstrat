@@ -156,6 +156,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.bracket_updated` | `order:{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
 | `reconciliation.mismatch_found` | `account:{account_id}` | Non-propagation-delay mismatch found by the reconciliation poller (feature 102) |
 | `order_intent.resolved_by_reconciliation` | `order:{order_id}` | A `101` `UNKNOWN` order intent resolved against broker truth by the reconciliation poller (feature 102) |
+| `order_intent.reclaimed_unknown` | `order:{order_id}` | A stale PENDING order intent reclaimed to UNKNOWN. `trigger`: `sweep` (sweeper, `user_id` `""`), `reactive_place` (PlaceOrder retry, including the internal flatten retry, which carries no trace id and may carry `user_id` `""`), `reactive_cancel`, `reactive_replace` (owner `user_id`). Payload: `trigger`, `order_id`, `intent_id`, `was_pending_since` (RFC3339Nano string, the pre-reclaim pending time) |
 | `account.positions.baseline_set` | `account:{account_id}` | Offline position baseline recorded (feature 163) — emitted after a `SnapshotOfflinePositions` call replaces the prior baseline and re-folds the account's positions |
 
 ## Order Replace (`ReplaceOrder`)

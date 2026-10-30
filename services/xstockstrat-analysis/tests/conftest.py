@@ -58,6 +58,59 @@ def fundamentals_row(symbol, missing=(), **metrics):
     return marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
 
 
+def snapshot_watcher(**values):
+    """A dial-free ConfigWatcher; each value lands in the oneof member matching its Python type."""
+    from gen.config.v1 import config_pb2
+
+    from app.config.watcher import ConfigWatcher
+
+    # __new__ bypasses __init__'s channel + watch-task dial (fails-074: never a live watcher).
+    w = ConfigWatcher.__new__(ConfigWatcher)
+    w.endpoint = "localhost:50060"
+    w.namespace = "analysis"
+    w._snapshot_event = asyncio.Event()
+    snap = config_pb2.ConfigSnapshot()
+    for key, val in values.items():
+        # bool before int: bool is an int subclass.
+        if isinstance(val, bool):
+            snap.values[key].bool_val = val
+        elif isinstance(val, int):
+            snap.values[key].int_val = val
+        elif isinstance(val, float):
+            snap.values[key].float_val = val
+        elif isinstance(val, str):
+            snap.values[key].string_val = val
+        else:
+            raise TypeError(f"snapshot_watcher: unsupported value type for {key}: {type(val)!r}")
+    w._snapshot = snap
+    return w
+
+
+def real_live_loop(ingest, indicators, rows, *, config_watcher, marketdata_stub):
+    """A real ``LiveEvaluationLoop`` over ``rows`` with empty portfolio pages; no cooldowns repo."""
+    from app.engine.live_loop import LiveEvaluationLoop
+    from app.services.evaluator import StrategyEvaluator
+
+    eof = types.SimpleNamespace(next_page_token="")
+    db = MagicMock()
+    db.fetch = AsyncMock(return_value=rows)
+    portfolio = MagicMock()
+    portfolio.ListPositions = AsyncMock(return_value=types.SimpleNamespace(positions=[], page=eof))
+    portfolio.ListWatchlists = AsyncMock(
+        return_value=types.SimpleNamespace(watchlists=[], page=eof)
+    )
+    return LiveEvaluationLoop(
+        config_watcher=config_watcher,
+        db_pool=db,
+        marketdata_stub=marketdata_stub,
+        ingest_stub=ingest,
+        notify_stub=AsyncMock(),
+        ledger_stub=AsyncMock(),
+        evaluator=StrategyEvaluator(indicators, ()),
+        portfolio_stub=portfolio,
+    )
+
+
 # Feature 215 PIT fixtures: SCHD (an ETF) has no SEC filings; AAPL has quarterly filings carrying
 # all six seeded fscore inputs (pe, pb, dividend_yield, roe, debt_to_equity, eps).
 SCHD_PIT_PERIODS = []

@@ -53,7 +53,7 @@ type PortfolioService struct {
 	quoteCfg intConfig
 
 	mu   sync.RWMutex
-	subs map[string]chan *portfoliov1.PortfolioSnapshot
+	subs map[string]snapshotSubscriber
 
 	// positionsMu serializes the ledger consumers' read-compute-write of portfolio.positions rows;
 	// correct only while those consumers run single-instance (instance_count: 1).
@@ -154,7 +154,7 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		// Watchlists reuse the single portfolio pgxpool (no second pool — budget stays 2).
 		watchlists: repository.NewWatchlistRepo(repo.Pool()),
 		wlCfg:      cfgWatcher,
-		subs:       make(map[string]chan *portfoliov1.PortfolioSnapshot),
+		subs:       make(map[string]snapshotSubscriber),
 		stops:      newStopStore(),
 	}
 	// Assigned only when non-nil: a nil pointer in an interface field defeats the nil-seam default.
@@ -882,11 +882,16 @@ func (s *PortfolioService) GetSnapshot(ctx context.Context, req *portfoliov1.Get
 	return s.repo.GetSnapshot(ctx, req.PortfolioId, at)
 }
 
-// Subscribe registers a streaming channel for portfolio updates.
-func (s *PortfolioService) Subscribe(id string) chan *portfoliov1.PortfolioSnapshot {
+type snapshotSubscriber struct {
+	ch     chan *portfoliov1.PortfolioSnapshot
+	userID string
+}
+
+// Subscribe registers a streaming channel that receives only userID's snapshots; an empty userID receives none.
+func (s *PortfolioService) Subscribe(id, userID string) chan *portfoliov1.PortfolioSnapshot {
 	ch := make(chan *portfoliov1.PortfolioSnapshot, 32)
 	s.mu.Lock()
-	s.subs[id] = ch
+	s.subs[id] = snapshotSubscriber{ch: ch, userID: userID}
 	s.mu.Unlock()
 	return ch
 }
@@ -894,26 +899,11 @@ func (s *PortfolioService) Subscribe(id string) chan *portfoliov1.PortfolioSnaps
 // Unsubscribe removes and closes a subscriber.
 func (s *PortfolioService) Unsubscribe(id string) {
 	s.mu.Lock()
-	if ch, ok := s.subs[id]; ok {
+	if sub, ok := s.subs[id]; ok {
 		delete(s.subs, id)
-		close(ch)
+		close(sub.ch)
 	}
 	s.mu.Unlock()
-}
-
-// StartSnapshotWriter periodically writes portfolio snapshots to the DB.
-func (s *PortfolioService) StartSnapshotWriter(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	intervalMin := s.cfg.GetInt("portfolio.snapshot.interval_minutes", 5)
-	ticker := time.NewTicker(time.Duration(intervalMin) * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.broadcastSnapshot(ctx, userID, mode)
-		}
-	}
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
@@ -945,9 +935,12 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	})
 
 	s.mu.RLock()
-	for _, ch := range s.subs {
+	for _, sub := range s.subs {
+		if sub.userID != userID {
+			continue
+		}
 		select {
-		case ch <- snap:
+		case sub.ch <- snap:
 		default:
 		}
 	}
@@ -999,7 +992,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 		for sym, val := range posValues {
 			pct := val / totalValue
 			if pct > concentrationLimitPct {
-				s.emitRiskAlert(ctx, fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
+				s.emitRiskAlert(ctx, userID, fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
 			}
 		}
 	}
@@ -1007,12 +1000,12 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	drawdowns, err := s.repo.GetAccountDrawdowns(ctx, userID, mode.String())
 	if err == nil {
 		for _, msg := range evaluateDrawdowns(drawdowns, maxDrawdownPct) {
-			s.emitRiskAlert(ctx, msg)
+			s.emitRiskAlert(ctx, userID, msg)
 		}
 	}
 }
 
-func (s *PortfolioService) emitRiskAlert(ctx context.Context, msg string) {
+func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, msg string) {
 	s.emitEvent(ctx, "portfolio.risk.drawdown_breach", "portfolio:risk", map[string]interface{}{
 		"message": msg,
 	})
@@ -1022,6 +1015,7 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, msg string) {
 		Title:         "portfolio risk limit breach",
 		Body:          msg,
 		SourceService: "portfolio",
+		TargetUserId:  userID,
 	})
 	if err != nil {
 		slog.Warn("notify emit failed", "error", err)

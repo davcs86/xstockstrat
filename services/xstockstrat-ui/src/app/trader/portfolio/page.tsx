@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/trader/AppShell';
@@ -24,13 +24,15 @@ import { PNL_UNAVAILABLE_LABEL, sumPortfolioTotals } from '@/lib/portfolioTotals
  */
 export default function PortfolioPage() {
   const { accounts, selectedAccountId, environmentMode } = useAccountContext();
-  const mode = environmentMode ?? 'paper';
+  const mode = environmentMode;
   // Combined view: all accounts (null → no account filter).
   const { data: portfoliosData, isLoading, error } = usePortfolios(null);
   const portfolios = portfoliosData?.portfolios ?? [];
   // Broker-reported positions for the selected account (full Position columns).
   const { data: positionsData } = usePositions(mode, selectedAccountId);
   const positions = positionsData?.positions ?? [];
+
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const accountName = (accountId: string) =>
     accounts.find((a) => a.id === accountId)?.displayName ?? accountId;
@@ -111,20 +113,28 @@ export default function PortfolioPage() {
   // Export the caller's ledger events (last 90 days). Goes through fetch() (not a bare <a href>) so
   // the session-cookie refresh interceptor applies; the blob feeds a transient download link.
   const onExportEvents = async () => {
-    const end = new Date();
-    const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
-    const res = await fetch(`/trader/api/ledger/export?${qs.toString()}`);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'ledger-events.ndjson';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    setExportError(null);
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+      const res = await fetch(`/trader/api/ledger/export?${qs.toString()}`);
+      if (!res.ok) {
+        setExportError(`Export failed (HTTP ${res.status})`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ledger-events.ndjson';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(`Export failed: ${(e as Error).message}`);
+    }
   };
 
   return (
@@ -150,6 +160,7 @@ export default function PortfolioPage() {
 
         {isLoading && <CardNotice>Loading portfolio…</CardNotice>}
         {error && <CardNotice variant="error">Portfolio unavailable</CardNotice>}
+        {exportError && <CardNotice variant="error">{exportError}</CardNotice>}
 
         {!isLoading && !error && portfolios.length > 0 && (
           <>

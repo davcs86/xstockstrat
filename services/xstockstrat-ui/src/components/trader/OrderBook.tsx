@@ -86,7 +86,9 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
               tableTestId="order-book-table"
             />
             {data.orders.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-6">No {mode} orders</p>
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No {mode ? `${mode} ` : ''}orders
+              </p>
             )}
           </>
         )}

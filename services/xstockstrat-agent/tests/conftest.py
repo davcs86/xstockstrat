@@ -2,7 +2,9 @@
 
 import pathlib
 import sys
+import threading
 import types
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +14,9 @@ import pytest
 ADMIN = {"user_id": "u-1", "email": "a@b.c", "roles": ["admin"], "aud": "http://x"}
 TRADER = {"user_id": "u-2", "email": "t@b.c", "roles": ["trader"], "aud": "http://x"}
 VIEWER = {"user_id": "u-3", "email": "v@b.c", "roles": ["viewer"], "aud": "http://x"}
+
+# Outer bound so a missing deadline fails instead of hanging.
+HANG_GUARD_S = 10
 
 
 def _ctx(claims: dict | None, *, with_request: bool = True):
@@ -72,6 +77,140 @@ def set_env(monkeypatch):
     monkeypatch.setattr(client, "NOTIFY_ENDPOINT", "notify-test:50059")
     monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", "analysis-test:50056")
     monkeypatch.setattr(oauth_server, "JWT_SECRET", "test-jwt-secret")
+
+
+@pytest.fixture
+def hung_config_server(monkeypatch):
+    """Start an in-process ConfigService and point ``client.get_config_value`` at it (feature 247).
+
+    ``start()`` (no args) hangs ``GetConfig`` until the caller's deadline expires;
+    ``start(answer_after_s=…, values=…)`` answers a snapshot after that delay. The returned handle
+    exposes ``port`` and ``entered`` (handler entries). Sync + threaded, unlike the ``grpc.aio``
+    server in test_list_opportunities_deadline.py: ``TestClient``'s portal loop cannot serve a
+    pytest-loop-bound aio server.
+    """
+    import grpc  # noqa: PLC0415
+    from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+    from app import client  # noqa: PLC0415
+
+    stop = threading.Event()
+    servers = []
+
+    def start(*, answer_after_s: float | None = None, values: dict | None = None):
+        lock = threading.Lock()
+        counter = {"entered": 0}
+
+        class _Config(config_pb2_grpc.ConfigServiceServicer):
+            def GetConfig(self, request, context):  # noqa: N802
+                with lock:
+                    counter["entered"] += 1
+                if answer_after_s is None:
+                    while context.is_active() and not stop.is_set():
+                        stop.wait(0.05)
+                    return config_pb2.ConfigSnapshot()
+                stop.wait(answer_after_s)
+                return config_pb2.ConfigSnapshot(
+                    namespace=request.namespace, version="1", values=values or {}
+                )
+
+        server = grpc.server(ThreadPoolExecutor(max_workers=8))
+        config_pb2_grpc.add_ConfigServiceServicer_to_server(_Config(), server)
+        port = server.add_insecure_port("127.0.0.1:0")
+        server.start()
+        servers.append(server)
+
+        monkeypatch.setattr(client, "CONFIG_ENDPOINT", f"127.0.0.1:{port}")
+        monkeypatch.setattr(
+            client.mtls, "secure_channel", lambda ep, _svc: grpc.aio.insecure_channel(ep)
+        )
+
+        class _Handle:
+            def __init__(self) -> None:
+                self.port = port
+
+            @property
+            def entered(self) -> int:
+                with lock:
+                    return counter["entered"]
+
+        return _Handle()
+
+    yield start
+    stop.set()
+    for server in servers:
+        server.stop(0).wait()
+
+
+@pytest.fixture
+def hung_backend(monkeypatch):
+    """Start an in-process gRPC server that serves ANY method and point one endpoint at it (273).
+
+    ``start(endpoint_attr, *, module=None, answers=None)`` redirects ``module.<endpoint_attr>``
+    (default module ``app.client``). Per method name, ``answers`` maps to ``(delay_s, msg)`` (answer
+    ``msg`` after the delay) or ``(delay_s, grpc.StatusCode)`` (abort after the delay); an absent
+    method hangs until the caller's deadline. The handle exposes ``port``, ``calls`` (a list of
+    ``(method, metadata_dict)``) and ``entered``. Config paths keep 247's ``hung_config_server``
+    (typed ConfigService); this fixture serves every other service, untyped (raw bytes).
+    """
+    import grpc  # noqa: PLC0415
+
+    from app import client  # noqa: PLC0415
+
+    stop = threading.Event()
+    servers = []
+
+    def start(endpoint_attr: str, *, module=None, answers: dict | None = None):
+        lock = threading.Lock()
+        calls: list[tuple[str, dict]] = []
+        replies = answers or {}
+
+        def _handle(method: str, context) -> bytes:
+            with lock:
+                calls.append((method, dict(context.invocation_metadata())))
+            reply = replies.get(method)
+            if reply is None:
+                while context.is_active() and not stop.is_set():
+                    stop.wait(0.05)
+                return b""
+            delay_s, outcome = reply
+            stop.wait(delay_s)
+            if isinstance(outcome, grpc.StatusCode):
+                context.abort(outcome, "rejected")
+            return outcome.SerializeToString()
+
+        class _AnyMethod(grpc.GenericRpcHandler):
+            def service(self, details):
+                method = details.method.rsplit("/", 1)[-1]
+                return grpc.unary_unary_rpc_method_handler(lambda _req, ctx: _handle(method, ctx))
+
+        server = grpc.server(ThreadPoolExecutor(max_workers=8))
+        server.add_generic_rpc_handlers((_AnyMethod(),))
+        port = server.add_insecure_port("127.0.0.1:0")
+        server.start()
+        servers.append(server)
+
+        monkeypatch.setattr(module or client, endpoint_attr, f"127.0.0.1:{port}")
+        monkeypatch.setattr(
+            client.mtls, "secure_channel", lambda ep, _svc: grpc.aio.insecure_channel(ep)
+        )
+
+        class _Handle:
+            def __init__(self) -> None:
+                self.port = port
+                self.calls = calls
+
+            @property
+            def entered(self) -> int:
+                with lock:
+                    return len(calls)
+
+        return _Handle()
+
+    yield start
+    stop.set()
+    for server in servers:
+        server.stop(0).wait()
 
 
 @pytest.fixture

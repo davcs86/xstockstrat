@@ -81,7 +81,7 @@ not an omission.
 
 ### Step 1 — service: D-54 — pending-hidden rows return NOT_FOUND on UpdateFormula/DeleteFormula
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -132,7 +132,7 @@ Expect exactly 2 hits, one in `UpdateFormula` and one in `DeleteFormula`. Lint i
 
 ### Step 2 — test: D-54 guard-branch tests for UpdateFormula/DeleteFormula
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_private_formulas.py` — modify
@@ -144,7 +144,7 @@ Expect exactly 2 hits, one in `UpdateFormula` and one in `DeleteFormula`. Lint i
   at `tests/test_private_formulas.py:29-45`. It already carries `pending_intent_id` and `deleted_at`.
 - The existing servicer factory is `def _servicer(rows=(), audit_error=None)` at `:48-60`, with
   `repo.update = AsyncMock(...)` at `:54` and `repo.delete = AsyncMock(return_value=True)` at `:55`.
-- The admin context helper is `def _admin(peer_sans=())` at `:63-67`, and `ADMIN_SCOPE = "7"` is
+- The admin context helper is `def _admin(peer_sans=())` at `:62-66`, and `ADMIN_SCOPE = "7"` is
   at `:16`.
 - The pending-read precedent is `class TestPendingAndCache` at `:276`, with
   `test_pending_intent_row_is_not_found_and_never_cached` at `:278` using the pending id
@@ -153,8 +153,9 @@ Expect exactly 2 hits, one in `UpdateFormula` and one in `DeleteFormula`. Lint i
   and `indicators_pb2.DeleteFormulaRequest(formula_id=...)` (precedent `tests/test_formulas.py:544`,
   `:575`).
 - `ctx_with` is at `tests/conftest.py:21`. It makes `ctx.abort` an `AsyncMock` that raises
-  `grpc.RpcError` (`:33`).
-- `SYSTEM_AUTHOR` is imported at `test_private_formulas.py:9`.
+  `grpc.RpcError` (`:32`).
+- `SYSTEM_AUTHOR` is imported at `test_private_formulas.py:10`
+  (`from app.formulas import SYSTEM_AUTHOR`).
 - Ledger traps:
   - `fails.md:75` (063): add a test per guard branch.
   - `fails.md:726-728`: use real pb2 messages, never MagicMock proto stand-ins.
@@ -206,7 +207,7 @@ DeleteFormula soft-deletes.
 
 ### Step 3 — service: D-10 — a sandbox run with no parseable output line fails
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
@@ -217,7 +218,7 @@ DeleteFormula soft-deletes.
 - `_SANDBOX_WRAPPER = textwrap.dedent("""` at `sandbox.py:206`.
   - It is a **non-raw** string filled by `.format(` (`:348`), so braces are doubled (`{{}}`) and any
     `\n` written in the source becomes a real newline in the child's code.
-- The wrapper output is at `:310-312`:
+- The wrapper output block is at `:310-312` (`:310` is the comment `# Output must be assigned to result variable`; the code is on `:311-312`):
   `_output = _formula_globals.get('result', {{}})` then
   `print("__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))`.
 - The user `exec` is at `:307`.
@@ -287,7 +288,7 @@ AC-3 and marker-framing guard catch it, so run Step 4's suite right after this e
 
 ### Step 4 — test: D-10 sandbox failure semantics, success guard and preserved classifications
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox.py` — modify
@@ -358,7 +359,7 @@ fail. AC-3 and the framing guard pass both before and after; they are guards, no
 
 ### Step 5 — service: D-18 Option A — honest ATR/VWAP descriptions in the engine registry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/indicators_engine.py` — modify
@@ -377,7 +378,7 @@ fail. AC-3 and the framing guard pass both before and after; they are guards, no
   `"VWAP": {"description": "Volume Weighted Average Price", "required": []}` at `:142`.
 - The dispatch entries `"ATR": _atr` and `"VWAP": _vwap` are at `:30-31`. They are unchanged.
 - `ListIndicators` builds `IndicatorMeta(description=info["description"])` from `INDICATOR_REGISTRY`
-  (`servicer.py:354-363`).
+  (`app/handlers/servicer.py:355-363`).
 
 **TDD**: `red-green required`
 
@@ -392,9 +393,10 @@ fail. AC-3 and the framing guard pass both before and after; they are guards, no
    absolute close-to-close change; the cumulative mean of the inputs) and that it is not the
    true-range / volume-weighted indicator.
 4. Leave the keys, `"required"`, the dispatch at `:30-31` and the math unchanged. Analysis consumers
-   (`evaluator.py:141`, `:196-197`; `screener.py:285`, the `_latest_indicator("ATR", ...)` call, with
-   its close-only comment at `:279-284`; `warmup.py:86`, `:108`;
-   `pnl_pattern_consumer.py:50`) keep resolving, with identical numbers.
+   (`evaluator.py:141`, `:196-197`; `app/services/screener.py:319`, the `_latest_indicator("ATR", ...)`
+   call, with its close-only comment starting at `:313`; `warmup.py:86`, `:108`;
+   `app/engine/pnl_pattern_consumer.py:50`, `DEFAULT_INDICATORS = ("RSI", "ATR")`) keep resolving,
+   with identical numbers.
 
 **Verification**:
 ```bash
@@ -407,7 +409,7 @@ Lint and coverage are run in Step 6.
 
 ### Step 6 — test: D-18 ATR/VWAP descriptions and unchanged values (engine + servicer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_indicators_engine.py` — modify
@@ -421,9 +423,10 @@ Lint and coverage are run in Step 6.
   pin is at `:182`, and the VWAP finite-at-index-0 check is at `:199-204`.
 - There is no existing `ListIndicators` or servicer `ComputeIndicator` test. The only mention is
   `test_owner_scoped_completeness.py:14` (`EXEMPT = {"ComputeIndicator", "ListIndicators", ...}`).
-- Servicer `ComputeIndicator` is at `servicer.py:204-225`. It drops points where
-  `r.get("value") is None` (`:216-217`) and builds `indicators_pb2.IndicatorPoint(value=..., extra=...)`.
-- Servicer `ListIndicators` is at `:354-363`. Construction is `IndicatorsServicer(config_watcher=...)`,
+- Servicer `ComputeIndicator` is at `services/xstockstrat-indicators/app/handlers/servicer.py:204`. It
+  drops points where `r.get("value") is None` (`:217`) and builds
+  `indicators_pb2.IndicatorPoint(value=..., extra=...)` (`:221`).
+- Servicer `ListIndicators` is at `:355-363`. Construction is `IndicatorsServicer(config_watcher=...)`,
   as in `tests/test_formulas.py:489`. `ComputeIndicator` and `ListIndicators` are owner-scope-exempt,
   so a bare `ctx_with([])` (`tests/conftest.py:21`) suffices.
 - `ComputeIndicatorRequest` fields are `indicator`, `values` and `params` (`indicators.proto:54-61`).
@@ -470,7 +473,7 @@ they guard that the numbers are unchanged.
 
 ### Step 7 — service: D-18 Option A — mirror the honest descriptions in the UI strategy catalog (C-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/strategyCatalog.ts` — modify
@@ -483,8 +486,10 @@ they guard that the numbers are unchanged.
 - The VWAP entry is `name: 'VWAP'` at `:103`, with `description: 'Volume Weighted Average Price'`
   at `:104`.
 - The consumers are `SymbolScreening.tsx`, `ComponentEditor.tsx`, `StrategyWizard.tsx`,
-  `RuleEditor.tsx`, `app/insights/screener/page.tsx`, `ruleSummary.ts` and `screenCriteria.ts`.
-  They are found by `grep -rln strategyCatalog src`, and none of them needs a change.
+  `RuleEditor.tsx`, `app/insights/screener/page.tsx`, `ruleSummary.ts`, `screenCriteria.ts` and
+  `src/lib/screenPresets.test.ts`. They are found by `grep -rln strategyCatalog src`, and none of
+  them needs a change: `screenPresets.test.ts` imports `BUILTIN_INDICATORS` but reads only `.name`
+  (`:7`) and asserts no description string.
 - A repo-wide grep finds no test or spec that asserts the old strings.
 
 **TDD**: `red-green required`
@@ -509,7 +514,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 8 — test: UI catalog carries no misleading ATR/VWAP names (vitest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/strategyCatalog.test.ts` — create
@@ -554,7 +559,7 @@ route, component or interaction, and no `e2e/` spec references the old strings (
 
 ### Step 9 — docs: indicators sandbox failure rule, ATR/VWAP approximation note, Wilder-ATR divergence
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators` (docs) + `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -619,7 +624,7 @@ grep -n "wilderATR\|Wilder" services/xstockstrat-indicators/docs/context-constit
 
 ### Step 10 — docs: file the "never assigns result" silent-success defect report
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`
 **Files**:
 - `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` — create
@@ -629,7 +634,7 @@ grep -n "wilderATR\|Wilder" services/xstockstrat-indicators/docs/context-constit
 
 **Codebase Evidence**:
 - The wrapper defaults a missing `result` to `{}`: `_output = _formula_globals.get('result', {{}})`
-  at `sandbox.py:310`. That run still prints a parseable marker, so it succeeds with `{}` even after
+  at `sandbox.py:311`. That run still prints a parseable marker, so it succeeds with `{}` even after
   Step 3.
 - The report format precedent is `docs/reports/2026-10-21-indicators-formula-correctness-defect.md:1-9`
   (the `**Recorded**`, `**Severity**`, `**Impact type**`, `**Environment**`, `**Affected service(s)**`,
@@ -644,7 +649,7 @@ grep -n "wilderATR\|Wilder" services/xstockstrat-indicators/docs/context-constit
 
 **Instructions**:
 1. Create the report, following the header shape of the 2026-10-21 precedent and `defect-filing.md`.
-   - Observed: a formula that never assigns `result` returns `success=true, output={}` (`sandbox.py:310`).
+   - Observed: a formula that never assigns `result` returns `success=true, output={}` (`sandbox.py:311`).
    - Expected: undecided; triage decides.
    - Source: feature 268 design.md § Open Risks.
    - Severity: `SEV-2`, provisional. `/sdd-triage` confirms or re-rates it.
@@ -662,3 +667,38 @@ cat docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.stat
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — RED proof for the marker-framing guard (2026-10-29)
+- **Spec said**: Step 4's RED proof calls AC-3 and the marker-framing guard "pass both before and after".
+- **Actual**: only AC-3 passes before Step 3. The framing guard fails pre-Step-3 (`assert {} == {'x': 1}`),
+  because the trailing `print("x", end="")` glued the marker mid-line. Step 3 had already landed, so RED was
+  captured by temporarily checking out the pre-Step-3 `sandbox.py` (`85ef0ac8~1`) and restoring it before GREEN.
+- **Disposition**: test unchanged. The guard is stronger than specced (it is also a RED assertion for the
+  framing fix). No scope change.
+
+### Step 5 — verification grep 1 matches the formatter's layout (2026-10-29)
+- **Spec said**: `grep -n '"ATR": {"description"\|"VWAP": {"description"'` shows the two edited entries.
+- **Actual**: both new descriptions exceed the 100-char `line-length`, so each entry is written as a
+  multi-line dict with a parenthesized string (the `ruff format` layout, no `noqa`). That grep returns
+  nothing. The equivalent check `grep -n '"ATR": {\|"VWAP": {'` hits `:144` and `:151`, and the runtime
+  values equal the specced strings exactly (checked via `INDICATOR_REGISTRY[...]["description"]`). Grep 2
+  returns `0` as specced.
+- **Disposition**: verification command form only; strings, keys, `required`, dispatch and math as specced.
+  Step 7 must match the runtime strings, not a one-line source form.
+
+### Step 7 — catalog entries are prettier-wrapped (2026-10-29)
+- **Spec said**: replace `:99` / `:104` with a one-line `description: ...,` each.
+- **Actual**: both new strings exceed prettier's print width, so `prettier --write` puts each value on its own
+  line after `description:` (`:99-100`, `:105-106`). The ATR value uses double quotes (apostrophe). Runtime values
+  are byte-identical to the engine's `INDICATOR_REGISTRY` strings (asserted with `toBe` in a scratch vitest).
+- **Disposition**: source layout only; strings, `name`, `params` and other entries as specced.
+
+### Step 9 — `wilderATR` line drift; context-forge plugin unavailable (2026-10-29)
+- **Spec said**: `wilderATR` at `trading.go:3170-3198`, called at `:3233`; teardown via `/context-forge:context-constitution refresh`.
+- **Actual**: the definition is at `:3169-3198` and the call at `:3232` (one-line drift); the findings row cites the
+  symbol anchor `trading.go#wilderATR` plus the current lines. The `context-constitution` skill is not available in
+  this session, so the teardown was done by hand: each touched doc was re-read against `sandbox.py` (marker loop and
+  `_fail` messages `:406-428`, wrapper print `:312`), `indicators_engine.py` (`INDICATOR_REGISTRY` ATR/VWAP `:144-156`)
+  and `trading.go#wilderATR`; no other drift found in the touched sections.
+- **Disposition**: anchors only; doc content as specced. The PR body must record both facts (plugin unavailable +
+  manual reconciliation) and the Open Risks of Instruction 5.
