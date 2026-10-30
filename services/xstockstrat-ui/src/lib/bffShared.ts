@@ -116,6 +116,10 @@ export function createDispatch(
   const handlerMap = new Map(router.handlers.map((h) => [prefix + h.requestPath, h]));
 
   return async function dispatchConnect(req: Request): Promise<Response> {
+    // Connect unary RPCs are POST-only; a GET must not reach the handler (it surfaces as a 5xx).
+    if (req.method !== 'POST') {
+      return new Response(null, { status: 405, headers: { Allow: 'POST' } });
+    }
     const pathname = new URL(req.url).pathname;
     const handler = handlerMap.get(pathname);
     if (!handler) return new Response(null, { status: 404 });
