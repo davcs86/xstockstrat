@@ -518,3 +518,19 @@ Still open (surface at the /sdd-execute checkpoint):
   CI-scoped coverage total 68.6% (>= 40%); `go build` ok; `golangci-lint` 0 issues; Step 6 greps clean; one `func pnlEvent`.
 - Tooling: the provisioned `~/go/bin/golangci-lint` (v2.14.0) is built with go1.26 and refuses the go1.27 module;
   the same pinned v2.14.0 was rebuilt with go1.27.0 into the session scratchpad for the lint run. No repo change.
+
+### Step 8 — CI real-TimescaleDB tier test (2026-10-30)
+
+- Operator decision (2026-10-30, own words: "A: --test-concurrency=1 (Recommended)"): `test:db` in
+  `services/xstockstrat-ledger/package.json` is now `tsc && node --test --test-concurrency=1 dist/__tests__/db/*.test.js`
+  so DB-tier files do not run in parallel against the shared CI database. Deviation Log row added; Step 8 Files updated.
+- New `src/__tests__/db/queryPagination.db.test.ts` (fail-loud `before()` like `streamResolve.db.test.ts`; rows scoped by
+  `randomUUID()` stream_key; `N = 2 * REPLAY_BATCH_SIZE + 500` seeded via `generate_series` with no explicit `sequence`):
+  AC-1 token walk (all rows once, ascending via `toSeq`, `ceil(N/1000)` pages, last token `''`, plus `ownerOnly` walk
+  returning only the caller's rows) and AC-5 (3 concurrent replays on a `max: 1` pool while `appendEvent` loops;
+  each replay equals the DB order exactly; max append latency < 5000 ms; timings `console.log`ged for the CI log).
+- Local verification only: `pnpm run build` ok, `lint` 0 errors, `test:coverage` 105 pass (89% lines), prettier clean.
+  No database started; `test:db` without `LEDGER_DB_TEST_URL` fails loudly by design. RED/GREEN evidence is the CI job.
+  Open: CI job result must be checked on the pushed branch; if it fails, hard stop per Step 8 instruction 6.
+- Tooling note: the worktree's `node_modules` symlink pointed at a main checkout with no install; replaced by a local
+  `pnpm install --frozen-lockfile` (gitignored).

@@ -618,10 +618,11 @@ grep -rn "func pnlEvent" --include="*_test.go" internal/   # exactly 1 declarati
 
 ### Step 8 — test: CI real-TimescaleDB tier — AC-5 non-starvation and real-pg token walk (`*.db.test.ts`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/db/queryPagination.db.test.ts` — create
+- `services/xstockstrat-ledger/package.json` — modify (`test:db` gains `--test-concurrency=1`; test-only script)
 
 **Reviewers**: `xstockstrat-ledger` owner — Append-only invariant (no deletes or updates), event ordering, hypertable partition safety
 
@@ -769,3 +770,4 @@ grep -n "then subscribes" services/xstockstrat-ledger/CLAUDE.md   # no hit
 | 2026-10-29 | 4 + 5 | **Steps 4 and 5 executed as ONE commit** with one red→green cycle on Step 5's tests. Step 4's `MAX(sequence)` bound query breaks 248's `makePool`/deferred-pool `streamEvents` fakes, and its `waitForDrain` needs Step 5's `once`/`removeListener`/`emit` call double, so Step 4's verification cannot pass alone. Standing rule (operator, 2026-10-29, own words): "Merge pairs + standing rule"; widened (operator, 2026-10-30, own words): "Widen the rule (Recommended)". | Operator decision 2026-10-30 (session question tool): "A: Include the fake fix (Recommended)" |
 | 2026-10-29 | 4 + 5 | **Files expansion (test fake only):** `services/xstockstrat-ledger/src/__tests__/streamResolveWired.test.ts` — `makeCountingPool` answers the new `MAX(sequence)` bound query (`wire(replay, max = '0')`; the buffered-resolve test passes `'50'`). No assertion changed; no production code outside Step 4's Files changed. | Operator decision 2026-10-30 (session question tool): "A: Include the fake fix (Recommended)" |
 | 2026-10-29 | 6 + 7 | **Steps 6 and 7 executed as ONE commit** with one red→green cycle on Step 7's tests. Step 6's **Verification** is "see Step 7" — its RED/GREEN tests live entirely in Step 7's files, so Step 6 cannot be verified alone. Standing rule (operator, 2026-10-29, own words): "Merge pairs + standing rule"; widened (operator, 2026-10-30, own words): "Widen the rule (Recommended)". No file outside Steps 6–7's **Files** is touched, no existing assertion changed. The `pagingLedger` fake also carries a 100-call safety cap (`pagingCallCap`, answers `ResourceExhausted`) so the pre-fix repeated-token loop ends inside the test run instead of leaking a spinning goroutine; it does not change any asserted behaviour. | Standing rule (operator 2026-10-29 / 2026-10-30) |
+| 2026-10-30 | 8 | **Step 8 Files expanded: `services/xstockstrat-ledger/package.json` `test:db` → `tsc && node --test --test-concurrency=1 dist/__tests__/db/*.test.js`** so the DB-tier files run one after another (both share the CI database and the AC-5 test needs the whole `max: 1` pool latency to itself). Test-only script; no production code or assertion changes. Step 8 is verified by CI job `Ledger DB test (TimescaleDB)` going green; locally only build/lint/`test:coverage` ran (build ok, lint 0 errors, 105 tests pass, coverage 89%) and no database was started. RED/GREEN against a real DB is therefore taken from that CI job, not a local capture. | Operator decision 2026-10-30 (session question tool): "A: --test-concurrency=1 (Recommended)" |

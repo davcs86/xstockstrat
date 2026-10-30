@@ -23,6 +23,7 @@
 | 2026-10-29 | `in-progress` | /sdd-execute | Steps 2+3 done (one commit, operator 2026-10-30 "A: Fix in same commit"): ledger `queryEvents` keyset token on `sequence`, 100/1000 page clamp, `toSeq`/`parseSequenceToken`; keyset/cap/default/bad-token tests; 263 exact-SQL expectations moved to `ORDER BY sequence ASC` |
 | 2026-10-29 | `in-progress` | /sdd-execute | Steps 4+5 done (one commit, operator 2026-10-30 "A: Include the fake fix"): ledger `streamEvents` bounded `REPLAY_BATCH_SIZE` 1000 replay up to a post-subscribe `MAX(sequence)` bound, `waitForDrain` backpressure, BigInt `maxSeq`; FIFO-interleave/dedupe/drain/cancel/error tests, 248 streamEvents fakes adapted |
 | 2026-10-29 | `in-progress` | /sdd-execute | Steps 6+7 done (one commit, standing merge-pairs rule): portfolio `GetPnL` fails closed (`ErrLedgerUnavailable` → `UNAVAILABLE`), rejects a repeated page token, pages at 1000 via one `collectFills` walk, keeps the largest \|cumulative `FilledQty`\| partial; AC-3/AC-4/AC-6 paging tests, mirror + classifier tests |
+| 2026-10-30 | `in-progress` | /sdd-execute | Step 8 done (code-side): `queryPagination.db.test.ts` (AC-1 real-pg token walk, AC-5 non-starvation over `max: 1` pool) added to the CI real-DB tier; `test:db` runs with `--test-concurrency=1` (operator 2026-10-30 "A: --test-concurrency=1"). Verified by CI job `Ledger DB test (TimescaleDB)` going green |
 
 ---
 
