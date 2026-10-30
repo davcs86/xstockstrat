@@ -111,8 +111,8 @@ func newQuoteSvc(t *testing.T, stub *stubMarketData, timeoutMs int64) (*Portfoli
 	return svc, mock, ledger
 }
 
-// expectAllAccounts registers the all-accounts ListPortfolios reads: balance accounts, their positions, and
-// offline accounts with their positions. GetOfflineStates is left unexpected (its error is non-fatal).
+// expectAllAccounts registers the all-accounts ListPortfolios reads. GetOfflineStates is left unexpected, which marks
+// every offline account degraded (offline_state_unavailable); a caller asserting offline P&L must expect it itself.
 func expectAllAccounts(mock pgxmock.PgxPoolIface, balance []string, offline []string, positions map[string]*pgxmock.Rows) {
 	bal := mock.NewRows([]string{"account_id", "cash", "buying_power", "equity", "last_equity"})
 	for _, id := range balance {

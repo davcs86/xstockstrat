@@ -29,6 +29,7 @@ type acctScenario struct {
 	state     *repository.OfflineState // nil → no offline_account_realized row
 	quotes    []*marketdatav1.Quote
 	bars      []*marketdatav1.Bar
+	statesErr error // non-nil → the GetOfflineStates query fails
 }
 
 func (sc acctScenario) stub() *stubMarketData {
@@ -84,6 +85,13 @@ func expectOfflineIDList(mock pgxmock.PgxPoolIface, userID string, ids ...string
 	mock.ExpectQuery(`SELECT account_id FROM portfolio.offline_account_realized`).WithArgs(userID).WillReturnRows(rows)
 }
 
+func (sc acctScenario) expectStates(mock pgxmock.PgxPoolIface) {
+	q := expectStates(mock, "u1", sc.states())
+	if sc.statesErr != nil {
+		q.WillReturnError(sc.statesErr)
+	}
+}
+
 func (sc acctScenario) states() map[string]repository.OfflineState {
 	if sc.state == nil {
 		return nil
@@ -104,7 +112,7 @@ func getPortfolioAcc(t *testing.T, sc acctScenario) *portfoliov1.Portfolio {
 	svc, mock := acctSvc(t, sc.stub(), 0)
 	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(sc.rows(mock, offAcct))
 	expectBalanceList(mock, "u1")
-	expectStates(mock, "u1", sc.states())
+	sc.expectStates(mock)
 	pf, err := svc.GetPortfolio(ctxWithUser(t, "u1"), &portfoliov1.GetPortfolioRequest{AccountId: proto.String(offAcct)})
 	if err != nil {
 		t.Fatalf("GetPortfolio: %v", err)
@@ -120,7 +128,7 @@ func listPortfoliosAcc(t *testing.T, sc acctScenario) *portfoliov1.Portfolio {
 	expectOfflineIDList(mock, "u1", offAcct)
 	mock.ExpectQuery(`FROM portfolio.account_balances`).WithArgs(offAcct).WillReturnRows(mock.NewRows([]string{"cash", "buying_power", "equity", "last_equity"}))
 	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(offAcct).WillReturnRows(sc.rows(mock, offAcct))
-	expectStates(mock, "u1", sc.states())
+	sc.expectStates(mock)
 	resp, err := svc.ListPortfolios(ctxWithUser(t, "u1"), &portfoliov1.ListPortfoliosRequest{AccountId: proto.String(offAcct)})
 	if err != nil {
 		t.Fatalf("ListPortfolios: %v", err)
@@ -227,23 +235,160 @@ func TestAccountPnL_FeesGrossAndLifetime(t *testing.T) {
 	approx(t, "realized_pnl_lifetime", pf.GetRealizedPnlLifetime(), 900)
 }
 
-func TestAccountPnL_OfflineStatesErrorIsNonFatal(t *testing.T) {
-	warns := recordWarns(t)
-	sc := acctScenario{positions: []posSpec{{testdata.Aapl, 100, 150}},
-		quotes: []*marketdatav1.Quote{testdata.LiveQuote(testdata.Aapl, testdata.AaplMid)}, bars: []*marketdatav1.Bar{aaplPC}}
-	svc, mock := acctSvc(t, sc.stub(), 0)
-	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(sc.rows(mock, offAcct))
-	expectBalanceList(mock, "u1")
-	expectStates(mock, "u1", nil).WillReturnError(errors.New("db down"))
-	pf, err := svc.GetPortfolio(ctxWithUser(t, "u1"), &portfoliov1.GetPortfolioRequest{AccountId: proto.String(offAcct)})
-	if err != nil {
-		t.Fatalf("GetPortfolio must not fail on an offline-state error: %v", err)
+// degradedSc: realized 500.00 sits in the unreadable state; AAPL 10 @ 154 marked at 164 is 100.00 unrealized.
+var degradedSc = acctScenario{positions: []posSpec{{testdata.Aapl, 10, 154}},
+	state:  &repository.OfflineState{RealizedPnl: 500},
+	quotes: []*marketdatav1.Quote{testdata.LiveQuote(testdata.Aapl, testdata.AaplMid)}, bars: []*marketdatav1.Bar{aaplPC},
+	statesErr: errors.New("db down")}
+
+// assertDegraded is the AC-3 contract for an offline Portfolio whose state could not be read.
+func assertDegraded(t *testing.T, pf *portfoliov1.Portfolio, equity float64) {
+	t.Helper()
+	if !pf.OfflineStateUnavailable {
+		t.Error("offline_state_unavailable = false, want true")
 	}
+	approx(t, "total_pnl", pf.TotalPnl, 0)
+	assertDay(t, pf, 0, 0)
+	approx(t, "equity", pf.Equity, equity)
+	if pf.TotalPnlPct != nil || pf.RealizedPnl != nil || pf.RealizedPnlLifetime != nil || pf.FeesSinceSnapshot != nil || pf.FeesLifetime != nil {
+		t.Errorf("degraded optionals must stay unset: %+v", pf)
+	}
+	for _, p := range pf.Positions {
+		assertDegradedPos(t, p)
+	}
+}
+
+func assertDegradedPos(t *testing.T, p *portfoliov1.Position) {
+	t.Helper()
+	if !p.OfflineStateUnavailable || p.DayPnl != 0 || p.DayPnlPct != 0 {
+		t.Errorf("%s/%s: marker=%v day_pnl=%v day_pnl_pct=%v, want marked with zero Day P&L",
+			p.AccountId, p.Symbol, p.OfflineStateUnavailable, p.DayPnl, p.DayPnlPct)
+	}
+}
+
+func TestGetPortfolio_AC3_OfflineStateErrorMarksDegraded(t *testing.T) {
+	warns := recordWarns(t)
+	pf := getPortfolioAcc(t, degradedSc)
 	assertMark(t, pf.Positions[0], testdata.AaplMid, portfoliov1.MarkSource_MARK_SOURCE_QUOTE, testdata.QuoteTime)
-	approx(t, "account day_pnl", pf.DayPnl, 0)
+	assertDegraded(t, pf, 10*testdata.AaplMid)
 	if warns.find("offline state unavailable") == nil {
 		t.Error("want WARN offline state unavailable")
 	}
+}
+
+func TestListPortfolios_AC3_OfflineStateErrorMarksDegraded(t *testing.T) {
+	t.Run("scoped", func(t *testing.T) { assertDegraded(t, listPortfoliosAcc(t, degradedSc), 10*testdata.AaplMid) })
+	t.Run("all accounts", func(t *testing.T) {
+		svc, mock := acctSvc(t, degradedSc.stub(), 0)
+		expectBalanceList(mock, "u1")
+		expectOfflineIDList(mock, "u1", offAcct)
+		mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(offAcct).WillReturnRows(degradedSc.rows(mock, offAcct))
+		degradedSc.expectStates(mock)
+		resp, err := svc.ListPortfolios(ctxWithUser(t, "u1"), &portfoliov1.ListPortfoliosRequest{})
+		if err != nil {
+			t.Fatalf("ListPortfolios: %v", err)
+		}
+		assertDegraded(t, resp.Portfolios[0], 10*testdata.AaplMid)
+	})
+}
+
+func TestPositionReads_AC3_OfflineStateErrorMarksDegraded(t *testing.T) {
+	svc, mock := acctSvc(t, degradedSc.stub(), 0)
+	for i := 0; i < 2; i++ { // ListPositions, GetPosition
+		mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(3)...).WillReturnRows(degradedSc.rows(mock, offAcct))
+		degradedSc.expectStates(mock)
+	}
+	ctx := ctxWithUser(t, "u1")
+	lp, err := svc.ListPositions(ctx, &portfoliov1.ListPositionsRequest{})
+	if err != nil {
+		t.Fatalf("ListPositions must stay OK: %v", err)
+	}
+	pos, err := svc.GetPosition(ctx, &portfoliov1.GetPositionRequest{Symbol: testdata.Aapl})
+	if err != nil {
+		t.Fatalf("GetPosition must stay OK: %v", err)
+	}
+	for _, p := range []*portfoliov1.Position{lp.Positions[0], pos} {
+		assertDegradedPos(t, p)
+		approx(t, "unrealized_pnl", p.UnrealizedPnl, 100)
+	}
+}
+
+// brokerPosRow is a broker-valued MSFT row (source 0, priced 150, unrealized 500).
+func brokerPosRow(rows *pgxmock.Rows, account string) *pgxmock.Rows {
+	return rows.AddRow("MSFT", 10.0, 100.0, 1000.0, time.Now(), "TRADING_MODE_PAPER", account, 150.0, 1500.0, 500.0, 0.5, 0.0, 0.0, "", "", 0, nil)
+}
+
+func TestListPortfolios_AC8_UndecodableRowDegradesOnlyItsAccount(t *testing.T) {
+	svc, mock := acctSvc(t, degradedSc.stub(), 0)
+	expectBalanceList(mock, "u1", balSpec{"acct-alp-1", 10120, 10000})
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("acct-alp-1").WillReturnRows(brokerPosRow(mock.NewRows(positionCols), "acct-alp-1"))
+	expectOfflineIDList(mock, "u1", "acct-off-1", "acct-off-2")
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("acct-off-1").WillReturnRows(degradedSc.rows(mock, "acct-off-1"))
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs("acct-off-2").WillReturnRows(mock.NewRows(positionCols))
+	mock.ExpectQuery(`FROM portfolio\.offline_account_realized WHERE user_id=\$1 AND account_id = ANY`).WithArgs("u1", pgxmock.AnyArg()).
+		WillReturnRows(mock.NewRows(stateCols).
+			AddRow("acct-off-1", 500.0, 0.0, 0.0, 0.0, []byte("{not json")).
+			AddRow("acct-off-2", 200.0, 0.0, 0.0, 0.0, []byte(`[]`)))
+	resp, err := svc.ListPortfolios(ctxWithUser(t, "u1"), &portfoliov1.ListPortfoliosRequest{})
+	if err != nil {
+		t.Fatalf("ListPortfolios: %v", err)
+	}
+	by := map[string]*portfoliov1.Portfolio{}
+	for _, pf := range resp.Portfolios {
+		by[pf.AccountId] = pf
+	}
+	assertDegraded(t, by["acct-off-1"], 10*testdata.AaplMid)
+	if by["acct-off-2"].OfflineStateUnavailable {
+		t.Error("acct-off-2 must not be marked")
+	}
+	assertTotal(t, by["acct-off-2"], 200, pct(0))
+	brk := by["acct-alp-1"]
+	if brk.OfflineStateUnavailable || brk.Positions[0].OfflineStateUnavailable {
+		t.Error("broker account must never be marked")
+	}
+	assertDay(t, brk, 120, 0.0120)
+	approx(t, "broker equity", brk.Equity, 10120)
+	approx(t, "broker total_pnl", brk.TotalPnl, 500)
+}
+
+func TestListPositions_DegradedOfflineKeepsBrokerRows(t *testing.T) {
+	svc, mock := acctSvc(t, degradedSc.stub(), 0)
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(3)...).
+		WillReturnRows(brokerPosRow(degradedSc.rows(mock, offAcct), "alp-1"))
+	degradedSc.expectStates(mock)
+	resp, err := svc.ListPositions(ctxWithUser(t, "u1"), &portfoliov1.ListPositionsRequest{})
+	if err != nil {
+		t.Fatalf("ListPositions: %v", err)
+	}
+	if len(resp.Positions) != 2 {
+		t.Fatalf("positions = %d, want broker and offline rows", len(resp.Positions))
+	}
+	for _, p := range resp.Positions {
+		if p.AccountId == offAcct {
+			assertDegradedPos(t, p)
+		} else if p.OfflineStateUnavailable {
+			t.Errorf("broker row %s must not be marked", p.Symbol)
+		}
+	}
+}
+
+func TestGetPortfolio_AggregateExcludesDegradedAccount(t *testing.T) {
+	svc, mock := acctSvc(t, degradedSc.stub(), 0)
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(3)...).
+		WillReturnRows(brokerPosRow(degradedSc.rows(mock, offAcct), "alp-1"))
+	expectBalanceList(mock, "u1", balSpec{"alp-1", 10120, 10000})
+	expectOfflineIDList(mock, "u1", offAcct)
+	degradedSc.expectStates(mock)
+	all, err := svc.GetPortfolio(ctxWithUser(t, "u1"), &portfoliov1.GetPortfolioRequest{})
+	if err != nil {
+		t.Fatalf("GetPortfolio: %v", err)
+	}
+	if !all.OfflineStateUnavailable {
+		t.Error("aggregate offline_state_unavailable = false, want true")
+	}
+	assertDay(t, all, 120, 0.0120)
+	assertTotal(t, all, 500, nil)
+	approx(t, "aggregate equity", all.Equity, 1500+10*testdata.AaplMid)
 }
 
 func TestAccountPnL_AC25_MixedBookAbsCostBasis(t *testing.T) {

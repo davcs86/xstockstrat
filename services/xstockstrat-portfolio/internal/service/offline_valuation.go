@@ -35,6 +35,19 @@ type readValuation struct {
 
 func (v readValuation) degraded(accountID string) bool { return v.unavailable[accountID] }
 
+// markDegradedPositions zeroes Day P&L and sets the marker on offline positions of degraded accounts; broker rows
+// are never touched. Every read applies it so embedded and standalone positions agree (C-10(b)).
+func markDegradedPositions(positions []*portfoliov1.Position, v readValuation) {
+	for _, p := range positions {
+		if p.Source == portfoliov1.PositionSource_POSITION_SOURCE_UNSPECIFIED || !v.degraded(p.AccountId) {
+			continue
+		}
+		p.DayPnl = 0
+		p.DayPnlPct = 0
+		p.OfflineStateUnavailable = true
+	}
+}
+
 // state is the caller's offline state for an account; nil when it has none (a broker or brand-new account).
 func (v readValuation) state(accountID string) *repository.OfflineState {
 	st, ok := v.states[accountID]

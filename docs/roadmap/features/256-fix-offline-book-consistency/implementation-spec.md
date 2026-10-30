@@ -669,7 +669,7 @@ behavioural proof.
 
 ### Step 11 — service: D-48 degraded marker and zeroing on every read path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`applyAccountPnL`, `buildAccountPortfolio`, callers, aggregate)
@@ -731,7 +731,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 
 ### Step 12 — test: AC-3 on all four reads, AC-8 isolation, aggregate exclusion, sweep of non-fatal-read tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/offline_account_pnl_test.go` — modify
@@ -1139,3 +1139,21 @@ _Populated by /sdd-execute as implementation proceeds._
   committed.
 - Steps 9 + 10 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
   `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-8, reported 0 issues. **Disposition**: CI-equivalent fallback.
+- Steps 11 + 12 (2026-10-29, standing operator rule "Merge pairs + standing rule"): the two steps land as **one**
+  lint-green commit with one red→green cycle on Step 12's tests, and both are marked done. Standing rule, quoted:
+  "if this step's Verification fails ONLY because the consumers or tests of its new code live in the immediately
+  following step [...] Execute this step and the next one together as ONE commit with one red→green cycle on the next
+  step's tests, mark BOTH steps done". Step 11 is `red-green required` with **Covers** `—`: its RED tests are Step
+  12's, and Step 11 alone breaks `TestAccountPnL_OfflineStatesErrorIsNonFatal`, which Step 12 rewrites.
+- Steps 11 + 12 (2026-10-29, line drift only, no spec change): Steps 7-10 shifted the cited lines. `applyAccountPnL`
+  sits at `portfolio_service.go:1438` (spec `:1339`), `buildAccountPortfolio` at `:1425`, and the `ListPortfolios`
+  `valueRead` calls at `:1516` / `:1567` (spec `:1417` / `:1468`). The symbols and the edits are as specified.
+- Steps 11 + 12 (2026-10-29, implementation detail, no spec change): the all-accounts `ListPortfolios` calls
+  `markDegradedPositions` once on the shared `all` slice, before the per-account loop; the slice shares its pointers
+  with each account's positions. Step 12 adds a `statesErr` field and an `expectStates` method to `acctScenario`, so
+  the scoped reads reuse `getPortfolioAcc` / `listPortfoliosAcc`. It also adds the `brokerPosRow` helper, the same
+  shape as AC-39's inline `brokerRow`, which is left unchanged (PRESERVE). The `portfolio_quote_deadline_test.go`
+  helper comment is reworded to the new contract; no expectation changed, because the sweep found no test that
+  asserts offline P&L under `expectAllAccounts`.
+- Steps 11 + 12 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-10, reported 0 issues. **Disposition**: CI-equivalent fallback.

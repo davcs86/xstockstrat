@@ -445,7 +445,7 @@ func unvaluedSymbols(positions []*portfoliov1.Position) []string {
 }
 
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
-	s.valueRead(ctx, positions, nil)
+	markDegradedPositions(positions, s.valueRead(ctx, positions, nil))
 	s.enrichRisk(ctx, positions)
 }
 
@@ -630,6 +630,7 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 		}
 	}
 	val := s.valueRead(ctx, positions, offlineCandidates)
+	markDegradedPositions(positions, val)
 	s.enrichRisk(ctx, positions)
 
 	portfolio := &portfoliov1.Portfolio{
@@ -644,7 +645,7 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 		byAccount[p.AccountId] = append(byAccount[p.AccountId], p)
 	}
 	if len(scope) == 1 && req.GetAccountId() != "" {
-		applyAccountPnL(portfolio, positions, balances[scope[0]], val.state(scope[0]), val.accounts[scope[0]])
+		applyAccountPnL(portfolio, positions, balances[scope[0]], val.state(scope[0]), val.accounts[scope[0]], val.degraded(scope[0]))
 		return portfolio, nil
 	}
 
@@ -653,7 +654,12 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 	for _, id := range scope {
 		acct := &portfoliov1.Portfolio{}
 		st := val.state(id)
-		applyAccountPnL(acct, byAccount[id], balances[id], st, val.accounts[id])
+		applyAccountPnL(acct, byAccount[id], balances[id], st, val.accounts[id], val.degraded(id))
+		if val.degraded(id) {
+			portfolio.OfflineStateUnavailable = true
+			allOffline = false
+			continue
+		}
 		dayPnl += acct.DayPnl
 		totalPnl += acct.TotalPnl
 		switch {
@@ -1422,20 +1428,21 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 }
 
 // buildAccountPortfolio assembles a Portfolio for one account from already-valued positions.
-func buildAccountPortfolio(accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) *portfoliov1.Portfolio {
+func buildAccountPortfolio(accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal, degraded bool) *portfoliov1.Portfolio {
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: accountID,
 		AccountId:   accountID,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 	}
-	applyAccountPnL(portfolio, positions, bal, st, acct)
+	applyAccountPnL(portfolio, positions, bal, st, acct, degraded)
 	return portfolio
 }
 
 // applyAccountPnL sets one account's equity and P&L. A broker account is authoritative for cash, buying power,
 // equity and Day P&L; an offline account (st != nil) excludes unpriced positions and carries FR-1/FR-2/FR-3/FR-4.
-func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) {
+// A degraded offline account keeps only its market-value equity: its P&L is zeroed and marked, never unrealized-only.
+func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal, degraded bool) {
 	var positionsValue, unrealizedPnl float64
 	for _, pos := range positions {
 		if st != nil && pos.MarkSource == portfoliov1.MarkSource_MARK_SOURCE_NONE {
@@ -1445,6 +1452,10 @@ func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position
 		unrealizedPnl += pos.UnrealizedPnl
 	}
 	p.Equity = positionsValue
+	if degraded {
+		p.OfflineStateUnavailable = true
+		return
+	}
 	p.TotalPnl = unrealizedPnl
 	if bal != nil {
 		p.Cash = bal.Cash
@@ -1514,9 +1525,10 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 			candidates = []string{accountID}
 		}
 		val := s.valueRead(ctx, positions, candidates)
+		markDegradedPositions(positions, val)
 		s.enrichRisk(ctx, positions)
 		return &portfoliov1.ListPortfoliosResponse{
-			Portfolios: []*portfoliov1.Portfolio{buildAccountPortfolio(accountID, positions, bal, val.state(accountID), val.accounts[accountID])},
+			Portfolios: []*portfoliov1.Portfolio{buildAccountPortfolio(accountID, positions, bal, val.state(accountID), val.accounts[accountID], val.degraded(accountID))},
 		}, nil
 	}
 
@@ -1565,10 +1577,11 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		all = append(all, a.positions...)
 	}
 	val := s.valueRead(ctx, all, offlineAppended)
+	markDegradedPositions(all, val)
 	portfolios := make([]*portfoliov1.Portfolio, 0, len(accts))
 	for _, a := range accts {
 		s.enrichRisk(ctx, a.positions)
-		portfolios = append(portfolios, buildAccountPortfolio(a.id, a.positions, a.bal, val.state(a.id), val.accounts[a.id]))
+		portfolios = append(portfolios, buildAccountPortfolio(a.id, a.positions, a.bal, val.state(a.id), val.accounts[a.id], val.degraded(a.id)))
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }

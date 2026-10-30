@@ -891,3 +891,41 @@ Each item names the step where it is resolved.
 - Verification: spec greps match; `go build`, `go vet` and the full `go test ./... -race` pass, 68.6% total on the CI
   coverpkg set (≥ 40%); `golangci-lint` v2.14.0 (go1.27.0 build) 0 issues.
 - Next: Step 11 (D-48 degraded marker and zeroing on every read path).
+
+## Session 2026-10-29 — Steps 11 + 12 (service + test, D-48 degraded marker)
+
+- Standing operator rule (2026-10-29, "Merge pairs + standing rule"): Steps 11 and 12 are one lint-green commit with one
+  red→green cycle on Step 12's tests, and both are marked done (Deviation Log). Step 11's RED tests are Step 12's.
+- `portfolio_service.go`:
+  - `applyAccountPnL` and `buildAccountPortfolio` take `degraded bool`. A degraded account sets
+    `OfflineStateUnavailable`, keeps `Equity = positionsValue`, and returns before the broker and offline branches,
+    so TotalPnl, DayPnl and DayPnlPct are 0 and the optionals are nil.
+  - Every caller passes `val.degraded(id)`.
+  - The GetPortfolio aggregate skips a degraded id's dayPnl/totalPnl/prior/absCost, sets the aggregate marker and
+    forces `allOffline = false`. Equity still sums every position.
+  - `markDegradedPositions` runs in `enrichPositions` (GetPosition/ListPositions), in GetPortfolio after `valueRead`,
+    and in both ListPortfolios branches.
+  - Handler untouched.
+- `offline_valuation.go`: `markDegradedPositions` sits beside `readValuation.degraded`. It changes only offline-sourced
+  rows of degraded accounts.
+- Tests (`offline_account_pnl_test.go`):
+  - `TestAccountPnL_OfflineStatesErrorIsNonFatal` is rewritten as `TestGetPortfolio_AC3_OfflineStateErrorMarksDegraded`.
+    The scenario is a realized 500.00 state the read cannot reach, and AAPL 10 @ 154 at mid 164 (100.00 unrealized).
+    The Warn assertion is kept.
+  - New tests: `TestListPortfolios_AC3_...` (scoped and all-accounts), `TestPositionReads_AC3_...`
+    (ListPositions + GetPosition), `TestListPortfolios_AC8_UndecodableRowDegradesOnlyItsAccount`,
+    `TestListPositions_DegradedOfflineKeepsBrokerRows` and `TestGetPortfolio_AggregateExcludesDegradedAccount`.
+  - The `portfolio_quote_deadline_test.go` `expectAllAccounts` comment states the new contract.
+  - C-13: the scenario literals are local to this file, and symbols and quotes reuse `internal/testdata`.
+- TDD:
+  - AC-3 red: on the pre-Step-11 tree, `offline_state_unavailable = false`, `total_pnl = 100, want 0`, and position
+    `day_pnl=40`, on all four reads.
+  - AC-8 red: acct-off-1 was unmarked, with total 100.
+  - Aggregate red: `total_pnl = 600, want 500`.
+  - Green: every targeted test passes, and `TestAC29_`, `AC39_` and `AC52_` stay green unchanged (PRESERVE).
+- Verification:
+  - The spec greps match, the handler diff is empty, and `error is non-fatal` has no hit.
+  - `go build`, `go vet` and the full `go test ./... -race` pass, with 68.6% on the CI coverpkg set (≥ 40%).
+  - `golangci-lint` v2.14.0 (go1.27.0 build) reported 0 issues.
+- Next: Step 13 (UI gating on `offlineStateUnavailable`). It is the backend→ui surface boundary, so a checkpoint is
+  due.
