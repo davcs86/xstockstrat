@@ -3,6 +3,7 @@ initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
 import * as mtls from './mtls';
+import { resolveDbConnection } from './dbTls';
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
 import { NotifyServiceImpl } from './grpc/notifyServiceImpl';
@@ -15,34 +16,26 @@ import { getLogger } from './services/logger';
 const log = getLogger('notify:server');
 
 async function main() {
+  const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);
+  if (dbConn.ssl !== false) {
+    log.info('db-tls: verifying server cert against DATABASE_CA_CERT');
+  }
   const grpcPort = process.env.GRPC_PORT ?? '50059';
   const configEndpoint = process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060';
-  const databaseUrl = process.env.DATABASE_URL ?? '';
 
   const configWatcher = new ConfigWatcher(configEndpoint, 'notify');
   await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
-  const sslDisabled = databaseUrl.includes('sslmode=disable');
-  let dbUrl = databaseUrl;
-  if (!sslDisabled) {
-    try {
-      const u = new URL(databaseUrl);
-      u.searchParams.delete('sslmode');
-      dbUrl = u.toString();
-    } catch { /* keep original if URL parsing fails */ }
-  }
-  const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
-    connectionString: dbUrl,
+    connectionString: dbConn.connectionString,
     // Cap pool size to stay within DigitalOcean's shared connection budget (root CLAUDE.md);
     // notify's DB use is light (alert history), so default 1. Override with DB_POOL_MAX.
     max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
-    ssl: sslDisabled ? false : {
-      rejectUnauthorized: !!caCert,
-      ...(caCert ? { ca: caCert } : {}),
-    },
+    ssl: dbConn.ssl,
   });
+  await pool.query('SELECT 1');
+  log.info('Database connected');
 
   const fanout = new FanoutDispatcher(configWatcher);
   const webPush = new WebPushDispatcher(pool, configWatcher, createAdminDirectory());

@@ -664,3 +664,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   clean); greps: no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` and
   `pool.query('SELECT 1')` present; `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 3/3 named
   tests pass (P-06); `test:coverage` exit 0, 117/117, all files 75.75% lines (≥40).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 10+11
+
+- Tooling setup (steps 10–11): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps installed with
+  `pnpm install --frozen-lockfile --filter xstockstrat-notify... --filter xstockstrat` (no lockfile change) ·
+  openssl ✓ (system).
+- Gate: the notify crash-loop sign-off is recorded (§ "Session 2026-10-22 (operator decision — fail-closed boot)"),
+  so the boot `SELECT 1` probe landed.
+- Steps 10 and 11 landed as one commit under the operator's standing merge-pairs rule (Step 10's RED test is Step 11's
+  boot test); Deviation Log entry added.
+- Notify `src/index.ts`: `resolveDbConnection(DATABASE_URL, DATABASE_CA_CERT)` is the first statement of `main()`,
+  before `ConfigWatcher`, with the value-free `db-tls:` canary log when TLS is on; `databaseUrl`, the inline
+  `sslDisabled`/`rejectUnauthorized: !!caCert` block and the `DATABASE_CA_CERT` read are gone; the Pool takes
+  `dbConn.connectionString` / `dbConn.ssl` (keeps `max` and its comment), then `await pool.query('SELECT 1')` +
+  `log.info('Database connected')` before `new FanoutDispatcher`.
+- Test `src/__tests__/dbTlsBoot.test.ts` mirrors identity's (AC-1 boot case + AC-2 wrong-CA and positive control),
+  with `import { Pool } from 'pg'` per Step 11; openssl helpers declared once in the file (single consumer, C-13).
+- TDD: AC-1 red (boot child exited on `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`) → green. AC-2
+  wrong-CA + positive control green before and after.
+- Verification: `build` exit 0; `lint` 0 errors (233 pre-existing warnings; `eslint` on the two touched files is
+  clean); greps: no `rejectUnauthorized`/`includes('sslmode` in `index.ts`, `ssl: dbConn.ssl` and
+  `pool.query('SELECT 1')` present; `node --test --test-reporter=spec dist/__tests__/dbTlsBoot.test.js` 3/3 named
+  tests pass (P-06); `test:coverage` exit 0, 105/105, all files 78.29% lines (≥40).

@@ -623,7 +623,7 @@ pnpm run lint
 
 ### Step 10 — service: Notify — resolve first, boot `SELECT 1` probe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/index.ts` — modify
@@ -669,7 +669,7 @@ grep -n "ssl: dbConn.ssl\|pool.query('SELECT 1')" src/index.ts  # → both prese
 
 ### Step 11 — test: Notify boot test + Pool-level TLS stub
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/dbTlsBoot.test.ts` — create
@@ -1086,3 +1086,15 @@ Pre-declared at spec time. Execute confirms or amends each entry; per F-09 the s
   RED: AC-1 failed — the boot child exited on `mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set`, not
   `DATABASE_CA_CERT`. The two Pool-level AC-2 tests were green at RED (the resolver from Step 1 already exists).
   GREEN: 3/3. **Disposition**: operator standing rule.
+- **Steps 10 and 11 executed as one commit (2026-10-29, sequential).** Step 10's TDD gate is `red-green required
+  (paired with Step 11)`: its RED test is Step 11's notify `dbTlsBoot.test.ts`, so Step 10 cannot complete a
+  red→green cycle alone. Applied the standing operator rule (operator, 2026-10-29, in their own words: 'Merge pairs +
+  standing rule'): "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step (e.g. ... the RED test is that next step's test), do NOT return a blocker. Execute this
+  step and the next one together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps
+  done, and add a Deviation Log entry quoting the rule." Gate (instruction 0): the crash-loop sign-off is recorded in
+  `context.md` § "Session 2026-10-22 (operator decision — fail-closed boot)", so the boot `SELECT 1` probe landed.
+  Instruction 3 also removed the `const caCert = process.env.DATABASE_CA_CERT;` line (`:35`) the delete list did
+  not name; it is dead once the resolver takes the CA. RED: AC-1 failed — the boot child exited on `mtls: MTLS_CERT,
+  MTLS_KEY and MTLS_CA_CERT must all be set`, not `DATABASE_CA_CERT`. The two Pool-level AC-2 tests were green at RED
+  (the resolver from Step 1 already exists). GREEN: 3/3. **Disposition**: operator standing rule.
