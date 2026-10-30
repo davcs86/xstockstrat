@@ -336,3 +336,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   is `"true"` and only `.do/app.yaml` is `"false"`. It is an env-config statement, not a signal claim (FR-4).
 - Files modified: `docs/setup/grafana-cloud.md`
 - Deviations: none
+
+### Step 7 — Correct the remaining FR-4 one-liners [done]
+- `docs/patterns/observability.md:3`, `docs/setup/CLAUDE.md:10`, `docs/launch-pdfs/product-features.md:192,198`,
+  `packages/otel/CLAUDE.md:4,7-8`, collector comments `:9`/`:35`/`:49` (comments only; `git diff -U0 06faaeb5` shows
+  no non-comment change), and `scripts/setup-env.sh:213` (string only) now state traces-only. The sanctioned literal
+  is on its own line in `observability.md`, `product-features.md` and the collector header. `product-features.pdf` is
+  a rendered copy with no in-repo generator and is NOT regenerated (note for the PR body).
+- Tooling: shellcheck/shfmt unavailable -> `uvx` PyPI equivalents (Deviation 2).
+- Files modified: `docs/patterns/observability.md`, `docs/setup/CLAUDE.md`, `docs/launch-pdfs/product-features.md`,
+  `packages/otel/CLAUDE.md`, `packages/otel/otel-collector-config.yaml`, `scripts/setup-env.sh`
+- Deviations: Deviation 2 (lint tooling fallback)

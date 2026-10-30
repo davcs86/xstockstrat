@@ -1,6 +1,8 @@
 # Observability — OTel Setup
 
-**Stack**: OpenTelemetry SDK (per-language) → OTLP push → Grafana Cloud (Loki + Mimir + Tempo)
+**Stack**: OpenTelemetry SDK (per-language) → OTLP/HTTP push (traces) → Grafana Cloud Tempo
+
+Metrics and logs are not exported (feature 226).
 
 - **Local dev**: Every service exports traces over OTLP/HTTP to `http://otel-collector:4318` (Docker Compose). Config: `packages/otel/otel-collector-config.yaml`.
 - **Production**: Services push OTLP directly to Grafana Cloud OTLP gateway (no collector needed on DO App Platform).

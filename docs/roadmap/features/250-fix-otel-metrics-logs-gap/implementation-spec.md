@@ -517,7 +517,7 @@ grep -n -F '.*/PlaceOrder' "$f"
 
 ### Step 7 — docs: Correct the remaining FR-4 one-liners (pattern doc, setup index, launch PDF source, otel CLAUDE.md, collector comments, setup-env)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: docs + `packages/otel` (comments only) + `scripts/` (one `info` string)
 **Files**:
 - `docs/patterns/observability.md` — modify (`:3`)
@@ -1021,3 +1021,10 @@ _Populated by /sdd-execute as implementation proceeds._
   and `main-dev`, so no content is missing; the feature branch (51 ahead / 26 behind) is left untouched.
 - **Disposition**: operator-approved layout (AskUserQuestion, 2026-10-30). F-03 is not engaged: no step PR
   targets `main-dev`.
+
+### Deviation 2 — Step 7 lint tooling (CI-equivalent fallback)
+- **Spec said**: Verification runs `shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh`.
+- **Actual**: neither binary is installed in this environment, so both ran via `uvx --from shellcheck-py shellcheck`
+  and `uvx --from shfmt-py shfmt -d -i 2` (unpinned PyPI wheels, not CI's pinned installs). Both exit 0, and the
+  pre-change `main-dev` copy of the file also exits 0 under the same tools.
+- **Disposition**: CI-equivalent fallback; the `shell-lint` CI job re-runs the real tools on this PR.
