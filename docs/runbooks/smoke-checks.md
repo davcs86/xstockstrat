@@ -69,8 +69,8 @@ SAN allowlist `xstockstrat-agent`, `xstockstrat-smoke-trigger`). Tests: `cd serv
 | 1 | GitHub secret `DEV_SMOKE_RESULTS_PAT`: fine-grained PAT confined by a ruleset to the `smoke-results` branch | repo admin | DO dev record job |
 | 2 | Ruleset on `smoke-results` that lets `GITHUB_TOKEN` (homelab `record` job) and that PAT push, and blocks force-push and delete | repo admin | both recorders |
 | 3 | GitHub secret `DEV_SMOKE_DB_PASSWORD` and the `xstockstrat_staging_smoke_ro` role in DO dev | DBA | DO dev DB checks |
-| 4 | `SMOKE_DB_PASSWORD` in the staging `APP_ENV` and the `smoke_ro` role in the homelab database (`docs/runbooks/smoke-db-role.md`) | DBA / homelab operator | homelab DB checks |
-| 5 | GitHub variable `SMOKE_BIND_ADDR` on the `staging` environment, equal to the VM tailnet address | homelab operator | homelab deploy |
+| 4 | `SMOKE_DB_PASSWORD` in the staging `APP_ENV` and the `smoke_ro` role in the homelab database (`docs/runbooks/smoke-db-role.md`) | DBA / homelab operator | **before merge** — `compose.smoke.yml` requires it; missing blocks every homelab staging deploy |
+| 5 | GitHub variable `SMOKE_BIND_ADDR` on the `staging` environment, equal to the VM tailnet address | homelab operator | **before merge** — the bind check and render fail without it, blocking every homelab staging deploy |
 | 6 | Tailnet ACL `tag:ci` → VM:9110, and no other interface listening on 9110 | tailnet admin | homelab trigger |
 | 7 | homelab-edge gate accepts the normalized shipped compose file (staging dry run) | homelab operator | homelab deploy |
 | 8 | Smoke user created and `smoke.rpc.user_id` set (`docs/runbooks/smoke-user.md`) | operator (config admin) | RPC checks |
