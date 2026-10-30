@@ -24,6 +24,7 @@
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 3+4 done in one commit (standing operator rule): `RunBacktest` → thin `@owner_scoped` wrapper over `_run_backtest`; `_BarFetchError` → FAILED_PRECONDITION `backtest bar series incomplete: …` (symbol + benchmark); AC-6 tests; full suite 1468 passed |
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 5+6 done in one commit (standing operator rule, widened): D-29 wall-clock bound — `asyncio.timeout(limit or None)` on `RunBacktest`, `cm.expired()` → DEADLINE_EXCEEDED `backtest exceeded Ns deadline`, `disarm()` before persistence; 0 = no limit, negative = 300 + WARN; AC-3/AC-5/T-inner-timeout/T-commit/T-executor tests; key registered in `HONOUR_KEYS`; full suite 1475 passed |
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done: analysis `CLAUDE.md` row for `analysis.backtest.max_duration_seconds` now carries the design §5 semantics (type `int`, default `300` unchanged; screener row untouched) |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done: strat-lab `backtest` skill (SKILL.md Phase 2 failure modes, output-handling, aggregation, README) and `mcp-tools.md` Errors rows for `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` and `FAILED_PRECONDITION` `backtest bar series incomplete: …` + MCP 60 s-cap note; @AC-32 guard unchanged |
 
 ---
 

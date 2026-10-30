@@ -593,7 +593,7 @@ grep -c "Max backtest run time" services/xstockstrat-analysis/CLAUDE.md   # expe
 
 ### Step 8 — docs: strat-lab `backtest` skill + `mcp-tools.md` failure-mode rows (C-14, @AC-32 @feature-224)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `plugins/strat-lab`, `docs/runbooks/`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify

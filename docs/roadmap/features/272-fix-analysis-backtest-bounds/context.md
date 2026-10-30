@@ -746,3 +746,25 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
   time"` → 0.
 - Files: `services/xstockstrat-analysis/CLAUDE.md`.
 - Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+
+## Session 2026-10-29 — sdd-execute sequential: Step 8 (docs)
+
+- Step 8 (C-14 consumer surfaces, same PR per `docs/patterns/strat-lab-plugin.md`):
+  - `docs/runbooks/mcp-tools.md` `run_backtest` Errors table: two rows after the `max_range_days` row
+    (`DEADLINE_EXCEEDED` `backtest exceeded Ns deadline`, default 300 s / 0 = no limit, do not retry immediately;
+    `FAILED_PRECONDITION` `backtest bar series incomplete: …`, report it) plus a sentence under the table on the MCP
+    60 s tool cap and feature 273's pass-through. No per-environment value named.
+  - `plugins/strat-lab/skills/backtest/SKILL.md` Phase 2: "Failure modes (feature 272)" paragraph (same two cases,
+    one truncated symbol fails the whole multi-symbol run, 60 s-cap fact), before `### Fill model`.
+  - `reference/output-handling.md`: bullet after the fundamentals-outage bullet — RPC errors, no result file; the
+    fundamentals "rerun" warning kept distinct.
+  - `reference/aggregation.md` § Combine independent runs: failed basket member is reported, never aggregated as
+    zero trades.
+  - `plugins/strat-lab/README.md`: one line after the three-failure list naming the two loud failures.
+- Anchor drift only (discovery): mcp-tools Errors table at `:421-430`, SKILL.md Fill-model heading at `:195` — text
+  anchors used, matching the 2026-10-29 re-spec. No deviation.
+- TDD: N/A (docs).
+- Verification: `validate.py --self-test` OK and `validate.py` passed all checks; message grep hits all five files;
+  `list_templates|instantiate_template` counts mcp-tools.md 7, SKILL.md 5 (unchanged); `is_public|include_public`
+  no match (@AC-32 @feature-224 guard holds).
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
