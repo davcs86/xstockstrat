@@ -76,7 +76,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `fix-after-hours-positions-priced` (231) | `offline-account-full-pnl` (240) | **File-level overlap, soft/rebase (WARN, not a blocker; feature 231 `/sdd-execute` merge-order gate, 2026-10-20)**: both edit `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — `applyQuotes`, `enrichPosition`, `broadcastSnapshot` (231 adds `markOf` and changes `enrichPosition(p, price)`). No proto/config/migration collision. Whichever merges second rebases and re-runs portfolio tests. **Resolved 2026-10-20**: 231 merged (promoted in #1258); 240's implementation spec was re-anchored on post-231 `main-dev` (`/sdd-review impl-spec` overlap scan) | Yes |
 | `fix-portfolio-snapshot-surface` (264) | `fix-sandbox-seed-keys` (243), `fix-python-config-stored-zero` (244), `fix-ledger-trimmed-notify-payload` (248) | **Config migration-NNN ordering (feature 264 `/sdd-execute` Step 6, 2026-10-29).** 264 reserves `034_retire_portfolio_snapshot_interval`; 243 holds `031`, 244 holds `032` and 248 holds `033`. golang-migrate skips a lower version that lands after a higher one, so 264 merges after all three, and its Step 10 two-sided gate is re-run before merge | Yes |
 | `otel-metrics-logs-export` (274) | `fix-otel-metrics-logs-gap` (250) | **Operator-ordered (2026-10-21).** 250 removes the metric/log-backed alert rules, mute timing and dashboard panels and adds the produced-signals guard. 274 adds metric/log export and restores those assets against the guard (FR-6). **P-0 amendment (2026-10-23):** 250 → 274 **PR-B is hard** (file overlap on `packages/otel/alerts/*`, dashboards, the produced-signals guard and FR-7 docs; 274 PR-B retires 250's guard Part 2); 274 PR-A follows 250 by operator order only. 274 designs on 250's landed state | No |
-| `fix-ledger-query-pagination` (257) | `fix-edge-owner-scope` (263) | **Operator-ordered (2026-10-22).** Both edit ledger `queryEvents` (`ledgerServiceImpl.ts`) and `QueryEventsRequest`. 263 lands its `owner_only` field and owner predicate first. 257 rebases, builds its page token on top of the owner predicate (the token must work with it), and takes the next free `QueryEventsRequest` field number after 263's | No |
+| `fix-ledger-query-pagination` (257) | `fix-edge-owner-scope` (263) | **Operator-ordered (2026-10-22).** Both edit ledger `queryEvents` (`ledgerServiceImpl.ts`) and `QueryEventsRequest`. 263 lands its `owner_only` field and owner predicate first. 257 rebases, builds its page token on top of the owner predicate (the token must work with it), and adds no `QueryEventsRequest` field (the token rides `PageRequest.page_token`; 263's `owner_only = 7` stays last) | No |
 | `fix-ledger-query-pagination` (257) | `fix-identity-ledger-test-suites` (252) | 257's ledger unit tests only execute once 252 fixes the ledger test runner (its Step 2 precondition greps for 252's runner). Merge order only | No |
 | `fix-getpnl-source-service` (251) | `fix-ledger-query-pagination` (257) | **Must not merge first.** 251 alone makes `GetPnL` read real fills through ledger `QueryEvents`, which ignores `pageToken` today (D-13/D-46): with >500 fills the loop re-reads page 1 and returns an inflated realized P&L. 257 (keyset token + fail-closed GetPnL) must merge before or together with 251 | No |
 | `fix-fundsignal-emit-accounting` (260) | `fix-fundsignal-neutral-score` (246) | Same file and test helpers (`analysis/app/engine/fundsignal_loop.py`, `tests/test_fundsignal_loop.py`). 246 lands first; 260 rebases | No |
@@ -96,6 +96,10 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `fix-ledger-trimmed-notify-payload` (248) | `fix-sandbox-seed-keys` (243) | **Config migration number ordering.** 243 adds config `031_heal_indicators_sandbox_keys_full_dotted`; 248 adds `033_ledger_stream_resolve_timeout`. golang-migrate applies by version, so 033 landing first leaves 031 permanently skipped on environments already at 033. Merge 243 first (merge order only) | No |
 | `fix-ledger-trimmed-notify-payload` (248) | `fix-python-config-stored-zero` (244) | **Config migration number ordering.** 244 adds config `032_analysis_zero_trap_descriptions`; 248 adds `033_ledger_stream_resolve_timeout`. Same golang-migrate skip hazard as the 243 row. Merge 244 first (merge order only) | No |
 | `fix-python-config-stored-zero` | `fix-sandbox-seed-keys` | Soft: both add an xstockstrat-config migration (243 = 031, 244 = 032) and both edit indicators tests/test_config_watcher.py (244 Step 6 delegates whichever helper is on the base). Expected order 243 → 244, which is not a hard gate (design rejected one). If 244 merges first, it renumbers to 031 and 243 to 032, each by max(origin/main-dev)+1 immediately before merge (fails.md:2910) | No |
+
+**257 rolling-deploy note**: until every ledger instance runs 257, a token from an old ledger build (an `event_id` UUID)
+or a repeated page makes portfolio `GetPnL` return `UNAVAILABLE`. Realized P&L changes on purpose once 251 lands:
+announce it as a correction, not a regression (insights.md:176-188).
 
 **Screener initiative build order**: `058 watchlist-management` ∥ `059 fundamentals-data-source`
 (independent to *build*, but their `xstockstrat-config` seed migrations **merge** in number order
@@ -171,6 +175,13 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 > - **084 `droplet-compose-deploy`** — `demoted/canceled`; no overlap.
 > - **250 `fix-otel-metrics-logs-gap`** — fix (b) is out of scope in its product-spec; no overlap on the telemetry tests.
 > - **241 `fix-config-audit-author-spoof`** — no overlap (config + agent only).
+
+> **Note on 251 `fix-getpnl-source-service` ↔ 249 — rebase-only, no hard ordering row** (the hard row for 257 stays above).
+> No field-number / migration / config-key collision.
+>
+> - **249 `fix-ibkr-request-signing` ↔ 251 on `trading.go`, trading `CLAUDE.md` and `INVENTORY.md`.** The edits are
+>   line-disjoint (251 touches only `applyBrokerOrderStatus`); line anchors in either spec shift, so whoever lands
+>   second rebases and re-greps. 241 (`fix-config-audit-author-spoof`) is `launched` and needs no row.
 
 ---
 

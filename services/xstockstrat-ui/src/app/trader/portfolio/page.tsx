@@ -15,7 +15,7 @@ import { usePortfolios, usePositions } from '@/hooks/usePortfolio';
 import { brokerLabel } from '@/lib/brokers';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
-import { sumPortfolioTotals } from '@/lib/portfolioTotals';
+import { PNL_UNAVAILABLE_LABEL, sumPortfolioTotals } from '@/lib/portfolioTotals';
 
 /**
  * Book → Portfolio: a read-only mirror of what the brokers report — the brokers own the ledger and
@@ -97,9 +97,14 @@ export default function PortfolioPage() {
         accessorKey: 'dayPnl',
         header: 'Day P&L',
         meta: { className: 'text-right tabular-nums hidden sm:table-cell' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.dayPnl)}>{fmtSignedUsd(row.original.dayPnl)}</span>
-        ),
+        cell: ({ row }) =>
+          row.original.offlineStateUnavailable ? (
+            <span className="text-muted-foreground">{PNL_UNAVAILABLE_LABEL}</span>
+          ) : (
+            <span className={pnlClass(row.original.dayPnl)}>
+              {fmtSignedUsd(row.original.dayPnl)}
+            </span>
+          ),
       },
     ],
     [accountName],
@@ -173,14 +178,16 @@ export default function PortfolioPage() {
               <StatTile label="Buying power" value={fmtUsd(combined.buyingPower)} />
               <StatTile
                 label="Day P&L"
-                value={fmtSignedUsd(combined.dayPnl)}
-                tone={combined.dayPnl >= 0 ? 'gain' : 'loss'}
+                value={combined.incomplete ? PNL_UNAVAILABLE_LABEL : fmtSignedUsd(combined.dayPnl)}
+                tone={combined.incomplete ? undefined : combined.dayPnl >= 0 ? 'gain' : 'loss'}
                 sub="blended"
               />
               <StatTile
                 label="Total P&L"
-                value={fmtSignedUsd(combined.totalPnl)}
-                tone={combined.totalPnl >= 0 ? 'gain' : 'loss'}
+                value={
+                  combined.incomplete ? PNL_UNAVAILABLE_LABEL : fmtSignedUsd(combined.totalPnl)
+                }
+                tone={combined.incomplete ? undefined : combined.totalPnl >= 0 ? 'gain' : 'loss'}
                 sub="open + realized"
               />
             </div>
@@ -191,6 +198,7 @@ export default function PortfolioPage() {
                 // Offline accounts have no account_balances row, so Cash / Buying power / Day P&L /
                 // Total P&L would misrepresent as $0 — show only the meaningful fields on their card.
                 const isOffline = acct?.brokerType === BrokerType.OFFLINE;
+                const pnlUnavailable = p.offlineStateUnavailable;
                 return (
                   <Card key={p.portfolioId || p.accountId}>
                     <CardContent className="pt-5 space-y-3">
@@ -215,17 +223,25 @@ export default function PortfolioPage() {
                         )}
                         <Field
                           label="Day P&L"
-                          value={`${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`}
-                          valueClass={pnlClass(p.dayPnl)}
+                          value={
+                            pnlUnavailable
+                              ? PNL_UNAVAILABLE_LABEL
+                              : `${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`
+                          }
+                          valueClass={pnlUnavailable ? 'text-muted-foreground' : pnlClass(p.dayPnl)}
                         />
                         <Field
                           label="Total P&L"
                           value={
-                            p.totalPnlPct !== undefined
-                              ? `${fmtSignedUsd(p.totalPnl)} (${fmtPct(p.totalPnlPct)})`
-                              : fmtSignedUsd(p.totalPnl)
+                            pnlUnavailable
+                              ? PNL_UNAVAILABLE_LABEL
+                              : p.totalPnlPct !== undefined
+                                ? `${fmtSignedUsd(p.totalPnl)} (${fmtPct(p.totalPnlPct)})`
+                                : fmtSignedUsd(p.totalPnl)
                           }
-                          valueClass={pnlClass(p.totalPnl)}
+                          valueClass={
+                            pnlUnavailable ? 'text-muted-foreground' : pnlClass(p.totalPnl)
+                          }
                         />
                         <Field
                           label="Positions"

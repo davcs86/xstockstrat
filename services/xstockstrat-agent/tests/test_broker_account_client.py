@@ -38,6 +38,9 @@ def _assert_no_credentials(out: dict) -> None:
     assert "api_key" not in blob
     assert "api_secret" not in blob
     assert "credentials_json" not in blob
+    for name in ("consumer_key", "access_token", "signature_key", "encryption_key", "dh_prime"):
+        assert name not in blob
+    assert "BEGIN" not in blob
 
 
 @pytest.mark.asyncio
@@ -138,6 +141,41 @@ async def test_update_broker_account_credentials_forwards_and_hides():
     meta = mock_stub.UpdateBrokerAccountCredentials.call_args.kwargs["metadata"]
     assert ("x-user-id", "user-42") in meta
     assert out["account"]["id"] == "acct-7"
+    _assert_no_credentials(out)
+
+
+@pytest.mark.asyncio
+async def test_update_broker_account_credentials_ibkr_seven_fields_forwarded_and_hidden():
+    """EXTEND @AC-4 @feature-164: the 7-key IBKR blob is forwarded verbatim and never echoed."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    ibkr_creds = json.dumps(
+        {
+            "consumer_key": "CKTEST",
+            "access_token": "ATTEST",
+            "access_token_secret": "ATSTEST",
+            "ibkr_account_id": "U1234567",
+            "signature_key": "-----BEGIN TEST-----\nsig\n-----END TEST-----",
+            "encryption_key": "-----BEGIN TEST-----\nenc\n-----END TEST-----",
+            "dh_prime": "-----BEGIN TEST-----\\ndh\\n-----END TEST-----",
+        }
+    )
+    mock_stub = MagicMock()
+    mock_stub.UpdateBrokerAccountCredentials = AsyncMock(
+        return_value=trading_pb2.UpdateBrokerAccountCredentialsResponse(
+            account=trading_pb2.BrokerAccount(id="acct-8", broker_type=2)
+        )
+    )
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.update_broker_account_credentials("user-42", "acct-8", ibkr_creds)
+
+    sent = mock_stub.UpdateBrokerAccountCredentials.call_args.args[0]
+    assert sent.account_id == "acct-8"
+    assert sent.credentials_json == ibkr_creds
+    assert out["account"]["broker_type"] == "BROKER_TYPE_IBKR"
     _assert_no_credentials(out)
 
 

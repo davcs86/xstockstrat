@@ -79,7 +79,7 @@ service change for GREEN.
 
 ### Step 1 — proto: additive `offline_state_unavailable` markers on Portfolio (17) and Position (26)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -121,7 +121,7 @@ grep -n 'offline_state_unavailable = 17\|offline_state_unavailable = 26' portfol
 
 ### Step 2 — proto-gen: regenerate Go/TS/Python stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/portfolio/v1/portfolio.pb.go` — modify (generated)
@@ -162,7 +162,7 @@ grep -rln 'OfflineStateUnavailable' packages/proto/gen/go/portfolio/v1/ | head -
 
 ### Step 3 — service: D-49 shared `isFinite` guard; ConfirmOrder rejects non-finite / negative fill before the load
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -204,7 +204,7 @@ grep -rln 'OfflineStateUnavailable' packages/proto/gen/go/portfolio/v1/ | head -
    (`@AC-7`/`@AC-8`/`@AC-15 @feature-163`, `@AC-43 @feature-240` PRESERVE).
 7. `deriveOfflineStatus` is unchanged; its `default → FILLED` is now unreachable for NaN/Inf.
 8. Order type, broker coverage and fill-state handling are unaffected beyond the guard: only
-   `BROKER_TYPE_OFFLINE` orders reach the confirm write (gate at `:910-912`); PARTIALLY_FILLED/FILLED derivation
+   `BROKER_TYPE_OFFLINE` orders reach the confirm write (gate at `:909-911`); PARTIALLY_FILLED/FILLED derivation
    is unchanged (FR-7). No trading-mode gate is involved (confirm never submits to a broker).
 
 **Verification**:
@@ -217,7 +217,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 
 ### Step 4 — test: D-49 ConfirmOrder validation and FR-7 / un-confirm non-regression
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
@@ -273,25 +273,27 @@ behavioural proof, and the coverage command guards the threshold.
 
 ### Step 5 — service: D-63 an unpublished recompute is not success (`appendLedgerEvent` sibling + ConfirmOrder UNAVAILABLE)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
+- `services/xstockstrat-trading/internal/service/ledger_emit_mtls_test.go` — modify (added 2026-10-29, operator Option A: `TestEmitLedgerEventFailSoftOneShot` → `TestEmitLedgerEventFailSoftBoundedRetry`, expects `appendMaxAttempts` attempts)
 
 **Reviewers**: `xstockstrat-trading` owner — order execution correctness, fill detection
 
 **Codebase Evidence**:
-- `const ledgerEmitTimeout = 10 * time.Second` (`trading.go:3657`); void
+- `const ledgerEmitTimeout = 10 * time.Second` (`trading.go:3661`); void
   `func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {`
-  (`:3661`) drops `structpb.NewStruct`'s error (`:3662`) and only Warns `"ledger emit failed"` (`:3671-3673`).
+  (`:3665`) drops `structpb.NewStruct`'s error (`:3666`) and only Warns `"ledger emit failed"` (`:3675-3677`).
   `grep -n 'emitLedgerEvent(' internal/service/*.go` (non-test) → 28 lines = definition + 27 call sites; only
-  the `:1067` site changes (fails.md:2092 shared-helper trap).
-- `recomputeAndEmitOfflinePositions` (`:962`, doc comment `:960-961`) emits at `:1067` and ends with an
-  unconditional `return nil` (`:1077`); query failures already return errors (`:964-978`).
-- ConfirmOrder swallow `trading.go:951-954`
+  the `:1072` site changes (fails.md:2092 shared-helper trap). A second `"account.positions.synced"`
+  `emitLedgerEvent` call at `trading.go:2414` is on the broker sync path and stays on the void wrapper.
+- `recomputeAndEmitOfflinePositions` (`:967`, doc comment `:965-966`) emits at `:1072` and ends with an
+  unconditional `return nil` (`:1083`); query failures already return errors (`:969-983`).
+- ConfirmOrder swallow `trading.go:956-959`
   (`slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted", ...)` then `return resp, nil`);
-  lock `lock := s.confirmLock(order.AccountId)` (`:918`).
-- SnapshotOfflinePositions call `:1224-1227` (Warn only); `warnings` slice already built above (`:1190-1192`,
+  lock `lock := s.confirmLock(order.AccountId)` (`:923`).
+- SnapshotOfflinePositions call `:1229-1232` (Warn only); `warnings` slice already built above (`:1191-1197`,
   `warnings = append(warnings, "account has unconfirmed NEW offline orders; ...")`), response field
   `repeated string warnings = 4;` (`packages/proto/trading/v1/trading.proto:350`).
 - Idempotency key: `string idempotency_key = 8;` (`packages/proto/ledger/v1/ledger.proto:50`). Precedent: portfolio
@@ -308,7 +310,7 @@ behavioural proof, and the coverage command guards the threshold.
 **Covers**: —
 
 **Instructions**:
-1. Add, beside `ledgerEmitTimeout` (`:3657`), the constants:
+1. Add, beside `ledgerEmitTimeout` (`:3661`), the constants:
    `appendMaxAttempts = 2` (one bounded retry), `appendRetryBackoff = 100 * time.Millisecond`,
    `offlineRecomputeQueryBudget = 5 * time.Second`, and
    `offlineRecomputeTimeout = 30 * time.Second`. Comment (≤ 2 lines, constraint only): the timeout must exceed
@@ -320,18 +322,18 @@ behavioural proof, and the coverage command guards the threshold.
    `context.WithTimeout(ctx, ledgerEmitTimeout)`; retries only when `grpcstatus.Code(err) == codes.Unavailable`
    and attempts remain, sleeping `appendRetryBackoff`; returns the last error. It never touches `confirmLock`
    (the caller holds it; the lock is non-reentrant — fails.md:2028).
-3. Make `emitLedgerEvent` (`:3661`) a void wrapper: `if err := s.appendLedgerEvent(...); err != nil { slog.Warn("ledger emit failed", "event_type", eventType, "error", err) }`.
+3. Make `emitLedgerEvent` (`:3665`) a void wrapper: `if err := s.appendLedgerEvent(...); err != nil { slog.Warn("ledger emit failed", "event_type", eventType, "error", err) }`.
    This is the design's "sibling" shape (`emitLedgerEvent` is "its void wrapper"). **Recorded behaviour change
    for the other 26 call sites** (impl-spec review, C-18 trade-off): each now gets one `codes.Unavailable` retry
    under a fresh per-event idempotency key, so a ledger outage raises a caller's worst-case emit wait from
    10s to 2×10s + 100ms; non-Unavailable failures are unchanged (one attempt, Warn). Pre-entered in the
    Deviation Log; the no-retry alternative for those callers is an operator choice carried in context.md.
 4. In `recomputeAndEmitOfflinePositions`, replace the `s.emitLedgerEvent(ctx, "account.positions.synced", ...)`
-   call at `:1067` with `if err := s.appendLedgerEvent(ctx, ...same args...); err != nil { return fmt.Errorf("emit account.positions.synced: %w", err) }`
+   call at `:1072` (only this site — the broker-sync `:2414` emit of the same event type stays void) with `if err := s.appendLedgerEvent(ctx, ...same args...); err != nil { return fmt.Errorf("emit account.positions.synced: %w", err) }`
    and keep the payload map verbatim — `user_id` included (fails.md:2054). The final `return nil` stays for the
-   success path. Update the doc comment at `:960-961` to "Fail-closed: a query or ledger-append error is
+   success path. Update the doc comment at `:965-966` to "Fail-closed: a query or ledger-append error is
    returned and nothing is emitted."
-5. In `ConfirmOrder`, replace `:950-954` with:
+5. In `ConfirmOrder`, replace `:955-959` (comment + swallow) with:
    ```go
    recomputeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), offlineRecomputeTimeout)
    defer cancel()
@@ -342,11 +344,11 @@ behavioural proof, and the coverage command guards the threshold.
    ```
    The order row is already persisted; a re-confirm with the same values is idempotent (absolute recompute,
    `@AC-10 @feature-157`) and re-emits.
-6. In `SnapshotOfflinePositions`, wrap the `:1224` call with the same `WithTimeout(WithoutCancel(ctx), offlineRecomputeTimeout)`
+6. In `SnapshotOfflinePositions`, wrap the `:1229` call with the same `WithTimeout(WithoutCancel(ctx), offlineRecomputeTimeout)`
    and, on error, keep the Warn and append `"positions not published; re-snapshot to retry"` to `warnings`
-   (the response literal already sets `Warnings: warnings`, `:1233`). No error return there (design §2).
+   (the response literal already sets `Warnings: warnings`, `:1238`). No error return there (design §2).
 7. Frozen-window confirm (`@AC-46 @feature-240`) still recomputes and emits — there is no no-op path in
-   `:962-1077`; it fails only if the ledger append fails.
+   `:967-1083`; it fails only if the ledger append fails.
 8. Fill-state completeness: PARTIALLY_FILLED and FILLED both go through the same persist → recompute → emit path;
    order type handling and broker coverage are unaffected (offline-only path).
 
@@ -361,7 +363,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
 
 ### Step 6 — test: D-63 emit failure, re-confirm, idempotency-key retry, timeout rule, `user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
@@ -373,8 +375,8 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off golan
   no failure hook today.
 - `fakeBaselineStore.baselineErr` (`:112`, returned at `:237-238`) and `confirmedErr` (`:116`) inject query
   failures; `newConfirmHarness` `:1598`; `parseSyncedPayload(t, ledger)` `:704`.
-- `TestConfirmOrder_AC46_FrozenWindowFillIgnored` `:2003`, `TestConfirmOrder_AC47_FrozenReconfirmLeavesPayload`
-  `:2016` (PRESERVE guards, must stay green).
+- `TestConfirmOrder_AC46_FrozenWindowFillIgnored` `:2058`, `TestConfirmOrder_AC47_FrozenReconfirmLeavesPayload`
+  `:2071` (PRESERVE guards, must stay green).
 
 **TDD**: `red-green required` — on the pre-Step-5 tree a failing append still returns success from ConfirmOrder.
 
@@ -415,7 +417,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 
 ### Step 7 — service: D-47 error-returning offline sync / deregistration handlers behind a SQLSTATE-classifying `boundedRetry`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -442,7 +444,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 - `DeleteOfflineRealized` uses `r.pool.Exec` (`portfolio_repo.go:535`), unlike its siblings on `r.db`
   (`DeletePositionsNotInSync` `:351-367`); `NewPortfolioRepo` sets `db: pool` (`:45`) so prod behaviour is
   identical, and `NewPortfolioRepoWithDB` leaves `pool` nil (`:49-51`) — a mocked delete would nil-panic.
-- Clock seam: `func (s *PortfolioService) clock() time.Time` (`offline_valuation.go:51-56`, uses `s.now`).
+- Clock seam: `func (s *PortfolioService) clock() time.Time` (`offline_valuation.go:54`, uses `s.now`).
 - `github.com/jackc/pgx/v5 v5.9.2` (`go.mod:8`); `pgconn` already imported in service tests
   (`portfolio_offline_test.go:11`).
 - `LedgerEvent` fields `event_id = 1`, `sequence = 9`, `stream_key = 10` (`packages/proto/ledger/v1/ledger.proto`).
@@ -492,7 +494,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
    event, unchanged `consumeEventStream` behaviour).
 6. Wire it: `ConsumePositionSyncs` → `s.boundedRetry("position sync", s.processPositionSync)`;
    `ConsumeAccountDeregistrations` → `s.boundedRetry("account deregistration", s.processAccountDeregistered)`.
-   `ConsumeOrderFills` (`:168`), `:1249` and `:1297` are unchanged.
+   `ConsumeOrderFills` (`:167`), `:1249` and `:1297` are unchanged.
 7. Repo: change `DeleteOfflineRealized` (`portfolio_repo.go:535`) from `r.pool.Exec` to `r.db.Exec` (same pool
    in prod) so Step 8 can fail it through pgxmock.
 8. Comments stay ≤ 2 lines and state constraints only (root CLAUDE.md How to Act #5); the self-heal and
@@ -510,7 +512,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 
 ### Step 8 — test: D-47 retry, park classification, deregistration retry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_sync_retry_test.go` — create
@@ -573,7 +575,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 
 ### Step 9 — service: D-48 per-row `GetOfflineStates` decode and `readValuation.unavailable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -587,7 +589,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
   (`portfolio_repo.go:499`): Query error `:507-509`, Scan error `:516-518`, whole-call
   `return nil, fmt.Errorf("decode recent fills for %s: %w", id, err)` (`:521-523`), `rows.Err` `:527-529`.
   Single production caller: `offline_valuation.go:99` (`grep -rn GetOfflineStates --include=*.go`, non-test).
-- `type readValuation struct { states ...; accounts ... }` (`offline_valuation.go:27-30`); `valueRead`
+- `type readValuation struct { states ...; accounts ... }` (`offline_valuation.go:28-31`); `valueRead`
   (`:75`) builds `ids` from explicit ids plus offline-sourced positions (`:76-92`), returns early when empty
   (`:93-97`), then `states, err := s.repo.GetOfflineStates(...)` with the Warn + empty-map substitution
   (`:99-103`).
@@ -625,7 +627,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 
 ### Step 10 — test: per-row decode isolation and `valueRead` marking
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/offline_realized_test.go` — modify
@@ -667,7 +669,7 @@ behavioural proof.
 
 ### Step 11 — service: D-48 degraded marker and zeroing on every read path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`applyAccountPnL`, `buildAccountPortfolio`, callers, aggregate)
@@ -681,8 +683,8 @@ behavioural proof.
   (`:1351-1358`), `if st == nil { return }` (`:1359-1361`) — the unrealized-only total that D-48 leaks — then the
   offline fields (`:1362-1370`).
 - Callers: `GetPortfolio` scoped `:645`, aggregate loop `:654`; `buildAccountPortfolio` (`:1326`, calls
-  `applyAccountPnL` at `:1333`) from `ListPortfolios` single-account `:1428` and all-accounts `:1478`.
-- GetPortfolio aggregate (`:651-677`): `allOffline := len(scope) > 0` (`:652`), per-account sums of
+  `applyAccountPnL` at `:1333`) from `ListPortfolios` single-account `:1420` and all-accounts `:1472`.
+- GetPortfolio aggregate (`:650-677`): `allOffline := len(scope) > 0` (`:650`), per-account sums of
   `dayPnl`/`totalPnl` (`:655-656`), `prior`/`absCost` switch (`:657-666`), `equity` over all positions
   (`:668-670`), `TotalPnlPct` only when `allOffline` (`:675-677`).
 - `enrichPositions` (`:445-448`) discards `valueRead`'s result; `GetPosition` (`:682`, call `:688`),
@@ -700,7 +702,7 @@ behavioural proof.
 
 **Instructions**:
 1. Add a `degraded bool` parameter to `applyAccountPnL` and `buildAccountPortfolio`; pass
-   `val.degraded(id)` at every caller (`:645`, `:654`, `:1428`, `:1478`). When `degraded`:
+   `val.degraded(id)` at every caller (`:645`, `:654`, `:1420`, `:1472`). When `degraded`:
    set `p.OfflineStateUnavailable = true`; keep `p.Equity = positionsValue`; set `TotalPnl`, `DayPnl`,
    `DayPnlPct` to 0; leave `TotalPnlPct`, `RealizedPnl`, `RealizedPnlLifetime`, `FeesSinceSnapshot`,
    `FeesLifetime` nil; return before the broker/offline branches. (A degraded id is never a broker id —
@@ -729,7 +731,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 
 ### Step 12 — test: AC-3 on all four reads, AC-8 isolation, aggregate exclusion, sweep of non-fatal-read tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/offline_account_pnl_test.go` — modify
@@ -742,7 +744,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
 - `TestAccountPnL_OfflineStatesErrorIsNonFatal` (`offline_account_pnl_test.go:230-247`) asserts the old
   behaviour (`expectStates(mock, "u1", nil).WillReturnError(errors.New("db down"))`, `GetPortfolio` succeeds,
   Warn `"offline state unavailable"`). It becomes the GetPortfolio AC-3 marker test.
-- Helpers: `acctScenario` (`:34-50`), `expectStates` `:52`, `expectBalanceList` `:71`, `expectOfflineIDList`
+- Helpers: `acctScenario` (`:27-50`), `expectStates` `:52`, `expectBalanceList` `:71`, `expectOfflineIDList`
   `:79`, `acctSvc` `:94`, `getPortfolioAcc` `:102`, `listPortfoliosAcc` `:116`, `bothReads` `:131`,
   `TestAC29_OfflineReadParity` `:328`, `TestGetPortfolio_AC39_BrokerOfflineAndAggregate` `:377`,
   `TestGetPortfolio_AC52_NoRowsRevealsNothing` `:423`.
@@ -750,7 +752,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off gol
   sdd-design session of context.md, inside the design the operator approved at the r3 gate. It is a recorded
   240 decision (`240-offline-account-full-pnl/context.md:399`, `:771`), not a durable `@AC-*` business rule:
   `grep -rni 'non-fatal\|GetOfflineStates' docs/sdd/business-rules/` → no hit, so no C-16 CHANGE applies.
-- `portfolio_quote_deadline_test.go:114-115`: "GetOfflineStates is left unexpected (its error is non-fatal)" in
+- `portfolio_quote_deadline_test.go:115` (in the `expectAllAccounts` doc comment `:114-115`): "GetOfflineStates is left unexpected (its error is non-fatal)" in
   `expectAllAccounts` — an unexpected pgxmock query now marks the offline ids degraded instead of being
   silently ignored, so callers asserting offline P&L under this helper must be swept.
 - Fixture homes: `internal/testdata/` exists (`marks.go`, `offline_pnl.go`; `testdata.Aapl`, `testdata.AaplMid`,
@@ -798,7 +800,7 @@ New logic is in `internal/service/` (excluded package); the targeted tests are t
 
 ### Step 13 — service: UI gating on `offlineStateUnavailable` (consumer grep + every P&L surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/portfolioTotals.ts` — modify
@@ -880,7 +882,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 14 — test: UI vitest + Playwright for every gated surface and the confirm-fill error path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/portfolioTotals.test.ts` — modify
@@ -901,7 +903,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
   with the dialog placeholders `Filled quantity` / `Average fill price`; no ConfirmOrder error case exists
   (recon.md).
 - Fixtures: `PORTFOLIO_OFFLINE_FULL_PNL` (`e2e/fixtures/portfolios.ts:59`), `PORTFOLIO_ALPACA_AC30`,
-  `POSITION_OFFLINE_AAPL` (`e2e/fixtures/positions.ts:59`); catalog rows `INVENTORY.md:16-17`, `:41`.
+  `POSITION_OFFLINE_AAPL` (`e2e/fixtures/positions.ts:59`); catalog rows `INVENTORY.md:17`, `:41`.
 
 **TDD**: `red-green required`
 
@@ -920,7 +922,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
    - `@AC-3` Book page `/trader/portfolio` combined and per-account cards.
    - `@AC-3` positions table and `/trader/positions/AAPL` detail show `P&L unavailable` for the degraded offline
      position while a broker row stays visible.
-   - `@AC-3` OrderBook `PortfolioSummary` (route `GetPortfolio` with the degraded portfolio).
+   - ~~`@AC-3` OrderBook `PortfolioSummary` (route `GetPortfolio` with the degraded portfolio).~~ Dropped
+     (operator, 2026-10-30): `PortfolioSummary` is mounted by no route; see the Deviation Log.
 4. `offline-accounts.spec.ts`: two confirm-dialog error cases — route `CONFIRM_ORDER` to a Connect error
    (`status: 400`, body `{"code":"invalid_argument","message":"filled_avg_price must be a finite number >= 0 when filling"}`)
    → `@AC-4` the dialog stays open and shows that message; and `{"code":"unavailable","message":"positions not published; re-confirm to retry"}`
@@ -942,10 +945,11 @@ grep -n 'PORTFOLIO_OFFLINE_DEGRADED\|POSITION_OFFLINE_AAPL_DEGRADED' services/xs
 
 ### Step 15 — test: agent pass-through of the marker and the FR-5/FR-6 errors (no agent code change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_offline_client.py` — modify
+- `services/xstockstrat-agent/tests/test_position_parity.py` — modify (added by operator decision, Deviation Log)
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape)
 
@@ -953,11 +957,11 @@ grep -n 'PORTFOLIO_OFFLINE_DEGRADED\|POSITION_OFFLINE_AAPL_DEGRADED' services/xs
 - `_grpc_error_message` (`services/xstockstrat-agent/app/tools.py:223-240`): `INVALID_ARGUMENT` →
   `exc.details() or "invalid argument"` (`:238-239`); any other code incl. `UNAVAILABLE` →
   `exc.details() or str(code)` (`:240`).
-- `list_positions` (`app/client.py:2356`) returns
+- `list_positions` (`app/client.py:2357`) returns
   `MessageToDict(p, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)` per position
   (`:2377-2381`), so `offline_state_unavailable` appears as a key after Step 2.
-- `stub.ConfirmOrder` (`app/client.py:2276`) passes errors through; `manage_offline_account` catches
-  `grpc.aio.AioRpcError` (`app/tools.py:2138`).
+- `stub.ConfirmOrder` (`app/client.py:2277`) passes errors through; `manage_offline_account` catches
+  `grpc.aio.AioRpcError` (`app/tools.py:2147`).
 - Existing tests: `test_confirm_offline_order_forwards_user_and_returns_derived_status` (`tests/test_offline_client.py:31`),
   `test_list_account_positions_forwards_user_id_via_header` (`:136`).
 
@@ -988,7 +992,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 16 — docs: service docs for the new retry/park, degrade and confirm contracts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
@@ -1060,3 +1064,124 @@ _Populated by /sdd-execute as implementation proceeds._
 - Pre-entered at impl-spec review (2026-10-22): Step 7 — deregistration retry option (a) covers broker
   accounts too, a scope extension beyond the product spec's offline-only Trading-Domain Scope. Needs explicit
   operator sign-off before Step 7 runs (C-16/P-03); option (b) means a Step 7 re-spec.
+- Step 1 (2026-10-28, verification method only, no spec change): `buf breaking` ran against `git archive`
+  snapshots of `origin/feature/fix-offline-book-consistency` and `origin/main-dev` (`packages/proto`) instead of
+  the `.git#branch=` inputs, which cannot be resolved from an isolated worktree. Both passed; the main-dev check
+  also passed without the CI `--exclude-path trading/v1/trading.proto`.
+- Step 2 (2026-10-28, Files list gap, no spec change): `buf-gen.sh` also regenerated the ts-proto outputs
+  `gen/ts/portfolio/v1/portfolio.ts`, `gen/ts/dist/portfolio/v1/portfolio.js` and `.../portfolio.d.ts`. The
+  step's **Files** does not list them. They are committed with the step, as Instruction 2 directs (stage every
+  regenerated `portfolio/v1` file). As the spec expects, the gRPC/Connect stubs did not change.
+- Step 2 (2026-10-28, toolchain, no spec change): the host `~/go/bin/protoc-gen-go` v1.36.11 was built with
+  go1.24.7. It reformatted doc comments in `gen/go/analysis/v1/analysis.pb.go`, which is outside `portfolio/v1`.
+  Following the runbook, the pinned plugins (protoc-gen-go v1.36.11, -go-grpc v1.6.2, -connect-go v1.19.2) were
+  rebuilt under `GOTOOLCHAIN=go1.27.0`, the toolchain CI and `Dockerfile.codegen` use. After the rebuild the
+  diff touches only `portfolio/v1`.
+- Step 3 (2026-10-28, verification method only, no spec change): the host `~/go/bin/golangci-lint` v2.14.0 was
+  built with go1.26 and refuses the module's `go 1.27.0` target ("can't load config"). It was rebuilt at the same
+  pinned version under `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, matching CI's Go 1.27, and reported 0 issues.
+  **Disposition**: CI-equivalent fallback. The RED/GREEN run used a throwaway test file that was not committed;
+  Step 4 owns the durable tests in `trading_offline_test.go`.
+- Step 4 (2026-10-28, verification method only, no spec change): `golangci-lint` v2.14.0 was rebuilt under
+  `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, as in Step 3, and reported 0 issues. **Disposition**: CI-equivalent
+  fallback. Step 3 had already landed, so RED was captured by temporarily restoring the pre-Step-3 `trading.go`
+  (`12a29f1b`) under the new tests, then restoring it (not committed). `@AC-7` and `@AC-10` pass on both trees by
+  design: they are non-regression guards. `TestDeriveOfflineStatus` was not extended (instruction 4: "only if needed").
+- Step 5 (2026-10-29, scope expansion, operator Option A): `ledger_emit_mtls_test.go` added to the step's **Files**.
+  `TestEmitLedgerEventFailSoftOneShot` asserted feature 210's one-shot emit and contradicted the void-wrapper retry.
+  It is renamed `TestEmitLedgerEventFailSoftBoundedRetry` and now expects `appendMaxAttempts` attempts (still
+  fail-soft and bounded). This supersedes feature 210's one-shot note for `emitLedgerEvent`; the 2026-10-22
+  "retry for all callers" decision stands, closing the pre-entered Step 5 item above.
+- Step 5 (2026-10-29, side effect, flagged for the operator): `appendLedgerEvent` returns the `structpb.NewStruct`
+  error (Instruction 2), so the void wrapper now Warns and skips the append when a payload cannot be encoded.
+  `order_intent.go:156` puts a `time.Time` (`out.UpdatedAt`) in the `order_intent.reclaimed_unknown` payload, which
+  `NewStruct` rejects. Before this step that event was appended with an empty payload; now it is not appended. No
+  code consumes the event. A one-line follow-up (`out.UpdatedAt.Format(time.RFC3339Nano)`) is outside this step's
+  **Files** and is carried as an open item.
+- Step 5 (2026-10-29, implementation detail, no spec change): the retry backoff waits on `ctx.Done()` as well as the
+  timer, so a cancelled caller stops retrying early.
+- Step 5 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 was rebuilt under
+  `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, as in Steps 3-4, and reported 0 issues. **Disposition**: CI-equivalent
+  fallback. RED was captured with a throwaway ConfirmOrder test that was not committed (Step 6 owns the durable tests).
+- Step 6 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` into a scratch GOBIN, as in Steps 3-5, reported 0 issues. **Disposition**: CI-equivalent
+  fallback. Step 5 had already landed, so RED was captured by temporarily restoring the pre-Step-5 `trading.go` and
+  `ledger_emit_mtls_test.go` (`ff62180f~1`) under the new tests, then restoring them (not committed). On that tree
+  `TestAppendLedgerEvent_*` and `TestOfflineRecomputeTimeout_*` fail to compile (the symbols do not exist), so the
+  behavioural RED ran with those two removed. `TestRecomputeEmit_PayloadKeepsUserID` passes on both trees by design
+  (non-regression guard, fails.md:2054). The test file adds one helper beyond the instructions, a `setFailFn` setter,
+  so the hook is swapped under the ledger mutex.
+- Steps 7 + 8 (2026-10-29, operator decision "B: merge Steps 7+8", session question tool): the two steps land as
+  **one** lint-green commit with one red→green cycle on Step 8's tests. This breaks one-commit-per-step on purpose:
+  Step 7 alone cannot compile the service tests, because the three void call sites
+  (`portfolio_offline_test.go:257`, `:307`, `portfolio_fill_sync_race_test.go:84`) must take the new return value.
+  The race test checks it with `t.Errorf` inside its goroutine (`t.Fatalf` is not goroutine-safe). Both steps are
+  marked done in that commit. Option (a) for deregistration scope was already signed off on 2026-10-22 (context.md).
+- Steps 7 + 8 (2026-10-29, Files gap, spec-sanctioned): `portfolio_quote_deadline_test.go` — `warnRecorder.Handle`
+  now records Warn **and** Error (`r.Level < slog.LevelWarn` skips), as Step 8 instruction 2 allows ("extended to
+  Error level if needed"), so the AC-6 test can read the `"event parked"` Error. The existing callers look records
+  up by message only, so they are unaffected.
+- Steps 7 + 8 (2026-10-29, implementation detail, no spec change): `classifyConsumerErr` also follows a single-`Unwrap`
+  chain, so a `fmt.Errorf("%w", errors.Join(...))` wrapper keeps the per-leaf precedence. The processPositionSync
+  failures are wrapped with the write that failed (`upsert position <sym>`, `delete positions not in sync`,
+  `upsert offline realized`), so `errors.Is` still reaches the driver error.
+- Steps 7 + 8 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-6, reported 0 issues. **Disposition**: CI-equivalent fallback.
+- Steps 9 + 10 (2026-10-29, operator decision "Merge pairs + standing rule", session question tool): the two steps
+  land as **one** lint-green commit with one red→green cycle on Step 10's tests, and both are marked done. Standing
+  rule, quoted: "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step [...] Execute this step and the next one together as ONE commit with one red→green cycle
+  on the next step's tests, mark BOTH steps done". Step 9 alone cannot compile the repository tests
+  (`offline_realized_test.go:55`, `:80` must take the 3-value `GetOfflineStates` return), and `degraded()` has no
+  non-test caller until Step 11.
+- Steps 9 + 10 (2026-10-29, implementation detail, no spec change): `GetOfflineStates` returns a non-nil empty
+  `failed` map on success (including the empty-ids early return); the per-row Warn keeps the `"offline state
+  unavailable"` message and adds `account_id`. RED was a compile failure of the new tests plus a throwaway 2-value
+  AC-8 test on the pre-Step-9 repo (`decode recent fills for off-1: invalid character ...`, whole batch failed), not
+  committed.
+- Steps 9 + 10 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-8, reported 0 issues. **Disposition**: CI-equivalent fallback.
+- Steps 11 + 12 (2026-10-29, standing operator rule "Merge pairs + standing rule"): the two steps land as **one**
+  lint-green commit with one red→green cycle on Step 12's tests, and both are marked done. Standing rule, quoted:
+  "if this step's Verification fails ONLY because the consumers or tests of its new code live in the immediately
+  following step [...] Execute this step and the next one together as ONE commit with one red→green cycle on the next
+  step's tests, mark BOTH steps done". Step 11 is `red-green required` with **Covers** `—`: its RED tests are Step
+  12's, and Step 11 alone breaks `TestAccountPnL_OfflineStatesErrorIsNonFatal`, which Step 12 rewrites.
+- Steps 11 + 12 (2026-10-29, line drift only, no spec change): Steps 7-10 shifted the cited lines. `applyAccountPnL`
+  sits at `portfolio_service.go:1438` (spec `:1339`), `buildAccountPortfolio` at `:1425`, and the `ListPortfolios`
+  `valueRead` calls at `:1516` / `:1567` (spec `:1417` / `:1468`). The symbols and the edits are as specified.
+- Steps 11 + 12 (2026-10-29, implementation detail, no spec change): the all-accounts `ListPortfolios` calls
+  `markDegradedPositions` once on the shared `all` slice, before the per-account loop; the slice shares its pointers
+  with each account's positions. Step 12 adds a `statesErr` field and an `expectStates` method to `acctScenario`, so
+  the scoped reads reuse `getPortfolioAcc` / `listPortfoliosAcc`. It also adds the `brokerPosRow` helper, the same
+  shape as AC-39's inline `brokerRow`, which is left unchanged (PRESERVE). The `portfolio_quote_deadline_test.go`
+  helper comment is reworded to the new contract; no expectation changed, because the sweep found no test that
+  asserts offline P&L under `expectAllAccounts`.
+- Steps 11 + 12 (2026-10-29, verification method only, no spec change): `golangci-lint` v2.14.0 rebuilt under
+  `GOTOOLCHAIN=go1.27.0` (scratch GOBIN), as in Steps 3-10, reported 0 issues. **Disposition**: CI-equivalent fallback.
+- Steps 13 + 14 (2026-10-30, standing operator rule "Merge pairs + standing rule", plus operator decision "A: Gate it,
+  drop e2e (Recommended)"): the two steps land as **one** lint-green commit with one red→green cycle on Step 14's
+  tests, and both are marked done. Standing rule, quoted: "if this step's Verification fails ONLY because the consumers
+  or tests of its new code live in the immediately following step [...] Execute this step and the next one together as
+  ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done". Step 13 alone breaks the
+  existing `portfolioTotals.test.ts` `toEqual` (new `incomplete` key), which Step 14 updates. Unmounted-component
+  finding: `grep -rn 'PortfolioSummary' services/xstockstrat-ui/src services/xstockstrat-ui/e2e` hits only its own
+  definition (`OrderBook.tsx:98`); `app/trader/page.tsx` mounts `OrderBook`, not `PortfolioSummary`. Its gating
+  (instruction 3) is done and is covered by `tsc --noEmit` and lint only; Step 14's `@AC-3 OrderBook PortfolioSummary`
+  e2e bullet is dropped. No extra files outside both steps' **Files**.
+- Steps 13 + 14 (2026-10-30, implementation detail, no spec change): the degraded card reuses `CardNotice
+  variant="muted"` ("Offline P&L temporarily unavailable") inside the PortfolioPanel single-account card and the
+  combined view's per-account card, as instruction 2 says. Gated values render in `text-muted-foreground` (StatTile
+  `tone` is left unset). Total P/L cells on `/trader/positions` stay as they are: they show `unrealizedPnl`, which the
+  backend does not zero. The `@AC-4` / `@AC-5` confirm-dialog e2e cases pass before and after the change by design
+  (instruction 7: `ConfirmFillDialog` needs no change), so they are non-regression guards.
+- Steps 13 + 14 (2026-10-30, verification method only, no spec change): the host `pnpm dev` harness timed out in the
+  10s warmup project, so Playwright ran with `CI=1` (the CI `pnpm build && pnpm start` server and timeouts) and
+  `--retries=0`. **Disposition**: CI-equivalent fallback. RED: the 5 new `@AC-3` cases failed; GREEN: 23/23 in the two
+  specs plus 83/83 in the other affected specs. `tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts`
+  (`:135-136`), a file this commit does not touch; they are carried as an open item.
+- Step 15 (2026-10-30): Files widened by the operator (session question tool, in their own words: 'A: Widen Step 15
+  (Recommended)') to also edit `services/xstockstrat-agent/tests/test_position_parity.py`: `offline_state_unavailable`
+  added to `_POSITION_FIELD_SET`, the field-count comment is now 26, and guard B's fully-populated `Position` sets
+  `offline_state_unavailable=True`. No assert statement changed. This records the decision that the marker surfaces
+  through `get_positions` and `manage_offline_account list_positions`. No agent code changed.

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -56,6 +58,10 @@ type PortfolioService struct {
 	// positionsMu serializes the ledger consumers' read-compute-write of portfolio.positions rows;
 	// correct only while those consumers run single-instance (instance_count: 1).
 	positionsMu sync.Mutex
+
+	// sideCache memoises order id → side resolved from order.created/submitted; zero value is usable.
+	sideCacheMu sync.Mutex
+	sideCache   map[string]string
 
 	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
 	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
@@ -251,6 +257,7 @@ type orderFillPayload struct {
 	Mode      string  `json:"trading_mode"` // "TRADING_MODE_PAPER" | "TRADING_MODE_LIVE"
 	AccountId string  `json:"account_id"`
 	OrderID   string  `json:"order_id"`
+	Side      string  `json:"side"` // "ORDER_SIDE_BUY" | "ORDER_SIDE_SELL"; absent on pre-feature-251 events
 	// StopPrice is carried by a stop/stop-limit order event; zero on plain market/limit fills.
 	// Learned into the in-memory stop store for the Exposure surface.
 	StopPrice float64 `json:"stop_price"`
@@ -443,7 +450,7 @@ func unvaluedSymbols(positions []*portfoliov1.Position) []string {
 }
 
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
-	s.valueRead(ctx, positions, nil)
+	markDegradedPositions(positions, s.valueRead(ctx, positions, nil))
 	s.enrichRisk(ctx, positions)
 }
 
@@ -628,6 +635,7 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 		}
 	}
 	val := s.valueRead(ctx, positions, offlineCandidates)
+	markDegradedPositions(positions, val)
 	s.enrichRisk(ctx, positions)
 
 	portfolio := &portfoliov1.Portfolio{
@@ -642,7 +650,7 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 		byAccount[p.AccountId] = append(byAccount[p.AccountId], p)
 	}
 	if len(scope) == 1 && req.GetAccountId() != "" {
-		applyAccountPnL(portfolio, positions, balances[scope[0]], val.state(scope[0]), val.accounts[scope[0]])
+		applyAccountPnL(portfolio, positions, balances[scope[0]], val.state(scope[0]), val.accounts[scope[0]], val.degraded(scope[0]))
 		return portfolio, nil
 	}
 
@@ -651,7 +659,12 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 	for _, id := range scope {
 		acct := &portfoliov1.Portfolio{}
 		st := val.state(id)
-		applyAccountPnL(acct, byAccount[id], balances[id], st, val.accounts[id])
+		applyAccountPnL(acct, byAccount[id], balances[id], st, val.accounts[id], val.degraded(id))
+		if val.degraded(id) {
+			portfolio.OfflineStateUnavailable = true
+			allOffline = false
+			continue
+		}
 		dayPnl += acct.DayPnl
 		totalPnl += acct.TotalPnl
 		switch {
@@ -717,6 +730,13 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 // Unavailable so callers can tell a transient dependency gap from a server bug.
 var ErrQuotesUnavailable = errors.New("quotes unavailable")
 
+// ErrOfflineStateUnavailable tags offline-state read failures in logs; no read returns it to a caller.
+var ErrOfflineStateUnavailable = errors.New("offline state unavailable")
+
+// ErrLedgerUnavailable marks a GetPnL ledger page that failed or repeated its token; the handler maps it to
+// Unavailable, and GetPnL never returns a partial realized sum.
+var ErrLedgerUnavailable = errors.New("ledger unavailable")
+
 // GetPnL computes realized + unrealized P&L over a time range. Realized uses the shared pnl package
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
@@ -739,110 +759,10 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		unrealized += (p.CurrentPrice - p.AvgEntryPrice) * p.Qty
 	}
 
-	// Collect fills in application order and fold once through the shared pnl package. Batching the fold
-	// is behavior-identical to the former incremental applyFill (no state read between passes).
-	var fills []pnl.Fill
-	filledOrderIDs := make(map[string]bool)
-	latestPartials := make(map[string]orderFillPayload)
-
-	// Pass 1 — query order.filled events; accumulate realized P&L and track completed order IDs.
-	var pageToken string
-	for {
-		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
-			EventType:     "order.filled",
-			SourceService: "trading",
-			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
-		})
-		if err != nil {
-			slog.Warn("GetPnL: QueryEvents (filled) failed", "error", err)
-			break
-		}
-		for _, ev := range resp.GetEvents() {
-			if ev.Payload == nil {
-				continue
-			}
-			raw, err := ev.Payload.MarshalJSON()
-			if err != nil {
-				continue
-			}
-			var fill orderFillPayload
-			if err := json.Unmarshal(raw, &fill); err != nil {
-				continue
-			}
-			if fill.UserID != userID {
-				continue
-			}
-			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
-				if fill.Mode == "TRADING_MODE_LIVE" {
-					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
-				}
-				if fillMode != req.TradingMode {
-					continue
-				}
-			}
-			filledOrderIDs[fill.OrderID] = true
-			fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
-		}
-		if resp.GetPage().GetNextPageToken() == "" {
-			break
-		}
-		pageToken = resp.GetPage().GetNextPageToken()
+	realized, err := s.realizedPnL(ctx, userID, req.TradingMode)
+	if err != nil {
+		return nil, err
 	}
-
-	// Pass 2 — query order.partially_filled events; keep last per order ID (highest cumulative FilledQty).
-	pageToken = ""
-	for {
-		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
-			EventType:     "order.partially_filled",
-			SourceService: "trading",
-			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
-		})
-		if err != nil {
-			slog.Warn("GetPnL: QueryEvents (partially_filled) failed", "error", err)
-			break
-		}
-		for _, ev := range resp.GetEvents() {
-			if ev.Payload == nil {
-				continue
-			}
-			raw, err := ev.Payload.MarshalJSON()
-			if err != nil {
-				continue
-			}
-			var fill orderFillPayload
-			if err := json.Unmarshal(raw, &fill); err != nil {
-				continue
-			}
-			if fill.UserID != userID {
-				continue
-			}
-			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
-				if fill.Mode == "TRADING_MODE_LIVE" {
-					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
-				}
-				if fillMode != req.TradingMode {
-					continue
-				}
-			}
-			// Events arrive in recorded_at order; overwrite = keep last (highest cumulative FilledQty).
-			latestPartials[fill.OrderID] = fill
-		}
-		if resp.GetPage().GetNextPageToken() == "" {
-			break
-		}
-		pageToken = resp.GetPage().GetNextPageToken()
-	}
-	// Apply partial fills only for orders that never reached order.filled status.
-	for orderID, fill := range latestPartials {
-		if filledOrderIDs[orderID] {
-			continue
-		}
-		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.FilledQty, Price: fill.FillPrice})
-	}
-
-	realized := pnl.Fold(fills).Realized
 
 	return &portfoliov1.PnLResponse{
 		RealizedPnl:   realized,
@@ -850,6 +770,212 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		TotalPnl:      realized + unrealized,
 		Range:         req.Range,
 	}, nil
+}
+
+// ledgerPnLPageSize matches the ledger's QUERY_EVENTS_MAX_PAGE_SIZE; a larger request is clamped there.
+const ledgerPnLPageSize = 1000
+
+// tradingSourceService is the source_service the trading producer stamps on its order events.
+const tradingSourceService = "xstockstrat-trading"
+
+// ErrFillUnattributable marks a fill GetPnL cannot fold: its side or account cannot be established.
+// The handler maps it to FailedPrecondition; it is permanent because the ledger is immutable.
+var ErrFillUnattributable = errors.New("fill unattributable")
+
+// sequencedFill is a kept fill with the ledger sequence that orders the fold.
+type sequencedFill struct {
+	orderFillPayload
+	seq int64
+}
+
+// realizedPnL folds the caller's fills, ordered by ledger sequence, at (mode, account, symbol) grain.
+func (s *PortfolioService) realizedPnL(ctx context.Context, userID string, mode commonv1.TradingMode) (float64, error) {
+	filled, err := s.collectFills(ctx, "order.filled", userID, mode)
+	if err != nil {
+		return 0, err
+	}
+	partials, err := s.collectFills(ctx, "order.partially_filled", userID, mode)
+	if err != nil {
+		return 0, err
+	}
+	filledOrderIDs := make(map[string]bool, len(filled))
+	kept := make([]sequencedFill, 0, len(filled))
+	for _, f := range filled {
+		filledOrderIDs[f.OrderID] = true
+		f.Qty = math.Abs(f.Qty)
+		kept = append(kept, f)
+	}
+	// One cumulative partial per order, the largest |FilledQty| (first seen wins a tie), only for orders
+	// that never reached order.filled. Order-id first-seen order keeps ties on equal sequences stable.
+	latest := make(map[string]sequencedFill)
+	var partialOrder []string
+	for _, f := range partials {
+		prev, ok := latest[f.OrderID]
+		if !ok {
+			partialOrder = append(partialOrder, f.OrderID)
+		}
+		if !ok || math.Abs(f.FilledQty) > math.Abs(prev.FilledQty) {
+			latest[f.OrderID] = f
+		}
+	}
+	for _, id := range partialOrder {
+		if filledOrderIDs[id] {
+			continue
+		}
+		f := latest[id]
+		f.Qty = math.Abs(f.FilledQty)
+		kept = append(kept, f)
+	}
+
+	// Resolve every side before the account rule so an unattributable fill fails the same way regardless of order.
+	for i := range kept {
+		if kept[i].Side != "" {
+			continue
+		}
+		side, err := s.orderSide(ctx, kept[i].OrderID)
+		if err != nil {
+			return 0, err
+		}
+		kept[i].Side = side
+	}
+	accountsBySymbol := make(map[string]map[bool]bool)
+	for _, f := range kept {
+		g := normalisedMode(f.Mode) + "|" + f.Symbol
+		if accountsBySymbol[g] == nil {
+			accountsBySymbol[g] = map[bool]bool{}
+		}
+		accountsBySymbol[g][f.AccountId != ""] = true
+	}
+	for g, has := range accountsBySymbol {
+		if has[true] && has[false] {
+			return 0, fmt.Errorf("GetPnL: %s mixes fills with and without account_id: %w", g, ErrFillUnattributable)
+		}
+	}
+
+	sort.SliceStable(kept, func(i, j int) bool { return kept[i].seq < kept[j].seq })
+	fills := make([]pnl.Fill, 0, len(kept))
+	for _, f := range kept {
+		signed, ok := signedQty(f.Side, f.Qty)
+		if !ok {
+			return 0, fmt.Errorf("GetPnL: order %s has side %q: %w", f.OrderID, f.Side, ErrFillUnattributable)
+		}
+		key := normalisedMode(f.Mode) + "|" + f.AccountId + "|" + f.Symbol
+		fills = append(fills, pnl.Fill{Symbol: key, Qty: signed, Price: f.FillPrice})
+	}
+	return pnl.Fold(fills).Realized, nil
+}
+
+func normalisedMode(m string) string {
+	if m == "TRADING_MODE_LIVE" {
+		return m
+	}
+	return "TRADING_MODE_PAPER"
+}
+
+// signedQty maps a trading order side to a signed fill quantity; any other side is unattributable.
+func signedQty(side string, qty float64) (float64, bool) {
+	switch side {
+	case "ORDER_SIDE_BUY":
+		return qty, true
+	case "ORDER_SIDE_SELL":
+		return -qty, true
+	}
+	return 0, false
+}
+
+// orderSide resolves an order's side from its order.created, then order.submitted, event (stream_key = order id).
+// Only positive answers are cached.
+func (s *PortfolioService) orderSide(ctx context.Context, orderID string) (string, error) {
+	s.sideCacheMu.Lock()
+	cached, ok := s.sideCache[orderID]
+	s.sideCacheMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	for _, eventType := range []string{"order.created", "order.submitted"} {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			StreamKey:     orderID,
+			EventType:     eventType,
+			SourceService: tradingSourceService,
+			Page:          &commonv1.PageRequest{PageSize: 1},
+		})
+		if err != nil {
+			return "", fmt.Errorf("GetPnL: side lookup (%s): %w: %w", eventType, ErrLedgerUnavailable, err)
+		}
+		for _, ev := range resp.GetEvents() {
+			if side := ev.GetPayload().GetFields()["side"].GetStringValue(); side != "" {
+				s.sideCacheMu.Lock()
+				if s.sideCache == nil {
+					s.sideCache = map[string]string{}
+				}
+				s.sideCache[orderID] = side
+				s.sideCacheMu.Unlock()
+				return side, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("GetPnL: no side for order %s: %w", orderID, ErrFillUnattributable)
+}
+
+// collectFills walks every ledger page of eventType and returns the caller's mode-matching fills in page order.
+// A repeated event_id, or an empty page that still carries a token, fails closed.
+func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID string, mode commonv1.TradingMode) ([]sequencedFill, error) {
+	var out []sequencedFill
+	seen := make(map[string]bool)
+	var token string
+	for {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			EventType:     eventType,
+			SourceService: tradingSourceService,
+			Page:          &commonv1.PageRequest{PageSize: ledgerPnLPageSize, PageToken: token},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): %w: %w", eventType, ErrLedgerUnavailable, err)
+		}
+		if len(resp.GetEvents()) == 0 && resp.GetPage().GetNextPageToken() != "" {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): empty page with a next token: %w", eventType, ErrLedgerUnavailable)
+		}
+		for _, ev := range resp.GetEvents() {
+			if id := ev.GetEventId(); id != "" {
+				if seen[id] {
+					return nil, fmt.Errorf("GetPnL: QueryEvents (%s): repeated event %s: %w", eventType, id, ErrLedgerUnavailable)
+				}
+				seen[id] = true
+			}
+			if ev.Payload == nil {
+				continue
+			}
+			raw, err := ev.Payload.MarshalJSON()
+			if err != nil {
+				continue
+			}
+			var fill orderFillPayload
+			if err := json.Unmarshal(raw, &fill); err != nil {
+				continue
+			}
+			if fill.UserID != userID {
+				continue
+			}
+			if mode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
+				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
+				if fill.Mode == "TRADING_MODE_LIVE" {
+					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
+				}
+				if fillMode != mode {
+					continue
+				}
+			}
+			out = append(out, sequencedFill{orderFillPayload: fill, seq: ev.GetSequence()})
+		}
+		next := resp.GetPage().GetNextPageToken()
+		if next == "" {
+			return out, nil
+		}
+		if next == token {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): repeated page token: %w", eventType, ErrLedgerUnavailable)
+		}
+		token = next
+	}
 }
 
 // GetSnapshot retrieves a historical portfolio snapshot.
@@ -1108,7 +1234,7 @@ func (p *positionSyncPayload) offlineState() repository.OfflineState {
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
-	s.consumeEventStream(ctx, "position sync", "account.positions.synced", ackAlways(s.processPositionSync))
+	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.boundedRetry("position sync", s.processPositionSync))
 }
 
 // accountDeregisteredPayload is the shape of trading's account.deregistered event.
@@ -1120,24 +1246,104 @@ type accountDeregisteredPayload struct {
 // ConsumeAccountDeregistrations purges an offline account's positions + realized P&L on
 // account.deregistered — no broker sync reconciles an offline account away, so the purge is event-driven.
 func (s *PortfolioService) ConsumeAccountDeregistrations(ctx context.Context) {
-	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", ackAlways(s.processAccountDeregistered))
+	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", s.boundedRetry("account deregistration", s.processAccountDeregistered))
 }
 
-func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) {
+// Bounds for boundedRetry's park rule (operator decision, ledgerEmitTimeout precedent).
+const (
+	syncRetryMinAttempts     = 5
+	syncRetryFallbackElapsed = 10 * time.Minute
+)
+
+type retryClass int
+
+const (
+	retryUnclassified retryClass = iota
+	retryDeterministic
+	retryTransient
+)
+
+// classifyConsumerErr ranks every errors.Join leaf; precedence is transient > deterministic > unclassified.
+func classifyConsumerErr(err error) retryClass {
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		best := retryUnclassified
+		for _, leaf := range j.Unwrap() {
+			best = max(best, classifyConsumerErr(leaf))
+		}
+		return best
+	}
+	class := retryUnclassified
+	var netErr net.Error
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled), pgconn.Timeout(err), errors.As(err, &netErr):
+		return retryTransient
+	case errors.As(err, &pgErr) && len(pgErr.Code) >= 2:
+		switch pgErr.Code[:2] {
+		case "08", "40", "53", "57":
+			return retryTransient
+		case "22", "23":
+			class = retryDeterministic
+		}
+	}
+	if w := errors.Unwrap(err); w != nil {
+		class = max(class, classifyConsumerErr(w))
+	}
+	return class
+}
+
+// boundedRetry withholds the cursor on a handler error until the event parks. Its state is unlocked:
+// each consumer runs on one goroutine.
+func (s *PortfolioService) boundedRetry(consumer string, h eventHandler) eventHandler {
+	var st struct {
+		seq      int64
+		attempts int
+		first    time.Time
+	}
+	return func(ctx context.Context, ev *ledgerv1.LedgerEvent) error {
+		err := h(ctx, ev)
+		if err == nil {
+			if st.seq == ev.Sequence {
+				st.attempts = 0
+			}
+			return nil
+		}
+		if st.attempts == 0 || st.seq != ev.Sequence {
+			st.seq, st.attempts, st.first = ev.Sequence, 0, s.clock()
+		}
+		st.attempts++
+		park := false
+		switch classifyConsumerErr(err) {
+		case retryDeterministic:
+			park = st.attempts >= syncRetryMinAttempts
+		case retryUnclassified:
+			park = st.attempts >= syncRetryMinAttempts && s.clock().Sub(st.first) >= syncRetryFallbackElapsed
+		}
+		if !park {
+			return err
+		}
+		slog.Error("event parked", "event_id", ev.EventId, "sequence", ev.Sequence, "stream_key", ev.StreamKey,
+			"consumer", consumer, "attempts", st.attempts, "error", err)
+		st.attempts = 0
+		return nil
+	}
+}
+
+func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
-		return
+		return nil
 	}
 	raw, err := event.Payload.MarshalJSON()
 	if err != nil {
-		return
+		return nil
 	}
 	var payload accountDeregisteredPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		slog.Warn("parse account deregistered payload", "error", err)
-		return
+		return nil
 	}
 	if payload.AccountID == "" {
-		return
+		return nil
 	}
 	userID := payload.UserID
 	if userID == "" {
@@ -1147,12 +1353,16 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	defer s.positionsMu.Unlock()
 
 	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
+	var failures []error
 	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
 		slog.Warn("deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
+		failures = append(failures, fmt.Errorf("delete positions: %w", err))
 	}
 	if err := s.repo.DeleteOfflineRealized(ctx, payload.AccountID); err != nil {
 		slog.Warn("deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
+		failures = append(failures, fmt.Errorf("delete offline realized: %w", err))
 	}
+	return errors.Join(failures...)
 }
 
 // shouldReconcileSyncDeletions reports whether an account.positions.synced event should run
@@ -1166,22 +1376,25 @@ func shouldReconcileSyncDeletions(positionCount int, realizedPnl *float64) bool 
 	return positionCount > 0 || realizedPnl != nil
 }
 
-func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
+// processPositionSync returns an error only for an offline sync (RealizedPnl != nil): every offline write
+// is attempted and the failures joined. A broker sync stays warn-and-continue.
+func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
-		return
+		return nil
 	}
 	raw, err := event.Payload.MarshalJSON()
 	if err != nil {
-		return
+		return nil
 	}
 	var sync positionSyncPayload
 	if err := json.Unmarshal(raw, &sync); err != nil {
 		slog.Warn("parse position sync payload", "error", err)
-		return
+		return nil
 	}
 	if sync.AccountID == "" {
-		return
+		return nil
 	}
+	var failures []error
 
 	s.positionsMu.Lock()
 	defer s.positionsMu.Unlock()
@@ -1206,12 +1419,14 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
+			failures = append(failures, fmt.Errorf("upsert position %s: %w", p.Symbol, err))
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
 	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
 		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
 			slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+			failures = append(failures, fmt.Errorf("delete positions not in sync: %w", err))
 		}
 	} else {
 		slog.Debug("skipping delete on empty broker position snapshot", "account_id", sync.AccountID)
@@ -1222,8 +1437,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	if sync.RealizedPnl != nil {
 		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
 			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
+			failures = append(failures, fmt.Errorf("upsert offline realized: %w", err))
 		}
 	}
+	if sync.RealizedPnl == nil {
+		return nil
+	}
+	return errors.Join(failures...)
 }
 
 // bracketUpdatePayload is the shape of the order.bracket_updated event payload. An empty
@@ -1317,20 +1537,21 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 }
 
 // buildAccountPortfolio assembles a Portfolio for one account from already-valued positions.
-func buildAccountPortfolio(accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) *portfoliov1.Portfolio {
+func buildAccountPortfolio(accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal, degraded bool) *portfoliov1.Portfolio {
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: accountID,
 		AccountId:   accountID,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 	}
-	applyAccountPnL(portfolio, positions, bal, st, acct)
+	applyAccountPnL(portfolio, positions, bal, st, acct, degraded)
 	return portfolio
 }
 
 // applyAccountPnL sets one account's equity and P&L. A broker account is authoritative for cash, buying power,
 // equity and Day P&L; an offline account (st != nil) excludes unpriced positions and carries FR-1/FR-2/FR-3/FR-4.
-func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal) {
+// A degraded offline account keeps only its market-value equity: its P&L is zeroed and marked, never unrealized-only.
+func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal, degraded bool) {
 	var positionsValue, unrealizedPnl float64
 	for _, pos := range positions {
 		if st != nil && pos.MarkSource == portfoliov1.MarkSource_MARK_SOURCE_NONE {
@@ -1340,6 +1561,10 @@ func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position
 		unrealizedPnl += pos.UnrealizedPnl
 	}
 	p.Equity = positionsValue
+	if degraded {
+		p.OfflineStateUnavailable = true
+		return
+	}
 	p.TotalPnl = unrealizedPnl
 	if bal != nil {
 		p.Cash = bal.Cash
@@ -1409,9 +1634,10 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 			candidates = []string{accountID}
 		}
 		val := s.valueRead(ctx, positions, candidates)
+		markDegradedPositions(positions, val)
 		s.enrichRisk(ctx, positions)
 		return &portfoliov1.ListPortfoliosResponse{
-			Portfolios: []*portfoliov1.Portfolio{buildAccountPortfolio(accountID, positions, bal, val.state(accountID), val.accounts[accountID])},
+			Portfolios: []*portfoliov1.Portfolio{buildAccountPortfolio(accountID, positions, bal, val.state(accountID), val.accounts[accountID], val.degraded(accountID))},
 		}, nil
 	}
 
@@ -1460,10 +1686,11 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		all = append(all, a.positions...)
 	}
 	val := s.valueRead(ctx, all, offlineAppended)
+	markDegradedPositions(all, val)
 	portfolios := make([]*portfoliov1.Portfolio, 0, len(accts))
 	for _, a := range accts {
 		s.enrichRisk(ctx, a.positions)
-		portfolios = append(portfolios, buildAccountPortfolio(a.id, a.positions, a.bal, val.state(a.id), val.accounts[a.id]))
+		portfolios = append(portfolios, buildAccountPortfolio(a.id, a.positions, a.bal, val.state(a.id), val.accounts[a.id], val.degraded(a.id)))
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }

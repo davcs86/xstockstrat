@@ -1,7 +1,9 @@
 package service
 
 import (
+	"errors"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -349,5 +351,49 @@ func TestListPositions_AC19_BrokerOnlyNoOfflineCalls(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
+	}
+}
+
+// valueReadPositions is one broker position (alp-1) and one offline position (acc-1); acc-2 is an explicit id.
+func valueReadPositions() []*portfoliov1.Position {
+	return []*portfoliov1.Position{
+		{Symbol: testdata.Tsla, Qty: 1, CostBasis: 100, AccountId: "alp-1"},
+		offPos(testdata.Aapl, 10, 150),
+	}
+}
+
+func TestValueRead_WholeCallErrorMarksEveryRequestedID(t *testing.T) {
+	warns := recordWarns(t)
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	mock.ExpectQuery(`FROM portfolio\.offline_account_realized`).WithArgs("u1", pgxmock.AnyArg()).
+		WillReturnError(errors.New("db down"))
+	v := svc.valueRead(ctxWithUser(t, "u1"), valueReadPositions(), []string{"acc-2"})
+	if !v.degraded(offAcct) || !v.degraded("acc-2") || v.degraded("alp-1") {
+		t.Errorf("degraded acc-1 %v acc-2 %v alp-1 %v, want true true false", v.degraded(offAcct), v.degraded("acc-2"), v.degraded("alp-1"))
+	}
+	if v.states == nil {
+		t.Error("states must stay a non-nil map")
+	}
+	if w := warns.find("offline state unavailable"); w == nil || !strings.Contains(w["error"], ErrOfflineStateUnavailable.Error()) {
+		t.Errorf("want an offline-state WARN carrying ErrOfflineStateUnavailable, got %v", w)
+	}
+}
+
+func TestValueRead_RowFailureMarksOnlyThatID(t *testing.T) {
+	warns := recordWarns(t)
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	mock.ExpectQuery(`FROM portfolio\.offline_account_realized`).WithArgs("u1", pgxmock.AnyArg()).
+		WillReturnRows(mock.NewRows([]string{"account_id", "realized_pnl", "realized_carried", "fees_since_snapshot", "fees_carried", "recent_fills"}).
+			AddRow(offAcct, 0.0, 0.0, 0.0, 0.0, []byte("{not json")).
+			AddRow("acc-2", 5.0, 0.0, 0.0, 0.0, []byte(`[]`)))
+	v := svc.valueRead(ctxWithUser(t, "u1"), valueReadPositions(), []string{"acc-2"})
+	if !v.degraded(offAcct) || v.degraded("acc-2") || v.degraded("alp-1") {
+		t.Errorf("degraded acc-1 %v acc-2 %v alp-1 %v, want true false false", v.degraded(offAcct), v.degraded("acc-2"), v.degraded("alp-1"))
+	}
+	if st := v.state("acc-2"); st == nil || st.RealizedPnl != 5 {
+		t.Errorf("acc-2 state = %+v, want its decoded row", st)
+	}
+	if w := warns.find("offline state unavailable"); w == nil || w["account_id"] != offAcct {
+		t.Errorf("want a per-account offline-state WARN for %s, got %v", offAcct, w)
 	}
 }
