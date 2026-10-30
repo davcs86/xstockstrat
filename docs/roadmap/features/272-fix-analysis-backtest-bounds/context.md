@@ -734,3 +734,15 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
   `services/xstockstrat-analysis/tests/test_config_read_classification.py`.
 - Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
 
+## Session 2026-10-29 — sdd-execute sequential: Step 7 (docs)
+
+- Step 7: `services/xstockstrat-analysis/CLAUDE.md:509` description cell for `analysis.backtest.max_duration_seconds`
+  replaced with the design §5 text (evaluation bound up to result assembly; persistence/grade recompute unbounded;
+  `0` = no limit, negative = 300 + WARN; `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline`; executor threads not
+  interrupted; presence-aware call-time read, per-user overrides apply). Type `int` and default `300` unchanged;
+  screener row (`:538`) untouched. No deviation.
+- TDD: N/A (docs).
+- Verification: `grep -n "analysis.backtest.max_duration_seconds"` → `:509` (new text); `grep -c "Max backtest run
+  time"` → 0.
+- Files: `services/xstockstrat-analysis/CLAUDE.md`.
+- Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.

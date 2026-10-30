@@ -558,7 +558,7 @@ show the import and its uses.
 
 ### Step 7 — docs: analysis `CLAUDE.md` key row for `analysis.backtest.max_duration_seconds`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (docs)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify

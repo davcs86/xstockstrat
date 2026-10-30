@@ -23,6 +23,7 @@
 | 2026-10-29 | `in-progress` (re-spec, no transition) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of steps 3-9 after merging origin/main-dev (e266b4ae): line drift in steps 4/5/6; Step 6 harness audit adds `test_config_zero_clamps.py:161`; steps 3/7/8/9 re-verified unchanged |
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 3+4 done in one commit (standing operator rule): `RunBacktest` → thin `@owner_scoped` wrapper over `_run_backtest`; `_BarFetchError` → FAILED_PRECONDITION `backtest bar series incomplete: …` (symbol + benchmark); AC-6 tests; full suite 1468 passed |
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Steps 5+6 done in one commit (standing operator rule, widened): D-29 wall-clock bound — `asyncio.timeout(limit or None)` on `RunBacktest`, `cm.expired()` → DEADLINE_EXCEEDED `backtest exceeded Ns deadline`, `disarm()` before persistence; 0 = no limit, negative = 300 + WARN; AC-3/AC-5/T-inner-timeout/T-commit/T-executor tests; key registered in `HONOUR_KEYS`; full suite 1475 passed |
+| 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done: analysis `CLAUDE.md` row for `analysis.backtest.max_duration_seconds` now carries the design §5 semantics (type `int`, default `300` unchanged; screener row untouched) |
 
 ---
 
