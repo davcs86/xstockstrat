@@ -292,3 +292,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `otel-guard:removed-assets` fence, and keeps `## Notification routing` byte-identical.
 - Files modified: `packages/otel/alerts/README.md`
 - Deviations: none
+
+### Step 4 — Rewrite service-health.json as Tempo-only; delete the other three dashboards [done]
+- `service-health.json` rewritten (uid `xstk-service-health` kept): one `DS_TEMPO` input/var and three TraceQL table
+  panels (server error spans; slow server spans (>2s); analysis scoring RPC activity). `signal-pipeline-throughput.json`,
+  `infrastructure.json`, `trading-service.json` removed.
+- **Dev-import gate PASSED** against the staging/dev Grafana Cloud stack (operator approved the live write):
+  - Import via Grafana MCP `update_dashboard`: success, version 1, uid `xstk-service-health`; read-back via
+    `get_dashboard_by_uid` shows 3 panels + the `DS_TEMPO` datasource var intact.
+  - Each panel's exact TraceQL ran against Tempo (`search_tempo_traces`, 24h) with no parse error. (a) returned rows
+    (`marketdata GetBars`, `identity RefreshToken`, `xstockstrat-ui POST /insights/api/[...connect]/route`);
+    (b) returned rows (`marketdata GetBars` 2-15s, `ledger LedgerService/QueryEvents` 2.5-30s, agent
+    `subscriptions/listen`), and the `Watch|Stream|Export` exclusion held (no WatchConfig rows); (c) parsed and was
+    empty (no `run_backtest` in 24h; the gate only requires (a) or (b) to return rows).
+  - Not proven: rendering in the Grafana UI (no browser session). The Tempo target keys (`queryType: traceql`,
+    `tableType: spans`, `limit`) were accepted by the save; the stored dashboard was upgraded to schemaVersion 42 by
+    Grafana, the repo file stays at 39.
+  - Span-name forms seen: gRPC names are `xstockstrat.<svc>.v1.<Svc>/<Method>` (Go) or `grpc.xstockstrat...` (Node),
+    so `.*/Method` matches. The analysis server-side RunBacktest span name was not observed (no calls).
+- **Open Item (kept as specced, operator decision)**: panel (b) also matches the agent's long-lived MCP span
+  `subscriptions/listen` (150-295s), since the exclusion only covers gRPC Watch/Stream/Export names. Noted in the
+  panel description; revisit in feature 274's dashboard restoration.
+- Side effect for the operator: the dashboard now exists in the xstockstrat Grafana Cloud stack (created by the gate).
+- Files modified: `packages/otel/dashboards/service-health.json`, and deleted `signal-pipeline-throughput.json`,
+  `infrastructure.json`, `trading-service.json`
+- Deviations: none

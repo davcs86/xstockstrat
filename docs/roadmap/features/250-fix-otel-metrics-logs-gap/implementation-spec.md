@@ -277,7 +277,7 @@ awk '/<!-- otel-guard:removed-assets -->/{i=1;next}/<!-- \/otel-guard:removed-as
 
 ### Step 4 — config: Rewrite `service-health.json` as Tempo-only; delete the other three dashboards
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (dashboards)
 **Files**:
 - `packages/otel/dashboards/service-health.json` — modify (full rewrite, keep `"uid": "xstk-service-health"`)
