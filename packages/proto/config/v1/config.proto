@@ -20,13 +20,17 @@ service ConfigService {
   rpc WatchConfig(WatchConfigRequest) returns (stream ConfigSnapshot);
 
   // One-shot config fetch (startup fast-path before stream establishes)
-  rpc GetConfig(GetConfigRequest) returns (ConfigSnapshot);
+  rpc GetConfig(GetConfigRequest) returns (ConfigSnapshot) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // Admin: set or update a config value
   rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
 
   // Admin: list all keys for a namespace
-  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
   // (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,

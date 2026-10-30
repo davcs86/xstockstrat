@@ -29,7 +29,9 @@ service MarketDataService {
   rpc BackfillBars(BackfillBarsRequest) returns (BackfillBarsResponse);
 
   // Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
-  rpc GetDataCoverage(GetDataCoverageRequest) returns (GetDataCoverageResponse);
+  rpc GetDataCoverage(GetDataCoverageRequest) returns (GetDataCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
   rpc DeleteBackfilledData(DeleteBackfilledDataRequest) returns (DeleteBackfilledDataResponse);
@@ -55,7 +57,9 @@ service MarketDataService {
 
   // Point-in-time historical fundamentals read (feature 198): returns only periods whose
   // filed_date < as_of_date (T+1 availability), for look-ahead-safe backtesting.
-  rpc GetHistoricalFundamentals(GetHistoricalFundamentalsRequest) returns (GetHistoricalFundamentalsResponse);
+  rpc GetHistoricalFundamentals(GetHistoricalFundamentalsRequest) returns (GetHistoricalFundamentalsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // Worker RPC driven by ingest.TriggerBackfill(data_kind=FUNDAMENTALS) (feature 198): fetches
   // as-reported statements from SEC EDGAR + a point-in-time price-join and persists them.

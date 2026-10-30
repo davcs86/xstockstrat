@@ -11,20 +11,32 @@ import "google/protobuf/field_mask.proto";
 
 service IngestService {
   rpc TriggerBackfill(TriggerBackfillRequest) returns (TriggerBackfillResponse);
-  rpc GetBackfillStatus(GetBackfillStatusRequest) returns (BackfillJob);
-  rpc ListBackfillJobs(ListBackfillJobsRequest) returns (ListBackfillJobsResponse);
+  rpc GetBackfillStatus(GetBackfillStatusRequest) returns (BackfillJob) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListBackfillJobs(ListBackfillJobsRequest) returns (ListBackfillJobsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
   rpc CancelBackfill(CancelBackfillRequest) returns (BackfillJob);
-  rpc NormalizeRawData(NormalizeRawDataRequest) returns (NormalizeRawDataResponse);
+  rpc NormalizeRawData(NormalizeRawDataRequest) returns (NormalizeRawDataResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
   rpc IngestSignal(IngestSignalRequest) returns (IngestSignalResponse);
   // Signal query — returns active signals filtered by source/symbol/direction and time window
-  rpc QuerySignals(QuerySignalsRequest) returns (QuerySignalsResponse);
-  rpc ListSignalSources(ListSignalSourcesRequest) returns (ListSignalSourcesResponse);
+  rpc QuerySignals(QuerySignalsRequest) returns (QuerySignalsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSignalSources(ListSignalSourcesRequest) returns (ListSignalSourcesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc ManageSignalSource(ManageSignalSourceRequest) returns (ManageSignalSourceResponse);
 
   // Template catalog (feature 224). List/read: any authenticated caller. Manage: ADMIN only.
-  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc ManageTemplate(ManageTemplateRequest) returns (SourceTemplate);
   // Copies a source template into a private signal source owned by the x-user-id caller.
   rpc InstantiateTemplate(InstantiateTemplateRequest) returns (SignalSource);
