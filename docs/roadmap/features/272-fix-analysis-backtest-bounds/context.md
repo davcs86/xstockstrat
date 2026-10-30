@@ -676,3 +676,27 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
     the 300 s default" conclusion holds. `_persist_backtest_run` seam → `:2861`.
   - Steps 3, 7, 8, 9: every cited anchor re-greps at its stated line; no change.
 - Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+
+## Session 2026-10-29 — sdd-execute sequential: Steps 3+4 (R-1, AC-6)
+
+- Steps 3 and 4 executed together as one commit under the standing operator rule (operator 2026-10-29, 'Merge pairs
+  + standing rule'): Step 3's RED test is Step 4's test. Deviation Log entry in implementation-spec.md.
+- Step 3: `RunBacktest` is now a thin `@owner_scoped` wrapper that awaits `_run_backtest` (the former body,
+  byte-identical, decorator removed) and maps `_BarFetchError` to `context.abort(FAILED_PRECONDITION,
+  "backtest bar series incomplete: <e>")` then `return None`. The per-symbol loop gained `except _BarFetchError:
+  raise` before `except grpc.RpcError`. The abort uses the inbound `context`; no emit, no minted context (C-03).
+  Located by symbol (spec line numbers had drifted).
+- Step 4: new `services/xstockstrat-analysis/tests/test_backtest_bounds.py` —
+  `test_truncated_symbol_fails_run_failed_precondition` (AAPL re-serves with token `"stuck"`) and
+  `test_truncated_benchmark_fails_run_failed_precondition` (SPY benchmark re-serves). Both assert the
+  FAILED_PRECONDITION code, the message prefix, and that neither `_persist_symbol_cells` nor
+  `_persist_backtest_run` was awaited. C-13: reuses `_wire_per_symbol`/`_sym_bars`/`_mkt_def` and
+  `make_servicer`/`_owned_ctx`/`_windowed_req`/`_EOF_PAGE`; no conftest change.
+- TDD: AC-6 red: symbol test `DID NOT RAISE` (the loop skipped AAPL and the run returned); benchmark test regex
+  mismatch (the uncaught `_BarFetchError` "SPY: page_token 'stuck' added no newer bar and re-issued a cursor …"
+  escaped) → 2 failed. Green: 2 passed.
+- Verification: Step 3 grep hit (`:795`, `:797`, `:801`, `:1143`); `ruff check` / `ruff format --check` clean;
+  `pytest --cov=app --cov-fail-under=40`: 1468 passed, coverage 90.08%; Step 4 import grep hit both lines.
+- Files: `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/tests/test_backtest_bounds.py`.
+

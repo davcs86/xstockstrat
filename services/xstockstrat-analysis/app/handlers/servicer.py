@@ -790,6 +790,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
     @owner_scoped
     async def RunBacktest(self, request, context):
+        try:
+            return await self._run_backtest(request, context)
+        except _BarFetchError as e:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION, f"backtest bar series incomplete: {e}"
+            )
+            return None
+
+    async def _run_backtest(self, request, context):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
@@ -1131,6 +1140,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
                 formula_errors += 1
                 continue
+            except _BarFetchError:
+                raise
             except grpc.RpcError as e:
                 log.warning("backtest symbol %s failed: %s — skipping", symbol, e)
                 continue

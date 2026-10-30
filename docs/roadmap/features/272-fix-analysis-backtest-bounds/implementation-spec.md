@@ -214,7 +214,7 @@ Deviation Log entry and a blocker; never patch it silently. Confirm the C-13 ver
 
 ### Step 3 — service: rename the RunBacktest body; `_BarFetchError` fails the run as FAILED_PRECONDITION
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -281,7 +281,7 @@ Behavior is verified in Step 4.
 
 ### Step 4 — test: AC-6 — FAILED_PRECONDITION for a truncated symbol and for the benchmark
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_bounds.py` — create
@@ -737,4 +737,19 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Formatting note (no spec deviation)**: the `_BarFetchError` message from Instruction 1 is split across three
   f-string lines to satisfy ruff E501 (100 cols). The literal `re-issued a cursor` stays on one source line, so
   Step 1's verification grep still matches; the rendered message is unchanged.
+- **Disposition**: applied under the standing rule; no other deviation.
+
+### 2026-10-29 — Steps 3 and 4 executed as one commit (standing operator rule)
+
+- **Step(s)**: 3 (service), 4 (test).
+- **Deviation**: Step 3 is `TDD: red-green required`, but its RED test is Step 4's test (Step 3 specs no test of its
+  own; "Behavior is verified in Step 4"). Per the STANDING OPERATOR RULE (operator, 2026-10-29, 'Merge pairs +
+  standing rule': "if this step's Verification fails ONLY because the consumers or tests of its new code live in the
+  immediately following step ... or the RED test is that next step's test ... Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done"), both steps landed
+  in one commit with one red→green cycle on Step 4's tests.
+- **Test-shape note (no behavior deviation)**: `tests/test_backtest_bounds.py` also imports `_EOF_PAGE` from
+  `.test_analysis_servicer` (Step 4's evidence names it as the non-stuck page) and factors the re-serving `GetBars`
+  side effect and the shared assertions into two module-local helpers (`_stuck_on`,
+  `_assert_failed_precondition_no_persistence`), each used by both tests. Instructions 2–3 assertions are unchanged.
 - **Disposition**: applied under the standing rule; no other deviation.
