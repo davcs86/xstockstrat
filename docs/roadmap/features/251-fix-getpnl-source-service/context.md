@@ -727,3 +727,10 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
 - GetPnL: `realizedPnL` folds kept fills sorted by ledger `sequence` at (mode, account, symbol) grain; `orderSide` looks up `order.created` then `order.submitted` (stream_key = order id) with a positive-only cache; `collectFills` fails closed on a repeated event_id or an empty page carrying a token. Producer source literal is at `trading.go:3676`.
 - golangci-lint unrunnable (go1.25 build vs go1.27 module); `gofmt -l` clean.
 - Next: Step 8 (handler/wire RED tests).
+
+## Session 2026-10-30 — Step 8 executed (RED)
+
+- Added `internal/service/portfolio_grpc_wire_test.go` (7 `TestWire*` cases through the real `GRPCHandler()` adapter, using the Step 6 shim) and, in `internal/handler/portfolio_handler_test.go`, ctx-first `classifyGetPnLError` calls, `TestClassifyGetPnLError_CtxFirst` and table-driven `TestToGRPCError`. The spec's "extra rows in `TestClassifyGetPnLError`" are a sibling test function to keep the 257/229 assertions untouched.
+- RED captured: handler package fails to compile (`too many arguments in call to classifyGetPnLError`); wire cases fail at runtime: AC4 gets `Internal` (want FailedPrecondition), AC7 cancel/deadline get `Unavailable` (want Canceled/DeadlineExceeded), F127 AC7 delete guard gets `Internal` (want FailedPrecondition). Cases 2, 6, 7 already pass. GREEN is Step 9.
+- golangci-lint not run: the handler test package cannot compile until Step 9. `gofmt -l` clean; one `func FilledEvent` site.
+- Next: Step 9 (ctx-first classifier, explicit `toGRPCError` codes).

@@ -497,7 +497,7 @@ New GetPnL logic is in `service`, excluded from COVERPKGS; `internal/testdata` i
 
 ### Step 8 — test: portfolio adapter wire tests and error-mapping tables (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_grpc_wire_test.go` — create
