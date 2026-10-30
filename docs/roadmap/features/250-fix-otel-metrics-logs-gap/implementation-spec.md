@@ -216,7 +216,7 @@ uv run --no-project --with pyyaml python3 -I -c "import yaml;d=yaml.safe_load(op
 
 ### Step 3 — docs: Rewrite `packages/otel/alerts/README.md` (no rules provisioned; fenced removals; follow-up cite)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (docs)
 **Files**:
 - `packages/otel/alerts/README.md` — modify (full rewrite)

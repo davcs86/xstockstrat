@@ -285,3 +285,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (fails.md:682-684). The `groups: []` fallback is kept if a real Grafana import rejects them.
 - Files modified: `packages/otel/alerts/alert-rules.yaml`, `packages/otel/alerts/mute-timings.yaml` (deleted)
 - Deviations: none
+
+### Step 3 — Rewrite packages/otel/alerts/README.md [done]
+- README now states `alert-rules.yaml` provisions no rules, carries the sanctioned literal on its own line, cites
+  `docs/roadmap/features/274-otel-metrics-logs-export/`, lists removed assets only inside the
+  `otel-guard:removed-assets` fence, and keeps `## Notification routing` byte-identical.
+- Files modified: `packages/otel/alerts/README.md`
+- Deviations: none
