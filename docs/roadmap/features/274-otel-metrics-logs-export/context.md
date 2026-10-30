@@ -199,3 +199,41 @@
   `termination.grace_period_seconds` default 120 s (max 600 s), `termination.drain_seconds` default 15 s (max 110 s); no `termination` block in
   `.do/app.yaml` / `.do/app.dev.yaml`, so 120 s applies and the 10 s shutdown bounds fit. The page does not name component types.
 - Open for `/sdd-review impl-spec`: G1 label/series names (step 48).
+
+## Session 2026-10-30 — sdd-review impl-spec (advisory)
+
+- Result: **14 failures, 30 warnings, 15 passes** (advisory — did not block; lifecycle unchanged, `implementation-ready`). The criteria
+  reviewer had no shell (no command was run); the blocking claims below were re-verified against the tree before recording.
+  Spec revision reviewed: commit `e4b0beea` (includes D8: `opentelemetry-instrumentation-logging` handler; DO grace period verified).
+- Unresolved ✗ carried into execution (Floor items first):
+  - [ ] **Step 43 (F-08, C-10, C-18)**: adds a third `segment` param to `createDispatch` (`bffShared.ts:112-115`, 2 params today); callers
+    `insightsBff.ts:218`, `configUiBff.ts:104`, `traderBff.ts:172` are not in Files; also 7 files. Add callers or split the step.
+  - [ ] **Steps 29, 32, 35, 38 (F-08)**: Instruction 2 requires exporting `telemetryStarted()` from `src/telemetry.ts`; Files omits
+    `src/telemetry.ts` and steps 28/31/34/37 never add it. Add the file to Files or move the export into the telemetry steps.
+  - [ ] **Steps 4, 8, 12 (F-05, B3 ordering)**: change `Init` to a three-value return; the existing tests call `shutdown, err := Init(ctx)`
+    (`trading|portfolio|marketdata/internal/telemetry/otel_test.go:59`), and `go vet`/`golangci-lint` compile test files, so Verification
+    cannot pass until the later test step. Update those callers in the same step or move the build-only check.
+  - [ ] **Steps 7, 11, 15 (F-08)**: Files is a prose directory entry, not exact stageable paths; no stated coverage threshold; `Covers` claims
+    AC-11 that the step itself disclaims. List exact `*_test.go` paths or fold the `*Context` retrofit gate into steps 6/10/14.
+  - [ ] **Step 48 (F-05)**: Verification `grep -n 'G1' context.md` already matches (11 hits) before any operator answer; use dated
+    `G1 q1..q7:` markers. Spell out that the PR-A squash-merge to `main-dev` and merge-back are operator-owned hand-offs outside the
+    `/sdd-execute` loop (F-02/F-03 note).
+  - [ ] **Steps 25, 27 (C-08)**: `pytest --cov=app` has no `--cov-fail-under=N`.
+  - [ ] **Steps 16, 18, 20, 24 / D8**: Instruction 2 still lists `opentelemetry.sdk._logs.{LoggerProvider,LoggingHandler}`; contradicts Instruction 3
+    (import `LoggingHandler` from `opentelemetry.instrumentation.logging.handler`). Also: the subprocess SIGTERM tests (17, 19, 21, 25) install
+    `sys.exit(0)` instead of the real handler (`indicators/app/main.py:87-90` only schedules `grpc_server.stop`), so the atexit flush path is
+    not exercised; and no assertion proves the new import path (add `-W error::DeprecationWarning`).
+  - [ ] **Step 47**: Verification `git diff --stat -- docs packages/otel` is never empty (steps 1/3 edit `docs/roadmap/**/context.md`) and has
+    no base ref; use `git diff --stat origin/main-dev -- docs packages/otel ':!docs/roadmap'`.
+- Warnings carried (non-blocking, full list in the review output): Steps 5/9/13 use `slog.Warn` where `WarnContext(ctx, …)` is needed for
+  trace correlation; Step 13 AC-18 is a function-sequence test, not a process exit within 10 s; Steps 30/33/36/39 prove AC-2 only with
+  hand-built spans (no real gRPC `NOT_FOUND` call) and omit AC-2 from `Covers`; Steps 6/14/43 exceed 5 files (C-18); Steps 49/50/53 Verification
+  is already green before the change (no red); Step 41 shares a receiver fixture across test files not in Files (C-13); Step 58 lists
+  `platform.feature` as "edit only if instructed" but nothing instructs it; AC-9 verification is partial. Line drift to refresh:
+  `servicer.py:799-800` is `:836`, `live_loop.py:334-345` is `:329-343`, `tools.py:194` is `:190`, `_LOGGER_PROVIDER_SET_ONCE` is
+  `_logs/_internal/__init__.py:422-423`, guard `FOLLOWUP` literal is `:20`.
+- Overlap findings: **no FAIL-level** (274 adds no config keys, proto fields or migrations). WARN-level shared files with in-flight features, none
+  in `merge-order.md` except 274↔250: `.github/workflows/ci.yml` (278 `config-wiring` job); marketdata `cmd/server/main.go` and
+  `marketdata_service.go` (215, 255); analysis `app/main.py`, `engine/live_loop.py`, `tests/test_live_loop.py` (215), `tests/conftest.py`
+  (215, 275); ledger `package.json`/`pnpm-lock.yaml` (257); trading `go.mod`/`go.sum` (249). Rebase-only; optional soft merge-order rows
+  274↔215, 274↔255, 274↔278, 274↔275 left to the operator. 250 is landed and consistent with 274's guard assumptions.
