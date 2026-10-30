@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-10-30 | `idea` → `draft` | /sdd-story | Product spec generated from the approved brainstorm design |
 | 2026-10-30 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 advisory warnings); first pass failed on Open Questions, fixed |
+| 2026-10-30 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, quick extended to the hard cap) and approved with recorded sign-offs and accepted open risks; recon.md + design.md written |
 
 ---
 
@@ -19,7 +20,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec smoke-check-runtime`_
+- [Recon](recon.md) — grounded codebase dossier (with the 2026-10-30 addendum)
+- [Design](design.md) — debated, approved architecture, rejected alternatives, open risks
+- [Implementation Spec](implementation-spec.md) — _not generated: execution follows the regenerated plan `docs/superpowers/plans/2026-10-29-staging-smoke-checks.md` (see context.md)_
 - [Context Log](context.md) — session history, decisions, deviations
 - Design input: `docs/superpowers/specs/2026-10-29-staging-smoke-checks-design.md` (approved); evidence: `docs/reports/2026-10-30-smoke-verification-needs.md`; draft plan: `docs/superpowers/plans/2026-10-29-staging-smoke-checks.md`
 
@@ -45,4 +48,4 @@ _(Auto-populated from docs/runbooks/reviewer-registry.md. Snapshot finalized at 
 
 ## Next Action
 
-`/sdd-design smoke-check-runtime quick` — recon + one adversarial round (Constitution C-11), then `/sdd-spec`
+Regenerate `docs/superpowers/plans/2026-10-29-staging-smoke-checks.md` from `design.md` (slices S0–S8), then execute subagent-driven (operator choice); `/sdd-spec` is not run for this feature (recorded in context.md)

@@ -78,3 +78,34 @@ A staging-only HTTP service runs a catalog of named checks (phase 1: DB reads an
 2. Config migrations/grant + proto annotations (annotate pure READs; decide the READ-SIDE-EFFECT class before annotating marketdata/portfolio).
 3. Platform wiring: compose/CI/certs → homelab staging-only profile + render assertions → DO dev component + `POST_DEPLOY` job → homelab post-deploy step → agent tool.
 4. Phase 2: write policy + guards, fixture lifecycle, record extension, two reference checks, runbooks.
+
+---
+
+## Addendum 2026-10-30 (design rounds 1–5; supersedes the rows named below)
+
+- **Shared key dropped.** The `smoke.api.key` / `x-smoke-key` / `SMOKE_API_KEY` rows (Dependencies, Risks "Agent-side key
+  holding", Existing Business Rules secret rows) no longer apply: the listener is mTLS-only with a SAN allowlist
+  `{xstockstrat-agent, xstockstrat-smoke-trigger}`. No `SECRET_CALLER_ALLOWLIST` entry, no secret migration. The
+  `@feature-147` AC-1/1b/2/3/4/5/14/16, `@feature-254` AC-3/4/6, `@feature-224` AC-35, `@feature-166` AC-3 rows are
+  therefore **untouched** (not extended). `@AC-1/2/4 @feature-210` is **extended**: the HTTP listener is mTLS
+  fail-closed and the plaintext caveat is retired. `@AC-1 @feature-214` is **CHANGE** (sign-off in `context.md`).
+- **Annotation is not "descriptor-only".** Adding `idempotency_level` to existing RPCs (a) trips `buf breaking`
+  (`RPC_SAME_IDEMPOTENCY_LEVEL`, default FILE category; `packages/proto/buf.yaml:1-12` has no `breaking:` block; CI runs
+  `buf breaking . --against … --exclude-path trading/v1/trading.proto`, `.github/workflows/ci.yml:145-148`) and (b) makes
+  connect-es serve HTTP GET for those methods; the UI BFF routes `src/app/{trader,insights,config-ui}/api/[...connect]/route.ts`
+  export `GET` and `createDispatch` forwards `req.method` (`services/xstockstrat-ui/src/lib/bffShared.ts:118-130`).
+  `xstockstrat-ui` is therefore an affected service.
+- **Descriptor spike result:** protobuf 7.36.1 reads the option via `DescriptorPool.FindMethodByName(...).GetOptions()`.
+  **SAN spike result:** uvicorn 0.47.0 + httpx 0.28.1 — `H11Protocol.connection_made` override + `scope['client']` map works
+  (allowed SANs 200, other platform leaf 403, no cert → connection error, wrong-SAN server rejected by `sni_hostname`
+  pinning).
+- **Deploy facts found by the adversary (verified in repo):** the deploy jobs already hold the platform CA key
+  (`.github/workflows/deploy.yml:67-71,93-103`); `deploy.yml:186-196` substitutes leaf placeholders by name prefix (so
+  `YOUR_DEV_MTLS_CERT_SMOKE` also matches `…_SMOKE_TRIGGER`); the literal "12" appears at `deploy.yml:71,89,103,165`,
+  `gen-dev-certs.sh:11,87`, `mtls-provision.sh:6,104`, `mtls-dev-env.sh:46`, `docs/patterns/inter-service-mtls.md:82`,
+  `docs/runbooks/inter-service-mtls-rollout.md:34,64`; `deploy-homelab.yml:86-98` resolves a digest for every
+  `${IMAGE_*}` in `compose.yml` (production included) and `homelab-render.test.sh:31-35,75,79` / `render-assert.jq:28,35-38,46`
+  hard-code 13 services and the port pin; `deploy-dev.yml:66-74` runs the homelab staging deploy automatically on a
+  `main-dev` push when `vars.HOMELAB_STAGING_ENABLED == 'true'`; `homelab-mtls-env.py:25-32` emits a var per minted leaf.
+- **Still unverified here:** tailnet ACL `tag:ci` → VM:9110; homelab-edge `smoke_ro` role; DO `POST_DEPLOY` failure
+  semantics and private-domain reachability from a job; whether the homelab gate accepts the normalized shipped file.

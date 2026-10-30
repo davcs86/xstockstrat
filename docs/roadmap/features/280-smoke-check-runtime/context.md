@@ -86,3 +86,33 @@
   step); approval = "Run final round 5" (hard cap reached after it; no `@AC-1 @feature-214` sign-off yet).
 - Operator note: BENIGN_READS ships as mechanism + guard + test-only entry with zero enabled entries until a check
   needs one (to be acknowledged at final approval).
+
+## Session 2026-10-30T04:30:00Z — sdd-design (rounds 5 + approval)
+
+- Round 5 (final, hard cap): proposer produced the corrected slice list S0–S8; adversary verdict READY WITH CORRECTIONS
+  (no Floor breach). Seven blocking wiring corrections are now part of `design.md`: trigger placeholder collision
+  (`YOUR_DEV_SMOKE_TRIGGER_MTLS_*`), normalized shipped compose (`jq 'del(.name,.networks)'` + staging dry run),
+  overlay assertions (no shared YAML anchors), older-image gating on the overlay file, record-only watchdog exit 0,
+  lazy DB pool + build-time SHA check, and the corrected rollout (merge auto-deploys homelab staging).
+- **Operator final gate: APPROVED** with these recorded sign-offs and acknowledgements:
+  1. **CHANGE sign-off** for `@AC-1 @feature-214` ("advertised tool count is 45"): re-scoped to "when `SMOKE_ENDPOINT`
+     is unset" (a staging agent with `smoke_checks` advertises 46; production stays 45). User @ 2026-10-30T04:30:00Z.
+  2. Benign-reads override ships as **mechanism + runtime guard + a test-only entry, zero enabled entries**, until a check
+     needs one (explicit override of the phase-1 anti-goal / FR-5, named side effects per entry).
+  3. Accepted open risks (also in `design.md`): unverified external prerequisites (tailnet ACL, homelab-edge `smoke_ro`
+     role, DO POST_DEPLOY semantics/reachability, homelab gate acceptance of the shipped file); migration `035` behind
+     feature 264's `034`; reliance on default workflow permissions for the `record` job.
+  4. buf policy (earlier gate): permanent `breaking.except: [RPC_SAME_IDEMPOTENCY_LEVEL]`.
+- Status: spec-ready → design-approved. `/sdd-spec` is **not** run: the operator chose subagent-driven execution of
+  `docs/superpowers/plans/2026-10-29-staging-smoke-checks.md`, which is being regenerated from this design (slices S0–S8).
+  Scenario↔test traceability (C-15) is carried by `Covers: AC-n` lines in the plan's task steps.
+
+### First-deploy proof checklist (must be recorded here before `launched`; C-15 / fails.md deploy-time-AC trap)
+
+- [ ] Tailnet ACL `tag:ci` → homelab staging VM:9110 works; the VM has no non-tailnet interface on 9110.
+- [ ] A DO job reaches `${xstockstrat-smoke.PRIVATE_DOMAIN}:9110`; the effect of a failing `POST_DEPLOY` job on the deployment is known.
+- [ ] The read-only DB role exists (homelab + DO dev) and the startup role check passes live.
+- [ ] The agent → smoke mTLS hop works with the real deployed leaves.
+- [ ] The built image carries the baked `SMOKE_GIT_SHA`.
+- [ ] The VM gate accepts the normalized shipped compose file (staging dry run) with the same project name.
+- [ ] Live halves of AC-14, 15, 17, 18, 26 and 46–48 observed on a real staging deploy; a run file lands on `smoke-results` with the deployed SHA, from both homelab and DO dev.

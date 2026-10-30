@@ -3095,3 +3095,13 @@ ambiguity is logged here).
 - **Rule it implies**: Never merge a shared append-only doc with `-X ours`/`-X theirs`; merge normally and keep both
   sides. A deletion the branch never meant to make is invisible to later merges, so check for it explicitly:
   `scripts/ledger-guard.py` (CI `ledger-guard`, and before any batch merge).
+
+### 2026-10-30 — smoke-check-runtime — assumption
+- **Mistake**: Recon classified a proto option change (`idempotency_level = NO_SIDE_EFFECTS` on existing RPCs) as
+  "descriptor-only, no behaviour change". It trips `buf breaking` (`RPC_SAME_IDEMPOTENCY_LEVEL`, default FILE category) and
+  makes connect-es serve HTTP GET for those methods, which the UI BFF routes (exporting `GET`, forwarding `req.method`)
+  would have exposed in production.
+- **Evidence**: `packages/proto/buf.yaml:1-12`; `.github/workflows/ci.yml:145-148`;
+  `services/xstockstrat-ui/src/lib/bffShared.ts:118-130`; `docs/roadmap/features/280-smoke-check-runtime/recon.md` Addendum.
+- **Rule it implies**: A proto option or annotation change is not "no behaviour change" until both the breaking-check
+  category and every generated-code consumer (including connect-es routers) are checked; ship the consumer guard first.
