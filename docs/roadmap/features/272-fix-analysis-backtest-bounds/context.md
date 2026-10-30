@@ -768,3 +768,17 @@ The `/sdd-design fix-analysis-backtest-bounds` full debate is halted at its appr
   `list_templates|instantiate_template` counts mcp-tools.md 7, SKILL.md 5 (unchanged); `is_public|include_public`
   no match (@AC-32 @feature-224 guard holds).
 - Open threads unchanged: Step 9 operator decision (A/B/C), C-10 merge-order pin (273 before 272), G-1 measurements.
+
+## Session 2026-10-29 — sdd-execute sequential: Step 9 (config, G-1 gate) — operator decision, deferred
+
+- G-1 operator decision (A/B/C), in their own words (session question tool, 2026-10-30): 'A: Reword G-1, hold the merge (Recommended)'.
+  Option A: G-1 measures against the effective limit, which is the 300 s code default in every environment. The seeded bare
+  key `backtest.max_duration_seconds=120` (prod) is not read by Step 5's dotted `analysis.backtest.max_duration_seconds`.
+  This holds unless the operator creates dotted `analysis.backtest.max_duration_seconds` rows via `set_config` or `/config-ui`
+  (no migration; F-01). Option B (heal migration) not chosen.
+- G-1 measurements not yet taken: ledger `QueryEvents` p50/p95/p99/max of (completed - started) plus orphan counts (dev and
+  prod, trailing 30 days), the confirmed effective limit per environment, and the operator threshold are all outstanding. They
+  need production/dev ledger access this session cannot perform.
+- Step 9 Status stays `pending` (deferred to operator). The integration PR is opened as draft/held and must not be merged
+  until the G-1 numbers and the operator threshold (or sign-off quoting them) are recorded here.
+- Anchor drift (discovery, no deviation): `analysis.backtest.started` append `servicer.py:827`, `completed` `:1353`.
