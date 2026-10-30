@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-30
 
 ---
 
@@ -17,6 +17,8 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings, 4 notes; overlap WARN, 10 same-file collisions, no FAIL) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (9 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps; AC-4..AC-22 + FR-4/FR-5 appended per design.md §6F |
+| 2026-10-30 | `implementation-ready` (re-spec) | sdd-execute sequential | Steps re-specced against `main-dev` after 257 merged (`079870fa`): Steps 1-3 superseded, GetPnL/UI/docs steps realigned |
+| 2026-10-30 | `implementation-ready` → `in-progress` | sdd-execute sequential (sdd-batch-execute) | Execution started under the operator's standing authorization; see context.md |
 
 ---
 
