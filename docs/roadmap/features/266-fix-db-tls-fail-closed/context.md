@@ -798,3 +798,132 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `docs/context-constitution-findings.md`: not touched, because no grounded drift was found.
 
   The integration PR body must record both facts: the plugin was unavailable, and this reconciliation list.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-db-tls-fail-closed (feature 266)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Outline across ledger/config/identity/notify; no single owner |
+| AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Same four-service outline |
+| AC-3 | services/xstockstrat-config/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | Subject is config only |
+| AC-4 | services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | config-ui audit route |
+| AC-5 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Deploy surface (.do/app*.yaml) |
+| AC-6 | services/xstockstrat-ledger/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | Subject is ledger only |
+| AC-7 | services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | |
+| AC-8 | services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature | CREATE | NEW | |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  # ─── Database TLS fail-closed (feature 266) ───────────────────────────────
+  # Node backends and the UI audit route never connect to a TLS database without verifying the certificate. Provenance: @feature-266.
+
+  @AC-1 @FR-1 @feature-266
+  Scenario Outline: A Node backend refuses to boot against a TLS database with no CA configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT is unset
+    When <service> starts
+    Then it exits non-zero before serving gRPC
+    And it logs that DATABASE_CA_CERT is required for a TLS database connection
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-2 @FR-2 @feature-266
+  Scenario Outline: A Node backend verifies the database certificate when a CA is configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT holds a CA that did not sign the server's certificate
+    When <service> starts
+    Then the database connection is rejected with a certificate verification error
+    And it exits non-zero and logs the certificate verification error
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-5 @FR-5 @feature-266
+  Scenario Outline: Every deployed component that reaches the database directly is given the CA
+    Given the DigitalOcean app spec <spec>
+    Then every component with DATABASE_URL among xstockstrat-ledger, xstockstrat-config, xstockstrat-identity, xstockstrat-notify and xstockstrat-ui also has DATABASE_CA_CERT bound to "${xstockstrat.CA_CERT}"
+
+    Examples:
+      | spec              |
+      | .do/app.yaml      |
+      | .do/app.dev.yaml  |
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-db-tls-fail-closed.feature (CREATE) ---
+# Promoted from docs/roadmap/features/266-fix-db-tls-fail-closed/acceptance.feature
+# Source feature 266 (fix-db-tls-fail-closed). Config service DB TLS behavior.
+Feature: fix-db-tls-fail-closed (config)
+  Acceptance scenarios for the xstockstrat-config service promoted from feature 266.
+
+  @AC-3 @FR-3 @feature-266
+  Scenario: Local compose with sslmode=disable still boots without a CA
+    Given DATABASE_URL is "postgres://xstockstrat:pw@timescaledb:5432/xstockstrat?sslmode=disable"
+    And DATABASE_CA_CERT is unset
+    When xstockstrat-config starts
+    Then it connects without TLS and serves gRPC
+
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-db-tls-fail-closed.feature (CREATE) ---
+# Promoted from docs/roadmap/features/266-fix-db-tls-fail-closed/acceptance.feature
+# Source feature 266 (fix-db-tls-fail-closed). Ledger DB TLS behavior.
+Feature: fix-db-tls-fail-closed (ledger)
+  Acceptance scenarios for the xstockstrat-ledger service promoted from feature 266.
+
+  @AC-6 @FR-1 @feature-266
+  Scenario: A DATABASE_URL with no sslmode is treated as TLS and still requires a CA
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat"
+    And DATABASE_CA_CERT is unset
+    When xstockstrat-ledger starts
+    Then it exits non-zero before serving gRPC
+    And it logs that DATABASE_CA_CERT is required for a TLS database connection
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-db-tls-fail-closed.feature (CREATE) ---
+# Promoted from docs/roadmap/features/266-fix-db-tls-fail-closed/acceptance.feature
+# Source feature 266 (fix-db-tls-fail-closed). config-ui audit route DB TLS behavior.
+Feature: fix-db-tls-fail-closed (ui)
+  Acceptance scenarios for the xstockstrat-ui audit route promoted from feature 266.
+
+  @AC-4 @FR-4 @feature-266
+  Scenario: The config-ui audit route never queries over unverified TLS
+    Given the xstockstrat-ui DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT is unset
+    When an admin requests /config-ui/api/audit
+    Then the route responds with an error status and logs that DATABASE_CA_CERT is required
+    And no database query is sent
+
+  @AC-7 @FR-2 @feature-266
+  Scenario: The config-ui audit route rejects a database certificate not signed by the configured CA
+    Given the xstockstrat-ui DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT holds a CA that did not sign the server's certificate
+    When an admin requests /config-ui/api/audit
+    Then the database connection is rejected with a certificate verification error
+    And the route responds with an error status and logs the certificate verification error
+
+  @AC-8 @FR-3 @feature-266
+  Scenario: The config-ui audit route with sslmode=disable still reads without a CA
+    Given the xstockstrat-ui DATABASE_URL is "postgres://xstockstrat:pw@timescaledb:5432/xstockstrat?sslmode=disable"
+    And DATABASE_CA_CERT is unset
+    When an admin requests /config-ui/api/audit
+    Then the route connects without TLS and responds with status 200
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1/AC-2 are Scenario Outlines across four Node services with no single owner, so they go to platform.feature and are not split per service. AC-5 is the deploy surface, also platform.
+- Dedup: grep for DATABASE_CA_CERT, DATABASE_URL, sslmode and verify-full across all services/*/acceptance/*.feature and platform.feature found no related scenario (the one DATABASE_URL hit, indicators-sandbox-os-isolation.feature, is unrelated). No DUP, OVERLAP or CONFLICT. The platform mTLS section (feature 210) covers inter-service gRPC, not DB transport.
+- The ledger, config and ui acceptance/ dirs already exist, so only new files are created. The platform file is appended after its last section, and I did not read its tail to confirm the end of file.
+- Not verified: I read acceptance.feature from the working tree on this branch, not from origin/feature/fix-db-tls-fail-closed.
+
+### Coverage check
+- Source scenarios: 8 (AC-1 to AC-8; AC-1, AC-2 and AC-5 are Outlines). Planned: 8 NEW, 0 DUP, 0 OVERLAP. All accounted for, none skipped.
+```
