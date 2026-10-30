@@ -1,8 +1,12 @@
 # Grafana Cloud & OpenTelemetry Setup
 
-This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. Every deployable workload — the eleven backend/UI services plus the `xstockstrat-agent` MCP server — emits traces, metrics, and logs via OTLP. In local dev, an `otel-collector` Docker container aggregates and forwards signals. In production (DO App Platform), services push OTLP directly to Grafana Cloud.
+This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. Every deployable workload — the eleven backend/UI services plus the `xstockstrat-agent` MCP server — exports **traces** via OTLP/HTTP when `OTEL_ENABLED=true`.
 
-The four V1 dashboards and the alert rules are checked into the repo as the reproducible source of truth — see `packages/otel/dashboards/` and `packages/otel/alerts/`. Steps 6 and 7 below explain how to import them.
+Metrics and logs are not exported (feature 226).
+
+In local dev, an `otel-collector` Docker container aggregates and forwards signals. In production (DO App Platform), services push OTLP directly to Grafana Cloud.
+
+The Tempo dashboard and the alert-cleanup file are checked into the repo as the reproducible source of truth — see `packages/otel/dashboards/` and `packages/otel/alerts/`. Steps 6 and 7 below explain how to use them.
 
 ---
 
@@ -20,8 +24,6 @@ Production (DO App Platform):
 
 **Signal types sent:**
 - **Traces** — distributed request traces across gRPC service calls
-- **Metrics** — request counts, latencies, DB query times, stream subscriber counts
-- **Logs** — structured logs from all services (errors, warnings, audit events)
 
 **Resource attributes attached to all telemetry:**
 
@@ -105,7 +107,7 @@ The `otel-collector` container starts automatically and reads `packages/otel/ote
 - Listens for OTLP on **HTTP :4318** — every xstockstrat service exports traces here
 - Also listens on **gRPC :4317** for other OTLP clients (e.g. `telemetrygen` smoke tests)
 - Applies a **memory limiter** (256 MiB max) to prevent OOM in dev
-- **Batches** spans/metrics/logs (10s window, 1000 items/batch) before forwarding
+- **Batches** telemetry (10s window, 1000 items/batch) before forwarding
 - Receives the `service.name`, `deployment.environment`, and `platform` resource attributes each service sets at startup (from `SERVICE_NAME`, `APPLICATION_ENV`, and the constant `xstockstrat`)
 - Forwards to Grafana Cloud via `otlphttp/grafana` exporter with gzip compression and retry
 
@@ -188,81 +190,63 @@ After starting the stack (dev) or deploying to DO (prod):
 4. Service name: `config`
 5. Run query — you should see traces from startup (WatchConfig handshakes)
 
-### Check Logs (Loki)
-
-1. Grafana Cloud → **Explore**
-2. Datasource: **Loki**
-3. Query:
-   ```logql
-   {service_name="trading"} |= "order"
-   ```
-4. You should see structured log lines from the trading service
-
-### Check Metrics (Prometheus/Mimir)
-
-1. Grafana Cloud → **Explore**
-2. Datasource: **grafanacloud-<stack>-prom**
-3. Query:
-   ```promql
-   {job="marketdata"}
-   ```
-
 ---
 
-## Step 6 — Dashboards (checked into the repo)
+## Step 6 — Dashboard (checked into the repo)
 
-The four V1 dashboards are version-controlled JSON under **`packages/otel/dashboards/`** — that
-directory is the source of truth, not the Grafana UI. See its `README.md` for the panel/metric
+The Tempo-backed dashboard is version-controlled JSON under **`packages/otel/dashboards/`** — that
+directory is the source of truth, not the Grafana UI. See its `README.md` for the panel/query
 assumptions.
 
 | File | Dashboard | Covers |
 |---|---|---|
-| `service-health.json` | Service Health | gRPC request rate, error rate, P99 latency, and log error volume — one series per service |
-| `signal-pipeline-throughput.json` | Signal Pipeline Throughput | signals ingested/hour, analysis scoring latency, agent scheduler run duration & success |
-| `trading-service.json` | Trading Service | order submission rate, PlaceOrder latency, fills/5m, trading error logs |
-| `infrastructure.json` | Infrastructure | gRPC connection errors, DB connection error logs, services-reporting count, OTLP export errors |
+| `service-health.json` | Service Health (`xstk-service-health`) | server error spans, slow server spans (>2s), analysis scoring RPC activity |
 
-**Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your
-Prometheus/Mimir and Loki datasources when prompted (each dashboard declares them as
-`__inputs`).
+**Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your Tempo
+datasource when prompted (the dashboard declares it as the `DS_TEMPO` `__inputs` entry).
 
 **Import (file-based provisioning):** point a Grafana dashboard provider at
-`packages/otel/dashboards/`; the `${DS_PROMETHEUS}` / `${DS_LOKI}` template variables resolve to
-the provisioned datasource UIDs.
+`packages/otel/dashboards/`; the `${DS_TEMPO}` template variable resolves to the provisioned
+datasource UID.
 
-> V1 ships **metrics + logs** dashboards. Distributed-trace visualization (Tempo) is out of
-> scope for V1 — traces are still collected and can be explored ad hoc via Tempo Search.
+Dashboards removed from that directory stay in Grafana Cloud until deleted by hand under
+Dashboards:
 
-### Ad-hoc Loki/Tempo queries (supplementary)
+<!-- otel-guard:removed-assets -->
+- `xstk-signal-pipeline` — dashboard
+- `xstk-infrastructure` — dashboard
+- `xstk-trading-service` — dashboard
+- `signal-pipeline-throughput.json` — file
+- `infrastructure.json` — file
+- `trading-service.json` — file
+<!-- /otel-guard:removed-assets -->
 
-```logql
-# Config change audit
-{service_name="config"} |= "SetConfig" | json | line_format "{{.namespace}}.{{.key}} = {{.value}} by {{.author}}"
-```
+### Ad-hoc Tempo queries (supplementary)
 
 ```traceql
 # Full order-flow span tree: trading → portfolio → indicators → ledger
-{ name = "PlaceOrder" }
+{ name =~ ".*/PlaceOrder" }
 ```
 
 ---
 
 ## Step 7 — Alert Rules (checked into the repo)
 
-The alert rules are version-controlled under **`packages/otel/alerts/`** as Grafana
-unified-alerting provisioning files. See its `README.md` for datasource-UID substitution and
-notification routing.
+`packages/otel/alerts/alert-rules.yaml` provisions no alert rules; it only deletes earlier ones.
+See its `README.md`. Alerting on gRPC error rate, latency and analysis scoring stalls returns with
+`docs/roadmap/features/274-otel-metrics-logs-export/`; until it lands, nothing pages for those failures.
 
-| File | Contents |
-|---|---|
-| `alert-rules.yaml` | `xstk-error-rate-high` (>1% errors, 5m), `xstk-p99-latency-high` (P99 >2s, 3m), `xstk-analysis-no-scoring` (no scoring events 30m) |
-| `mute-timings.yaml` | `outside-us-market-hours` mute timing for the no-scoring alert |
+**Apply:** file-based provisioning (self-hosted) applies `deleteRules` / `deleteMuteTimes` itself.
+Grafana Cloud does not apply the file: delete the items below by hand under Alerting → Alert rules
+and Alerting → Notification policies → Mute timings.
 
-**Apply:** substitute `${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` with your datasource UIDs, then
-provision the files (self-hosted) or recreate the rules via Alerting → Alert rules → **Import**
-(Grafana Cloud). Attach the `outside-us-market-hours` mute timing to the notification policy
-matching `mute_outside_market_hours = "true"` so the analysis no-scoring alert only pages during
-the US session.
+<!-- otel-guard:removed-assets -->
+- `xstk-error-rate-high` — alert rule
+- `xstk-p99-latency-high` — alert rule
+- `xstk-analysis-no-scoring` — alert rule
+- `outside-us-market-hours` — mute timing
+- `mute-timings.yaml` — file
+<!-- /otel-guard:removed-assets -->
 
 Routing (contact points + notification policies) is left to each environment — route to email or
 to Slack via feature `020-notify-external-fanout`.
@@ -271,7 +255,7 @@ to Slack via feature `020-notify-external-fanout`.
 
 ## Step 8 — Service Name Reference
 
-Use these exact service names when querying by `service.name` or `service_name` in Grafana:
+Use these exact service names when querying by `resource.service.name` in Tempo:
 
 | Service | `service.name` |
 |---|---|
@@ -309,14 +293,6 @@ Use these exact service names when querying by `service.name` or `service_name` 
 ### Collector OOM in dev
 
 The memory limiter is set to 256 MiB. If your machine is under heavy load, the collector will drop telemetry. Reduce `limit_mib` in `packages/otel/otel-collector-config.yaml` or set `OTEL_ENABLED=false` during local-only development.
-
-### Traces not correlating with logs
-
-Enable **Derived fields** in Loki datasource settings pointing to Tempo:
-- Grafana → Connections → Data sources → Loki → Derived fields
-- Name: `TraceID`
-- Regex: `trace_id=(\w+)`
-- Query: `${__value.raw}` in Tempo datasource
 
 ### Production services not sending telemetry
 
