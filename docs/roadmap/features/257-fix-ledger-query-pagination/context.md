@@ -544,3 +544,97 @@ Still open (surface at the /sdd-execute checkpoint):
 - Teardown: the context-forge plugin was not invoked from this subagent session (availability unconfirmed), so the audit was done by hand. Re-read the three touched files against `ledgerServiceImpl.ts` and `portfolio_handler.go`; re-stamped the stale `~Lnn` hints in the ledger constitution (LEDGER-1..7, gotchas, `toValidDate`) to the current file. The integration PR body must record both facts: plugin unavailable, and this manual reconciliation.
 - Verification greps: `may gap` hit (CLAUDE.md:35); `LEDGER-9` one row mentioning `toSeq`; `ErrLedgerUnavailable` hit in portfolio CLAUDE.md; `then subscribes` no hit.
 
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-ledger-query-pagination (feature 257)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ledger/acceptance/fix-ledger-query-pagination.feature | CREATE | NEW | QueryEvents next_page_token walk |
+| AC-2 | same ledger file | CREATE | NEW | page_size cap 1000 |
+| AC-7 | same ledger file | CREATE | NEW | default page of 100, oldest first |
+| AC-5 | same ledger file | CREATE | NEW | StreamEvents replay does not starve AppendEvent. Evidence is now the CI real-DB tier (*.db.test.ts), per the operator re-spec. |
+| AC-3 | services/xstockstrat-portfolio/acceptance/fix-ledger-query-pagination.feature | CREATE | NEW | GetPnL folds each fill once. The observable subject is portfolio's GetPnL. |
+| AC-6 | same portfolio file | CREATE | NEW | largest cumulative partial fill |
+| AC-4 | same portfolio file | CREATE | NEW | GetPnL errors rather than returning a partial sum |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-ledger-query-pagination.feature (CREATE) ---
+# Promoted from feature 257 (fix-ledger-query-pagination) at launch, C-16. Do not hand-edit; scenarios are verbatim.
+Feature: fix-ledger-query-pagination (bug fix)
+  Regression guard: QueryEvents honours pageToken, caps page_size, and StreamEvents replay does not starve AppendEvent on the single-connection pool.
+
+  # "Exactly once" covers every matching event committed before the walk passes its sequence; a lower sequence
+  # committing after the walk passed it is not delivered by that walk (operator sign-off 2026-10-22, change (a)).
+  @AC-1 @FR-1 @FR-2 @regression @feature-257
+  Scenario: Following next_page_token returns each event exactly once
+    Given the ledger holds 3 events of type "t" appended in order "e1", "e2", "e3"
+    When QueryEvents is called with event_type "t" and page_size 2
+    Then it returns "e1", "e2" and a non-empty next_page_token
+    When QueryEvents is called again with event_type "t", page_size 2 and that next_page_token
+    Then it returns only "e3" and an empty next_page_token
+
+  @AC-2 @FR-3 @regression @feature-257
+  Scenario: An oversized page_size is capped at 1000
+    Given the ledger holds 20000 events of type "t"
+    When QueryEvents is called with event_type "t" and page_size 1000000
+    Then it returns exactly 1000 events and a non-empty next_page_token
+
+  @AC-7 @FR-4 @regression @feature-257
+  Scenario: Callers that omit page_token still get the oldest first page
+    Given the ledger holds 150 events of type "t" appended in order "e1" to "e150"
+    When QueryEvents is called with event_type "t", no page_size and no page_token
+    Then it returns "e1" to "e100" in ascending sequence order and a non-empty next_page_token
+    When QueryEvents is called with event_type "t", page_size 500 and no page_token
+    Then it returns "e1" to "e150" in ascending sequence order and an empty next_page_token
+
+  # The 2-second bound is the pass threshold. On the buggy code the append waits for the whole replay.
+  @AC-5 @FR-7 @regression @feature-257
+  Scenario: StreamEvents replay does not starve AppendEvent
+    Given the ledger holds 200000 events and its query pool has 1 connection
+    And a StreamEvents call is replaying from sequence 0
+    When AppendEvent is called while the replay is still in progress
+    Then AppendEvent commits within 2 seconds
+    And the replay still delivers, in ascending sequence order and exactly once, every event committed before the replay passed its sequence
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-ledger-query-pagination.feature (CREATE) ---
+# Promoted from feature 257 (fix-ledger-query-pagination) at launch, C-16. Do not hand-edit; scenarios are verbatim.
+Feature: fix-ledger-query-pagination (bug fix)
+  Regression guard: GetPnL pages through ledger QueryEvents without double-counting fills and never returns a partial sum.
+
+  @AC-3 @FR-5 @regression @feature-257
+  Scenario: GetPnL folds each fill exactly once across ledger pages
+    Given the ledger holds 501 "order.filled" events for user "u-1" from trading, alternating buy 1 "AAPL" @ 100.00 and sell 1 "AAPL" @ 101.00, ending with a buy
+    When GetPnL runs for user "u-1"
+    Then realized_pnl is 250.00
+
+  @AC-6 @FR-5 @regression @feature-257
+  Scenario: GetPnL keeps the largest cumulative partial fill of an order that spans ledger pages
+    Given the ledger holds one "order.filled" event for user "u-1" from trading buying 600 "AAPL" @ 100.00
+    And it holds 501 "order.partially_filled" events for user "u-1" from trading for sell order "o-s" on "AAPL" @ 101.00, with sell-signed cumulative filled_qty -1, -2, ... -501 (largest magnitude -501)
+    And order "o-s" has no "order.filled" event
+    When GetPnL runs for user "u-1"
+    Then realized_pnl is 501.00
+
+  @AC-4 @FR-6 @regression @feature-257
+  Scenario: GetPnL fails rather than returning a partial sum when a page cannot be read
+    Given the ledger returns a first page of 500 "order.filled" events for user "u-1" with a non-empty next_page_token
+    And the next QueryEvents call fails with DEADLINE_EXCEEDED
+    When GetPnL runs for user "u-1"
+    Then GetPnL returns an error with code UNAVAILABLE or DEADLINE_EXCEEDED
+    And no realized_pnl value is returned
+
+### Notes / ambiguities / conflicts
+- Attribution: GetPnL is defined in packages/proto/portfolio/v1/portfolio.proto, so AC-3, AC-4 and AC-6 go to the portfolio suite. AC-1, AC-2, AC-5 and AC-7 assert on ledger RPCs (QueryEvents, StreamEvents, AppendEvent), so they go to the ledger suite.
+- The AC-5 source file carries the comment "Evidence: unit FIFO interleave test (CI) + one recorded real-TimescaleDB run (context.md); not a CI job." I dropped it from the promoted block because it is stale under the operator decision of 2026-10-29. AC-5 is now verified by the ledger *.db.test.ts in the "Ledger DB test (TimescaleDB)" CI job. The orchestrator may add a one-line provenance comment pointing at that test once it exists.
+- Dedup: I grepped the five existing ledger suites for pagination, page_token and QueryEvents and found no match. I grepped platform.feature for the same terms and found no match. I grepped the portfolio suites for GetPnL. The existing GetPnL rules (fix-book-portfolio-page, fix-after-hours-positions-priced, offline-account-full-pnl) cover quote availability and unrealized P&L only. None asserts realized_pnl or paging, so there is no OVERLAP and no CONFLICT.
+- fix-ledger-trimmed-notify-payload.feature has StreamEvents live-delivery scenarios. They are a different outcome from AC-5 (replay versus append starvation), so no overlap.
+- No scenario goes to platform.feature.
+- Scenario order within the ledger file follows the source file order but for AC-7, which is moved ahead of AC-5 for grouping. The tags are unchanged.
+
+### Coverage check
+- Source scenarios: 7 (AC-1 to AC-7). Planned: 7 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC is accounted for and none is skipped.
+```
