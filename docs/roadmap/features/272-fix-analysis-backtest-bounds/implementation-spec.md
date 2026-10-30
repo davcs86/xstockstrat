@@ -775,3 +775,16 @@ _Populated by /sdd-execute as implementation proceeds._
   are module-local (`_bounded_svc`, `_stall_evaluated`, `_assert_deadline_abort`), single-file consumers (C-13).
 - **Disposition**: applied under the standing rule (widened); no other deviation.
 
+
+### 2026-10-29 — Step 9 deferred to operator — integration PR merge held until ledger QueryEvents p50/p95/p99/max plus orphan counts (dev and prod, trailing 30 days) and the operator threshold are recorded
+
+- **Step(s)**: 9 (config, G-1 gate). **Status stays `pending`.**
+- **Operator decision** (session question tool, 2026-10-30): 'A: Reword G-1, hold the merge (Recommended)'. G-1 measures
+  against the effective limit, the 300 s code default, because the seeded bare `backtest.max_duration_seconds=120` is not
+  read by Step 5's dotted `analysis.backtest.max_duration_seconds`, unless the operator creates dotted rows via
+  `set_config` or `/config-ui` (no migration; F-01).
+- **Held until**: (1) confirm the effective limit per environment with `get_config` / `list_config_keys`; (2) ledger
+  `QueryEvents` for `analysis.backtest.started` / `.completed` on `backtest:<id>` streams, trailing 30 days, dev and prod;
+  (3) record n, p50, p95, p99, max and orphan counts in `context.md`; (4) operator threshold plus pass or quoted sign-off.
+  Then `grep -n "G-1" context.md` shows them and Step 9 flips to `done`.
+- **Disposition**: operator-only; no code change.
