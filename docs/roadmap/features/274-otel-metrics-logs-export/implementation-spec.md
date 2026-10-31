@@ -124,7 +124,7 @@ python3 -c "import json; d=json.load(open('scripts/testdata/rpc-status-vectors.j
 
 ### Step 3 — docs: Egress audit of every log site before PR-A merges (FR-5; record in context.md)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `all runtimes`
 **Files**:
 - `docs/roadmap/features/274-otel-metrics-logs-export/context.md` — modify (append)
