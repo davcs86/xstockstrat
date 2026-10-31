@@ -112,3 +112,8 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
   - [ ] `services/xstockstrat-agent/app/{tools,client}.py` + `docs/runbooks/mcp-tools.md` (Steps 17, 21) vs 215/275 — disjoint regions; re-grep anchors at execute time (273, launched, already changed `ingest_signal`).
   - [ ] **Policy interaction with 278 — needs an operator decision only if 278 lands first:** the deliberately unseeded prune-interval key is a `read-unseeded` finding for 278's shrink-only ratchet; Step 13 Instructions 3 stops and escalates (seeding is a design change → `/sdd-design`); baselining it is NOT allowed. A `merge-order.md` row `281 after 278` is recommended if both are queued (not written here: no FAIL-level overlap).
 - Carried into execution (announce at each checkpoint): the four overlap items above (`[ ]`), the Open Threads from the design session, and the spec-time unverified items (portfolio role `SELECT` on `ingest.newsletter_signals` → runbook preflight; ingest 013/014 fixture constraints → re-grep in Steps 10/16).
+
+## Session 2026-10-31 — merge order (operator-requested)
+
+- Added `docs/roadmap/features/merge-order.md` row: `signal-watchlist-expiry-pruning` (281) must wait for `enforce-config-key-wiring` (278) (Resolved: No). Reason: 278's shrink-only `read-unseeded` ratchet vs this feature's deliberately unseeded key (Step 13 Instructions 3 escalates); shared `ci-gate` block and `config-governance.md` (rebase-only). Escape hatch recorded in the row: 281 may merge first only after the operator records an exemption ruling here.
+- Closes the overlap item "policy interaction with 278" as *tracked* (the operator decision still falls to Step 13 at execute time if 278 has landed).
