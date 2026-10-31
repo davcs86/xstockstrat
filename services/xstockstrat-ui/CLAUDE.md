@@ -300,7 +300,7 @@ DATABASE_CA_CERT            # feature 266 — config-ui audit route only; DB CA 
 DB_POOL_MAX=1               # config-ui audit pool cap
 OTEL_ENABLED                # toggle OTel; init errors never block startup
 OTEL_EXPORTER_OTLP_ENDPOINT
-SERVICE_NAME=xstockstrat-ui
+SERVICE_NAME=ui
 ```
 
 ## Frontend gotchas

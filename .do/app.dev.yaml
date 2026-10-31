@@ -24,7 +24,7 @@ ingress:
 # Component-level envs override these when the same key is set.
 envs:
   - key: APPLICATION_ENV
-    value: development
+    value: staging
   - key: TRADING_MODE
     value: paper
   - key: OTEL_ENABLED
@@ -656,7 +656,7 @@ services:
       - key: DB_POOL_MAX
         value: "1"
       - key: SERVICE_NAME
-        value: xstockstrat-ui
+        value: ui
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
