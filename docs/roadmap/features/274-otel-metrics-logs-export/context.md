@@ -378,3 +378,5 @@ Indicators telemetry tests: otel_reset resets meter/logger set-once + removes br
 Ingest: same telemetry.py as indicators (service default "ingest"), main.py interceptors, pyproject dependency + uv.lock. Verified ast, ruff, uv lock --check, grep; 367 existing tests pass.
 
 Ingest telemetry tests (same suite as indicators step 17; shared fixture in conftest). RED: 16 failed on pre-step-16 tree; GREEN 384 passed, cov 84.34% (floor 40).
+
+Analysis: same telemetry.py as indicators (default "analysis"), main.py interceptors, pyproject dep + uv.lock. Deviation 6: AC-5 guard test narrowed to ignore the server-interceptor call. Verified ast/ruff/uv lock --check/grep; 1475 tests pass.

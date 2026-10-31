@@ -20,7 +20,7 @@ from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
 from app.supervision import spawn
-from app.telemetry import init_telemetry
+from app.telemetry import init_telemetry, server_interceptors
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ async def serve():
     )
 
     # ── gRPC server ────────────────────────────────────────────────────────
-    grpc_server = grpc.aio.server()
+    grpc_server = grpc.aio.server(interceptors=server_interceptors())
     analysis_pb2_grpc.add_AnalysisServiceServicer_to_server(servicer, grpc_server)
 
     service_names = (

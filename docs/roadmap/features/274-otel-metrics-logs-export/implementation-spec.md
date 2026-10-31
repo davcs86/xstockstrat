@@ -758,7 +758,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check .
 
 ### Step 20 — service: analysis: meter + logger providers, logging bridge, span-derived rpc.server.duration, cancel/deadline interceptor (Python)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
@@ -2084,4 +2084,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 11 fixes only test code that fails because it matched a removed call shape.
 - **Actual**: `TestServerDurationRecordsStatusCode` (Step 5 for trading, Step 9 for portfolio) failed once in a full parallel `go test ./... -race` run of portfolio and then passed on 300 loaded repeats and 3 further full runs. Cause: grpc-go delivers the server stats `End` event from a deferred call after the reply and trailers are written, so a client can see the response before `rpc.server.duration` is recorded, and the test collected once, immediately. The test now polls until the metric appears. Applied to both existing copies; marketdata's copy is cloned from the fixed version.
 - **Disposition**: gap-protocol default (fix now): test-only change, no behaviour change, committed with Step 11 (the retrofit gate).
+
+### Deviation 6 — An analysis AC-5 guard test matched the new server-interceptor argument (step 20)
+- **Spec said**: Step 20 changes only `app/telemetry.py`, `app/main.py`, `pyproject.toml`, `uv.lock`.
+- **Actual**: `tests/test_owner_header_guard.py::test_main_wires_no_channel_interceptor` (`@AC-5`, nothing below the stub adds an `x-internal-caller` grant) asserted `"interceptors=" not in inspect.getsource(app_main)`. That substring also matches the new `grpc.aio.server(interceptors=server_interceptors())`, a *server* interceptor that cannot add an outbound grant. The guard now strips that one exact call before the check, so any channel/client `interceptors=` (the thing AC-5 forbids) still fails it.
+- **Disposition**: gap-protocol default (fix now): test-only narrowing committed with Step 20; the guard stays as strict for its purpose.
 

@@ -111,7 +111,8 @@ def _assert_indicators_headers(indicators, owner, path=None):
 
 
 def test_main_wires_no_channel_interceptor():  # AC-5: nothing below the stub adds a grant
-    assert "interceptors=" not in inspect.getsource(app_main)
+    src = inspect.getsource(app_main).replace("interceptors=server_interceptors()", "")
+    assert "interceptors=" not in src
 
 
 def _cfg(overrides=None):
