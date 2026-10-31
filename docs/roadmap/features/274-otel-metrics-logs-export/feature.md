@@ -14,6 +14,7 @@
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings open; 1 FAIL + 9 warnings across two passes fixed) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 59 steps (PR-A 1-47, G1 gate 48, PR-B 49-59) |
+| 2026-10-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1-2 done (sequential, session branch `ccr-4f43fb65-lagupv`) |
 
 ---
 

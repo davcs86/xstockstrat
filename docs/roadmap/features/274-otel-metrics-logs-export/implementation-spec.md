@@ -1,6 +1,6 @@
 # Implementation Spec: otel-metrics-logs-export
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-30
 **Feature**: `docs/roadmap/features/274-otel-metrics-logs-export/feature.md`
 **Total Steps**: 59
@@ -66,7 +66,7 @@ AC-2's Node rows are driven by a real in-process gRPC `NOT_FOUND` call (steps 30
 
 ### Step 1 — docs: PR-A precondition check and spec-time deviation record (no code)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/274-otel-metrics-logs-export/`
 **Files**:
 - `docs/roadmap/features/274-otel-metrics-logs-export/context.md` — modify (append)
@@ -97,7 +97,7 @@ grep -n 'OTEL_METRIC\|OTEL_BLRP\|OTEL_TRACES_SAMPLER' docker-compose.yml .do/app
 
 ### Step 2 — test: Shared golden RPC status vectors and bucket boundaries (consumed by the Python and Node recorder suites)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/testdata/rpc-status-vectors.json` — create
@@ -2060,3 +2060,12 @@ ls .claude/skills | grep -i context-forge || echo 'plugin unavailable: record ma
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation 1 — Branch layout (session branch; the spec PR becomes PR-A)
+- **Spec said**: work on `feature/otel-metrics-logs-export`, PR-A as its own squash PR into `main-dev`.
+- **Actual**: the harness assigns `ccr-4f43fb65-lagupv`, pushes elsewhere are not permitted, and the open spec PR #1379 already sits on it. Steps 1-47 are committed here, one commit per step, and #1379 is retitled as PR-A when step 47 lands. PR-B (steps 49-59) needs a fresh branch from `main-dev` after the operator merges PR-A and passes G1.
+- **Disposition**: sequential mode, operator-approved (run request 2026-10-31); F-03 not engaged (no step PR targets `main-dev`).
+
+### Deviation 2 — Lint tooling and Node version
+- shellcheck/shfmt are not installed: `uvx` PyPI wheels are used (as in feature 250); golangci-lint is installed from source at CI's v2.14.0; Node here is v22.22.0 while the repo pins Node 24 (root CLAUDE.md): Node/UI steps run on 22 and CI re-runs them on 24.
+- **Disposition**: CI-equivalent fallback.
