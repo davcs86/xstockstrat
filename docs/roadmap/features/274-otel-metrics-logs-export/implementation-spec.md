@@ -199,7 +199,7 @@ test -f services/xstockstrat-trading/internal/telemetry/logbridge.go && test -f 
 
 ### Step 5 — test: trading: telemetry tests — metrics/logs export, status code, bridge, shutdown (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel_test.go` — modify
@@ -2069,3 +2069,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Deviation 2 — Lint tooling and Node version
 - shellcheck/shfmt are not installed: `uvx` PyPI wheels are used (as in feature 250); golangci-lint is installed from source at CI's v2.14.0; Node here is v22.22.0 while the repo pins Node 24 (root CLAUDE.md): Node/UI steps run on 22 and CI re-runs them on 24.
 - **Disposition**: CI-equivalent fallback.
+
+### Deviation 3 — Step 5 edited a Step 4 source file (found by the paired tests)
+- **Spec said**: Step 5's Files are the tests, `go.mod` and `go.sum`; it "does not edit `otel.go`".
+- **Actual**: the new failure-visibility tests showed that `ForceFlush` returns export errors instead of reporting them through `otel.Handle` (only the background and shutdown paths do), so `StopServer`'s `_ = forceFlush(ctx)` silently dropped a failed final flush, contradicting FR-4. `internal/telemetry/shutdown.go` now routes that error through `otel.Handle` (stdout-only once `WrapLogHandler` is installed), covered by `TestStopServerReportsFailedFlushThroughOTelErrorHandler`.
+- **Disposition**: gap-protocol default (fix now, expand scope): one line in the paired service step's own file, found inside the red-green cycle of the pair. Steps 9 and 13 clone `shutdown.go` from this corrected version.
+

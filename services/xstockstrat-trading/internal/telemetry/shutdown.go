@@ -3,6 +3,8 @@ package telemetry
 import (
 	"context"
 	"time"
+
+	"go.opentelemetry.io/otel"
 )
 
 // StopServer flushes telemetry first, then stops the server gracefully, falling back to force when
@@ -11,7 +13,11 @@ import (
 func StopServer(forceFlush func(context.Context) error, graceful func(), force func(), flushTimeout, gracefulTimeout time.Duration) {
 	if forceFlush != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
-		_ = forceFlush(ctx)
+		// ForceFlush returns export errors instead of reporting them, so route a failed final flush
+		// through the OTel error handler (stdout-only once WrapLogHandler is installed).
+		if err := forceFlush(ctx); err != nil {
+			otel.Handle(err)
+		}
 		cancel()
 	}
 
