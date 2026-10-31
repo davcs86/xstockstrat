@@ -923,6 +923,85 @@ func TestGetBarsMarksSymbolWarm(t *testing.T) {
 	}
 }
 
+// TestGetBarsWarnsWhenMissAndLiveFetchEmpty is structural for the same reason as
+// TestGetBarsMarksSymbolWarm (GetBars needs a live DB pool): the DB-miss + empty-live-fetch branch
+// must stay a WARN, or a symbol the feed never serves is silent in the logs.
+func TestGetBarsWarnsWhenMissAndLiveFetchEmpty(t *testing.T) {
+	src, err := os.ReadFile("marketdata_service.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	body := funcBody(t, string(src), "func (s *MarketDataService) GetBars(")
+	if !strings.Contains(body, `slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none"`) {
+		t.Error("GetBars must WARN when no bars are stored and the live fetch returns none")
+	}
+}
+
+// fakeEmptyMultiSource is a MultiSymbolSource whose GetBarsMulti returns `bars` (never inserted
+// here: every slice is empty, so the nil repo is not reached).
+type fakeEmptyMultiSource struct {
+	fakeBackfillSource
+	bars map[string][]*marketdatav1.Bar
+}
+
+func (f *fakeEmptyMultiSource) GetBarsMulti(context.Context, []string, string, time.Time, time.Time) (map[string][]*marketdatav1.Bar, error) {
+	return f.bars, nil
+}
+func (*fakeEmptyMultiSource) GetLatestQuotesMulti(context.Context, []string) (map[string]*marketdatav1.Quote, error) {
+	return nil, nil
+}
+func (*fakeEmptyMultiSource) GetLatestTradesMulti(context.Context, []string) (map[string]*source.Trade, error) {
+	return nil, nil
+}
+
+// TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars covers both ingest paths: one
+// summarized WARN naming the symbols (sorted, capped) with missing/total counts.
+func TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars(t *testing.T) {
+	const msg = "bar ingest: symbols returned no bars"
+	start, end := time.Now().Add(-48*time.Hour), time.Now()
+	cases := []struct {
+		name string
+		src  source.DataSourceClient
+	}{
+		{"per-symbol fallback", &fakeBackfillSource{}},
+		// An empty slice and an absent key must both count as "no bars".
+		{"multi-symbol", &fakeEmptyMultiSource{bars: map[string][]*marketdatav1.Bar{"ZZZ": nil}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := installWarnRecorder(t)
+			s := &MarketDataService{}
+			s.ingestRecentBarsForTimeframe(context.Background(), tc.src, []string{"ZZZ", "AAA"}, "1d", start, end)
+			w := rec.find(msg)
+			if w == nil {
+				t.Fatalf("expected WARN %q", msg)
+			}
+			if w.attrs["missing"] != "2" || w.attrs["total"] != "2" || w.attrs["timeframe"] != "1d" {
+				t.Errorf("unexpected attrs: %v", w.attrs)
+			}
+			if w.attrs["sample"] != "[AAA ZZZ]" {
+				t.Errorf("sample should be sorted, got %q", w.attrs["sample"])
+			}
+		})
+	}
+
+	t.Run("sample is capped", func(t *testing.T) {
+		rec := installWarnRecorder(t)
+		var symbols []string
+		for i := 0; i < barIngestNoBarsSample+2; i++ {
+			symbols = append(symbols, fmt.Sprintf("S%02d", i))
+		}
+		(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), &fakeBackfillSource{}, symbols, "1d", start, end)
+		w := rec.find(msg)
+		if w == nil {
+			t.Fatalf("expected WARN %q", msg)
+		}
+		if w.attrs["missing"] != "12" || strings.Count(w.attrs["sample"], "S") != barIngestNoBarsSample {
+			t.Errorf("want missing=12 and %d sampled symbols, got %v", barIngestNoBarsSample, w.attrs)
+		}
+	})
+}
+
 // funcBody returns the source text from the given func signature up to the next top-level `func (`.
 func funcBody(t *testing.T, src, signature string) string {
 	t.Helper()
