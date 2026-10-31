@@ -1,4 +1,4 @@
-import { initTelemetry } from './telemetry';
+import { initTelemetry, shutdownTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
@@ -56,7 +56,13 @@ async function main() {
   );
 
   const shutdown = () => {
-    grpcServer.tryShutdown(() => { pool.end(); process.exit(0); });
+    // Open streams block tryShutdown, so flush telemetry in parallel and force the stop.
+    const flush = shutdownTelemetry();
+    setTimeout(() => {
+      grpcServer.forceShutdown();
+      flush.finally(() => process.exit(0));
+    }, 5000).unref();
+    grpcServer.tryShutdown(async () => { await flush; pool.end(); process.exit(0); });
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
