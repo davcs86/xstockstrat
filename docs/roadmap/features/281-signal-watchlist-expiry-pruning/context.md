@@ -82,3 +82,16 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - [ ] Ledger event lost on crash after commit; pasted REPORT is the record for backfill removals — portfolio step (S6/S7).
 - [ ] Verify at /sdd-spec: `ingest.newsletter_signals.id` is BIGINT; `Timestamp` import in portfolio.proto; `ledger` owner semantics for request `user_id`; `.do/app*.yaml` portfolio block for any env the subcommand needs; `docs/runbooks/CLAUDE.md` index row; agent test location.
 - [ ] Re-verify migration number `018` (portfolio) and proto field `4` are still free on `main-dev` at /sdd-spec time; feature numbers may collide again with unmerged branches.
+
+## Session 2026-10-31 — sdd-spec
+
+- Generated implementation-spec.md with 21 steps (1 proto, 1 proto-gen, 1 migration, 8 portfolio service/test pairs + CI harness, 1 config + test, 1 agent + test, 1 UI e2e, 1 docs, 1 premise-evidence check). Status → implementation-ready. Every AC-1..AC-18 is covered by ≥1 step (map in the spec's `## Scenario Coverage`).
+- Key codebase findings (all grounded this session; design/recon wording corrected, no design change):
+  - `insertBindingsTx` (`watchlist_repo.go:494-504`) returns only `error`; the "inserted-symbol set" in design § 3 is the NEW shape Step 5 introduces.
+  - `migration-rerun` pass 1 applies `018` via `db-migrate.sh up`, but pass 2 replays only a fixed 224/225 file list — `018` is not replayed; idempotency is by construction, `migration-rerun.sh` stays untouched.
+  - Prune step 3 must `DELETE` only the symbols its `SELECT … FOR UPDATE SKIP LOCKED` actually locked; deleting over the full due set would block on a row held by `UpdateBinding` (`watchlist_repo.go:337`) and break "never waits" / AC-12.
+  - No Go real-DB harness exists (`dbtest`/`go:build` grep over portfolio/trading/marketdata: none); Step 4 creates it from scratch from the `ledger-db-test` CI shape (`ci.yml:711-768`). DB tests run only in the new `portfolio-db-test` job; locally RED for a DB test is a compile failure.
+  - Migration `018` and proto field `4` are free on all remote branches; `ingest.newsletter_signals.id` is `BIGSERIAL`; ledger honours request `user_id` over `x-user-id` metadata (`ledgerServiceImpl.ts:77-78`); `.do/app*.yaml`/compose need no change (no new env/port).
+  - New portfolio logic lands only in coverage-excluded packages (`repository`, `service`, `cmd`), so the 40% Go threshold is held by not touching measured packages.
+- Unverified at spec time (carried into the runbook preflight, Step 20): the portfolio DB role can `SELECT` from `ingest.newsletter_signals`; any `signal_sources` FK/NOT NULL on `ingest.newsletter_signals` fixtures (re-grep ingest 013/014 in Steps 10/16).
+- Teardown owed at execute time: Step 20 touches context files; run `/context-forge:context-constitution refresh` or record the manual reconciliation in the PR body.
