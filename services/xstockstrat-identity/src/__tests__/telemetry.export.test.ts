@@ -1,9 +1,9 @@
 import { after, before, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { startOtlpReceiver, waitFor } from './fixtures/otlpReceiver';
+import type { Received } from './fixtures/otlpReceiver';
 
 const TELEMETRY = '../telemetry';
 const LOGGER = '../services/logger';
@@ -12,28 +12,8 @@ const HEADER_FORMS = ['Authorization=Basic dGVzdDprZXk=', 'Authorization=Basic%2
 const SERVICE_DIR = join(__dirname, '..', '..');
 const BUCKETS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000];
 
-type Received = { path: string; auth: string | undefined; body: string };
-const received: Received[] = [];
-let traceRequests = 0;
-const server = createServer((req, res) => {
-  const chunks: Buffer[] = [];
-  req.on('data', (c) => chunks.push(c));
-  req.on('end', () => {
-    received.push({
-      path: req.url ?? '',
-      auth: req.headers.authorization,
-      body: Buffer.concat(chunks).toString('utf8'),
-    });
-    if (req.url?.endsWith('/v1/traces')) {
-      // First trace export succeeds (AC-1); later ones are rejected (AC-3).
-      res.writeHead(traceRequests++ === 0 ? 200 : 400).end();
-    } else if (req.url?.endsWith('/v1/metrics') || req.url?.endsWith('/v1/logs')) {
-      res.writeHead(200).end('{}');
-    } else {
-      res.writeHead(404).end();
-    }
-  });
-});
+const otlp = startOtlpReceiver({ rejectTracesAfterFirst: true });
+const { received, at } = otlp;
 
 const errorSpy = mock.method(console, 'error', () => {});
 const warnSpy = mock.method(console, 'warn', () => {});
@@ -48,20 +28,8 @@ const logged = (spy: typeof errorSpy) =>
     .map((c) => c.arguments.map(String).join(' '))
     .filter((m) => !m.startsWith('(node:'));
 
-async function waitFor(cond: () => boolean, ms = 5000): Promise<boolean> {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (cond()) return true;
-    await new Promise((r) => setTimeout(r, 25));
-  }
-  return cond();
-}
-
-const at = (suffix: string) => received.filter((r) => r.path.endsWith(suffix));
-
 before(async () => {
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  port = (server.address() as AddressInfo).port;
+  port = await otlp.listen();
   process.env.OTEL_ENABLED = 'true';
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `http://127.0.0.1:${port}/otlp`;
   process.env.OTEL_EXPORTER_OTLP_HEADERS = HEADER_FORMS[0];
@@ -79,8 +47,7 @@ before(async () => {
 });
 
 after(() => {
-  server.closeAllConnections();
-  server.close();
+  otlp.close();
 });
 
 // Feature 226 AC-1: configured only by the OTel spec env vars -> POST <path>/v1/traces with auth.

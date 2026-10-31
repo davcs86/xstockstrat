@@ -1468,7 +1468,7 @@ grep -q 'user_id: user.user_id' services/xstockstrat-identity/src/grpc/identityS
 
 ### Step 41 — test: identity: seed-admin log has user_id only; auth logs export no credential plaintext
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
