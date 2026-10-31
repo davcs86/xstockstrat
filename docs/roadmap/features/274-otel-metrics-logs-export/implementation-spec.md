@@ -1015,7 +1015,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 28 — service: ledger: metric reader, log processor, span-derived rpc.server.duration, awaited shutdown (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
@@ -2089,4 +2089,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 20 changes only `app/telemetry.py`, `app/main.py`, `pyproject.toml`, `uv.lock`.
 - **Actual**: `tests/test_owner_header_guard.py::test_main_wires_no_channel_interceptor` (`@AC-5`, nothing below the stub adds an `x-internal-caller` grant) asserted `"interceptors=" not in inspect.getsource(app_main)`. That substring also matches the new `grpc.aio.server(interceptors=server_interceptors())`, a *server* interceptor that cannot add an outbound grant. The guard now strips that one exact call before the check, so any channel/client `interceptors=` (the thing AC-5 forbids) still fails it.
 - **Disposition**: gap-protocol default (fix now): test-only narrowing committed with Step 20; the guard stays as strict for its purpose.
+
+### Deviation 7 — The Node steps' lockfile is the repo-root `pnpm-lock.yaml`, not the per-service one (step 28)
+- **Spec said**: Steps 28/29 (and their identity/notify/config/UI analogues) modify `services/<svc>/pnpm-lock.yaml`.
+- **Actual**: the workspace root `pnpm-lock.yaml` is the lockfile CI (`pnpm install --frozen-lockfile`, `cache-dependency-path: pnpm-lock.yaml`) and every Node Dockerfile (`COPY pnpm-workspace.yaml package.json pnpm-lock.yaml`) use; `pnpm install` rewrites only that file. The per-service `pnpm-lock.yaml` is a stale leftover that nothing reads.
+- **Disposition**: gap-protocol default (fix now): the steps stage the root `pnpm-lock.yaml` instead of the service-level file, and leave the stale file untouched (removing it is out of scope).
 
