@@ -680,7 +680,7 @@ cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 
 ### Step 18 — service: ingest: meter + logger providers, logging bridge, span-derived rpc.server.duration, cancel/deadline interceptor (Python)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/telemetry.py` — modify

@@ -374,3 +374,5 @@
 Indicators: MeterProvider + LoggerProvider + logging bridge (instrumentation.logging handler, opentelemetry* filter), span-derived rpc.server.duration processor, cancel/deadline interceptor, grpc.aio.server(interceptors=...), dependency + uv.lock. Verified: ast.parse, ruff check/format, uv lock --check, existing 369 tests pass.
 
 Indicators telemetry tests: otel_reset resets meter/logger set-once + removes bridge handlers; metrics/logs export under both header forms with resource trio; 9-vector status table (python subset) with shared buckets; failure visibility w/o recursion; disabled mode; SIGTERM atexit flush subprocess + static no-exit check on main.py; D8 handler module; AC-22 real aio server deadline(4)/cancel(1). RED: 16 failed on pre-step-16 tree (ImportError); GREEN 386 passed, cov 84.28% (floor 50).
+
+Ingest: same telemetry.py as indicators (service default "ingest"), main.py interceptors, pyproject dependency + uv.lock. Verified ast, ruff, uv lock --check, grep; 367 existing tests pass.
