@@ -365,3 +365,8 @@
 - **GREEN**: the 47 calls were rewritten mechanically from the lint report to `slog.XContext(ctx, ...)`; `go build ./...`, `go vet ./...` clean; `golangci-lint run`: 0 issues; `grep sloglint .golangci.yml` passes. Behaviour-neutral proof: with `slog.XContext(ctx, ` normalised back to `slog.X(`, every deleted line pairs with an identical added line.
 - Files modified: `services/xstockstrat-marketdata/.golangci.yml`, `internal/service/{marketdata_service.go,classification_service.go}`. Not touched (no flagged call): `cmd/server/main.go`, `internal/alpaca/*`, `internal/edgar/*`, `internal/fmp/*`, `internal/finnhub/*`.
 - Deviations: none
+
+### Step 15 — marketdata: retrofit gate — full suite green under sloglint [done]
+- `go test ./... -race -count=1` with CI's coverage computation: all 15 packages `ok` (including `cmd/server` and the new telemetry tests), total 71.5% (floor 40); golangci-lint v2.14.0 0 issues. `internal/service/marketdata_service_test.go`, the one non-telemetry test that swaps `slog`, needed no change. TDD: red N/A (behaviour-neutral retrofit gate; green run captured here).
+- Files modified: none (verification only)
+- Deviations: none

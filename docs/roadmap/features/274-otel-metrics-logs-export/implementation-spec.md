@@ -574,7 +574,7 @@ grep -q 'sloglint' services/xstockstrat-marketdata/.golangci.yml   # fails befor
 
 ### Step 15 — test: marketdata: retrofit gate — full suite green under sloglint (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify (only if it asserted on a removed non-Context call; it is the one test file outside `internal/telemetry` that swaps `slog` or asserts log text, found by `grep -rln 'slog.SetDefault\|slog.New(' services/xstockstrat-marketdata --include=*_test.go`; if the suite is green after the retrofit no file changes)
