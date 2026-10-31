@@ -1533,7 +1533,7 @@ grep -q 'PeriodicExportingMetricReader' services/xstockstrat-ui/src/telemetry.ts
 
 ### Step 43 — service: ui: http.server.duration recorder for Connect BFF (unary only) and REST route handlers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/bffMetrics.ts` — create

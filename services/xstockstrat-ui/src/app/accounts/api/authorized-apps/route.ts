@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withBffMetrics } from '@/lib/bffMetrics';
 import { ConnectError } from '@connectrpc/connect';
 import { identityClient, connectCodeToHttp } from '@/lib/connectClients';
 import { getSessionFromRequest } from '@/lib/auth';
@@ -10,7 +11,7 @@ function tsToISO(ts?: { seconds: bigint; nanos: number }): string | null {
 }
 
 // GET /accounts/api/authorized-apps — the calling user's OAuth-authorized apps.
-export async function GET(req: NextRequest) {
+async function getHandler(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /accounts/api/authorized-apps — revoke one app: body { action: 'revoke', clientId }.
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
@@ -57,3 +58,7 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export const GET = withBffMetrics('accounts', '/accounts/api/authorized-apps', getHandler);
+
+export const POST = withBffMetrics('accounts', '/accounts/api/authorized-apps', postHandler);
