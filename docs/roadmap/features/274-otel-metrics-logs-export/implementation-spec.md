@@ -1879,7 +1879,7 @@ test -f packages/otel/alerts/mute-timings.yaml && [ "$(grep -c -E '^[[:space:]]+
 
 ### Step 54 — test: guard tests: restored rules pass; noDataState on every rule; mute timing referenced (AC-8, AC-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify

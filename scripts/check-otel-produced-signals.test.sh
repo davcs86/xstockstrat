@@ -233,6 +233,42 @@ fresh
 append docker-compose.yml "      OTEL_PYTHON_GRPC_EXCLUDED_SERVICES: x"
 expect_hit AC-17-grpc-exclusion-in-compose "AC-17 P4-sampler docker-compose.yml:"
 
+# --- AC-8 / AC-14: alert rule invariants (Part 5) ---------------------------------------------------
+fresh
+expect_green AC-14-real-rules-pass
+run=$((run + 1))
+[ "$(grep -c -E '^[[:space:]]+- uid:' "${tree}/packages/otel/alerts/alert-rules.yaml")" -eq 3 ] ||
+  case_fail AC-14-three-rules "the real tree does not declare three rules"
+
+fresh
+awk '/noDataState:/ && !done { done = 1; next } { print }' "${tree}/packages/otel/alerts/alert-rules.yaml" >"${work}/ar" &&
+  cp "${work}/ar" "${tree}/packages/otel/alerts/alert-rules.yaml"
+expect_hit AC-8-rule-without-nodatastate "AC-8 P5 packages/otel/alerts/alert-rules.yaml:" "xstk-error-rate-high has no noDataState"
+
+fresh
+sed -i.bak 's/noDataState: Alerting/noDataState: OK/' "${tree}/packages/otel/alerts/alert-rules.yaml"
+rm -f "${tree}/packages/otel/alerts/alert-rules.yaml.bak"
+expect_hit AC-8-stall-rule-nodata-must-alert "AC-8 P5 packages/otel/alerts/alert-rules.yaml:" "xstk-analysis-no-scoring noDataState must be Alerting"
+
+fresh
+sed -i.bak '0,/noDataState: OK/s//noDataState: NoData/' "${tree}/packages/otel/alerts/alert-rules.yaml"
+rm -f "${tree}/packages/otel/alerts/alert-rules.yaml.bak"
+expect_hit AC-8-rpc-rule-nodata-must-be-ok "AC-8 P5 packages/otel/alerts/alert-rules.yaml:" "noDataState must be OK"
+
+fresh
+sed -i.bak 's/name: outside-us-market-hours/name: outside-market-hours/' "${tree}/packages/otel/alerts/mute-timings.yaml"
+rm -f "${tree}/packages/otel/alerts/mute-timings.yaml.bak"
+expect_hit AC-14-mute-timing-renamed "AC-14 P5 packages/otel/alerts/mute-timings.yaml:"
+
+fresh
+rm -f "${tree}/packages/otel/alerts/mute-timings.yaml"
+expect_hit AC-14-mute-timing-file-missing "AC-14 P5 packages/otel/alerts/mute-timings.yaml:"
+
+fresh
+grep -v 'mute_outside_market_hours' "${tree}/packages/otel/alerts/alert-rules.yaml" >"${work}/ar" &&
+  cp "${work}/ar" "${tree}/packages/otel/alerts/alert-rules.yaml"
+expect_hit AC-14-stall-rule-label-dropped "AC-14 P5 packages/otel/alerts/alert-rules.yaml:" "mute_outside_market_hours"
+
 # --- Part 2 is retired: signal talk in docs is free ---------------------------------------------
 fresh
 append docs/setup/grafana-cloud.md "Loki and Prometheus now carry rpc_server_duration_milliseconds with service_name=analysis; P99 per service."
@@ -241,7 +277,7 @@ expect_green AC-9-docs-free-text
 
 # --- a line carrying several Part 3 tags reports each one -----------------------------------------
 fresh
-append docs/setup/grafana-cloud.md "see xstk-retired-fake and mute-timings.yaml"
+append docs/setup/grafana-cloud.md "see xstk-retired-fake and dashboards-gone.json"
 expect_hit multi-tag-name-and-file \
   "AC-3 P3-name docs/setup/grafana-cloud.md:" "AC-3 P3-file docs/setup/grafana-cloud.md:"
 
@@ -281,13 +317,13 @@ expect_green fence-ascii-separator
 
 # --- a comment can never make a deleted asset count as existing -------------------------------
 fresh
-append packages/otel/alerts/alert-rules.yaml "# removed xstk-error-rate-high"
-append docs/setup/grafana-cloud.md "xstk-error-rate-high"
+append packages/otel/alerts/alert-rules.yaml "# removed xstk-retired-fake"
+append docs/setup/grafana-cloud.md "xstk-retired-fake"
 expect_hit comment-does-not-create-existence "AC-3 P3-name docs/setup/grafana-cloud.md:"
 
 # --- removal prose states a count that is wrong ----------------------------------------------
 fresh
-append packages/otel/alerts/README.md "Delete the three alert rules below"
+append packages/otel/alerts/README.md "Delete the four alert rules below"
 expect_hit removal-prose-count "AC-3 P3-count packages/otel/alerts/README.md:"
 
 # --- dashboard fallback tree: no dashboard JSON ------------------------------------------------

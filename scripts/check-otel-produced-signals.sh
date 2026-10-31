@@ -9,6 +9,8 @@
 #   Part 1    alerts/*.yaml and dashboards/*.json (AC-8): every PromQL metric identifier, Loki service_name
 #             value and Loki |= / |~ literal in an expr must be registered.
 #   Part 3    docs/ + packages/otel (AC-3): named assets exist, counts match, removed assets are fenced.
+#   Part 5    (AC-8/AC-14): every alert rule declares noDataState (OK for the RPC rules, Alerting for the stall
+#             heartbeat), and the stall rule carries the label the outside-us-market-hours mute timing keys on.
 #   Part 4    (AC-17): every rpc_server_duration_milliseconds_* selector excludes the proto-derived
 #             server-streaming methods; no trace sampler or gRPC-exclusion env in deploy specs.
 #
@@ -382,6 +384,41 @@ done < <(for base in docs packages/otel; do
     find "${ROOT}/${base}" -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) -print
   fi
 done | sort)
+
+# --- Part 5: alert rule invariants -----------------------------------------------------------------
+mute_ok=0
+if [ -f "$ROOT/packages/otel/alerts/mute-timings.yaml" ] &&
+  grep -q -E '^[[:space:]]+name:[[:space:]]*outside-us-market-hours[[:space:]]*$' "$ROOT/packages/otel/alerts/mute-timings.yaml"; then
+  mute_ok=1
+fi
+f="$ROOT/packages/otel/alerts/alert-rules.yaml"
+if [ -f "$f" ]; then
+  rel="${f#"$ROOT"/}"
+  while IFS='|' read -r ln uid nodata muted; do
+    if [ -z "$nodata" ]; then
+      hit AC-8 P5 "$rel" "$ln" "${uid} has no noDataState"
+    else
+      case "$uid" in
+      xstk-error-rate-high | xstk-p99-latency-high)
+        [ "$nodata" = OK ] || hit AC-8 P5 "$rel" "$ln" "${uid} noDataState must be OK, got ${nodata}"
+        ;;
+      xstk-analysis-no-scoring)
+        [ "$nodata" = Alerting ] || hit AC-8 P5 "$rel" "$ln" "${uid} noDataState must be Alerting, got ${nodata}"
+        ;;
+      esac
+    fi
+    if [ "$uid" = xstk-analysis-no-scoring ]; then
+      [ "$muted" = 1 ] || hit AC-14 P5 "$rel" "$ln" "${uid} lacks the mute_outside_market_hours label"
+      [ "$mute_ok" = 1 ] || hit AC-14 P5 packages/otel/alerts/mute-timings.yaml 1 "outside-us-market-hours mute timing missing"
+    fi
+  done < <(awk '
+    function emit() { if (uid != "") print ln "|" uid "|" nodata "|" muted }
+    /^[[:space:]]*- uid:/ { emit(); uid = $0; sub(/^[[:space:]]*- uid:[[:space:]]*/, "", uid); gsub(/[[:space:]"]/, "", uid); ln = NR; nodata = ""; muted = 0; next }
+    uid != "" && /^[[:space:]]*noDataState:/ { nodata = $0; sub(/^[[:space:]]*noDataState:[[:space:]]*/, "", nodata); gsub(/[[:space:]"]/, "", nodata) }
+    uid != "" && /^[[:space:]]*mute_outside_market_hours:[[:space:]]*"?true"?[[:space:]]*$/ { muted = 1 }
+    END { emit() }
+  ' "$f")
+fi
 
 # --- Part 4: the span-derived metrics need every inbound span sampled ----------------------------
 for f in "$ROOT"/.do/* "$ROOT"/docker-compose.yml; do
