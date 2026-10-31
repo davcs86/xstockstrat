@@ -359,3 +359,9 @@
 - **GREEN**: 13 tests pass under `-race` (and 3 repeated runs); full suite `-race` has no failures; CI-style coverage total 71.5% (floor 40); golangci-lint v2.14.0 0 issues after `gofmt` of the hand-assembled test file; `grep telemetry.StopServer cmd/server/main.go` passes.
 - Files modified: `services/xstockstrat-marketdata/internal/telemetry/{otel_test.go,shutdown_test.go}`, `go.mod`/`go.sum` (tidy)
 - Deviations: none
+
+### Step 14 — marketdata: slog calls with a context in scope use their *Context variant; enforced by sloglint [done]
+- **RED**: adding `sloglint` (`context: scope`, `no-mixed-args: false`) to marketdata's `.golangci.yml` made `golangci-lint run` report 47 issues, all `XContext should be used instead`: 42 in `internal/service/marketdata_service.go`, 5 in `internal/service/classification_service.go`. (The spec's 73 call sites / 5 files counts every `slog.X(`; only calls with a context in scope are flagged, and the test files were already clean.)
+- **GREEN**: the 47 calls were rewritten mechanically from the lint report to `slog.XContext(ctx, ...)`; `go build ./...`, `go vet ./...` clean; `golangci-lint run`: 0 issues; `grep sloglint .golangci.yml` passes. Behaviour-neutral proof: with `slog.XContext(ctx, ` normalised back to `slog.X(`, every deleted line pairs with an identical added line.
+- Files modified: `services/xstockstrat-marketdata/.golangci.yml`, `internal/service/{marketdata_service.go,classification_service.go}`. Not touched (no flagged call): `cmd/server/main.go`, `internal/alpaca/*`, `internal/edgar/*`, `internal/fmp/*`, `internal/finnhub/*`.
+- Deviations: none

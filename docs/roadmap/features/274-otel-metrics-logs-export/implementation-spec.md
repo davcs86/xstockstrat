@@ -537,7 +537,7 @@ grep -q 'telemetry.StopServer' services/xstockstrat-marketdata/cmd/server/main.g
 
 ### Step 14 — service: marketdata: move every slog call with a context in scope to its *Context variant; enforce with sloglint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/.golangci.yml` — modify
