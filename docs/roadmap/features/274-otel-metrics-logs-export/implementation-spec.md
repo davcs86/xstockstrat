@@ -1571,7 +1571,7 @@ cd services/xstockstrat-ui && pnpm run test:unit
 
 ### Step 44 — service: ui: serverLog module bridging server-side logs to the OTel logger; migrate console.* sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/serverLog.ts` — create
