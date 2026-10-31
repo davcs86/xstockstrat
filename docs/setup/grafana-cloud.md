@@ -1,12 +1,10 @@
 # Grafana Cloud & OpenTelemetry Setup
 
-This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. Every deployable workload — the eleven backend/UI services plus the `xstockstrat-agent` MCP server — exports **traces** via OTLP/HTTP when `OTEL_ENABLED=true`.
-
-Metrics and logs are not exported (feature 226).
+This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. Every deployable workload — the eleven backend/UI services plus the `xstockstrat-agent` MCP server — exports **traces, metrics and logs** via OTLP/HTTP (`/v1/traces`, `/v1/metrics`, `/v1/logs`) when `OTEL_ENABLED=true`. The series and log streams, the stream-method exclusion and the optional SDK env vars are listed in `docs/patterns/observability.md` § Exported signals.
 
 In local dev, an `otel-collector` Docker container aggregates and forwards signals. In production (DO App Platform), services push OTLP directly to Grafana Cloud.
 
-The Tempo dashboard and the alert-cleanup file are checked into the repo as the reproducible source of truth — see `packages/otel/dashboards/` and `packages/otel/alerts/`. Steps 6 and 7 below explain how to use them.
+The dashboards and alert rules are checked into the repo as the reproducible source of truth — see `packages/otel/dashboards/` and `packages/otel/alerts/`. Steps 6 and 7 below explain how to use them.
 
 ---
 
@@ -23,7 +21,9 @@ Production (DO App Platform):
 **Collector config:** `packages/otel/otel-collector-config.yaml`
 
 **Signal types sent:**
-- **Traces** — distributed request traces across gRPC service calls
+- **Traces** — distributed request traces across gRPC service calls (Tempo)
+- **Metrics** — `rpc_server_duration_milliseconds_*` (gRPC services), `mcp_tool_duration_milliseconds_*` (agent), `http_server_duration_milliseconds_*` (UI) (Mimir / Prometheus)
+- **Logs** — each service's application log records, stream `{service_name="<name>"}` (Loki)
 
 **Resource attributes attached to all telemetry:**
 

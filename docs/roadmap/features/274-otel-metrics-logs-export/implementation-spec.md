@@ -1969,7 +1969,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 57 — docs: FR-7: docs state the three exported signals (observability, grafana-cloud, product-features, collector, packages/otel)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/, packages/otel/`
 **Files**:
 - `docs/patterns/observability.md` — modify
