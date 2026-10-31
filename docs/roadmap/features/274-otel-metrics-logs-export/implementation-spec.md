@@ -893,7 +893,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 24 — service: agent: meter + logger providers and logging bridge (no gRPC server, no RPC recorder)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify

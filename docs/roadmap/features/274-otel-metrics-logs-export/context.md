@@ -386,3 +386,5 @@ Analysis telemetry tests (shared suite + AC-3 RunBacktest log/trace correlation 
 Analysis live_loop: `log.info("live_loop: cycle complete")` after a successful _run_cycle only. Verified ast, ruff, grep; full suite 1496 passed (tests for step 23 written first; RED captured: success-case test failed before this edit).
 
 Analysis heartbeat tests: success => exactly one record; error => cycle error, none; locked => skipping, none. RED: success case failed pre-step-22, the other two (negative) cases pass by construction. GREEN 1496 passed, cov 90.22% (floor 40).
+
+Agent: MeterProvider + LoggerProvider + logging bridge (instrumentation.logging handler, opentelemetry* filter) added to init_telemetry; no recorder/interceptor (client only); dependency + uv.lock. Verified ast, ruff, uv lock --check, grep; 598 existing tests pass.
