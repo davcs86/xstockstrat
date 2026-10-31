@@ -866,7 +866,7 @@ grep -q 'live_loop: cycle complete' services/xstockstrat-analysis/app/engine/liv
 
 ### Step 23 — test: analysis: heartbeat emitted once per successful cycle, not on error or skip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify

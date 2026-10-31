@@ -384,3 +384,5 @@ Analysis: same telemetry.py as indicators (default "analysis"), main.py intercep
 Analysis telemetry tests (shared suite + AC-3 RunBacktest log/trace correlation using the real servicer harness). RED: 16 failed on pre-step-16 tree; the AC-3 test passes pre-implementation because it exercises only the already-installed instrumentation handler against the servicer (no app.telemetry dependency), as a guard for the real log line. GREEN 1493 passed, cov 90.04% (floor 40).
 
 Analysis live_loop: `log.info("live_loop: cycle complete")` after a successful _run_cycle only. Verified ast, ruff, grep; full suite 1496 passed (tests for step 23 written first; RED captured: success-case test failed before this edit).
+
+Analysis heartbeat tests: success => exactly one record; error => cycle error, none; locked => skipping, none. RED: success case failed pre-step-22, the other two (negative) cases pass by construction. GREEN 1496 passed, cov 90.22% (floor 40).

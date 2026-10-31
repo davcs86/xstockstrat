@@ -1610,3 +1610,58 @@ class TestStoredZeroAlertThrottle:
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
         await loop._eval_pair(defn, "AAPL", throttle=0)
         loop._notify.EmitAlert.assert_awaited_once()
+
+
+class _StopLoop(BaseException):
+    """Ends run_forever after one iteration; not an Exception so the loop's handler can't eat it."""
+
+
+class TestLiveLoopHeartbeat:
+    """Feature 274 @AC-3: `live_loop: cycle complete` is the liveness signal for the alert."""
+
+    @staticmethod
+    def _one_iteration(monkeypatch):
+        calls = []
+
+        async def _sleep(_seconds):
+            calls.append(_seconds)
+            if len(calls) > 1:
+                raise _StopLoop
+
+        monkeypatch.setattr(live_loop_module.asyncio, "sleep", _sleep)
+
+    @staticmethod
+    def _heartbeats(caplog):
+        return [r for r in caplog.records if r.getMessage() == "live_loop: cycle complete"]
+
+    @pytest.mark.asyncio
+    async def test_successful_cycle_logs_exactly_one_heartbeat(self, monkeypatch, caplog):
+        loop = _make_loop()
+        loop._run_cycle = AsyncMock()
+        self._one_iteration(monkeypatch)
+        with caplog.at_level(logging.INFO), pytest.raises(_StopLoop):
+            await loop.run_forever()
+        loop._run_cycle.assert_awaited_once()
+        assert len(self._heartbeats(caplog)) == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_cycle_logs_error_not_heartbeat(self, monkeypatch, caplog):
+        loop = _make_loop()
+        loop._run_cycle = AsyncMock(side_effect=RuntimeError("boom"))
+        self._one_iteration(monkeypatch)
+        with caplog.at_level(logging.INFO), pytest.raises(_StopLoop):
+            await loop.run_forever()
+        assert self._heartbeats(caplog) == []
+        assert "live_loop: cycle error: boom" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_skipped_cycle_logs_skipping_not_heartbeat(self, monkeypatch, caplog):
+        loop = _make_loop()
+        loop._run_cycle = AsyncMock()
+        self._one_iteration(monkeypatch)
+        async with loop._lock:
+            with caplog.at_level(logging.INFO), pytest.raises(_StopLoop):
+                await loop.run_forever()
+        loop._run_cycle.assert_not_awaited()
+        assert self._heartbeats(caplog) == []
+        assert "live_loop: previous cycle still running — skipping" in caplog.text
