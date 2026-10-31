@@ -1757,7 +1757,7 @@ test -f packages/otel/produced-signals.tsv   # fails before the step
 
 ### Step 50 — test: guard tests: registry allowlist (AC-8), producer-literal drift, Part 2 cases removed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify
