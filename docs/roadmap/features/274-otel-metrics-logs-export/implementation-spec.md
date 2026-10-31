@@ -2032,7 +2032,7 @@ bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-
 
 ### Step 59 — docs: PR-B teardown: context-constitution refresh scoped to touched files; final guard run
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/, packages/otel/`
 **Files**:
 - `docs/roadmap/features/274-otel-metrics-logs-export/context.md` — modify (append)

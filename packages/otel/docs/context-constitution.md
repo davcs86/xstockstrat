@@ -26,7 +26,7 @@ production pushes OTLP straight to Grafana Cloud). Does not restate documented/C
 |---|---|
 | Grafana Cloud OTLP exporter (single endpoint, gzip, retry) via `${env:…}` | `otel-collector-config.yaml#otlphttp/grafana (~L49-63)` |
 | Prod has no collector; services push OTLP direct to Grafana Cloud | `otel-collector-config.yaml#no collector deployment is needed there (~L18-19)` |
-| Alert-rule cleanup and the Tempo dashboard (purpose, import, removed assets) | `alerts/README.md`, `dashboards/README.md` |
+| Alert rules and dashboards (purpose, import, substitutions, the produced-signals registry) | `alerts/README.md`, `dashboards/README.md`, `produced-signals.tsv` |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the
