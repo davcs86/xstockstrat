@@ -2001,7 +2001,7 @@ bash scripts/check-otel-produced-signals.sh
 
 ### Step 58 — docs: FR-7: constitution rows (PLAT-3, OTEL-1/OTEL-2) and the findings rows marked RESOLVED (feature 274)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/, packages/otel/docs/`
 **Files**:
 - `docs/context-constitution.md` — modify
