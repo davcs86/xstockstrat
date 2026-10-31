@@ -1659,7 +1659,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 47 — docs: PR-A teardown: reconcile service-level context files and record the doc-drift waiver
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/*/CLAUDE.md, services/*/docs/`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify
