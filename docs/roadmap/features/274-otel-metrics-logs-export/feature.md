@@ -58,6 +58,10 @@ re-run /sdd-spec if the registry changes.)_
 | Service owner (`xstockstrat-config`) | Secret redaction on the OTLP log edge; WatchConfig stream stability |
 | Service owner (`xstockstrat-ui`) | Connect-RPC call safety; no secret values logged; BFF recorder wrapping |
 
+## Scenario Promotion
+
+All 22 `@AC-*` scenarios were promoted (C-16) at integration on 2026-10-31: 13 into per-service suites (`services/xstockstrat-{trading,analysis,ledger,config,portfolio,marketdata,identity,indicators,agent,ui}/acceptance/otel-metrics-logs-export.feature`) and 9 into `docs/sdd/business-rules/platform.feature`, each tagged `@feature-274`. 250 `@AC-3` is superseded by 274 `@AC-9` (operator-signed CHANGE); a comment block in `platform.feature` records it.
+
 ## Next Action
 
 Merge PR-B, then the operator decides the production flip (`OTEL_ENABLED` in `.do/app.yaml`) using the G1 cost figures (Loki bytes/day is still unmeasured); `/promote` flips the feature to `launched` and promotes the `@AC-*` scenarios (C-16).

@@ -672,3 +672,114 @@ Feature: Platform-wide guarantees
     Then each signal type it says a workload emits (traces, metrics, logs) has an exporter in every runtime's telemetry module, or the claim is scoped to the workloads that have one
     And each metric series, log stream or datasource it says an alert or dashboard reads is in, or holds, the produced-signal set of AC-1
     And docs/setup/grafana-cloud.md does not state that every workload "emits traces, metrics, and logs via OTLP" while no runtime exports metrics or logs
+
+  # ─── otel metrics + logs export (feature 274) ──────────────────────────────
+  # Feature 274 extends 226 @AC-1 (traces) to metrics and logs, and supersedes parts of 250:
+  #  - 250 @AC-1/@AC-2: only their Given sentence "that set holds no PromQL metric name and no Loki log
+  #    stream" is stale; their Then clauses are preserved and extended by 274 @AC-8 and @AC-14.
+  #  - 250 @AC-3 is CHANGED by 274 @AC-9 (operator-signed C-16 CHANGE, 274 context.md R1 gate, 2026-10-21):
+  #    the docs now state three signals. Read the 250 scenario as superseded by 274 @AC-9.
+
+  @AC-2 @FR-2 @regression @feature-274
+  Scenario Outline: Every gRPC backend records the server duration histogram with its status code
+    Given <service> runs with OTEL_ENABLED="true"
+    When a client calls one of its unary RPCs and the handler returns gRPC status NOT_FOUND (5)
+    Then the next metric export contains a histogram data point for that method with rpc.grpc.status_code=5
+    And in Grafana Cloud the series rpc_server_duration_milliseconds_count{service_name="<name>",rpc_grpc_status_code="5"} increases by 1
+    And rpc_server_duration_milliseconds_bucket{service_name="<name>"} exists, which is the same series name the alert rules and dashboards query
+
+    Examples:
+      | service                | name        |
+      | xstockstrat-trading    | trading     |
+      | xstockstrat-portfolio  | portfolio   |
+      | xstockstrat-marketdata | marketdata  |
+      | xstockstrat-indicators | indicators  |
+      | xstockstrat-ingest     | ingest      |
+      | xstockstrat-analysis   | analysis    |
+      | xstockstrat-ledger     | ledger      |
+      | xstockstrat-identity   | identity    |
+      | xstockstrat-notify     | notify      |
+      | xstockstrat-config     | config      |
+
+  @AC-8 @FR-6 @regression @feature-274
+  Scenario: Restored alert rules query only produced series
+    Given feature 250 has merged and this feature restores xstk-error-rate-high, xstk-p99-latency-high and the re-derived analysis scoring-stall rule
+    When scripts/check-otel-produced-signals.sh runs in CI
+    Then it exits 0
+    And adding a rule that queries the unproduced metric "rpc_client_bogus_total" makes it exit non-zero
+
+  @AC-9 @FR-7 @regression @feature-274
+  Scenario: Docs state the three exported signals
+    Given docs/patterns/observability.md and docs/setup/grafana-cloud.md after this feature
+    When an operator reads the signal list
+    Then both list traces, metrics and logs with the endpoints "/v1/traces", "/v1/metrics" and "/v1/logs"
+    And the root findings row for "metrics and logs are never sent" is marked RESOLVED (feature 274)
+    And the PLAT-3 row of docs/context-constitution.md names the "/v1/metrics" and "/v1/logs" exporters
+    And OTEL-1 and OTEL-2 in packages/otel/docs/context-constitution.md name rpc_server_duration_milliseconds and the service_name Loki stream as produced
+    And packages/otel/CLAUDE.md and the packages/otel findings row for the unproduced RPC metric state the signals as produced
+
+  # AC-1 and AC-10 sample one runtime per language; AC-2 exercises metric export on all 10 gRPC backends.
+
+  @AC-10 @FR-1 @regression @feature-274
+  Scenario Outline: Each runtime language exports metrics with its resource attributes
+    Given <service> runs with OTEL_ENABLED="true", SERVICE_NAME="<name>" and APPLICATION_ENV="staging"
+    When one metric export interval elapses
+    Then the collector receives a POST to "/v1/metrics" whose resource has service.name="<name>", deployment.environment="staging" and platform="xstockstrat"
+
+    Examples:
+      | service                | name       |
+      | xstockstrat-indicators | indicators |
+      | xstockstrat-agent      | agent      |
+      | xstockstrat-notify     | notify     |
+      | xstockstrat-ui         | ui         |
+
+  @AC-11 @FR-3 @regression @feature-274
+  Scenario Outline: Each runtime language bridges its logger to OTLP with trace correlation
+    Given <service> runs with OTEL_ENABLED="true"
+    When it logs a WARN record through <logger> inside an active server span
+    Then the collector receives a POST to "/v1/logs" containing that record with severity WARN
+    And the record's trace_id equals the active span's trace_id
+
+    Examples:
+      | service                | logger           |
+      | xstockstrat-trading    | log/slog         |
+      | xstockstrat-agent      | Python logging   |
+      | xstockstrat-identity   | winston          |
+      | xstockstrat-ui         | the server logger |
+
+  @AC-14 @FR-6 @regression @feature-274
+  Scenario: Restored mute timing and dashboards reference only produced series
+    Given feature 250 has merged and this feature's packages/otel assets are applied
+    When packages/otel/alerts/ and packages/otel/dashboards/*.json are inspected
+    Then the mute timing "outside-us-market-hours" exists and is referenced by the re-derived analysis scoring-stall rule
+    And the service-health dashboard's $service variable queries rpc_server_duration_milliseconds_count
+    And scripts/check-otel-produced-signals.sh reports 0 panel exprs targeting an unproduced series
+
+  # Added by /sdd-design (2026-10-21, design.md § Acceptance additions)
+
+  @AC-15 @FR-2 @regression @feature-274
+  Scenario: Python and Node RPC recorders satisfy the shared status vectors
+    Given scripts/testdata/rpc-status-vectors.json with vectors "ok", "abort NOT_FOUND", "unhandled ValueError", "bare Exception", "node error without code", "node string code" and "ERROR status only"
+    When each vector's span is ended through the Python recorder and through the Node recorder
+    Then each recorded rpc.grpc.status_code equals the vector's expected code (0, 5, 2, 2, 2, 2, 2)
+    And every histogram data point uses bucket boundaries [0,5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000]
+
+  @AC-17 @FR-6 @regression @feature-274
+  Scenario: The guard pins the proto-derived stream exclusion on every restored selector
+    Given packages/otel/alerts/alert-rules.yaml restored by this feature
+    When a rule's rpc_server_duration_milliseconds_sum selector omits the rpc_method stream matcher
+    Then scripts/check-otel-produced-signals.sh exits non-zero
+    And adding "rpc StreamFoo(Req) returns (stream Resp);" to a proto without updating the matcher also makes it exit non-zero
+
+  @AC-19 @FR-1 @regression @feature-274
+  Scenario Outline: Metrics and logs honour the path-prefixed gateway and both header forms
+    Given <service> runs with OTEL_ENABLED="true", OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:<port>/otlp" and OTEL_EXPORTER_OTLP_HEADERS="<headers>"
+    When it records one metric and one log record and exports
+    Then the receiver gets POST "/otlp/v1/metrics" and POST "/otlp/v1/logs", each with Authorization "Basic dGVzdDprZXk="
+
+    Examples:
+      | service                | headers                                  |
+      | xstockstrat-trading    | Authorization=Basic dGVzdDprZXk=         |
+      | xstockstrat-analysis   | Authorization=Basic%20dGVzdDprZXk%3D     |
+      | xstockstrat-ledger     | Authorization=Basic dGVzdDprZXk=         |
+      | xstockstrat-ui         | Authorization=Basic%20dGVzdDprZXk%3D     |
