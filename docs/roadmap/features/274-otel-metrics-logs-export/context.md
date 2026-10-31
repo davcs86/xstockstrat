@@ -327,3 +327,10 @@
 - Verification: `go build ./...`, `go vet ./internal/telemetry/... ./cmd/...` clean; golangci-lint v2.14.0 0 issues; existing telemetry tests pass with the new signature; discriminating check passes.
 - Files modified: `services/xstockstrat-portfolio/internal/telemetry/{otel.go,logbridge.go,shutdown.go,otel_test.go}`, `cmd/server/main.go`, `go.mod`, `go.sum`
 - Deviations: none (`shutdown.go` is cloned from trading *after* Deviation 3, so it already routes a failed final flush through `otel.Handle`)
+
+### Step 9 — portfolio: telemetry tests — metrics/logs export, status code, bridge, shutdown (Go) [done]
+- Tests are trading's step-5 tests verbatim apart from the expected `service.name` (`portfolio`); portfolio's original `otel_test.go` was identical to trading's modulo the service name, so nothing portfolio-specific was lost.
+- **RED** (accepted build-failure RED): with `otel.go` and `cmd/server/main.go` restored from `a937f47e` (pre-step-8) and `logbridge.go`/`shutdown.go` moved aside, `go test ./internal/telemetry/...` fails to build: `assignment mismatch: 3 variables but Init returns 2 values`, `undefined: WrapLogHandler`, `undefined: serverMetricViews`. Source restored from HEAD.
+- **GREEN**: 12 tests pass under `-race` (resource trio, traces and metrics+logs export under both header forms, resource attributes on the metric request, `rpc.server.duration` with `rpc.grpc.status_code=5` and the dropped siblings absent, trace correlation, failure visibility without recursion, disabled mode, the four `StopServer` cases). Full suite `-race`: no failures; CI-style coverage total 68.6% (floor 40); golangci-lint v2.14.0 0 issues; `grep telemetry.StopServer cmd/server/main.go` passes.
+- Files modified: `services/xstockstrat-portfolio/internal/telemetry/{otel_test.go,shutdown_test.go}`, `go.mod`/`go.sum` (tidy)
+- Deviations: none

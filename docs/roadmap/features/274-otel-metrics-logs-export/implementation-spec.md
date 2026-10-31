@@ -349,7 +349,7 @@ test -f services/xstockstrat-portfolio/internal/telemetry/logbridge.go && test -
 
 ### Step 9 — test: portfolio: telemetry tests — metrics/logs export, status code, bridge, shutdown (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/telemetry/otel_test.go` — modify
