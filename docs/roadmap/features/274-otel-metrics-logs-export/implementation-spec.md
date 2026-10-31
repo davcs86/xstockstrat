@@ -1190,7 +1190,7 @@ cd services/xstockstrat-identity && pnpm run lint
 
 ### Step 33 — test: identity: telemetry tests — export paths, status vectors, lazy histogram, log bridge, shutdown (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/telemetry.export.test.ts` — modify
@@ -2099,4 +2099,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 28 — `shutdownTelemetry()` calls `sdk.shutdown()`; Step 30 — set `OTEL_METRIC_EXPORT_INTERVAL` and expect a flush on shutdown.
 - **Actual**: `@opentelemetry/sdk-metrics` 1.25.1's `PeriodicExportingMetricReader.onShutdown()` clears its timer and shuts the exporter down but exports nothing, so with the 60 s default interval a SIGTERM would silently drop all unexported metrics; and an explicit reader ignores `OTEL_METRIC_EXPORT_INTERVAL` (only the env-built reader reads it). `shutdownTelemetry()` now awaits `MeterProvider.forceFlush()` before `sdk.shutdown()`, and `metricIntervalOptions()` passes `OTEL_METRIC_EXPORT_INTERVAL`/`OTEL_METRIC_EXPORT_TIMEOUT` to the reader. Residual: while the resource's async attributes are still pending (the first milliseconds after start) the reader exports without awaiting, so a flush that early can return before delivery; a SIGTERM that early loses at most startup-time points.
 - **Disposition**: gap-protocol default (fix now): `src/telemetry.ts` changed under Step 30 (outside its Files list), the identity/notify/config/UI clones inherit it. Tests: Step 30's shutdown-flush test proves the flush; a 200 ms settle delay in the child models a long-running service.
+
+### Deviation 9 — The winston OTLP transport lost severity under the dev (colorize) format (found by the identity AC-11 test)
+- **Spec said**: Step 29/32 — `logger.add(new OpenTelemetryTransportV3())`; "Winston levels map to OTel severity inside the transport".
+- **Actual**: with the non-production format (`combine(colorize(), simple())`) `colorize()` rewrites `info.level` to an ANSI-wrapped string before any transport runs; the transport's level map then misses, so the exported record had no `severityNumber` and a `severityText` of `\u001b[33mwarn\u001b[39m`. The transport now carries its own `format` that restores `info[Symbol.for('level')]` on the transport's copy of `info`, so the stdout line is untouched and the OTLP severity is correct in both formats.
+- **Disposition**: gap-protocol default (fix now): `logger.ts` fixed in ledger (committed in Step 29) and identity (Step 32) under Step 33; the notify and config clones start from the fixed file. The ledger export test gained the AC-11 correlation test so ledger is covered as well.
 

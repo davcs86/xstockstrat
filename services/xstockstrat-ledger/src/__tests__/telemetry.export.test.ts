@@ -149,6 +149,30 @@ test('bridges a winston record to /otlp/v1/logs, and exporter failures stay off 
     assert.ok(!r.body.includes('OTLPExporterError'), 'export failure leaked into logs');
 });
 
+// AC-11: a log written inside an active span is correlated to it and keeps WARN severity.
+test('a WARN logged inside an active span is exported with WARN severity and the span trace id', async () => {
+  const { trace } = await import('@opentelemetry/api');
+  const { getLogger } = await import(LOGGER);
+  const logger = getLogger('ledger');
+  let traceId = '';
+  trace.getTracer('t').startActiveSpan('s', (span) => {
+    traceId = span.spanContext().traceId;
+    logger.warn('correlated-line');
+    span.end();
+  });
+  const has = (r: Received) => r.body.includes('correlated-line');
+  assert.ok(await waitFor(() => at('/v1/logs').some(has)), 'receiver got no /v1/logs request');
+  const records = at('/v1/logs')
+    .filter(has)
+    .flatMap((r) => JSON.parse(r.body).resourceLogs)
+    .flatMap((rl: any) => rl.scopeLogs)
+    .flatMap((sl: any) => sl.logRecords)
+    .filter((l: any) => JSON.stringify(l).includes('correlated-line'));
+  assert.equal(records.length, 1);
+  assert.equal(records[0].traceId, traceId);
+  assert.equal(records[0].severityNumber, 13);
+});
+
 // AC-4: the stdout line is byte-identical with and without the OTLP transport.
 test('the stdout line is unchanged by the OTLP log transport', async () => {
   const { getLogger } = await import(LOGGER);

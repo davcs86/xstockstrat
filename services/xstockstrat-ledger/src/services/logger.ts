@@ -16,7 +16,13 @@ function attachOtlpLogTransport(logger: Logger): Logger {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { OpenTelemetryTransportV3 } = require('@opentelemetry/winston-transport');
-    logger.add(new OpenTelemetryTransportV3());
+    // colorize() rewrites info.level with ANSI codes, which the transport cannot map to a severity;
+    // this runs on the transport's own copy, so the stdout line is untouched.
+    const plainLevel = format((info) => {
+      info.level = String(info[Symbol.for('level')] ?? info.level);
+      return info;
+    });
+    logger.add(new OpenTelemetryTransportV3({ format: plainLevel() }));
   } catch (err) {
     console.warn('[otel] log bridge unavailable — logs stay on stdout:', err);
   }
