@@ -60,3 +60,25 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - **Untracked removal scope: "Remove strictly as amended"** — the backfill removes every SIGNAL entry with no `direction='watchlist'` signal row under the owner's OWN user id, **knowingly accepting the adversary's warning** that pre-feature-224 signal rows were reassigned to `SEED_USER_ID` (ingest migration `013_signal_ownership_templates.up.sql:70`) so real users' entries can appear untracked while their signal is still live (this contradicts FR-3 for those users). Rejected options: legacy-owner match that never removes (adversary-recommended) and list-only. Mitigation kept inside the choice: REPORT must print per-owner counts and flag owners that have zero signal rows under any owner id, and removal remains bounded by `--expect-untracked N` with the exact rows listed for the DBA.
 - **No pin-on-add:** a MANUAL add of an existing SIGNAL entry stays first-writer-wins (no change to feature 127); recorded as residual risk.
 - Gate: **run a fourth round** — not yet approved.
+
+## Session 2026-10-31 — sdd-design (COMPLETION)
+
+- Phase 0 Recon: wrote recon.md (services: portfolio, ingest, agent, analysis, ui; Premise Verdict: confirmed for the portfolio signal watchlist, refuted for opportunities, by-design for ingest rows; key reuse patterns: `RemoveSymbols` idempotent delete shape, ingest/analysis background-loop precedents, operator-CLI REPORT/APPLY pattern from `legacy-formula-authors.md`).
+- Phase 1 Grilling: 4 rounds (quick mode, user-extended; hard cap 5 not reached). Chosen approach: agent stamps `signal_provenance` on the add → portfolio side table `watchlist_signal_expiry` → in-process never-waiting `SKIP LOCKED` prune loop; one-shot `portfolio backfill-signal-expiry` subcommand marks/seeds the backlog (CLI never deletes bindings). Rejected: analysis sweeper / portfolio→ingest edge / lazy prune / expiry column on bindings / FK cascade / blocking prune / CLI deleting bindings / `reason` column / pause switch / pin-on-add / mark grace / legacy-owner match (user declined) / list-only REPORT.
+- Constitution rules touched: C-03, C-04, C-05, C-07, C-08, C-09, C-10, C-12/13, C-14, C-15, C-16, C-18, F-01, F-02, F-04, F-06, F-07, P-03. Floor breaches: none in any of the 4 adversary rounds.
+- Round 4 adversary fixes folded at the gate (user chose "Approve design"): APPLY statements recompute from ingest at statement time and skip rows whose class changed (closes the ingest+agent-add race); `--legacy-owner` required in both modes, no env fallback (portfolio runtime has no `SEED_USER_ID`); runbook invokes the subcommand from a workstation (distroless image has no shell); ledger owner via request `user_id` (+ `x-trace-id` metadata); provenance only with a dated `valid_until` (open-ended ⇒ no provenance ⇒ untrack); UI e2e asserts the existing `No symbols` line (no `EmptyState` change); `lock_timeout=500ms` instead of a 2 s wall clock; AC-14 split into SetConfig rows vs clamp rows; AC-17 requires a live rescuing signal; new AC-18 for provenance validation.
+- User sign-offs recorded in prior sections: FR-2/FR-3 narrowed; backfill; strategy-bound pruned; silent UI; add-then-prune; failed renewal accepted; untrack-on-add; pause switch cut; strict untracked removal incl. the pre-224 `SEED_USER_ID` risk; no pin-on-add. Gate-4 answer: **no mark grace period**.
+- Product spec + acceptance.feature rewritten to match design.md (FR-1..FR-7, AC-1..AC-18; AC-1..AC-7 IDs kept, Given/Then reworded pre-implementation only).
+- Status: draft → design-approved. Skipped `/sdd-review product-spec` by operator choice (draft gate, round 0).
+
+## Open Threads (carry into /sdd-spec; each with target step)
+
+- [ ] Strict untracked removal deletes live pre-224 legacy-owner entries; REPORT flags `NO_OWN_SIGNALS`/`legacy_live`; undo = manual re-add — runbook + backfill step (S10/S14).
+- [ ] No grace period; APPLY → tick ≤300 s irreversible; emergency stop = `DELETE … WHERE signal_id IS NULL` / `TRUNCATE`, human must act within one interval — runbook (S14).
+- [ ] Failed/deduplicated renewal add ⇒ early prune until next non-deduplicated ingest — agent step + docs (S12/S14).
+- [ ] Signals outside the agent path / buy-sell signals never keep an entry alive — docs (S14).
+- [ ] MANUAL add does not pin; replace-all re-stamping MANUAL makes an entry permanently immune — `mcp-tools.md` sentence (S14).
+- [ ] Add-then-prune of an already-expired signal — docs (S14).
+- [ ] Ledger event lost on crash after commit; pasted REPORT is the record for backfill removals — portfolio step (S6/S7).
+- [ ] Verify at /sdd-spec: `ingest.newsletter_signals.id` is BIGINT; `Timestamp` import in portfolio.proto; `ledger` owner semantics for request `user_id`; `.do/app*.yaml` portfolio block for any env the subcommand needs; `docs/runbooks/CLAUDE.md` index row; agent test location.
+- [ ] Re-verify migration number `018` (portfolio) and proto field `4` are still free on `main-dev` at /sdd-spec time; feature numbers may collide again with unmerged branches.
