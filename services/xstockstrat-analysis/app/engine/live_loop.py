@@ -81,6 +81,11 @@ _TRUNCATION_COUNTER = metrics.get_meter(__name__).create_counter(
 )
 
 
+def _pair_label(key: tuple | None) -> str:
+    """Rotation cursor ``(created_at, strategy_id, symbol)`` rendered as ``strategy_id/symbol``."""
+    return "start" if key is None else f"{key[1]}/{key[2]}"
+
+
 def strategy_symbols(definition) -> list[str]:
     """The per-strategy symbol universe from ``signal_params.symbols`` (empty if unset).
 
@@ -337,6 +342,7 @@ class LiveEvaluationLoop:
             async with self._lock:
                 try:
                     await self._run_cycle()
+                    log.info("live_loop: cycle complete")
                 except Exception as e:  # never let one bad cycle kill the loop
                     log.error("live_loop: cycle error: %s", e)
 
@@ -433,21 +439,31 @@ class LiveEvaluationLoop:
         n = min(max_pairs, len(pairs))
         if n == 0:
             return  # max_pairs misconfigured to 0 → skip without touching the cursor
-        if len(pairs) > max_pairs:
-            # A fleet larger than the per-cycle budget rotates across cycles, not silently dropped.
-            log.warning(
-                "live_loop: %d live (strategy,symbol) pairs exceed "
-                "max_strategies_per_cycle=%d — evaluating %d this cycle, rotating the rest",
-                len(pairs),
-                max_pairs,
-                n,
-            )
-            _TRUNCATION_COUNTER.add(len(pairs) - max_pairs)
         start = bisect_right(pairs, self._cursor_key) if self._cursor_key is not None else 0
         if start >= len(pairs):
             start = 0  # cursor past the end (fleet shrank) → resume at the oldest
+        if len(pairs) > max_pairs:
+            # A fleet larger than the per-cycle budget rotates across cycles, not silently dropped.
+            log.warning(
+                "live_loop: %d live (strategy,symbol) pairs across %d strategies exceed "
+                "max_strategies_per_cycle=%d — evaluating %d this cycle (window %d..%d of %d%s, "
+                "resuming after %s), rotating the rest; full rotation takes ~%d cycles",
+                len(pairs),
+                len({(r[3].user_id, r[1]) for r in records}),
+                max_pairs,
+                n,
+                start,
+                (start + n - 1) % len(pairs),
+                len(pairs),
+                ", wrapping" if start + n > len(pairs) else "",
+                _pair_label(self._cursor_key),
+                -(-len(pairs) // n),
+            )
+            _TRUNCATION_COUNTER.add(len(pairs) - max_pairs)
         last_idx = None
         dataless: list = []
+        errors = 0
+        t0 = time.monotonic()
         for i in range(n):
             idx = (start + i) % len(pairs)
             _ca, strategy_id, symbol, definition, deny_entry = records[idx]
@@ -459,8 +475,18 @@ class LiveEvaluationLoop:
                 ):
                     dataless.append((strategy_id, symbol))
             except Exception as e:
+                errors += 1
                 log.warning("live_loop: (%s,%s) error: %s — continuing", strategy_id, symbol, e)
         self._cursor_key = pairs[last_idx]
+        log.info(
+            "live_loop: evaluated %d/%d pairs in %.1fs (errors=%d, no_bars=%d); cursor now at %s",
+            n,
+            len(pairs),
+            time.monotonic() - t0,
+            errors,
+            len(dataless),
+            _pair_label(self._cursor_key),
+        )
         if dataless:
             # One summarized WARN per cycle with a bounded sample (a per-pair WARN would flood a
             # large fleet); data gaps otherwise surface only in RPC response fields.

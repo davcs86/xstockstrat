@@ -425,9 +425,15 @@ run gains a `warnings` entry `fundamentals fetch failed for <SYM> — rerun`.
 | Unknown `strategy_id` | `strategy not found` (NOT_FOUND) from analysis |
 | `start` after `end` | `ValueError` raised by the client before any RPC |
 | Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
+| Backtest evaluation exceeds `analysis.backtest.max_duration_seconds` (default 300 s; 0 = no limit) | `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` — narrow the range or symbols; do not retry immediately (the compute thread keeps running) |
+| marketdata re-served a bar page, or bar pagination hit its page cap | `FAILED_PRECONDITION` `backtest bar series incomplete: …` — retrying will not fix it; report it |
 | History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
 | Fundamentals-requiring strategy on a symbol with no usable fundamentals (e.g. an ETF) | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` + `fundamentals_gap` on that symbol (not an RPC error) |
 | Analysis service unreachable | `httpx` connection error propagated |
+
+Through the agent, the MCP 60 s tool cap fires before any server deadline above 60 s (the default is
+300 s), so agent users see the `backtest exceeded Ns deadline` message only when the limit is below
+60 s, and only once feature 273's error pass-through lands.
 
 ---
 
@@ -1404,7 +1410,7 @@ credential field. Offline accounts are **not** created here — use `manage_offl
 | `account_id` | string | update/deregister/resume | The broker account to act on |
 | `display_name` | string | `register` | Name for the new account |
 | `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
-| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…,"signature_key":…,"encryption_key":…,"dh_prime":…}`, the last three as PEM strings) |
 | `reason` | string | no | Operator-supplied context for why the halt is being cleared (resume only; default `""`) |
 
 - **register** → `{"account": …}` with `credential_status`; the submitted credentials are never

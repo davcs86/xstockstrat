@@ -12,7 +12,7 @@
     "proto:gen": "cd ../../packages/proto && buf generate",
     "test": "tsc && node --test dist/__tests__/*.test.js",
     "test:coverage": "tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js",
-    "test:db": "tsc && node --test dist/__tests__/db/*.test.js",
+    "test:db": "tsc && node --test --test-concurrency=1 dist/__tests__/db/*.test.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write src",
@@ -33,7 +33,14 @@
     "pg": "^8.11.5",
     "uuid": "^9.0.1",
     "winston": "^3.13.0",
-    "pg-cursor": "^2.11.0"
+    "pg-cursor": "^2.11.0",
+    "@opentelemetry/api-logs": "^0.52.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.52.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.52.0",
+    "@opentelemetry/sdk-logs": "^0.52.0",
+    "@opentelemetry/sdk-metrics": "^1.25.0",
+    "@opentelemetry/sdk-trace-base": "^1.25.0",
+    "@opentelemetry/winston-transport": "0.5.0"
   },
   "devDependencies": {
     "@types/node": "^24",

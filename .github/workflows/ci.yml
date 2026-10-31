@@ -99,6 +99,13 @@ jobs:
               - 'scripts/check-context-map.sh'
               - 'docs/**'
               - '**/CLAUDE.md'
+            otel-signals:
+              - 'packages/otel/**'
+              - 'packages/proto/**/*.proto'
+              - 'docs/**'
+              - '.do/**'
+              - 'scripts/check-otel-produced-signals*.sh'
+              - 'scripts/testdata/otel-produced-signals/**'
 
       - name: Print matched filters
         run: |
@@ -793,6 +800,19 @@ jobs:
       - name: Saved-workflow gate tests (no agents, no tokens)
         run: node --test scripts/workflow-tests/*.test.mjs
 
+  otel-signals:
+    name: OTel produced-signal guard
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'otel-signals') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Alert/dashboard queries and observability docs name only exported signals
+        run: bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-signals.test.sh
+
   ledger-guard:
     name: Ledger guard (other features' entries kept)
     needs: changes
@@ -896,6 +916,7 @@ jobs:
       - homelab-render
       - markdown-lint
       - context-map
+      - otel-signals
       - ledger-guard
       - secret-scan
     runs-on: ubuntu-latest
@@ -918,6 +939,7 @@ jobs:
           echo "homelab-render:  ${{ needs.homelab-render.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
+          echo "otel-signals:    ${{ needs.otel-signals.result }}"
           echo "ledger-guard:    ${{ needs.ledger-guard.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
 

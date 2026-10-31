@@ -66,6 +66,7 @@ HONOUR_KEYS = frozenset(
         "analysis.backtest.default_commission_pct",
         "analysis.backtest.default_slippage_pct",
         "analysis.backtest.default_fill_model",
+        "analysis.backtest.max_duration_seconds",
         "analysis.opportunity.signal_rank_weight",
         "analysis.engine.alert_throttle_seconds",
         "analysis.scoring.sharpe_weight",
@@ -111,6 +112,7 @@ ZERO_IS_LEGIT = {
     "analysis.opportunity.startup_jitter_seconds": "0 disables jitter",
     "analysis.fundsignal.retry_seconds": "max(1, …) floor kept, feature-156 @AC-4",
     "analysis.fundsignal.startup_jitter_seconds": "0 disables jitter",
+    "analysis.backtest.max_duration_seconds": "0 = no limit (feature-272 @AC-5)",
 }
 
 _ZERO_SENSITIVE = re.compile(

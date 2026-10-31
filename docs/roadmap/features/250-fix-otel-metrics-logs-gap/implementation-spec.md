@@ -1,6 +1,6 @@
 # Implementation Spec: fix-otel-metrics-logs-gap
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-21
 **Feature**: `docs/roadmap/features/250-fix-otel-metrics-logs-gap/feature.md`
 **Total Steps**: 12
@@ -94,7 +94,7 @@ and logs, so every follow-up citation in this spec points at
 
 ### Step 1 — docs: Verify the 274 follow-up dir is on the 250 branch (marker)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/` (read-only check on `feature/fix-otel-metrics-logs-gap`)
 **Files**:
 - None. Verification only.
@@ -129,7 +129,7 @@ test -f docs/roadmap/features/274-otel-metrics-logs-export/status.md && echo ok 
 
 ### Step 2 — config: Replace every alert rule with `deleteRules`/`deleteMuteTimes`; delete `mute-timings.yaml`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (alerts)
 **Files**:
 - `packages/otel/alerts/alert-rules.yaml` — modify (full rewrite)
@@ -216,7 +216,7 @@ uv run --no-project --with pyyaml python3 -I -c "import yaml;d=yaml.safe_load(op
 
 ### Step 3 — docs: Rewrite `packages/otel/alerts/README.md` (no rules provisioned; fenced removals; follow-up cite)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (docs)
 **Files**:
 - `packages/otel/alerts/README.md` — modify (full rewrite)
@@ -277,7 +277,7 @@ awk '/<!-- otel-guard:removed-assets -->/{i=1;next}/<!-- \/otel-guard:removed-as
 
 ### Step 4 — config: Rewrite `service-health.json` as Tempo-only; delete the other three dashboards
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (dashboards)
 **Files**:
 - `packages/otel/dashboards/service-health.json` — modify (full rewrite, keep `"uid": "xstk-service-health"`)
@@ -367,7 +367,7 @@ Plus the dev-import gate outcome recorded in `context.md`.
 
 ### Step 5 — docs: Rewrite `packages/otel/dashboards/README.md` to the Tempo dashboard (keep the attribute bullet)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (docs)
 **Files**:
 - `packages/otel/dashboards/README.md` — modify (full rewrite)
@@ -431,7 +431,7 @@ grep -c -E 'service\.name' "$f" && grep -c 'deployment.environment' "$f" && grep
 
 ### Step 6 — docs: Correct `docs/setup/grafana-cloud.md` (traces only; fenced cleanup; follow-up cite)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/setup/`
 **Files**:
 - `docs/setup/grafana-cloud.md` — modify
@@ -517,7 +517,7 @@ grep -n -F '.*/PlaceOrder' "$f"
 
 ### Step 7 — docs: Correct the remaining FR-4 one-liners (pattern doc, setup index, launch PDF source, otel CLAUDE.md, collector comments, setup-env)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: docs + `packages/otel` (comments only) + `scripts/` (one `info` string)
 **Files**:
 - `docs/patterns/observability.md` — modify (`:3`)
@@ -611,7 +611,7 @@ shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh
 
 ### Step 8 — docs: Re-ground OTEL-1, retire OTEL-2, NARROW the findings rows
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel` (constitution) + root findings
 **Files**:
 - `packages/otel/docs/context-constitution.md` — modify
@@ -692,7 +692,7 @@ grep -l -E 'docs/roadmap/features/274-otel-metrics-logs-export/' packages/otel/a
 
 ### Step 9 — docs: Teardown, the context-constitution refresh over the touched context files
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: context files touched in Steps 3-8
 **Files**:
 - `packages/otel/CLAUDE.md` — modify (only if the refresh reports grounded drift)
@@ -745,7 +745,7 @@ markdownlint-cli2 --config .markdownlint.yaml packages/otel/CLAUDE.md docs/setup
 
 ### Step 10 — test: `scripts/check-otel-produced-signals.test.sh` with verbatim pre-fix fixtures (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — create
@@ -867,7 +867,7 @@ No coverage threshold applies to bash. The fixture-backed cases are the coverage
 
 ### Step 11 — service: `scripts/check-otel-produced-signals.sh [ROOT]`, the produced-set guard (GREEN)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.sh` — create
@@ -956,7 +956,7 @@ No coverage threshold applies to bash. The fixture-backed cases are the coverage
 
 ### Step 12 — config: Add the dedicated `otel-signals` CI job and wire it into `ci-gate`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/`
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -1012,3 +1012,29 @@ bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation 1 — Branch layout (session branch instead of `feature/fix-otel-metrics-logs-gap`)
+- **Spec said**: work on `feature/fix-otel-metrics-logs-gap`, merging `origin/main-dev` into it (BRANCH SYNC).
+- **Actual**: the harness assigns this session `ccr-4f43fb65-lagupv` (equal to `origin/main-dev` at start), and
+  pushes elsewhere are not permitted. All step commits land on that branch; the single integration PR targets
+  `main-dev` from it. Every 250 artifact was byte-identical between `origin/feature/fix-otel-metrics-logs-gap`
+  and `main-dev`, so no content is missing; the feature branch (51 ahead / 26 behind) is left untouched.
+- **Disposition**: operator-approved layout (AskUserQuestion, 2026-10-30). F-03 is not engaged: no step PR
+  targets `main-dev`.
+
+### Deviation 2 — Step 7 lint tooling (CI-equivalent fallback)
+- **Spec said**: Verification runs `shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh`.
+- **Actual**: neither binary is installed in this environment, so both ran via `uvx --from shellcheck-py shellcheck`
+  and `uvx --from shfmt-py shfmt -d -i 2` (unpinned PyPI wheels, not CI's pinned installs). Both exit 0, and the
+  pre-change `main-dev` copy of the file also exits 0 under the same tools.
+- **Disposition**: CI-equivalent fallback; the `shell-lint` CI job re-runs the real tools on this PR.
+
+### Deviation 3 — Step 11 staged a Step 9 file (wording fix found by the guard)
+- **Spec said**: Step 11's Files is only `scripts/check-otel-produced-signals.sh`; Step 9 owns the context files (Step 9
+  Instruction 3: "the Step 11 guard is the final check" for any refresh rewording).
+- **Actual**: the first guard run on the real tree reported one hit, `AC-3 P2-generic` on line 3 of
+  `packages/otel/docs/context-constitution-findings.md`: the Step 9 refresh stamp said "metrics/logs rows narrowed or
+  resolved", which matches the generic token `metrics.{0,12}logs`. All 58 red cases already passed; the 8 failing cases were
+  green cases tripping on this single hit. The stamp now reads "export-gap rows narrowed or resolved".
+- **Disposition**: operator decision (AskUserQuestion, option "Fix now, expand scope"). One-phrase edit to a file Step 9
+  already owns, staged with Step 11 as a sanctioned F-08 exception for this deviation.

@@ -254,7 +254,9 @@ func runOfflineSync(t *testing.T, payload string) (*syncRecorderDB, []any) {
 	}
 	db := &syncRecorderDB{}
 	svc := &PortfolioService{repo: repository.NewPortfolioRepoWithDB(db), ledger: &fakeLedger{}, cfg: &config.Watcher{}}
-	svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Payload: st})
+	if err := svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Payload: st}); err != nil {
+		t.Fatalf("processPositionSync: %v", err)
+	}
 	w := db.find("offline_account_realized")
 	if w == nil {
 		t.Fatalf("no offline_account_realized write for %s", payload)
@@ -304,7 +306,9 @@ func TestProcessPositionSync_BrokerNeverWritesOfflineState(t *testing.T) {
 		"positions": []interface{}{map[string]interface{}{"symbol": "AAPL", "qty": 1.0, "avg_cost": 1.0}}})
 	db := &syncRecorderDB{}
 	svc := &PortfolioService{repo: repository.NewPortfolioRepoWithDB(db), ledger: &fakeLedger{}, cfg: &config.Watcher{}}
-	svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Payload: st})
+	if err := svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Payload: st}); err != nil {
+		t.Fatalf("processPositionSync: %v", err)
+	}
 	if db.find("offline_account_realized") != nil {
 		t.Error("a broker sync must not write offline state")
 	}

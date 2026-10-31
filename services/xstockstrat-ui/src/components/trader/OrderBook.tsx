@@ -13,6 +13,7 @@ import { Stat } from '../shared/Stat';
 import { CardNotice } from '../shared/CardNotice';
 import { QueryStateMessages } from '../shared/QueryStateMessages';
 import { OrderSideBadge, OrderStatusBadge, formatUsd } from './orderShared';
+import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 
 // ── OrderBook ──────────────────────────────────────────────────────────────
 export function OrderBook({ mode }: { mode: TradingMode }) {
@@ -105,6 +106,7 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
   if (error || !data) return <CardNotice variant="error">Portfolio unavailable</CardNotice>;
 
   const pnlPositive = data.dayPnl >= 0;
+  const pnlUnavailable = data.offlineStateUnavailable;
 
   return (
     <Card>
@@ -127,10 +129,23 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
           />
           <Stat
             label="Day P&L"
-            value={`${pnlPositive ? '+' : ''}$${Number(data.dayPnl).toFixed(2)} (${Number(data.dayPnlPct * 100).toFixed(2)}%)`}
-            valueClass={pnlPositive ? 'text-buy' : 'text-destructive'}
+            value={
+              pnlUnavailable
+                ? PNL_UNAVAILABLE_LABEL
+                : `${pnlPositive ? '+' : ''}$${Number(data.dayPnl).toFixed(2)} (${Number(data.dayPnlPct * 100).toFixed(2)}%)`
+            }
+            valueClass={
+              pnlUnavailable
+                ? 'text-muted-foreground'
+                : pnlPositive
+                  ? 'text-buy'
+                  : 'text-destructive'
+            }
           />
-          <Stat label="Total P&L" value={`$${Number(data.totalPnl).toFixed(2)}`} />
+          <Stat
+            label="Total P&L"
+            value={pnlUnavailable ? PNL_UNAVAILABLE_LABEL : `$${Number(data.totalPnl).toFixed(2)}`}
+          />
         </div>
 
         {data.positions?.length > 0 && (

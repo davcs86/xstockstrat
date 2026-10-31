@@ -19,6 +19,7 @@ import {
   type JwtClaims,
 } from '@/lib/auth';
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
+import { recordBffDuration } from '@/lib/bffMetrics';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
@@ -115,19 +116,36 @@ export function createDispatch(
 ): (req: Request) => Promise<Response> {
   const handlerMap = new Map(router.handlers.map((h) => [prefix + h.requestPath, h]));
 
+  const segment = prefix.split('/')[1];
+
   return async function dispatchConnect(req: Request): Promise<Response> {
+    const startMs = performance.now();
     const pathname = new URL(req.url).pathname;
     const handler = handlerMap.get(pathname);
-    if (!handler) return new Response(null, { status: 404 });
+    if (!handler) {
+      recordBffDuration({ segment, rpcService: 'unmatched', status: 404, startMs });
+      return new Response(null, { status: 404 });
+    }
 
-    const uRes = await handler({
-      httpVersion: '2.0',
-      url: req.url,
-      method: req.method,
-      header: req.headers,
-      body: bodyAsIterable(req.body),
-      signal: req.signal,
-    });
+    // Server-streaming methods resolve on their first message, so only unary calls are timed.
+    const timed = handler.method.methodKind === 'unary';
+    let status = 500;
+    let uRes: Awaited<ReturnType<typeof handler>>;
+    try {
+      uRes = await handler({
+        httpVersion: '2.0',
+        url: req.url,
+        method: req.method,
+        header: req.headers,
+        body: bodyAsIterable(req.body),
+        signal: req.signal,
+      });
+      status = uRes.status;
+    } finally {
+      if (timed) {
+        recordBffDuration({ segment, rpcService: handler.service.typeName, status, startMs });
+      }
+    }
 
     const responseHeaders = new Headers(uRes.header);
     uRes.trailer?.forEach((value, key) => responseHeaders.append(key, value));

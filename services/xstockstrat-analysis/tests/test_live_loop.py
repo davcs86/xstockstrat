@@ -779,6 +779,34 @@ class TestLiveLoopFairShare:
             await loop._run_cycle()
         assert sum("exceed max_strategies_per_cycle" in r.message for r in caplog.records) == 1
 
+    @pytest.mark.asyncio
+    async def test_rotation_logs_window_cursor_and_cycle_summary(self, caplog):
+        loop = _make_loop()
+        self._cfg_max(loop, 2)
+        loop._db.fetch = AsyncMock(
+            return_value=[_live_row("s1", "u1", symbols=["A", "B", "C", "D", "E"])]
+        )
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            pass
+
+        loop._eval_pair = fake_eval
+        with caplog.at_level("INFO"):
+            await loop._run_cycle()  # window 0..1, cursor start
+            await loop._run_cycle()  # window 2..3, resuming after s1/B
+        warns = [r for r in caplog.records if "exceed max_strategies_per_cycle" in r.message]
+        assert all(r.levelname == "WARNING" for r in warns)
+        assert "5 live (strategy,symbol) pairs across 1 strategies" in warns[0].message
+        assert "window 0..1 of 5" in warns[0].message
+        assert "resuming after start" in warns[0].message
+        assert "~3 cycles" in warns[0].message
+        assert "window 2..3 of 5" in warns[1].message
+        assert "resuming after s1/B" in warns[1].message
+        summaries = [r.message for r in caplog.records if "evaluated 2/5 pairs" in r.message]
+        assert len(summaries) == 2
+        assert "errors=0, no_bars=0" in summaries[0]
+        assert "cursor now at s1/D" in summaries[1]
+
 
 class TestLiveLoopOwnerScoped:
     def _wire(self, loop, positions_by_owner, signals=()):
@@ -1610,3 +1638,58 @@ class TestStoredZeroAlertThrottle:
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
         await loop._eval_pair(defn, "AAPL", throttle=0)
         loop._notify.EmitAlert.assert_awaited_once()
+
+
+class _StopLoop(BaseException):
+    """Ends run_forever after one iteration; not an Exception so the loop's handler can't eat it."""
+
+
+class TestLiveLoopHeartbeat:
+    """Feature 274 @AC-3: `live_loop: cycle complete` is the liveness signal for the alert."""
+
+    @staticmethod
+    def _one_iteration(monkeypatch):
+        calls = []
+
+        async def _sleep(_seconds):
+            calls.append(_seconds)
+            if len(calls) > 1:
+                raise _StopLoop
+
+        monkeypatch.setattr(live_loop_module.asyncio, "sleep", _sleep)
+
+    @staticmethod
+    def _heartbeats(caplog):
+        return [r for r in caplog.records if r.getMessage() == "live_loop: cycle complete"]
+
+    @pytest.mark.asyncio
+    async def test_successful_cycle_logs_exactly_one_heartbeat(self, monkeypatch, caplog):
+        loop = _make_loop()
+        loop._run_cycle = AsyncMock()
+        self._one_iteration(monkeypatch)
+        with caplog.at_level(logging.INFO), pytest.raises(_StopLoop):
+            await loop.run_forever()
+        loop._run_cycle.assert_awaited_once()
+        assert len(self._heartbeats(caplog)) == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_cycle_logs_error_not_heartbeat(self, monkeypatch, caplog):
+        loop = _make_loop()
+        loop._run_cycle = AsyncMock(side_effect=RuntimeError("boom"))
+        self._one_iteration(monkeypatch)
+        with caplog.at_level(logging.INFO), pytest.raises(_StopLoop):
+            await loop.run_forever()
+        assert self._heartbeats(caplog) == []
+        assert "live_loop: cycle error: boom" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_skipped_cycle_logs_skipping_not_heartbeat(self, monkeypatch, caplog):
+        loop = _make_loop()
+        loop._run_cycle = AsyncMock()
+        self._one_iteration(monkeypatch)
+        async with loop._lock:
+            with caplog.at_level(logging.INFO), pytest.raises(_StopLoop):
+                await loop.run_forever()
+        loop._run_cycle.assert_not_awaited()
+        assert self._heartbeats(caplog) == []
+        assert "live_loop: previous cycle still running — skipping" in caplog.text

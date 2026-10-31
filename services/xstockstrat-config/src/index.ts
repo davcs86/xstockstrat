@@ -1,4 +1,4 @@
-import { initTelemetry } from './telemetry';
+import { initTelemetry, shutdownTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
@@ -56,7 +56,14 @@ async function main() {
 
   const shutdown = () => {
     log.info('Shutting down config service...');
-    grpcServer.tryShutdown(() => {
+    // Open WatchConfig streams block tryShutdown, so flush telemetry in parallel and force the stop.
+    const flush = shutdownTelemetry();
+    setTimeout(() => {
+      grpcServer.forceShutdown();
+      flush.finally(() => process.exit(0));
+    }, 5000).unref();
+    grpcServer.tryShutdown(async () => {
+      await flush;
       pool.end();
       process.exit(0);
     });

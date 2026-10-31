@@ -298,6 +298,8 @@ _BAR_PAGE_SIZE = 1000
 # max_range_days). Exhausting it RAISES — silently truncating would reintroduce the fixed bug.
 _MAX_BAR_PAGES = 32
 
+_BACKTEST_MAX_DURATION_DEFAULT_S = 300
+
 # PIT fundamentals pager bounds (feature 215): 8 × 200 periods covers decades of filings; a
 # stalled cursor or the cap raises so the loader reports UNKNOWN, never a truncated history.
 _FUND_PAGE_SIZE = 200
@@ -790,6 +792,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
     @owner_scoped
     async def RunBacktest(self, request, context):
+        limit = self._cfg.get_int_present(
+            "analysis.backtest.max_duration_seconds", _BACKTEST_MAX_DURATION_DEFAULT_S
+        )
+        if limit < 0:
+            log.warning(
+                "analysis.backtest.max_duration_seconds=%d is negative — using %ds",
+                limit,
+                _BACKTEST_MAX_DURATION_DEFAULT_S,
+            )
+            limit = _BACKTEST_MAX_DURATION_DEFAULT_S
+        try:
+            async with asyncio.timeout(limit or None) as cm:
+                return await self._run_backtest(request, context, lambda: cm.reschedule(None))
+        except TimeoutError:
+            if not cm.expired():
+                raise
+            await context.abort(
+                grpc.StatusCode.DEADLINE_EXCEEDED, f"backtest exceeded {limit}s deadline"
+            )
+            return None
+        except _BarFetchError as e:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION, f"backtest bar series incomplete: {e}"
+            )
+            return None
+
+    async def _run_backtest(self, request, context, disarm):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
@@ -1131,6 +1160,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
                 formula_errors += 1
                 continue
+            except _BarFetchError:
+                raise
             except grpc.RpcError as e:
                 log.warning("backtest symbol %s failed: %s — skipping", symbol, e)
                 continue
@@ -1271,6 +1302,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             result.warnings.extend(
                 f"fundamentals fetch failed for {sym} — rerun" for sym in fund_unknown
             )
+        # Deadline ends here so persistence always completes; no awaited state-writing call may
+        # move above this disarm().
+        disarm()
         self._backtests[backtest_id] = result
         self._backtests[(caller_user_id, request.strategy_id)] = result
 
@@ -1406,10 +1440,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         than 500 bars silently lost its **newest** bars.
 
         Safety properties (a partial series must never be returned silently):
-        - **Strict cursor monotonicity.** Each page must contribute at least one bar strictly
-          newer than the last one seen. marketdata falls back to ``cursor = start`` on an
-          unparseable page token, re-serving the identical page with the identical token; this
-          turns that infinite loop into a loud failure.
+        - **Strict cursor monotonicity.** A page with no bar strictly newer than the last one
+          seen raises when a token was sent **and** the response re-issues a non-empty token
+          (marketdata falls back to ``cursor = start`` on an unparseable page token, re-serving
+          the identical page); with an empty response token it is EOF.
         - **Page cap.** ``_MAX_BAR_PAGES`` bounds the loop. Exhausting it raises.
 
         A full page with an empty ``next_page_token`` is genuine EOF, not a lost tail:
@@ -1437,8 +1471,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 b for b in page if last_seen is None or (b.time.seconds, b.time.nanos) > last_seen
             ]
             if not fresh:
-                # Either genuine EOF, or a server that re-served an already-consumed page.
-                # Both are terminal; neither should loop.
+                # `page_token` is still the token just sent: a sent token answered by a re-issued
+                # token is a re-served page (raise); any other empty-of-fresh page is EOF.
+                if page_token and resp.page.next_page_token:
+                    raise _BarFetchError(
+                        f"{symbol}: page_token {page_token!r} added no newer bar and "
+                        f"re-issued a cursor ({len(bars)} bars so far) "
+                        "— refusing to return a truncated series"
+                    )
                 return bars
 
             bars.extend(fresh)
@@ -4507,7 +4547,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:  # noqa: BLE001
                 component_series.append(
                     analysis_pb2.ComponentSeries(
-                        ref_name=comp.ref_name, kind=comp.kind, error=str(e)
+                        ref_name=comp.ref_name, kind=comp.kind, error=_component_error_text(e)
                     )
                 )
         return analysis_pb2.GetIndicatorSeriesResponse(
@@ -7196,6 +7236,14 @@ def _strip_dead_signal_params(definition) -> None:
     for key in _DEAD_SIGNAL_PARAM_KEYS:
         if key in fields:
             del fields[key]
+
+
+def _component_error_text(e: Exception) -> str:
+    """User-facing `ComponentSeries.error`: an RpcError's `details()`, never its repr with transport
+    internals."""
+    if isinstance(e, grpc.RpcError):
+        return e.details() or e.code().name
+    return str(e)
 
 
 def _row_to_strategy_definition(

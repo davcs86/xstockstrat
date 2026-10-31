@@ -99,7 +99,7 @@ Namespace: `indicators`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms. `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value. A stored ≤ 0 reads as the default |
+| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms, on top of a fixed `SANDBOX_STARTUP_GRACE_MS` (5000) wall allowance for interpreter + numpy/pandas startup (`app/services/sandbox.py`; not a config key). `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value. A stored ≤ 0 reads as the default |
 | `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228). A stored ≤ 0 reads as the default |
 | `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. A configured `""` is honoured: it denies all imports rather than reverting to this permissive default (feature 173) |
 | `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via `ConfigWatcher.sandbox_max_concurrent()`, which clamps through `int_positive`: a stored ≤ 0 reads as the default. |
@@ -150,7 +150,7 @@ parent is root) → `PR_SET_NO_NEW_PRIVS` → `VmData` baseline probe → expand
   `NO_NEW_PRIVS` must stay set (pyseccomp sets it on load — never disable).
 - **Expanded rlimits**: `RLIMIT_DATA` = measured baseline + `memory_bytes` headroom (memory;
   `RLIMIT_AS` would reject numpy's virtual reservations — INDICATORS-2), `RLIMIT_CPU` =
-  `ceil(timeout_ms/1000)+2`, `RLIMIT_NPROC` = `max_concurrent*16` (fork-bomb bound, derived from
+  `ceil((timeout_ms+SANDBOX_STARTUP_GRACE_MS)/1000)+2` (wall deadline + 2s, so the wall clock ends a runaway as `timeout`), `RLIMIT_NPROC` = `max_concurrent*16` (fork-bomb bound, derived from
   config — F-07), `RLIMIT_FSIZE=0`, `RLIMIT_NOFILE=64`.
 - **BLAS/OMP threads pinned to 1** (`_THREAD_LIMIT_ENV`): numeric libs otherwise spawn one
   buffer-reserving thread per core and overflow the cap.
@@ -231,7 +231,7 @@ uv run python -m app.main
 
 ## Maintenance
 
-`app.maintenance.legacy_authors` reports and repairs `indicators.formulas` rows whose `author` is a legacy username instead of a user id. The owner cannot read those rows, because `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`. An operator runs it by hand. It is not part of the service process. It opens one `asyncpg` connection from a required `DATABASE_URL`, with no fallback, and does not use the `main.py` pool. Report mode writes nothing. Apply mode needs a confirmed plan whose sha256 digest matches. Follow `docs/runbooks/legacy-formula-authors.md` for the full procedure, including DBA sign-off, the pooled `:25061` URL with `DB_PGBOUNCER=true`, and restarting every instance afterwards.
+`app.maintenance.legacy_authors` reports and repairs `indicators.formulas` rows whose `author` is a legacy username instead of a user id. The owner cannot read those rows, because `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`. An operator runs it by hand. It is not part of the service process. It opens one `asyncpg` connection from a required `DATABASE_URL`, with no fallback, and does not use the `main.py` pool. Report mode writes nothing. Apply mode needs a confirmed plan whose sha256 digest matches. `app.maintenance.legacy_authors_ops` wraps it as `report` → `confirm` → `apply` (asyncpg + stdlib only, so it also runs in the DO console and echoes the result before the restart). Follow `docs/runbooks/legacy-formula-authors.md` for the full procedure, including DBA sign-off, the pooled `:25061` URL with `DB_PGBOUNCER=true`, and restarting every instance afterwards.
 
 ```bash
 uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json   # report

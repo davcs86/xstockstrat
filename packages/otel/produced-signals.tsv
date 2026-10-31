@@ -1,0 +1,23 @@
+kind	identifier	producer-path	producer-literal
+metric	rpc_server_duration_milliseconds_count	services/xstockstrat-trading/internal/telemetry/otel.go,services/xstockstrat-indicators/app/telemetry.py,services/xstockstrat-ledger/src/telemetry.ts	rpc.server.duration
+metric	mcp_tool_duration_milliseconds_count	services/xstockstrat-agent/app/tool_metrics.py	mcp.tool.duration
+metric	http_server_duration_milliseconds_count	services/xstockstrat-ui/src/lib/bffMetrics.ts	http.server.duration
+metric	rpc_server_duration_milliseconds_bucket	services/xstockstrat-trading/internal/telemetry/otel.go,services/xstockstrat-indicators/app/telemetry.py,services/xstockstrat-ledger/src/telemetry.ts	rpc.server.duration
+metric	mcp_tool_duration_milliseconds_bucket	services/xstockstrat-agent/app/tool_metrics.py	mcp.tool.duration
+metric	http_server_duration_milliseconds_bucket	services/xstockstrat-ui/src/lib/bffMetrics.ts	http.server.duration
+metric	rpc_server_duration_milliseconds_sum	services/xstockstrat-trading/internal/telemetry/otel.go,services/xstockstrat-indicators/app/telemetry.py,services/xstockstrat-ledger/src/telemetry.ts	rpc.server.duration
+metric	mcp_tool_duration_milliseconds_sum	services/xstockstrat-agent/app/tool_metrics.py	mcp.tool.duration
+metric	http_server_duration_milliseconds_sum	services/xstockstrat-ui/src/lib/bffMetrics.ts	http.server.duration
+loki-service	trading	services/xstockstrat-trading/internal/telemetry/otel.go	return "trading"
+loki-service	portfolio	services/xstockstrat-portfolio/internal/telemetry/otel.go	return "portfolio"
+loki-service	marketdata	services/xstockstrat-marketdata/internal/telemetry/otel.go	return "marketdata"
+loki-service	indicators	services/xstockstrat-indicators/app/telemetry.py	"SERVICE_NAME", "indicators"
+loki-service	ingest	services/xstockstrat-ingest/app/telemetry.py	"SERVICE_NAME", "ingest"
+loki-service	analysis	services/xstockstrat-analysis/app/telemetry.py	"SERVICE_NAME", "analysis"
+loki-service	agent	services/xstockstrat-agent/app/telemetry.py	"SERVICE_NAME", "agent"
+loki-service	ledger	services/xstockstrat-ledger/src/telemetry.ts	?? 'ledger'
+loki-service	identity	services/xstockstrat-identity/src/telemetry.ts	?? 'identity'
+loki-service	notify	services/xstockstrat-notify/src/telemetry.ts	?? 'notify'
+loki-service	config	services/xstockstrat-config/src/telemetry.ts	?? 'config'
+loki-service	ui	services/xstockstrat-ui/src/telemetry.ts	?? 'ui'
+loki-literal	live_loop: cycle complete	services/xstockstrat-analysis/app/engine/live_loop.py	live_loop: cycle complete

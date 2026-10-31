@@ -36,7 +36,7 @@ restate documented/CI-enforced rules (see `## Pointers`).
 | DB pool cap 1 (light DB use — alert history) | `src/index.ts#DB_POOL_MAX (~L39)`; root pool budget |
 | gRPC-only, port 50059 | `CLAUDE.md#Ports (~L19-30)` |
 | mTLS fail-closed boot (`mtls.serverCredentials()`; dials `targetOverride('xstockstrat-config')` and `targetOverride('xstockstrat-identity')`); per-leaf `propagation.ts` deleted (feature 175) — the identity dial forwards the header trio via `adminDirectory.ts#PROPAGATED_HEADERS` (root PLAT-4) | `docs/patterns/inter-service-mtls.md`; `src/mtls.ts`, `src/services/configWatcher.ts`, `src/services/adminDirectory.ts` |
-| OTel gated on `OTEL_ENABLED`, non-fatal init | `src/telemetry.ts#initTelemetry` — `OTEL_ENABLED` gate (~L30), non-fatal `catch` (~L60-61) |
+| OTel gated on `OTEL_ENABLED`, non-fatal init | `src/telemetry.ts#initTelemetry` — `OTEL_ENABLED` gate (~L137), non-fatal `catch` (~L185) |
 | All RPC errors collapse to a bare numeric gRPC code `13` (INTERNAL); `grpc.status` is never imported (house style, harmless deviation) | `src/grpc/notifyServiceImpl.ts` `callback({ code: 13 … })` (e.g. `#emitAlert` ~L115, ~L154, `#markAlertRead` ~L184) |
 
 ---

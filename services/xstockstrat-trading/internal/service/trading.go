@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,6 +90,36 @@ type ibkrCreds struct {
 	AccessToken       string `json:"access_token"`
 	AccessTokenSecret string `json:"access_token_secret"`
 	IBKRAccountID     string `json:"ibkr_account_id"`
+	SignatureKey      string `json:"signature_key"`
+	EncryptionKey     string `json:"encryption_key"`
+	DHPrime           string `json:"dh_prime"`
+}
+
+// validateIBKRCreds rejects an IBKR blob missing any field the LST handshake needs; it names the
+// missing fields only and never echoes a submitted value.
+func validateIBKRCreds(raw string) error {
+	var c ibkrCreds
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return grpcstatus.Errorf(codes.InvalidArgument, "IBKR credentials_json must be a JSON object of string fields")
+	}
+	var missing []string
+	for _, f := range []struct{ name, val string }{
+		{"consumer_key", c.ConsumerKey},
+		{"access_token", c.AccessToken},
+		{"access_token_secret", c.AccessTokenSecret},
+		{"ibkr_account_id", c.IBKRAccountID},
+		{"signature_key", c.SignatureKey},
+		{"encryption_key", c.EncryptionKey},
+		{"dh_prime", c.DHPrime},
+	} {
+		if f.val == "" {
+			missing = append(missing, f.name)
+		}
+	}
+	if len(missing) > 0 {
+		return grpcstatus.Errorf(codes.InvalidArgument, "IBKR credentials_json missing required field(s): %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // TradingService implements business logic for order placement, cancellation,
@@ -255,17 +286,17 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 		// (tagged OFFLINE) so they resolve after a restart; every broker poller skips OFFLINE entries.
 		if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
 			s.brokers[rec.ID] = brokerPoolEntry{client: nil, brokerType: rec.BrokerType, userID: rec.UserID}
-			slog.Info("LoadBrokerPool: loaded offline account", "account_id", rec.ID, "user_id", rec.UserID)
+			slog.InfoContext(ctx, "LoadBrokerPool: loaded offline account", "account_id", rec.ID, "user_id", rec.UserID)
 			continue
 		}
 		plaintext, err := repository.DecryptCredentials(s.encKey, rec.CredentialsEnc)
 		if err != nil {
-			slog.Warn("LoadBrokerPool: decrypt failed, skipping account", "account_id", rec.ID, "error", err)
+			slog.WarnContext(ctx, "LoadBrokerPool: decrypt failed, skipping account", "account_id", rec.ID, "error", err)
 			continue
 		}
 		b, err := s.instantiateBrokerLocked(rec, plaintext)
 		if err != nil {
-			slog.Warn("LoadBrokerPool: instantiate broker failed, skipping account", "account_id", rec.ID, "error", err)
+			slog.WarnContext(ctx, "LoadBrokerPool: instantiate broker failed, skipping account", "account_id", rec.ID, "error", err)
 			continue
 		}
 		s.brokers[rec.ID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType, userID: rec.UserID}
@@ -278,7 +309,7 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 		s.halted[rec.ID] = rec.Halted
 		s.haltReasons[rec.ID] = rec.HaltReason
 		s.haltedMu.Unlock()
-		slog.Info("LoadBrokerPool: loaded account", "account_id", rec.ID, "broker_type", rec.BrokerType, "is_paper", rec.IsPaper)
+		slog.InfoContext(ctx, "LoadBrokerPool: loaded account", "account_id", rec.ID, "broker_type", rec.BrokerType, "is_paper", rec.IsPaper)
 	}
 	return nil
 }
@@ -298,7 +329,7 @@ func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
 	}
 	n := len(orders)
 	s.mu.Unlock()
-	slog.Info("loaded in-flight orders for fill polling", "count", n)
+	slog.InfoContext(ctx, "loaded in-flight orders for fill polling", "count", n)
 	return nil
 }
 
@@ -439,7 +470,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	persistedOffline := false
 	if s.accountRepo != nil {
 		if rec, gErr := s.accountRepo.GetBrokerAccount(ctx, resolvedAccountID); gErr != nil {
-			slog.Warn("placeorder: could not read authoritative broker_type; falling back to pool tag",
+			slog.WarnContext(ctx, "placeorder: could not read authoritative broker_type; falling back to pool tag",
 				"account_id", resolvedAccountID, "error", gErr)
 		} else if rec != nil {
 			persistedOffline = rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE)
@@ -643,7 +674,7 @@ func (s *TradingService) submitOrder(
 	s.mu.Unlock()
 
 	if err := s.repo.UpsertOrder(ctx, order); err != nil {
-		slog.Warn("db upsert order failed", "order_id", orderID, "error", err)
+		slog.WarnContext(ctx, "db upsert order failed", "order_id", orderID, "error", err)
 	}
 
 	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.created", orderID, order.UserId, map[string]interface{}{
@@ -657,7 +688,7 @@ func (s *TradingService) submitOrder(
 			"limit_price": order.LimitPrice, "user_id": order.UserId,
 		})
 		go s.emitApprovalAlert(context.WithoutCancel(ctx), order)
-		slog.Info("order pending approval", "order_id", orderID, "symbol", req.Symbol)
+		slog.InfoContext(ctx, "order pending approval", "order_id", orderID, "symbol", req.Symbol)
 		return order, nil
 	}
 
@@ -680,16 +711,14 @@ func (s *TradingService) submitOrder(
 	}
 	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
-		var netErr net.Error
-		isTimeout := errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
-		if isTimeout {
+		if isUncertainBrokerOutcome(err) {
 			// Uncertain outcome: leave order.Status pre-call and the intent PENDING for reclaim —
 			// don't mark REJECTED, which conflates "definitely rejected" with "unknown".
 			s.persistOrderBestEffort(ctx, order, "broker_timeout")
 			go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.broker_call_uncertain", orderID, order.UserId, map[string]interface{}{
 				"order_id": orderID, "intent_id": intentID, "error": err.Error(),
 			})
-			slog.Warn("broker call uncertain (timeout)", "order_id", orderID, "intent_id", intentID, "error", err)
+			slog.WarnContext(ctx, "broker call uncertain (timeout)", "order_id", orderID, "intent_id", intentID, "error", err)
 			return order, fmt.Errorf("broker submission failed: %w", err)
 		}
 		// Definite, synchronous rejection.
@@ -704,11 +733,11 @@ func (s *TradingService) submitOrder(
 		if ownsIntent {
 			if marshaled, mErr := proto.Marshal(order); mErr == nil {
 				if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, orderID, repository.IntentStateRejected, marshaled); fErr != nil {
-					slog.Warn("finalize order intent (rejected) failed", "intent_id", intentID, "error", fErr)
+					slog.WarnContext(ctx, "finalize order intent (rejected) failed", "intent_id", intentID, "error", fErr)
 				}
 			}
 		}
-		slog.Error("broker rejected order", "order_id", orderID, "error", err)
+		slog.ErrorContext(ctx, "broker rejected order", "order_id", orderID, "error", err)
 		return nil, &brokerRejectedError{err: err}
 	}
 
@@ -742,12 +771,12 @@ func (s *TradingService) submitOrder(
 	}
 
 	if err := s.repo.UpsertOrder(context.WithoutCancel(ctx), order); err != nil {
-		slog.Warn("db upsert after broker submit failed", "order_id", orderID, "error", err)
+		slog.WarnContext(ctx, "db upsert after broker submit failed", "order_id", orderID, "error", err)
 	}
 	if ownsIntent {
 		if marshaled, mErr := proto.Marshal(order); mErr == nil {
 			if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, orderID, repository.IntentStateCompleted, marshaled); fErr != nil {
-				slog.Warn("finalize order intent (completed) failed", "intent_id", intentID, "error", fErr)
+				slog.WarnContext(ctx, "finalize order intent (completed) failed", "intent_id", intentID, "error", fErr)
 			}
 		}
 	}
@@ -757,7 +786,7 @@ func (s *TradingService) submitOrder(
 		"broker_status": brokerOrder.Status, "trading_mode": mode.String(),
 	})
 
-	slog.Info("order submitted to broker", "order_id", orderID, "broker_order_id", brokerOrder.BrokerOrderID,
+	slog.InfoContext(ctx, "order submitted to broker", "order_id", orderID, "broker_order_id", brokerOrder.BrokerOrderID,
 		"trading_mode", mode.String(), "broker_status", brokerOrder.Status)
 	return order, nil
 }
@@ -835,7 +864,7 @@ func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.
 	}
 	if marshaled, mErr := proto.Marshal(order); mErr == nil {
 		if fErr := s.orderIntentRepo.FinalizeIntent(ctx, intentID, orderID, repository.IntentStateCompleted, marshaled); fErr != nil {
-			slog.Warn("finalize offline order intent failed", "intent_id", intentID, "error", fErr)
+			slog.WarnContext(ctx, "finalize offline order intent failed", "intent_id", intentID, "error", fErr)
 		}
 	}
 
@@ -857,6 +886,8 @@ func (s *TradingService) confirmLock(accountID string) *sync.Mutex {
 	}
 	return lk
 }
+
+func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
 
 // deriveOfflineStatus maps a confirmed fill quantity to an order status server-side (never
 // client-supplied): 0 → NEW, 0 < filled < qty → PARTIALLY_FILLED, filled >= qty → FILLED.
@@ -891,10 +922,13 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if req.OrderId == "" {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "order_id is required")
 	}
-	if req.FilledQty < 0 {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be >= 0")
+	if !isFinite(req.FilledQty) || req.FilledQty < 0 {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be a finite number >= 0")
 	}
-	if req.Fees != nil && (*req.Fees < 0 || math.IsNaN(*req.Fees) || math.IsInf(*req.Fees, 0)) {
+	if req.FilledQty > 0 && (!isFinite(req.FilledAvgPrice) || req.FilledAvgPrice < 0) {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_avg_price must be a finite number >= 0 when filling")
+	}
+	if req.Fees != nil && (*req.Fees < 0 || !isFinite(*req.Fees)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "fees must be >= 0")
 	}
 
@@ -947,10 +981,11 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	s.orders[order.OrderId] = order
 	s.mu.Unlock()
 
-	// Recompute net positions from ALL confirmed offline orders (seeded by the baseline) — idempotent.
-	if err := s.recomputeAndEmitOfflinePositions(ctx, order.AccountId, order.UserId); err != nil {
-		slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted",
-			"account_id", order.AccountId, "error", err)
+	recomputeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), offlineRecomputeTimeout)
+	defer cancel()
+	if err := s.recomputeAndEmitOfflinePositions(recomputeCtx, order.AccountId, order.UserId); err != nil {
+		slog.WarnContext(ctx, "ConfirmOrder: positions.synced not published", "account_id", order.AccountId, "error", err)
+		return nil, grpcstatus.Errorf(codes.Unavailable, "positions not published; re-confirm to retry")
 	}
 	resp := proto.Clone(order).(*tradingv1.Order)
 	hideUnconfirmedFill(resp)
@@ -958,12 +993,13 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 }
 
 // recomputeAndEmitOfflinePositions recomputes an offline account's net positions and emits
-// account.positions.synced. Fail-closed (a query error skips the emit). Caller must hold confirmLock(accountID).
+// account.positions.synced. Fail-closed: a query or ledger-append error is returned and nothing is emitted.
+// Caller must hold confirmLock(accountID).
 func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
 	// --- Load baseline (fail-closed: error → skip emit) ---
 	hdr, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
 	if err != nil {
-		slog.Warn("recomputeAndEmitOfflinePositions: baseline query failed; skipping positions.synced emit",
+		slog.WarnContext(ctx, "recomputeAndEmitOfflinePositions: baseline query failed; skipping positions.synced emit",
 			"account_id", accountID, "error", err)
 		return err
 	}
@@ -972,7 +1008,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	// --- Load confirmed orders (fail-closed: error → skip emit) ---
 	confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
 	if err != nil {
-		slog.Warn("recomputeAndEmitOfflinePositions: recompute query failed; skipping positions.synced emit",
+		slog.WarnContext(ctx, "recomputeAndEmitOfflinePositions: recompute query failed; skipping positions.synced emit",
 			"account_id", accountID, "error", err)
 		return err
 	}
@@ -1064,7 +1100,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	}
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
 	// portfolio from double-folding. Run on the inbound request ctx for header propagation.
-	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
+	if err := s.appendLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
 		"account_id":          accountID,
 		"user_id":             userID,
 		"trading_mode":        tradingMode,
@@ -1074,7 +1110,9 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 		"realized_carried":    hdr.RealizedCarried,
 		"fees_carried":        hdr.FeesCarried,
 		"recent_fills":        recentFills,
-	})
+	}); err != nil {
+		return fmt.Errorf("emit account.positions.synced: %w", err)
+	}
 	return nil
 }
 
@@ -1153,11 +1191,11 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: "empty symbol",
 			})
-		case math.IsInf(pos.Qty, 0) || math.IsNaN(pos.Qty):
+		case !isFinite(pos.Qty):
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite qty for %s", pos.Symbol),
 			})
-		case math.IsInf(pos.AvgCostPerShare, 0) || math.IsNaN(pos.AvgCostPerShare):
+		case !isFinite(pos.AvgCostPerShare):
 			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
 				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite avg_cost_per_share for %s", pos.Symbol),
 			})
@@ -1186,7 +1224,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	var warnings []string
 	hasNew, warnErr := s.baselineStore.HasUnconfirmedOfflineOrders(ctx, req.AccountId)
 	if warnErr != nil {
-		slog.Warn("SnapshotOfflinePositions: failed to check for unconfirmed orders",
+		slog.WarnContext(ctx, "SnapshotOfflinePositions: failed to check for unconfirmed orders",
 			"account_id", req.AccountId, "error", warnErr)
 	} else if hasNew {
 		warnings = append(warnings, "account has unconfirmed NEW offline orders; their fills are excluded from the position fold until confirmed")
@@ -1221,9 +1259,12 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 		"positions":          baselinePayload,
 	})
 
-	if err := s.recomputeAndEmitOfflinePositions(ctx, req.AccountId, req.UserId); err != nil {
-		slog.Warn("SnapshotOfflinePositions: recompute failed after baseline persist",
+	recomputeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), offlineRecomputeTimeout)
+	defer cancel()
+	if err := s.recomputeAndEmitOfflinePositions(recomputeCtx, req.AccountId, req.UserId); err != nil {
+		slog.WarnContext(ctx, "SnapshotOfflinePositions: recompute failed after baseline persist",
 			"account_id", req.AccountId, "error", err)
+		warnings = append(warnings, "positions not published; re-snapshot to retry")
 	}
 
 	return &tradingv1.SnapshotOfflinePositionsResponse{
@@ -1314,7 +1355,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	if order.BrokerOrderId != "" {
 		_, entry, resolveErr := s.resolveAccount(order.AccountId)
 		if resolveErr != nil {
-			slog.Warn("cancel: could not resolve broker account", "order_id", req.OrderId, "account_id", order.AccountId, "error", resolveErr)
+			slog.WarnContext(ctx, "cancel: could not resolve broker account", "order_id", req.OrderId, "account_id", order.AccountId, "error", resolveErr)
 			// A broker-call failure can't assert CONFIRMED — the cancel intent goes to UNKNOWN.
 			finalIntentState = repository.IntentStateUnknown
 		} else {
@@ -1324,7 +1365,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 					return resp, rErr
 				}
 			} else if err != nil {
-				slog.Warn("broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
+				slog.WarnContext(ctx, "broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 				// Continue with internal cancellation — broker may have already filled/canceled.
 				finalIntentState = repository.IntentStateUnknown
 			}
@@ -1335,20 +1376,20 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	// Cancelling an already-filled leg is a broker no-op.
 	if haveEntry {
 		if bracket, bErr := s.bracketRepo.GetBracketByOrderID(ctx, req.OrderId); bErr != nil {
-			slog.Warn("cancel: bracket lookup failed", "order_id", req.OrderId, "error", bErr)
+			slog.WarnContext(ctx, "cancel: bracket lookup failed", "order_id", req.OrderId, "error", bErr)
 		} else if bracket != nil && bracket.Status == bracketStatusActive {
 			if bracket.StopLegOrderID != "" {
 				if err := resolvedEntry.client.CancelOrder(ctx, bracket.StopLegOrderID); err != nil {
-					slog.Warn("cancel: bracket stop leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.StopLegOrderID, "error", err)
+					slog.WarnContext(ctx, "cancel: bracket stop leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.StopLegOrderID, "error", err)
 				}
 			}
 			if bracket.TakeProfitLegOrderID != "" {
 				if err := resolvedEntry.client.CancelOrder(ctx, bracket.TakeProfitLegOrderID); err != nil {
-					slog.Warn("cancel: bracket take-profit leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.TakeProfitLegOrderID, "error", err)
+					slog.WarnContext(ctx, "cancel: bracket take-profit leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.TakeProfitLegOrderID, "error", err)
 				}
 			}
 			if uErr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uErr != nil {
-				slog.Warn("cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
+				slog.WarnContext(ctx, "cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
 			}
 			go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", req.OrderId, order.UserId, bracketUpdatedPayload(order, "", ""))
 		}
@@ -1381,7 +1422,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *tradingv1.Order, entry brokerPoolEntry, intentID string) (*tradingv1.CancelOrderResponse, bool, error) {
 	brokerOrder, err := entry.client.GetOrder(ctx, order.BrokerOrderId)
 	if err != nil {
-		slog.Warn("cancel: order not cancelable and broker re-read failed", "order_id", order.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
+		slog.WarnContext(ctx, "cancel: order not cancelable and broker re-read failed", "order_id", order.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 		order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN })
 		s.finalizeCancelIntent(ctx, intentID, order, repository.IntentStateUnknown)
 		return nil, true, grpcstatus.Errorf(codes.Unavailable,
@@ -1390,7 +1431,7 @@ func (s *TradingService) reconcileNotCancelable(ctx context.Context, order *trad
 	if alpacaStatusToProto(brokerOrder.Status) == tradingv1.OrderStatus_ORDER_STATUS_CANCELED {
 		return nil, false, nil
 	}
-	slog.Warn("cancel: order already terminal at broker, adopting broker status", "order_id", order.OrderId, "broker_status", brokerOrder.Status)
+	slog.WarnContext(ctx, "cancel: order already terminal at broker, adopting broker status", "order_id", order.OrderId, "broker_status", brokerOrder.Status)
 	order = s.applyBrokerOrderStatus(ctx, order, entry, brokerOrder)
 	order = s.updateOrder(order, func(o *tradingv1.Order) { o.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED })
 	s.finalizeCancelIntent(ctx, intentID, order, repository.IntentStateCompleted)
@@ -1403,7 +1444,7 @@ func (s *TradingService) finalizeCancelIntent(ctx context.Context, intentID stri
 		return
 	}
 	if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, order.OrderId, state, marshaled); fErr != nil {
-		slog.Warn("finalize cancel intent failed", "intent_id", intentID, "error", fErr)
+		slog.WarnContext(ctx, "finalize cancel intent failed", "intent_id", intentID, "error", fErr)
 	}
 }
 
@@ -1517,12 +1558,10 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		brokerReq.TimeInForce = tifToWireString(*req.TimeInForce)
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
-		var netErr net.Error
-		isTimeout := errors.Is(replaceErr, context.DeadlineExceeded) || (errors.As(replaceErr, &netErr) && netErr.Timeout())
-		if !isTimeout && ownsIntent {
+		if !isUncertainBrokerOutcome(replaceErr) && ownsIntent {
 			if marshaled, mErr := proto.Marshal(order); mErr == nil {
 				if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, req.OrderId, repository.IntentStateRejected, marshaled); fErr != nil {
-					slog.Warn("finalize replace intent (rejected) failed", "intent_id", intentID, "error", fErr)
+					slog.WarnContext(ctx, "finalize replace intent (rejected) failed", "intent_id", intentID, "error", fErr)
 				}
 			}
 		}
@@ -1551,7 +1590,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	if ownsIntent {
 		if marshaled, mErr := proto.Marshal(order); mErr == nil {
 			if fErr := s.orderIntentRepo.FinalizeIntent(context.WithoutCancel(ctx), intentID, req.OrderId, repository.IntentStateCompleted, marshaled); fErr != nil {
-				slog.Warn("finalize replace intent (completed) failed", "intent_id", intentID, "error", fErr)
+				slog.WarnContext(ctx, "finalize replace intent (completed) failed", "intent_id", intentID, "error", fErr)
 			}
 		}
 	}
@@ -1586,7 +1625,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrdersRequest) (*tradingv1.ListOrdersResponse, error) {
 	orders, err := s.repo.ListOrders(ctx, req.UserId, req.Status, req.TradingMode, req.StrategyId, req.Symbol, req.Side, req.OrderType, req.AccountId, req.Range)
 	if err != nil {
-		slog.Warn("db list orders failed, falling back to in-memory", "error", err)
+		slog.WarnContext(ctx, "db list orders failed, falling back to in-memory", "error", err)
 		var mem []*tradingv1.Order
 		s.mu.Lock()
 		for _, o := range s.orders {
@@ -1753,13 +1792,13 @@ func (s *TradingService) pollFills(ctx context.Context) {
 			}
 		}
 		if !ok {
-			slog.Warn("fill poll: no broker for account", "order_id", order.OrderId, "account_id", order.AccountId)
+			slog.WarnContext(ctx, "fill poll: no broker for account", "order_id", order.OrderId, "account_id", order.AccountId)
 			continue
 		}
 
 		brokerOrder, err := entry.client.GetOrder(ctx, order.BrokerOrderId)
 		if err != nil {
-			slog.Warn("fill poll: broker GetOrder failed", "order_id", order.OrderId, "error", err)
+			slog.WarnContext(ctx, "fill poll: broker GetOrder failed", "order_id", order.OrderId, "error", err)
 			continue
 		}
 
@@ -1795,23 +1834,27 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 	})
 
 	if err := s.repo.UpsertOrder(ctx, order); err != nil {
-		slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
 	}
 
 	s.broadcastOrder(order)
 
 	switch newStatus {
 	case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
-		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.filled", order.OrderId, order.UserId, map[string]interface{}{
+		filledPayload := map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 			"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 			"account_id": order.AccountId,
 			// Per-fill fee (0 when the broker exposes none).
 			"fees": brokerOrder.Fees,
-		})
+		}
+		if order.Side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED {
+			filledPayload["side"] = order.Side.String()
+		}
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.filled", order.OrderId, order.UserId, filledPayload)
 		go s.emitFillAlert(context.WithoutCancel(ctx), order)
-		slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
+		slog.InfoContext(ctx, "order filled", "order_id", order.OrderId, "symbol", order.Symbol,
 			"qty", order.Qty, "fill_price", order.FilledAvgPrice)
 		// Fill detected asynchronously — order.StopPrice is nonzero only for an auto-sized
 		// MARKET/LIMIT entry; a no-op for every other order (see maybeSubmitBracket's guard).
@@ -1819,14 +1862,18 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
-		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.partially_filled", order.OrderId, order.UserId, map[string]interface{}{
+		partialPayload := map[string]interface{}{
 			"order_id": order.OrderId, "symbol": order.Symbol,
 			"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 			"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 			"account_id": order.AccountId,
 			// Per-fill fee (0 when the broker exposes none).
 			"fees": brokerOrder.Fees,
-		})
+		}
+		if order.Side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED {
+			partialPayload["side"] = order.Side.String()
+		}
+		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.partially_filled", order.OrderId, order.UserId, partialPayload)
 		// First partial fill creates the bracket; a later partial fill on an
 		// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).
 		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
@@ -1943,7 +1990,7 @@ func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountI
 		SourceService: "xstockstrat-trading",
 	})
 	if err != nil {
-		slog.Warn("reconciliation: emit alert failed", "account_id", accountID, "mismatch_class", mismatchClass, "error", err)
+		slog.WarnContext(ctx, "reconciliation: emit alert failed", "account_id", accountID, "mismatch_class", mismatchClass, "error", err)
 	}
 }
 
@@ -1989,7 +2036,11 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		brokerOrders, err := entry.client.ListOrders(listCtx)
 		cancel()
 		if err != nil {
-			slog.Warn("reconcileTick: ListOrders failed", "account_id", accountID, "error", err)
+			if errors.Is(err, broker.ErrInvalidCredentials) {
+				slog.WarnContext(ctx, "reconcileTick: broker rejected credentials; skipping account this tick", "account_id", accountID, "call", "ListOrders")
+				continue
+			}
+			slog.WarnContext(ctx, "reconcileTick: ListOrders failed", "account_id", accountID, "error", err)
 			systemicCount++
 			continue
 		}
@@ -2047,7 +2098,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 			if lookupErr != nil {
 				// Fail-safe: a transient DB error skips this account's unknown-order check for the
 				// tick (counters untouched) — never a false halt; a real foreign order re-evaluates next tick.
-				slog.Warn("reconcileTick: broker-order-id DB lookup failed; skipping unknown-order check this tick",
+				slog.WarnContext(ctx, "reconcileTick: broker-order-id DB lookup failed; skipping unknown-order check this tick",
 					"account_id", accountID, "error", lookupErr)
 			} else {
 				for _, boID := range unmatchedBrokerIDs {
@@ -2074,7 +2125,11 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		brokerPositions, posErr := entry.client.GetPositions(posCtx)
 		posCancel()
 		if posErr != nil {
-			slog.Warn("reconcileTick: GetPositions failed", "account_id", accountID, "error", posErr)
+			if errors.Is(posErr, broker.ErrInvalidCredentials) {
+				slog.WarnContext(ctx, "reconcileTick: broker rejected credentials; skipping account this tick", "account_id", accountID, "call", "GetPositions")
+				continue
+			}
+			slog.WarnContext(ctx, "reconcileTick: GetPositions failed", "account_id", accountID, "error", posErr)
 			systemicCount++
 			continue
 		}
@@ -2092,7 +2147,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		})
 		listPosCancel()
 		if ppErr != nil {
-			slog.Warn("reconcileTick: portfolio ListPositions failed", "account_id", accountID, "error", ppErr)
+			slog.WarnContext(ctx, "reconcileTick: portfolio ListPositions failed", "account_id", accountID, "error", ppErr)
 			continue // not counted toward systemic — the broker side of this account is fine
 		}
 		platformBySymbol := make(map[string]float64, len(platformPositions.Positions))
@@ -2119,7 +2174,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 				// Fail-safe: a DB lookup error skips this account's position-side check for the tick
 				// (candidates untouched) — never a false halt; re-evaluated next tick. Mirrors the
 				// order-side lookup-error path above. Intent resolution below still runs.
-				slog.Warn("reconcileTick: net-filled-qty DB lookup failed; skipping position check this tick",
+				slog.WarnContext(ctx, "reconcileTick: net-filled-qty DB lookup failed; skipping position check this tick",
 					"account_id", accountID, "error", netErr)
 				skipPositionCheck = true
 			} else {
@@ -2176,7 +2231,7 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 		Environment: env,
 	})
 	if err != nil {
-		slog.Warn("systemic escalation SetConfig failed", "error", err, "systemic_count", systemicCount, "total_accounts", totalAccounts)
+		slog.WarnContext(ctx, "systemic escalation SetConfig failed", "error", err, "systemic_count", systemicCount, "total_accounts", totalAccounts)
 	}
 
 	_, alertErr := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
@@ -2187,7 +2242,7 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 		SourceService: "xstockstrat-trading",
 	})
 	if alertErr != nil {
-		slog.Warn("systemic escalation alert failed", "error", alertErr)
+		slog.WarnContext(ctx, "systemic escalation alert failed", "error", alertErr)
 	}
 }
 
@@ -2201,7 +2256,7 @@ func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID st
 	}
 	unknownIntents, err := s.orderIntentRepo.ListUnknownForAccount(ctx, accountID)
 	if err != nil {
-		slog.Warn("resolveUnknownIntents: ListUnknownForAccount failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "resolveUnknownIntents: ListUnknownForAccount failed", "account_id", accountID, "error", err)
 		return
 	}
 	if len(unknownIntents) == 0 {
@@ -2223,7 +2278,7 @@ func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID st
 			EventType: "order_intent.late_response_conflict",
 		})
 		if qerr != nil {
-			slog.Warn("resolveUnknownIntents: QueryEvents failed", "intent_id", intent.IntentID, "error", qerr)
+			slog.WarnContext(ctx, "resolveUnknownIntents: QueryEvents failed", "intent_id", intent.IntentID, "error", qerr)
 		} else if len(events.Events) > 0 {
 			payload := events.Events[0].Payload.AsMap()
 			outcome, _ := payload["outcome"].(string)
@@ -2239,7 +2294,7 @@ func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID st
 			responseJSON, _ := json.Marshal(payload)
 			resolved, rerr := s.orderIntentRepo.ResolveUnknownIntent(ctx, intent.IntentID, newState, responseJSON)
 			if rerr != nil {
-				slog.Warn("resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
+				slog.WarnContext(ctx, "resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
 				continue
 			}
 			if resolved {
@@ -2270,7 +2325,7 @@ func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID st
 		}
 		resolved, rerr := s.orderIntentRepo.ResolveUnknownIntent(ctx, intent.IntentID, newState, nil)
 		if rerr != nil {
-			slog.Warn("resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
+			slog.WarnContext(ctx, "resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
 			continue
 		}
 		if resolved {
@@ -2302,13 +2357,13 @@ func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 			}
 			// Heartbeat: make a healthy sync loop observable and a stalled one diagnosable
 			// from logs alone (a silent stall otherwise looks identical to a healthy idle service).
-			slog.Info("position sync cycle complete",
+			slog.InfoContext(ctx, "position sync cycle complete",
 				"accounts_synced", synced, "accounts_skipped", skipped, "accounts_failed", failed)
 			// Watchdog: accounts registered but none synced for several intervals. lastOK stays
 			// zero until the first successful sync, guarding against a false positive before then.
 			if synced == 0 && (skipped > 0 || failed > 0) && !lastOK.IsZero() {
 				if stale := time.Since(lastOK); stale > 3*currentInterval {
-					slog.Warn("position sync stalled: no account has synced recently",
+					slog.WarnContext(ctx, "position sync stalled: no account has synced recently",
 						"stale_for", stale.Round(time.Second).String(),
 						"accounts_skipped", skipped, "accounts_failed", failed)
 				}
@@ -2379,7 +2434,7 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 	positions, err := client.GetPositions(posCtx)
 	cancel()
 	if err != nil {
-		slog.Warn("syncPositions: GetPositions failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "syncPositions: GetPositions failed", "account_id", accountID, "error", err)
 		return false
 	}
 
@@ -2419,7 +2474,7 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 	bal, err := client.GetAccount(balCtx)
 	cancelBal()
 	if err != nil {
-		slog.Warn("syncPositions: GetAccount failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "syncPositions: GetAccount failed", "account_id", accountID, "error", err)
 		return true
 	}
 	s.emitLedgerEvent(ctx, "account.balance.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
@@ -2442,6 +2497,30 @@ func (s *TradingService) brokerCallTimeout() time.Duration {
 		ms = 5000
 	}
 	return time.Duration(ms) * time.Millisecond
+}
+
+// ibkrTiming is the IBKR LST session lifecycle from trading.ibkr.*, read live on every use (≤0 → default).
+func (s *TradingService) ibkrTiming() broker.IBKRTiming {
+	ms := func(key string, def int64) time.Duration {
+		v := s.cfgW.GetInt(key, def)
+		if v <= 0 {
+			v = def
+		}
+		return time.Duration(v) * time.Millisecond
+	}
+	return broker.IBKRTiming{
+		LSTRefreshMargin:  ms("trading.ibkr.lst_refresh_margin_ms", 60000),
+		HandshakeTimeout:  ms("trading.ibkr.handshake_timeout_ms", 10000),
+		ReauthMinInterval: ms("trading.ibkr.reauth_min_interval_ms", 30000),
+	}
+}
+
+// isUncertainBrokerOutcome reports a broker call that may have been processed (timeout or a failed
+// resend), so the order must stay PENDING for reclaim instead of being marked REJECTED.
+func isUncertainBrokerOutcome(err error) bool {
+	var netErr net.Error
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) ||
+		errors.Is(err, broker.ErrOutcomeUncertain)
 }
 
 // haltedPollInterval is how often reconcileTick re-polls an already-halted account's broker
@@ -2495,6 +2574,11 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 	if !json.Valid([]byte(req.CredentialsJson)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
 	}
+	if req.BrokerType == commonv1.BrokerType_BROKER_TYPE_IBKR {
+		if err := validateIBKRCreds(req.CredentialsJson); err != nil {
+			return nil, err
+		}
+	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(req.CredentialsJson))
 	if err != nil {
@@ -2517,7 +2601,7 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 
 	b, err := s.instantiateBrokerLocked(rec, []byte(req.CredentialsJson))
 	if err != nil {
-		slog.Warn("RegisterBrokerAccount: broker instantiation failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "RegisterBrokerAccount: broker instantiation failed", "account_id", accountID, "error", err)
 	} else {
 		s.brokersMu.Lock()
 		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: int32(req.BrokerType), userID: userID}
@@ -2547,6 +2631,11 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "offline accounts have no broker credentials to update")
 	}
+	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_IBKR) {
+		if err := validateIBKRCreds(credentialsJSON); err != nil {
+			return nil, err
+		}
+	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(credentialsJSON))
 	if err != nil {
@@ -2566,7 +2655,7 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 
 	b, err := s.instantiateBrokerLocked(rec, []byte(credentialsJSON))
 	if err != nil {
-		slog.Warn("UpdateBrokerAccountCredentials: broker instantiation failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "UpdateBrokerAccountCredentials: broker instantiation failed", "account_id", accountID, "error", err)
 	} else {
 		s.brokersMu.Lock()
 		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType, userID: rec.UserID}
@@ -2614,7 +2703,7 @@ func (s *TradingService) validateAndRecordCredential(ctx context.Context, accoun
 	if changed {
 		logCredentialStatusTransition(accountID, seen, prev, status)
 		if err := s.accountRepo.UpdateCredentialStatus(context.WithoutCancel(ctx), accountID, status, checkedAt); err != nil {
-			slog.Warn("validateAndRecordCredential: persist status failed", "account_id", accountID, "error", err)
+			slog.WarnContext(ctx, "validateAndRecordCredential: persist status failed", "account_id", accountID, "error", err)
 			// Roll back the cached value so the next check retries the write.
 			s.credStatusMu.Lock()
 			if seen {
@@ -2744,7 +2833,7 @@ func (s *TradingService) haltAccount(ctx context.Context, accountID, reason stri
 	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := s.accountRepo.UpdateHaltStatus(dbCtx, accountID, true, reason, &now, haltSource); err != nil {
-		slog.Warn("haltAccount: persist halt failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "haltAccount: persist halt failed", "account_id", accountID, "error", err)
 	}
 
 	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
@@ -2755,9 +2844,9 @@ func (s *TradingService) haltAccount(ctx context.Context, accountID, reason stri
 		SourceService: "xstockstrat-trading",
 	})
 	if err != nil {
-		slog.Warn("haltAccount: emit alert failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "haltAccount: emit alert failed", "account_id", accountID, "error", err)
 	}
-	slog.Error("account halted", "account_id", accountID, "reason", reason)
+	slog.ErrorContext(ctx, "account halted", "account_id", accountID, "reason", reason)
 }
 
 // flattenAndHalt closes the bracket's underlying position at market (protection window expired
@@ -2767,13 +2856,13 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	accountEntry, ok := s.brokers[bracket.AccountID]
 	s.brokersMu.RUnlock()
 	if !ok {
-		slog.Warn("flattenAndHalt: no broker for account", "account_id", bracket.AccountID, "order_id", bracket.OrderID)
+		slog.WarnContext(ctx, "flattenAndHalt: no broker for account", "account_id", bracket.AccountID, "order_id", bracket.OrderID)
 		return
 	}
 	// Offline accounts (feature 157) never arm a bracket, so this is naturally unreachable for
 	// them; guard explicitly anyway so a nil client can never be dereferenced below.
 	if accountEntry.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
-		slog.Warn("flattenAndHalt: offline account has no broker to flatten", "account_id", bracket.AccountID, "order_id", bracket.OrderID)
+		slog.WarnContext(ctx, "flattenAndHalt: offline account has no broker to flatten", "account_id", bracket.AccountID, "order_id", bracket.OrderID)
 		return
 	}
 
@@ -2781,7 +2870,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	order, orderOK := s.orders[bracket.OrderID]
 	s.mu.Unlock()
 	if !orderOK {
-		slog.Warn("flattenAndHalt: entry order not found", "order_id", bracket.OrderID)
+		slog.WarnContext(ctx, "flattenAndHalt: entry order not found", "order_id", bracket.OrderID)
 		return
 	}
 
@@ -2794,7 +2883,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	})
 	cancel()
 	if err != nil || position == nil || position.Qty == 0 {
-		slog.Warn("flattenAndHalt: no open position to flatten", "account_id", bracket.AccountID, "symbol", order.Symbol, "error", err)
+		slog.WarnContext(ctx, "flattenAndHalt: no open position to flatten", "account_id", bracket.AccountID, "symbol", order.Symbol, "error", err)
 		return
 	}
 
@@ -2821,7 +2910,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	// zero — maybeSubmitBracket's stopPrice<=0 guard means no bracket is opened on the flatten.
 	hashDigest, hashErr := placeOrderRequestHash(flattenReq)
 	if hashErr != nil {
-		slog.Warn("flattenAndHalt: compute request hash failed", "order_id", bracket.OrderID, "error", hashErr)
+		slog.WarnContext(ctx, "flattenAndHalt: compute request hash failed", "order_id", bracket.OrderID, "error", hashErr)
 		return
 	}
 	requestHashHex := hex.EncodeToString(hashDigest)
@@ -2847,12 +2936,12 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 		}
 		if lastErr == nil {
 			if uerr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uerr != nil {
-				slog.Warn("flattenAndHalt: update bracket status failed", "order_id", bracket.OrderID, "error", uerr)
+				slog.WarnContext(ctx, "flattenAndHalt: update bracket status failed", "order_id", bracket.OrderID, "error", uerr)
 			}
-			slog.Info("flattenAndHalt: position flattened", "account_id", bracket.AccountID, "symbol", order.Symbol, "attempt", attempt)
+			slog.InfoContext(ctx, "flattenAndHalt: position flattened", "account_id", bracket.AccountID, "symbol", order.Symbol, "attempt", attempt)
 			return
 		}
-		slog.Warn("flattenAndHalt: flatten attempt failed", "account_id", bracket.AccountID, "symbol", order.Symbol, "attempt", attempt, "error", lastErr)
+		slog.WarnContext(ctx, "flattenAndHalt: flatten attempt failed", "account_id", bracket.AccountID, "symbol", order.Symbol, "attempt", attempt, "error", lastErr)
 	}
 
 	s.haltAccount(context.Background(), bracket.AccountID,
@@ -2885,7 +2974,7 @@ func (s *TradingService) checkBracketProtection(ctx context.Context) {
 	expired, err := s.bracketRepo.ListExpiredProtection(scanCtx, time.Now())
 	cancel()
 	if err != nil {
-		slog.Warn("checkBracketProtection: scan failed", "error", err)
+		slog.WarnContext(ctx, "checkBracketProtection: scan failed", "error", err)
 		return
 	}
 	for _, bracket := range expired {
@@ -3067,14 +3156,14 @@ func (s *TradingService) ResumeAccountSvc(ctx context.Context, accountID, reason
 		SourceService: "xstockstrat-trading",
 	})
 	if err != nil {
-		slog.Warn("resume account: emit alert failed", "account_id", accountID, "error", err)
+		slog.WarnContext(ctx, "resume account: emit alert failed", "account_id", accountID, "error", err)
 	}
 
 	refreshed, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "re-fetch account after resume: %v", err)
 	}
-	slog.Info("account resumed", "account_id", accountID, "operator", callerUserID, "reason", reason)
+	slog.InfoContext(ctx, "account resumed", "account_id", accountID, "operator", callerUserID, "reason", reason)
 	return recordToProtoAccount(refreshed), nil
 }
 
@@ -3093,6 +3182,10 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			AccessTokenSecret: creds.AccessTokenSecret,
 			IBKRAccountID:     creds.IBKRAccountID,
 			IsPaper:           rec.IsPaper,
+			SignatureKey:      creds.SignatureKey,
+			EncryptionKey:     creds.EncryptionKey,
+			DHPrime:           creds.DHPrime,
+			Timing:            s.ibkrTiming,
 		}), nil
 	default:
 		var creds alpacaCreds
@@ -3124,7 +3217,7 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 	}
 
 	if equityErr != nil {
-		slog.Warn("portfolio risk check skipped", "user_id", callerID, "error", equityErr)
+		slog.WarnContext(ctx, "portfolio risk check skipped", "user_id", callerID, "error", equityErr)
 		return
 	}
 
@@ -3136,7 +3229,7 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 	if orderNotional > 0 {
 		pct := orderNotional / equity
 		if pct > maxPositionPct {
-			slog.Warn("order exceeds max_position_pct threshold",
+			slog.WarnContext(ctx, "order exceeds max_position_pct threshold",
 				"order_id_pending", req.Symbol,
 				"order_notional", orderNotional,
 				"portfolio_equity", equity,
@@ -3273,7 +3366,7 @@ func (s *TradingService) ComputePositionSize(ctx context.Context, req *tradingv1
 	}
 	dollarRisk = finalQty * stopDistance
 
-	slog.Info("computed position size",
+	slog.InfoContext(ctx, "computed position size",
 		"symbol", req.Symbol, "sized_qty", finalQty, "stop_price", stopPrice, "dollar_risk", dollarRisk,
 		"equity", equity, "confidence", confidence,
 		"max_risk_per_trade_pct", maxRiskPct, "atr_multiplier", atrMultiplier, "max_concentration_pct", maxConcentrationPct,
@@ -3347,7 +3440,7 @@ func (s *TradingService) emitBracketFailureAlert(ctx context.Context, order *tra
 		TargetUserId:  order.UserId,
 	})
 	if err != nil {
-		slog.Warn("emit bracket failure alert failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "emit bracket failure alert failed", "order_id", order.OrderId, "error", err)
 	}
 }
 
@@ -3362,7 +3455,7 @@ func (s *TradingService) maybeSubmitBracket(ctx context.Context, order *tradingv
 
 	existing, err := s.bracketRepo.GetBracketByOrderID(ctx, order.OrderId)
 	if err != nil {
-		slog.Warn("bracket lookup failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "bracket lookup failed", "order_id", order.OrderId, "error", err)
 		return
 	}
 
@@ -3392,7 +3485,7 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 		BracketTakeProfitPrice: &takeProfitPrice, ProtectionDeadline: deadline,
 	}
 	if err := s.bracketRepo.CreateBracket(ctx, rec); err != nil {
-		slog.Warn("create bracket failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "create bracket failed", "order_id", order.OrderId, "error", err)
 		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket row creation failed: %v", err))
 		return
 	}
@@ -3402,7 +3495,7 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 		// Bracket already attached atomically at entry SubmitOrder (PlaceOrder's own
 		// broker-submission statement) — just record the leg IDs the broker returned.
 		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, ""); err != nil {
-			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
+			slog.WarnContext(ctx, "update bracket status failed", "order_id", order.OrderId, "error", err)
 		}
 		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID))
@@ -3413,13 +3506,13 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 		})
 		if err != nil {
 			if uerr := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
-				slog.Warn("update bracket status (failed) failed", "order_id", order.OrderId, "error", uerr)
+				slog.WarnContext(ctx, "update bracket status (failed) failed", "order_id", order.OrderId, "error", uerr)
 			}
 			go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket leg submission failed: %v", err))
 			return
 		}
 		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
-			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
+			slog.WarnContext(ctx, "update bracket status failed", "order_id", order.OrderId, "error", err)
 		}
 		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
@@ -3430,23 +3523,23 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 // (best-effort), resubmit at the new cumulative filled qty, and re-arm protection_deadline.
 func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Order, accountEntry brokerPoolEntry, existing *repository.OrderBracketRecord, stopPrice, takeProfitPrice float64, deadline time.Time) {
 	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusCanceling, existing.StopLegOrderID, existing.TakeProfitLegOrderID, ""); err != nil {
-		slog.Warn("update bracket status (canceling) failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "update bracket status (canceling) failed", "order_id", order.OrderId, "error", err)
 	}
 	if existing.StopLegOrderID != "" {
 		if err := accountEntry.client.CancelOrder(ctx, existing.StopLegOrderID); err != nil {
-			slog.Warn("cancel stop leg failed during resize", "order_id", order.OrderId, "leg_id", existing.StopLegOrderID, "error", err)
+			slog.WarnContext(ctx, "cancel stop leg failed during resize", "order_id", order.OrderId, "leg_id", existing.StopLegOrderID, "error", err)
 		}
 	}
 	if existing.TakeProfitLegOrderID != "" {
 		if err := accountEntry.client.CancelOrder(ctx, existing.TakeProfitLegOrderID); err != nil {
-			slog.Warn("cancel take-profit leg failed during resize", "order_id", order.OrderId, "leg_id", existing.TakeProfitLegOrderID, "error", err)
+			slog.WarnContext(ctx, "cancel take-profit leg failed during resize", "order_id", order.OrderId, "leg_id", existing.TakeProfitLegOrderID, "error", err)
 		}
 	}
 	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusSubmitting, "", "", ""); err != nil {
-		slog.Warn("update bracket status (submitting, resize) failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "update bracket status (submitting, resize) failed", "order_id", order.OrderId, "error", err)
 	}
 	if err := s.bracketRepo.ReArmProtection(ctx, existing.ID, deadline); err != nil {
-		slog.Warn("rearm protection failed during resize", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "rearm protection failed during resize", "order_id", order.OrderId, "error", err)
 	}
 
 	resp, err := accountEntry.client.SubmitBracketLegs(ctx, order.BrokerOrderId, order.ClientOrderId, broker.BracketLegsRequest{
@@ -3455,13 +3548,13 @@ func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Ord
 	})
 	if err != nil {
 		if uerr := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
-			slog.Warn("update bracket status (failed, resize) failed", "order_id", order.OrderId, "error", uerr)
+			slog.WarnContext(ctx, "update bracket status (failed, resize) failed", "order_id", order.OrderId, "error", uerr)
 		}
 		go s.emitBracketFailureAlert(context.WithoutCancel(ctx), order, fmt.Sprintf("bracket resize failed: %v", err))
 		return
 	}
 	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
-		slog.Warn("update bracket status (active, resize) failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "update bracket status (active, resize) failed", "order_id", order.OrderId, "error", err)
 	}
 	go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.bracket_updated", order.OrderId, order.UserId,
 		bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
@@ -3655,31 +3748,60 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 // mid-RPC surfaces as a logged error instead of silently wedging the calling goroutine.
 const ledgerEmitTimeout = 10 * time.Second
 
+const (
+	appendMaxAttempts           = 2
+	appendRetryBackoff          = 100 * time.Millisecond
+	offlineRecomputeQueryBudget = 5 * time.Second
+	// Must exceed appendMaxAttempts*ledgerEmitTimeout + appendRetryBackoff + offlineRecomputeQueryBudget,
+	// or a slow ledger is cut off before its retry (asserted by TestOfflineRecomputeTimeout_CoversRetryBudget).
+	offlineRecomputeTimeout = 30 * time.Second
+)
+
+// appendLedgerEvent appends an event, retrying only codes.Unavailable under one idempotency key, and
+// returns the last error. It never takes confirmLock: callers may hold it and the lock is non-reentrant.
+func (s *TradingService) appendLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) error {
+	p, err := structpb.NewStruct(payload)
+	if err != nil {
+		return fmt.Errorf("build %s payload: %w", eventType, err)
+	}
+	req := &ledgerv1.AppendEventRequest{
+		EventType:      eventType,
+		SourceService:  "xstockstrat-trading",
+		StreamKey:      streamKey,
+		UserId:         userID,
+		Payload:        p,
+		IdempotencyKey: uuid.NewString(),
+	}
+	for attempt := 1; ; attempt++ {
+		emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
+		_, err = s.ledger.AppendEvent(emitCtx, req)
+		cancel()
+		if err == nil || grpcstatus.Code(err) != codes.Unavailable || attempt >= appendMaxAttempts {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(appendRetryBackoff):
+		}
+	}
+}
+
 // persistOrderBestEffort writes order state after a broker side effect; log-only, never surfaced.
 func (s *TradingService) persistOrderBestEffort(ctx context.Context, order *tradingv1.Order, path string) {
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ledgerEmitTimeout)
 	defer cancel()
 	if err := s.repo.UpsertOrder(wctx, order); err != nil {
-		slog.Error("order state write failed", "order_id", order.OrderId, "user_id", order.UserId,
+		slog.ErrorContext(ctx, "order state write failed", "order_id", order.OrderId, "user_id", order.UserId,
 			"status", order.Status.String(), "path", path, "error", err)
 	}
 }
 
-// emitLedgerEvent appends an event to the ledger. Pass the order/account owner as userID for
+// emitLedgerEvent is the fail-soft wrapper of appendLedgerEvent. Pass the order/account owner as userID for
 // user-owned events (background pollers have no inbound x-user-id); pass "" for platform-scoped events.
 func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {
-	p, _ := structpb.NewStruct(payload)
-	emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
-	defer cancel()
-	_, err := s.ledger.AppendEvent(emitCtx, &ledgerv1.AppendEventRequest{
-		EventType:     eventType,
-		SourceService: "xstockstrat-trading",
-		StreamKey:     streamKey,
-		UserId:        userID,
-		Payload:       p,
-	})
-	if err != nil {
-		slog.Warn("ledger emit failed", "event_type", eventType, "error", err)
+	if err := s.appendLedgerEvent(ctx, eventType, streamKey, userID, payload); err != nil {
+		slog.WarnContext(ctx, "ledger emit failed", "event_type", eventType, "error", err)
 	}
 }
 
@@ -3693,7 +3815,7 @@ func (s *TradingService) emitApprovalAlert(ctx context.Context, order *tradingv1
 		TargetUserId:  order.UserId,
 	})
 	if err != nil {
-		slog.Warn("notify emit failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "notify emit failed", "order_id", order.OrderId, "error", err)
 	}
 }
 
@@ -3709,6 +3831,6 @@ func (s *TradingService) emitFillAlert(ctx context.Context, order *tradingv1.Ord
 		TargetUserId:  order.UserId,
 	})
 	if err != nil {
-		slog.Warn("notify fill alert failed", "order_id", order.OrderId, "error", err)
+		slog.WarnContext(ctx, "notify fill alert failed", "order_id", order.OrderId, "error", err)
 	}
 }

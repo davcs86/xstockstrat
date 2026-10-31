@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/auth';
+import { withBffMetrics } from '@/lib/bffMetrics';
 
 interface AgentTool {
   name: string;
@@ -9,7 +10,7 @@ interface AgentTool {
 
 // GET /accounts/api/mcp-tools — proxies the agent's public GET /api/tools catalog; any fetch failure
 // returns { tools: [], reachable: false } (HTTP 200). Requires a session like every /accounts page.
-export async function GET(req: NextRequest) {
+async function getHandler(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -25,3 +26,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ tools: [], reachable: false });
   }
 }
+
+export const GET = withBffMetrics('accounts', '/accounts/api/mcp-tools', getHandler);

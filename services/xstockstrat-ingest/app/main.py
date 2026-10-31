@@ -23,7 +23,7 @@ from grpc_reflection.v1alpha import reflection
 from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer
-from app.telemetry import init_telemetry
+from app.telemetry import init_telemetry, server_interceptors
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ async def serve():
         notify_channel=notify_channel,
     )
 
-    grpc_server = grpc.aio.server()
+    grpc_server = grpc.aio.server(interceptors=server_interceptors())
     ingest_pb2_grpc.add_IngestServiceServicer_to_server(servicer, grpc_server)
 
     service_names = (
