@@ -273,10 +273,23 @@ func TestServerDurationRecordsStatusCode(t *testing.T) {
 		t.Fatalf("call error = %v, want NotFound", err)
 	}
 
+	// grpc-go delivers the server's stats End event from a deferred call after the reply is written, so
+	// the client can see the response before rpc.server.duration is recorded: poll rather than collect once.
 	var rm metricdata.ResourceMetrics
-	if err := reader.Collect(context.Background(), &rm); err != nil {
-		t.Fatalf("collect: %v", err)
-	}
+	waitFor(t, func() bool {
+		rm = metricdata.ResourceMetrics{}
+		if err := reader.Collect(context.Background(), &rm); err != nil {
+			return false
+		}
+		for _, sm := range rm.ScopeMetrics {
+			for _, m := range sm.Metrics {
+				if m.Name == "rpc.server.duration" {
+					return true
+				}
+			}
+		}
+		return false
+	}, "rpc.server.duration to be recorded")
 	found := false
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {

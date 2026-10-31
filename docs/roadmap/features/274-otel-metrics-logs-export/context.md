@@ -340,3 +340,9 @@
 - **GREEN**: the 32 calls were rewritten mechanically from the lint report to `slog.XContext(ctx, ...)`; `go build ./...` and `go vet ./...` clean; `golangci-lint run`: 0 issues; `grep sloglint .golangci.yml` passes. Behaviour-neutral proof: with `slog.XContext(ctx, ` normalised back to `slog.X(`, every deleted line pairs with an identical added line (no odd-count lines).
 - Files modified: `services/xstockstrat-portfolio/.golangci.yml`, `internal/service/{portfolio_service.go,offline_valuation.go}`. Not touched: `cmd/server/main.go`, `internal/config/config.go` (no flagged call).
 - Deviations: none
+
+### Step 11 — portfolio: retrofit gate — full suite green under sloglint [done]
+- After the retrofit the full suite `go test ./... -race -count=1` is green in portfolio except one intermittent failure of `TestServerDurationRecordsStatusCode`, which is a race in the step-9 test, not a retrofit effect (Deviation 5): it passed 300 loaded repeats, three further full runs and 40 repeats after the fix. Fix: poll for `rpc.server.duration` instead of collecting once (test-only; applied to portfolio and, for the same reason, trading's identical copy).
+- Gate result after the fix: every package `ok`; CI-style coverage total 68.6% (floor 40); golangci-lint v2.14.0 0 issues. `internal/service/portfolio_quote_deadline_test.go` (the one non-telemetry test that swaps `slog`) needed no change. TDD: red N/A (behaviour-neutral retrofit gate).
+- Files modified: `services/xstockstrat-portfolio/internal/telemetry/otel_test.go` and `services/xstockstrat-trading/internal/telemetry/otel_test.go` (Deviation 5)
+- Deviations: Deviation 5

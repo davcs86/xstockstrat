@@ -425,7 +425,7 @@ grep -q 'sloglint' services/xstockstrat-portfolio/.golangci.yml   # fails before
 
 ### Step 11 — test: portfolio: retrofit gate — full suite green under sloglint (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — modify (only if it asserted on a removed non-Context call; it is the one test file outside `internal/telemetry` that swaps `slog` or asserts log text, found by `grep -rln 'slog.SetDefault\|slog.New(' services/xstockstrat-portfolio --include=*_test.go`; if the suite is green after the retrofit no file changes)
@@ -2079,4 +2079,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 6 Files are `.golangci.yml` plus the conditional source files; no test file.
 - **Actual**: enabling `sloglint` also flagged three `slog.NewTextHandler(io.Discard, nil)` / `slog.NewJSONHandler(io.Discard, nil)` uses in Step 5's new `internal/telemetry/otel_test.go` ("use slog.DiscardHandler"). Left alone they would fail CI's golangci-lint on the same PR.
 - **Disposition**: gap-protocol default (fix now): the three uses were replaced by `slog.DiscardHandler`; behaviour is identical. Steps 10 and 14 apply the same fix to portfolio's and marketdata's copies of the test file.
+
+### Deviation 5 — A flaky status-code test fixed in two earlier steps' files (found by the portfolio retrofit gate)
+- **Spec said**: Step 11 fixes only test code that fails because it matched a removed call shape.
+- **Actual**: `TestServerDurationRecordsStatusCode` (Step 5 for trading, Step 9 for portfolio) failed once in a full parallel `go test ./... -race` run of portfolio and then passed on 300 loaded repeats and 3 further full runs. Cause: grpc-go delivers the server stats `End` event from a deferred call after the reply and trailers are written, so a client can see the response before `rpc.server.duration` is recorded, and the test collected once, immediately. The test now polls until the metric appears. Applied to both existing copies; marketdata's copy is cloned from the fixed version.
+- **Disposition**: gap-protocol default (fix now): test-only change, no behaviour change, committed with Step 11 (the retrofit gate).
 
