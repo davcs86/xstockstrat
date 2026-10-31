@@ -722,3 +722,10 @@ Feature: fix-ibkr-request-signing (bug fix)
 ### Coverage check
 - Source scenarios: 10 (AC-1..AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped. Tags are verbatim plus @feature-249, with @regression retained.
 ```
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

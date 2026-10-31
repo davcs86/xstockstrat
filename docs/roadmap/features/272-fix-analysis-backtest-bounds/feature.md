@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
 
 ---
 
@@ -27,6 +29,7 @@
 | 2026-10-29 | `in-progress` (no transition) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done: strat-lab `backtest` skill (SKILL.md Phase 2 failure modes, output-handling, aggregation, README) and `mcp-tools.md` Errors rows for `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` and `FAILED_PRECONDITION` `backtest bar series incomplete: …` + MCP 60 s-cap note; @AC-32 guard unchanged |
 | 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 9 (G-1) closed by operator sign-off: threshold 60 s, no measurements (no analysis traces, no ledger access, prod not running). All 9 steps done. |
 
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
 ---
 
 ## Reviewers
