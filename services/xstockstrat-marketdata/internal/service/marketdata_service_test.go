@@ -923,6 +923,141 @@ func TestGetBarsMarksSymbolWarm(t *testing.T) {
 	}
 }
 
+// TestGetBarsWarnsWhenMissAndLiveFetchEmpty is structural for the same reason as
+// TestGetBarsMarksSymbolWarm (GetBars needs a live DB pool): the DB-miss + empty-live-fetch branch
+// must stay a WARN, or a symbol the feed never serves is silent in the logs.
+func TestGetBarsWarnsWhenMissAndLiveFetchEmpty(t *testing.T) {
+	src, err := os.ReadFile("marketdata_service.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	body := funcBody(t, string(src), "func (s *MarketDataService) GetBars(")
+	if !strings.Contains(body, `slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none"`) {
+		t.Error("GetBars must WARN when no bars are stored and the live fetch returns none")
+	}
+}
+
+// fakeEmptyMultiSource is a MultiSymbolSource whose GetBarsMulti returns `bars` (never inserted
+// here: every slice is empty, so the nil repo is not reached).
+type fakeEmptyMultiSource struct {
+	fakeBackfillSource
+	bars map[string][]*marketdatav1.Bar
+}
+
+func (f *fakeEmptyMultiSource) GetBarsMulti(context.Context, []string, string, time.Time, time.Time) (map[string][]*marketdatav1.Bar, error) {
+	return f.bars, nil
+}
+func (*fakeEmptyMultiSource) GetLatestQuotesMulti(context.Context, []string) (map[string]*marketdatav1.Quote, error) {
+	return nil, nil
+}
+func (*fakeEmptyMultiSource) GetLatestTradesMulti(context.Context, []string) (map[string]*source.Trade, error) {
+	return nil, nil
+}
+
+// TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars covers both ingest paths: one
+// summarized WARN naming the symbols (sorted, capped) with missing/total counts.
+func TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars(t *testing.T) {
+	const msg = "bar ingest: symbols returned no bars"
+	start, end := time.Now().Add(-48*time.Hour), time.Now()
+	cases := []struct {
+		name string
+		src  source.DataSourceClient
+	}{
+		{"per-symbol fallback", &fakeBackfillSource{}},
+		// An empty slice and an absent key must both count as "no bars".
+		{"multi-symbol", &fakeEmptyMultiSource{bars: map[string][]*marketdatav1.Bar{"ZZZ": nil}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := installWarnRecorder(t)
+			s := &MarketDataService{}
+			s.ingestRecentBarsForTimeframe(context.Background(), tc.src, []string{"ZZZ", "AAA"}, "1d", start, end)
+			w := rec.find(msg)
+			if w == nil {
+				t.Fatalf("expected WARN %q", msg)
+			}
+			if w.attrs["missing"] != "2" || w.attrs["total"] != "2" || w.attrs["timeframe"] != "1d" {
+				t.Errorf("unexpected attrs: %v", w.attrs)
+			}
+			if w.attrs["sample"] != "[AAA ZZZ]" {
+				t.Errorf("sample should be sorted, got %q", w.attrs["sample"])
+			}
+		})
+	}
+
+	t.Run("sample is capped", func(t *testing.T) {
+		rec := installWarnRecorder(t)
+		var symbols []string
+		for i := 0; i < barIngestNoBarsSample+2; i++ {
+			symbols = append(symbols, fmt.Sprintf("S%02d", i))
+		}
+		(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), &fakeBackfillSource{}, symbols, "1d", start, end)
+		w := rec.find(msg)
+		if w == nil {
+			t.Fatalf("expected WARN %q", msg)
+		}
+		if w.attrs["missing"] != "12" || strings.Count(w.attrs["sample"], "S") != barIngestNoBarsSample {
+			t.Errorf("want missing=12 and %d sampled symbols, got %v", barIngestNoBarsSample, w.attrs)
+		}
+	})
+}
+
+// infoRecorder captures slog.LevelInfo messages and attrs; slog.SetDefault is process-global, so
+// tests using it must not call t.Parallel().
+type infoRecorder struct {
+	mu   sync.Mutex
+	recs []recordedWarn
+}
+
+func (h *infoRecorder) Enabled(context.Context, slog.Level) bool { return true }
+func (h *infoRecorder) Handle(_ context.Context, r slog.Record) error {
+	if r.Level != slog.LevelInfo {
+		return nil
+	}
+	rec := recordedWarn{msg: r.Message, attrs: map[string]string{}}
+	r.Attrs(func(a slog.Attr) bool {
+		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
+		return true
+	})
+	h.mu.Lock()
+	h.recs = append(h.recs, rec)
+	h.mu.Unlock()
+	return nil
+}
+func (h *infoRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *infoRecorder) WithGroup(string) slog.Handler      { return h }
+
+// TestIngestRecentBars_LogsHeartbeatEveryCycle: every cycle and timeframe logs one INFO line, with
+// or without gaps, so marketdata appears in a short log window even when nothing is wrong.
+func TestIngestRecentBars_LogsHeartbeatEveryCycle(t *testing.T) {
+	const msg = "bar ingest: cycle complete"
+	start, end := time.Now().Add(-48*time.Hour), time.Now()
+	cases := []struct {
+		name    string
+		src     source.DataSourceClient
+		noBars  string
+		symbols []string
+	}{
+		{"all symbols missing", &fakeBackfillSource{}, "2", []string{"AAA", "ZZZ"}},
+		{"no symbols missing", &fakeEmptyMultiSource{bars: map[string][]*marketdatav1.Bar{}}, "0", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &infoRecorder{}
+			prev := slog.Default()
+			slog.SetDefault(slog.New(h))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+			(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), tc.src, tc.symbols, "1d", start, end)
+			if len(h.recs) != 1 || h.recs[0].msg != msg {
+				t.Fatalf("want exactly one %q INFO, got %v", msg, h.recs)
+			}
+			if a := h.recs[0].attrs; a["timeframe"] != "1d" || a["no_bars"] != fmt.Sprint(len(tc.symbols)) || a["symbols"] != fmt.Sprint(len(tc.symbols)) {
+				t.Errorf("unexpected attrs: %v", a)
+			}
+		})
+	}
+}
+
 // funcBody returns the source text from the given func signature up to the next top-level `func (`.
 func funcBody(t *testing.T, src, signature string) string {
 	t.Helper()

@@ -324,6 +324,9 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 			// than blanking a chart that has data.
 			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, startImplicit); len(fresh) > 0 {
 				bars, nextToken = fresh, freshToken
+			} else if len(bars) == 0 {
+				slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none",
+					"symbol", req.Symbol, "timeframe", canonicalTf, "start", start, "end", end)
 			}
 		}
 	}
@@ -1283,9 +1286,16 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 // ingestRecentBarsForTimeframe is ingestRecentBars' per-timeframe body, split out so the
 // caller can size each timeframe's window independently (see minIngestLookback).
 func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
+	began := time.Now()
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	if ms, ok := src.(source.MultiSymbolSource); ok {
 		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
+			var missing []string
+			for _, sym := range symbols {
+				if len(barsBySym[sym]) == 0 {
+					missing = append(missing, sym)
+				}
+			}
 			for sym, bars := range barsBySym {
 				if len(bars) == 0 {
 					continue
@@ -1294,11 +1304,13 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, sr
 					slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 				}
 			}
+			reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
 			return
 		} else {
 			slog.WarnContext(ctx, "bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
 		}
 	}
+	var missing []string
 	for _, sym := range symbols {
 		bars, err := src.GetBars(ctx, sym, tf, start, end)
 		if err != nil {
@@ -1306,12 +1318,35 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, sr
 			continue
 		}
 		if len(bars) == 0 {
+			missing = append(missing, sym)
 			continue
 		}
 		if err := s.repo.InsertBars(ctx, bars); err != nil {
 			slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 		}
 	}
+	reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
+}
+
+// barIngestNoBarsSample caps the symbols named in one bar-ingest no-bars WARN.
+const barIngestNoBarsSample = 10
+
+// reportIngestCycle logs a per-cycle INFO heartbeat (keeps a quiet marketdata visible in short log
+// windows) and one WARN naming the symbols the feed returned no bars for (missing of total).
+func reportIngestCycle(ctx context.Context, tf string, missing []string, total int, start, end time.Time, began time.Time) {
+	slog.InfoContext(ctx, "bar ingest: cycle complete",
+		"timeframe", tf, "symbols", total, "no_bars", len(missing), "elapsed_ms", time.Since(began).Milliseconds())
+	if len(missing) == 0 {
+		return
+	}
+	sort.Strings(missing)
+	sample := missing
+	if len(sample) > barIngestNoBarsSample {
+		sample = sample[:barIngestNoBarsSample]
+	}
+	slog.WarnContext(ctx, "bar ingest: symbols returned no bars",
+		"timeframe", tf, "missing", len(missing), "total", total, "sample", sample,
+		"window_start", start, "window_end", end)
 }
 
 // ListAssets delegates to the default data source.
