@@ -1368,7 +1368,7 @@ grep -q 'telemetryStarted' services/xstockstrat-config/src/telemetry.ts && grep 
 
 ### Step 38 — service: config: winston → OTLP log bridge and awaited SIGTERM flush (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/services/logger.ts` — modify

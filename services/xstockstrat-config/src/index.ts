@@ -1,4 +1,4 @@
-import { initTelemetry } from './telemetry';
+import { initTelemetry, shutdownTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
@@ -39,24 +39,30 @@ async function main() {
   await configImpl.initialize();
 
   const grpcServer = new grpc.Server();
-  grpcServer.addService(createConfigServiceDefinition(), configImpl as unknown as grpc.UntypedServiceImplementation);
-
-  grpcServer.bindAsync(
-    `0.0.0.0:${grpcPort}`,
-    mtls.serverCredentials(),
-    (err, port) => {
-      if (err) {
-        log.error('Failed to bind gRPC', { error: err.message });
-        process.exit(1);
-      }
-      grpcServer.start();
-      log.info(`Config gRPC service listening on port ${port}`);
-    }
+  grpcServer.addService(
+    createConfigServiceDefinition(),
+    configImpl as unknown as grpc.UntypedServiceImplementation,
   );
+
+  grpcServer.bindAsync(`0.0.0.0:${grpcPort}`, mtls.serverCredentials(), (err, port) => {
+    if (err) {
+      log.error('Failed to bind gRPC', { error: err.message });
+      process.exit(1);
+    }
+    grpcServer.start();
+    log.info(`Config gRPC service listening on port ${port}`);
+  });
 
   const shutdown = () => {
     log.info('Shutting down config service...');
-    grpcServer.tryShutdown(() => {
+    // Open WatchConfig streams block tryShutdown, so flush telemetry in parallel and force the stop.
+    const flush = shutdownTelemetry();
+    setTimeout(() => {
+      grpcServer.forceShutdown();
+      flush.finally(() => process.exit(0));
+    }, 5000).unref();
+    grpcServer.tryShutdown(async () => {
+      await flush;
       pool.end();
       process.exit(0);
     });
