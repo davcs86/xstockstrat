@@ -198,9 +198,9 @@ func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventTy
 				return
 			}
 			if isGracefulStreamClose(err) {
-				slog.Info(name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
+				slog.InfoContext(ctx, name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
 			} else {
-				slog.Error(name+" stream error, retrying", "error", err)
+				slog.ErrorContext(ctx, name+" stream error, retrying", "error", err)
 			}
 			time.Sleep(2 * time.Second)
 		}
@@ -278,7 +278,7 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	}
 	var fill orderFillPayload
 	if err := json.Unmarshal(raw, &fill); err != nil {
-		slog.Warn("parse order fill payload", "error", err)
+		slog.WarnContext(ctx, "parse order fill payload", "error", err)
 		return nil
 	}
 
@@ -410,7 +410,7 @@ func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string
 	defer cancel()
 	resp, err := s.marketdata.GetLatestQuotes(qctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
 	if err != nil {
-		slog.Warn("batch latest quotes unavailable", "count", len(symbols), "error", err)
+		slog.WarnContext(ctx, "batch latest quotes unavailable", "count", len(symbols), "error", err)
 		return out, false
 	}
 	for _, q := range resp.Quotes {
@@ -540,7 +540,7 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 	}
 	resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{EventType: "order.filled"})
 	if err != nil {
-		slog.Warn("HydrateStops: QueryEvents failed", "error", err)
+		slog.WarnContext(ctx, "HydrateStops: QueryEvents failed", "error", err)
 		return
 	}
 	n := 0
@@ -566,7 +566,7 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
 		n++
 	}
-	slog.Info("HydrateStops: replayed resting stops from ledger", "count", n)
+	slog.InfoContext(ctx, "HydrateStops: replayed resting stops from ledger", "count", n)
 }
 
 // markAt values p at price. The % is over |cost basis| so a short reports a correctly signed return.
@@ -603,7 +603,7 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 
 	balances := map[string]*repository.AccountBalance{}
 	if list, err := s.repo.ListAccountBalancesByUser(ctx, userID); err != nil {
-		slog.Warn("GetPortfolio: list account balances failed", "user_id", userID, "error", err)
+		slog.WarnContext(ctx, "GetPortfolio: list account balances failed", "user_id", userID, "error", err)
 	} else {
 		for _, a := range list {
 			bal := a.Balance
@@ -618,7 +618,7 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 			scope = append(scope, id)
 		}
 		if ids, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
-			slog.Warn("GetPortfolio: list offline account ids failed", "user_id", userID, "error", err)
+			slog.WarnContext(ctx, "GetPortfolio: list offline account ids failed", "user_id", userID, "error", err)
 		} else {
 			scope = append(scope, ids...)
 		}
@@ -1030,7 +1030,7 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	applyQuotes(positions, quotes)
 	// Any unpriced position would understate equity — skip rather than persist/emit a partial snapshot.
 	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
-		slog.Warn("portfolio snapshot skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		slog.WarnContext(ctx, "portfolio snapshot skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
 		return
 	}
 	var equity float64
@@ -1094,7 +1094,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	applyQuotes(positions, quotes)
 	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
 	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
-		slog.Warn("concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
 	} else {
 		for _, p := range positions {
 			posValues[p.Symbol] += p.MarketValue
@@ -1133,7 +1133,7 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, msg string
 		TargetUserId:  userID,
 	})
 	if err != nil {
-		slog.Warn("notify emit failed", "error", err)
+		slog.WarnContext(ctx, "notify emit failed", "error", err)
 	}
 }
 
@@ -1173,7 +1173,7 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		}
 		backoff *= 2
 	}
-	slog.Warn("ledger append failed", "event_type", eventType, "error", err)
+	slog.WarnContext(ctx, "ledger append failed", "event_type", eventType, "error", err)
 }
 
 // positionSyncPayload is the expected shape of the account.positions.synced event payload.
@@ -1322,7 +1322,7 @@ func (s *PortfolioService) boundedRetry(consumer string, h eventHandler) eventHa
 		if !park {
 			return err
 		}
-		slog.Error("event parked", "event_id", ev.EventId, "sequence", ev.Sequence, "stream_key", ev.StreamKey,
+		slog.ErrorContext(ctx, "event parked", "event_id", ev.EventId, "sequence", ev.Sequence, "stream_key", ev.StreamKey,
 			"consumer", consumer, "attempts", st.attempts, "error", err)
 		st.attempts = 0
 		return nil
@@ -1339,7 +1339,7 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	}
 	var payload accountDeregisteredPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		slog.Warn("parse account deregistered payload", "error", err)
+		slog.WarnContext(ctx, "parse account deregistered payload", "error", err)
 		return nil
 	}
 	if payload.AccountID == "" {
@@ -1355,11 +1355,11 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
 	var failures []error
 	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
-		slog.Warn("deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
+		slog.WarnContext(ctx, "deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
 		failures = append(failures, fmt.Errorf("delete positions: %w", err))
 	}
 	if err := s.repo.DeleteOfflineRealized(ctx, payload.AccountID); err != nil {
-		slog.Warn("deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
+		slog.WarnContext(ctx, "deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
 		failures = append(failures, fmt.Errorf("delete offline realized: %w", err))
 	}
 	return errors.Join(failures...)
@@ -1388,7 +1388,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 	var sync positionSyncPayload
 	if err := json.Unmarshal(raw, &sync); err != nil {
-		slog.Warn("parse position sync payload", "error", err)
+		slog.WarnContext(ctx, "parse position sync payload", "error", err)
 		return nil
 	}
 	if sync.AccountID == "" {
@@ -1418,25 +1418,25 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			AsOf:             p.AsOf,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
-			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
+			slog.WarnContext(ctx, "upsert position from sync failed", "symbol", p.Symbol, "error", err)
 			failures = append(failures, fmt.Errorf("upsert position %s: %w", p.Symbol, err))
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
 	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
 		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
-			slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+			slog.WarnContext(ctx, "delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("delete positions not in sync: %w", err))
 		}
 	} else {
-		slog.Debug("skipping delete on empty broker position snapshot", "account_id", sync.AccountID)
+		slog.DebugContext(ctx, "skipping delete on empty broker position snapshot", "account_id", sync.AccountID)
 	}
 
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
 		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
-			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
+			slog.WarnContext(ctx, "upsert offline realized failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("upsert offline realized: %w", err))
 		}
 	}
@@ -1466,14 +1466,14 @@ func (s *PortfolioService) ConsumeBracketUpdates(ctx context.Context) {
 func (s *PortfolioService) processBracketUpdate(ctx context.Context, event *ledgerv1.LedgerEvent) {
 	upd, err := parseBracketUpdatePayload(event.Payload)
 	if err != nil {
-		slog.Warn("parse bracket update payload", "error", err)
+		slog.WarnContext(ctx, "parse bracket update payload", "error", err)
 		return
 	}
 	if upd.AccountID == "" || upd.Symbol == "" {
 		return
 	}
 	if err := s.repo.UpdatePositionBracket(ctx, upd.UserID, upd.Symbol, upd.TradingMode, upd.AccountID, upd.StopOrderID, upd.TakeProfitOrderID); err != nil {
-		slog.Warn("update position bracket failed", "symbol", upd.Symbol, "error", err)
+		slog.WarnContext(ctx, "update position bracket failed", "symbol", upd.Symbol, "error", err)
 	}
 }
 
@@ -1521,7 +1521,7 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 	var bal balanceSyncPayload
 	if err := json.Unmarshal(raw, &bal); err != nil {
-		slog.Warn("parse balance sync payload", "error", err)
+		slog.WarnContext(ctx, "parse balance sync payload", "error", err)
 		return
 	}
 	if bal.AccountID == "" {
@@ -1532,7 +1532,7 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 		userID = "default"
 	}
 	if err := s.repo.UpsertAccountBalance(ctx, bal.AccountID, userID, bal.TradingMode, bal.Cash, bal.BuyingPower, bal.Equity, bal.LastEquity); err != nil {
-		slog.Warn("upsert account balance failed", "account_id", bal.AccountID, "error", err)
+		slog.WarnContext(ctx, "upsert account balance failed", "account_id", bal.AccountID, "error", err)
 	}
 }
 
@@ -1623,7 +1623,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		}
 		bal, err := s.repo.GetAccountBalance(ctx, accountID)
 		if err != nil {
-			slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
+			slog.WarnContext(ctx, "ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
 		}
 		positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
 		if err != nil {
@@ -1655,7 +1655,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 	for _, acct := range accounts {
 		positions, err := s.repo.ListPositionsByAccount(ctx, acct.AccountID, "")
 		if err != nil {
-			slog.Warn("ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
+			slog.WarnContext(ctx, "ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
 			continue
 		}
 		bal := acct.Balance
@@ -1667,13 +1667,13 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 	// A nil balance yields 0 cash/BP and equity = summed market value; a lookup failure is non-fatal.
 	var offlineAppended []string
 	if offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
-		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
+		slog.WarnContext(ctx, "ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
 	} else {
 		offlineAppended = offlineIDsToAppend(balanceIDs, offlineIDs)
 		for _, id := range offlineAppended {
 			positions, err := s.repo.ListPositionsByAccount(ctx, id, "")
 			if err != nil {
-				slog.Warn("ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
+				slog.WarnContext(ctx, "ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
 				continue
 			}
 			accts = append(accts, loaded{id: id, positions: positions})

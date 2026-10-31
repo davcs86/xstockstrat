@@ -117,14 +117,14 @@ func (s *PortfolioService) valueRead(ctx context.Context, positions []*portfolio
 	unavailable := map[string]bool{}
 	states, failed, err := s.repo.GetOfflineStates(ctx, middleware.FromContext(ctx).UserID, ids)
 	if err != nil {
-		slog.Warn("offline state unavailable", "accounts", len(ids), "error", errors.Join(ErrOfflineStateUnavailable, err))
+		slog.WarnContext(ctx, "offline state unavailable", "accounts", len(ids), "error", errors.Join(ErrOfflineStateUnavailable, err))
 		states = map[string]repository.OfflineState{}
 		for _, id := range ids {
 			unavailable[id] = true
 		}
 	}
 	for id, ferr := range failed {
-		slog.Warn("offline state unavailable", "account_id", id, "error", errors.Join(ErrOfflineStateUnavailable, ferr))
+		slog.WarnContext(ctx, "offline state unavailable", "account_id", id, "error", errors.Join(ErrOfflineStateUnavailable, ferr))
 		unavailable[id] = true
 	}
 	now := s.clock()
@@ -174,7 +174,7 @@ func (s *PortfolioService) fetchMarks(ctx context.Context, now time.Time, quoteS
 		})
 		cancel()
 		if err != nil {
-			slog.Warn("offline last-close bars unavailable", "count", len(barSyms), "error", err)
+			slog.WarnContext(ctx, "offline last-close bars unavailable", "count", len(barSyms), "error", err)
 		} else {
 			bars = indexBars(resp.Results)
 		}

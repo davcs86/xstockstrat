@@ -389,7 +389,7 @@ grep -q 'telemetry.StopServer' services/xstockstrat-portfolio/cmd/server/main.go
 
 ### Step 10 — service: portfolio: move every slog call with a context in scope to its *Context variant; enforce with sloglint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/.golangci.yml` — modify

@@ -334,3 +334,9 @@
 - **GREEN**: 12 tests pass under `-race` (resource trio, traces and metrics+logs export under both header forms, resource attributes on the metric request, `rpc.server.duration` with `rpc.grpc.status_code=5` and the dropped siblings absent, trace correlation, failure visibility without recursion, disabled mode, the four `StopServer` cases). Full suite `-race`: no failures; CI-style coverage total 68.6% (floor 40); golangci-lint v2.14.0 0 issues; `grep telemetry.StopServer cmd/server/main.go` passes.
 - Files modified: `services/xstockstrat-portfolio/internal/telemetry/{otel_test.go,shutdown_test.go}`, `go.mod`/`go.sum` (tidy)
 - Deviations: none
+
+### Step 10 — portfolio: slog calls with a context in scope use their *Context variant; enforced by sloglint [done]
+- **RED**: adding `sloglint` (`context: scope`, `no-mixed-args: false`) to portfolio's `.golangci.yml` made `golangci-lint run` report 32 issues, all `XContext should be used instead`: 29 in `internal/service/portfolio_service.go`, 3 in `internal/service/offline_valuation.go`. No other file and no test file was flagged (the step-9 tests already use `slog.DiscardHandler`).
+- **GREEN**: the 32 calls were rewritten mechanically from the lint report to `slog.XContext(ctx, ...)`; `go build ./...` and `go vet ./...` clean; `golangci-lint run`: 0 issues; `grep sloglint .golangci.yml` passes. Behaviour-neutral proof: with `slog.XContext(ctx, ` normalised back to `slog.X(`, every deleted line pairs with an identical added line (no odd-count lines).
+- Files modified: `services/xstockstrat-portfolio/.golangci.yml`, `internal/service/{portfolio_service.go,offline_valuation.go}`. Not touched: `cmd/server/main.go`, `internal/config/config.go` (no flagged call).
+- Deviations: none
