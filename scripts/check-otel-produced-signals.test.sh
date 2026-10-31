@@ -43,12 +43,39 @@ fresh() {
   cp "${REPO_ROOT}/docs/context-constitution-findings.md" "${tree}/docs/"
   cp "${REPO_ROOT}/docs/sdd/business-rules/platform.feature" "${tree}/docs/sdd/business-rules/"
   cp -R "${REPO_ROOT}/.do" "${tree}/"
+  cp "${REPO_ROOT}/docker-compose.yml" "${tree}/"
+  copy_protos
   copy_producers
+}
+
+copy_protos() {
+  local f svc
+  for f in "${REPO_ROOT}"/packages/proto/*/v1/*.proto; do
+    svc="$(basename "$(dirname "$(dirname "$f")")")"
+    mkdir -p "${tree}/packages/proto/${svc}/v1"
+    cp "$f" "${tree}/packages/proto/${svc}/v1/"
+  done
+}
+
+# The matcher the guard must see, derived independently from the protos.
+stream_matcher() {
+  grep -h -E '^[[:space:]]*rpc[[:space:]]+[A-Za-z0-9_]+.*returns[[:space:]]*\([[:space:]]*stream[[:space:]]' \
+    "${REPO_ROOT}"/packages/proto/*/v1/*.proto |
+    sed -E 's/^[[:space:]]*rpc[[:space:]]+([A-Za-z0-9_]+).*/\1/' | sort -u | paste -sd'|' -
+}
+
+# A rule selector for $1 carrying the given matcher body (empty = bare selector).
+rule_expr() {
+  if [ -n "$2" ]; then
+    printf '      expr: sum(rate(%s{%s}[5m]))' "$1" "$2"
+  else
+    printf '      expr: sum(rate(%s[5m]))' "$1"
+  fi
 }
 
 # Copies every file the registry names as a producer, so registry integrity runs on the throwaway tree.
 copy_producers() {
-  local ln=0 kind ident paths lit pth old_ifs
+  local ln=0 kind paths pth old_ifs
   while IFS=$'\t' read -r kind _ paths _; do
     ln=$((ln + 1))
     if [ "$ln" -eq 1 ] || [ -z "$kind" ]; then continue; fi
@@ -136,6 +163,75 @@ expect_hit AC-8-producer-literal-drift "AC-8 P1-producer packages/otel/produced-
 fresh
 rm -f "${tree}/packages/otel/produced-signals.tsv"
 expect_hit AC-8-registry-missing "AC-8 P1-producer packages/otel/produced-signals.tsv:"
+
+# --- AC-17: Part 4, the proto-derived stream exclusion ---------------------------------------------
+M="rpc_method!~\"$(stream_matcher)\""
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "$(rule_expr rpc_server_duration_milliseconds_count "$M")"
+expect_green AC-17-selector-with-matcher-passes
+
+for suffix in count bucket sum; do
+  fresh
+  append packages/otel/alerts/alert-rules.yaml "$(rule_expr "rpc_server_duration_milliseconds_${suffix}" "")"
+  expect_hit "AC-17-bare-${suffix}" "AC-17 P4 packages/otel/alerts/alert-rules.yaml:" "rpc_server_duration_milliseconds_${suffix}"
+
+  fresh
+  append packages/otel/alerts/alert-rules.yaml "$(rule_expr "rpc_server_duration_milliseconds_${suffix}" 'service_name="analysis"')"
+  expect_hit "AC-17-other-matchers-${suffix}" "AC-17 P4 packages/otel/alerts/alert-rules.yaml:"
+done
+
+dash() {
+  cat >"${tree}/packages/otel/dashboards/service-health.json" <<DASH_EOF
+{
+  "templating": { "list": [ {
+    "query": "label_values(rpc_server_duration_milliseconds_count, service_name)"
+  } ] },
+  "uid": "xstk-service-health",
+  "panels": [ { "targets": [ {
+    "expr": "$1"
+  } ] } ]
+}
+DASH_EOF
+}
+
+fresh
+dash 'sum(mcp_tool_duration_milliseconds_count)'
+expect_green AC-17-label-values-templating-exempt
+
+fresh
+dash 'sum(rpc_server_duration_milliseconds_count)'
+expect_hit AC-17-same-selector-in-target-fails "AC-17 P4 packages/otel/dashboards/service-health.json:"
+
+fresh
+dash "sum(rpc_server_duration_milliseconds_count{${M//\"/\\\"}})"
+expect_green AC-17-dashboard-target-with-matcher
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "$(rule_expr rpc_server_duration_milliseconds_count "$M")"
+append packages/proto/notify/v1/notify.proto "rpc StreamFoo(Req) returns (stream Resp);"
+expect_hit AC-17-new-stream-rpc-needs-matcher "AC-17 P4 packages/otel/alerts/alert-rules.yaml:" "StreamFoo"
+
+fresh
+append packages/proto/notify/v1/notify.proto "rpc Foo(Req);"
+expect_hit AC-17-rpc-without-returns "AC-17 P4 packages/proto/notify/v1/notify.proto:"
+
+fresh
+append packages/proto/marketdata/v1/marketdata.proto "rpc GetBars(Req) returns (stream Resp);"
+expect_hit AC-17-stream-named-like-unary "AC-17 P4 packages/proto:" "GetBars"
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "$(rule_expr rpc_server_duration_milliseconds_count "$M")"
+append packages/proto/notify/v1/notify.proto "// rpc StreamFoo(Req) returns (stream Resp);"
+expect_green AC-17-commented-stream-ignored
+
+fresh
+append .do/app.yaml "  - key: OTEL_TRACES_SAMPLER"
+expect_hit AC-17-sampler-in-do-spec "AC-17 P4-sampler .do/app.yaml:"
+
+fresh
+append docker-compose.yml "      OTEL_PYTHON_GRPC_EXCLUDED_SERVICES: x"
+expect_hit AC-17-grpc-exclusion-in-compose "AC-17 P4-sampler docker-compose.yml:"
 
 # --- Part 2 is retired: signal talk in docs is free ---------------------------------------------
 fresh
