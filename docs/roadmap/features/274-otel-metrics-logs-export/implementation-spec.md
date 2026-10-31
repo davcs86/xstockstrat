@@ -836,7 +836,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 22 — service: analysis: live-loop heartbeat log line after each successful cycle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify

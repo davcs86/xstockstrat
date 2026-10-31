@@ -382,3 +382,5 @@ Ingest telemetry tests (same suite as indicators step 17; shared fixture in conf
 Analysis: same telemetry.py as indicators (default "analysis"), main.py interceptors, pyproject dep + uv.lock. Deviation 6: AC-5 guard test narrowed to ignore the server-interceptor call. Verified ast/ruff/uv lock --check/grep; 1475 tests pass.
 
 Analysis telemetry tests (shared suite + AC-3 RunBacktest log/trace correlation using the real servicer harness). RED: 16 failed on pre-step-16 tree; the AC-3 test passes pre-implementation because it exercises only the already-installed instrumentation handler against the servicer (no app.telemetry dependency), as a guard for the real log line. GREEN 1493 passed, cov 90.04% (floor 40).
+
+Analysis live_loop: `log.info("live_loop: cycle complete")` after a successful _run_cycle only. Verified ast, ruff, grep; full suite 1496 passed (tests for step 23 written first; RED captured: success-case test failed before this edit).
