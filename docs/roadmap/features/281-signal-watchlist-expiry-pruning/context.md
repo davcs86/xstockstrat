@@ -44,3 +44,10 @@ Folded in without a decision: overwrite (not merge) a leftover expiry row when t
 - **Failed renewal add accepted as a residual risk** (early prune at the old expiry until the next non-deduplicated ingest); no agent retry added.
 - **Backfill REPORT also lists `untracked_no_signal` SIGNAL entries** (user, symbol) for manual removal; no automatic deletion.
 - Gate: **run a third round** — not yet approved.
+
+## Session 2026-10-31 — user amendment during round 3 (supersedes the two round-2 answers it touches)
+
+User replied to the two open questions the round-2 proposer raised: **(1) "Remove them"**, **(2) "Yes"**. Interpreted as:
+1. **Backfill removes `untracked_no_signal` SIGNAL entries** (SIGNAL bindings on system lists with no matching `direction='watchlist'` signal row for the owner) instead of only listing them. Supersedes "REPORT lists them, no auto-delete". Safeguard to carry into design: removal is an explicit APPLY step (not implicit), its count is shown in REPORT first and must be passed back (`--expect-untracked N`) so the DBA approves the exact blast radius; each removal still emits the owner-visible ledger event.
+2. **Cutting the "interval 0 = disabled" kill switch is acceptable.** Supersedes "restore pause switch". Config key bounds return to `[60,86400]` with `<=0` reading as the default (300); **untrack-on-provenance-less-add stays** (it is what makes version skew self-safe without a switch).
+- Round-3 proposer was launched before this amendment; its output is reconciled with these two deltas before the adversary pass. Gate remains: not yet approved.
