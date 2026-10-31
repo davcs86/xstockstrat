@@ -1724,7 +1724,7 @@ for n in 1 2 3 4 5 6 7; do grep -q -E "^- G1 q$n \([0-9]{4}-[0-9]{2}-[0-9]{2}\):
 
 ### Step 49 — service: guard: produced-signals registry as an allowlist; retire Part 2; relax P3-count
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/ + packages/otel (non-service)`
 **Files**:
 - `packages/otel/produced-signals.tsv` — create
