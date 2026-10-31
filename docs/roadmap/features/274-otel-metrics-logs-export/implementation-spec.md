@@ -1084,7 +1084,7 @@ cd services/xstockstrat-ledger && pnpm run lint
 
 ### Step 30 — test: ledger: telemetry tests — export paths, status vectors, lazy histogram, log bridge, shutdown (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/telemetry.export.test.ts` — modify
@@ -2094,4 +2094,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Steps 28/29 (and their identity/notify/config/UI analogues) modify `services/<svc>/pnpm-lock.yaml`.
 - **Actual**: the workspace root `pnpm-lock.yaml` is the lockfile CI (`pnpm install --frozen-lockfile`, `cache-dependency-path: pnpm-lock.yaml`) and every Node Dockerfile (`COPY pnpm-workspace.yaml package.json pnpm-lock.yaml`) use; `pnpm install` rewrites only that file. The per-service `pnpm-lock.yaml` is a stale leftover that nothing reads.
 - **Disposition**: gap-protocol default (fix now): the steps stage the root `pnpm-lock.yaml` instead of the service-level file, and leave the stale file untouched (removing it is out of scope).
+
+### Deviation 8 — Node `shutdownTelemetry()` must flush the meter provider itself, and the reader must read the interval env var (step 30, found by the test)
+- **Spec said**: Step 28 — `shutdownTelemetry()` calls `sdk.shutdown()`; Step 30 — set `OTEL_METRIC_EXPORT_INTERVAL` and expect a flush on shutdown.
+- **Actual**: `@opentelemetry/sdk-metrics` 1.25.1's `PeriodicExportingMetricReader.onShutdown()` clears its timer and shuts the exporter down but exports nothing, so with the 60 s default interval a SIGTERM would silently drop all unexported metrics; and an explicit reader ignores `OTEL_METRIC_EXPORT_INTERVAL` (only the env-built reader reads it). `shutdownTelemetry()` now awaits `MeterProvider.forceFlush()` before `sdk.shutdown()`, and `metricIntervalOptions()` passes `OTEL_METRIC_EXPORT_INTERVAL`/`OTEL_METRIC_EXPORT_TIMEOUT` to the reader. Residual: while the resource's async attributes are still pending (the first milliseconds after start) the reader exports without awaiting, so a flush that early can return before delivery; a SIGTERM that early loses at most startup-time points.
+- **Disposition**: gap-protocol default (fix now): `src/telemetry.ts` changed under Step 30 (outside its Files list), the identity/notify/config/UI clones inherit it. Tests: Step 30's shutdown-flush test proves the flush; a 200 ms settle delay in the child models a long-running service.
 
