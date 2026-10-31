@@ -1286,6 +1286,7 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 // ingestRecentBarsForTimeframe is ingestRecentBars' per-timeframe body, split out so the
 // caller can size each timeframe's window independently (see minIngestLookback).
 func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
+	began := time.Now()
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	if ms, ok := src.(source.MultiSymbolSource); ok {
 		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
@@ -1303,7 +1304,7 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, sr
 					slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 				}
 			}
-			warnNoBars(ctx, tf, missing, len(symbols), start, end)
+			reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
 			return
 		} else {
 			slog.WarnContext(ctx, "bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
@@ -1324,15 +1325,17 @@ func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, sr
 			slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 		}
 	}
-	warnNoBars(ctx, tf, missing, len(symbols), start, end)
+	reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
 }
 
 // barIngestNoBarsSample caps the symbols named in one bar-ingest no-bars WARN.
 const barIngestNoBarsSample = 10
 
-// warnNoBars emits one summarized WARN per ingest cycle and timeframe for the warm symbols the feed
-// returned no bars for (missing of total, so an all-symbols gap such as a market holiday is visible).
-func warnNoBars(ctx context.Context, tf string, missing []string, total int, start, end time.Time) {
+// reportIngestCycle logs a per-cycle INFO heartbeat (keeps a quiet marketdata visible in short log
+// windows) and one WARN naming the symbols the feed returned no bars for (missing of total).
+func reportIngestCycle(ctx context.Context, tf string, missing []string, total int, start, end time.Time, began time.Time) {
+	slog.InfoContext(ctx, "bar ingest: cycle complete",
+		"timeframe", tf, "symbols", total, "no_bars", len(missing), "elapsed_ms", time.Since(began).Milliseconds())
 	if len(missing) == 0 {
 		return
 	}

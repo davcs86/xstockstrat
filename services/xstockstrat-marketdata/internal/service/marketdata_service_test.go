@@ -1002,6 +1002,62 @@ func TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars(t *testing.T) {
 	})
 }
 
+// infoRecorder captures slog.LevelInfo messages and attrs; slog.SetDefault is process-global, so
+// tests using it must not call t.Parallel().
+type infoRecorder struct {
+	mu   sync.Mutex
+	recs []recordedWarn
+}
+
+func (h *infoRecorder) Enabled(context.Context, slog.Level) bool { return true }
+func (h *infoRecorder) Handle(_ context.Context, r slog.Record) error {
+	if r.Level != slog.LevelInfo {
+		return nil
+	}
+	rec := recordedWarn{msg: r.Message, attrs: map[string]string{}}
+	r.Attrs(func(a slog.Attr) bool {
+		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
+		return true
+	})
+	h.mu.Lock()
+	h.recs = append(h.recs, rec)
+	h.mu.Unlock()
+	return nil
+}
+func (h *infoRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *infoRecorder) WithGroup(string) slog.Handler      { return h }
+
+// TestIngestRecentBars_LogsHeartbeatEveryCycle: every cycle and timeframe logs one INFO line, with
+// or without gaps, so marketdata appears in a short log window even when nothing is wrong.
+func TestIngestRecentBars_LogsHeartbeatEveryCycle(t *testing.T) {
+	const msg = "bar ingest: cycle complete"
+	start, end := time.Now().Add(-48*time.Hour), time.Now()
+	cases := []struct {
+		name    string
+		src     source.DataSourceClient
+		noBars  string
+		symbols []string
+	}{
+		{"all symbols missing", &fakeBackfillSource{}, "2", []string{"AAA", "ZZZ"}},
+		{"no symbols missing", &fakeEmptyMultiSource{bars: map[string][]*marketdatav1.Bar{}}, "0", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &infoRecorder{}
+			prev := slog.Default()
+			slog.SetDefault(slog.New(h))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+			(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), tc.src, tc.symbols, "1d", start, end)
+			if len(h.recs) != 1 || h.recs[0].msg != msg {
+				t.Fatalf("want exactly one %q INFO, got %v", msg, h.recs)
+			}
+			if a := h.recs[0].attrs; a["timeframe"] != "1d" || a["no_bars"] != fmt.Sprint(len(tc.symbols)) || a["symbols"] != fmt.Sprint(len(tc.symbols)) {
+				t.Errorf("unexpected attrs: %v", a)
+			}
+		})
+	}
+}
+
 // funcBody returns the source text from the given func signature up to the next top-level `func (`.
 func funcBody(t *testing.T, src, signature string) string {
 	t.Helper()
