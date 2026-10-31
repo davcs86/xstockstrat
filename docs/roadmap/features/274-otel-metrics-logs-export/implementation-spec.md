@@ -1296,7 +1296,7 @@ cd services/xstockstrat-notify && pnpm run lint
 
 ### Step 36 — test: notify: telemetry tests — export paths, status vectors, lazy histogram, log bridge, shutdown (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/telemetry.export.test.ts` — modify
