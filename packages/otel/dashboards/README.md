@@ -10,6 +10,7 @@ runtimes export traces, metrics and logs over OTLP/HTTP.
 | `signal-pipeline-throughput.json` | Signal Pipeline | `xstk-signal-pipeline` | Analysis scoring latency (P99 by `rpc_method`); analysis live-loop cycles (10m) |
 | `infrastructure.json` | Infrastructure | `xstk-infrastructure` | gRPC transport errors per service (status 4, 8, 14); services reporting telemetry |
 | `trading-service.json` | Trading Service | `xstk-trading-service` | `PlaceOrder` rate by status; `PlaceOrder` P50/P99; trading error logs |
+| `marketdata-service.json` | Marketdata Service | `xstk-marketdata-service` | `GetBars` rate by status; `GetBars` P50/P99; marketdata error logs; no-bars warnings (bar ingester, `GetBars` miss with empty live fetch) |
 
 ## Importing
 
