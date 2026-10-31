@@ -1439,7 +1439,7 @@ cd services/xstockstrat-config && pnpm run lint
 
 ### Step 40 — service: identity: seed-admin refusal log carries user_id, not the email
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify

@@ -418,3 +418,5 @@ Config: telemetry.ts cloned from the ledger implementation (default "config", ow
 Config: logger.ts = ledger bridge (with the Deviation 9 level fix), index.ts shutdown (parallel flush, 5s unref'd forceShutdown, flush.finally exit), winston-transport 0.5.0, root lock. Verified build, lint 0 errors, 241 tests pass.
 
 Config Node telemetry tests = shared suite + AC-10 config row (name config, env staging), AC-5 (OTEL_ENABLED unset: 10 real gRPC GetConfig calls, zero export requests, no-op MeterProvider) and AC-7 (a served GetSecret plaintext AKTESTSECRET123 appears in no exported request). RED: 4+ TS errors vs pre-step-37 sources. GREEN config tests incl. coverage floor, lint 0 errors. Also restored the original formatting of the unrelated lines that prettier had reflowed in the ledger, notify and config index.ts files (steps 29/35/38), keeping only the intended shutdown edits.
+
+Identity: the seed-admin refusal log.warn now logs { user_id: user.user_id } instead of { email } (PII removed at source on stdout and OTLP). Verified build, lint, grep; behaviour tests are step 41 (RED captured: refusal tests failed before this edit).

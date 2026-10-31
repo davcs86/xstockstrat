@@ -151,7 +151,7 @@ export class IdentityServiceImpl {
       if (isBlockedDefaultAdmin(user.password_hash, process.env.APPLICATION_ENV)) {
         log.warn(
           'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
-          { email }
+          { user_id: user.user_id }
         );
         return callback({ code: 16, message: 'invalid credentials' });
       }
