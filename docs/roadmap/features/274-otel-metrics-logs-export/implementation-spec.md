@@ -1907,7 +1907,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 55 — service: dashboards: per-panel restore on produced series; keep Tempo panels; update README
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel (non-service)`
 **Files**:
 - `packages/otel/dashboards/service-health.json` — modify
@@ -2119,4 +2119,5 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 53 touches only `alerts/alert-rules.yaml`, `alerts/mute-timings.yaml` and `alerts/README.md`, and its Verification requires the guard to exit 0; `docs/setup/grafana-cloud.md` is a Step 57 file.
 - **Actual**: that doc carries its own `otel-guard:removed-assets` fence listing the three rules, the mute timing and `mute-timings.yaml`. Once the assets exist again the fence is a Part 3 hit (`AC-3 P3-fence`), so the guard cannot exit 0 after Step 53 without editing it.
 - **Disposition**: gap-protocol default (expand scope): Step 53 replaces that doc's "Step 7 — Alert Rules" paragraph and removes the fence; Step 57 still owns the remaining observability wording in the same file.
+- **Also in Step 55**: the same file's dashboard section carries a second `removed-assets` fence (the three retired dashboards and files); Step 55 rewrites that section and drops the fence for the same reason.
 

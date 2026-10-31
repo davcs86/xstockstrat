@@ -194,32 +194,21 @@ After starting the stack (dev) or deploying to DO (prod):
 
 ## Step 6 — Dashboard (checked into the repo)
 
-The Tempo-backed dashboard is version-controlled JSON under **`packages/otel/dashboards/`** — that
-directory is the source of truth, not the Grafana UI. See its `README.md` for the panel/query
-assumptions.
+The dashboards are version-controlled JSON under **`packages/otel/dashboards/`** — that directory is the
+source of truth, not the Grafana UI. See its `README.md` for the panel/query assumptions.
 
 | File | Dashboard | Covers |
 |---|---|---|
-| `service-health.json` | Service Health (`xstk-service-health`) | server error spans, slow server spans (>2s), analysis scoring RPC activity |
+| `service-health.json` | Service Health (`xstk-service-health`) | request rate, error rate and P99 latency per service, error-log volume, plus Tempo drill-downs (server error spans, slow server spans, analysis scoring RPC activity) |
+| `signal-pipeline-throughput.json` | Signal Pipeline (`xstk-signal-pipeline`) | analysis latency by RPC method, analysis live-loop cycles |
+| `infrastructure.json` | Infrastructure (`xstk-infrastructure`) | transport-level gRPC errors, services reporting |
+| `trading-service.json` | Trading Service (`xstk-trading-service`) | `PlaceOrder` rate and latency, trading error logs |
 
-**Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your Tempo
-datasource when prompted (the dashboard declares it as the `DS_TEMPO` `__inputs` entry).
+**Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your Prometheus, Loki and
+(for Service Health) Tempo datasources when prompted (the `DS_PROMETHEUS`, `DS_LOKI` and `DS_TEMPO` `__inputs`).
 
 **Import (file-based provisioning):** point a Grafana dashboard provider at
-`packages/otel/dashboards/`; the `${DS_TEMPO}` template variable resolves to the provisioned
-datasource UID.
-
-Dashboards removed from that directory stay in Grafana Cloud until deleted by hand under
-Dashboards:
-
-<!-- otel-guard:removed-assets -->
-- `xstk-signal-pipeline` — dashboard
-- `xstk-infrastructure` — dashboard
-- `xstk-trading-service` — dashboard
-- `signal-pipeline-throughput.json` — file
-- `infrastructure.json` — file
-- `trading-service.json` — file
-<!-- /otel-guard:removed-assets -->
+`packages/otel/dashboards/`; the `${DS_*}` template variables resolve to the provisioned datasource UIDs.
 
 ### Ad-hoc Tempo queries (supplementary)
 
