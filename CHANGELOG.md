@@ -3,6 +3,26 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-10-31
+
+### Features
+- fix-ibkr-request-signing: `IBKRClient.signRequest` signs plain OAuth 1.0a: query params are excluded from the base string, the HMAC key is `&` + access-token secret instead of a Live Session Token, and the header has no `realm`.
+- fix-otel-metrics-logs-gap: No service exports OTel metrics or logs (traces only, per feature 226), yet the provisioned Grafana alerts and dashboards query `rpc_server_duration_milliseconds`, which nothing produces, and `docs/setup/grafana-cloud.md` claims traces, metrics and logs.
+- fix-getpnl-source-service: `PortfolioService.GetPnL` queries ledger fills with `SourceService: "trading"`, but trading stamps `"xstockstrat-trading"` and the ledger filters by exact match, so `realized_pnl` is always 0 with no error.
+- fix-offline-book-consistency: The offline-account books from feature 240 drift or misreport P&L in four ways:
+- fix-ledger-query-pagination: Ledger `QueryEvents` emits `nextPageToken` but never reads `pageToken` (D-13).
+- fix-analysis-backtest-bounds: `_fetch_bars_paged` silently returns only the first page when marketdata re-serves a page, against its own documented contract, so backtests run on a truncated window.
+- otel-metrics-logs-export: Every xstockstrat runtime exports OTel metrics (including a gRPC server-duration histogram) and logs over OTLP/HTTP next to its existing traces.
+
+### Proto Changes
+- portfolio/v1/portfolio.proto
+- trading/v1/trading.proto
+
+### Summary
+16 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-30
 
 ### Features
