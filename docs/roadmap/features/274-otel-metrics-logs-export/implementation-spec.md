@@ -928,7 +928,7 @@ grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-agent/pypro
 
 ### Step 25 — test: agent: telemetry tests — metrics/logs export, resource, log correlation, flush
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_telemetry.py` — modify

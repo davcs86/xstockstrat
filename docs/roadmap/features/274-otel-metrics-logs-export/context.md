@@ -388,3 +388,5 @@ Analysis live_loop: `log.info("live_loop: cycle complete")` after a successful _
 Analysis heartbeat tests: success => exactly one record; error => cycle error, none; locked => skipping, none. RED: success case failed pre-step-22, the other two (negative) cases pass by construction. GREEN 1496 passed, cov 90.22% (floor 40).
 
 Agent: MeterProvider + LoggerProvider + logging bridge (instrumentation.logging handler, opentelemetry* filter) added to init_telemetry; no recorder/interceptor (client only); dependency + uv.lock. Verified ast, ruff, uv lock --check, grep; 598 existing tests pass.
+
+Agent telemetry tests: shared fixture (client instrumentor) resets meter/logger; metrics/logs export under both header forms; AC-10 agent row (service.name=agent, env staging, platform); AC-11 WARN log inside a span exports severity WARN with the span's trace_id; failure visibility w/o recursion; disabled; D8 handler module; SIGTERM atexit flush subprocess + static main.py check. RED against pre-step-24 telemetry.py captured; GREEN full suite, floor 40.
