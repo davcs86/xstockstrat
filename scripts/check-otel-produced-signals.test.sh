@@ -269,6 +269,45 @@ grep -v 'mute_outside_market_hours' "${tree}/packages/otel/alerts/alert-rules.ya
   cp "${work}/ar" "${tree}/packages/otel/alerts/alert-rules.yaml"
 expect_hit AC-14-stall-rule-label-dropped "AC-14 P5 packages/otel/alerts/alert-rules.yaml:" "mute_outside_market_hours"
 
+# --- AC-14: restored dashboards reference only produced series ---------------------------------------
+fresh
+expect_green AC-14-real-dashboards-pass
+run=$((run + 1))
+n=0
+for f in "${tree}"/packages/otel/dashboards/*.json; do n=$((n + 1)); done
+[ "$n" -eq 4 ] || case_fail AC-14-four-dashboards "expected 4 dashboards, found ${n}"
+
+run=$((run + 1))
+grep -q '"query": "label_values(rpc_server_duration_milliseconds_count, service_name)"' \
+  "${REPO_ROOT}/packages/otel/dashboards/service-health.json" ||
+  case_fail AC-14-service-variable "service-health lacks the \$service variable over rpc_server_duration_milliseconds_count"
+
+run=$((run + 1))
+for input in DS_PROMETHEUS DS_LOKI DS_TEMPO; do
+  grep -q "\"name\": \"${input}\"" "${REPO_ROOT}/packages/otel/dashboards/service-health.json" ||
+    case_fail AC-14-datasource-inputs "service-health lacks the ${input} input"
+done
+
+fresh
+dash 'sum(rate(rpc_client_bogus_total[5m]))'
+expect_hit AC-14-unregistered-series-in-panel "AC-8 P1 packages/otel/dashboards/service-health.json:" "rpc_client_bogus_total"
+
+fresh
+dash 'sum(count_over_time({service_name=\"nosuch\"} [5m]))'
+expect_hit AC-14-unregistered-service-in-panel "AC-8 P1 packages/otel/dashboards/service-health.json:" 'service_name="nosuch"'
+
+fresh
+dash 'sum(count_over_time({service_name=\"analysis\"} |= \"signal.ingested\" [5m]))'
+expect_hit AC-14-unproduced-literal-in-panel "AC-8 P1 packages/otel/dashboards/service-health.json:" '|= "signal.ingested"'
+
+fresh
+dash 'sum(rate({service_name=\"trading\"} | detected_level=\"error\" [5m]))'
+expect_green AC-14-metadata-filter-passes
+
+fresh
+dash 'sum(rate(rpc_server_duration_milliseconds_count{service_name=\"trading\"}[5m]))'
+expect_hit AC-14-panel-selector-without-matcher "AC-17 P4 packages/otel/dashboards/service-health.json:"
+
 # --- Part 2 is retired: signal talk in docs is free ---------------------------------------------
 fresh
 append docs/setup/grafana-cloud.md "Loki and Prometheus now carry rpc_server_duration_milliseconds with service_name=analysis; P99 per service."
@@ -332,9 +371,9 @@ fallback_tree() {
   fresh
   rm -f "${tree}"/packages/otel/dashboards/*.json
   while IFS= read -r f; do
-    grep -v 'service-health' "$f" >"${work}/stripped" || true
+    grep -v -E 'service-health|signal-pipeline|infrastructure|trading-service' "$f" >"${work}/stripped" || true
     cp "${work}/stripped" "$f"
-  done < <(grep -rl 'service-health' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
+  done < <(grep -rl -E 'service-health|signal-pipeline|infrastructure|trading-service' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
 }
 
 fallback_tree

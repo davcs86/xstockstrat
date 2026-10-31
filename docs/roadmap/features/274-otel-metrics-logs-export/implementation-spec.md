@@ -1942,7 +1942,7 @@ grep -q 'rpc_server_duration_milliseconds' packages/otel/dashboards/service-heal
 
 ### Step 56 — test: guard tests: restored dashboards reference only produced series; $service variable (AC-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify
