@@ -206,24 +206,24 @@
   reviewer had no shell (no command was run); the blocking claims below were re-verified against the tree before recording.
   Spec revision reviewed: commit `e4b0beea` (includes D8: `opentelemetry-instrumentation-logging` handler; DO grace period verified).
 - Unresolved ✗ carried into execution (Floor items first):
-  - [ ] **Step 43 (F-08, C-10, C-18)**: adds a third `segment` param to `createDispatch` (`bffShared.ts:112-115`, 2 params today); callers
+  - [x] **Step 43 (F-08, C-10, C-18)**: adds a third `segment` param to `createDispatch` (`bffShared.ts:112-115`, 2 params today); callers
     `insightsBff.ts:218`, `configUiBff.ts:104`, `traderBff.ts:172` are not in Files; also 7 files. Add callers or split the step.
-  - [ ] **Steps 29, 32, 35, 38 (F-08)**: Instruction 2 requires exporting `telemetryStarted()` from `src/telemetry.ts`; Files omits
+  - [x] **Steps 29, 32, 35, 38 (F-08)**: Instruction 2 requires exporting `telemetryStarted()` from `src/telemetry.ts`; Files omits
     `src/telemetry.ts` and steps 28/31/34/37 never add it. Add the file to Files or move the export into the telemetry steps.
-  - [ ] **Steps 4, 8, 12 (F-05, B3 ordering)**: change `Init` to a three-value return; the existing tests call `shutdown, err := Init(ctx)`
+  - [x] **Steps 4, 8, 12 (F-05, B3 ordering)**: change `Init` to a three-value return; the existing tests call `shutdown, err := Init(ctx)`
     (`trading|portfolio|marketdata/internal/telemetry/otel_test.go:59`), and `go vet`/`golangci-lint` compile test files, so Verification
     cannot pass until the later test step. Update those callers in the same step or move the build-only check.
-  - [ ] **Steps 7, 11, 15 (F-08)**: Files is a prose directory entry, not exact stageable paths; no stated coverage threshold; `Covers` claims
+  - [x] **Steps 7, 11, 15 (F-08)**: Files is a prose directory entry, not exact stageable paths; no stated coverage threshold; `Covers` claims
     AC-11 that the step itself disclaims. List exact `*_test.go` paths or fold the `*Context` retrofit gate into steps 6/10/14.
-  - [ ] **Step 48 (F-05)**: Verification `grep -n 'G1' context.md` already matches (11 hits) before any operator answer; use dated
+  - [x] **Step 48 (F-05)**: Verification `grep -n 'G1' context.md` already matches (11 hits) before any operator answer; use dated
     `G1 q1..q7:` markers. Spell out that the PR-A squash-merge to `main-dev` and merge-back are operator-owned hand-offs outside the
     `/sdd-execute` loop (F-02/F-03 note).
-  - [ ] **Steps 25, 27 (C-08)**: `pytest --cov=app` has no `--cov-fail-under=N`.
-  - [ ] **Steps 16, 18, 20, 24 / D8**: Instruction 2 still lists `opentelemetry.sdk._logs.{LoggerProvider,LoggingHandler}`; contradicts Instruction 3
+  - [x] **Steps 25, 27 (C-08)**: `pytest --cov=app` has no `--cov-fail-under=N`.
+  - [x] **Steps 16, 18, 20, 24 / D8**: Instruction 2 still lists `opentelemetry.sdk._logs.{LoggerProvider,LoggingHandler}`; contradicts Instruction 3
     (import `LoggingHandler` from `opentelemetry.instrumentation.logging.handler`). Also: the subprocess SIGTERM tests (17, 19, 21, 25) install
     `sys.exit(0)` instead of the real handler (`indicators/app/main.py:87-90` only schedules `grpc_server.stop`), so the atexit flush path is
     not exercised; and no assertion proves the new import path (add `-W error::DeprecationWarning`).
-  - [ ] **Step 47**: Verification `git diff --stat -- docs packages/otel` is never empty (steps 1/3 edit `docs/roadmap/**/context.md`) and has
+  - [x] **Step 47**: Verification `git diff --stat -- docs packages/otel` is never empty (steps 1/3 edit `docs/roadmap/**/context.md`) and has
     no base ref; use `git diff --stat origin/main-dev -- docs packages/otel ':!docs/roadmap'`.
 - Warnings carried (non-blocking, full list in the review output): Steps 5/9/13 use `slog.Warn` where `WarnContext(ctx, …)` is needed for
   trace correlation; Step 13 AC-18 is a function-sequence test, not a process exit within 10 s; Steps 30/33/36/39 prove AC-2 only with
@@ -237,3 +237,26 @@
   `marketdata_service.go` (215, 255); analysis `app/main.py`, `engine/live_loop.py`, `tests/test_live_loop.py` (215), `tests/conftest.py`
   (215, 275); ledger `package.json`/`pnpm-lock.yaml` (257); trading `go.mod`/`go.sum` (249). Rebase-only; optional soft merge-order rows
   274↔215, 274↔255, 274↔278, 274↔275 left to the operator. 250 is landed and consistent with 274's guard assumptions.
+
+## Session 2026-10-31 — sdd-review impl-spec re-runs and fixes (advisory)
+
+- **Pass 1 findings fixed** (commit `9190d2be`): the eight [x] items above, plus line-drift refresh and `slog.WarnContext` wording.
+- **Pass 2** (spec-reviewer, no shell): 2 FAIL, 27 WARN, 30 PASS, 0 Floor. All but one of the earlier failures confirmed closed. New FAILs: step 46
+  (called `createDispatch` with a third argument that step 43 had removed; listed `bffDeadlines.test.ts` as modified with nothing to change) and
+  step 57 (its grep matched the roadmap history, so it could never be empty). Fixed in `8437aede`, together with: RED-capture scope, AC-2 now proven
+  by one real in-process gRPC `NOT_FOUND` call per Node service (steps 30/33/36/39), a shared OTLP receiver fixture for identity (step 41),
+  `handler.service.typeName` verified against `@connectrpc/connect` 2.1.1 (step 43), and discriminating Verification lines on 20 steps.
+- **Pass 3** (spec-reviewer, no shell): 3 FAIL, 17 WARN, 39 PASS. The three FAILs were one defect **introduced by pass-2 fixes' neighbour text**: steps 5/9/13
+  told the executor to export `serverMetricViews()` from `otel.go`, which is not in their Files, and steps 4/8/12 never created it (F-08/F-04).
+  Fixed: steps 4/8/12 now create the helper (its doc comment carries the `rpc.server.duration` producer literal for the step-49 registry), steps 5/9/13
+  only use it (mechanically checked). Also fixed: RED mechanics when the service step is already committed (`git checkout <pre-step commit> -- <non-test
+  files>`; build/import/compile failure accepted as RED in all languages, to be noted in `context.md` at the first test step), step 46 case (3) made
+  non-vacuous, step 45 second header form in its own file, step 41 OTLP tests isolated in `identityServiceImpl.otlp.test.ts`, step 49 any-one
+  producer semantics and silent-success exit code, static `telemetry.StopServer` grep in steps 5/9/13 (AC-12 wiring), retrofit gates 7/11/15 marked
+  `red N/A`, coverage-floor comments on steps 45/46, stale cites refreshed.
+- **Not re-reviewed after the pass-3 fix batch.** Remaining known warnings, all structural: steps 4/6/8/10/12/14 (6-7 Files each), 43 (7 Files, recorded),
+  55 (5 Files with conditional creates) exceed the C-18 five-file guideline by design; step 54 is a test step that also edits the guard; Node steps 29/32/35/38
+  have no discriminating check of their own (covered by 30/33/36/39). The reviewers had no shell, so no Verification command or line cite into an
+  uninstalled package (`@connectrpc/connect`, OTel SDKs) has been run; the connect types were checked from the npm tarballs at 2.1.0 and the lock pins 2.1.1.
+- Overlap re-scan (after the first fix batch): no FAIL-level collision; WARN-level shared files unchanged (marketdata `cmd/server/main.go` and
+  `marketdata_service_test.go` with 215/230/255; portfolio `portfolio_quote_deadline_test.go` with 251/256). No merge-order row proposed.
