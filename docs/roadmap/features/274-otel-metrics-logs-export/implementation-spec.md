@@ -1632,7 +1632,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 46 — test: ui: BFF route histogram — unary Connect and REST recorded; stream and unmatched handled
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/bffMetrics.test.ts` — create
