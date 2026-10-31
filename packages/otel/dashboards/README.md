@@ -10,7 +10,7 @@ runtimes export traces, metrics and logs over OTLP/HTTP.
 | `signal-pipeline-throughput.json` | Signal Pipeline | `xstk-signal-pipeline` | Analysis scoring latency (P99 by `rpc_method`); analysis live-loop cycles (10m) |
 | `infrastructure.json` | Infrastructure | `xstk-infrastructure` | gRPC transport errors per service (status 4, 8, 14); services reporting telemetry |
 | `trading-service.json` | Trading Service | `xstk-trading-service` | `PlaceOrder` rate by status; `PlaceOrder` P50/P99; trading error logs |
-| `marketdata-service.json` | Marketdata Service | `xstk-marketdata-service` | `GetBars` rate by status; `GetBars` P50/P99; marketdata error logs; no-bars warnings (bar ingester, `GetBars` miss with empty live fetch) |
+| `service-detail.json` | Service Detail | `xstk-service-detail` | Any one service in one environment, chosen by the `$service` and `$environment` dropdowns: request rate, error rate and P99 latency by method; P50/P99 across all RPCs; log rate by level; warning and error log lines |
 
 ## Importing
 
@@ -34,7 +34,7 @@ Every series and log literal a panel queries is registered in `../produced-signa
 - **Metrics:** `rpc_server_duration_milliseconds_{count,bucket,sum}` with `service_name`, `rpc_service`,
   `rpc_method` and `rpc_grpc_status_code`. Every selector excludes the server-streaming methods
   (`rpc_method!~"…"`, derived from `packages/proto` by the guard): a stream call ends on each deploy and
-  would look like an error or a slow call. The `$service` variable is the one exempt query.
+  would look like an error or a slow call. The `$service` and `$environment` variable queries (`label_values`) are the exempt ones; panels select them with `=~"$service"`, which the guard does not read as a service-name value.
 - **Python and Node** record `rpc.server.duration` from the gRPC server span, so the Python and Node
   numbers depend on inbound spans being sampled; the guard rejects a trace sampler or gRPC-exclusion env in
   the deploy specs.

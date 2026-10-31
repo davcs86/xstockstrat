@@ -203,7 +203,7 @@ source of truth, not the Grafana UI. See its `README.md` for the panel/query ass
 | `signal-pipeline-throughput.json` | Signal Pipeline (`xstk-signal-pipeline`) | analysis latency by RPC method, analysis live-loop cycles |
 | `infrastructure.json` | Infrastructure (`xstk-infrastructure`) | transport-level gRPC errors, services reporting |
 | `trading-service.json` | Trading Service (`xstk-trading-service`) | `PlaceOrder` rate and latency, trading error logs |
-| `marketdata-service.json` | Marketdata Service (`xstk-marketdata-service`) | `GetBars` rate and latency, marketdata error logs, no-bars warnings |
+| `service-detail.json` | Service Detail (`xstk-service-detail`) | any one service in one environment (dropdowns): RPC rate, errors and latency by method, log rate by level, warning and error log lines |
 
 **Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your Prometheus, Loki and
 (for Service Health) Tempo datasources when prompted (the `DS_PROMETHEUS`, `DS_LOKI` and `DS_TEMPO` `__inputs`).

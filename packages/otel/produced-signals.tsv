@@ -21,5 +21,3 @@ loki-service	notify	services/xstockstrat-notify/src/telemetry.ts	?? 'notify'
 loki-service	config	services/xstockstrat-config/src/telemetry.ts	?? 'config'
 loki-service	ui	services/xstockstrat-ui/src/telemetry.ts	?? 'ui'
 loki-literal	live_loop: cycle complete	services/xstockstrat-analysis/app/engine/live_loop.py	live_loop: cycle complete
-loki-literal	bar ingest: symbols returned no bars	services/xstockstrat-marketdata/internal/service/marketdata_service.go	bar ingest: symbols returned no bars
-loki-literal	GetBars: no bars stored and live fetch returned none	services/xstockstrat-marketdata/internal/service/marketdata_service.go	GetBars: no bars stored and live fetch returned none

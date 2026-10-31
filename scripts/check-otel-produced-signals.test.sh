@@ -371,9 +371,9 @@ fallback_tree() {
   fresh
   rm -f "${tree}"/packages/otel/dashboards/*.json
   while IFS= read -r f; do
-    grep -v -E 'service-health|signal-pipeline|infrastructure|trading-service|marketdata-service' "$f" >"${work}/stripped" || true
+    grep -v -E 'service-health|signal-pipeline|infrastructure|trading-service|service-detail' "$f" >"${work}/stripped" || true
     cp "${work}/stripped" "$f"
-  done < <(grep -rl -E 'service-health|signal-pipeline|infrastructure|trading-service|marketdata-service' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
+  done < <(grep -rl -E 'service-health|signal-pipeline|infrastructure|trading-service|service-detail' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
 }
 
 fallback_tree
