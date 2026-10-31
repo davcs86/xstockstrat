@@ -246,7 +246,7 @@
   step 57 (its grep matched the roadmap history, so it could never be empty). Fixed in `8437aede`, together with: RED-capture scope, AC-2 now proven
   by one real in-process gRPC `NOT_FOUND` call per Node service (steps 30/33/36/39), a shared OTLP receiver fixture for identity (step 41),
   `handler.service.typeName` verified against `@connectrpc/connect` 2.1.1 (step 43), and discriminating Verification lines on 20 steps.
-- **Pass 3** (spec-reviewer, no shell): 3 FAIL, 17 WARN, 39 PASS. The three FAILs were one defect **introduced by pass-2 fixes' neighbour text**: steps 5/9/13
+- **Pass 3** (spec-reviewer, no shell): 3 FAIL, 17 WARN, 39 PASS. The three FAILs were one defect that was **already in the original spec text** (passes 1 and 2 missed it; not introduced by the fixes): steps 5/9/13
   told the executor to export `serverMetricViews()` from `otel.go`, which is not in their Files, and steps 4/8/12 never created it (F-08/F-04).
   Fixed: steps 4/8/12 now create the helper (its doc comment carries the `rpc.server.duration` producer literal for the step-49 registry), steps 5/9/13
   only use it (mechanically checked). Also fixed: RED mechanics when the service step is already committed (`git checkout <pre-step commit> -- <non-test
