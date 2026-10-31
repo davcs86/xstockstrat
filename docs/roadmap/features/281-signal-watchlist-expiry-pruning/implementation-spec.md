@@ -73,7 +73,7 @@ Deployment files: **no new env var and no new port** (the backfill subcommand ru
 ### Verification commands (referenced by name from the steps)
 
 - **GO-LINT** — `cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod`
-- **GO-COVER** — `cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"` — confirm ≥ 40%. All new portfolio logic in this spec lands in `repository/`, `service/` and `cmd/`, which CI excludes from the measured set; the threshold is therefore held by not touching `config`/`middleware`/`mtls`/`marketsession`, and the behavior is proven by the tests named in each step.
+- **GO-COVER** — `cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"` — confirm ≥ 40%. All new portfolio logic in this spec lands in `repository/`, `service/` and `cmd/`, which CI excludes from the measured set; the threshold is therefore held by not touching `config`/`middleware`/`mtls`/`marketsession`, and the behavior is proven by the tests named in each step.
 - **GO-DBTEST** — `cd services/xstockstrat-portfolio && PORTFOLIO_DB_TEST_URL='postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable' GOWORK=off go test -tags dbtest -race -count=1 ./internal/repository/...` — runs in CI job `portfolio-db-test` (Step 4). Locally it needs a migrated TimescaleDB; where none is available the executor runs `GOWORK=off go vet -tags dbtest ./...` (offline compile proof) and cites the CI job for the green run. RED for a DB test is a compile failure against the pre-implementation tree, or a CI failure.
 - **PY-VERIFY** — `cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40`
 - **NODE-VERIFY** (config) — `cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40`
@@ -163,9 +163,9 @@ _The three globs above are **generated output**: the exact file list is whatever
 **Verification**:
 ```bash
 ./scripts/buf-gen.sh && git diff --stat packages/proto/gen/ | tail -5
-# then a second run must be a no-op (state hash before/after; `git diff` alone misses new untracked files):
-H1=$( (git status --porcelain packages/proto/gen/; git diff packages/proto/gen/) | sha256sum )
-./scripts/buf-gen.sh && H2=$( (git status --porcelain packages/proto/gen/; git diff packages/proto/gen/) | sha256sum ) && [ "$H1" = "$H2" ] && echo "second run was a no-op"
+# then a second run must be a no-op (state checksum before/after; `git diff` alone misses new untracked files; `cksum` is POSIX and exists on macOS and Linux):
+H1=$( (git status --porcelain packages/proto/gen/; git diff packages/proto/gen/) | cksum )
+./scripts/buf-gen.sh && H2=$( (git status --porcelain packages/proto/gen/; git diff packages/proto/gen/) | cksum ) && [ -n "$H1" ] && [ "$H1" = "$H2" ] && echo "second run was a no-op"
 ```
 Confirm only `portfolio/v1` outputs changed.
 
@@ -229,7 +229,7 @@ ls services/xstockstrat-portfolio/migrations/018_*.up.sql services/xstockstrat-p
 **Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
 **Codebase Evidence**:
-- Confirmed via: `grep -rn "dbtest\|go:build" services/xstockstrat-{portfolio,trading,marketdata} --include=*.go` → no match: **Not found — the Go real-DB harness must be created from scratch**; the only real-DB CI precedent is `ledger-db-test` (`.github/workflows/ci.yml:712-768`: `timescale/timescaledb:latest-pg16` service, `docker build -f scripts/Dockerfile.migrate`, migrator `docker run` with `SEED_USER_ID`, then the test command).
+- Confirmed via: `grep -rnE "dbtest|go:build" services/xstockstrat-{portfolio,trading,marketdata} --include=*.go` → no match: **Not found — the Go real-DB harness must be created from scratch**; the only real-DB CI precedent is `ledger-db-test` (`.github/workflows/ci.yml:712-768`: `timescale/timescaledb:latest-pg16` service, `docker build -f scripts/Dockerfile.migrate`, migrator `docker run` with `SEED_USER_ID`, then the test command).
 - The migrator image runs every service's migrations incl. ingest (needs `SEED_USER_ID`; `scripts/Dockerfile.migrate:13` copies `services`, `scripts/migration-rerun.sh` passes `SEED_USER_ID="00000000-0000-4000-8000-0000000000c1"`), which the backfill tests (Step 16) need for `ingest.newsletter_signals`.
 - Path-filter names available to `if:`: `xstockstrat-portfolio`, `migrations`, `proto`, `ci`, `go-shared` (`ci.yml:30-70`); the `ledger-db-test` gate shape at `ci.yml:712-720`. The `ci-gate` aggregate job's `needs:` list and summary echoes at `ci.yml:899-937` (`ledger-db-test` entries are the template).
 - Pool constructor: `repository.NewPortfolioRepo(connStr)` / `Pool()` (`portfolio_repo.go:37,55`); `newPool` sets `MaxConns` from `DB_POOL_MAX` (`pool.go:15-33`). The harness builds its own `pgxpool` with `ConnConfig.RuntimeParams["lock_timeout"]="500ms"` (design § 8 T4) so any wait fails deterministically.
@@ -248,7 +248,7 @@ ls services/xstockstrat-portfolio/migrations/018_*.up.sql services/xstockstrat-p
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go vet -tags dbtest ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n "portfolio-db-test" ../../.github/workflows/ci.yml   # (cwd is services/xstockstrat-portfolio) job def + aggregate needs + summary echo (≥3 hits)
+[ "$(grep -c "portfolio-db-test" ../../.github/workflows/ci.yml)" -ge 3 ]   # cwd is services/xstockstrat-portfolio; asserts job def + ci-gate needs + summary echo (≥3 matching lines)
 ```
 Green DB run: CI job `portfolio-db-test` (or GO-DBTEST locally against a migrated database).
 
@@ -266,7 +266,7 @@ Green DB run: CI job `portfolio-db-test` (or GO-DBTEST locally against a migrate
 **Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "func (r \*WatchlistRepo) AddSymbols\|func insertBindingsTx\|func touchWatchlistTx" internal/repository/watchlist_repo.go` → `280`, `494`, `478`. `AddSymbols` is `Begin → touchWatchlistTx (L287, locks parent) → insertBindingsTx (L290) → Commit → GetByID`.
+- Confirmed via: `grep -nE "func \(r \*WatchlistRepo\) AddSymbols|func insertBindingsTx|func touchWatchlistTx" internal/repository/watchlist_repo.go` → `280`, `494`, `478`. `AddSymbols` is `Begin → touchWatchlistTx (L287, locks parent) → insertBindingsTx (L290) → Commit → GetByID`.
 - `insertBindingsTx` (`:494-504`) loops `INSERT … VALUES ($1,$2,$3,$4) ON CONFLICT (watchlist_id, symbol) DO NOTHING` and returns `error` only; `Create` (`:49`) and `Update` (`:224`) call it and ignore any result. First writer wins on `source` (`:497-499`).
 - `touchWatchlistTx` `UPDATE … RETURNING updated_at` takes the parent row lock (`:478-490`); `RemoveSymbols` (`:300-322`) and `Update` (`:194-`) also lock the parent first — the add path's parent-first order is preserved.
 - Interface `WatchlistStore` (`portfolio_service.go:1757-1779`) declares `AddSymbols(ctx, watchlistID string, bindings []*portfoliov1.WatchlistBinding)`; sole caller `AddWatchlistSymbols` at `:2184`; fake at `watchlist_service_test.go` (`AddSymbols` method on `fakeWatchlistStore`).
@@ -332,6 +332,7 @@ then **GO-LINT** (the paired test step runs GO-COVER and GO-DBTEST).
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go vet -tags dbtest ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
+[ "$(grep -cE '^func TestAddPath_' internal/repository/watchlist_signal_expiry_add_dbtest_test.go)" -ge 7 ]   # the step cannot pass without its tests (cwd is services/xstockstrat-portfolio)
 ```
 GO-DBTEST (CI `portfolio-db-test`) green; then **GO-COVER** (excluded packages: "New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient"; confirm total ≥ 40%).
 
@@ -397,7 +398,7 @@ then **GO-LINT**.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -run 'AddWatchlistSymbols' -race -count=1
+cd services/xstockstrat-portfolio && OUT=$(GOWORK=off go test ./internal/service/ -run 'TestAddWatchlistSymbols_(NoProvenanceIntent|ProvenanceTracksIntent|ProvenanceValidation|SignalSourceSkipsDefault)' -race -count=1 -v 2>&1); rc=$?; [ "$rc" -eq 0 ] && [ "$(echo "$OUT" | grep -c '^--- PASS')" -ge 4 ]   # all four named tests run and pass (three are new, `SignalSourceSkipsDefault` already exists and is updated; a filter matching nothing, or any failure, fails the command)
 ```
 then **GO-LINT** and **GO-COVER** ("New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient"; confirm total ≥ 40%).
 
@@ -463,7 +464,7 @@ then **GO-LINT**.
 **Covers**: `AC-2, AC-3, AC-4, AC-5, AC-6, AC-8, AC-10, AC-12` — AC-2 (only tracked signal past → entry and its expiry row removed, list itself survives); AC-3 (two signals' merged row: future `valid_until` retains, then after `UPDATE … valid_until = now() - '1 day'` the next tick removes); AC-4 (SIGNAL binding with **no** expiry row survives any number of ticks); AC-5 (MANUAL binding with an expired orphan row is not removed; the orphan row is swept); AC-6 (second tick returns `Removed == nil`, no error); AC-8 (after a renewal merge the entry survives past the old expiry, removed after the new one, `PrunedEntry.SignalID` = 102); AC-10 (seed `ingest.newsletter_signals` rows — a live `buy` and an `mcp_client`-source `watchlist` row for the symbol — and assert the entry is still removed: the prune reads only the side table); AC-12 (see below).
 
 **Instructions**:
-1. Cases as above, each asserting the post-state of `watchlist_symbols` **and** `watchlist_signal_expiry`, plus `PrunedEntry` fields (`UserID`, `WatchlistID`, `Symbol`, `StrategyID`, `SignalID`, `ValidUntil`).
+1. **One `TestPrune_*` function per case** (table-driven only where the shape repeats), **at least nine**: `TestPrune_ExpiredOnlySignalRemoves` (AC-2), `TestPrune_MergedRowRetainsThenRemoves` (AC-3), `TestPrune_UntrackedEntrySurvives` (AC-4), `TestPrune_ManualOrphanSweptEntryKept` (AC-5), `TestPrune_SecondTickIsNoop` (AC-6), `TestPrune_RenewalEventNamesSignal102` (AC-8), `TestPrune_StrategyBoundRemovedLikeAny`, `TestPrune_IngestSignalsDoNotKeepAlive` (AC-10), `TestPrune_ConcurrencyNeverWaits` (AC-12 a/b/c, may be subtests). Cases as above, each asserting the post-state of `watchlist_symbols` **and** `watchlist_signal_expiry`, plus `PrunedEntry` fields (`UserID`, `WatchlistID`, `Symbol`, `StrategyID`, `SignalID`, `ValidUntil`).
 2. Strategy-bound SIGNAL entry (`strat-9`) is removed like any other and `StrategyID == "strat-9"` (feeds AC-13 in Step 12).
 3. AC-10's ingest rows need the ingest schema: columns confirmed from `ingest/migrations/001_newsletter_signals.up.sql` plus `user_id TEXT NOT NULL` (`013:70`, contracted by `014`); re-grep 013/014 for any other NOT NULL/FK before writing the fixture insert (a `signal_sources` FK may apply — **not verified at spec time**; if present, insert a source row first).
 4. AC-12 concurrency (both interleavings, `lock_timeout=500ms` on the prune's pool so any wait **fails** rather than hangs): (a) hold an open tx doing `UPDATE watchlist_symbols … RETURNING` on the due binding (mirrors `UpdateBinding` step 1); run a tick → completes without error, binding **not** removed, expiry row **kept**; commit the holder → next tick removes it. (b) hold the parent via `touchWatchlistTx`-equivalent `UPDATE portfolio.watchlists …` (mirrors `AddSymbols`/`RemoveSymbols`/replace-all) → tick skips the list, no error; then run `UpdateBinding`'s second statement while a tick holds the parent to prove no deadlock (assert the `UpdateBinding` caller gets `ErrBindingNotFound` or success, never a `40P01`). Also (c) a concurrent renewal `AddSymbols` and tick interleave without a lock-timeout error (`SQLSTATE 55P03`) or `40P01`.
@@ -472,6 +473,7 @@ then **GO-LINT**.
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go vet -tags dbtest ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
+[ "$(grep -cE '^func TestPrune_' internal/repository/signal_expiry_prune_dbtest_test.go)" -ge 9 ]   # the step cannot pass without its tests (cwd is services/xstockstrat-portfolio)
 ```
 GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages — integration verification is sufficient; total ≥ 40%).
 
@@ -546,7 +548,7 @@ Each grep must hit (chained with `&&`): the explicit `x-trace-id` metadata set, 
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/ -run 'SignalPrune|ClampPrune|PruneEvents' -race -count=1
+cd services/xstockstrat-portfolio && [ "$(grep -cE '^func Test(SignalPrune|ClampPrune)' internal/service/signal_prune_test.go)" -ge 6 ] && OUT=$(GOWORK=off go test ./internal/service/ -run 'TestSignalPrune_|TestClampPruneInterval' -race -count=1 -v 2>&1); rc=$?; [ "$rc" -eq 0 ] && [ "$(echo "$OUT" | grep -c '^--- PASS')" -ge 6 ]   # the six named tests exist, run and pass; a filter matching nothing, or any failure, fails the command
 ```
 then **GO-LINT** and **GO-COVER** ("New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient"; total ≥ 40%).
 
@@ -605,7 +607,7 @@ cd services/xstockstrat-config && grep -n "signal_prune_interval_seconds" src/gr
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+cd services/xstockstrat-config && [ "$(grep -c 'signal_prune_interval_seconds' src/__tests__/setConfigScalarBounds.test.ts)" -ge 3 ] && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
 ```
 
 ---
@@ -634,7 +636,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 **Instructions** (design § 5; **the CLI never deletes bindings** — the in-service prune is the single deleter):
 1. `main.go`: right after the `healthcheck` branch add `if len(os.Args) > 1 && os.Args[1] == "backfill-signal-expiry" { os.Exit(runBackfillSignalExpiry(os.Args[2:])) }`.
-2. `backfill.go` (**thin**; defines `func runBackfillSignalExpiry(args []string) int`, the function `main.go` calls): `flag.NewFlagSet` with `--mode=report|apply` (default `report`), `--legacy-owner <id>`, `--expect-untracked N`, `--expect-seed-expired M`. Refuse when `DATABASE_URL` is empty; print `target host=<host> db=<db>` before anything else; build `repository.BackfillOptions` and call `repository.RunBackfill`; map `errors.Is(err, repository.ErrBackfillRefused)` (and any other error) to a non-zero exit. No bound or ownership logic here.
+2. `backfill.go` (**thin**; defines `func runBackfillSignalExpiry(args []string) int`, the function `main.go` calls): `flag.NewFlagSet` with `--mode=report|apply` (default `report`), `--legacy-owner <id>`, `--expect-untracked N`, `--expect-seed-expired M`. Refuse when `DATABASE_URL` is empty with the exact message `backfill-signal-expiry: DATABASE_URL is required (pooled :25061 URL; no .env fallback)` on stderr and exit code 2; when `DATABASE_URL` is non-empty print `target host=<host> db=<db>` before anything else; build `repository.BackfillOptions` and call `repository.RunBackfill`; map `errors.Is(err, repository.ErrBackfillRefused)` (and any other error) to a non-zero exit. No bound or ownership logic here.
    **Exported contract Step 16 calls** (`signal_expiry_backfill.go`): `type BackfillOptions struct { Mode string; LegacyOwner string; ExpectUntracked, ExpectSeedExpired *int64 }`; `type BackfillResult struct { Seeded, Marked, SkippedChanged int; Report string }`; `var ErrBackfillRefused = errors.New("backfill refused")`; `func RunBackfill(ctx context.Context, pool *pgxpool.Pool, opts BackfillOptions, out io.Writer) (BackfillResult, error)`. `RunBackfill` itself enforces: `LegacyOwner` non-empty in **both** modes; `ExpectUntracked` and `ExpectSeedExpired` non-nil for APPLY; live untracked count > `*ExpectUntracked` or seed-expired count > `*ExpectSeedExpired` ⇒ return `ErrBackfillRefused` **before the first write**. The legacy owner is echoed in the header of both modes so the pasted REPORT and APPLY output show the same value (a cross-invocation mismatch cannot be detected by the process; the change record is the control).
 3. `signal_expiry_backfill.go`: candidate query = SIGNAL bindings (`source=2`) on `system_managed` lists with **no** expiry row, `LEFT JOIN ingest.newsletter_signals n ON n.user_id = w.user_id AND lower(n.direction)='watchlist' AND upper(btrim(n.symbol)) = s.symbol`. Classify per binding: any open-ended row (`n.valid_until IS NULL`) ⇒ stays **untracked** (skipped); else `max(valid_until)` with that row's `id` ⇒ **seed** (`seed_expired` when `max <= now()`); no row ⇒ **untracked ⇒ mark** `{valid_until = now(), signal_id NULL}`. Over-inclusion prunes late, never early.
 4. **REPORT**: a single read-only transaction (no locks, never write-then-rollback). Print a header (`legacy_owner`, "read-only"), SEED rows (owner, watchlist_id, symbol, `valid_until`, `signal_id`, `seed_expired`), UNTRACKED rows `(owner, watchlist_id, symbol, strategy_id, legacy_rows, legacy_live)` + a `with_live_legacy_signal` count (`legacy_*` computed from `n.user_id = <legacy-owner>`; informational only, behavior unchanged), a PER-OWNER table (`signal_entries, seed, seed_expired, untracked, own_signal_rows_total`, flag `NO_OWN_SIGNALS` when the owner has zero watchlist-direction rows under their own id), and a final `NEXT:` line with the exact APPLY command including `--expect-untracked N --expect-seed-expired M` and the same `--legacy-owner`.
@@ -646,7 +648,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go vet -tags dbtest ./...
 # the subcommand refuses an empty DATABASE_URL before opening any connection (the --legacy-owner / --expect-* refusals live in repository.RunBackfill and are asserted by Step 16):
-( DATABASE_URL= GOWORK=off go run ./cmd/server backfill-signal-expiry --mode=report --legacy-owner SEED; echo "exit=$?" )   # cwd is already services/xstockstrat-portfolio; expect exit=1-or-higher (empty DATABASE_URL refused before any connection)
+OUT=$( DATABASE_URL= GOWORK=off go run ./cmd/server backfill-signal-expiry --mode=report --legacy-owner SEED 2>&1 ); rc=$?; [ "$rc" -ne 0 ] && echo "$OUT" | grep -q "DATABASE_URL is required"   # cwd is already services/xstockstrat-portfolio; a real assertion: non-zero exit AND the refusal text (go run maps the child exit code to 1)
 ```
 then **GO-LINT**.
 
@@ -676,10 +678,12 @@ then **GO-LINT**.
 4. **Ingest-interleaving test (design T4):** between the REPORT candidate read and the APPLY row write, commit a new live watchlist-direction ingest row **and** a renewal `AddSymbols` for the same entry; APPLY must skip it as `changed since REPORT` (or, if it ran first, the add's merge/rescue fixes the mark) — assert the entry is never left marked-and-removable while a live signal exists, using the harness's `lock_timeout=500ms` pool so waits fail deterministically.
 5. Symbols in fixtures include `" aapl"` to prove `upper(btrim())` normalization at the source.
 6. C-13: literals inline, single consumer.
+7. **Mandated test names** (the Verification counts them; **at least nine**): `TestBackfill_ReportIsReadOnly`, `TestBackfill_BoundsRefuseBeforeWrite`, `TestBackfill_LegacyOwnerRequired`, `TestBackfill_SeedsFromOwnerRows` (AC-15, incl. the `" aapl"` fixture), `TestBackfill_StrictUntrackedRemoval` (AC-16, incl. `legacy_live` and the bound refusal), `TestBackfill_MarkedEntryRescued` (AC-17), `TestBackfill_OpenEndedStaysUntracked`, `TestBackfill_Idempotent`, `TestBackfill_IngestInterleavingSkipsChanged`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go vet -tags dbtest ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
+[ "$(grep -cE '^func TestBackfill_' internal/repository/signal_expiry_backfill_dbtest_test.go)" -ge 9 ]   # the step cannot pass without its tests (cwd is services/xstockstrat-portfolio)
 ```
 GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages; total ≥ 40%).
 
@@ -696,7 +700,7 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages; total
 **Reviewers**: Service owner `xstockstrat-agent` — MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync across all six inventory surfaces; statelessness
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "add_watchlist_symbol\|ensure_signal_watchlist\|_iso_to_timestamp" services/xstockstrat-agent/app/client.py services/xstockstrat-agent/app/tools.py` → `client.py:297` (`ensure_signal_watchlist`), `:315` (`add_watchlist_symbol(user_id, watchlist_id, symbol)`), `:99` (`_iso_to_timestamp`); `tools.py:692` calls `await client.add_watchlist_symbol(user_id, wl_id, symbol)` inside `if direction == "watchlist" and not result.get("deduplicated"):` (`:688-696`, bare `except Exception` → `log.warning`).
+- Confirmed via: `grep -nE "add_watchlist_symbol|ensure_signal_watchlist|_iso_to_timestamp" services/xstockstrat-agent/app/client.py services/xstockstrat-agent/app/tools.py` → `client.py:297` (`ensure_signal_watchlist`), `:315` (`add_watchlist_symbol(user_id, watchlist_id, symbol)`), `:99` (`_iso_to_timestamp`); `tools.py:692` calls `await client.add_watchlist_symbol(user_id, wl_id, symbol)` inside `if direction == "watchlist" and not result.get("deduplicated"):` (`:688-696`, bare `except Exception` → `log.warning`).
 - Current request: `AddWatchlistSymbolsRequest(watchlist_id=…, bindings=[binding])` with metadata `_metadata(("x-user-id", user_id))` (`client.py:324-328`) — the existing propagating call; no new outbound RPC (step-constraints §B: reuses the `_metadata` header mechanism, `client.py:68-90`).
 - `result` carries `{"signal_id": resp.signal_id, "deduplicated": resp.deduplicated}` (`client.py` `ingest_signal` return) and `valid_until` is the tool's ISO string argument (`tools.py:608-613`).
 - The `ingest_signal` docstring SIDE EFFECT block is at `tools.py:628-630`; `get_watchlist` docstring at `:2020-2031`. Tool count statement: `tools.py:54` ("the tool count stays forty-five").
@@ -714,7 +718,7 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages; total
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && grep -rn "forty-five\|45 tools\|45 MCP" app/tools.py CLAUDE.md | head
+cd services/xstockstrat-agent && grep -q "forty-five" app/tools.py && ! git diff -U0 "$(git merge-base HEAD origin/main-dev)" -- app/tools.py | grep -E '^[+-].*(forty-five|@(server|mcp)\.tool)'   # tool count text present and untouched; no tool registration added/removed (diffed against the merge base, so it still bites after the step is committed)
 ruff check . && ruff format --check .
 ```
 then **PY-VERIFY** (run with Step 18's tests).
@@ -742,11 +746,12 @@ then **PY-VERIFY** (run with Step 18's tests).
 **Instructions**:
 1. `test_watchlist_client.py`: add tests for the request builder — with `signal_id=102, valid_until="2026-12-01T00:00:00Z"` the captured `AddWatchlistSymbolsRequest` has `signal_provenance.signal_id == 102` and `valid_until.seconds` = that instant; with `valid_until=None` / `signal_id=None` / `valid_until=""` / `valid_until="not-a-date"` (unparseable) the field is unset **and the `AddWatchlistSymbolsRequest` is still sent** (the binding add is not dropped) (`HasField("signal_provenance")` is false); binding source stays `WATCHLIST_ENTRY_SOURCE_SIGNAL`; `x-user-id` appears exactly once (existing assertion pattern).
 2. `test_ingest_signal_watchlist.py`: update the existing add assertions to the new call shape (`("u-2", "wl-sys", "NVDA", 1, None)` for an open-ended signal); add a case with `valid_until` set asserting `mock_add` receives `signal_id` 102 and the ISO string; assert the gate is unchanged (non-watchlist direction and deduplicated results still do not call `add_watchlist_symbol`); assert a portfolio `INVALID_ARGUMENT` from the add is swallowed with a WARN (feature 127 AC-4 shape).
-3. Docstring parity: extend the existing AC-5 doc-parity test (it reads the `ingest_signal` docstring and `docs/runbooks/mcp-tools.md`) to assert the docstring now mentions expiry.
+3. **Mandated new test names** (the Verification counts them): `test_add_watchlist_symbol_sends_provenance`, `test_add_watchlist_symbol_omits_provenance_when_undated`, `test_add_watchlist_symbol_unparseable_valid_until_still_adds`, `test_ingest_signal_passes_signal_id_and_valid_until`, `test_ingest_signal_open_ended_passes_no_valid_until`, `test_add_invalid_argument_is_swallowed` (the existing `test_watchlist_direction_adds_symbol` is updated in place to the new call shape).
+4. Docstring parity: extend the existing AC-5 doc-parity test (it reads the `ingest_signal` docstring and `docs/runbooks/mcp-tools.md`) to assert the docstring now mentions expiry.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest tests/test_watchlist_client.py tests/test_ingest_signal_watchlist.py
+cd services/xstockstrat-agent && ruff check . && ruff format --check . && [ "$(grep -cE '^(async )?def test_(add_watchlist_symbol_(sends_provenance|omits_provenance_when_undated|unparseable_valid_until_still_adds)|ingest_signal_(passes_signal_id_and_valid_until|open_ended_passes_no_valid_until)|add_invalid_argument_is_swallowed)' tests/test_watchlist_client.py tests/test_ingest_signal_watchlist.py | awk -F: '{n+=$2} END{print n}')" -ge 6 ] && pytest tests/test_watchlist_client.py tests/test_ingest_signal_watchlist.py
 pytest --cov=app --cov-fail-under=40   # full suite (cwd is already services/xstockstrat-agent): the 40% threshold is only meaningful over the whole suite
 ```
 
@@ -778,10 +783,10 @@ pytest --cov=app --cov-fail-under=40   # full suite (cwd is already services/xst
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm test:e2e -- e2e/insights/watchlists.spec.ts -g "emptied by expiry pruning"
-grep -n "from '../helpers\|from '../fixtures" e2e/insights/watchlists.spec.ts
+cd services/xstockstrat-ui && pnpm test:e2e e2e/insights/watchlists.spec.ts -g "emptied by expiry pruning"   # no `--`: pnpm would forward it and Playwright would read -g as a file filter
+grep -n "emptied by expiry pruning" e2e/insights/watchlists.spec.ts   # the new test exists
 ```
-(imports resolve to `e2e/helpers`/`e2e/fixtures`; no INVENTORY change needed when no fixture was added.)
+(the test reuses the existing `mockWatchlists` import already at `watchlists.spec.ts:2-3`; no INVENTORY change is needed when no fixture was added.)
 
 ---
 
@@ -835,6 +840,7 @@ bash scripts/check-context-map.sh
 - `docs/runbooks/CLAUDE.md` — modify (index row, table at `:5-17`)
 - `docs/runbooks/mcp-tools.md` — modify (`ingest_signal` entry `:224`, errors table `:254-255`, `get_watchlist` `:1246-1260`)
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify (add the runbook link to the `backfill-signal-expiry` sentence written in Step 20)
+- `docs/patterns/ci-overview.md` — modify (add the `portfolio-db-test` job row beside `ledger-db-test`, `:19`)
 
 **Reviewers**: none
 
@@ -853,14 +859,15 @@ bash scripts/check-context-map.sh
 2. **`docs/runbooks/CLAUDE.md`**: add the index row for the new runbook (key trigger: stale `source=SIGNAL` watchlist entries after signal expiry / backlog cleanup).
 3. **`docs/runbooks/mcp-tools.md`**: extend `:224` and the `get_watchlist` entry with the expiry sentence (the literal word "expires" must appear in each) (same wording as the Step 17 docstrings); update `:254-255` rows (a provenance validation failure drops the auto-add with a WARN; `deduplicated: true` also does not renew expiry). Keep tool counts unchanged (45).
 4. **Portfolio `CLAUDE.md`**: link `docs/runbooks/signal-watchlist-expiry-backfill.md` from the `backfill-signal-expiry` sentence added in Step 20 (the file now exists, so `check-context-map.sh` passes).
-5. **Teardown (mandatory, root `CLAUDE.md`) — covers the files of Steps 20 and 21**: run `/context-forge:context-constitution refresh` scoped to them; if the plugin is unavailable, re-read each touched context file against the current code and record in the PR body both the unavailability and the reconciliation performed (a bare "plugin unavailable" does not pass; ledger `fails.md:670`).
+5. **`docs/patterns/ci-overview.md`**: add a `portfolio-db-test` row (Go real-Postgres tests, build tag `dbtest`, runs `go test -tags dbtest ./internal/repository/...` against the migrated TimescaleDB service; gated into `ci-gate`) in the same format as the `ledger-db-test` row, so the CI job matrix stays complete (root `CLAUDE.md` names this file as the job-matrix reference).
+6. **Teardown (mandatory, root `CLAUDE.md`) — covers the files of Steps 20 and 21**: run `/context-forge:context-constitution refresh` scoped to them; if the plugin is unavailable, re-read each touched context file against the current code and record in the PR body both the unavailability and the reconciliation performed (a bare "plugin unavailable" does not pass; ledger `fails.md:670`).
 
 **Verification**:
 ```bash
 grep -n "signal_prune_interval_seconds" docs/runbooks/signal-watchlist-expiry-backfill.md
 grep -n "signal_entry_expired" docs/runbooks/signal-watchlist-expiry-backfill.md && grep -n "signal_entry_removed_untracked" docs/runbooks/signal-watchlist-expiry-backfill.md
-grep -n "signal-watchlist-expiry-backfill" docs/runbooks/CLAUDE.md && grep -n "signal-watchlist-expiry-backfill" services/xstockstrat-portfolio/CLAUDE.md
-grep -n "expires" docs/runbooks/mcp-tools.md | head
+grep -n "signal-watchlist-expiry-backfill" docs/runbooks/CLAUDE.md && grep -n "signal-watchlist-expiry-backfill" services/xstockstrat-portfolio/CLAUDE.md && grep -n "portfolio-db-test" docs/patterns/ci-overview.md
+awk '/^### `ingest_signal`/,/^### `emit_alert`/' docs/runbooks/mcp-tools.md | grep -q expires && awk '/^### `get_watchlist`/,/^### `manage_watchlist`/' docs/runbooks/mcp-tools.md | grep -q expires   # each section carries the word
 bash scripts/check-context-map.sh
 ```
 (every grep must hit; `check-context-map.sh` must pass.)
@@ -891,9 +898,9 @@ bash scripts/check-context-map.sh
 **Verification**:
 ```bash
 grep -n "Premise Verdict" docs/roadmap/features/281-signal-watchlist-expiry-pruning/recon.md
-grep -c "watchlist_repo.go\|portfolio_service.go\|tools.py\|client.py" docs/roadmap/features/281-signal-watchlist-expiry-pruning/recon.md
+[ "$(grep -cE "watchlist_repo\.go|portfolio_service\.go|tools\.py|client\.py" docs/roadmap/features/281-signal-watchlist-expiry-pruning/recon.md)" -ge 4 ]
 ```
-(the first prints the heading line; the count is ≥ 4.)
+(the first prints the heading line; the second asserts at least 4 matching lines.)
 
 ---
 

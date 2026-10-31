@@ -95,3 +95,20 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
   - New portfolio logic lands only in coverage-excluded packages (`repository`, `service`, `cmd`), so the 40% Go threshold is held by not touching measured packages.
 - Unverified at spec time (carried into the runbook preflight, Step 20): the portfolio DB role can `SELECT` from `ingest.newsletter_signals`; any `signal_sources` FK/NOT NULL on `ingest.newsletter_signals` fixtures (re-grep ingest 013/014 in Steps 10/16).
 - Teardown owed at execute time: Step 20 touches context files; run `/context-forge:context-constitution refresh` or record the manual reconciliation in the PR body.
+
+## Session 2026-10-31 — sdd-review impl-spec (advisory) — converged after 11 passes
+
+- Result: **0 failures, 0 warnings** at pass 11 (advisory gate; did not block). Pass 1 returned 0 failures / 5 warnings (+ overlap scan 0 FAIL / 4 WARN); passes 2-10 each re-reviewed the whole spec adversarially and surfaced progressively smaller runnability defects, all fixed in `implementation-spec.md` (a pre-execution edit — F-09 step-body immutability applies only once `/sdd-execute` starts).
+- Findings addressed (all `[x]`):
+  - [x] W1 Steps 15/16 — refusal/bound logic moved into exported `repository.RunBackfill` (`BackfillOptions`, `BackfillResult`, `ErrBackfillRefused`); `backfill.go` is a thin `runBackfillSignalExpiry`; the unenforceable cross-process "legacy-owner differs from REPORT" refusal dropped (spec-time correction 6).
+  - [x] W2 Step 4 TDD wording; W3 Step 2 generated-glob note; W5 Step 17 `ValueError` guard; W7 Step 20 split → Steps 20 (service/pattern/constitution docs) and 21 (runbook, runbooks index, `mcp-tools.md`, `ci-overview.md`, portfolio link, teardown); premise check now Step 22 (22 steps total).
+  - [x] N1-N13 runbook/grep naming, stale evidence bullets, `Merged` field and shared-merge claim removed (backfill inserts only rows lacking an expiry row), step-number/anchor drift.
+  - [x] N14-N22 `buf breaking` CI form, malformed/vacuous no-op checks, wrong cwd after `cd`, coverage gate scoped to the full suite, named tests, `pruneOnce` defined in Step 11, runbook link moved to Step 21 so `check-context-map.sh` passes at Step 20.
+  - [x] N23-N31 `docs/patterns/ci-overview.md` row for `portfolio-db-test`, real exit-code assertions (Step 15 refusal text, Step 17 tool-count guard, Step 19 Playwright invocation), per-section `expires` check, `GOWORK=off` on `go list`.
+  - [x] N32-N38 test-existence + pass-count assertions on every test step (mandated `TestAddPath_*`/`TestPrune_*`/`TestBackfill_*` and named pytest functions), `$?`-based assertions, guards diffed against the merge base, POSIX `cksum` instead of `sha256sum`, ERE instead of GNU BRE `\|`.
+- Overlap findings (feature-overlap, 0 FAIL, 4 WARN, rebase-level only):
+  - [ ] `.github/workflows/ci.yml` `ci-gate` block (Step 4) is also edited by `278-enforce-config-key-wiring` — textual conflict likely, job names differ.
+  - [ ] `docs/patterns/config-governance.md` (Step 20) is also edited by 278, 243, 255 — append-only, rebase-only.
+  - [ ] `services/xstockstrat-agent/app/{tools,client}.py` + `docs/runbooks/mcp-tools.md` (Steps 17, 21) vs 215/275 — disjoint regions; re-grep anchors at execute time (273, launched, already changed `ingest_signal`).
+  - [ ] **Policy interaction with 278 — needs an operator decision only if 278 lands first:** the deliberately unseeded prune-interval key is a `read-unseeded` finding for 278's shrink-only ratchet; Step 13 Instructions 3 stops and escalates (seeding is a design change → `/sdd-design`); baselining it is NOT allowed. A `merge-order.md` row `281 after 278` is recommended if both are queued (not written here: no FAIL-level overlap).
+- Carried into execution (announce at each checkpoint): the four overlap items above (`[ ]`), the Open Threads from the design session, and the spec-time unverified items (portfolio role `SELECT` on `ingest.newsletter_signals` → runbook preflight; ingest 013/014 fixture constraints → re-grep in Steps 10/16).
