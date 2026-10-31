@@ -266,6 +266,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.25.0
         version: 1.40.0
+      '@opentelemetry/winston-transport':
+        specifier: 0.5.0
+        version: 0.5.0
       '@xstockstrat/proto':
         specifier: workspace:*
         version: link:../../packages/proto/gen/ts
@@ -1825,6 +1828,10 @@ packages:
 
   '@opentelemetry/semantic-conventions@1.41.1':
     resolution: {integrity: sha512-/UhIkaZgPutTFmQ7RnIJGgDXZmtEJ7Dvi86xNTFWcnRxVRNk/aotsqDJYeEvDP+FSMB2SdW+pQzNMcWP0rwuNA==}
+    engines: {node: '>=14'}
+
+  '@opentelemetry/winston-transport@0.5.0':
+    resolution: {integrity: sha512-uPtnRgP4+CAQjns7TXdhJf46WGRj8kESmBWvm+4aVpvqHGfU7c+f0yzMx8o04+LyXXkoOqYeq54X0grEFtVtdw==}
     engines: {node: '>=14'}
 
   '@phosphor-icons/react@2.1.10':
@@ -7722,6 +7729,11 @@ snapshots:
   '@opentelemetry/semantic-conventions@1.40.0': {}
 
   '@opentelemetry/semantic-conventions@1.41.1': {}
+
+  '@opentelemetry/winston-transport@0.5.0':
+    dependencies:
+      '@opentelemetry/api-logs': 0.52.1
+      winston-transport: 4.9.0
 
   '@phosphor-icons/react@2.1.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:

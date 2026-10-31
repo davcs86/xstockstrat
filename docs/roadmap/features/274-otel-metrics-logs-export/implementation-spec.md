@@ -1050,7 +1050,7 @@ grep -q 'telemetryStarted' services/xstockstrat-ledger/src/telemetry.ts && grep 
 
 ### Step 29 — service: ledger: winston → OTLP log bridge and awaited SIGTERM flush (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/services/logger.ts` — modify

@@ -1,4 +1,4 @@
-import { initTelemetry } from './telemetry';
+import { initTelemetry, shutdownTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
@@ -40,33 +40,42 @@ async function main() {
 
   // Dedicated LISTEN/NOTIFY connection (separate from the query pool) so live streams never starve AppendEvent;
   // it also resolves trimmed NOTIFY rows, so the pool is never borrowed for them.
-  const notifier = new EventNotifier(makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher), {
-    resolveRow: makeResolveRow(configWatcher),
-  });
+  const notifier = new EventNotifier(
+    makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher),
+    {
+      resolveRow: makeResolveRow(configWatcher),
+    },
+  );
   await notifier.start();
   log.info('Event notifier started');
 
   const ledgerImpl = new LedgerServiceImpl(pool, configWatcher, notifier);
 
   const grpcServer = new grpc.Server();
-  grpcServer.addService(createLedgerServiceDefinition(), ledgerImpl as unknown as grpc.UntypedServiceImplementation);
-
-  grpcServer.bindAsync(
-    `0.0.0.0:${grpcPort}`,
-    mtls.serverCredentials(),
-    (err, port) => {
-      if (err) {
-        log.error('Failed to bind gRPC server', { error: err.message });
-        process.exit(1);
-      }
-      grpcServer.start();
-      log.info(`Ledger gRPC service listening on port ${port}`);
-    }
+  grpcServer.addService(
+    createLedgerServiceDefinition(),
+    ledgerImpl as unknown as grpc.UntypedServiceImplementation,
   );
+
+  grpcServer.bindAsync(`0.0.0.0:${grpcPort}`, mtls.serverCredentials(), (err, port) => {
+    if (err) {
+      log.error('Failed to bind gRPC server', { error: err.message });
+      process.exit(1);
+    }
+    grpcServer.start();
+    log.info(`Ledger gRPC service listening on port ${port}`);
+  });
 
   const shutdown = async () => {
     log.info('Shutting down ledger service...');
+    // Open StreamEvents streams block tryShutdown, so flush telemetry in parallel and force the stop.
+    const flush = shutdownTelemetry();
+    setTimeout(() => {
+      grpcServer.forceShutdown();
+      flush.finally(() => process.exit(0));
+    }, 5000).unref();
     grpcServer.tryShutdown(async () => {
+      await flush;
       await notifier.stop();
       await pool.end();
       process.exit(0);
