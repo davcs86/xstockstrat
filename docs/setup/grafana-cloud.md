@@ -232,21 +232,13 @@ Dashboards:
 
 ## Step 7 — Alert Rules (checked into the repo)
 
-`packages/otel/alerts/alert-rules.yaml` provisions no alert rules; it only deletes earlier ones.
-See its `README.md`. Alerting on gRPC error rate, latency and analysis scoring stalls returns with
-`docs/roadmap/features/274-otel-metrics-logs-export/`; until it lands, nothing pages for those failures.
+`packages/otel/alerts/alert-rules.yaml` provisions three rules (error rate, P99 latency, analysis live-loop
+heartbeat) and `mute-timings.yaml` the `outside-us-market-hours` mute timing; see its `README.md` for the
+datasource-UID substitutions, the stream-method exclusion and the stall rule's meaning.
 
-**Apply:** file-based provisioning (self-hosted) applies `deleteRules` / `deleteMuteTimes` itself.
-Grafana Cloud does not apply the file: delete the items below by hand under Alerting → Alert rules
-and Alerting → Notification policies → Mute timings.
-
-<!-- otel-guard:removed-assets -->
-- `xstk-error-rate-high` — alert rule
-- `xstk-p99-latency-high` — alert rule
-- `xstk-analysis-no-scoring` — alert rule
-- `outside-us-market-hours` — mute timing
-- `mute-timings.yaml` — file
-<!-- /otel-guard:removed-assets -->
+**Apply:** file-based provisioning (self-hosted) applies both files itself. Grafana Cloud does not apply
+the file: import each rule under Alerting → Alert rules and create the mute timing under Alerting →
+Notification policies → Mute timings.
 
 Routing (contact points + notification policies) is left to each environment — route to email or
 to Slack via feature `020-notify-external-fanout`.

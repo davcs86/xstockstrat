@@ -1847,7 +1847,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 53 — service: alerts: restore error-rate and p99 rules, re-derive the scoring-stall rule, restore the mute timing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel (non-service)`
 **Files**:
 - `packages/otel/alerts/alert-rules.yaml` — modify
@@ -2114,4 +2114,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 42 — plain `new PeriodicExportingMetricReader({ exporter })` / `new BatchLogRecordProcessor(exporter)`; Step 45 — tests set `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_BLRP_SCHEDULE_DELAY` to export within the test window.
 - **Actual**: with sdk-metrics 2.7 and sdk-logs 0.218 an explicitly constructed reader/processor does not read those env vars (probed outside vitest: no request in 1.2 s with the delay set to 50 ms; exports arrive once `exportIntervalMillis`/`scheduledDelayMillis` are passed). `src/telemetry.ts` now passes both from the standard env vars when set and valid (`metricIntervalOptions`, `logBatchOptions`), leaving the SDK defaults otherwise.
 - **Disposition**: gap-protocol default (fix now): `telemetry.ts` changed under Step 45 (outside its Files list). `serverLog.ts` was also prettier-formatted there. The Step 42 comment-only claim "env-only exporters" is unchanged: the exporters still take no arguments.
+
+### Deviation 12 — Step 53 also rewrites the alert paragraph and fence in `docs/setup/grafana-cloud.md` (step 53)
+- **Spec said**: Step 53 touches only `alerts/alert-rules.yaml`, `alerts/mute-timings.yaml` and `alerts/README.md`, and its Verification requires the guard to exit 0; `docs/setup/grafana-cloud.md` is a Step 57 file.
+- **Actual**: that doc carries its own `otel-guard:removed-assets` fence listing the three rules, the mute timing and `mute-timings.yaml`. Once the assets exist again the fence is a Part 3 hit (`AC-3 P3-fence`), so the guard cannot exit 0 after Step 53 without editing it.
+- **Disposition**: gap-protocol default (expand scope): Step 53 replaces that doc's "Step 7 — Alert Rules" paragraph and removes the fence; Step 57 still owns the remaining observability wording in the same file.
 
