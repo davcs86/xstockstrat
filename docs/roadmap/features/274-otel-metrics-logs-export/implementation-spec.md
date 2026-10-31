@@ -1693,7 +1693,7 @@ bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-
 
 ### Step 48 — docs: G1 dev proof gate (operator) and feature-branch re-sync — blocks PR-B
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `operator / Grafana Cloud dev`
 **Files**:
 - `docs/roadmap/features/274-otel-metrics-logs-export/context.md` — modify (append G1 answers)
