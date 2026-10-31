@@ -497,7 +497,7 @@ test -f services/xstockstrat-marketdata/internal/telemetry/logbridge.go && test 
 
 ### Step 13 — test: marketdata: telemetry tests — metrics/logs export, status code, bridge, shutdown (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/telemetry/otel_test.go` — modify

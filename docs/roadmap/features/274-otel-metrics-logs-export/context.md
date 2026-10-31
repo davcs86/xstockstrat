@@ -352,3 +352,10 @@
 - Verification: `go build ./...`, `go vet ./internal/telemetry/... ./cmd/...` clean; golangci-lint v2.14.0 0 issues; existing telemetry tests pass with the new signature; discriminating check passes.
 - Files modified: `services/xstockstrat-marketdata/internal/telemetry/{otel.go,logbridge.go,shutdown.go,otel_test.go}`, `cmd/server/main.go`, `go.mod`, `go.sum`
 - Deviations: none
+
+### Step 13 — marketdata: telemetry tests — metrics/logs export, status code, bridge, shutdown (Go) [done]
+- Tests are trading's step-5 tests (with the Deviation 5 polling fix) with `service.name` = `marketdata`, plus marketdata's AC-12/AC-18 test in `shutdown_test.go`: a real `grpc.Server` (health service, `otelgrpc` stats handler) holds a client `Watch` stream open (which blocks `GracefulStop` forever), serves two unary `Check` calls and three INFO log records through `WrapLogHandler` with `OTEL_METRIC_EXPORT_INTERVAL=600000` (so only the stop path can deliver), then `StopServer(forceFlush, srv.GracefulStop, srv.Stop, 2s, 3s)` + `shutdown`. It asserts the whole sequence finishes inside 10 s (measured 3.0 s: the 3 s graceful fallback), the exported `rpc.server.duration` count for `Check` is exactly 2, and `rec-1..3` all arrive on `/otlp/v1/logs`.
+- **RED** (accepted build-failure RED): with `otel.go`/`main.go` restored from `8448347f` (pre-step-12) and `logbridge.go`/`shutdown.go` moved aside, the test package fails to build: `assignment mismatch: 3 variables but Init returns 2 values`, `undefined: WrapLogHandler`, `undefined: serverMetricViews`. Sources restored from HEAD (verified byte-identical to the step-12 commit).
+- **GREEN**: 13 tests pass under `-race` (and 3 repeated runs); full suite `-race` has no failures; CI-style coverage total 71.5% (floor 40); golangci-lint v2.14.0 0 issues after `gofmt` of the hand-assembled test file; `grep telemetry.StopServer cmd/server/main.go` passes.
+- Files modified: `services/xstockstrat-marketdata/internal/telemetry/{otel_test.go,shutdown_test.go}`, `go.mod`/`go.sum` (tidy)
+- Deviations: none
