@@ -5,6 +5,7 @@ import type { LedgerEvent } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { ledgerClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
+import { withBffMetrics } from '@/lib/bffMetrics';
 
 /**
  * Ledger event export — session-gated BFF streaming route on the /trader segment. Streams the
@@ -83,7 +84,7 @@ function mapError(err: unknown): NextResponse {
   );
 }
 
-export async function GET(req: NextRequest) {
+async function getHandler(req: NextRequest) {
   // Reject unauthenticated before any ledger call.
   const claims = await getSessionFromRequest(req);
   if (!claims) {
@@ -151,3 +152,5 @@ export async function GET(req: NextRequest) {
     },
   });
 }
+
+export const GET = withBffMetrics('trader', '/trader/api/ledger/export', getHandler);

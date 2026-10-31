@@ -355,7 +355,7 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
 
 ## Observability
 
-OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. See
+OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. The UI exports traces, metrics and logs (all OTLP/HTTP, env-only exporters): `src/lib/bffMetrics.ts` records `http.server.duration` for unary Connect BFF calls and the wrapped REST routes (server streams excluded), and `src/lib/serverLog.ts` writes the usual console line and also emits an OTel log record. `telemetry.ts`'s own console lines stay stdout-only (recursion guard). See
 `docs/patterns/observability.md`.
 
 ## Testing
@@ -409,7 +409,7 @@ real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contai
 | Config-UI audit (DB) | `src/app/config-ui/api/audit/route.ts` |
 | Next config | `next.config.js` |
 | Dockerfile | `Dockerfile` |
-| OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts` |
+| OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts`, `src/lib/bffMetrics.ts`, `src/lib/serverLog.ts` |
 | E2E | `e2e/`, `playwright.config.ts` |
 | Shell nav model (083) | `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx` |
 | Enum render maps (083) | `src/lib/opportunityShared.tsx` |

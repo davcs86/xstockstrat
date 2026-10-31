@@ -57,7 +57,7 @@ holds the asymmetries and scars the docs *don't* state. Does not restate documen
 | BFF handler-map key includes the segment prefix (no basePath stripping) | `src/lib/bffShared.ts#createDispatch` (~L115-152; `handlerMap` key ~L119); CLAUDE.md |
 | Middleware matcher must include `/` | `src/middleware.ts:16-17` (matcher array `:16-23`) |
 | Vitest scope `src/lib/**`, 40% floor; e2e via Playwright | `vitest.config.ts:25-33`; CLAUDE.md |
-| OTel hook: `src/instrumentation.ts` (`NEXT_RUNTIME === 'nodejs'` guard) → `initTelemetry`, exporter built with no args (root PLAT-3) | `docs/patterns/observability.md`; CLAUDE.md § Observability |
+| OTel hook: `src/instrumentation.ts` (`NEXT_RUNTIME === 'nodejs'` guard) → `initTelemetry`; trace, metric and log exporters are built with no args (root PLAT-3) and the metric reader / log processor are explicit (`src/telemetry.ts`) | `docs/patterns/observability.md`; CLAUDE.md § Observability |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the

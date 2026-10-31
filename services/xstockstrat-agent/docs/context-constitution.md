@@ -34,7 +34,7 @@ that *calls* backends as a gRPC client. Does not restate documented/CI-enforced 
 | What | Where |
 |---|---|
 | OAuth 2.1 routes, single-transport `handle_mcp` (SSE removed by feature 079), `/agent` path-insertion quirk | `CLAUDE.md` §OAuth |
-| OTel instruments the gRPC *client* channel (not a server) | `app/telemetry.py` (client-channel docstring ~L6-8), `#GrpcAioInstrumentorClient().instrument() (~L53)` |
+| OTel instruments the gRPC *client* channel (not a server); its RPC-level metric is `mcp.tool.duration` from `ToolMetricsMiddleware`, not `rpc.server.duration` | `app/telemetry.py` (client-channel docstring ~L6-8), `#GrpcAioInstrumentorClient().instrument() (~L80)`; `app/tool_metrics.py#ToolMetricsMiddleware` |
 | `mtls.secure_channel` for all backend calls (mutual TLS, feature 210) | `app/mtls.py`, `app/client.py` (root PLAT-N3) |
 | n8n/HTTP-webhook migration to gRPC left no residue | PR #441 |
 | `list_opportunities` gRPC deadline + the fixed policy-read cap | `CLAUDE.md` `agent.opportunities.read_timeout_seconds` row; `app/client.py#_CONFIG_READ_TIMEOUT_S`; `app/tools.py#_POLICY_READ_TIMEOUT_S` |

@@ -337,6 +337,7 @@ class LiveEvaluationLoop:
             async with self._lock:
                 try:
                     await self._run_cycle()
+                    log.info("live_loop: cycle complete")
                 except Exception as e:  # never let one bad cycle kill the loop
                     log.error("live_loop: cycle error: %s", e)
 

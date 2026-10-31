@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { getSessionFromRequest, hasAdminScope } from '@/lib/auth';
 import { resolveDbConnection } from '@/lib/dbTls';
 import { HEADER_TRACE_ID } from '@/lib/headers';
+import { serverLog } from '@/lib/serverLog';
 
 let pool: Pool | null = null;
 
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (err: unknown) {
-    console.error('config-ui audit: database error', {
+    serverLog.error('config-ui audit: database error', {
       traceId: req.headers.get(HEADER_TRACE_ID) ?? '',
       code: (err as { code?: string })?.code,
       message: err instanceof Error ? err.message : String(err),

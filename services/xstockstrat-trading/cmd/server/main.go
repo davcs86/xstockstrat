@@ -41,10 +41,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	shutdownOtel, err := telemetry.Init(ctx)
+	shutdownOtel, forceFlushOtel, err := telemetry.Init(ctx)
 	if err != nil {
-		slog.Warn("otel init failed — continuing without tracing", "error", err)
+		slog.Warn("otel init failed — continuing without telemetry export", "error", err)
 	} else {
+		slog.SetDefault(slog.New(telemetry.WrapLogHandler(logger.Handler())))
 		defer func() {
 			ctx2, c := context.WithTimeout(context.Background(), 5*time.Second)
 			defer c()
@@ -160,7 +161,7 @@ func main() {
 		<-quit
 		slog.Info("shutting down trading service")
 		hs.Shutdown()
-		grpcServer.GracefulStop()
+		telemetry.StopServer(forceFlushOtel, grpcServer.GracefulStop, grpcServer.Stop, 2*time.Second, 3*time.Second)
 		cancel()
 	}()
 

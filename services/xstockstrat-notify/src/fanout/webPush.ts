@@ -173,13 +173,13 @@ export class WebPushDispatcher {
       if (status === 404 || status === 410) {
         try {
           await this.pool.query('DELETE FROM notify.push_subscriptions WHERE endpoint = $1', [row.endpoint]);
-          log.info('pruned expired push subscription', { alertId, endpoint: row.endpoint, status });
+          log.info('pruned expired push subscription', { alertId, subscriptionId: row.subscription_id, status });
         } catch (delErr: any) {
-          log.warn('failed to prune push subscription', { alertId, endpoint: row.endpoint, error: delErr?.message ?? String(delErr) });
+          log.warn('failed to prune push subscription', { alertId, subscriptionId: row.subscription_id, error: delErr?.message ?? String(delErr) });
         }
         return;
       }
-      log.warn('push channel error', { alertId, channel: 'push', endpoint: row.endpoint, error: error?.message ?? String(error) });
+      log.warn('push channel error', { alertId, channel: 'push', subscriptionId: row.subscription_id, error: error?.message ?? String(error) });
     }
   }
 }

@@ -131,26 +131,42 @@ class StubbedDispatcher extends WebPushDispatcher {
 }
 
 function withVapid(subject: string, fn: () => Promise<void> | void): Promise<void> {
-  const prev = { p: process.env.VAPID_PRIVATE_KEY, u: process.env.VAPID_PUBLIC_KEY, s: process.env.VAPID_SUBJECT };
+  const prev = {
+    p: process.env.VAPID_PRIVATE_KEY,
+    u: process.env.VAPID_PUBLIC_KEY,
+    s: process.env.VAPID_SUBJECT,
+  };
   process.env.VAPID_PRIVATE_KEY = VAPID.privateKey;
   process.env.VAPID_PUBLIC_KEY = VAPID.publicKey;
   process.env.VAPID_SUBJECT = subject;
   const restore = () => {
-    prev.p === undefined ? delete process.env.VAPID_PRIVATE_KEY : (process.env.VAPID_PRIVATE_KEY = prev.p);
-    prev.u === undefined ? delete process.env.VAPID_PUBLIC_KEY : (process.env.VAPID_PUBLIC_KEY = prev.u);
+    prev.p === undefined
+      ? delete process.env.VAPID_PRIVATE_KEY
+      : (process.env.VAPID_PRIVATE_KEY = prev.p);
+    prev.u === undefined
+      ? delete process.env.VAPID_PUBLIC_KEY
+      : (process.env.VAPID_PUBLIC_KEY = prev.u);
     prev.s === undefined ? delete process.env.VAPID_SUBJECT : (process.env.VAPID_SUBJECT = prev.s);
   };
   return Promise.resolve(fn()).finally(restore);
 }
 
 function withoutVapid(fn: () => Promise<void> | void): Promise<void> {
-  const prev = { p: process.env.VAPID_PRIVATE_KEY, u: process.env.VAPID_PUBLIC_KEY, s: process.env.VAPID_SUBJECT };
+  const prev = {
+    p: process.env.VAPID_PRIVATE_KEY,
+    u: process.env.VAPID_PUBLIC_KEY,
+    s: process.env.VAPID_SUBJECT,
+  };
   delete process.env.VAPID_PRIVATE_KEY;
   delete process.env.VAPID_PUBLIC_KEY;
   delete process.env.VAPID_SUBJECT;
   const restore = () => {
-    prev.p === undefined ? delete process.env.VAPID_PRIVATE_KEY : (process.env.VAPID_PRIVATE_KEY = prev.p);
-    prev.u === undefined ? delete process.env.VAPID_PUBLIC_KEY : (process.env.VAPID_PUBLIC_KEY = prev.u);
+    prev.p === undefined
+      ? delete process.env.VAPID_PRIVATE_KEY
+      : (process.env.VAPID_PRIVATE_KEY = prev.p);
+    prev.u === undefined
+      ? delete process.env.VAPID_PUBLIC_KEY
+      : (process.env.VAPID_PUBLIC_KEY = prev.u);
     prev.s === undefined ? delete process.env.VAPID_SUBJECT : (process.env.VAPID_SUBJECT = prev.s);
   };
   return Promise.resolve(fn()).finally(restore);
@@ -197,7 +213,7 @@ describe('WebPushDispatcher.dispatch', () => {
     });
   });
 
-  it('AC-4 / @AC-2: pushes to exactly the target user\'s subscriptions, carrying title/body', async () => {
+  it("AC-4 / @AC-2: pushes to exactly the target user's subscriptions, carrying title/body", async () => {
     await withVapid('mailto:ops@xstockstrat.test', async () => {
       const pool = sqlPool(GIVENS);
       const admins = stubAdmins(['user-99']);
@@ -220,7 +236,7 @@ describe('WebPushDispatcher.dispatch', () => {
     });
   });
 
-  it('@AC-5: an untargeted alert is pushed only to admin-role users\' subscriptions', async () => {
+  it("@AC-5: an untargeted alert is pushed only to admin-role users' subscriptions", async () => {
     await withVapid('mailto:ops@xstockstrat.test', async () => {
       const pool = sqlPool(GIVENS);
       const d = new StubbedDispatcher(pool.obj as any, cfg(), stubAdmins(['user-99']).obj);
@@ -235,7 +251,7 @@ describe('WebPushDispatcher.dispatch', () => {
     });
   });
 
-  it('@AC-1: an untargeted alert is not pushed to any non-admin user\'s devices', async () => {
+  it("@AC-1: an untargeted alert is not pushed to any non-admin user's devices", async () => {
     await withVapid('mailto:ops@xstockstrat.test', async () => {
       const pool = sqlPool(GIVENS);
       const d = new StubbedDispatcher(pool.obj as any, cfg(), stubAdmins(['user-99']).obj);
@@ -358,8 +374,37 @@ describe('WebPushDispatcher.dispatch', () => {
       await d.dispatch(alert()); // must resolve (no throw)
       const deletes = pool.calls.filter((c) => /^\s*DELETE/i.test(c.sql));
       assert.equal(deletes.length, 1, 'the gone subscription was pruned');
-      assert.match(deletes[0].sql.replace(/\s+/g, ' '), /DELETE FROM notify\.push_subscriptions WHERE endpoint = \$1/);
+      assert.match(
+        deletes[0].sql.replace(/\s+/g, ' '),
+        /DELETE FROM notify\.push_subscriptions WHERE endpoint = \$1/,
+      );
       assert.deepEqual(deletes[0].params, ['https://push.example/one']);
+    });
+  });
+
+  it('feature 274: the prune log line names the subscription id, never the push endpoint URL', async () => {
+    await withVapid('mailto:ops@xstockstrat.test', async () => {
+      const pool = capturingPool([SUBS[0]]);
+      const d = new StubbedDispatcher(pool.obj as any, cfg(), stubAdmins().obj);
+      d.throwErr = { statusCode: 410 };
+      const written: string[] = [];
+      const original = process.stdout.write;
+      process.stdout.write = ((chunk: any) => {
+        written.push(String(chunk));
+        return true;
+      }) as typeof process.stdout.write;
+      try {
+        await d.dispatch(alert());
+      } finally {
+        process.stdout.write = original;
+      }
+      const output = written.join('');
+      assert.match(output, /pruned expired push subscription/);
+      assert.ok(
+        !output.includes(SUBS[0].endpoint),
+        'the capability-bearing endpoint URL was logged',
+      );
+      assert.ok(output.includes(SUBS[0].subscription_id), 'the subscription id is logged instead');
     });
   });
 
@@ -402,7 +447,11 @@ describe('WebPushDispatcher.deliver — send options (defect 2026-09-03)', () =>
     }
     // Regression: the old code passed the 10s HTTP-timeout value as the TTL (=> TTL 10), silently
     // dropping every alert to a device offline >10s. The TTL must now be the deliberate 3600s.
-    assert.equal(opts.TTL, 3600, 'push message TTL must be the deliberate 1h value, not the old 10s');
+    assert.equal(
+      opts.TTL,
+      3600,
+      'push message TTL must be the deliberate 1h value, not the old 10s',
+    );
     // And a real socket send timeout must be set (separate concern from the retention TTL).
     assert.equal(typeof opts.timeout, 'number', 'a real send timeout must be passed');
     assert.ok(opts.timeout >= 1000, 'the send timeout must be a sane socket timeout');

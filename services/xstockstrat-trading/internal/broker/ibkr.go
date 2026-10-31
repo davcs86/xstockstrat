@@ -166,7 +166,7 @@ func (c *IBKRClient) resolveIBKROrderReplies(ctx context.Context, op string, bod
 		if round >= ibkrMaxConfirmRounds {
 			return nil, fmt.Errorf("ibkr %s: %w after %d confirmations: %s", op, ErrIBKRConfirmationRequired, round, msg)
 		}
-		slog.Warn("ibkr: auto-confirming order prompt", "op", op, "prompt_id", prompt.ID, "message", msg, "round", round+1)
+		slog.WarnContext(ctx, "ibkr: auto-confirming order prompt", "op", op, "prompt_id", prompt.ID, "message", msg, "round", round+1)
 		next, err := c.confirmReply(ctx, prompt.ID)
 		if err != nil {
 			return nil, fmt.Errorf("ibkr %s: %w", op, err)

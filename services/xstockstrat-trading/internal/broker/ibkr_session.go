@@ -294,7 +294,7 @@ func (c *IBKRClient) initBrokerage(ctx context.Context, lst []byte) error {
 	}
 	_ = json.Unmarshal(body, &reply)
 	if !reply.Authenticated {
-		slog.Warn("ibkr brokerage session not established", "competing", reply.Competing)
+		slog.WarnContext(ctx, "ibkr brokerage session not established", "competing", reply.Competing)
 		return fmt.Errorf("ibkr ssodh/init: brokerage session not authenticated: %w", ErrInvalidCredentials)
 	}
 	return nil
