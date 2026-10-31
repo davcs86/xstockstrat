@@ -602,7 +602,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 16 — service: indicators: meter + logger providers, logging bridge, span-derived rpc.server.duration, cancel/deadline interceptor (Python)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify

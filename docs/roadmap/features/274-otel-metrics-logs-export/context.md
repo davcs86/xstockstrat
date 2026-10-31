@@ -370,3 +370,5 @@
 - `go test ./... -race -count=1` with CI's coverage computation: all 15 packages `ok` (including `cmd/server` and the new telemetry tests), total 71.5% (floor 40); golangci-lint v2.14.0 0 issues. `internal/service/marketdata_service_test.go`, the one non-telemetry test that swaps `slog`, needed no change. TDD: red N/A (behaviour-neutral retrofit gate; green run captured here).
 - Files modified: none (verification only)
 - Deviations: none
+
+Indicators: MeterProvider + LoggerProvider + logging bridge (instrumentation.logging handler, opentelemetry* filter), span-derived rpc.server.duration processor, cancel/deadline interceptor, grpc.aio.server(interceptors=...), dependency + uv.lock. Verified: ast.parse, ruff check/format, uv lock --check, existing 369 tests pass.
