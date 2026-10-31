@@ -406,3 +406,5 @@ Identity: telemetry.ts cloned from the ledger implementation (incl. Deviation 8 
 Identity: logger.ts identical to the ledger bridge (OpenTelemetryTransportV3 after sdk.start only); index.ts shutdown starts shutdownTelemetry() in parallel with tryShutdown, awaits it in the callback, 5s unref'd forceShutdown then flush.finally(exit). winston-transport pinned 0.5.0; root pnpm-lock.yaml. Verified build, lint 0 errors, 117 tests pass.
 
 Identity Node telemetry tests = ledger suite + AC-11 (WARN inside an active span exports severity WARN and the span's traceId). Found and fixed Deviation 9 (colorize rewrote info.level so OTLP lost severity): logger.ts fixed in ledger and identity, AC-11 test added to ledger too. RED: build fails (4 TS errors, missing exports) against pre-step-31 sources. GREEN identity 136 tests, ledger 142, c8 >= 40, lint 0 errors.
+
+Notify: telemetry.ts cloned from the ledger implementation (default "notify", own header comment); six OTel deps; root pnpm-lock.yaml. Verified build, lint 0 errors, grep, existing tests pass.
