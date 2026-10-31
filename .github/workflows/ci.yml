@@ -101,6 +101,7 @@ jobs:
               - '**/CLAUDE.md'
             otel-signals:
               - 'packages/otel/**'
+              - 'packages/proto/**/*.proto'
               - 'docs/**'
               - '.do/**'
               - 'scripts/check-otel-produced-signals*.sh'

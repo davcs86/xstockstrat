@@ -9,6 +9,8 @@
 #   Part 1    alerts/*.yaml and dashboards/*.json (AC-8): every PromQL metric identifier, Loki service_name
 #             value and Loki |= / |~ literal in an expr must be registered.
 #   Part 3    docs/ + packages/otel (AC-3): named assets exist, counts match, removed assets are fenced.
+#   Part 4    (AC-17): every rpc_server_duration_milliseconds_* selector excludes the proto-derived
+#             server-streaming methods; no trace sampler or gRPC-exclusion env in deploy specs.
 #
 # Each hit prints "AC-n <tag> <relpath>:<line>: <text>" to stderr; exit 1 on any hit.
 # macOS bash 3.2 + BSD/GNU compatible (grep -E / POSIX awk only; no mapfile, no associative arrays).
@@ -59,6 +61,63 @@ else
   hit AC-8 P1-producer packages/otel/produced-signals.tsv 1 "registry missing"
 fi
 
+# --- Part 4: server-streaming methods, derived from the protos ----------------------------------
+streams=""
+unary=""
+while IFS=$'\t' read -r kind val; do
+  case "$kind" in
+  S) streams="${streams}${val}${NL}" ;;
+  U) unary="${unary}${val}${NL}" ;;
+  E) hit AC-17 P4 "$val" 1 "rpc line without returns" ;;
+  esac
+done < <(for p in "$ROOT"/packages/proto/*/v1/*.proto; do
+  awk -v rel="${p#"$ROOT"/}" '
+    /^[[:space:]]*\/\// { next }
+    /^[[:space:]]*rpc[[:space:]]+[A-Za-z0-9_]+/ {
+      name = $0
+      sub(/^[[:space:]]*rpc[[:space:]]+/, "", name)
+      sub(/[^A-Za-z0-9_].*/, "", name)
+      if ($0 !~ /returns/) { print "E\t" rel ":" FNR; next }
+      if ($0 ~ /returns[[:space:]]*\([[:space:]]*stream[[:space:]]/) print "S\t" name
+      else print "U\t" name
+    }
+  ' "$p"
+done)
+stream_matcher=""
+for m in $(printf '%s' "$streams" | sort -u); do
+  stream_matcher="${stream_matcher:+${stream_matcher}|}${m}"
+  case "${NL}${unary}" in
+  *"${NL}${m}${NL}"*) hit AC-17 P4 packages/proto 1 "stream rpc ${m} shares its name with a unary rpc" ;;
+  esac
+done
+if [ -n "$streams" ]; then
+  want_matcher="rpc_method!~\"${stream_matcher}\""
+else
+  want_matcher=""
+fi
+
+# $1 relpath, $2 line, $3 expr: every rpc_server_duration selector must carry the exact stream matcher.
+check_streams() {
+  local row
+  [ -n "$want_matcher" ] || return 0
+  while IFS= read -r row; do
+    hit AC-17 P4 "$1" "$2" "$row"
+  done < <(printf '%s\n' "$3" | awk -v want="$want_matcher" '
+    {
+      s = $0
+      while (match(s, /rpc_server_duration_milliseconds_(count|bucket|sum)/)) {
+        name = substr(s, RSTART, RLENGTH)
+        rest = substr(s, RSTART + RLENGTH)
+        s = rest
+        if (substr(rest, 1, 1) != "{") { print name " (no label matchers)"; continue }
+        body = substr(rest, 2)
+        sub(/\}.*/, "", body)
+        if (index(body, want) == 0) print name " (missing " want ")"
+      }
+    }
+  ')
+}
+
 registered() {
   case "${NL}${reg}" in
   *"${NL}$1"$'\t'"$2${NL}"*) return 0 ;;
@@ -108,9 +167,10 @@ expr_tokens() {
   '
 }
 
-# $1 relpath, $2 line, $3 expr
+# $1 relpath, $2 line, $3 expr, $4 E (an expr) or Q (a templating label_values query: Part 4 exempt)
 check_expr() {
   local kind tok
+  if [ "${4:-E}" = E ]; then check_streams "$1" "$2" "$3"; fi
   while IFS=$'\t' read -r kind tok; do
     case "$kind" in
     M) registered metric "$tok" || hit AC-8 P1 "$1" "$2" "$tok" ;;
@@ -120,17 +180,17 @@ check_expr() {
   done < <(printf '%s\n' "$3" | expr_tokens)
 }
 
-# stdin: "line<TAB>expr" rows
+# stdin: "line<TAB>E|Q<TAB>expr" rows
 check_rows() {
-  local ln ex
-  while IFS=$'\t' read -r ln ex; do
-    check_expr "$1" "$ln" "$ex"
+  local ln ty ex
+  while IFS=$'\t' read -r ln ty ex; do
+    check_expr "$1" "$ln" "$ex" "$ty"
   done
 }
 
 alert_exprs() {
   awk '
-    function flush() { if (cur != "") { print startln "\t" cur; cur = "" } }
+    function flush() { if (cur != "") { print startln "\tE\t" cur; cur = "" } }
     inblk {
       if ($0 ~ /^[[:space:]]*$/) next
       match($0, /^[[:space:]]*/)
@@ -138,15 +198,18 @@ alert_exprs() {
       flush(); inblk = 0
     }
     /^[[:space:]]*expr:[[:space:]]*[|>][-+]?[[:space:]]*$/ { match($0, /^[[:space:]]*/); ind = RLENGTH; inblk = 1; startln = NR; cur = ""; next }
-    /^[[:space:]]*expr:[[:space:]]*[^|>[:space:]]/ { v = $0; sub(/^[[:space:]]*expr:[[:space:]]*/, "", v); gsub(/^["\047]|["\047][[:space:]]*$/, "", v); print NR "\t" v }
+    /^[[:space:]]*expr:[[:space:]]*[^|>[:space:]]/ { v = $0; sub(/^[[:space:]]*expr:[[:space:]]*/, "", v); gsub(/^["\047]|["\047][[:space:]]*$/, "", v); print NR "\tE\t" v }
     END { flush() }
   ' "$1"
 }
 
 dashboard_exprs() {
-  grep -n -E '^[[:space:]]*"(expr|query)": "(label_values|[^"])' "$1" |
-    grep -E '"expr": "|"query": "label_values' |
-    sed -E 's/^([0-9]+):[[:space:]]*"(expr|query)": "(.*)"[[:space:]]*,?[[:space:]]*$/\1\t\3/; s/\\"/"/g' || true
+  {
+    grep -n -E '^[[:space:]]*"expr": "' "$1" |
+      sed -E 's/^([0-9]+):[[:space:]]*"expr": "(.*)"[[:space:]]*,?[[:space:]]*$/\1\tE\t\2/'
+    grep -n -E '^[[:space:]]*"query": "label_values' "$1" |
+      sed -E 's/^([0-9]+):[[:space:]]*"query": "(.*)"[[:space:]]*,?[[:space:]]*$/\1\tQ\t\2/'
+  } | sed -E 's/\\"/"/g' || true
 }
 
 for f in "$ROOT"/packages/otel/alerts/*.yaml; do
@@ -319,6 +382,15 @@ done < <(for base in docs packages/otel; do
     find "${ROOT}/${base}" -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) -print
   fi
 done | sort)
+
+# --- Part 4: the span-derived metrics need every inbound span sampled ----------------------------
+for f in "$ROOT"/.do/* "$ROOT"/docker-compose.yml; do
+  [ -f "$f" ] || continue
+  grep -n -E 'OTEL_TRACES_SAMPLER|OTEL_PYTHON_GRPC_EXCLUDED_SERVICES|OTEL_PYTHON_GRPC_EXCLUDE_SERVICES' "$f" |
+    while IFS= read -r row; do
+      hit AC-17 P4-sampler "${f#"$ROOT"/}" "${row%%:*}" "${row#*:}"
+    done || true
+done
 
 if [ -s "$hits" ]; then
   cat "$hits" >&2

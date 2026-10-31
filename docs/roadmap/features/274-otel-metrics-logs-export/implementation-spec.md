@@ -1787,7 +1787,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 51 — service: guard Part 4 (proto-derived stream exclusion), sampler guard, CI paths filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/ + .github/workflows/ci.yml`
 **Files**:
 - `scripts/check-otel-produced-signals.sh` — modify
