@@ -155,7 +155,7 @@ grep -rn "extra=" services/xstockstrat-*/app --include=*.py
 
 ### Step 4 — service: trading: metrics + logs pipelines, slog bridge, bounded shutdown (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify

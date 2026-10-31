@@ -56,7 +56,7 @@ func exportOneSpan(t *testing.T, endpoint, headers string) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
 	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", headers)
 	ctx := context.Background()
-	shutdown, err := Init(ctx)
+	shutdown, _, err := Init(ctx)
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}

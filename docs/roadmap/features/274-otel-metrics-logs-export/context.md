@@ -292,3 +292,13 @@
   - Go (trading, portfolio, marketdata) sites matching key|secret|token|pass|cred|auth: they log account ids, credential *status* names and booleans, key *names* (`marketdata/cmd/server/main.go:77`) and `api_key_placeholder`/`api_secret_placeholder` booleans (`:113`), never values -> PASS.
 - Files modified: `docs/roadmap/features/274-otel-metrics-logs-export/context.md`
 - Deviations: none yet (the notify FIX is logged when applied in step 35)
+
+### Step 4 — trading: metrics + logs pipelines, slog bridge, bounded shutdown (Go) [done]
+- `internal/telemetry/otel.go`: `Init` now returns `(shutdown, forceFlush, err)`; builds the three exporters first (any construction error returns `(nil, nil, err)` with nothing installed), then the trace provider, a `MeterProvider` with a `PeriodicReader` and `serverMetricViews()`, and a `LoggerProvider` with a `BatchProcessor`; `shutdown`/`forceFlush` join the three providers. `serverMetricViews()` drops the four size/count instruments so only `rpc.server.duration` survives; its doc comment carries that literal for the step-49 registry. All exporters are env-only (no endpoint/insecure/headers option; grep confirms).
+- `logbridge.go`: `WrapLogHandler` returns `base` unchanged when disabled or no logger provider is installed (an atomic flag set by `Init`); otherwise `slog.NewMultiHandler(base, otelslog.NewHandler(name))` and an OTel error handler that writes through `base` only (recursion guard, FR-4); the record keeps the error text so the existing `400 Bad Request` assertion holds.
+- `shutdown.go`: `StopServer` flushes first, then runs graceful stop with a timer and falls back to `force`. `cmd/server/main.go`: three-value `Init`, `slog.SetDefault(WrapLogHandler(...))` after a successful init and before `grpc.NewServer`, signal goroutine now `hs.Shutdown()` -> `StopServer(..., 2s, 3s)` -> `cancel()`; the deferred 5 s `shutdownOtel` is kept. `otel_test.go:59` arity edit only.
+- `go.mod`/`go.sum`: the eight pins added and tidied (`otel` family v1.45.0, `otel/log`+`sdk/log`+`otlploghttp` v0.21.0, `otelslog` v0.20.0).
+- Verification: `go build ./...` and `go vet ./internal/telemetry/... ./cmd/...` clean; golangci-lint v2.14.0 (rebuilt with the go1.27.0 toolchain, because the first `go install` auto-switched to go1.26.10 and refused the Go 1.27 module) reports 0 issues; the three existing telemetry tests pass with the new signature; the discriminating check passes.
+- TDD: red-green for this pair is captured in step 5 (the tests are written against the pre-step source per the Step Dependencies RED protocol).
+- Files modified: `services/xstockstrat-trading/internal/telemetry/{otel.go,logbridge.go,shutdown.go,otel_test.go}`, `cmd/server/main.go`, `go.mod`, `go.sum`
+- Deviations: none
