@@ -183,7 +183,7 @@ func TestInitExportsMetricsAndLogsOverOTLPHTTP(t *testing.T) {
 				t.Fatalf("counter: %v", err)
 			}
 			counter.Add(context.Background(), 1)
-			slog.New(WrapLogHandler(slog.NewTextHandler(io.Discard, nil))).Info("hello")
+			slog.New(WrapLogHandler(slog.DiscardHandler)).Info("hello")
 			flush(t, forceFlush)
 
 			for _, path := range []string{"/otlp/v1/metrics", "/otlp/v1/logs"} {
@@ -334,7 +334,7 @@ func TestLogRecordCarriesTraceContext(t *testing.T) {
 	rc := newOTLPReceiver(t, http.StatusOK)
 	_, forceFlush := startTelemetry(t, rc.url(), rawHeaders)
 
-	logger := slog.New(WrapLogHandler(slog.NewTextHandler(io.Discard, nil)))
+	logger := slog.New(WrapLogHandler(slog.DiscardHandler))
 	ctx, span := otel.Tracer("t").Start(context.Background(), "s")
 	logger.WarnContext(ctx, "inside span")
 	sc := span.SpanContext()
@@ -496,7 +496,7 @@ func TestDisabledInstallsNothing(t *testing.T) {
 	if otel.GetMeterProvider() != sentinel {
 		t.Error("Init installed a MeterProvider while disabled")
 	}
-	base := slog.NewJSONHandler(io.Discard, nil)
+	base := slog.DiscardHandler
 	if WrapLogHandler(base) != base {
 		t.Error("WrapLogHandler must return its argument unchanged while disabled")
 	}

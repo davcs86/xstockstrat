@@ -239,7 +239,7 @@ grep -q 'telemetry.StopServer' services/xstockstrat-trading/cmd/server/main.go  
 
 ### Step 6 — service: trading: move every slog call with a context in scope to its *Context variant; enforce with sloglint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/.golangci.yml` — modify
@@ -2074,4 +2074,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 5's Files are the tests, `go.mod` and `go.sum`; it "does not edit `otel.go`".
 - **Actual**: the new failure-visibility tests showed that `ForceFlush` returns export errors instead of reporting them through `otel.Handle` (only the background and shutdown paths do), so `StopServer`'s `_ = forceFlush(ctx)` silently dropped a failed final flush, contradicting FR-4. `internal/telemetry/shutdown.go` now routes that error through `otel.Handle` (stdout-only once `WrapLogHandler` is installed), covered by `TestStopServerReportsFailedFlushThroughOTelErrorHandler`.
 - **Disposition**: gap-protocol default (fix now, expand scope): one line in the paired service step's own file, found inside the red-green cycle of the pair. Steps 9 and 13 clone `shutdown.go` from this corrected version.
+
+### Deviation 4 — Step 6 edited the Step 5 test file (sloglint applies to tests too)
+- **Spec said**: Step 6 Files are `.golangci.yml` plus the conditional source files; no test file.
+- **Actual**: enabling `sloglint` also flagged three `slog.NewTextHandler(io.Discard, nil)` / `slog.NewJSONHandler(io.Discard, nil)` uses in Step 5's new `internal/telemetry/otel_test.go` ("use slog.DiscardHandler"). Left alone they would fail CI's golangci-lint on the same PR.
+- **Disposition**: gap-protocol default (fix now): the three uses were replaced by `slog.DiscardHandler`; behaviour is identical. Steps 10 and 14 apply the same fix to portfolio's and marketdata's copies of the test file.
 
