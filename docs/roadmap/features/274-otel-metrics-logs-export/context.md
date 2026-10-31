@@ -316,3 +316,8 @@
 - **GREEN**: all 96 calls rewritten mechanically from the lint report to `slog.XContext(ctx, ...)`; every flagged call is in a function with `ctx context.Context` (eight sit in `submitOrder`, whose multi-line signature hid it from a one-line search). No message, key or level changed: diffing the changed lines with `slog.XContext(ctx, ` normalised back to `slog.X(` pairs every deletion with an identical addition, so stdout bytes are unchanged. `golangci-lint run`: 0 issues; `go build ./...` and `go vet ./...` clean; `grep sloglint .golangci.yml` passes. The full suite is run in step 7 (the retrofit gate).
 - Files modified: `services/xstockstrat-trading/.golangci.yml`, `internal/broker/{ibkr.go,ibkr_session.go}`, `internal/service/{order_intent.go,trading.go}`, and `internal/telemetry/otel_test.go` under Deviation 4. Not touched (no flagged call): `cmd/server/main.go`, `internal/config/config.go`, `internal/service/trading_sync_test.go`.
 - Deviations: Deviation 4
+
+### Step 7 — trading: retrofit gate — full suite green under sloglint [done]
+- `go test ./... -race -count=1` with CI's coverage computation: every package `ok`, total 79.1% (floor 40); `golangci-lint run` 0 issues. No test asserted on a removed non-Context call, so `internal/service/trading_sync_test.go` (the one non-telemetry test that swaps `slog`) is unchanged. TDD: red N/A (behaviour-neutral retrofit gate; green run captured here, as `tdd-gate.md` allows).
+- Files modified: none (verification only)
+- Deviations: none
