@@ -34,7 +34,7 @@ export function initTelemetry(): void {
     const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
     const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-    const serviceName = process.env.SERVICE_NAME ?? 'xstockstrat-ui';
+    const serviceName = process.env.SERVICE_NAME ?? 'ui';
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');

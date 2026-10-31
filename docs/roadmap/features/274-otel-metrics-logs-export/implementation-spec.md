@@ -1693,7 +1693,7 @@ bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-
 
 ### Step 48 — docs: G1 dev proof gate (operator) and feature-branch re-sync — blocks PR-B
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `operator / Grafana Cloud dev`
 **Files**:
 - `docs/roadmap/features/274-otel-metrics-logs-export/context.md` — modify (append G1 answers)
@@ -1724,7 +1724,7 @@ for n in 1 2 3 4 5 6 7; do grep -q -E "^- G1 q$n \([0-9]{4}-[0-9]{2}-[0-9]{2}\):
 
 ### Step 49 — service: guard: produced-signals registry as an allowlist; retire Part 2; relax P3-count
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/ + packages/otel (non-service)`
 **Files**:
 - `packages/otel/produced-signals.tsv` — create
@@ -1757,7 +1757,7 @@ test -f packages/otel/produced-signals.tsv   # fails before the step
 
 ### Step 50 — test: guard tests: registry allowlist (AC-8), producer-literal drift, Part 2 cases removed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify
@@ -1787,7 +1787,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 51 — service: guard Part 4 (proto-derived stream exclusion), sampler guard, CI paths filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/ + .github/workflows/ci.yml`
 **Files**:
 - `scripts/check-otel-produced-signals.sh` — modify
@@ -1820,7 +1820,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 52 — test: guard tests: Part 4 stream matcher and sampler guard (AC-17)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify
@@ -1847,7 +1847,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 53 — service: alerts: restore error-rate and p99 rules, re-derive the scoring-stall rule, restore the mute timing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel (non-service)`
 **Files**:
 - `packages/otel/alerts/alert-rules.yaml` — modify
@@ -1879,7 +1879,7 @@ test -f packages/otel/alerts/mute-timings.yaml && [ "$(grep -c -E '^[[:space:]]+
 
 ### Step 54 — test: guard tests: restored rules pass; noDataState on every rule; mute timing referenced (AC-8, AC-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify
@@ -1907,7 +1907,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 55 — service: dashboards: per-panel restore on produced series; keep Tempo panels; update README
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel (non-service)`
 **Files**:
 - `packages/otel/dashboards/service-health.json` — modify
@@ -1942,7 +1942,7 @@ grep -q 'rpc_server_duration_milliseconds' packages/otel/dashboards/service-heal
 
 ### Step 56 — test: guard tests: restored dashboards reference only produced series; $service variable (AC-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify
@@ -1969,7 +1969,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 ### Step 57 — docs: FR-7: docs state the three exported signals (observability, grafana-cloud, product-features, collector, packages/otel)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/, packages/otel/`
 **Files**:
 - `docs/patterns/observability.md` — modify
@@ -2001,7 +2001,7 @@ bash scripts/check-otel-produced-signals.sh
 
 ### Step 58 — docs: FR-7: constitution rows (PLAT-3, OTEL-1/OTEL-2) and the findings rows marked RESOLVED (feature 274)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/, packages/otel/docs/`
 **Files**:
 - `docs/context-constitution.md` — modify
@@ -2032,7 +2032,7 @@ bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-
 
 ### Step 59 — docs: PR-B teardown: context-constitution refresh scoped to touched files; final guard run
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/, packages/otel/`
 **Files**:
 - `docs/roadmap/features/274-otel-metrics-logs-export/context.md` — modify (append)
@@ -2114,4 +2114,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 42 — plain `new PeriodicExportingMetricReader({ exporter })` / `new BatchLogRecordProcessor(exporter)`; Step 45 — tests set `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_BLRP_SCHEDULE_DELAY` to export within the test window.
 - **Actual**: with sdk-metrics 2.7 and sdk-logs 0.218 an explicitly constructed reader/processor does not read those env vars (probed outside vitest: no request in 1.2 s with the delay set to 50 ms; exports arrive once `exportIntervalMillis`/`scheduledDelayMillis` are passed). `src/telemetry.ts` now passes both from the standard env vars when set and valid (`metricIntervalOptions`, `logBatchOptions`), leaving the SDK defaults otherwise.
 - **Disposition**: gap-protocol default (fix now): `telemetry.ts` changed under Step 45 (outside its Files list). `serverLog.ts` was also prettier-formatted there. The Step 42 comment-only claim "env-only exporters" is unchanged: the exporters still take no arguments.
+
+### Deviation 12 — Step 53 also rewrites the alert paragraph and fence in `docs/setup/grafana-cloud.md` (step 53)
+- **Spec said**: Step 53 touches only `alerts/alert-rules.yaml`, `alerts/mute-timings.yaml` and `alerts/README.md`, and its Verification requires the guard to exit 0; `docs/setup/grafana-cloud.md` is a Step 57 file.
+- **Actual**: that doc carries its own `otel-guard:removed-assets` fence listing the three rules, the mute timing and `mute-timings.yaml`. Once the assets exist again the fence is a Part 3 hit (`AC-3 P3-fence`), so the guard cannot exit 0 after Step 53 without editing it.
+- **Disposition**: gap-protocol default (expand scope): Step 53 replaces that doc's "Step 7 — Alert Rules" paragraph and removes the fence; Step 57 still owns the remaining observability wording in the same file.
+- **Also in Step 55**: the same file's dashboard section carries a second `removed-assets` fence (the three retired dashboards and files); Step 55 rewrites that section and drops the fence for the same reason.
 

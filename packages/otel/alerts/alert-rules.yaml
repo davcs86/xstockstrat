@@ -1,15 +1,165 @@
-# No rule may target a metric or log datasource until a produced path is recorded.
-# Follow-up: feature 274 (see README.md).
+# Grafana unified-alerting provisioning file (apiVersion 1).
+#
+# Provision via Grafana file-based provisioning (self-hosted) or import through
+# Grafana Cloud → Alerting → Alert rules → Import. See README.md in this directory
+# for the datasource-UID substitution and folder-creation steps.
+#
+# Placeholders to substitute before provisioning:
+#   ${DS_PROMETHEUS_UID}  — UID of your Grafana Cloud Prometheus/Mimir datasource
+#   ${DS_LOKI_UID}        — UID of your Grafana Cloud Loki datasource
+# Find them at Grafana → Connections → Data sources → <name> → (UID in the URL).
+#
+# Every rpc_server_duration_milliseconds_* selector excludes the server-streaming methods (a stream
+# call ends on each deploy and would look like an error or a slow call); scripts/check-otel-produced-signals.sh
+# derives the matcher from packages/proto and fails when a selector lacks it. Series and log literals must be
+# registered in packages/otel/produced-signals.tsv.
+#
+# Notification routing (contact point / policy) is configured separately in Grafana
+# and is intentionally NOT pinned here so each environment can route to its own
+# email / Slack / OnCall target. V1 routes to email or Slack via feature 020
+# (notify-external-fanout). See README.md.
+
 apiVersion: 1
 
-deleteRules:
+groups:
   - orgId: 1
-    uid: xstk-error-rate-high
-  - orgId: 1
-    uid: xstk-p99-latency-high
-  - orgId: 1
-    uid: xstk-analysis-no-scoring
+    name: xstockstrat-service-health
+    folder: xstockstrat
+    interval: 1m
+    rules:
+      # FR-4.1 — any service error rate > 1% for 5 minutes (server streams excluded)
+      - uid: xstk-error-rate-high
+        title: Service error rate > 1%
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          platform: xstockstrat
+        annotations:
+          summary: "{{ $labels.service_name }} gRPC error rate is {{ printf \"%.2f\" $values.B.Value }}% (> 1% for 5m)"
+          runbook: docs/runbooks/bug-triage.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS_UID}
+            model:
+              refId: A
+              editorMode: code
+              expr: |
+                100 * sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_grpc_status_code!="0", rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m]))
+                / clamp_min(sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m])), 0.001)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [1] }
 
-deleteMuteTimes:
   - orgId: 1
-    name: outside-us-market-hours
+    name: xstockstrat-latency
+    folder: xstockstrat
+    interval: 1m
+    rules:
+      # FR-4.2 — any service P99 latency > 2s for 3 minutes (server streams excluded)
+      - uid: xstk-p99-latency-high
+        title: Service P99 latency > 2s
+        condition: C
+        for: 3m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          platform: xstockstrat
+        annotations:
+          summary: "{{ $labels.service_name }} P99 gRPC latency is {{ printf \"%.0f\" $values.B.Value }} ms (> 2000 ms for 3m)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS_UID}
+            model:
+              refId: A
+              editorMode: code
+              expr: |
+                histogram_quantile(0.99, sum by (le, service_name) (rate(rpc_server_duration_milliseconds_bucket{rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m])))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [2000] }
+
+  - orgId: 1
+    name: xstockstrat-signal-pipeline
+    folder: xstockstrat
+    interval: 5m
+    rules:
+      # FR-4.3 — the analysis live loop has not completed a cycle for 30 minutes. The uid is unchanged but the
+      # meaning is a heartbeat (the loop logs "live_loop: cycle complete" every cycle, even with no live
+      # strategy), not RPC activity: RunBacktest/ScoreStrategy are client-invoked, so silence there is normal.
+      # No data means the log stream itself is gone, so it alerts. Attach the "outside-us-market-hours" mute
+      # timing (see mute-timings.yaml) to the notification policy so it only pages during US market hours.
+      - uid: xstk-analysis-no-scoring
+        title: Analysis live loop heartbeat absent for 30m
+        condition: C
+        for: 0m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+          platform: xstockstrat
+          mute_outside_market_hours: "true"
+        annotations:
+          summary: "xstockstrat-analysis has not logged a completed live-loop cycle in the last 30 minutes"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 1800, to: 0 }
+            datasourceUid: ${DS_LOKI_UID}
+            model:
+              refId: A
+              editorMode: code
+              expr: |
+                sum(count_over_time({service_name="analysis"} |= "live_loop: cycle complete" [30m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [1] }
