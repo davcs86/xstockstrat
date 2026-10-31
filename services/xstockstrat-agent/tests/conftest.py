@@ -276,3 +276,15 @@ def otel_reset(monkeypatch):
     ):
         if hasattr(provider, "shutdown"):
             provider.shutdown()
+
+
+@pytest.fixture
+def metric_reader(otel_reset):
+    """Global MeterProvider backed by an in-memory reader."""
+    from opentelemetry import metrics
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    reader = InMemoryMetricReader()
+    metrics.set_meter_provider(MeterProvider(metric_readers=[reader]))
+    return reader

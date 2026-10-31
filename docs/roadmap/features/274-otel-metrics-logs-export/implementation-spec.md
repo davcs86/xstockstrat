@@ -988,7 +988,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 27 — test: agent: mcp.tool.duration data points for raise, isError and unknown tool
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tool_metrics.py` — create
