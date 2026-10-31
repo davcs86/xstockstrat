@@ -23,7 +23,7 @@ Implements the approved design (`design.md`) in three phases that mirror its **P
 | Scenario | Step(s) |
 |---|---|
 | AC-1 | 5 |
-| AC-2 | 5, 9, 13, 17, 19, 21 |
+| AC-2 | 5, 9, 13, 17, 19, 21, 30, 33, 36, 39 |
 | AC-3 | 21, 23 |
 | AC-4 | 30 |
 | AC-5 | 39 |
@@ -45,13 +45,13 @@ Implements the approved design (`design.md`) in three phases that mirror its **P
 | AC-21 | 27 |
 | AC-22 | 17, 19, 21 |
 
-AC-2's Grafana-Cloud series assertion (`rpc_server_duration_milliseconds_count{service_name=…,rpc_grpc_status_code="5"}`), AC-3's Loki query and AC-9's rendered-docs reading are additionally proven at the G1 gate (step 48).
+AC-2's Node rows are driven by a real in-process gRPC `NOT_FOUND` call (steps 30/33/36/39); its Grafana-Cloud series assertion (`rpc_server_duration_milliseconds_count{service_name=…,rpc_grpc_status_code="5"}`), AC-3's Loki query and AC-9's rendered-docs reading are additionally proven at the G1 gate (step 48).
 
 ## Step Dependencies
 
 - Steps 2 and 3 precede every runtime step: the Python/Node recorder suites read `scripts/testdata/rpc-status-vectors.json` (step 2); the egress audit (step 3) must be complete before PR-A merges and any FIX it finds lands in the owning service step.
 - Within every runtime: a service step is followed by its paired test step (Node has two service steps — telemetry, then logger/index — before the single test step, which covers both) (the test is written first and must be RED against the pre-implementation tree — P-06); Go adds a second service+test pair for the slog retrofit, which requires the first pair (the retrofit's tests rely on `WrapLogHandler`).
-- **RED capture for a test step that follows its service step** (`.claude/skills/sdd-execute/reference/tdd-gate.md`, which treats the pair as one cycle): author the test step's tests first, then reproduce the pre-implementation tree by reverting only the paired service step's source files in the working tree (`git stash push -- <that step's Files>`), run the tests to capture RED, restore (`git stash pop`), and run the step's Verification for GREEN. Record both captures in the PR body and `context.md` (never in the step body, F-09).
+- **RED capture for a test step that follows its service step** (`.claude/skills/sdd-execute/reference/tdd-gate.md`, which treats the pair as one cycle): author the test step's tests first, then reproduce the pre-implementation tree by reverting only the paired service step's non-test source files in the working tree (`git stash push -- <that step's Files minus *_test.go, go.mod/go.sum, pyproject.toml and lockfiles>`; the test step edits several of those, so they must stay). For Go, a build failure of the test package in that tree is accepted as RED, because every new test depends on the new symbols, run the tests to capture RED, restore (`git stash pop`), and run the step's Verification for GREEN. Record both captures in the PR body and `context.md` (never in the step body, F-09).
 - Go steps require the module set in step 1's evidence; `portfolio` and `marketdata` clone `trading`'s approach and may be executed in parallel after `trading` is merged into the feature branch as a reference.
 - Step 22 (analysis heartbeat) requires step 20; the PR-B stall rule and registry row depend on the literal `live_loop: cycle complete` it emits.
 - Step 26 (agent middleware) requires step 24 (providers installed) so `mcp.tool.duration` binds to the real provider.
@@ -192,6 +192,7 @@ grep -rn "extra=" services/xstockstrat-*/app --include=*.py
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/... ./cmd/...
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
+test -f services/xstockstrat-trading/internal/telemetry/logbridge.go && test -f services/xstockstrat-trading/internal/telemetry/shutdown.go && grep -q 'telemetry.WrapLogHandler' services/xstockstrat-trading/cmd/server/main.go   # fails before the step
 ```
 
 ---
@@ -217,7 +218,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 **Covers**: `AC-1, AC-2, AC-11, AC-19`
 
 **Instructions**:
-1. Write the tests first and run them against the pre-implementation tree to capture RED (the export/status tests fail on their assertions against the pre-implementation `Init`, because no metrics or logs request reaches the receiver; the `StopServer`/`WrapLogHandler` tests fail to build because those symbols do not exist yet).
+1. Write the tests first and run them against the pre-implementation tree to capture RED (stash only the service step's non-test source — `otel.go`, `logbridge.go`, `shutdown.go`, `cmd/server/main.go` — and keep `otel_test.go`, `go.mod`, `go.sum`: the telemetry test package then fails to build because the 3-value `Init`, `WrapLogHandler` and `StopServer` do not exist in that tree; that build failure is the accepted RED, and GREEN is this step's Verification).
 2. Extend `exportOneSpan`'s receiver so it records every path (`/otlp/v1/traces`, `/otlp/v1/metrics`, `/otlp/v1/logs`). **Export (AC-19, EXTEND `@AC-1 @feature-226`)**: under both header forms (`Authorization=Basic dGVzdDprZXk=` and `Authorization=Basic%20dGVzdDprZXk%3D`) a recorded metric (`otel.Meter("t").Int64Counter`) and a log record (`global.GetLoggerProvider()` emit or `WrapLogHandler` + `slog.Info`) followed by `forceFlush` produce `POST /otlp/v1/metrics` and `POST /otlp/v1/logs` with `Authorization: Basic dGVzdDprZXk=`.
 3. **Status/duration (AC-2)**: build a real `grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))` over a `bufconn`/loopback listener with a tiny unary handler returning `status.Error(codes.NotFound, ...)` (register via `grpc.ServiceDesc` inline, no proto), install a `sdkmetric.NewManualReader` MeterProvider **with the same Views as Init (export the view list from otel.go as an unexported helper `serverMetricViews()` so the test uses it)**, call it, collect, and assert: instrument name `rpc.server.duration`, unit `ms`, a data point with `rpc.grpc.status_code` = 5, and **no** `rpc.server.request.size|response.size|requests_per_rpc|responses_per_rpc` instruments. Also assert bucket boundaries equal `scripts/testdata/rpc-status-vectors.json#bucket_boundaries_ms` (read the file; Go SDK default = `[0,5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000]`).
 4. **Resource (AC-1/AC-10 Go row)**: the exported metric request carries `service.name`, `deployment.environment=staging`, `platform=xstockstrat` — decode the OTLP protobuf body with `go.opentelemetry.io/proto/otlp/collector/metrics/v1` in the receiver (`go.opentelemetry.io/proto/otlp v1.11.0` is already an indirect requirement, `go.mod:33` / `go.sum:58-59`; `go mod tidy` promotes it to direct). `TestNewResourceOmitsTradingMode` stays green (PRESERVE `@AC-1 @feature-171`).
@@ -268,6 +269,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 ```bash
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod
 cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go vet ./...
+grep -q 'sloglint' services/xstockstrat-trading/.golangci.yml   # fails before the step
 ```
 
 ---
@@ -339,6 +341,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/... ./cmd/...
 cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod
+test -f services/xstockstrat-portfolio/internal/telemetry/logbridge.go && test -f services/xstockstrat-portfolio/internal/telemetry/shutdown.go && grep -q 'telemetry.WrapLogHandler' services/xstockstrat-portfolio/cmd/server/main.go   # fails before the step
 ```
 
 ---
@@ -364,7 +367,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 **Covers**: `AC-2, AC-6, AC-19`
 
 **Instructions**:
-1. Write the tests first and run them against the pre-implementation tree to capture RED (the export/status tests fail on their assertions against the pre-implementation `Init`, because no metrics or logs request reaches the receiver; the `StopServer`/`WrapLogHandler` tests fail to build because those symbols do not exist yet).
+1. Write the tests first and run them against the pre-implementation tree to capture RED (stash only the service step's non-test source — `otel.go`, `logbridge.go`, `shutdown.go`, `cmd/server/main.go` — and keep `otel_test.go`, `go.mod`, `go.sum`: the telemetry test package then fails to build because the 3-value `Init`, `WrapLogHandler` and `StopServer` do not exist in that tree; that build failure is the accepted RED, and GREEN is this step's Verification).
 2. Extend `exportOneSpan`'s receiver so it records every path (`/otlp/v1/traces`, `/otlp/v1/metrics`, `/otlp/v1/logs`). **Export (AC-19, EXTEND `@AC-1 @feature-226`)**: under both header forms (`Authorization=Basic dGVzdDprZXk=` and `Authorization=Basic%20dGVzdDprZXk%3D`) a recorded metric (`otel.Meter("t").Int64Counter`) and a log record (`global.GetLoggerProvider()` emit or `WrapLogHandler` + `slog.Info`) followed by `forceFlush` produce `POST /otlp/v1/metrics` and `POST /otlp/v1/logs` with `Authorization: Basic dGVzdDprZXk=`.
 3. **Status/duration (AC-2)**: build a real `grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))` over a `bufconn`/loopback listener with a tiny unary handler returning `status.Error(codes.NotFound, ...)` (register via `grpc.ServiceDesc` inline, no proto), install a `sdkmetric.NewManualReader` MeterProvider **with the same Views as Init (export the view list from otel.go as an unexported helper `serverMetricViews()` so the test uses it)**, call it, collect, and assert: instrument name `rpc.server.duration`, unit `ms`, a data point with `rpc.grpc.status_code` = 5, and **no** `rpc.server.request.size|response.size|requests_per_rpc|responses_per_rpc` instruments. Also assert bucket boundaries equal `scripts/testdata/rpc-status-vectors.json#bucket_boundaries_ms` (read the file; Go SDK default = `[0,5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000]`).
 4. **Resource (AC-1/AC-10 Go row)**: the exported metric request carries `service.name`, `deployment.environment=staging`, `platform=xstockstrat` — decode the OTLP protobuf body with `go.opentelemetry.io/proto/otlp/collector/metrics/v1` in the receiver (`go.opentelemetry.io/proto/otlp v1.11.0` is already an indirect requirement, `go.mod:33` / `go.sum:58-59`; `go mod tidy` promotes it to direct). `TestNewResourceOmitsTradingMode` stays green (PRESERVE `@AC-1 @feature-171`).
@@ -413,6 +416,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./...
+grep -q 'sloglint' services/xstockstrat-portfolio/.golangci.yml   # fails before the step
 ```
 
 ---
@@ -484,6 +488,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go vet ./internal/telemetry/... ./cmd/...
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
+test -f services/xstockstrat-marketdata/internal/telemetry/logbridge.go && test -f services/xstockstrat-marketdata/internal/telemetry/shutdown.go && grep -q 'telemetry.WrapLogHandler' services/xstockstrat-marketdata/cmd/server/main.go   # fails before the step
 ```
 
 ---
@@ -509,7 +514,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 **Covers**: `AC-2, AC-12, AC-18, AC-19`
 
 **Instructions**:
-1. Write the tests first and run them against the pre-implementation tree to capture RED (the export/status tests fail on their assertions against the pre-implementation `Init`, because no metrics or logs request reaches the receiver; the `StopServer`/`WrapLogHandler` tests fail to build because those symbols do not exist yet).
+1. Write the tests first and run them against the pre-implementation tree to capture RED (stash only the service step's non-test source — `otel.go`, `logbridge.go`, `shutdown.go`, `cmd/server/main.go` — and keep `otel_test.go`, `go.mod`, `go.sum`: the telemetry test package then fails to build because the 3-value `Init`, `WrapLogHandler` and `StopServer` do not exist in that tree; that build failure is the accepted RED, and GREEN is this step's Verification).
 2. Extend `exportOneSpan`'s receiver so it records every path (`/otlp/v1/traces`, `/otlp/v1/metrics`, `/otlp/v1/logs`). **Export (AC-19, EXTEND `@AC-1 @feature-226`)**: under both header forms (`Authorization=Basic dGVzdDprZXk=` and `Authorization=Basic%20dGVzdDprZXk%3D`) a recorded metric (`otel.Meter("t").Int64Counter`) and a log record (`global.GetLoggerProvider()` emit or `WrapLogHandler` + `slog.Info`) followed by `forceFlush` produce `POST /otlp/v1/metrics` and `POST /otlp/v1/logs` with `Authorization: Basic dGVzdDprZXk=`.
 3. **Status/duration (AC-2)**: build a real `grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))` over a `bufconn`/loopback listener with a tiny unary handler returning `status.Error(codes.NotFound, ...)` (register via `grpc.ServiceDesc` inline, no proto), install a `sdkmetric.NewManualReader` MeterProvider **with the same Views as Init (export the view list from otel.go as an unexported helper `serverMetricViews()` so the test uses it)**, call it, collect, and assert: instrument name `rpc.server.duration`, unit `ms`, a data point with `rpc.grpc.status_code` = 5, and **no** `rpc.server.request.size|response.size|requests_per_rpc|responses_per_rpc` instruments. Also assert bucket boundaries equal `scripts/testdata/rpc-status-vectors.json#bucket_boundaries_ms` (read the file; Go SDK default = `[0,5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000]`).
 4. **Resource (AC-1/AC-10 Go row)**: the exported metric request carries `service.name`, `deployment.environment=staging`, `platform=xstockstrat` — decode the OTLP protobuf body with `go.opentelemetry.io/proto/otlp/collector/metrics/v1` in the receiver (`go.opentelemetry.io/proto/otlp v1.11.0` is already an indirect requirement, `go.mod:33` / `go.sum:58-59`; `go mod tidy` promotes it to direct). `TestNewResourceOmitsTradingMode` stays green (PRESERVE `@AC-1 @feature-171`).
@@ -559,6 +564,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go vet ./...
+grep -q 'sloglint' services/xstockstrat-marketdata/.golangci.yml   # fails before the step
 ```
 
 ---
@@ -626,6 +632,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 cd services/xstockstrat-indicators && python -c "import ast,sys; ast.parse(open('app/telemetry.py').read()); ast.parse(open('app/main.py').read())"
 cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 cd services/xstockstrat-indicators && uv lock --check   # pyproject.toml and uv.lock in sync (D8)
+grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-indicators/pyproject.toml && grep -q 'opentelemetry.instrumentation.logging.handler' services/xstockstrat-indicators/app/telemetry.py   # fails before the step (D8)
 ```
 
 ---
@@ -703,6 +710,7 @@ cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 cd services/xstockstrat-ingest && python -c "import ast,sys; ast.parse(open('app/telemetry.py').read()); ast.parse(open('app/main.py').read())"
 cd services/xstockstrat-ingest && ruff check . && ruff format --check .
 cd services/xstockstrat-ingest && uv lock --check   # pyproject.toml and uv.lock in sync (D8)
+grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-ingest/pyproject.toml && grep -q 'opentelemetry.instrumentation.logging.handler' services/xstockstrat-ingest/app/telemetry.py   # fails before the step (D8)
 ```
 
 ---
@@ -780,6 +788,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check .
 cd services/xstockstrat-analysis && python -c "import ast,sys; ast.parse(open('app/telemetry.py').read()); ast.parse(open('app/main.py').read())"
 cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 cd services/xstockstrat-analysis && uv lock --check   # pyproject.toml and uv.lock in sync (D8)
+grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-analysis/pyproject.toml && grep -q 'opentelemetry.instrumentation.logging.handler' services/xstockstrat-analysis/app/telemetry.py   # fails before the step (D8)
 ```
 
 ---
@@ -847,6 +856,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 ```bash
 cd services/xstockstrat-analysis && python -c "import ast; ast.parse(open('app/engine/live_loop.py').read())"
 cd services/xstockstrat-analysis && ruff check . && ruff format --check .
+grep -q 'live_loop: cycle complete' services/xstockstrat-analysis/app/engine/live_loop.py   # fails before the step
 ```
 
 ---
@@ -908,6 +918,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 cd services/xstockstrat-agent && python -c "import ast; ast.parse(open('app/telemetry.py').read())"
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
 cd services/xstockstrat-agent && uv lock --check   # pyproject.toml and uv.lock in sync (D8)
+grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-agent/pyproject.toml && grep -q 'opentelemetry.instrumentation.logging.handler' services/xstockstrat-agent/app/telemetry.py   # fails before the step (D8)
 ```
 
 ---
@@ -1029,6 +1040,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 ```bash
 cd services/xstockstrat-ledger && pnpm run build
 cd services/xstockstrat-ledger && pnpm run lint
+grep -q 'telemetryStarted' services/xstockstrat-ledger/src/telemetry.ts && grep -q 'RpcDurationProcessor' services/xstockstrat-ledger/src/telemetry.ts   # fails before the step
 ```
 
 ---
@@ -1084,7 +1096,7 @@ cd services/xstockstrat-ledger && pnpm run lint
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-4, AC-15, AC-19`
+**Covers**: `AC-2, AC-4, AC-15, AC-19`
 
 **Instructions**:
 1. Write first, capture RED. Keep one-file-per-process (the OTel globals are set once per process).
@@ -1094,6 +1106,7 @@ cd services/xstockstrat-ledger && pnpm run lint
 5. **Failure visibility**: the existing `logs a rejected export` test stays green and additionally asserts no `/v1/logs` record contains the failure text.
 6. **Shutdown flush (AC-12-style)**: with `OTEL_METRIC_EXPORT_INTERVAL=600000`, record 2 metric points + 3 log lines, call `shutdownTelemetry()` and assert both arrive before it resolves; a second call is idempotent.
 7. **AC-4**: with `OTEL_ENABLED=true`, `getLogger('ledger').info('event appended')` writes to `process.stdout` the same line as with `OTEL_ENABLED=false` (capture both via a spied `Console` transport stream; compare bytes) while the receiver also gets the record on `/v1/logs`.
+8. **AC-2 end-to-end (real gRPC call)**: in its own child process (OTel globals are set once), run `initTelemetry()` with `OTEL_METRIC_EXPORT_INTERVAL=100`, then `require('@grpc/grpc-js')` **after** `sdk.start()` (the gRPC instrumentation patches the module on first require); start an in-process `grpc.Server` on `127.0.0.1:0` with insecure credentials and one inline unary method (`/t.T/Get`, Buffer-identity serializers, no proto) whose handler returns `{ code: grpc.status.NOT_FOUND }`, call it with a client, and assert the receiver's JSON `/otlp/v1/metrics` body contains an `rpc.server.duration` data point with `rpc.grpc.status_code` = 5 and the shared bucket boundaries. This proves the instrumentation really sets the attribute `RpcDurationProcessor` reads; the hand-built-span vectors above prove only the mapping rules.
 
 **Verification**:
 ```bash
@@ -1133,6 +1146,7 @@ cd services/xstockstrat-ledger && pnpm run lint
 ```bash
 cd services/xstockstrat-identity && pnpm run build
 cd services/xstockstrat-identity && pnpm run lint
+grep -q 'telemetryStarted' services/xstockstrat-identity/src/telemetry.ts && grep -q 'RpcDurationProcessor' services/xstockstrat-identity/src/telemetry.ts   # fails before the step
 ```
 
 ---
@@ -1188,7 +1202,7 @@ cd services/xstockstrat-identity && pnpm run lint
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-11, AC-15, AC-19`
+**Covers**: `AC-2, AC-11, AC-15, AC-19`
 
 **Instructions**:
 1. Write first, capture RED. Keep one-file-per-process (the OTel globals are set once per process).
@@ -1198,6 +1212,7 @@ cd services/xstockstrat-identity && pnpm run lint
 5. **Failure visibility**: the existing `logs a rejected export` test stays green and additionally asserts no `/v1/logs` record contains the failure text.
 6. **Shutdown flush (AC-12-style)**: with `OTEL_METRIC_EXPORT_INTERVAL=600000`, record 2 metric points + 3 log lines, call `shutdownTelemetry()` and assert both arrive before it resolves; a second call is idempotent.
 7. **AC-11 identity row**: a WARN logged inside `trace.getTracer('t').startActiveSpan(...)` is exported with severity WARN and `traceId` equal to the active span's.
+8. **AC-2 end-to-end (real gRPC call)**: in its own child process (OTel globals are set once), run `initTelemetry()` with `OTEL_METRIC_EXPORT_INTERVAL=100`, then `require('@grpc/grpc-js')` **after** `sdk.start()` (the gRPC instrumentation patches the module on first require); start an in-process `grpc.Server` on `127.0.0.1:0` with insecure credentials and one inline unary method (`/t.T/Get`, Buffer-identity serializers, no proto) whose handler returns `{ code: grpc.status.NOT_FOUND }`, call it with a client, and assert the receiver's JSON `/otlp/v1/metrics` body contains an `rpc.server.duration` data point with `rpc.grpc.status_code` = 5 and the shared bucket boundaries. This proves the instrumentation really sets the attribute `RpcDurationProcessor` reads; the hand-built-span vectors above prove only the mapping rules.
 
 **Verification**:
 ```bash
@@ -1237,6 +1252,7 @@ cd services/xstockstrat-identity && pnpm run lint
 ```bash
 cd services/xstockstrat-notify && pnpm run build
 cd services/xstockstrat-notify && pnpm run lint
+grep -q 'telemetryStarted' services/xstockstrat-notify/src/telemetry.ts && grep -q 'RpcDurationProcessor' services/xstockstrat-notify/src/telemetry.ts   # fails before the step
 ```
 
 ---
@@ -1292,7 +1308,7 @@ cd services/xstockstrat-notify && pnpm run lint
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-10, AC-15, AC-19`
+**Covers**: `AC-2, AC-10, AC-15, AC-19`
 
 **Instructions**:
 1. Write first, capture RED. Keep one-file-per-process (the OTel globals are set once per process).
@@ -1302,6 +1318,7 @@ cd services/xstockstrat-notify && pnpm run lint
 5. **Failure visibility**: the existing `logs a rejected export` test stays green and additionally asserts no `/v1/logs` record contains the failure text.
 6. **Shutdown flush (AC-12-style)**: with `OTEL_METRIC_EXPORT_INTERVAL=600000`, record 2 metric points + 3 log lines, call `shutdownTelemetry()` and assert both arrive before it resolves; a second call is idempotent.
 7. **AC-10 notify row**: metric request resource has `service.name=notify`, `deployment.environment=staging`, `platform=xstockstrat`.
+8. **AC-2 end-to-end (real gRPC call)**: in its own child process (OTel globals are set once), run `initTelemetry()` with `OTEL_METRIC_EXPORT_INTERVAL=100`, then `require('@grpc/grpc-js')` **after** `sdk.start()` (the gRPC instrumentation patches the module on first require); start an in-process `grpc.Server` on `127.0.0.1:0` with insecure credentials and one inline unary method (`/t.T/Get`, Buffer-identity serializers, no proto) whose handler returns `{ code: grpc.status.NOT_FOUND }`, call it with a client, and assert the receiver's JSON `/otlp/v1/metrics` body contains an `rpc.server.duration` data point with `rpc.grpc.status_code` = 5 and the shared bucket boundaries. This proves the instrumentation really sets the attribute `RpcDurationProcessor` reads; the hand-built-span vectors above prove only the mapping rules.
 
 **Verification**:
 ```bash
@@ -1341,6 +1358,7 @@ cd services/xstockstrat-notify && pnpm run lint
 ```bash
 cd services/xstockstrat-config && pnpm run build
 cd services/xstockstrat-config && pnpm run lint
+grep -q 'telemetryStarted' services/xstockstrat-config/src/telemetry.ts && grep -q 'RpcDurationProcessor' services/xstockstrat-config/src/telemetry.ts   # fails before the step
 ```
 
 ---
@@ -1396,7 +1414,7 @@ cd services/xstockstrat-config && pnpm run lint
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-5, AC-7, AC-15, AC-19`
+**Covers**: `AC-2, AC-5, AC-7, AC-15, AC-19`
 
 **Instructions**:
 1. Write first, capture RED. Keep one-file-per-process (the OTel globals are set once per process).
@@ -1406,6 +1424,7 @@ cd services/xstockstrat-config && pnpm run lint
 5. **Failure visibility**: the existing `logs a rejected export` test stays green and additionally asserts no `/v1/logs` record contains the failure text.
 6. **Shutdown flush (AC-12-style)**: with `OTEL_METRIC_EXPORT_INTERVAL=600000`, record 2 metric points + 3 log lines, call `shutdownTelemetry()` and assert both arrive before it resolves; a second call is idempotent.
 7. **AC-5**: with `OTEL_ENABLED=false`, start the module, simulate 10 WatchConfig-style gRPC calls on a local `@grpc/grpc-js` server (reuse an existing config test's server harness), and assert the receiver got zero requests and no meter/logger provider exists (`metrics.getMeterProvider()` is the no-op); **AC-7**: with `OTEL_ENABLED=true`, log a request line through `getLogger` while serving `GetSecret` for a secret row whose plaintext is `AKTESTSECRET123` (reuse the secret fixtures in `src/__tests__/secretsAndScope.test.ts`/`secretCallerAuthz.test.ts`), and assert no `/v1/logs` body or attribute contains `AKTESTSECRET123` (decode the OTLP/JSON or protobuf body as text).
+8. **AC-2 end-to-end (real gRPC call)**: in its own child process (OTel globals are set once), run `initTelemetry()` with `OTEL_METRIC_EXPORT_INTERVAL=100`, then `require('@grpc/grpc-js')` **after** `sdk.start()` (the gRPC instrumentation patches the module on first require); start an in-process `grpc.Server` on `127.0.0.1:0` with insecure credentials and one inline unary method (`/t.T/Get`, Buffer-identity serializers, no proto) whose handler returns `{ code: grpc.status.NOT_FOUND }`, call it with a client, and assert the receiver's JSON `/otlp/v1/metrics` body contains an `rpc.server.duration` data point with `rpc.grpc.status_code` = 5 and the shared bucket boundaries. This proves the instrumentation really sets the attribute `RpcDurationProcessor` reads; the hand-built-span vectors above prove only the mapping rules.
 
 **Verification**:
 ```bash
@@ -1439,6 +1458,7 @@ cd services/xstockstrat-config && pnpm run lint
 ```bash
 cd services/xstockstrat-identity && pnpm run build
 cd services/xstockstrat-identity && pnpm run lint
+grep -q 'user_id: user.user_id' services/xstockstrat-identity/src/grpc/identityServiceImpl.ts   # fails before the step
 ```
 
 ---
@@ -1449,6 +1469,8 @@ cd services/xstockstrat-identity && pnpm run lint
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
+- `services/xstockstrat-identity/src/__tests__/fixtures/otlpReceiver.ts` — create
+- `services/xstockstrat-identity/src/__tests__/telemetry.export.test.ts` — modify (import the shared receiver instead of its inline copy)
 
 **Reviewers**: Service owner (`xstockstrat-identity`) — no plaintext credentials in config or logs
 
@@ -1460,7 +1482,7 @@ cd services/xstockstrat-identity && pnpm run lint
 **Covers**: `AC-13, AC-20`
 
 **Instructions**:
-1. **AC-20**: in the existing seed-admin test spy the logger (`getLogger` is module-level `log`; assert via the winston transport stream or a spy on `logger.warn`) and require the second argument deep-equals `{ user_id: <row user_id> }` and that `JSON.stringify` of the call contains neither `admin@example.com` nor the email. With `OTEL_ENABLED=true` and the in-process receiver from the telemetry step, additionally assert the exported `/v1/logs` record carries `user_id` and not the email.
+1. **AC-20**: in the existing seed-admin test spy the logger (`getLogger` is module-level `log`; assert via the winston transport stream or a spy on `logger.warn`) and require the second argument deep-equals `{ user_id: <row user_id> }` and that `JSON.stringify` of the call contains neither `admin@example.com` nor the email. With `OTEL_ENABLED=true` and the in-process OTLP receiver, which this step extracts from step 33's `telemetry.export.test.ts` into `src/__tests__/fixtures/otlpReceiver.ts` (C-13: this is its second consumer; that test file is edited to import it), additionally assert the exported `/v1/logs` record carries `user_id` and not the email.
 2. **AC-13**: serve `authenticateUser` with password `Hunter2!Plain` returning an access token (reuse the file's pool mock/fixtures — C-13 second consumer rule) with the OTLP bridge active; decode every exported `/v1/logs` body and assert none contains `Hunter2!Plain` or the issued token string. If the check fails, the leak is in an existing log call — fix at the call site (egress audit step) rather than redacting in the bridge.
 
 **Verification**:
@@ -1500,6 +1522,7 @@ cd services/xstockstrat-identity && pnpm run lint
 ```bash
 cd services/xstockstrat-ui && pnpm run lint
 cd services/xstockstrat-ui && pnpm run test:unit
+grep -q 'PeriodicExportingMetricReader' services/xstockstrat-ui/src/telemetry.ts && ! grep -q 'metricReaders: \[\]' services/xstockstrat-ui/src/telemetry.ts   # fails before the step
 ```
 
 ---
@@ -1523,6 +1546,7 @@ cd services/xstockstrat-ui && pnpm run test:unit
 - `services/xstockstrat-ui/src/lib/bffShared.ts:115-152`: `createDispatch(router, prefix)` builds `handlerMap = new Map(router.handlers.map((h) => [prefix + h.requestPath, h]))`; `dispatchConnect(req)` → `const handler = handlerMap.get(pathname); if (!handler) return new Response(null, { status: 404 }); const uRes = await handler({...}); ... return new Response(...)`; used by `src/lib/traderBff.ts`, `insightsBff.ts`, `configUiBff.ts` (and route files `trader|insights|config-ui/api/[...connect]/route.ts`)
 - REST handlers: `accounts/api/profile/route.ts` exports `GET` :32 and `PUT` :49; `mcp-tools` GET :12; `agent-health` GET :6; `authorized-apps` GET :13, POST :39; `trader/api/ledger/export/route.ts` GET :86. Health, auth, OAuth, `config-ui/api/audit` routes are **not** wrapped (accepted, design Open Risks)
 - `@connectrpc/connect` resolves a server stream on its first message (`protocol-connect/handler-factory.js:277-280`, `untilFirst`) so a server-stream handler's duration is time-to-first-message — only `handler.method.methodKind === 'unary'` is recorded (design R3 B1)
+- **File count (C-18, recorded)**: seven Files because five are the same mechanical one-line `withBffMetrics(...)` wrap of an existing exported handler. Splitting them out would renumber steps 44-59 and every cross-reference (the same call feature 250 accepted for its step 7), so the step stays whole and its Verification (lint + unit) covers all seven.
 
 **TDD**: `red-green required`
 
@@ -1530,7 +1554,7 @@ cd services/xstockstrat-ui && pnpm run test:unit
 
 **Instructions**:
 1. Create `src/lib/bffMetrics.ts` exporting `recordBffDuration({ segment, route?, rpcService?, status, startMs })` and `withBffMetrics(segment, route, handler)` (the one shared helper for both seams — C-18). The histogram `http.server.duration` (unit `ms`) is created lazily on first use via `metrics.getMeter('xstockstrat-ui')` (API 1.9.1 has no proxy provider; no-op when OTel is off). Attributes: `xstk.segment` (`trader|insights|config-ui|accounts`), `http.route` (static template for REST; omit for Connect), `http.response.status_code`, and `rpc.service` (Connect only; `unmatched` for an unmatched path). Never user ids, symbols or raw paths (cardinality).
-2. In `createDispatch`: capture `const t0 = performance.now()` before the handler lookup; for an unmatched path record `rpc.service="unmatched"`, status 404 and return; for a matched handler wrap `await handler(...)` in `try/finally` and record **only when `handler.method.methodKind === 'unary'`**, with `rpc.service = handler.method.parent.typeName` (confirm the property path against the `@bufbuild/protobuf` `DescMethod` shape by grep before use) and `http.response.status_code = uRes.status` (status 500 when it threw). Server-streaming methods (StreamAlerts, StreamOrderUpdates, ...) are never recorded. `createDispatch` already receives the segment inside its `prefix` argument (`'/trader/api'`, `'/insights/api'`, `'/config-ui/api'` at `traderBff.ts:172`, `insightsBff.ts:218`, `configUiBff.ts:104`), so derive it with `prefix.split('/')[1]`; the signature and the three callers stay unchanged (nothing outside this step's Files is touched).
+2. In `createDispatch`: capture `const t0 = performance.now()` before the handler lookup; for an unmatched path record `rpc.service="unmatched"`, status 404 and return; for a matched handler wrap `await handler(...)` in `try/finally` and record **only when `handler.method.methodKind === 'unary'`**, with `rpc.service = handler.service.typeName` (verified at spec time: the UI resolves `@connectrpc/connect` 2.1.1, whose `UniversalHandler` carries `service: DescService` and `method: DescMethod`, `dist/esm/protocol/universal-handler.d.ts:95,99`; `DescService.typeName` is the proto-qualified name) and `http.response.status_code = uRes.status` (status 500 when it threw). Server-streaming methods (StreamAlerts, StreamOrderUpdates, ...) are never recorded. `createDispatch` already receives the segment inside its `prefix` argument (`'/trader/api'`, `'/insights/api'`, `'/config-ui/api'` at `traderBff.ts:172`, `insightsBff.ts:218`, `configUiBff.ts:104`), so derive it with `prefix.split('/')[1]`; the signature and the three callers stay unchanged (nothing outside this step's Files is touched).
 3. Wrap each exported REST handler with `withBffMetrics('accounts'|'trader', '/accounts/api/profile', handler)` etc. (`http.route` = the literal route template). Do not change response bodies, status codes or auth logic.
 
 **Verification**:
@@ -1607,19 +1631,18 @@ cd services/xstockstrat-ui && pnpm run lint
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/bffMetrics.test.ts` — create
-- `services/xstockstrat-ui/src/lib/bffDeadlines.test.ts` — modify
 
 **Reviewers**: Service owner (`xstockstrat-ui`) — Connect-RPC call safety, no secret values rendered/logged
 
 **Codebase Evidence**:
-- `services/xstockstrat-ui/src/lib/__tests__/traderBff.test.ts` and `src/lib/bffDeadlines.test.ts` exercise `createDispatch` with in-process routers — reuse their router builders; `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` (C-12): no new Playwright fixtures are needed — these are vitest unit tests
+- `services/xstockstrat-ui/src/lib/__tests__/traderBff.test.ts` drives the real `dispatchConnect` from `traderBff.ts` with `vi.mock('@/lib/auth')` and `vi.mock('@/lib/connectClients')` (`:6-33`), and `src/lib/bffDeadlines.test.ts` does the same per segment through `dispatchers[segment]` (`:55-70`): copy that mocking pattern into the new test file (neither existing file exports it, and this step modifies neither); `traderBff.ts` registers `ListBrokerAccounts` (`:64`, unary) and `StreamAlerts` (`:95-98`, server-streaming); `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` (C-12): no new Playwright fixtures are needed — these are vitest unit tests
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-16`
 
 **Instructions**:
-1. With an `InMemoryMetricReader` MeterProvider: (1) a unary `TradingService` Connect call returning 200 through `createDispatch(router, '/trader/api', 'trader')` produces an `http.server.duration` point with `xstk.segment=trader`, `rpc.service=xstockstrat.trading.v1.TradingService`, `http.response.status_code=200`; (2) a wrapped `GET /accounts/api/profile` returns 200 and records `xstk.segment=accounts`, `http.route=/accounts/api/profile`; (3) a server-streaming method (`StreamAlerts` on `NotifyService`) held open records **no** point for 60 s (use fake timers / an unresolved iterator) — assert no point carries `rpc.service=xstockstrat.notify.v1.NotifyService`; (4) an unmatched path records `rpc.service=unmatched`, status 404; (5) a handler that throws still records (try/finally) with status 500. Use inventory fixtures for domain objects (C-12); error payloads stay inline.
+1. With an `InMemoryMetricReader` MeterProvider: (1) a unary `TradingService` Connect call returning 200 through the real `dispatchConnect` from `traderBff.ts` (`ListBrokerAccounts`, with `tradingClient` mocked as in `traderBff.test.ts`) produces an `http.server.duration` point with `xstk.segment=trader`, `rpc.service=xstockstrat.trading.v1.TradingService`, `http.response.status_code=200`; (2) a wrapped `GET /accounts/api/profile` returns 200 and records `xstk.segment=accounts`, `http.route=/accounts/api/profile`; (3) a server-streaming method (`StreamAlerts` on `NotifyService`) held open records **no** point for 60 s (use fake timers / an unresolved iterator) — assert no point carries `rpc.service=xstockstrat.notify.v1.NotifyService`; (4) an unmatched path records `rpc.service=unmatched`, status 404; (5) a handler that throws still records (try/finally) with status 500. Use inventory fixtures for domain objects (C-12); error payloads stay inline.
 
 **Verification**:
 ```bash
@@ -1657,7 +1680,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 **Verification**:
 ```bash
-git diff --stat origin/main-dev -- docs packages/otel ':!docs/roadmap'  # expect empty: PR-A touches neither tree (docs/roadmap context bookkeeping excluded; the guard skips it)
+git diff --stat origin/main-dev...HEAD -- docs packages/otel ':!docs/roadmap'  # expect empty: PR-A touches neither tree (docs/roadmap context bookkeeping excluded; the guard skips it)
 bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-signals.test.sh  # still green (guard unchanged in PR-A)
 ```
 
@@ -1722,6 +1745,7 @@ for n in 1 2 3 4 5 6 7; do grep -q -E "^- G1 q$n \([0-9]{4}-[0-9]{2}-[0-9]{2}\):
 ```bash
 bash scripts/check-otel-produced-signals.sh  # exit 0 against the current tree (alert-rules.yaml has no rules yet)
 shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-signals.test.sh && shfmt -d -i 2 scripts/check-otel-produced-signals.sh scripts/check-otel-produced-signals.test.sh
+test -f packages/otel/produced-signals.tsv   # fails before the step
 ```
 
 ---
@@ -1843,6 +1867,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 **Verification**:
 ```bash
 bash scripts/check-otel-produced-signals.sh  # exit 0: every identifier registered, every selector carries the matcher
+test -f packages/otel/alerts/mute-timings.yaml && [ "$(grep -c -E '^[[:space:]]+- uid:' packages/otel/alerts/alert-rules.yaml)" -ge 3 ]   # fails before the step (rules were deleted by feature 250)
 ```
 
 ---
@@ -1905,6 +1930,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 ```bash
 bash scripts/check-otel-produced-signals.sh  # '0 panel exprs targeting an unproduced series'
 python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('packages/otel/dashboards/*.json')]; print('json ok')"
+grep -q 'rpc_server_duration_milliseconds' packages/otel/dashboards/service-health.json   # fails before the step (the dashboard is Tempo-only today)
 ```
 
 ---
@@ -1961,7 +1987,7 @@ shellcheck scripts/check-otel-produced-signals.sh scripts/check-otel-produced-si
 
 **Verification**:
 ```bash
-grep -rn 'Metrics and logs are not exported' docs packages/otel  # expect no output
+grep -rn 'Metrics and logs are not exported' docs packages/otel --exclude-dir=roadmap --exclude-dir=reports  # expect no output (roadmap/reports keep the historical text)
 grep -n '/v1/metrics' docs/patterns/observability.md docs/setup/grafana-cloud.md
 bash scripts/check-otel-produced-signals.sh
 ```
@@ -1977,7 +2003,6 @@ bash scripts/check-otel-produced-signals.sh
 - `docs/context-constitution-findings.md` — modify
 - `packages/otel/docs/context-constitution.md` — modify
 - `packages/otel/docs/context-constitution-findings.md` — modify
-- `docs/sdd/business-rules/platform.feature` — modify (C-16 promotion is owned by the sdd-execute integration PR; edit only if instructed there)
 
 **Reviewers**: none
 
