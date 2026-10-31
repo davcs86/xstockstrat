@@ -642,7 +642,7 @@ grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-indicators/
 
 ### Step 17 — test: indicators: telemetry tests — metrics/logs export, status vectors, recorder, subprocess flush (Python)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_telemetry.py` — modify
