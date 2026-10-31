@@ -957,7 +957,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 26 — service: agent: ToolMetricsMiddleware records mcp.tool.duration with outcome
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tool_metrics.py` — create

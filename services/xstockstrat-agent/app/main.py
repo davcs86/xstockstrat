@@ -23,6 +23,7 @@ import os
 from mcp.server.mcpserver import MCPServer
 
 from app.scopes import MCP_CLAIMS_SCOPE_KEY
+from app.tool_metrics import ToolMetricsMiddleware
 from app.tools import _new_trace_id, register_prompts, register_tools
 
 # Server-level instructions are returned in the MCP `initialize` result, so every client — including
@@ -78,6 +79,7 @@ def create_server() -> MCPServer:
     server = MCPServer("xstockstrat-agent", instructions=LIST_CORRELATION_INSTRUCTIONS)
     register_tools(server)
     register_prompts(server)
+    server.middleware.append(ToolMetricsMiddleware(server))
     return server
 
 
