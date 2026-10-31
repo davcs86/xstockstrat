@@ -720,7 +720,7 @@ grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-ingest/pypr
 
 ### Step 19 — test: ingest: telemetry tests — metrics/logs export, status vectors, recorder, subprocess flush (Python)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_telemetry.py` — modify
