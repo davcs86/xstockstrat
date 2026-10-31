@@ -346,3 +346,9 @@
 - Gate result after the fix: every package `ok`; CI-style coverage total 68.6% (floor 40); golangci-lint v2.14.0 0 issues. `internal/service/portfolio_quote_deadline_test.go` (the one non-telemetry test that swaps `slog`) needed no change. TDD: red N/A (behaviour-neutral retrofit gate).
 - Files modified: `services/xstockstrat-portfolio/internal/telemetry/otel_test.go` and `services/xstockstrat-trading/internal/telemetry/otel_test.go` (Deviation 5)
 - Deviations: Deviation 5
+
+### Step 12 — marketdata: metrics + logs pipelines, slog bridge, bounded shutdown (Go) [done]
+- Applied step 4's change to marketdata: telemetry files cloned from trading with the `SERVICE_NAME` default `marketdata`; `cmd/server/main.go` gets the three-value `Init`, the `WrapLogHandler` default after a successful init, and `StopServer(..., 2s, 3s)` in the signal goroutine (the deferred 5 s `shutdownOtel` flushes the stream-end points once `Serve` returns); `otel_test.go` arity-only edit; eight module pins via `go get` + `go mod tidy`. Exporters are env-only.
+- Verification: `go build ./...`, `go vet ./internal/telemetry/... ./cmd/...` clean; golangci-lint v2.14.0 0 issues; existing telemetry tests pass with the new signature; discriminating check passes.
+- Files modified: `services/xstockstrat-marketdata/internal/telemetry/{otel.go,logbridge.go,shutdown.go,otel_test.go}`, `cmd/server/main.go`, `go.mod`, `go.sum`
+- Deviations: none

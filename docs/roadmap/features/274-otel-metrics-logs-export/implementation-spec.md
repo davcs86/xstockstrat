@@ -453,7 +453,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 12 — service: marketdata: metrics + logs pipelines, slog bridge, bounded shutdown (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify
