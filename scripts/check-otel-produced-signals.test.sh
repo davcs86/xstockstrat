@@ -275,7 +275,7 @@ expect_green AC-14-real-dashboards-pass
 run=$((run + 1))
 n=0
 for f in "${tree}"/packages/otel/dashboards/*.json; do n=$((n + 1)); done
-[ "$n" -eq 4 ] || case_fail AC-14-four-dashboards "expected 4 dashboards, found ${n}"
+[ "$n" -eq 5 ] || case_fail AC-14-dashboard-count "expected 5 dashboards, found ${n}"
 
 run=$((run + 1))
 grep -q '"query": "label_values(rpc_server_duration_milliseconds_count, service_name)"' \
@@ -371,9 +371,9 @@ fallback_tree() {
   fresh
   rm -f "${tree}"/packages/otel/dashboards/*.json
   while IFS= read -r f; do
-    grep -v -E 'service-health|signal-pipeline|infrastructure|trading-service' "$f" >"${work}/stripped" || true
+    grep -v -E 'service-health|signal-pipeline|infrastructure|trading-service|service-detail' "$f" >"${work}/stripped" || true
     cp "${work}/stripped" "$f"
-  done < <(grep -rl -E 'service-health|signal-pipeline|infrastructure|trading-service' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
+  done < <(grep -rl -E 'service-health|signal-pipeline|infrastructure|trading-service|service-detail' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
 }
 
 fallback_tree
