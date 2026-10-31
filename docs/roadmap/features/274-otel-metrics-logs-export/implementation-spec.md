@@ -1262,7 +1262,7 @@ grep -q 'telemetryStarted' services/xstockstrat-notify/src/telemetry.ts && grep 
 
 ### Step 35 — service: notify: winston → OTLP log bridge and awaited SIGTERM flush (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/services/logger.ts` — modify
@@ -2104,4 +2104,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 29/32 — `logger.add(new OpenTelemetryTransportV3())`; "Winston levels map to OTel severity inside the transport".
 - **Actual**: with the non-production format (`combine(colorize(), simple())`) `colorize()` rewrites `info.level` to an ANSI-wrapped string before any transport runs; the transport's level map then misses, so the exported record had no `severityNumber` and a `severityText` of `\u001b[33mwarn\u001b[39m`. The transport now carries its own `format` that restores `info[Symbol.for('level')]` on the transport's copy of `info`, so the stdout line is untouched and the OTLP severity is correct in both formats.
 - **Disposition**: gap-protocol default (fix now): `logger.ts` fixed in ledger (committed in Step 29) and identity (Step 32) under Step 33; the notify and config clones start from the fixed file. The ledger export test gained the AC-11 correlation test so ledger is covered as well.
+
+### Deviation 10 — notify `webPush.ts` log sites no longer log the push endpoint URL (step 35, egress audit FIX from Step 3)
+- **Spec said**: Step 35's Files list omits `src/fanout/webPush.ts`; the Step 3 egress audit marked its three log sites `endpoint: row.endpoint` as **FIX** (the per-subscription push URL embeds a capability token and would now leave the process over OTLP).
+- **Actual**: the three log calls (`pruned expired push subscription`, `failed to prune push subscription`, `push channel error`) now log `subscriptionId: row.subscription_id`; the delivery call at `webPush.ts:168` still passes `row.endpoint` to the push service. A regression test in `webPush.test.ts` asserts the prune log line contains the subscription id and not the endpoint (RED before the fix).
+- **Disposition**: gap-protocol default (expand scope): `webPush.ts` and `webPush.test.ts` committed with Step 35.
 

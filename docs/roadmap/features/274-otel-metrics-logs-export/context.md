@@ -408,3 +408,5 @@ Identity: logger.ts identical to the ledger bridge (OpenTelemetryTransportV3 aft
 Identity Node telemetry tests = ledger suite + AC-11 (WARN inside an active span exports severity WARN and the span's traceId). Found and fixed Deviation 9 (colorize rewrote info.level so OTLP lost severity): logger.ts fixed in ledger and identity, AC-11 test added to ledger too. RED: build fails (4 TS errors, missing exports) against pre-step-31 sources. GREEN identity 136 tests, ledger 142, c8 >= 40, lint 0 errors.
 
 Notify: telemetry.ts cloned from the ledger implementation (default "notify", own header comment); six OTel deps; root pnpm-lock.yaml. Verified build, lint 0 errors, grep, existing tests pass.
+
+Notify: logger.ts = ledger bridge (with the Deviation 9 level fix), index.ts shutdown (parallel flush, 5s unref'd forceShutdown, flush.finally exit), winston-transport 0.5.0, root lock. Deviation 10: webPush.ts log sites log subscriptionId not endpoint, with a RED/GREEN regression test. Verified build, lint 0 errors, 106 tests pass.
