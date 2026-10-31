@@ -1402,7 +1402,7 @@ cd services/xstockstrat-config && pnpm run lint
 
 ### Step 39 — test: config: telemetry tests — export paths, status vectors, lazy histogram, log bridge, shutdown (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/telemetry.export.test.ts` — modify

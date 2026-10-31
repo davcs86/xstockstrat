@@ -39,19 +39,20 @@ async function main() {
   await configImpl.initialize();
 
   const grpcServer = new grpc.Server();
-  grpcServer.addService(
-    createConfigServiceDefinition(),
-    configImpl as unknown as grpc.UntypedServiceImplementation,
-  );
+  grpcServer.addService(createConfigServiceDefinition(), configImpl as unknown as grpc.UntypedServiceImplementation);
 
-  grpcServer.bindAsync(`0.0.0.0:${grpcPort}`, mtls.serverCredentials(), (err, port) => {
-    if (err) {
-      log.error('Failed to bind gRPC', { error: err.message });
-      process.exit(1);
+  grpcServer.bindAsync(
+    `0.0.0.0:${grpcPort}`,
+    mtls.serverCredentials(),
+    (err, port) => {
+      if (err) {
+        log.error('Failed to bind gRPC', { error: err.message });
+        process.exit(1);
+      }
+      grpcServer.start();
+      log.info(`Config gRPC service listening on port ${port}`);
     }
-    grpcServer.start();
-    log.info(`Config gRPC service listening on port ${port}`);
-  });
+  );
 
   const shutdown = () => {
     log.info('Shutting down config service...');

@@ -42,19 +42,17 @@ async function main() {
   const notifyImpl = new NotifyServiceImpl(pool, configWatcher, fanout, webPush);
 
   const grpcServer = new grpc.Server();
-  grpcServer.addService(
-    createNotifyServiceDefinition(),
-    notifyImpl as unknown as grpc.UntypedServiceImplementation,
-  );
+  grpcServer.addService(createNotifyServiceDefinition(), notifyImpl as unknown as grpc.UntypedServiceImplementation);
 
-  grpcServer.bindAsync(`0.0.0.0:${grpcPort}`, mtls.serverCredentials(), (err, port) => {
-    if (err) {
-      log.error('Bind failed', { error: err.message });
-      process.exit(1);
+  grpcServer.bindAsync(
+    `0.0.0.0:${grpcPort}`,
+    mtls.serverCredentials(),
+    (err, port) => {
+      if (err) { log.error('Bind failed', { error: err.message }); process.exit(1); }
+      grpcServer.start();
+      log.info(`Notify gRPC service listening on port ${port}`);
     }
-    grpcServer.start();
-    log.info(`Notify gRPC service listening on port ${port}`);
-  });
+  );
 
   const shutdown = () => {
     // Open streams block tryShutdown, so flush telemetry in parallel and force the stop.
@@ -63,17 +61,10 @@ async function main() {
       grpcServer.forceShutdown();
       flush.finally(() => process.exit(0));
     }, 5000).unref();
-    grpcServer.tryShutdown(async () => {
-      await flush;
-      pool.end();
-      process.exit(0);
-    });
+    grpcServer.tryShutdown(async () => { await flush; pool.end(); process.exit(0); });
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }
 
-main().catch((err) => {
-  console.error('Fatal:', err);
-  process.exit(1);
-});
+main().catch((err) => { console.error('Fatal:', err); process.exit(1); });
