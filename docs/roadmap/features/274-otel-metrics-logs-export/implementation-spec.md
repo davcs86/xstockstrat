@@ -1121,7 +1121,7 @@ cd services/xstockstrat-ledger && pnpm run lint
 
 ### Step 31 — service: identity: metric reader, log processor, span-derived rpc.server.duration, awaited shutdown (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/telemetry.ts` — modify
