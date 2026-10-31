@@ -15,6 +15,7 @@
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 59 steps (PR-A 1-47, G1 gate 48, PR-B 49-59) |
 | 2026-10-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1-2 done (sequential, session branch `ccr-4f43fb65-lagupv`) |
+| 2026-10-31 | `in-progress` → `code-completed` | /sdd-execute | All 59 steps done: PR-A #1379 and follow-ups #1380/#1382 merged, G1 dev proof recorded, PR-B (steps 49-59) open; prod stays OTEL_ENABLED="false" |
 
 ---
 
@@ -57,6 +58,10 @@ re-run /sdd-spec if the registry changes.)_
 | Service owner (`xstockstrat-config`) | Secret redaction on the OTLP log edge; WatchConfig stream stability |
 | Service owner (`xstockstrat-ui`) | Connect-RPC call safety; no secret values logged; BFF recorder wrapping |
 
+## Scenario Promotion
+
+All 22 `@AC-*` scenarios were promoted (C-16) at integration on 2026-10-31: 13 into per-service suites (`services/xstockstrat-{trading,analysis,ledger,config,portfolio,marketdata,identity,indicators,agent,ui}/acceptance/otel-metrics-logs-export.feature`) and 9 into `docs/sdd/business-rules/platform.feature`, each tagged `@feature-274`. 250 `@AC-3` is superseded by 274 `@AC-9` (operator-signed CHANGE); a comment block in `platform.feature` records it.
+
 ## Next Action
 
-`/sdd-review otel-metrics-logs-export impl-spec` — validate the implementation spec, then `/sdd-execute otel-metrics-logs-export` (PR-A steps 1-47 first; step 48 is the operator G1 gate before PR-B).
+Merge PR-B, then the operator decides the production flip (`OTEL_ENABLED` in `.do/app.yaml`) using the G1 cost figures (Loki bytes/day is still unmeasured); `/promote` flips the feature to `launched` and promotes the `@AC-*` scenarios (C-16).

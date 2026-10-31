@@ -189,9 +189,7 @@ The agent authenticates to Claude.ai via OAuth 2.1 (RFC 8414/9728); its outbound
 
 ## Section 8 — Observability
 
-OpenTelemetry SDK in every service exports OTLP traces to Grafana Cloud (or any OTLP receiver) when `OTEL_ENABLED=true`.
-
-Metrics and logs are not exported (feature 226).
+OpenTelemetry SDK in every service exports OTLP traces, metrics (`rpc_server_duration_milliseconds_*`, `mcp_tool_duration_milliseconds_*`, `http_server_duration_milliseconds_*`) and logs to Grafana Cloud (or any OTLP receiver) when `OTEL_ENABLED=true`. Alert rules (error rate, P99 latency, analysis live-loop heartbeat) and dashboards are provisioned from `packages/otel/`.
 
 - Distributed traces span all 15 services via `x-trace-id` header propagation
 - Per-language instrumentation: `internal/telemetry/` (Go), `app/telemetry.py` (Python), `src/telemetry.ts` (Node.js)

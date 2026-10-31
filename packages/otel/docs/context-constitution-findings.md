@@ -10,12 +10,12 @@ governance. The `observability.md` doc-lie about the OTLP port is recorded at th
 ## Open questions (unresolved *why* — needs a maintainer)
 
 - `memory_limiter.limit_mib: 256` / `spike_limit_mib: 64` / `batch.timeout: 10s` are dev-tuned magic numbers with no prod counterpart — deliberately dev-only (collector absent in prod), or placeholders? `otel-collector-config.yaml#memory_limiter (~L37-46)` — status: **open**
-- ~~**Latent bug?** alerts and dashboards depended on an RPC duration histogram no service exports~~ **NARROWED (feature 250)** — defect `otel-metrics-logs-never-exported-defect`: alerts/dashboards narrowed to traces, docs corrected; metrics/logs export is `docs/roadmap/features/274-otel-metrics-logs-export/`. — status: **narrowed**
+- ~~**Latent bug?** alerts and dashboards depended on an RPC duration histogram no service exports~~ **RESOLVED (feature 274)** — defect `otel-metrics-logs-never-exported-defect`: feature 250 narrowed the assets to traces; feature 274 added metric and log export to all 12 runtimes and restored them on the proven series. — status: **resolved**
 
 ## Resolved
 
 - **`alerts/README.md` implies `${DS_PROMETHEUS_UID}`/`${DS_LOKI_UID}` placeholders resolve automatically** — retired 2026-08-09 (refresh): this row misdiagnosed its own evidence. `alerts/README.md:19-29` ("## Substitutions before provisioning") already explicitly instructs "replace them before applying" with a table of what to substitute; `docs/setup/grafana-cloud.md#**Apply:** substitute (~L261-264)` is equally explicit. No `envsubst`/templating tooling was ever implied or expected. Confirmed no such tooling exists (repo-wide grep for `DS_PROMETHEUS_UID|DS_LOKI_UID|envsubst`, only doc references). Not a real doc-lie — dropped. The placeholders were later removed with the alert rules (feature 250, defect `otel-metrics-logs-never-exported-defect`).
-- **No service exports OTel metrics or logs, so the Grafana alerts and dashboards read nothing** — resolved by feature 250 (alerts/dashboards narrowed to traces, docs corrected); report [`2026-10-19-otel-metrics-logs-never-exported-defect`](../../../docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md); export restoration is `docs/roadmap/features/274-otel-metrics-logs-export/`.
+- **No service exports OTel metrics or logs, so the Grafana alerts and dashboards read nothing** — resolved by feature 250 (alerts/dashboards narrowed to traces, docs corrected) and **RESOLVED (feature 274)**: export restored in all 12 runtimes and the assets restored on the proven series; report [`2026-10-19-otel-metrics-logs-never-exported-defect`](../../../docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md); `docs/roadmap/features/274-otel-metrics-logs-export/`.
 
 
 ## Filed as defect reports (2026-10-19)

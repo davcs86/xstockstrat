@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
-# Regression cases for scripts/check-otel-produced-signals.sh (feature 250). Each case builds a
-# throwaway copy of the OTel assets and docs, mutates it, and asserts the guard's exit code and
-# hit prefix. Pre-fix text lives in scripts/testdata/otel-produced-signals/. No network.
+# Regression cases for scripts/check-otel-produced-signals.sh (features 250 and 274). Each case builds a
+# throwaway copy of the OTel assets, docs and registered producer files, mutates it, and asserts the
+# guard's exit code and hit prefix. Verbatim pre-250 text lives in scripts/testdata/otel-produced-signals/.
+# No network.
 # Records every failure and exits once at the end; only the missing-guard check exits at once.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="${REPO_ROOT}/scripts/check-otel-produced-signals.sh"
 FX="${REPO_ROOT}/scripts/testdata/otel-produced-signals"
-FOLLOWUP="docs/roadmap/features/274-otel-metrics-logs-export/"
-SANCTIONED="Metrics and logs are not exported (feature 226)."
 OPEN="<!-- otel-guard:removed-assets -->"
 CLOSE="<!-- /otel-guard:removed-assets -->"
-DEFECT="otel-metrics-logs-never-exported-defect"
-RULE_LINE="- \`xstk-error-rate-high\` — alert rule"
-RULE_LINE_ASCII="- \`xstk-error-rate-high\` - alert rule"
+RULE_LINE="- \`xstk-retired-fake\` — alert rule"
+RULE_LINE_ASCII="- \`xstk-retired-fake\` - alert rule"
 EXISTING_FILE_LINE="- \`service-health.json\` — file"
 DASH_LINE="- \`xstk-service-health\` — dashboard"
 
@@ -44,8 +42,51 @@ fresh() {
   cp "${REPO_ROOT}/docs/launch-pdfs/product-features.md" "${tree}/docs/launch-pdfs/"
   cp "${REPO_ROOT}/docs/context-constitution-findings.md" "${tree}/docs/"
   cp "${REPO_ROOT}/docs/sdd/business-rules/platform.feature" "${tree}/docs/sdd/business-rules/"
-  cp "${REPO_ROOT}/docs/reports/2026-10-19-${DEFECT}.md" "${tree}/docs/reports/"
   cp -R "${REPO_ROOT}/.do" "${tree}/"
+  cp "${REPO_ROOT}/docker-compose.yml" "${tree}/"
+  copy_protos
+  copy_producers
+}
+
+copy_protos() {
+  local f svc
+  for f in "${REPO_ROOT}"/packages/proto/*/v1/*.proto; do
+    svc="$(basename "$(dirname "$(dirname "$f")")")"
+    mkdir -p "${tree}/packages/proto/${svc}/v1"
+    cp "$f" "${tree}/packages/proto/${svc}/v1/"
+  done
+}
+
+# The matcher the guard must see, derived independently from the protos.
+stream_matcher() {
+  grep -h -E '^[[:space:]]*rpc[[:space:]]+[A-Za-z0-9_]+.*returns[[:space:]]*\([[:space:]]*stream[[:space:]]' \
+    "${REPO_ROOT}"/packages/proto/*/v1/*.proto |
+    sed -E 's/^[[:space:]]*rpc[[:space:]]+([A-Za-z0-9_]+).*/\1/' | sort -u | paste -sd'|' -
+}
+
+# A rule selector for $1 carrying the given matcher body (empty = bare selector).
+rule_expr() {
+  if [ -n "$2" ]; then
+    printf '      expr: sum(rate(%s{%s}[5m]))' "$1" "$2"
+  else
+    printf '      expr: sum(rate(%s[5m]))' "$1"
+  fi
+}
+
+# Copies every file the registry names as a producer, so registry integrity runs on the throwaway tree.
+copy_producers() {
+  local ln=0 kind paths pth old_ifs
+  while IFS=$'\t' read -r kind _ paths _; do
+    ln=$((ln + 1))
+    if [ "$ln" -eq 1 ] || [ -z "$kind" ]; then continue; fi
+    old_ifs="$IFS"
+    IFS=,
+    for pth in $paths; do
+      mkdir -p "${tree}/$(dirname "$pth")"
+      cp "${REPO_ROOT}/${pth}" "${tree}/${pth}"
+    done
+    IFS="$old_ifs"
+  done <"${REPO_ROOT}/packages/otel/produced-signals.tsv"
 }
 
 guard() {
@@ -55,10 +96,6 @@ guard() {
 
 append() {
   printf '%s\n' "$2" >>"${tree}/$1"
-}
-
-tsv_field() {
-  awk -F'\t' -v id="$1" -v col="$2" '$1 == id { print $col }' "${FX}/fr4.prefix.tsv"
 }
 
 expect_green() {
@@ -84,74 +121,204 @@ expect_hit() {
   done
 }
 
-# --- green: the fixed tree -------------------------------------------------------------------
+# --- green: the real tree --------------------------------------------------------------------
 fresh
-expect_green green-fixed-tree
+expect_green green-real-tree
 run=$((run + 1))
 if grep -q 'SERVICE_NAME' "$err"; then
   case_fail green-env-var-line "SERVICE_NAME=<service> env line was reported"
 fi
 
-# --- AC-1 / AC-2: verbatim pre-fix assets ----------------------------------------------------
+# --- AC-8: the allowlist --------------------------------------------------------------------------
 fresh
-cp "${FX}/alert-rules.prefix.yaml" "${tree}/packages/otel/alerts/alert-rules.yaml"
-expect_hit AC-1-red "AC-1 P1 packages/otel/alerts/alert-rules.yaml:"
+append packages/otel/alerts/alert-rules.yaml "      expr: rpc_client_bogus_total"
+expect_hit AC-8-unregistered-metric "AC-8 P1 packages/otel/alerts/alert-rules.yaml:" "rpc_client_bogus_total"
 
 fresh
-cp "${FX}/service-health.prefix.json" "${tree}/packages/otel/dashboards/service-health.prefix.json"
-expect_hit AC-2-red "AC-2 P1 packages/otel/dashboards/service-health.prefix.json:"
+append packages/otel/alerts/alert-rules.yaml "      expr: sum by (service_name) (rate(mcp_tool_duration_milliseconds_count[5m]))"
+expect_green AC-8-registered-metric-passes
 
-# --- AC-3: one case per pre-fix cite -------------------------------------------------------
-while IFS=$'\t' read -r cid tag rel line; do
+fresh
+append packages/otel/alerts/alert-rules.yaml "      expr: |"
+append packages/otel/alerts/alert-rules.yaml "        sum(count_over_time({service_name=\"nosuch\"} [5m]))"
+expect_hit AC-8-unregistered-service-name "AC-8 P1 packages/otel/alerts/alert-rules.yaml:" 'service_name="nosuch"'
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "      expr: sum(count_over_time({service_name=\"analysis\"} |= \"never produced\" [5m]))"
+expect_hit AC-8-unregistered-loki-literal "AC-8 P1 packages/otel/alerts/alert-rules.yaml:" '|= "never produced"'
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "      expr: sum(count_over_time({service_name=\"analysis\"} |= \"live_loop: cycle complete\" | json | level=~\"info\" [30m]))"
+expect_green AC-8-registered-loki-passes
+
+fresh
+cp "${FX}/alert-rules.prefix.yaml" "${tree}/packages/otel/alerts/alert-rules.prefix.yaml"
+expect_hit AC-8-verbatim-pre250-rule "AC-8 P1 packages/otel/alerts/alert-rules.prefix.yaml:" 'ScoreStrategy|RunBacktest'
+
+fresh
+sed -i.bak 's/mcp\.tool\.duration/mcp.tool.renamed/' "${tree}/services/xstockstrat-agent/app/tool_metrics.py"
+rm -f "${tree}/services/xstockstrat-agent/app/tool_metrics.py.bak"
+expect_hit AC-8-producer-literal-drift "AC-8 P1-producer packages/otel/produced-signals.tsv:" "mcp_tool_duration_milliseconds_count"
+
+fresh
+rm -f "${tree}/packages/otel/produced-signals.tsv"
+expect_hit AC-8-registry-missing "AC-8 P1-producer packages/otel/produced-signals.tsv:"
+
+# --- AC-17: Part 4, the proto-derived stream exclusion ---------------------------------------------
+M="rpc_method!~\"$(stream_matcher)\""
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "$(rule_expr rpc_server_duration_milliseconds_count "$M")"
+expect_green AC-17-selector-with-matcher-passes
+
+for suffix in count bucket sum; do
   fresh
-  append "$rel" "$line"
-  expect_hit "AC-3-${cid}" "AC-3 ${tag} ${rel}:"
-done <"${FX}/fr4.prefix.tsv"
+  append packages/otel/alerts/alert-rules.yaml "$(rule_expr "rpc_server_duration_milliseconds_${suffix}" "")"
+  expect_hit "AC-17-bare-${suffix}" "AC-17 P4 packages/otel/alerts/alert-rules.yaml:" "rpc_server_duration_milliseconds_${suffix}"
 
-# root findings row: the pre-fix row (no defect basename) trips above; the real NARROWed row is green
-run=$((run + 1))
-if ! grep -q -F "$DEFECT" "${REPO_ROOT}/docs/context-constitution-findings.md"; then
-  case_fail root-findings-narrowed "root findings row does not carry the defect basename"
-fi
-# otel findings rows are asserted by content, never by line number
-run=$((run + 1))
-if ! grep -q -F "$DEFECT" "${REPO_ROOT}/packages/otel/docs/context-constitution-findings.md"; then
-  case_fail otel-findings-content "otel findings do not carry the defect basename"
-fi
+  fresh
+  append packages/otel/alerts/alert-rules.yaml "$(rule_expr "rpc_server_duration_milliseconds_${suffix}" 'service_name="analysis"')"
+  expect_hit "AC-17-other-matchers-${suffix}" "AC-17 P4 packages/otel/alerts/alert-rules.yaml:"
+done
 
-# --- a line carrying several tags reports each one ------------------------------------------
+dash() {
+  cat >"${tree}/packages/otel/dashboards/service-health.json" <<DASH_EOF
+{
+  "templating": { "list": [ {
+    "query": "label_values(rpc_server_duration_milliseconds_count, service_name)"
+  } ] },
+  "uid": "xstk-service-health",
+  "panels": [ { "targets": [ {
+    "expr": "$1"
+  } ] } ]
+}
+DASH_EOF
+}
+
 fresh
-append docs/setup/grafana-cloud.md "$(tsv_field s6-258 4)"
-expect_hit multi-tag-p99-and-uids \
-  "AC-3 P2-generic docs/setup/grafana-cloud.md:" "AC-3 P3-name docs/setup/grafana-cloud.md:"
+dash 'sum(mcp_tool_duration_milliseconds_count)'
+expect_green AC-17-label-values-templating-exempt
 
 fresh
-append docs/setup/grafana-cloud.md "see xstk-error-rate-high and mute-timings.yaml"
+dash 'sum(rpc_server_duration_milliseconds_count)'
+expect_hit AC-17-same-selector-in-target-fails "AC-17 P4 packages/otel/dashboards/service-health.json:"
+
+fresh
+dash "sum(rpc_server_duration_milliseconds_count{${M//\"/\\\"}})"
+expect_green AC-17-dashboard-target-with-matcher
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "$(rule_expr rpc_server_duration_milliseconds_count "$M")"
+append packages/proto/notify/v1/notify.proto "rpc StreamFoo(Req) returns (stream Resp);"
+expect_hit AC-17-new-stream-rpc-needs-matcher "AC-17 P4 packages/otel/alerts/alert-rules.yaml:" "StreamFoo"
+
+fresh
+append packages/proto/notify/v1/notify.proto "rpc Foo(Req);"
+expect_hit AC-17-rpc-without-returns "AC-17 P4 packages/proto/notify/v1/notify.proto:"
+
+fresh
+append packages/proto/marketdata/v1/marketdata.proto "rpc GetBars(Req) returns (stream Resp);"
+expect_hit AC-17-stream-named-like-unary "AC-17 P4 packages/proto:" "GetBars"
+
+fresh
+append packages/otel/alerts/alert-rules.yaml "$(rule_expr rpc_server_duration_milliseconds_count "$M")"
+append packages/proto/notify/v1/notify.proto "// rpc StreamFoo(Req) returns (stream Resp);"
+expect_green AC-17-commented-stream-ignored
+
+fresh
+append .do/app.yaml "  - key: OTEL_TRACES_SAMPLER"
+expect_hit AC-17-sampler-in-do-spec "AC-17 P4-sampler .do/app.yaml:"
+
+fresh
+append docker-compose.yml "      OTEL_PYTHON_GRPC_EXCLUDED_SERVICES: x"
+expect_hit AC-17-grpc-exclusion-in-compose "AC-17 P4-sampler docker-compose.yml:"
+
+# --- AC-8 / AC-14: alert rule invariants (Part 5) ---------------------------------------------------
+fresh
+expect_green AC-14-real-rules-pass
+run=$((run + 1))
+[ "$(grep -c -E '^[[:space:]]+- uid:' "${tree}/packages/otel/alerts/alert-rules.yaml")" -eq 3 ] ||
+  case_fail AC-14-three-rules "the real tree does not declare three rules"
+
+fresh
+awk '/noDataState:/ && !done { done = 1; next } { print }' "${tree}/packages/otel/alerts/alert-rules.yaml" >"${work}/ar" &&
+  cp "${work}/ar" "${tree}/packages/otel/alerts/alert-rules.yaml"
+expect_hit AC-8-rule-without-nodatastate "AC-8 P5 packages/otel/alerts/alert-rules.yaml:" "xstk-error-rate-high has no noDataState"
+
+fresh
+sed -i.bak 's/noDataState: Alerting/noDataState: OK/' "${tree}/packages/otel/alerts/alert-rules.yaml"
+rm -f "${tree}/packages/otel/alerts/alert-rules.yaml.bak"
+expect_hit AC-8-stall-rule-nodata-must-alert "AC-8 P5 packages/otel/alerts/alert-rules.yaml:" "xstk-analysis-no-scoring noDataState must be Alerting"
+
+fresh
+sed -i.bak '0,/noDataState: OK/s//noDataState: NoData/' "${tree}/packages/otel/alerts/alert-rules.yaml"
+rm -f "${tree}/packages/otel/alerts/alert-rules.yaml.bak"
+expect_hit AC-8-rpc-rule-nodata-must-be-ok "AC-8 P5 packages/otel/alerts/alert-rules.yaml:" "noDataState must be OK"
+
+fresh
+sed -i.bak 's/name: outside-us-market-hours/name: outside-market-hours/' "${tree}/packages/otel/alerts/mute-timings.yaml"
+rm -f "${tree}/packages/otel/alerts/mute-timings.yaml.bak"
+expect_hit AC-14-mute-timing-renamed "AC-14 P5 packages/otel/alerts/mute-timings.yaml:"
+
+fresh
+rm -f "${tree}/packages/otel/alerts/mute-timings.yaml"
+expect_hit AC-14-mute-timing-file-missing "AC-14 P5 packages/otel/alerts/mute-timings.yaml:"
+
+fresh
+grep -v 'mute_outside_market_hours' "${tree}/packages/otel/alerts/alert-rules.yaml" >"${work}/ar" &&
+  cp "${work}/ar" "${tree}/packages/otel/alerts/alert-rules.yaml"
+expect_hit AC-14-stall-rule-label-dropped "AC-14 P5 packages/otel/alerts/alert-rules.yaml:" "mute_outside_market_hours"
+
+# --- AC-14: restored dashboards reference only produced series ---------------------------------------
+fresh
+expect_green AC-14-real-dashboards-pass
+run=$((run + 1))
+n=0
+for f in "${tree}"/packages/otel/dashboards/*.json; do n=$((n + 1)); done
+[ "$n" -eq 4 ] || case_fail AC-14-four-dashboards "expected 4 dashboards, found ${n}"
+
+run=$((run + 1))
+grep -q '"query": "label_values(rpc_server_duration_milliseconds_count, service_name)"' \
+  "${REPO_ROOT}/packages/otel/dashboards/service-health.json" ||
+  case_fail AC-14-service-variable "service-health lacks the \$service variable over rpc_server_duration_milliseconds_count"
+
+run=$((run + 1))
+for input in DS_PROMETHEUS DS_LOKI DS_TEMPO; do
+  grep -q "\"name\": \"${input}\"" "${REPO_ROOT}/packages/otel/dashboards/service-health.json" ||
+    case_fail AC-14-datasource-inputs "service-health lacks the ${input} input"
+done
+
+fresh
+dash 'sum(rate(rpc_client_bogus_total[5m]))'
+expect_hit AC-14-unregistered-series-in-panel "AC-8 P1 packages/otel/dashboards/service-health.json:" "rpc_client_bogus_total"
+
+fresh
+dash 'sum(count_over_time({service_name=\"nosuch\"} [5m]))'
+expect_hit AC-14-unregistered-service-in-panel "AC-8 P1 packages/otel/dashboards/service-health.json:" 'service_name="nosuch"'
+
+fresh
+dash 'sum(count_over_time({service_name=\"analysis\"} |= \"signal.ingested\" [5m]))'
+expect_hit AC-14-unproduced-literal-in-panel "AC-8 P1 packages/otel/dashboards/service-health.json:" '|= "signal.ingested"'
+
+fresh
+dash 'sum(rate({service_name=\"trading\"} | detected_level=\"error\" [5m]))'
+expect_green AC-14-metadata-filter-passes
+
+fresh
+dash 'sum(rate(rpc_server_duration_milliseconds_count{service_name=\"trading\"}[5m]))'
+expect_hit AC-14-panel-selector-without-matcher "AC-17 P4 packages/otel/dashboards/service-health.json:"
+
+# --- Part 2 is retired: signal talk in docs is free ---------------------------------------------
+fresh
+append docs/setup/grafana-cloud.md "Loki and Prometheus now carry rpc_server_duration_milliseconds with service_name=analysis; P99 per service."
+append docs/patterns/observability.md "Metrics and logs are exported over OTLP."
+expect_green AC-9-docs-free-text
+
+# --- a line carrying several Part 3 tags reports each one -----------------------------------------
+fresh
+append docs/setup/grafana-cloud.md "see xstk-retired-fake and dashboards-gone.json"
 expect_hit multi-tag-name-and-file \
   "AC-3 P3-name docs/setup/grafana-cloud.md:" "AC-3 P3-file docs/setup/grafana-cloud.md:"
-
-# --- the sanctioned literal is stripped case-exactly ----------------------------------------
-fresh
-append docs/patterns/observability.md "$SANCTIONED"
-expect_green strip-exact-literal
-
-fresh
-append docs/patterns/observability.md "metrics and logs are not exported (feature 226)."
-expect_hit strip-recased-literal "AC-3 P2-generic docs/patterns/observability.md:"
-
-# --- the follow-up path is stripped case-exactly, and only the path ---------------------------
-fresh
-append packages/otel/alerts/README.md "See ${FOLLOWUP}"
-append docs/setup/grafana-cloud.md "See ${FOLLOWUP}"
-expect_green followup-exact-path
-
-fresh
-append packages/otel/alerts/README.md "See docs/roadmap/features/274-OTEL-metrics-logs-export/"
-expect_hit followup-recased-path "AC-3 P2-generic packages/otel/alerts/README.md:"
-
-fresh
-append packages/otel/alerts/README.md "See ${FOLLOWUP} restores metrics and logs"
-expect_hit followup-trailing-prose "AC-3 P2-generic packages/otel/alerts/README.md:"
 
 # --- removed-assets fence ---------------------------------------------------------------
 fresh
@@ -189,13 +356,13 @@ expect_green fence-ascii-separator
 
 # --- a comment can never make a deleted asset count as existing -------------------------------
 fresh
-append packages/otel/alerts/alert-rules.yaml "# removed xstk-error-rate-high"
-append docs/setup/grafana-cloud.md "xstk-error-rate-high"
+append packages/otel/alerts/alert-rules.yaml "# removed xstk-retired-fake"
+append docs/setup/grafana-cloud.md "xstk-retired-fake"
 expect_hit comment-does-not-create-existence "AC-3 P3-name docs/setup/grafana-cloud.md:"
 
 # --- removal prose states a count that is wrong ----------------------------------------------
 fresh
-append packages/otel/alerts/README.md "Delete the three alert rules below"
+append packages/otel/alerts/README.md "Delete the four alert rules below"
 expect_hit removal-prose-count "AC-3 P3-count packages/otel/alerts/README.md:"
 
 # --- dashboard fallback tree: no dashboard JSON ------------------------------------------------
@@ -204,9 +371,9 @@ fallback_tree() {
   fresh
   rm -f "${tree}"/packages/otel/dashboards/*.json
   while IFS= read -r f; do
-    grep -v 'service-health' "$f" >"${work}/stripped" || true
+    grep -v -E 'service-health|signal-pipeline|infrastructure|trading-service' "$f" >"${work}/stripped" || true
     cp "${work}/stripped" "$f"
-  done < <(grep -rl 'service-health' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
+  done < <(grep -rl -E 'service-health|signal-pipeline|infrastructure|trading-service' "${tree}/docs" "${tree}/packages/otel" 2>/dev/null)
 }
 
 fallback_tree
@@ -231,29 +398,6 @@ done
 if grep -q 'trading_mode' "$readme"; then
   case_fail c16-trading-mode "dashboards README mentions trading_mode"
 fi
-
-# --- the follow-up citation is identical in all four places and the dir exists -------------------
-run=$((run + 1))
-cites=""
-for f in packages/otel/alerts/README.md docs/setup/grafana-cloud.md \
-  packages/otel/docs/context-constitution-findings.md docs/context-constitution-findings.md; do
-  hit="$(grep -o -E 'docs/roadmap/features/274-otel-metrics-logs-export/' "${REPO_ROOT}/${f}" | sort -u)"
-  if [ -z "$hit" ]; then
-    case_fail followup-citation "no follow-up citation in ${f}"
-  fi
-  cites="${cites}${hit}"$'\n'
-done
-if [ "$(printf '%s' "$cites" | sort -u | grep -c .)" -ne 1 ]; then
-  case_fail followup-citation "citations differ across the four files"
-fi
-if [ ! -d "${REPO_ROOT}/${FOLLOWUP}" ]; then
-  case_fail followup-dir-exists "${FOLLOWUP} does not exist"
-fi
-
-# --- the guard does not depend on the defect report file ------------------------------------
-fresh
-rm -f "${tree}/docs/reports/2026-10-19-${DEFECT}.md"
-expect_green defect-report-independence
 
 # --- .feature files are outside the guard glob -------------------------------------------------
 fresh

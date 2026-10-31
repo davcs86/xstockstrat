@@ -1,12 +1,10 @@
 # Grafana Cloud & OpenTelemetry Setup
 
-This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. Every deployable workload — the eleven backend/UI services plus the `xstockstrat-agent` MCP server — exports **traces** via OTLP/HTTP when `OTEL_ENABLED=true`.
-
-Metrics and logs are not exported (feature 226).
+This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. Every deployable workload — the eleven backend/UI services plus the `xstockstrat-agent` MCP server — exports **traces, metrics and logs** via OTLP/HTTP (`/v1/traces`, `/v1/metrics`, `/v1/logs`) when `OTEL_ENABLED=true`. The series and log streams, the stream-method exclusion and the optional SDK env vars are listed in `docs/patterns/observability.md` § Exported signals.
 
 In local dev, an `otel-collector` Docker container aggregates and forwards signals. In production (DO App Platform), services push OTLP directly to Grafana Cloud.
 
-The Tempo dashboard and the alert-cleanup file are checked into the repo as the reproducible source of truth — see `packages/otel/dashboards/` and `packages/otel/alerts/`. Steps 6 and 7 below explain how to use them.
+The dashboards and alert rules are checked into the repo as the reproducible source of truth — see `packages/otel/dashboards/` and `packages/otel/alerts/`. Steps 6 and 7 below explain how to use them.
 
 ---
 
@@ -23,7 +21,9 @@ Production (DO App Platform):
 **Collector config:** `packages/otel/otel-collector-config.yaml`
 
 **Signal types sent:**
-- **Traces** — distributed request traces across gRPC service calls
+- **Traces** — distributed request traces across gRPC service calls (Tempo)
+- **Metrics** — `rpc_server_duration_milliseconds_*` (gRPC services), `mcp_tool_duration_milliseconds_*` (agent), `http_server_duration_milliseconds_*` (UI) (Mimir / Prometheus)
+- **Logs** — each service's application log records, stream `{service_name="<name>"}` (Loki)
 
 **Resource attributes attached to all telemetry:**
 
@@ -194,32 +194,21 @@ After starting the stack (dev) or deploying to DO (prod):
 
 ## Step 6 — Dashboard (checked into the repo)
 
-The Tempo-backed dashboard is version-controlled JSON under **`packages/otel/dashboards/`** — that
-directory is the source of truth, not the Grafana UI. See its `README.md` for the panel/query
-assumptions.
+The dashboards are version-controlled JSON under **`packages/otel/dashboards/`** — that directory is the
+source of truth, not the Grafana UI. See its `README.md` for the panel/query assumptions.
 
 | File | Dashboard | Covers |
 |---|---|---|
-| `service-health.json` | Service Health (`xstk-service-health`) | server error spans, slow server spans (>2s), analysis scoring RPC activity |
+| `service-health.json` | Service Health (`xstk-service-health`) | request rate, error rate and P99 latency per service, error-log volume, plus Tempo drill-downs (server error spans, slow server spans, analysis scoring RPC activity) |
+| `signal-pipeline-throughput.json` | Signal Pipeline (`xstk-signal-pipeline`) | analysis latency by RPC method, analysis live-loop cycles |
+| `infrastructure.json` | Infrastructure (`xstk-infrastructure`) | transport-level gRPC errors, services reporting |
+| `trading-service.json` | Trading Service (`xstk-trading-service`) | `PlaceOrder` rate and latency, trading error logs |
 
-**Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your Tempo
-datasource when prompted (the dashboard declares it as the `DS_TEMPO` `__inputs` entry).
+**Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your Prometheus, Loki and
+(for Service Health) Tempo datasources when prompted (the `DS_PROMETHEUS`, `DS_LOKI` and `DS_TEMPO` `__inputs`).
 
 **Import (file-based provisioning):** point a Grafana dashboard provider at
-`packages/otel/dashboards/`; the `${DS_TEMPO}` template variable resolves to the provisioned
-datasource UID.
-
-Dashboards removed from that directory stay in Grafana Cloud until deleted by hand under
-Dashboards:
-
-<!-- otel-guard:removed-assets -->
-- `xstk-signal-pipeline` — dashboard
-- `xstk-infrastructure` — dashboard
-- `xstk-trading-service` — dashboard
-- `signal-pipeline-throughput.json` — file
-- `infrastructure.json` — file
-- `trading-service.json` — file
-<!-- /otel-guard:removed-assets -->
+`packages/otel/dashboards/`; the `${DS_*}` template variables resolve to the provisioned datasource UIDs.
 
 ### Ad-hoc Tempo queries (supplementary)
 
@@ -232,21 +221,13 @@ Dashboards:
 
 ## Step 7 — Alert Rules (checked into the repo)
 
-`packages/otel/alerts/alert-rules.yaml` provisions no alert rules; it only deletes earlier ones.
-See its `README.md`. Alerting on gRPC error rate, latency and analysis scoring stalls returns with
-`docs/roadmap/features/274-otel-metrics-logs-export/`; until it lands, nothing pages for those failures.
+`packages/otel/alerts/alert-rules.yaml` provisions three rules (error rate, P99 latency, analysis live-loop
+heartbeat) and `mute-timings.yaml` the `outside-us-market-hours` mute timing; see its `README.md` for the
+datasource-UID substitutions, the stream-method exclusion and the stall rule's meaning.
 
-**Apply:** file-based provisioning (self-hosted) applies `deleteRules` / `deleteMuteTimes` itself.
-Grafana Cloud does not apply the file: delete the items below by hand under Alerting → Alert rules
-and Alerting → Notification policies → Mute timings.
-
-<!-- otel-guard:removed-assets -->
-- `xstk-error-rate-high` — alert rule
-- `xstk-p99-latency-high` — alert rule
-- `xstk-analysis-no-scoring` — alert rule
-- `outside-us-market-hours` — mute timing
-- `mute-timings.yaml` — file
-<!-- /otel-guard:removed-assets -->
+**Apply:** file-based provisioning (self-hosted) applies both files itself. Grafana Cloud does not apply
+the file: import each rule under Alerting → Alert rules and create the mute timing under Alerting →
+Notification policies → Mute timings.
 
 Routing (contact points + notification policies) is left to each environment — route to email or
 to Slack via feature `020-notify-external-fanout`.
