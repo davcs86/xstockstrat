@@ -6874,6 +6874,44 @@ class TestGetIndicatorSeries:
         assert len(by_ref["bad"].series) == 0
 
     @pytest.mark.asyncio
+    async def test_rpc_error_surfaces_details_only(self):
+        """A component failing with an indicators RpcError shows the server's `details()`, never the
+        `AioRpcError` repr with its `debug_error_string` transport internals."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="sqz",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-legacy",
+                )
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="f-legacy", name="sqz")
+        )
+        rpc_error = grpc.aio.AioRpcError(
+            grpc.StatusCode.PERMISSION_DENIED,
+            grpc.aio.Metadata(),
+            grpc.aio.Metadata(),
+            "admins cannot execute another user's formula",
+            "UNKNOWN:Error received from peer {grpc_status:7}",
+        )
+
+        with patch.object(
+            StrategyEvaluator, "_compute_component", new=AsyncMock(side_effect=rpc_error)
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        assert resp.components[0].error == "admins cannot execute another user's formula"
+
+    @pytest.mark.asyncio
     async def test_none_maps_to_unset_indicator_value_not_zero(self):
         """A warm-up/gap None round-trips as an UNSET IndicatorValue (no presence), distinct from a
         real 0.0 (present) — the AC-4a no-fabricated-0.0 guarantee. This is the test that could not
