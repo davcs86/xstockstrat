@@ -10,6 +10,19 @@ row that still stores a legacy username is invisible to the user who owns it (fe
 connection. It has two modes: REPORT (the default, which only runs SELECTs) and APPLY (which needs a
 digest-matched, fully-confirmed plan).
 
+**Wrapper**: `scripts/manage-formula-authors.py` runs §4–§6 as `report` → `confirm` → `apply` (same
+guards; it adds none of its own authority). It needs `DATABASE_URL` (never falls back to a local DB),
+auto-sets `DB_PGBOUNCER=true` for a `:25061` URL, and keeps its files (default `~/legacy-authors`,
+refused inside the repo) at mode 0600. `confirm` only marks `suggested` rows `confirmed` and prints the
+digest to record; `apply` still needs that digest passed explicitly. Overrides for `unmappable` /
+`ambiguous` rows (§5) are still a hand edit of `plan.json` before `confirm`'s digest is taken.
+
+```bash
+uv run scripts/manage-formula-authors.py report
+uv run scripts/manage-formula-authors.py confirm          # prints the sha256 for the DBA record
+uv run scripts/manage-formula-authors.py apply --confirm-digest <sha256>
+```
+
 ---
 
 ## 1. Scope
