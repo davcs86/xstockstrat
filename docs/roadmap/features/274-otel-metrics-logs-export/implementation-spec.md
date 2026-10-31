@@ -305,7 +305,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 8 — service: portfolio: metrics + logs pipelines, slog bridge, bounded shutdown (Go)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/telemetry/otel.go` — modify

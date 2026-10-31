@@ -321,3 +321,9 @@
 - `go test ./... -race -count=1` with CI's coverage computation: every package `ok`, total 79.1% (floor 40); `golangci-lint run` 0 issues. No test asserted on a removed non-Context call, so `internal/service/trading_sync_test.go` (the one non-telemetry test that swaps `slog`) is unchanged. TDD: red N/A (behaviour-neutral retrofit gate; green run captured here, as `tdd-gate.md` allows).
 - Files modified: none (verification only)
 - Deviations: none
+
+### Step 8 — portfolio: metrics + logs pipelines, slog bridge, bounded shutdown (Go) [done]
+- Applied step 4's change verbatim to portfolio: `internal/telemetry/{otel.go,logbridge.go,shutdown.go}` cloned from the verified trading versions with the `SERVICE_NAME` default set to `portfolio`; `cmd/server/main.go` gets the three-value `Init`, `slog.SetDefault(WrapLogHandler(...))` after a successful init, and `StopServer(..., 2s, 3s)` in the signal goroutine (deferred 5 s `shutdownOtel` kept); `otel_test.go` arity-only edit; the eight module pins added with `go get` + `go mod tidy` (both `go.mod` and `go.sum`). All exporters are env-only.
+- Verification: `go build ./...`, `go vet ./internal/telemetry/... ./cmd/...` clean; golangci-lint v2.14.0 0 issues; existing telemetry tests pass with the new signature; discriminating check passes.
+- Files modified: `services/xstockstrat-portfolio/internal/telemetry/{otel.go,logbridge.go,shutdown.go,otel_test.go}`, `cmd/server/main.go`, `go.mod`, `go.sum`
+- Deviations: none (`shutdown.go` is cloned from trading *after* Deviation 3, so it already routes a failed final flush through `otel.Handle`)
