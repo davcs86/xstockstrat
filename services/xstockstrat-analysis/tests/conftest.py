@@ -493,17 +493,34 @@ def local_pg():
 
 @pytest.fixture
 def otel_reset(monkeypatch):
-    """Isolate a test calling init_telemetry: the OTel tracer provider is set-once per process."""
-    from opentelemetry import trace
+    """Isolate a test calling init_telemetry: the OTel providers are set-once per process."""
+    import logging
+
+    from opentelemetry import metrics, trace
+    from opentelemetry._logs import _internal as logs_internal
     from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
+    from opentelemetry.metrics import _internal as metrics_internal
     from opentelemetry.util._once import Once
 
     monkeypatch.setattr(trace, "_TRACER_PROVIDER_SET_ONCE", Once())
     monkeypatch.setattr(trace, "_TRACER_PROVIDER", None)
+    monkeypatch.setattr(metrics_internal, "_METER_PROVIDER_SET_ONCE", Once())
+    monkeypatch.setattr(metrics_internal, "_METER_PROVIDER", None)
+    monkeypatch.setattr(logs_internal, "_LOGGER_PROVIDER_SET_ONCE", Once())
+    monkeypatch.setattr(logs_internal, "_LOGGER_PROVIDER", None)
     monkeypatch.setenv("NO_PROXY", "127.0.0.1")
     monkeypatch.setenv("no_proxy", "127.0.0.1")
     monkeypatch.setattr(GrpcAioInstrumentorServer, "instrument", lambda self, **kw: None)
+    root = logging.getLogger()
+    handlers_before = list(root.handlers)
     yield
-    provider = trace.get_tracer_provider()
-    if hasattr(provider, "shutdown"):
-        provider.shutdown()
+    for h in list(root.handlers):
+        if h not in handlers_before:
+            root.removeHandler(h)
+    for provider in (
+        trace.get_tracer_provider(),
+        metrics.get_meter_provider(),
+        logs_internal.get_logger_provider(),
+    ):
+        if hasattr(provider, "shutdown"):
+            provider.shutdown()

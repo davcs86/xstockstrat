@@ -798,7 +798,7 @@ grep -q 'opentelemetry-instrumentation-logging' services/xstockstrat-analysis/py
 
 ### Step 21 — test: analysis: telemetry tests — metrics/logs export, status vectors, recorder, subprocess flush (Python)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_telemetry.py` — modify
