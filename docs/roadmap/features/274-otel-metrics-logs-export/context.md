@@ -412,3 +412,5 @@ Notify: telemetry.ts cloned from the ledger implementation (default "notify", ow
 Notify: logger.ts = ledger bridge (with the Deviation 9 level fix), index.ts shutdown (parallel flush, 5s unref'd forceShutdown, flush.finally exit), winston-transport 0.5.0, root lock. Deviation 10: webPush.ts log sites log subscriptionId not endpoint, with a RED/GREEN regression test. Verified build, lint 0 errors, 106 tests pass.
 
 Notify Node telemetry tests = shared suite (incl. AC-11 and AC-10 notify row: service.name=notify, env=staging). RED: 4 TS errors against pre-step-34 sources (missing exports). GREEN 125 tests, c8 >= 40, lint 0 errors.
+
+Config: telemetry.ts cloned from the ledger implementation (default "config", own header comment); six OTel deps; root pnpm-lock.yaml. Verified build, lint 0 errors, grep, existing tests pass.

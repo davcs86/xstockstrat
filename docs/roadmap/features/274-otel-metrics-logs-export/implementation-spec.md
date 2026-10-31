@@ -1333,7 +1333,7 @@ cd services/xstockstrat-notify && pnpm run lint
 
 ### Step 37 — service: config: metric reader, log processor, span-derived rpc.server.duration, awaited shutdown (Node)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify
