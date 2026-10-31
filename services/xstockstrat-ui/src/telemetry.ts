@@ -1,3 +1,17 @@
+/** An explicit reader ignores OTEL_METRIC_EXPORT_INTERVAL in sdk-metrics 2.x, so honour it here. */
+function metricIntervalOptions(): { exportIntervalMillis?: number; exportTimeoutMillis?: number } {
+  const interval = Number(process.env.OTEL_METRIC_EXPORT_INTERVAL);
+  if (!Number.isFinite(interval) || interval <= 0) return {};
+  const timeout = Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT) || 30000;
+  return { exportIntervalMillis: interval, exportTimeoutMillis: Math.min(interval, timeout) };
+}
+
+/** The batch processor ignores OTEL_BLRP_SCHEDULE_DELAY in sdk-logs 0.218, so honour it here. */
+function logBatchOptions(): { scheduledDelayMillis?: number } {
+  const delay = Number(process.env.OTEL_BLRP_SCHEDULE_DELAY);
+  return Number.isFinite(delay) && delay > 0 ? { scheduledDelayMillis: delay } : {};
+}
+
 export function initTelemetry(): void {
   if (process.env.OTEL_ENABLED !== 'true') return;
 
@@ -36,8 +50,13 @@ export function initTelemetry(): void {
       // No exporter takes a url option: it overrides OTEL_EXPORTER_OTLP_* (the SDK appends the
       // signal path itself). The UI passes no spanProcessors, so the implicit trace processor stays.
       traceExporter: new OTLPTraceExporter(),
-      metricReaders: [new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() })],
-      logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
+      metricReaders: [
+        new PeriodicExportingMetricReader({
+          exporter: new OTLPMetricExporter(),
+          ...metricIntervalOptions(),
+        }),
+      ],
+      logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter(), logBatchOptions())],
       instrumentations: [],
     });
 

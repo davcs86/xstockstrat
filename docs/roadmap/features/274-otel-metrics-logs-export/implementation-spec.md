@@ -1601,7 +1601,7 @@ cd services/xstockstrat-ui && pnpm run test:unit
 
 ### Step 45 — test: ui: telemetry tests — export paths under both header forms, resource, log correlation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/instrumentation.test.ts` — modify
@@ -2109,4 +2109,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 35's Files list omits `src/fanout/webPush.ts`; the Step 3 egress audit marked its three log sites `endpoint: row.endpoint` as **FIX** (the per-subscription push URL embeds a capability token and would now leave the process over OTLP).
 - **Actual**: the three log calls (`pruned expired push subscription`, `failed to prune push subscription`, `push channel error`) now log `subscriptionId: row.subscription_id`; the delivery call at `webPush.ts:168` still passes `row.endpoint` to the push service. A regression test in `webPush.test.ts` asserts the prune log line contains the subscription id and not the endpoint (RED before the fix).
 - **Disposition**: gap-protocol default (expand scope): `webPush.ts` and `webPush.test.ts` committed with Step 35.
+
+### Deviation 11 — The UI's explicit metric reader and log processor ignore the interval env vars (step 45, found by the test)
+- **Spec said**: Step 42 — plain `new PeriodicExportingMetricReader({ exporter })` / `new BatchLogRecordProcessor(exporter)`; Step 45 — tests set `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_BLRP_SCHEDULE_DELAY` to export within the test window.
+- **Actual**: with sdk-metrics 2.7 and sdk-logs 0.218 an explicitly constructed reader/processor does not read those env vars (probed outside vitest: no request in 1.2 s with the delay set to 50 ms; exports arrive once `exportIntervalMillis`/`scheduledDelayMillis` are passed). `src/telemetry.ts` now passes both from the standard env vars when set and valid (`metricIntervalOptions`, `logBatchOptions`), leaving the SDK defaults otherwise.
+- **Disposition**: gap-protocol default (fix now): `telemetry.ts` changed under Step 45 (outside its Files list). `serverLog.ts` was also prettier-formatted there. The Step 42 comment-only claim "env-only exporters" is unchanged: the exporters still take no arguments.
 
