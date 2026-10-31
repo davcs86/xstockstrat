@@ -1499,7 +1499,7 @@ cd services/xstockstrat-identity && pnpm run lint
 
 ### Step 42 — service: ui: explicit metric reader + log processor (0.218 line), declared exporter deps
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify

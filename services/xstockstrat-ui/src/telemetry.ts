@@ -7,6 +7,14 @@ export function initTelemetry(): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { resourceFromAttributes } = require('@opentelemetry/resources');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
@@ -25,11 +33,11 @@ export function initTelemetry(): void {
         'deployment.environment': process.env.APPLICATION_ENV ?? 'development',
         platform: 'xstockstrat',
       }),
-      // No url option: it overrides OTEL_EXPORTER_OTLP_* (the SDK appends /v1/traces itself).
+      // No exporter takes a url option: it overrides OTEL_EXPORTER_OTLP_* (the SDK appends the
+      // signal path itself). The UI passes no spanProcessors, so the implicit trace processor stays.
       traceExporter: new OTLPTraceExporter(),
-      // Empty arrays stop sdk-node auto-starting env-default OTLP metrics/logs (traces only).
-      metricReaders: [],
-      logRecordProcessors: [],
+      metricReaders: [new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() })],
+      logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
       instrumentations: [],
     });
 
