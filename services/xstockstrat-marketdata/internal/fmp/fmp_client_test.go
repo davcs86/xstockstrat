@@ -170,6 +170,28 @@ func TestGetFundamentalsMulti_OneQuoteCall(t *testing.T) {
 	}
 }
 
+// The boot quota seed counts rows by source with as_of >= today, so AsOf must be the fetch instant.
+func TestToFundamentals_SourceAndAsOfIsFetchInstant(t *testing.T) {
+	rt := &recordingRT{respond: func(path string) (int, string) {
+		if path == "/stable/quote" {
+			return 200, `[{"symbol":"AAPL","price":1}]`
+		}
+		return 200, `[]`
+	}}
+	c := newTestClient([]string{"core"}, rt)
+
+	f, err := c.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Source != SourceName {
+		t.Fatalf("source: got %q want %q", f.Source, SourceName)
+	}
+	if age := time.Since(f.AsOf); age < 0 || age >= 5*time.Second {
+		t.Fatalf("AsOf = %v (age %v), want the fetch instant", f.AsOf, age)
+	}
+}
+
 // TestHTTPError_DoesNotLeakAPIKey ensures error strings never contain the API key.
 func TestHTTPError_DoesNotLeakAPIKey(t *testing.T) {
 	rt := &recordingRT{respond: func(path string) (int, string) { return 403, `forbidden` }}

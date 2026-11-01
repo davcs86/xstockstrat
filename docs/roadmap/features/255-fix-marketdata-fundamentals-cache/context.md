@@ -1030,3 +1030,15 @@ the next `/sdd-batch` run can pick it up.
 - Verification: `go build ./...`, `go vet` of fmp/finnhub/classification, the no-literal grep, full `go test ./...`
   all pass; golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
 - Files modified: `internal/fmp/fmp_client.go`, `internal/finnhub/finnhub_client.go`, `internal/classification/sector.go`
+
+### Step 4 — test: source-id constants and AsOf-is-fetch-instant [done]
+- Added `TestToFundamentals_SourceAndAsOfIsFetchInstant` (fmp: `f.Source == SourceName`, AsOf age in `[0, 5s)`),
+  `TestSourceFMPAliasesFMPSourceName` (classification: `SourceFMP == fmp.SourceName`), and switched the finnhub
+  `MapsField` source assertion to `SourceName`.
+- TDD red: with Step 3's three production files temporarily restored from the Step 2 commit, the three packages failed
+  to build (`undefined: SourceName`, `undefined: fmp.SourceName`) → green: all three packages pass on `HEAD`.
+- Verification: targeted `go test` passes; full `go test ./... -race` passes, total coverage 71.5% (≥ 40%);
+  golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/fmp/fmp_client_test.go`, `internal/finnhub/finnhub_client_test.go`,
+  `internal/classification/sector_test.go`
+

@@ -249,7 +249,7 @@ grep -n 'Source: *"fmp"\|Source: *"finnhub"' services/xstockstrat-marketdata/int
 
 ### Step 4 — test: source-id constants and AsOf-is-fetch-instant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
@@ -1084,4 +1084,15 @@ _Populated by /sdd-execute as implementation proceeds._
   probe tests (`undefined: SourceName` / `undefined: fmp.SourceName`), which went green after the change and were
   deleted. Edits were applied by symbol; the new consts shift later `fmp_client.go`/`finnhub_client.go` anchors by
   3 lines (the AsOf comment adds 2 more in `toFundamentals`). The C-18 waivers (`marketdata_repo.go:587`, `marketdata_service.go:1966`/`:1986`) were left untouched.
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 4 — CI-equivalent fallback (golangci-lint) and RED by reverting Step 3
+- **Spec said**: Step 4's Verification runs the targeted `go test`, the coverage command and
+  `GOWORK=off golangci-lint run --modules-download-mode=mod`; RED is the compile failure before Step 3.
+- **Actual**: Step 3 had already landed, so RED was captured by temporarily restoring Step 3's three production files
+  from the Step 2 commit (`undefined: SourceName` / `undefined: fmp.SourceName`), then restoring them from `HEAD`
+  (not committed). golangci-lint ran with the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin)
+  and reported `0 issues.`; the coverage command ran with `COVERPKGS` expanded inline (same package set); total 71.5%.
+  The FMP test's quote stub is a minimal `[{"symbol":"AAPL","price":1}]` body, matching the file's existing
+  core-only stubs (C-13: no new domain fixture). The finnhub literal assertion at `:123` was replaced, not duplicated.
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
