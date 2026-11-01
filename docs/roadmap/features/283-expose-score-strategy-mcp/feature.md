@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-01 | `idea` → `draft` | /sdd-story | Product spec generated (gap from 215 Step 26 (e)) |
 | 2026-11-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; first pass FAILED on open questions, resolved by operator) |
+| 2026-11-01 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; hard cap) and approved with documented open risks; recon.md + design.md written |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, user-approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec expose-score-strategy-mcp`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -38,4 +41,4 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 ## Next Action
 
-`/sdd-design expose-score-strategy-mcp` — full design recommended (same-function overlap with 215 on `manage_strategy`; option C may touch `xstockstrat-analysis`; `score` has no `STRATEGY_OPERATION_*` enum and needs separate RPC dispatch)
+`/sdd-spec expose-score-strategy-mcp` — generate implementation spec from the approved design (first execute step must be the production-wiring trailer loopback test)

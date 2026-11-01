@@ -58,3 +58,9 @@ Feature: expose-score-strategy-mcp
   Scenario: The score operation is documented in the runbook and the strat-lab skill
     When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are read
     Then both describe manage_strategy operation "score" including its side effects, and the documented operations equal the tool's accepted operations
+
+  @AC-11 @FR-5
+  Scenario: A refresh whose excluded list was not reported yields null, not an empty list
+    Given strategy "fundamentals_macd_blend" is scored by an analysis build that sets no excluded-symbols trailer
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "fundamentals_macd_blend"
+    Then the result contains the recomputed rating and evidence_symbols, excluded_symbols is null rather than an empty list, and a warning is logged
