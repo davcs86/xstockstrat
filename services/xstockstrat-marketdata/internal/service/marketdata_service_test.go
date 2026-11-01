@@ -677,6 +677,78 @@ func TestGetFundamentals_FMPRepoFallback_CountsOnlyFMPRows(t *testing.T) {
 	}
 }
 
+// vendorAxisCfg is the Finnhub vendor path with snapshot_source pinned to "vendor" (feature 255, AC-4).
+func vendorAxisCfg() *fakeCfg {
+	cfg := enabledCfg(finnhub.SourceName)
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": snapshotSourceVendor}
+	return cfg
+}
+
+// AC-4 (feature 255): a fresh edgar cache row is not served as vendor data on the vendor path.
+func TestGetFundamentals_VendorPathRefusesEdgarRow_AC4(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Price: f64p(100)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+	svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 Finnhub call for an edgar cache row, got %d", src.calls)
+	}
+	if f.Price != 200 || f.Source != finnhub.SourceName || f.Stale {
+		t.Fatalf("expected fresh finnhub data (price 200), got %+v", f)
+	}
+}
+
+// AC-4 multi path: edgar and edgar+fmp rows are both on the edgar axis, so neither is a fresh vendor hit.
+func TestGetFundamentalsMulti_VendorPathRefusesEdgarRow(t *testing.T) {
+	for _, rowSource := range []string{snapshotSourceEdgar, "edgar+fmp"} {
+		t.Run(rowSource, func(t *testing.T) {
+			repo := newFakeFundRepo()
+			repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: rowSource, Price: f64p(100)}
+			repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+			src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+			svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+			out, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
+			if err != nil {
+				t.Fatalf("GetFundamentalsMulti: %v", err)
+			}
+			if src.calls != 1 {
+				t.Fatalf("expected 1 Finnhub call for a %s cache row, got %d", rowSource, src.calls)
+			}
+			if len(out) != 1 || out[0].Price != 200 || out[0].Source != finnhub.SourceName || out[0].Stale {
+				t.Fatalf("expected fresh finnhub data (price 200), got %+v", out)
+			}
+		})
+	}
+}
+
+// AC-4 keeps the at-quota stale serve (@feature-215 @AC-7): a fresh edgar row is served stale, labelled edgar.
+func TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Price: f64p(100)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	repo.sinceBySource[finnhub.SourceName] = 20 // == finnhub symbols_per_minute
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+	svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("expected a stale serve, not an error: %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("at-cap must not call Finnhub, got %d", src.calls)
+	}
+	if !f.Stale || f.Source != snapshotSourceEdgar || f.Price != 100 {
+		t.Fatalf("expected the edgar row served stale, got %+v", f)
+	}
+}
+
 // Mirrors TestGetFundamentals_DisabledFailedPrecondition, and additionally asserts the
 // error text names "finnhub" — proving Step 5.6's fundamentalsEnabled() generalization
 // actually dispatches on the active provider rather than hardcoding "fmp".

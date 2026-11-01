@@ -467,7 +467,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./...
 
 ### Step 8 — test: the vendor path refuses an edgar cache row (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -1129,4 +1129,17 @@ _Populated by /sdd-execute as implementation proceeds._
   deleted (Step 8 owns the committed tests). Full `go test ./... -race` passes, including `CacheHitNoFMP` and the
   feature-211 edgar tests. As an extra check, the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI
   pin) ran on `./internal/service/...` and reported `0 issues.`
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 8 — CI-equivalent fallback (golangci-lint), COVERPKGS expanded inline, RED by reverting Step 7
+- **Spec said**: Verification runs the targeted `go test`, the coverage command with a computed `COVERPKGS`, and
+  `golangci-lint run`; Instruction 3 names `sinceBySource["finnhub"]=20`.
+- **Actual**: the targeted run passes; the coverage command ran with `COVERPKGS` expanded inline (the session sandbox
+  refuses a runtime-computed variable; same package set), all packages pass under `-race`, total 71.5%. golangci-lint
+  ran with the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) and reported `0 issues.` Step 7
+  had already landed, so RED was captured by temporarily restoring `marketdata_service.go` from the Step 6 commit,
+  then restoring `HEAD` (not committed). The at-cap case is its own test,
+  `TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale`; a shared `vendorAxisCfg()` helper builds the
+  `snapshot_source: "vendor"` config for the three tests. Source literals use `finnhub.SourceName` and the
+  `snapshotSourceEdgar`/`snapshotSourceVendor` constants (DRY), except the single `"edgar+fmp"` case.
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.

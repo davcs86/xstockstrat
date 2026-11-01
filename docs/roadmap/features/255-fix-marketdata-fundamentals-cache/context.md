@@ -1102,3 +1102,15 @@ the next `/sdd-batch` run can pick it up.
   by hand on the staged set.
 - Files modified: `internal/service/marketdata_service.go`
 
+### Step 8 — test: the vendor path refuses an edgar cache row (AC-4) [done]
+- Added `TestGetFundamentals_VendorPathRefusesEdgarRow_AC4` (fresh `edgar` row, 1 min old → 1 Finnhub call, price 200,
+  `Source=finnhub`, not stale), `TestGetFundamentalsMulti_VendorPathRefusesEdgarRow` (subtests `edgar` and
+  `edgar+fmp`, same assertions on the multi path) and `TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale`
+  (`sinceBySource["finnhub"]=20` → the edgar row is served `Stale` with `Source=edgar`, no error, 0 calls). A small
+  `vendorAxisCfg()` helper pins `snapshot_source: "vendor"` on `enabledCfg("finnhub")`.
+- TDD: RED with `marketdata_service.go` temporarily restored from the Step 6 commit: all four cases failed (single and
+  both multi subtests `got 0` calls; at-cap served the edgar row fresh, not stale) → GREEN on `HEAD` after restoring.
+- Verification: targeted run passes (incl. `CacheHitNoFMP` and every `feature211` test); full `go test ./... -race`
+  passes, total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/service/marketdata_service_test.go`
+
