@@ -52,3 +52,10 @@
 - Gate scope (operator): warm/live-fetch gate sits at the `GetBars` warm site only; quote, price and `BatchGetBars` paths keep warming so held positions stay priced.
 - Round 1 adversary: no Floor breach; adopted: us_equity-only asset load, uppercase/trim in classify, classify inside `warmMu`, last-good-set retained on failed refresh (only never-loaded fails open), capped backoff, config governance (seed/waiver, config-team approval), `watchlist_refused` on ingest_signal, bindings not deprecated `Symbols`, pre-RPC size bound.
 - Operator chose another round (round 2) before approval.
+
+## Session 2026-11-01 — sdd-design round 2 gate (operator answers)
+
+- Gate scope REVISED (operator): warm/live-fetch gate now covers `GetBars`, `BatchGetBars` AND `BatchGetLatestPrice` (opportunity-universe paths, so refused-but-stored signal symbols like FORL stop being warmed/re-fetched). `GetLatestQuote(s)`/`GetLatestPrice` stay ungated. This supersedes the round-1 "GetBars only" answer. Known cost to reconcile in round 3: `BatchGetBars` also feeds held-position offline valuation (feature 240 `@AC-53/@AC-54`, feature 231 marks).
+- UI rename (operator): `commitRename` switches to the masked path (`updateMask: ['name']`) so a rename never drops symbols.
+- Adopted from round-2 adversary: refresh default 6h bounds [1,24]; shrink guard (reject a refresh <50% of last good set; fixed invariant); ACs agnostic about OTC vs NOT_TRADABLE reason (verify with live data); exhaustive `Record<UnservableReason,...>` UI map; "refused" = not newly added; RPC size bound; boot-window / NULL-credential fail-open recorded as residuals; fix stale FR-4/FR-5 text.
+- Operator chose another round (round 3) before approval.
