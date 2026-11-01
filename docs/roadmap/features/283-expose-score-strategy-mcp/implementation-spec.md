@@ -78,7 +78,7 @@ Expose `analysis.v1.AnalysisService/ScoreStrategy` as `manage_strategy operation
 
 **TDD**: `red-green required` — RED: `AttributeError: module 'app.client' has no attribute 'score_strategy'`.
 
-**Covers**: `AC-7, AC-11`
+**Covers**: `AC-1, AC-7, AC-11`
 
 **Instructions**:
 0. Read the installed OpenTelemetry package before writing assertions: `cd services/xstockstrat-agent && uv sync --extra dev && uv run python -c "import opentelemetry.instrumentation.grpc as m; print(m.__file__, m.__version__)"`; open that package and confirm (a) `GrpcAioInstrumentorClient` has `instrument()` **and** `uninstrument()`, (b) whether its aio client interceptor returns the call object or the response. Record both in `context.md`. Do not rely on memory of the 0.66b1 source.
@@ -253,9 +253,9 @@ git diff --stat -- packages/proto   # empty: no proto change
 - Tool-test pattern: `tests/test_tools.py:20-24` `_make_server()` / `_tool_fn(server, name)`; `class TestManageStrategyTool` at `:937`; `patch.object(client, "manage_strategy", AsyncMock(...))` with `_ctx(ADMIN)` (`tests/conftest.py`, `ADMIN` ⇒ `user_id "u-1"`); error mapping precedent `test_grpc_error_reraised_as_clear_message` (`:1220`) using `_rpc_error(code, details)` (`tests/test_tools.py:931`); description assertions `server._tool_manager.get_tool("manage_strategy").description` (`:1083`) and `.parameters["properties"]` (`:1106`).
 - Client-test pattern: `tests/test_client.py:74-78` `_channel_cm()`, `:81` `class TestManageStrategyClient`, `:175` the bogus-operation `ValueError` test; `get_strategy` mock pattern `mock_stub.GetStrategy = AsyncMock(return_value=...)` (`:777`).
 - Fake call object required by the call-object form: **not found** in `test_client.py` (all existing stubs are `AsyncMock(return_value=resp)`); a small awaitable with `trailing_metadata()` is new and has one consumer here (C-13: inline).
-- `tests/test_tool_deadlines.py:23` `_LONG_TOOLS = {"run_backtest", "screen_symbols", "trigger_backfill", "run_fundamentals_scan"}`; `:24` `_MUTATING_PREFIXES`; `:19`/`:21` `_LONG_S`/`_SLACK_S`; `:51` `patched_budgets`; `:63` `_timed_error`; `:70` `test_ac1_get_positions_hung_portfolio_surfaces_deadline`; `:274` `test_fr3_worst_cases_fit_under_57s`; `:281` `_mapper_calls` (innermost-function attribution of each `_grpc_error_message` call).
+- `tests/test_tool_deadlines.py:23` `_LONG_TOOLS = {"run_backtest", "screen_symbols", "trigger_backfill", "run_fundamentals_scan"}`; `:24` `_MUTATING_PREFIXES`; `:19`/`:21` `_LONG_S`/`_SLACK_S`; `:51` `patched_budgets`; `:63` `_timed_error`; `:70` `test_ac1_get_positions_hung_portfolio_surfaces_deadline`; `:274` `test_fr3_worst_cases_fit_under_57s`; `:281` `_mapper_calls` (innermost-function attribution of each `_grpc_error_message` call); `:38` `_tool`; `:16` imports `ADMIN`, `_ctx`, `HANG_GUARD_S`; `hung_backend` fixture at `tests/conftest.py:146`.
 
-**TDD**: `red-green required` — RED now: the tool tests (AC-1/2/3/4/5/8/9) and the tool-deadline guard fail because `manage_strategy` has no `score` branch and `_score_strategy` does not exist (`long_seen != _LONG_TOOLS`); GREEN after Step 6. The `TestScoreStrategyClient` cases already go green with Step 2 (they cover `client.score_strategy`, which exists by then); only the tool-level cases carry the RED for Step 6.
+**TDD**: `red-green required` — RED now: the tool tests (AC-1/2/3/4/5/7/8/9) and the tool-deadline guard fail because `manage_strategy` has no `score` branch and `_score_strategy` does not exist (`long_seen != _LONG_TOOLS`); GREEN after Step 6. The `TestScoreStrategyClient` cases already go green with Step 2 (they cover `client.score_strategy`, which exists by then); only the tool-level cases carry the RED for Step 6.
 
 **Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9, AC-11`
 
