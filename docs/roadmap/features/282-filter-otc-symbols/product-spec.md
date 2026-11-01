@@ -14,17 +14,17 @@ As a trader or operator, I want OTC, delisted and non-tradable symbols kept out 
 
 ## Functional Requirements
 
-FR-1. Marketdata classifies a symbol as unservable when Alpaca asset metadata shows it is OTC (`Asset.exchange`), delisted/inactive, or non-tradable, and exposes that to other services, since marketdata is the only service allowed to call Alpaca. "Unservable" is the single marketdata-owned predicate.
+FR-1. Marketdata classifies a symbol as unservable when it is absent from its active+tradable Alpaca asset set (delisted, inactive, non-tradable) or present with `Asset.exchange` `OTC`, and exposes that to other services, since marketdata is the only service allowed to call Alpaca. "Unservable" is the single marketdata-owned predicate.
 FR-2. Watchlist addition refuses unservable (OTC, delisted, non-tradable) symbols on every add path (`AddWatchlistSymbols`, the symbol lists of `CreateWatchlist` / `UpdateWatchlist`, and bindings) and reports each refused symbol with a reason; other symbols in the same request are unaffected.
 FR-3. An unservable symbol does not enter the bar-ingestion warm set, and `GetBars` for it makes no live Alpaca fetch, so the bar ingester stops re-fetching it.
 FR-4. Signal-driven watchlist additions (`EnsureSignalWatchlist`) skip unservable symbols the same way.
-FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchanged for that call on every path (watchlist adds, `GetBars`, `markWarm`) and a WARN is logged, so a marketdata or Alpaca outage cannot block legitimate additions. A ticker Alpaca does not list at all is a distinct case: it is not blocked (see Out of Scope).
+FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchanged for that call on every path (watchlist adds, `GetBars`, `markWarm`) and a WARN is logged, so a marketdata or Alpaca outage cannot block legitimate additions. An empty or failed asset-set load must never classify every symbol as unservable.
 
 ## Out of Scope
 
 - Any in-product mark, new field or automated migration for existing unservable entries. Existing staging entries are handled by a one-time operator cleanup (FMP + Webull MCP audit, then `manage_watchlist_symbols`), not by shipped code.
 - Adding OTC market data (the Alpaca `otc` feed) or trading OTC symbols.
-- A time-based negative cache for symbols Alpaca does not list at all (unknown tickers); only symbols Alpaca reports as OTC, inactive or non-tradable are blocked.
+- A per-symbol time-based negative cache. Absence from the cached active+tradable asset set is the only unservable signal for delisted/unknown tickers (a mistyped ticker is refused too).
 
 ## Affected Services
 
@@ -42,7 +42,7 @@ FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchan
 ## Proto Contract Changes
 
 - [ ] No proto changes required
-- Likely, decided at design: a way to ask marketdata whether symbols are unservable (and possibly `status`/`tradable` on `Asset`) (new RPC, or a filter or flag on `ListAssets`), and refusal reasons on the portfolio watchlist responses. `Asset.exchange` already exists.
+- Likely, decided at design: a way to ask marketdata whether symbols are unservable (new RPC, or a filter on `ListAssets`); `Asset` itself needs no new fields (new RPC, or a filter or flag on `ListAssets`), and refusal reasons on the portfolio watchlist responses. `Asset.exchange` already exists.
 
 ## Config Key Changes
 
@@ -52,7 +52,7 @@ FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchan
 ## Database Changes
 
 - [ ] No schema changes
-- Undecided: classification may need a cache (in memory or table) so watchlist adds do not call Alpaca each time.
+- Undecided: the asset set needs a refreshed in-memory (or table) cache; the full set is large and must not be fetched per watchlist add. Classification may need a cache (in memory or table) so watchlist adds do not call Alpaca each time.
 
 ## Trading Domain
 
@@ -79,5 +79,5 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [x] **Feed awareness.** Decided: always filter, regardless of `marketdata.alpaca.feed`.
 - [x] **Where to enforce bar ingestion.** Decided 2026-11-01: in marketdata (`markWarm` / `GetBars`, FR-3); no analysis live-loop change.
 - [x] **Scope widened.** Decided 2026-11-01: the block covers delisted and non-tradable symbols as well as OTC (DNB case).
-- [ ] **Delisted/non-tradable signal.** Which Alpaca asset fields define it (`status`, `tradable`)? `common.v1.Asset` may lack them, which would be a proto change. Settle in design recon against live `ListAssets`.
+- [x] **Delisted/non-tradable signal.** Resolved 2026-11-01 from code: `alpaca.Client.ListAssets` already requests `status=active` (`internal/alpaca/client.go:521`) and skips `!Tradable` (`:548`), so the marketdata asset set is active+tradable only. Predicate: a symbol is unservable when it is absent from that set (delisted, inactive or non-tradable) **or** present with `Asset.exchange == "OTC"`. No new `Asset` fields are needed. Residual, for design recon with live credentials: confirm Alpaca's actual `exchange`/`tradable` values for CRTD, BOSSY, FORL, CERO and DNB, and that OTC rows (if returned) carry `exchange="OTC"`.
 - [x] **Known trap (ledger, `docs/roadmap/ledger/fails.md:656`).** A firing predicate was replicated into a new call site instead of extracted. Keep one OTC predicate, owned by marketdata, and have portfolio and ingest ask it rather than re-deriving it from `exchange`.

@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/filter-otc-symbols`
 **Created**: 2026-10-31
-**Last Updated**: 2026-10-31
+**Last Updated**: 2026-11-01
 
 ---
 
@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-31 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, no blockers; open question resolved from code) |
 
 ---
 
@@ -40,4 +41,4 @@ Keep over-the-counter (OTC) symbols out of the bar-ingestion warm set and out of
 
 ## Next Action
 
-`/sdd-review filter-otc-symbols product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design filter-otc-symbols quick` — recon + design debate, then `/sdd-spec`
