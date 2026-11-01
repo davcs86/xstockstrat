@@ -1042,3 +1042,25 @@ the next `/sdd-batch` run can pick it up.
 - Files modified: `internal/fmp/fmp_client_test.go`, `internal/finnhub/finnhub_client_test.go`,
   `internal/classification/sector_test.go`
 
+### Step 5 — service: D-51 — source-filtered quota counts, the parenthesised seed predicate and the `seedFMPBudget` seam [done]
+- `CountFundamentalsFetchedToday(ctx, src)` and `CountFundamentalsFetchedSince(ctx, src, since)` filter `source = $1`
+  and run on `r.db` (pgxmock-substitutable). Today uses the parenthesised
+  `(fetched_at >= <UTC day> OR as_of >= <UTC day>)` form (design 5.8); Since has no as_of arm. The interface and
+  `fundamentalsQuota` pass `finnhub.SourceName` / `fmp.SourceName` (new `internal/finnhub` import). `main.go`'s inline
+  seed is now `seedFMPBudget(ctx, repo, fmpClient)`, always counting `fmp.SourceName`; its WARN became
+  `slog.WarnContext(ctx, ...)` (sloglint), same message.
+- TDD red: uncommitted probes failed to compile (`too many arguments in call to repo.CountFundamentalsFetchedToday` /
+  `...Since`, `undefined: seedFMPBudget`) → green: the same probes passed (pgxmock regexes
+  `source = \$1 AND \(fetched_at >= .+ OR as_of >= .+\)` with `WithArgs("fmp")` and `source = \$1 AND fetched_at >= \$2`
+  with `WithArgs("finnhub", any)`; a seed fake `{"edgar":30,"fmp":5}` seeded 5 and saw src `fmp`), then were deleted
+  (Step 6 owns the committed tests).
+- Verification: `go build ./...` passes; `go vet` of `repository`/`cmd/server` passes; `go vet ./internal/service/`
+  fails only on the test fake, as Step Dependencies anticipates (Step 6 fixes it); the grep shows every call passes a
+  source; golangci-lint 0 issues on `repository`/`cmd` (CI-equivalent fallback, in the Deviation Log).
+- The marketdata `CLAUDE.md` `daily_request_cap` boot-seed clause, written ahead of the code in Step 1, now matches.
+- Husky: neither this worktree nor the main worktree has `node_modules`, and `core.hooksPath` points at the main
+  worktree's missing `.husky/_`, so the hook cannot fire on commit. `pnpm install --frozen-lockfile --ignore-scripts`
+  ran in the worktree (no git-config change) and `.husky/pre-commit` was run by hand on the staged set.
+- Open: `internal/service` tests do not compile until Step 6 lands; run Step 6 next.
+- Files modified: `cmd/server/main.go`, `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`
+

@@ -651,25 +651,26 @@ func (r *MarketDataRepo) SumDividendsInWindow(ctx context.Context, symbol string
 	return sum, total > 0, nil
 }
 
-// CountFundamentalsFetchedToday counts rows fetched within the current UTC day — the
-// FR-4 daily quota window. The idx_fundamentals_fetched_at index backs this scan.
-func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context) (int, error) {
+// CountFundamentalsFetchedToday counts src's rows fetched (or as-of) within the current UTC day — the
+// FR-4 daily quota window. The as_of arm keeps an epoch-expired fmp row written today counted.
+func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context, src string) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx,
+	err := r.db.QueryRow(ctx,
 		`SELECT count(*) FROM marketdata.fundamentals
-		 WHERE fetched_at >= date_trunc('day', now() AT TIME ZONE 'UTC')`).Scan(&n)
+		 WHERE source = $1 AND (fetched_at >= date_trunc('day', now() AT TIME ZONE 'UTC') OR as_of >= date_trunc('day', now() AT TIME ZONE 'UTC'))`,
+		src).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count fundamentals fetched today: %w", err)
 	}
 	return n, nil
 }
 
-// CountFundamentalsFetchedSince counts rows fetched since `since` — the rolling-window quota
+// CountFundamentalsFetchedSince counts src's rows fetched since `since` — the rolling-window quota
 // shape a per-minute-limited provider (Finnhub) needs, vs CountFundamentalsFetchedToday's UTC day.
-func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error) {
+func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, src string, since time.Time) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx,
-		`SELECT count(*) FROM marketdata.fundamentals WHERE fetched_at >= $1`, since).Scan(&n)
+	err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM marketdata.fundamentals WHERE source = $1 AND fetched_at >= $2`, src, since).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count fundamentals fetched since %s: %w", since, err)
 	}

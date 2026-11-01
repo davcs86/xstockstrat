@@ -294,7 +294,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 5 — service: D-51 — source-filtered quota counts, the parenthesised seed predicate and the `seedFMPBudget` seam
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -1096,3 +1096,16 @@ _Populated by /sdd-execute as implementation proceeds._
   The FMP test's quote stub is a minimal `[{"symbol":"AAPL","price":1}]` body, matching the file's existing
   core-only stubs (C-13: no new domain fixture). The finnhub literal assertion at `:123` was replaced, not duplicated.
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 5 — service test package red until Step 6; CI-equivalent fallback (golangci-lint)
+- **Spec said**: Verification is `go build ./...`, `go vet ./internal/repository/ ./internal/service/ ./cmd/server/` and
+  a grep; Step Dependencies (`:72-74`) says the service test package does not compile between Steps 5 and 6.
+- **Actual**: `go build ./...` passes; `go vet` of `repository` and `cmd/server` passes. `go vet ./internal/service/`
+  fails only in `marketdata_service_test.go` (`*fakeFundRepo does not implement fundamentalsRepo`), the gap the spec
+  anticipates and Step 6 closes. The package's non-test code was checked with the operator-approved
+  `/usr/local/bin/golangci-lint` v2.14.0 `--tests=false` (only hit: `priceJoin is unused`, whose callers are all in
+  tests, an artifact of `--tests=false`). golangci-lint on `repository` and `cmd` reports `0 issues.` after the moved
+  WARN became `slog.WarnContext(ctx, ...)` (sloglint flags `slog.Warn` inside a function holding `ctx`; message
+  unchanged). The grep shows every call passes a source. RED/GREEN used uncommitted throwaway probes (Step 6 owns
+  the committed tests).
+- **Disposition**: CI-equivalent fallback; spec-anticipated red window for `internal/service` tests until Step 6.
