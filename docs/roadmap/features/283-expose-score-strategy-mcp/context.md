@@ -305,3 +305,10 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
   - Pre-existing drift noticed, not fixed here: `docs/runbooks/mcp-tools.md` `### manage_strategy` still opens "Admin-scoped write" though ownership-gating landed in feature 133 (agent `CLAUDE.md:125`); worth a findings-log line.
   - Agent and analysis CI coverage thresholds are both 40% (`ci.yml` matrix).
 - Open for `/sdd-review impl-spec`: challenge refinements 1-3; Step 2/4 contingency (own client interceptor touching `app/mtls.py`) is listed in `**Files**` for F-08 but only used if the OTel client wrapper swallows trailers.
+
+## Session 2026-11-01 — sdd-review impl-spec (advisory)
+
+- Result: converged after 5 passes — pass 1: 5 failures + 7 warnings; pass 2: 0 + 6; pass 3: 1 + 1; pass 4: 1 + 2; pass 5: **0 failures, 0 warnings (CONVERGED)** (advisory — did not block). Lifecycle unchanged (`implementation-ready`).
+- Fixed across passes: Steps 5/6 swapped so the tool tests (incl. `_LONG_TOOLS`/`_MUTATING_PREFIXES` guard + hung-backend case) precede the `score` branch (P-06); `--cov-fail-under=40` added to the test steps; Step 2 / Step 10 Files lists cover contingency and conditional files (F-08); Step 3 anchors re-pointed by symbol; redundant "four ops" parity test dropped; Step 7 keeps a real RED (`_MIN_STUB_CALLS`=74 + `_LONG_RPCS`); Covers/Scenario Coverage reconciled for AC-1/AC-7 (C-15); stale step pointers and change-history prose removed.
+- Unresolved ✗ / ⚠ carried into execution: none.
+- Overlap findings (no FAIL-level): same-function overlap with 215 on analysis `ScoreStrategy` (`servicer.py`) and `tests/test_grade_fundamentals_exclusion.py` — rebase and re-anchor by symbol after 215's final edits; disjoint-function overlap with 215/275/281/282 in agent `tools.py`/`client.py` and soft overlap on `mcp-tools.md`, `SKILL.md`, agent/analysis `CLAUDE.md`. `merge-order.md` row 102 corrected: 215's spec does not edit `manage_strategy` (was claimed as same-function).
