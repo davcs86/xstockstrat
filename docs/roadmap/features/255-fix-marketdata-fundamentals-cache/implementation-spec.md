@@ -886,7 +886,7 @@ total must still be at least 40%.
 
 ### Step 15 — service: D-19 — stream manager ctx, URL seam, healthy-session reset, cancellable backoff and give-up close
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/stream.go` — modify
@@ -1231,3 +1231,17 @@ _Populated by /sdd-execute as implementation proceeds._
     under `-race`, total 72.6%. The operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported
     `0 issues.`
 - **Disposition**: CI-equivalent fallback; the live-DB proof is an unproven-in-CI Open Thread.
+
+### 2026-11-01 — Step 15 — CI-equivalent fallback (golangci-lint), RED via a transport-rewrite probe, one extra helper
+- **Spec said**: Verification is the `time.Sleep` grep, the symbol grep, `go build ./...` and `go vet ./internal/alpaca/`.
+  The `add()` goroutine and `closeAllLocked` each delete and close the sub's non-nil channels.
+- **Actual**:
+  - All Verification commands pass. As an extra check, the operator-approved `/usr/local/bin/golangci-lint` v2.14.0
+    (the CI pin) reported `0 issues.` on the whole module, and `go test ./... -race` passes.
+  - The channel-close logic shared by `add()` and `closeAllLocked` is one unexported helper, `closeSubLocked(sub)`,
+    rather than two copies (DRY guard rail). There is no behaviour beyond the spec's.
+  - RED/GREEN used an uncommitted in-package probe, deleted afterwards because Step 16 owns the committed tests. The
+    `streamURL` seam did not exist before the step, so the probe pointed the hardcoded `wss://` URL at an
+    `httptest` websocket server by swapping `http.DefaultClient.Transport` (coder/websocket dials through it when
+    `DialOptions` is nil). That way the same probe compiles against the old code and the new code.
+- **Disposition**: CI-equivalent fallback.

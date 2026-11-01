@@ -1234,3 +1234,27 @@ the next `/sdd-batch` run can pick it up.
 - Deviations: RED came from reverting Step 13, the seed counts are asserted as a delta, and the live DB was not
   available (see Deviation Log)
 
+### Step 15 — service: D-19 — stream manager ctx, URL seam, healthy-session reset, cancellable backoff and give-up close [done]
+- `streamManager` gains `ctx`/`stop` (minted in `streamMgr()`, background loop with no originating request) and
+  `streamURL`. `baseCtx()` returns Background for a nil ctx, so the `TestDispatchBarCarries1MinEnum` literal still works.
+- `connectAndRead` returns `(healthy, err)`. It dials `streamURL` when that is set, derives its ctx from `baseCtx()`,
+  and sets `healthy` on a decoded `T == "subscription"` frame (the subscribe ack).
+- `run()` resets `attempts = 0` after a healthy session, so the budget counts consecutive failures only. The backoff is
+  a `select` on `baseCtx().Done()` / `time.After`, with no `time.Sleep`. The give-up keeps the ERROR log with `max`,
+  names `marketdata.stream.max_reconnects`, and calls `closeAllLocked()` under `m.mu` before `running=false`.
+- `add()`'s goroutine now deletes and closes under `m.mu`, and only if the id is still in `subs`, so a sub that
+  `closeAllLocked` already closed is never closed twice. The shared close is `closeSubLocked`.
+- `TIMEFRAME_1MIN` in `dispatch` is untouched.
+- TDD (uncommitted probe, deleted; Step 16 owns the committed AC-7/AC-8 tests):
+  - AC-7 red: `connections = 3, want >= 5 (budget must reset after a healthy session)` → green: passed.
+  - AC-8 red: `subscriber channel not closed after give-up` → green: passed, with no double-close panic after the
+    subscriber ctx was cancelled.
+  - The cancellable-backoff probe (600 s delay, manager ctx cancelled) passed green. It needs the new fields, so it
+    has no pre-change red.
+  - All probes passed `-race -count=3`.
+- Verification: no `time.Sleep` hits; `closeAllLocked`, `streamURL` and `attempts = 0` are present; `go build ./...` and
+  `go vet ./internal/alpaca/` pass; `go test ./... -race` passes; golangci-lint v2.14.0 reported 0 issues
+  (CI-equivalent fallback).
+- Files modified: `internal/alpaca/stream.go`
+- Deviations: the RED probe used a transport rewrite, and the extra `closeSubLocked` helper (see Deviation Log)
+
