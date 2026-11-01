@@ -993,3 +993,19 @@ the next `/sdd-batch` run can pick it up.
 - Tooling: the operator approved CI-equivalent fallbacks (golangci-lint v2.14.0 at `/usr/local/bin`, Docker codegen,
   `go vet -tags dbtest` for real-Postgres steps). Each one used is logged in the spec's Deviation Log. None was used
   this session. The host has Node v22 (root `CLAUDE.md` pins 24); this is noted, not a blocker.
+
+### Step 1 — docs: D-50 — cap `<= 0` is a zero budget (comments and docs only) [done]
+- Comments and docs now say that cap `<= 0` is a zero budget. The four sites are `fmp_client.go:97`, the
+  `atQuotaAlertThreshold` comment at `marketdata_service.go:1993` (helper unchanged, still 1 definition), marketdata
+  `CLAUDE.md:82` (boot-seed wording changed to `source='fmp'`, as Instruction 3 says), and `config-governance.md`
+  (`:215-217` prose, `:803` key row). TDD: N/A (docs). Verification: only `:36` still matches "uncapped",
+  `zero budget` is found at all four sites, the helper count is 1, `GOWORK=off go build ./...` passes, and
+  golangci-lint reports 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/fmp/fmp_client.go`,
+  `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, `services/xstockstrat-marketdata/CLAUDE.md`,
+  `docs/patterns/config-governance.md`
+- Deviations: the context-forge refresh was done by hand because the plugin is unavailable. The golangci-lint run is a
+  CI-equivalent fallback. Both are in the Deviation Log.
+- Open: the marketdata `CLAUDE.md` boot-seed clause describes the code after Step 5 (`source='fmp'` count). Until
+  Step 5 lands, the doc is ahead of the code.
+

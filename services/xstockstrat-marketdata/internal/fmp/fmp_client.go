@@ -94,7 +94,7 @@ func (c *Client) SeedBudget(used int) {
 	}
 }
 
-// BudgetSnapshot returns today's used count and the live cap (cap <= 0 = uncapped).
+// BudgetSnapshot returns today's used count and the live cap (cap <= 0 = zero budget: every reserve() is refused).
 func (c *Client) BudgetSnapshot() (used, dailyCap int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

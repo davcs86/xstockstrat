@@ -91,7 +91,7 @@ product-spec.md is rewritten to match.
 
 ### Step 1 — docs: D-50 — cap `<= 0` is a zero budget (comments and docs only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `docs/patterns/`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify (comment only)
@@ -1050,3 +1050,20 @@ grep -n "missing_metrics\|missingMetrics" services/xstockstrat-ui/src/lib/trader
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-11-01 — Step 1 — CI-equivalent fallback (golangci-lint)
+- **Spec said**: Step 1's Verification is grep checks plus `GOWORK=off go build ./...`, with no lint command.
+- **Actual**: the build passed. As an extra check, the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the
+  CI pin, built with go1.27.0) ran on `./internal/fmp/... ./internal/service/...` and reported `0 issues.`
+- **Disposition**: CI-equivalent fallback.
+
+### 2026-11-01 — Step 1 — context-file teardown done by hand
+- **Spec said**: Instruction 5 says to run `/context-forge:context-constitution refresh` on the marketdata `CLAUDE.md`.
+- **Actual**: that plugin skill is not available in this session; only `context-forge:context-scrubber` is. Row `:82`
+  was reconciled by hand against the code. The `<= 0` text matches `reserve()` (`fmp_client.go:127`) and
+  `atQuotaAlertThreshold` (`marketdata_service.go:1994`). The boot-seed clause now describes the `source='fmp'`
+  count, which only Step 5 implements. Today `CountFundamentalsFetchedToday` (`marketdata_repo.go:672`) still counts
+  every row with `fetched_at >= $1`. The spec wrote it this way on purpose (Instruction 3, design Step 2). The
+  doc is ahead of the code until Step 5 lands.
+- **Disposition**: Manual reconciliation. The integration PR body must say both that the plugin was unavailable and
+  that this manual reconciliation was done (root CLAUDE.md §Teardown).

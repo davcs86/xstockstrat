@@ -1990,7 +1990,7 @@ func (s *MarketDataService) quotaCountAfterFetch(_ context.Context, estimate int
 	return estimate
 }
 
-// atQuotaAlertThreshold is the single home of the 80%-of-cap threshold; cap <= 0 is never "at threshold".
+// atQuotaAlertThreshold is the single home of the 80%-of-cap threshold; cap <= 0 is a zero budget (FMP disabled), never "at threshold" — no 80% alert.
 func atQuotaAlertThreshold(count, cap int) bool { return cap > 0 && count >= (cap*8)/10 }
 
 // maybeAlertQuota emits one WARNING per active window once the count crosses 80% of cap. The dedup
