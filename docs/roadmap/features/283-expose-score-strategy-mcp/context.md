@@ -106,3 +106,180 @@ Debate halted at the approval gate after round 2 (gate policy: halt). design.md 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-01 — sdd-batch design gate (round 3)
+
+Debate halted at the approval gate after round 3 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready).
+
+### Open Threads
+
+- **Approach (r3 + adversary fixes).** No proto change, tool count stays 45, `get_strategy` untouched; `manage_strategy` `operation='score'` routes to `ScoreStrategy`. Analysis sets trailing metadata `x-score-excluded-symbols` as a JSON array string (never empty, so `"[]"` is distinct from a missing key) on every success path, never on aborts. The agent reads it via the call-object form; a missing key yields `excluded_symbols = null` plus a WARN (never a fabricated `[]`). 45 s deadline in a separate `_score_strategy` helper; AC-9 pre-call rejection of definition args; local NOT_FOUND passthrough; marker-anchored (not line-number) parity guard across docstring, runbook and strat-lab SKILL.md.
+- **Strongest open objection (blocking).** The call-object form of `ScoreStrategy` is invisible to the existing `@AC-10 @feature-273` deadline AST guard; the impl-spec must extend `_stub_calls` (Assign/AnnAssign), `_LONG_RPCS`, `_AC5_ROWS` and keep the fake-channel mock raising on await with `trailing_metadata()`. Second blocker: six spec/acceptance changes (FR-5 null amendment, new @AC-11, AC-10 parser scope, 273 @AC-5 row, SKILL.md canonical line, product-spec "two rows" to "prose note") exceed the operator decisions and need real operator sign-off.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes (no operator decision).** New append-only @AC-11; AC-10 EXTEND; `@AC-5 @feature-273` and `@AC-10 @feature-273` EXTEND; PRESERVE only: `@AC-6 @feature-273`, `@AC-1 @feature-214`, `@AC-1/2/3/4/6 @feature-149`, `@AC-3 @feature-215`. Covered by operator decision: AC-3, AC-4, AC-7, AC-8, AC-9.
+- **Known limitation (recorded, not fixed).** Server-side cancellation in the `score is None` branch can diverge memory and DB (`_strategies.pop` before `scores_repo.delete`); pre-existing.
+- **Next step.** Operator approves or redirects at the gate; the next `/sdd-batch` run resumes from the state below. First execute step is the analysis trailer loopback test (with OTel instrumentor); failure returns FR-5 to the operator. Final impl-spec step names the root-CLAUDE.md teardown.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Current best approach (r3 proposal with adversary fixes adopted). No proto change, tool count stays 45, get_strategy untouched, manage_strategy operation='score' routed to ScoreStrategy.\n\n1. Analysis (services/xstockstrat-analysis/app/handlers/servicer.py): module constant _EXCLUDED_TRAILER_KEY = \"x-score-excluded-symbols\". Immediately before `return score` (~:2662) call context.set_trailing_metadata on every success path. ENCODING CHANGE (adopted from adversary): send a JSON array string (json.dumps(excluded), e.g. \"[]\" or '[\"AAPL\",\"MSFT\"]'), never an empty value, so \"none excluded\" is a non-empty present value and is distinct from \"key missing = analysis did not report\"; no comma-ambiguity. No re-sort (_exclude_refused_cells already returns sorted(set(...)) :2798, extended once :2852-2853; sortedness/dedup verified, drop the 'not re-read' caveat); an analysis test pins sorted+deduped. Abort paths (:2583-2635) return earlier and carry no trailer.\n\n2. Agent client (services/xstockstrat-agent/app/client.py): op_map (:932-937) stays literal; only the ValueError text (:938-941) changes to say 'score' is routed separately. Add score_strategy(user_id, strategy_id) modelled on get_strategy (:982-1005): x-user-id only, no range, timeout=_LONG_RPC_TIMEOUT_S, call-object form (call = stub.ScoreStrategy(...); resp = await call; md = await call.trailing_metadata()), snake_case MessageToDict plus excluded_symbols. Parse: key present -> json.loads list; key MISSING (or unparseable) -> None plus one WARN log (deploy skew; [] would fabricate 'nothing excluded', P-03).\n\n3. Agent tool (services/xstockstrat-agent/app/tools.py): `score` branch at the very top of manage_strategy (:1034) above the dict-rule json.dumps (:1039-1042), testing ORIGINAL arguments. Any non-None definition arg or clear_fields (even []) raises ValueError(\"manage_strategy(operation='score') accepts only strategy_id; got: <names>\") before identity resolution/any client call (AC-9). Otherwise return await _score_strategy(ctx, strategy_id): _caller_user_id(ctx,\"manage_strategy\") (:155) -> client.score_strategy; catch AioRpcError -> _grpc_error_message(e, not_found=e.details() or \"no eligible evidence\", deadline_s=client._LONG_RPC_TIMEOUT_S, write=True). Shared mapper unchanged (PERMISSION_DENIED/UNAVAILABLE already pass server text :248-252). Owner-scoped, no admin gate.\n\n4. Deadline: 45 s; separate helper because the AST walker attributes catch sites to the innermost function. Agent tests/test_tool_deadlines.py: add \"_score_strategy\" to _LONG_TOOLS (:23), \"_score_\" to _MUTATING_PREFIXES (:24-35); 10+45<=57 (:276). ADDED to close adversary blocker #1 (tests/test_client_deadlines.py, @AC-10 @feature-273): extend _stub_calls (:109-124) to also match Assign/AnnAssign whose value is Call(stub.X) (not only ast.Await(Call)); add \"ScoreStrategy\" to _LONG_RPCS (:48) and _AC5_ROWS (:20-45); re-check _MIN_STUB_CALLS (:54); the fake-channel row (:85-101) must keep an AsyncMock that raises on await AND exposes trailing_metadata() (not a coroutine-only mock). Add `ScoreStrategy | 45.5` row to @AC-5 @feature-273. design.md records the worst-case bound ceil(symbols/4) x pages x 10 s (can exceed 45 s); a deadline before _persist_strategy_score (:2637) leaves grade UNCHANGED, verify via list_strategies. Known limitation (recorded in context.md/findings, not fixed here): on server-side CancelledError in the `score is None` branch, self._strategies.pop (:2618) runs before await scores_repo.delete (:2621), so memory and DB can diverge (pre-existing, UI BFF path has it too); docstring must not claim atomic refresh; server-side time_remaining guard rejected as out of scope follow-up.\n\n5. Parity guard (tests/test_score_strategy_parity.py): (a) result keys minus {\"excluded_symbols\"} subset of StrategyScore.DESCRIPTOR.fields_by_name; descriptor fields absent from result must have presence or be in opt-out {\"origin\"}. (b) operations: expected set built in the test from analysis_pb2.StrategyOperation (drop UNSPECIFIED, strip prefix, lower-case) | {\"score\"}; parsers read the tools.py docstring summary line (:924) and :925, the `| operation |` row under `### manage_strategy` in docs/runbooks/mcp-tools.md, and a new canonical line in plugins/strat-lab/skills/backtest/SKILL.md (\"`manage_strategy` operations: `register` | `update` | `deactivate` | `reactivate` | `score`\"). Parsers anchor on regex markers (docstring `operation:` token, heading + table-row, literal prefix), NEVER line numbers; the spec must forbid line-number anchoring (rebases from 215/275/281). Plus: client ValueError text lists exactly the four op_map names. Count guard stays 45 (test_tools_endpoint.py:14,106-122).\n\n6. Trailer verification: FIRST execute step is an analysis loopback test: grpc.aio.server(interceptors=server_interceptors()) with OTel forced on and GrpcAioInstrumentorServer().instrument() applied before server construction (un-instrumented on teardown), mTLS add_secure_port; asserts populated trailer arrives, empty-list \"[]\" arrives as present non-empty value, abort carries no key. Agent side: fake awaitable call object test; real-channel hung_backend case with answers={\"ScoreStrategy\": (0, StrategyScore(...))} asserting excluded_symbols None + WARN. If the loopback test fails, FR-5 returns to the operator (no auto-adopted proto field). Both suites assert the literal key.\n\n7. AC-4 forcing: extend test_pit_outage_raises_and_score_strategy_aborts_unavailable (analysis tests/test_grade_fundamentals_exclusion.py:195-207): UNAVAILABLE with exact text, no set_trailing_metadata, no upsert/delete. Agent side patches client.score_strategy to raise AioRpcError(UNAVAILABLE, that text) and asserts the exact message; AC-3/AC-8 likewise with NOT_FOUND details.\n\n8. Docs/process: docstring, mcp-tools.md, strat-lab SKILL.md, agent CLAUDE.md row, one PLAT-* trailer-contract row in docs/context-constitution.md (service CLAUDE.md files point to it). Semantics to state precisely (adversary C-18): excluded_symbols = symbols left with NO surviving cell (_exclude_refused_cells :2798), NOT symbols with any refused window; always [] when the strategy is not guarded or analysis.backtest.fundamentals.enabled is off (:2825-2836), so [] does not mean 'guard ran and found nothing'; null = analysis did not report. Spec: amend FR-5 (null) and add append-only @AC-11 (do not edit AC-7). Merge-order prose note near merge-order.md:102 and :321-326; product-spec § Decisions 'two rows' -> 'prose note'. Final impl-spec step names the root-CLAUDE.md teardown (/context-forge:context-constitution refresh, or manual reconciliation recorded in the PR body, fails.md:670) because context files are touched.",
+    "open_objections": [
+      {
+        "text": "BLOCKING (answered in approach item 4, must be carried into impl-spec): the call-object form of ScoreStrategy is invisible to the existing @AC-10 @feature-273 deadline guard (tests/test_client_deadlines.py _stub_calls :109-124 matches only ast.Await(Call(stub.X))). Required: extend _stub_calls to Assign/AnnAssign, add ScoreStrategy to _LONG_RPCS and _AC5_ROWS, re-check _MIN_STUB_CALLS, keep the fake-channel mock raising on await with trailing_metadata(). Stays open until the impl-spec carries these steps.",
+        "blocking": true
+      },
+      {
+        "text": "BLOCKING (needs the real operator gate; not coverable by a design synthesis): six spec/acceptance changes go beyond the binding operator decisions and need explicit operator sign-off, per fails.md:66-68 any self-run gate is provisional: (1) FR-5 amendment 'null = analysis did not report'; (2) new append-only @AC-11; (3) AC-10 parser scope; (4) new row in feature 273's durable @AC-5; (5) new canonical operations line in strat-lab SKILL.md; (6) rewriting product-spec § Decisions 'two rows' -> 'prose note' (reconciles an operator-recorded decision with the binding 'prose note' decision).",
+        "blocking": true
+      },
+      {
+        "text": "RESOLVED (r2), carry into impl-spec: loopback test must include GrpcAioInstrumentorServer (OTel) plus _CancelStatusInterceptor; if it fails FR-5 returns to the operator.",
+        "blocking": true
+      },
+      {
+        "text": "RESOLVED (r2), carry into impl-spec: None+WARN path needs its own real-channel hung_backend case with answers={'ScoreStrategy': (0, StrategyScore(...))}.",
+        "blocking": true
+      },
+      {
+        "text": "Editing 273's durable @AC-5 row is an EXTEND of another feature's suite (C-16); record it in context.md with sign-off. Recon's 'no CHANGE flags, no sign-off needed' no longer holds.",
+        "blocking": false
+      },
+      {
+        "text": "Server-side cancellation under the 45 s deadline can leave memory/DB divergence in the score-is-None branch (:2618 pop before :2621 delete); pre-existing. Record as known limitation in context.md/findings; docstring must not claim atomic refresh; write=True 'outcome unknown' message is correct.",
+        "blocking": false
+      },
+      {
+        "text": "excluded_symbols semantics (symbols with no surviving cell; [] when strategy unguarded or fundamentals gate off) must be stated in docstring and runbook so operators do not misread [] as 'guard ran, nothing found'.",
+        "blocking": false
+      },
+      {
+        "text": "Parity-guard parsers must anchor on regex markers, not line numbers; the impl-spec must forbid line-number anchoring (rebase brittleness with 215/275/281).",
+        "blocking": false
+      },
+      {
+        "text": "New PLAT-* row and agent CLAUDE.md edit trigger the root CLAUDE.md teardown audit; name it in the final impl-spec step.",
+        "blocking": false
+      },
+      {
+        "text": "Trailer key is an untyped cross-service contract: record once in docs/context-constitution.md (PLAT-* row), reference from CLAUDE.md files; both suites assert the literal.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-9",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-11 (new, null excluded_symbols)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-10",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-273",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-10 @feature-273",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-273",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-214",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1/2/3/4/6 @feature-149",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-215",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Additive StrategyScore.excluded_symbols proto field (option A): ruled out by binding operator decision; returns to operator only if the trailer loopback test fails.",
+      "Comma-joined trailer with empty string for 'none excluded': empty-value presence is fragile and comma-ambiguous; replaced by JSON array (always non-empty).",
+      "STRATEGY_OPERATIONS hoist replacing literal op_map: lost to minimum-diff/greppable constants; enum anchor lives in the parity test.",
+      "Missing trailer -> [] plus WARN: fabricates 'nothing excluded' (P-03); None plus WARN chosen.",
+      "Response header (initial metadata) instead of trailer: excluded only final after aggregation.",
+      "Agent derives excluded via GetStrategy plus evidence reads: no evidence-listing RPC, duplicates guard logic (C-18).",
+      "Read excluded from analysis.strategy.scored ledger payload: best-effort emit, racing second RPC, alters shared payload.",
+      "Encode excluded into component_scores via sentinel key: pollutes numeric map.",
+      "Keeping 10 s _RPC_TIMEOUT_S for score: cancels handler before _persist_strategy_score.",
+      "Editing shared _grpc_error_message (or adding a pass_not_found_detail flag) to pass NOT_FOUND detail: touches shared mapper; local call-site passthrough is smaller and correct.",
+      "Re-sorting/deduping in the servicer edit: redundant with _exclude_refused_cells.",
+      "Async kick-then-poll ScoreStrategy: changes ScoreStrategy semantics, loses synchronous NOT_FOUND/UNAVAILABLE contract.",
+      "Server-side context.time_remaining() guard before persist: would fix cancellation divergence but changes ScoreStrategy semantics; recorded as follow-up, out of scope.",
+      "grpc.aio with_call-style API to keep the awaited form: does not exist in grpc.aio; call-object form is forced, so the guard is fixed instead.",
+      "New score_strategy tool or admin gating: ruled out by operator decisions."
+    ],
+    "open_risks": [
+      "Success-path trailer through the production analysis stack (aio server, _CancelStatusInterceptor, OTel GrpcAioInstrumentorServer, owner_scoped, mTLS) into the agent call-object read has no in-repo precedent; if any layer drops it every result shows excluded_symbols null, AC-7 fails, FR-5 returns to the operator. Loopback test is the first execute step and go/no-go gate.",
+      "45 s may be insufficient for cold PIT fundamentals on large guarded strategies (ceil(symbols/4) x 8 pages x 10 s) and sits near the MCP client's 60 s limit; timeout leaves grade unchanged (if before persist) and reports outcome unknown.",
+      "Server-side cancellation memory/DB divergence at :2618/:2621 (pre-existing); stale grade could be restored by hydrate_scores at restart.",
+      "Header size: excluded lists beyond the ~8 KiB gRPC metadata limit unhandled; JSON encoding is slightly larger than CSV but a few hundred tickers is ~4 KiB at worst.",
+      "Textual conflicts on manage_strategy and the same docs with features 215/275/281; top-of-function branch and marker-anchored parsers minimise this; 283 integration waits on 215 (on trunk).",
+      "Deploy skew (older analysis without trailer) yields null excluded_symbols, a third state operators must understand.",
+      "Empty list is ambiguous when the fundamentals gate is off or the strategy is unguarded; mitigated by docs only.",
+      "Six spec/acceptance changes lack operator sign-off; any design-gate approval run by a nested subagent is provisional (fails.md:66-68).",
+      "The unread-this-round assumption that hung_backend answers returns success without a trailer (conftest.py:172-175) must be confirmed when writing the test."
+    ],
+    "constitution_rules_touched": [
+      "C-10",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-04",
+      "PLAT-4",
+      "PLAT-5",
+      "PLAT-13",
+      "AGENT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "The r3 proposal is sound against all binding operator decisions (operation='score', no proto field, owner scoping, separate RPC route, local NOT_FOUND passthrough, AC-9 pre-call rejection, docstring plus executable parity guard, AC-4 forcing) and the adversary found no Floor breach. I adopt the adversary's first blocker concretely: the call-object form escapes the @AC-10 deadline AST guard, so _stub_calls, _LONG_RPCS, _AC5_ROWS and the fake-channel mock are all extended. I adopt the JSON-array trailer encoding because it removes the empty-value-versus-missing fragility and comma ambiguity at no real cost, strengthening the None-means-not-reported contract. The second blocker (six spec/acceptance changes beyond the operator decisions, including rewriting an operator-recorded product-spec line) cannot be settled by synthesis and stays open for the real operator gate; I do not mark those changes covered. Non-blocking items are carried as documentation and test constraints: precise excluded_symbols semantics, marker-anchored (not line-number) parsers, the 45 s cancellation limitation recorded rather than fixed, the 273 @AC-5 EXTEND sign-off, and the teardown audit step. The residual technical uncertainty remains the trailer delivery path, gated by the loopback test with explicit escalation to the operator."
+  },
+  "floor_breaches": []
+}
+```
