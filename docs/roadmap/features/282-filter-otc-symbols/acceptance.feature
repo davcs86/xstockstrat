@@ -43,3 +43,11 @@ Feature: filter-otc-symbols
     When the owner adds BOSSY to watchlist "core"
     Then BOSSY is added
     And a WARN is logged that OTC classification was unavailable
+
+  @AC-7 @FR-1 @FR-2 @FR-3
+  Scenario: Delisted or non-tradable symbols are blocked like OTC symbols
+    Given Alpaca reports DNB as inactive and non-tradable
+    When DNB is added to a watchlist and GetBars is called for DNB
+    Then DNB is reported as refused with a reason
+    And marketdata makes 0 live Alpaca fetches for DNB
+    And DNB is not in the warm set the bar ingester reads
