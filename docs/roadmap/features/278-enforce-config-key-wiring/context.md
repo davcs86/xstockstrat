@@ -220,3 +220,10 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
   - **Step 18**: merge-order.md already has a 278 row (:101, 281 vs 278). Only a soft 243-vs-278 row is added. 244, 261 and 264 have launched, and the PR #1322 / `ccr-fac38b1f-6m24q2` reference is stale.
 - Not re-specced (outside the directive): Step 5 still cites `configServiceImpl.ts:188` (now :276), and the Step Dependencies bullet still mentions PR #1322. Both are stale and do not affect execution.
 - Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode-entry and up-front confirmation: given by the operator, who approved the up-front plan for `/sdd-execute enforce-config-key-wiring sequential` through the sdd-batch-execute workflow. Steps run as one commit each on `feature/enforce-config-key-wiring`, and there is a single integration PR at the end.
+- Status: `implementation-ready` → `in-progress`.
+- Step 10 is confirmed after Step 9 against the recorded `reported-only` ruling. It is not an operator stop.
+- Severity: n/a.
