@@ -70,9 +70,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Verify the premise.** Confirm the `exchange` Alpaca returns for CRTD, DNB, FORL and BOSSY (`ListAssets`) and whether each is actually OTC. DNB (acquired) or others may instead be delisted or unknown, which this feature would not cover (see Out of Scope).
-- [ ] **Rejection behaviour.** Refuse the whole request, refuse only the OTC symbols (proposed in FR-2), or accept with a warning?
-- [ ] **Existing data.** What happens to OTC symbols already on watchlists, bindings, live-strategy universes and the warm set: leave them, exclude them from universe resolution, or clean up?
-- [ ] **Feed awareness.** Apply the filter only when `marketdata.alpaca.feed` cannot serve OTC (`iex`, `sip`), or always?
-- [ ] **Where to enforce bar ingestion.** At `markWarm` / `GetBars` in marketdata, in the analysis live-loop universe, or both?
-- [ ] **Known trap (ledger, `docs/roadmap/ledger/fails.md:656`).** A firing predicate was replicated into a new call site instead of extracted. Keep one OTC predicate, owned by marketdata, and have portfolio and ingest ask it rather than re-deriving it from `exchange`.
+- [x] **Verify the premise.** Resolved 2026-11-01 against FMP + Webull (third-party; Alpaca `ListAssets` itself not yet queried — confirm in design recon). CRTD: FMP "Other OTC", Webull OTCB. BOSSY: FMP "Other OTC", Webull PINL. FORL: FMP "Other OTC", Webull EXPM (expert market, liquidate-only). DNB is **not** OTC: the ticker now resolves to Dun & Bradstreet (NYSE, Webull non-tradable) — a delisted/reused ticker, i.e. the out-of-scope "unservable symbol" case. Staging `query_bars` for CRTD returns no bars.
+- [x] **Rejection behaviour.** Decided: accept the rest of the request; refuse only OTC symbols and report each with a warning/reason (FR-2 as written).
+- [x] **Existing data.** Decided: leave existing OTC entries in place (no deletion/migration). If feasible, add a visual mark in the UI or a new field flagging OTC symbols. Design to decide mark vs. field (proto impact).
+- [x] **Feed awareness.** Decided: always filter, regardless of `marketdata.alpaca.feed`.
+- [x] **Where to enforce bar ingestion.** Decided: in the analysis live loop (universe). Design must reconcile with FR-3 (marketdata `markWarm`/`GetBars` no-fetch) — keep one marketdata-owned predicate either way.
+- [x] **Known trap (ledger, `docs/roadmap/ledger/fails.md:656`).** A firing predicate was replicated into a new call site instead of extracted. Keep one OTC predicate, owned by marketdata, and have portfolio and ingest ask it rather than re-deriving it from `exchange`.
