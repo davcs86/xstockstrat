@@ -28,3 +28,10 @@
 
 - `merge-order.md` row 100 split into two (283 waits for 215's *merge*; 215's `launched` waits for 283). Row 2 is not machine-enforced (the file gates only integration PRs) — enforced by 215's Step 26 (e).
 - Spec warnings addressed: `excluded_symbols` in FR-1; server detail text preserved in FR-3; AC-9 also covers `clear_fields`; feature.md reviewer table updated for option C. Re-review requested.
+
+## Session 2026-11-01 — sdd-review product-spec (pass 3)
+
+- Result: PASS WITH WARNINGS, no blockers; status remains spec-ready. All pass-2 warnings verified fixed.
+- Addressed: AC-6 reworded (count stated as words or digits); merge-order row A set Resolved=Yes (215's code verified on origin/main-dev); row B now states its real enforcement (CI promotes only `code-completed`; keep 215 `in-progress` until Step 26 (e) runs).
+- Carried to design: `_grpc_error_message` (`tools.py:244-245`) discards the server detail on NOT_FOUND — `score` must pass it through; AC-4 needs a way to force `_GradeInputsUnknown`; update the `operation` docstring and the parity guard together.
+- Open for operator: whether row B stays in the table or moves to a prose note (scan 3 flagged `/sdd-execute` would still prompt on it).

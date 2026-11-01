@@ -33,7 +33,7 @@ Feature: expose-score-strategy-mcp
   @AC-6 @FR-4
   Scenario: The tool count is unchanged and its surfaces agree
     When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
-    Then every statement says "forty-five" and the registered tool count is 45
+    Then every statement states the count 45 (in words or digits) and the registered tool count is 45
 
   @AC-7 @FR-5
   Scenario: A refresh names the excluded symbols
