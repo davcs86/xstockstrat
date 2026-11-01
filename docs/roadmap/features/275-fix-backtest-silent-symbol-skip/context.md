@@ -784,3 +784,19 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   passed, coverage 90.24% (≥40).
 - Spec citation drift: `servicer.py:2036` → `app/handlers/servicer.py:2083` (Deviation Log).
 - Next: Step 5 (evaluator refusal-mapping tests + the shared `aio_rpc_error` conftest builder).
+
+### Step 5 — evaluator refusal-mapping tests (2026-11-01, done)
+
+- `services/xstockstrat-analysis/tests/conftest.py`: added `import grpc` and `aio_rpc_error(code, details="")`
+  (C-13 shared builder; Step 7 is its second consumer).
+- `services/xstockstrat-analysis/tests/test_unreadable_formula.py`: `_not_found()` now delegates to `aio_rpc_error`;
+  added `pytest` and `FormulaExecutionError` imports and six unit tests (AC-1 PERMISSION_DENIED → `.code` with no
+  `"admins cannot"` leak, AC-7 NOT_FOUND → `.code`, contract error `.code == ""`, live-path PERMISSION_DENIED re-raise
+  pin, live-path NOT_FOUND skip pin, backtest UNAVAILABLE re-raise = 6-vs-4 boundary). `test_ac5_*`/`test_ac30_*`
+  unchanged.
+- TDD: RED against the pre-Step-4 `evaluator.py` (temporarily restored from `c7c287a0`, see Deviation Log): 3 failed
+  (the two mapping tests and `AttributeError: ... no attribute 'code'`), 10 passed. GREEN on the Step 4 evaluator: 13
+  passed.
+- Verification: full suite 1504 passed, coverage 90.25% (≥40); `ruff check` all passed; `ruff format --check` 121
+  files formatted; the C-13 grep for `grpc.aio.AioRpcError(` in the test file has no hit.
+- Next: Step 6.

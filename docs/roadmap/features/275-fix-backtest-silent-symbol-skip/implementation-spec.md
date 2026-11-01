@@ -301,7 +301,7 @@ Behavior is verified in Step 5.
 
 ### Step 5 — test: evaluator refusal mapping (design test (f), unit level)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add the shared `aio_rpc_error` builder)
@@ -833,6 +833,16 @@ _Populated by /sdd-execute as implementation proceeds._
   `-p tests.conftest`). Step 5 lands the durable tests. No scope change.
 - **Step 4 (2026-11-01) — stale citation.** Codebase Evidence cites `servicer.py:2036` for `raise_unreadable=True`; on
   the merged tree it is `app/handlers/servicer.py:2083`. Evidence only, no code impact.
+- **Step 5 (2026-11-01) — RED against the pre-Step-4 evaluator.** Step 4 had already landed, so the new tests could not
+  be red on the branch head. RED was captured by temporarily restoring `evaluator.py` from `c7c287a0` (pre-Step-4),
+  running the test file (3 failed, 10 passed), then restoring the Step 4 file (no diff to `evaluator.py` in this
+  commit). No scope change.
+- **Step 5 (2026-11-01) — `import grpc` in `tests/conftest.py`.** The spec's `aio_rpc_error` needs `grpc`, which
+  conftest did not import; added to the top-level import block (not the `# noqa: E402` block).
+- **Step 5 (2026-11-01) — no `test_ac30_*` change.** The three `test_ac30_*` tests use `_not_found()`, which now
+  delegates to `aio_rpc_error`; they stay unchanged and green. Eight other test files still carry inline
+  `AioRpcError` builders; they are outside this step's **Files** and were left alone (out of scope).
+- No CI-equivalent tooling fallback was used in Step 5 (`uv run pytest` and `uv run ruff`, the service's own harness).
 - **Step 4 (2026-11-01) — one inline comment.** `_execute_formula` gained a one-line constraint comment ("Never
   e.details() …") to keep Instruction 3 load-bearing at the raise site. No CI-equivalent tooling fallback was used in
   Step 4 (`uv run ruff` and `uv run pytest`, the service's own harness).
