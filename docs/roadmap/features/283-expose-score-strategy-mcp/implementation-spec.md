@@ -105,7 +105,7 @@ The agent coverage command (`--cov-fail-under=40`) is repeated in Steps 2, 5 (ru
 
 ### Step 2 — service: agent `client.score_strategy` (go/no-go gate: client half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
