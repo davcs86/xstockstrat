@@ -442,7 +442,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_tools_endpoint.py -q  
 
 ### Step 10 — docs: root CLAUDE.md teardown and full-suite verification
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `docs/roadmap/features/283-expose-score-strategy-mcp/context.md` — modify (session log: loopback evidence, matcher counts, gate outcomes)
@@ -482,3 +482,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - 2026-11-01 — Step 6 (minor, within Files): the module-docstring `manage_strategy` line text from Instruction 4 is wrapped onto a continuation line, because on one line it is 135 characters and fails ruff `E501` (line-length 100). The wording is unchanged. No CI-equivalent fallback was used (pytest and ruff ran natively).
 - 2026-11-01 — Step 7 (minor, within Files): `_LONG_RPCS` is reflowed onto one entry per line because the one-line set with `"ScoreStrategy"` is 106 characters (ruff `E501`, line-length 100); the `_stub_calls` docstring is updated to name the new `call = stub.<Rpc>(...)` form. No CI-equivalent fallback was used (pytest and ruff ran natively).
 - 2026-11-01 — Step 8 (minor, within Files): the parity test reuses Step 5's fake call object and `_channel_cm` by importing the `tests.test_client` **module** (C-13, single definition site). It does not import the `TestScoreStrategyClient` name, because pytest re-collects an imported `Test*` class (the first RED run showed 3 duplicate tests). The runbook's `**Errors**` rows for `score` quote the servicer's real abort details, including the three `… store unavailable` UNAVAILABLE variants. The `score` field table wording follows the `StrategyScore` proto comments. No CI-equivalent fallback was used (pytest, ruff and the plugin validator ran natively).
+- 2026-11-01 — Step 10 (minor, within Files):
+  - `/context-forge:context-constitution refresh` is not invocable in this session (only `context-forge:context-scrubber` is exposed). The teardown was therefore done by hand: the five context files were re-read against `client.score_strategy`, `_parse_excluded_trailer`, `_score_strategy`, the `score` branch and the analysis trailer block (`_EXCLUDED_TRAILER_KEY`, `_EXCLUDED_TRAILER_MAX_BYTES`).
+  - One grounded drift was fixed in `docs/runbooks/mcp-tools.md`: the `score` field table listed the `component_scores` keys as `sharpe`, `drawdown`, `consistency`, but `_score_from_metrics` emits `sharpe`, `drawdown`, `win_rate`.
+  - The proto/deploy `git diff --stat` check was also run against `origin/main-dev...HEAD`, and it is empty. The working-tree form alone says nothing about the feature's commits.
+  - The husky pre-commit hook does not run in this worktree: `core.hooksPath` is `.husky/_`, which is absent, and the main worktree has no `node_modules` to symlink. Commits were still made without `--no-verify`.
+  - No CI-equivalent fallback was used (pytest, ruff and the plugin validator ran natively).

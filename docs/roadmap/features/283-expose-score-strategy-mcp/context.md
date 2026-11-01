@@ -434,3 +434,34 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
   - `test_tools_endpoint.py`: 9 passed (AC-6 count surfaces).
   - As an extra check, `test_tools.py` + `test_score_strategy_parity.py`: 134 passed.
   - No CI-equivalent fallback was used.
+
+### Step 10 — docs: root CLAUDE.md teardown and full-suite verification — 2026-11-01
+
+- **Teardown, for the integration PR body.**
+  - `/context-forge:context-constitution refresh` is **unavailable** in this session: only `context-forge:context-scrubber` is invocable. The manual reconciliation below replaces it, per root `CLAUDE.md` § Teardown and `fails.md:670`.
+  - Each of the five context files was re-read against the current code (`client.score_strategy`, `_parse_excluded_trailer`, `tools._score_strategy`, the `operation == "score"` branch, and the analysis trailer block with `_EXCLUDED_TRAILER_KEY` / `_EXCLUDED_TRAILER_MAX_BYTES`).
+  - `services/xstockstrat-agent/CLAUDE.md`: matches the code. The row says register/update/deactivate/reactivate + `score`. The trailer paragraph (call-object form, missing/unparseable ⇒ `null` + WARN, literal asserted in both loopback suites) is accurate. `forty-five` is unchanged.
+  - `services/xstockstrat-analysis/CLAUDE.md` § Evidence exclusion (H): matches the code. The trailer is set only on the success return, as `json.dumps(excluded, separators=(",", ":"))`. It is `"[]"` when nothing is excluded or the guard is off. Above 4096 bytes it is omitted with a WARN, and every abort path returns before it is set. The `analysis.strategy.scored` row stays "`ScoreStrategy` RPC only", which is still true: the agent reaches that RPC.
+  - `services/xstockstrat-analysis/docs/scoring.md`: matches the code. The manual-refresh paragraph names the agent route and the trailer.
+  - `docs/runbooks/mcp-tools.md`: one drift, **fixed**. The `score` field table gave the `component_scores` keys as `sharpe`, `drawdown`, `consistency`, but `_score_from_metrics` emits `sharpe`, `drawdown`, `win_rate`, and `_aggregate_cells` keeps those keys. The errors table, the 45 s bound and the `excluded_symbols` semantics match the servicer abort strings and `_grpc_error_message`.
+  - `plugins/strat-lab/skills/backtest/SKILL.md`: matches the code. The canonical operations line, the ownership wording and the Refreshing-the-grade paragraph are accurate.
+  - Pre-existing drift **not** introduced by 283 and left for a findings entry (already noted at Step 8): the runbook's `manage_strategy` opener still says "Admin-scoped write", and the `client.manage_strategy` docstring still says "admin-scoped". Both have been ownership-gated since feature 133.
+- **Execution findings roll-up.**
+  - Sub-step 0, installed `opentelemetry-instrumentation-grpc` 0.66b1:
+    - Client side: the aio unary interceptor returns the call object, and `_add_interceptors` prepends OTel interceptors.
+    - Server side: `GrpcAioInstrumentorServer` swaps `grpc.aio.server`, so it must be installed before the server is built.
+  - Gates:
+    - Step 2 client gate GREEN through `GrpcAioInstrumentorClient`; the contingency interceptor was not needed.
+    - Step 4 server gate GREEN behind `server_interceptors()` (`_CancelStatusInterceptor`) and a real `GrpcAioInstrumentorServer`.
+    - No proto field was added; FR-5 stands as designed.
+  - Step 7 matcher: 73 (red) → 74 (green), via the single `ast.Assign` branch.
+- **Pre-existing divergence, unfixed and out of scope.** This is in the `score is None` branch of `ScoreStrategy`. `servicer.py:2622` pops the in-memory grade before `:2625` deletes the DB row. A server-side cancel between the two leaves memory cleared while the persisted grade survives, and `hydrate_scores()` restores it at the next boot. (The spec cites `:2618`/`:2621`; Step 4's trailer constants shifted the lines by 4.)
+- TDD: N/A (docs/process).
+- Verification:
+  - Agent: `uv run pytest --cov=app --cov-fail-under=40 -q` gave 642 passed, 84.44%. `ruff check` and `ruff format --check` are clean.
+  - Analysis: the same command gave 1508 passed, 90.26%. `ruff check` and `ruff format --check` are clean.
+  - `python3 plugins/strat-lab/scripts/validate.py` reports OK.
+  - `git diff --stat -- packages/proto .do docker-compose.yml` is empty, and so is the same check against `origin/main-dev...HEAD`.
+  - The agent suite ran after the runbook fix.
+  - No CI-equivalent fallback was used. Node v22 vs the pinned 24 was irrelevant here, since no Node or UI step ran.
+- Status: all 10 steps done → `code-completed`. No ledger insight was added: the reusable lesson ("prove a metadata channel through the production interceptor/instrumentor stack with a real-wire loopback before building on it") is feature-local until a second trailer contract exists.

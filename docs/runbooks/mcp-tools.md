@@ -577,7 +577,7 @@ evidence base is used. Unlike the other operations, it returns **snake_case**:
 |---|---|
 | `strategy_id` | The scored strategy |
 | `overall_score` | Headline score (double) |
-| `component_scores` | Per-component scores (map, e.g. `sharpe`, `drawdown`, `consistency`) |
+| `component_scores` | Per-component scores (map: `sharpe`, `drawdown`, `win_rate`) |
 | `rating` | `A`/`B`/`C`/`D`/`F` |
 | `evidence_symbols` | **Count** (int) of distinct symbols contributing eligible evidence cells |
 | `evidence_days` | Total trading days of evidence across those symbols |

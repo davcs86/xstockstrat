@@ -16,6 +16,7 @@
 | 2026-11-01 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 | 2026-11-01 | `implementation-ready` (re-spec) | /sdd-execute | Steps 1-10 re-verified after merging `origin/main-dev` (already up to date); line anchors re-pointed in Steps 3/5/7/8/9, no blocking mismatch |
 | 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (sdd-batch-execute); operator's up-front confirmation recorded in context.md |
+| 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done; Step 10 teardown reconciled by hand (context-constitution refresh not invocable) and fixed one runbook drift; agent + analysis suites green |
 
 ---
 
@@ -43,4 +44,4 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 ## Next Action
 
-`/sdd-execute expose-score-strategy-mcp sequential` — Step 10 (root CLAUDE.md teardown and full-suite verification); Step 9 docs landed 2026-11-01
+`/sdd-execute expose-score-strategy-mcp sequential` — open the integration PR to `main-dev` (§5.6). Its body must carry the Step 10 teardown record from context.md: the plugin was unavailable, plus the manual reconciliation list. All 10 steps landed 2026-11-01.
