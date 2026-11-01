@@ -747,3 +747,22 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Pre-commit hook: the main worktree has no `node_modules` and `core.hooksPath` is unset, so husky does not run in this
   worktree; the commit was made without `--no-verify`.
 - Next: Step 3 (`./scripts/buf-gen.sh` via the codegen image + `NO_TRADE_MESSAGE[EVALUATION_FAILED]`).
+
+### Step 3 — proto-gen + UI `NO_TRADE_MESSAGE[EVALUATION_FAILED]` (2026-11-01, done)
+
+- `./scripts/buf-gen.sh` ran in the `Dockerfile.codegen` image (CI-equivalent fallback, see the Deviation Log). It
+  regenerated 8 `packages/proto/gen/` files, all `analysis/v1` (Go, Python, TS source, TS `dist`). A second run gave
+  a byte-identical diff.
+- `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx`: added
+  `[NoTradeReason.EVALUATION_FAILED]` after `FUNDAMENTALS_UNAVAILABLE`, using the spec copy "Not evaluated — … stopped
+  this symbol from being evaluated. …". It does not start with "No trades —". Step 8 asserts this substring.
+- TDD: N/A (proto-gen). Compile-check RED/GREEN anyway:
+  - RED: after regeneration and before the key, `tsc --noEmit` failed with `BacktestDiagnostics.tsx(41,7): TS2741
+    Property '[NoTradeReason.EVALUATION_FAILED]' is missing`.
+  - GREEN: that error is gone after the key was added.
+  - Two `tsc --noEmit` errors remain in `e2e/insights/backfills.spec.ts:135-136`. That file is untouched and exists
+    on `origin/main-dev`, and it is outside the `next build` type-check.
+- Verification: `pnpm run lint` → 0 errors (existing warnings only, none in `BacktestDiagnostics.tsx`). `pnpm build` →
+  success. The `EVALUATION_FAILED` grep hits `analysis.proto:203` and `BacktestDiagnostics.tsx:52`.
+- Next: Step 4.
+

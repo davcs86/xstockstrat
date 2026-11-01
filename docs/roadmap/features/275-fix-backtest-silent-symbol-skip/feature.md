@@ -61,4 +61,4 @@ diagnostics and is scored and persisted as a success. On staging this hid a PERM
 
 ## Next Action
 
-`/sdd-execute fix-backtest-silent-symbol-skip sequential` — Steps 1–2 are done (2026-11-01: re-anchor gate; `NO_TRADE_REASON_EVALUATION_FAILED = 6` in `analysis.proto`, buf lint/breaking clean). Continue with Step 3 (regenerate stubs + UI `NO_TRADE_MESSAGE` key); `proto-freshness` is stale until then.
+`/sdd-execute fix-backtest-silent-symbol-skip sequential` — Steps 1–3 are done (2026-11-01: re-anchor gate; `NO_TRADE_REASON_EVALUATION_FAILED = 6` in `analysis.proto`; stubs regenerated, and the UI `NO_TRADE_MESSAGE[EVALUATION_FAILED]` key added, `pnpm build` green). Continue with Step 4.
