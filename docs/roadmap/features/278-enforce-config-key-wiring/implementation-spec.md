@@ -56,12 +56,19 @@ The environment-baseline gate (Step 10) was resolved on 2026-10-23: there is no 
 **Reviewers**: Platform Lead — cross-service tooling and SDD process, `xstockstrat-config` owner — stored-key shape and scoping
 
 **Codebase Evidence**:
-- Stored form is the raw `key` column: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:188` `byKey[k].values[row.key] = buildConfigValue(row)` (recon.md Codebase Map); only `user_id IS NULL` rows serve global snapshots (`configServiceImpl.ts:181,207`, design.md).
-- Seed shape: `INSERT INTO config.config_values (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id) VALUES (...)`, confirmed at `services/xstockstrat-config/migrations/025_ingest_mcp_client_keys.up.sql:25-29` (multi-row VALUES, `NULL` user_id). 001 uses a narrower column list (`001_config_tables.up.sql:55-69`) with the 002 default `'dev'` (`002_config_environment.up.sql:7`); 002 re-inserts production rows for platform, trading, indicators, marketdata, portfolio, analysis (`002_config_environment.up.sql:48-71`) but not ledger `stream.notify_enabled` or trading `fill_poller.interval_ms`.
-- Rewrites after seeding: `017_config_secrets_and_scoping.up.sql:38-39` `UPDATE config.config_values SET environment = 'staging' WHERE environment = 'dev'` and the `config.config_audit` twin on the next line (must NOT match the model); `029_heal_config_keys_full_dotted.up.sql:24-28` `SET key = namespace || '.' || key WHERE key NOT LIKE namespace || '.%' AND is_secret = false AND namespace IN ('platform','trading','portfolio','marketdata')`. Files containing `UPDATE`/`DELETE`: 001, 009, 010, 016, 017, 020, 029 (`grep -ln "DELETE\|UPDATE" *.up.sql`).
-- Migration set: `000`..`030` with no `024` up-file (`ls services/xstockstrat-config/migrations`); tip is `030_marketdata_edgar_snapshot_keys.up.sql`.
-- Script-language precedent: `scripts/merge-train-resolve.mjs`, `scripts/workflow-tests/harness.mjs`; `node --test` already runs in CI (`.github/workflows/ci.yml:723-724`). Exit-code and prefixed-stderr convention to mirror: `scripts/check-migration-contract.sh`.
-- **Not found**: any existing config-wiring script, baseline or annotation convention (recon.md Risks).
+- Stored form is the raw `key` column: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:276` `byKey[k].values[row.key] = buildConfigValue(row)` (recon.md Codebase Map); only `user_id IS NULL` rows serve global snapshots (`configServiceImpl.ts:265,269,295`, design.md).
+- Seed shape: `INSERT INTO config.config_values (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id) VALUES (...)`, confirmed at `services/xstockstrat-config/migrations/025_ingest_mcp_client_keys.up.sql:25-29` (INSERT head; the `mcp_client.request_timeout_seconds` rows are at `:34,37`; multi-row VALUES, `NULL` user_id, `ON CONFLICT ... DO NOTHING`). 001 uses a narrower column list (`001_config_tables.up.sql:55-69`) with the 002 default `'dev'` (`002_config_environment.up.sql:7`); 002 re-inserts production rows for platform, trading, indicators, marketdata, portfolio, analysis (`002_config_environment.up.sql:48-71`) but not ledger `stream.notify_enabled` or trading `fill_poller.interval_ms`.
+- Rewrites after seeding, by shape (every `UPDATE`/`DELETE` statement in `grep -ln "DELETE\|UPDATE" *.up.sql` = 001, 009, 010, 016, 017, 020, 029, 031, 032, 034):
+  - environment rename: `017_config_secrets_and_scoping.up.sql:38` `UPDATE config.config_values SET environment = 'staging' WHERE environment = 'dev'`; the `config.config_audit` twin at `:39` must NOT match the model.
+  - namespace-guarded prefix heal: `029_heal_config_keys_full_dotted.up.sql:24-28` `SET key = namespace || '.' || key WHERE key NOT LIKE namespace || '.%' AND is_secret = false AND namespace IN ('platform','trading','portfolio','marketdata')`.
+  - literal-list prefix heal: `031_heal_indicators_sandbox_keys_full_dotted.up.sql:29-46` `SET key = namespace || '.' || key, value_data = CASE ..., ... WHERE namespace = 'indicators' AND key IN ('sandbox.timeout_ms','sandbox.memory_bytes','sandbox.allowed_imports') AND is_secret = false`.
+  - twin dedupe DELETE: `031_...up.sql:15-25` `DELETE FROM config.config_values b WHERE b.namespace = 'indicators' AND b.key IN (...) AND b.is_secret = false AND EXISTS (SELECT 1 ... t.key = 'indicators.' || b.key AND t.environment = b.environment AND COALESCE(t.user_id,'') = COALESCE(b.user_id,''))`.
+  - literal DELETE: `009_drop_fmp_api_key_config.up.sql:18-20` (`namespace = 'marketdata' AND key = 'secret.marketdata.fmp.api_key'`), `020_remove_analysis_signal_source_weights.up.sql:8-10` (`namespace = 'analysis' AND key = 'signals.source_weights'`), `034_retire_portfolio_snapshot_interval.up.sql:6-8` (`namespace = 'portfolio' AND key IN ('portfolio.snapshot.interval_minutes','snapshot.interval_minutes')`).
+  - key-neutral UPDATE (SET list touches no `namespace`/`key`/`environment`/`is_secret`/`user_id`): `016_deprecate_analysis_signal_source_weights_desc.up.sql:9` (description), `032_analysis_zero_trap_descriptions.up.sql:5,11,17,23` (four description-only), `031_...up.sql:74` (description plus `updated_by`/`update_reason`/`caller_identity`).
+  - not statements: `001_config_tables.up.sql:50` is `BEFORE UPDATE ON config.config_values` inside `CREATE TRIGGER`; every `UPDATE` hit in `010_config_audit_insert_trigger.up.sql:3-12` is a `--` comment.
+- Migration set: `000`..`034` with no `024` up-file (`ls services/xstockstrat-config/migrations`); tip is `034_retire_portfolio_snapshot_interval.up.sql` (031 = feature 243, 032 = 244, 033 = 248 seed-only INSERT, 034 = 264).
+- Script-language precedent: `scripts/merge-train-resolve.mjs`, `scripts/workflow-tests/harness.mjs`; `node --test` already runs in CI (`.github/workflows/ci.yml:801`). Exit-code and prefixed-stderr convention to mirror: `scripts/check-migration-contract.sh`.
+- **Not found**: any existing config-wiring script, baseline or annotation convention (recon.md Risks; re-checked 2026-11-01).
 
 **TDD**: `red-green required`
 
@@ -70,8 +77,16 @@ The environment-baseline gate (Step 10) was resolved on 2026-10-23: there is no 
 **Instructions**:
 1. Create `scripts/check-config-wiring.mjs` (ESM, `#!/usr/bin/env node`, no npm dependency, only `node:` built-ins). Export the pure functions so tests import them; run the CLI only when invoked directly. Flags: `--root <dir>` (default repo root, so fixtures can stand in for the tree), `--final`, `--declared-from <product-spec.md>`, `--declared-migration <file>`, `--keys <ns.key,...>`, `--json`. Exit codes: `0` clean, `1` findings, `2` usage or internal error.
 2. Implement `buildStoredSet(root)`: read `services/xstockstrat-config/migrations/*.up.sql` in NNN order (never `*.down.sql`); return a map keyed `(namespace, key, environment)` for rows with `user_id IS NULL` and `is_secret` false; rows with `is_secret=true` go to a separate `secrets` set that is never compared against ordinary readers and whose values are never read or printed (F-08).
-3. Statement splitter plus a closed rewrite model, one case each: multi-row `INSERT ... VALUES` including the 001 narrow column list with the 002 `'dev'` default; the 017 environment rename (`SET environment='<lit>' WHERE environment='<lit>'`, applied to `config.config_values` only, never `config.config_audit`); the 029 heal with its exact guards (`NOT LIKE namespace || '.%'`, `is_secret = false`, `namespace IN (...)`). Any other `UPDATE`/`DELETE` against `config.config_values` that the model cannot interpret trips the fail-closed trigger (finding kind internal `unmodelled-rewrite`, exit 1) unless allow-listed.
-4. The allow-list is read from `config-wiring.json` `registry.rewriteAllow` and keyed on migration file name plus a SHA-256 of the whitespace-normalized statement; never on statement shape or NNN alone (design.md Rejected Alternatives).
+3. Statement splitter (strips `--` comments and quoted literals before keyword detection; only statements whose first keyword is `INSERT`, `UPDATE` or `DELETE` are classified, so 001's `CREATE TRIGGER ... BEFORE UPDATE` and 010's comments are never rewrites) plus a closed rewrite model, one case each, applied in NNN order to `config.config_values` only (never `config.config_audit` or any other table):
+   1. multi-row `INSERT ... VALUES`, including the 001 narrow column list with the 002 `'dev'` default; `ON CONFLICT ... DO NOTHING` keeps the first row for a `(namespace, key, environment, user scope)`.
+   2. environment rename (017): `SET environment='<lit>' WHERE environment='<lit>'`.
+   3. namespace-guarded prefix heal (029) with its exact guards (`NOT LIKE namespace || '.%'`, `is_secret = false`, `namespace IN (...)`).
+   4. literal-list prefix heal (031:29): `SET key = namespace || '.' || key` plus any other non-scope columns, guarded by `namespace = '<lit>' AND key IN (<lits>) AND is_secret = false`.
+   5. twin dedupe DELETE (031:15): removes a bare `(ns, key)` row only when a `ns.key` row exists in the same `(namespace, environment, user scope)`, with the literal `namespace`/`key IN`/`is_secret = false` guards.
+   6. literal DELETE (009, 020, 034): `WHERE namespace = '<lit>' AND key (= '<lit>' | IN (<lits>))`, all environments and user scopes.
+   7. key-neutral UPDATE (016, 031:74, 032): a SET list naming none of `namespace`, `key`, `environment`, `is_secret`, `user_id`; a no-op on the stored set whatever its WHERE clause.
+   Any other `UPDATE`/`DELETE` against `config.config_values` that the model cannot interpret trips the fail-closed trigger (finding kind internal `unmodelled-rewrite`, exit 1) unless allow-listed. The real tree (001-034) must parse with zero `unmodelled-rewrite` and an empty `rewriteAllow` (Step 9 verifies; a new shape is added here with a Step 2 fixture, never allow-listed).
+4. The allow-list is read from `config-wiring.json` `registry.rewriteAllow` and keyed on migration file name plus a SHA-256 of the whitespace-normalized statement; never on statement shape or NNN alone (design.md Rejected Alternatives). It exists only for a future statement the model deliberately does not cover, recorded with a one-line reason in the owning feature's `context.md`.
 5. Output lines are `file:key:kind[:env]` and never contain values.
 
 **Verification**:
@@ -96,13 +111,19 @@ node --check scripts/check-config-wiring.mjs && node --test scripts/config-wirin
 - `scripts/config-wiring-fixtures/seed/unmodelled/services/xstockstrat-config/migrations/002_delete.up.sql` — create
 - `scripts/config-wiring-fixtures/seed/scope-and-secret/services/xstockstrat-config/migrations/001_seed.up.sql` — create (also a `001_seed.down.sql` sibling, to prove exclusion)
 - `scripts/config-wiring-fixtures/seed/multi-row/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/heal-031/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/heal-031/services/xstockstrat-config/migrations/002_heal.up.sql` — create (twin dedupe DELETE, literal-list prefix heal, `ON CONFLICT DO NOTHING` insert, key-neutral UPDATE, in 031's order)
+- `scripts/config-wiring-fixtures/seed/literal-delete/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/literal-delete/services/xstockstrat-config/migrations/002_delete.up.sql` — create (`key =` and `key IN` forms)
+- `scripts/config-wiring-fixtures/seed/key-neutral/services/xstockstrat-config/migrations/001_seed.up.sql` — create
+- `scripts/config-wiring-fixtures/seed/key-neutral/services/xstockstrat-config/migrations/002_describe.up.sql` — create (description-only UPDATE, plus a `CREATE TRIGGER ... BEFORE UPDATE ON config.config_values` and a `-- UPDATE` comment that must not classify)
 
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
 **Codebase Evidence**:
-- Test runner and style precedent: `scripts/workflow-tests/merge-train-resolve.test.mjs` (`node:assert/strict`, `node:test`, temp-dir scenarios via `fs.mkdtempSync`); run command `node --test scripts/workflow-tests/*.test.mjs` at `.github/workflows/ci.yml:724`.
-- Real shapes the fixtures must reproduce: 001 narrow insert (`001_config_tables.up.sql:55-69`), 002 production re-insert (`002_config_environment.up.sql:48-71`), 017 rename (`017_config_secrets_and_scoping.up.sql:38-39`), 029 heal (`029_heal_config_keys_full_dotted.up.sql:24-28`), 025 bare ingest seed (`025_ingest_mcp_client_keys.up.sql:25-29`).
-- Negative matches that must classify as wired (recon.md Patterns to REUSE): fully dotted seeds from 018, 021, 022, 026, 027, 028, 030; ui `performance.*` (023); agent `signal.alert_threshold` (004).
+- Test runner and style precedent: `scripts/workflow-tests/merge-train-resolve.test.mjs` (`node:assert/strict`, `node:test`, temp-dir scenarios via `fs.mkdtempSync`); run command `node --test scripts/workflow-tests/*.test.mjs` at `.github/workflows/ci.yml:801`.
+- Real shapes the fixtures must reproduce: 001 narrow insert (`001_config_tables.up.sql:55-69`), 002 production re-insert (`002_config_environment.up.sql:48-71`), 017 rename (`017_config_secrets_and_scoping.up.sql:38-39`), 029 heal (`029_heal_config_keys_full_dotted.up.sql:24-28`), 025 bare ingest seed (`025_ingest_mcp_client_keys.up.sql:25-29`, rows `:34,37`), 031 heal sequence (`031_heal_indicators_sandbox_keys_full_dotted.up.sql:15-25,29-46,48-72,74-82`), literal DELETEs (`009_...up.sql:18-20`, `020_...up.sql:8-10`, `034_retire_portfolio_snapshot_interval.up.sql:6-8`), key-neutral UPDATEs (`016_...up.sql:9`, `032_analysis_zero_trap_descriptions.up.sql:5,11,17,23`), non-statements (`001_config_tables.up.sql:50`, `010_config_audit_insert_trigger.up.sql:3-12`).
+- Negative matches that must classify as wired (recon.md Patterns to REUSE): fully dotted seeds from 018, 021, 022, 026, 027, 028, 030, 033; ui `performance.*` (023); agent `signal.alert_threshold` (004). Analysis `backtest.max_duration_seconds` is no longer a dead seed: `services/xstockstrat-analysis/app/handlers/servicer.py:795-796` reads `analysis.backtest.max_duration_seconds` (`get_int_present`) while 001:69/002:71 seed it bare, so on the real tree it is a `form-mismatch`; the fixtures here use synthetic keys and do not depend on it.
 - Test-data rule (C-13): the fixture migrations have one consumer each in this suite, so they stay inline in `config-wiring-fixtures/`; a second suite reusing one moves it to a shared fixture dir in the same step.
 
 **TDD**: `red-green required`
@@ -117,6 +138,9 @@ Author the cases below to fail against the pre-implementation tree (the script d
 4. `*.down.sql` is excluded; a `user_id` non-NULL row is excluded; a secret row lands in `secrets` and its value text never appears in any output.
 5. Fail-closed: an unmodelled `DELETE FROM config.config_values ...` trips `unmodelled-rewrite`; the same statement passes only when allow-listed by file plus statement hash, and fails again when the statement text changes by one token.
 6. Multi-row VALUES and duplicate rows per environment produce one stored entry per `(namespace, key, environment)`.
+7. 031 heal fixture: bare rows in the literal key list become `ns.key`; a bare row whose dotted twin already exists in the same environment is deleted, not double-entered; a key outside the `IN` list and an `is_secret=true` row stay bare; the following key-neutral UPDATE changes nothing; no `unmodelled-rewrite`.
+8. Literal DELETE fixture: both the `key =` and `key IN (...)` forms remove the named key from every environment and leave other keys; no `unmodelled-rewrite`.
+9. Key-neutral fixture: a description-only UPDATE leaves the stored set unchanged and raises no `unmodelled-rewrite`; the `CREATE TRIGGER ... BEFORE UPDATE` statement and the `-- UPDATE` comment are not classified as rewrites. An UPDATE whose SET names `key` or `environment` outside cases 2-4 of Step 1 Instructions 3 still trips `unmodelled-rewrite`.
 
 **Verification**:
 ```
@@ -137,20 +161,20 @@ No coverage threshold applies (Node script tests, not a service; C-08 service th
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
 **Codebase Evidence**:
-- Python getters over a raw snapshot: ingest `services/xstockstrat-ingest/app/config/watcher.py:104,112,120,130,138` (`get_str`, `get_int`, `get_int_present`, `get_bool`, `get_float`); analysis adds `get_float_present` (`services/xstockstrat-analysis/app/config/watcher.py:136`); indicators adds `get_str_present` (`services/xstockstrat-indicators/app/config/watcher.py:98`).
-- Python shapes the AST must resolve: multi-line call `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:148`; plain literal `fundsignal_loop.py:136` `self._cfg.get_bool("analysis.fundsignal.enabled", default=False)`; same-file constant `services/xstockstrat-agent/app/tools.py:78` `_ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"`; cross-watcher read `fundsignal_loop.py:97` (`marketdata.fundamentals.provider`).
-- Go getters: `Watcher.GetString/GetInt/GetFloat/GetBool` at `services/xstockstrat-portfolio/internal/config/config.go:112,126,140,170`, `services/xstockstrat-trading/internal/config/config.go:205,215,225,235`, `services/xstockstrat-marketdata/internal/config/config.go:142,156,170,184`. Indirection: parameterized helper `services/xstockstrat-marketdata/internal/service/marketdata_service.go:982-987` `resolvePositiveInt(cfg intGetter, key string, def int64)`; constant read `services/xstockstrat-portfolio/internal/config/config.go:160` `w.GetString(FactorMapKey, "{}")`.
-- TypeScript: index syntax `this.snapshot?.values[key]` at `services/xstockstrat-ledger/src/services/configWatcher.ts:108,113,118` (and the config/notify/identity equivalents); direct index `services/xstockstrat-ui/src/lib/performanceMetrics.ts:193` `values['performance.risk_free_rate_annual']`.
-- **Not found**: any current `int_positive` getter (feature 244 adds it, not on this branch); it is handled via the forwarder registry, not hard-coded.
+- Python getter methods over a raw snapshot: ingest `services/xstockstrat-ingest/app/config/watcher.py:116,124,134,142` (`get_str`, `get_int`, `get_bool`, `get_float`) with `get_int_present = get_int` a class-attribute alias at `:132`; analysis `services/xstockstrat-analysis/app/config/watcher.py:103,111,121,129` with aliases `get_int_present = get_int` `:119` and `get_float_present = get_float` `:137`; indicators `services/xstockstrat-indicators/app/config/watcher.py:102,112,120,128` with alias `get_str_present = get_str` `:110`. Call sites use the alias names (e.g. `servicer.py:795` `self._cfg.get_int_present(`), so attribute-name matching covers them.
+- Module-level forwarder (feature 244, launched): `int_positive(cfg, key: str, default: int)` defined at `services/xstockstrat-analysis/app/config/watcher.py:142`, `services/xstockstrat-indicators/app/config/watcher.py:155`, `services/xstockstrat-ingest/app/config/watcher.py:213`; the key is argument index 1. Callers: method form `int_positive(self, "ingest.backfill.max_concurrent_jobs", 3)` (ingest `watcher.py:183`, indicators `watcher.py:138,142,152`), imported function form `int_positive(cfg_watcher, "ingest.mcp_client.request_timeout_seconds", ...)` multi-line (`services/xstockstrat-ingest/app/engine/mcp_client_loop.py:165-167`), `int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)` (`services/xstockstrat-analysis/app/handlers/servicer.py:3833`), multi-line `fundsignal_loop.py:156-158`.
+- Python shapes the AST must resolve: multi-line call `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:156-158` (`int_positive(` over three lines) and `servicer.py:795-796` (`get_int_present(` over two); plain literal `fundsignal_loop.py:144` `self._cfg.get_bool("analysis.fundsignal.enabled", default=False)`; same-file constant `services/xstockstrat-agent/app/tools.py:78` `_ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"`; cross-watcher read `fundsignal_loop.py:105` (`md_config_watcher.get_str("marketdata.fundamentals.provider", "")`).
+- Go getters: `Watcher.GetString/GetInt/GetFloat/GetBool` at `services/xstockstrat-portfolio/internal/config/config.go:112,126,140,170`, `services/xstockstrat-trading/internal/config/config.go:205,215,225,235`, `services/xstockstrat-marketdata/internal/config/config.go:142,156,170,184`. Indirection: parameterized helper `services/xstockstrat-marketdata/internal/service/marketdata_service.go:986` `func resolvePositiveInt(cfg intGetter, key string, def int64) int64`; constant read `services/xstockstrat-portfolio/internal/config/config.go:160` `w.GetString(FactorMapKey, "{}")`.
+- TypeScript: index syntax `this.snapshot?.values[key]` at `services/xstockstrat-ledger/src/services/configWatcher.ts:108,113,118,123` (and the config/notify/identity equivalents); direct index `services/xstockstrat-ui/src/lib/performanceMetrics.ts:193` `values['performance.risk_free_rate_annual']`.
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. `config-wiring-py-reads.py`: walk `services/*/app/**/*.py` (skip `tests/`), use `ast` to find calls whose attribute or name is one of the getter names (`get_str`, `get_int`, `get_int_present`, `get_bool`, `get_float`, `get_float_present`, `get_str_present`) or `.values.get(...)`/`.values[...]` on a snapshot. Resolve the first argument: string literal, or a module-level `Name` bound to a string literal in the same file; anything else is reported as `{"file","symbol","line","dynamic":true}`. Emit JSON on stdout.
-2. In the Node script add `extractGoReads` and `extractTsReads`: regex over the `Get(String|Int|Float|Bool)\(` call and the `values\[`-index syntax; match across line breaks (`s` flag, balanced to the first argument) so a literal split over lines is not misreported; resolve a bare identifier through a same-service constant (`const X = "..."` / Go `const`/`var`) found in the same package or imported same-service file; otherwise `dynamic-read`.
-3. Add `registry.forwarders` (key `file:symbol` of the helper, value `{"keyArg": <index>}`): calls to a registered helper are treated as getter calls on the given argument. Add `registry.dynamic` (key `file:symbol`, value an array of the keys that call site can produce): an enumerated dynamic site yields those reads instead of a `dynamic-read` finding. The registry lives in `scripts/config-wiring.json` (design: no reader may be edited, no in-code annotation).
+1. `config-wiring-py-reads.py`: walk `services/*/app/**/*.py` (skip `tests/`), use `ast` to find calls whose attribute or name is one of the getter names (`get_str`, `get_int`, `get_int_present`, `get_bool`, `get_float`, `get_float_present`, `get_str_present`; the `*_present` names are matched as call names even though they are class-attribute aliases, not `def`s) or `.values.get(...)`/`.values[...]` on a snapshot; for these the key is argument 0. It also receives the Python entries of `registry.forwarders` (passed by the Node script as a JSON argument) and treats a call whose callee name (bare `Name` or `Attribute.attr`) equals a registered forwarder symbol of the same service as a read of argument `keyArg`. Resolve the key argument: string literal, or a module-level `Name` bound to a string literal in the same file; anything else is reported as `{"file","symbol","line","dynamic":true}`. Getter calls inside the body of a registered forwarder whose key argument is the forwarder's own key parameter are the pass-through, not a read, and are skipped. Emit JSON on stdout.
+2. In the Node script add `extractGoReads` and `extractTsReads`: regex over the `Get(String|Int|Float|Bool)\(` call and the `values\[`-index syntax; match across line breaks (`s` flag, balanced to the first argument) so a literal split over lines is not misreported; resolve a bare identifier through a same-service constant (`const X = "..."` / Go `const`/`var`) found in the same package or imported same-service file; otherwise `dynamic-read`. The same forwarder rule applies (calls to a registered Go/TS forwarder read `keyArg`; its own pass-through body is skipped).
+3. Add `registry.forwarders` (key `file:symbol` of the helper, value `{"keyArg": <index>}`): calls to a registered helper are treated as getter calls on the given argument. The real tree needs, at minimum, the three `int_positive` definitions (`services/xstockstrat-{analysis,indicators,ingest}/app/config/watcher.py:int_positive`, `keyArg` 1) and `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt` (`keyArg` 1); Step 11 records them. Without these entries every `int_positive` read (ingest `watcher.py:183`, `mcp_client_loop.py:165`, analysis `servicer.py:3833`, ...) would be missed and the three helper bodies would report false `dynamic-read`. Add `registry.dynamic` (key `file:symbol`, value an array of the keys that call site can produce): an enumerated dynamic site yields those reads instead of a `dynamic-read` finding. The registry lives in `scripts/config-wiring.json` (design: no reader may be edited, no in-code annotation).
 4. Cross-namespace reads are not matched by the consuming service's namespace: reads are plain strings joined against the whole stored set.
 5. Never read `GetSecret` calls as ordinary reads.
 
@@ -173,11 +197,15 @@ node --check scripts/check-config-wiring.mjs && python3 -I -m py_compile scripts
 - `scripts/config-wiring-fixtures/readers/services/xstockstrat-marketdata/internal/service/forwarder.go` — create (`resolvePositiveInt`-shaped helper and two callers)
 - `scripts/config-wiring-fixtures/readers/services/xstockstrat-marketdata/internal/config/split_literal.go` — create (literal split over two lines, constant, `GetSecret`)
 - `scripts/config-wiring-fixtures/readers/services/xstockstrat-ui/src/lib/index_reads.ts` — create (`values['...']` literal and `values[key]` dynamic)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-ingest/app/config/watcher.py` — create (module-level `int_positive(cfg, key, default)` forwarder whose body calls `cfg.get_int(key, default)`, a method-form caller `int_positive(self, "<lit>", 3)` and a `get_int_present = get_int` alias with a caller)
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-ingest/app/engine/forwarder_caller.py` — create (imported-function caller `int_positive(cfg_watcher, "<lit>", ...)` split over three lines)
+
+All Files are new fixtures (create); nothing pre-exists under `scripts/config-wiring-fixtures/`.
 
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
 **Codebase Evidence**:
-- Real call shapes to copy into fixtures: `fundsignal_loop.py:136,148` (literal, multi-line), `tools.py:78` (constant), `marketdata_service.go:982-987` (forwarder), `portfolio/internal/config/config.go:160` (constant), `performanceMetrics.ts:193` (index), `configWatcher.ts:108` (parameter `key` -> dynamic).
+- Real call shapes to copy into fixtures: `fundsignal_loop.py:144` (literal), `fundsignal_loop.py:156-158` and `servicer.py:795-796` (multi-line), `tools.py:78` (constant), `marketdata_service.go:986` (Go forwarder `resolvePositiveInt(cfg intGetter, key string, def int64)`), Python module-level forwarder `int_positive(cfg, key, default)` (`services/xstockstrat-ingest/app/config/watcher.py:213-216`; callers `watcher.py:183` method form and `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:165-167` imported multi-line form), class-attribute alias `get_int_present = get_int` (`ingest watcher.py:132`), `portfolio/internal/config/config.go:160` (constant), `performanceMetrics.ts:193` (index), `configWatcher.ts:108` (parameter `key` -> dynamic).
 - Dynamic example for @AC-9: an f-string key `f"analysis.{name}.enabled"` where `name` is a function parameter; digest found no such runtime f-string getter in analysis `app/` today (recon.md Risks), so the fixture is synthetic.
 - Quality gate from design.md: the count of false-dynamic-read entries (a literal argument split across lines) in the Go and TS extractors must be zero.
 
@@ -186,7 +214,7 @@ node --check scripts/check-config-wiring.mjs && python3 -I -m py_compile scripts
 **Covers**: `AC-1` (reader side: both strings are extracted verbatim), `AC-9` (runtime-built key is reported, not skipped)
 
 **Instructions**:
-Author failing cases: (a) Python multi-line call and same-file constant resolve to the literal; (b) Python `f"analysis.{name}.enabled"` with `name` a parameter produces exactly one dynamic entry naming file and symbol; (c) the same site listed in `registry.dynamic` resolves to its enumerated keys and produces no dynamic entry; (d) Go literal split over two lines resolves (false-dynamic count = 0); (e) Go `resolvePositiveInt(cfg, key, def)` is dynamic without a forwarder entry and resolves at its callers with one; (f) Go and Python constants resolve; (g) TS `values['performance.risk_free_rate_annual']` and `this.snapshot?.values[key]` classify as literal and dynamic respectively; (h) a `GetSecret("x")` call is not extracted as an ordinary read; (i) a `tests/` file is not scanned.
+Author failing cases: (a) Python multi-line call and same-file constant resolve to the literal; (b) Python `f"analysis.{name}.enabled"` with `name` a parameter produces exactly one dynamic entry naming file and symbol; (c) the same site listed in `registry.dynamic` resolves to its enumerated keys and produces no dynamic entry; (d) Go literal split over two lines resolves (false-dynamic count = 0); (e) Go `resolvePositiveInt(cfg, key, def)` is dynamic without a forwarder entry and resolves at its callers with one; (f) Go and Python constants resolve; (g) TS `values['performance.risk_free_rate_annual']` and `this.snapshot?.values[key]` classify as literal and dynamic respectively; (h) a `GetSecret("x")` call is not extracted as an ordinary read; (i) a `tests/` file is not scanned; (j) with `int_positive` in `registry.forwarders` (`keyArg` 1), both Python callers (method form and imported multi-line form) resolve to their argument-1 literal and the forwarder body's `cfg.get_int(key, default)` yields no `dynamic-read`; without the entry the callers yield no read and the body yields exactly one `dynamic-read`; (k) a call through the `get_int_present` alias resolves its literal like `get_int`.
 
 **Verification**:
 ```
@@ -246,8 +274,8 @@ node --check scripts/check-config-wiring.mjs && node --test scripts/config-wirin
 **Reviewers**: Platform Lead — cross-service tooling and SDD process
 
 **Codebase Evidence**:
-- Scenario keys (illustrative, per `acceptance.feature` comment): `ingest` `mcp_client.request_timeout_seconds` read as `ingest.mcp_client.request_timeout_seconds`; `ledger` `stream.notify_enabled` (seed `001_config_tables.up.sql:65`) with no reader; `ingest.backfill.retry_on_failure` read at `services/xstockstrat-ingest/app/config/watcher.py:191` with no seed (recon.md Baseline source).
-- Negative matches: dotted seeds 018/021/022/026/027/028/030, ui `performance.*`, agent `signal.alert_threshold`, 029-healed keys.
+- Scenario keys (illustrative, per `acceptance.feature` comment): `ingest` `mcp_client.request_timeout_seconds` read as `ingest.mcp_client.request_timeout_seconds`; `ledger` `stream.notify_enabled` (seed `001_config_tables.up.sql:65`) with no reader; `ingest.backfill.retry_on_failure` read at `services/xstockstrat-ingest/app/config/watcher.py:187` (`self.get_bool(...)`) with no seed (recon.md Baseline source; re-checked 2026-11-01, still no reader for `stream.notify_enabled` and no seed for `retry_on_failure`).
+- Negative matches: dotted seeds 018/021/022/026/027/028/030/033, ui `performance.*`, agent `signal.alert_threshold`, 029-healed and 031-healed keys.
 
 **TDD**: `red-green required`
 
@@ -277,15 +305,15 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Codebase Evidence**:
 - Baseline-with-owner precedent: `.jscpd.json` and `scripts/check-duplication.sh` are the repo's only baseline-style files, but they are threshold-only (`minTokens: 100`, `DUP_REPORT_ONLY=1`), with no per-entry owner; so the owner-bearing ratchet is **Not found**, built new.
 - Step-time versus completion gate: `.claude/skills/sdd-execute/SKILL.md:289` (Verification runs before the `done` flip at `:298-299`); step bodies immutable (`SKILL.md:487`, F-09).
-- Declared-key sources (FR-2): product spec `## Config Key Changes` (`.claude/skills/sdd-story/SKILL.md:198`) and a migration inserting into `config.config_values` (@AC-10). The overlap-check regex ``[a-z][a-z-]+\.[a-z]+\.[a-z_]+`` (`overlap-check.md:25,53`) matches only three-segment keys, so this step defines its own pattern.
-- Owners to be recorded in entries (Step 11): feature 277/278 and 243 (product spec Open Questions; recon.md Baseline source).
+- Declared-key sources (FR-2): product spec `## Config Key Changes` (`.claude/skills/sdd-story/SKILL.md:198-201`) and a migration inserting into `config.config_values` (@AC-10). The overlap-check regex ``[a-z][a-z-]+\.[a-z]+\.[a-z_]+`` (`.claude/skills/sdd-review/reference/overlap-check.md:25,53`) matches only three-segment keys, so this step defines its own pattern.
+- Owners to be recorded in entries (Step 11): feature 278 and feature 243. Feature 277 (`fix-ingest-seeded-config-keys`) is `demoted/canceled` (`docs/roadmap/features/277-fix-ingest-seeded-config-keys/status.md`), and the operator ruled on 2026-11-01 (context.md, "operator ruling at the sdd-batch-execute up-front gate") that no entry may name it and the owner regex drops 277. Feature 243 is still `in-progress`.
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. Validate `config-wiring.json` on every run: each `findings[]` entry must carry `namespace`, `key`, `kind`, optional `envs` (list), and a non-empty `owner` matching `^(feature )?(243|277|278)\b|^(defect|feature) .+`; an entry without an owner makes the run fail naming the entry (@AC-8). Schema errors exit `2`.
+1. Validate `config-wiring.json` on every run: each `findings[]` entry must carry `namespace`, `key`, `kind`, optional `envs` (list), and a non-empty `owner` matching `^(feature )?(243|278)\b|^(defect|feature) .+` (277 removed by the 2026-11-01 operator ruling); an entry without an owner makes the run fail naming the entry (@AC-8). Schema errors exit `2`.
 2. Ratchet (`--final` and CI): a produced finding not in `findings` fails and is named (@AC-7); a `findings` entry that no longer occurs fails as stale; an entry whose `envs` list is larger than the produced env list fails as stale-in-part, so fixing one environment forces shrinking the entry (env-list ratchet); entries may only shrink.
 3. `policy.envReadUnseeded`: `blocking` | `reported`. Under `reported`, env-scoped `read-unseeded` findings (those with `:env`) are printed prefixed `REPORTED:` and do not affect the exit code or the ratchet. Default `reported` until the operator ruling at Step 10.
 4. Modes. Default (step-time, non-final): `form-mismatch`, `dynamic-read`, `unmodelled-rewrite`, and declared-key findings that are not missing-side are failures; missing-side `seeded-unread` and `read-unseeded` for declared keys are printed `PENDING:` and do not fail. `--final`: full ratchet, PENDING becomes failure. Without a declared-key source, step-time mode checks no key and exits `0` (@AC-5).
@@ -317,7 +345,7 @@ node --check scripts/check-config-wiring.mjs && node -e "JSON.parse(require('fs'
 
 **Codebase Evidence**:
 - Acceptance wording: `acceptance.feature` @AC-4, @AC-5, @AC-7, @AC-8, @AC-10; PRESERVE @AC-5/@AC-10 from design.md Business Rules Touched.
-- Key examples: `analysis.fundsignal.enabled` (`fundsignal_loop.py:136`; seeded bare in `008_analysis_fundsignal_keys.up.sql:13`); `ledger` `stream.notify_enabled`.
+- Key examples: `analysis.fundsignal.enabled` (`services/xstockstrat-analysis/app/engine/fundsignal_loop.py:144`; seeded bare in `008_analysis_fundsignal_keys.up.sql:13-14`); `ledger` `stream.notify_enabled` (`001_config_tables.up.sql:65`, no reader).
 
 **TDD**: `red-green required`
 
@@ -344,8 +372,14 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Baseline reconciliation targets (feature 277 sweep, `docs/roadmap/features/277-fix-ingest-seeded-config-keys/recon.md:86-103` on branch `feature/fix-ingest-seeded-config-keys`): 5 ingest + 13 analysis `form-mismatch` (18); dead seeds `analysis` `backtest.max_duration_seconds` (`001_config_tables.up.sql:69`) and `ledger` `stream.notify_enabled` (`:65`); unseeded `ingest.backfill.max_concurrent_jobs` (`watcher.py:187`) and `ingest.backfill.retry_on_failure` (`:191`); extras `ingest.backfill.max_retry_attempts` (`:195`), `ingest.signals.dedup_window_hours` (`:215`), analysis `fundsignal.retry_seconds`, `startup_jitter_seconds`; `indicators.sandbox.*` (feature 243).
-- Open risk to close here: no migration after 017 renames environments again, and 002, 005, 025 do not trip the fail-closed trigger (design.md Open Risks).
+- Reference sweep (feature 277, `demoted/canceled`; its branch `feature/fix-ingest-seeded-config-keys` no longer exists): `docs/roadmap/features/277-fix-ingest-seeded-config-keys/recon.md:86-101` on `main-dev` (table header `:88`). Its line refs are stale; the current reader locations are below.
+- Expected set on the current tree (migrations 000-034), re-derived 2026-11-01 by grep; the run is authoritative and this list is what the run is reconciled against:
+  - `form-mismatch`, ingest (5): `backfill.chunk_max_bars`, `backfill.chunk_window_days`, `backfill.max_concurrent_chunks` (seeded bare by 005; read dotted via `int_positive` at ingest `watcher.py:196,200,205`), `mcp_client.poll_interval_seconds`, `mcp_client.request_timeout_seconds` (seeded bare by `025_ingest_mcp_client_keys.up.sql:28-37`; read dotted via `int_positive` at `mcp_client_loop.py:165,191`).
+  - `form-mismatch`, analysis (14): the twelve `fundsignal.*` keys (008, e.g. `analysis.fundsignal.enabled` at `fundsignal_loop.py:144`), `scoring.signal_decay_half_life_hours` (019), and `backtest.max_duration_seconds` (001:69 / 002:71 bare; now read dotted at `servicer.py:795-796`, so it moved from the sweep's dead-seed group to `form-mismatch`).
+  - `seeded-unread` (1): `ledger` `stream.notify_enabled` (`001_config_tables.up.sql:65`, staging only offline: 002 does not re-insert it).
+  - `read-unseeded`: `ingest.backfill.max_concurrent_jobs` (`watcher.py:183`, `int_positive`), `ingest.backfill.retry_on_failure` (`:187`), `ingest.backfill.max_retry_attempts` (`:191`), `ingest.signals.dedup_window_hours` (`:210`), `analysis.fundsignal.retry_seconds` (`fundsignal_loop.py:151,162`), `analysis.fundsignal.startup_jitter_seconds` (`:170`), and `indicators.sandbox.max_concurrent` (indicators `watcher.py:152`; feature 243's product spec lists it as "no seed exists; not part of this defect").
+  - Expected gone: `indicators.sandbox.timeout_ms`/`memory_bytes`/`allowed_imports` (healed to dotted by 031 for both environments; the readers are dotted at indicators `watcher.py:138,142,147`); `portfolio.snapshot.interval_minutes` (deleted by 034, reader removed by 264); `ledger.stream.resolve_timeout_ms` (033 seeds it dotted).
+- Open-risk checks to close here: (a) no migration after 017 renames environments again (031-034 contain no `SET environment`); (b) no migration trips the fail-closed trigger: 002, 005, 025 and 033 are INSERT-only, and 009, 016, 020, 031, 032, 034 must classify under Step 1 Instructions 3 cases 4-7.
 
 **TDD**: `N/A (non-code-bearing: records a run, writes no code)`
 
@@ -353,9 +387,8 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 **Instructions**:
 1. Run `node scripts/check-config-wiring.mjs --final --json > <scratchpad>/first-run.json` with `findings` empty. Do not run any staging or production read or write.
-2. Append a `## Session 2026-10-23 — sdd-execute 278 step 9` block to `context.md` with: total finding counts per kind; the list of `read-unseeded env=` entries (count and keys); the reconciliation of the produced list against the 277 sweep (18 + 2 + 2 + the four extras + `indicators.sandbox.*`), stating any difference and its cause; the result of the two open-risk checks above. Any new migration shape that trips `unmodelled-rewrite` is added to the closed model with a fixture in Step 2's suite, never allow-listed by weakening the trigger (log it in the `## Deviation Log`).
-3. If 243 (`031_heal_indicators_sandbox_keys_full_dotted`), 248 (`032_ledger_stream_resolve_timeout`), 244 (`032_analysis_zero_trap_descriptions`) or 264 (`034`) migrations have landed on the base by now, the stored set differs from this spec's; re-run and record the difference before Step 10/11.
-4. Record the proposed owner for each group: 277/278 for the 18 form mismatches, the two dead seeds and the two named unseeded ingest keys; "feature 278" for the four extras (operator may overrule); 243 for `indicators.sandbox.*`.
+2. Append a `## Session <date> — sdd-execute 278 step 9` block to `context.md` with: total finding counts per kind; the list of `read-unseeded env=` entries (count and keys); the reconciliation of the produced list against the expected set above, stating any difference and its cause; the result of the two open-risk checks. Any migration shape that trips `unmodelled-rewrite` is added to the closed model (Step 1 Instructions 3) with a fixture in Step 2's suite, never allow-listed by weakening the trigger (log it in the `## Deviation Log`); `registry.rewriteAllow` stays empty.
+3. Record the proposed owner for each group: `feature 278` for every form mismatch, the dead seed and every unseeded key (operator ruling 2026-11-01: 277 is canceled, its entries collapse to 278); `feature 243` only for a remaining `indicators.sandbox.*` finding that 243's spec claims (expected: none after 031, since 243 excludes `sandbox.max_concurrent`).
 
 **Verification**:
 ```
@@ -371,31 +404,30 @@ node scripts/check-config-wiring.mjs --final --json | node -e "const j=JSON.pars
 **Status**: `pending`
 **Service**: `docs/roadmap/features/278-enforce-config-key-wiring/`
 **Files**:
-- `docs/roadmap/features/278-enforce-config-key-wiring/context.md` — modify (record the operator's results and ruling)
+- `docs/roadmap/features/278-enforce-config-key-wiring/context.md` — modify (one confirmation line in the Step 9/10 session entry; the operator record itself already exists)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- This step is performed by the OPERATOR. The implementation session has only the staging MCP (`mcp__xstockstrat_staging__get_config`) and cannot read production; the tool reads only its own deployment's environment ("it is a deployment property ... this tool cannot read another environment's rows"). The step therefore must not assume the agent can read production.
-- Why the gate exists: 002 back-fills 001-era rows via `DEFAULT 'dev'` (`002_config_environment.up.sql:7`) and 017 renames dev to staging (`017_config_secrets_and_scoping.up.sql:38`); 002:48-71 re-inserts production rows for platform, trading (four approval/risk keys), indicators, marketdata, portfolio and analysis, but **not** `ledger` `stream.notify_enabled` (001:65) or `trading` `fill_poller.interval_ms` (001:61). Offline they appear staging-only.
+- Already resolved: `context.md` "## Session 2026-10-23 — environment-baseline decision (operator)" holds the three staging samples and the line "**environment-baseline decision (operator ruling): reported-only.**"; the 2026-11-01 operator ruling at the sdd-batch-execute gate says to treat Step 10 as resolved and confirm/flip it, not reopen it. There is no production deployment, so no production read is possible or required.
+- The implementation session has only the staging MCP (`mcp__xstockstrat_staging__get_config`), which reads only its own deployment's environment; no step may assume the agent can read production.
+- Why the gate existed: 002 back-fills 001-era rows via `DEFAULT 'dev'` (`002_config_environment.up.sql:7`) and 017 renames dev to staging (`017_config_secrets_and_scoping.up.sql:38`); 002:48-71 re-inserts production rows for platform, trading (four approval/risk keys), indicators, marketdata, portfolio and analysis, but **not** `ledger` `stream.notify_enabled` (001:65) or `trading` `fill_poller.interval_ms` (001:61). Offline they appear staging-only.
 - Sampled 001-era keys (chosen to span the gap): `ledger` `stream.notify_enabled`; `trading` `fill_poller.interval_ms` (after the 029 heal, stored as `trading.fill_poller.interval_ms` if present); control `platform` `maintenance_mode` (re-inserted for production by `002:48`).
 
-**TDD**: `N/A (operator decision step; no code)`
+**TDD**: `N/A (confirmation of a recorded operator ruling; no code)`
 
 **Covers**: —
 
 **Instructions**:
-OPERATOR actions, all read-only, nothing written:
-1. Read the first-run `read-unseeded env=` count and list that Step 9 recorded in `context.md`.
-2. Against the **production** deployment's agent (the same MCP server configured for production, whose environment is production), call the read-only tool `get_config` three times: `get_config(namespace="ledger")`, `get_config(namespace="trading")`, `get_config(namespace="platform")` (leave `user_id` empty). In each result, check that `values` contains `stream.notify_enabled`, `trading.fill_poller.interval_ms` (or the bare `fill_poller.interval_ms`) and `platform.maintenance_mode` (or bare `maintenance_mode`) respectively, and note the returned `environment` field equals `production`. Do not call `set_config` or any manage tool. Secret values are `[redacted]` by the tool.
-3. Record in `context.md`: the three results (present or absent, stored form seen), then the ruling: **blocking** (env-scoped `read-unseeded` fails CI and enters the ratchet) or **reported-only** (printed `REPORTED:`, kept out of the ratchet). If production lacks rows the offline model says exist, or has rows it cannot see (runtime-created), say so; the governance section (Step 18) documents runtime-created keys as `read-unseeded` by design.
-4. Until this record exists, `policy.envReadUnseeded` stays `reported` and no later step may rely on a different value.
+Confirmation step, run by the executor right after Step 9; nothing is read from or written to any environment:
+1. Confirm the 2026-10-23 record exists in `context.md` and its ruling is `reported-only`, and that `scripts/config-wiring.json` `policy.envReadUnseeded` is `reported`.
+2. Check Step 9's `read-unseeded env=` list against the ruling: env-scoped findings print `REPORTED:` and stay out of the ratchet; staging findings are blocking. Append one line to the Step 9 session entry: "Step 10 confirmed: reported-only (2026-10-23 operator ruling), N env-scoped findings reported".
+3. Flip this step `done`; do not stop at an operator gate. Re-open it, and run the production `get_config` sampling of `ledger`, `trading` and `platform` (read-only, `get_config(namespace=...)` with `user_id` empty, against the production-deployed agent), only when a production deployment exists.
 
 **Verification**:
 ```
-grep -n "environment-baseline decision" docs/roadmap/features/278-enforce-config-key-wiring/context.md
+grep -n "environment-baseline decision (operator ruling): reported-only" docs/roadmap/features/278-enforce-config-key-wiring/context.md && grep -n "Step 10 confirmed: reported-only" docs/roadmap/features/278-enforce-config-key-wiring/context.md && node -e "const j=JSON.parse(require('fs').readFileSync('scripts/config-wiring.json','utf8')); if (j.policy.envReadUnseeded!=='reported') process.exit(1)"
 ```
-The execute loop leaves this step `pending` until the operator's entry exists (a heading containing `environment-baseline decision` and a line starting `Ruling:`).
 
 ---
 
@@ -410,9 +442,9 @@ The execute loop leaves this step `pending` until the operator's entry exists (a
 **Reviewers**: Platform Lead — baseline contents and ownership, `xstockstrat-config` owner — key list
 
 **Codebase Evidence**:
-- Contents come from Step 9's run and the operator ruling from Step 10; reference list in recon.md Baseline source (`recon.md` table) and `docs/roadmap/features/277-fix-ingest-seeded-config-keys/recon.md:86-103`.
-- The ingest defect report `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` is closed `wont-fix`, so entries name feature 277/278 as owner, not the report (product spec Out of Scope).
-- `indicators.sandbox.*` is owned by feature 243 until its migration `031_heal_indicators_sandbox_keys_full_dotted` lands (not on this branch; recon.md Dependencies).
+- Contents come from Step 9's run and the Step 10 ruling (`reported-only`); the expected set is Step 9's Codebase Evidence (re-derived against migrations 000-034), with `docs/roadmap/features/277-fix-ingest-seeded-config-keys/recon.md:86-101` (on `main-dev`) as the historical reference only.
+- The ingest defect report `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` exists and is closed `wont-fix`, so entries name a feature as owner, not the report (product spec Out of Scope). Feature 277 is `demoted/canceled`; by the 2026-11-01 operator ruling (context.md) every entry the spec previously gave to 277 is owned by `feature 278`.
+- `031_heal_indicators_sandbox_keys_full_dotted.up.sql` is now on the branch (feature 243, still `in-progress`): it heals `indicators.sandbox.timeout_ms`, `memory_bytes`, `allowed_imports` for both environments, so no `indicators.sandbox.*` form-mismatch is expected. `indicators.sandbox.max_concurrent` (read at indicators `watcher.py:152`, never seeded) is outside 243's scope (`docs/roadmap/features/243-fix-sandbox-seed-keys/product-spec.md:86`).
 - **Not found**: any seed or reader fix landing in this feature; none is allowed (no reader or seed edit).
 
 **TDD**: `N/A (config data file; verified by Step 12's real-tree test)`
@@ -420,9 +452,9 @@ The execute loop leaves this step `pending` until the operator's entry exists (a
 **Covers**: —
 
 **Instructions**:
-1. Set `policy.envReadUnseeded` to the operator's ruling from Step 10 (`blocking` or `reported`).
-2. Fill `findings` with exactly the findings the first run produced, each with `owner`: `feature 277` or `feature 278` for the form mismatches, dead seeds and unseeded ingest keys; `feature 278` for the four extras (record any operator overrule in `context.md`); `feature 243` for `indicators.sandbox.*`. Record the final count per kind in `context.md` (design leaves the exact count to this run).
-3. Fill `registry.forwarders` / `registry.dynamic` / `registry.rewriteAllow` with only the entries the first run required (for example `marketdata_service.go:resolvePositiveInt`), each justified in one line in `context.md`.
+1. Keep `policy.envReadUnseeded` at `reported` (Step 10 ruling).
+2. Fill `findings` with exactly the findings the first run produced, each with `owner: "feature 278"` (form mismatches, the dead seed, every unseeded key including `indicators.sandbox.max_concurrent`); use `feature 243` only for an `indicators.sandbox.*` finding inside 243's declared scope, if the run still produces one. No entry names 277. Record the final count per kind in `context.md` (design leaves the exact count to this run).
+3. Fill `registry.forwarders` / `registry.dynamic` with only the entries the first run required, each justified in one line in `context.md`; expected forwarders: `services/xstockstrat-analysis/app/config/watcher.py:int_positive`, `services/xstockstrat-indicators/app/config/watcher.py:int_positive`, `services/xstockstrat-ingest/app/config/watcher.py:int_positive`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt` (all `keyArg` 1). `registry.rewriteAllow` stays empty (Step 1 models every current rewrite).
 4. Do not add any entry to hide a finding that has a fixable cause in the extractor; fix the extractor in Step 3's code instead (false-dynamic-read count must be zero).
 
 **Verification**:
@@ -470,11 +502,12 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Reviewers**: Platform Lead — CI job matrix and gate
 
 **Codebase Evidence**:
-- Job shape to copy: `migration-contract-gate` at `.github/workflows/ci.yml:676-692` (`needs: changes`, `if:` on `matched`, `actions/checkout@v7`, one script step). No `fetch-depth` is needed: the scan is whole-tree (`fails.md:1040`).
-- `changes` filters block at `ci.yml:39-91` has `scripts`, `migrations`, per-service filters and `context-map`, and **no aggregate service-source filter**.
-- `ci-gate` `needs:` list and echo list at `ci.yml:776-818` (`- context-map`, `echo "context-map: ..."`); a job missing there is not enforced.
-- `context-map` job runs `node --test scripts/workflow-tests/*.test.mjs` (`ci.yml:723-724`); our test is a separate file and is run by the new job itself.
-- Shell lint covers `scripts/*.sh` only (`ci.yml:626-629`), so the `.mjs` files are outside shellcheck/shfmt; no `*.test.sh` is added, so the structural-test line `ci.yml:632` is unchanged.
+- Job shape to copy: `migration-contract-gate` at `.github/workflows/ci.yml:693-709` (`needs: changes`, `if:` on `matched`, `actions/checkout@v7`, one script step). Copy only the gating shape: that job adds `with: fetch-depth: 0` and a `github.event_name == 'pull_request'` guard because it diffs against the base branch; `config-wiring` reads only the checked-out tree, so it takes the default shallow checkout and needs no `pull_request` guard.
+- `changes` job starts at `ci.yml:14`; its `dorny/paths-filter@v4` `filters: |` block runs `:39-108` and has `scripts`, `migrations`, per-service filters and `context-map` (`:92`), and **no aggregate service-source filter**.
+- `ci-gate` at `ci.yml:899`, `needs:` list and echo list through `:945` (`- context-map`, `echo "context-map:     ${{ needs.context-map.result }}"`); a job missing there is not enforced.
+- `context-map` job (`ci.yml:787`) runs `node --test scripts/workflow-tests/*.test.mjs` (`ci.yml:801`); our test is a separate file and is run by the new job itself.
+- Shell lint (`shell-lint`, `ci.yml:629`) covers `scripts/*.sh .claude/hooks/*.sh` only (`ci.yml:643,646`), so the `.mjs` files are outside shellcheck/shfmt; no `*.test.sh` is added, so the structural-test line `ci.yml:649` is unchanged.
+- Node setup step to copy: `node-lint` (`ci.yml:430`) uses `actions/setup-node@v7` with `node-version: "24"` (`ci.yml:459-461`); drop its `cache: 'pnpm'` lines since the new job installs no packages.
 
 **TDD**: `N/A (CI workflow; behavior proven by Steps 8 and 12 and a local run)`
 
@@ -482,7 +515,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 **Instructions**:
 1. Add a `config-wiring` filter to `changes`: `services/xstockstrat-config/migrations/**`, `services/*/app/**`, `services/*/internal/**`, `services/*/src/**`, `scripts/check-config-wiring.mjs`, `scripts/config-wiring-py-reads.py`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/**`.
-2. Add job `config-wiring` ("Config key wiring (whole-tree)"): `needs: changes`, `if:` matched `config-wiring` or `ci`, steps: `actions/checkout@v7`, `actions/setup-node` pinned to the Node 24 line used by other jobs (copy the exact step from `node-lint`), `node --test scripts/config-wiring.test.mjs`, `node scripts/check-config-wiring.mjs --final`.
+2. Add job `config-wiring` ("Config key wiring (whole-tree)"): `needs: changes`, `if:` matched `config-wiring` or `ci`, steps: `actions/checkout@v7`, `actions/setup-node@v7` with `node-version: "24"` (from `node-lint`, without the pnpm cache lines), `node --test scripts/config-wiring.test.mjs`, `node scripts/check-config-wiring.mjs --final`.
 3. Add `config-wiring` to `ci-gate` `needs:` and add `echo "config-wiring: ${{ needs.config-wiring.result }}"`.
 4. The filter roots must equal the extractors' scan roots (`services/*/app`, `services/*/internal`, `services/*/src`, covering the ui reader `services/xstockstrat-ui/src/lib/performanceMetrics.ts`); Step 12 test (5) asserts this.
 5. Only after Step 11's ruling is recorded does this step run; the job is a whole-tree scan, never the diff.
@@ -508,7 +541,7 @@ python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml'));
 - Phase 3 step 3 runs `**Verification**` (`SKILL.md:289`) and step 4 flips `**Status**` to `done` (`SKILL.md:298-299`); the offline-only migration rule is `SKILL.md:290-297`; the all-steps-done transition to `code-completed` is `SKILL.md:303`; step bodies are immutable (`SKILL.md:487`).
 - TDD-gate carve-out: `SKILL.md:285` (config/migration steps skip it), so for them the wiring check is the only gate (recon.md Risks).
 - Config-key convention line: `.claude/skills/sdd-execute/reference/repo-conventions.md:30` (`- **Config keys**: format is <service-short-name>.<category>.<key>`).
-- Reference files are listed in `.claude/context-map.yaml:80-86`; no new reference file is created.
+- Reference files are listed in `.claude/context-map.yaml:83-86` (`sequential-mode.md`, `deviation-handling.md`, `repo-conventions.md`, `tdd-gate.md`); no new reference file is created. All `SKILL.md` and `repo-conventions.md` anchors above re-verified exact on 2026-11-01.
 
 **TDD**: `N/A (docs/skill text; structural assertions in Step 17)`
 
@@ -537,8 +570,8 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/SKILL.md .claude/skills
 **Reviewers**: Platform Lead — SDD process
 
 **Codebase Evidence**:
-- Sequential mode runs Phase 3 unchanged inside the step loop: `reference/sequential-mode.md:80-92` (§5.5; "Run **Phase 3 Execution** + Verification unchanged, including the offline migration check ... `SKILL.md` Phase 3 / HARD CONSTRAINTS", line 92-93). The design's cited `:112` is inside §5.5b (`:109-` smart checkpoints) and is **not** the mirror location; the correct anchors are §5.5 (`:80`) and §5.6 per-feature integration PR (`:145`).
-- Feature-end checkpoint precedes the integration PR (`sequential-mode.md:109-125`, condition 3).
+- Sequential mode runs Phase 3 unchanged inside the step loop: `.claude/skills/sdd-execute/reference/sequential-mode.md:81-109` (§5.5; "Run **Phase 3 Execution** + Verification unchanged, including the **offline migration check** ...", line 93). The design's cited `:112` is inside §5.5b (`:110-145` smart checkpoints) and is **not** the mirror location; the correct anchors are §5.5 (`:81`) and §5.6 per-feature integration PR (`:146`).
+- Feature-end checkpoint precedes the integration PR (§5.5b, `sequential-mode.md:110-126`, condition 3).
 
 **TDD**: `N/A (docs/skill text; structural assertions in Step 17)`
 
@@ -565,9 +598,10 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/reference/sequential-mo
 **Reviewers**: Platform Lead — SDD process
 
 **Codebase Evidence**:
-- B2 table at `impl-spec-criteria.md:12-31`; the `C-14` row at `:31` is the precedent for a prominent FAIL row although Mode B is advisory (`:4`); WARN list starts `:33`. Today no sdd-review text mentions config readers or `config.config_values` (recon.md Risks).
-- `## Config Key Changes` template in `.claude/skills/sdd-story/SKILL.md:196-199` (`- [ ] No new config keys` / `- OR: list keys in <service>.<category>.<key> format`); nothing in sdd-review or sdd-execute reads that section today (recon.md).
-- Product-spec criterion 6 checks key format only (`product-spec-criteria.md:25`).
+- B2 table at `.claude/skills/sdd-review/reference/impl-spec-criteria.md:12-31`; the `C-14` row at `:31` is the precedent for a prominent FAIL row although Mode B is advisory (`:4-5`); WARN list starts `:33`. Today no sdd-review text mentions config readers or `config.config_values` (recon.md Risks).
+- `## Config Key Changes` template in `.claude/skills/sdd-story/SKILL.md:198-201` (`- [ ] No new config keys` / `- OR: list keys in <service>.<category>.<key> format`); nothing in sdd-review or sdd-execute reads that section today (recon.md).
+- Product-spec criterion 6 checks key format only (`.claude/skills/sdd-review/reference/product-spec-criteria.md:25`).
+- Snapshot-built test models: `services/xstockstrat-ingest/tests/test_config_watcher.py:56` (`_int_watcher(**int_values)`), `:74` (empty `ConfigSnapshot()`), `services/xstockstrat-ingest/tests/test_ingest_servicer.py:77` (`ConfigWatcher.__new__`); re-verified 2026-11-01.
 
 **TDD**: `N/A (docs/skill text; structural assertions in Step 17)`
 
@@ -622,10 +656,11 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/patterns/config-governance.md` headings: `## Rules` (`:5`), `## Registering a new config key` (`:56`, steps 1-4 listed at `:58-61`), `## Per-Feature Registered Keys` (`:105`). Existing PRESERVE-equivalent: feature 182's entries and `docs/sdd/business-rules/platform.feature` @AC-6 (recon.md Existing Business Rules). Feature 264 also edits this file (rebase-only overlap; recon.md Dependencies).
-- `docs/roadmap/features/merge-order.md` already carries rows for 243/244/261 (e.g. line 82, 244 vs 261); the new row records that 243, 244 and 261 will edit `scripts/config-wiring.json`.
-- `scripts/check-context-map.sh` validates `.claude/context-map.yaml` paths and doc cross-references (`check-context-map.sh:1-30`).
-- Teardown: root `CLAUDE.md` § Teardown requires `/context-forge:context-constitution refresh` scoped to touched context files, or a recorded manual reconciliation if the plugin is unavailable (ledger `fails.md:670`).
+- `docs/patterns/config-governance.md` headings: `## Rules` (`:5`), `## Global Config Keys` (`:36`), `## Registering a new config key` (`:56`, steps 1-4 listed at `:58-61`), `## Registering a new vendor credential (an encrypted secret config row)` (`:63`), `## Author-sentinel conventions` (`:93`), `## Per-Feature Registered Keys` (`:109`). Existing PRESERVE-equivalent: feature 182's entries and `docs/sdd/business-rules/platform.feature` @AC-6 (recon.md Existing Business Rules). Feature 264 (now launched) edited this file.
+- `docs/roadmap/features/merge-order.md` already has a 278 row: `:101`, `signal-watchlist-expiry-pruning` (281) vs `enforce-config-key-wiring` (278), the config-wiring ratchet policy. 244 and 261 have launched (their ratchet coupling is moot: 278's first run sees their merged state); 243 is still `in-progress` and its migration 031 is already on `main-dev`, so its only remaining coupling is that any later 243 key change must edit `scripts/config-wiring.json`.
+- PR #1322 / branch `ccr-fac38b1f-6m24q2` is stale: 278's artifacts are on `main-dev` and `git merge origin/main-dev` into `feature/enforce-config-key-wiring` was a no-op on 2026-11-01.
+- `scripts/check-context-map.sh` validates `.claude/context-map.yaml` paths and doc cross-references (`check-context-map.sh:1-30`); it exits 0 on the current tree. `.claude/context-map.yaml:55-64` registers only workflow helpers/tests.
+- Teardown: root `CLAUDE.md` § Teardown requires `/context-forge:context-constitution refresh` scoped to touched context files, or a recorded manual reconciliation if the plugin is unavailable (ledger `fails.md:670`, the context-teardown trap entry).
 
 **TDD**: `N/A (docs-only)`
 
@@ -633,13 +668,13 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 **Instructions**:
 1. In `config-governance.md` add a section `## Wiring check (config key must be read under its stored key)` after `## Registering a new config key`: the stored key must equal the reader string verbatim; the four finding kinds; the step-time versus `--final` split; the baseline in `scripts/config-wiring.json` (owner required, entries may only shrink); keys created at runtime (`SetConfig create_key=true`, config-ui) surface as `read-unseeded` by design and must be seeded in a migration; secrets are excluded and values are never printed. Add one line to the registering list pointing at the section. Do not touch the registered-keys log.
-2. Add a `merge-order.md` row: 278 lands before 243/244/261 edit `scripts/config-wiring.json`; the feature artifacts live on `ccr-fac38b1f-6m24q2` (PR #1322, not yet merged to `main-dev`).
+2. Do not add a second 278 row to `merge-order.md`; the existing `:101` row (281 vs 278) stays. Add one row only for the live coupling, in the table's `Feature | Must wait for | Reason | Resolved` shape: Feature `fix-sandbox-seed-keys` (243), Must wait for `enforce-config-key-wiring` (278), Reason marked Soft (either order works; if 243 lands first, 278's Step 9 run records its state), stating that once 278 lands any further 243 change to a config key or reader must update `scripts/config-wiring.json` (shrink-only ratchet) in the same PR. Do not add rows for 244/261 (launched) and do not mention PR #1322.
 3. `.claude/context-map.yaml` is not edited: it registers only workflow helpers/tests (`merge-train-resolve.mjs`, `workflow-tests/*`, lines 55-64), not tooling scripts. Run `./scripts/check-context-map.sh`.
 4. Teardown: run `/context-forge:context-constitution refresh` scoped to `docs/patterns/config-governance.md` and the touched skill files; fix grounded drift. If the plugin is unavailable, re-read each touched context file against the current code and record in the PR body both that the plugin was unavailable and the manual reconciliation performed (a bare "plugin unavailable" does not pass).
 
 **Verification**:
 ```
-./scripts/check-context-map.sh && grep -n "Wiring check" docs/patterns/config-governance.md && grep -n "config-wiring" docs/roadmap/features/merge-order.md && node --test scripts/config-wiring.test.mjs && node scripts/check-config-wiring.mjs --final
+./scripts/check-context-map.sh && grep -n "Wiring check" docs/patterns/config-governance.md && grep -n "fix-sandbox-seed-keys.*enforce-config-key-wiring" docs/roadmap/features/merge-order.md && node --test scripts/config-wiring.test.mjs && node scripts/check-config-wiring.mjs --final
 ```
 
 ---
