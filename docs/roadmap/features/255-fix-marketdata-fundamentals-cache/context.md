@@ -1210,3 +1210,27 @@ the next `/sdd-batch` run can pick it up.
 - Files modified: `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`
 - Deviations: the service anchors drifted, and the repository test is red until Step 14 (see Deviation Log)
 
+### Step 14 — test: expired storage, re-fetch, stale at the cap, 4xx kept fresh, cancel survival and SQL pins (AC-5, AC-10, store half) [done]
+- `fakeFundRepo.UpsertFundamentals` now models the Step 13 SQL. It returns `ctx.Err()` on a done ctx, stores a copy,
+  stamps a flagged row at the epoch, and COALESCEs the five enrichment columns from a same-source prior row.
+- Service tests: `TestGetFundamentals_EnrichmentFailedStoredExpired_AC5`,
+  `TestGetFundamentals_TransientEnrichment503StoredExpired` (a real `fmp.Client` against an `httptest` profile 503),
+  `TestGetFundamentals_TransientOverEdgarRow_AC10` (fresh, then stale at the cap with no call, then re-fetched after the
+  reset), `TestGetFundamentals_FlaggedSameSourceKeepsEnrichment`, `TestGetFundamentals_Deterministic4xxRowKeptFresh`
+  and `TestGetFundamentals_UpsertSurvivesRequestCancel` (single and multi).
+- Repo tests: `TestUpsertFundamentals_CastsExtraMetricsToJSONB` widened to 17 args, which closes Step 13's open thread.
+  New: `TestUpsertFundamentals_ExpireAndSameSourceMerge` and the env-gated `TestUpsertFundamentals_LiveDB_EpochAndSeed`.
+- TDD: RED came from restoring Step 13's production files from the Step 12 commit. The output was
+  `expected 17, but got 16 arguments`, `could not match actual sql`, and `upserts = 0, want 1` (single and multi).
+  GREEN came after restoring `HEAD`.
+- Verification: `go test ./... -race` passes with coverage 72.6% (`COVERPKGS` expanded inline). The LiveDB run gave
+  `--- SKIP` (`DATABASE_URL not set`). golangci-lint v2.14.0 reported 0 issues (CI-equivalent fallback).
+- Live-DB record for the PR body: no real Postgres was available in this environment (`DATABASE_URL` unset, and no
+  DB is started per the HARD CONSTRAINT), so the test result is SKIP.
+- Open thread: [ ] the Step 14 live-DB test (`$17::boolean` wire bind under `QueryExecModeExec`, epoch read-back,
+  source-filtered seed count) is unproven in CI. Run it against a migrated staging DB before launch.
+- Files modified: `internal/service/marketdata_service_test.go`, `internal/repository/marketdata_repo_test.go`,
+  `internal/repository/fundamentals_livedb_test.go` (new)
+- Deviations: RED came from reverting Step 13, the seed counts are asserted as a delta, and the live DB was not
+  available (see Deviation Log)
+

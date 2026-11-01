@@ -126,7 +126,7 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 
 	repo := &MarketDataRepo{db: mock}
 
-	anyArgs := make([]any, 16)
+	anyArgs := make([]any, 17)
 	for i := range anyArgs {
 		anyArgs[i] = pgxmock.AnyArg()
 	}
@@ -145,6 +145,40 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet (query text missing the ::jsonb cast): %v", err)
+	}
+}
+
+// Feature 255 — a flagged row is stored at the epoch and merges enrichment only within one source; the
+// $17 bind must stay a Go bool so the ::boolean cast is a real bool param under QueryExecModeExec.
+func TestUpsertFundamentals_ExpireAndSameSourceMerge(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	args := make([]any, 17)
+	for i := range args {
+		args[i] = pgxmock.AnyArg()
+	}
+	args[16] = true
+	mock.ExpectExec(`(?s)CASE WHEN \$17::boolean THEN 'epoch'::timestamptz ELSE now\(\) END.*` +
+		`beta=CASE WHEN \$17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE\(EXCLUDED.beta, fundamentals.beta\).*` +
+		`fetched_at=EXCLUDED.fetched_at`).
+		WithArgs(args...).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	err = repo.UpsertFundamentals(context.Background(), &source.Fundamentals{
+		Symbol:           "AAPL",
+		Source:           "fmp",
+		EnrichmentFailed: true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertFundamentals: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
 	}
 }
 

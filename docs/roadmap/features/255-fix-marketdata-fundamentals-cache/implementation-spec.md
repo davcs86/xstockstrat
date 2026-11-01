@@ -797,7 +797,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./...
 
 ### Step 14 — test: expired storage, re-fetch, stale at the cap, 4xx kept fresh, cancel survival and SQL pins (AC-5, AC-10, store half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -1209,3 +1209,25 @@ _Populated by /sdd-execute as implementation proceeds._
   - a source that cancels the request ctx before the single and multi upserts.
 - **Disposition**: CI-equivalent fallback. `internal/repository` tests stay red until Step 14, which the spec
   anticipates.
+
+### 2026-11-01 — Step 14 — CI-equivalent fallback (golangci-lint), RED by reverting Step 13, live-DB test unproven, seed count as a delta
+- **Spec said**: write the tests red-first against the pre-Step-13 tree. The live-DB test asserts
+  `CountFundamentalsFetchedToday(ctx, "fmp") == 0` after 30 edgar rows, then `== 1` with an epoch-stamped fmp row.
+  Instruction 3 is a 503 "sibling with the same assertions". The PR body must record the live-DB run.
+- **Actual**:
+  - RED was captured by temporarily restoring Step 13's two production files from the Step 12 commit, then restoring
+    `HEAD` (not committed). The two SQL pins and both cancel-survival subtests failed. The AC-5, AC-10, merge and 4xx
+    service tests passed even then, because the store contract they exercise lives in the fake, which now models the
+    Step 13 SQL. They pin the service read path (TTL, cap, stale serve) against that contract; the SQL pins and the
+    live-DB test pin the real store.
+  - The 503 sibling drives a real `fmp.Client` against an `httptest` server whose profile answers 503, so the flag
+    travels end to end (the AC-5 test already covers the fake-source path). No new shared fixture (C-13).
+  - The live-DB test asserts the seed counts as a delta from a baseline (`baseline`, then `baseline+1`), because a
+    shared database can already hold today's fmp rows; an absolute `== 0` would be flaky there. The AC-10 edgar row
+    carries a `Beta` so the "no cross-source carry-over" assertion has something to catch.
+  - No database was available (`DATABASE_URL` unset; `/sdd-execute` never starts one), so the live-DB test SKIPs:
+    `fundamentals_livedb_test.go:18: DATABASE_URL not set`. Recorded as an Open Thread in context.md.
+  - The coverage command ran with its `COVERPKGS` list expanded inline (same package set); every package passes
+    under `-race`, total 72.6%. The operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported
+    `0 issues.`
+- **Disposition**: CI-equivalent fallback; the live-DB proof is an unproven-in-CI Open Thread.
