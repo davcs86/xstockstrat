@@ -589,7 +589,7 @@ cd services/xstockstrat-analysis \
 
 ### Step 8 — test: `/insights` reachability of the new reason and warning (C-10, C-12, C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/backtests.ts` — modify
@@ -881,3 +881,16 @@ _Populated by /sdd-execute as implementation proceeds._
   pre-existing inline builders outside this step's class; the diff adds none. They were left alone (out of scope).
 - No CI-equivalent tooling fallback was used in Step 7 (`uv sync --extra dev`, `uv run pytest` and `uv run ruff`, the
   service's own harness).
+- **Step 8 (2026-11-01) — stale citations.** Codebase Evidence cites `backtest-coverage.spec.ts:97-108` and :110-127;
+  on the branch head they were :94-107 and :109-124 (now :98-111 and :113-128 after the added import line). Evidence
+  only, no code impact.
+- **Step 8 (2026-11-01) — e2e run in CI mode.** **Disposition**: CI-equivalent fallback. The local `pnpm test:e2e`
+  default (`pnpm dev`, 10s test timeout) timed out in the `warmup.setup.ts` SSR pre-warm on a cold dev server. The
+  spec was run the way CI runs it: `pnpm build`, then `CI=1 E2E_PREBUILT=1 pnpm test:e2e
+  e2e/insights/backtest-coverage.spec.ts --project=chromium` (`next start`, CI timeouts, one retry, the
+  pre-installed Chromium from `PLAYWRIGHT_BROWSERS_PATH`). `pnpm install --frozen-lockfile` was run in the worktree
+  first (no `node_modules` here, none in the main worktree to symlink). Host Node is v22; root CLAUDE.md pins 24.
+  Noted, not a blocker.
+- **Step 8 (2026-11-01) — pre-existing `tsc` errors.** `tsc --noEmit` reports two errors in
+  `e2e/insights/backfills.spec.ts:135-136` (`dataKind` / `timeframeEnum` on `never`). That file is outside this
+  step's **Files** and unchanged; none of the four touched files has an error. Left alone (out of scope).

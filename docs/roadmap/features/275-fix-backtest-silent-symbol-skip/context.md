@@ -850,3 +850,19 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   `test_backtest_fundamentals_guard.py` and `test_warmup.py` are unchanged (68 passed).
 - Next: Step 8 (`/insights` reachability of the new reason and warning).
 
+### Step 8 — `/insights` reachability of the new reason and warning (2026-11-01, done)
+
+- `e2e/fixtures/backtests.ts`: `BACKTEST_EVAL_FAILED_WARNING = 'backtest symbol AAPL not evaluated: UNAVAILABLE'`
+  (mirrors analysis `EVAL_FAILED_WARNING`, C-12). `e2e/mock-backend.ts`: imports it and adds the
+  `strat-eval-failed-001` `RunBacktest` sentinel before `strat-formula-error-001` (status 2, no coverage gap, one
+  `AAPL` diagnostic `noTradeReason: 6`, `warnings: [BACKTEST_EVAL_FAILED_WARNING]`). `INVENTORY.md`: the fixture row
+  beside the 217 seed-span warning and the sentinel row beside `strat-fundamentals-etf-001`.
+- `e2e/insights/backtest-coverage.spec.ts`: imports the fixture from `../fixtures` and adds
+  `evaluation-failed backtest renders the not-evaluated reason and the warning` (banner text
+  `stopped this symbol from being evaluated`, the `backtest-warnings` card carries the fixture string,
+  `insufficient-data` count 0).
+- TDD: RED with the fixture and spec but no mock branch: the new test failed (no `no-trade-reason` element). GREEN:
+  13 passed in the spec file (chromium).
+- Verification: `pnpm run lint` passed (pre-existing warnings only); both greps hit; e2e ran in CI mode (Deviation
+  Log, CI-equivalent fallback). `tsc --noEmit` shows only two pre-existing `backfills.spec.ts` errors.
+- Next: Step 9 (agent `run_backtest` docstring and `docs/runbooks/mcp-tools.md`).
