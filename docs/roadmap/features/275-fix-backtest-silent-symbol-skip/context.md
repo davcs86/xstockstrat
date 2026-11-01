@@ -632,3 +632,19 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
     `mock-backend.ts` `strat-fundamentals-etf-001` :1123-1142; `INVENTORY.md` rows :36 and :66-67; agent `tools.py`
     :784-785 and :803-813; `mcp-tools.md` :324-325, plus the No-attachment paragraph at :395-398, which Step 9 now
     also corrects.
+
+## Session 2026-11-01 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute fix-backtest-silent-symbol-skip sequential`, run by `sdd-batch-execute` in its own worktree
+  (single writer, P-01). The operator gave the up-front sequential confirmation (mode entry), so per-step
+  confirmation is replaced by the plan's operator checkpoints.
+- Lifecycle `implementation-ready` → `in-progress` (`status.md` and the `feature.md` history row).
+- Branch base: `c5400f8a` already contains `origin/main-dev`, and the ledger guard is clean. The steps were re-spec'd
+  in the session entry above.
+- Tooling (operator-approved CI-equivalent fallbacks; each one used is logged in the `implementation-spec.md`
+  Deviation Log): golangci-lint v2.14.0 at `/usr/local/bin/golangci-lint`; `./scripts/localenv-setup.sh` (Docker
+  `Dockerfile.codegen`, buf 1.72.0) for buf lint/breaking and codegen; never start a database. Node is v22 while the
+  root pins 24. This is noted and is not a blocker.
+- Next: Step 1 (the re-anchor gate, whose answers are pre-recorded above and are re-confirmed by its Verification grep).
+- Open threads carried forward: the merge-order rows (275 after 272, 273 and 215) are still not written to
+  `docs/roadmap/features/merge-order.md`, because they are router-owned and need operator confirmation.
