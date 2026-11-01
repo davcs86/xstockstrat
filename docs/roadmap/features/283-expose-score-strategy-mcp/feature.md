@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-01 | `idea` → `draft` | /sdd-story | Product spec generated (gap from 215 Step 26 (e)) |
+| 2026-11-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; first pass FAILED on open questions, resolved by operator) |
 
 ---
 
@@ -37,4 +38,4 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 ## Next Action
 
-`/sdd-review expose-score-strategy-mcp product-spec` — AI review of product spec before running /sdd-design
+`/sdd-design expose-score-strategy-mcp` — full design recommended (same-function overlap with 215 on `manage_strategy`; option C may touch `xstockstrat-analysis`; `score` has no `STRATEGY_OPERATION_*` enum and needs separate RPC dispatch)

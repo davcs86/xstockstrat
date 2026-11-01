@@ -57,4 +57,4 @@ Feature: expose-score-strategy-mcp
   @AC-10 @FR-4
   Scenario: The score operation is documented in the runbook and the strat-lab skill
     When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are read
-    Then both describe manage_strategy operation "score" including its side effects, and a parity test fails if the documented operations diverge from the tool's accepted operations
+    Then both describe manage_strategy operation "score" including its side effects, and the documented operations equal the tool's accepted operations

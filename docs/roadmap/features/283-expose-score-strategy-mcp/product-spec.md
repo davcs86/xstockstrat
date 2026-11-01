@@ -25,7 +25,7 @@ FR-1. `manage_strategy` accepts `operation='score'` with `strategy_id`. It calls
 FR-2. The `manage_strategy` docstring states the `score` side effects: it recomputes and persists the grade and emits an `analysis.strategy.scored` ledger event, and the time range is ignored (the whole eligible evidence base is used).
 FR-3. gRPC errors map to actionable messages: `PERMISSION_DENIED` (not owned/missing), `NOT_FOUND` (no eligible evidence; the stale grade is cleared — both the "run a backtest" and the "all evidence symbols excluded (fundamentals unavailable: …)" variants), `UNAVAILABLE` (store down, or fundamentals availability unknown with the grade unchanged).
 FR-4. The `score` operation is documented in `docs/runbooks/mcp-tools.md` and the `strat-lab` `backtest` skill reference (same PR). No tool-count surface changes (count stays 45); an executable guard asserts the count surfaces still agree.
-FR-5. A successful `score` result names the symbols the refresh excluded from the grade's evidence (215's check), not only how many contributed — via the `excluded` list `ScoreStrategy` already computes, without a new proto field (decision above).
+FR-5. A successful `score` result carries `excluded_symbols` (a list of strings; `evidence_symbols` stays the integer count of contributing symbols) naming the symbols the refresh excluded from the grade's evidence (215's check) — via the `excluded` list `ScoreStrategy` already computes, without a new proto field (decision above).
 
 ## Out of Scope
 
@@ -77,5 +77,5 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [x] Tool shape — resolved: expand `manage_strategy` with `operation='score'`.
 - [x] Authorization — resolved: owner-scoped, not admin-gated.
 - [x] Tool-count merge-order — resolved: count stays 45, no race with 281; 215↔283 ordering recorded in `merge-order.md`.
-- [ ] _Design-phase:_ which no-proto channel carries `excluded` from analysis to the agent (trailing metadata vs. another existing field), and how `manage_strategy`'s `operation` validation/dispatch accommodates a read-shaped-args write op.
+- **Deferred to `/sdd-design` (not a blocker):** which no-proto channel carries `excluded` from analysis to the agent (trailing metadata vs. another existing field), and how `manage_strategy`'s `operation` validation/dispatch accommodates a read-shaped-args write op. Design must also pass the server's NOT_FOUND detail through `_grpc_error_message` for `score` so AC-3/AC-8 keep their specific messages. AC-7 re-opens to the operator if no channel is viable.
 - **Known trap (ledger `fails.md` 2026-08-02 mcp-tools-alignment-triage):** MCP prose, runbook and `strat-lab` skill drift from `client.py`/protos. Design must add an executable parity guard (descriptor-parity test like `test_backtest_view.py`), not prose only.
