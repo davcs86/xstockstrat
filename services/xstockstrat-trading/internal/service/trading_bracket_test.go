@@ -472,6 +472,12 @@ type fakeAccountRepo struct {
 	repository.AccountRepository
 	updateHaltStatusFn func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error
 	listActiveFn       func(ctx context.Context) ([]*repository.BrokerAccountRecord, error)
+	statusWrites       []int32
+}
+
+func (f *fakeAccountRepo) UpdateCredentialStatus(_ context.Context, _ string, status int32, _ time.Time) error {
+	f.statusWrites = append(f.statusWrites, status)
+	return nil
 }
 
 func (f *fakeAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {

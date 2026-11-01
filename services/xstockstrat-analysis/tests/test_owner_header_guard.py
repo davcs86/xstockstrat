@@ -19,12 +19,12 @@ from gen.analysis.v1 import analysis_pb2
 from app import main as app_main
 from app.engine import entry_backfill
 from app.engine.fundsignal_loop import FundamentalsSignalLoop
-from app.engine.live_loop import LiveEvaluationLoop, resolve_fundamentals_universe
+from app.engine.live_loop import resolve_fundamentals_universe
 from app.engine.pnl_pattern_consumer import SnapshotComposer
 from app.handlers import servicer as servicer_mod
 from app.handlers.servicer import _row_to_strategy_definition
 from app.services.evaluator import StrategyEvaluator
-from tests.conftest import RecordingStub, ctx_with
+from tests.conftest import RecordingStub, ctx_with, fundamentals_row, real_live_loop
 from tests.test_analysis_servicer import make_servicer
 from tests.test_get_attribution import _FakePositionsRepo, _FakeSnapshotsRepo, _sig
 from tests.test_pnl_pattern_consumer import ORDER_PAYLOAD, make_consumer, make_event
@@ -111,7 +111,8 @@ def _assert_indicators_headers(indicators, owner, path=None):
 
 
 def test_main_wires_no_channel_interceptor():  # AC-5: nothing below the stub adds a grant
-    assert "interceptors=" not in inspect.getsource(app_main)
+    src = inspect.getsource(app_main).replace("interceptors=server_interceptors()", "")
+    assert "interceptors=" not in src
 
 
 def _cfg(overrides=None):
@@ -137,20 +138,8 @@ def _marketdata():
 
 
 def _live_loop(ingest, indicators, rows):
-    db = MagicMock()
-    db.fetch = AsyncMock(return_value=rows)
-    portfolio = MagicMock()
-    portfolio.ListPositions = AsyncMock(return_value=SimpleNamespace(positions=[], page=_EOF))
-    portfolio.ListWatchlists = AsyncMock(return_value=SimpleNamespace(watchlists=[], page=_EOF))
-    return LiveEvaluationLoop(
-        config_watcher=_cfg(),
-        db_pool=db,
-        marketdata_stub=_marketdata(),
-        ingest_stub=ingest,
-        notify_stub=AsyncMock(),
-        ledger_stub=AsyncMock(),
-        evaluator=StrategyEvaluator(indicators, ()),
-        portfolio_stub=portfolio,
+    return real_live_loop(
+        ingest, indicators, rows, config_watcher=_cfg(), marketdata_stub=_marketdata()
     )
 
 
@@ -177,10 +166,17 @@ async def test_entry_backfill_run_once():
     loop = _live_loop(ingest, RecordingStub(), [])
     db = MagicMock()
     db.fetch = AsyncMock(return_value=[_row()])
-    trading = MagicMock()
-    trading.ListOrders = AsyncMock(return_value=SimpleNamespace(orders=[]))
+    trading = RecordingStub({"ListOrders": SimpleNamespace(orders=[])})
     await entry_backfill.run_once(loop, db, trading, _cfg())
     _assert_owner_headers(ingest)
+    # _row() is signal-eligible with no allowlist; the ingest stub returns MSFT, so a pair exists.
+    assert trading.calls, "no ListOrders issued — the guard would be vacuous"
+    for method, req, meta in trading.calls:
+        assert method == "ListOrders"
+        assert [v for k, v in meta if k == "x-user-id"] == ["bob"], meta
+        trace_ids = [v for k, v in meta if k == "x-trace-id"]
+        assert len(trace_ids) == 1 and trace_ids[0], meta
+        assert req.user_id == "bob"
 
 
 async def test_pnl_handle_order_event():
@@ -218,7 +214,7 @@ def _fundsignal_loop(ingest, indicators):
     loop._db.fetchrow = AsyncMock(return_value={"symbol": "AAPL"})
     loop._marketdata.GetFundamentalsMulti = AsyncMock(
         side_effect=lambda req, metadata=(): SimpleNamespace(
-            fundamentals=[SimpleNamespace(symbol=s, **_FUND_VALUES) for s in req.symbols]
+            fundamentals=[fundamentals_row(s, **_FUND_VALUES) for s in req.symbols]
         )
     )
     return loop

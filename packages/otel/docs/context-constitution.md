@@ -1,20 +1,20 @@
 # packages/otel — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped; OTEL-2 evidence-weakened note: no service exports metrics). Captures the **non-obvious**
+Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — OTEL-1 re-grounded on Tempo, OTEL-2 retired, collector line hints re-stamped). Captures the **non-obvious**
 invariants of the OTel package (Collector config + checked-in Grafana provisioning; local-dev only —
 production pushes OTLP straight to Grafana Cloud). Does not restate documented/CI-enforced rules
 (see `## Pointers`).
 
 > Inherits all rules of the root constitution (`../../../docs/context-constitution.md`). This file lists only
-> what is specific to **packages/otel** (chiefly the alert/dashboard metric contracts; the env-only
+> what is specific to **packages/otel** (chiefly the short-`service.name` addressing rule; the env-only
 > OTLP/HTTP export rule lives in the root as PLAT-3).
 
 ## Rules (`OTEL-*`) — binding, easy-to-miss conventions
 
 | ID | Rule | Why | Evidence | Example (canonical `path:line`) |
 |---|---|---|---|---|
-| **OTEL-1** | **Alerts and dashboards address a service by its **short** `service.name` (`analysis`), NOT the container name (`xstockstrat-analysis`).** | Grafana promotes the OTel `service.name` resource attr to the `service_name` label; an alert filtering on the container name silently never fires. | `alerts/alert-rules.yaml#{service_name="analysis"} (~L134)`; `dashboards/README.md#Grafana Cloud promotes (~L42)` | `packages/otel/alerts/alert-rules.yaml#{service_name="analysis"} (~L134)` |
-| **OTEL-2** | **Alerts/dashboards hard-code the OTLP→Prometheus histogram `rpc_server_duration_milliseconds` and label `rpc_grpc_status_code="0"` (=OK).** A service emitting a differently-named histogram (or Grafana mapping it `_ms`) makes the alerts silently never fire. | The metric name is the cross-cutting contract between each service's gRPC instrumentation and the provisioned alerts. | `alerts/alert-rules.yaml#rpc_server_duration_milliseconds_count (~L44-45)`, `#rpc_server_duration_milliseconds_bucket (~L88)`; all 4 dashboards. > ⚠ evidence weakened as of 2026-10-19: no service creates a MeterProvider/OTLP metric exporter (`rg 'MeterProvider\|OTLPMetricExporter\|otlpmetric\|PeriodicExportingMetricReader' services/` empty; `services/xstockstrat-ui/src/telemetry.ts#metricReaders: [] (~L31)`), so the histogram these alerts depend on may never be produced — see findings. | `packages/otel/alerts/alert-rules.yaml#rpc_server_duration_milliseconds_count (~L44-45)` |
+| **OTEL-1** | **Alert and dashboard queries address a service by its **short** `service.name` (`analysis`), NOT the container name (`xstockstrat-analysis`).** The same short name is the metric label and Loki stream: `rpc_server_duration_milliseconds_*{service_name="analysis"}`, `{service_name="analysis"}`. | In TraceQL a container-name filter (`resource.service.name = "xstockstrat-analysis"`) matches no span, and `service_name="xstockstrat-analysis"` matches no series or stream, so the panel is silently empty. | `dashboards/service-health.json#resource.service.name = "analysis"` (panel (c)); `alerts/alert-rules.yaml#xstk-analysis-no-scoring` | `packages/otel/dashboards/service-health.json#resource.service.name = "analysis"` |
+| **OTEL-2** | **Alert and dashboard metric names and Loki literals are exactly what the runtimes produce.** `rpc_server_duration_milliseconds_{count,bucket,sum}` (labels `service_name`, `rpc_service`, `rpc_method`, `rpc_grpc_status_code`), `mcp_tool_duration_milliseconds_*`, `http_server_duration_milliseconds_*`, the Loki stream `{service_name="<short name>"}` and the heartbeat line `live_loop: cycle complete` are **produced**; everything an asset queries is registered in `produced-signals.tsv` and enforced by `scripts/check-otel-produced-signals.sh`. Every `rpc_server_duration_*` selector excludes the proto-derived server-streaming methods. (Un-retired by feature 274; retired by feature 250 while nothing was produced.) | A series nothing produces makes an alert read empty and never fire, which is how the original gap went unnoticed. Accepted asymmetries (feature 274 design): an unsampled inbound `traceparent` records no Python/Node RPC point; Node cancelled streams and Go `os.Exit(1)` paths can lose the last points; the UI flush on shutdown is best-effort. | `produced-signals.tsv`; `scripts/check-otel-produced-signals.sh` (Parts 1, 4, 5) | `packages/otel/produced-signals.tsv` |
 
 ## Gotchas & scars
 
@@ -24,9 +24,9 @@ production pushes OTLP straight to Grafana Cloud). Does not restate documented/C
 
 | What | Where |
 |---|---|
-| Grafana Cloud OTLP exporter (single endpoint, gzip, retry) via `${env:…}` | `otel-collector-config.yaml#otlphttp/grafana (~L48-62)` |
-| Prod has no collector; services push OTLP direct to Grafana Cloud | `otel-collector-config.yaml#no collector deployment is needed there (~L17-18)` |
-| Alert/dashboard purpose, UIDs, substitution steps; market-hours mute timing | `alerts/README.md`, `dashboards/README.md`, `alerts/mute-timings.yaml` |
+| Grafana Cloud OTLP exporter (single endpoint, gzip, retry) via `${env:…}` | `otel-collector-config.yaml#otlphttp/grafana (~L49-63)` |
+| Prod has no collector; services push OTLP direct to Grafana Cloud | `otel-collector-config.yaml#no collector deployment is needed there (~L18-19)` |
+| Alert rules and dashboards (purpose, import, substitutions, the produced-signals registry) | `alerts/README.md`, `dashboards/README.md`, `produced-signals.tsv` |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the

@@ -35,10 +35,10 @@ _None currently open_ — the 3 unwired config keys (`notify.stream.max_subscrib
 - `ListAlerts.unreadCount` ignores both `limit` and `unreadOnly` (counts all targeted-or-broadcast unread alerts for the user) — intended? `src/grpc/notifyServiceImpl.ts#listAlerts` — status: **open**
 - `unregisterPushSubscription` takes no `x-user-id` at all, not even a presence check (consistent with NOTIFY-6) — intended? — status: **open**
 - The acknowledged-flag filter in `matchesSubscriber` looks unreachable on the live stream, since every emitted alert has `acknowledged: false` — status: **open**
-- ⚠ An empty `targetUserId` broadcasts a Web Push to **EVERY subscription of EVERY user** (unfiltered `SELECT … FROM notify.push_subscriptions`) — consistent with `StreamAlerts` broadcast semantics, but for OS-level device notifications one untargeted alert pings all users' installed PWAs. Is cross-user push broadcast intended, or should untargeted alerts skip push? `src/fanout/webPush.ts#dispatch` (unfiltered branch ~L97-101; targeted branch ~L91-96, query ~L93) — status: **open**
 
 ## Resolved
 
+- **RESOLVED 2026-10-29 — resolved by feature 242 (admin-only untargeted audience).** An empty `targetUserId` used to Web-Push **every subscription of every user** (unfiltered `SELECT … FROM notify.push_subscriptions`), so one untargeted alert pinged all users' installed PWAs (open question, 2026-09-02). `src/fanout/webPush.ts#dispatch` now resolves the untargeted audience to admin-role users via a live identity `ListAdminUserIds` call (`src/services/adminDirectory.ts`) and queries `WHERE user_id = ANY($1::text[])` (~L116); a lookup failure skips the push. Per-user producers (portfolio risk, analysis live loop) now set `target_user_id`. The invariant is NOTIFY-8 in the constitution.
 - **RESOLVED 2026-09-03 — `WEBPUSH_HTTP_TIMEOUT_MS` was named as an HTTP timeout but consumed as the Web Push message TTL (10s), so any device offline > 10s silently missed OS alerts and no real send timeout was enforced (latent bug, 2026-09-02).** The mis-named constant is gone; current code splits it into `WEBPUSH_TTL_SECONDS = 3600` and `WEBPUSH_SEND_TIMEOUT_MS = 10000` (`src/fanout/webPush.ts:15-16`), passes both distinctly to `webpush.sendNotification({ TTL, timeout })` (`:148-151`), and adds a regression test asserting the deliberate 1h TTL + a real socket timeout (`src/__tests__/webPush.test.ts:200-224`). Both prongs — "no send timeout" and "10s TTL drops offline devices" — are fixed. Confirmed by re-resolving the citations against current code. The invariant is now captured as the TTL-vs-send-timeout scar in the constitution.
 
 
@@ -56,6 +56,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 | [`2026-10-19-notify-stream-ignores-backpressure-defect`](../../../docs/reports/2026-10-19-notify-stream-ignores-backpressure-defect.md) | StreamAlerts fan-out ignores write backpressure (unbounded buffering) |
 | [`2026-10-19-notify-untargeted-push-broadcasts-all-users-defect`](../../../docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md) | Untargeted alert sends a Web Push to every user's devices |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
+| [`2026-10-28-node-leaf-c8-check-coverage-unenforced-defect`](../../../docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.md) | Node-leaf c8 `--lines 40` is declared but never enforced (no `--check-coverage`) |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

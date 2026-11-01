@@ -29,6 +29,10 @@ Top level of each result file:
   - A fundamentals **outage** is different: the symbol gets no reason 5, no evidence cell, and a
     `warnings` entry `fundamentals fetch failed for <SYM> — rerun`. Rerun it; do not read it as a
     no-signal.
+- `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` and
+  `FAILED_PRECONDITION` `backtest bar series incomplete: …` are RPC errors, not result fields:
+  there is no result file to parse. Unlike the fundamentals-outage `warnings` entry above,
+  `backtest bar series incomplete` is not fixed by a rerun — report it.
 
 ## Extract-summary recipe
 

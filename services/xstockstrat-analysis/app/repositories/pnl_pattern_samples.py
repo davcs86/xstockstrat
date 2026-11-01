@@ -11,7 +11,7 @@ class PnLPatternSamplesRepository:
     def __init__(self, db):
         self._db = db
 
-    async def insert_many(self, db, rows: list[dict]) -> None:
+    async def insert_many(self, db, rows: list[dict], *, timeout: float | None = None) -> None:
         for r in rows:
             await db.execute(
                 """
@@ -30,6 +30,7 @@ class PnLPatternSamplesRepository:
                 r["closed_at"],
                 r["close_event_id"],
                 r["position_id"],
+                timeout=timeout,
             )
 
     async def query(

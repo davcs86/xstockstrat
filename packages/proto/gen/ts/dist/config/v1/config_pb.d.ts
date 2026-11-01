@@ -294,7 +294,10 @@ export type SetConfigRequest = Message<"xstockstrat.config.v1.SetConfigRequest">
      */
     value?: ConfigValue | undefined;
     /**
-     * @generated from field: string author = 4;
+     * deprecated (feature 241): ignored; attribution is the propagated x-user-id or authorized x-internal-caller
+     *
+     * @generated from field: string author = 4 [deprecated = true];
+     * @deprecated
      */
     author: string;
     /**

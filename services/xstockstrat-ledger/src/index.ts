@@ -1,21 +1,26 @@
-import { initTelemetry } from './telemetry';
+import { initTelemetry, shutdownTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
 import * as mtls from './mtls';
+import { resolveDbConnection } from './dbTls';
 import { getLogger } from './services/logger';
 import { ConfigWatcher } from './services/configWatcher';
 import { LedgerServiceImpl } from './grpc/ledgerServiceImpl';
 import { createLedgerServiceDefinition } from './grpc/serviceDefinition';
 import { EventNotifier } from './services/eventNotifier';
-import { Pool, Client } from 'pg';
+import { makeListenerClient, makeResolveRow } from './services/eventRowResolver';
+import { Pool } from 'pg';
 
 const log = getLogger('ledger:server');
 
 async function main() {
+  const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);
+  if (dbConn.ssl !== false) {
+    log.info('db-tls: verifying server cert against DATABASE_CA_CERT');
+  }
   const configEndpoint = process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060';
   const grpcPort = process.env.GRPC_PORT ?? '50057';
-  const databaseUrl = process.env.DATABASE_URL ?? '';
 
   // Subscribe to config before accepting traffic
   log.info(`Connecting to config service at ${configEndpoint}`);
@@ -23,32 +28,21 @@ async function main() {
   await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
-  const sslDisabled = databaseUrl.includes('sslmode=disable');
-  let dbUrl = databaseUrl;
-  if (!sslDisabled) {
-    try {
-      const u = new URL(databaseUrl);
-      u.searchParams.delete('sslmode');
-      dbUrl = u.toString();
-    } catch { /* keep original if URL parsing fails */ }
-  }
-  const caCert = process.env.DATABASE_CA_CERT;
-  const sslOption = sslDisabled ? false : {
-    rejectUnauthorized: !!caCert,
-    ...(caCert ? { ca: caCert } : {}),
-  };
   const pool = new Pool({
-    connectionString: dbUrl,
+    connectionString: dbConn.connectionString,
     // Query pool default 1: total ledger DB conns = 2 (pool + dedicated listener),
     // within the shared cluster budget. Override with DB_POOL_MAX.
     max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
-    ssl: sslOption,
+    ssl: dbConn.ssl,
   });
   await pool.query('SELECT 1');
   log.info('Database connected');
 
-  // Dedicated LISTEN/NOTIFY connection (separate from the query pool) so live streams never starve AppendEvent.
-  const notifier = new EventNotifier(() => new Client({ connectionString: dbUrl, ssl: sslOption }));
+  // Dedicated LISTEN/NOTIFY connection (separate from the query pool) so live streams never starve AppendEvent;
+  // it also resolves trimmed NOTIFY rows, so the pool is never borrowed for them.
+  const notifier = new EventNotifier(makeListenerClient(dbConn.connectionString, dbConn.ssl, configWatcher), {
+    resolveRow: makeResolveRow(configWatcher),
+  });
   await notifier.start();
   log.info('Event notifier started');
 
@@ -72,7 +66,14 @@ async function main() {
 
   const shutdown = async () => {
     log.info('Shutting down ledger service...');
+    // Open StreamEvents streams block tryShutdown, so flush telemetry in parallel and force the stop.
+    const flush = shutdownTelemetry();
+    setTimeout(() => {
+      grpcServer.forceShutdown();
+      flush.finally(() => process.exit(0));
+    }, 5000).unref();
     grpcServer.tryShutdown(async () => {
+      await flush;
       await notifier.stop();
       await pool.end();
       process.exit(0);

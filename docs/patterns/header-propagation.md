@@ -34,16 +34,18 @@ re-authenticate — at most they perform a **role check** on the propagated `x-a
 ### Documented exception: indicators formula author-ownership
 
 `xstockstrat-indicators` formula management (`UpdateFormula` / `DeleteFormula`) keeps a distinct
-**author-ownership** check (`row.author == request.user_id`) as its primary authorization model — a
-deliberate, documented exception to the pure role-check model. Feature 049 added an **admin-scope
-override** (`x-access-scope & 0x04`) so platform admins can manage any formula, and closed the
-`RegisterFormula` gap — no silent `"dev-user"` default. Note the actual precedence, which an earlier
-version of this line stated backwards: an explicit `request.author` **wins**, the propagated
-`x-user-id` is the **fallback**, and the call is rejected only when both are empty
-(`services/xstockstrat-indicators/app/handlers/servicer.py`). `xstockstrat-config`'s `SetConfig`
-follows the same precedence (feature 074). This is a *presence* guarantee — no anonymous writes —
-not an authenticity guarantee: a caller that can assert `x-access-scope` can equally assert
-`x-user-id`.
+**author-ownership** check (stored `author` == the caller's `x-user-id`) as its primary authorization
+model — a deliberate, documented exception to the pure role-check model. There is no admin override
+for formula writes (feature 224), and `RegisterFormula` has no silent `"dev-user"` default.
+
+Write attribution comes from headers only, in both services: indicators `RegisterFormula` stamps
+`author` from `x-user-id` and ignores the body `author`
+(`services/xstockstrat-indicators/app/handlers/servicer.py`), and `xstockstrat-config`'s `SetConfig`
+credits `x-user-id` (or the `callerID` of an authorized `x-internal-caller` grant) and ignores the
+deprecated `SetConfigRequest.author` (feature 241). A missing identity is rejected (indicators
+`UNAUTHENTICATED`, config `INVALID_ARGUMENT`). This is a *presence* guarantee — no anonymous writes —
+not an authenticity guarantee: identity is propagated, not authenticated, so a caller that can assert
+`x-access-scope` can equally assert `x-user-id`.
 
 ## Go services
 
@@ -120,8 +122,17 @@ async def _background_task(self, arg, propagation_meta=()):
 Backend Node.js services are **gRPC-only** (`@grpc/grpc-js`). Use `AsyncLocalStorage` to carry
 the three headers from the inbound gRPC call's metadata to any outbound gRPC clients.
 
-The pattern below is the template a Node leaf would use if it made outbound per-request gRPC
-calls; none currently does, so there is no live reference store (the former per-leaf
+Two Node leaves make outbound per-request gRPC calls, and both use **explicit inbound-metadata
+threading** instead of the store: the handler passes `call.metadata` down, and the client copies the
+trio into a fresh `grpc.Metadata` through an inline `PROPAGATED_HEADERS` const. This is an accepted
+Node form beside the AsyncLocalStorage template below:
+
+- identity → ledger admin-audit writes: `services/xstockstrat-identity/src/grpc/ledgerAudit.ts`
+  (`PROPAGATED_HEADERS` `:14`, copy loop `:40-44`);
+- notify → identity `ListAdminUserIds`: `services/xstockstrat-notify/src/services/adminDirectory.ts`
+  (`PROPAGATED_HEADERS` `:11`, copy loop `:42-46`; feature 242).
+
+No Node leaf runs the AsyncLocalStorage store, so it has no live reference (the former per-leaf
 `src/middleware/propagation.ts` copies were unused and removed in feature 175).
 
 ```typescript
@@ -167,3 +178,8 @@ propagation path. Recent additions:
   analysis→trading edge; it forwards `x-user-id`/`x-access-scope`/`x-trace-id` through the analysis
   servicer's per-method forwarding (feature 049), so no new wiring was needed — the edge is
   non-cyclic (trading never calls analysis).
+- **`xstockstrat-notify` → `xstockstrat-identity`** (feature 242): an untargeted alert's Web Push
+  resolves its audience with `ListAdminUserIds` (`IDENTITY_ENDPOINT`). notify forwards the emitting
+  producer's trio, but the RPC is **header-blind**: identity authorizes it by the exact mTLS peer SAN
+  `xstockstrat-notify` alone (`services/xstockstrat-identity/src/grpc/adminDirectory.ts`), so a
+  forwarded `x-access-scope` confers nothing. The edge is non-cyclic (identity never calls notify).

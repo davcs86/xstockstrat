@@ -168,6 +168,8 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   copilot-aware `queryEvents`): the BFF forces `stream_key=copilot:<user>:default` +
   `event_type=copilot.message` server-side from the verified session, so the browser never learns
   the user id and can only touch its own thread. No agent DB, no LLM, no new pool (F-06).
+  For other keys the same `queryEvents` checks `account:` keys against trading `ListBrokerAccounts`
+  and forces ledger `owner_only` server-side on every remaining key (feature 263).
 - **Mobile companion** — one shared `src/components/mobile/SectionRenderer.tsx` (section kinds
   `head/stat/signal/signalGroup/chart/row/form/note/action`, ≥44px tap targets) drawn behind
   `sm:hidden` beside the desktop layout, plus a fixed `BottomTabBar` (mobile-only) mounted globally in
@@ -232,7 +234,7 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/lib/headers.ts` | shared | **Canonical** propagation header names (`HEADER_USER_ID` / `HEADER_ACCESS_SCOPE` / `HEADER_TRACE_ID`). The DRY guard rail bans the raw `x-*` literals elsewhere. |
 | `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_*`) for cross-segment links/fetches. |
 | `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
-| `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Route protection, token refresh, trace-ID injection; matcher must include `/`. Near-expiry refresh calls `identity.ts` `refreshSession()` **in-process** (no self-`fetch` to `/api/auth/refresh`); the `api/auth/refresh` matcher exclusion is **kept** because that route still has a live browser caller (`src/lib/authRedirect.ts`). |
+| `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Route protection, token refresh, trace-ID injection; matcher must include `/`. Near-expiry refresh calls `identity.ts` `refreshSession()` **in-process** (no self-`fetch` to `/api/auth/refresh`); the `api/auth/refresh` matcher exclusion is **kept** because that route still has a live browser caller (`src/lib/authRedirect.ts`). The eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check (no prefix match, so lookalikes stay gated); `agent-health` still returns its own 401 (feature 271). |
 | `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove.** Statically prerendered auth pages get `s-maxage=31536000`, and the prod edge (Cloudflare) ignores `Vary: RSC`, so it cross-serves the `text/x-component` RSC/Flight prefetch payload to document navigations — the browser then renders raw Flight text (incl. Next's built-in "404: This page could not be found." string), surfacing as the login route "not found". |
 | `src/app/auth/{login,oauth-login}/page.tsx` | Browser / Server | Unified login (domain root, outside all basePaths) + OAuth agent login. Kept non-static by the segment layout above. `oauth-login` is a server page: it follows only the server-resolved `${AGENT_PUBLIC_URL}/oauth/callback` (exact `agent_cb` match, `src/lib/oauthCallback.ts`), never the client-supplied URL. |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |
@@ -294,10 +296,11 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 AGENT_PUBLIC_URL            # runtime (never NEXT_PUBLIC_*): /accounts connector URL + the /auth/oauth-login callback check; unset ⇒ every OAuth agent login is rejected
 VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
+DATABASE_CA_CERT            # feature 266 — config-ui audit route only; DB CA PEM, required unless DATABASE_URL has exactly sslmode=disable. Missing on a TLS URL (or any ssl*/uselibpqcompat URL param) ⇒ the route logs the error and returns a generic 500
 DB_POOL_MAX=1               # config-ui audit pool cap
 OTEL_ENABLED                # toggle OTel; init errors never block startup
 OTEL_EXPORTER_OTLP_ENDPOINT
-SERVICE_NAME=xstockstrat-ui
+SERVICE_NAME=ui
 ```
 
 ## Frontend gotchas
@@ -352,7 +355,7 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
 
 ## Observability
 
-OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. See
+OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. The UI exports traces, metrics and logs (all OTLP/HTTP, env-only exporters): `src/lib/bffMetrics.ts` records `http.server.duration` for unary Connect BFF calls and the wrapped REST routes (server streams excluded), and `src/lib/serverLog.ts` writes the usual console line and also emits an OTel log record. `telemetry.ts`'s own console lines stay stdout-only (recursion guard). See
 `docs/patterns/observability.md`.
 
 ## Testing
@@ -406,7 +409,7 @@ real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contai
 | Config-UI audit (DB) | `src/app/config-ui/api/audit/route.ts` |
 | Next config | `next.config.js` |
 | Dockerfile | `Dockerfile` |
-| OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts` |
+| OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts`, `src/lib/bffMetrics.ts`, `src/lib/serverLog.ts` |
 | E2E | `e2e/`, `playwright.config.ts` |
 | Shell nav model (083) | `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx` |
 | Enum render maps (083) | `src/lib/opportunityShared.tsx` |

@@ -429,3 +429,442 @@ Per the grilling protocol `design.md` is not written and `status.md` stays `spec
 ## Session 2026-10-22 (operator decision — merge order vs 257)
 
 - **Decided:** 263 merges **first**. `257-fix-ledger-query-pagination` rebases onto 263's ledger `QueryEvents` owner filter, builds its page token on top of it, and takes the next free `QueryEventsRequest` field number (no field-7 collision). This resolves the impl-spec Open Thread "merge-order direction (257 waits for 263)". Step 12 item 6 may now write the `merge-order.md` row `263 → 257`.
+
+## Session 2026-10-28 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup (§5.3): `git merge -X ours origin/main-dev` into a detached checkout of
+  `origin/feature/fix-edge-owner-scope` (merge commit `e664e030`, pushed).
+- Re-spec of Steps 2, 5, 6, 7, 8, 9, 10, 11 and 12 (Instructions / Codebase Evidence / Files /
+  Verification only). No step's scope, order or acceptance mapping changed.
+  - Step 2: `scripts/buf-gen.sh` needs `grpcio-tools` (`python3 -m grpc_tools.protoc`), which is not on
+    the host. Added an install-if-missing instruction (PyPI is reachable). Not a blocker.
+  - Steps 5–11: line drift only (`dispatchConnect` `traderBff.ts:151`; mock default branch `:449-469`;
+    config `requestUserId` `:78`, invariant text `:40`; agent `client.py` `:2035/:2060/:2065/:2081`,
+    `tools.py` `:1601-1605/:1629-1633`; `TestSetConfigRequestParity` `:261`).
+  - Step 12: line drift (findings `:29`/`:46`, mcp-tools `:1052/:1059/:1077/:1085`). Item 6 is now
+    **verify-only**: the "257 waits for 263" row is already at `merge-order.md:78` (via main-dev), so no
+    duplicate is added. The 257 directory now exists on this branch (`implementation-ready`), and its
+    spec already rebases onto `owner_only = 7`. This resolves the Open Thread on merge-order direction.
+- Hook note: `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, and the
+  main worktree has no `node_modules` to symlink, so the husky pre-commit hook cannot run on this host.
+  No `--no-verify` was used.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`.
+- Up-front confirmation: the operator approved the up-front plan by standing authorization (operator
+  chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via
+  batch-execute; then "start batch 2 in parallel too"). Answers recorded:
+  - checkpoints are unattended and set to "report"
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule
+  - merge-train is authorized; 255 and 275 are deferred
+  - operator-only DB/prod steps: open the PR and hold the merge
+- Execution mode: one commit per step on `feature/fix-edge-owner-scope`, detached worktree, pushed
+  after each commit; a step's commit is made only after its verification passes.
+
+### Step 1 — proto: add `owner_only` to `QueryEventsRequest` (2026-10-28)
+
+- Added `bool owner_only = 7;` to `QueryEventsRequest` (`packages/proto/ledger/v1/ledger.proto:69`) with the
+  spec's 2-line constraint comment. TDD: N/A (proto contract; behaviour is tested in Steps 4/6/7).
+- Verification: `buf lint` passed; `buf breaking --against "<git-common-dir>#branch=origin/main-dev,subdir=packages/proto"`
+  passed (additive field); `grep -n "owner_only = 7"` returns one line.
+- Stubs are not regenerated in this commit, so the `proto-freshness` gate stays red until Step 2. This is expected.
+- The C-09 proto approval gate (Proto Reviewer plus the ledger and ui owners) is still open. It goes in the integration PR description.
+- Hook: `node_modules` is symlinked from the main worktree. `core.hooksPath` points at
+  `/home/user/xstockstrat/.husky/_`, which does not exist (`.husky/` holds only `pre-commit`), so the husky
+  pre-commit hook does not run. No `--no-verify` was used.
+
+### Step 2 — proto-gen: regenerate stubs (2026-10-28)
+
+- Ran `./scripts/buf-gen.sh` host-native (buf 1.72.0, grpcio-tools 1.80.0, Node 24.20.0 TS plugins;
+  `pnpm install --frozen-lockfile --filter @xstockstrat/proto` for `tsc`). TDD: N/A (generated code).
+- Pin drift found: the `~/go/bin` Go plugins are at the CI versions but were built with go1.24.7, and
+  their gofmt pass re-indented comments in `gen/go/analysis/v1/analysis.pb.go`. Reverted that file and
+  rebuilt the three plugins with go1.27.0 (CI `setup-go`) into a session-local `GOBIN`; the re-run touched
+  ledger files only (DEV-1). Future codegen on this host must use go1.27-built plugins or it will
+  produce the same non-ledger diff.
+- Verification: changed files are `ledger.pb.go`, `ledger_pb2.py`, `ledger.ts`, `ledger_pb.ts` and the
+  four `dist/ledger/v1/ledger{,_pb}.{js,d.ts}`; `buf lint` and `buf breaking` (against local `main-dev`)
+  passed inside the script; a second run left `git diff --stat packages/proto/gen/` identical (fresh).
+- Hook: `core.hooksPath` still points at the missing `/home/user/xstockstrat/.husky/_`, and the main
+  worktree has no `node_modules` to symlink, so the pre-commit hook does not run. No `--no-verify`.
+
+### Step 3 — service: ledger shared caller-owner helper + opt-in `queryEvents` owner predicate (2026-10-28)
+
+- Added exported `callerUserId(call)` beside `toValidDate` (carries the empty-caller/NULL-row constraint
+  comment); `exportEvents` now uses it (no behaviour change); `queryEvents` appends
+  `user_id = $n` bound to the caller only when `req.ownerOnly` — flag absent leaves SQL/params unchanged.
+  `streamEvents`/`getEvent` untouched.
+- Tooling setup (step 3): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile`.
+- TDD (AC-2/AC-7, scratch test vs `dist/`, DEV-2): red — 4/5 fail (`callerUserId` undefined; params
+  `[101]` lacked `''`/`'u-a'`; SQL lacked `AND user_id = $2`), baseline flag-absent case passed →
+  green — 5/5 pass. Existing `ledgerServiceImpl.test.ts` re-run against `dist/`: 29/29 pass
+  (exportEvents cases guard the helper extraction).
+- Verification: `pnpm run build` ok; `test:coverage` ok (in-repo run is vacuous for the impl, fails.md
+  feature 021); `lint` 0 errors; `grep callerUserId` → definition + one use each in `queryEvents` and
+  `exportEvents`.
+- Open for Step 4: `dist/__tests__/` is not emitted by `tsconfig.json`, so its verification command
+  needs adjusting (DEV-2).
+- Hook: ran via `git -c core.hooksPath=.husky/_` (worktree-local husky dir); shared config still points
+  at the missing main-worktree path. No `--no-verify`.
+
+## Session 2026-10-29 (sdd-execute sequential (sdd-batch-execute) — re-spec)
+
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended
+  checkpoints ("report"), C-16 promotion auto-confirmed unless it changes an existing @AC rule,
+  merge-train authorized, 255/275 deferred; operator-only DB/prod steps: open PR, hold merge; blocker
+  decisions 2026-10-29 recorded per feature. Status already `in-progress` (no transition).
+- Branch setup: `git merge -X ours origin/main-dev` (brought in 241 and 252) — merge commit `cbf94534`.
+- Re-spec (line drift only, every Files path unchanged):
+  - Step 7: mock `queryEvents` `:394-471`, default `order.filled` return `:450-470`; INVENTORY policy cite
+    is `:73` (not `:22-23`); noted the unrelated second `listBrokerAccounts` at `mock-backend.ts:1354` and
+    that no existing spec depends on the default AAPL `mock-order-001` row.
+  - Step 8: UI `ADMIN_SCOPE` at `auth.ts:79`; after the 241 merge config `listKeys` moved to `:527`
+    (`requestUserId` `:529`, SQL `:536`); `setConfig` header read at `:376`.
+  - Step 10: `_Caller`/`_CALLER` at `client.py:35-38`.
+  - Step 12: findings evidence now `ledgerServiceImpl.ts:186` / `:266` (post Step 3), `client.py:35-38`,
+    `trading.go:2246` / `:2277`.
+
+### Step 4 — test: ledger owner-predicate SQL capture (2026-10-29)
+
+- Added `captureQuery` (inline single-consumer capturing pool, C-13) beside `makeImpl`, and four
+  `describe('queryEvents')` cases reusing `makeStreamCall` for `x-user-id` (no re-declaration): (a)
+  `ownerOnly` + `u-a` → `WHERE user_id = $1 … LIMIT $2`, params `['u-a', 101]`; (b) `ownerOnly` with no
+  caller binds `''`; (c) flag absent is byte-identical to the pre-change `stream_key = $1 AND
+  event_type = $2 … LIMIT $3` with no `user_id`; (d) `ownerOnly` + `eventType` → `event_type = $1 AND
+  user_id = $2 … LIMIT $3`.
+- Tooling setup (step 4): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile
+  --filter xstockstrat-ledger...`; husky hooks installed with `pnpm exec husky` (worktree `.husky/_`).
+- TDD (AC-2/AC-7): red — against the pre-Step-3 impl (`5d81b32e`, restored temporarily, DEV-3) cases
+  a/b/d failed (`SELECT * FROM ledger.events  ORDER BY recorded_at ASC LIMIT $1` lacked `WHERE user_id = $1`;
+  `event_type = $1` lacked `AND user_id = $2`), case c passed as the baseline pin → green — 34/34 pass on
+  the compiled `node --test dist/__tests__/ledgerServiceImpl.test.js`.
+- Verification: `pnpm run build` ok; `test:coverage` 51/51 pass, 74.52% lines (≥40%), non-vacuous since
+  feature 252; `lint` 0 errors (warnings only); one `makeStreamCall` declaration.
+- Prettier: the pre-existing file is not prettier-clean; only the added hunks were formatted, the rest
+  left untouched (surgical diff).
+
+### Step 5 — service: trader BFF `queryEvents` three-branch owner scoping [done] (2026-10-29)
+
+- `queryEvents` builds `backendHeaders(claims, ctx)` once and takes the first matching branch: `copilot:`
+  → rewritten to `copilotStreamKey(user)`, `ownerOnly: false`; `account:<id>` → empty id or an id not in
+  trading `listBrokerAccounts` (same headers, errors uncaught) is `PERMISSION_DENIED`, an owned id forwards
+  unchanged with `ownerOnly: false`; anything else (incl. no key) → `ownerOnly: true`. Added the
+  `ConnectError`/`Code` import and module-local `ACCOUNT_STREAM_PREFIX`; handler comment replaced (2 lines).
+- Files modified: `services/xstockstrat-ui/src/lib/traderBff.ts`
+- Tooling setup (step 5): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile
+  --filter xstockstrat-ui... --filter .` (worktree-local `node_modules`, husky installed by `prepare`).
+- TDD (AC-1/AC-2/AC-7, uncommitted Step 6 draft test, DEV-4): red — 7/9 fail (`expected undefined to be
+  'permission_denied'` for foreign/empty `account:`; `expected undefined to be 'unavailable'`; `ownerOnly`
+  `expected false to be true` for no key / `portfolio:u-b` / browser override; C-03 no trading call), AC-3
+  account + copilot passed as baselines → green — 9/9 pass.
+- Verification: `grep backendHeaders(claims, ctx)` → one call in `queryEvents` (`:123`), shared by
+  `listBrokerAccounts` and both `queryEvents` calls; `pnpm run lint` 0 errors (pre-existing warnings only);
+  `tsc --noEmit` only the pre-existing `e2e/insights/backfills.spec.ts:135-136` errors (identical without
+  this change, DEV-4); `test:unit` 48 files / 247 tests pass.
+- Deviations: DEV-4 (RED/GREEN via uncommitted draft of the Step 6 test; pre-existing `tsc` error noted).
+
+### Step 6 — test: trader BFF `queryEvents` unit test (vitest) [done] (2026-10-29)
+
+- Created `src/lib/__tests__/traderBff.test.ts`: 9 cases driven through the real `dispatchConnect`
+  (`/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents`, JSON body + `access_token` cookie), with
+  `@/lib/auth` mocked (`u-a`, `['trader']`, fixed `generateTraceId`) and `@/lib/connectClients` mocked
+  (`listBrokerAccounts`/`queryEvents` `vi.fn`s, other clients `{}`). Covers AC-1 (foreign + empty `account:`
+  id), trading `Unavailable` pass-through, AC-3 (owned account, copilot via `copilotStreamKey('u-a')`),
+  AC-2/AC-7 (no key, `portfolio:u-b`), browser `ownerOnly:false` override, and C-03 (same `HEADER_USER_ID` /
+  `HEADER_TRACE_ID` on trading + ledger calls). C-12: inputs are scenario one-offs, kept inline.
+- Files modified: `services/xstockstrat-ui/src/lib/__tests__/traderBff.test.ts`
+- Tooling setup (step 6): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇ `pnpm install --frozen-lockfile
+  --filter xstockstrat-ui... --filter .` (worktree-local `node_modules`, husky installed by `prepare`).
+- TDD (AC-1/AC-2/AC-7, DEV-5): red — against the pre-Step-5 `traderBff.ts` (`54ef1a73~1`, restored
+  temporarily) 7/9 fail (`expected 200 to be greater than or equal to 400` foreign `account:`; `expected
+  undefined to be 'permission_denied'` empty id; `expected undefined to be 'unavailable'`; `ownerOnly`
+  `expected false to be true` for no key / `portfolio:u-b` / override; C-03 no trading call), AC-3 account +
+  copilot pass as baselines → green — 9/9 pass on the committed Step 5 code.
+- Verification: `vitest run src/lib/__tests__/traderBff.test.ts` 9/9; `test:coverage` 48 files / 247 tests
+  pass, `src/lib/**` 73.36% lines (≥40%, `*Bff.ts` excluded so unchanged); `lint` exit 0 (pre-existing
+  warnings only, none in the new file); prettier clean; `tsc --noEmit` only the pre-existing
+  `e2e/insights/backfills.spec.ts:135-136` errors (DEV-4).
+- Deviations: DEV-5 (RED via temporary restore of the pre-Step-5 handler, since Step 5 landed first).
+
+
+### Step 7 — test: trader BFF owner scoping end to end (e2e mock + fixtures + spec) [done] (2026-10-29)
+
+- Fixtures (`e2e/fixtures/ledgerEvents.ts`): added `OWNER_SCOPE_ORDER_FILLED_EVENTS`. It has three
+  `order.filled` `LedgerExportFixtureRow`s: the own `TEST_USER_ID` MSFT row, a foreign
+  `OWNER_SCOPE_FOREIGN_USER_ID` (= `TEST_USER_B_ID`) AAPL row, and a NULL-owned TSLA row on
+  `account:acct-legacy`. Also added `OWNER_SCOPE_FOREIGN_ACCOUNT_ID` (`acct-b`), the own and legacy
+  symbols, and the own and foreign copilot note texts.
+- `INVENTORY.md`: added a catalog row for these fixtures. The "Not yet centralized" ledger row no longer
+  lists the `order.filled` branch.
+- Mock (`e2e/mock-backend.ts`): the default `order.filled` branch now maps the fixture. It keeps only
+  `TEST_USER_ID` rows when `req.ownerOnly`, and no longer filters on `sourceService`. The
+  `copilotThreads` store is seeded with a foreign note under
+  `copilotStreamKey(OWNER_SCOPE_FOREIGN_USER_ID)`. The `account:` and copilot branches are unchanged.
+- Spec (`e2e/trader/ledger-owner-scope.spec.ts`): 4 tests use the api-smoke browser-`fetch` pattern
+  with `addAuthCookie`:
+  - AC-1: a foreign `account:` returns non-200 with `permission_denied`
+  - AC-2/AC-7: no foreign, NULL-owned or TSLA rows come back, and the own MSFT row does
+  - AC-3: an owned `account:alpaca-default` returns the reconciliation event
+  - AC-3 copilot: `AppendEvent`, then `QueryEvents` with the foreign copilot key, resolves to the
+    caller's thread; the appended note is present and the foreign note is absent
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/ledgerEvents.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/mock-backend.ts`,
+  `services/xstockstrat-ui/e2e/trader/ledger-owner-scope.spec.ts`
+- Tooling setup (step 7):
+  - node ✓ 24.20.0 · pnpm ✓ 9.15.9
+  - workspace deps ⬇ `pnpm install --frozen-lockfile --filter xstockstrat-ui... --filter .`
+    (worktree-local)
+  - Chromium pre-provisioned at `/opt/pw-browsers` (no `playwright install`)
+- TDD (AC-1/AC-2/AC-7, DEV-6):
+  - Red, against the pre-Step-5 `traderBff.ts` (`54ef1a73~1`, restored temporarily): 2/4 fail.
+    - AC-1: `expect(result.status).not.toBe(200)` got 200.
+    - AC-2: `events.some(userId === OWNER_SCOPE_FOREIGN_USER_ID)` expected false, got true.
+    - Both AC-3 cases pass as baselines.
+  - Green: 4/4 pass.
+- Verification:
+  - `playwright test ledger-owner-scope + positions-reconciliation + api-smoke` (`--project=chromium
+    --no-deps --timeout=120000`): 14/14 pass.
+  - Extra regression check: `copilot.spec.ts` + `trader/positions.spec.ts` 9/9 pass.
+  - The import grep shows `../helpers/auth`, `../fixtures` and `../fixtures/ledgerEvents`, and
+    `INVENTORY.md` lists `OWNER_SCOPE_ORDER_FILLED_EVENTS`.
+  - `pnpm run lint` exits 0.
+  - `tsc --noEmit` reports only the pre-existing `e2e/insights/backfills.spec.ts:135-136` errors (DEV-4).
+- Deviations: DEV-6:
+  - RED came from a temporary restore of the pre-Step-5 handler.
+  - `u-b` is the canonical `TEST_USER_B_ID`.
+  - The copilot foreign seed lives in the mock store, and the spec asserts "present", not "exactly one".
+  - The harness ran with `--no-deps`.
+  - `lint-staged` reformats the existing `CLOSED_POSITION_ROWS` rows (whitespace only).
+- Correction (2026-10-29, after commit `1ad6b0bd`): the `lint-staged` pass did **not** reformat the
+  `CLOSED_POSITION_ROWS` rows. A standalone `prettier --check` flags them, but that is pre-existing, and
+  the step diff contains only the added lines. DEV-6 has been amended to match.
+
+### Step 8 — service: config `boundReadUserId` on `GetConfig` / `ListKeys` (2026-10-29)
+
+- Files: `services/xstockstrat-config/src/grpc/authz.ts` (new exported `boundReadUserId` after
+  `userIdFrom`), `services/xstockstrat-config/src/grpc/configServiceImpl.ts` (import + the `getConfig`
+  and `listKeys` call sites). `watchConfig`, `getSecret`, `setConfig` and `resolveOverlayValues` are
+  unchanged, and still call `requestUserId` directly.
+- Tooling setup (step 8): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇
+  `pnpm install --frozen-lockfile --filter xstockstrat-config... --filter .` (worktree-local).
+- TDD (DEV-7): a draft of the Step 9 test, kept out of the commit.
+  - Red, on the pre-Step-8 tree: 2/5 fail. AC-4 `getConfig` and AC-5 `listKeys` bind `'u-b'` where
+    `'u-a'` is expected.
+  - Green: 5/5.
+- Verification:
+  - `pnpm run test:coverage`: 182/182 pass, 86.71% lines (threshold 40).
+  - `pnpm run lint`: 0 errors.
+  - The spec grep finds one definition and two call sites (`getConfig:318`, `listKeys:530`).
+- Bind-not-refuse (operator decision of 2026-10-22): a non-admin's foreign body id is rebound to the
+  header caller, with no error. Admin callers, header-less callers and an empty body id are passed through.
+
+## Session 2026-10-29 (sdd-execute sequential (sdd-batch-execute) — re-spec, second merge)
+
+- Up-front confirmation: operator standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended
+  checkpoints ("report"), C-16 promotion auto-confirmed unless it changes an existing @AC rule,
+  merge-train authorized, 255/275 deferred; operator-only DB/prod steps: open PR, hold merge; blocker
+  decisions 2026-10-29 recorded per feature. Status already `in-progress` (no transition).
+- Branch setup: plain `git merge --no-edit origin/main-dev` (no conflicts) — merge commit `1ae2437b`;
+  `ledger-guard --own-slug fix-edge-owner-scope --base origin/main-dev --fix` reported clean.
+- Re-spec (line drift only, every Files path unchanged):
+  - Step 9: `md(pairs)` builder at `setConfigAuthz.test.ts:43`.
+  - Step 10: `_Caller`/`_CALLER` at `client.py:39-42`; `get_config` `:2040` echo `:2065`;
+    `list_config_keys` `:2070` echo `:2086`; docstring `user_id` lines `tools.py:1603-1604`/`:1631-1632`.
+  - Step 11: `TestSetConfigRequestParity` at `test_config_tools.py:255` (patches `:277-278`);
+    `set_caller` `client.py:45`, `reset_caller` `:53`; conftest ADMIN/TRADER `:14-15`; conftest import
+    already at `test_config_tools.py:22`.
+  - Step 12: agent CLAUDE.md scope-selector text `:29-30`; findings `## Open questions` `:45`;
+    `watchConfig` `requestUserId` `configServiceImpl.ts:284`; accepted-gap cite `client.py:39-42`.
+
+### Step 9 — test: config read-binding matrix (2026-10-29)
+
+- Files: `services/xstockstrat-config/src/__tests__/readUserBinding.test.ts` (create) — a `boundReadUserId`
+  unit matrix (6 cases, inline `md()` builder) plus 8 cases over the real-server harness copied from
+  `scopeResolution.test.ts`, with a pool that captures the `getConfig` overlay params and the `listKeys`
+  `DISTINCT ON (key)` params and returns per-user rows keyed by `params[2]` (`u-a` 450 + one secret row,
+  `u-b` 900).
+- Tooling setup (step 9): node ✓ 24.20.0 · pnpm ✓ 9.15.9 · workspace deps ⬇
+  `pnpm install --frozen-lockfile --filter xstockstrat-config... --filter .` (worktree-local).
+- TDD (DEV-8): AC-4 red: overlay param `'u-b'` where `'u-a'` expected (also AC-5, the bound-overlay secret
+  case and the regression pin) against the pre-Step-8 call sites → green: 14/14.
+- Verification:
+  - `pnpm run test:coverage`: 196/196 pass, 86.94% lines (threshold 40); `scopeResolution`, `listKeys*`,
+    `secretsAndScope` and `perUserSecrets` still green.
+  - `pnpm run lint`: 0 errors.
+  - `grep "__tests__/fixtures"` → none: `md()` stays an inline single-file helper (C-13 verdict in the spec).
+
+### Step 10 — service: agent echoes the effective `user_id`; docstrings state the bind (2026-10-29)
+
+- Files: `services/xstockstrat-agent/app/client.py` — imports `_ADMIN` from `app.scopes`; new private
+  `_effective_config_user_id(user_id)` (mirrors config `boundReadUserId`: a non-admin bound caller's foreign
+  non-empty id echoes as the caller's id); `get_config` / `list_config_keys` echo it. The request `user_id`
+  and `_metadata()` sent to config are unchanged. `services/xstockstrat-agent/app/tools.py` — both tools'
+  `user_id:` docstring lines state the bind (two lines each).
+- Discovery: Step 8's `boundReadUserId` is at `authz.ts:33` (the discovery digest's "not implemented" was stale).
+- Tooling setup (step 10): `uv sync --extra dev` (worktree-local, from `uv.lock`).
+- TDD (DEV-9): AC-4/AC-5 red: echo `'u-b'` where `'u-2'` expected (uncommitted Step 11 draft) → green: 10/10.
+- Verification: `uv run pytest --cov=app --cov-fail-under=40` 530 passed, 81.20%; `ruff check .` clean;
+  `ruff format --check .` clean; `grep _effective_config_user_id app/client.py` → 1 definition + 2 uses.
+
+### Step 11 — test: agent effective `user_id` echo (2026-10-29)
+
+- Files: `services/xstockstrat-agent/tests/test_config_tools.py` — new `TestConfigReadEchoesEffectiveUserId`
+  (stub-capture harness mirrored from `TestSetConfigRequestParity`; `GetConfig`→`ConfigSnapshot`,
+  `ListKeys`→`ListKeysResponse`), parametrized over `get_config`/`list_config_keys` × non-admin foreign (AC-4/AC-5),
+  own (AC-6), admin foreign (AC-8), no caller bound, empty id; each asserts the echo and that the wire `user_id`
+  is unchanged. Reuses `TRADER`/`ADMIN` from `tests.conftest` (C-13).
+- TDD (DEV-10): red 2/10 against the pre-Step-10 client (`cff6d631~1`; echo `'u-b'`, expected `'u-2'`) → green 10/10.
+- Verification: `pytest tests/test_config_tools.py` 42 passed; `pytest --cov=app --cov-fail-under=40` 540 passed,
+  82.07%; `ruff check .` clean; `ruff format --check .` clean; conftest import grep → `:22`.
+
+### Step 12 — docs: same-PR contract docs, findings, merge order (2026-10-29)
+
+- Files:
+  - `services/xstockstrat-ledger/CLAUDE.md`: Critical Invariant #5 (`QueryEvents.owner_only`: scoped to
+    `x-user-id`, NULL rows excluded, edges MUST set it, fails open by default); Stream Key rows
+    `account:{account_id}` (trading, reconciliation rows NULL-owned) and `copilot:{user_id}:default` (UI BFF).
+  - `services/xstockstrat-config/CLAUDE.md`: invariant #5 gains the bound-read paragraph (`boundReadUserId` on
+    `GetConfig`/`ListKeys`; admins and header-less callers keep the body id; `WatchConfig`/`GetSecret` unbound;
+    internal readers must not forward a user's `x-user-id` while asking about another user).
+  - `services/xstockstrat-agent/CLAUDE.md`: body-`user_id` sentence and the `get_config`/`list_config_keys`
+    rows say "bound to the caller for non-admins", echo = scope read.
+  - `docs/runbooks/mcp-tools.md`: both `user_id` rows and Returns lines, same semantics; tool count, names and
+    parameters unchanged.
+  - `docs/context-constitution-findings.md`: one `## Latent bugs` row for the gaps 263 accepts (P-03).
+  - `services/xstockstrat-ui/CLAUDE.md`: Copilot rail paragraph — `account:` keys are checked via trading
+    `ListBrokerAccounts`, every other key gets `owner_only` server-side.
+  - `docs/roadmap/features/merge-order.md`: verified only — one `fix-edge-owner-scope` row (`:78`).
+- TDD: N/A (docs). Baseline: verification greps 1, 2, 4, 6 returned nothing → after: all six return lines.
+- Teardown: context-constitution refresh skill unavailable; manual reconciliation found no drift (DEV-11).
+  Open item for the integration PR body: state the plugin was unavailable and the manual reconciliation done.
+
+## Session 2026-10-29 (sdd-batch-execute promotion plan (awaiting operator confirm))
+
+C-16 promotion plan for launch, produced by sdd-batch-execute. Nothing is written to a durable suite until
+the operator confirms.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-edge-owner-scope (feature 263)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature | CREATE | NEW | trader BFF QueryEvents foreign stream |
+| AC-2 | same ui file | CREATE | NEW | no stream_key leaks no foreign or NULL-owner events |
+| AC-3 | same ui file | CREATE | NEW | own account and copilot streams still work |
+| AC-7 | same ui file | CREATE | NEW | own position lineage with no stream_key |
+| AC-4 | /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-edge-owner-scope.feature | CREATE | NEW | non-admin get_config bound to caller |
+| AC-5 | same config file | CREATE | NEW | non-admin list_config_keys bound to caller |
+| AC-6 | same config file | CREATE | NEW | own per-user overlay still readable |
+| AC-8 | same config file | CREATE | NEW | admin override preserved |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature (CREATE) ---
+# Promoted from docs/roadmap/features/263-fix-edge-owner-scope/acceptance.feature on launch
+# (C-16). Scenarios are verbatim; each carries its source `@AC-*` and a `@feature-263` tag.
+# Durable business rule xstockstrat-ui guarantees: the trader BFF LedgerService.QueryEvents never returns
+# another user's (or an unowned) event, while a trader still reads their own streams. A rule enters only by promotion.
+Feature: fix-edge-owner-scope (bug fix)
+  Regression guard for docs/reports/2026-10-21-edge-owner-scope-defect.md:
+  trader BFF ledger queryEvents and agent get_config / list_config_keys read other users' data (debt-radar D-25, D-31).
+
+  Background:
+    Given user "u-a" owns broker account "acct-a" and user "u-b" owns broker account "acct-b"
+    And the ledger holds an "order.filled" event on stream "account:acct-b" for user "u-b" symbol "AAPL"
+    And the ledger holds an "order.filled" event on stream "account:acct-legacy" with a NULL user_id symbol "TSLA"
+
+  @AC-1 @FR-1 @regression @feature-263
+  Scenario: A trader cannot read another user's account stream through the trader BFF
+    Given user "u-a" is signed in to /trader
+    When "u-a" calls trader BFF LedgerService.QueryEvents with stream_key "account:acct-b"
+    Then the call fails with PERMISSION_DENIED
+    And no event from stream "account:acct-b" is returned
+
+  @AC-2 @FR-2 @regression @feature-263
+  Scenario: A trader BFF query with no stream key returns no other user's events
+    Given user "u-a" is signed in to /trader
+    When "u-a" calls trader BFF LedgerService.QueryEvents with event_type "order.filled" and no stream_key
+    Then the response contains no event belonging to user "u-b"
+    And the response contains no event whose user_id is NULL
+    And the "order.filled" event on "account:acct-legacy" symbol "TSLA" is not returned
+
+  @AC-3 @FR-1 @FR-5 @regression @feature-263
+  Scenario: A trader still reads their own account and copilot streams
+    Given user "u-a" is signed in to /trader
+    And the ledger holds a "reconciliation.tick" event on stream "account:acct-a"
+    And the ledger holds a "copilot.message" event "note-a" on stream "copilot:u-a:default" for user "u-a"
+    And the ledger holds a "copilot.message" event "note-b" on stream "copilot:u-b:default" for user "u-b"
+    When "u-a" calls trader BFF LedgerService.QueryEvents with stream_key "account:acct-a"
+    Then the "reconciliation.tick" event on "account:acct-a" is returned
+    And a QueryEvents with stream_key "copilot:anything" returns exactly the "note-a" event
+    And the "note-b" event is not returned
+
+  @AC-7 @FR-2 @FR-5 @regression @feature-263
+  Scenario: A trader still reads their own position lineage with no stream key
+    Given user "u-a" is signed in to /trader
+    And the ledger holds an "order.filled" event on stream "account:acct-a" for user "u-a" symbol "MSFT"
+    When "u-a" calls trader BFF LedgerService.QueryEvents with event_type "order.filled" and no stream_key
+    Then the "order.filled" event for user "u-a" symbol "MSFT" is returned
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-edge-owner-scope.feature (CREATE) ---
+# Promoted from docs/roadmap/features/263-fix-edge-owner-scope/acceptance.feature on launch
+# (C-16). Scenarios are verbatim; each carries its source `@AC-*` and a `@feature-263` tag.
+# Durable business rule xstockstrat-config guarantees: GetConfig/ListKeys bind a non-admin caller's per-user
+# scope to the verified caller (admin may read any user). A rule enters only by promotion.
+Feature: fix-edge-owner-scope (bug fix)
+  Regression guard for docs/reports/2026-10-21-edge-owner-scope-defect.md:
+  trader BFF ledger queryEvents and agent get_config / list_config_keys read other users' data (debt-radar D-25, D-31).
+
+  @AC-4 @FR-3 @regression @feature-263
+  Scenario: A non-admin MCP get_config with a foreign user_id is bound to the caller
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And user "u-a" has a per-user config row "analysis.backtest.max_duration_seconds" = 450 in the agent's environment scope
+    And non-admin user "u-a" is the verified MCP caller
+    When "u-a" calls get_config with namespace "analysis" and user_id "u-b"
+    Then the returned "analysis.backtest.max_duration_seconds" value is 450
+    And the value 900 is not returned
+
+  @AC-5 @FR-4 @regression @feature-263
+  Scenario: A non-admin MCP list_config_keys with a foreign user_id is bound to the caller
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And user "u-a" has no per-user config rows in namespace "analysis"
+    And non-admin user "u-a" is the verified MCP caller
+    When "u-a" calls list_config_keys with namespace "analysis" and user_id "u-b"
+    Then "analysis.backtest.max_duration_seconds" is not reported as a per-user override
+    And no key overridden by "u-b" is revealed
+
+  @AC-6 @FR-5 @regression @feature-263
+  Scenario: An MCP caller still reads their own per-user config overlay
+    Given user "u-a" has a per-user override "analysis.backtest.max_duration_seconds" = 450
+    And non-admin user "u-a" is the verified MCP caller
+    When "u-a" calls get_config with namespace "analysis" and user_id "u-a"
+    Then the returned "analysis.backtest.max_duration_seconds" value is 450
+
+  @AC-8 @FR-6 @regression @feature-263
+  Scenario: An admin MCP caller can still read another user's per-user config overlay
+    Given user "u-b" has a per-user config row "analysis.backtest.max_duration_seconds" = 900 in the agent's environment scope
+    And admin user "u-admin" is the verified MCP caller
+    When "u-admin" calls get_config with namespace "analysis" and user_id "u-b"
+    Then the returned "analysis.backtest.max_duration_seconds" value is 900
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1/2/3/7 assert on the trader BFF response, so they go to xstockstrat-ui. AC-4/5/6/8 are phrased via MCP tools, but the fix and the Then outcome live in config (design.md D-31: boundReadUserId in config authz.ts, applied at getConfig and listKeys). They are routed to xstockstrat-config rather than xstockstrat-agent. The agent echo fix is secondary. If the owner prefers an agent copy, that would be a second target. I did not duplicate.
+- The Background block is included only in the ui file, where all four scenarios use it. The config scenarios don't reference it, so it was dropped from that file. Scenario text is verbatim.
+- Possible tension, not a conflict: /home/user/xstockstrat/services/xstockstrat-config/acceptance/config-ui-usability.feature:11-14 and :27-28 call ListKeys with user_id "u-123" without naming the caller. Feature 263 binds non-admin callers to their own x-user-id. Those scenarios stay valid if the caller is u-123 or an admin. A human may want to confirm the caller identity assumption. No standing @AC-* is contradicted.
+- No OVERLAP: grep of every ui/config/agent/ledger suite and docs/sdd/business-rules/platform.feature found no existing QueryEvents-owner or get_config/list_config_keys user_id-binding rule. fix-config-audit-author-spoof (@feature-?, SetConfig author/x-user-id) covers writes only. config-secrets-and-scoping covers the overlay and WatchConfig, not caller binding.
+- The ledger suite is not a target: the ledger fix is an owner_only predicate, but no 263 scenario asserts ledger-level behavior.
+
+### Coverage check
+- Source scenarios: 8 (AC-1..AC-8). Planned: 8 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. All accounted for, none skipped.
+```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

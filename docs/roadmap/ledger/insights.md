@@ -3736,3 +3736,37 @@ reusing.
   code 13, `consumedAt` null and 0 inserts.
 - **Rule it implies**: For every single-use claim, list which post-claim steps can throw. Move each one before the
   claim or inside the transaction, or record it as an accepted residual.
+
+### 2026-10-22 — fix-agent-client-deadlines — design
+- **Pattern**: Deadlining an inbound token-validation call means the backend's slowness now reaches the
+  auth edge. If that failure maps to the existing 401 with `WWW-Authenticate`, an OAuth client re-authorizes.
+  The re-auth goes through the same stalled identity service, so the user is effectively logged out.
+  The design gives the validator a three-way result instead: claims, invalid, or backend-unavailable.
+  The validator still never raises. Backend-unavailable (`DEADLINE_EXCEEDED`/`UNAVAILABLE`) maps to
+  503 *without* `WWW-Authenticate`; only a genuinely invalid token gets the 401 with the re-auth pointer.
+- **Evidence**: `docs/roadmap/features/273-fix-agent-client-deadlines/design.md` (§3);
+  `services/xstockstrat-agent/app/main.py:164-174`, `app/auth.py:58-61`.
+- **Rule it implies**: When an auth-path dependency becomes able to fail fast, keep "cannot verify" separate
+  from "verified invalid". Fail closed with a retryable 5xx, not a credential-revoking 401.
+
+### 2026-10-27 — homelab-compose-deploy — design
+- **Pattern**: Re-pull every sibling repo the feature deploys into before approving the design, and recon its newest
+  infrastructure code as the contract. Round 6's pull of homelab-edge found the provisioned database/role names
+  (`xstockstrat-<env>` / `xstockstrat_<env>`) differed from the names the design had hardcoded from an earlier answer,
+  and that its Gatus probed a UI path that did not exist — both would have failed every deploy or alerted forever.
+- **Evidence**: `docs/roadmap/features/279-homelab-compose-deploy/recon.md` "Addendum 2026-10-27" (E1, R6-1);
+  homelab-edge `inventories/prod/group_vars/all/main.yml:118-133`, `roles/stack/templates/gatus-config.yaml.j2:77,95`.
+- **Rule it implies**: For cross-repo infra features, the other repo's provisioning code outranks an earlier verbal
+  value; re-read it at the last design gate and record which commit the design was grounded in.
+
+### 2026-10-31 — signal-watchlist-expiry-pruning — design
+- **Pattern**: When an operator tool decides a destructive action from another service's data (here: portfolio entries
+  vs `ingest.newsletter_signals`), recompute the decision from that data **inside each write statement**, not from a
+  precomputed plan — a check-then-act across two services' commits has no shared lock, so a signal ingested between the
+  report and the write otherwise gets its entry removed. Pair it with "the tool only marks; the owning service's one
+  existing deleter removes", which also avoids a second deleter, lock-order inversions, and giving a CLI the service's
+  mTLS/ledger identity.
+- **Evidence**: `docs/roadmap/features/281-signal-watchlist-expiry-pruning/design.md` §5 (APPLY recompute, mark-then-prune);
+  round-3/4 adversary findings recorded in its `context.md`.
+- **Rule it implies**: re-check foreign-schema state in the write statement; one deleter per resource; a destructive
+  operator path takes an expected-count bound and lists the exact rows for the reviewer.
