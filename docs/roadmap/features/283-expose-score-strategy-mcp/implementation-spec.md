@@ -253,14 +253,16 @@ git diff --stat -- packages/proto   # empty: no proto change
 - Tool-test pattern: `tests/test_tools.py:20-24` `_make_server()` / `_tool_fn(server, name)`; `class TestManageStrategyTool` at `:937`; `patch.object(client, "manage_strategy", AsyncMock(...))` with `_ctx(ADMIN)` (`tests/conftest.py`, `ADMIN` ⇒ `user_id "u-1"`); error mapping precedent `test_grpc_error_reraised_as_clear_message` (`:1220`) using `_rpc_error(code, details)` (`tests/test_tools.py:931`); description assertions `server._tool_manager.get_tool("manage_strategy").description` (`:1083`) and `.parameters["properties"]` (`:1106`).
 - Client-test pattern: `tests/test_client.py:74-78` `_channel_cm()`, `:81` `class TestManageStrategyClient`, `:175` the bogus-operation `ValueError` test; `get_strategy` mock pattern `mock_stub.GetStrategy = AsyncMock(return_value=...)` (`:777`).
 - Fake call object required by the call-object form: **not found** in `test_client.py` (all existing stubs are `AsyncMock(return_value=resp)`); a small awaitable with `trailing_metadata()` is new and has one consumer here (C-13: inline).
+- `tests/test_tool_deadlines.py:23` `_LONG_TOOLS = {"run_backtest", "screen_symbols", "trigger_backfill", "run_fundamentals_scan"}`; `:24` `_MUTATING_PREFIXES`; `:19`/`:21` `_LONG_S`/`_SLACK_S`; `:51` `patched_budgets`; `:63` `_timed_error`; `:70` `test_ac1_get_positions_hung_portfolio_surfaces_deadline`; `:274` `test_fr3_worst_cases_fit_under_57s`; `:281` `_mapper_calls` (innermost-function attribution of each `_grpc_error_message` call).
 
 **TDD**: `red-green required` — RED now: the tool tests (AC-1/2/3/4/5/8/9) and the tool-deadline guard fail because `manage_strategy` has no `score` branch and `_score_strategy` does not exist (`long_seen != _LONG_TOOLS`); GREEN after Step 6. The `TestScoreStrategyClient` cases already go green with Step 2 (they cover `client.score_strategy`, which exists by then); only the tool-level cases carry the RED for Step 6.
 
-**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-8, AC-9, AC-11`
+**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9, AC-11`
 
 **Instructions**:
 1. `TestManageStrategyScore` in `tests/test_tools.py` (scenario literals are single-consumer, inline per C-13), all patching `client.score_strategy` with `AsyncMock`:
    - **AC-1**: returns `{"strategy_id": "fundamentals_macd_blend", "overall_score": 0.71, "component_scores": {...}, "rating": "B", "evidence_symbols": 3, "evidence_days": 756, "provisional": False, "excluded_symbols": []}` unchanged; `m.assert_awaited_once_with(user_id="u-1", strategy_id="fundamentals_macd_blend")`; no `access_scope` kwarg; result keys all snake_case.
+   - **AC-7**: the mocked client returns `{"evidence_symbols": 2, "excluded_symbols": ["SCHD"], ...}`; the tool returns it unchanged (the tool layer adds no re-derivation or filtering of `excluded_symbols`).
    - **AC-2**: `AioRpcError(PERMISSION_DENIED, details="strategy not found or not owned")` → `RuntimeError` matching that text.
    - **AC-3**: `AioRpcError(NOT_FOUND, details="no eligible evidence — run a backtest")` → message contains `no eligible evidence — run a backtest` (proves the server detail is not replaced by the fixed `"strategy not found"`).
    - **AC-4**: `AioRpcError(UNAVAILABLE, details="fundamentals availability unknown — grade unchanged")` → message contains exactly that text.
