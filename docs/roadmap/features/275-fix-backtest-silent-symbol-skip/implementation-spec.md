@@ -370,10 +370,12 @@ builder lives only in `conftest.py`.
 
 ### Step 6 — service: one inline `except Exception` arm, the `eval_failures` gate term and per-symbol warnings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
+- `services/xstockstrat-analysis/tests/test_owner_dimension.py` — modify (fixture wiring only; operator Option A, 2026-11-01)
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (fixture wiring only, `TestRunBacktestPersistence`; operator Option A, 2026-11-01)
 
 **Reviewers**: `xstockstrat-analysis` owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
@@ -846,3 +848,19 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Step 4 (2026-11-01) — one inline comment.** `_execute_formula` gained a one-line constraint comment ("Never
   e.details() …") to keep Instruction 3 load-bearing at the raise site. No CI-equivalent tooling fallback was used in
   Step 4 (`uv run ruff` and `uv run pytest`, the service's own harness).
+- **Step 6 (2026-11-01) — Files expanded: four tests relied on the catch-all (operator Option A).** With the two
+  catch-alls replaced by the single surfacing arm, four tests went red: `test_owner_dimension.py`
+  `TestAC21SameStrategyIdTwoOwners::{test_alice_backtest_leaves_bob_score_runs_and_details_untouched,
+  test_owner_reads_own_backtest, test_admin_foreign_get_backtest_is_denied}` and `test_analysis_servicer.py`
+  `TestRunBacktestPersistence::test_ok_run_appends_history_row`. Their `_marketdata` was a bare `MagicMock` channel
+  stub, so `await GetBars(...)` raised `TypeError`, the old `except Exception` swallowed it, and the run reported
+  OK. The tests passed for the wrong reason, which is the defect itself. The operator chose Option A: Step 6's
+  **Files** gained both test files, with fixture wiring only. `GetBars` now returns 60 real flat bars (at least
+  `slow_period(50)+2`), and `ComputeIndicator` returns tail-aligned points (the `TestFormulaErrorSurfacing._wire` /
+  `TestBacktestDiagnostics._svc_with` pattern; `RecordingStub` responses in `_wired()`). Each test again exercises
+  an evaluated OK run, and no assertion changed. fails.md candidate recorded in `context.md`.
+- **Step 6 (2026-11-01) — TDD evidence via a scratch probe.** Step 7 owns the durable AC-1…AC-7 tests, so the red→green
+  cycle ran against an uncommitted scratch probe outside the repo, loaded with `-p tests.conftest` (the Step 4 method).
+  RED: 3 failed (all-RpcError run OK instead of INSUFFICIENT_DATA; `ValueError` run OK; no PERMISSION_DENIED
+  warning). GREEN: all passed. No CI-equivalent tooling fallback was used in Step 6 (`uv run pytest` and `uv run ruff`,
+  the service's own harness).

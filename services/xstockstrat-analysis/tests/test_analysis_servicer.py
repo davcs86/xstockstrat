@@ -346,6 +346,11 @@ class TestRunBacktestPersistence:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_runs_repo = AsyncMock()
+        bars = [_bar(5000 + i, 100.0) for i in range(60)]  # ≥ slow_period(50)+2 → evaluated
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(return_value=_points([100.0] * 60))
 
         result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=_owned_ctx())
 

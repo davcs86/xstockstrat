@@ -800,3 +800,36 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: full suite 1504 passed, coverage 90.25% (≥40); `ruff check` all passed; `ruff format --check` 121
   files formatted; the C-13 grep for `grpc.aio.AioRpcError(` in the test file has no hit.
 - Next: Step 6.
+
+### Step 6 — single surfacing arm, gate term and warnings (2026-11-01, done)
+
+- `services/xstockstrat-analysis/app/handlers/servicer.py`:
+  - Added `EVAL_FAILED_WARNING = "backtest symbol {symbol} not evaluated: {code}"` beside `_PROPAGATED_HEADERS`.
+  - Added `eval_failures: list[tuple[str, str]] = []` beside `formula_errors`.
+  - The `FormulaExecutionError` arm appends `(symbol, fe.code)` only when `fe.code` is set, so mapped refusals warn
+    and contract errors stay silent.
+  - The `grpc.RpcError` and `except Exception` arms became one `except Exception` arm after `except _BarFetchError:
+    raise`. It derives the code name (the RpcError status, else the type name), pops `symbol_intents[symbol]`, and
+    logs symbol, strategy, code, error and `x-trace-id` via `.get`, with `exc_info` for non-RPC errors. It also
+    appends an `EVALUATION_FAILED` diagnostics row and records the failure in `eval_failures`.
+  - Gate: `or eval_failures` was added to the INSUFFICIENT_DATA or-chain, and the comment now names "not evaluated".
+    The recompute condition `status == OK or fund_refusals > 0` is unchanged.
+  - The `EVAL_FAILED_WARNING` warnings sit after the `fund_unknown` block and before `disarm()`. They carry the code
+    only, never `e.details()`.
+- Operator Option A (blocker resolution): four tests had passed only because the catch-all swallowed a `TypeError`
+  from an unawaitable `MagicMock` `GetBars`. Fixture wiring with real bars plus `ComputeIndicator` points was added in
+  `tests/test_owner_dimension.py` (`_bars()`, `_wired()`) and in `tests/test_analysis_servicer.py`
+  (`TestRunBacktestPersistence::test_ok_run_appends_history_row`). No assertion changed (Deviation Log).
+- **fails.md candidate**: "a catch-all hid incomplete test mocks". A broad `except Exception: continue` in production
+  code also swallows test-fixture gaps, such as a bare-`MagicMock` gRPC stub that is not awaitable. Tests then pass
+  for the wrong reason: here, an OK run with no symbol evaluated, which is the very defect under fix. Narrowing or
+  surfacing a catch-all must budget for the tests it was silently carrying. A test that asserts an OK run should also
+  prove a symbol was evaluated.
+- TDD: scratch probe (Deviation Log). RED: 3 failed. GREEN: all passed.
+- Verification: the grep hits `servicer.py:354`, `:943`, `:1165`, `:1167`, `:1175`, `:1189`, `:1194`, `:1301` and
+  `:1330`. By hand: the loop arms run `_InsufficientData`, `_FundamentalsUnavailable`, `_FundamentalsUnknown`,
+  `FormulaExecutionError`, `_BarFetchError` (raise), then the single `except Exception`, with no `grpc.RpcError` arm.
+  `:1390` is still `status == OK or fund_refusals > 0`. `ruff check` passed, and `ruff format --check` reported 121
+  files formatted. The full suite passed 1504 tests, coverage 90.20% (≥40).
+- Next: Step 7 (the durable RunBacktest evaluation-failure tests, AC-1…AC-7).
+

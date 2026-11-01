@@ -351,6 +351,7 @@ _INTENT_SWEEP_SECONDS = 300
 # The SAN-bound grant indicators requires on the saga RPCs; never the N-only `analysis` bypass id.
 _TEMPLATE_SAGA_CALLER = "analysis-template-saga"
 _PROPAGATED_HEADERS = ("x-user-id", "x-access-scope", "x-trace-id")
+EVAL_FAILED_WARNING = "backtest symbol {symbol} not evaluated: {code}"
 
 
 def blend_strategy_id(cfg) -> str:
@@ -939,6 +940,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Count symbols dropped by a custom-formula execution error, so the status gate reports
         # INSUFFICIENT_DATA (never OK+scored) on a no-usable-evidence run.
         formula_errors: int = 0
+        eval_failures: list[tuple[str, str]] = []
         # One per-symbol evidence cell buffered per traded symbol; flushed on OK.
         symbol_cells: list[dict] = []
         # Per-symbol signal-intent lists, buffered for the optional portfolio simulator. Populated
@@ -1159,14 +1161,37 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                 )
                 formula_errors += 1
+                if fe.code:
+                    eval_failures.append((symbol, fe.code))
                 continue
             except _BarFetchError:
                 raise
-            except grpc.RpcError as e:
-                log.warning("backtest symbol %s failed: %s — skipping", symbol, e)
-                continue
             except Exception as e:
-                log.warning("backtest symbol %s error: %s — skipping", symbol, e)
+                code = (
+                    e.code().name
+                    if isinstance(e, grpc.RpcError) and callable(getattr(e, "code", None))
+                    else type(e).__name__
+                )
+                symbol_intents.pop(symbol, None)
+                log.warning(
+                    "backtest symbol=%s strategy=%s not evaluated: %s (%s) trace_id=%s",
+                    symbol,
+                    request.strategy_id,
+                    code,
+                    e,
+                    dict(propagation_meta).get("x-trace-id", ""),
+                    exc_info=not isinstance(e, grpc.RpcError),
+                )
+                all_diagnostics.append(
+                    analysis_pb2.SymbolDiagnostics(
+                        symbol=symbol,
+                        bars=[],
+                        no_trade_reason=analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED,
+                        bars_total=0,
+                        warmup_bars=0,
+                    )
+                )
+                eval_failures.append((symbol, code))
                 continue
 
         # Resolve capital-allocation model: LEGACY → serial per-symbol path; PORTFOLIO → shared-pool
@@ -1268,12 +1293,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             result.capital_skips.extend(capital_skips)
         if portfolio_equity_curve:
             result.portfolio_equity_curve.extend(portfolio_equity_curve)
-        # No trades + no usable curve (all symbols insufficient, or all formula-failed) →
+        # No trades + no usable curve (all insufficient, formula-failed or not evaluated) →
         # INSUFFICIENT_DATA, never a fabricated flat-equity success. A partial run stays OK.
         if (
             not all_trades
             and len(daily_equity) <= 1
-            and (coverage_gaps or formula_errors or fund_refusals or fund_unknown)
+            and (coverage_gaps or formula_errors or fund_refusals or fund_unknown or eval_failures)
         ):
             result.status = analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         else:
@@ -1301,6 +1326,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if fund_unknown:  # @AC-8: an outage is a rerun prompt, never a refusal
             result.warnings.extend(
                 f"fundamentals fetch failed for {sym} — rerun" for sym in fund_unknown
+            )
+        if eval_failures:
+            result.warnings.extend(
+                EVAL_FAILED_WARNING.format(symbol=s, code=c) for s, c in eval_failures
             )
         # Deadline ends here so persistence always completes; no awaited state-writing call may
         # move above this disarm().

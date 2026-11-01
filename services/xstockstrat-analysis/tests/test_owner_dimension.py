@@ -8,6 +8,7 @@ fails closed with ``UNAVAILABLE`` when the ledger append fails.
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -15,6 +16,7 @@ import pytest
 from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.ingest.v1 import ingest_pb2
+from gen.marketdata.v1 import marketdata_pb2
 
 from app import admin_audit
 from app.admin_audit import audit_admin_read
@@ -126,10 +128,23 @@ def _cells():
     ]
 
 
+def _bars(n=60):
+    bars = [marketdata_pb2.Bar(open=100.0, high=100.0, low=100.0, close=100.0) for _ in range(n)]
+    for i, b in enumerate(bars):
+        b.time.seconds = 5000 + i
+    return bars
+
+
 def _wired():
     svc = _servicer()
     svc._ledger = RecordingStub()
-    svc._indicators = RecordingStub()
+    # ≥ slow_period(50)+2 real bars so RunBacktest evaluates the symbol (an OK run).
+    bars = _bars()
+    svc._marketdata = RecordingStub(
+        {"GetBars": SimpleNamespace(page=SimpleNamespace(next_page_token=""), bars=bars)}
+    )
+    points = SimpleNamespace(result=[SimpleNamespace(value=100.0) for _ in bars])
+    svc._indicators = RecordingStub({"ComputeIndicator": points})
     svc._strategies_repo = _FakeStrategies()
     svc._backtest_runs_repo = _FakeRuns()
     svc._backtest_details_repo = _FakeDetails()
