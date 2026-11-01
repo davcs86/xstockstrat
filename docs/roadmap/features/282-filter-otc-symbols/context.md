@@ -97,3 +97,21 @@
   - `GetBars` needs a live DB pool, so its gate is covered by the existing structural source-scan style (`TestGetBarsMarksSymbolWarm` is updated) plus unit tests of `markWarmIfServable`.
   - `resolvePositiveInt` maps `<= 0` to the default, so the new refresh-interval reader reads `budgetCfg.GetInt` directly to keep the MARKETDATA-5 pause rule.
 - Open decisions for `/sdd-review impl-spec` (not guessed): (a) `refused` always present on agent create/add/replace-update, `watchlist_refused` only when non-empty on `ingest_signal`; (b) no client-side 1000 constant in portfolio (RPC InvalidArgument fails open) despite design.md's "size check before the RPC"; (c) config bound [1,24] vs "<= 0 pauses".
+
+## Session 2026-11-01 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 12 warnings, 0 Floor breaches (advisory — did not block). All AC-1..AC-26 covered; all required design elements present (post-filter cap, `markWarmIfServable` at exactly 3 sites, first-load-only prune, full-request flight key, masked rename, filtered `partialColdFetch`, enum NAME fixtures, teardown). Code anchors resolve.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 12: no `--cov-fail-under=N` on the agent pytest run (C-08, the only ✗) — [ ] unaddressed
+  - Step 7 (F-08 risk): `asset_servability.go` hosts the `servable` helper and a comment but is not in Step 7's **Files** — [ ] unaddressed (record a Deviation Log entry or pin the helper in Step 5 before executing; do not stage outside Files)
+  - Steps 5/6 (F-09 risk): backoff delay function and refresher test seam are "if needed" in Step 6 but undefined in Step 5 — [ ] unaddressed
+  - Steps 6, 8, 10: Go coverage threshold is prose only; assert `go tool cover` total >= 40% — [ ] unaddressed
+  - Step 14: no coverage threshold stated for vitest (low impact, scope `src/lib/**`) — [ ] unaddressed
+  - Step 8: AC-4/AC-9/AC-23 for `GetBars` proven by source-scan only, and the `partialColdFetch` WARN content is untested — [ ] unaddressed
+  - Step 9: `portfolio.watchlist.max_symbols_per_list` has no SetConfig bound; an operator raising it above 1000 makes the RPC reject and portfolio fail open, bypassing the filter on large adds (design decision b rests on the default 500) — [ ] unaddressed; needs operator confirmation (P-03)
+  - Step 9: no IBKR/broker symmetry note (asset set is Alpaca-only; design R1/R6) — [ ] unaddressed
+  - Step 2: tree is red between Steps 2 and 5 (F-05 tension); fold Step 2 into Step 5's commit or add an adapter stub — [ ] unaddressed
+  - Step 1: confirm the `buf breaking` input path/`subdir` (runs from `packages/proto`) — [ ] unaddressed
+  - Steps 7/9/13: name/anchor drift (`servableOf` vs `servable`; design `servabilityFor` vs spec `refuseUnservable`; `setDefaultStrategy` anchor `:139-146` is now ~`:146`) — [ ] unaddressed
+  - Step 15: touches 7 files (>5 guideline) and Verification does not evidence the teardown — [ ] unaddressed
+- Overlap findings (WARN only, no migration/proto-field/config-key collision): same-file overlap with 215 and 255 on `marketdata.proto` (end-of-file append), `marketdata_service.go`, `cmd/server/main.go`; with 215 and 275 on agent `tools.py` (docstring regions); 240 vs 282 on `portfolio_service.go` not checked. merge-order row for 282 (after 215) exists but wrongly calls 275 "analysis-only" — 275's spec edits agent `tools.py`; proposed amendment (needs operator OK as merge-order.md is shared): name 275 as a soft `tools.py` rebase.
