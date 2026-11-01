@@ -379,3 +379,10 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
   - `ruff check` and `ruff format --check` are clean.
   - Full suite with `--cov=app --cov-fail-under=40`: 636 passed, 84.44%.
   - No CI-equivalent fallback was used.
+
+### Step 7 — test: deadline guards, call-object matcher and the 273 durable row — 2026-11-01
+
+- `tests/test_client_deadlines.py`: `_MIN_STUB_CALLS = 74`; `"ScoreStrategy"` added to `_LONG_RPCS` (reflowed one per line, E501); `_AC5_ROWS` gains `("ScoreStrategy", "ANALYSIS_ENDPOINT", lambda: client.score_strategy("u-1", "s-1"), _LONG)`; `_stub_calls` gains exactly one branch — an `ast.Assign` whose value is `Call(Attribute(Name('stub')))` yields `(fn.name, rpc, call)` — ahead of the unchanged `ast.Await` filter. No bare-`ast.Call` matching.
+- `acceptance/fix-agent-client-deadlines.feature`: `| ScoreStrategy       | 45.5   |` appended after `TriggerBackfill` (signed-off EXTEND of `@AC-5 @feature-273`), same commit as the `_AC5_ROWS` tuple.
+- TDD (C-16 preservation/extension of `@AC-5`, `@AC-6`, `@AC-10 @feature-273`) red: with the bump + `_LONG_RPCS` edit and the matcher unchanged, 1 failed / 21 passed — `AssertionError: matcher found only 73 stub calls` (`assert 73 >= 74`). Green after the Assign branch: matcher count exactly 74 (`('score_strategy', 'ScoreStrategy')` included); the fake-channel `ScoreStrategy` row passes with no mock change (`await call` raises `_Recorded` before `trailing_metadata()`), and the hung-backend row passes.
+- Verification: `test_tool_deadlines.py` + `test_client_deadlines.py` 42 passed (incl. PRESERVE `test_fr3_worst_cases_fit_under_57s`); full suite `--cov=app --cov-fail-under=40` 638 passed, 84.44%; `ScoreStrategy` grep hits the test tuple, `_LONG_RPCS` and the feature row; `ruff check` + `ruff format --check` clean. No CI-equivalent fallback used.

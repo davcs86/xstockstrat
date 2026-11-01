@@ -42,16 +42,23 @@ _AC5_ROWS = [
     ("ScreenSymbols", "ANALYSIS_ENDPOINT", lambda: client.screen_symbols(["AAPL"]), _LONG),
     ("RunFundamentalsScan", "ANALYSIS_ENDPOINT", lambda: client.run_fundamentals_scan(), _LONG),
     ("TriggerBackfill", "INGEST_ENDPOINT", lambda: client.trigger_backfill(["AAPL"]), _LONG),
+    ("ScoreStrategy", "ANALYSIS_ENDPOINT", lambda: client.score_strategy("u-1", "s-1"), _LONG),
 ]
 _AC5_IDS = [row[0] for row in _AC5_ROWS]
 
-_LONG_RPCS = {"RunBacktest", "ScreenSymbols", "RunFundamentalsScan", "TriggerBackfill"}
+_LONG_RPCS = {
+    "RunBacktest",
+    "ScreenSymbols",
+    "RunFundamentalsScan",
+    "TriggerBackfill",
+    "ScoreStrategy",
+}
 # (enclosing function, rpc) -> the only other `timeout` name allowed there.
 _TIMEOUT_ALLOW_LIST = {
     ("list_opportunities", "ListOpportunities"): "timeout",  # feature 227 policy deadline
     ("get_config_value", "GetConfig"): "_CONFIG_READ_TIMEOUT_S",  # feature 247
 }
-_MIN_STUB_CALLS = 73
+_MIN_STUB_CALLS = 74
 
 
 @pytest.mark.parametrize(("rpc", "endpoint_attr", "call", "budget_attr"), _AC5_ROWS, ids=_AC5_IDS)
@@ -107,12 +114,24 @@ def test_deadline_constants_are_pinned():
 
 
 def _stub_calls():
-    """Yield (enclosing function, rpc, call) for every awaited unary stub call in client.py."""
+    """Yield (enclosing function, rpc, call) for every unary stub call in client.py.
+
+    Matches awaited calls and `call = stub.<Rpc>(...)` call objects (awaited later for trailers).
+    """
     tree = ast.parse(Path(client.__file__).read_text())
     for fn in tree.body:
         if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         for node in ast.walk(fn):
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Attribute)
+                and isinstance(node.value.func.value, ast.Name)
+                and node.value.func.value.id == "stub"
+            ):
+                yield fn.name, node.value.func.attr, node.value
+                continue
             if not (
                 isinstance(node, ast.Await)
                 and isinstance(node.value, ast.Call)
