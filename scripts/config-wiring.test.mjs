@@ -6,6 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { buildStoredSet } from './check-config-wiring.mjs'
+import * as cw from './check-config-wiring.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SCRIPT = path.join(HERE, 'check-config-wiring.mjs')
@@ -141,6 +142,112 @@ test('9 key-neutral UPDATE, trigger DDL, function bodies and comments are not re
     assert.equal(u[0].file, '003_rewrite.up.sql')
     fs.rmSync(dir, { recursive: true, force: true })
   }
+})
+
+const READERS = path.join(HERE, 'config-wiring-fixtures', 'readers')
+const PY_A = 'services/xstockstrat-analysis/app'
+const PY_I = 'services/xstockstrat-ingest/app'
+const GO_MD = 'services/xstockstrat-marketdata/internal'
+const TS_UI = 'services/xstockstrat-ui/src/lib/index_reads.ts'
+const FWD_PY = { [`${PY_I}/config/watcher.py:int_positive`]: { keyArg: 1 } }
+const FWD_GO = { [`${GO_MD}/service/forwarder.go:resolvePositiveInt`]: { keyArg: 1 } }
+const DYN = { [`${PY_A}/dynamic_fstring.py:is_enabled`]: ['analysis.breakout.enabled', 'analysis.momentum.enabled'] }
+
+const reg = (over = {}) => ({ forwarders: {}, dynamic: {}, rewriteAllow: [], ...over })
+const readKeys = (res, file) => res.reads.filter((r) => r.file === file).map((r) => r.key).sort()
+const dynSites = (res, prefix = '') => res.dynamic.filter((d) => d.file.startsWith(prefix)).map((d) => `${d.file}:${d.symbol}`).sort()
+
+test('a Python multi-line call, plain literal, same-file constant and values index resolve', () => {
+  const res = cw.extractReads(READERS, reg())
+  assert.deepEqual(readKeys(res, `${PY_A}/literal_and_const.py`), [
+    'analysis.backtest.max_duration_seconds',
+    'analysis.fundsignal.enabled',
+    'analysis.index_lit',
+    'marketdata.fundamentals.provider',
+  ])
+  assert.deepEqual(dynSites(res, `${PY_A}/literal_and_const.py`), [])
+})
+
+test('b Python f-string key with a parameter is exactly one dynamic entry', () => {
+  const res = cw.extractReads(READERS, reg())
+  const d = res.dynamic.filter((x) => x.file === `${PY_A}/dynamic_fstring.py`)
+  assert.equal(d.length, 1)
+  assert.equal(d[0].symbol, 'is_enabled')
+  assert.equal(d[0].line, 2)
+  assert.deepEqual(readKeys(res, `${PY_A}/dynamic_fstring.py`), [])
+})
+
+test('c registry.dynamic enumerates the site instead of reporting it', () => {
+  const res = cw.extractReads(READERS, reg({ dynamic: DYN }))
+  assert.deepEqual(readKeys(res, `${PY_A}/dynamic_fstring.py`), ['analysis.breakout.enabled', 'analysis.momentum.enabled'])
+  assert.deepEqual(dynSites(res, `${PY_A}/dynamic_fstring.py`), [])
+})
+
+test('d Go literal split over lines resolves; comments are not reads (false-dynamic = 0)', () => {
+  const res = cw.extractReads(READERS, reg())
+  assert.deepEqual(readKeys(res, `${GO_MD}/config/split_literal.go`), [
+    'marketdata.factor_map',
+    'marketdata.feed.enabled',
+    'marketdata.feed.symbols',
+  ])
+  assert.deepEqual(dynSites(res, `${GO_MD}/config/`), [])
+})
+
+test('e Go forwarder is dynamic without a registry entry and resolves at its callers with one', () => {
+  const without = cw.extractReads(READERS, reg())
+  assert.deepEqual(dynSites(without, `${GO_MD}/service/`), [`${GO_MD}/service/forwarder.go:resolvePositiveInt`])
+  assert.deepEqual(readKeys(without, `${GO_MD}/service/forwarder.go`), [])
+
+  const withFwd = cw.extractReads(READERS, reg({ forwarders: FWD_GO }))
+  assert.deepEqual(readKeys(withFwd, `${GO_MD}/service/forwarder.go`), ['marketdata.backfill.batch_size', 'marketdata.backfill.max_concurrent'])
+  assert.deepEqual(dynSites(withFwd, `${GO_MD}/service/`), [])
+})
+
+test('f Go and Python constants resolve to their literal', () => {
+  const res = cw.extractReads(READERS, reg({ forwarders: FWD_GO }))
+  assert.ok(readKeys(res, `${GO_MD}/config/split_literal.go`).includes('marketdata.factor_map'))
+  assert.ok(readKeys(res, `${GO_MD}/service/forwarder.go`).includes('marketdata.backfill.batch_size'))
+  assert.ok(readKeys(res, `${PY_A}/literal_and_const.py`).includes('analysis.fundsignal.enabled'))
+})
+
+test('g TS literal index and getter are reads; values[key] is dynamic', () => {
+  const res = cw.extractReads(READERS, reg())
+  assert.deepEqual(readKeys(res, TS_UI), ['performance.risk_free_rate_annual', 'performance.window_days'])
+  assert.deepEqual(dynSites(res, TS_UI), [`${TS_UI}:getString`])
+})
+
+test('h GetSecret calls are never ordinary reads', () => {
+  const res = cw.extractReads(READERS, reg({ forwarders: { ...FWD_PY, ...FWD_GO }, dynamic: DYN }))
+  const all = res.reads.map((r) => r.key)
+  assert.ok(!all.includes('marketdata.alpaca.api_key'))
+  assert.ok(!all.includes('ui.vendor.api_key'))
+})
+
+test('i tests/ directories are not scanned', () => {
+  const res = cw.extractReads(READERS, reg())
+  const files = [...res.reads, ...res.dynamic].map((r) => r.file)
+  assert.ok(files.length > 0)
+  assert.ok(!files.some((f) => f.includes('/tests/')))
+  assert.ok(!res.reads.some((r) => r.key === 'analysis.should_not_be_scanned'))
+})
+
+test('j int_positive forwarder: callers resolve with the entry; body is one dynamic without it', () => {
+  const withFwd = cw.extractReads(READERS, reg({ forwarders: FWD_PY }))
+  assert.deepEqual(readKeys(withFwd, `${PY_I}/config/watcher.py`), ['ingest.backfill.max_concurrent_jobs', 'ingest.backfill.max_retry_attempts'])
+  assert.deepEqual(readKeys(withFwd, `${PY_I}/engine/forwarder_caller.py`), ['ingest.mcp_client.request_timeout_seconds'])
+  assert.deepEqual(dynSites(withFwd, PY_I), [])
+
+  const without = cw.extractReads(READERS, reg())
+  assert.deepEqual(readKeys(without, `${PY_I}/config/watcher.py`), ['ingest.backfill.max_retry_attempts'])
+  assert.deepEqual(readKeys(without, `${PY_I}/engine/forwarder_caller.py`), [])
+  assert.deepEqual(dynSites(without, PY_I), [`${PY_I}/config/watcher.py:int_positive`])
+})
+
+test('k a call through the get_int_present alias resolves like get_int', () => {
+  const res = cw.extractReads(READERS, reg())
+  const r = res.reads.find((x) => x.key === 'ingest.backfill.max_retry_attempts')
+  assert.equal(r.file, `${PY_I}/config/watcher.py`)
+  assert.equal(r.line, 15)
 })
 
 test('CLI usage errors exit 2', () => {

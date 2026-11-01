@@ -255,3 +255,39 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 ## Session 2026-11-01 — operator ruling: option A for every inverted test/impl pair
 
 - **Binding operator decision:** the spec places each implementation step before its paired RED test step (3→4, 5→6, 7→8). Apply the same Option A already used for Steps 1+2 to every remaining pair: author the test step's test cases and fixtures first, capture RED, implement the implementation step, capture GREEN with both steps' Verification commands, and land each pair as **one** red-green commit that flips both Statuses to `done`, staging both steps' Files. Log one Deviation Log entry per pair ("executed as one TDD cycle, operator option A"). Do not raise a blocker for this ordering again.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 3+4
+
+### Step 3 — Reader extraction (Python `ast`, Go and TypeScript regex) [done]
+- `scripts/config-wiring-py-reads.py` is new. It uses stdlib `ast` and runs as `python3 -I <helper> <root> <forwarders-json>`. It scans `services/*/app/**/*.py` and skips `tests/`, `test/`, `__pycache__/` and `.venv/`.
+  - Reads come from the getter names (including the `*_present` aliases) and from `.values.get(...)` / `.values[...]`, with the key at argument 0 or `key=`.
+  - It also handles calls to registered forwarders of the same service, with the key at `keyArg`.
+  - A key argument resolves to a literal or to a module-level string constant. Anything else becomes `{"file","symbol","line","dynamic":true}`.
+  - In a registered forwarder's body, a call that passes the forwarder's own key parameter is treated as pass-through and skipped.
+- `scripts/check-config-wiring.mjs` gains `extractReads`, `extractPyReads`, `extractGoReads` and `extractTsReads`.
+  - Go/TS matching uses a regex over comment-blanked source. A balanced argument scan handles calls split across lines.
+  - Constants resolve in the same file, then the same package, then the service. A `pkg.X` constant resolves in the directory named `pkg`.
+  - The forwarder rule is the same as for Python. `registry.dynamic` turns an enumerated site into reads.
+  - `GetSecret`/`getSecret` are never matched. `run()` is unchanged; Step 5 wires the join and output.
+- Real-tree smoke run (not a gate; it uses the four Step-3 minimum forwarders). It took about 0.4 s and found 213 reads (169 unique keys: 115 py, 83 go, 15 ts/tsx) and 46 dynamic sites. Breakdown of the dynamic sites:
+  - The getter internals of the Python and TS watchers: `ConfigWatcher.get_*` in analysis/indicators/ingest, and `getString/getInt/getFloat/getBool` in config/identity/ledger/notify.
+  - analysis `float_positive` and `str_nonempty`.
+  - agent `client.py:get_config_value`.
+  - `values`-index false positives in config `configServiceImpl.ts`, analysis `servicer.py:1858` / `evaluator.py:95`, ui `accountShared.tsx`/`indicatorChart.ts`, marketdata fundamentals and trading `ibkrTiming`.
+  - Step 9 counts these and Step 11 records them in `registry.forwarders`/`registry.dynamic`. An empty `registry.dynamic` array silences a site.
+- TDD red (before implementation): `node --test scripts/config-wiring.test.mjs` gave tests 21, pass 10, fail 11 (`cw.extractReads is not a function`).
+- TDD green: `node --check scripts/check-config-wiring.mjs && python3 -I -m py_compile scripts/config-wiring-py-reads.py && node --test scripts/config-wiring.test.mjs` gave tests 21, pass 21, fail 0. `ruff check` on the helper passed.
+- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring-py-reads.py`
+- Deviations: Steps 3+4 were executed as one TDD cycle (operator option A). TS uses lower-case `get*` names. The format of the dynamic `symbol` and the extractor API are defined here. See the Deviation Log.
+
+### Step 4 — Reader-extraction fixtures and tests (authored red) [done]
+- Cases (a)-(k) were added to `scripts/config-wiring.test.mjs`. They reach the new exports through `import * as cw`, so red fails per case and not for the whole module. The fixtures are under `scripts/config-wiring-fixtures/readers/` (the 9 files the spec lists).
+  - `split_literal.go` also carries a commented-out `GetString` call.
+  - `index_reads.ts` also carries a TS `getInt` read and a `getSecret` call.
+- Red and green are as recorded for Step 3. Lint: `node --check scripts/config-wiring.test.mjs && python3 -I -m py_compile scripts/config-wiring-py-reads.py` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/readers/**` (9 files)
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker) and python3 3.13. No CI-equivalent fallback was used.
+- Open items for Steps 9/11:
+  - Register `float_positive`/`str_nonempty` (analysis, `keyArg` 1) and agent `get_config_value` (`keyArg` 0) as forwarders.
+  - Handle the Python and TS watcher getter internals and the `values`-index false positives listed above, either through `registry` entries or by tightening the extractor.
+- Severity: n/a.

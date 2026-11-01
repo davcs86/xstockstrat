@@ -2,6 +2,7 @@
 // Config-key wiring check (feature 278). Prints `file:key:kind[:env]` lines, never config values.
 // Usage: node scripts/check-config-wiring.mjs [--root <dir>] [--final] [--declared-from <spec.md>]
 //        [--declared-migration <file>] [--keys <ns.key,...>] [--json]   exit 0 clean, 1 findings, 2 error
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -332,6 +333,226 @@ export function buildStoredSet(root, { registry = loadRegistry(root) } = {}) {
     ;(r.isSecret ? secrets : stored).set([r.namespace, r.key, r.environment].join('\u0000'), entry)
   }
   return { stored, secrets, unmodelled }
+}
+
+const PY_READS = path.join(REPO_ROOT, 'scripts', 'config-wiring-py-reads.py')
+const SKIP_DIRS = new Set(['tests', 'test', '__tests__', 'e2e', 'node_modules', 'vendor', '.next', '.venv', 'dist'])
+const LANG_EXT = { py: /\.py$/, go: /\.go$/, ts: /\.tsx?$/ }
+const GETTER_RE = { go: /\.(Get(?:String|Int|Float|Bool))\s*\(/g, ts: /\.(get(?:String|Int|Float|Bool))\s*\(/g }
+const INDEX_RE = /\bvalues\s*(?:\?\.\s*)?\[/g
+const DECL_RE = {
+  go: /^func\s+(?:\(\s*(?:\w+\s+)?\*?\s*(\w+)(?:\[[^\]]*\])?\s*\)\s*)?(\w+)\s*[([]/gm,
+  ts: /^[ \t]*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function\s*\*?\s*([A-Za-z_$][\w$]*)|(?:(?:public|private|protected|static|readonly|override|async)\s+)*([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\([^)]*\)\s*(?::\s*[^{;=]+)?\{|(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*(?::\s*[^=]+)?=>)/gm,
+}
+const NOT_DECL = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function'])
+
+function walk(root, rel, out = []) {
+  const abs = path.join(root, rel)
+  if (!fs.existsSync(abs)) return out
+  const ents = fs.readdirSync(abs, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  for (const ent of ents) {
+    const r = path.posix.join(rel, ent.name)
+    if (ent.isDirectory()) { if (!SKIP_DIRS.has(ent.name)) walk(root, r, out) } else if (ent.isFile()) out.push(r)
+  }
+  return out
+}
+
+function listServices(root) {
+  const dir = path.join(root, 'services')
+  return fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort() : []
+}
+
+function forwardersOf(registry, lang) {
+  return Object.entries(registry.forwarders || {})
+    .map(([k, v]) => ({ file: k.slice(0, k.lastIndexOf(':')), symbol: k.slice(k.lastIndexOf(':') + 1), keyArg: v.keyArg }))
+    .filter((f) => LANG_EXT[lang].test(f.file) && /^[A-Za-z_$][\w$]*$/.test(f.symbol) && Number.isInteger(f.keyArg))
+}
+
+function skipString(src, i, lang) {
+  const q = src[i]
+  const raw = q === '`' && lang === 'go'
+  let j = i + 1
+  while (j < src.length && src[j] !== q) {
+    if (src[j] === '\\' && !raw) j++
+    else if (src[j] === '\n' && q !== '`') break
+    j++
+  }
+  return j + 1
+}
+
+// Replaces comments with spaces (newlines kept) so offsets and line numbers stay exact.
+function blankComments(src, lang) {
+  let out = ''
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]
+    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+      const lineComment = src[i + 1] === '/'
+      let stop = lineComment ? src.indexOf('\n', i) : src.indexOf('*/', i + 2)
+      stop = stop < 0 ? src.length : lineComment ? stop : stop + 2
+      out += src.slice(i, stop).replace(/[^\n]/g, ' ')
+      i = stop
+    } else if (c === '"' || c === "'" || c === '`') {
+      const stop = skipString(src, i, lang)
+      out += src.slice(i, stop)
+      i = stop
+    } else {
+      out += c
+      i++
+    }
+  }
+  return out
+}
+
+function callArgs(src, open, lang) {
+  const args = []
+  let depth = 0
+  let start = open + 1
+  for (let j = open; j < src.length; j++) {
+    const c = src[j]
+    if (c === '"' || c === "'" || c === '`') { j = skipString(src, j, lang) - 1; continue }
+    if (c === '(' || c === '[' || c === '{') depth++
+    else if (c === ')' || c === ']' || c === '}') {
+      if (--depth === 0) { args.push(src.slice(start, j).trim()); return { args, end: j } }
+    } else if (c === ',' && depth === 1) { args.push(src.slice(start, j).trim()); start = j + 1 }
+  }
+  return null
+}
+
+function argKey(text, lang) {
+  const m = /^"((?:[^"\\\n]|\\.)*)"$/.exec(text) || (lang === 'ts' && /^'((?:[^'\\\n]|\\.)*)'$/.exec(text)) || /^`([^`$\\]*)`$/.exec(text)
+  if (m) return { key: m[1] }
+  if (/^[0-9]/.test(text)) return null
+  if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?$/.test(text)) return { ident: text }
+  return { dynamic: true }
+}
+
+function goConsts(src) {
+  const out = []
+  let block = false
+  for (const line of src.split('\n')) {
+    if (/^(?:const|var)\s*\(\s*$/.test(line)) { block = true; continue }
+    if (block && /^\)/.test(line)) { block = false; continue }
+    const re = block ? /^\s+([A-Za-z_]\w*)(?:\s+string)?\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/ : /^(?:const|var)\s+([A-Za-z_]\w*)(?:\s+string)?\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/
+    const m = re.exec(line)
+    if (m) out.push([m[1], m[2]])
+  }
+  return out
+}
+
+function tsConsts(src) {
+  const re = /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*(?::\s*string\s*)?=\s*(?:'([^'\\\n]*)'|"([^"\\\n]*)")\s*;?\s*$/gm
+  return [...src.matchAll(re)].map((m) => [m[1], m[2] ?? m[3]])
+}
+
+// Same file, then same package/dir, then service-wide; ambiguous or absent -> unresolved.
+function resolveIdent(ident, file, consts) {
+  const dot = ident.indexOf('.')
+  const dirOf = (f) => path.posix.dirname(f)
+  let tiers
+  if (dot >= 0) {
+    const pkg = ident.slice(0, dot)
+    const name = ident.slice(dot + 1)
+    tiers = [consts.filter((c) => c.name === name && path.posix.basename(dirOf(c.file)) === pkg)]
+  } else {
+    const named = consts.filter((c) => c.name === ident)
+    tiers = [named.filter((c) => c.file === file), named.filter((c) => dirOf(c.file) === dirOf(file)), named]
+  }
+  for (const tier of tiers) {
+    const values = new Set(tier.map((c) => c.value))
+    if (values.size === 1) return [...values][0]
+    if (values.size > 1) return null
+  }
+  return null
+}
+
+function declsOf(src, lang) {
+  const out = []
+  for (const m of src.matchAll(DECL_RE[lang])) {
+    const name = lang === 'go' ? (m[1] ? `${m[1]}.${m[2]}` : m[2]) : m[1] || m[2] || m[3]
+    if (name && !NOT_DECL.has(name)) out.push({ at: m.index, name })
+  }
+  return out
+}
+
+const symbolAt = (decls, at) => decls.filter((d) => d.at < at).at(-1)?.name ?? '<module>'
+const lineAt = (src, at) => src.slice(0, at).split('\n').length
+
+function locateDef(src, fw, lang) {
+  if (!src) return null
+  const re = lang === 'go'
+    ? new RegExp(`func\\s+(?:\\([^)]*\\)\\s*)?${fw.symbol}\\s*\\(`)
+    : new RegExp(`(?:function\\s+${fw.symbol}|^[ \\t]*(?:(?:public|private|protected|static|async)\\s+)*${fw.symbol})\\s*\\(`, 'm')
+  const m = re.exec(src)
+  if (!m) return null
+  const open = m.index + m[0].length - 1
+  const params = callArgs(src, open, lang)
+  const bodyStart = params ? src.indexOf('{', params.end) : -1
+  const body = bodyStart >= 0 ? callArgs(src, bodyStart, lang) : null
+  if (!body) return null
+  const param = /^[A-Za-z_$][\w$]*/.exec(params.args[fw.keyArg] || '')
+  return { file: fw.file, open, bodyStart, bodyEnd: body.end, param: param ? param[0] : null }
+}
+
+function extractRegexReads(root, registry, lang) {
+  const reads = []
+  const dynamic = []
+  const allFwds = forwardersOf(registry, lang)
+  for (const svc of listServices(root)) {
+    const base = lang === 'go' ? `services/${svc}` : `services/${svc}/src`
+    const files = walk(root, base).filter((f) => (lang === 'go' ? /\.go$/.test(f) && !/_test\.go$/.test(f) : /\.tsx?$/.test(f) && !/\.(test|spec|d)\.tsx?$/.test(f)))
+    const srcs = new Map(files.map((f) => [f, blankComments(fs.readFileSync(path.join(root, f), 'utf8'), lang)]))
+    const consts = [...srcs].flatMap(([file, src]) => (lang === 'go' ? goConsts : tsConsts)(src).map(([name, value]) => ({ file, name, value })))
+    const fwds = allFwds.filter((f) => f.file.startsWith(`services/${svc}/`))
+    const defs = fwds.map((fw) => locateDef(srcs.get(fw.file), fw, lang)).filter(Boolean)
+    const fwdRe = fwds.length ? new RegExp(`(?<![\\w$])(${fwds.map((f) => f.symbol).join('|')})\\s*\\(`, 'g') : null
+    for (const [file, src] of srcs) {
+      const sites = [...src.matchAll(GETTER_RE[lang]), ...src.matchAll(INDEX_RE)].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0 }))
+      for (const m of fwdRe ? src.matchAll(fwdRe) : []) {
+        const open = m.index + m[0].length - 1
+        if (!defs.some((d) => d.file === file && d.open === open)) sites.push({ open, keyArg: fwds.find((f) => f.symbol === m[1]).keyArg })
+      }
+      const decls = declsOf(src, lang)
+      for (const site of sites.sort((a, b) => a.open - b.open)) {
+        const text = callArgs(src, site.open, lang)?.args[site.keyArg]
+        if (!text) continue
+        const def = defs.find((d) => d.file === file && site.open > d.bodyStart && site.open < d.bodyEnd)
+        if (def && text === def.param) continue
+        const k = argKey(text, lang)
+        if (!k) continue
+        const key = k.key ?? (k.ident ? resolveIdent(k.ident, file, consts) : null)
+        const line = lineAt(src, site.open)
+        if (key != null) reads.push({ file, line, key })
+        else dynamic.push({ file, symbol: symbolAt(decls, site.open), line })
+      }
+    }
+  }
+  return { reads, dynamic }
+}
+
+export const extractGoReads = (root, registry) => extractRegexReads(root, registry, 'go')
+export const extractTsReads = (root, registry) => extractRegexReads(root, registry, 'ts')
+
+export function extractPyReads(root, registry) {
+  const r = spawnSync('python3', ['-I', PY_READS, root, JSON.stringify(forwardersOf(registry, 'py'))], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  if (r.status !== 0) throw new Error(`python reader failed: ${(r.stderr || r.error?.message || '').trim()}`)
+  const out = JSON.parse(r.stdout)
+  return { reads: out.reads, dynamic: out.dynamic.map(({ file, symbol, line }) => ({ file, symbol, line })) }
+}
+
+// registry.dynamic enumerates the keys a dynamic site can produce; those sites become reads.
+export function extractReads(root, registry = loadRegistry(root)) {
+  const reads = []
+  const dynamic = []
+  for (const part of [extractPyReads(root, registry), extractGoReads(root, registry), extractTsReads(root, registry)]) {
+    reads.push(...part.reads)
+    for (const d of part.dynamic) {
+      const keys = (registry.dynamic || {})[`${d.file}:${d.symbol}`]
+      if (Array.isArray(keys)) reads.push(...keys.map((key) => ({ file: d.file, line: d.line, key })))
+      else dynamic.push(d)
+    }
+  }
+  return { reads, dynamic }
 }
 
 export function run(argv) {

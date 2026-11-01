@@ -17,6 +17,7 @@
 | 2026-11-01 | `implementation-ready` (unchanged) | /sdd-execute sequential (re-spec §5.3) | Steps 1,2,3,4,6,7,8,9,10,11,13,14,15,16,18 re-specced to the current tree (migration tip 034, int_positive forwarders, 277 owners → 278, Step 10 confirm-only) |
 | 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front confirmation given by the operator; sequential step loop starts |
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 1+2 done as one red-green commit (operator Option A): seed-side parser, CLI skeleton, parser fixtures and tests |
+| 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 3+4 done as one red-green commit (operator Option A): reader extraction (Python ast helper, Go/TS regex), forwarder and dynamic registry, reader fixtures and tests |
 
 ---
 

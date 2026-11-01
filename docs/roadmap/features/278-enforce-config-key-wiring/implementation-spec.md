@@ -152,7 +152,7 @@ No coverage threshold applies (Node script tests, not a service; C-08 service th
 
 ### Step 3 — service: Reader extraction (Python `ast`, Go and TypeScript regex)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -187,7 +187,7 @@ node --check scripts/check-config-wiring.mjs && python3 -I -m py_compile scripts
 
 ### Step 4 — test: Reader-extraction fixtures and tests (authored red)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
@@ -702,3 +702,18 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: "Output lines are `file:key:kind[:env]`".
 **Actual**: An unmodelled statement has no key, so its line is `services/xstockstrat-config/migrations/<file>:L<line>:unmodelled-rewrite`. `--json` adds the statement `sha256` (the `rewriteAllow` key). Values are never printed.
 **Reason**: The finding needs a locator, and no key exists for it.
+
+### Deviation: Steps 3+4 — executed as one TDD cycle
+**Spec said**: "Step 4 covers Step 3 ... `/sdd-execute` captures red before the paired service step" (separate steps, one commit each).
+**Actual**: Step 4's fixtures and cases (a)-(k) were authored first and red was captured (21 tests: 10 pass, 11 fail with `cw.extractReads is not a function`). Step 3 was then implemented and green was captured with both Verification commands (21 pass). Steps 3 and 4 landed as one red-green commit that flips both Statuses to `done`.
+**Reason**: Operator decision (Option A) for every inverted test/impl pair, recorded in context.md (commit cdfbeaf6).
+
+### Deviation: Step 3 — TypeScript getter calls use the lower-case method names
+**Spec said**: "regex over the `Get(String|Int|Float|Bool)\(` call and the `values\[`-index syntax".
+**Actual**: Go matches `.Get(String|Int|Float|Bool)(`. TypeScript matches `.get(String|Int|Float|Bool)(`, because the TS watchers define `getString/getInt/getFloat/getBool` (for example `services/xstockstrat-ledger/src/services/configWatcher.ts:107`) and callers use them (`ledgerServiceImpl.ts:378`, `notify/src/fanout/fanout.ts:56`). The `values[`-index rule applies to both languages. Comments are blanked before matching, so a commented-out call is not a read.
+**Reason**: With the capitalised pattern alone, every TS getter read would be missed. Fixture `readers/.../index_reads.ts` pins this with `cfg.getInt('performance.window_days', 30)`.
+
+### Deviation: Step 3 — dynamic-site `symbol` and extractor API
+**Spec said**: dynamic entries are `{"file","symbol","line","dynamic":true}`; `registry.dynamic` and `registry.forwarders` are keyed `file:symbol`.
+**Actual**: Python `symbol` is the dotted enclosing scope (`ConfigWatcher.get_str`, `is_enabled`). Go `symbol` is `Receiver.Func` or `Func`. TS `symbol` is the nearest preceding function or method name. All three fall back to `<module>`. The Node API is `extractReads(root, registry)`, which returns `{reads:[{file,line,key}], dynamic:[{file,symbol,line}]}`, plus `extractPyReads`, `extractGoReads` and `extractTsReads`. An identifier argument resolves to a string constant in the same file first, then the same directory or package, then anywhere in the service. A `pkg.Name` argument resolves in a directory named `pkg`. If more than one value matches, the read is reported as `dynamic-read`.
+**Reason**: The spec does not define the symbol format or the function signatures. Steps 5 and 11 key on these.
