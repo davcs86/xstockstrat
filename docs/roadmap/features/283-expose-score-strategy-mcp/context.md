@@ -362,3 +362,20 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
 - `tests/test_tool_deadlines.py`: `_score_strategy` in `_LONG_TOOLS`, `_score_` in `_MUTATING_PREFIXES`; new `test_manage_strategy_score_hung_analysis_surfaces_long_deadline` (hung `ANALYSIS_ENDPOINT`, `within 0.6s (deadline exceeded)` + `outcome unknown, verify before retrying`, `elapsed < _LONG_S + _SLACK_S`, `entered == 1`). `test_fr3_worst_cases_fit_under_57s` unchanged (PRESERVE `@AC-6 @feature-273`).
 - TDD (AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9, AC-11) red: 12 failed — 8× `ValueError: unknown operation 'score'` from `client.manage_strategy` (no `score` branch), 2× AC-9 `DID NOT RAISE`/regex mismatch, AC-5 `'analysis.strategy.scored'` not in description, `long_seen` missing `_score_strategy`; 208 passed in the three files. Green-reachability probe with a **temporary, reverted** Step-6-shaped `tools.py` (not committed): 220 passed. Green is due in Step 6.
 - Verification: full suite `--cov=app` → 12 failed (the RED cases only), 624 passed, coverage 84% (the 40% gate re-runs after Step 6); `ruff check` + `ruff format --check` clean; `def _rpc_error` grep shows only the two pre-existing copies (`test_tools.py`, `test_tool_deadlines.py`), no new one. No CI-equivalent fallback used.
+
+### Step 6 — service: agent `manage_strategy operation='score'` — 2026-11-01
+
+- `app/tools.py`: module-level `_score_strategy(ctx, strategy_id)` between `_grpc_error_message` and `_EXTRACTOR_TOOL_MAP`. It resolves `x-user-id` via `_caller_user_id` (owner-scoped; no admin gate, no `_caller_access_scope`) and calls `client.score_strategy`. Its own catch site passes `not_found=e.details() or "no eligible evidence"`, `deadline_s=client._LONG_RPC_TIMEOUT_S` and `write=True`. The shared mapper is not edited.
+- `manage_strategy`: the first statement after the docstring is `if operation == "score":`. It builds the 11-name `given` list (ten definition args plus `clear_fields`), raises `ValueError("manage_strategy(operation='score') accepts only strategy_id; got: …")` before any identity resolution or client call, and otherwise returns `_score_strategy`. `supplied`/`mask`/`update_mask`, the `update` empty-mask guard and the `client.manage_strategy` call are untouched.
+- Docstring changes:
+  - The summary line and the `operation:` line now include `score`.
+  - A new `SCORE (feature 283)` paragraph sits before `RESPONSE CASING`. It covers: only `strategy_id`; recomputes and persists the grade; the `analysis.strategy.scored` event; range ignored; the snake_case fields; the `excluded_symbols` `[]`/`null` semantics; PERMISSION_DENIED/NOT_FOUND/UNAVAILABLE; and that a deadline means the outcome is unknown, so verify with `list_strategies`.
+  - `RESPONSE CASING` gains the `score` snake_case clause.
+  - The module docstring line is updated and wrapped for E501 (see the Deviation Log). The "forty-five" tool-count text is unchanged.
+- TDD (paired RED from Step 5, re-captured before implementing): 12 failed, 147 passed in `test_tools.py` + `test_tool_deadlines.py` + `test_tools_endpoint.py`. The failures were 10× `TestManageStrategyScore`, the hung-analysis deadline case, and `test_every_catch_site_passes_deadline_s` (`long_seen` missing `_score_strategy`). After implementing: 159 passed.
+- Verification:
+  - The three files: 159 passed.
+  - The grep shows `operation == "score"`, `_score_strategy` and `client._LONG_RPC_TIMEOUT_S` at the new catch site.
+  - `ruff check` and `ruff format --check` are clean.
+  - Full suite with `--cov=app --cov-fail-under=40`: 636 passed, 84.44%.
+  - No CI-equivalent fallback was used.
