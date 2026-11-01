@@ -251,3 +251,7 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22.23.4. The root CLAUDE.md pins 24; the operator noted this is not a blocker. No CI-equivalent fallback was used, because Steps 1-2 need only `node`.
 - Open item: the fail-closed trigger does not see CTE-led (`WITH ...`) DML. No current migration other than the 017 collapse uses that shape.
 - Severity: n/a.
+
+## Session 2026-11-01 — operator ruling: option A for every inverted test/impl pair
+
+- **Binding operator decision:** the spec places each implementation step before its paired RED test step (3→4, 5→6, 7→8). Apply the same Option A already used for Steps 1+2 to every remaining pair: author the test step's test cases and fixtures first, capture RED, implement the implementation step, capture GREEN with both steps' Verification commands, and land each pair as **one** red-green commit that flips both Statuses to `done`, staging both steps' Files. Log one Deviation Log entry per pair ("executed as one TDD cycle, operator option A"). Do not raise a blocker for this ordering again.
