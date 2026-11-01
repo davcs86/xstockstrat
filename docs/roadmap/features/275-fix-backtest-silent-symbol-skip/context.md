@@ -766,3 +766,21 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   success. The `EVALUATION_FAILED` grep hits `analysis.proto:203` and `BacktestDiagnostics.tsx:52`.
 - Next: Step 4.
 
+### Step 4 — evaluator refusal mapping (2026-11-01, done)
+
+- `services/xstockstrat-analysis/app/services/evaluator.py`:
+  - `FormulaExecutionError.__init__` gained `code: str = ""`, stored as `self.code` (gRPC status name). The docstring
+    says it is set only for an owner-unreadable refusal. All 2-arg raise sites are unchanged, so contract errors keep
+    `code == ""`.
+  - `_execute_formula`: when `_raise_unreadable` is set and the code is NOT_FOUND or PERMISSION_DENIED, it raises
+    `FormulaExecutionError(formula_id, "not readable by owner", e.code().name)`. `e.details()` is never used. The live
+    path is unchanged: PERMISSION_DENIED and every other non-NOT_FOUND code re-raise, and NOT_FOUND skips with the
+    one-time warning. `metadata=self._meta` is unchanged.
+- TDD (scratch probe, see Deviation Log; Step 5 lands the durable tests): AC-1 red: `AioRpcError` PERMISSION_DENIED
+  propagated, and AC-7 red: `AttributeError: 'FormulaExecutionError' object has no attribute 'code'` (3 failed, 3
+  pins passed) → green: 6 passed.
+- Verification: the grep hits `evaluator.py:109`, `:264`, `:266`, `:268`; `ruff check` → all passed; `ruff format
+  --check` → 121 files already formatted. Also run: `tests/test_unreadable_formula.py` 7 passed; full suite 1498
+  passed, coverage 90.24% (≥40).
+- Spec citation drift: `servicer.py:2036` → `app/handlers/servicer.py:2083` (Deviation Log).
+- Next: Step 5 (evaluator refusal-mapping tests + the shared `aio_rpc_error` conftest builder).

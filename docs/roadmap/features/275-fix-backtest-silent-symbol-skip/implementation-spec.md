@@ -242,7 +242,7 @@ empty `git diff packages/proto/gen/`.
 
 ### Step 4 — service: map backtest-path `ExecuteFormula` PERMISSION_DENIED to `FormulaExecutionError` with a status code
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -827,3 +827,12 @@ _Populated by /sdd-execute as implementation proceeds._
   `gen/ts/analysis/v1/analysis_pb.ts`, `gen/ts/dist/analysis/v1/{analysis.d.ts,analysis.js,analysis_pb.d.ts,analysis_pb.js}`.
 - **Step 3 (2026-11-01) — not in one commit with Step 2.** This follows from the Step 2 entry above. Step 3 is its own
   commit, and the branch head is `proto-freshness`-consistent again from this commit on.
+- **Step 4 (2026-11-01) — TDD evidence via a scratch probe.** The step's paired tests are Step 5's **Files**
+  (`tests/conftest.py`, `tests/test_unreadable_formula.py`), so committing them here would break F-08. The red→green
+  cycle ran against an uncommitted scratch test that mirrors the six Step 5 cases (outside the repo, loaded with
+  `-p tests.conftest`). Step 5 lands the durable tests. No scope change.
+- **Step 4 (2026-11-01) — stale citation.** Codebase Evidence cites `servicer.py:2036` for `raise_unreadable=True`; on
+  the merged tree it is `app/handlers/servicer.py:2083`. Evidence only, no code impact.
+- **Step 4 (2026-11-01) — one inline comment.** `_execute_formula` gained a one-line constraint comment ("Never
+  e.details() …") to keep Instruction 3 load-bearing at the raise site. No CI-equivalent tooling fallback was used in
+  Step 4 (`uv run ruff` and `uv run pytest`, the service's own harness).
