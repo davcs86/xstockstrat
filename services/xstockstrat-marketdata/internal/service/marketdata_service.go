@@ -1709,7 +1709,8 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		if found && time.Since(fetchedAt) <= ttl {
+		// An edgar-axis row is never a fresh vendor hit; at quota it may still be served stale below.
+		if found && time.Since(fetchedAt) <= ttl && cacheAxis(f.Source) == snapshotSourceVendor {
 			cached[strings.ToUpper(sym)] = s.toProtoFundamentals(f, false)
 			continue
 		}
@@ -1767,7 +1768,7 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if found && time.Since(fetchedAt) <= ttl {
+	if found && time.Since(fetchedAt) <= ttl && cacheAxis(cached.Source) == snapshotSourceVendor {
 		return s.toProtoFundamentals(cached, false), nil
 	}
 

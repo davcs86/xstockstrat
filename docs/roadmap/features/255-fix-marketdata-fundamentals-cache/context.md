@@ -1086,3 +1086,19 @@ the next `/sdd-batch` run can pick it up.
 - Files modified: `internal/service/marketdata_service_test.go`, `internal/repository/marketdata_repo_test.go`,
   `cmd/server/main_test.go`
 
+### Step 7 — service: D-52 — vendor-axis fresh check [done]
+- Both vendor-path fresh checks now also require `cacheAxis(<row>.Source) == snapshotSourceVendor`: the multi path
+  (`marketdata_service.go:1713`, row `f`, with a 1-line constraint comment) and `resolveFundamentals` (`:1771`, row
+  `cached`). The stale serves (quota exhausted, `ErrFMPDailyCapExceeded`) are unchanged, so an edgar row can still be
+  served `stale=true` at cap (@feature-215 @AC-7). The spec's line anchors had drifted ~+1; edits were placed by content.
+- TDD: AC-4 red (service half): an uncommitted probe failed — a fresh `edgar` row (single) and `edgar+fmp` row (multi)
+  under the Finnhub vendor path were served fresh with `calls=0` → green: after the change both re-fetch (`calls=1`,
+  price 200) and the at-cap probe serves the edgar row `Stale` with `calls=0`. Probe deleted; Step 8 owns the tests.
+- Verification: the grep has 2 hits; `go build ./...` passes; full `go test ./... -race` passes (incl.
+  `CacheHitNoFMP`, feature-211 edgar tests); golangci-lint 0 issues on `internal/service` (CI-equivalent fallback, in
+  the Deviation Log).
+- Husky: the main worktree has no `node_modules` (a symlink would dangle) and `core.hooksPath` points at its missing
+  `.husky/_`; `pnpm install --frozen-lockfile --ignore-scripts` ran in this worktree and `.husky/pre-commit` was run
+  by hand on the staged set.
+- Files modified: `internal/service/marketdata_service.go`
+

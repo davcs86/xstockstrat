@@ -428,7 +428,7 @@ total must still be at least 40%.
 
 ### Step 7 — service: D-52 — vendor-axis fresh check
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -1120,3 +1120,13 @@ _Populated by /sdd-execute as implementation proceeds._
   failures in all three packages), then restoring `HEAD` for GREEN. A throwaway mutation (each count call passed
   `"edgar"`, reverted, not committed) failed the AC-2, fallback and AC-3 tests, so the pins catch a wrong source.
 - **Disposition**: CI-equivalent fallback.
+
+### 2026-11-01 — Step 7 — CI-equivalent fallback (golangci-lint), RED via throwaway probes
+- **Spec said**: Verification is the 2-hit grep and `go build ./...`; the paired tests belong to Step 8.
+- **Actual**: the grep has 2 hits (`marketdata_service.go:1713`, `:1771`) and the build passes. RED/GREEN used an
+  uncommitted probe file (single and multi paths over a fresh `edgar`/`edgar+fmp` row under the vendor path, plus an
+  at-cap stale serve); it failed before the change (`calls=0`, edgar row served fresh) and passed after, then was
+  deleted (Step 8 owns the committed tests). Full `go test ./... -race` passes, including `CacheHitNoFMP` and the
+  feature-211 edgar tests. As an extra check, the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI
+  pin) ran on `./internal/service/...` and reported `0 issues.`
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
