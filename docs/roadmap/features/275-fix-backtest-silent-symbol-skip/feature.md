@@ -61,4 +61,4 @@ diagnostics and is scored and persisted as a success. On staging this hid a PERM
 
 ## Next Action
 
-`/sdd-execute fix-backtest-silent-symbol-skip sequential` — Step 1 (re-anchor gate) is done and passed on the merged tree (2026-11-01); continue with Steps 2–3 (proto value 6 + regenerated stubs + UI map key, one commit).
+`/sdd-execute fix-backtest-silent-symbol-skip sequential` — Steps 1–2 are done (2026-11-01: re-anchor gate; `NO_TRADE_REASON_EVALUATION_FAILED = 6` in `analysis.proto`, buf lint/breaking clean). Continue with Step 3 (regenerate stubs + UI `NO_TRADE_MESSAGE` key); `proto-freshness` is stale until then.

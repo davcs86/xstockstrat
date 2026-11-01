@@ -730,3 +730,20 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - TDD: N/A (verification/checklist step, no code). The Step 1 Verification grep output matched every merged anchor
   above.
 - Next: Step 2 (proto `NO_TRADE_REASON_EVALUATION_FAILED = 6`, landing in one commit with Step 3).
+
+### Step 2 — proto `NO_TRADE_REASON_EVALUATION_FAILED = 6` (2026-11-01, done)
+
+- `packages/proto/analysis/v1/analysis.proto`: appended `NO_TRADE_REASON_EVALUATION_FAILED = 6` (:203) after value 5
+  with the spec's comment, and widened the value-4 comment to the option (a) wording (indicators refusal: NOT_FOUND to
+  the owner, PERMISSION_DENIED to an admin or for any other `ExecuteFormula` refusal). No other enum or message touched.
+- The 6-vs-4 boundary: 4 = formula failure, out-of-contract series, or any `ExecuteFormula` NOT_FOUND/PERMISSION_DENIED
+  refusal on the backtest path (Step 4 maps these); 6 = any other upstream RPC status or unexpected exception, explained
+  in the run warnings.
+- TDD: N/A (proto). Verification: `buf lint` → clean; `buf breaking` against `origin/main-dev` (`subdir=packages/proto`)
+  → clean (additive enum value); the enum grep lists values 0–6. buf 1.72.0 ran inside the `Dockerfile.codegen` image
+  (CI-equivalent fallback, Deviation Log).
+- Committed alone (not with Step 3): the `.proto` source only, `gen/` untouched, so `tsc` is not broken; `proto-freshness`
+  stays stale until Step 3 regenerates the stubs. Recorded in the Deviation Log.
+- Pre-commit hook: the main worktree has no `node_modules` and `core.hooksPath` is unset, so husky does not run in this
+  worktree; the commit was made without `--no-verify`.
+- Next: Step 3 (`./scripts/buf-gen.sh` via the codegen image + `NO_TRADE_MESSAGE[EVALUATION_FAILED]`).

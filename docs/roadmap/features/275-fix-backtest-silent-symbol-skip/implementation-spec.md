@@ -164,7 +164,7 @@ grep -n "NO_TRADE_REASON_.* = [0-9]*;" packages/proto/analysis/v1/analysis.proto
 
 ### Step 2 — proto: add `NO_TRADE_REASON_EVALUATION_FAILED = 6` and draw the 6-vs-4 boundary
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -802,3 +802,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Step 1 (2026-11-01) — 215 status.** 215's `status.md` is `in-progress`, not landed; the Step 1 criterion (its value
   5, `fund_refusals` and `fund_unknown` in the tree) holds, so the gate passes. Recorded, not a blocker.
 - No CI-equivalent tooling fallback was used in Step 1 (grep and git only).
+- **Step 2 (2026-11-01) — buf via the pinned codegen image.** **Disposition**: CI-equivalent fallback. Host `buf` is
+  not installed. The `xstockstrat-codegen` image was built from `Dockerfile.codegen` (buf 1.72.0, the CI pin) with the
+  same `docker build` command `scripts/localenv-setup.sh` uses; the script itself was not run, because its codegen
+  half writes `packages/proto/gen/`, which is Step 3's **Files**. `buf lint` and `buf breaking --against
+  "/home/user/xstockstrat/.git#branch=origin/main-dev,subdir=packages/proto"` (the literal `--git-common-dir`
+  value) ran inside the container with the repo mounted at its host path → both clean.
+- **Step 2 (2026-11-01) — separate commit from Step 3.** Step Dependencies say Steps 2–3 land in one commit, because the
+  exhaustive `NO_TRADE_MESSAGE` breaks `tsc` once the stubs carry value 6. The run harness executes one commit per
+  step, so Step 2 (the `.proto` source only) is committed alone; `packages/proto/gen/` is untouched, so the UI build is
+  not broken at this commit. The intermediate commit is stale against `proto-freshness` until Step 3 regenerates the
+  stubs and adds the UI key. Sequential mode has no per-step PR, so CI only sees the integration head. No scope change.
