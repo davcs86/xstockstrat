@@ -122,3 +122,8 @@
 - `max_symbols_per_list` (operator yes): SetConfig bound `[1,1000]` added in Step 3 (+ test rows in Step 4); staging value verified 500. product-spec gains `xstockstrat-config` as an affected service; design.md Portfolio paragraph updated.
 - merge-order.md row for 282 amended (operator yes): 275 also edits agent `tools.py` (soft docstring-region rebase); 240/231 are launched so no overlap risk. Coverage table now maps AC-4 -> 6,8; AC-7 -> 6,8,10; AC-22 -> 4,6,10. Total Steps: 16.
 - Unchanged dissent/risks carried: design R1-R11; teardown owed in Step 16.
+
+## Session 2026-11-01 — merge with main-dev; feature 281 ordering
+
+- Merged `origin/main-dev` into the branch (add/add conflicts in the five 282 files resolved to our side; main-dev held only the original story, byte-identical to `4a185fd`).
+- Feature 281 (`signal-watchlist-expiry-pruning`, implementation-ready) overlaps 282 on `AddWatchlistSymbols`, the agent signal-add path and shared docs/tests (no proto field, config key or migration collision). Operator decision: 282 merges AFTER 281. Added a soft `merge-order.md` row; Step Dependencies note updated. Carry into execution: re-anchor Steps 9/11 after 281 lands; keep the servability filter ahead of 281's expiry write so a refused symbol gets no expiry row.
