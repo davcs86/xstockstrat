@@ -22,7 +22,7 @@ FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchan
 
 ## Out of Scope
 
-- Any in-product mark, new field or automated migration for existing unservable entries. Existing staging entries are handled by a one-time operator cleanup (FMP + Webull MCP audit, then `manage_watchlist_symbols`), not by shipped code.
+- Any migration, cleanup job, mark or new field for existing unservable entries; staging was handled by a one-time operator cleanup (FMP + Webull MCP audit, then `manage_watchlist_symbols`). This is a scope exclusion only: it does not constrain the design of the filter, which treats every submitted symbol uniformly.
 - Adding OTC market data (the Alpaca `otc` feed) or trading OTC symbols.
 - A per-symbol time-based negative cache. Absence from the cached active+tradable asset set is the only unservable signal for delisted/unknown tickers (a mistyped ticker is refused too).
 
@@ -75,7 +75,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 - [x] **Verify the premise.** Resolved 2026-11-01 against FMP + Webull (third-party; Alpaca `ListAssets` itself not yet queried — confirm in design recon). CRTD: FMP "Other OTC", Webull OTCB. BOSSY: FMP "Other OTC", Webull PINL. FORL: FMP "Other OTC", Webull EXPM (expert market, liquidate-only). DNB is **not** OTC: the ticker now resolves to Dun & Bradstreet (NYSE, Webull non-tradable) — a delisted/reused ticker, i.e. the delisted/non-tradable case, in scope since 2026-11-01. Staging `query_bars` for CRTD returns no bars.
 - [x] **Rejection behaviour.** Decided: accept the rest of the request; refuse only OTC symbols and report each with a warning/reason (FR-2 as written).
-- [x] **Existing data.** Decided 2026-11-01: no mark and no new field. Existing unservable entries are removed by a one-time operator cleanup using the FMP and Webull MCPs (see Out of Scope); the audit result is recorded in `context.md`.
+- [x] **Existing data.** Decided 2026-11-01 and clarified by the operator: no migration or cleanup code is required for existing unservable entries (staging was cleaned once by hand). This must not shape the feature design: no special-casing of stored entries.
 - [x] **Feed awareness.** Decided: always filter, regardless of `marketdata.alpaca.feed`.
 - [x] **Where to enforce bar ingestion.** Decided 2026-11-01: in marketdata (`markWarm` / `GetBars`, FR-3); no analysis live-loop change.
 - [x] **Scope widened.** Decided 2026-11-01: the block covers delisted and non-tradable symbols as well as OTC (DNB case).
