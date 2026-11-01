@@ -1007,7 +1007,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 17 — test: consumer-surface read-only verification (C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-ui` (read-only, no file changes)
 **Files**:
 - none (verification only)
@@ -1265,3 +1265,11 @@ _Populated by /sdd-execute as implementation proceeds._
   - Worktree setup: `pnpm install --frozen-lockfile` ran at the worktree root so the husky pre-commit hook could run.
     The main worktree had no `node_modules` to symlink. No lockfile changed.
 - **Disposition**: CI-equivalent fallback.
+
+### 2026-11-01 — Step 17 — no deviation; worktree setup only
+- **Spec said**: read-only verification, TDD N/A, Files none.
+- **Actual**: all three Verification commands ran as specced and passed. No code or test file changed. Worktree
+  setup: the main worktree had no `node_modules` to symlink, so `pnpm install --frozen-lockfile` ran at the worktree
+  root for the husky pre-commit hook. No lockfile changed. Node is v22 against the root CLAUDE.md pin of 24
+  (operator-noted, not a blocker).
+- **Disposition**: None (setup note only).

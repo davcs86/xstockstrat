@@ -1278,3 +1278,17 @@ the next `/sdd-batch` run can pick it up.
 - Files modified: `internal/alpaca/stream_test.go`
 - Deviations: RED came from a mutation, and there are three extra harness helpers (see Deviation Log)
 
+### Step 17 — test: consumer-surface read-only verification (C-14) [done]
+- `git diff --stat origin/main-dev -- packages/proto/ services/xstockstrat-agent/ services/xstockstrat-ui/` is empty.
+  This branch changes no proto, agent or UI file.
+- Agent `uv run pytest tests/test_fundamental_metrics_tool.py -q`: `2 passed`. The tools read `missing_metrics` as
+  authoritative (`tools.py:314-316`, `:340`) and pass it through (`:456`, `:487`), so a longer list is a valid shape.
+- The BFF grep for `missing_metrics|missingMetrics` in `traderBff.ts`/`insightsBff.ts` has no hits. The `stale|source`
+  hits are comments and the unrelated `sourceService` note field. `getFundamentals` (`traderBff.ts:88`,
+  `insightsBff.ts:110`) and `getFundamentalsMulti` (`insightsBff.ts:121`) are plain `forward(...)` pass-throughs.
+- The integration PR must note two things. Analysis fundsignal (feature 246) benefits from the honest
+  `missing_metrics`. FR-4(b) provenance: a merged stale row shows today's `as_of` with prior enrichment values.
+- TDD: N/A (no code change).
+- Files modified: none
+- Deviations: none (worktree `pnpm install` setup note in Deviation Log)
+
