@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps; AC-5/AC-6 refined, @AC-10 added, FR-4(b) rewritten per operator r3/r4 sign-off |
 | 2026-11-01 | `implementation-ready` (re-spec) | /sdd-execute | Merged `origin/main-dev`; steps 0–17 re-anchored to the current codebase (Step 11 now wraps both `getJSON` transport returns; Step 13 reflects existing `WarnContext`) |
+| 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (sdd-batch-execute); operator gave the up-front confirmation |
 
 ---
 
