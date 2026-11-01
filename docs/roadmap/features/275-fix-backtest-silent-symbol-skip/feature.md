@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator at the r3 gate: option (a) (PERMISSION_DENIED → FORMULA_ERROR, FR-8/AC-7 added) and sign-off on the @AC-5 @feature-150 correction |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps (Step 1 is a hard re-anchor gate on the merged 272/273/215 tree) |
 | 2026-11-01 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Directive re-spec of steps 1, 5, 6, 7, 8 and 9 onto the merged tree (272/273 launched; 215 gate + value 5 present); line anchors only, no scope change |
+| 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator gave the up-front sequential confirmation; execution starts at Step 1 on `feature/fix-backtest-silent-symbol-skip` |
 
 ---
 
