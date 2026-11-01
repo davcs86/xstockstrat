@@ -361,7 +361,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 8 — test: descriptor + operations-set parity guard, with the runbook and strat-lab skill edits it forces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_score_strategy_parity.py` — create
@@ -481,3 +481,4 @@ _Populated by /sdd-execute as implementation proceeds._
 - 2026-11-01 — Step 3 (minor, within Files): the success-path "sorted + deduped" and "oversize" unit tests also carry an eligible `_cell("AAPL", trades=3)`, because ScoreStrategy only reaches `return score` (where the trailer is set) when at least one symbol is eligible; the server loopback's populated case uses `AAPL + SCHD`. The literal-key test also pins `_EXCLUDED_TRAILER_MAX_BYTES == 4096` (the Step 4 value). No CI-equivalent fallback was needed for this step (pytest + ruff ran natively); the analysis `.venv` resolves Python 3.12.3 (`.python-version` 3.12, `requires-python >=3.12`), not the root-table 3.13.
 - 2026-11-01 — Step 6 (minor, within Files): the module-docstring `manage_strategy` line text from Instruction 4 is wrapped onto a continuation line, because on one line it is 135 characters and fails ruff `E501` (line-length 100). The wording is unchanged. No CI-equivalent fallback was used (pytest and ruff ran natively).
 - 2026-11-01 — Step 7 (minor, within Files): `_LONG_RPCS` is reflowed onto one entry per line because the one-line set with `"ScoreStrategy"` is 106 characters (ruff `E501`, line-length 100); the `_stub_calls` docstring is updated to name the new `call = stub.<Rpc>(...)` form. No CI-equivalent fallback was used (pytest and ruff ran natively).
+- 2026-11-01 — Step 8 (minor, within Files): the parity test reuses Step 5's fake call object and `_channel_cm` by importing the `tests.test_client` **module** (C-13, single definition site). It does not import the `TestScoreStrategyClient` name, because pytest re-collects an imported `Test*` class (the first RED run showed 3 duplicate tests). The runbook's `**Errors**` rows for `score` quote the servicer's real abort details, including the three `… store unavailable` UNAVAILABLE variants. The `score` field table wording follows the `StrategyScore` proto comments. No CI-equivalent fallback was used (pytest, ruff and the plugin validator ran natively).

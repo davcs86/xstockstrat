@@ -386,3 +386,34 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
 - `acceptance/fix-agent-client-deadlines.feature`: `| ScoreStrategy       | 45.5   |` appended after `TriggerBackfill` (signed-off EXTEND of `@AC-5 @feature-273`), same commit as the `_AC5_ROWS` tuple.
 - TDD (C-16 preservation/extension of `@AC-5`, `@AC-6`, `@AC-10 @feature-273`) red: with the bump + `_LONG_RPCS` edit and the matcher unchanged, 1 failed / 21 passed — `AssertionError: matcher found only 73 stub calls` (`assert 73 >= 74`). Green after the Assign branch: matcher count exactly 74 (`('score_strategy', 'ScoreStrategy')` included); the fake-channel `ScoreStrategy` row passes with no mock change (`await call` raises `_Recorded` before `trailing_metadata()`), and the hung-backend row passes.
 - Verification: `test_tool_deadlines.py` + `test_client_deadlines.py` 42 passed (incl. PRESERVE `test_fr3_worst_cases_fit_under_57s`); full suite `--cov=app --cov-fail-under=40` 638 passed, 84.44%; `ScoreStrategy` grep hits the test tuple, `_LONG_RPCS` and the feature row; `ruff check` + `ruff format --check` clean. No CI-equivalent fallback used.
+
+### Step 8 — test: descriptor + operations-set parity guard, with the runbook and strat-lab skill edits it forces — 2026-11-01
+
+- `tests/test_score_strategy_parity.py` (new). Every surface is located by a regex marker, never by line number.
+  - `test_score_projection_covers_every_proto_field` pins `{f for f in StrategyScore.DESCRIPTOR.fields if f.has_presence} == {"origin"}` and checks that `client.score_strategy`'s keys minus `excluded_symbols` equal the no-presence descriptor fields. `FieldDescriptor.has_presence` is present in the locked protobuf, so the fallback was not needed.
+  - `test_operation_sets_match_the_enum_on_every_surface` checks that `StrategyOperation` minus `UNSPECIFIED`, plus `score`, matches four surfaces: the tool summary line, the docstring `operation:` line, the runbook `| \`operation\` |` row inside `### \`manage_strategy\``, and the new canonical `SKILL.md` line.
+  - `test_score_side_effects_are_documented_on_runbook_and_skill` is parametrized over the runbook and skill (AC-10): `analysis.strategy.scored`, `persists`, and a range…ignored clause.
+  - The fake call and `_channel_cm` come from the `tests.test_client` module (see the Deviation Log).
+- `docs/runbooks/mcp-tools.md`, inside `### \`manage_strategy\`` only:
+  - `"score"` is added to the `operation` row.
+  - Seven `score` rows are added to **Errors**: client-side `ValueError`, PERMISSION_DENIED, both NOT_FOUND variants with the stale grade cleared, the availability-unknown UNAVAILABLE, the store-down UNAVAILABLE variants, and the 45 s deadline.
+  - A `**\`score\` (feature 283).**` block follows "Effect on the derived grade". It covers: owner-scoped, not admin-gated; `strategy_id` only; persists the grade and emits `analysis.strategy.scored`; range ignored; a snake_case field table with `excluded_symbols` `[]`/`null` semantics; a Return example; and the 45 s budget with the `ceil(symbols/4) × 8 × 10 s` bound, plus "verify with `list_strategies`".
+  - The count text was not touched.
+- `plugins/strat-lab/skills/backtest/SKILL.md`:
+  - The canonical line `` `manage_strategy` operations: `register` | `update` | `deactivate` | `reactivate` | `score` `` is added after the Scope paragraph.
+  - The Ownership paragraph now names `manage_strategy` "(every operation, `score` included)".
+  - A new **Refreshing the grade (feature 283)** paragraph follows the Mutation guard.
+  - Frontmatter is untouched. No plugin version bump: the manifests were not edited.
+- Pre-existing drift, not fixed here (for the findings log):
+  - The runbook `manage_strategy` opener still says "**Admin-scoped write**", although the section has been ownership-gated since feature 133 (agent `CLAUDE.md` § Management-tool authorization). The new `score` block states "owner-scoped, not admin-gated" explicitly.
+  - The `client.manage_strategy` docstring also still says "admin-scoped".
+- TDD (AC-6, AC-10):
+  - RED: 3 failed, 1 passed. The failures were the runbook operation set missing `score` (the docstring surfaces already passed after Step 6), plus the runbook and SKILL.md missing `analysis.strategy.scored`. The projection test was already green from Step 2.
+  - GREEN after the docs edits: 4 passed.
+- Verification:
+  - `test_tools_endpoint.py` + `test_tools.py`: 139 passed. This includes the AC-6 count guard (45) and the feature-149 docs guard, both PRESERVE.
+  - Full suite with `--cov=app --cov-fail-under=40`: 642 passed, 84.44%.
+  - `ruff check` and `ruff format --check` are clean.
+  - `validate.py --self-test` and `validate.py` are OK.
+  - No CI-equivalent fallback was used.
+
