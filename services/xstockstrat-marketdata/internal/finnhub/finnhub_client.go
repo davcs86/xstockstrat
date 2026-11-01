@@ -16,6 +16,9 @@ import (
 	"github.com/xstockstrat/marketdata/internal/source"
 )
 
+// SourceName is the fundamentals-row source id Finnhub writes.
+const SourceName = "finnhub"
+
 // ClientConfig holds Finnhub connection settings. The API key is never logged. No metric
 // tiering (unlike FMP) — every fetch issues all 3 calls, so there is no Metrics field.
 type ClientConfig struct {
@@ -92,7 +95,7 @@ func (c *Client) fetchOne(ctx context.Context, symbol string, now time.Time) (*s
 		Symbol:       strings.ToUpper(symbol),
 		ExtraMetrics: map[string]float64{},
 		AsOf:         now,
-		Source:       "finnhub",
+		Source:       SourceName,
 	}
 	metric.Metric.apply(f)
 	quote.apply(f)

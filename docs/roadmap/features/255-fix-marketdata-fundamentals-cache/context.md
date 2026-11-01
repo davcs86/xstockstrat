@@ -1020,3 +1020,13 @@ the next `/sdd-batch` run can pick it up.
   golangci-lint reports 0 issues (CI-equivalent fallback, in the Deviation Log).
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
 
+### Step 3 — service: S — introduce `fmp.SourceName`/`finnhub.SourceName` and alias `classification.SourceFMP` [done]
+- Added `fmp.SourceName = "fmp"` and `finnhub.SourceName = "finnhub"`; both clients now write `Source: SourceName`.
+  `classification.SourceFMP = fmp.SourceName` (new import `internal/fmp`; no cycle — `go build ./...` clean). Added
+  the 2-line AsOf constraint comment in `fmpQuote.toFundamentals`. C-18 waivers left as-is.
+- TDD red: uncommitted probe tests failed to compile (`undefined: SourceName` in fmp/finnhub,
+  `undefined: fmp.SourceName` in classification) → green: the same probes passed after the change, then were deleted
+  (Step 4 owns the committed tests).
+- Verification: `go build ./...`, `go vet` of fmp/finnhub/classification, the no-literal grep, full `go test ./...`
+  all pass; golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/fmp/fmp_client.go`, `internal/finnhub/finnhub_client.go`, `internal/classification/sector.go`

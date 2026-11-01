@@ -196,7 +196,7 @@ The new tests are in the excluded `service` package. The CI total must still be 
 
 ### Step 3 — service: S — introduce `fmp.SourceName`/`finnhub.SourceName` and alias `classification.SourceFMP`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify
@@ -1074,3 +1074,14 @@ _Populated by /sdd-execute as implementation proceeds._
   and reported `0 issues.` The coverage command ran with its `COVERPKGS` list expanded inline (same package set); the
   total was 71.5%.
 - **Disposition**: CI-equivalent fallback.
+
+### 2026-11-01 — Step 3 — CI-equivalent fallback (golangci-lint) and RED via throwaway probes
+- **Spec said**: Step 3's Verification is `go build ./...`, `go vet` of `fmp`/`finnhub`/`classification` and a grep;
+  its paired tests belong to Step 4.
+- **Actual**: all three pass. As an extra check, the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI
+  pin) ran on `fmp`, `finnhub`, `classification` and `repository` and reported `0 issues.`; the full
+  `GOWORK=off go test ./...` passes. Because Step 4 owns the test files, RED was captured with uncommitted throwaway
+  probe tests (`undefined: SourceName` / `undefined: fmp.SourceName`), which went green after the change and were
+  deleted. Edits were applied by symbol; the new consts shift later `fmp_client.go`/`finnhub_client.go` anchors by
+  3 lines (the AsOf comment adds 2 more in `toFundamentals`). The C-18 waivers (`marketdata_repo.go:587`, `marketdata_service.go:1966`/`:1986`) were left untouched.
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.

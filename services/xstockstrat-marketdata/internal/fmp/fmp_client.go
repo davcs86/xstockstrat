@@ -19,6 +19,9 @@ import (
 	"github.com/xstockstrat/marketdata/internal/source"
 )
 
+// SourceName is the fundamentals-row source id FMP writes; the quota seed filters on it.
+const SourceName = "fmp"
+
 // ErrFMPDailyCapExceeded is returned before any HTTP call once the shared UTC-day budget is spent.
 // Callers map it to serve-stale / ResourceExhausted, never to Unavailable.
 var ErrFMPDailyCapExceeded = errors.New("fmp: daily request cap reached")
@@ -339,8 +342,10 @@ func (q fmpQuote) toFundamentals(now time.Time) *source.Fundamentals {
 		YearHigh:     q.YearHigh,
 		YearLow:      q.YearLow,
 		ExtraMetrics: extra,
-		AsOf:         now,
-		Source:       "fmp",
+		// The boot quota seed counts as_of >= today: AsOf must stay the fetch instant,
+		// not a vendor-reported date.
+		AsOf:   now,
+		Source: SourceName,
 	}
 }
 
