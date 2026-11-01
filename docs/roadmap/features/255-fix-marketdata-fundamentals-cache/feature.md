@@ -58,4 +58,4 @@ Five marketdata defects in the fundamentals path:
 
 ## Next Action
 
-`/sdd-execute fix-marketdata-fundamentals-cache sequential` — continue at Step 10 (Steps 1–9 done 2026-11-01)
+`/sdd-execute fix-marketdata-fundamentals-cache sequential` — continue at Step 11 (Steps 1–10 done 2026-11-01)

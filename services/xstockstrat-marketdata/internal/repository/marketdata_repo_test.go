@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -746,3 +748,82 @@ func TestDropQuoteChunksBefore(t *testing.T) {
 }
 
 func tp(t time.Time) *time.Time { return &t }
+
+// --- Feature 255: AC-6 — an undecodable extra_metrics column is logged, never silently dropped ---
+
+func captureSlog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestGetFundamentals_UndecodableExtraIsLogged_AC6(t *testing.T) {
+	buf := captureSlog(t)
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	cols := strings.Split(strings.ReplaceAll(fundamentalsColumns, " ", ""), ",")
+	asOf := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`FROM marketdata.fundamentals WHERE symbol = \$1`).
+		WithArgs("AAPL").
+		WillReturnRows(pgxmock.NewRows(cols).AddRow(
+			"AAPL", asOf,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, // market_cap..year_low (11)
+			[]byte(`{"total_debt":"n/a"}`), // extra_metrics: valid jsonb, not map[string]float64
+			"USD", "fmp", asOf,
+		))
+
+	f, _, found, err := repo.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if len(f.ExtraMetrics) != 0 {
+		t.Fatalf("expected empty ExtraMetrics, got %v", f.ExtraMetrics)
+	}
+	out := buf.String()
+	for _, want := range []string{"fundamentals extra_metrics decode failed", "symbol=AAPL", "error="} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("log output missing %q; got:\n%s", want, out)
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestDecodeExtraMetrics(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     []byte
+		want    map[string]float64
+		wantLog bool
+	}{
+		{"valid", []byte(`{"total_debt":12.5}`), map[string]float64{"total_debt": 12.5}, false},
+		{"empty", nil, map[string]float64{}, false},
+		{"type mismatch", []byte(`{"total_debt":"n/a"}`), map[string]float64{}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := captureSlog(t)
+			got := decodeExtraMetrics(context.Background(), "MSFT", tc.raw)
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			logged := strings.Contains(buf.String(), "fundamentals extra_metrics decode failed") &&
+				strings.Contains(buf.String(), "symbol=MSFT")
+			if logged != tc.wantLog {
+				t.Fatalf("logged=%v, want %v; log:\n%s", logged, tc.wantLog, buf.String())
+			}
+		})
+	}
+}

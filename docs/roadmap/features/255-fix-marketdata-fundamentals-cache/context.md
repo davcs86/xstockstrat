@@ -1131,3 +1131,15 @@ the next `/sdd-batch` run can pick it up.
   worktree and `.husky/pre-commit` was run by hand on the staged set (`core.hooksPath` points at a missing dir).
 - Files modified: `internal/repository/marketdata_repo.go`
 
+### Step 10 — test: an undecodable extra column is logged (AC-6) [done]
+- Added `TestGetFundamentals_UndecodableExtraIsLogged_AC6` (pgxmock `GetFundamentals` over a row whose
+  `extra_metrics` is `{"total_debt":"n/a"}`: found, empty `ExtraMetrics`, WARN with `symbol=AAPL` and `error=`) and
+  `TestDecodeExtraMetrics` (valid / empty / type-mismatch table) in `internal/repository/marketdata_repo_test.go`, with a
+  file-local `captureSlog(t)` (stdlib `slog.NewTextHandler`, restored in `t.Cleanup`, no `t.Parallel()`).
+- TDD: AC-6 red: with Step 9's `slog.WarnContext` temporarily stubbed out (uncommitted mutation, restored),
+  "log output missing \"fundamentals extra_metrics decode failed\"" and `type mismatch` "logged=false, want true"
+  failed → green: both tests pass on the committed Step 9 code.
+- Verification: the targeted `-run 'UndecodableExtra|DecodeExtraMetrics'` passes; full `go test ./... -race` passes,
+  total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/repository/marketdata_repo_test.go`
+

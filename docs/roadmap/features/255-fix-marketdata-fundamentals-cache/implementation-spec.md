@@ -550,7 +550,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./...
 
 ### Step 10 — test: an undecodable extra column is logged (AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
@@ -1153,4 +1153,16 @@ _Populated by /sdd-execute as implementation proceeds._
   (`undefined: decodeExtraMetrics`) and passed after, then was deleted (Step 10 owns the committed tests). Full
   `go test ./... -race` passes, `go vet -tags dbtest ./internal/repository/` passes, and the operator-approved
   `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported `0 issues.` on the module.
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 10 — CI-equivalent fallback (golangci-lint), RED by mutation, file-local slog capture
+- **Spec said**: write the two AC-6 tests red-first; capture slog with `slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))`
+  restored in `t.Cleanup`; "no new shared helper".
+- **Actual**: Step 9 already landed the production change, so the tests could not fail against the committed tree.
+  RED was captured by temporarily replacing Step 9's `slog.WarnContext` line with a no-op (restored from a backup
+  before GREEN, never committed): both `TestGetFundamentals_UndecodableExtraIsLogged_AC6` and the `type mismatch` case
+  of `TestDecodeExtraMetrics` failed on the missing WARN. The capture is a file-local, unexported `captureSlog(t)` in
+  `marketdata_repo_test.go` that both tests use (stdlib only, not a shared fixture); it avoids pasting the
+  SetDefault/Cleanup block twice (C-18). The operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (CI pin) reported
+  `0 issues.`
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
