@@ -1258,3 +1258,23 @@ the next `/sdd-batch` run can pick it up.
 - Files modified: `internal/alpaca/stream.go`
 - Deviations: the RED probe used a transport rewrite, and the extra `closeSubLocked` helper (see Deviation Log)
 
+### Step 16 — test: Alpaca reconnect budget reset and give-up close (AC-7, AC-8) [done]
+- `stream_test.go` gains an `httptest` + `websocket.Accept` server (`newStreamTestServer`). The manager is built with
+  `MaxReconnects 3`, `ReconnectDelayMs 1`, a `ws://` `streamURL` and a manager ctx that is cancelled in `t.Cleanup`.
+- New tests:
+  - `TestStreamManager_BudgetResetsAfterHealthySession_AC7`: four healthy (acked) drops are followed by a 5th
+    connection, and the subscriber stays open.
+  - `TestStreamManager_GiveUpClosesSubscribers_AC8`: `<-barCh` returns `ok == false`, and the ERROR log has
+    `giving up` and `max=3`. A later subscriber-ctx cancel does not panic.
+  - `TestStreamManager_BackoffCancellable`: cancelling during a 600 s backoff sets `running == false` with no reconnect.
+- `TestDispatchBarCarries1MinEnum` is unchanged.
+- TDD: RED came from temporarily reverting Step 15's reset, give-up close and cancellable backoff in `stream.go`.
+  - AC-7 red: `timed out waiting for a 5th connection` → green: passed.
+  - AC-8 red: `subscriber channel not closed after give-up` → green: passed.
+  - Backoff red: `timed out waiting for run to return…` → green: passed.
+  - GREEN held under `-race -count=3`.
+- Verification: `go test ./... -race` passes with coverage 81.9%. golangci-lint v2.14.0 reported 0 issues
+  (CI-equivalent fallback).
+- Files modified: `internal/alpaca/stream_test.go`
+- Deviations: RED came from a mutation, and there are three extra harness helpers (see Deviation Log)
+

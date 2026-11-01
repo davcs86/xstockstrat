@@ -957,7 +957,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 ### Step 16 — test: Alpaca reconnect budget reset and give-up close (AC-7, AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/stream_test.go` — modify
@@ -1244,4 +1244,24 @@ _Populated by /sdd-execute as implementation proceeds._
     `streamURL` seam did not exist before the step, so the probe pointed the hardcoded `wss://` URL at an
     `httptest` websocket server by swapping `http.DefaultClient.Transport` (coder/websocket dials through it when
     `DialOptions` is nil). That way the same probe compiles against the old code and the new code.
+- **Disposition**: CI-equivalent fallback.
+
+### 2026-11-01 — Step 16 — CI-equivalent fallback (golangci-lint), RED via a reverted-behaviour mutation, extra test helpers
+- **Spec said**: TDD is red-green required. The Verification is the coverage run, the `-race -count=3` targeted run
+  and `golangci-lint run`.
+- **Actual**:
+  - Step 15 had already landed, so the committed tests were green on first run. RED came from temporarily reverting
+    Step 15's three behaviours in `stream.go` (not committed; restored with `git checkout`): the `attempts = 0` reset,
+    the `closeAllLocked()` give-up call, and the cancellable `select` backoff (back to `time.Sleep`). Under that mutation
+    all three new tests failed for the missing behaviour, not for compile or setup errors, and
+    `TestDispatchBarCarries1MinEnum` stayed green.
+  - The test file adds `newStreamTestManager`, `lockedBuffer` (a goroutine-safe slog sink, so `-race` stays clean while
+    the run loop logs) and `waitFor`, alongside the specced `newStreamTestServer`. They are local harness helpers with
+    one consumer file (C-13 does not apply). Instruction 5's cancellable-backoff case is
+    `TestStreamManager_BackoffCancellable`.
+  - The coverage command ran from a scratch script with the same `COVERPKGS` expansion. Every package passes under
+    `-race`, and the total is 81.9%. The operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported
+    `0 issues.`
+  - Worktree setup: `pnpm install --frozen-lockfile` ran at the worktree root so the husky pre-commit hook could run.
+    The main worktree had no `node_modules` to symlink. No lockfile changed.
 - **Disposition**: CI-equivalent fallback.
