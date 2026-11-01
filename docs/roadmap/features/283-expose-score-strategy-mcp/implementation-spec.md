@@ -240,7 +240,7 @@ git diff --stat -- packages/proto   # empty: no proto change
 
 ### Step 5 — test: agent tool + client unit tests and tool-deadline guards for `score` (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (new class `TestManageStrategyScore`)

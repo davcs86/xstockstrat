@@ -43,4 +43,4 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 ## Next Action
 
-`/sdd-execute expose-score-strategy-mcp sequential` — Step 5 (agent tool + client unit tests and tool-deadline guards for `score`, RED); Step 4 server-half gate GREEN 2026-11-01
+`/sdd-execute expose-score-strategy-mcp sequential` — Step 6 (agent `manage_strategy operation='score'`, turns Step 5 green); Step 5 RED landed 2026-11-01
