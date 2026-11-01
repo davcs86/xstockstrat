@@ -604,3 +604,31 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
     if it reaches `implementation-ready` first.
 - Next: operator writes or confirms the merge-order rows, then `/sdd-execute fix-backtest-silent-symbol-skip` after
   272, 273 and 215 land.
+
+## Session 2026-11-01 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: `git merge --no-edit origin/main-dev` into the detached `origin/feature/fix-backtest-silent-symbol-skip`
+  (`c5400f8a`) was already up to date, so there was no merge commit. `scripts/ledger-guard.py --own-slug
+  fix-backtest-silent-symbol-skip --base origin/main-dev --fix` reported clean.
+- Directive re-spec of steps 1, 5, 6, 7, 8 and 9 (`implementation-spec.md`). Only line anchors and evidence changed;
+  there is no scope or design change. Every Files path exists, and every anchor symbol is still present.
+  - Prerequisites: 272 and 273 are `launched`. 215 is `in-progress`, but `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5`,
+    `fund_refusals` and `fund_unknown` are in the tree.
+  - Re-anchor answers: (a) the deadline is `asyncio.timeout(limit or None)` around `_run_backtest` in the `RunBacktest`
+    wrapper (`servicer.py:806-807`), and an inner `TimeoutError` is re-raised (:808-810). (b) `_fetch_bars_paged`
+    (:1435-1495) does not wrap `GetBars` errors, so a raw `grpc.RpcError` reaches the loop. (c) `NoTradeReason` value 6
+    is free; the last value is 5 at `analysis.proto:202`.
+  - Exception inventory: the only new custom exception is `_FundamentalsPageError` (:372), and `_load_fundamentals`
+    catches it internally (:1851). No new sentinel needs to sit above the Step 6 broad arm.
+  - Merged `servicer.py` anchors: catch-alls :1165-1170, directly after 272's `except _BarFetchError: raise`
+    (:1163-1164); gate :1273-1280 (or-chain :1276); `fund_unknown` warnings :1301-1304; `disarm()` :1307;
+    `_persist_backtest_run` call :1341-1351 (`score` still 3rd positional; def :2895); recompute :1361;
+    `raise_unreadable=True` :2082-2083. Other `StrategyEvaluator(` sites: :3921, :4222, :4463, :4914, :5530, :6010 and
+    `app/main.py:157`.
+  - New constraint noted in Step 6: 272's `disarm()` (:1307) forbids moving any awaited state-writing call above it.
+    The new warnings block is a synchronous `extend`, so it goes after the `fund_unknown` block and before `disarm()`.
+  - Test and UI anchors moved: `conftest.py` `ctx_with` :131 and `OWNER_HEADERS` :139; `TestFormulaErrorSurfacing`
+    :1703; `_EOF_PAGE` :135; `_bar` :1485; `test_warmup.py` `_BarFetchError` raises :242/:253/:277;
+    `mock-backend.ts` `strat-fundamentals-etf-001` :1123-1142; `INVENTORY.md` rows :36 and :66-67; agent `tools.py`
+    :784-785 and :803-813; `mcp-tools.md` :324-325, plus the No-attachment paragraph at :395-398, which Step 9 now
+    also corrects.
