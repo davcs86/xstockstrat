@@ -4547,7 +4547,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:  # noqa: BLE001
                 component_series.append(
                     analysis_pb2.ComponentSeries(
-                        ref_name=comp.ref_name, kind=comp.kind, error=str(e)
+                        ref_name=comp.ref_name, kind=comp.kind, error=_component_error_text(e)
                     )
                 )
         return analysis_pb2.GetIndicatorSeriesResponse(
@@ -7236,6 +7236,14 @@ def _strip_dead_signal_params(definition) -> None:
     for key in _DEAD_SIGNAL_PARAM_KEYS:
         if key in fields:
             del fields[key]
+
+
+def _component_error_text(e: Exception) -> str:
+    """User-facing `ComponentSeries.error`: an RpcError's `details()`, never its repr with transport
+    internals."""
+    if isinstance(e, grpc.RpcError):
+        return e.details() or e.code().name
+    return str(e)
 
 
 def _row_to_strategy_definition(

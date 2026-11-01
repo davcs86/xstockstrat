@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-29
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
 
 ---
 
@@ -32,6 +34,7 @@
 | 2026-10-29 | `in-progress` (no change) | /sdd-execute sequential | Step 17 done: `ibkr.md` OAuth 1.0a + LST section, trading `CLAUDE.md` credential-health IBKR handshake note, TRADING-3 widened (deterministic credential failures, any IBKR call), findings open question resolved (feature 249) + stale anchors re-stamped; teardown by manual reconciliation (context-forge refresh unavailable) |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential | All 17 steps done; 10 acceptance scenarios promoted to `services/xstockstrat-trading/acceptance/fix-ibkr-request-signing.feature` (C-16) |
 
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
 ---
 
 ## Reviewers

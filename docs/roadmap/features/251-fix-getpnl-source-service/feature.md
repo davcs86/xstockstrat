@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-30
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
 
 ---
 
@@ -29,6 +31,7 @@
 | 2026-10-30 | `in-progress` (step 13 done) | sdd-execute sequential | Step 13: rebase-only note 251 ↔ 249 added to merge-order.md; 241 launched (dropped), 252 context note dropped per re-spec |
 | 2026-10-30 | `in-progress` → `code-completed` | sdd-execute sequential (sdd-batch-execute) | All steps done; acceptance scenarios promoted to per-service suites (C-16); PG-1 remains an operator gate |
 
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
 ---
 
 ## Reviewers

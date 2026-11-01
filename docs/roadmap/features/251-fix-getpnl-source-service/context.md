@@ -846,3 +846,10 @@ Source scenarios: 22. Planned: 21 NEW + 0 DUP + 1 OVERLAP = 22.
 - **PG-1 not run, still blocks promotion:** it needs read-only SQL against the ledger (per-type counts, `EXPLAIN ANALYZE`,
   side-less fill stream keys), a `GetPnL` call and a malformed-token call on the real gRPC path. This session has no database
   access (egress to `:25060` is blocked) and the staging agent exposes no `GetPnL` or `QueryEvents` tool. The operator runs it.
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31
