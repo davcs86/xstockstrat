@@ -1,6 +1,6 @@
 # Implementation Spec: enforce-config-key-wiring
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-10-23
 **Feature**: `docs/roadmap/features/278-enforce-config-key-wiring/feature.md`
 **Total Steps**: 18
@@ -48,7 +48,7 @@ The environment-baseline gate (Step 10) was resolved on 2026-10-23: there is no 
 
 ### Step 1 — service: Seed-side parser (stored set) and CLI skeleton
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/check-config-wiring.mjs` — create
@@ -98,7 +98,7 @@ node --check scripts/check-config-wiring.mjs && node --test scripts/config-wirin
 
 ### Step 2 — test: Parser fixtures and tests (authored red)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — create
@@ -682,3 +682,23 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Steps 1+2 — executed as one TDD cycle
+**Spec said**: "Step 2 [test] covers Step 1 [service] ... `/sdd-execute` captures red before the paired service step" (separate steps, one commit each).
+**Actual**: Step 2's test file and all of its fixtures were authored first, red was captured (script missing, every case fails), Step 1 was implemented, green was captured with both Verification commands, and Steps 1 and 2 landed as one paired red-green commit that flips both Statuses to `done`.
+**Reason**: Operator decision (Option A) on the Step 1 blocker, 2026-11-01: Step 1's Verification runs a test file that Step 2 creates.
+
+### Deviation: Step 1 — CTE-led DELETE is not classified
+**Spec said**: "only statements whose first keyword is `INSERT`, `UPDATE` or `DELETE` are classified".
+**Actual**: Implemented as written. As a result the 017 trading_mode collapse (`WITH ranked AS (...) DELETE FROM config.config_values c USING ranked r ...`, `017_config_secrets_and_scoping.up.sql:44-62`) is never classified and never trips `unmodelled-rewrite`. On the stored set this is a no-op: INSERT keeps the first row per `(namespace, key, environment, user scope)`, which is the one-row-per-scope result the collapse produces. The `rename-017` fixture includes the collapse statement to pin this.
+**Reason**: Spec wording. Consequence (open item): a future CTE-led `WITH ... UPDATE/DELETE` on `config.config_values` would bypass the fail-closed trigger.
+
+### Deviation: Step 1 — INSERT shapes outside the model fail closed
+**Spec said**: "Any other `UPDATE`/`DELETE` against `config.config_values` that the model cannot interpret trips the fail-closed trigger".
+**Actual**: An `INSERT INTO config.config_values` also trips `unmodelled-rewrite` when it is not `(cols) VALUES (...)[, ...]` with no conflict clause or `ON CONFLICT ... DO NOTHING`. Examples are `INSERT ... SELECT` and `ON CONFLICT ... DO UPDATE`. It also trips when `namespace`/`key`/`environment`/`user_id`/`is_secret` is not a single literal. The real tree (000-034) has no such INSERT: zero `unmodelled-rewrite`, `rewriteAllow` empty.
+**Reason**: A silently skipped insert would drop seeds from the stored set. This is the same fail-closed rule, applied to the remaining DML verb.
+
+### Deviation: Step 1 — `unmodelled-rewrite` output line
+**Spec said**: "Output lines are `file:key:kind[:env]`".
+**Actual**: An unmodelled statement has no key, so its line is `services/xstockstrat-config/migrations/<file>:L<line>:unmodelled-rewrite`. `--json` adds the statement `sha256` (the `rewriteAllow` key). Values are never printed.
+**Reason**: The finding needs a locator, and no key exists for it.

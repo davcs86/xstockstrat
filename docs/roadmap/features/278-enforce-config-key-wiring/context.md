@@ -227,3 +227,27 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Status: `implementation-ready` → `in-progress`.
 - Step 10 is confirmed after Step 9 against the recorded `reported-only` ruling. It is not an operator stop.
 - Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 1+2
+
+### Step 1 — Seed-side parser (stored set) and CLI skeleton [done]
+- Created `scripts/check-config-wiring.mjs`: a zero-dependency ESM script. It has a tokenizer that drops comments and handles quoted, `$$` and double-quoted text, and a statement splitter. `buildStoredSet(root)` replays `*.up.sql` in NNN order against `config.config_values` only, using the closed model of Instructions 3 (cases 1-7). It returns `stored` (global, non-secret rows keyed `(namespace, key, environment)`, each carrying its inserting migration), `secrets` (keys only, never values) and `unmodelled`. The fail-closed `unmodelled-rewrite` honours `registry.rewriteAllow` (file name plus SHA-256 of the comment-stripped, whitespace-normalised statement). The CLI accepts `--root/--final/--declared-from/--declared-migration/--keys/--json`; only `--root` and `--json` act at this step. Exit codes are 0, 1 and 2, and errors print to stderr with the prefix `config-wiring:`.
+- Real tree (000-034): exit 0, zero `unmodelled-rewrite`, 180 stored entries, 8 secret entries. The four `alpaca`/`fmp`/`finnhub` keys stay bare in `secrets`. `indicators.sandbox.{timeout_ms,memory_bytes,allowed_imports}` are dotted in both environments. `ledger stream.notify_enabled` is staging-only. `analysis backtest.max_duration_seconds` is bare in both environments. `portfolio snapshot.interval_minutes` and `analysis signals.source_weights` are gone.
+- Discovery-digest blocker resolved without allow-listing. The re-spec had already added the 031/034/009/020/016/032 shapes (cases 4-7). 029's second UPDATE (`value_data` only) is key-neutral. The 017 `WITH ranked ... DELETE` collapse is CTE-led, so it is not classified (see Deviation Log).
+- TDD red (captured before implementation): `node --test scripts/config-wiring.test.mjs` failed with `ERR_MODULE_NOT_FOUND ... scripts/check-config-wiring.mjs`, pass 0 / fail 1, so no case could run.
+- TDD green: `node --check scripts/check-config-wiring.mjs && node --test scripts/config-wiring.test.mjs` gave tests 10, pass 10, fail 0.
+- Files modified: `scripts/check-config-wiring.mjs`
+- Deviations: executed as one TDD cycle with Step 2 (operator Option A); a CTE-led DELETE is not classified; non-`VALUES`/non-`DO NOTHING` INSERTs fail closed; the unmodelled line is `file:L<line>:unmodelled-rewrite`. Full detail is in the Deviation Log.
+
+### Step 2 — Parser fixtures and tests (authored red) [done]
+- Authored `scripts/config-wiring.test.mjs` (`node:test`, `node:assert/strict`) with cases 1-9 of the Instructions plus a CLI usage-error case (exit 2). Fixtures are under `scripts/config-wiring-fixtures/seed/{bare-insert,heal-029,rename-017,unmodelled,scope-and-secret,multi-row,heal-031,literal-delete,key-neutral}/`.
+  - `rename-017` also carries the 017 CTE collapse.
+  - `key-neutral` also carries a `$$` function body containing `UPDATE ... SET key`.
+  - `multi-row` carries `''`, `--` and `;` inside string literals and a comment inside VALUES.
+  - The case-5 allow-list and the case-9 negative cases run on temp copies (`fs.mkdtempSync`). This mirrors the merge-train test style, so no extra fixture files were needed.
+- Red and green are as in Step 1, since both steps were one TDD cycle. Lint: `node --check scripts/config-wiring.test.mjs` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/seed/**` (16 files, including the `scope-and-secret/.../001_seed.down.sql` sibling)
+- Deviations: none beyond the shared TDD-cycle entry.
+- Tooling: Node v22.23.4. The root CLAUDE.md pins 24; the operator noted this is not a blocker. No CI-equivalent fallback was used, because Steps 1-2 need only `node`.
+- Open item: the fail-closed trigger does not see CTE-led (`WITH ...`) DML. No current migration other than the 017 collapse uses that shape.
+- Severity: n/a.
