@@ -205,7 +205,7 @@ C-13 verdict: `_blend_svc`/`_cell` already live in `test_grade_fundamentals_excl
 
 ### Step 4 — service: analysis `ScoreStrategy` sets the excluded-symbols trailer (go/no-go gate: server half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify

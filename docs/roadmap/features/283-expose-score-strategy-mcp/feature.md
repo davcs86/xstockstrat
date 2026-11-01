@@ -43,4 +43,4 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 ## Next Action
 
-`/sdd-execute expose-score-strategy-mcp sequential` — Step 4 (analysis `ScoreStrategy` sets the trailer, server-half go/no-go gate); Step 3 RED landed 2026-11-01
+`/sdd-execute expose-score-strategy-mcp sequential` — Step 5 (agent tool + client unit tests and tool-deadline guards for `score`, RED); Step 4 server-half gate GREEN 2026-11-01
