@@ -318,3 +318,9 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
 - Merged `origin/main-dev` into the detached `origin/feature/expose-score-strategy-mcp` checkout: already up to date (no conflicts); `scripts/ledger-guard.py --own-slug expose-score-strategy-mcp --base origin/main-dev --fix` reported clean (no repair).
 - Re-verified Steps 1-10 against the current tree: no blocking mismatch; every cited symbol resolves, and the expected-absent symbols (`client.score_strategy`, `_EXCLUDED_TRAILER_*`, the `score` branch, both `test_score_trailer_loopback.py` files, `test_score_strategy_parity.py`) are still absent, so the planned REDs hold. `import json` is still missing from agent `client.py` (Step 2 Instruction 2 adds it). AST matcher on `client.py` re-measured at 73 awaited stub calls, 0 `Assign = stub.X(...)` (Step 7's 73→74 plan holds). Locked protobuf 6.33.6 exposes `FieldDescriptor.has_presence` (Step 8).
 - Line anchors re-pointed (symbols authoritative): `test_tools.py` `_make_server`/`_tool_fn` :23/:29, description :1106, `.parameters` :1083, docs guard :1101, `test_grpc_error_reraised_as_clear_message` :1215; `test_pit_outage_…` :196; `test_ac5_listed_rpcs_…` :81; `SKILL.md` Scope :15; analysis `CLAUDE.md` Evidence exclusion (H) :464-467. Instructions, Files and Verification unchanged.
+
+## Session 2026-11-01 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute expose-score-strategy-mcp sequential`, run by the sdd-batch-execute workflow in its own worktree (sole writer, P-01). The operator approved the up-front plan (the sequential mode-entry confirmation, given once for this feature); per-step operator checkpoints still apply.
+- Status: `implementation-ready` → `in-progress`. Branch base: `origin/feature/expose-score-strategy-mcp` merged with `origin/main-dev` (already up to date) and re-spec committed first (see the session above).
+- Next: Step 1 (agent client-half loopback, RED).
