@@ -647,13 +647,13 @@ The new logic is in the excluded `repository` package. The CI total must still b
    - Add an unexported `type stageError struct{ stage string; err error }`. `Error()` returns `e.err.Error()` and
      `Unwrap()` returns `e.err`. Wrap the existing `fmt.Errorf` values at **both** transport returns `:250` and `:252`
      (`stage: "transport"`), at `:260` (`"read"`) and at `:267` (`"decode"`), so each error text stays byte-identical
-     and the `%w` chain to ctx errors (where present) is kept. This choice is pinned: `io.ReadAll` and `json.Unmarshal` errors share no type a classifier could
-     match without string matching.
+     and the `%w` chain to ctx errors (where present) is kept. This choice is pinned: `io.ReadAll` and
+     `json.Unmarshal` errors share no type a classifier could match without string matching.
    - Add an unexported `func enrichmentClass(err error) string`, evaluated in the same order. It returns `cap`,
      `ctx`, `http_<code>`, or the `stage` of an `errors.As`-matched `*stageError` (`transport`, `read`, `decode`).
      It classifies by `errors.Is`/`errors.As` only, never by string matching. Errors with no stage (the build-request
-     returns at `:228`/`:230`, and a non-ctx limiter error at `:234`) still expire under rule 5. Their class label is an open
-     operator question (context.md Open Threads); the executor must not invent one silently.
+     returns at `:228`/`:230`, and a non-ctx limiter error at `:234`) still expire under rule 5, with the class
+     label `other` (operator decision 2026-10-22, context.md).
    - Rewrite the loop at `:189-201`. Call `fetchRatios` and `fetchProfile`, and apply each on success with a non-nil
      result, as today. On a non-nil error, append `SYM:ratios:<class>` or `SYM:profile:<class>` to a local
      `failures []string`. Set `f.EnrichmentFailed = true` only when `enrichmentExpires(err)`.
