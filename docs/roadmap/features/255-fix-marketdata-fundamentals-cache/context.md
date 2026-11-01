@@ -1292,3 +1292,132 @@ the next `/sdd-batch` run can pick it up.
 - Files modified: none
 - Deviations: none (worktree `pnpm install` setup note in Deviation Log)
 
+
+## Session 2026-11-01 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-marketdata-fundamentals-cache (feature 255)
+
+### Verdicts
+All 10 scenarios are observable on marketdata: the FMP/Finnhub clients, the fundamentals cache, GetFundamentals/GetFundamentalsMulti, and the Alpaca stream manager. All 10 go to one new file, so no cross-cutting platform.feature entry is needed. The file does not exist, so it is a CREATE.
+
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature | CREATE | NEW | FMP cap 0 = zero budget, single-symbol path |
+| AC-9 | same | CREATE | NEW | cap 0 on the multi-symbol path |
+| AC-2 | same | CREATE | NEW | edgar rows do not consume the Finnhub quota |
+| AC-3 | same | CREATE | NEW | FMP boot budget seed counts only FMP rows |
+| AC-4 | same | CREATE | NEW | vendor path ignores edgar cache rows |
+| AC-5 | same | CREATE | NEW | failed FMP enrichment is not cached as complete |
+| AC-6 | same | CREATE | NEW | undecodable extra column is logged |
+| AC-7 | same | CREATE | NEW | Alpaca reconnect budget resets after a healthy session |
+| AC-8 | same | CREATE | NEW | subscribers are told when the stream gives up |
+| AC-10 | same | CREATE | NEW | transient enrichment failure over an edgar row is stored already expired |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature (CREATE) ---
+# Promoted from docs/roadmap/features/255-fix-marketdata-fundamentals-cache/acceptance.feature (C-16). Verbatim; do not edit.
+Feature: fix-marketdata-fundamentals-cache (bug fix)
+  Regression guard for docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md:
+  cap-0 comments contradicting the enforced zero budget (D-50), quota counts ignore source (D-51), vendor cache ignores source (D-52),
+  silent decode/enrichment drops (D-53), and a lifetime-cumulative Alpaca reconnect budget (D-19).
+
+  @AC-1 @FR-1 @regression @feature-255
+  Scenario: An FMP daily cap of 0 is a zero budget (FMP disabled)
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 0
+    And the fundamentals cache has no row for "AAPL"
+    When GetFundamentals is called for "AAPL"
+    Then the FMP client makes no HTTP call
+    And the response is ResourceExhausted for quota
+    And no quota WARNING alert is emitted
+
+  @AC-9 @FR-1 @regression @feature-255
+  Scenario: An FMP daily cap of 0 is a zero budget on the multi-symbol path
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 0
+    And the cache holds an "AAPL" row with source "fmp" older than "marketdata.fmp.cache_ttl_hours" and no row for "MSFT"
+    When GetFundamentalsMulti is called for "AAPL" and "MSFT"
+    Then the FMP client makes no HTTP call
+    And the response holds the cached "AAPL" row with stale=true and no entry for "MSFT"
+    And no quota WARNING alert is emitted
+
+  @AC-2 @FR-2 @regression @feature-255
+  Scenario: Edgar snapshot rows do not consume the Finnhub quota
+    Given "marketdata.fundamentals.provider" is "finnhub" with "marketdata.finnhub.symbols_per_minute" 20 and "marketdata.finnhub.rate_window_seconds" 60
+    And 20 fundamentals rows with source "edgar" were fetched in the last 60 seconds
+    And no row with source "finnhub" was fetched in the last 60 seconds
+    When GetFundamentals is called for uncached symbol "MSFT"
+    Then the Finnhub client fetches "MSFT"
+    And the response is fresh fundamentals for "MSFT", not ResourceExhausted
+    And no quota WARNING alert is emitted
+
+  @AC-3 @FR-2 @regression @feature-255
+  Scenario: The FMP boot budget seed counts only FMP rows
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 7
+    And 30 fundamentals rows fetched today with source "edgar" and 5 with source "fmp"
+    And marketdata has started
+    When GetFundamentals is called for uncached symbol "MSFT"
+    Then the FMP client fetches "MSFT"
+    And the response is fresh fundamentals for "MSFT", not ResourceExhausted
+
+  @AC-4 @FR-3 @regression @feature-255
+  Scenario: The vendor path does not serve an edgar cache row as vendor data
+    Given "marketdata.fundamentals.snapshot_source" is "vendor" and "marketdata.fundamentals.provider" is "finnhub"
+    And the cache holds an "AAPL" row with source "edgar" fetched 1 minute ago
+    When GetFundamentals is called for "AAPL"
+    Then the Finnhub client fetches "AAPL"
+    And the response carries the Finnhub values for "AAPL", not the edgar row's values
+
+  @AC-5 @FR-4 @regression @feature-255
+  Scenario: A failed FMP enrichment is not cached as a fresh complete row
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.metrics" is "core,extended"
+    And the quote fetch for "AAPL" succeeds but the profile fetch returns ErrFMPDailyCapExceeded
+    When GetFundamentals is called for "AAPL"
+    Then a WARN is logged naming "AAPL" and the profile enrichment
+    And the response's missing_metrics lists "beta", the metric the profile call supplies
+    When the FMP daily quota resets and GetFundamentals is called for "AAPL" again, within "marketdata.fmp.cache_ttl_hours"
+    Then the FMP client makes the profile fetch for "AAPL"
+
+  @AC-6 @FR-4 @regression @feature-255
+  Scenario: An undecodable extra column is logged, not silently dropped
+    Given the cache holds an "AAPL" row whose extra column is the jsonb object {"total_debt":"n/a"}, which does not decode as name-to-number metrics
+    When GetFundamentals is called for "AAPL"
+    Then a WARN is logged naming "AAPL" and the extra decode error
+
+  @AC-7 @FR-5 @regression @feature-255
+  Scenario: The Alpaca reconnect budget resets after a healthy session
+    Given an Alpaca stream manager with MaxReconnects 3 and one active subscriber
+    When the stream connects successfully and then drops, four times in a row
+    Then the manager is still running and reconnects after the fourth drop
+
+  @AC-8 @FR-5 @regression @feature-255
+  Scenario: Subscribers learn when the Alpaca stream gives up
+    Given an Alpaca stream manager with MaxReconnects 3 and one active bar subscriber
+    When three consecutive connection attempts fail without a healthy session
+    Then the subscriber's receive on its bar channel reports the channel closed
+    And an ERROR is logged naming the exhausted reconnect budget
+
+  @AC-10 @FR-3 @FR-4 @regression @feature-255
+  Scenario: A transient FMP enrichment failure over an edgar cache row is stored already expired
+    Given "marketdata.fundamentals.snapshot_source" is "vendor", "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.metrics" is "core,extended"
+    And the cache holds an "AAPL" row with source "edgar" fetched 1 minute ago
+    And the quote and ratios fetches for "AAPL" succeed but the profile fetch returns HTTP 503
+    When GetFundamentals is called for "AAPL"
+    Then the response carries the FMP values for "AAPL" with stale=false and missing_metrics containing "beta"
+    And the cached "AAPL" row has source "fmp" and is already past "marketdata.fmp.cache_ttl_hours"
+    When the FMP daily cap is reached and GetFundamentals is called for "AAPL" again
+    Then the FMP client makes no HTTP call
+    And the response is the cached "AAPL" row with source "fmp" and stale=true
+    When the FMP daily quota resets and GetFundamentals is called for "AAPL" again
+    Then the FMP client fetches "AAPL"
+
+### Notes / ambiguities / conflicts
+- Dedup: I grepped all 17 files in services/xstockstrat-marketdata/acceptance/ and docs/sdd/business-rules/platform.feature for cap-0, MaxReconnects, reconnect, symbols_per_minute, missing_metrics, extra column and @feature-255. There were no matches for these outcomes, so there are no DUP or OVERLAP verdicts.
+- Possible interaction, not a conflict: block-fundamentals-strategy-on-etf.feature:26 uses an 80%-of-daily_request_cap budget threshold. It does not assert zero-cap behaviour, so AC-1 and AC-9 do not contradict it. A human may want to confirm that.
+- AC-7 and AC-8 concern the Alpaca stream manager, not fundamentals. I kept them in the marketdata file because the Alpaca stream lives in marketdata and they trace to the same defect report. The tag order follows the source, with @feature-255 appended.
+- The `# Promoted from ...` header line is my wording. If the existing suites use a different provenance-comment format, the orchestrator should match it.
+- The 255 scenarios do not use any @FR tags that were missing from the source. I added only @feature-255 and changed no @AC or @FR numbers.
+- Scope: `feature.md` lists only xstockstrat-marketdata, agent and ui as reviewers. The agent and ui are read-only, so there are no other service suites.
+
+### Coverage check
+- Source scenarios: 10 (AC-1 to AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
+```
