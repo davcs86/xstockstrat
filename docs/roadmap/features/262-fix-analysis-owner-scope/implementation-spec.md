@@ -121,7 +121,7 @@ The change is additive, so it needs no C-16 sign-off.
 
 ### Step 2 — service: owner-scoped `ListOrders` in the entry-backfill (FR-1/FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/entry_backfill.py` — modify
@@ -129,29 +129,37 @@ The change is additive, so it needs no C-16 sign-off.
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias; Security — auth scope (tenant isolation: owner header + body `user_id` on the cross-service read)
 
 **Codebase Evidence**:
-- `entry_backfill.py:63` is `async def _backfill_pair(user_id, strategy_id, symbol):`.
-- `:64-65` is the comment "Key must match live_loop's 3-tuple … ListOrders stays owner-implicit via
+- Re-verified 2026-10-29 after the main-dev merge (244's `int_positive` semaphore clamp and 259's
+  `spawn` supervision have landed; line numbers shifted by +1).
+- `entry_backfill.py:57-59` is the 244 semaphore clamp
+  (`asyncio.Semaphore(int_positive(cfg_watcher, "analysis.strategy.max_concurrent_entry_backfill", 4))`)
+  and `:60-62` is the strategies fetch.
+- `entry_backfill.py:64` is `async def _backfill_pair(user_id, strategy_id, symbol):`.
+- `:65-66` is the comment "Key must match live_loop's 3-tuple … ListOrders stays owner-implicit via
   the order's own user_id."
-- `:70-76` is the pair-local `try`. It contains
+- `:71-77` is the pair-local `try`. It contains
   `resp = await trading_stub.ListOrders(trading_pb2.ListOrdersRequest(strategy_id=strategy_id, symbol=symbol))`,
   which sends no `user_id` and no `metadata=`. Its failure branch is
   `except Exception as e: log.warning("entry_backfill: (%s,%s) ListOrders failed: %s", ...)`.
-- `:123` is `log.info("entry_backfill: boot pass complete (%d pairs considered)", len(tasks))`.
-- Imports at `:14-21` are `asyncio`, `logging`, `datetime.UTC`, `trading_pb2`, `resolve_universe`,
+- `:124` is `log.info("entry_backfill: boot pass complete (%d pairs considered)", len(tasks))`.
+- Imports at `:14-22` are `asyncio`, `logging`, `datetime.UTC`, `trading_pb2`,
+  `from app.config.watcher import int_positive`, `resolve_universe`,
   `_row_to_strategy_definition` and `blend_strategy_id`. There is no `uuid` and no `owner_metadata`.
 - `app/identity.py:6-10` is
   `def owner_metadata(owner) -> list[tuple[str, str]]`. It raises `ValueError` for an empty or
   `"system"` owner and returns `[("x-user-id", owner)]`.
-- Reuse pattern: `app/handlers/servicer.py:6315-6318` is the owner-scoped sibling
+- Reuse pattern: `app/handlers/servicer.py:6323-6324` is the owner-scoped sibling
   `ListOrders(ListOrdersRequest(strategy_id=strategy_id, user_id=user_id), metadata=propagation_meta)`
   (recon.md § Patterns to REUSE).
-- Trace-id precedent: `servicer.py:3602-3604` builds
+- Trace-id precedent: `servicer.py:3609-3611` builds
   `*owner_metadata(user_id), ..., ("x-trace-id", uuid.uuid4().hex)`.
 - Trading fails open on an empty body `user_id`: `services/xstockstrat-trading/internal/repository/trading_repo.go:229-231`
   adds `AND user_id = $n` only when `userID != ""` (recon.md:65, :176-178). Trading is read-only
   here.
 - Header propagation (step-constraints §B): this is not a new edge. It is the existing analysis →
-  trading `ListOrders` call (stub `servicer._trading`, `app/main.py:174-176`), and it gains Python
+  trading `ListOrders` call (stub `servicer._trading`, started at `app/main.py:174-180` via
+  `spawn(backfill_entry_times(..., servicer._trading, cfg_watcher), "entry-backfill", forever=False)`
+  from 259's supervision; `app/main.py` is not edited), and it gains Python
   per-call `metadata=`. The backfill has no inbound request, so there is no `x-access-scope` to
   forward. Per the operator decision of 2026-10-21, a background pass mints its own trace id. The
   call carries `x-user-id` (owner) and `x-trace-id` (per pass).
@@ -162,20 +170,21 @@ The change is additive, so it needs no C-16 sign-off.
 
 **Instructions**:
 1. Add `import uuid` to the stdlib imports and `from app.identity import owner_metadata` to the
-   `app.` imports (`:14-21`, keeping ruff's isort order).
-2. In `run_once`, after the `trading_stub is None` early return (`:54-55`), mint
+   `app.` imports (`:14-22`, keeping ruff's isort order).
+2. In `run_once`, after the `trading_stub is None` early return (`:55-56`), mint
    `pass_trace_id = uuid.uuid4().hex` once per pass.
-3. In `_backfill_pair`, replace the `:64-65` comment with exactly two lines (How-to-Act #5):
+3. In `_backfill_pair`, replace the `:65-66` comment with exactly two lines (How-to-Act #5):
    `# Key must match live_loop's 3-tuple (user_id, strategy_id, symbol) or the slot is never read.`
    and `# Body user_id is load-bearing: trading treats an empty user_id as all users.`
-4. Inside the existing `try` at `:70-76`, first build
+4. Inside the existing `try` at `:71-77`, first build
    `md = owner_metadata(user_id) + [("x-trace-id", pass_trace_id)]`. Then call
    `trading_stub.ListOrders(trading_pb2.ListOrdersRequest(user_id=user_id, strategy_id=strategy_id, symbol=symbol), metadata=md)`.
    An `owner_metadata` `ValueError` stays pair-local via the existing `except Exception`.
-5. Add `pass_trace_id` to the `:75` warning, e.g.
+5. Add `pass_trace_id` to the `:76` warning, e.g.
    `"entry_backfill: (%s,%s,%s) ListOrders failed [trace %s]: %s"` with `user_id, strategy_id, symbol, pass_trace_id, e`.
-   Also add it to the `:123` info log: `"entry_backfill: boot pass complete (%d pairs considered) [trace %s]"`.
-6. Leave the pair set, the blend gating (`:84-111`) and the seeding writes (`:77-82`) unchanged.
+   Also add it to the `:124` info log: `"entry_backfill: boot pass complete (%d pairs considered) [trace %s]"`.
+6. Leave the pair set, the blend gating (`:85-112`), the 244 semaphore clamp (`:57-59`) and the
+   seeding writes (`:78-83`) unchanged.
    That keeps 193 `@AC-3` intact.
 
 **Verification**:
@@ -189,7 +198,7 @@ Behavioural verification is Step 3.
 
 ### Step 3 — test: `@AC-1`/`@AC-2` owner scoping + runtime header guard on the trading stub
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_entry_backfill.py` — modify
@@ -212,8 +221,9 @@ Behavioural verification is Step 3.
 - `tests/test_owner_header_guard.py:175-183` is `test_entry_backfill_run_once`. It stubs
   `trading = MagicMock()` with `trading.ListOrders = AsyncMock(...)` at `:180-181` and asserts
   ingest headers only (`:183`).
-- `RecordingStub` (`tests/conftest.py:83-110`) records `(method, request, list(metadata))` into
-  `.calls`. It is already imported in `test_owner_header_guard.py:27`.
+- `RecordingStub` (`tests/conftest.py:118`) records `(method, request, list(metadata))` into
+  `.calls`. It is already imported in `test_owner_header_guard.py:27`, whose import line is now
+  `from tests.conftest import RecordingStub, ctx_with, fundamentals_row` (re-verified 2026-10-29).
 - `fails.md:2659` (2026-10-06 header): assert a non-empty `x-user-id` at runtime and assert the
   call list is non-empty first, because a vacuous guard passes.
 
@@ -268,7 +278,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 4 — service: failure isolation in `run_once` (FR-3/FR-4, `@AC-9`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/entry_backfill.py` — modify
@@ -276,30 +286,33 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `entry_backfill.py:50-53` is the docstring ("Never raises — a per-pair failure is logged and
+- Re-verified 2026-10-29 on the merged tree. 244's semaphore clamp (`:57-59`) is already in the
+  base, so the adjacent conflict the earlier spec predicted has effectively happened; indent the
+  edits against the current tree.
+- `entry_backfill.py:51-54` is the docstring ("Never raises — a per-pair failure is logged and
   skipped").
-- `:59-61` is `rows = await db_pool.fetch("SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE")`,
+- `:60-62` is `rows = await db_pool.fetch("SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE")`,
   which is unguarded.
-- `:89-91` is `fundamentals_universe = (await live_loop._resolve_fundamentals_universe() if blend_active else set())`,
+- `:90-92` is `fundamentals_universe = (await live_loop._resolve_fundamentals_universe() if blend_active else set())`,
   which is unguarded.
-- `:94` is `system_signals = await live_loop._drain_system_signals()`, which is unguarded.
-- `:99-121` is the row loop:
-  - `:100` `definition = _row_to_strategy_definition(dict(row))` is strict. Per
-    `servicer.py:7193-7220` (verified in design r2), it raises `KeyError` on a missing
+- `:95` is `system_signals = await live_loop._drain_system_signals()`, which is unguarded.
+- `:100-122` is the row loop:
+  - `:101` `definition = _row_to_strategy_definition(dict(row))` is strict. Per
+    `servicer.py:7201` `_row_to_strategy_definition` (verified in design r2), it raises `KeyError` on a missing
     `strategy_id`/`display_name`/`active` and `ParseError` on bad `definition_json`.
-  - `:102-104` drains held then watch into the caches one at a time. A raise in between leaves a
-    partial cache, which then causes a `KeyError` at `:114`.
-  - `:106-109` is the owner-signal drain.
-  - `:110-111` is the blend skip.
-  - `:112-119` is `resolve_universe(...)`.
-- `:122` is `await asyncio.gather(*tasks, return_exceptions=True)`, and its results are discarded.
+  - `:103-105` drains held then watch into the caches one at a time. A raise in between leaves a
+    partial cache, which then causes a `KeyError` at `:115`.
+  - `:107-110` is the owner-signal drain.
+  - `:111-112` is the blend skip.
+  - `:113-120` is `resolve_universe(...)`.
+- `:123` is `await asyncio.gather(*tasks, return_exceptions=True)`, and its results are discarded.
 - Drains:
-  - `live_loop.py:476-478` `_drain_owner_signals` and `:517-522` `_drain_held` call
+  - `live_loop.py:479-481` `_drain_owner_signals` and `:520-525` `_drain_held` call
     `owner_metadata(owner)`.
-  - `:545-551` `_drain_watchlist` does the same.
-  - `:472` `_drain_system_signals` uses `_SYSTEM_READ_META`.
-  - `:510` is `_resolve_fundamentals_universe`.
-- Reuse pattern: `live_loop.py:384-395` is the per-strategy skip guard
+  - `:548-554` `_drain_watchlist` does the same.
+  - `:475-477` `_drain_system_signals` uses `_SYSTEM_READ_META`.
+  - `:514` is `_resolve_fundamentals_universe`.
+- Reuse pattern: `live_loop.py:397` is the per-strategy skip guard warning
   (`except ValueError as e: log.warning("live_loop: strategy %s skipped — %s", ...); continue`).
   Here it is widened to `Exception` and also names the owner (recon.md § Patterns to REUSE).
   `except Exception` excludes `asyncio.CancelledError`, which is a `BaseException` in 3.13.
@@ -309,20 +322,20 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Covers**: —
 
 **Instructions**:
-1. **(a) Strategies read.** Wrap the `:59-61` fetch. On `except Exception as e`, call
+1. **(a) Strategies read.** Wrap the `:60-62` fetch (the `:57-59` semaphore clamp above it stays as is). On `except Exception as e`, call
    `log.warning("entry_backfill: live-strategies read failed [trace %s]: %s", pass_trace_id, e)`
    and `return`.
-2. **(b) Blend-universe resolve.** Turn `:89-91` into: if `blend_active`, `try` the awaited
+2. **(b) Blend-universe resolve.** Turn `:90-92` into: if `blend_active`, `try` the awaited
    `_resolve_fundamentals_universe()`. On `except Exception as e`, warn
    `"entry_backfill: fundamentals-universe resolve failed [trace %s]: %s"` and set
    `fundamentals_universe = set()`; otherwise use `set()`.
-   - The existing `:110-111` skip then drops the blend pairs.
+   - The existing `:111-112` skip then drops the blend pairs.
    - That skip must stay **ahead of** `resolve_universe` and of any task append (193 `@AC-3`;
      fails.md 2026-10-05/2026-10-07).
-3. **(c) System drain.** Wrap `:94`. On `except Exception as e`, warn
+3. **(c) System drain.** Wrap `:95`. On `except Exception as e`, warn
    `"entry_backfill: system-signal drain failed [trace %s]: %s"` and set `system_signals = set()`.
    Add **no** comment claiming production protection (C-18).
-4. **(d) Row loop (`:99-121`).** Add `failed_owners: dict[str, list[str]] = {}`, mapping each
+4. **(d) Row loop (`:100-122`).** Add `failed_owners: dict[str, list[str]] = {}`, mapping each
    failed owner to the `strategy_id`s it skipped. Then, per row:
    - **Row-scoped parse.**
      `try: definition = _row_to_strategy_definition(dict(row))`. On `except Exception as e`, warn
@@ -338,26 +351,26 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
      - On `except Exception as e`, warn
        `"entry_backfill: strategy %s owner %s skipped [trace %s]: %s"`, set
        `failed_owners[owner] = [definition.strategy_id]` and `continue`.
-   - **Owner-signal drain** (`:106-109`). Keep the `signal_eligible and strategy_id != blend_id`
+   - **Owner-signal drain** (`:107-110`). Keep the `signal_eligible and strategy_id != blend_id`
      condition. Wrap the `_drain_owner_signals(owner)` await in its own `try`.
      - On `except Exception as e`, warn
        `"entry_backfill: owner-signal drain failed for owner %s [trace %s]: %s"` and cache
        `own_cache[owner] = set()`, so the owner falls back to `system_signals` and does not
        re-warn. Do **not** add the owner to `failed_owners`.
      - Only a held/watch failure poisons an owner (design decision, context.md 2026-10-22).
-   - **Row-scoped resolve.** The `:110-111` blend skip runs first, unchanged.
-     - Then `try` the `resolve_universe(...)` call (`:112-119`, arguments unchanged). On
+   - **Row-scoped resolve.** The `:111-112` blend skip runs first, unchanged.
+     - Then `try` the `resolve_universe(...)` call (`:113-120`, arguments unchanged). On
        `except Exception as e`, warn
        `"entry_backfill: strategy %s (owner %s) skipped — universe resolve failed [trace %s]: %s"`
        and `continue`.
-     - The `for symbol in resolved.union` append (`:120-121`) is unchanged.
+     - The `for symbol in resolved.union` append (`:121-122`) is unchanged.
 5. **(e) Per-owner summary.** After the loop, for each `owner, sids in failed_owners.items()`,
    warn once: `"entry_backfill: owner %s skipped strategies %s [trace %s]"`.
 6. **(f) Gather results.** Bind `results = await asyncio.gather(*tasks, return_exceptions=True)`.
    For each `r` that `isinstance(r, Exception)`, warn
    `"entry_backfill: pair task failed [trace %s]: %s"`. Keep the Step 2 `boot pass complete` info
    log.
-7. **(g) Docstring.** Rewrite `:50-53` so it says the pass never raises. A failed strategies read
+7. **(g) Docstring.** Rewrite `:51-54` so it says the pass never raises. A failed strategies read
    ends the pass with a warning. Blend-universe and system-drain failures fall back to empty sets.
    A malformed row or failed resolve skips that row. A held/watchlist drain failure skips that
    owner's rows. Every failure is logged with the pass trace id. Keep it at most ~5 lines.
@@ -375,7 +388,7 @@ Behavioural verification is Step 5.
 
 ### Step 5 — test: `@AC-3`/`@AC-4`/`@AC-5`/`@AC-8`/`@AC-9` failure isolation (real loop for `@AC-3`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify
@@ -393,24 +406,24 @@ Behavioural verification is Step 5.
   - Its consumers are `:162`, `:177`, `:415` and `:425`.
   - It depends on the file-local `_cfg` (`:117`), `_marketdata` (`:128`, which uses `_real_bars`
     from `tests/test_readiness_opportunities_source_symbol.py:23`) and `_EOF` (`:46`).
-- `tests/conftest.py` imports no test modules (`:6-46`). It already exports `RecordingStub` (`:83`)
-  and `ctx_with` (`:71`), so it is the Python C-13 home.
+- `tests/conftest.py` imports no test modules. It already exports `fundamentals_row` (`:56`, 246),
+  `snapshot_watcher` (`:61`, 244), `ctx_with` (`:106`) and `RecordingStub` (`:118`), so it is the
+  Python C-13 home. Its module-top `# noqa: E402` imports are `:44-48` (re-verified 2026-10-29).
 - `tests/test_entry_backfill.py:49-61` `_fake_live_loop` uses plain `AsyncMock` drains that never
   raise. A `@AC-3` built on it would pass before the fix (design r1 blocking objection).
 - `tests/test_entry_backfill.py:213-243` is `test_blend_backfill_restricted_to_fundamentals_universe`,
   the PRESERVE guard for 193 `@AC-3`. Its blend-cfg pattern is `:233-236`.
-- caplog style: `tests/test_live_loop.py:101` / `:119`
+- caplog style: `tests/test_live_loop.py:120` / `:149`
   `with caplog.at_level(logging.WARNING, logger="app.engine.live_loop"):`. Here the logger is
   `app.engine.entry_backfill`.
-- `live_loop.py:896-906` `_write_entry_cooldown` returns early when `self._cooldowns_repo is None`
-  (`:901-902`). The constructor at `live_loop.py:267` defaults `cooldowns_repo=None` (`:276`,
-  stored at `:300`), and `_live_loop` (`test_owner_header_guard.py:139-154`) passes none. So the
+- `live_loop.py:898` `_write_entry_cooldown` returns early when `self._cooldowns_repo is None`
+  (`:903`). The constructor at `live_loop.py:270` defaults `cooldowns_repo=None` (`:279`), and `_live_loop` (`test_owner_header_guard.py:139-154`) passes none. So the
   real loop needs no cooldowns repo, and `@AC-3` fails RED on the escaped `ValueError`, not on a
   constructor error (re-verified at /sdd-review impl-spec). Still check the RED failure message.
 
 **TDD**: `red-green required`. Against the pre-Step-4 tree:
 - `@AC-3` fails because the real `owner_metadata` `ValueError` escapes `run_once` from
-  `live_loop.py:522`.
+  `_drain_held` (`live_loop.py:520-525`).
 - `@AC-8`, `@AC-4`, `@AC-5` and `@AC-9` fail because the injected exception escapes `run_once`.
 - The row-split test fails because the `KeyError` from the parse escapes.
 
@@ -423,17 +436,19 @@ Behavioural verification is Step 5.
      test-module dependencies injected as parameters. That keeps conftest free of
      test-module imports; `_marketdata` needs `_real_bars`.
    - Import `LiveEvaluationLoop` and `StrategyEvaluator` inside the function or at module top
-     (after `_setup_gen_path`, `# noqa: E402` as at `:44-46`).
+     (after `_setup_gen_path`, `# noqa: E402` as at `:44-48`). Add `real_live_loop` on top of the
+     current conftest, beside the already-merged `fundamentals_row`/`snapshot_watcher`.
    - The moved body also uses the file-local `_EOF` (`test_owner_header_guard.py:46`,
      `SimpleNamespace(next_page_token="")`) for the portfolio pages. conftest has no
      `SimpleNamespace` import (it imports `types`, `:17`), so build the page inline as
      `types.SimpleNamespace(next_page_token="")`. Do not import `_EOF` from the test module.
    - In `test_owner_header_guard.py`, replace the `_live_loop` body with
      `return real_live_loop(ingest, indicators, rows, config_watcher=_cfg(), marketdata_stub=_marketdata())`
-     and import `real_live_loop` from `tests.conftest` (`:27`). The 4 call sites stay unchanged.
-   - **Fallback (design Open Risk), preferred on any collision:** 244 (`snapshot_watcher`) and
-     246 (`fundamentals_row`) also add conftest helpers. Rebase before this step; if the conftest
-     edit then conflicts, keep `_live_loop` where it is. For `@AC-3`, use a `_drain_held` side effect that calls
+     and add `real_live_loop` to the `from tests.conftest import ...` line (`:27`). The 4 call
+     sites stay unchanged.
+   - **Fallback (design Open Risk):** the 244 (`snapshot_watcher`) and 246 (`fundamentals_row`)
+     conftest helpers are already merged (2026-10-29), so no rebase conflict is expected. Only if a
+     later merge makes the conftest edit conflict, keep `_live_loop` where it is. For `@AC-3`, use a `_drain_held` side effect that calls
      the real `app.identity.owner_metadata(owner)` and returns `set()`. Record that in the
      Deviation Log.
 2. **`@AC-3`** (`test_system_owner_does_not_stop_other_owners`, `tests/test_entry_backfill.py`):
@@ -502,7 +517,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 6 — service: delete owner-agnostic `StrategiesRepository.get_by_id` / `.update` (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategies.py` — modify
@@ -514,14 +529,14 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 - `app/repositories/strategies.py:89-97` is
   `async def get_by_id(self, strategy_id)` with `WHERE strategy_id = $1`.
 - `:110-124` is `async def update(self, strategy_id, display_name, definition_json)` with
-  `WHERE strategy_id = $1` at `:117`.
+  `WHERE strategy_id = $1` at `:117` (re-verified 2026-10-29; `import json` is `:15`).
 - `:99-102` is the `get_by_owner_and_id` docstring "Owner-scoped twin of :meth:`get_by_id` —
   resolves the row only under its owner (feature 133)…". Keep `get_by_owner_and_id` (`:99`) and
   `update_locked` (`:126`).
 - Grep found 0 callers in `app/`. `grep -rn "get_by_id\|_strategies_repo.update\b" app/`, after
   excluding `strategy_scores`/`template`, hits only `strategies.py:89`, `:100` and the comment at
-  `servicer.py:3174`.
-- `app/handlers/servicer.py:3174` is
+  `servicer.py:3181`.
+- `app/handlers/servicer.py:3181` is
   `# Atomic backstop for a concurrent duplicate that raced the get_by_id check.`
 - The `get_by_id` on `strategy_scores` and `strategy_templates` belongs to other repositories and is
   out of scope (`tests/test_strategy_scores_repo.py:127` calls the scores repo).
@@ -537,7 +552,7 @@ exist.
 2. Rewrite the `get_by_owner_and_id` docstring opening (`:100`) so it no longer cross-references
    `get_by_id`. For example: `"""Resolve the row only under its owner (feature 133). Returns ``None`` …`
    (keep the rest of the docstring).
-3. Reword the `servicer.py:3174` comment to name the owner-scoped read it follows, e.g.
+3. Reword the `servicer.py:3181` comment to name the owner-scoped read it follows, e.g.
    `# Atomic backstop for a concurrent duplicate that raced the get_by_owner_and_id check.`
 4. Leave the `import json` in place if `update_locked` or others still use it. Run
    `ruff check` to confirm no unused import was left behind.
@@ -553,7 +568,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 7 — test: deletion-first mock cleanup + `@AC-6`/`@AC-7` (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -562,29 +577,31 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Re-verified at /sdd-spec on `origin/feature/fix-analysis-owner-scope` @ `5afe0c84`. Every
-  single-line `get_by_id = AsyncMock(...)` site is followed **on the next line** by an explicit
-  `get_by_owner_and_id = AsyncMock(...)` with the same return value:
-  - `tests/test_analysis_servicer.py`: 119, 684, 799, 812, 986, 1008, 1075, 2175 (`repo.`), 2285,
-    2815, 2892, 3119, 3170, 3451 (`repo.`), 4036, 4149, 6216, 6234, 6252, 6269, 6286, 6407, 6427
-    and 7592.
+- Re-verified 2026-10-29 on the main-dev-merged feature branch (counts unchanged; line numbers
+  drifted). Every single-line `get_by_id = AsyncMock(...)` site is followed **on the next line** by
+  an explicit `get_by_owner_and_id = AsyncMock(...)` with the same return value:
+  - `tests/test_analysis_servicer.py` (24): 119, 702, 817, 830, 1004, 1026, 1093, 2269 (`repo.`),
+    2379, 2910, 2987, 3214, 3265, 3546 (`repo.`), 4131, 4244, 6311, 6329, 6347, 6364, 6381, 6502,
+    6522 and 7687.
   - `tests/test_readiness_opportunities_source_symbol.py`: 61 and 189.
-- `:1975-1983` / `:2003-2011` are multi-line `get_by_id = AsyncMock(return_value={...})`, and they
-  are followed by the alias `get_by_owner_and_id = svc._strategies_repo.get_by_id` at `:1984` /
-  `:2012`.
-- `:4500` is `svc._strategies_repo.get_by_id = AsyncMock(side_effect=lambda sid: strategies.get(sid))`.
-  The `:4501-4502` comment ends "so mirror get_by_id (owner-agnostic here)". `:4503-4505` already
-  defines `get_by_owner_and_id = AsyncMock(side_effect=lambda uid, sid: strategies.get(sid))`.
-- `:6335` is `svc._strategies_repo.get_by_id.assert_not_awaited()  # no precondition fetch on disable`.
-  The disable path never calls `get_by_owner_and_id`: `servicer.py:3412-3415` fetches only under
+- `:2069-2078` / `:2097-2106` are multi-line `get_by_id = AsyncMock(return_value={...})` blocks,
+  each ending with the alias `get_by_owner_and_id = svc._strategies_repo.get_by_id` (last line of
+  each range).
+- `:4595` is `svc._strategies_repo.get_by_id = AsyncMock(side_effect=lambda sid: strategies.get(sid))`.
+  The `:4596-4597` comment ends "so mirror get_by_id (owner-agnostic here)". The lines right after
+  it already define `get_by_owner_and_id = AsyncMock(side_effect=lambda uid, sid: strategies.get(sid))`.
+- `:6430` is `svc._strategies_repo.get_by_id.assert_not_awaited()  # no precondition fetch on disable`.
+  The disable path never calls `get_by_owner_and_id`: `servicer.py:3419` fetches only under
   `if request.live_enabled:`.
-- The stale comments are `:978` ("…via get_by_id.") and `:1007` ("…from the get_by_id
+- The stale comments are `:996` ("…via get_by_id.") and `:1025` ("…from the get_by_id
   precondition fetch.").
 - No test references `_strategies_repo.update`. `svc._strategies_repo` is a bare `AsyncMock`
   (e.g. `:1974`, `:6324`), so deleting a mock line changes no behavior when the explicit
   `get_by_owner_and_id` stays (design r2 rationale).
-- The repo-level tests live in `class TestListLiveEnabled` (`tests/test_analysis_servicer.py:6667`),
-  which builds `StrategiesRepository(db)` directly (`:6699`, `:6718`).
+- The repo-level tests live in `class TestListLiveEnabled` (`tests/test_analysis_servicer.py:6762`),
+  which imports `StrategiesRepository` inside the test (`:6771`) and builds `StrategiesRepository(db)`
+  directly (`:6794`, `:6813`).
+- The `_strategies_repo.(get_by_id|update)` grep count across `tests/` + `app/` is 30 (re-verified).
 
 **TDD**: `red-green required`. The new `@AC-6` test fails before Step 6 (`hasattr` is True). The
 `@AC-7` grep count is 30 before this step and 0 after.
@@ -594,27 +611,27 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Instructions**: apply the **deletion-first** rule (operator-approved at the design gate r2; the
 rename/retarget rules are a Rejected Alternative):
 1. **(i)** Delete each `get_by_id = AsyncMock(...)` line listed above whose next line already sets
-   `get_by_owner_and_id`. The cited line numbers are from `5afe0c84` and will drift after the
-   rebase in instruction 7. Locate each site by `grep -n "get_by_id" <file>` on the rebased tree,
-   not by the number. That is 24 sites in `test_analysis_servicer.py`, including `repo.` at
-   2175/3451, and 2 in `test_readiness_opportunities_source_symbol.py`. Delete from the bottom of
+   `get_by_owner_and_id`. The cited line numbers are from the 2026-10-29 merged tree and may
+   drift further. Locate each site by `grep -n "get_by_id" <file>`, not by the number. That is 24
+   sites in `test_analysis_servicer.py`, including `repo.` at 2269/3546, and 2 in `test_readiness_opportunities_source_symbol.py`. Delete from the bottom of
    the file upward so the cited line numbers stay valid while editing.
-2. **(ii)** At `:1975-1984` and `:2003-2012`, rename the multi-line `get_by_id = AsyncMock(` to
-   `get_by_owner_and_id = AsyncMock(` (same `return_value` dict) and delete the alias line
-   (`:1984`, `:2012`).
-3. **(iii)** Delete `:4500`. Reword `:4501-4502` to say that the fixtures sit under a single owner
+2. **(ii)** At `:2069-2078` and `:2097-2106`, rename the multi-line `get_by_id = AsyncMock(` to
+   `get_by_owner_and_id = AsyncMock(` (same `return_value` dict) and delete the trailing alias line
+   of each range.
+3. **(iii)** Delete `:4595`. Reword `:4596-4597` to say that the fixtures sit under a single owner
    (`_HEADERS` x-user-id="u1"), so the owner-scoped mock ignores `uid`. Remove the "mirror
    get_by_id" wording.
-4. **(iv)** Retarget `:6335` to
+4. **(iv)** Retarget `:6430` to
    `svc._strategies_repo.get_by_owner_and_id.assert_not_awaited()  # no precondition fetch on disable`.
-5. **(v)** Reword the `:978` and `:1007` comments to name `get_by_owner_and_id`.
+5. **(v)** Reword the `:996` and `:1025` comments to name `get_by_owner_and_id`.
 6. **`@AC-6`:** add `class TestStrategiesRepositoryOwnerScopedOnly` right after
    `TestListLiveEnabled` with one test. It asserts that
    `not hasattr(StrategiesRepository, "get_by_id")`, `not hasattr(StrategiesRepository, "update")`
    and `hasattr(StrategiesRepository, "get_by_owner_and_id") and hasattr(StrategiesRepository, "update_locked")`.
-   Import inside the test, as `TestListLiveEnabled` does at `:6676`.
-7. Do this first: rebase onto the latest feature branch (215/244/245 churn). Then re-run the
-   greps below, and delete any resurrected `get_by_id` line by rule (i).
+   Import inside the test, as `TestListLiveEnabled` does at `:6771`.
+7. Do this first: confirm the checkout is the latest `origin/feature/fix-analysis-owner-scope`
+   (main-dev, including 215/244/245, was merged in on 2026-10-29). Then re-run the greps below, and
+   delete any resurrected `get_by_id` line by rule (i).
 
 **Verification**:
 ```bash
@@ -629,7 +646,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 8 — docs: analysis CLAUDE.md dependency row + context teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-analysis/` (docs)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -637,7 +654,8 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `services/xstockstrat-analysis/CLAUDE.md:230` (the `xstockstrat-trading` dependency row) reads
+- `services/xstockstrat-analysis/CLAUDE.md:271` (the `xstockstrat-trading` dependency row;
+  re-verified 2026-10-29, was `:230`) reads
   "`ListOrders(strategy_id, symbol)` boot-time-only for the exit-cooldown entry-time backfill
   (feature 116, `app/engine/entry_backfill.py`)".
 - `services/xstockstrat-analysis/docs/context-constitution.md:23` (ANALYSIS-7) and
@@ -651,7 +669,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Covers**: —
 
 **Instructions**:
-1. In `CLAUDE.md:230`, replace "`ListOrders(strategy_id, symbol)` boot-time-only" with
+1. In `CLAUDE.md:271`, replace "`ListOrders(strategy_id, symbol)` boot-time-only" with
    "`ListOrders(user_id, strategy_id, symbol)` + owner `x-user-id` (and a per-pass `x-trace-id`)
    boot-time-only". Leave the rest of the row unchanged.
 2. Run `/context-forge:context-constitution refresh` scoped to `services/xstockstrat-analysis/`
@@ -673,3 +691,28 @@ grep -n "ListOrders(strategy_id, symbol)" services/xstockstrat-analysis/CLAUDE.m
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 2 (2026-10-29), comment wording.** Instruction 3's first comment line, verbatim, is
+  102 chars at its 8-space indent and fails ruff E501 (limit 100), which the step's own
+  Verification runs. Committed as
+  `# Key must match live_loop's (user_id, strategy_id, symbol) key or the slot is never read.`;
+  same constraint, no behaviour change. The second line is verbatim.
+- **Step 3 (2026-10-29), `@AC-2` fake models trading's fail-open.** Instruction 3's fake returns
+  only orders with `user_id == req.user_id`. Against the pre-Step-2 tree the body `user_id` is `""`,
+  so that fake returns nothing and the test passed — it could not show the RED the step's **TDD**
+  line names ("the unfiltered fake returns u-b's fill"). The committed fake also returns every
+  order when `req.user_id` is empty, mirroring `trading_repo.go:229-231`; it then fails RED and
+  passes GREEN. No scope change.
+- **Step 5 (2026-10-29), WARNING-text assertion for the malformed row.** Instruction 4 asks for a
+  WARNING that names `"bad"`. A bare `"bad"` substring can also match the hex `pass_trace_id` every
+  warning carries, so the test asserts `"strategy bad (owner u-a)"`. Same intent, never vacuous.
+- **Step 7 (2026-10-29), `@AC-6` assertion obfuscates the method name (operator decision).**
+  Instruction 6's literal `hasattr(StrategiesRepository, "get_by_id")` would leave one hit for the
+  step's second Verification grep (`expect 0`). Operator decision in their own words (session
+  question tool, 2026-10-29): 'B: obfuscate the name'. The grep stays at `expect 0`; the test asserts
+  `not hasattr(StrategiesRepository, "get_" + "by_id")` with a one-line comment that the name is split
+  so the grep stays a strict 0. Same assertion, same RED/GREEN.
+- **Step 7 (2026-10-29), comment wrapping for E501.** The reworded `(v)` comments and the `(iv)`
+  line with its inline comment are 105-107 chars and fail ruff E501, which the step's own
+  Verification runs. The two `(v)` comments wrap onto a second line, and the `(iv)` comment
+  `# no precondition fetch on disable` moves to the line above the assert. Wording unchanged.

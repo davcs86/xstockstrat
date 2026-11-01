@@ -333,3 +333,309 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   The router decides the order and owns the write. Whichever feature lands second rebases. Target: the /sdd-execute
   checkpoint before Step 1 (marketdata) and before Step 7 (authz.ts).
 - [ ] Re-run the overlap scan once 256-260 get implementation specs (no concrete clash today). Target: /sdd-execute start.
+
+## Session 2026-10-28 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-marketdata-secret-exposure` (`-X ours`).
+- Re-spec, line drift only (no Instruction change): Step 7 pre-merge gate grep now targets `deploy.yml:101`
+  (the `:102` grep failed after the merge and would have blocked P-03 falsely), and its Instruction 4 WARN cite moves
+  to `main.go:77-78`. Step 9 WARN moves to `main.go:77-78`, Step 1 FMP `fetchQuotes`/`fetchRatios`/`FetchSector`/
+  `FetchIsEtf` to `:263`/`:273`/`:364`/`:374`, Step 5 `ci.yml:594`, Step 8 `fails.md:671` (rule `:673`).
+  The Step 7 SAN-material grep passes against the current tree.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status `implementation-ready` → `in-progress`.
+- Up-front confirmation (sequential mode entry): given by operator standing authorization, operator chat 2026-10-28
+  (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute, then "start batch 2 in
+  parallel too". Answers: unattended checkpoints (checkpoints = report); C-16 promotion auto-confirmed unless it
+  changes an existing @AC rule; merge-train authorized; 255 and 275 deferred; operator-only DB/prod steps — open the
+  integration PR and hold the merge.
+- Branch base: `origin/main-dev` merged in (`-X ours`); Steps 1, 5, 7, 8, 9 re-spec'd for line drift (entry above).
+
+## Session 2026-10-28 — sdd-execute sequential, Step 1
+
+- Step 1 done (D-39). Both vendor `getJSON` functions now unwrap `*url.Error` and `%w`-wrap only `ue.Err`, with a
+  cause-free fallback, at the build-request and transport sites (`fmp_client.go`, `finnhub_client.go`; `"errors"`
+  import added to finnhub). `reserve()`, `counted` and the refund `defer` are untouched (217 @AC-4).
+- TDD: AC-1/AC-2 red: throwaway probes failed with
+  `fmp: /stable/quote request failed: Get "http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL": dial tcp ...`
+  and `finnhub: build request: parse "http://127.0.0.1:1\x7f/stock/metric?...&token=k-secret": ...` → green:
+  `fmp: /stable/quote request failed: dial tcp 127.0.0.1:1: connect: connection refused`,
+  `finnhub: /stock/metric build request: net/url: invalid control character in URL`. Probes were not committed;
+  Steps 2-3 add the committed tests (Deviation Log).
+- Verification: `go build ./...`, `go vet` (fmp, finnhub) OK; the leak grep returns nothing; `golangci-lint run` 0 issues;
+  `go test -race` on fmp/finnhub/service green.
+- Tooling note: the provisioned `~/go/bin/golangci-lint` v2.14.0 was built with go1.26 and refuses the go1.27 module.
+  It was rebuilt at the same pin with `GOTOOLCHAIN=go1.27.0 go install .../golangci-lint@v2.14.0` into the session
+  scratchpad. No repo change.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 2
+
+- Step 2 done (D-39 client tests, AC-1/AC-2). Added `assertNoKeyLeak` and `newLeakClient` (file-local) plus
+  `TestTransportError_DoesNotLeakAPIKey_AC1`/`_AC2`, `TestBuildRequestError_DoesNotLeakAPIKey` and
+  `TestTransportError_PreservesDeadlineCause` to `fmp_client_test.go` and `finnhub_client_test.go`, and
+  `TestGateway_BudgetRefundOnTransportError_AC4` to `fmp_gateway_test.go`.
+- TDD, RED (pre-Step-1 client files from `ba303400^`, restored afterwards):
+  - FMP AC-1: `error leaked api key: "fmp: /stable/quote request failed: Get \"http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL\": dial tcp 127.0.0.1:1: connect: connection refused"`.
+  - FMP build request: `error leaked api key: "fmp: build request: parse \"http://127.0.0.1:1\\x7f/stable/quote?apikey=k-secret&symbol=AAPL\": net/url: invalid control character in URL"`.
+  - Finnhub AC-2 and build request failed the same way with `token=k-secret`.
+  - Both deadline tests failed on `error chain still holds a *url.Error` (not "N/A — characterization" as the
+    spec predicted; Deviation Log).
+  - `TestGateway_BudgetRefundOnTransportError_AC4` passed (characterization guard for 217 @AC-4, as specified).
+- GREEN after restoring Step 1: all 7 new tests (plus the existing 403 and 503 tests) pass with `-race`.
+- Verification: full `go test ./... -race` green; coverage total 71.4% (>= 40%); `golangci-lint` v2.14.0 (go1.27
+  build in the session scratchpad) 0 issues.
+
+## Session 2026-10-28 — sdd-execute sequential, Step 3
+
+- Step 3 done (D-39 service edge, AC-5/AC-7). Added `TestFundamentals_TransportErrorStatusIsKeyFree_feature254` to
+  `marketdata_service_test.go` (plus the `internal/fmp` import): a real `fmp.Client` on `http://127.0.0.1:1` with
+  key `k-secret` behind `newFundSvc(enabledCfg("fmp"), ...)`; subtests `single (AC-5)` and `batch (AC-7)` assert
+  `CodeUnavailable`, `"fmp"` present, and no `k-secret` / `apikey=`. `marketdata_service.go` unchanged (FR-3).
+- TDD, RED (pre-Step-1 `fmp_client.go` from `ba303400^`, restored afterwards): both subtests failed with
+  `status leaked api key: "unavailable: fmp fetch: fmp: /stable/quote request failed: Get \"http://127.0.0.1:1/stable/quote?apikey=k-secret&symbol=AAPL\": dial tcp 127.0.0.1:1: connect: connection refused"`.
+  GREEN on `HEAD`: both subtests and `VendorNoFundamentalsIsNotFound_feature215` pass with `-race`.
+- Verification: full `go test ./... -race` green; coverage total 71.5% (>= 40%); `golangci-lint` v2.14.0 (go1.27
+  build in the session scratchpad) 0 issues.
+
+
+## Session 2026-10-29 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-marketdata-secret-exposure` (`-X ours`, merge `12dc255b`).
+- Operator approval: standing authorization, operator chat 2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f):
+  "Start executing features 241-276" via batch-execute. Answers: unattended checkpoints (checkpoints = report); C-16
+  promotion auto-confirmed unless it changes an existing @AC rule; merge-train authorized; 255 and 275 deferred;
+  operator-only DB/prod steps — open the integration PR and hold the merge; blocker decisions 2026-10-29 recorded per
+  feature.
+- Status already `in-progress` (flipped 2026-10-28); no status change this session.
+- Re-spec of Steps 4-9 against the merged tree: every path, symbol and line cite still resolves (config `authz.ts`
+  grant `:114-126`, `secretsAndScope.test.ts` GetSecret describe `:63`, `perUserSecrets.test.ts:236-248`,
+  `secretCallerAuthz.test.ts:57-62`, marketdata `config.go:70/:109/:115`, `main.go:77-78`). Changes: Step 5
+  Instructions 2-3 spell out `setEnv(...leaf, caPem)` (3-arg `setEnv`, `mintLeaf` returns `[certPem, keyPem]`, CA PEM
+  read with `readFileSync` since openssl writes it to a path); Step 9 Verification names the DO apps MCP
+  `apps-get-logs` tool because `doctl` is not installed in the sandbox. Steps 4, 6, 7, 8 unchanged.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4
+
+- Tooling setup (step 4): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter "xstockstrat-config..."`).
+- Step 4 done (D-40 prep). Created `services/xstockstrat-config/src/__tests__/mtlsTestPki.ts`, which exports `sh`,
+  `mintLeaf` and `setEnv` moved verbatim from `peerSanSpike.test.ts`. Both `peerSanSpike.test.ts` and `mtls.test.ts`
+  now import them and drop their local copies and the unused `execFileSync` / `writeFileSync` imports. `mintPki` and
+  the spike's inline CA lines are unchanged.
+- TDD: N/A (refactor with no behavior change). The characterization suites ran before and after the move: 182/182
+  pass both times, and `inter-service mTLS` and `peer SAN spike` stay green. c8 all-files lines are 86.77% both
+  times (>= 40).
+- Verification: `pnpm run lint` exit 0 (warnings only, none in the touched files). The grep finds `function sh|mintLeaf|setEnv`
+  only in `mtlsTestPki.ts`. jscpd was run directly instead of through the script (Deviation Log): 0 clones in config.
+  The 46 repo-wide clones are all in files this step does not touch.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 5
+
+- Tooling setup (step 5): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter "xstockstrat-config..."`).
+- Step 5 done (D-40 prep). The `GetSecret allow-list + failure modes` describe in `secretsAndScope.test.ts` now mints a
+  test CA plus `xstockstrat-config` / `xstockstrat-marketdata` / `xstockstrat-ingest` leaves (`mtlsTestPki.ts`), binds
+  with `mtls.serverCredentials()`, and dials `client` (marketdata leaf) and `ingestClient` (ingest leaf) with
+  `mtls.clientCredentials()` + `mtls.targetOverride('xstockstrat-config')`. `ingestClient` is unused until Step 6
+  (accepted impl-spec review note). The five `it` blocks and the SetConfig describe are unchanged. The header comment
+  now says "GetSecret (over mTLS)".
+- TDD: N/A (transport change, no behavior change). Characterization before and after: 182/182 pass, and the five
+  GetSecret tests (AC-4, AC-5 x2, AC-16 x2) stay green under the still header-only marketdata grant. c8 all-files
+  lines are 86.77% both times (>= 40).
+- Verification: `pnpm run test:coverage` exit 0; `pnpm run lint` 0 errors (warnings only; the new `ingestClient: any`
+  mirrors the existing `client: any`); `git diff --quiet -- src/grpc/authz.ts` → untouched.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 6
+
+- Tooling setup (step 6): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter . --filter "xstockstrat-config..."`).
+- Step 6 done (D-40 red evidence). Added `it('AC-3 (254): marketdata secret is denied to an mTLS peer whose SAN is
+  xstockstrat-ingest')` to the GetSecret describe of `secretsAndScope.test.ts`. It seeds `encryptSecret('alpaca-xyz')`,
+  calls GetSecret through `ingestClient` (ingest leaf, valid CA, wrong SAN) with `x-internal-caller: marketdata`, and
+  asserts `PERMISSION_DENIED` with no `res`. The local `getSecret` helper now delegates to a new `getSecretAs(c, …)`.
+- TDD: AC-3 red: under the current header-only `marketdata` grant (no `peerSan`), `assert.ok(err, 'a wrong-SAN peer
+  must be refused')` failed with `actual: null`. GetSecret succeeded for the ingest-SAN peer, which is the D-40 gap.
+  Suite: `ℹ tests 183`, `ℹ pass 182`, `ℹ fail 1`, and the only `✖` is `AC-3 (254)`. AC-4 / AC-5 x2 / AC-16 x2 stay
+  green. → green: pending Step 7 (the `peerSan: 'xstockstrat-marketdata'` grant). This is the RED evidence for Step 7
+  (C-08 pair); copy it into the integration PR body.
+- Verification: the expected-red run above. The spec-reporter grep replaces the TAP grep (Deviation Log).
+  `pnpm run lint` exits 0, with 0 errors and only warnings. `authz.ts` is untouched. There is no coverage gate at
+  this step (F-05: it moves to Step 7).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 7
+
+- Tooling setup (step 7): node ✓ v24.20.0 · pnpm ✓ 9.15.9 · openssl ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter . --filter "xstockstrat-config..."`).
+- Step 7 done (D-40 fix). `SECRET_CALLER_ALLOWLIST`'s `marketdata` entry in `src/grpc/authz.ts` now carries
+  `peerSan: 'xstockstrat-marketdata'`, mirroring the ingest grant. No other `authz.ts` edit (ingest and SetConfig
+  grants and the matcher are untouched). In `perUserSecrets.test.ts`, the old "no SAN required" test became
+  `marketdata GetSecret requires the xstockstrat-marketdata peer SAN (254: AC-3/AC-4/AC-6)`, with a new
+  `MARKETDATA_SAN` const: the marketdata SAN resolves `alpaca-xyz` (AC-4); the ingest SAN, `() => ({})` and no auth
+  context each give `PERMISSION_DENIED` with no `res` (AC-3/AC-6). `secretCallerAuthz.test.ts:59` now passes
+  `callWith('marketdata', 'DNS:xstockstrat-marketdata')`.
+- TDD: red: unit tests authored first, run before the `authz.ts` edit. `ℹ tests 183`, `ℹ pass 181`, `ℹ fail 2`: the
+  new unit test failed on the wrong-SAN assert (`undefined !== 7`, i.e. GetSecret succeeded for an ingest-SAN peer),
+  and Step 6's wire `AC-3 (254)` still failed. → green: after the grant edit, `ℹ tests 183`, `ℹ pass 183`, `ℹ fail 0`;
+  in the wire suite only AC-3 (254) changed state (AC-4 / AC-5 x2 / AC-16 x2 stayed green).
+- Verification: `pnpm run test:coverage` exit 0, c8 all-files lines 86.79% (>= 40). `pnpm run lint` exit 0 (0 errors,
+  warnings only). `grep peerSan: 'xstockstrat-marketdata'` → `authz.ts:119`. Pre-merge gate (P-03): the three SAN
+  material lines (`gen-dev-certs.sh:28`, `:50`, `deploy.yml:101`) are unchanged.
+- Rollback for D-40 is reverting the `authz.ts:119` line alone (D-39 stays).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 8
+
+- Tooling setup (step 8): none needed (docs only).
+- Step 8 done (docs). The `marketdata` GetSecret grant's DNS SAN `xstockstrat-marketdata` is now stated in config
+  `CLAUDE.md` invariant #6, config `docs/context-constitution.md` (Gotcha at `:35` and invariant row at `:51`: both
+  grants carry `peerSan`), marketdata `CLAUDE.md:218` (header plus leaf SAN; a SAN-less leaf gets
+  `PERMISSION_DENIED`, which surfaces as the boot WARN `resolving vendor credential from config failed`), and the
+  root `CLAUDE.md` § Config Governance Rules parenthetical.
+- Residual (a), the redirect `Location`-parse error whose inner cause can quote a vendor-sent URL, is **accepted with
+  no test** (design.md). It is tracked with residual (b), query-string keys in proxy/vendor access logs, in
+  `docs/reports/2026-10-29-marketdata-vendor-key-url-residuals-defect.md` (sidecar `open`), which recommends
+  key-in-header (vendor support unverified) plus a shared `redactURLError` helper.
+- Teardown: `/context-forge:context-constitution` is unavailable in this session, so it was done by hand (see the
+  Deviation Log). That includes the out-of-Files fix of `docs/patterns/config-governance.md:25`. The integration PR
+  body must record both.
+- TDD: N/A (docs).
+- Verification: the three spec greps pass (config SAN lines at `CLAUDE.md:41` and `context-constitution.md:35`/`:51`;
+  `DNS SAN` at marketdata `CLAUDE.md:218` and root `CLAUDE.md:176`; sidecar `head -1` → `open`). The report has
+  exactly one severity token.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 9
+
+- Step 9 (post-merge dev smoke) **deferred to operator**; Status stays `pending`. Precondition unmet: Step 7
+  (`d3f6780b`) is only on `origin/feature/fix-marketdata-secret-exposure`, not on `origin/main-dev`, so the dev app
+  still runs pre-fix code and no smoke evidence exists yet. The exact operator checks are in the implementation-spec
+  Deviation Log (2026-10-29, Step 9): after merge + dev deploy, grep a post-config-healthy marketdata boot for the
+  ASCII prefix `resolving vendor credential from config failed` and expect 0; any match → revert `authz.ts:119`
+  alone. Record boot timestamp + match count here when done.
+- Line drift noted: the WARN is at `services/xstockstrat-marketdata/cmd/server/main.go:77-78` (Step 9 Codebase
+  Evidence already cites this; older planning notes cite `:70-71`).
+- Update (operator decision 2026-10-29): Step 9 **Status** set to `done`. The smoke is post-merge verification and no
+  longer holds the integration PR. It is **not yet performed**: after the merge deploys to dev, the operator's session
+  checks marketdata `GetSecret` at startup (Grafana logs/traces, or the Verification grep expecting 0) and records the
+  boot timestamp and match count here. A match still means reverting the Step 7 `authz.ts` `peerSan` line alone.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-marketdata-secret-exposure (feature 254)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/254-fix-marketdata-secret-exposure/acceptance.feature (7 scenarios, AC-1..AC-7). Affected services (feature.md Reviewers): xstockstrat-marketdata, xstockstrat-config.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 (FR-1) | services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature | CREATE | NEW | FMP client error text; no existing suite asserts it |
+| AC-2 (FR-2) | same marketdata file | CREATE (same file) | NEW | Finnhub client error text |
+| AC-5 (FR-3) | same marketdata file | CREATE (same file) | NEW | GetFundamentals UNAVAILABLE status message |
+| AC-7 (FR-3) | same marketdata file | CREATE (same file) | NEW | GetFundamentalsMulti UNAVAILABLE status message |
+| AC-3 (FR-4) | services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature | CREATE | NEW | GetSecret refused without marketdata SAN. Tightens the config @feature-147 @AC-4/@AC-5 allow-list rule; see Notes |
+| AC-4 (FR-5) | same config file | CREATE (same file) | NEW | marketdata still resolves with SAN xstockstrat-marketdata. Adds the SAN precondition that @feature-147 @AC-4 did not state |
+| AC-6 (FR-4) | same config file | CREATE (same file) | NEW | No peer SAN is refused. Replaces the "no SAN required" assertion in perUserSecrets.test.ts:236 |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature (CREATE) ---
+# Promoted from docs/roadmap/features/254-fix-marketdata-secret-exposure/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-254` tag.
+# Durable business rules xstockstrat-marketdata already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-marketdata - vendor API keys never leak through errors
+  Vendor API keys must not appear in transport errors (D-39) or in gRPC status messages returned to callers.
+
+  @AC-1 @FR-1 @regression @feature-254
+  Scenario: An FMP transport failure never reveals the API key
+    Given an FMP client configured with api key "k-secret" and base URL "http://127.0.0.1:1"
+    When GetFundamentalsMulti is called for "AAPL" and the HTTP transport fails
+    Then an error is returned that names "fmp" and the request path "/stable/quote"
+    And the error text does not contain "k-secret"
+    And the error text does not contain "apikey="
+
+  @AC-2 @FR-2 @regression @feature-254
+  Scenario: A Finnhub transport failure never reveals the token
+    Given a Finnhub client configured with api key "k-secret" and base URL "http://127.0.0.1:1"
+    When GetFundamentals is called for "AAPL" and the HTTP transport fails
+    Then an error is returned that names "finnhub" and the request path "/stock/metric"
+    And the error text does not contain "k-secret"
+    And the error text does not contain "token="
+
+  @AC-5 @FR-3 @regression @feature-254
+  Scenario: The marketdata gRPC Unavailable status never carries the vendor key
+    Given marketdata uses fundamentals provider "fmp" with api key "k-secret" and base URL "http://127.0.0.1:1"
+    And the fundamentals cache holds no row for "AAPL"
+    When the GetFundamentals RPC is called for "AAPL"
+    Then the call fails with UNAVAILABLE
+    And the status message names "fmp"
+    And the status message does not contain "k-secret"
+    And the status message does not contain "apikey="
+
+  @AC-7 @FR-3 @regression @feature-254
+  Scenario: The marketdata batch Unavailable status never carries the vendor key
+    Given marketdata uses fundamentals provider "fmp" with api key "k-secret" and base URL "http://127.0.0.1:1"
+    And the fundamentals cache holds no row for "AAPL"
+    When the GetFundamentalsMulti RPC is called for "AAPL"
+    Then the call fails with UNAVAILABLE
+    And the status message names "fmp"
+    And the status message does not contain "k-secret"
+    And the status message does not contain "apikey="
+    # AC-5 covers marketdata_service.go:1760 (single); AC-7 covers :1704 (batch).
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature (CREATE) ---
+# Promoted from docs/roadmap/features/254-fix-marketdata-secret-exposure/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-254` tag.
+# Durable business rules xstockstrat-config already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-config - the marketdata vendor secret grant is bound to the marketdata mTLS SAN
+  GetSecret for the marketdata vendor keys requires both the x-internal-caller grant and the marketdata peer SAN (D-40).
+
+  @AC-3 @FR-4 @regression @feature-254
+  Scenario: The marketdata vendor secret is refused to a peer without the marketdata SAN
+    Given config holds secret "marketdata/alpaca.api_key" = "alpaca-xyz"
+    When GetSecret is called for namespace "marketdata" key "alpaca.api_key" with header x-internal-caller "marketdata" from an mTLS peer whose DNS SAN is "xstockstrat-ingest"
+    Then the call fails with PERMISSION_DENIED
+    And no plaintext value is returned
+
+  @AC-4 @FR-5 @regression @feature-254
+  Scenario: The marketdata service still resolves its vendor secret
+    Given config holds secret "marketdata/alpaca.api_key" = "alpaca-xyz"
+    When GetSecret is called for namespace "marketdata" key "alpaca.api_key" with header x-internal-caller "marketdata" from an mTLS peer whose DNS SAN is "xstockstrat-marketdata"
+    Then the response has found true and value "alpaca-xyz"
+
+  @AC-6 @FR-4 @regression @feature-254
+  Scenario: The marketdata vendor secret is refused to a caller with no mTLS SAN
+    Given config holds secret "marketdata/alpaca.api_key" = "alpaca-xyz"
+    When GetSecret is called for namespace "marketdata" key "alpaca.api_key" with header x-internal-caller "marketdata" and no peer SAN
+    Then the call fails with PERMISSION_DENIED
+    And no plaintext value is returned
+    # Replaces the "no SAN required" assertion at services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts:236.
+
+### Notes / ambiguities / conflicts
+- Attribution: AC-1/2/5/7 assert on marketdata vendor clients and the marketdata RPC status -> marketdata. AC-3/4/6 assert on config's GetSecret outcome (the allow-list lives in services/xstockstrat-config/src/grpc/authz.ts) -> config, even though the Given names marketdata. No scenario spans services, so nothing goes to docs/sdd/business-rules/platform.feature (grep of it found no overlapping secret/SAN rule).
+- Tag collision is intentional: the marketdata dir already has @feature-147 @AC-6/@AC-7 and the config dir has @feature-147 @AC-4/@AC-5. Provenance is the @AC+@feature pair, so there is no DUP. Dedup grep found no existing marketdata scenario on error-text redaction.
+- CHANGES EXISTING RULE (tightening, not a literal contradiction): /home/user/xstockstrat/services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature @feature-147 @AC-4 (lines 42-47) says an allow-listed "marketdata" caller with x-internal-caller="marketdata" gets plaintext, and it states no SAN condition. The 254 AC-3/AC-6 make the header alone insufficient, and AC-6 explicitly replaces the "no SAN required" test. AC-4 (254) restates the happy path with the SAN. I did not mark CONFLICT, because 147 @AC-4 is silent on SAN and 254 is a reviewed, intentional hardening that narrows the grant. I did not edit or delete the 147 scenario; promotion is additive. A human may want to annotate or consolidate 147 @AC-4 with 254 @AC-4 (OVERLAP-style candidate). The 147 @AC-5 fail-closed rule is unaffected.
+- The existing config suite's header comment for ingest-style SAN binding (Constitution invariant #6 in services/xstockstrat-config/CLAUDE.md) already describes the SAN mechanism for `ingest`; 254 extends the same mechanism to `marketdata`.
+
+### Coverage check
+- Source scenarios: 7. Planned: 7 NEW (4 marketdata, 3 config), 0 DUP, 0 OVERLAP, 0 CONFLICT. All of AC-1..AC-7 are accounted for and none were skipped. Scenario text is verbatim; only the `@feature-254` tag was added.
+```
+
+## Session 2026-10-29 — sdd-execute sequential, C-16 promotion applied
+
+- Promotion plan above applied as written: `services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature` (AC-1, AC-2, AC-5, AC-7) and `services/xstockstrat-config/acceptance/fix-marketdata-secret-exposure.feature` (AC-3, AC-4, AC-6) created. Scenario text is verbatim, with `@feature-254` added.
+- **Amendment to an existing rule (operator decision 2026-10-29):** `services/xstockstrat-config/acceptance/config-secrets-and-scoping.feature` feature-147 `@AC-4 @FR-3` now has the precondition "the caller presents an mTLS peer certificate whose DNS SAN is `xstockstrat-marketdata`" (per 254 AC-6) and is tagged `@feature-254` as well. 147's other assertions are unchanged, and 147 `@AC-5` is untouched.
+- Status stays `code-completed`, so there is no history row. The husky pre-commit hook did not run: `core.hooksPath` points to `/home/user/xstockstrat/.husky/_`, which does not exist, and the main worktree has no `node_modules` to symlink. These were docs-only commits, and `--no-verify` was not used.
+
+## Session 2026-10-29 — Step 9 post-merge dev smoke (operator session)
+
+- **Result: PASS.** The squash merge `1b5a922a` (#1344) deployed to dev; the `deploy-dev` run succeeded at 06:48:49Z.
+- **Evidence:** Tempo shows 4 `ConfigService/GetSecret` spans at 06:47:56Z on the new config pod `xstockstrat-config-856865669c-zbmgm`. That pod's ReplicaSet is new; the earlier boots ran on `6fbb9bf545`. All four spans have `rpc.grpc.status_code=0` and `deployment.environment=development`. This is the marketdata boot resolving its four vendor credentials while presenting its SAN.
+- A TraceQL search for `GetSecret` spans with `status_code != 0` over 06:40–07:10Z returned **0** spans. So no marketdata request was denied by the new `peerSan` binding.
+- Loki holds no marketdata log streams (no `service_name` values over 24h), so the log grep for `resolving vendor credential from config failed` could not run. The trace check above is the equivalent the step allowed. No revert of the Step 7 `authz.ts` `peerSan` line is needed.
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

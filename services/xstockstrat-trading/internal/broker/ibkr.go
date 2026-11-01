@@ -3,15 +3,17 @@ package broker
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"net/url"
 	"sort"
@@ -28,6 +30,15 @@ type IBKRConfig struct {
 	AccessTokenSecret string
 	IBKRAccountID     string // e.g. "U1234567"
 	IsPaper           bool
+	SignatureKey      string // PEM RSA private key (PKCS#1 or PKCS#8)
+	EncryptionKey     string // PEM RSA private key (PKCS#1 or PKCS#8)
+	DHPrime           string // PEM "DH PARAMETERS"
+	Timing            func() IBKRTiming
+
+	// Optional test seams; nil selects the production default.
+	Now      func() time.Time
+	Nonce    func() string
+	DHRandom func() *big.Int
 }
 
 // IBKRClient submits and manages orders via IBKR Web API (OAuth 1.0a HMAC-SHA256).
@@ -39,7 +50,18 @@ type IBKRClient struct {
 	ibkrAccountID     string
 	isPaper           bool
 	httpClient        *http.Client
+	now               func() time.Time
+	nonce             func() string
+	dhRandom          func() *big.Int
+	timingFn          func() IBKRTiming
+	signatureKey      *rsa.PrivateKey
+	encryptionKey     *rsa.PrivateKey
+	dhP, dhG          *big.Int
+	credErr           error // non-nil: every session attempt fails locally with no HTTP call
+	ibkrSessionState
 }
+
+const ibkrRealm = "limited_poa"
 
 // IBKRRequestTimeout is IBKR's hardcoded HTTP client timeout — a confirmed pre-existing bug
 // (docs/context-constitution-findings.md); also the staleness-threshold formula's floor.
@@ -51,7 +73,7 @@ func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 		base = "https://api.ibkr.com/v1/api"
 	}
 	base = strings.TrimRight(base, "/")
-	return &IBKRClient{
+	c := &IBKRClient{
 		baseURL:           base,
 		consumerKey:       cfg.ConsumerKey,
 		accessToken:       cfg.AccessToken,
@@ -59,7 +81,45 @@ func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 		ibkrAccountID:     cfg.IBKRAccountID,
 		isPaper:           cfg.IsPaper,
 		httpClient:        &http.Client{Timeout: IBKRRequestTimeout},
+		now:               cfg.Now,
+		nonce:             cfg.Nonce,
+		dhRandom:          cfg.DHRandom,
+		timingFn:          cfg.Timing,
 	}
+	c.credErr = c.loadKeyMaterial(cfg)
+	if c.now == nil {
+		c.now = time.Now
+	}
+	if c.nonce == nil {
+		c.nonce = defaultIBKRNonce
+	}
+	if c.dhRandom == nil {
+		c.dhRandom = defaultIBKRDHRandom
+	}
+	return c
+}
+
+const ibkrNonceAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+func defaultIBKRNonce() string {
+	b := make([]byte, 16)
+	n := big.NewInt(int64(len(ibkrNonceAlphabet)))
+	for i := range b {
+		r, err := rand.Int(rand.Reader, n)
+		if err != nil {
+			panic("ibkr: crypto/rand unavailable: " + err.Error())
+		}
+		b[i] = ibkrNonceAlphabet[r.Int64()]
+	}
+	return string(b)
+}
+
+func defaultIBKRDHRandom() *big.Int {
+	r, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 256))
+	if err != nil {
+		panic("ibkr: crypto/rand unavailable: " + err.Error())
+	}
+	return r
 }
 
 // IsPaper reports whether this client is configured for paper trading.
@@ -106,7 +166,7 @@ func (c *IBKRClient) resolveIBKROrderReplies(ctx context.Context, op string, bod
 		if round >= ibkrMaxConfirmRounds {
 			return nil, fmt.Errorf("ibkr %s: %w after %d confirmations: %s", op, ErrIBKRConfirmationRequired, round, msg)
 		}
-		slog.Warn("ibkr: auto-confirming order prompt", "op", op, "prompt_id", prompt.ID, "message", msg, "round", round+1)
+		slog.WarnContext(ctx, "ibkr: auto-confirming order prompt", "op", op, "prompt_id", prompt.ID, "message", msg, "round", round+1)
 		next, err := c.confirmReply(ctx, prompt.ID)
 		if err != nil {
 			return nil, fmt.Errorf("ibkr %s: %w", op, err)
@@ -124,13 +184,10 @@ func (c *IBKRClient) confirmReply(ctx context.Context, promptID string) ([]byte,
 		return nil, fmt.Errorf("confirm reply: build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodPost, endpoint))
-	resp, err := c.httpClient.Do(httpReq)
+	resp, body, err := c.do(httpReq, "confirmReply", false)
 	if err != nil {
 		return nil, fmt.Errorf("confirm reply: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("confirm reply: status %d: %s", resp.StatusCode, body)
 	}
@@ -165,15 +222,10 @@ func (c *IBKRClient) resolveConid(ctx context.Context, symbol string) (int64, er
 	q.Set("symbol", symbol)
 	q.Set("types", "STK")
 	httpReq.URL.RawQuery = q.Encode()
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "resolveConid", false)
 	if err != nil {
 		return 0, fmt.Errorf("ibkr resolveConid: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("ibkr resolveConid: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -231,15 +283,10 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 		return nil, fmt.Errorf("ibkr SubmitOrder: build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodPost, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "SubmitOrder", false)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr SubmitOrder: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("ibkr SubmitOrder: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -282,13 +329,10 @@ func (c *IBKRClient) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID,
 		return nil, fmt.Errorf("ibkr SubmitBracketLegs: build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodPost, endpoint))
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "SubmitBracketLegs", true)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr SubmitBracketLegs: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("ibkr SubmitBracketLegs: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -310,16 +354,11 @@ func (c *IBKRClient) CancelOrder(ctx context.Context, brokerOrderID string) erro
 	if err != nil {
 		return fmt.Errorf("ibkr CancelOrder: build request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodDelete, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, body, err := c.do(httpReq, "CancelOrder", false)
 	if err != nil {
 		return fmt.Errorf("ibkr CancelOrder: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("ibkr CancelOrder: status %d: %s", resp.StatusCode, body)
 	}
 	return nil
@@ -356,15 +395,10 @@ func (c *IBKRClient) ReplaceOrder(ctx context.Context, brokerOrderID string, req
 		return nil, fmt.Errorf("ibkr ReplaceOrder: build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodPost, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "ReplaceOrder", false)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr ReplaceOrder: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("ibkr ReplaceOrder: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -386,15 +420,10 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 	q := httpReq.URL.Query()
 	q.Set("orderId", brokerOrderID)
 	httpReq.URL.RawQuery = q.Encode()
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "GetOrder", false)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr GetOrder: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ibkr GetOrder: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -425,15 +454,10 @@ func (c *IBKRClient) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
 	q := httpReq.URL.Query()
 	q.Set("accountId", c.ibkrAccountID)
 	httpReq.URL.RawQuery = q.Encode()
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "ListOrders", false)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr ListOrders: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ibkr ListOrders: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -465,15 +489,10 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr GetPositions: build request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "GetPositions", false)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr GetPositions: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ibkr GetPositions: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -519,15 +538,10 @@ func (c *IBKRClient) GetAccount(ctx context.Context) (*BrokerBalance, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ibkr GetAccount: build request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, respBody, err := c.do(httpReq, "GetAccount", false)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr GetAccount: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ibkr GetAccount: status %d: %s", resp.StatusCode, respBody)
 	}
@@ -550,80 +564,100 @@ func (c *IBKRClient) GetAccount(ctx context.Context) (*BrokerBalance, error) {
 	return bal, nil
 }
 
-// ValidateCredentials confirms the OAuth credentials via GET /portfolio/accounts: 401/403 maps
-// to ErrInvalidCredentials; other non-200s and transport errors return as transient errors.
+// ValidateCredentials confirms the credentials with the LST handshake, then GET /portfolio/accounts.
+// ErrInvalidCredentials comes from do/ensureSession; other non-200s and transport errors are transient.
 func (c *IBKRClient) ValidateCredentials(ctx context.Context) error {
 	endpoint := fmt.Sprintf("%s/portfolio/accounts", c.baseURL)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("ibkr ValidateCredentials: build request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
-
-	resp, err := c.httpClient.Do(httpReq)
+	resp, body, err := c.do(httpReq, "ValidateCredentials", false)
 	if err != nil {
 		return fmt.Errorf("ibkr ValidateCredentials: http: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return nil
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return ErrInvalidCredentials
-	default:
-		body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("ibkr ValidateCredentials: status %d: %s", resp.StatusCode, body)
+	}
+	return nil
+}
+
+// oauthEncode is the single encoding rule pinned by the ibind vectors (Python quote_plus).
+func oauthEncode(s string) string { return url.QueryEscape(s) }
+
+func (c *IBKRClient) oauthParams(signatureMethod string) map[string]string {
+	return map[string]string{
+		"oauth_consumer_key":     c.consumerKey,
+		"oauth_nonce":            c.nonce(),
+		"oauth_signature_method": signatureMethod,
+		"oauth_timestamp":        strconv.FormatInt(c.now().Unix(), 10),
+		"oauth_token":            c.accessToken,
 	}
 }
 
-// signRequest generates an OAuth 1.0a Authorization header using HMAC-SHA256.
-func (c *IBKRClient) signRequest(method, rawURL string) string {
-	nonce := make([]byte, 16)
-	rand.Read(nonce) //nolint:errcheck
-	nonceStr := base64.StdEncoding.EncodeToString(nonce)
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-
-	oauthParams := map[string]string{
-		"oauth_consumer_key":     c.consumerKey,
-		"oauth_nonce":            nonceStr,
-		"oauth_signature_method": "HMAC-SHA256",
-		"oauth_timestamp":        timestamp,
-		"oauth_token":            c.accessToken,
-		"oauth_version":          "1.0",
+// buildBaseString signs over the URL's query params (FR-3, operator ruling 2026-10-29), unlike ibind;
+// this is the only place that inclusion lives.
+func buildBaseString(method string, u *url.URL, oauth map[string]string) string {
+	pairs := make([][2]string, 0, len(oauth))
+	for k, v := range oauth {
+		pairs = append(pairs, [2]string{k, v})
 	}
+	for k, vs := range u.Query() {
+		for _, v := range vs {
+			pairs = append(pairs, [2]string{k, v})
+		}
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i][0] != pairs[j][0] {
+			return pairs[i][0] < pairs[j][0]
+		}
+		return pairs[i][1] < pairs[j][1]
+	})
+	parts := make([]string, len(pairs))
+	for i, p := range pairs {
+		parts[i] = p[0] + "=" + p[1]
+	}
+	baseURI := strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + u.Path
+	return strings.ToUpper(method) + "&" + oauthEncode(baseURI) + "&" + oauthEncode(strings.Join(parts, "&"))
+}
 
-	// Build sorted parameter string for the signature base.
-	keys := make([]string, 0, len(oauthParams))
-	for k := range oauthParams {
+func authorizeHeader(oauth map[string]string, sig string) string {
+	params := make(map[string]string, len(oauth)+1)
+	for k, v := range oauth {
+		params[k] = v
+	}
+	params["oauth_signature"] = oauthEncode(sig)
+	keys := make([]string, 0, len(params))
+	for k := range params {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-
-	parts := make([]string, 0, len(keys))
+	parts := make([]string, 0, len(keys)+1)
+	parts = append(parts, `realm="`+ibkrRealm+`"`)
 	for _, k := range keys {
-		parts = append(parts, url.QueryEscape(k)+"="+url.QueryEscape(oauthParams[k]))
+		parts = append(parts, k+`="`+params[k]+`"`)
 	}
-	paramString := strings.Join(parts, "&")
+	return "OAuth " + strings.Join(parts, ", ")
+}
 
-	// Signature base string: METHOD&encoded_url&encoded_params
-	baseString := strings.ToUpper(method) + "&" +
-		url.QueryEscape(rawURL) + "&" +
-		url.QueryEscape(paramString)
+// authorize returns the Authorization header for a regular request; lst is the base64-decoded LST.
+func (c *IBKRClient) authorize(req *http.Request, lst []byte) string {
+	oauth := c.oauthParams("HMAC-SHA256")
+	mac := hmac.New(sha256.New, lst)
+	mac.Write([]byte(buildBaseString(req.Method, req.URL, oauth))) //nolint:errcheck
+	return authorizeHeader(oauth, base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+}
 
-	// Signing key: consumer_secret&token_secret (consumer secret is empty for IBKR OAuth 1.0a)
-	signingKey := "&" + url.QueryEscape(c.accessTokenSecret)
-
-	mac := hmac.New(sha256.New, []byte(signingKey))
-	mac.Write([]byte(baseString)) //nolint:errcheck
-	sig := base64.StdEncoding.EncodeToString(mac.Sum(nil))
-
-	oauthParams["oauth_signature"] = sig
-
-	headerParts := make([]string, 0, len(oauthParams))
-	for k, v := range oauthParams {
-		headerParts = append(headerParts, url.QueryEscape(k)+`="`+url.QueryEscape(v)+`"`)
+// authorizeLST returns the RSA-SHA256 Authorization header for the live_session_token request.
+func (c *IBKRClient) authorizeLST(req *http.Request, prepend string, dhChallenge string, key *rsa.PrivateKey) (string, error) {
+	oauth := c.oauthParams("RSA-SHA256")
+	oauth["diffie_hellman_challenge"] = dhChallenge
+	digest := sha256.Sum256([]byte(prepend + buildBaseString(req.Method, req.URL, oauth)))
+	sig, err := rsa.SignPKCS1v15(nil, key, crypto.SHA256, digest[:])
+	if err != nil {
+		return "", fmt.Errorf("ibkr authorizeLST: sign: %w", err)
 	}
-	return "OAuth " + strings.Join(headerParts, ", ")
+	return authorizeHeader(oauth, base64.StdEncoding.EncodeToString(sig)), nil
 }
 
 var _ Broker = (*IBKRClient)(nil)

@@ -27,8 +27,9 @@ builders in `app/client.py` **no longer set a request-body `user_id`** (deprecat
 (trading `PlaceOrder`/`ConfirmOrder`), and `manage_formula` update/delete (indicators
 `UpdateFormula`/`DeleteFormula`) forward the caller only as `x-user-id`. Body `user_id` is still sent
 where it is a **target/scope selector, not the caller** — `list_account_orders` (`ListOrders`
-filter), the config tools (per-user scope), `emit_alert` (`target_user_id`), and `IssueAuthCode`
-(token subject). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
+filter), the config tools (per-user scope; on `get_config`/`list_config_keys` it is
+**bound to the caller for non-admins** by config `boundReadUserId`, feature 263), `emit_alert`
+(`target_user_id`), and `IssueAuthCode` (token subject). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
 generalized this from the feature-073 `set_config`-only case; the old hardcoded admin scope was
 removed). The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
@@ -71,9 +72,9 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
 | `list_strategies` | List stored strategy definitions (read-only, feature 087) |
 | `list_opportunities` | List the caller's ranked Decide-queue opportunities with live-market enrichment (read-only, feature 095) |
-| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id` — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
-| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); environment is the agent's own deployment env (no caller override, PR #994) |
-| `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override, secrets included — feature 224) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
+| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id`, **bound to the caller for non-admins** (a non-admin asking for another user's id reads their own; admins may read any user's), and the echoed `user_id` is the scope actually read (feature 263) — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
+| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); optional per-user `user_id` **bound to the caller for non-admins**, echoed as the scope actually read (feature 263); environment is the agent's own deployment env (no caller override, PR #994) |
+| `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override, secrets included — feature 224) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091); no `author` parameter — the write is attributed to the caller's `x-user-id` (feature 241) |
 | `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
 | `list_watchlists` | List the caller's own watchlists from portfolio, paginated (read-only, feature 148) |
@@ -191,7 +192,10 @@ the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service'
 ## Config Keys Consumed
 
 Namespace: `agent`, resolved via `client.get_config_value()` — env-scoped since feature 093; see
-its docstring for the read signature and oneof-stringify behavior.
+its docstring for the read signature and oneof-stringify behavior. Every `get_config_value` read
+carries the fixed gRPC deadline `_CONFIG_READ_TIMEOUT_S` = 3.0 s (`app/client.py`) — not a config key,
+because a config read cannot bound itself; on expiry the read raises `DEADLINE_EXCEEDED` and each
+caller falls back to its documented default (feature 247).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -202,7 +206,7 @@ its docstring for the read signature and oneof-stringify behavior.
 | `agent.extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
 | `agent.extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
 | `agent.extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
-| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "upstream did not respond within Ns (deadline exceeded); retry shortly". The policy read itself is capped by the fixed invariant `_POLICY_READ_TIMEOUT_S` = 3s (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Unseeded (feature 227 seeding waiver); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
+| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "upstream did not respond within Ns (deadline exceeded); retry shortly". The policy read itself carries the client deadline `_CONFIG_READ_TIMEOUT_S` and stays wrapped in the outer `_POLICY_READ_TIMEOUT_S` = 3s bound (both fixed invariants, neither a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Unseeded (feature 227 seeding waiver); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
 
 ## Environment Variables
 

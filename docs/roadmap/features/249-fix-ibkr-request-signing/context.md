@@ -255,3 +255,477 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `./scripts/buf-gen.sh`); trading `CLAUDE.md` vs 240 (other sections); `tools.py`/`mcp-tools.md` vs 215 (other
     regions); `config-governance.md` vs 240/243 (Step 10 note).
 - Overlap findings: WARN, file-level only. No migration, proto field-number or config-key collision.
+
+## Session 2026-10-28 — re-spec (sdd-batch-execute pre-flight)
+
+- Merged `origin/main-dev` into the feature branch (`-X ours`, 40de843c). Re-spec of step bodies 1, 4, 6, 7, 15 only;
+  line drift, substance unchanged. Commit `respec(fix-ibkr-request-signing): align steps 1,4,6,7,15 with current codebase`.
+  - Step 1: `gitleaks-action@v3` now `ci.yml:767`; trufflehog `:750`, `--only-verified` `extra_args` `:762`.
+    gitleaks is installed at `~/go/bin/gitleaks`, so the two mandatory gitleaks commands can run on this host.
+    `.gitleaks.toml:33-40` unchanged; `internal/testdata/` unchanged; `ibkr/` fixtures still absent.
+  - Step 4: PEM-parse precedent is now `load()` at `internal/mtls/mtls.go:22-41`. Other anchors verified.
+  - Step 6: the `DeadlineExceeded\|Timeout()` grep also hits `trading.go:1973`, `:2377`, `:2440`
+    (`brokerCallTimeout()`) and `alpaca.go:67`; only `:684`/`:1521` classify errors, so the conclusion holds.
+  - Step 7: `TestReplaceOrder_IBKR`'s header assertion is `if gotAuth == ""` at `ibkr_test.go:323` (`:285` is the
+    func declaration).
+  - Step 15: `tools.py` anchors shifted ~+14: `manage_account` `:2153`, IBKR docstring `:2175-2177`,
+    update_credentials sentence `:2179-2181`, non-empty checks `:2191-2214`; runbook row `mcp-tools.md:1392`.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Status: `implementation-ready` → `in-progress`. Mode: sequential (one commit per step on
+  `feature/fix-ibkr-request-signing`, single integration PR at the end). Severity SEV-2.
+- Up-front confirmation: the operator approved the up-front plan by standing authorization (operator chat 2026-10-28,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Answers: unattended
+  checkpoints (checkpoints = `report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
+  merge-train authorized; 255/275 deferred. Operator-only DB/prod steps: open the PR, hold the merge.
+- Branch setup (§5.3): `origin/main-dev` merged with `-X ours` (40de843c); step bodies 1, 4, 6, 7, 15 re-spec'd
+  (session entry above).
+- Still owed (carried): the FR-3 operator ruling at the Step 2 checkpoint, or a recorded deferral to the
+  integration-PR merge.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 1
+
+- Step 1 done: `internal/testdata/ibkr/` (two committed 2048-bit RSA test keys, RFC 3526 group-14 `dhparam.pem`,
+  `gen_vectors.py`, generated `vectors.json`) and `internal/testdata/ibkr.go` (`IBKRSignatureKeyPEM`,
+  `IBKREncryptionKeyPEM`, `IBKRDHParamPEM`, `MustIBKRVectors()`). TDD N/A (fixture data).
+- Operator decision (2026-10-29, session question tool, "Yes, run both"): Option A, the `.gitleaks.toml`
+  `[allowlist]` gains a `paths` entry for exactly `.../testdata/ibkr/vectors.json`; the comment block names it as
+  generated test data with no real secrets. Recorded in the spec's Deviation Log.
+- Verification: `go vet`/`go test ./internal/testdata/` pass; a throwaway test confirmed `MustIBKRVectors()`
+  decodes (14 request vectors, 2 DH cases, non-empty PEMs). `gitleaks dir .../ibkr` → no leaks found; a fresh key
+  is still detected both standalone and when dropped inside `ibkr/` (exit 1). Regeneration with pycryptodome 4.2.0
+  from ibind `759ec3a1` is byte-identical.
+- The root `.gitignore:55` ignores `*.pem`; the three fixture PEMs are force-added (`git add -f`), `.gitignore`
+  unchanged (Deviation Log).
+- Carried to Step 4: pycryptodome 4.2.0 returns empty bytes for a wrong-key PKCS#1 v1.5 decrypt, so the Go decrypt
+  must fail closed on an empty plaintext.
+- Still owed: the FR-3 operator ruling at the Step 2 checkpoint (or a recorded deferral to the integration-PR merge).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 2 + 3
+
+- Steps 2 and 3 done in **one commit** by operator decision (session question tool, 2026-10-29: "A: Steps 2+3
+  together (Recommended)"). Recorded in the spec's Deviation Log.
+- `ibkr.go`: `IBKRConfig` gains the `Now`/`Nonce`/`DHRandom` seams, with defaults set in `NewIBKRClient` (16-char
+  alnum nonce and 256-bit DH random, both from `crypto/rand`). It also gains `ibkrRealm = "limited_poa"`,
+  `oauthEncode` (`url.QueryEscape`), `oauthParams`, `buildBaseString`, `authorizeHeader`, `authorize` (HMAC-SHA256
+  keyed by the LST) and `authorizeLST` (RSA-SHA256 PKCS#1 v1.5 over `prepend + baseString`). `signRequest` and its 11
+  call sites are untouched; Step 6 deletes them.
+- `ibkr_sign_internal_test.go` (package `broker`): `TestIBKRAuthorize_GETQueryParamsSigned` (AC-1),
+  `_LSTKeyedAndRealm` (AC-2), `_EncodingPinned` (`BRK B` and the `%2B`/`%2F`/`%3D` signature) and
+  `TestIBKRAuthorizeLST_RSAVector`. All fixtures come from `testdata.MustIBKRVectors()`. RED: compile failure; GREEN:
+  pass.
+- **FR-3 operator ruling (closes the "Still owed" item):** operator, 2026-10-29: "Include params (FR-3)". This is
+  the final ruling and it does not hold the integration-PR merge. Query params stay in the signature base string,
+  which deviates from ibind. The single inclusion point is `buildBaseString`.
+- Verification: `go build ./...` and `go vet ./...` clean. golangci-lint v2.14.0 reports 0 issues; it was rebuilt
+  with go1.27, because the provisioned binary was built with go1.26 and rejects the `go 1.27.0` module (Deviation
+  Log). `go test ./... -race` passes with COVERPKGS total coverage 73.1%. `oauth_version` appears only in
+  `signRequest`. No vector nonce literal appears in any `_test.go`.
+- Carried to Step 4: the Go decrypt must fail closed on an empty plaintext (from Step 1).
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 4 + 5
+
+- Steps 4 and 5 done in **one commit** under the standing operator rule (session question tool, 2026-10-29: "Merge
+  pairs + standing rule"). Step 4's unexported session symbols have no consumer before Step 5's tests. Recorded in
+  the spec's Deviation Log.
+- `ibkr.go`: `IBKRConfig` gains `SignatureKey`, `EncryptionKey`, `DHPrime` (PEM) and `Timing func() IBKRTiming`.
+  `NewIBKRClient` parses them once (PKCS#1 then PKCS#8 RSA; a `DH PARAMETERS` block via `asn1`) and retains
+  `credErr` naming the field only. The constructor signature is unchanged.
+- `ibkr_session.go` holds `IBKRTiming` (nil `Timing` defaults to 60s/10s/30s), the embedded `ibkrSessionState`,
+  and these functions:
+  - `ensureSession` uses `singleflight.DoChan("lst")` with a detached leader ctx, a negative cache and the joiner
+    re-call rule;
+  - `handshake`, `mintLST` (PKCS#1 v1.5 decrypt with a scoped `//nolint:staticcheck`; an empty plaintext fails
+    closed) and `computeLST` (Java `toByteArray`);
+  - `initBrokerage` (`{"publish":true,"compete":false}`), `invalidate(gen)` and `reinit(ctx, gen)` (flight key
+    `"init"`).
+  `golang.org/x/sync` is now a direct requirement.
+- `internal/testdata/ibkr.go` adds `IBKRAuthHandler` (vector replay, `Strict`, `SetOverride`, `Requests`/`Count`,
+  `Next`), plus `IBKRLSTPath`/`IBKRInitPath`, `IBKRLSTReplyJSON`, `IBKRInitReplyJSON` and `IBKRHeaderParam`.
+- `ibkr_session_internal_test.go` covers all eight Step 5 tests plus `TestInvalidate_GenerationGuardAndThrottle` and
+  `TestReinit_RerunsInitOnly`. AC-3 red: compile failure (`ensureSession` undefined); green: the strict LST header
+  equals vector (a) and the LST equals vector (b). AC-4, AC-5 and AC-10 red: compile failure; green: all rows pass.
+- Verification: `go build`/`go vet` clean; golangci-lint v2.14.0 (rebuilt with go1.27) reports 0 issues. `go test
+  ./... -race` passes with COVERPKGS total 76.1%, and the session tests are stable at `-count=20`. The `x/sync`
+  grep shows no `// indirect`. `compete` appears only as `compete:false` and `limited_poa` only as the realm
+  constant. The PEM-interpolation grep and the inline-fake grep both find nothing.
+- Open item for Step 7: the strict handler matches signatures over the vector base URL. `package broker_test`
+  cannot swap `httpClient`, so Step 7 needs a way to route `https://api.ibkr.com/v1/api` to the test server, for
+  example an exported transport seam. Decide at Step 6/7.
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 6 + 7
+
+### Steps 6 + 7 — `c.do` send seam + wire-level/retry tests [done]
+- One commit under the standing operator rule ("Merge pairs + standing rule"). Step 6's RED test is Step 7's, and
+  Step 6 breaks the existing IBKR fakes that Step 7 migrates. Recorded in the spec's Deviation Log.
+- `broker.go`: reworded the `ErrInvalidCredentials` doc and added `ErrOutcomeUncertain`.
+- `ibkr_session.go` adds `do(req, op, noResend)`:
+  - session errors are flattened `%v` in one closure, and only the sentinel keeps `%w`;
+  - a 401 is final when the session was just minted or `noResend` is set;
+  - otherwise a stale generation resends with the current session, and a successful `invalidate` re-handshakes and
+    resends once with a rebuilt body (`GetBody`);
+  - a 400 `no bridge` on `/iserver/` runs `reinit` and resends once;
+  - a failed resend of a POST/DELETE after a 401 is `ErrOutcomeUncertain`;
+  - a final 401/403 is the wrapped sentinel.
+  `do` uses the new helpers `currentSession`, `sendSigned` and `ibkrFinalAuthErr`.
+- `ibkr.go`: all 11 sign+Do pairs are now `c.do`, with `noResend=true` only for `SubmitBracketLegs`.
+  `ValidateCredentials` is `c.do` plus a 200 check. `signRequest` (and with it the `"&"+secret` key) is deleted.
+- Tests:
+  - `ibkr_do_test.go` adds AC-1 strict `GetOrder`, AC-2 strict GET/POST/DELETE, the AC-6 7-row matrix plus the
+    generation-guard and throttle subtests, and AC-8 (LST 503 and blocked past `HandshakeTimeout`: no order POST,
+    not a timeout, not uncertain).
+  - `ibkr_test.go`/`ibkr_reply_test.go` now run every server behind `testdata.IBKRAuthHandler{Next: …}` with
+    `ibkrTestConfig`. `TestReplaceOrder_IBKR` asserts the realm prefix, and `TestGetOrder_IBKRPartialFill` was
+    added.
+- TDD:
+  - AC-1 red: `GetOrder: status 401` (strict handler rejects the legacy signature) → green: header equals vector.
+  - AC-2 red: realm missing → green.
+  - AC-6 red: every row fails, since a 401 was never retried and there was no `ErrOutcomeUncertain` → green.
+  - AC-8 red: `order POSTs = 1, want none` → green.
+  - RED was taken with a temporary uncommitted shim declaring only `ErrOutcomeUncertain`, after a plain compile
+    failure.
+- Verification:
+  - `go build`/`go vet` are clean, and golangci-lint v2.14.0 (rebuilt with go1.27, `GOWORK=off`) reports 0 issues.
+  - `go test ./... -race` passes, with COVERPKGS total 78.3%, and the broker package is stable at `-count=10`.
+  - The greps show no `signRequest`, `c.do(` × 11, `session: %v` only inside `do`, no `TRADING_MODE`, and one
+    `IBKRAuthHandler` declaration.
+- Files modified: `services/xstockstrat-trading/internal/broker/{broker.go,ibkr.go,ibkr_session.go,ibkr_test.go,
+  ibkr_reply_test.go,ibkr_do_test.go}`.
+- Deviations: steps merged (standing rule). There were also notes with no spec change: the strict tests swap
+  `http.DefaultTransport`, which resolves the Steps 4+5 open item; some helpers are not named in the spec; and the
+  literal readings of the 401-only uncertain rule and the 401-only `noResend`.
+- Open items:
+  - A 2xx reply that carries a duplicate-`cOID` error is not classified as uncertain, because the reply format is
+    unpinned. Only a non-2xx resend is uncertain.
+  - Steps 8/9 consume `ErrOutcomeUncertain` (`trading.go:684`/`:1521`).
+
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 8 + 9
+
+### Steps 8 + 9 — trading plumbing + service-level tests [done]
+- One commit under the standing operator rule ("Merge pairs + standing rule"). Step 8's RED test is Step 9's.
+  Recorded in the spec's Deviation Log.
+- `trading.go` changes:
+  - `ibkrCreds` gains `signature_key`, `encryption_key` and `dh_prime`. `instantiateBrokerLocked` passes them, plus
+    `Timing: s.ibkrTiming`, into `broker.IBKRConfig`. Instantiation stays tolerant.
+  - `ibkrTiming` sits next to `brokerCallTimeout`. It reads `trading.ibkr.lst_refresh_margin_ms` (60000),
+    `handshake_timeout_ms` (10000) and `reauth_min_interval_ms` (30000) live, with `≤0 → default`.
+  - `validateIBKRCreds` returns `InvalidArgument` naming the missing fields and never echoes a value.
+    `RegisterBrokerAccount` calls it only for IBKR (after `json.Valid`), and `UpdateBrokerAccountCredentials` calls it
+    only for IBKR records (after the offline guard).
+  - `isUncertainBrokerOutcome` (timeout, `net.Error` timeout, or `broker.ErrOutcomeUncertain`) replaces both
+    inline classifiers, in `SubmitOrder` and `ReplaceOrder`.
+  - `reconcileTick` skips an account whose `ListOrders`/`GetPositions` returns `ErrInvalidCredentials`. It logs a
+    WARN with `call` and does not count the account as systemic.
+- `credentialStatusFromError`, `validateAndRecordCredential` and the paper/live gate are unchanged.
+- Tests:
+  - `trading_ibkr_auth_test.go` (new) covers AC-3 (strict), AC-4 (9 rows), AC-5, AC-7 (register + update × 3
+    fields), `TestIsUncertainBrokerOutcome` (AC-8 / AC-6 row 5), AC-9 (2 rows) and AC-10.
+  - `fakeAccountRepo` gains `statusWrites` through `UpdateCredentialStatus`.
+- TDD: RED was a compile failure, then behavioral failures (AC-7, AC-8, AC-9, AC-10, and a 5s `lst_timeout`) under
+  a temporary, uncommitted shim. GREEN: all pass with `-race`.
+- Verification:
+  - `go build` and `go vet` are clean, and golangci-lint v2.14.0 (rebuilt with go1.27, `GOWORK=off`) reports
+    0 issues.
+  - `go test ./... -race` passes, with COVERPKGS total 78.7%.
+  - The greps show three `trading.ibkr.*` `GetInt` reads, `isUncertainBrokerOutcome` defined once with 2 call sites,
+    `environmentIsPaper` untouched, and one `statusWrites` declaration.
+- Files modified: `services/xstockstrat-trading/internal/service/{trading.go,trading_bracket_test.go,
+  trading_ibkr_auth_test.go}`.
+- Open items:
+  - The husky hook is not installed in this environment: `.husky/_` is absent and there is no root `node_modules`.
+    The hook's only gating checks are scoped to the UI.
+  - Step 10 must register the three `trading.ibkr.*` keys that Step 8 now reads.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 10
+
+### Step 10 — config: register `trading.ibkr.*` keys [done]
+- `services/xstockstrat-trading/CLAUDE.md`: three `int` rows after `trading.broker.timeout_ms` —
+  `trading.ibkr.lst_refresh_margin_ms` (60000), `trading.ibkr.handshake_timeout_ms` (10000),
+  `trading.ibkr.reauth_min_interval_ms` (30000); read live per handshake, `<= 0` reads as the default.
+- `docs/patterns/config-governance.md`: `### feature 249 — fix-ibkr-request-signing (`xstockstrat-trading`)` prepended
+  as the newest Per-Feature Registered Keys entry. On this branch the previous top entry is feature 240 (features 264
+  and 248 have not merged here), so 249 sits directly above 240. Unseeded (feature 102 precedent), no
+  `SCALAR_BOUNDS_REGISTRY` entry, not tied to `IBKRRequestTimeout`.
+- Spec line refs had drifted (log header, feature 102 precedent now at `:610`); placement followed the spec's
+  re-read instruction. No key-name collision.
+- TDD: N/A (docs/config registration). Verification: the grep shows each key with the same default in `CLAUDE.md`,
+  `config-governance.md` and `trading.go` (`ibkrTiming`, Step 8).
+- Files modified: `services/xstockstrat-trading/CLAUDE.md`, `docs/patterns/config-governance.md`.
+- Open item: when features 264/248 merge with this branch, keep the log newest-first (rebase only, append-only).
+
+## Session 2026-10-29 — sdd-execute sequential, Step 11
+
+### Step 11 — proto: comment-only IBKR `credentials_json` shape [done]
+- `packages/proto/trading/v1/trading.proto`: the `RegisterBrokerAccountRequest` IBKR comment line now lists all
+  7 keys (`consumer_key`, `access_token`, `access_token_secret`, `ibkr_account_id`, `signature_key` and
+  `encryption_key` as PEM RSA private keys, `dh_prime` as PEM DH parameters). It wraps over three `//` lines. No field
+  number, type or name changed (C-09). The `UpdateBrokerAccountCredentialsRequest` "same shape" comment needs no edit.
+- TDD: N/A (proto comment). Verification: `buf lint` is clean, and `buf breaking` returns 0 against a `git archive`
+  tarball of `origin/feature/fix-ibkr-request-signing:packages/proto` (`#subdir=packages/proto`). The worktree
+  sandbox refuses the spec's `<repo-root>/.git#branch=…` form, so this fallback is in the Deviation Log.
+- Files modified: `packages/proto/trading/v1/trading.proto`.
+- Open item: the CI `proto-freshness` gate fails until Step 12 regenerates the 5 `gen/` stubs that carry this comment.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 12
+
+### Step 12 — proto-gen: regenerate stubs [done]
+- `./scripts/buf-gen.sh` regenerated the IBKR `credentials_json` comment into exactly the 5 listed stubs.
+  `gen/go/trading/v1/trading.pb.go`, `gen/ts/trading/v1/trading_pb.ts`, `gen/ts/trading/v1/trading.ts`,
+  `gen/ts/dist/trading/v1/trading_pb.d.ts` and `gen/ts/dist/trading/v1/trading.d.ts` changed. Every diff line is
+  comment-only. Python stubs and descriptors are unchanged.
+- Toolchain: the host `~/go/bin` Go plugins were built with go1.24.7 and reflowed a comment in
+  `gen/go/analysis/v1/analysis.pb.go`. That is unrelated churn, so it was discarded. The pinned plugins were rebuilt
+  with go1.27.0 (the CI `proto-freshness` Go) into a scratch `GOBIN`. `pnpm install --frozen-lockfile` supplied the
+  pinned `tsc`. This is recorded in the Deviation Log (CI-equivalent fallback). No repo pin changed.
+- TDD: N/A (codegen). Verification: `git diff --name-only packages/proto/gen/` lists exactly the 5 paths, and the
+  non-comment changed-line grep is empty.
+- Files modified: the 5 `gen/` stubs above.
+- Open item (for the host, not the repo): rebuild `~/go/bin` protoc plugins with Go 1.27, or later regenerations will
+  reintroduce the `analysis.pb.go` comment drift.
+
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 13 + 14
+
+### Steps 13 + 14 — `/trader` IBKR credential form + e2e [done, one commit]
+- Merged under the standing operator rule ("Merge pairs + standing rule"): Step 13's RED test is Step 14's e2e.
+  Operator decision 2026-10-30, in their own words: "B: Keep native" — the PEM `Textarea`s keep native `required`
+  (no `noValidate`), so Step 14 instruction 3 now asserts the `Encryption key (PEM)` textarea is `:invalid` with a
+  non-empty `validationMessage`, the dialog stays open and no `RegisterBrokerAccount` request is sent. `FieldError`
+  is wired under every credential input but not e2e-asserted (it cannot render while native validation blocks).
+- `accountShared.tsx`: `CredentialState`/`EMPTY_CREDENTIALS` gain `signatureKey`/`encryptionKey`/`dhPrime`;
+  `CREDENTIAL_KEYS` drives both forms' `useWatch`, `handleCredsChange` and (via `credsFromWatch`) creds maps;
+  IBKR `credentials_json` carries 7 keys; the IBKR schema requires the 3 new fields; `CredentialFields` renders from
+  `IBKR_INPUTS`/`ALPACA_INPUTS` (PEM rows are `Textarea` with `autoComplete="off"`, `spellCheck={false}`,
+  `required`, `rows={4}`), each in `Field` + `FieldError`, with an optional `errors` prop fed `formState.errors` by
+  both forms. Edit-form copy adds the IBKR seven-values sentence. Offline branches unchanged in behaviour.
+- e2e: `IBKR_TEST_CREDENTIALS_INPUT` fixture (PEM-shaped `-----BEGIN TEST-----` placeholders, no gitleaks rule) +
+  INVENTORY row; `account-selector.spec.ts` adds AC-7 register (exact 7-key blob, PEM newlines), AC-7 blocked submit,
+  IBKR Edit keys no-echo + 7-key save, and the Add-form Offline guard. Placeholders use `exact: true`.
+- TDD: RED (pre-Step-13 build) — the 3 IBKR tests fail waiting for `Signature key (PEM)`; GREEN — 20 passed across
+  `account-selector.spec.ts` and `offline-accounts.spec.ts` (`CI=1`, `--retries=0`).
+- Verification: `pnpm run lint` no errors; `lint:dup` 0 clones; color-literal grep empty; vitest 237/237;
+  `tsc --noEmit` clean for changed files (two pre-existing errors in untouched `e2e/insights/backfills.spec.ts:135-136`).
+- Files modified: `services/xstockstrat-ui/src/components/trader/accountShared.tsx`,
+  `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/accounts.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
+- Open items: `backfills.spec.ts` tsc errors pre-exist (not this feature); local `pnpm dev` first-hit compile times
+  out the 10s warm-up in this sandbox, so e2e ran on the `CI=1` production build.
+
+
+## Session 2026-10-29 — sdd-execute sequential, Steps 15 + 16
+
+### Steps 15 + 16 — agent `manage_account` IBKR shape + tests [done, one commit]
+- Merged under the standing operator rule ("Merge pairs + standing rule"): Step 15's RED test is Step 16's docstring
+  assertion.
+- `tools.py` `manage_account` docstring: the IBKR blob lists 7 keys (the last three are PEM strings), and
+  update_credentials names the incomplete-IBKR `INVALID_ARGUMENT`. Validation, parameters and return shape are
+  unchanged; trading stays the only validator (C-10). `mcp-tools.md:1392` row carries the same shape.
+- Tests: `_assert_no_credentials` also rejects `consumer_key`/`access_token`/`signature_key`/`encryption_key`/
+  `dh_prime`/`BEGIN`; new `test_update_broker_account_credentials_ibkr_seven_fields_forwarded_and_hidden`,
+  `test_update_credentials_ibkr_incomplete_maps_invalid_argument` (@AC-7) and
+  `test_manage_account_docstring_lists_ibkr_key_material`.
+- TDD: AC-7 red: `'signature_key' in description` failed → green: 520 passed, coverage 81.23%.
+- Verification: `ruff check .` and `ruff format --check .` clean; `grep signature_key` hits both files.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`,
+  `services/xstockstrat-agent/tests/test_broker_account_client.py`,
+  `services/xstockstrat-agent/tests/test_account_tools.py`.
+- Open item: the runbook's `update_credentials` bullet and `**Errors:**` line do not yet mention the incomplete-IBKR
+  `INVALID_ARGUMENT` (Step 15 instruction 3 limits the edit to the row). Step 17 or a later pass may add it.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 17
+
+### Step 17 — docs: IBKR auth docs, TRADING-3 widening, findings closure, teardown [done]
+- `services/xstockstrat-trading/docs/ibkr.md` gains the section `### IBKR: OAuth 1.0a + Live Session Token (feature 249)`.
+  It covers:
+  - the 7-field blob and the legacy 4-field INVALID behaviour;
+  - the handshake order (LST, then `ssodh/init` with `compete=false`) and the negative cache;
+  - LST-keyed HMAC-SHA256 with `realm="limited_poa"` and the ibind-pinned `QueryEscape` encoding;
+  - the 401/no-bridge retry rule, the bracket-leg `noResend` and `ErrOutcomeUncertain`;
+  - the three `trading.ibkr.*` keys;
+  - the unverified-contract caveat (ibind @ `759ec3a1…`) and the FR-3 ruling ("Include params (FR-3)");
+  - the follow-ups `ibkr-session-keepalive` and `ibkr-fleet-invalid-alert`.
+  The two existing sections are unchanged.
+- Trading `CLAUDE.md` credential-health paragraph: for IBKR, the LST handshake and `ssodh/init` now run before
+  `GET /portfolio/accounts`, and a legacy 4-field account reads INVALID until it is updated.
+- TRADING-3 is widened: HTTP 401/403, or deterministically unusable credentials, from any IBKR call. The Why gains
+  the converse risk, and the anchors are re-stamped (`credentialStatusFromError` ~L3020, the IBKR sentinel sites in
+  `ibkr_session.go`, and the `reconcileTick` skip).
+- Findings:
+  - The `signRequest` query-param open question is removed from Open questions and recorded under Resolved
+    (feature 249). It cites `do` ~L362, `authorize` ~L644 and `buildBaseString` ~L600.
+  - The stale `instantiateBrokerLocked (~L3027)` anchors in the IBKR timeout and accessor-mismatch rows are fixed.
+- Teardown: the context-forge `context-constitution` refresh skill is unavailable. A manual reconciliation of the
+  Steps 10/15/17 context files against the code found no further drift (details in the spec's Deviation Log). **The
+  integration PR body must state both that the plugin was unavailable and what manual reconciliation was done.**
+- TDD: N/A (docs). Verification: all three greps hit (`ibkr.md` lines 30-47; the TRADING-3 count is 1; findings
+  `:50`).
+- Files modified: `services/xstockstrat-trading/{docs/ibkr.md,CLAUDE.md,docs/context-constitution.md,
+  docs/context-constitution-findings.md}`.
+- Open items:
+  - The paper smoke against a real IBKR account (FR-3 vs ibind; unverified contract).
+  - The `mcp-tools.md` `update_credentials`/Errors lines (from Steps 15+16).
+  - Defect report sidecar resolution at launch.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-ibkr-request-signing (feature 249)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-trading/acceptance/fix-ibkr-request-signing.feature | CREATE | NEW | IBKR client signing (trading) |
+| AC-2 | same | CREATE | NEW | |
+| AC-3 | same | CREATE | NEW | |
+| AC-4 | same | CREATE | NEW | |
+| AC-5 | same | CREATE | NEW | |
+| AC-6 | same | CREATE | NEW | |
+| AC-7 | same | CREATE | NEW | registration RPC lives in trading |
+| AC-8 | same | CREATE | NEW | |
+| AC-9 | same | CREATE | NEW | reconcileTick is trading; no overlap with fix-reconciliation-false-halt.feature (different outcomes) |
+| AC-10 | same | CREATE | NEW | |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-ibkr-request-signing.feature (CREATE) ---
+# Promoted from docs/roadmap/features/249-fix-ibkr-request-signing/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
+Feature: fix-ibkr-request-signing (bug fix)
+  Regression guard for docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md:
+  IBKR request signing omits query params and never uses a Live Session Token.
+  Expected signatures are known-answer vectors from an independent RFC 5849 / ibind reference signer over
+  fixed inputs (Live Session Token, nonce, timestamp). The client code under test never recomputes them.
+
+  @AC-1 @FR-3 @feature-249 @regression
+  Scenario: A GET with query params is signed over those params
+    Given an IBKR client with a fixed Live Session Token, nonce and timestamp
+    When GetOrder sends "GET /iserver/account/orders" with query "orderId=42"
+    Then the oauth_signature equals the reference signer's HMAC-SHA256 vector, keyed by the base64-decoded Live Session Token, for a base string whose parameter string includes "orderId=42" sorted with the oauth params
+    And the base string URI is the request URL without its query
+
+  @AC-2 @FR-2 @feature-249 @regression
+  Scenario Outline: Every IBKR request is signed with the Live Session Token and carries realm
+    Given an IBKR client that has completed the Live Session Token handshake, with a fixed nonce and timestamp
+    When the client sends <method> to <path>
+    Then the Authorization header starts with "OAuth realm=\"limited_poa\""
+    And the oauth_signature equals the reference signer's vector keyed by the base64-decoded Live Session Token
+    And the oauth_signature does not equal the vector keyed by "&" + access_token_secret
+
+    Examples:
+      | method | path                                         |
+      | GET    | /iserver/secdef/search?symbol=AAPL&types=STK |
+      | POST   | /iserver/account/U123/orders                 |
+      | DELETE | /iserver/account/U123/order/42               |
+
+  @AC-3 @FR-1 @feature-249 @regression
+  Scenario: The client obtains a Live Session Token before its first regular request
+    Given an IBKR account registered with OAuth credentials that the test IBKR server accepts, and no cached Live Session Token
+    When ValidateCredentials runs
+    Then the test server receives an RSA-SHA256-signed Live Session Token request carrying a Diffie-Hellman challenge before "GET /portfolio/accounts"
+    And the "GET /portfolio/accounts" request is HMAC-SHA256 signed with the Live Session Token derived from that exchange
+    And the account's CredentialStatus is CREDENTIAL_STATUS_OK
+
+  @AC-4 @FR-4 @feature-249 @regression
+  Scenario Outline: A failed Live Session Token handshake is classified per TRADING-3
+    Given an IBKR account with no cached Live Session Token
+    And the test IBKR server answers the Live Session Token request with <response>
+    When ValidateCredentials runs
+    Then the account's CredentialStatus is <status>
+    And the test server receives no "GET /portfolio/accounts" request
+
+    Examples:
+      | response                                                                        | status                    |
+      | HTTP 401                                                                        | CREDENTIAL_STATUS_INVALID |
+      | HTTP 403                                                                        | CREDENTIAL_STATUS_INVALID |
+      | HTTP 503                                                                        | CREDENTIAL_STATUS_UNKNOWN |
+      | no response before the timeout                                                  | CREDENTIAL_STATUS_UNKNOWN |
+      | any reply, for an access_token_secret the encryption key cannot decrypt         | CREDENTIAL_STATUS_INVALID |
+      | an LST reply whose live_session_token_signature does not match                  | CREDENTIAL_STATUS_INVALID |
+      | a valid LST reply, then a 2xx ssodh/init reply without authenticated:true       | CREDENTIAL_STATUS_INVALID |
+      | a valid LST reply, then a ssodh/init reply with competing:true                  | CREDENTIAL_STATUS_INVALID |
+      | a valid LST reply, then HTTP 503 on ssodh/init                                  | CREDENTIAL_STATUS_UNKNOWN |
+
+  @AC-5 @FR-4 @feature-249 @regression
+  Scenario: A legacy 4-field IBKR blob reads INVALID without any HTTP call
+    Given an IBKR account whose credentials hold only consumer_key, access_token, access_token_secret and ibkr_account_id
+    When ValidateCredentials runs
+    Then the account's CredentialStatus is CREDENTIAL_STATUS_INVALID
+    And the test IBKR server receives no request
+    And the account keeps its broker pool entry
+
+  @AC-6 @FR-2 @feature-249 @regression
+  Scenario Outline: A 401 on a regular request is retried once, guarded by session generation
+    Given an IBKR client holding a cached Live Session Token of generation G
+    And the test IBKR server answers the first <method> <path> with <first>
+    When the client sends <method> to <path>
+    Then the client <action>
+    And the call's outcome is <outcome>
+
+    Examples:
+      | method | path                           | first                                       | action                                                     | outcome                 |
+      | GET    | /iserver/account/orders        | HTTP 401                                    | re-handshakes once and resends once with a new nonce       | the 200 reply           |
+      | POST   | /iserver/account/U123/orders   | HTTP 401                                    | re-handshakes once and resends the same body and cOID once | the 200 reply           |
+      | DELETE | /iserver/account/U123/order/42 | HTTP 401                                    | re-handshakes once and resends once                        | the 200 reply           |
+      | GET    | /portfolio/accounts            | HTTP 401 on a session this call just minted | does not resend                                            | ErrInvalidCredentials   |
+      | POST   | /iserver/account/U123/orders   | HTTP 401, then a duplicate-cOID rejection   | resends once                                               | uncertain, not REJECTED |
+      | POST   | /iserver/account/U123/orders   | HTTP 401 on a bracket-leg submission        | does not resend                                            | ErrInvalidCredentials   |
+      | GET    | /iserver/account/orders        | the pinned lapsed-brokerage-session reply   | re-runs ssodh/init once and resends once                   | the 200 reply           |
+
+  @AC-7 @FR-1 @feature-249 @regression
+  Scenario Outline: An incomplete IBKR credential blob is rejected at registration
+    Given a caller registering or updating a <broker> account
+    When the credentials_json omits <field>
+    Then the RPC returns <result>
+
+    Examples:
+      | broker  | field          | result                           |
+      | IBKR    | signature_key  | InvalidArgument                  |
+      | IBKR    | encryption_key | InvalidArgument                  |
+      | IBKR    | dh_prime       | InvalidArgument                  |
+      | OFFLINE | every field    | success with no credential check |
+
+  @AC-8 @FR-4 @feature-249 @regression
+  Scenario: A session failure before an order POST is a definite rejection
+    Given an IBKR account whose Live Session Token handshake fails with HTTP 503
+    When PlaceOrder submits an order on that account
+    Then the test IBKR server receives no order POST
+    And the order is REJECTED, not left PENDING as an uncertain submission
+
+  @AC-9 @FR-4 @feature-249 @regression
+  Scenario Outline: A credential-rejected IBKR broker call is not counted as systemic
+    Given an IBKR account and an Alpaca account, both not halted
+    And the IBKR client returns ErrInvalidCredentials from <call>
+    When reconcileTick runs
+    Then the IBKR account is skipped for that tick with a WARN log
+    And the systemic failure count does not include the IBKR account
+    And no account is escalated to REDUCE_ONLY
+
+    Examples:
+      | call         |
+      | ListOrders   |
+      | GetPositions |
+
+  @AC-10 @FR-1 @feature-249 @regression
+  Scenario: A bad-credential handshake is negatively cached and later heals
+    Given an IBKR account whose Live Session Token request the test IBKR server rejects with HTTP 401
+    And ValidateCredentials has run once and the account reads CREDENTIAL_STATUS_INVALID
+    When ValidateCredentials runs again before trading.ibkr.reauth_min_interval_ms has elapsed
+    Then the test IBKR server receives no further Live Session Token request
+    When the test IBKR server starts accepting the credentials and ValidateCredentials runs after the interval
+    Then the account's CredentialStatus is CREDENTIAL_STATUS_OK
+
+### Notes / ambiguities / conflicts
+- All 10 scenarios route to xstockstrat-trading (feature.md Reviewers lists only trading as owner; config team only approves the new trading.ibkr.* keys, AC-10).
+- Dedup: grepped all *.feature for IBKR / ErrInvalidCredentials / CREDENTIAL_STATUS / Live Session. The only IBKR-adjacent promoted rules are services/xstockstrat-trading/acceptance/order-time-in-force-enum.feature (OPG unsupported) and offline-account-portfolios.feature (OFFLINE credential_status UNSPECIFIED). Neither asserts the same outcome. AC-7's OFFLINE row ("success with no credential check") is consistent with offline-account-portfolios.feature, not a contradiction. No OVERLAP or CONFLICT.
+- AC-9 is adjacent to fix-reconciliation-false-halt.feature (reconcile halting) but asserts a different outcome (credential-rejected IBKR excluded from the systemic count). No overlap.
+
+### Coverage check
+- Source scenarios: 10 (AC-1..AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped. Tags are verbatim plus @feature-249, with @regression retained.
+```
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

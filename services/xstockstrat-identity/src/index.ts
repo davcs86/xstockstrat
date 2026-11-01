@@ -1,8 +1,9 @@
-import { initTelemetry } from './telemetry';
+import { initTelemetry, shutdownTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
 import * as mtls from './mtls';
+import { resolveDbConnection } from './dbTls';
 import { IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity';
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
@@ -13,33 +14,25 @@ import { getLogger } from './services/logger';
 const log = getLogger('identity:server');
 
 async function main() {
+  const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);
+  if (dbConn.ssl !== false) {
+    log.info('db-tls: verifying server cert against DATABASE_CA_CERT');
+  }
   const grpcPort = process.env.GRPC_PORT ?? '50058';
   const configEndpoint = process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060';
-  const databaseUrl = process.env.DATABASE_URL ?? '';
 
   const configWatcher = new ConfigWatcher(configEndpoint, 'identity');
   await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
-  const sslDisabled = databaseUrl.includes('sslmode=disable');
-  let dbUrl = databaseUrl;
-  if (!sslDisabled) {
-    try {
-      const u = new URL(databaseUrl);
-      u.searchParams.delete('sslmode');
-      dbUrl = u.toString();
-    } catch { /* keep original if URL parsing fails */ }
-  }
-  const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
-    connectionString: dbUrl,
+    connectionString: dbConn.connectionString,
     // Cap pool size to stay within the shared DB connection budget. Override with DB_POOL_MAX.
     max: parseInt(process.env.DB_POOL_MAX ?? '2', 10),
-    ssl: sslDisabled ? false : {
-      rejectUnauthorized: !!caCert,
-      ...(caCert ? { ca: caCert } : {}),
-    },
+    ssl: dbConn.ssl,
   });
+  await pool.query('SELECT 1');
+  log.info('Database connected');
 
   // Best-effort ledger audit for admin user-management mutations.
   const ledgerAudit = createLedgerAudit();
@@ -63,7 +56,13 @@ async function main() {
   );
 
   const shutdown = () => {
-    grpcServer.tryShutdown(() => { pool.end(); process.exit(0); });
+    // Open streams block tryShutdown, so flush telemetry in parallel and force the stop.
+    const flush = shutdownTelemetry();
+    setTimeout(() => {
+      grpcServer.forceShutdown();
+      flush.finally(() => process.exit(0));
+    }, 5000).unref();
+    grpcServer.tryShutdown(async () => { await flush; pool.end(); process.exit(0); });
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

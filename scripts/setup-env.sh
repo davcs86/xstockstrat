@@ -210,7 +210,7 @@ fi
 section "OpenTelemetry / Grafana Cloud (Optional)"
 
 info "For local dev, OpenTelemetry is optional. Services work fine without it."
-info "If you want to enable observability (traces, metrics, logs):"
+info "If you want to enable observability (traces):"
 info ""
 info "  1. Create a Grafana Cloud account: https://grafana.com/products/cloud/"
 info "  2. Create an OTLP token in Grafana Cloud"

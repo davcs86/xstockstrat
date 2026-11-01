@@ -90,7 +90,7 @@ Before `/promote` flips this feature to `launched`: on dev, an admin device rece
 
 ### Step 1 — proto: add `IdentityService.ListAdminUserIds`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -133,7 +133,7 @@ Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/identity/v1/identity.pb.go` — modify (generated)
@@ -171,7 +171,7 @@ Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-
 
 ### Step 3 — service: identity `ListAdminUserIds` handler (SAN-gated, header-blind)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/adminDirectory.ts` — create
@@ -181,11 +181,11 @@ Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-
 
 **Codebase Evidence**:
 - `peerDnsSans(call)` to copy verbatim: `services/xstockstrat-config/src/grpc/authz.ts:135-142` (parses `getAuthContext()?.sslPeerCertificate?.subjectaltname`, keeps `DNS:` entries). Call shape `SecretCallerCall` at `:129-132`. Runtime copy #2 (C-18; `design.md:281`).
-- Admin predicate source: `WHERE user_id <> $1 AND is_active = true AND 'admin' = ANY(roles)` at `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:851`; the new query drops `user_id <> $1` (`design.md:47-50`).
+- Admin predicate source: `WHERE user_id <> $1 AND is_active = true AND 'admin' = ANY(roles)` at `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:855` (second copy in `setUserActive` at `:897`); the new query drops `user_id <> $1` (`design.md:47-50`).
 - `identity.users.user_id UUID`, `roles TEXT[]`, `is_active BOOLEAN` at `services/xstockstrat-identity/migrations/001_identity_tables.up.sql:7,10,11`.
-- Error-echo anti-pattern NOT to copy: `callback({ code: 13, message: err.message })` at `identityServiceImpl.ts:784` (`design.md:51-52`).
-- `IdentityServiceImpl` holds `private readonly pool: Pool` (`identityServiceImpl.ts:105-106`); class closes at file end after `setUserActive` (`:878`). Registered via `grpcServer.addService(IdentityServiceService, identityImpl as unknown as grpc.UntypedServiceImplementation)` (`services/xstockstrat-identity/src/index.ts:50-53`) — the generated descriptor routes `listAdminUserIds` to the impl method of that name, so `index.ts` needs no change.
-- `adminGate` (`identityServiceImpl.ts:735-745`) and `authz.ts` stay byte-identical (`@AC-7 @feature-043`, `design.md:53-54`).
+- Error-echo anti-pattern NOT to copy: `callback({ code: 13, message: err.message })` at `identityServiceImpl.ts:788` (the pattern recurs 15 times in the file) (`design.md:51-52`).
+- `IdentityServiceImpl` holds `private readonly pool: Pool` (`identityServiceImpl.ts:105-106`); class closes at file end (`:935`) after `setUserActive` (starts `:882`). Registered via `grpcServer.addService(IdentityServiceService, identityImpl as unknown as grpc.UntypedServiceImplementation)` (`services/xstockstrat-identity/src/index.ts:50-53`) — the generated descriptor routes `listAdminUserIds` to the impl method of that name, so `index.ts` needs no change.
+- `adminGate` (`identityServiceImpl.ts:739-749`) and `authz.ts` stay byte-identical (`@AC-7 @feature-043`, `design.md:53-54`).
 - Header propagation: the handler makes **no** outbound call (step-constraints §B header row N/A).
 
 **TDD**: `red-green required`
@@ -210,7 +210,7 @@ Identity-owner proto approval recorded in `context.md` before Step 2 commits (C-
 5. In `identityServiceImpl.ts`: add `import { listAdminUserIds } from './adminDirectory';` beside the `./ledgerAudit` import (`:9`), and a one-line delegate method at the end of the class:
    `async listAdminUserIds(call: any, callback: any) { return listAdminUserIds(this.pool, call, callback); }`
    No other line in the file changes.
-6. Canonical form (`design.md:261`): `user_id::text` yields the lowercase hyphenated UUID; that equals the `x-user-id` notify stores at register (`identityServiceImpl.ts:167` JWT `user_id: user.user_id` → `services/xstockstrat-ui/src/lib/bffShared.ts:39` → `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:232`). No normalization is added.
+6. Canonical form (`design.md:261`): `user_id::text` yields the lowercase hyphenated UUID; that equals the `x-user-id` notify stores at register (`identityServiceImpl.ts:167` JWT `user_id: user.user_id` → `services/xstockstrat-ui/src/lib/bffShared.ts:40` (`[HEADER_USER_ID]: claims.user_id`) → `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:232`). No normalization is added.
 
 **Verification**:
 ```bash
@@ -224,7 +224,7 @@ git diff --stat src/grpc/authz.ts src/index.ts   # empty
 
 ### Step 4 — test: identity `ListAdminUserIds` deny matrix + real-socket case
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/adminDirectory.test.ts` — create
@@ -276,7 +276,7 @@ grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: sing
 
 ### Step 5 — service: notify `AdminDirectory` client + `IDENTITY_ENDPOINT` wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/services/adminDirectory.ts` — create
@@ -339,7 +339,7 @@ ls services/xstockstrat-notify/src/middleware 2>/dev/null   # absent (@AC-2 @fea
 
 ### Step 6 — test: notify `AdminDirectory` (single-flight, freshness, deadline, trio on the wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/adminDirectory.test.ts` — create
@@ -378,7 +378,7 @@ grep -n "__tests__/fixtures" src/__tests__/adminDirectory.test.ts   # none: sing
 
 ### Step 7 — service: notify untargeted push resolves admin audience
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/webPush.ts` — modify
@@ -435,7 +435,7 @@ grep -n "dispatch(alert, call.metadata)" src/grpc/notifyServiceImpl.ts
 
 ### Step 8 — test: notify push audience (deliberate rewrite of feature-165 broadcast case)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/webPush.test.ts` — modify
@@ -447,7 +447,7 @@ grep -n "dispatch(alert, call.metadata)" src/grpc/notifyServiceImpl.ts
 - Case to rewrite under operator sign-off: `it('AC-4: broadcast (empty targetUserId) queries all subscriptions'` at `webPush.test.ts:147-155` (context.md § Operator decisions 2026-10-21; C-16 CHANGE, `design.md:290`).
 - Targeted guard to keep and extend: `webPush.test.ts:129-145` (`/WHERE user_id = \$1/`, params `['user-42']`, `:142-143`).
 - SQL-blind fake: `capturingPool` `:33-45`; `cfg` `:47-49`; `StubbedDispatcher` `:53-60`; `alert()` `:88-98`; `SUBS` `:100-103`. Every existing `new StubbedDispatcher(pool.obj as any, cfg…)` (`:113`, `:123`, `:132`, `:150` (rewritten), `:160`, `:171`, `:184`) and `new ExposedDispatcher(pool.obj as any, cfg())` (`:203`, class `:194`) must pass a 3rd argument once the constructor requires it (tsc compiles tests).
-- EmitAlert harness: `recordingWebPush` (`notifyServiceImpl.test.ts:64-75`), `registerSubscriber` (`:314`), `REQ` (`:353`), push isolation (`:546-565`), unauthenticated-caller pin (`:219-224`, must stay green).
+- EmitAlert harness: `recordingWebPush` (`notifyServiceImpl.test.ts:64-75`), `registerSubscriber` (`:314`), `REQ` (`:353`), push isolation (`:546-565`), unauthenticated-caller pin (comment block `:219-225`, `it(...)` at `:226`; must stay green).
 
 **TDD**: `red-green required`
 
@@ -468,7 +468,7 @@ grep -n "dispatch(alert, call.metadata)" src/grpc/notifyServiceImpl.ts
 5. `@AC-11`: `stubAdmins(Object.assign(new Error('unavailable'), { code: 14 }))` → dispatch resolves, zero sends; subclass overriding `logAdminLookupError` counts 1. Repeat with `{ code: 13 }`. With an injected clock: three failures at t=0, 30s, 59s → 1 ERROR; failure at t=60s → 2.
 6. Gates: untargeted alert with VAPID absent or severity below `min_severity` → `stubAdmins` not called (`@AC-6/@AC-7 @feature-165` PRESERVE).
 7. md pass-through: `dispatch(alert({ targetUserId: '' }), md)` → `stubAdmins` received the same `md`.
-8. `notifyServiceImpl.test.ts` — `@AC-1`: `emitAlert({ request: REQ({ targetUserId: '' }), metadata: <md> }, cb)` with `recordingWebPush` → callback returns an `alertId`; `registerSubscriber` received 1; after a microtask the push fake received `(alert, md)` (extend `recordingWebPush` to record the 2nd arg). Existing `:219-224` and `:546-565` stay unchanged and green (`@AC-11` "never fails or delays EmitAlert").
+8. `notifyServiceImpl.test.ts` — `@AC-1`: `emitAlert({ request: REQ({ targetUserId: '' }), metadata: <md> }, cb)` with `recordingWebPush` → callback returns an `alertId`; `registerSubscriber` received 1; after a microtask the push fake received `(alert, md)` (extend `recordingWebPush` to record the 2nd arg). Existing `:219-226` (pin comment + `it`) and `:546-565` stay unchanged and green (`@AC-11` "never fails or delays EmitAlert").
 
 **Verification**:
 ```bash
@@ -482,7 +482,7 @@ grep -n "__tests__/fixtures" src/__tests__/webPush.test.ts src/__tests__/notifyS
 
 ### Step 9 — service: portfolio risk alerts target the account owner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -517,7 +517,7 @@ grep -n "emitRiskAlert(ctx, userID" internal/service/portfolio_service.go   # 2 
 
 ### Step 10 — test: portfolio owner targeting (concentration + drawdown)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — modify
@@ -526,10 +526,10 @@ grep -n "emitRiskAlert(ctx, userID" internal/service/portfolio_service.go   # 2 
 
 **Codebase Evidence**:
 - `recordingNotify` records `in.Body` only (`portfolio_quote_deadline_test.go:345-357`); second consumer `offline_account_pnl_test.go:314` (`&recordingNotify{}`, unaffected by an added field).
-- `TestCheckRiskLimits_AC3_SumsAcrossAccounts` (`:440-458`, owner `"u1"`, exact body set `:454`).
-- `TestCheckRiskLimits_AC9_UnpricedSkipsConcentrationDrawdownStillAlerts` (`:460-481`, drawdown `brk-1` 800/1000).
+- `TestCheckRiskLimits_AC3_SumsAcrossAccounts` (comment `:440`, func `:441`, owner `"u1"`, exact body set `:454`).
+- `TestCheckRiskLimits_AC9_UnpricedSkipsConcentrationDrawdownStillAlerts` (comment `:460`, func `:461`, drawdown `brk-1` 800/1000).
 - `expectDrawdowns` hard-codes `.WithArgs("u1", "TRADING_MODE_PAPER")` (`:367-373`); `posRow`, `positionCols`, `anyArgs`, `newQuoteSvc`, `ctxWithUser` used at `:441-451`.
-- Go fixture home `internal/testdata/marks.go` (`Lyft`, `Msft`, …) — no `user-42` / `acct-1` constants.
+- Go fixture home `internal/testdata/marks.go` (`Lyft`, `Msft`, …) — no `user-42` / `acct-1` constants. Both literals already appear inline as per-test scenario sentinels elsewhere in the module (`"user-42"`: `internal/service/watchlist_service_test.go:620,645,659`, `internal/handler/portfolio_identity_test.go:64`; `"acct-1"`: `internal/service/portfolio_close_payload_test.go:24,28,46`) — the module's convention is inline sentinel IDs, not a shared constant.
 - New logic lives in `internal/service/` — an excluded coverage package (spec-template coverage note).
 
 **TDD**: `red-green required`
@@ -541,14 +541,14 @@ grep -n "emitRiskAlert(ctx, userID" internal/service/portfolio_service.go   # 2 
 2. `@AC-3`: in `TestCheckRiskLimits_AC3_SumsAcrossAccounts`, after the body-set assertion, assert every recorded req has `TargetUserId == "u1"` (the `checkRiskLimits` owner), `Category == "risk"`, `Severity == ALERT_SEVERITY_WARNING`. Body set stays exactly as `:454` (EXTEND `@AC-3 @feature-231`).
 3. `@AC-9 @feature-231` EXTEND: in the AC9 test, assert the single drawdown req has `TargetUserId == "u1"`; still the only alert.
 4. `@AC-6`: new `TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner` — owner `"user-42"`; empty positions via `mock.ExpectQuery(\`FROM portfolio.positions\`).WithArgs(anyArgs(4)...)`; drawdown via an inline `mock.ExpectQuery(\`FROM portfolio.account_balances\`).WithArgs("user-42", "TRADING_MODE_PAPER")` returning `acct-1`, `8500.0`, `10000.0`; call `checkRiskLimits(ctxWithUser(t, "user-42"), "user-42", TRADING_MODE_PAPER)`; assert exactly one req with body `drawdown limit breach: account acct-1 at 15.0% (peak 10000.00, current 8500.00)`, category `risk`, severity WARNING, `TargetUserId == "user-42"`. `expectDrawdowns` is not modified.
-5. C-13 verdict: `"user-42"` / `"acct-1"` have one consumer (this new test) → inline compliant; `expectDrawdowns` keeps its `"u1"` literal.
+5. C-13 verdict: `"user-42"` / `"acct-1"` are opaque scenario-sentinel IDs (the `acceptance.feature` givens), not shared fixture data; within `portfolio_quote_deadline_test.go` they have one consumer (this new test) and they follow the module's existing inline-sentinel convention (other files above) → inline compliant, no `internal/testdata` constant; `expectDrawdowns` keeps its `"u1"` literal.
 
 **Verification**:
 ```bash
 (cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/service/... -run 'TestCheckRiskLimits' -count=1 -v)
 (cd services/xstockstrat-portfolio && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:")   # ≥ 40% (ci.yml:256-257 form)
 (cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod)
-grep -rn '"user-42"' --include="*_test.go" services/xstockstrat-portfolio   # repo root; one declaring test (C-13)
+grep -n '"user-42"' services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go   # repo root; hits only inside TestCheckRiskLimits_242_AC6_DrawdownTargetsOwner (C-13; pre-existing hits in watchlist_service_test.go / portfolio_identity_test.go are unrelated sentinels)
 ```
 New logic is in an excluded package (`internal/service/`) — no coverage threshold applies to it; the targeted `-run` tests are the behavioral proof.
 
@@ -556,7 +556,7 @@ New logic is in an excluded package (`internal/service/`) — no coverage thresh
 
 ### Step 11 — service: analysis live-loop alerts target the strategy owner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -567,7 +567,7 @@ New logic is in an excluded package (`internal/service/`) — no coverage thresh
 - `_emit_alert` builds `notify_pb2.EmitAlertRequest(severity=…WARNING, category="strategy", title=…, body=…, source_service="xstockstrat-analysis", tags=[…], context=ctx)` at `live_loop.py:834-845`; called `:819`.
 - `_emit_fundamentals_unavailable_alert` builder at `:850-861`; called `:727`.
 - Owner `definition.user_id` (`StrategyDefinition.user_id = 13`, `packages/proto/analysis/v1/analysis.proto:377`); validated upstream by `owner_metadata` (`app/identity.py:6-10`) via `_run_cycle` `:383-395`; `sector_params.apply_sector` copies with `CopyFrom` (`app/services/sector_params.py:109`) so `user_id` survives (`live_loop.py:734`).
-- `fundsignal_loop._emit_warning` (`app/engine/fundsignal_loop.py:614-628`) stays untargeted (`design.md:112-113`; PRESERVE `@AC-6 @feature-224`).
+- `fundsignal_loop._emit_warning` (defined `app/engine/fundsignal_loop.py:642`, builder `:646-654`; callers `:283`, `:632`) stays untargeted (`design.md:112-113`; PRESERVE `@AC-6 @feature-224`).
 - Existing notify stub reused — no new outbound call (§B header row N/A).
 
 **TDD**: `red-green required`
@@ -589,7 +589,7 @@ grep -n "target_user_id" app/engine/fundsignal_loop.py   # none
 
 ### Step 12 — test: analysis owner targeting (strategy trigger + fundamentals-unavailable)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -623,7 +623,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_live_loop.py   # un
 
 ### Step 13 — docs: agent `emit_alert` broadcast wording (push reaches admins only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (docstring only)
@@ -655,7 +655,7 @@ grep -n "admin" services/xstockstrat-agent/app/tools.py docs/runbooks/mcp-tools.
 
 ### Step 14 — docs: platform docs (root CLAUDE.md, PLAT-4, header-propagation, mTLS SAN gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `CLAUDE.md` — modify
@@ -669,7 +669,7 @@ grep -n "admin" services/xstockstrat-agent/app/tools.py docs/runbooks/mcp-tools.
 - Root `CLAUDE.md:336` ("The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls…"); dependency diagram `CLAUDE.md:310-330` (`All services → xstockstrat-notify` `:326`, no notify → identity edge).
 - `docs/context-constitution.md:38` PLAT-4 ("identity is the only outbound per-request caller … ledger/notify/config make no outbound per-request calls").
 - `docs/patterns/header-propagation.md:123-125` ("none currently does" — already false per `ledgerAudit.ts:14`); AsyncLocalStorage template `:120-154`; "Request-scoped outbound edges" `:160-169`.
-- `docs/patterns/inter-service-mtls.md` (86 lines) has no peer-SAN authorization section (grep `peer`: none); the existing SAN grant is config's `peerSan: 'xstockstrat-ingest'` (`services/xstockstrat-config/src/grpc/authz.ts:124`).
+- `docs/patterns/inter-service-mtls.md` (90 lines) has no peer-SAN authorization section (grep `peer`: none); the existing SAN grant is config's `peerSan: 'xstockstrat-ingest'` (`services/xstockstrat-config/src/grpc/authz.ts:124`).
 
 **TDD**: N/A (docs)
 
@@ -692,7 +692,7 @@ grep -n "none currently does" docs/patterns/header-propagation.md   # none
 
 ### Step 15 — docs: service docs (notify/identity CLAUDE.md + per-module constitution) and Teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-notify/`, `services/xstockstrat-identity/`
 **Files**:
 - `services/xstockstrat-notify/CLAUDE.md` — modify
@@ -735,7 +735,7 @@ grep -n "resolved by feature 242" services/xstockstrat-notify/docs/context-const
 
 ### Step 16 — docs: C-14 follow-up for trading per-account alerts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`, feature dir
 **Files**:
 - `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md` — create
@@ -747,7 +747,8 @@ grep -n "resolved by feature 242" services/xstockstrat-notify/docs/context-const
 **Codebase Evidence**:
 - Reconciliation mismatch `EmitAlertRequest{Severity: …CRITICAL, Category: "reconciliation", …}` without `TargetUserId` at `services/xstockstrat-trading/internal/service/trading.go:1938-1944`.
 - Account halt `EmitAlertRequest{Severity: …CRITICAL, Category: "halt", …}` without `TargetUserId` at `trading.go:2751-2757`.
-- Targeting precedent in the same file: `TargetUserId: order.UserId` (`trading.go:3348`).
+- Systemic escalation `EmitAlertRequest{Severity: …CRITICAL, Category: "reconciliation", Title: "Systemic broker-reconciliation failure — trading reduced to REDUCE_ONLY", …}` without `TargetUserId` at `trading.go:2183-2189` — system-wide (counts unreachable accounts across all owners), not per-account; admin-only delivery after 242 is the intended audience. Distinct from the per-account reconciliation alert at `:1938-1944` despite the shared category.
+- Targeting precedent in the same file: `TargetUserId: order.UserId` (`trading.go:3348`; also `:3684`, `:3700`).
 - Defect-report + sidecar format: `.claude/skills/sdd-qa/reference/defect-filing.md`; sidecar precedent `docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.status` (`triaged` / `ref: feature:…`).
 - No existing feature dir for this follow-up (`ls docs/roadmap/features | grep account-alert`: none).
 
@@ -756,7 +757,7 @@ grep -n "resolved by feature 242" services/xstockstrat-notify/docs/context-const
 **Covers**: —
 
 **Instructions**:
-1. Write the defect report per `defect-filing.md`: after feature 242, both CRITICAL per-account trading alerts reach admin devices only; the account owner loses the push for their own halt/reconciliation. Severity SEV-2; affected service `xstockstrat-trading`; owner resolvable from `accountID`.
+1. Write the defect report per `defect-filing.md`: after feature 242, both CRITICAL per-account trading alerts reach admin devices only; the account owner loses the push for their own halt/reconciliation. Severity SEV-2; affected service `xstockstrat-trading`; owner resolvable from `accountID`. State explicitly that the systemic escalation alert (`trading.go:2183-2189`, same `reconciliation` category) is **out of scope**: it is system-wide, so admin-only delivery is intended and it must not be targeted — do not conflate it with the per-account reconciliation alert at `:1938-1944`.
 2. Sidecar content: `open`.
 3. Append to `context.md`: provisional follow-up slug `fix-trading-account-alert-targeting` (its `NNN` is assigned by `/sdd-triage`; route via `/sdd-triage --from-report docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`), or an operator sign-off; required before the integration PR merges (C-14, `design.md:207-210`).
 
@@ -772,3 +773,124 @@ grep -n "fix-trading-account-alert-targeting" docs/roadmap/features/242-fix-push
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 1 (2026-10-28) — verification mechanism only, no code deviation.** The worktree-isolation guard refused
+  the `buf breaking --against "<git-common-dir>#branch=main-dev,subdir=packages/proto"` form (a path naming the
+  shared `.git`). Equivalent input used: `git archive main-dev packages/proto` and `git archive origin/main-dev
+  packages/proto` extracted to the session scratchpad, then `buf breaking --against <extract>/packages/proto`. Both
+  exit 0 (local `main-dev` 0fc13c41 is behind `origin/main-dev` fa40c8a4, so both were checked); `buf lint` exit 0
+  (buf 1.72.0). A blank line precedes the new rpc comment, matching the service block's existing comment spacing.
+- **Step 2 (2026-10-29) — toolchain parity only, no code deviation.** (a) The provisioned `protoc-gen-go`
+  (v1.36.11) and `protoc-gen-connect-go` (v1.19.2) in `~/go/bin` were built with go1.24.7 and reflowed an unrelated
+  doc comment in `gen/go/analysis/v1/analysis.pb.go`; all three Go plugins were rebuilt at their CI pins with
+  `GOTOOLCHAIN=go1.27.0` (CI `proto-freshness` uses Go 1.27) into the session scratchpad, which removed the drift.
+  (b) `gen/ts` had no `node_modules`, so `tsc` resolved to a global TypeScript 6.0.2 (TS5107 error); ran
+  `pnpm install --frozen-lockfile` in the worktree (lockfile TypeScript 5.9.3, as CI does). (c) `buf-gen.sh:41`'s
+  `buf breaking` passed in the worktree; also re-checked against a `git archive main-dev packages/proto` extract
+  (exit 0). Result: drift is identity-only, and a second `buf-gen.sh` run gives an empty `git diff packages/proto/gen/`.
+- **Step 3 (2026-10-29) — formatting and TDD-evidence mechanics only, no behaviour deviation.** (a) The delegate
+  `listAdminUserIds(call, callback)` spans three lines, not one (house brace style). `identityServiceImpl.ts` has no
+  other change. It was not run through prettier because the file already fails `prettier --check` at HEAD, and a
+  reformat would touch unrelated lines. (b) The verbatim `peerDnsSans` copy omits the JSDoc line above it in
+  config `authz.ts:134`. It is mechanism narration, not a constraint (root CLAUDE.md comment rule). (c) The spec
+  allows only `@AC-*` tests in Step 4's file. So the step-3 RED→GREEN gate ran on an uncommitted scratch suite
+  (7 cases mirroring Step 4 (i)-(vii)) that imports `src/grpc/adminDirectory.ts`. Step 4 still owns the committed
+  tests. (d) `pnpm run lint` exits 0 with 186 warnings, all pre-existing `no-explicit-any` warnings plus the two the
+  spec-mandated `any` delegate adds (`identityServiceImpl.ts:937`). `adminDirectory.ts` is warning-free.
+- **Step 4 (2026-10-29) — test mechanics only, no behaviour deviation.** (a) RED was captured by moving the
+  already-landed `src/grpc/adminDirectory.ts` (Step 3) out of the tree for one run and restoring it: both test files
+  fail with `ERR_MODULE_NOT_FOUND ... src/grpc/adminDirectory.ts`. (b) Case (vii) (DB failure → generic INTERNAL)
+  carries no `@AC-*` tag because the spec assigns it none. (c) `mtls.test.ts` keeps its own one-line fake pool
+  (`queries` recorder) instead of importing the one in `adminDirectory.test.ts`; each has one consumer (C-13
+  inline). (d) `mtls.test.ts` is not run through prettier: it already fails `prettier --check` at HEAD, and a
+  reformat would touch unrelated lines. `adminDirectory.test.ts` is prettier-clean. (e) The P-06 load check found
+  that the guarded `identityServiceImpl.test.ts` skips vacuously on Node 24.20.0 (see context.md). Per Instruction
+  5 the `fails.md:2222` claim is corrected by an appended ledger entry (append-only rule), in its own commit.
+- **Step 5 (2026-10-29) — formatting and TDD-evidence mechanics only, no behaviour deviation.** (a) The spec puts
+  every `@AC-*` test for this seam in Step 6's `adminDirectory.test.ts`, so the step-5 RED→GREEN gate ran on an
+  uncommitted scratch suite (5 cases mirroring Step 6's freshness, single-flight, deadline/trio, failure-clears-slot
+  and missing-endpoint cases), deleted before commit; Step 6 still owns the committed tests. (b) The worktree had no
+  `node_modules`; `pnpm install --frozen-lockfile` was run at the worktree root (as Steps 2-4) instead of symlinking
+  the main worktree's, so pnpm never writes into the shared checkout. (c) `adminDirectory.ts` was run through
+  prettier (new file); the `IdentityServiceClient` construction and the `listAdminUserIds` call wrap across lines.
+- **Step 6 (2026-10-29) — test mechanics only, no behaviour deviation.** (a) Step 5 had already landed the code under
+  test, so RED was captured twice against `src/services/adminDirectory.ts`: moved aside (`tsc` → `TS2307 Cannot find
+  module '../services/adminDirectory.js'`), then mutated (single-flight guard removed + `waitForReady: true` added) →
+  `tests 79, pass 77, fail 2` (single-flight, deadline). The file was restored byte-identical (`cmp`). (b) One extra
+  case beyond the spec list, "relays only the header trio from inbound metadata", asserts an inbound `authorization`
+  header is not relayed. It is in Step 6's own file and adds no production code. (c) `grpc.CallOptions` has no
+  `waitForReady` member, so the deadline case reads it through a `Record<string, unknown>` cast. (d) The new
+  `mtls.test.ts` case carries no `@AC-*` tag: that file's `@AC-*` tags belong to feature 210. The file already fails
+  `prettier --check` at HEAD, so only the added lines are prettier-formatted (no whole-file reformat).
+  `adminDirectory.test.ts` is prettier-clean. (e) The worktree had no `node_modules`, and the main worktree has none
+  to symlink, so `pnpm install --frozen-lockfile --filter xstockstrat-notify... --filter xstockstrat` was run at the
+  worktree root. That run installs husky, so the pre-commit hook runs.
+- **Steps 7 + 8 (2026-10-29) — merged into one commit (operator decision, Option B).** Step 7 makes `admins:
+  AdminDirectory` a required 3rd constructor argument, and `tsc` compiles the tests, so Step 7 alone cannot pass its
+  own `pnpm run build` without Step 8's edits to every `new StubbedDispatcher`/`ExposedDispatcher` site. The operator
+  chose to land Step 7's three files and Step 8's two test files together, with one red→green cycle on Step 8's
+  tests, and to mark both steps done in that commit. Other notes, mechanics only: (a) RED was `tsc` TS2554 ×17
+  ("Expected 2 arguments, but got 3/4"), and running the emitted `dist` gave `tests 61, pass 53, fail 8`; GREEN is
+  `tests 88, pass 88, fail 0, skipped 0`. (b) The feature-165 targeted case keeps its `AC-4` title and gains `@AC-2`,
+  and it switches from `capturingPool(SUBS)` to `sqlPool(GIVENS)`; `capturingPool` and `SUBS` stay for the other
+  feature-165 cases. (c) `StubbedDispatcher` also overrides `logAdminLookupError` to record each call, so every
+  `@AC-11` case counts escalations through the same subclass. (d) `reportAdminLookupError` reads the clock once per
+  call. (e) None of the five files is prettier-clean at HEAD, so only the added lines follow prettier style; there is
+  no whole-file reformat. (f) `pnpm run lint` has 0 errors. Warnings went from 211 to 233, and all 22 new ones are
+  `no-explicit-any` (the spec's `catch (e: any)` and `e: any`, plus the test fakes).
+- **Step 9 (2026-10-29) — verification tooling and TDD-evidence mechanics only, no code deviation.** (a) The
+  provisioned `~/go/bin/golangci-lint` (v2.14.0) was built with go1.26 and refuses the module's `go 1.27.0`
+  ("can't load config"). It was rebuilt at the same pin with `GOTOOLCHAIN=go1.27.0` into the session scratchpad;
+  that build reports `0 issues.` (b) The spec puts every `@AC-*` portfolio test in Step 10, so the step-9 RED→GREEN
+  gate ran on an uncommitted scratch test (drawdown alert for owner `u1` must carry `TargetUserId == "u1"`), deleted
+  before commit. Step 10 still owns the committed tests. (c) Codebase Evidence cites the trading precedent at
+  `trading.go:3348`; it is at `:3347` (also `:3693`, `:3709`). Citation drift only.
+- **Step 10 (2026-10-29) — verification tooling and TDD-evidence mechanics only, no code deviation.** (a) Lint ran
+  with the same go1.27 rebuild of golangci-lint v2.14.0 as Step 9, because the provisioned binary is go1.26; it
+  reports `0 issues.` (b) Step 9's production change was already on the branch, so RED was captured by running the
+  new tests against the pre-Step-9 `portfolio_service.go` (`574dc1cf~1`), swapped in temporarily and restored
+  before GREEN. That file is not part of this commit.
+- **Step 11 (2026-10-29) — TDD-evidence mechanics only, no code deviation.** The spec puts the `@AC-4`/`@AC-7`
+  analysis tests in Step 12, so the step-11 RED→GREEN gate ran on an uncommitted scratch test (trigger alert for
+  owner `user-42` and fundamentals-unavailable alert for owner `u1` must carry `target_user_id`), deleted before
+  commit. Step 12 still owns the committed tests. Spec line cites (`:835-844`, `:851-860`) matched the tree.
+- **Step 12 (2026-10-29) — test mechanics only, no behaviour deviation.** (a) Step 11's production change was
+  already on the branch, so RED was captured by running the new tests against the pre-Step-11 `live_loop.py`
+  (`330afc77~1`), swapped in temporarily and restored byte-identical before GREEN; that file is not in this commit.
+  (b) The severity assertions read `live_loop_module.notify_pb2.ALERT_SEVERITY_WARNING`, as the existing feature-215
+  test does, so the file gains no import. (c) `strategy_id` is not load-bearing in the `_loop` fixtures, so the
+  `@AC-7` test overrides it to `strat-2` and asserts the spec title; it selects the alert with `_fund_alerts`.
+- **Step 13 (2026-10-29) — line cites only, no behaviour deviation.** The spec's `tools.py:690-692` / `:699` sit at
+  `:689-691` / `:698` (off by one); the text matched as quoted. The new docstring clause is a separate sentence on
+  two lines so the Verification grep (`admin` and `push` on one line) hits `tools.py`. The agent venv lacked
+  `httpcore`/`starlette`, so `uv sync --extra dev --frozen` was run before the pytest Verification (no lockfile change).
+- **Step 14 (2026-10-29) — doc scope and line cites only, no behaviour deviation.** (a) Instruction 4 says "the two
+  SAN-gated grants". The tree has a third: ingest and indicators accept `x-user-id: system` grants only from peer
+  SAN `xstockstrat-analysis` (feature 224, `_SYSTEM_GRANT_SAN` / `_ANALYSIS_SAN`). The new "Peer-SAN
+  authorization" note in `inter-service-mtls.md` lists all three so it is not wrong by omission. Config still has
+  exactly one `peerSan` grant (`authz.ts:124`, ingest). A discovery note that claimed a second marketdata
+  `peerSan` was wrong, because the marketdata grant has none. (b) `header-propagation.md`'s stale text sat at
+  `:123-125` → `:124-126` and the edges list at `:162-171` (the spec cites are off by 1-2). (c) The "none currently
+  does" paragraph was replaced with the explicit-threading form and its two live references. The AsyncLocalStorage
+  template is unchanged. (d) Verification 1 already matched before the edit, through the pre-existing `:336` and
+  `:435` lines that name notify and identity in one sentence. The new diagram edge at `:327` is the intended hit.
+- **Step 15 (2026-10-29) — Teardown mechanism and doc scope only, no behaviour deviation.** (a) The
+  `/context-forge:context-constitution` skill is not available in this session (only `context-forge:context-scrubber`
+  is loaded), so the Teardown for Steps 14 and 15 was done by hand. Each touched context file was re-read against
+  the code, and every new citation was checked against the code. The integration PR body must record both
+  "plugin unavailable" and this manual reconciliation (root CLAUDE.md § Teardown). (b) The notify constitution's
+  `webPush.ts` line hints had drifted by 7-185 lines because of this feature's admin-lookup change. They were
+  re-stamped: NOTIFY-6 prune ~L175, severity gate ~L87-92, VAPID ~L66-77, TTL constants ~L17-18, `#deliver`
+  ~L159-162, TTL regression test ~L386. Anchors were unchanged. (c) The identity constitution's other `~L`
+  hints drift by about 1-5 lines (Step 3 added one import line, on top of earlier drift). Every `#anchor` still
+  resolves, so they were left as approximate hints. (d) The new rules are numbered NOTIFY-8 and IDENTITY-12 (next
+  free IDs). Identity `CLAUDE.md` names `ListAdminUserIds` in its own sentence that cross-references IDENTITY-12,
+  instead of extending the method list. The rest of the stale list stays with the open
+  `2026-10-19-identity-claude-md-drift-defect`. (e) The notify findings "Filed as defect reports" row for
+  `2026-10-19-notify-untargeted-push-broadcasts-all-users-defect` stays, because its sidecar is `triaged`, not
+  `resolved` (the table rule: a row stays until its report is resolved).
+- **Step 16 (2026-10-29) — report date and wording only, no behaviour deviation.** (a) The report keeps the
+  spec's file name (`2026-10-21-…`, fixed at spec time), but its `**Recorded**` field is the actual filing date,
+  2026-10-29. (b) The owner lookup is cited as `trading.broker_accounts.user_id` (`BrokerAccountRecord.UserID`,
+  `account_repo.go:24`); the table is `broker_accounts`, not `accounts`. (c) Spec cites (`:1938-1944`,
+  `:2751-2757`, `:2183-2189`, `:3348`/`:3684`/`:3700`) all matched the branch tree.

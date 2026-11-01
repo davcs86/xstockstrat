@@ -178,6 +178,9 @@ A backtest silently reports fewer/short bars if the symbol's history is not back
 first run, confirm coverage and trigger a backfill if needed — see `reference/backfill.md`. Skip
 only if the caller guarantees data is already present.
 
+- A `trigger_backfill` deadline error says "outcome unknown": the job may already be queued. Check
+  `get_backfill_status` before re-triggering, so no duplicate job is queued.
+
 ## Phase 2 — Run, and handle the oversized output
 
 Call `run_backtest` **one symbol at a time** when you need clean per-symbol returns (the independent
@@ -185,6 +188,22 @@ basket; see Phase 3 for why). The result — full day-by-day diagnostics — alm
 tool-output token limit and is written to a file instead. **Do not read that file raw.** Extract
 only the summary fields and per-symbol trade counts with a small `python3` script (or a subagent).
 The exact save-and-parse recipe, including the JSON shape, is in `reference/output-handling.md`.
+
+- `run_backtest` has a 45 s budget. A "did not respond within 45s" error is safe to retry — narrow
+  the symbol set or the `start`/`end` window first.
+
+**Failure modes (feature 272).** Two server errors are loud failures, not results:
+
+- `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` — evaluation ran past
+  `analysis.backtest.max_duration_seconds` (default 300 s; 0 = no limit). Narrow the range or the
+  symbols; do not retry immediately, because the compute thread keeps running.
+- `FAILED_PRECONDITION` `backtest bar series incomplete: …` — marketdata re-served a bar page or bar
+  pagination hit its page cap. Retrying will not fix it; report it. One truncated symbol now fails
+  the whole multi-symbol run; it is no longer silently skipped.
+
+Through the agent, the MCP 60 s tool cap fires before any server deadline above 60 s, so you see the
+`backtest exceeded` message only when the limit is below 60 s, and only once feature 273's error
+pass-through lands.
 
 ### Fill model (feature 151)
 

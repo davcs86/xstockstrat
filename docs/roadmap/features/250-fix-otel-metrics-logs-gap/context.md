@@ -222,3 +222,232 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `226-fix-otel-trace-export` (launched) on the collector header, `observability.md`, `grafana-cloud.md`,
   `packages/otel/CLAUDE.md:4`, the otel constitution, root findings `:17`/`:18` and the dashboards README attribute
   bullet (rebase-only; the bullet is preserved by Step 5). No config-key, proto-field or migration collision.
+
+## Session 2026-10-23 — P-0 amendment (feature 274 prerequisite)
+
+- Applied before any step started: F-09 re-check passed (`status.md` = `implementation-ready`; all 13
+  `implementation-spec.md` steps `**Status**: pending`).
+- Branch synced with `origin/main-dev` (it carried no unique content; conflicts in `ci.yml`/`CLAUDE.md` took
+  main-dev, ledger files kept both sides).
+- **P-1 retired**: no `trace-derived-alerting` `/sdd-story`. Follow-up is feature
+  `274-otel-metrics-logs-export`. Every citation literal and the Step 10/11 4-site regex now use
+  `docs/roadmap/features/274-otel-metrics-logs-export/`. Step 1 kept (number unchanged, so no renumbering) as a
+  verification marker that the 274 dir is on the branch.
+- **Guard Part 2 annotated** "implement now; retire in 274 PR-B" in `design.md` and `implementation-spec.md`
+  Step 11. 250 still implements it.
+- **C-16 CHANGE sign-off mirrored** from 274 `context.md` (R1 gate, 2026-10-21, operator): approves 274
+  retiring 250's guard Part 2 ("docs list only exported signals"). Verbatim operator answer there: "Amend 250
+  before it runs".
+- `design.md` §6 carries a dated amendment block; its original text is unchanged below it.
+- `merge-order.md` row for 250 → 274 updated on the same branch (250 → 274 PR-B hard on file overlap; PR-A follows
+  250 by operator order).
+- Open Threads: `/sdd-review fix-otel-metrics-logs-gap impl-spec` re-run required (recorded below once run).
+- `/sdd-review impl-spec` re-run (spec-reviewer, 2026-10-23): FAIL on one blocker, fixed in the same P-0 change. The
+  literal `274-otel-metrics-logs-export` contains `metrics-logs`, which the guard's generic Part 2 token
+  `metrics.{0,12}logs` matches, so the cites required by Steps 3/6/8 would fail the guard's own green case. Fix: the
+  guard strips the case-exact 274 path alongside the sanctioned literal (Step 11 item 4); Step 3/6/7 verification
+  greps `sed`-strip it first; Step 10 gains a follow-up-path case (exact green; recased and trailing-prose red).
+  Warnings fixed: stale `## Prerequisite` heading renamed; design.md `:38` and §8 step 1 annotated; 274's number is
+  immutable so Step 10's dir-exists dependency is durable. Re-run of the review after the fix is the gate to push.
+- Second re-review (same day): the OTEL-2 retired marker in `packages/otel/docs/context-constitution.md` (Step 8
+  item 2) was specced to cite the defect basename, whose `metrics-logs` trips the generic token outside the two
+  exempt findings files. Pre-existing in 250's spec, not caused by P-0. Fixed: marker cites feature 250 only. Step 3
+  item 4 gains a wording caution for the cite line.
+- Third re-review (spec-reviewer, 2026-10-23): PASS, 0 blockers, 0 warnings. Non-blocking notes carried to
+  `/sdd-execute`: Step 3 and Step 8 verification lack the sed-stripped generic-token grep (Step 11 is the backstop).
+  P-0 is complete: 250 may now execute; 274 `/sdd-spec` follows 250's merge.
+
+## Session 2026-10-30 — sdd-execute (sequential)
+
+- Branch layout (operator-approved): all commits on session branch `ccr-4f43fb65-lagupv` (= `origin/main-dev` at
+  start), one commit per step, one integration PR into `main-dev`. Logged as Deviation 1. The 250 artifacts on
+  `origin/feature/fix-otel-metrics-logs-gap` were byte-identical to main-dev, so nothing was lost.
+- Read-only re-validation of all 12 steps' Codebase Evidence: LINE-DRIFT ONLY, no content mismatch, no re-spec.
+  Drift: `ci.yml` cites in Steps 7/11/12 are re-anchored by job/symbol name at execution (filter block, `context-map`
+  job now with two `run:` steps, `ci-gate` needs/echo list, `shell-lint`, `markdown-lint`). Step 8: root findings
+  `:18` resolution cell already reads "Narrowed to traces by feature 250 ... filed as feature 274" (changed by 274
+  after `06faaeb5`); the step still applies on top of it.
+- Operator context: the observability review of 2026-10-30 found the staging stack exports traces only; operator
+  chose to keep 274 as approved (SDK RPC histogram + log bridge) and not pursue Grafana-side span-metrics.
+- Tooling setup (steps 1-12): docs/config/test/script/CI steps only. git ✓, bash ✓, grep ✓, python3 ✓. Nothing installed.
+
+### Step 1 — Verify the 274 follow-up dir is on the 250 branch [done]
+- `docs/roadmap/features/274-otel-metrics-logs-export` is on `origin/main-dev` and in this tree; `status.md` present
+  (`design-approved`). Verification-only; no source files changed.
+- Files modified: none (spec/feature/status/context bookkeeping only)
+- Deviations: Deviation 1 (branch layout)
+
+### Step 2 — Replace every alert rule with deleteRules/deleteMuteTimes; delete mute-timings.yaml [done]
+- `alert-rules.yaml` rewritten to a 2-line constraint comment + `apiVersion: 1` + `deleteRules` (the three xstk UIDs)
+  + `deleteMuteTimes` (`outside-us-market-hours`), no `groups`. `mute-timings.yaml` removed (orphaned, C-10).
+- Live-boot check skipped (spec marks it optional): the `deleteRules`/`deleteMuteTimes` key names rest on the
+  Context7 Grafana file-provisioning docs evidence recorded at spec time, which is **not a live-boot proof**
+  (fails.md:682-684). The `groups: []` fallback is kept if a real Grafana import rejects them.
+- Files modified: `packages/otel/alerts/alert-rules.yaml`, `packages/otel/alerts/mute-timings.yaml` (deleted)
+- Deviations: none
+
+### Step 3 — Rewrite packages/otel/alerts/README.md [done]
+- README now states `alert-rules.yaml` provisions no rules, carries the sanctioned literal on its own line, cites
+  `docs/roadmap/features/274-otel-metrics-logs-export/`, lists removed assets only inside the
+  `otel-guard:removed-assets` fence, and keeps `## Notification routing` byte-identical.
+- Files modified: `packages/otel/alerts/README.md`
+- Deviations: none
+
+### Step 4 — Rewrite service-health.json as Tempo-only; delete the other three dashboards [done]
+- `service-health.json` rewritten (uid `xstk-service-health` kept): one `DS_TEMPO` input/var and three TraceQL table
+  panels (server error spans; slow server spans (>2s); analysis scoring RPC activity). `signal-pipeline-throughput.json`,
+  `infrastructure.json`, `trading-service.json` removed.
+- **Dev-import gate PASSED** against the staging/dev Grafana Cloud stack (operator approved the live write):
+  - Import via Grafana MCP `update_dashboard`: success, version 1, uid `xstk-service-health`; read-back via
+    `get_dashboard_by_uid` shows 3 panels + the `DS_TEMPO` datasource var intact.
+  - Each panel's exact TraceQL ran against Tempo (`search_tempo_traces`, 24h) with no parse error. (a) returned rows
+    (`marketdata GetBars`, `identity RefreshToken`, `xstockstrat-ui POST /insights/api/[...connect]/route`);
+    (b) returned rows (`marketdata GetBars` 2-15s, `ledger LedgerService/QueryEvents` 2.5-30s, agent
+    `subscriptions/listen`), and the `Watch|Stream|Export` exclusion held (no WatchConfig rows); (c) parsed and was
+    empty (no `run_backtest` in 24h; the gate only requires (a) or (b) to return rows).
+  - Not proven: rendering in the Grafana UI (no browser session). The Tempo target keys (`queryType: traceql`,
+    `tableType: spans`, `limit`) were accepted by the save; the stored dashboard was upgraded to schemaVersion 42 by
+    Grafana, the repo file stays at 39.
+  - Span-name forms seen: gRPC names are `xstockstrat.<svc>.v1.<Svc>/<Method>` (Go) or `grpc.xstockstrat...` (Node),
+    so `.*/Method` matches. The analysis server-side RunBacktest span name was not observed (no calls).
+- **Open Item (kept as specced, operator decision)**: panel (b) also matches the agent's long-lived MCP span
+  `subscriptions/listen` (150-295s), since the exclusion only covers gRPC Watch/Stream/Export names. Noted in the
+  panel description; revisit in feature 274's dashboard restoration.
+- Side effect for the operator: the dashboard now exists in the xstockstrat Grafana Cloud stack (created by the gate).
+- Files modified: `packages/otel/dashboards/service-health.json`, and deleted `signal-pipeline-throughput.json`,
+  `infrastructure.json`, `trading-service.json`
+- Deviations: none
+
+### Step 5 — Rewrite packages/otel/dashboards/README.md [done]
+- README describes the single Tempo dashboard (`DS_TEMPO` input, three TraceQL panels), carries the sanctioned
+  literal on its own line, keeps the attribute bullet (`service.name`, `deployment.environment`, `platform`) in
+  Tempo resource-attribute wording with no `trading_mode` (`@AC-3 @feature-171` preserved), and fences the deleted
+  dashboard UIDs/files for manual deletion. Notes that panel (b) still shows non-gRPC long-lived spans.
+- Files modified: `packages/otel/dashboards/README.md`
+- Deviations: none
+
+### Step 6 — Correct docs/setup/grafana-cloud.md [done]
+- Traces-only wording (scoped by `OTEL_ENABLED=true`), sanctioned literal on its own line, signal list reduced to
+  Traces, Loki/Prometheus verification and the derived-fields troubleshooting removed, Step 6 now describes the single
+  Tempo dashboard (`DS_TEMPO`), Step 7 states no rules are provisioned and cites
+  `docs/roadmap/features/274-otel-metrics-logs-export/`, both cleanup lists are fenced, TraceQL example is
+  `{ name =~ ".*/PlaceOrder" }`, Step 8 uses `resource.service.name` in Tempo.
+- Observation (out of scope, not edited): Step 4b still says the app specs ship `OTEL_ENABLED: "false"`; `.do/app.dev.yaml`
+  is `"true"` and only `.do/app.yaml` is `"false"`. It is an env-config statement, not a signal claim (FR-4).
+- Files modified: `docs/setup/grafana-cloud.md`
+- Deviations: none
+
+### Step 7 — Correct the remaining FR-4 one-liners [done]
+- `docs/patterns/observability.md:3`, `docs/setup/CLAUDE.md:10`, `docs/launch-pdfs/product-features.md:192,198`,
+  `packages/otel/CLAUDE.md:4,7-8`, collector comments `:9`/`:35`/`:49` (comments only; `git diff -U0 06faaeb5` shows
+  no non-comment change), and `scripts/setup-env.sh:213` (string only) now state traces-only. The sanctioned literal
+  is on its own line in `observability.md`, `product-features.md` and the collector header. `product-features.pdf` is
+  a rendered copy with no in-repo generator and is NOT regenerated (note for the PR body).
+- Tooling: shellcheck/shfmt unavailable -> `uvx` PyPI equivalents (Deviation 2).
+- Files modified: `docs/patterns/observability.md`, `docs/setup/CLAUDE.md`, `docs/launch-pdfs/product-features.md`,
+  `packages/otel/CLAUDE.md`, `packages/otel/otel-collector-config.yaml`, `scripts/setup-env.sh`
+- Deviations: Deviation 2 (lint tooling fallback)
+
+### Step 8 — Re-ground OTEL-1, retire OTEL-2, NARROW the findings rows [done]
+- `packages/otel/docs/context-constitution.md`: OTEL-1 re-grounded on `resource.service.name` with panel (c) as
+  evidence; OTEL-2 replaced by a retired marker citing feature 250 only (no `rpc_server_duration`, no defect
+  basename); pointer row repointed to the two READMEs; intro line reworded.
+- `packages/otel/docs/context-constitution-findings.md`: "Latent bug?" row NARROWED by content (basename + 274 path),
+  Resolved row carries the basename, and the defect-report table row moved to `## Resolved` per that file's lifecycle
+  rule. Root `docs/context-constitution-findings.md` row `:18` marked **NARROWED (feature 250)** with the basename and the
+  274 path (274's session had already begun narrowing it).
+- Files modified: `packages/otel/docs/context-constitution.md`, `packages/otel/docs/context-constitution-findings.md`,
+  `docs/context-constitution-findings.md`
+- Deviations: none
+
+### Step 9 — Teardown: context-constitution refresh over the touched context files [done]
+- Teardown: `/context-forge:context-constitution refresh` is **plugin unavailable** in this session (the skill list carries
+  `context-forge:context-scrubber` only), so the equivalent was done by hand: every file below was re-read against the
+  post-Step-8 tree (`alert-rules.yaml`, `service-health.json`, both READMEs, `grafana-cloud.md`, the collector config).
+  This must also be stated in the PR body (plugin unavailable + the reconciliations below).
+- packages/otel/CLAUDE.md: none needed (pointer block and description were corrected in Step 7 and match the tree)
+- docs/setup/CLAUDE.md: none needed (`grafana-cloud.md` row corrected in Step 7; the row matches the rewritten doc)
+- packages/otel/docs/context-constitution.md: reconciled (refresh stamp added; collector line hints re-stamped +1 after the
+  Step 7 comment edit: `otlphttp/grafana` ~L49-63, no-collector note ~L18-19)
+- packages/otel/docs/context-constitution-findings.md: reconciled (refresh stamp added; collector hints re-stamped +1:
+  headers comment ~L14-16, exporter header line ~L56, `memory_limiter` ~L37-46)
+- docs/context-constitution-findings.md: none needed (row narrowed in Step 8; no other row concerns the touched assets)
+- Not touched, by design: root `docs/context-constitution.md` and other modules' constitutions (no drift found
+  against the files edited here). `.agents/context-forge.json` `scrubberExtraTargets` (`README.md`,
+  `docs/patterns/ui-ux-governance.md`) untouched.
+- markdownlint-cli2 (npx, repo `.markdownlint.yaml`) on `packages/otel/CLAUDE.md` and `docs/setup/CLAUDE.md`: 0 issues.
+- Files modified: `packages/otel/docs/context-constitution.md`, `packages/otel/docs/context-constitution-findings.md`
+- Deviations: none
+
+### Step 10 — scripts/check-otel-produced-signals.test.sh with verbatim pre-fix fixtures (RED) [done]
+- Fixtures (committed once, extracted from `06faaeb5`; the test never calls `git`): `alert-rules.prefix.yaml`,
+  `service-health.prefix.json`, and `fr4.prefix.tsv` (39 rows: pre-fix lines for the Step 3/5/6/7/8 cites, each asserted at
+  authoring time to match the token regex of its tag). Test cases: green fixed tree; AC-1 red; AC-2 red; one AC-3 red per
+  TSV row; multi-tag lines; strip (exact green / recased red); follow-up path (exact green / recased and trailing-prose
+  red); fence (pass / unfenced / prose / unclosed / still-existing file / ASCII separator); comment-only existence;
+  removal-prose count; dashboard-fallback tree (fenced green / unfenced red); C-16 attribute set; four-way follow-up
+  citation + dir exists; defect-report independence; `.feature` exclusion.
+- **RED (i)** guard absent: `ASSERT FAIL: scripts/check-otel-produced-signals.sh missing`, rc=1.
+- **RED (ii)** throwaway stub guard (`exit 0`, never staged, deleted): `cases=66 failed=53` = AC-1 red 1, AC-2 red 1, AC-3
+  per-cite 39, other red cases 12; none of the green/static cases fail.
+- Lint: shellcheck + shfmt via `uvx` PyPI wheels (Deviation 2 applies); `grep` confirms no runtime `git` in the test and
+  the only script referencing `otel-produced-signals` is the test (C-13: single-consumer fixtures, no inventory entry).
+- Test-authoring correction: a first draft asserted `platform.feature` already mentions Loki; it does not until the
+  @AC scenarios are promoted at integration, so the redundant precondition was removed (the `.feature` exclusion case
+  appends its own Loki line).
+- Files modified: `scripts/check-otel-produced-signals.test.sh`, `scripts/testdata/otel-produced-signals/{alert-rules.prefix.yaml,service-health.prefix.json,fr4.prefix.tsv}`
+- Deviations: none (lint tooling per Deviation 2)
+
+### Step 11 — scripts/check-otel-produced-signals.sh, the produced-set guard (GREEN) [done]
+- Guard implements design.md §4: Part 1 (alerts/dashboards), Part 2 (SPECIFIC over SCOPE, GENERIC over GEN_SCOPE, case-exact
+  strip of the sanctioned literal and the 274 path, findings-row exemption keyed on the defect basename), Part 3 (value-line
+  existence set, P3-name/file/count, removed-assets fence grammar with nested/unclosed/still-existing checks). Parts 1-2
+  use `grep -E`; Part 3 uses one awk pass per file; existence sets are newline-delimited strings checked with `case` (no
+  per-token spawns). bash 3.2 compatible constructs only. Runs in about 1.3s on the real tree.
+- **GREEN**: `bash scripts/check-otel-produced-signals.sh` rc=0 on the real tree; `bash scripts/check-otel-produced-signals.test.sh`
+  `cases=66 failed=0` (about 50s, dominated by per-case tree copies); shellcheck + shfmt clean (uvx wheels, Deviation 2);
+  `bash -n` ok. `/bin/bash` 3.2 (macOS) not available here: bash 3.2 compatibility is by construction, not run.
+- Deviation 3: the guard's first real-tree run caught a wording slip of mine in Step 9's stamp; fixed (operator decision).
+- Files modified: `scripts/check-otel-produced-signals.sh` (and, per Deviation 3,
+  `packages/otel/docs/context-constitution-findings.md`)
+- Deviations: Deviation 3
+
+### Step 12 — Add the otel-signals CI job and wire it into ci-gate [done]
+- `.github/workflows/ci.yml`: new `otel-signals` paths filter (`packages/otel/**`, `docs/**`, `.do/**`, the two scripts,
+  the fixtures), new job `OTel produced-signal guard` running the guard and its test (shaped like `context-map`; NOT
+  appended to `shell-lint`, which skips docs-only PRs), `otel-signals` added to `ci-gate.needs` and the echo list.
+  `docs/patterns/ci-overview.md`: one `otel-signals` row (other omitted jobs not backfilled).
+- Verification: pyyaml structure assertions pass; script name only in the filter and the new job; markdownlint clean on
+  the doc; guard rc=0 and test `cases=66 failed=0` on the final tree (about 50s, so the job runs about 1 minute).
+- Files modified: `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`
+- Deviations: none
+
+### Integration — C-16 promotion (operator confirmed 2026-10-30)
+- `@AC-1`, `@AC-2`, `@AC-3` appended verbatim to `docs/sdd/business-rules/platform.feature`, each tagged `@feature-250`
+  (all three are cross-cutting: `packages/otel` + docs have no service suite; no dedup needed). Scenarios 66 -> 69. They
+  contain "Loki" and a time-bound "today" sentence that feature 274 supersedes under its recorded C-16 CHANGE sign-off
+  (274 `context.md` R1 gate); `.feature` files are outside the guard's glob (guard rc=0 after the write).
+- Merge-order gate: passes (`merge-order.md` row 78 makes 274 wait on 250, not the reverse).
+
+## Session 2026-10-30 — sdd-execute (sequential, complete)
+**Steps this session**: 1-12
+**Progress**: 12 done / 12 total
+**Stopped at**: all complete (status `code-completed`; implementation-spec header `complete`)
+**Next**: merge PR #1377 into `main-dev` when CI is green, then `/sdd-spec otel-metrics-logs-export` for feature 274
+Accountability:
+- Out-of-scope changes: none beyond Deviation 3 (one Step 9 stamp phrase, operator-approved) and the Step 4 gate dashboard
+  created in the Grafana Cloud stack (operator-approved).
+- Open questions / items: panel (b) also lists the agent's long-lived `subscriptions/listen` spans (kept as specced); Grafana
+  UI rendering and a live `deleteRules`/`deleteMuteTimes` import are unproven; the macOS `/bin/bash` 3.2 run was not possible
+  here; removed alert rules, mute timing and three dashboards must be deleted by hand in Grafana Cloud (listed in the fenced
+  READMEs); `product-features.pdf` is a rendered copy and was not regenerated; `grafana-cloud.md` Step 4b still says the app
+  specs ship `OTEL_ENABLED: "false"` (dev is `"true"`; env-config wording, outside FR-4); no ledger entries were added.
+- Unaddressed review warnings: Step 7 touches 6 files (not split, operator call); guard heuristics are vocabulary-bound (C-18).
+- Deviations this session: Deviation 1 (session-branch layout), 2 (lint tooling via uvx wheels), 3 (Step 9 stamp phrase).
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

@@ -5,7 +5,9 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-python-config-zero-trap-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -19,7 +21,29 @@
 | 2026-10-21 | `spec-ready` (amended) | /sdd-design | product-spec.md FR-3 amended per design: read-site `max(1, …)` guards subsumed by the `>0` clamp; negatives resolve to the default; present-aware `retry_seconds` guards stay |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps; acceptance.feature extended (20 @AC-6 rows, @AC-10..@AC-12) |
+| 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential | Merged origin/main-dev (`-X ours`); re-specced Steps 7, 8, 10, 12, 14, 15, 17 (evidence and Instructions/Verification) to the current codebase — indicators servicer line drift and `_clamp_override`, ci.yml real_pg step, `_sched_loop` line, 029 line, CLAUDE.md/governance grep lines, config Node/pnpm tooling note |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f: 'Start executing features 241-276'; unattended checkpoints = report; C-16 promotion auto-confirmed unless it changes an existing @AC rule) |
+| 2026-10-28 | `in-progress` (step 1 done) | /sdd-execute sequential | Step 1: ingest `get_str`/`get_int`/`get_float` use `HasField`; `get_int_present = get_int` alias (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 2 done) | /sdd-execute sequential | Step 2: conftest `snapshot_watcher` (C-13 home); ingest @AC-1/@AC-4 getter rows in `test_config_watcher.py` (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 3 done) | /sdd-execute sequential | Step 3: module-level `int_positive` clamps the four FR-3 backfill properties and both `mcp_client` loop reads (`max(…, 1)` dropped); dead `sandbox_*` helpers and their 3 tests removed (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 4 done) | /sdd-execute sequential | Step 4: ingest @AC-5 (`_backfill_sem` at 0 → 3) and @AC-6 rows (backfill properties, loop timeout/poll interval) plus the AST read-classification guard `tests/test_config_read_classification.py` (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 5 done) | /sdd-execute sequential | Step 5: indicators `get_str`/`get_int`/`get_float` use `HasField`; `get_str_present = get_str` alias (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 6 done) | /sdd-execute sequential | Step 6: indicators conftest `snapshot_watcher` (C-13 home), `_str_watcher` delegates to it; @AC-1/@AC-4 getter rows in `test_config_watcher.py` (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 7 done) | /sdd-execute sequential | Step 7: indicators module-level `int_positive` clamps `sandbox_timeout_ms` / `sandbox_memory_bytes` / `sandbox_max_concurrent()`; `servicer.py` semaphore `max(1, …)` dropped (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 8 done) | /sdd-execute sequential | Step 8: indicators @AC-6 accessor rows (0 / -1 → defaults), servicer rows (semaphore `_value == 4`; sandbox receives `max_concurrent` 4, `timeout_ms` 5000, `memory_bytes` 134217728) and the AST read-classification guard `tests/test_config_read_classification.py` (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 9 done) | /sdd-execute sequential | Step 9: analysis `get_str`/`get_int`/`get_float` use `HasField`; `get_int_present = get_int` and `get_float_present = get_float` aliases (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 10 done) | /sdd-execute sequential | Step 10: analysis conftest `snapshot_watcher`; @AC-1/@AC-4 getter rows, the `:594` contrast flipped to `0.0`; @AC-2 commission/slippage seam + zero-cost fill; @AC-3 rank-weight seam + real-SQL sort-0 order; @AC-9 throttle seam + alert at throttle 0; @AC-12 screener rank cap and patterns `min_sample` (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 11 done) | /sdd-execute sequential | Step 11: analysis module-level `int_positive` / `float_positive` / `str_nonempty`; all 34 FR-3 sites clamped; named readers `default_cooldown_days` (servicer) and `fundsignal_source_slug` (fundsignal_loop); read-site `max(1, …)` wrappers and the two inline `<= 0` clamps removed; dead `sandbox_*` helpers and their 3 tests deleted (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 12 done) | /sdd-execute sequential | Step 12: analysis AST read-classification guard (34 `FR3_KEYS`, 36 `HONOUR_KEYS`, 8 `ZERO_IS_LEGIT`, `collect()` exposed); @AC-6 table (34 rows, defaults resolved via `collect()`, -5 row) and site seams (`__init__` semaphores/pool, named readers, screener sem, fundsignal `_tick`, `default_fill_model` legacy); @AC-7 honour rows + over-clamp tripwire; retention test flipped to `test_retention_non_positive_reads_as_default` (-5, 0 → 20) (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 13 done) | /sdd-execute sequential | Step 13: config `SCALAR_BOUNDS_REGISTRY` comments (`configServiceImpl.ts`) restated for the new getter semantics — min 1 because a Python reader clamps ≤ 0 to the default; lower 0 only where 0 is a legitimate value; no registry row changed (comment-only, TDD red N/A) |
+| 2026-10-28 | `in-progress` (step 14 done) | /sdd-execute sequential | Step 14: config @AC-8 `intVal: 0` → `INVALID_ARGUMENT` `[1, 5]` for `analysis.opportunity.max_concurrent_bars_fetches`, no INSERT; new `watchConfigWireZero.test.ts` proves a stored 0 / 0.0 / "" survives `responseSerialize`→`responseDeserialize` on SNAPSHOT and DELTA (characterization, TDD red N/A) |
+| 2026-10-28 | `in-progress` (step 15 done) | /sdd-execute sequential | Step 15: config migration `032_analysis_zero_trap_descriptions.{up,down}.sql`, four description-guarded `UPDATE`s that restate the 027/028 zero-trap descriptions for `signal_rank_weight`, both `opportunity.max_concurrent_*` keys and `readiness_materializer.max_concurrent_bars_fetches`; `.down` restores the verbatim text; merge-order row 244 ↔ 243 added (migration, TDD N/A) |
+| 2026-10-28 | `in-progress` (step 16 done) | /sdd-execute sequential | Step 16: config `zeroTrapDescriptionMigration.test.ts` (@AC-11) — globs the `*_analysis_zero_trap_descriptions` pair, asserts description-only UPDATEs, every up WHERE text verbatim in 027/028, and down = exact inverse (TDD red → green) |
+| 2026-10-28 | `in-progress` (step 17 done) | /sdd-execute sequential | Step 17: config-key rows (analysis/ingest/indicators `CLAUDE.md`, `config-governance.md`) restated as "0 is honoured" / "a stored ≤ 0 reads as the default"; root PLAT gotcha, CONFIG-11, INGEST-9 rewritten; CF-N10 and the dead `sandbox_*` rows resolved; config `sparkline_bars` drift row added; manual context-forge teardown (docs, TDD N/A) |
+| 2026-10-28 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of pending Step 18 against current codebase after merging `origin/main-dev` (`-X ours`): line drift only — agent `list_opportunities` `tools.py:1518`→`:1527`, `set_config` def `:1642`→`:1651` (params `:1655-1660`, docstring `:1662`); all other evidence still matches |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute (operator session) | Step 18 dev audit recorded (staging MCP, no FR-3 zero rows); post-deploy smoke and prod audit deferred per operator decision "Record audit, merge, I smoke" |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers
@@ -55,4 +79,4 @@ or a zero signal-rank weight cannot be configured).
 
 ## Next Action
 
-`/sdd-review fix-python-config-stored-zero impl-spec` — validate implementation spec, then `/sdd-execute fix-python-config-stored-zero`
+Done: staging rollout smoke passed (2026-10-29). The prod audit is waived by operator decision (2026-10-30: prod is not running).

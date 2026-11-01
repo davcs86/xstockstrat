@@ -345,3 +345,320 @@ halt). design.md is not written and status.md is unchanged (`spec-ready`).
 - `#1262 hotfix/fix-refresh-token-rotation` also touches both identity files. Before Step 1, check whether
   `rotateRefreshToken` (:340-374, hotfix 5bd271d) is on `main-dev`, and re-anchor the line hints if it is not.
   — [ ] unaddressed
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: merged `origin/main-dev` into `feature/fix-identity-auth-code-race` (normal merge). One conflict,
+  `docs/roadmap/ledger/insights.md`, resolved by keeping both sides (base first). `ledger-guard --fix`: clean.
+- Re-spec of step bodies against the current codebase:
+  - Steps 1 and 3: no mismatch; every `identityServiceImpl.ts` anchor resolves as cited. Left unchanged.
+  - Steps 2 and 4: feature 252 rewrote `src/__tests__/identityServiceImpl.test.ts`. All test-file anchors
+    re-pointed (`makeTokenDb` :374-409, `describe('exchangeAuthCode')` :282, `makeSpyPool` :235-247,
+    `describe('refreshOAuthToken')` :445-471, `APPLICATION_ENV` precedent :125-140, seed-hash import :11/:19).
+    Step 2 Instruction 4 inverted: the file has no `if (!impl) return;` guards now, so the new tests add none.
+    Verification switched from the scratch `.verify` tsc route to `pnpm test` (`package.json:12`), which is now
+    real RED/GREEN evidence. Step 4 Evidence notes `routePool` (:701-712) records params but has no `connect()`,
+    so extending `makeSpyPool` stays the choice.
+  - Step 5: `issueAuthCode` :439. No Postgres on `localhost:5432` here and this run may not start one, so the
+    BEFORE/AFTER repro goes to the operator (the spec's stop-and-ask path).
+  - Step 6: identity `CLAUDE.md` anchor is :37-38.
+- Not edited (outside step bodies): the Execution Summary at `implementation-spec.md:36` still describes the
+  pre-252 compiled-run guard; the Step 2/4 bodies supersede it.
+- Open Thread "Step 2: RED/GREEN depends on the scratch tsc compile until feature 252 lands" — addressed by this
+  re-spec (252 landed). Overlap thread with 252 — addressed (merged; guards gone).
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `sequential` (one commit per step on `feature/fix-identity-auth-code-race`, single integration PR at end).
+- Up-front confirmation: operator approved the up-front plan by standing authorization — operator chat
+  2026-10-28/29 (session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute;
+  unattended checkpoints, auto-confirm C-16 promotion, merge-train authorized, defer 255/275; operator-only
+  DB/prod steps: open PR, hold merge; blocker decisions 2026-10-29 recorded per feature; checkpoints "report",
+  C-16 promotion auto-confirmed unless it changes an existing @AC rule.
+- Lifecycle: `implementation-ready` → `in-progress`.
+- Known operator-only item: Step 5 (real-Postgres AC-1 repro) needs a local Postgres, which this run may not start;
+  it goes to the operator per the spec's stop-and-ask path.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 1 (sdd-batch-execute)
+
+- Step 1 done: `exchangeAuthCode` keeps Phase A as is, mints before the claim, then calls new private
+  `redeemAuthCode(codeHash, userId, clientId)` (after `rotateRefreshToken`), which runs the conditional claim
+  (`consumed_at IS NULL AND expires_at > NOW()`) and `issueRefreshToken(…, client)` in one transaction; 0 rows →
+  `16 invalid_grant`. Unconditional autocommit UPDATE removed. No deviations.
+- TDD (C-08 pair with Step 2): Step 2's tests were drafted per its Instructions and run uncommitted on the
+  pre-Step-1 tree (Node 24.20.0, `pnpm test`), then the draft was reverted; Step 2 owns committing them.
+  - RED: 86 tests, 82 pass, 4 fail — AC-1 20-way race (`20 !== 1` winners), AC-1 claim-time expiry (`undefined !== 16`),
+    AC-3 `failInsert` and AC-3 `JWT_SECRET` unset (`consumedAt` set, expected `null`). AC-2/AC-5/AC-6 guards green.
+  - GREEN: 86 tests, 86 pass, 0 fail, 0 skipped; tsc diagnostics: none.
+- Verification: `pnpm run lint` 0 errors (194 pre-existing `no-explicit-any` warnings, none in new code); predicate
+  grep 1 hit (`redeemAuthCode`); unconditional-UPDATE grep 0 hits; jscpd report: 1 clone, pre-existing
+  (`updateUserMetadata`/`adminUpdateUserMetadata`), none between `redeemAuthCode` and `rotateRefreshToken` — no
+  stop-and-ask triggered.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 2 (sdd-batch-execute)
+
+- Step 2 done: inline `makeAuthCodeDb` fake (after `makeTokenDb`; fidelity rules a–e of design.md §3) plus 7
+  `@AC-*`-named tests and a local `exchange()` helper inside `describe('exchangeAuthCode')`. Existing exchange tests
+  and `makeTokenDb` untouched; no `if (!impl) return;` guards. `JWT_SECRET`-unset test restores the prior value in
+  `finally`.
+- TDD (Node 24.20.0, `pnpm test`): RED on the pre-Step-1 `identityServiceImpl.ts` (temporarily restored from
+  `d6cd9f3c`, uncommitted) — 86 tests, 82 pass, 4 fail: AC-1 20-way race (`20 !== 1`), AC-1 claim-time expiry
+  (`undefined !== 16`), AC-3 `failInsert` and AC-3 `JWT_SECRET` unset (`consumedAt` set, expected `null`).
+  GREEN on the Step 1 tree — 86 tests, 86 pass, 0 fail, 0 skipped; tsc errors: none.
+- Verification: `pnpm run lint` 0 errors (194 warnings, unchanged from Step 1); `pnpm run test:coverage` 86/86,
+  All files 82.56% lines (≥40).
+- Deviations logged (F-09): `pnpm test` route + spec-reporter output (no TAP `# ` lines); RED via temporary
+  pre-Step-1 source swap because Step 1 was committed first.
+
+## Session 2026-10-29 — sdd-execute sequential, branch setup + re-spec (sdd-batch-execute)
+
+- Up-front plan approved by the operator's standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints
+  `report`; C-16 promotion auto-confirmed unless it changes an existing @AC rule; operator-only DB/prod steps:
+  open PR, hold merge). Status already `in-progress` (Steps 1-2 done), so no status flip.
+- §5.3 branch setup: merged `origin/main-dev` into the feature branch (normal merge, no conflicts, merge commit
+  `6b61bfbf`); ledger-guard `--own-slug fix-identity-auth-code-race --fix` reported clean, no repair needed.
+- Re-spec of Steps 3, 4, 5 (line-anchor drift only, no symbol drift):
+  - Step 3: `refreshOAuthToken`'s `mintOAuthAccessToken` call is now `identityServiceImpl.ts:560-562`
+    (`:533-535` is `exchangeAuthCode`'s Step 1 call); the 3 grep hits are `:295`, `:533`, `:560`.
+  - Step 4: `describe('refreshOAuthToken')` is `:593-619` (new describe goes after `:619`); `routePool` `:850-861`;
+    `pool.queries` example `:607`; `APPLICATION_ENV` precedent `:121-140`.
+  - Step 5: `issueAuthCode` starts at `identityServiceImpl.ts:468`; request fields unchanged. No Postgres on
+    `localhost:5432`, so the BEFORE/AFTER repro run stays with the operator, as the spec already says.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 3 (sdd-batch-execute)
+
+- Step 3 done: `mintOAuthAccessToken` renamed to `mintAccessToken(userId, email, roles, audience?)`, returning
+  `{ accessToken, expiresIn, issuedAt, expiresAt }`; `aud` written only when `audience !== undefined` (OAuth callers
+  still pass `audience` / `resource || ''`, so `aud: ''` is preserved, FR-8). `authenticateUser` and `refreshToken`
+  mint through it; `authenticateUser` issues its refresh token through `issueRefreshToken(user.user_id)`, so
+  first-party login rows now write `client_id = NULL` explicitly (accepted side effect, design.md §2). No import change.
+- TDD (Node 24.20.0, `pnpm test`), temporary uncommitted AC-4 login probe (deleted after GREEN):
+  RED — 87 tests, 86 pass, 1 fail: refresh INSERT `params[3]` `undefined !== null`. GREEN — 87 tests, 87 pass, 0 fail.
+- Verification: `pnpm run lint` 0 errors (192 warnings, down from 194 — two `jwt as any` sites removed);
+  `grep -c mintOAuthAccessToken` → 0. FR-6/FR-7 structural preview: one `(jwt as any).sign` (`:287`, in
+  `mintAccessToken`), one `INSERT INTO identity.refresh_tokens` (`:305`, in `issueRefreshToken`).
+  `pnpm run test:coverage` (probe removed) 86/86, All files 82.67% lines.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 4 (sdd-batch-execute)
+
+### Step 4 — test: claim-shape and client-tagging parity across login, refresh and OAuth exchange (AC-4) [done]
+- `makeSpyPool` now records `params` beside `queries` (additive). Three `@AC-4` cases were added. The login and
+  first-party refresh cases are in the new `describe('token claim-shape parity (AC-4)')`. The OAuth-exchange case is
+  nested in `describe('exchangeAuthCode')` so it can reuse `storedRow` and `exchangeCall`. Each case checks the
+  shared claims (`user_id`/`email`/`roles`/`issued_at`/`expires_at`, TTL 900), the `aud` rule, and the refresh
+  INSERT `client_id` (`null`, `null`, `'oauthc_1'`). `APPLICATION_ENV` is unset and restored in `finally`.
+- Tooling: Node 24.20.0 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile --filter "xstockstrat-identity..."` ⬇
+  (worktree, no lockfile change).
+- TDD (`pnpm test`):
+  - **RED** ran on the pre-Step-3 `identityServiceImpl.ts`, restored temporarily from `d98f682f~1` and not committed.
+    89 tests: 88 pass, 1 fail. The failure was "AC-4 login", with refresh INSERT `client_id` `undefined !== null`.
+  - **GREEN** ran on the Step 3 tree: 89 tests, 89 pass, 0 fail, 0 skipped. All three `@AC-4` cases executed.
+- FR-6/FR-7 structural check:
+  - `grep -n "(jwt as any).sign"` → 1 hit, `:287`, inside `mintAccessToken` (`:271`).
+  - `grep -n "INSERT INTO identity.refresh_tokens"` → 1 hit, `:305`, inside `issueRefreshToken` (`:297`).
+- Verification:
+  - `pnpm run lint`: 0 errors. Warnings went from 192 to 206. All 14 new ones are `any` warnings in the new
+    test code, which follows the file's existing untyped-mock style.
+  - `pnpm run test:coverage`: 89/89, All files 83.7% lines (threshold ≥40).
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.
+- Deviations: F-09 evidence route and RED-by-temporary-source-swap, the same as Steps 2 and 3. The OAuth case is
+  nested as the spec allows. See the Deviation Log.
+
+## Session 2026-10-29 — sdd-execute sequential, Step 5 (sdd-batch-execute)
+
+### Step 5 — test: real-Postgres 20-caller repro of AC-1 [pending — deferred to operator]
+- Blocked on an operator-only action: `pg_isready -h localhost -p 5432` → "no response", and the execute loop may not
+  start a database. Step **Status** stays `pending`; the integration PR merge is held (see the Deviation Log entry).
+- Code side done: `repro-265.cjs` written in the session scratchpad (not committed), `node --check` passes, and on
+  Node v24.20.0 against the Step 4 `dist/` it loads `pg` and `IdentityServiceImpl`, then fails at connect
+  (`repro-265 failed: connect ECONNREFUSED 127.0.0.1:5432`). Seeded rows are removed by deleting the client and user
+  (auth codes and refresh tokens cascade, migrations 001/003/004).
+- BEFORE base: `d6cd9f3c` (pre-Step-1 `identityServiceImpl.ts`). AFTER: this branch at or after `56daa169`.
+- Command (run from the repo root or the BEFORE worktree root, after `pnpm --filter xstockstrat-identity run build`):
+
+  ```bash
+  DB_POOL_MAX=20 JWT_SECRET=repro DATABASE_URL='postgres://xstockstrat:<pw>@localhost:5432/xstockstrat?sslmode=disable' timeout 60 node <scratchpad>/repro-265.cjs
+  ```
+
+- local only; never set DB_POOL_MAX for identity in .do/app*.yaml (direct :25060, budget 2)
+- F-06 check: `DB_POOL_MAX=20` over `.do/app.yaml` and `.do/app.dev.yaml` → 0 hits.
+- Operator to record here: `node --version`; BEFORE line (expect `successes` > 1, `refresh_rows` > 1); AFTER line
+  (expect `repro-265 successes=1/20 refresh_rows=1`); and confirmation that this repro counts as the AC-1
+  real-Postgres harness (design.md §3).
+- Script `repro-265.cjs`, verbatim:
+
+```js
+// repro-265: 20 concurrent exchangeAuthCode calls on one code against real Postgres (AC-1).
+// Run from the repo root after `pnpm test` (or `pnpm run build`) in services/xstockstrat-identity.
+const path = require('node:path');
+const crypto = require('node:crypto');
+const dir = path.resolve(process.env.IDENTITY_DIR || 'services/xstockstrat-identity');
+const { Pool } = require(require.resolve('pg', { paths: [dir] }));
+const { IdentityServiceImpl } = require(path.join(dir, 'dist/grpc/identityServiceImpl.js'));
+
+const call = (fn, request) => new Promise((resolve) => fn({ request }, (err, res) => resolve({ err, res })));
+
+(async () => {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.DB_POOL_MAX) });
+  const impl = new IdentityServiceImpl(pool, { getInt: (_k, d) => d });
+  const ts = Date.now();
+  const clientId = `repro265_${ts}`;
+  const redirectUri = 'https://agent.example/callback';
+  const verifier = 'repro-265-fixed-code-verifier-0123456789abcdefghijklmnop';
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  let userId;
+  try {
+    userId = (await pool.query(
+      'INSERT INTO identity.users (email, password_hash) VALUES ($1, $2) RETURNING user_id',
+      [`repro-265-${ts}@example.com`, 'repro-265-not-a-hash'],
+    )).rows[0].user_id;
+    await pool.query(
+      "INSERT INTO identity.oauth_clients (client_id, redirect_uris) VALUES ($1, '{https://agent.example/callback}')",
+      [clientId],
+    );
+    const issued = await call(impl.issueAuthCode.bind(impl), { userId, clientId, redirectUri, codeChallenge: challenge, resource: '' });
+    if (issued.err) throw new Error(`issueAuthCode failed: ${JSON.stringify(issued.err)}`);
+    const results = await Promise.all(Array.from({ length: 20 }, () => call(impl.exchangeAuthCode.bind(impl), {
+      code: issued.res.code, codeVerifier: verifier, redirectUri, clientId, resource: '',
+    })));
+    const ok = results.filter((r) => !r.err).length;
+    const errCodes = results.filter((r) => r.err).map((r) => r.err.code);
+    const rows = (await pool.query(
+      'SELECT count(*)::int AS n FROM identity.refresh_tokens WHERE user_id = $1 AND client_id = $2',
+      [userId, clientId],
+    )).rows[0].n;
+    console.log(`repro-265 successes=${ok}/20 refresh_rows=${rows} error_codes=${JSON.stringify(errCodes)}`);
+  } finally {
+    await pool.query('DELETE FROM identity.oauth_clients WHERE client_id = $1', [clientId]).catch(() => {});
+    if (userId) await pool.query('DELETE FROM identity.users WHERE user_id = $1', [userId]).catch(() => {});
+    await pool.end();
+  }
+})().catch((e) => { console.error('repro-265 failed:', e.message); process.exit(1); });
+```
+
+## Session 2026-10-29 — sdd-execute sequential, Step 6 (sdd-batch-execute)
+
+### Step 6 — docs: teardown context refresh for identity [done]
+- `/context-forge:context-constitution refresh` unavailable in this session, so the refresh was manual (root
+  `CLAUDE.md` § Teardown): both files re-read against `src/grpc/identityServiceImpl.ts` @ `0e4fc22d`.
+- `services/xstockstrat-identity/docs/context-constitution.md`:
+  - IDENTITY-1: `jwt.verify` ~L192 (`#validateToken`), single `jwt.sign` ~L287 (`#mintAccessToken`).
+  - IDENTITY-2: hex sites ~L213/303/460/484/529; PKCE base64url compare ~L504 in `#exchangeAuthCode`.
+  - IDENTITY-4: now names `#mintAccessToken` (~L271) and states `aud` is written only for OAuth callers (~L286);
+    first-party tokens carry none.
+  - Every other `~L` hint re-stamped; `last_used_at` gotcha re-anchored to `#rotateRefreshToken` `touchLastUsed`.
+  - No new IDENTITY-* rule (none proposed; IDENTITY-8 holds the atomic-guard family).
+- `services/xstockstrat-identity/CLAUDE.md:37-38` unchanged: "single-use" is now true under concurrency.
+- Verification: `grep -n mintOAuthAccessToken` over both files → 0 hits; `grep -c mintAccessToken`
+  context-constitution.md → 3 (header, IDENTITY-1, IDENTITY-4). TDD: N/A (docs).
+- Integration PR body owes: "context-forge refresh plugin unavailable; manual reconciliation of identity's
+  context-constitution.md + CLAUDE.md performed in Step 6" (Deviation Log, Step 6).
+
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-identity-auth-code-race (feature 265)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-identity/acceptance/fix-identity-auth-code-race.feature | CREATE | NEW | concurrent single-grant; subject is ExchangeAuthCode / identity.refresh_tokens |
+| AC-2 | same | CREATE | NEW | consumed code not redeemable |
+| AC-3 | same | CREATE | NEW | failed refresh insert leaves code unconsumed |
+| AC-4 | same | CREATE | NEW | claim shape and client tagging across login, refresh and OAuth exchange |
+| AC-5 | same | CREATE | NEW | Scenario Outline; failed validation does not consume code |
+| AC-6 | same | CREATE | NEW | expired code rejected |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-identity/acceptance/fix-identity-auth-code-race.feature (CREATE) ---
+# Promoted from feature 265 (fix-identity-auth-code-race) acceptance.feature at launch (C-16). Do not hand-edit; scenarios are verbatim.
+Feature: xstockstrat-identity - authorization code single-use and token issuance (fix-identity-auth-code-race)
+  Regression guard: ExchangeAuthCode must redeem an authorization code at most once (debt-radar D-23, D-21).
+
+  Background:
+    Given an OAuth client "mcp-client-1" registered with redirect_uri "https://agent.example/callback"
+    And user "u-1" was issued an authorization code for "mcp-client-1" with a PKCE S256 challenge for verifier "v-123"
+
+  @AC-1 @FR-1 @FR-3 @regression @feature-265
+  Scenario: Concurrent exchanges of one authorization code yield exactly one grant
+    When 20 ExchangeAuthCode calls for that code with code_verifier "v-123" run concurrently
+    Then exactly 1 call returns an access token and a refresh token
+    And the other 19 calls fail with UNAUTHENTICATED "invalid_grant"
+    And identity.refresh_tokens holds exactly 1 new row for user "u-1" and client "mcp-client-1"
+
+  @AC-2 @FR-1 @FR-4 @regression @feature-265
+  Scenario: A consumed authorization code cannot be redeemed again
+    Given the code was exchanged successfully once
+    When ExchangeAuthCode is called again with the same code and code_verifier "v-123"
+    Then the call fails with UNAUTHENTICATED "invalid_grant"
+
+  @AC-3 @FR-2 @regression @feature-265
+  Scenario: A failed refresh-token insert does not consume the authorization code
+    Given the refresh-token INSERT for the exchange fails with "connection terminated"
+    When ExchangeAuthCode is called with the code and code_verifier "v-123"
+    Then the call fails with gRPC status INTERNAL
+    And the response carries no access token or refresh token
+    And the code's consumed_at is still NULL
+    And identity.refresh_tokens holds no new row for user "u-1" and client "mcp-client-1"
+
+  @AC-4 @FR-6 @FR-7 @FR-8 @regression @feature-265
+  Scenario: First-party login, first-party refresh and OAuth exchange issue tokens with the same claim shape and client tagging
+    Given user "u-1" with email "u1@example.com" and roles ["trader"]
+    When "u-1" authenticates with a password, refreshes that session, and separately exchanges an authorization code with resource "https://agent.example/mcp"
+    Then every access token carries user_id "u-1", email "u1@example.com", roles ["trader"], issued_at and expires_at
+    And on every access token expires_at minus issued_at equals 900 seconds
+    And only the OAuth access token carries aud "https://agent.example/mcp"
+    And the login refresh token is stored with client_id NULL and the OAuth refresh token with client_id "mcp-client-1"
+
+  @AC-5 @FR-5 @regression @feature-265
+  Scenario Outline: A request that fails client, redirect or PKCE validation does not consume the code
+    When ExchangeAuthCode is called for that code with <field> set to <value>
+    Then the call fails with UNAUTHENTICATED "invalid_grant"
+    And the code's consumed_at is still NULL
+    And a following ExchangeAuthCode call with client "mcp-client-1", redirect_uri "https://agent.example/callback" and code_verifier "v-123" returns an access token and a refresh token
+
+    Examples:
+      | field         | value                          |
+      | code_verifier | "wrong-verifier"               |
+      | redirect_uri  | "https://evil.example/callback" |
+      | client_id     | "other-client"                 |
+
+  @AC-6 @FR-4 @regression @feature-265
+  Scenario: An expired authorization code cannot be redeemed
+    Given the code's expires_at is in the past
+    When ExchangeAuthCode is called with the code and code_verifier "v-123"
+    Then the call fails with UNAUTHENTICATED "invalid_grant"
+    And identity.refresh_tokens holds no new row for user "u-1" and client "mcp-client-1"
+
+### Notes / ambiguities / conflicts
+- All six scenarios are attributed to xstockstrat-identity (observable subject is ExchangeAuthCode and identity.refresh_tokens); none cross-service, so nothing goes to docs/sdd/business-rules/platform.feature.
+- Dedup: grepped services/xstockstrat-identity/acceptance/*.feature (mcp-user-profile-roles, user-management-ui, fix-identity-ledger-test-suites) and docs/sdd/business-rules for ExchangeAuthCode, invalid_grant, auth code, expires_at, client_id, 900. No matches, so no DUP, OVERLAP or CONFLICT. fix-identity-ledger-test-suites.feature:9 mentions refresh-token single-use revocation only as a mutation-test note, not an asserted outcome.
+- Background is kept verbatim in the file header, since scenarios depend on it.
+- The `Examples` table cell padding was slightly re-aligned (whitespace only; the values are unchanged).
+- The source acceptance.feature was read from the working tree path docs/roadmap/features/265-fix-identity-auth-code-race/acceptance.feature, not origin/feature/fix-identity-auth-code-race. Orchestrator should confirm the two match.
+
+### Coverage check
+- Source scenarios: 6 (AC-1 to AC-6). Planned (NEW+DUP+OVERLAP): 6 (6 NEW). None skipped.
+```
+
+## Session 2026-10-29 — operator decision: Step 5 runs post-deploy
+
+- Operator choice (own words, chat 2026-10-29): "Run it after deploy." The options offered were: operator runs the local
+  repro; waive Step 5; or run it on dev after deploy.
+- Feasibility checked on main-dev: DCR at `/agent/oauth/register` is open (agent-namespace `oauth.registration_enabled` unset)
+  and `oauth.allowed_redirect_uris` is unset, so any `https://` redirect registers. `issueAuthCode` sets
+  `expires_at = NOW() + 60 s`, and `/oauth/callback` needs a logged-in UI session cookie, so the browser leg is the
+  operator's. The 20 concurrent token POSTs run from a local operator script within the TTL; no code or token passes
+  through the session.
+- Step 5 → `done` (post-merge), status → `code-completed`, merge hold lifted; Deviation Log entry added.
+- Merged origin/main-dev (normal merge, clean); the PR diff is unchanged (8 files).
+
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30
