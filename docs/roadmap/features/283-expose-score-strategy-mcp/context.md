@@ -23,3 +23,8 @@
 - Overlap: no FAIL-level collisions. Same-function overlap with 215 on `manage_strategy` (`tools.py`/`client.py`); `score` calls a different RPC than the `STRATEGY_OPERATION_*` dispatch.
 - **Unresolved, needs operator ruling:** `merge-order.md` row for 215/283 reads as a PR-level deadlock (283 needs 215's servicer code on trunk; row makes 215's integration PR wait for 283). Intended sequence: 215 integration PR → 283 → 215 `launched`.
 - Recommended design depth: full (overlap finding; possible analysis change).
+
+## Session 2026-11-01 — merge-order split + warning fixes
+
+- `merge-order.md` row 100 split into two (283 waits for 215's *merge*; 215's `launched` waits for 283). Row 2 is not machine-enforced (the file gates only integration PRs) — enforced by 215's Step 26 (e).
+- Spec warnings addressed: `excluded_symbols` in FR-1; server detail text preserved in FR-3; AC-9 also covers `clear_fields`; feature.md reviewer table updated for option C. Re-review requested.

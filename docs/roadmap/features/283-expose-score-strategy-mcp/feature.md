@@ -32,9 +32,9 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync across all six inventory surfaces; no secret values in tool output or the unauthenticated `GET /api/tools` catalog |
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias (only if the open proto fork is taken) |
-| Proto Reviewer + `packages/proto` owner | Only if the additive-field option is chosen: field number uniqueness, `buf lint`/`buf breaking` |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements still agreeing at forty-five across the inventory surfaces (no bump); no secret values in tool output or the unauthenticated `GET /api/tools` catalog |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias (only if option C needs the `excluded` list exposed on a no-proto channel, e.g. trailing metadata) |
+| Proto Reviewer + `packages/proto` owner | Not required (option C adds no proto field); engaged only if design returns to the operator and an additive field is chosen |
 
 ## Next Action
 

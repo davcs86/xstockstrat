@@ -51,7 +51,7 @@ Feature: expose-score-strategy-mcp
 
   @AC-9 @FR-1
   Scenario: Strategy-definition arguments are rejected for score
-    When the caller invokes "manage_strategy" with operation "score", strategy_id "fundamentals_macd_blend" and cooldown_days 45
+    When the caller invokes "manage_strategy" with operation "score", strategy_id "fundamentals_macd_blend", cooldown_days 45 and clear_fields ["exit_rule"]
     Then the tool raises an error stating that "score" accepts only strategy_id, and no backend call is made
 
   @AC-10 @FR-4
