@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/enforce-config-key-wiring`
 **Created**: 2026-10-23
-**Last Updated**: 2026-10-23
+**Last Updated**: 2026-11-01
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-10-23 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 | 2026-10-23 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-23 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
+| 2026-11-01 | `implementation-ready` (unchanged) | /sdd-execute sequential (re-spec §5.3) | Steps 1,2,3,4,6,7,8,9,10,11,13,14,15,16,18 re-specced to the current tree (migration tip 034, int_positive forwarders, 277 owners → 278, Step 10 confirm-only) |
 
 ---
 
