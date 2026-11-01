@@ -676,7 +676,7 @@ grep -n "err.Error()\|\"error\", rErr\|\"error\", pErr" services/xstockstrat-mar
 
 ### Step 12 — test: FMP enrichment classification, flag and WARN (AC-5, AC-10, client half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
@@ -1180,4 +1180,17 @@ _Populated by /sdd-execute as implementation proceeds._
   compile before the change (`f.EnrichmentFailed undefined`, `undefined: statusError`) and passed after, then was
   deleted (Step 12 owns the committed tests). Full `go test ./... -race` passes. The operator-approved
   `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported `0 issues.` on the module.
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 12 — CI-equivalent fallback (golangci-lint), RED via mutation, un-wrapped transport site pinned at the classifier
+- **Spec said**: Instruction 4 says `transport` covers both return sites (`:250` url-error inner cause, `:252` un-wrapped)
+  through an enrichment test, with one test per class including `cap`.
+- **Actual**: `http.Client.Do` always returns a `*url.Error`, so the un-wrapped `:252` return cannot be reached through a
+  RoundTripper. Both transport forms (plus a wrapped deadline and an unstaged `other` error) are pinned instead in
+  `TestEnrichmentClassifier_StagesAndOther`, which calls `enrichmentClass`/`enrichmentExpires` directly. The `cap` class
+  is covered only by the AC-5 test (`fmp_gateway_test.go`), not repeated in the class table (DRY). RED came from an
+  uncommitted mutation of Step 11's loop that cleared `EnrichmentFailed` and suppressed the WARN, because Step 11 had
+  already landed. Five test functions failed (AC-5, AC-10, the 4xx table, the 8-class table and the key-leak test) and
+  passed again on the restored file. The coverage command ran with its `COVERPKGS` list expanded inline (same package
+  set); the total was 72.6%. The operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (CI pin) reported `0 issues.`
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.

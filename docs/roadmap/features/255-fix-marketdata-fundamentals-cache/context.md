@@ -1164,3 +1164,28 @@ the next `/sdd-batch` run can pick it up.
 - Files modified: `internal/source/source.go`, `internal/fmp/fmp_client.go`
 - Deviations: line anchors drifted (+3 to +4); vet scope widened to `./internal/...` (see Deviation Log)
 
+### Step 12 — test: FMP enrichment classification, flag and WARN (AC-5, AC-10, client half) [done]
+- `fmp_gateway_test.go`: `TestEnrichment_ProfileCapExceeded_FlagsAndWarns_AC5`. A cap of 2 is spent by quote and
+  ratios, so profile is refused: the row is flagged, `Beta` is nil, there are 0 profile HTTP calls, and one WARN carries
+  `AAPL:profile:cap`.
+- `fmp_client_test.go`:
+  - `TestEnrichment_Profile503_FlagsTransient_AC10`: flag set, `Beta` nil, ratios applied, `AAPL:profile:http_503`.
+  - `TestEnrichment_Deterministic4xxNotFlagged`: profile 404, ratios 402 and profile 403 (the 403 case is commented as
+    the operator-sanctioned Open Risk). No flag, the metric is nil, and the pair is in the WARN.
+  - `TestEnrichment_FailureClassesFlagRow`: `http_500/400/401/429`, `transport`, `read` (failing body), `decode`
+    (`[{`) and `ctx` (cancelled inside the profile RoundTrip). Each sets the flag and puts one class label in the WARN.
+  - `TestEnrichmentClassifier_StagesAndOther`: both transport forms, a deadline wrapped in transport → `ctx`, unstaged
+    → `other`, plus cap and 404.
+  - `TestEnrichment_WarnDoesNotLeakAPIKey`: the transport error text holds the full URL, and the WARN still has no
+    `SECRET-KEY`/`apikey`.
+  - `TestEnrichment_EmptyProfileIsNotAFailure` and `TestStatusError_TextIsPathAndCode`.
+  - The helpers `captureSlog`, `enrichBodies`, `profileRT` and `failingBody` are file-local, with inline bodies (C-13).
+- TDD: AC-5/AC-10 red came from an uncommitted mutation of Step 11's loop (flag cleared, WARN suppressed). AC-5, AC-10,
+  the 4xx table, all 8 class subtests and the key-leak test failed (e.g. "EnrichmentFailed = false, want true on a
+  profile 503"). Green: all of them pass on the restored committed Step 11 code.
+- Verification: full `go test ./... -race` passes, total coverage 72.6% (≥ 40%); golangci-lint 0 issues (CI-equivalent
+  fallback, in the Deviation Log).
+- Files modified: `internal/fmp/fmp_client_test.go`, `internal/fmp/fmp_gateway_test.go`
+- Deviations: the un-wrapped transport return is unreachable through `http.Client`, so it is pinned at the classifier;
+  `cap` is tested only in AC-5 (see Deviation Log)
+

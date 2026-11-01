@@ -1,9 +1,12 @@
 package fmp
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -266,5 +269,242 @@ func TestTransportError_PreservesDeadlineCause(t *testing.T) {
 	}
 	if errors.As(err, new(*url.Error)) {
 		t.Fatalf("error chain still holds a *url.Error: %v", err)
+	}
+}
+
+// captureSlog routes the default logger into a buffer for the test and restores it after.
+func captureSlog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func enrichmentWarns(log string) int {
+	return strings.Count(log, `level=WARN msg="fmp enrichment failed"`)
+}
+
+// enrichBodies serves 200 quote and ratios bodies and the given profile response.
+func enrichBodies(profileStatus int, profileBody string) func(string) (int, string) {
+	return func(path string) (int, string) {
+		switch path {
+		case "/stable/quote":
+			return 200, `[{"symbol":"AAPL","price":150}]`
+		case "/stable/ratios-ttm":
+			return 200, `[{"priceToBookRatioTTM":40.0}]`
+		}
+		return profileStatus, profileBody
+	}
+}
+
+// profileRT delegates quote/ratios to enrichBodies and hands the profile request to profile.
+type profileRT struct {
+	recordingRT
+	profile func(req *http.Request) (*http.Response, error)
+}
+
+func (rt *profileRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Path == "/stable/profile" {
+		return rt.profile(req)
+	}
+	return rt.recordingRT.RoundTrip(req)
+}
+
+func newProfileClient(profile func(*http.Request) (*http.Response, error)) *Client {
+	rt := &profileRT{recordingRT: recordingRT{respond: enrichBodies(200, `[]`)}, profile: profile}
+	return NewClient(ClientConfig{BaseURL: "https://fmp.test", APIKey: "SECRET-KEY",
+		Metrics: []string{"core", "extended"}, HTTPClient: &http.Client{Transport: rt}})
+}
+
+type failingBody struct{}
+
+func (failingBody) Read([]byte) (int, error) { return 0, errors.New("body read failed") }
+func (failingBody) Close() error             { return nil }
+
+// @AC-10 (client half): a transient profile 503 flags the row; the ratios metrics still apply.
+func TestEnrichment_Profile503_FlagsTransient_AC10(t *testing.T) {
+	logBuf := captureSlog(t)
+	rt := &recordingRT{respond: enrichBodies(503, ``)}
+	f, err := newTestClient([]string{"core", "extended"}, rt).GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !f.EnrichmentFailed {
+		t.Fatal("EnrichmentFailed = false, want true on a profile 503")
+	}
+	if f.Beta != nil {
+		t.Fatalf("Beta = %v, want nil", *f.Beta)
+	}
+	if got := derefF(t, "PBRatio", f.PBRatio); got != 40.0 {
+		t.Fatalf("PBRatio = %v, want 40 (ratios applied)", got)
+	}
+	log := logBuf.String()
+	if enrichmentWarns(log) != 1 || !strings.Contains(log, "AAPL:profile:http_503") {
+		t.Fatalf("want one WARN carrying AAPL:profile:http_503, got:\n%s", log)
+	}
+}
+
+// Deterministic 402/403/404 keep the row fresh but are still reported in the WARN.
+func TestEnrichment_Deterministic4xxNotFlagged(t *testing.T) {
+	for _, tc := range []struct {
+		name, failPath, pair string
+		code                 int
+	}{
+		{"profile 404", "/stable/profile", "AAPL:profile:http_404", 404},
+		{"ratios 402", "/stable/ratios-ttm", "AAPL:ratios:http_402", 402},
+		// The 403 exemption is the design's Open Risk, operator-sanctioned (r3 (2)).
+		{"profile 403", "/stable/profile", "AAPL:profile:http_403", 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logBuf := captureSlog(t)
+			rt := &recordingRT{respond: func(path string) (int, string) {
+				switch path {
+				case tc.failPath:
+					return tc.code, `{"error":"plan"}`
+				case "/stable/quote":
+					return 200, `[{"symbol":"AAPL","price":150}]`
+				case "/stable/ratios-ttm":
+					return 200, `[{"priceToBookRatioTTM":40.0}]`
+				}
+				return 200, `[{"beta":1.3}]`
+			}}
+			f, err := newTestClient([]string{"core", "extended"}, rt).GetFundamentals(context.Background(), "AAPL")
+			if err != nil {
+				t.Fatalf("GetFundamentals: %v", err)
+			}
+			if f.EnrichmentFailed {
+				t.Fatalf("EnrichmentFailed = true, want false on HTTP %d", tc.code)
+			}
+			if tc.failPath == "/stable/profile" && f.Beta != nil {
+				t.Fatalf("Beta = %v, want nil", *f.Beta)
+			}
+			if tc.failPath == "/stable/ratios-ttm" && f.PBRatio != nil {
+				t.Fatalf("PBRatio = %v, want nil", *f.PBRatio)
+			}
+			log := logBuf.String()
+			if enrichmentWarns(log) != 1 || !strings.Contains(log, tc.pair) {
+				t.Fatalf("want one WARN carrying %s, got:\n%s", tc.pair, log)
+			}
+		})
+	}
+}
+
+// Every non-exempt failure class flags the row and is labelled in the single WARN (cap: the AC-5 gateway test).
+func TestEnrichment_FailureClassesFlagRow(t *testing.T) {
+	status := func(code int, body string) func(*http.Request) (*http.Response, error) {
+		return func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+		}
+	}
+	for _, tc := range []struct {
+		class   string
+		profile func(*http.Request) (*http.Response, error)
+	}{
+		{"http_500", status(500, ``)},
+		// 400, 401 and 429 are unassigned codes, so they expire (Open Risk, acknowledged with r4).
+		{"http_400", status(400, ``)},
+		{"http_401", status(401, ``)},
+		{"http_429", status(429, ``)},
+		{"transport", func(*http.Request) (*http.Response, error) { return nil, errors.New("connection reset") }},
+		{"read", func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: 200, Body: failingBody{}, Header: make(http.Header)}, nil
+		}},
+		{"decode", status(200, `[{`)},
+		{"ctx", nil},
+	} {
+		t.Run(tc.class, func(t *testing.T) {
+			logBuf := captureSlog(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			profile := tc.profile
+			if profile == nil {
+				profile = func(*http.Request) (*http.Response, error) { cancel(); return nil, context.Canceled }
+			}
+			f, err := newProfileClient(profile).GetFundamentals(ctx, "AAPL")
+			if err != nil {
+				t.Fatalf("GetFundamentals: %v", err)
+			}
+			if !f.EnrichmentFailed {
+				t.Fatalf("EnrichmentFailed = false, want true for class %s", tc.class)
+			}
+			if f.Beta != nil {
+				t.Fatalf("Beta = %v, want nil", *f.Beta)
+			}
+			log := logBuf.String()
+			if want := "AAPL:profile:" + tc.class; enrichmentWarns(log) != 1 || !strings.Contains(log, want) {
+				t.Fatalf("want one WARN carrying %s, got:\n%s", want, log)
+			}
+		})
+	}
+}
+
+// Both transport return sites (url.Error inner cause and un-wrapped) and unstaged errors classify without string matching.
+func TestEnrichmentClassifier_StagesAndOther(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		err     error
+		class   string
+		expires bool
+	}{
+		{"transport cause", &stageError{"transport", fmt.Errorf("fmp: p request failed: %w", errors.New("reset"))}, "transport", true},
+		{"transport un-wrapped", &stageError{"transport", errors.New("fmp: p request failed")}, "transport", true},
+		{"transport deadline", &stageError{"transport", fmt.Errorf("fmp: p request failed: %w", context.DeadlineExceeded)}, "ctx", true},
+		{"build request", errors.New("fmp: p build request"), "other", true},
+		{"cap", ErrFMPDailyCapExceeded, "cap", true},
+		{"http 404", &statusError{"/stable/profile", 404}, "http_404", false},
+	} {
+		if got := enrichmentClass(tc.err); got != tc.class {
+			t.Errorf("%s: class = %q, want %q", tc.name, got, tc.class)
+		}
+		if got := enrichmentExpires(tc.err); got != tc.expires {
+			t.Errorf("%s: expires = %v, want %v", tc.name, got, tc.expires)
+		}
+	}
+	if enrichmentExpires(nil) {
+		t.Error("enrichmentExpires(nil) = true, want false")
+	}
+}
+
+// The enrichment WARN never carries the API key, even when the transport error text holds the URL.
+func TestEnrichment_WarnDoesNotLeakAPIKey(t *testing.T) {
+	logBuf := captureSlog(t)
+	c := newProfileClient(func(req *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("dial failed for %s", req.URL.String())
+	})
+	if _, err := c.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	log := logBuf.String()
+	if !strings.Contains(log, "AAPL:profile:transport") {
+		t.Fatalf("WARN missing AAPL:profile:transport:\n%s", log)
+	}
+	if strings.Contains(log, "SECRET-KEY") || strings.Contains(log, "apikey") {
+		t.Fatalf("WARN leaked the api key:\n%s", log)
+	}
+}
+
+// An empty profile array is vendor absence, not a failure: no flag and no WARN.
+func TestEnrichment_EmptyProfileIsNotAFailure(t *testing.T) {
+	logBuf := captureSlog(t)
+	rt := &recordingRT{respond: enrichBodies(200, `[]`)}
+	f, err := newTestClient([]string{"core", "extended"}, rt).GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.EnrichmentFailed {
+		t.Fatal("EnrichmentFailed = true, want false on an empty profile")
+	}
+	if n := enrichmentWarns(logBuf.String()); n != 0 {
+		t.Fatalf("enrichment WARNs = %d, want 0:\n%s", n, logBuf.String())
+	}
+}
+
+// statusError text stays URL-free so TestHTTPError_DoesNotLeakAPIKey keeps holding.
+func TestStatusError_TextIsPathAndCode(t *testing.T) {
+	got := (&statusError{path: "/stable/profile", code: 503}).Error()
+	if want := "fmp: /stable/profile returned HTTP 503"; got != want {
+		t.Fatalf("statusError text = %q, want %q", got, want)
 	}
 }
