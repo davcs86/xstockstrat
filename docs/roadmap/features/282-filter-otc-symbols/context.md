@@ -102,16 +102,23 @@
 
 - Result: 1 failure, 12 warnings, 0 Floor breaches (advisory — did not block). All AC-1..AC-26 covered; all required design elements present (post-filter cap, `markWarmIfServable` at exactly 3 sites, first-load-only prune, full-request flight key, masked rename, filtered `partialColdFetch`, enum NAME fixtures, teardown). Code anchors resolve.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 12: no `--cov-fail-under=N` on the agent pytest run (C-08, the only ✗) — [ ] unaddressed
-  - Step 7 (F-08 risk): `asset_servability.go` hosts the `servable` helper and a comment but is not in Step 7's **Files** — [ ] unaddressed (record a Deviation Log entry or pin the helper in Step 5 before executing; do not stage outside Files)
-  - Steps 5/6 (F-09 risk): backoff delay function and refresher test seam are "if needed" in Step 6 but undefined in Step 5 — [ ] unaddressed
-  - Steps 6, 8, 10: Go coverage threshold is prose only; assert `go tool cover` total >= 40% — [ ] unaddressed
-  - Step 14: no coverage threshold stated for vitest (low impact, scope `src/lib/**`) — [ ] unaddressed
-  - Step 8: AC-4/AC-9/AC-23 for `GetBars` proven by source-scan only, and the `partialColdFetch` WARN content is untested — [ ] unaddressed
-  - Step 9: `portfolio.watchlist.max_symbols_per_list` has no SetConfig bound; an operator raising it above 1000 makes the RPC reject and portfolio fail open, bypassing the filter on large adds (design decision b rests on the default 500) — [ ] unaddressed; needs operator confirmation (P-03)
-  - Step 9: no IBKR/broker symmetry note (asset set is Alpaca-only; design R1/R6) — [ ] unaddressed
-  - Step 2: tree is red between Steps 2 and 5 (F-05 tension); fold Step 2 into Step 5's commit or add an adapter stub — [ ] unaddressed
-  - Step 1: confirm the `buf breaking` input path/`subdir` (runs from `packages/proto`) — [ ] unaddressed
-  - Steps 7/9/13: name/anchor drift (`servableOf` vs `servable`; design `servabilityFor` vs spec `refuseUnservable`; `setDefaultStrategy` anchor `:139-146` is now ~`:146`) — [ ] unaddressed
-  - Step 15: touches 7 files (>5 guideline) and Verification does not evidence the teardown — [ ] unaddressed
+  - Step 12: no `--cov-fail-under=N` on the agent pytest run (C-08, the only ✗) — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Step 7 (F-08 risk): `asset_servability.go` hosts the `servable` helper and a comment but is not in Step 7's **Files** — [x] resolved 2026-11-01 (spec edited, see Session below) (record a Deviation Log entry or pin the helper in Step 5 before executing; do not stage outside Files)
+  - Steps 5/6 (F-09 risk): backoff delay function and refresher test seam are "if needed" in Step 6 but undefined in Step 5 — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Steps 6, 8, 10: Go coverage threshold is prose only; assert `go tool cover` total >= 40% — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Step 14: no coverage threshold stated for vitest (low impact, scope `src/lib/**`) — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Step 8: AC-4/AC-9/AC-23 for `GetBars` proven by source-scan only, and the `partialColdFetch` WARN content is untested — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Step 9: `portfolio.watchlist.max_symbols_per_list` has no SetConfig bound; an operator raising it above 1000 makes the RPC reject and portfolio fail open, bypassing the filter on large adds (design decision b rests on the default 500) — [x] resolved 2026-11-01 (spec edited, see Session below); needs operator confirmation (P-03)
+  - Step 9: no IBKR/broker symmetry note (asset set is Alpaca-only; design R1/R6) — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Step 2: tree is red between Steps 2 and 5 (F-05 tension); fold Step 2 into Step 5's commit or add an adapter stub — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Step 1: confirm the `buf breaking` input path/`subdir` (runs from `packages/proto`) — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Steps 7/9/13: name/anchor drift (`servableOf` vs `servable`; design `servabilityFor` vs spec `refuseUnservable`; `setDefaultStrategy` anchor `:139-146` is now ~`:146`) — [x] resolved 2026-11-01 (spec edited, see Session below)
+  - Step 15: touches 7 files (>5 guideline) and Verification does not evidence the teardown — [x] resolved 2026-11-01 (spec edited, see Session below)
 - Overlap findings (WARN only, no migration/proto-field/config-key collision): same-file overlap with 215 and 255 on `marketdata.proto` (end-of-file append), `marketdata_service.go`, `cmd/server/main.go`; with 215 and 275 on agent `tools.py` (docstring regions); 240 vs 282 on `portfolio_service.go` not checked. merge-order row for 282 (after 215) exists but wrongly calls 275 "analysis-only" — 275's spec edits agent `tools.py`; proposed amendment (needs operator OK as merge-order.md is shared): name 275 as a soft `tools.py` rebase.
+
+## Session 2026-11-01 — impl-spec review fixes applied (operator: address all warnings, bound max_symbols_per_list, amend merge-order)
+
+- Resolved all 13 review items by editing `implementation-spec.md` before execution (F-09 not yet in force): Step 12 coverage gate (`--cov-fail-under=40` on the full suite); Step 7 F-08 (the `servable` helper, `liveFetchAllowed` and the gate comment moved into Step 5 `asset_servability.go`; Step 7 only calls them); Steps 5/6 F-09 (defined `nextAssetRetryDelay` and `noteAssetRefreshFailure` seams in Step 5); Go coverage thresholds asserted with `awk` in Steps 6/8/10; Step 14 uses `test:coverage` (vitest thresholds lines 40); Step 8 gains a behavioural `liveFetchAllowed` test (Step 6), a `partialColdFetch` WARN assertion; Step 9 IBKR/broker scope note and `refuseUnservable` naming; Step 2 verification corrected (the marketdata tree stays green: adapter embeds `UnimplementedMarketDataServiceServer`); Step 1 `buf breaking` uses the CI invocation; Step 13 anchor `:146`; old Step 15 split into Step 15 (agent runbook, agent CLAUDE.md, config-governance) and Step 16 (marketdata/portfolio CLAUDE.md + constitutions + teardown with evidence in Verification).
+- `max_symbols_per_list` (operator yes): SetConfig bound `[1,1000]` added in Step 3 (+ test rows in Step 4); staging value verified 500. product-spec gains `xstockstrat-config` as an affected service; design.md Portfolio paragraph updated.
+- merge-order.md row for 282 amended (operator yes): 275 also edits agent `tools.py` (soft docstring-region rebase); 240/231 are launched so no overlap risk. Coverage table now maps AC-4 -> 6,8; AC-7 -> 6,8,10; AC-22 -> 4,6,10. Total Steps: 16.
+- Unchanged dissent/risks carried: design R1-R11; teardown owed in Step 16.

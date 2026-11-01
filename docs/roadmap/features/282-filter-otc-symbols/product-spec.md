@@ -34,6 +34,7 @@ FR-5. When classification is unavailable, nothing is blocked: portfolio lets a w
 - `xstockstrat-portfolio` — filters `AddWatchlistSymbols`, `CreateWatchlist` and replace-all `UpdateWatchlist` by asking marketdata; returns `refused_symbols`.
 - `xstockstrat-agent` — `manage_watchlist_symbols`, `manage_watchlist` and `ingest_signal` surface the refusals.
 - `xstockstrat-ui` — watchlist add forms and the screener save-as / Add-top-N show the refusals; rename uses the masked update.
+- `xstockstrat-config` — write-edge bounds for the two new keys and a `[1,1000]` ceiling on the existing `portfolio.watchlist.max_symbols_per_list` (registry only; no migration, no new seed).
 
 ## Consumer Surface(s)
 
@@ -54,6 +55,7 @@ FR-5. When classification is unavailable, nothing is blocked: portfolio lets a w
 - [x] New config keys (unseeded under the feature-227 waiver; SetConfig-bounded; clamped on read):
   - `marketdata.assets.refresh_interval_hours` — int, default 6, bounds [1,24]; `<= 0` pauses refreshes and keeps the current set.
   - `portfolio.marketdata.servability_timeout_ms` — int, default 2000, bounds [500,4000].
+- Existing key `portfolio.watchlist.max_symbols_per_list` gains a SetConfig bound `[1,1000]` (default 500 unchanged; staging holds 500) so a within-cap watchlist request can never exceed marketdata's 1000-symbol `GetSymbolServability` bound and silently fail open.
 - No kill-switch key: the filter always applies (decided 2026-11-01).
 - Operator-approved fixed invariants (F-07 precedent, recorded in `design.md`): shrink guard (reject a refresh under 50% of the last good set); backoff 1m initial, 30m cap; RPC size bound 1000; immediate first load; `us_equity` class only; exchange literal `OTC`; interval ceiling 24h stays below the 48h `minIngestLookback`.
 
@@ -70,7 +72,7 @@ Read-only use of Alpaca asset metadata; no order routing, account, credential or
 Branch to create: `feature/filter-otc-symbols` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval per service (marketdata, portfolio, agent, ui) — non-breaking proto change
-- [x] Owner + config team approval for the two new config keys
+- [x] Owner + config team approval for the two new config keys and the `max_symbols_per_list` bound
 - [ ] 2 service owners + platform lead (breaking proto change) — not needed, all proto changes are additive
 - [ ] DBA review + service owner (schema migration) — not needed, no table
 

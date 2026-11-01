@@ -3,14 +3,14 @@
 **Status**: `pending`
 **Created**: 2026-11-01
 **Feature**: `docs/roadmap/features/282-filter-otc-symbols/feature.md`
-**Total Steps**: 15
+**Total Steps**: 16
 **Feature Branch**: `feature/filter-otc-symbols`
 
 ---
 
 ## Execution Summary
 
-Proto first (Steps 1-2: `common.v1.UnservableReason`, `marketdata.v1.GetSymbolServability`, `portfolio.v1.RefusedSymbol` + `refused_symbols`), then the two new config keys at the config write edge (Steps 3-4). Marketdata is built next in two slices: the asset-set predicate, refresher and RPC (Steps 5-6), then the warm-add gate at `GetBars`/`BatchGetBars`/`BatchGetLatestPrice` (Steps 7-8). Portfolio consumes the RPC and refuses per symbol on the three insert paths (Steps 9-10), then the consumer surfaces land separately per C-14: Agent (Steps 11-12) and UI (Steps 13-14). Step 15 is docs, constitution invariants and the registered-keys log.
+Proto first (Steps 1-2: `common.v1.UnservableReason`, `marketdata.v1.GetSymbolServability`, `portfolio.v1.RefusedSymbol` + `refused_symbols`), then the two new config keys and the `portfolio.watchlist.max_symbols_per_list` ceiling at the config write edge (Steps 3-4). Marketdata is built next in two slices: the asset-set predicate, refresher and RPC (Steps 5-6), then the warm-add gate at `GetBars`/`BatchGetBars`/`BatchGetLatestPrice` (Steps 7-8). Portfolio consumes the RPC and refuses per symbol on the three insert paths (Steps 9-10), then the consumer surfaces land separately per C-14: Agent (Steps 11-12) and UI (Steps 13-14). Steps 15-16 are docs (runbook, agent and config-governance first; then the marketdata and portfolio `CLAUDE.md` files and constitutions with the teardown).
 
 Consumer surfaces (C-14): UI `/insights` (Step 13: `WatchlistDetail`, screener save-as and Add top N, rename via masked update) and Agent (Step 11: `manage_watchlist_symbols`, `manage_watchlist`, `ingest_signal`). No new page or route, so C-10(a) nav registration is not triggered. No new env var or port: the two keys are config keys, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are untouched. No migration (in-memory asset set).
 
@@ -23,10 +23,10 @@ C-16 business-rule changes (signed off in `context.md`, rounds 1 and 3) are prom
 | AC-1 | 6 |
 | AC-2 | 10 |
 | AC-3 | 10 |
-| AC-4 | 8 |
+| AC-4 | 6, 8 |
 | AC-5 | 12 |
 | AC-6 | 10 |
-| AC-7 | 8, 10 |
+| AC-7 | 6, 8, 10 |
 | AC-8 | 10 |
 | AC-9 | 6 |
 | AC-10 | 6 |
@@ -41,7 +41,7 @@ C-16 business-rule changes (signed off in `context.md`, rounds 1 and 3) are prom
 | AC-19 | 10, 12 |
 | AC-20 | 14 |
 | AC-21 | 14 |
-| AC-22 | 6, 10 |
+| AC-22 | 4, 6, 10 |
 | AC-23 | 6, 8 |
 | AC-24 | 4, 6 |
 | AC-25 | 10 |
@@ -52,12 +52,12 @@ C-16 business-rule changes (signed off in `context.md`, rounds 1 and 3) are prom
 - Step 2 requires Step 1: regenerated stubs come from the edited `.proto` files.
 - Steps 5, 9, 11 and 13 require Step 2: they compile against `UnservableReason`, `GetSymbolServability`, `RefusedSymbol`.
 - Step 4 [test] covers Step 3 [service]; Step 6 [test] covers Step 5; Step 8 [test] covers Step 7; Step 10 [test] covers Step 9; Step 12 [test] covers Step 11; Step 14 [test] covers Step 13. Each test step is authored to fail against the pre-implementation tree (P-06).
-- Step 7 requires Step 5: `markWarmIfServable` and the snapshot live in `asset_servability.go`.
+- Step 7 requires Step 5: `markWarmIfServable`, the snapshot, `(*assetSet).servable` and `liveFetchAllowed` all live in `asset_servability.go` (Step 5's Files); Step 7 only calls them from `marketdata_service.go`.
 - Step 9 requires Step 5 only at runtime (portfolio calls the RPC); at compile time it needs Step 2.
 - Step 8 and Step 6 both consume the marketdata asset fixtures: the fixture home `internal/testdata/assets.go` is created in Step 6 (C-13: Step 8 is the known second consumer, so the literal is centralized up front rather than copied).
-- Step 15 requires Steps 3, 5, 9, 11, 13 (documents their final behavior); run the CLAUDE.md teardown (`/context-forge:context-constitution refresh`, scoped to the touched context files) as the last step before pushing.
+- Step 15 requires Steps 3 and 11 (documents the registered keys and the agent surface); Step 16 requires Steps 3, 5, 9 and 15 (documents the marketdata and portfolio behavior) and ends with the CLAUDE.md teardown (`/context-forge:context-constitution refresh`, scoped to every touched context file) as the last step before pushing.
 - Merge order: soft row after `block-fundamentals-strategy-on-etf` (215) in `docs/roadmap/features/merge-order.md:91`. 282 re-anchors its `marketdata.proto` and `marketdata_service.go` line references after 215 lands (design R10).
-- Open decisions carried to `/sdd-review impl-spec` (P-03, not guessed silently): (a) agent `refused` key is always present on create/add/replace-update responses, but `watchlist_refused` on `ingest_signal` is present only when non-empty (keeps the documented `{signal_id, deduplicated}` shape stable); (b) design.md says "a size check before the RPC" and also rejects chunking because it would duplicate marketdata's 1000 constant, so Step 9 adds no client-side constant and relies on the RPC `InvalidArgument` failing open with a WARN; (c) the config registry bound `[1,24]` for `marketdata.assets.refresh_interval_hours` rejects `0` at `SetConfig`, so "`<= 0` pauses" is a reader-only defence (AC-24 is tested at the reader).
+- Decisions resolved by the impl-spec review (operator, 2026-11-01): (a) agent `refused` key is always present on create/add/replace-update responses and `watchlist_refused` on `ingest_signal` only when non-empty (stable `{signal_id, deduplicated}` shape); (b) `portfolio.watchlist.max_symbols_per_list` gets a write-edge bound `[1,1000]` (Step 3) so a within-cap request can never exceed the RPC's 1000-symbol bound; portfolio adds no client-side constant, and an oversized `AddWatchlistSymbols` that reaches the RPC fails open but is then rejected by the cap anyway (union > cap); (c) the registry bound `[1,24]` for `marketdata.assets.refresh_interval_hours` rejects `0` at `SetConfig`, so "`<= 0` pauses" is a reader-only defence (AC-24 is tested at the reader). The design's helper name `servabilityFor` is implemented as `refuseUnservable` (Step 9).
 
 ---
 
@@ -94,9 +94,9 @@ C-16 business-rule changes (signed off in `context.md`, rounds 1 and 3) are prom
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/filter-otc-symbols"
+cd packages/proto && buf lint && buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto"
 ```
-(`buf breaking` must report no findings; if the feature branch does not exist yet, compare against `.git#branch=main-dev`.)
+(Same invocation shape as CI `buf breaking`: run from `packages/proto`, compare against the target branch with `subdir`. It must report no findings; run `git fetch origin main-dev` first.)
 
 ---
 
@@ -116,6 +116,7 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/fil
 **Codebase Evidence**:
 - Confirmed via: `ls packages/proto/gen/go/marketdata/v1 packages/proto/gen/python/marketdata/v1 packages/proto/gen/ts/marketdata/v1` → the three language trees exist and are checked in (root `CLAUDE.md` § Generating Proto Stubs; CI `proto-freshness` enforces a clean diff).
 - Generated stubs are never hand-edited (root `CLAUDE.md` § Key File Paths Reference).
+- The marketdata tree stays green after regeneration: `grpcMarketDataAdapter` embeds `marketdatav1.UnimplementedMarketDataServiceServer` (`internal/handler/marketdata_handler.go:299-302`) and the Connect handler embeds `marketdatav1connect.UnimplementedMarketDataServiceHandler`, so the new method is satisfied until Step 5 implements it. No F-05 gap between Steps 2 and 5.
 
 **TDD**: `N/A (generated code)`
 
@@ -129,14 +130,14 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/fil
 **Verification**:
 ```bash
 ./scripts/buf-gen.sh && git status --short packages/proto/gen | head -20
-cd services/xstockstrat-marketdata && GOWORK=off go build ./... 2>&1 | head   # expect only the missing-method error until Step 5 (handler adapter)
+cd services/xstockstrat-marketdata && GOWORK=off go build ./...   # must succeed: the adapter/handler embed the Unimplemented* types
 grep -n "UNSERVABLE_REASON_OTC" packages/proto/gen/go/common/v1/common.pb.go packages/proto/gen/python/common/v1/common_pb2.py packages/proto/gen/ts/common/v1/common_pb.ts
 ```
 A second `./scripts/buf-gen.sh` run must produce an empty `git diff` (freshness).
 
 ---
 
-### Step 3 — service: config write-edge bounds for the two new keys
+### Step 3 — service: config write-edge bounds for the two new keys and the symbols-per-list ceiling
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
@@ -148,7 +149,8 @@ A second `./scripts/buf-gen.sh` run must produce an empty `git diff` (freshness)
 **Codebase Evidence**:
 - Confirmed via: `grep -n "SCALAR_BOUNDS_REGISTRY" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → registry at `:103`; sibling entry `'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 }` at `:139`; `lookupScalarBounds` `:154-155` probes the bare `key` then `${namespace}.${key}`; enforced in `SetConfig` at `:557-563`.
 - Neither new key exists: `grep -rn "marketdata.assets.refresh_interval_hours\|portfolio.marketdata.servability_timeout_ms" services docs --include=*.ts --include=*.go --include=*.md` → only this feature's own docs.
-- Both keys are **unseeded** (feature-227 waiver, `docs/patterns/config-governance.md:144,155,169`): consumed-with-default, no migration row.
+- Both new keys are **unseeded** (feature-227 waiver, `docs/patterns/config-governance.md:144,155,169`): consumed-with-default, no migration row.
+- Existing key `portfolio.watchlist.max_symbols_per_list` (seeded by `services/xstockstrat-config/migrations/006_watchlist_config.up.sql`, default `500`; read live by `maxSymbolsPerList()` at `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1872`) has **no** registry entry today (`grep -n "max_symbols_per_list" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → none). Staging holds `500` (`get_config portfolio watchlist.max_symbols_per_list`, 2026-11-01), within the new bound. The registry lookup probes `${namespace}.${key}` = `portfolio.watchlist.max_symbols_per_list` for the stored `(portfolio, watchlist.max_symbols_per_list)` row (`:154-155`).
 
 **TDD**: `red-green required`
 
@@ -158,6 +160,7 @@ A second `./scripts/buf-gen.sh` run must produce an empty `git diff` (freshness)
 1. In `SCALAR_BOUNDS_REGISTRY` add, with a one-line comment citing feature 282 (24h ceiling stays below the 48h `minIngestLookback`; the portfolio timeout floor/ceiling keeps the check cheap relative to the 4000ms quote deadline):
    - `'marketdata.assets.refresh_interval_hours': { minValue: 1, maxValue: 24 },`
    - `'portfolio.marketdata.servability_timeout_ms': { minValue: 500, maxValue: 4000 },`
+   - `'portfolio.watchlist.max_symbols_per_list': { minValue: 1, maxValue: 1000 },` (comment: ceiling equals marketdata's `GetSymbolServability` request bound of 1000, so a within-cap watchlist request can never exceed it and silently fail open).
 2. No other change in this file. The registry is write-edge only; readers clamp on read in Steps 5 and 9.
 
 **Verification**:
@@ -181,14 +184,16 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 **TDD**: `red-green required` (run against the tree before Step 3: the out-of-range cases are accepted because the keys are unbounded, so the reject tests fail)
 
-**Covers**: `AC-24`
+**Covers**: `AC-22, AC-24`
 
 **Instructions**:
-1. Append four rows to `TIMEOUT_KEY_FORMS`, mirroring the existing two-forms-per-key convention:
+1. Append six rows to `TIMEOUT_KEY_FORMS`, mirroring the existing two-forms-per-key convention:
    - `{ ns: 'marketdata', key: 'assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 }`
    - `{ ns: 'marketdata', key: 'marketdata.assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 }`
    - `{ ns: 'portfolio', key: 'marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 }`
    - `{ ns: 'portfolio', key: 'portfolio.marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 }`
+   - `{ ns: 'portfolio', key: 'watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 }`
+   - `{ ns: 'portfolio', key: 'portfolio.watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 }`
 2. Update the comment above the table to name feature 282.
 3. C-13 (Node): no new domain literal; rows extend the existing table (single consumer), so no fixture is created.
 
@@ -227,12 +232,12 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 **Instructions**:
 1. `asset_servability.go` (new, package `service`). Fixed operator-approved invariants as unexported consts (F-07 precedent, recorded in `design.md`): `assetClassUSEquity = "us_equity"`, `assetExchangeOTC = "OTC"`, `assetShrinkKeepPercent = 50`, `assetRetryInitial = time.Minute`, `assetRetryMax = 30 * time.Minute`, `servabilityMaxSymbols = 1000`, `defaultAssetRefreshHours = 6`, `maxAssetRefreshHours = 24`, and the config key const `assetRefreshHoursKey = "marketdata.assets.refresh_interval_hours"`.
-2. `type assetSet struct { otc map[string]bool }` (immutable after construction; normalized symbol → exchange is OTC). Constructor `newAssetSet(assets []*commonv1.Asset) *assetSet` (uppercase/trim symbol; `otc = strings.EqualFold(exchange, assetExchangeOTC)`). Method `(a *assetSet) classify(sym string) (servable bool, reason commonv1.UnservableReason)`: normalize (uppercase+trim); absent → `(false, UNSERVABLE_REASON_NOT_TRADABLE)`; present and OTC → `(false, UNSERVABLE_REASON_OTC)`; else `(true, UNSERVABLE_REASON_UNSPECIFIED)`. A nil `*assetSet` receiver returns servable (fail open).
+2. `type assetSet struct { otc map[string]bool }` (immutable after construction; normalized symbol → exchange is OTC). Constructor `newAssetSet(assets []*commonv1.Asset) *assetSet` (uppercase/trim symbol; `otc = strings.EqualFold(exchange, assetExchangeOTC)`). Method `(a *assetSet) classify(sym string) (servable bool, reason commonv1.UnservableReason)`: normalize (uppercase+trim); absent → `(false, UNSERVABLE_REASON_NOT_TRADABLE)`; present and OTC → `(false, UNSERVABLE_REASON_OTC)`; else `(true, UNSERVABLE_REASON_UNSPECIFIED)`. A nil `*assetSet` receiver returns servable (fail open). Add `(a *assetSet) servable(sym string) bool` (nil-safe, over `classify`) and the package function `liveFetchAllowed(snap *assetSet, sym string) bool` (`snap == nil` → true, else `snap.servable(sym)`): the single place Step 7 and its tests ask "may this symbol be live-fetched?" (AC-4/AC-7/AC-23 behavioural seam).
 3. `type assetServabilityState struct { snap atomic.Pointer[assetSet]; unloadedWarned bool }` (`unloadedWarned` is touched only by the refresher goroutine). Add field `assets assetServabilityState` to `MarketDataService` (`marketdata_service.go`, next to `etf etfFlagState` at `:~96`) so existing struct literals in tests keep a usable zero value (nil snapshot = servable).
-4. `(s *MarketDataService) markWarmIfServable(symbols ...string) *assetSet`: take `warmMu`, **load the snapshot while holding the lock**, add each non-empty symbol to `warmSymbols` unless the snapshot is non-nil and marks it unservable, release, return the snapshot (the caller's live-fetch decision reuses it — one snapshot, one predicate per request). Do not change `markWarm` (the quote and price paths keep using it).
+4. `(s *MarketDataService) markWarmIfServable(symbols ...string) *assetSet`: take `warmMu`, **load the snapshot while holding the lock**, add each non-empty symbol to `warmSymbols` unless the snapshot is non-nil and marks it unservable, release, return the snapshot (the caller's live-fetch decision reuses it — one snapshot, one predicate per request). Do not change `markWarm` (the quote and price paths keep using it). Put this comment at the definition and nowhere else: "gate applies at warm-add sites only; warm-set readers are never filtered".
 5. `(s *MarketDataService) GetSymbolServability(ctx, req *marketdatav1.GetSymbolServabilityRequest) (*marketdatav1.GetSymbolServabilityResponse, error)`: `len(req.GetSymbols()) > servabilityMaxSymbols` → `connect.NewError(connect.CodeInvalidArgument, …)`; normalize via `normalizeSymbols`; one snapshot load; for a nil snapshot return `AssetSetLoaded=false` with every symbol `Servable=true`; otherwise per-symbol `{Symbol, Servable, Reason}` via `classify`, `AssetSetLoaded=true`. In-memory only (no DB, no Alpaca call — feature 153 `@AC-1`).
 6. `(s *MarketDataService) refreshAssets(ctx) error`: `src, err := s.registry.Get("")`; `assets, err := src.ListAssets(ctx, assetClassUSEquity)`; build `next := newAssetSet(assets)`; **reject** (return error, keep the last good set, log WARN with old/new counts) when `len(next.otc) == 0`, or when a prior snapshot exists and `len(next.otc)*100 < len(prev.otc)*assetShrinkKeepPercent`; the very first load has no prior set so the shrink guard does not protect it (design R3). On accept: `s.assets.snap.Store(next)`; on the **first** successful load only, take `warmMu` and delete every `warmSymbols` entry for which `next.classify(sym)` is unservable (path-agnostic), release, and log one INFO `asset set loaded` (count, pruned). No later refresh prunes (design R2).
-7. `(s *MarketDataService) StartAssetSetRefresher(ctx)`: run `refreshAssets` immediately at boot (do not wait a tick); on the first failure while still unloaded log exactly one WARN (`asset set unavailable; treating every symbol as servable`) via `unloadedWarned`, then rely on backoff. Then loop on a 1-minute `time.Ticker` (MARKETDATA-5, mirrors `StartClassificationRefreshPoller`): each tick re-read `resolveAssetRefreshInterval(s.budgetCfg)`; interval `0` (paused) → `continue`; run `refreshAssets` when `time.Since(lastSuccess) >= interval` (or the retry deadline has passed); on failure double the retry delay from `assetRetryInitial` to `assetRetryMax`, on success reset it. Runs on the long-lived `main` ctx (background work carries no propagation headers by design).
+7. `(s *MarketDataService) StartAssetSetRefresher(ctx)`: run `refreshAssets` immediately at boot (do not wait a tick); on the first failure while still unloaded log exactly one WARN (`asset set unavailable; treating every symbol as servable`) via `(s *MarketDataService) noteAssetRefreshFailure(ctx, err)` (owns `unloadedWarned`; called by the loop on every failed attempt, so Step 6 can call it directly), then rely on backoff. Then loop on a 1-minute `time.Ticker` (MARKETDATA-5, mirrors `StartClassificationRefreshPoller`): each tick re-read `resolveAssetRefreshInterval(s.budgetCfg)`; interval `0` (paused) → `continue`; run `refreshAssets` when `time.Since(lastSuccess) >= interval` (or the retry deadline has passed); on failure advance the delay with the pure function `nextAssetRetryDelay(cur time.Duration) time.Duration` (`0` → `assetRetryInitial`; else `min(cur*2, assetRetryMax)`), on success reset it to `0`. `refreshAssets`, `noteAssetRefreshFailure` and `nextAssetRetryDelay` are the test seams: the ticker loop itself needs no tests that sleep. Runs on the long-lived `main` ctx (background work carries no propagation headers by design).
 8. `resolveAssetRefreshInterval(cfg intGetter) time.Duration`: nil cfg → 6h; `v := cfg.GetInt(assetRefreshHoursKey, 6)`; `v <= 0` → `0` (paused, keep the set); `v > 24` → 24h; else `v` hours.
 9. `marketdata_handler.go`: add `(h *MarketDataHandler) GetSymbolServability` (copy the `GetEtfFlags` shape: return the service error unwrapped) after `GetEtfFlags` (`:159-167`) and `(a *grpcMarketDataAdapter) GetSymbolServability` after `:360-366`.
 10. `cmd/server/main.go`: add `go svc.StartAssetSetRefresher(ctx)` after `go svc.StartEtfFlagFiller(ctx)` (`:170`).
@@ -263,16 +268,17 @@ grep -n "StartAssetSetRefresher" cmd/server/main.go
 
 **TDD**: `red-green required` (fails to compile / assert against the tree before Step 5)
 
-**Covers**: `AC-1, AC-9, AC-10, AC-11, AC-15, AC-22, AC-23, AC-24`
+**Covers**: `AC-1, AC-4, AC-7, AC-9, AC-10, AC-11, AC-15, AC-22, AC-23, AC-24`
 
 **Instructions**:
 1. `internal/testdata/assets.go`: exported constants for the symbols (`Bossy`, `Crtd`, `Forl`, `Dnb`, `Zzzz`, reuse `Msft` from `marks.go`, add `Aapl` only if absent) and a builder `ServableAssets() []*commonv1.Asset` returning AAPL (`NASDAQ`), MSFT (`NASDAQ`), ZZZZ (`NASDAQ`), BOSSY and CRTD (`OTC`), and `FORL` (`OTC`); DNB deliberately absent. No domain data is declared inline in the test files.
 2. `asset_servability_test.go`, one test per scenario, each naming its `@AC-N`:
    - AC-1: `GetSymbolServability` on a loaded set → AAPL servable; BOSSY `UNSERVABLE_REASON_OTC`; DNB `UNSERVABLE_REASON_NOT_TRADABLE`; `AssetSetLoaded == true`.
-   - AC-23: `" bossy "` classifies as BOSSY in `GetSymbolServability` and in `classify`.
+   - AC-23: `" bossy "` classifies as BOSSY in `GetSymbolServability`, in `classify` and in `servable`.
+   - AC-4 / AC-7 (decision half, behavioural): `liveFetchAllowed(snap, "BOSSY")` and `liveFetchAllowed(snap, "DNB")` are false on a loaded set, `liveFetchAllowed(snap, "AAPL")` is true, and `liveFetchAllowed(nil, "BOSSY")` is true (fail open). Step 8 pins that `GetBars` routes its live fetch through this function.
    - AC-22 (marketdata half): 1001 symbols → `connect.CodeOf(err) == connect.CodeInvalidArgument`; exactly 1000 succeeds.
-   - AC-9: nil snapshot → `GetSymbolServability` returns `AssetSetLoaded == false` and every symbol servable; `markWarmIfServable("BOSSY")` adds it; the refresher logs exactly one unloaded WARN across several failed attempts (capture with a `slog` handler; assert count == 1).
-   - AC-10: after a good load, a `ListAssets` error leaves BOSSY unservable and AAPL servable (`refreshAssets` returns error, snapshot pointer unchanged); assert the retry delay doubles 1m → 2m → … capped at 30m (extract the delay step as a small pure function in Step 5 if needed to test without sleeping).
+   - AC-9: nil snapshot → `GetSymbolServability` returns `AssetSetLoaded == false` and every symbol servable; `markWarmIfServable("BOSSY")` adds it; `noteAssetRefreshFailure` called five times logs exactly one unloaded WARN (capture with a `slog` handler; assert count == 1).
+   - AC-10: after a good load, a `ListAssets` error leaves BOSSY unservable and AAPL servable (`refreshAssets` returns error, snapshot pointer unchanged); assert `nextAssetRetryDelay` goes `0 → 1m → 2m → 4m → … → 30m` and stays capped at 30m (pure function defined in Step 5; no sleeping).
    - AC-11: with a 10-asset set loaded, a refresh returning 4 assets is rejected and a WARN is logged; an empty refresh is rejected the same way; a 5-of-10 refresh (exactly 50%) is accepted.
    - AC-15: warm `BOSSY` and `AAPL` via `markWarm` while unloaded; first successful load that lists AAPL but not BOSSY removes BOSSY and keeps AAPL; a **later** refresh that stops listing AAPL does not remove it from the warm set.
    - AC-24: `resolveAssetRefreshInterval` with a `fakeIntGetter` → `0` → paused (returns 0), `48` → 24h, key unset → 6h, `nil` cfg → 6h.
@@ -280,7 +286,7 @@ grep -n "StartAssetSetRefresher" cmd/server/main.go
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print "total " $3 "%"; if ($3+0 < 40) {print "FAIL: coverage below the 40% CI threshold"; exit 1}}'
 grep -rn "Bossy\|BOSSY" --include="*_test.go" internal | head   # C-13: asset literals only via internal/testdata
 ```
 New logic is in an excluded package (`service/`) — no coverage threshold applies to it; the repo-wide ≥ 40% command above must still pass and these tests provide the behavioral verification.
@@ -309,10 +315,10 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 **Covers**: —
 
 **Instructions**:
-1. `GetBars`: replace `s.markWarm(req.Symbol)` (`:262`) with `snap := s.markWarmIfServable(req.Symbol)` and `unservable := snap != nil && !servableOf(snap, req.Symbol)` (small helper `(*assetSet).servable(sym) bool` over `classify`, nil-safe). Wrap the existing `if refetch { … }` body (`:312-332`) as `if refetch && !unservable { … }`, keeping the inner `slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none" …)` text intact. An unservable symbol still gets its stored bars; a miss returns the empty valid `GetBarsResponse` exactly as today, with no live fetch and no WARN (the noise this feature removes).
-2. `BatchGetBars`: replace the `markWarm` loop (`:748-750`) with `snap := s.markWarmIfServable(req.Symbols...)`. When building `cold` (`:763-768`) skip any symbol the snapshot marks unservable, **before** `sortedCold` and the singleflight key. If `cold` ends up empty no flight runs and strict and partial calls succeed with the stored bars only. `partialColdFetch` receives the filtered `cold`, so its WARN does not report unservable symbols.
-3. `BatchGetLatestPrice`: replace the `markWarm` loop (`:867-869`) with `snap := s.markWarmIfServable(req.Symbols...)`. Keep the flight key on the **full** sorted request (`:871-874`: callers that differ only in unservable members must not share a leader's previous-close map). Inside the closure compute `tradeSyms` = the servable subset of `req.Symbols` and use it for both the `GetLatestTradesMulti` call and the per-symbol fallback loop (`:908-945`), skipping the whole trade section when `tradeSyms` is empty; the previous-close read (`:893`) still covers `req.Symbols`. An unservable symbol with a stored previous close is therefore returned with `prev_close` only; one without is omitted (existing omit rule, `:964-979`). `n` in the log fields stays `len(req.Symbols)`.
-4. Add a comment at `markWarmIfServable`'s definition (Step 5) and nowhere else: "gate applies at warm-add sites only; warm-set readers are never filtered". Do not touch `warmSnapshot` (`:1099`), the `StartWarmQuotePoller` inline copy (`:1132-1137`), `ingestRecentBars`, or `classificationUniverse`.
+1. `GetBars`: replace `s.markWarm(req.Symbol)` (`:262`) with `snap := s.markWarmIfServable(req.Symbol)`. Wrap the existing `if refetch { … }` body (`:312-332`) as `if refetch && liveFetchAllowed(snap, req.Symbol) { … }` (`liveFetchAllowed` and `servable` are defined in Step 5, in `asset_servability.go`; this step edits only `marketdata_service.go`), keeping the inner `slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none" …)` text intact. An unservable symbol still gets its stored bars; a miss returns the empty valid `GetBarsResponse` exactly as today, with no live fetch and no WARN (the noise this feature removes).
+2. `BatchGetBars`: replace the `markWarm` loop (`:748-750`) with `snap := s.markWarmIfServable(req.Symbols...)`. When building `cold` (`:763-768`) skip any symbol for which `!snap.servable(sym)`, **before** `sortedCold` and the singleflight key. If `cold` ends up empty no flight runs and strict and partial calls succeed with the stored bars only. `partialColdFetch` receives the filtered `cold`, so its WARN does not report unservable symbols.
+3. `BatchGetLatestPrice`: replace the `markWarm` loop (`:867-869`) with `snap := s.markWarmIfServable(req.Symbols...)`. Keep the flight key on the **full** sorted request (`:871-874`: callers that differ only in unservable members must not share a leader's previous-close map). Inside the closure compute `tradeSyms` = the subset of `req.Symbols` for which `snap.servable(sym)` holds and use it for both the `GetLatestTradesMulti` call and the per-symbol fallback loop (`:908-945`), skipping the whole trade section when `tradeSyms` is empty; the previous-close read (`:893`) still covers `req.Symbols`. An unservable symbol with a stored previous close is therefore returned with `prev_close` only; one without is omitted (existing omit rule, `:964-979`). `n` in the log fields stays `len(req.Symbols)`.
+4. Do not add the gate comment here (it lives at `markWarmIfServable`'s definition, Step 5). Do not touch `warmSnapshot` (`:1099`), the `StartWarmQuotePoller` inline copy (`:1132-1137`), `ingestRecentBars`, or `classificationUniverse`.
 5. Header propagation: no outbound gRPC calls added.
 
 **Verification**:
@@ -343,10 +349,10 @@ grep -n "markWarm(\|markWarmIfServable(" internal/service/marketdata_service.go 
 **Covers**: `AC-4, AC-7, AC-12, AC-13, AC-14, AC-16, AC-17, AC-23, AC-26`
 
 **Instructions**:
-1. Update `TestGetBarsMarksSymbolWarm` to require `s.markWarmIfServable(req.Symbol)` in `GetBars`'s body (and still that the body contains no bare `s.markWarm(`), and extend it with a structural assertion that the `refetch` branch is guarded by the unservable flag (`refetch && !unservable`). Keep `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` passing unchanged.
+1. Update `TestGetBarsMarksSymbolWarm` to require `s.markWarmIfServable(req.Symbol)` in `GetBars`'s body (and still that the body contains no bare `s.markWarm(`), and extend it with a structural assertion that the `refetch` branch is guarded by `liveFetchAllowed(snap, req.Symbol)` (the behaviour of that function is proven in Step 6; `GetBars` itself needs a live DB pool, so this wiring stays a source scan). Keep `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` passing unchanged.
 2. Add `TestMarkWarmIfServable_*`: with a loaded set (`svc.assets.snap.Store(newAssetSet(testdata.ServableAssets()))`) `markWarmIfServable("BOSSY","AAPL")` adds only AAPL and returns the same snapshot (AC-4 warm half, AC-7 for DNB, AC-23 for `" bossy "`); with a nil snapshot both are added.
 3. AC-12: new test using `partialSvc`-style construction with the asset set loaded (AAPL, ZZZZ listed; BOSSY not), `barsStore: fakeBarsStore{}`, a source whose cold fetch returns an error and counts calls; `BatchGetBars` for AAPL + BOSSY with `AllowPartial: false` succeeds with AAPL only and 0 live fetches. Also assert a **pinned** variant for R4: with ZZZZ servable in the loaded set, strict still returns the plain source error (`errors.Is(err, errColdFetch)`), so `@AC-53 @feature-240` remains meaningful.
-4. AC-14: asset set loaded (AAPL, ZZZZ listed); the cold fetch for ZZZZ blocks (`hangUntilDone`); `BatchGetBars` for AAPL, ZZZZ, BOSSY with `AllowPartial: true` under a 1000ms context deadline returns within the deadline with the stored AAPL bars; the recording source saw `ZZZZ` requested and `BOSSY` not (record the symbols argument of `GetBarsMulti` in a new wrapper type; do not change `scriptedBarsSource`'s existing signature used by other tests).
+4. AC-14: asset set loaded (AAPL, ZZZZ listed); the cold fetch for ZZZZ blocks (`hangUntilDone`); `BatchGetBars` for AAPL, ZZZZ, BOSSY with `AllowPartial: true` under a 1000ms context deadline returns within the deadline with the stored AAPL bars; the recording source saw `ZZZZ` requested and `BOSSY` not (record the symbols argument of `GetBarsMulti` in a new wrapper type; do not change `scriptedBarsSource`'s existing signature used by other tests). Capture `slog` output in this test and assert the `partialColdFetch` WARN lists ZZZZ and does **not** mention BOSSY (the filtered cold list is what it receives).
 5. AC-13: `svc.prevClose` fake with BOSSY previous close 9.9 and no AAPL previous close; `fakeBatchPriceSource` with an AAPL trade only; `BatchGetLatestPrice` for AAPL + BOSSY returns AAPL with `LastPrice`, BOSSY with `PrevClose` set and `LastPrice == nil`, BOSSY not in the warm set, and the source's trade request never contained BOSSY; a symbol with neither is omitted. Also assert the singleflight key is built from the full set (two concurrent calls differing only in an unservable member do not share a previous-close map).
 6. AC-16: with BOSSY unservable, `GetLatestQuotes`, `GetLatestQuote` (and `GetLatestPrice` where its fake allows) each add BOSSY to the warm set and their live fetch behaviour is unchanged (BOSSY is requested from the source).
 7. AC-17 (marketdata half) and AC-26: warm `FORL` through `GetLatestQuotes` after the asset set is loaded and lists FORL as OTC → it stays warm across a later `refreshAssets` (no prune after first load); and a symbol warmed while unloaded then pruned by the first load is re-added by the next `GetLatestQuotes` call.
@@ -354,7 +360,7 @@ grep -n "markWarm(\|markWarmIfServable(" internal/service/marketdata_service.go 
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print "total " $3 "%"; if ($3+0 < 40) {print "FAIL: coverage below the 40% CI threshold"; exit 1}}'
 grep -rn "FORL\|\"BOSSY\"" --include="*_test.go" internal | head   # ≤ 1 declaration site per literal (C-13)
 ```
 New logic is in an excluded package (`service/`) — no coverage threshold applies; behavior is proven by the tests above.
@@ -378,6 +384,8 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 - Never classify: masked `UpdateWatchlist` branch, `UpdateWatchlistBinding` (`:2080`), `UpdateWatchlistBindings` (`:2112`, rebind-only), `EnsureSignalWatchlist` (`:1939`, takes no symbols), `RemoveWatchlistSymbols`.
 - Test seam: `newSvc` in `watchlist_service_test.go:275` leaves `marketdata` nil, so every existing watchlist test runs without a marketdata client — the helper must treat a nil client as "servability unavailable" and let the write through.
 - Only INSERT site: `insertBindingsTx` `internal/repository/watchlist_repo.go:494`.
+- Cap source: `maxSymbolsPerList()` reads `portfolio.watchlist.max_symbols_per_list` through `s.wlCfg` (`portfolio_service.go:1872-1873`, default 500); Step 3 bounds that key to `[1,1000]`, so the 1000-symbol RPC bound cannot be exceeded by any within-cap request.
+- Scope note (B2b, broker symmetry): the asset set is Alpaca-only and the check applies to watchlist symbols regardless of the account's broker. Broker/IBKR holdings, reads, quotes and `GetPnL` never classify (design R1/R6), so an IBKR-only OTC symbol can be held and valued but is refused on a watchlist. No code path in this step touches `BrokerType`.
 
 **TDD**: `red-green required`
 
@@ -385,10 +393,10 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 
 **Instructions**:
 1. Add `const defaultServabilityTimeoutMs = 2000` and `(s *PortfolioService) servabilityTimeout() time.Duration` reading `portfolio.marketdata.servability_timeout_ms` through `s.quoteCfg` (nil → 2000ms; value `< 500` or `> 4000` or `<= 0` → clamp: `<= 0` → default, `< 500` → 500, `> 4000` → 4000), modelled on `quoteTimeout()` (`:422-432`) without copying more than the lookup; if the shared part grows beyond the timeout lookup, extract the wrapper instead (dry-reviewer).
-2. Add `(s *PortfolioService) refuseUnservable(ctx, bindings []*portfoliov1.WatchlistBinding) (accepted []*portfoliov1.WatchlistBinding, refused []*portfoliov1.RefusedSymbol)`:
+2. (design.md names this helper `servabilityFor`; the implementation name is `refuseUnservable`.) Add `(s *PortfolioService) refuseUnservable(ctx, bindings []*portfoliov1.WatchlistBinding) (accepted []*portfoliov1.WatchlistBinding, refused []*portfoliov1.RefusedSymbol)`:
    - empty input, or `s.marketdata == nil` → return the input unchanged, no refusals (nil client = unavailable; no WARN in the nil-client test path).
    - Build the symbol list with `bindingSymbols`; call `s.marketdata.GetSymbolServability(qctx, &marketdatav1.GetSymbolServabilityRequest{Symbols: …})` under `context.WithTimeout(ctx, s.servabilityTimeout())` (reuses the propagating client — C-03).
-   - On any error, timeout, or `AssetSetLoaded == false`: log `slog.WarnContext(ctx, "symbol servability unavailable; allowing write", "count", …, "error", …)` and return the input unchanged (fail open, FR-5, AC-6, AC-22). Do not add a client-side size constant (see Step Dependencies decision (b)); an oversize request fails open through the RPC `InvalidArgument`.
+   - On any error, timeout, or `AssetSetLoaded == false`: log `slog.WarnContext(ctx, "symbol servability unavailable; allowing write", "count", …, "error", …)` and return the input unchanged (fail open, FR-5, AC-6, AC-22). Do not add a client-side size constant (see Step Dependencies decision (b)); an oversize request fails open through the RPC `InvalidArgument` and is then rejected by the cap check (the union exceeds `max_symbols_per_list ≤ 1000`), so the bypass is not reachable.
    - Otherwise partition `bindings` by the response (`Servable == false` → refused with its `Reason`), preserving order and each accepted binding's `Source` and `StrategyId`.
 3. Wire the three paths **after** `requestBindings` (and so after `applyDefaultStrategy`, so defaults land on accepted symbols only) and **before** the cap check and the repository call:
    - `CreateWatchlist`: `bindings, refused := s.refuseUnservable(ctx, bindings)`; cap check on the accepted count; return `&CreateWatchlistResponse{Watchlist: wl, RefusedSymbols: refused}`. A create where every symbol is refused still creates the (empty) list.
@@ -445,7 +453,7 @@ grep -n "refuseUnservable\|UnaryClientInterceptor" internal/service/portfolio_se
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"
+cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print "total " $3 "%"; if ($3+0 < 40) {print "FAIL: coverage below the 40% CI threshold"; exit 1}}'
 grep -rn "\"CRTD\"" --include="*_test.go" internal | head   # ≤ 1 file declares the literal (C-13 single consumer)
 ```
 New logic is in an excluded package (`service/`) — no coverage threshold applies; integration/behavioral verification is the tests above.
@@ -518,7 +526,8 @@ grep -n "_metadata((\"x-user-id\"" app/client.py | head -5   # new return paths 
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest tests/test_watchlist_client.py tests/test_watchlist_tools.py tests/test_ingest_signal_watchlist.py tests/test_tool_deadlines.py --cov=app --cov-report=term -q
+cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest tests/test_watchlist_client.py tests/test_watchlist_tools.py tests/test_ingest_signal_watchlist.py tests/test_tool_deadlines.py -q
+pytest --cov=app --cov-report=term --cov-fail-under=40 -q   # full suite: the CI gate (coverage_threshold 40, cov_source app)
 grep -n "conftest\|def .*fixture" tests/test_watchlist_client.py | head -3   # C-13: no second inline copy of a domain fixture introduced
 ```
 
@@ -539,7 +548,7 @@ grep -n "conftest\|def .*fixture" tests/test_watchlist_client.py | head -3   # C
 **Codebase Evidence**:
 - Exhaustive render maps: `src/lib/opportunityShared.tsx:1-2` ("Exhaustive Record<Enum,…> maps — adding a proto enum value without a map entry breaks `tsc` here"); imports of numeric protobuf-es enums from `@xstockstrat/proto/<svc>/v1/<svc>_pb` at `:8-15`; `EnumRender { label, role, icon? }` at `:20-28`; examples `FUNDAMENTALS_GAP: Record<FundamentalsGap, EnumRender>` `:40-45`. Ledger `insights.md:~192` / `fails.md:81-83`: a new proto enum value hard-couples to every exhaustive TS map in the same PR.
 - Add controls (no `/trader` add control exists): `WatchlistDetail.tsx:101-115` (`handleAddSymbol` → `addSymbols.mutate({watchlistId, symbols, bindings}, { onSuccess: () => setSymbolInput('') })`, no error UI); `screener/page.tsx:149-158` (`handleSaveAsWatchlist` → `createWl.mutate({name, symbols: saveSymbols}, { onSuccess: () => setSaveName('') })`; `handleAddTopN` → `addSymbols.mutate({watchlistId: targetListId, symbols: topNSymbols})`); controls rendered `:512-545`, existing `createWl.error` paragraph `:547-549`; `/insights/watchlists/page.tsx:57-71` create dialog is name-only (no symbols, nothing to refuse).
-- Rename: `commitRename` (`WatchlistDetail.tsx:126-134`) currently sends `{watchlistId, name, description, bindings}` (replace-all); the masked path already exists as `setDefaultStrategy` → `updateWatchlist.mutate({ watchlistId, updateMask: ['default_strategy_id'], … })` (`:139-146`); `useUpdateWatchlist` maps `updateMask` to `{ paths: input.updateMask }` (`src/hooks/useWatchlists.ts:76-84`).
+- Rename: `commitRename` (`WatchlistDetail.tsx:126-134`) currently sends `{watchlistId, name, description, bindings}` (replace-all); the masked path already exists as `setDefaultStrategy` → `updateWatchlist.mutate({ watchlistId, updateMask: ['default_strategy_id'], … })` (`:146`); `useUpdateWatchlist` maps `updateMask` to `{ paths: input.updateMask }` (`src/hooks/useWatchlists.ts:76-84`).
 - Hooks return the typed RPC result so `refusedSymbols` is available on `onSuccess`: `useAddWatchlistSymbols`, `useCreateWatchlist` (`useWatchlists.ts:37-48, ~98-110`) over `insightsPortfolioClient` (`src/lib/browserClients/insightsPortfolioClient.ts:8`); BFF passthrough `forward(...)` for `createWatchlist`/`updateWatchlist`/`addWatchlistSymbols` (`src/lib/insightsBff.ts:134-144`) already forwards the response whole and propagates headers (no BFF change).
 - Primitives: `CardNotice` (`src/components/shared/CardNotice.tsx`, `variant: 'muted' | 'error'`, `role="alert"` on error) — C-17 canonical notice; no toast library.
 
@@ -595,7 +604,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm ru
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm run test:unit
+cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm run test:coverage   # vitest.config thresholds lines: 40
 cd services/xstockstrat-ui && pnpm exec playwright test e2e/insights/watchlists.spec.ts e2e/insights/screener.spec.ts --project=chromium --no-deps
 grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth\|watchlistMock" e2e/insights/watchlists.spec.ts e2e/insights/screener.spec.ts | head
 grep -n "MOCK_UNSERVABLE" e2e/fixtures/INVENTORY.md
@@ -603,26 +612,20 @@ grep -n "MOCK_UNSERVABLE" e2e/fixtures/INVENTORY.md
 
 ---
 
-### Step 15 — docs: runbook, CLAUDE.md files, constitutions, registered keys
+### Step 15 — docs: agent runbook, agent CLAUDE.md, registered keys
 
 **Status**: `pending`
-**Service**: `docs/runbooks/`, `docs/patterns/`, service docs
+**Service**: `docs/runbooks/`, `docs/patterns/`, `xstockstrat-agent`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify (`ingest_signal` `:224-255`, `manage_watchlist` / `manage_watchlist_symbols` `:1263-1335`)
 - `services/xstockstrat-agent/CLAUDE.md` — modify (tool table rows `:~82-83`, watchlist section `:~134`)
-- `services/xstockstrat-marketdata/CLAUDE.md` — modify (config table near `:85`, asset-set section near `:168-175`)
-- `services/xstockstrat-marketdata/docs/context-constitution.md` — modify (new `MARKETDATA-*` invariant)
-- `services/xstockstrat-portfolio/CLAUDE.md` — modify (config table near `:110`, watchlist section)
-- `services/xstockstrat-portfolio/docs/context-constitution.md` — modify (new `PORTFOLIO-*` invariant)
 - `docs/patterns/config-governance.md` — modify (append a Per-Feature Registered Keys entry)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
 - Doc parity is test-enforced for the watchlist tools: `tests/test_watchlist_tools.py:312-322` requires the runbook headings; `docs/runbooks/mcp-tools.md` anchors confirmed at `### \`ingest_signal\`` (~L224), `### \`manage_watchlist\`` and `### \`manage_watchlist_symbols\`` (~L1263-1335).
-- Config tables: marketdata `CLAUDE.md:85` lists `marketdata.classification.refresh_interval_hours`; portfolio `CLAUDE.md:110` lists `portfolio.marketdata.quote_timeout_ms`; the Per-Feature Registered Keys log is append-only, newest first (`docs/patterns/config-governance.md:109-111`), and feature 229's entry (`:165-181`) is the table format to follow.
-- Constitutions: marketdata `MARKETDATA-*` rows (`docs/context-constitution.md:16-33`, `MARKETDATA-5` pause rule); portfolio `PORTFOLIO-*` rows (`:20-33`).
-- Root `CLAUDE.md` § Teardown: a session that changed context files must run `/context-forge:context-constitution refresh` scoped to the touched files, or reconcile by hand and record it in the PR body.
+- The Per-Feature Registered Keys log is append-only, newest first (`docs/patterns/config-governance.md:109-111`), and feature 229's entry (`:165-181`) is the table format to follow.
 
 **TDD**: `N/A (docs)`
 
@@ -630,16 +633,52 @@ grep -n "MOCK_UNSERVABLE" e2e/fixtures/INVENTORY.md
 
 **Instructions**:
 1. `mcp-tools.md`: `ingest_signal` — add `watchlist_refused` (present only when non-empty) to **Return**, an **Errors** row (unservable symbol: skipped, ingest still succeeds), and the R7 note; `manage_watchlist` / `manage_watchlist_symbols` — **Returns** `{"watchlist": …, "refused": [{symbol, reason}]}`, reason names, "refused = not newly added", a name-only replace-all update drops and reports a now-unservable stored symbol. Mirror every statement in the tool docstrings (Step 11) and the agent `CLAUDE.md` rows.
-2. Marketdata `CLAUDE.md`: config row `marketdata.assets.refresh_interval_hours` (int, default `6`, SetConfig bounds `[1,24]`, clamped on read, `<= 0` pauses, unseeded); an "Asset-set servability" section stating the predicate (absent from the active+tradable `us_equity` set, or exchange `OTC`), the fixed invariants (shrink guard 50%, backoff 1m→30m, RPC bound 1000, immediate first load, first-load-only warm prune, accepted residuals R2/R3), and the gate's scope (warm-add sites only).
-3. Marketdata `docs/context-constitution.md`: new `MARKETDATA-15` — "the unservable gate applies at warm-add sites only (`markWarmIfServable` in `GetBars`/`BatchGetBars`/`BatchGetLatestPrice`); warm-set readers and the quote/price paths are never filtered", with the held-position coupling (R11: portfolio always quotes offline positions via `GetLatestQuotes`, `trading.go:1074` publishes `current_price: 0`) and the guard tests. Portfolio `CLAUDE.md` + `docs/context-constitution.md`: config row `portfolio.marketdata.servability_timeout_ms` (int, `2000`, bounds `[500,4000]`, clamped, unseeded) and new `PORTFOLIO-15` — "servability is asked of marketdata (never re-derived from `Asset.exchange`), uniform on every submitted symbol on Create/replace-all Update/AddWatchlistSymbols, fail-open with WARN, cap on the post-filter union; masked/rebind/Ensure RPCs and reads never classify".
-4. `docs/patterns/config-governance.md`: append a "feature 282 — filter-otc-symbols" entry at the top of the Per-Feature Registered Keys log with both keys, defaults, bounds, unseeded (227 D2 precedent), owner + config-team approval.
-5. Teardown: run `/context-forge:context-constitution refresh` scoped to the touched context files; if the plugin is unavailable, re-read each touched file against the final code, reconcile drift, and record both facts in the PR body.
+2. Agent `CLAUDE.md`: update the `manage_watchlist` / `manage_watchlist_symbols` table rows and the watchlist-tools paragraph with the same statements; keep the tool-count statements unchanged (no tool is added).
+3. `docs/patterns/config-governance.md`: append a "feature 282 — filter-otc-symbols" entry at the top of the Per-Feature Registered Keys log with both new keys (defaults, bounds, unseeded under the 227 D2 precedent, owner + config-team approval) and the new write-edge bound `[1,1000]` on the existing `portfolio.watchlist.max_symbols_per_list` (coupling: marketdata's 1000-symbol RPC bound).
 
 **Verification**:
 ```bash
 grep -n "watchlist_refused\|refused" docs/runbooks/mcp-tools.md services/xstockstrat-agent/CLAUDE.md | head
-grep -n "marketdata.assets.refresh_interval_hours\|portfolio.marketdata.servability_timeout_ms" services/xstockstrat-marketdata/CLAUDE.md services/xstockstrat-portfolio/CLAUDE.md docs/patterns/config-governance.md
+grep -n "marketdata.assets.refresh_interval_hours\|portfolio.marketdata.servability_timeout_ms\|max_symbols_per_list" docs/patterns/config-governance.md
 cd services/xstockstrat-agent && pytest tests/test_watchlist_tools.py -q -k doc_parity
+```
+
+---
+
+### Step 16 — docs: marketdata and portfolio CLAUDE.md, constitutions, teardown
+
+**Status**: `pending`
+**Service**: `xstockstrat-marketdata`, `xstockstrat-portfolio`
+**Files**:
+- `services/xstockstrat-marketdata/CLAUDE.md` — modify (config table near `:85`, asset-set section near `:168-175`)
+- `services/xstockstrat-marketdata/docs/context-constitution.md` — modify (new `MARKETDATA-*` invariant)
+- `services/xstockstrat-portfolio/CLAUDE.md` — modify (config table near `:110`, watchlist section)
+- `services/xstockstrat-portfolio/docs/context-constitution.md` — modify (new `PORTFOLIO-*` invariant)
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- Config tables: marketdata `CLAUDE.md:85` lists `marketdata.classification.refresh_interval_hours`; portfolio `CLAUDE.md:110` lists `portfolio.marketdata.quote_timeout_ms` (and the watchlist keys incl. `portfolio.watchlist.max_symbols_per_list`).
+- Constitutions: marketdata `MARKETDATA-*` rows (`docs/context-constitution.md:16-33`, `MARKETDATA-5` pause rule); portfolio `PORTFOLIO-*` rows (`:20-33`).
+- Root `CLAUDE.md` § Teardown: a session that changed context files must run `/context-forge:context-constitution refresh` scoped to the touched files, or reconcile by hand and record both facts in the PR body.
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions**:
+1. Marketdata `CLAUDE.md`: config row `marketdata.assets.refresh_interval_hours` (int, default `6`, SetConfig bounds `[1,24]`, clamped on read, `<= 0` pauses, unseeded); an "Asset-set servability" section stating the predicate (absent from the active+tradable `us_equity` set, or exchange `OTC`), the fixed invariants (shrink guard 50%, backoff 1m→30m, RPC bound 1000, immediate first load, first-load-only warm prune, accepted residuals R2/R3), and the gate's scope (warm-add sites only).
+2. Marketdata `docs/context-constitution.md`: new `MARKETDATA-15` — "the unservable gate applies at warm-add sites only (`markWarmIfServable` in `GetBars`/`BatchGetBars`/`BatchGetLatestPrice`); warm-set readers and the quote/price paths are never filtered", with the held-position coupling (R11: portfolio always quotes offline positions via `GetLatestQuotes`, `trading.go:1074` publishes `current_price: 0`) and the guard tests.
+3. Portfolio `CLAUDE.md`: config row `portfolio.marketdata.servability_timeout_ms` (int, `2000`, bounds `[500,4000]`, clamped, unseeded) and the new bound `[1,1000]` on `portfolio.watchlist.max_symbols_per_list`; portfolio `docs/context-constitution.md`: new `PORTFOLIO-15` — "servability is asked of marketdata (never re-derived from `Asset.exchange`), uniform on every submitted symbol on Create/replace-all Update/AddWatchlistSymbols, fail-open with WARN, cap on the post-filter union; masked/rebind/Ensure RPCs and reads never classify".
+4. Teardown (last action before pushing): run `/context-forge:context-constitution refresh` scoped to every context file this feature touched (the four files above plus Step 15's `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `docs/patterns/config-governance.md`); fix the grounded drift it reports. If the plugin is unavailable, re-read each touched file against the final code, reconcile the drift, and record **both** that the plugin was unavailable and the manual reconciliation in the PR body and in `context.md`.
+
+**Verification**:
+```bash
+grep -n "marketdata.assets.refresh_interval_hours" services/xstockstrat-marketdata/CLAUDE.md
+grep -n "portfolio.marketdata.servability_timeout_ms\|max_symbols_per_list" services/xstockstrat-portfolio/CLAUDE.md
+grep -n "MARKETDATA-15" services/xstockstrat-marketdata/docs/context-constitution.md
+grep -n "PORTFOLIO-15" services/xstockstrat-portfolio/docs/context-constitution.md
+git diff --name-only origin/main-dev -- '*CLAUDE.md' '*context-constitution.md' docs/runbooks/mcp-tools.md docs/patterns/config-governance.md   # the teardown scope; its result and the refresh outcome go into context.md and the PR body
 ```
 
 ---
