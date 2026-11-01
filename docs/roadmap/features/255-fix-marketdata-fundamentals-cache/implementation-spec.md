@@ -358,7 +358,7 @@ grep -n "CountFundamentalsFetched" -r services/xstockstrat-marketdata --include=
 
 ### Step 6 — test: source-filtered counts and the boot seed (AC-2, AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -1109,3 +1109,14 @@ _Populated by /sdd-execute as implementation proceeds._
   unchanged). The grep shows every call passes a source. RED/GREEN used uncommitted throwaway probes (Step 6 owns
   the committed tests).
 - **Disposition**: CI-equivalent fallback; spec-anticipated red window for `internal/service` tests until Step 6.
+
+### 2026-11-01 — Step 6 — CI-equivalent fallback (golangci-lint), COVERPKGS expanded inline, RED by reverting Step 5
+- **Spec said**: Verification runs the coverage command with a computed `COVERPKGS`, `golangci-lint run` and the
+  `todayCount`/`sinceCount` grep.
+- **Actual**: the coverage command ran with its `COVERPKGS` list expanded inline (the session sandbox refuses a
+  runtime-computed variable; same package set); all packages pass under `-race`, total 71.5%. golangci-lint ran with
+  the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) and reported `0 issues.`; the grep has no
+  hits. RED was captured by temporarily restoring Step 5's three production files from the Step 4 commit (build
+  failures in all three packages), then restoring `HEAD` for GREEN. A throwaway mutation (each count call passed
+  `"edgar"`, reverted, not committed) failed the AC-2, fallback and AC-3 tests, so the pins catch a wrong source.
+- **Disposition**: CI-equivalent fallback.

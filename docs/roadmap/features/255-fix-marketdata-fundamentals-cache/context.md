@@ -1064,3 +1064,25 @@ the next `/sdd-batch` run can pick it up.
 - Open: `internal/service` tests do not compile until Step 6 lands; run Step 6 next.
 - Files modified: `cmd/server/main.go`, `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`
 
+### Step 6 — test: source-filtered counts and the boot seed (AC-2, AC-3) [done]
+- `fakeFundRepo` now keys counts by source (`todayBySource`/`sinceBySource`, recording `countSources`); the 17
+  `todayCount`/`sinceCount` references were migrated (FMP tests → `todayBySource["fmp"]`, Finnhub →
+  `sinceBySource["finnhub"]`) with no assertion change. Added `TestGetFundamentals_Finnhub_EdgarRowsDoNotConsumeQuota_AC2`,
+  `TestGetFundamentals_FMPRepoFallback_CountsOnlyFMPRows`, the pgxmock SQL pins
+  `TestCountFundamentalsFetchedToday_SourceAndAsOfPredicate` / `TestCountFundamentalsFetchedSince_SourcePredicate`, and
+  `TestSeedFMPBudget_CountsOnlyFMPRows_AC3` plus `TestSeedFMPBudget_CountErrorStartsFromZero` (local fake counter and
+  recording RoundTripper, cap 7, `{"edgar":30,"fmp":5}`).
+- TDD: AC-2/AC-3 red: with Step 5's production files restored from the Step 4 commit, all three packages failed to build
+  (`*fakeFundRepo does not implement fundamentalsRepo`, `too many arguments` on the repo counts,
+  `undefined: seedFMPBudget`) → green: all new tests pass on `HEAD`. A throwaway mutation (count calls pass `"edgar"`)
+  failed AC-2 (`finnhub request cap 20 reached`), the fallback (`fmp request cap 250 reached`) and AC-3
+  (`seeded used = 30, want 5`); reverted.
+- Verification: full `go test ./... -race` passes, total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent
+  fallback, in the Deviation Log); no `todayCount`/`sinceCount` left. The Step 5 red window for `internal/service`
+  tests is closed.
+- Husky: `pnpm install --frozen-lockfile --ignore-scripts` ran in this worktree (no lockfile change);
+  `core.hooksPath` points at the main worktree's missing `.husky/_`, so `.husky/pre-commit` was run by hand on the
+  staged set.
+- Files modified: `internal/service/marketdata_service_test.go`, `internal/repository/marketdata_repo_test.go`,
+  `cmd/server/main_test.go`
+

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,7 @@ import (
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/testdata"
@@ -179,15 +181,21 @@ func TestResolveDeletePlan(t *testing.T) {
 // ── Fundamentals (feature 059) ───────────────────────────────────────────────
 
 type fakeFundRepo struct {
-	rows       map[string]*source.Fundamentals
-	fetchedAt  map[string]time.Time
-	todayCount int
-	sinceCount int
-	upserts    int
+	rows          map[string]*source.Fundamentals
+	fetchedAt     map[string]time.Time
+	todayBySource map[string]int
+	sinceBySource map[string]int
+	countSources  []string
+	upserts       int
 }
 
 func newFakeFundRepo() *fakeFundRepo {
-	return &fakeFundRepo{rows: map[string]*source.Fundamentals{}, fetchedAt: map[string]time.Time{}}
+	return &fakeFundRepo{
+		rows:          map[string]*source.Fundamentals{},
+		fetchedAt:     map[string]time.Time{},
+		todayBySource: map[string]int{},
+		sinceBySource: map[string]int{},
+	}
 }
 
 func (r *fakeFundRepo) GetFundamentals(_ context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error) {
@@ -202,20 +210,22 @@ func (r *fakeFundRepo) UpsertFundamentals(_ context.Context, f *source.Fundament
 	r.upserts++
 	r.rows[f.Symbol] = f
 	r.fetchedAt[f.Symbol] = time.Now()
-	r.todayCount++
+	r.todayBySource[f.Source]++
 	return nil
 }
 
-func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context) (int, error) {
-	return r.todayCount, nil
+func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context, src string) (int, error) {
+	r.countSources = append(r.countSources, src)
+	return r.todayBySource[src], nil
 }
 
 // CountFundamentalsFetchedSince is the rolling-window sibling (feature 129, Step 4).
-// Tests set sinceCount directly, mirroring how todayCount is set directly today rather
+// Tests set sinceBySource directly, mirroring how todayBySource is set directly today rather
 // than derived from real timestamps — the dispatch logic under test (fundamentalsQuota)
 // only cares which repo method gets called for which provider, not real time math.
-func (r *fakeFundRepo) CountFundamentalsFetchedSince(_ context.Context, _ time.Time) (int, error) {
-	return r.sinceCount, nil
+func (r *fakeFundRepo) CountFundamentalsFetchedSince(_ context.Context, src string, _ time.Time) (int, error) {
+	r.countSources = append(r.countSources, src)
+	return r.sinceBySource[src], nil
 }
 
 type fakeFundSource struct {
@@ -381,7 +391,7 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
-	repo.todayCount = 250
+	repo.todayBySource["fmp"] = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
@@ -400,7 +410,7 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 // Acceptance #3b: at-cap miss with NO cache returns ResourceExhausted.
 func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.todayCount = 250
+	repo.todayBySource["fmp"] = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
@@ -532,7 +542,7 @@ func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
 // FR-7: crossing 80% of the cap emits exactly one WARNING (deduped per day).
 func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.todayCount = 199 // post-fetch 200 == 80% of 250
+	repo.todayBySource["fmp"] = 199 // post-fetch 200 == 80% of 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, notify, "fmp")
@@ -586,13 +596,13 @@ func TestGetFundamentals_Finnhub_CacheHitNoFetch(t *testing.T) {
 }
 
 // Mirrors TestGetFundamentals_AtCapStale, using the rolling-window counter
-// (sinceCount) against marketdata.finnhub.symbols_per_minute (20) instead of FMP's
-// todayCount against daily_request_cap.
+// (sinceBySource) against marketdata.finnhub.symbols_per_minute (20) instead of FMP's
+// todayBySource against daily_request_cap.
 func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
-	repo.sinceCount = 20
+	repo.sinceBySource["finnhub"] = 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
@@ -611,13 +621,59 @@ func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 // Mirrors TestGetFundamentals_AtCapNoCacheResourceExhausted.
 func TestGetFundamentals_Finnhub_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 20
+	repo.sinceBySource["finnhub"] = 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+// AC-2 (feature 255): edgar rows inside the window do not consume the Finnhub quota.
+func TestGetFundamentals_Finnhub_EdgarRowsDoNotConsumeQuota_AC2(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.sinceBySource["edgar"] = 20 // == finnhub symbols_per_minute
+	repo.sinceBySource[finnhub.SourceName] = 0
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), testdata.Msft)
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Stale {
+		t.Fatalf("expected a fresh fetch, got stale %+v", f)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 Finnhub call, got %d", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("expected 0 quota WARNINGs, got %d", notify.warnings)
+	}
+	if !slices.Contains(repo.countSources, finnhub.SourceName) {
+		t.Fatalf("quota count sources = %v, want %q", repo.countSources, finnhub.SourceName)
+	}
+}
+
+// The FMP repo-count fallback (no shared budget wired) counts only fmp rows, not edgar ones (feature 255).
+func TestGetFundamentals_FMPRepoFallback_CountsOnlyFMPRows(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.todayBySource["edgar"] = 250 // == daily_request_cap
+	repo.todayBySource[fmp.SourceName] = 0
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 FMP call, got %d", src.calls)
+	}
+	if !slices.Contains(repo.countSources, fmp.SourceName) {
+		t.Fatalf("quota count sources = %v, want %q", repo.countSources, fmp.SourceName)
 	}
 }
 
@@ -669,7 +725,7 @@ func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 // design.md called for: unlike FMP's UTC-day dedup (which fires once and stays silent
 // for the rest of the day), Finnhub's rolling-window dedup must re-fire once the window
 // bucket changes. There is no injectable clock on maybeAlertQuota, so — exactly like
-// repo.sinceCount/todayCount are set directly elsewhere in this suite to force a quota
+// repo.sinceBySource/todayBySource are set directly elsewhere in this suite to force a quota
 // precondition without issuing real requests — this test forces the bucket-changed
 // precondition directly by overwriting quotaAlertBucket between calls, isolating the
 // exact comparison branch under test (see the 2026-07-30 082-fix-fmp-config-boot-only
@@ -677,7 +733,7 @@ func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 // end-to-end test — here, a real 60s sleep to observe a genuine new window).
 func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 15 // post-fetch 16 == 80% of 20
+	repo.sinceBySource["finnhub"] = 15 // post-fetch 16 == 80% of 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
@@ -714,7 +770,7 @@ func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 // TestGetFundamentalsMulti_ThreeCallsPerSymbol proves separately at the client level.
 func TestGetFundamentals_Finnhub_ThreeCallsPerSymbolCostsQuota(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
+	repo.sinceBySource["finnhub"] = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
@@ -3165,7 +3221,7 @@ func TestFundamentals_EdgarKillSwitchBothRPCs_feature215(t *testing.T) {
 // the edgar fallback (quota is an outage, never omitted as absence).
 func TestFundamentals_QuotaExhaustedNotOmitted_feature215(t *testing.T) {
 	svc, repo := absenceSvc(edgarCfg(true, true), &fakeFundSource{resp: &source.Fundamentals{}})
-	repo.sinceCount = 20 // == finnhub symbols_per_minute
+	repo.sinceBySource["finnhub"] = 20 // == finnhub symbols_per_minute
 	if _, err := svc.GetFundamentals(context.Background(), "SCHD"); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("single code = %v, want ResourceExhausted", connect.CodeOf(err))
 	}

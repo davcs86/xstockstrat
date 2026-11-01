@@ -146,6 +146,56 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 	}
 }
 
+// Feature 255 — pins the source filter and the parenthesised fetched_at/as_of OR (an unparenthesised OR
+// would count other sources' as-of-today rows). pgxmock cannot evaluate SQL; semantics are live-DB tested.
+func TestCountFundamentalsFetchedToday_SourceAndAsOfPredicate(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	mock.ExpectQuery(`source = \$1 AND \(fetched_at >= .+ OR as_of >= .+\)`).
+		WithArgs("fmp").
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(5))
+
+	n, err := repo.CountFundamentalsFetchedToday(context.Background(), "fmp")
+	if err != nil {
+		t.Fatalf("CountFundamentalsFetchedToday: %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("count = %d, want 5", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestCountFundamentalsFetchedSince_SourcePredicate(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	mock.ExpectQuery(`source = \$1 AND fetched_at >= \$2`).
+		WithArgs("finnhub", pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(3))
+
+	n, err := repo.CountFundamentalsFetchedSince(context.Background(), "finnhub", time.Now().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("CountFundamentalsFetchedSince: %v", err)
+	}
+	if n != 3 {
+		t.Fatalf("count = %d, want 3", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
 // feature 095 — GetPreviousDailyClose reads the second-newest 1d bar's close (prior session),
 // and reports ok=false (never a fabricated 0) when fewer than two daily bars are stored.
 func TestGetPreviousDailyClose(t *testing.T) {
