@@ -833,3 +833,20 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   files formatted. The full suite passed 1504 tests, coverage 90.20% (≥40).
 - Next: Step 7 (the durable RunBacktest evaluation-failure tests, AC-1…AC-7).
 
+### Step 7 — RunBacktest evaluation-failure surfacing tests (2026-11-01, done)
+
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py`: imports `EVAL_FAILED_WARNING`, `_BarFetchError`,
+  `_FundamentalsUnavailable` and `aio_rpc_error`. New class `TestEvaluationFailureSurfacing` sits directly after
+  `TestFormulaErrorSurfacing` and reuses its `_req`/`_formula_def`/`_wire` through a class-level instance (no
+  subclass). 15 tests: AC-1, AC-7, AC-2, AC-3, AC-4, AC-5, (a) timeout, (a') CancelledError, (b) refused+failed
+  recompute, (c) trace-id log + `analysis.backtest.completed` metadata and its no-trace variant, (d) portfolio
+  `symbol_intents` exclusion, (e) `_BarFetchError` → FAILED_PRECONDITION abort with no run persisted, (f) a contract
+  error adds no warning, (g) ExecuteFormula UNAVAILABLE → EVALUATION_FAILED.
+- TDD: RED on the pre-Step-6 servicer (temporarily restored, Deviation Log): 11 failed, 7 passed. AC-4 was already
+  green after Step 4, because PERMISSION_DENIED maps to FORMULA_ERROR, which gates. GREEN: 18 passed.
+- Verification: the `-k` run passed 18; the full suite passed 1519, coverage 90.30% (≥40); `ruff check` all passed;
+  `ruff format --check` 121 files formatted. The grep shows the `tests.conftest` import with `aio_rpc_error` and the
+  `EVAL_FAILED_WARNING` uses. No new inline `AioRpcError` builder. `test_unreadable_formula.py`,
+  `test_backtest_fundamentals_guard.py` and `test_warmup.py` are unchanged (68 passed).
+- Next: Step 8 (`/insights` reachability of the new reason and warning).
+

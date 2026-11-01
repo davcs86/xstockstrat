@@ -27,10 +27,17 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.handlers.servicer import AnalysisServicer, _InsufficientData, _row_to_opportunity
+from app.handlers.servicer import (
+    EVAL_FAILED_WARNING,
+    AnalysisServicer,
+    _BarFetchError,
+    _FundamentalsUnavailable,
+    _InsufficientData,
+    _row_to_opportunity,
+)
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
-from tests.conftest import OWNER_HEADERS, ctx_with, snapshot_watcher
+from tests.conftest import OWNER_HEADERS, aio_rpc_error, ctx_with, snapshot_watcher
 
 
 def make_servicer() -> AnalysisServicer:
@@ -1814,6 +1821,240 @@ class TestFormulaErrorSurfacing:
                         _classify_no_trade_reason(trades, warmup, n)
                         != analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
                     )
+
+
+class TestEvaluationFailureSurfacing:
+    """feature 275 — a symbol that raises during evaluation is never silently dropped: it gets a
+    diagnostics row, a per-symbol warning (code only) and counts toward INSUFFICIENT_DATA."""
+
+    h = TestFormulaErrorSurfacing()
+
+    def _bars(self):
+        return [_bar(7200 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
+
+    def _ok_out(self, n):
+        from google.protobuf.struct_pb2 import Struct
+
+        out = Struct()
+        out.update({"value": [1.0] * n})  # ff > 0 on every bar
+        return SimpleNamespace(success=True, output=out, error="")
+
+    def _svc(self, execute_outcome=None):
+        svc = make_servicer()
+        bars = self._bars()
+        outcome = execute_outcome or self._ok_out(len(bars))
+        side_effect = outcome if isinstance(outcome, BaseException) else (lambda *a, **kw: outcome)
+        self.h._wire(svc, bars, side_effect)
+        return svc
+
+    async def _run(self, svc, symbols=("AAPL",), ctx=None, **req_kw):
+        req = self.h._req(self.h._formula_def(), list(symbols))
+        for k, v in req_kw.items():
+            setattr(req, k, v)
+        return await svc.RunBacktest(req, ctx if ctx is not None else _owned_ctx())
+
+    @staticmethod
+    def _reasons(result):
+        return {d.symbol: d.no_trade_reason for d in result.diagnostics}
+
+    @pytest.mark.asyncio
+    async def test_ac1_admin_permission_denied_is_formula_error_and_insufficient(self):
+        svc = self._svc(
+            aio_rpc_error(
+                grpc.StatusCode.PERMISSION_DENIED, "admins cannot execute another user's formula"
+            )
+        )
+        result = await self._run(svc)
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
+        assert (
+            EVAL_FAILED_WARNING.format(symbol="AAPL", code="PERMISSION_DENIED") in result.warnings
+        )
+        assert not any("admins cannot" in w for w in result.warnings)
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+
+    @pytest.mark.asyncio
+    async def test_ac7_owner_not_found_is_formula_error_with_not_found_warning(self):
+        svc = self._svc(aio_rpc_error(grpc.StatusCode.NOT_FOUND, "formula not found"))
+        result = await self._run(svc, ctx=ctx_with(OWNER_HEADERS))
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
+        assert EVAL_FAILED_WARNING.format(symbol="AAPL", code="NOT_FOUND") in result.warnings
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+
+    @pytest.mark.asyncio
+    async def test_ac2_getbars_unavailable_is_evaluation_failed(self):
+        svc = self._svc()
+        svc._marketdata.GetBars = AsyncMock(side_effect=aio_rpc_error(grpc.StatusCode.UNAVAILABLE))
+        result = await self._run(svc, symbols=["SCHD"])
+
+        assert self._reasons(result)["SCHD"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+        assert EVAL_FAILED_WARNING.format(symbol="SCHD", code="UNAVAILABLE") in result.warnings
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+
+    @pytest.mark.asyncio
+    async def test_ac3_unexpected_exception_is_evaluation_failed(self):
+        svc = self._svc()
+        svc._backtest_symbol_evaluated = AsyncMock(side_effect=ValueError("boom"))
+        result = await self._run(svc)
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+        assert EVAL_FAILED_WARNING.format(symbol="AAPL", code="ValueError") in result.warnings
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+
+    @pytest.mark.asyncio
+    async def test_ac4_all_failed_run_is_unscored_and_not_persisted_as_ok(self):
+        svc = self._svc(aio_rpc_error(grpc.StatusCode.PERMISSION_DENIED, "denied"))
+        svc._persist_backtest_run = AsyncMock()
+        svc._persist_backtest_detail = AsyncMock()
+        svc._persist_symbol_cells = AsyncMock()
+        svc._recompute_headline = AsyncMock()
+
+        result = await self._run(svc, symbols=["AAPL", "SCHD"])
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        svc._persist_backtest_run.assert_awaited_once()
+        assert svc._persist_backtest_run.await_args.args[2] is None  # score arg
+        svc._persist_backtest_detail.assert_not_awaited()
+        svc._persist_symbol_cells.assert_not_awaited()
+        svc._recompute_headline.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_ac5_partial_run_stays_ok_and_reports_failed_symbol(self):
+        bars = self._bars()
+        svc = self._svc()
+
+        async def _get_bars(req, **kw):
+            if req.symbol == "MSFT":
+                raise aio_rpc_error(grpc.StatusCode.UNAVAILABLE)
+            return SimpleNamespace(page=_EOF_PAGE, bars=bars)
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_get_bars)
+        result = await self._run(svc, symbols=["AAPL", "MSFT"])
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        assert result.total_trades >= 1
+        assert self._reasons(result)["MSFT"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+        assert EVAL_FAILED_WARNING.format(symbol="MSFT", code="UNAVAILABLE") in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_per_symbol_timeout_is_evaluation_failed_row(self):
+        svc = self._svc()
+        svc._backtest_symbol_evaluated = AsyncMock(side_effect=TimeoutError())
+        result = await self._run(svc)
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+        assert EVAL_FAILED_WARNING.format(symbol="AAPL", code="TimeoutError") in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_cancelled_error_propagates(self):
+        svc = self._svc()
+        svc._backtest_symbol_evaluated = AsyncMock(side_effect=asyncio.CancelledError())
+        with pytest.raises(asyncio.CancelledError):
+            await self._run(svc)
+
+    @pytest.mark.asyncio
+    async def test_fund_refused_plus_eval_failed_still_recomputes(self):
+        svc = self._svc()
+
+        async def _evaluated(*, symbol, **kw):
+            if symbol == "AAPL":
+                raise _FundamentalsUnavailable(symbol)
+            raise ValueError("boom")
+
+        svc._backtest_symbol_evaluated = AsyncMock(side_effect=_evaluated)
+        svc._recompute_headline = AsyncMock()
+        result = await self._run(svc, symbols=["AAPL", "MSFT"])
+
+        svc._recompute_headline.assert_awaited_once()
+        assert self._reasons(result)["MSFT"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+
+    @pytest.mark.asyncio
+    async def test_eval_failure_log_carries_trace_id(self, caplog):
+        svc = self._svc()
+        svc._backtest_symbol_evaluated = AsyncMock(side_effect=ValueError("boom"))
+        with caplog.at_level(logging.WARNING):
+            result = await self._run(svc, ctx=_owned_ctx())
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+        assert any(
+            all(s in r.getMessage() for s in ("AAPL", "ValueError", "t1")) for r in caplog.records
+        )
+        completed = [
+            c
+            for c in svc._ledger.AppendEvent.await_args_list
+            if c.args[0].event_type == "analysis.backtest.completed"
+        ]
+        assert len(completed) == 1
+        assert ("x-trace-id", "t1") in completed[0].kwargs["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_eval_failure_without_trace_id_still_records_row(self):
+        svc = self._svc()
+        svc._backtest_symbol_evaluated = AsyncMock(side_effect=ValueError("boom"))
+        result = await self._run(svc, ctx=ctx_with([("x-user-id", "u1"), ("x-access-scope", "1")]))
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+        assert EVAL_FAILED_WARNING.format(symbol="AAPL", code="ValueError") in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_portfolio_mode_excludes_symbol_whose_metrics_raise(self):
+        from app.handlers import servicer as servicer_mod
+
+        real_compute = servicer_mod._compute_metrics
+        calls = {"n": 0}
+
+        def _compute(*a, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:  # the AAPL evidence cell
+                raise ValueError("metrics boom")
+            return real_compute(*a, **kw)
+
+        svc = self._svc()
+        svc._simulate_portfolio = AsyncMock(side_effect=svc._simulate_portfolio)
+        with patch.object(servicer_mod, "_compute_metrics", side_effect=_compute):
+            result = await self._run(
+                svc, symbols=["AAPL", "MSFT"], sizing_mode=analysis_pb2.SIZING_MODE_PORTFOLIO
+            )
+
+        intents = svc._simulate_portfolio.await_args.args[0]
+        assert "AAPL" not in intents
+        assert "MSFT" in intents
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+
+    @pytest.mark.asyncio
+    async def test_bar_fetch_error_still_propagates_past_broad_arm(self):
+        svc = self._svc()
+        svc._backtest_symbol_evaluated = AsyncMock(
+            side_effect=_BarFetchError("AAPL: bar pagination exceeded")
+        )
+        svc._persist_backtest_run = AsyncMock()
+        ctx = _owned_ctx()
+
+        with pytest.raises(Exception, match="aborted"):
+            await self._run(svc, ctx=ctx)
+
+        ctx.abort.assert_awaited_once()
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        svc._persist_backtest_run.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_formula_contract_error_adds_no_eval_warning(self):
+        from google.protobuf.struct_pb2 import Struct
+
+        svc = self._svc(SimpleNamespace(success=False, output=Struct(), error="boom"))
+        result = await self._run(svc)
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
+        assert not any(w.startswith("backtest symbol AAPL not evaluated") for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_execute_formula_unavailable_is_evaluation_failed(self):
+        svc = self._svc(aio_rpc_error(grpc.StatusCode.UNAVAILABLE))
+        result = await self._run(svc, ctx=_owned_ctx())
+
+        assert self._reasons(result)["AAPL"] == analysis_pb2.NO_TRADE_REASON_EVALUATION_FAILED
+        assert EVAL_FAILED_WARNING.format(symbol="AAPL", code="UNAVAILABLE") in result.warnings
 
 
 class TestBacktestRangeCap:

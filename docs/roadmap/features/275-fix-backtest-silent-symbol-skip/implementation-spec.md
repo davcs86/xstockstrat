@@ -462,7 +462,7 @@ symbol loop, and `except _BarFetchError: raise` precedes the single arm. The `:1
 
 ### Step 7 — test: RunBacktest evaluation-failure surfacing (AC-1 … AC-7, design tests (a)–(g))
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (new class
@@ -864,3 +864,20 @@ _Populated by /sdd-execute as implementation proceeds._
   RED: 3 failed (all-RpcError run OK instead of INSUFFICIENT_DATA; `ValueError` run OK; no PERMISSION_DENIED
   warning). GREEN: all passed. No CI-equivalent tooling fallback was used in Step 6 (`uv run pytest` and `uv run ruff`,
   the service's own harness).
+- **Step 7 (2026-11-01) — RED against the pre-Step-6 servicer.** Step 6 had already landed, so RED was captured by
+  temporarily restoring `servicer.py` from `2f5a5a83` (post-Step-4, pre-Step-6). A scratch-only `EVAL_FAILED_WARNING`
+  constant was appended so the test module imports. The Step 6 file was then restored, so this commit has no diff to
+  `servicer.py`. RED: 11 failed, 7 passed. GREEN: 18 passed.
+- **Step 7 (2026-11-01) — AC-4 and (b) differ from the spec's RED forecast.** AC-4
+  (`test_ac4_all_failed_run_is_unscored_and_not_persisted_as_ok`) passes pre-Step-6. Step 4 already maps its
+  PERMISSION_DENIED input to `FormulaExecutionError`, so `formula_errors` drives INSUFFICIENT_DATA. It stays as the
+  persistence pin. (b) fails pre-Step-6 only on its added MSFT `EVALUATION_FAILED` row assertion; its recompute pin
+  holds on both trees. Pin (a') and the (e) `_BarFetchError` pin passed pre-Step-6, as designed. (c) and (d) were also
+  RED pre-Step-6, because both assert the new row.
+- **Step 7 (2026-11-01) — `_svc` side-effect wrapping.** `TestFormulaErrorSurfacing._wire` passes its argument as an
+  `AsyncMock` `side_effect`, which rejects a bare response object. The new class's `_svc` passes exceptions through and
+  wraps a response as `lambda *a, **kw: outcome`, so `_wire` is reused unchanged (C-13).
+- **Step 7 (2026-11-01) — C-13 grep.** `grep -rn "grpc.aio.AioRpcError(" tests/test_analysis_servicer.py` hits two
+  pre-existing inline builders outside this step's class; the diff adds none. They were left alone (out of scope).
+- No CI-equivalent tooling fallback was used in Step 7 (`uv sync --extra dev`, `uv run pytest` and `uv run ruff`, the
+  service's own harness).
