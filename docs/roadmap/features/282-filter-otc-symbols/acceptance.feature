@@ -51,3 +51,23 @@ Feature: filter-otc-symbols
     Then DNB is reported as refused with a reason
     And marketdata makes 0 live Alpaca fetches for DNB
     And DNB is not in the warm set the bar ingester reads
+
+  @AC-8 @FR-2
+  Scenario Outline: Every watchlist write path refuses unservable symbols
+    Given CRTD is OTC and MSFT is not
+    When <path> is called with symbols CRTD and MSFT
+    Then CRTD is reported as refused with a reason
+    And MSFT is stored
+
+    Examples:
+      | path                      |
+      | UpdateWatchlist           |
+      | UpdateWatchlistBinding    |
+      | AddWatchlistSymbols       |
+
+  @AC-9 @FR-5
+  Scenario: Unavailable asset metadata does not block GetBars or warming
+    Given marketdata cannot read Alpaca asset metadata
+    When GetBars is called for BOSSY
+    Then marketdata attempts the live fetch as it does today
+    And a WARN is logged that the OTC lookup failed

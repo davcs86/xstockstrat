@@ -10,7 +10,7 @@ On staging the analysis live loop logs `had no 1d bars` every rotation (~14 min)
 
 ## User Story
 
-As a trader or operator, I want OTC symbols kept out of watchlists and the bar-ingestion warm set, so that symbols the platform cannot serve stop generating failing `GetBars` calls, repeated Alpaca fetches and no-bars warnings.
+As a trader or operator, I want OTC, delisted and non-tradable symbols kept out of watchlists and the bar-ingestion warm set, so that symbols the platform cannot serve stop generating failing `GetBars` calls, repeated Alpaca fetches and no-bars warnings.
 
 ## Functional Requirements
 
@@ -18,7 +18,7 @@ FR-1. Marketdata classifies a symbol as unservable when Alpaca asset metadata sh
 FR-2. Watchlist addition refuses unservable (OTC, delisted, non-tradable) symbols on every add path (`AddWatchlistSymbols`, the symbol lists of `CreateWatchlist` / `UpdateWatchlist`, and bindings) and reports each refused symbol with a reason; other symbols in the same request are unaffected.
 FR-3. An unservable symbol does not enter the bar-ingestion warm set, and `GetBars` for it makes no live Alpaca fetch, so the bar ingester stops re-fetching it.
 FR-4. Signal-driven watchlist additions (`EnsureSignalWatchlist`) skip unservable symbols the same way.
-FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchanged for that call (nothing is blocked) and a WARN is logged, so a marketdata or Alpaca outage cannot block legitimate additions.
+FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchanged for that call on every path (watchlist adds, `GetBars`, `markWarm`) and a WARN is logged, so a marketdata or Alpaca outage cannot block legitimate additions. A ticker Alpaca does not list at all is a distinct case: it is not blocked (see Out of Scope).
 
 ## Out of Scope
 
@@ -29,8 +29,7 @@ FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchan
 ## Affected Services
 
 - `xstockstrat-marketdata` — owns Alpaca asset metadata; the warm set (`markWarm`), `GetBars` live-fetch fallback and bar ingester.
-- `xstockstrat-portfolio` — watchlist add paths (`AddWatchlistSymbols`, `CreateWatchlist`, `UpdateWatchlist`, `UpdateWatchlistBinding`, `EnsureSignalWatchlist`).
-- `xstockstrat-ingest` — signal ingestion that drives `EnsureSignalWatchlist` (confirm in design recon).
+- `xstockstrat-portfolio` — enforces the check inside `EnsureSignalWatchlist` (the agent's call builds an empty request, so portfolio derives the symbols; ingest is not a caller) and the other watchlist add paths (`AddWatchlistSymbols`, `CreateWatchlist`, `UpdateWatchlist`, `UpdateWatchlistBinding`, `EnsureSignalWatchlist`).
 - `xstockstrat-agent` — `manage_watchlist_symbols` / `manage_watchlist` must surface the refusal.
 - `xstockstrat-ui` — watchlist add forms must surface the refusal.
 
@@ -48,12 +47,16 @@ FR-5. When asset metadata is unavailable (the lookup fails), behaviour is unchan
 ## Config Key Changes
 
 - [ ] No new config keys
-- Candidate, decided at design: a kill-switch (e.g. `marketdata.assets.exclude_otc`) so the filter can be turned off, for instance when `marketdata.alpaca.feed` is `otc`.
+- No kill-switch key: the filter always applies (decided 2026-11-01). Design must not reintroduce one; any key it does add follows `docs/patterns/config-governance.md`.
 
 ## Database Changes
 
 - [ ] No schema changes
 - Undecided: classification may need a cache (in memory or table) so watchlist adds do not call Alpaca each time.
+
+## Trading Domain
+
+Read-only use of Alpaca asset metadata; no order routing, account, credential or `BrokerType` change, so IBKR and the trading mode are unaffected.
 
 ## Feature Workflow Notes
 
@@ -70,7 +73,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [x] **Verify the premise.** Resolved 2026-11-01 against FMP + Webull (third-party; Alpaca `ListAssets` itself not yet queried — confirm in design recon). CRTD: FMP "Other OTC", Webull OTCB. BOSSY: FMP "Other OTC", Webull PINL. FORL: FMP "Other OTC", Webull EXPM (expert market, liquidate-only). DNB is **not** OTC: the ticker now resolves to Dun & Bradstreet (NYSE, Webull non-tradable) — a delisted/reused ticker, i.e. the out-of-scope "unservable symbol" case. Staging `query_bars` for CRTD returns no bars.
+- [x] **Verify the premise.** Resolved 2026-11-01 against FMP + Webull (third-party; Alpaca `ListAssets` itself not yet queried — confirm in design recon). CRTD: FMP "Other OTC", Webull OTCB. BOSSY: FMP "Other OTC", Webull PINL. FORL: FMP "Other OTC", Webull EXPM (expert market, liquidate-only). DNB is **not** OTC: the ticker now resolves to Dun & Bradstreet (NYSE, Webull non-tradable) — a delisted/reused ticker, i.e. the delisted/non-tradable case, in scope since 2026-11-01. Staging `query_bars` for CRTD returns no bars.
 - [x] **Rejection behaviour.** Decided: accept the rest of the request; refuse only OTC symbols and report each with a warning/reason (FR-2 as written).
 - [x] **Existing data.** Decided 2026-11-01: no mark and no new field. Existing unservable entries are removed by a one-time operator cleanup using the FMP and Webull MCPs (see Out of Scope); the audit result is recorded in `context.md`.
 - [x] **Feed awareness.** Decided: always filter, regardless of `marketdata.alpaca.feed`.
