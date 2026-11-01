@@ -31,7 +31,7 @@ of `docker-compose.yml` but provide hermetic CI/local environments.
 
 ```dockerfile
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 FROM base AS builder
 WORKDIR /workspace
@@ -95,7 +95,7 @@ After pnpm deploy --prod:     ~100MB (80% reduction)
 
 ```dockerfile
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 FROM base AS deps
 WORKDIR /workspace
@@ -350,7 +350,7 @@ When Docker builds encounter npm registry timeouts or network instability, confi
 
 ```dockerfile
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 # Configure npm to retry failed requests and use longer timeouts
 RUN npm config set fetch-timeout 120000 && \
     npm config set fetch-retry-mintimeout 20000 && \
