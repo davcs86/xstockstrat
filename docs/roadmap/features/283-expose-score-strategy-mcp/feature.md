@@ -15,6 +15,7 @@
 | 2026-11-01 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; hard cap) and approved with documented open risks; recon.md + design.md written |
 | 2026-11-01 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 | 2026-11-01 | `implementation-ready` (re-spec) | /sdd-execute | Steps 1-10 re-verified after merging `origin/main-dev` (already up to date); line anchors re-pointed in Steps 3/5/7/8/9, no blocking mismatch |
+| 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (sdd-batch-execute); operator's up-front confirmation recorded in context.md |
 
 ---
 
