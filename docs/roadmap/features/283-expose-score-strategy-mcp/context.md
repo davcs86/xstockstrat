@@ -417,3 +417,20 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
   - `validate.py --self-test` and `validate.py` are OK.
   - No CI-equivalent fallback was used.
 
+
+### Step 9 — docs: service CLAUDE.md files and scoring doc — 2026-11-01
+
+- `services/xstockstrat-agent/CLAUDE.md`:
+  - The `manage_strategy` tool-table row now reads register/update/deactivate/reactivate, plus "`operation='score'` refreshes the headline grade (owner-scoped, feature 283)".
+  - A new paragraph after the feature-133 ownership-gated paragraph names the trailer contract: key `x-score-excluded-symbols`, a compact JSON array of strings, read via the call-object form; missing or unparseable ⇒ `excluded_symbols: null` plus WARN; the key literal is asserted in both services' `tests/test_score_trailer_loopback.py`; a second trailer would justify a `PLAT-*` row (not added).
+  - The "forty-five" count text was not touched.
+- `services/xstockstrat-analysis/CLAUDE.md`: one sentence on the **Evidence exclusion (H)** bullet. It says a successful ScoreStrategy sets the trailer (`"[]"` when none or the guard does not apply; omitted above 4096 bytes and on every abort path), consumed by the agent's `manage_strategy operation='score'`. These semantics were checked against `servicer.py` (`_EXCLUDED_TRAILER_MAX_BYTES = 4096`, set only on the success return) and `client._parse_excluded_trailer`.
+- `services/xstockstrat-analysis/docs/scoring.md`: one clause on the manual-refresh paragraph. It says the refresh is reachable via the agent tool and reports excluded symbols through the trailer.
+- `merge-order.md` and the root `CLAUDE.md` were not touched.
+- TDD: N/A (docs).
+  - Baseline: before the edits, the trailer-key grep matched nothing in the three files (exit 1).
+  - After the edits, the grep hits all three files (agent `:134`, analysis `:468`, scoring `:45`), and `forty-five` is unchanged (`:44`, `:50`).
+- Verification:
+  - `test_tools_endpoint.py`: 9 passed (AC-6 count surfaces).
+  - As an extra check, `test_tools.py` + `test_score_strategy_parity.py`: 134 passed.
+  - No CI-equivalent fallback was used.

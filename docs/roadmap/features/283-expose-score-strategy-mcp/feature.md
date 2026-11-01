@@ -43,4 +43,4 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 ## Next Action
 
-`/sdd-execute expose-score-strategy-mcp sequential` — Step 9 (service CLAUDE.md files and scoring doc); Step 8 parity guard GREEN 2026-11-01
+`/sdd-execute expose-score-strategy-mcp sequential` — Step 10 (root CLAUDE.md teardown and full-suite verification); Step 9 docs landed 2026-11-01

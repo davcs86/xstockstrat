@@ -406,7 +406,7 @@ python3 plugins/strat-lab/scripts/validate.py --self-test && python3 plugins/str
 
 ### Step 9 — docs: service CLAUDE.md files and scoring doc
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-analysis/docs/scoring.md`)
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
