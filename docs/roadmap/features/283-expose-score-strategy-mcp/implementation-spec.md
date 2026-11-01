@@ -393,7 +393,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run pytest tests/test_score_strategy_parity.py -q   # RED before edits (all three surfaces lack 'score'), GREEN after
+cd services/xstockstrat-agent && uv run pytest tests/test_score_strategy_parity.py -q   # RED before edits (runbook + SKILL.md lack 'score'; docstring surface is green after Step 6), GREEN after
 cd services/xstockstrat-agent && uv run pytest tests/test_tools_endpoint.py tests/test_tools.py -q   # AC-6 count guard (45) + feature-149 docs guard stay green
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q   # CI threshold (agent: 40%)
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
