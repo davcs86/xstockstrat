@@ -61,7 +61,7 @@ Expose `analysis.v1.AnalysisService/ScoreStrategy` as `manage_strategy operation
 
 ### Step 1 — test: agent client-half production-wiring loopback (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/conftest.py` — modify (`hung_backend`: optional trailers)

@@ -43,4 +43,4 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 ## Next Action
 
-`/sdd-review expose-score-strategy-mcp impl-spec` — validate implementation spec, then `/sdd-execute expose-score-strategy-mcp` (Steps 1-2 and 3-4 are the trailer go/no-go gates)
+`/sdd-execute expose-score-strategy-mcp sequential` — Step 2 (`client.score_strategy`, client-half go/no-go gate); Step 1 RED landed 2026-11-01
