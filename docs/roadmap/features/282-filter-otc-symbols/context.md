@@ -59,3 +59,11 @@
 - UI rename (operator): `commitRename` switches to the masked path (`updateMask: ['name']`) so a rename never drops symbols.
 - Adopted from round-2 adversary: refresh default 6h bounds [1,24]; shrink guard (reject a refresh <50% of last good set; fixed invariant); ACs agnostic about OTC vs NOT_TRADABLE reason (verify with live data); exhaustive `Record<UnservableReason,...>` UI map; "refused" = not newly added; RPC size bound; boot-window / NULL-credential fail-open recorded as residuals; fix stale FR-4/FR-5 text.
 - Operator chose another round (round 3) before approval.
+
+## Session 2026-11-01 — sdd-design round 3 gate (operator answers)
+
+- Round-3 design: warm-add gate (`markWarmIfServable`) at `GetBars`/`BatchGetBars`/`BatchGetLatestPrice` only; readers never filtered; `GetLatestQuote(s)`/`GetLatestPrice` ungated. Held-position carve-out verified by adversary for offline holdings: trading publishes offline positions with `current_price: 0` (`trading.go:1074`) so portfolio always quotes them via `GetLatestQuotes`, which re-warms them.
+- `@AC-53 f240` strict row (operator): classify as EXTEND with a NEW scenario (strict `BatchGetBars` whose only cold symbols are unservable succeeds, makes no live fetch, omits them) — NOT a CHANGE. Adversary view recorded: it understates a narrowing of "strict fails INTERNAL on live-fetch error"; carry as an Open Risk in design.md.
+- Warm set pruning (operator): prune unservable symbols from the warm set on EVERY successful asset-set refresh (held offline symbols re-warm on the next read via the ungated quote path).
+- Adopted without question: drop the `@AC-3 f178` qualifier (ungated path); FR-3/AC-4/AC-7 reworded to "not added by the gated sites"; invariant "gate at warm-add sites only, readers never filtered" in marketdata AND portfolio constitutions; held-position AC split into a marketdata and a portfolio scenario; single-snapshot `servable()` helper; update `TestGetBarsMarksSymbolWarm` source scan. Residuals: Monday 48h-window miss for never-stored symbols; broker/IBKR holdings not warmed by opportunity paths; today-closed fills lack prev close; new listings refused up to refresh interval (6h).
+- Operator chose another round (round 4); round 5 is the cap.
