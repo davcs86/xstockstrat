@@ -1009,3 +1009,14 @@ the next `/sdd-batch` run can pick it up.
 - Open: the marketdata `CLAUDE.md` boot-seed clause describes the code after Step 5 (`source='fmp'` count). Until
   Step 5 lands, the doc is ahead of the code.
 
+### Step 2 — test: cap-0 zero-budget behavioural pins (AC-1, AC-9) [done]
+- Added `TestGetFundamentals_CapZeroIsZeroBudget_AC1` and `TestGetFundamentalsMulti_CapZeroIsZeroBudget_AC9` after
+  the `AtCapNoCacheResourceExhausted` analogue. Both wire `fmpBudget = fakeBudget{0,0}` with cap 0 in config. AC-1:
+  uncached single read → `ResourceExhausted`, 0 vendor calls, 0 WARNs. AC-9: a 48h-old AAPL row is served `Stale`,
+  uncached MSFT is dropped, 0 vendor calls, 0 WARNs.
+- TDD: N/A (regression pin of unchanged behaviour, per spec). Green on the first run. A throwaway mutation
+  (`count >= cap` → `count > cap` at both sites, reverted, not committed) made both tests fail, so the pins bite.
+- Verification: the targeted run passes; full `go test ./... -race` passes with total coverage 71.5% (≥ 40%);
+  golangci-lint reports 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+

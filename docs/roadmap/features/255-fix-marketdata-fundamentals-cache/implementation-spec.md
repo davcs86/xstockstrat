@@ -149,7 +149,7 @@ Checklist (FR-1, review warning 1): all four sites say `<= 0` = zero budget, and
 
 ### Step 2 — test: cap-0 zero-budget behavioural pins (AC-1, AC-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -1067,3 +1067,10 @@ _Populated by /sdd-execute as implementation proceeds._
   doc is ahead of the code until Step 5 lands.
 - **Disposition**: Manual reconciliation. The integration PR body must say both that the plugin was unavailable and
   that this manual reconciliation was done (root CLAUDE.md §Teardown).
+
+### 2026-11-01 — Step 2 — CI-equivalent fallback (golangci-lint)
+- **Spec said**: Step 2's Verification runs `GOWORK=off golangci-lint run --modules-download-mode=mod`.
+- **Actual**: it ran with the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin, built with go1.27.0)
+  and reported `0 issues.` The coverage command ran with its `COVERPKGS` list expanded inline (same package set); the
+  total was 71.5%.
+- **Disposition**: CI-equivalent fallback.

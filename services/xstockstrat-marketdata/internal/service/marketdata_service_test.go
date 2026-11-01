@@ -410,6 +410,55 @@ func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 	}
 }
 
+// AC-1 (feature 255): daily_request_cap 0 is a zero budget — an uncached single read is refused, never fetched.
+func TestGetFundamentals_CapZeroIsZeroBudget_AC1(t *testing.T) {
+	cfg := enabledCfg("fmp")
+	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(cfg, repo, src, notify, "fmp")
+	svc.fmpBudget = fakeBudget{used: 0, cap: 0}
+
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cap 0 must not call the vendor, got %d calls", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("cap 0 must not raise the quota WARN, got %d", notify.warnings)
+	}
+}
+
+// AC-9 (feature 255): daily_request_cap 0 on the multi path serves stale rows and drops uncached symbols.
+func TestGetFundamentalsMulti_CapZeroIsZeroBudget_AC9(t *testing.T) {
+	cfg := enabledCfg("fmp")
+	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: "fmp"}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(cfg, repo, src, notify, "fmp")
+	svc.fmpBudget = fakeBudget{used: 0, cap: 0}
+
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL", testdata.Msft})
+	if err != nil {
+		t.Fatalf("GetFundamentalsMulti: %v", err)
+	}
+	if len(out) != 1 || out[0].Symbol != "AAPL" || !out[0].Stale {
+		t.Fatalf("expected exactly one stale AAPL row, got %+v", out)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cap 0 must not call the vendor, got %d calls", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("cap 0 must not raise the quota WARN, got %d", notify.warnings)
+	}
+}
+
 // Acceptance #4: enabled=false returns FailedPrecondition and makes zero FMP calls.
 func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
 	repo := newFakeFundRepo()
