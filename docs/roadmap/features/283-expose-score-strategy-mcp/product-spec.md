@@ -12,37 +12,43 @@
 
 As an operator driving the platform through the MCP agent, I want to refresh a strategy's headline grade and read its evidence provenance, so that I can verify grade-affecting changes (such as 215's evidence exclusion) without the UI or raw gRPC.
 
+## Decisions (operator, 2026-11-01)
+
+- **Tool shape: expand an existing tool — no new tool.** `ScoreStrategy` is exposed as a new `operation='score'` on `manage_strategy` (already the owner-gated write tool whose docstring documents grade clearing). `get_strategy` stays read-only and is not extended. The registered tool count therefore **stays forty-five**.
+- **FR-5 mechanism: option C** — surface the `excluded` list `ScoreStrategy` already computes, with **no new `StrategyScore` proto field**. How analysis exposes it without a proto field is a design-phase question (`/sdd-design`); if no no-proto channel is viable the fork returns to the operator rather than silently adopting option A.
+- **Authorization:** owner-scoped via the forwarded `x-user-id` (`_caller_user_id`), not admin-gated — matches `manage_strategy`/`set_strategy_live` since feature 133 and the analysis servicer's `get_by_owner_and_id` / `PERMISSION_DENIED`.
+- **Merge order:** recorded in `docs/roadmap/features/merge-order.md` as one table row (283's integration PR waits for 215's integration PR, i.e. 215's code on trunk) plus a non-blocking prose note ("Launch gate: 215 ↔ 283": 215's `launched` waits for 283). Sequence: 215 PR → 283 PR → 215 Step 26 (e) → 215 `launched`.
+
 ## Functional Requirements
 
-FR-1. A new agent tool `score_strategy(strategy_id)` calls `ScoreStrategy` as the caller (owner-scoped via the forwarded `x-user-id`) and returns the resulting `StrategyScore` in snake_case: `strategy_id`, `overall_score`, `component_scores`, `rating`, `evidence_symbols`, `evidence_days`, `provisional`, `origin`.
-FR-2. The tool's docstring states the side effects: it recomputes and persists the grade and emits an `analysis.strategy.scored` ledger event, and `range` is ignored (the whole eligible evidence base is used).
-FR-3. gRPC errors map to actionable messages: `PERMISSION_DENIED` (not owned/missing), `NOT_FOUND` (no eligible evidence; the stale grade is cleared), `UNAVAILABLE` (store down, or fundamentals availability unknown with the grade unchanged).
-FR-4. The tool is documented in `docs/runbooks/mcp-tools.md`, the `strat-lab` `backtest` skill reference, and every tool-count surface is bumped (45 → 46).
-FR-5. Operators can tell which symbols a refresh excluded (215's check), not only how many contributed. _The mechanism is an open fork (see Open Questions)._
+FR-1. `manage_strategy` accepts `operation='score'` with `strategy_id`. It calls `ScoreStrategy` as the caller (owner-scoped via the forwarded `x-user-id`) and returns the resulting `StrategyScore` in snake_case: `strategy_id`, `overall_score`, `component_scores`, `rating`, `evidence_symbols`, `evidence_days`, `provisional`, `origin`, plus `excluded_symbols` (FR-5). Every other `manage_strategy` argument is rejected for `score` (an actionable error, no backend call).
+FR-2. The `manage_strategy` docstring states the `score` side effects: it recomputes and persists the grade and emits an `analysis.strategy.scored` ledger event, and the time range is ignored (the whole eligible evidence base is used).
+FR-3. gRPC errors map to actionable messages: `PERMISSION_DENIED` (not owned/missing), `NOT_FOUND` (no eligible evidence; the stale grade is cleared — both the "run a backtest" and the "all evidence symbols excluded (fundamentals unavailable: …)" variants), `UNAVAILABLE` (store down, or fundamentals availability unknown with the grade unchanged). The server's detail text is passed through unchanged so each case keeps its specific message.
+FR-4. The `score` operation is documented in `docs/runbooks/mcp-tools.md` and the `strat-lab` `backtest` skill reference (same PR). No tool-count surface changes (count stays 45); an executable guard asserts the count surfaces still agree.
+FR-5. A successful `score` result carries `excluded_symbols`: a list of strings naming the symbols left with no surviving evidence cell (215's check), or `null` when analysis did not report it (e.g. an older analysis build, an oversize list, or a transport that dropped the trailer). `evidence_symbols` stays the integer count of contributing symbols. `[]` is always returned when the strategy is not guarded or `analysis.backtest.fundamentals.enabled` is off, so `[]` does not mean "the guard ran and found nothing". Delivered via the existing `excluded` list, with no new `StrategyScore` proto field (decision above).
 
 ## Out of Scope
 
 - Changing `ScoreStrategy` semantics, the evidence derivation, or 215's guard.
+- A new standalone MCP tool, or a read-only persisted-grade view (`get_strategy` is unchanged).
 - A UI surface (the UI BFF already reaches `ScoreStrategy` via `insightsBff.ts`).
 - Batch or scheduled re-scoring.
 - Executing 215 Step 26 (e) itself — this feature only unblocks it.
 
 ## Affected Services
 
-- `xstockstrat-agent` — new tool, client wrapper, docs, tool-count surfaces.
-- `xstockstrat-analysis` — only if FR-5 is met by an additive proto field.
-- `packages/proto` — only if FR-5 is met by an additive proto field.
+- `xstockstrat-agent` — `manage_strategy` `score` operation, client wrapper, docs.
+- `xstockstrat-analysis` — only if option C needs the `excluded` list exposed on a no-proto channel (e.g. gRPC trailing metadata); the design decides.
 
 ## Consumer Surface(s)
 
-- [ ] **UI** — none; already reachable through the `insights` BFF.
-- [x] **Agent** — `xstockstrat-agent` MCP tool `score_strategy` (new); plus `strat-lab` `backtest` skill reference update in the same PR (root `CLAUDE.md` rule for strategy-API changes).
+- [ ] **UI** — none; already reachable through the `insights` BFF. The tool count is unchanged, so the UI's count surfaces (`copilot.ts`, `CopilotRail.tsx`) are not edited.
+- [x] **Agent** — `xstockstrat-agent` MCP tool `manage_strategy` (new `score` operation); plus `strat-lab` `backtest` skill reference update in the same PR (root `CLAUDE.md` rule for strategy-API changes).
 - [ ] **None**
 
 ## Proto Contract Changes
 
-- [x] No proto changes required for FR-1..FR-4
-- FR-5 may add an additive field to `StrategyScore` (see Open Questions).
+- [x] No proto changes (option C adds no `StrategyScore` field). If the design finds no no-proto channel, this returns to the operator as a new fork (it does not auto-revert to an additive field).
 
 ## Config Key Changes
 
@@ -56,7 +62,7 @@ FR-5. Operators can tell which symbols a refresh excluded (215's check), not onl
 
 Branch to create: `feature/expose-score-strategy-mcp` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (agent; plus analysis/proto if FR-5 adds a field)
+- [x] 1 service owner approval (agent; plus analysis if option C needs an analysis change)
 - [ ] 2 service owners + platform lead (breaking proto change) — not applicable
 - [ ] DBA review + service owner (schema migration) — not applicable
 
@@ -67,8 +73,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **FR-5 fork — how to show excluded symbols.** `StrategyScore.evidence_symbols` is an `int32` count (`analysis.proto:255`), so a refresh can't name SCHD. Options: (A) additive `repeated string excluded_symbols` on `StrategyScore` (proto + analysis change, richest); (B) tool returns only the count and the operator compares before/after counts with SCHD added/removed (no proto, weaker proof); (C) surface the `excluded` list already computed in `ScoreStrategy` as a response `warnings` field in the tool only if analysis exposes it. Operator to choose at design.
-- [ ] Tool shape: standalone `score_strategy` write tool vs also exposing the persisted grade read-only via `get_strategy`/`GetStrategyReport`. The story requires only the refresh; a read-only grade view is not in scope unless chosen.
-- [ ] Authorization: `ScoreStrategy` is owner-scoped, not admin-gated; confirm no `_caller_access_scope` admin check is wanted (constitution: admin scope only on management tools).
-- [ ] Tool-count merge-order: any in-flight feature that also adds a tool (e.g. 281) races on the six count surfaces; whichever lands second re-bumps.
+- [x] FR-5 fork — resolved: option C (see Decisions).
+- [x] Tool shape — resolved: expand `manage_strategy` with `operation='score'`.
+- [x] Authorization — resolved: owner-scoped, not admin-gated.
+- [x] Tool-count merge-order — resolved: count stays 45, no race with 281; 215↔283 ordering recorded in `merge-order.md`.
+- **Resolved at `/sdd-design` (trailing-metadata channel `x-score-excluded-symbols`, see design.md); originally deferred:** which no-proto channel carries `excluded` from analysis to the agent (trailing metadata vs. another existing field), and how `manage_strategy`'s `operation` validation/dispatch accommodates a read-shaped-args write op. Design must also pass the server's NOT_FOUND detail through `_grpc_error_message` for `score` so AC-3/AC-8 keep their specific messages. AC-7 re-opens to the operator if no channel is viable.
 - **Known trap (ledger `fails.md` 2026-08-02 mcp-tools-alignment-triage):** MCP prose, runbook and `strat-lab` skill drift from `client.py`/protos. Design must add an executable parity guard (descriptor-parity test like `test_backtest_view.py`), not prose only.
