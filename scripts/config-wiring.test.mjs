@@ -61,7 +61,7 @@ test('4 down files, per-user rows and secret values stay out', () => {
   assert.ok(!JSON.stringify([...s.stored.values(), ...s.secrets.values()]).includes('TOPSECRET-VALUE-778'))
   for (const args of [[], ['--json']]) {
     const r = cli(root, ...args)
-    assert.equal(r.status, 0, r.stderr)
+    assert.notEqual(r.status, 2, r.stderr)
     assert.ok(!(r.stdout + r.stderr).includes('TOPSECRET-VALUE-778'))
   }
 })
@@ -82,7 +82,8 @@ test('5 unmodelled rewrite fails closed; allow-list is file plus statement hash'
   const registry = { forwarders: {}, dynamic: {}, rewriteAllow: [{ file: u.file, sha256: u.sha256, reason: 'fixture' }] }
   fs.writeFileSync(path.join(dir, 'scripts', 'config-wiring.json'), JSON.stringify({ registry }))
   r = cli(dir)
-  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.notEqual(r.status, 2, r.stderr)
+  assert.doesNotMatch(r.stdout, /unmodelled-rewrite/)
   assert.deepEqual(buildStoredSet(dir).unmodelled, [])
 
   const sql = path.join(dir, MIG, '002_delete.up.sql')
@@ -248,6 +249,67 @@ test('k a call through the get_int_present alias resolves like get_int', () => {
   const r = res.reads.find((x) => x.key === 'ingest.backfill.max_retry_attempts')
   assert.equal(r.file, `${PY_I}/config/watcher.py`)
   assert.equal(r.line, 15)
+})
+
+const JOIN = path.join(HERE, 'config-wiring-fixtures', 'join')
+const SEEDS = 'services/xstockstrat-config/migrations'
+const lines = (r) => r.stdout.split('\n').filter(Boolean)
+
+test('join 1 @AC-1 form-mismatch names both strings and suppresses the pair (both directions)', () => {
+  const r = cli(path.join(JOIN, 'mismatch'))
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [
+    `${SEEDS}/001_seed.up.sql:ingest/ingest.signals.window_hours->signals.window_hours:form-mismatch`,
+    `${SEEDS}/001_seed.up.sql:ingest/mcp_client.request_timeout_seconds->ingest.mcp_client.request_timeout_seconds:form-mismatch`,
+  ])
+})
+
+test('join 2 @AC-2 seeded-unread names the last seeding migration, no env', () => {
+  const r = cli(path.join(JOIN, 'seeded-unread'))
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [`${SEEDS}/002_reseed.up.sql:ledger/stream.notify_enabled:seeded-unread`])
+})
+
+test('join 3+6 @AC-3 read-unseeded is one finding per key across reader files', () => {
+  const r = cli(path.join(JOIN, 'read-unseeded'))
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), ['services/xstockstrat-ingest/app/config/watcher.py:ingest.backfill.retry_on_failure:read-unseeded'])
+})
+
+test('join 4 @AC-9 an f-string key is one dynamic-read naming file and symbol', () => {
+  const r = cli(READERS)
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r).filter((l) => l.startsWith(`${PY_A}/dynamic_fstring.py:`)), [`${PY_A}/dynamic_fstring.py:is_enabled:dynamic-read`])
+})
+
+test('join 5 env collapse: missing everywhere has no env; production-only seed reports :staging', () => {
+  const root = path.join(JOIN, 'env-collapse')
+  const r = cli(root)
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [
+    'services/xstockstrat-ingest/app/flags.py:ingest.alpha.enabled:read-unseeded:staging',
+    'services/xstockstrat-ingest/app/flags.py:ingest.gamma.enabled:read-unseeded',
+  ])
+  const j = JSON.parse(cli(root, '--json').stdout)
+  assert.deepEqual(j.findings.map((f) => [f.key, f.kind, f.envs]), [
+    ['ingest.alpha.enabled', 'read-unseeded', ['staging']],
+    ['ingest.gamma.enabled', 'read-unseeded', undefined],
+  ])
+})
+
+test('join 7 negative matches (dotted, ui/agent bare, 029/031 healed) are wired', () => {
+  const r = cli(path.join(JOIN, 'negative-matches'))
+  assert.equal(r.stdout, '')
+  assert.equal(r.status, 0, r.stderr)
+})
+
+test('join 8 a secret row and a GetSecret read give no finding and no value text', () => {
+  for (const args of [[], ['--json']]) {
+    const r = cli(path.join(JOIN, 'secret'), ...args)
+    assert.equal(r.status, 0, r.stdout + r.stderr)
+    assert.ok(!(r.stdout + r.stderr).includes('SECRETVALUE-JOIN-913'))
+  }
+  assert.equal(cli(path.join(JOIN, 'secret')).stdout, '')
 })
 
 test('CLI usage errors exit 2', () => {

@@ -555,6 +555,53 @@ export function extractReads(root, registry = loadRegistry(root)) {
   return { reads, dynamic }
 }
 
+const SEED_DIR = MIGRATIONS.split(path.sep).join('/')
+
+// Per (namespace, key, environment), then one finding per (namespace, key, kind); `envs` only on partial seeding.
+export function join(stored, reads) {
+  const byKey = new Map()
+  for (const r of reads.reads) if (!byKey.has(r.key) || r.file < byKey.get(r.key)) byKey.set(r.key, r.file)
+  const allEnvs = [...new Set([...stored.values()].map((s) => s.environment))].sort()
+  const seeded = new Map()
+  for (const s of stored.values()) {
+    const id = `${s.namespace}\u0000${s.key}`
+    if (!seeded.has(id)) seeded.set(id, { namespace: s.namespace, key: s.key, envs: new Set(), file: s.file })
+    const e = seeded.get(id)
+    e.envs.add(s.environment)
+    if (s.file > e.file) e.file = s.file
+  }
+  const partnerOf = (ns, key) => (byKey.has(`${ns}.${key}`) ? `${ns}.${key}` : key.startsWith(`${ns}.`) && byKey.has(key.slice(ns.length + 1)) ? key.slice(ns.length + 1) : null)
+  const findings = []
+  const covered = new Map()
+  const cover = (key, env) => { if (!covered.has(key)) covered.set(key, new Set()); covered.get(key).add(env) }
+  for (const s of seeded.values()) {
+    for (const env of s.envs) cover(s.key, env)
+    if (byKey.has(s.key)) continue
+    const readKey = partnerOf(s.namespace, s.key)
+    const file = `${SEED_DIR}/${s.file}`
+    if (readKey === null) findings.push({ kind: 'seeded-unread', namespace: s.namespace, key: s.key, file })
+    else {
+      for (const env of s.envs) cover(readKey, env)
+      findings.push({ kind: 'form-mismatch', namespace: s.namespace, key: s.key, readKey, file })
+    }
+  }
+  for (const [key, file] of byKey) {
+    const missing = allEnvs.filter((env) => !covered.get(key)?.has(env))
+    if (allEnvs.length && !missing.length) continue
+    const f = { kind: 'read-unseeded', namespace: '', key, file }
+    if (missing.length && missing.length < allEnvs.length) f.envs = missing
+    findings.push(f)
+  }
+  const sites = new Map(reads.dynamic.map((d) => [`${d.file}:${d.symbol}`, d]))
+  for (const d of sites.values()) findings.push({ kind: 'dynamic-read', namespace: '', key: d.symbol, file: d.file })
+  return findings
+}
+
+export function findingLine(f) {
+  const key = f.kind === 'form-mismatch' ? `${f.namespace}/${f.key}->${f.readKey}` : f.kind === 'seeded-unread' ? `${f.namespace}/${f.key}` : f.key
+  return [f.file, key, f.kind, ...(f.envs ? [f.envs.join(',')] : [])].join(':')
+}
+
 export function run(argv) {
   const { values } = parseArgs({
     args: argv,
@@ -568,9 +615,16 @@ export function run(argv) {
     },
   })
   const root = path.resolve(values.root)
-  const { stored, secrets, unmodelled } = buildStoredSet(root)
-  const findings = unmodelled.map((u) => ({ file: path.posix.join(MIGRATIONS.split(path.sep).join('/'), u.file), key: `L${u.line}`, kind: 'unmodelled-rewrite', sha256: u.sha256 }))
-  const lines = findings.map((f) => `${f.file}:${f.key}:${f.kind}`)
+  const registry = loadRegistry(root)
+  const { stored, secrets, unmodelled } = buildStoredSet(root, { registry })
+  const findings = [
+    ...unmodelled.map((u) => ({ kind: 'unmodelled-rewrite', namespace: '', key: `L${u.line}`, file: `${SEED_DIR}/${u.file}`, sha256: u.sha256 })),
+    ...join(stored, extractReads(root, registry)),
+  ]
+    .map((f) => [findingLine(f), f])
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([, f]) => f)
+  const lines = findings.map(findingLine)
   if (values.json) process.stdout.write(JSON.stringify({ findings, counts: { stored: stored.size, secrets: secrets.size } }, null, 2) + '\n')
   else if (lines.length) process.stdout.write(lines.join('\n') + '\n')
   return findings.length ? 1 : 0

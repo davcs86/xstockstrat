@@ -291,3 +291,33 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
   - Register `float_positive`/`str_nonempty` (analysis, `keyArg` 1) and agent `get_config_value` (`keyArg` 0) as forwarders.
   - Handle the Python and TS watcher getter internals and the `values`-index false positives listed above, either through `registry` entries or by tightening the extractor.
 - Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 5+6
+
+### Step 5 — Join with collapse, finding kinds and output [done]
+- `scripts/check-config-wiring.mjs` gains `join(stored, reads)` and `findingLine(f)`, and `run()` now prints the join's findings next to `unmodelled-rewrite`.
+  - Joins are verbatim. A bare-seed/dotted-read pair, or a dotted-seed/bare-read pair, gives one `form-mismatch` and suppresses its `seeded-unread`/`read-unseeded` per environment.
+  - Findings are grouped per `(namespace, key, kind)`.
+  - Only `read-unseeded` carries `:env`, listing the environments where the key is missing when it is seeded in some environments but not others.
+  - Dynamic sites are deduplicated per `file:symbol`.
+  - Output is sorted. The exit code is 1 when there is any finding and 0 otherwise.
+  - Secrets and `GetSecret` never enter the comparison.
+- Real-tree smoke run (not a gate; no `config-wiring.json` yet, so no forwarders are registered) exited 1 with 150 lines:
+  - 9 `form-mismatch`: the analysis `backtest.max_duration_seconds`, seven `fundsignal.*`, and `scoring.signal_decay_half_life_hours`.
+  - 31 `seeded-unread`.
+  - 64 `read-unseeded`, one of them env-scoped: `trading.fill_poller.interval_ms:production`.
+  - 46 `dynamic-read`.
+- The ingest `form-mismatch` group and the remaining `fundsignal.*` keys show up as `seeded-unread` here, because their reads go through `int_positive` and similar forwarders that are not registered yet. Steps 9 and 11 reconcile this once the forwarders are registered.
+- TDD red (before implementation): `node --test scripts/config-wiring.test.mjs` gave tests 28, pass 23, fail 5. The five failures were join cases 1-5. Cases 7 and 8 assert no output, so they already passed.
+- TDD green: `node --check scripts/check-config-wiring.mjs && node --test scripts/config-wiring.test.mjs` gave tests 28, pass 28, fail 0.
+- Files modified: `scripts/check-config-wiring.mjs`
+- Deviations: Steps 5+6 were executed as one TDD cycle (operator option A). The `join` signature, the per-kind key and file fields, and the rule that only `read-unseeded` carries an env are defined here. See the Deviation Log.
+
+### Step 6 — Join and finding-kind tests (authored red) [done]
+- Join cases 1-8 were added to `scripts/config-wiring.test.mjs`. Each asserts exact CLI lines. Case 6 (PRESERVE @AC-3) is folded into case 3, where two reader files read the same key and produce one finding. Case 4 reuses the `readers/` fixture.
+- Fixtures are under `scripts/config-wiring-fixtures/join/{mismatch,seeded-unread,read-unseeded,env-collapse,negative-matches,secret}/` (17 files).
+- Step 2 cases 4 and 5 no longer assert exit 0, because their fixtures' seeds now report `seeded-unread`. See the Deviation Log.
+- Lint: `node --check scripts/config-wiring.test.mjs` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/join/**`
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
+- Severity: n/a.

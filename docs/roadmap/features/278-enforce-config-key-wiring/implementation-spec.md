@@ -226,7 +226,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ### Step 5 — service: Join with collapse, finding kinds and output
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -259,7 +259,7 @@ node --check scripts/check-config-wiring.mjs && node --test scripts/config-wirin
 
 ### Step 6 — test: Join and finding-kind tests (authored red)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
@@ -717,3 +717,30 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: dynamic entries are `{"file","symbol","line","dynamic":true}`; `registry.dynamic` and `registry.forwarders` are keyed `file:symbol`.
 **Actual**: Python `symbol` is the dotted enclosing scope (`ConfigWatcher.get_str`, `is_enabled`). Go `symbol` is `Receiver.Func` or `Func`. TS `symbol` is the nearest preceding function or method name. All three fall back to `<module>`. The Node API is `extractReads(root, registry)`, which returns `{reads:[{file,line,key}], dynamic:[{file,symbol,line}]}`, plus `extractPyReads`, `extractGoReads` and `extractTsReads`. An identifier argument resolves to a string constant in the same file first, then the same directory or package, then anywhere in the service. A `pkg.Name` argument resolves in a directory named `pkg`. If more than one value matches, the read is reported as `dynamic-read`.
 **Reason**: The spec does not define the symbol format or the function signatures. Steps 5 and 11 key on these.
+
+### Deviation: Steps 5+6 — executed as one TDD cycle
+**Spec said**: "Step 6 covers Step 5 ... `/sdd-execute` captures red before the paired service step" (separate steps, one commit each).
+**Actual**: Step 6's fixtures and cases were authored first and red was captured (28 tests: 23 pass, 5 fail). The 5 failures were cases (1)-(5). Cases (7) and (8) passed before the join existed because they assert that there is no output, and the pre-join CLI printed nothing. Step 5 was then implemented and green was captured with both Verification commands (28 pass). Steps 5 and 6 landed as one red-green commit that flips both Statuses to `done`.
+**Reason**: Operator decision (Option A) for every inverted test/impl pair, recorded in context.md (commit cdfbeaf6).
+
+### Deviation: Step 5 — `join` signature, line format and env rule
+**Spec said**: "`join(stored, reads, registry)`"; "Output lines are `file:key:kind[:env]`"; "`:env` is appended only when the key is seeded in some environments and absent in others (one finding listing the missing envs)".
+**Actual**:
+- The function is `join(stored, reads)`, where `reads` is the `extractReads` result `{reads, dynamic}`. The registry is applied earlier, inside `extractReads` (forwarders and `registry.dynamic`), so `join` takes no registry argument.
+- The key field depends on the kind:
+  - `seeded-unread` is `<namespace>/<storedKey>`, because a bare stored key is ambiguous without its namespace.
+  - `form-mismatch` is `<namespace>/<storedKey>-><readKey>`, so the line names both strings (@AC-1).
+  - `read-unseeded` is the read key.
+  - `dynamic-read` is the symbol.
+- The file field also depends on the kind:
+  - For seed-side kinds it is the full migration path, using the latest file that seeded the key in any environment.
+  - For `read-unseeded` it is the reader file that sorts first.
+  - For `dynamic-read` it is the reader file.
+- When `envs` is present it is comma-joined. `--json` emits `{kind, namespace, key, readKey?, file, envs?}`, and `namespace` is `''` for read-side kinds.
+- Only `read-unseeded` can carry `:env`. It lists the environments in which no stored row (or form-mismatch partner) exists, out of all environments present in the stored set. Seed-side kinds hold in every environment where the key is seeded, so they never carry `:env`. That is why `ledger stream.notify_enabled` (staging-only) is a single untagged `seeded-unread`, as Step 9 expects. Form-mismatch suppression is per environment: a read covered by a bare partner only in staging still reports `read-unseeded:production`.
+**Reason**: The spec does not define the key field's form for the seed-side kinds, or the env semantics for a seed-side kind. The Step 10 ruling (production-only gaps reported) applies only to read-side gaps.
+
+### Deviation: Step 6 — Step 2 CLI assertions relaxed
+**Spec said**: Step 2 cases 4 and 5 asserted CLI exit `0` on the `scope-and-secret` fixture and on the allow-listed `unmodelled` fixture.
+**Actual**: With the join wired into `run()`, both fixtures now also report `seeded-unread` for their reader-less seeds, so the exit code is `1`. The assertions now check that the run is not an error (exit `!= 2`), that no secret value appears in the output, and, for case 5, that no `unmodelled-rewrite` line remains. The fixtures are unchanged.
+**Reason**: Those cases test the parser, not wiring. Adding readers to Step 2's fixtures would mix concerns.
