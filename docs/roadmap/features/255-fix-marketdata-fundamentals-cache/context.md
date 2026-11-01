@@ -964,3 +964,21 @@ the next `/sdd-batch` run can pick it up.
 
 - **Decided:** enrichment errors with no stage (the `build request` error at `fmp_client.go:226` and a non-ctx limiter
   error at `:229`) get the WARN class label `other`. They still expire the row under rule 5. Step 11 uses `other`.
+
+## Session 2026-11-01 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup (§5.3): merged `origin/main-dev` into the branch (`a4e75e48`, normal merge, no conflicts);
+  `scripts/ledger-guard.py --fix` reported clean, so no repair was needed.
+- Re-spec of steps 0–17 (`implementation-spec.md`). Upstream main-dev changed 23 marketdata files since `111b4e25`. The
+  content still matches, and the line anchors were re-pointed. Material changes:
+  - Step 11: feature 254's merged secret-exposure fix rewrote `getJSON`. The transport error now wraps only the
+    `*url.Error` inner cause (`fmp_client.go:250`) and has a second un-wrapped return (`:252`). `stageError{"transport"}`
+    must wrap both. Build-request is now two returns (`:228`/`:230`). The recorded `other` class label (2026-10-22
+    decision) is folded into the step.
+  - Step 13: the service write blocks already use `slog.WarnContext(ctx, ...)` (`:1743`/`:1798`), so the instruction
+    reduces to swapping `ctx` for `wctx`. The verification now expects 5 `context.WithoutCancel(ctx)` hits in total
+    (3 pre-existing). `edgarFinish` upserts only when `live != nil`.
+  - Step 1: config-governance shared-budget prose is now at `:214-216` and the key row is at `:802`.
+  - Step 5: `cmd/server/main.go` anchors moved +8 lines (seed block `:137-141`).
+- The 215/254 overlap threads are now moot for anchors, because both are on main-dev and in the merged tree. The
+  merge-order rows are still pending an operator yes.
