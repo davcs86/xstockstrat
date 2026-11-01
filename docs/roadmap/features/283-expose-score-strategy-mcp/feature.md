@@ -13,6 +13,7 @@
 | 2026-11-01 | `idea` → `draft` | /sdd-story | Product spec generated (gap from 215 Step 26 (e)) |
 | 2026-11-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; first pass FAILED on open questions, resolved by operator) |
 | 2026-11-01 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; hard cap) and approved with documented open risks; recon.md + design.md written |
+| 2026-11-01 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — debated, user-approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec expose-score-strategy-mcp`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -35,10 +36,9 @@ The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance field
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements still agreeing at forty-five across the inventory surfaces (no bump); no secret values in tool output or the unauthenticated `GET /api/tools` catalog |
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias (only if option C needs the `excluded` list exposed on a no-proto channel, e.g. trailing metadata) |
-| Proto Reviewer + `packages/proto` owner | Not required (option C adds no proto field); engaged only if design returns to the operator and an additive field is chosen |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
 
 ## Next Action
 
-`/sdd-spec expose-score-strategy-mcp` — generate implementation spec from the approved design (first execute step must be the production-wiring trailer loopback test)
+`/sdd-review expose-score-strategy-mcp impl-spec` — validate implementation spec, then `/sdd-execute expose-score-strategy-mcp` (Steps 1-2 and 3-4 are the trailer go/no-go gates)
