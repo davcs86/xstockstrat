@@ -75,3 +75,14 @@
 - Merge order (operator): add a soft row so 282 merges after 215.
 - Round-4 adversary additions to carry into design.md: `BatchGetLatestPrice` flight keyed on the FULL request set (filter only the trade fetch) and AC-13 states what an unservable symbol with a stored previous close returns; prune-race closure statement + two accepted residuals (one in-flight live fetch on an old snapshot; one poller/ingester cycle on a pre-prune copy); `@AC-53`/`@AC-54` f240 tests pin the asset set (ZZZZ servable in a loaded set) so `@AC-54` is not vacuous; refresh interval clamped on read, `<=0` per MARKETDATA-5, re-read each tick; never-loaded WARN once per state transition; first-load truncation not protected by the shrink guard (R3).
 - Operator chose round 5 (the cap) before approval.
+
+## Session 2026-11-01 — sdd-design (completion)
+
+- Phase 0 Recon: wrote recon.md (services: marketdata, portfolio, agent, ui; reuse: `etfFlagState` cache shape, classification poller, `latestQuotesFor` fail-open, `GetEtfFlags` RPC shape).
+- Phase 1 Grilling: 5 rounds (quick mode extended to the cap by the operator). Chosen approach: marketdata-owned in-memory asset-set predicate + `GetSymbolServability` RPC; gate at warm-add sites of `GetBars`/`BatchGetBars`/`BatchGetLatestPrice` only (readers and quote paths ungated); first-load-only prune; portfolio uniform filter after `requestBindings` with post-filter cap, fail-open; agent/UI surface `refused`. Rejected: `ListAssets` filter, DB table, new-vs-stored special-casing, prune-every-refresh, reader-side filtering, origin tagging, kill-switch.
+- Round-5 final change: per-list cap on the post-filter union (the round-5 proposal kept it pre-filter, which contradicted FR-2 "accept the rest").
+- Constitution rules touched: C-03/04/05/08/09/10/12/13/14/15/16/17/18, F-04/06/07, P-03/04/05. Floor breaches: none.
+- C-16: CHANGE `@AC-5 f148` and platform `@AC-1 f127` (signed off round 1); EXTEND `@AC-53/54 f240` (operator, R4 dissent recorded).
+- Artifacts rewritten for the final design: product-spec.md, acceptance.feature (AC-1..AC-9 reworded in place; AC-10..AC-26 appended), merge-order.md soft row after 215. design.md Open Risks R1..R11 mirror below.
+- Open Threads (target step): R1 held-symbol gaps -> marketdata gate step + AC-17/AC-26 tests; R4 f240 pin -> marketdata test step + promotion; R9 verify Alpaca values with live credentials -> marketdata asset-set step; R10 rebase vs 215/255 -> before merge; R11 coupling -> contract tests AC-16/AC-17.
+- Status: spec-ready -> design-approved.
