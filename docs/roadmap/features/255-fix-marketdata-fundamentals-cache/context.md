@@ -1189,3 +1189,24 @@ the next `/sdd-batch` run can pick it up.
 - Deviations: the un-wrapped transport return is unreachable through `http.Client`, so it is pinned at the classifier;
   `cap` is tested only in AC-5 (see Deviation Log)
 
+### Step 13 — service: D-53b (store) — expire on write, same-source merge and the trace-carrying write ctx [done]
+- `UpsertFundamentals`:
+  - The VALUES `fetched_at` is now `CASE WHEN $17::boolean THEN 'epoch'::timestamptz ELSE now() END`.
+  - The conflict branch sets `fetched_at=EXCLUDED.fetched_at`.
+  - `pb_ratio`, `dividend_yield`, `beta`, `roe` and `debt_to_equity` COALESCE with the existing row only on a flagged
+    same-source overwrite. Every other column, `as_of` and `source` included, is still overwritten.
+  - `f.EnrichmentFailed` binds as `$17`, and the doc comment was rewritten.
+- `marketdata_service.go`: each write block (multi and single) creates one `wctx := context.WithoutCancel(ctx)` for the
+  upsert, the WARN, `seedFromProfile`, `maybeAlertQuota` and `quotaCountAfterFetch`. The read paths are unchanged, and
+  `classification_service.go` was not touched (C-18).
+- TDD, with uncommitted probes that were deleted afterwards (Step 14 owns the committed tests):
+  - RED: a pgxmock regex probe failed with `could not match actual sql`, and a cancel probe failed with
+    `upsert ctx was cancelled (context canceled)`.
+  - GREEN: both probes passed.
+- Verification: the 4 greps match and the build passes. `go vet -tags dbtest ./internal/repository/` passes, and
+  golangci-lint reports 0 issues (CI-equivalent fallback).
+- Open thread, closed by Step 14: `TestUpsertFundamentals_CastsExtraMetricsToJSONB` fails
+  (`expected 16, but got 17 arguments`) until Step 14 Instruction 8 widens its arg list to 17.
+- Files modified: `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`
+- Deviations: the service anchors drifted, and the repository test is red until Step 14 (see Deviation Log)
+

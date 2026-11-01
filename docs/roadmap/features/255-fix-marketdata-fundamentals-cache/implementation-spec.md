@@ -732,7 +732,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 13 — service: D-53b (store) — expire on write, same-source merge and the trace-carrying write ctx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -1194,3 +1194,18 @@ _Populated by /sdd-execute as implementation proceeds._
   passed again on the restored file. The coverage command ran with its `COVERPKGS` list expanded inline (same package
   set); the total was 72.6%. The operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (CI pin) reported `0 issues.`
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 13 — repository test red until Step 14; CI-equivalent fallback (golangci-lint); RED via throwaway probes
+- **Spec said**: Verification is four greps plus `GOWORK=off go build ./...`. Step 14 Instruction 8 widens
+  `TestUpsertFundamentals_CastsExtraMetricsToJSONB` from 16 to 17 args. The service anchors were `:1706-1713`/`:1762-1766`.
+- **Actual**: every grep matches (`$17::boolean` on VALUES and the 5 merge columns, `fetched_at=EXCLUDED.fetched_at`,
+  5 `context.WithoutCancel(ctx)`, 2 `WarnContext(wctx, "GetFundamentals` hits) and the build passes. The write blocks
+  were edited by content (now `:1743-1751` and `:1799-1804`). Until Step 14 lands,
+  `TestUpsertFundamentals_CastsExtraMetricsToJSONB` fails with `expected 16, but got 17 arguments`. That test belongs
+  to Step 14, so it was left unchanged. Every other package passes under `-race`. `go vet -tags dbtest
+  ./internal/repository/` passes, and the operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported
+  `0 issues.` RED/GREEN used two uncommitted probes, deleted afterwards:
+  - a pgxmock regex over the epoch CASE, the beta merge and `fetched_at=EXCLUDED.fetched_at`, with a 17th arg of `true`;
+  - a source that cancels the request ctx before the single and multi upserts.
+- **Disposition**: CI-equivalent fallback. `internal/repository` tests stay red until Step 14, which the spec
+  anticipates.

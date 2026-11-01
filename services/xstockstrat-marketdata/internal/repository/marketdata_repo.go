@@ -581,8 +581,8 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 	}, fetched, true, nil
 }
 
-// UpsertFundamentals inserts or refreshes a cached fundamentals row, bumping fetched_at
-// to now() so the quota count (CountFundamentalsFetchedToday) and TTL reflect the fetch.
+// UpsertFundamentals stores a row flagged EnrichmentFailed already expired (fetched_at = epoch), and a
+// flagged same-source overwrite keeps the last-known-good enrichment columns.
 func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error {
 	extraJSON, err := json.Marshal(f.ExtraMetrics)
 	if err != nil {
@@ -602,21 +602,26 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 		INSERT INTO marketdata.fundamentals
 		  (symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe,
 		   debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16, now())
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,
+		        CASE WHEN $17::boolean THEN 'epoch'::timestamptz ELSE now() END)
 		ON CONFLICT (symbol) DO UPDATE SET
 		  as_of=EXCLUDED.as_of, market_cap=EXCLUDED.market_cap, pe_ratio=EXCLUDED.pe_ratio,
-		  pb_ratio=EXCLUDED.pb_ratio, dividend_yield=EXCLUDED.dividend_yield, eps=EXCLUDED.eps,
-		  beta=EXCLUDED.beta, roe=EXCLUDED.roe, debt_to_equity=EXCLUDED.debt_to_equity,
+		  pb_ratio=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.pb_ratio, fundamentals.pb_ratio) ELSE EXCLUDED.pb_ratio END,
+		  dividend_yield=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.dividend_yield, fundamentals.dividend_yield) ELSE EXCLUDED.dividend_yield END,
+		  eps=EXCLUDED.eps,
+		  beta=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.beta, fundamentals.beta) ELSE EXCLUDED.beta END,
+		  roe=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.roe, fundamentals.roe) ELSE EXCLUDED.roe END,
+		  debt_to_equity=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.debt_to_equity, fundamentals.debt_to_equity) ELSE EXCLUDED.debt_to_equity END,
 		  price=EXCLUDED.price, year_high=EXCLUDED.year_high, year_low=EXCLUDED.year_low,
 		  extra_metrics=EXCLUDED.extra_metrics, currency=EXCLUDED.currency, source=EXCLUDED.source,
-		  fetched_at=now()`
+		  fetched_at=EXCLUDED.fetched_at`
 	asOf := f.AsOf
 	if asOf.IsZero() {
 		asOf = time.Now().UTC()
 	}
 	_, err = r.db.Exec(ctx, q,
 		f.Symbol, asOf, f.MarketCap, f.PERatio, f.PBRatio, f.DividendYield, f.EPS, f.Beta, f.ROE,
-		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSONText, f.Currency, src)
+		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSONText, f.Currency, src, f.EnrichmentFailed)
 	if err != nil {
 		return fmt.Errorf("upsert fundamentals %s: %w", f.Symbol, err)
 	}

@@ -1740,14 +1740,15 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 			} else if err != nil {
 				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 			}
+			wctx := context.WithoutCancel(ctx)
 			for _, f := range fetched {
-				if upErr := s.fundRepo.UpsertFundamentals(ctx, f); upErr != nil {
-					slog.WarnContext(ctx, "GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
+				if upErr := s.fundRepo.UpsertFundamentals(wctx, f); upErr != nil {
+					slog.WarnContext(wctx, "GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
 				}
-				s.seedFromProfile(ctx, f.Symbol, f.Sector)
+				s.seedFromProfile(wctx, f.Symbol, f.Sector)
 				cached[strings.ToUpper(f.Symbol)] = s.toProtoFundamentals(f, false)
 			}
-			s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+len(fetched)), cap, windowSeconds)
+			s.maybeAlertQuota(wctx, s.quotaCountAfterFetch(wctx, count+len(fetched)), cap, windowSeconds)
 		}
 	}
 
@@ -1796,11 +1797,12 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 	}
-	if upErr := s.fundRepo.UpsertFundamentals(ctx, fresh); upErr != nil {
-		slog.WarnContext(ctx, "GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
+	wctx := context.WithoutCancel(ctx)
+	if upErr := s.fundRepo.UpsertFundamentals(wctx, fresh); upErr != nil {
+		slog.WarnContext(wctx, "GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
 	}
-	s.seedFromProfile(ctx, fresh.Symbol, fresh.Sector)
-	s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+1), cap, windowSeconds)
+	s.seedFromProfile(wctx, fresh.Symbol, fresh.Sector)
+	s.maybeAlertQuota(wctx, s.quotaCountAfterFetch(wctx, count+1), cap, windowSeconds)
 	return s.toProtoFundamentals(fresh, false), nil
 }
 
