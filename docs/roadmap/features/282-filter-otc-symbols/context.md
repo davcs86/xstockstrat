@@ -86,3 +86,14 @@
 - Artifacts rewritten for the final design: product-spec.md, acceptance.feature (AC-1..AC-9 reworded in place; AC-10..AC-26 appended), merge-order.md soft row after 215. design.md Open Risks R1..R11 mirror below.
 - Open Threads (target step): R1 held-symbol gaps -> marketdata gate step + AC-17/AC-26 tests; R4 f240 pin -> marketdata test step + promotion; R9 verify Alpaca values with live credentials -> marketdata asset-set step; R10 rebase vs 215/255 -> before merge; R11 coupling -> contract tests AC-16/AC-17.
 - Status: spec-ready -> design-approved.
+
+## Session 2026-11-01 — sdd-spec
+
+- Generated implementation-spec.md with 15 steps (proto, proto-gen, config x2, marketdata x4, portfolio x2, agent x2, ui x2, docs). Status → implementation-ready. Every AC-1..AC-26 is covered by a step's `**Covers**` (table in the spec).
+- Key codebase findings:
+  - Anchors re-verified at HEAD: `markWarm` sites `marketdata_service.go:262,545,575,688,749,868`; `GetBars` live fetch `:312-332`; `BatchGetBars` cold path `:763-772`; `BatchGetLatestPrice` flight key `:871-874`, prev-close `:893`, trades `:908-945`; portfolio call sites `CreateWatchlist :1905`, `UpdateWatchlist :2010`, `AddWatchlistSymbols :2166`, `requestBindings :1830`, marketdata dial with propagation interceptor `:138`.
+  - `xstockstrat-config` is an additional affected service: both new keys need `SCALAR_BOUNDS_REGISTRY` entries (`configServiceImpl.ts:103`) plus `TIMEOUT_KEY_FORMS` rows (`setConfigScalarBounds.test.ts`); the product spec's "SetConfig-bounded" implies it. The registry min of 1 rejects 0 at write time, so "`<= 0` pauses" is a reader-only defence.
+  - `newSvc` in portfolio tests leaves `marketdata` nil and `stubMarketData` panics on unstubbed methods: the servability helper treats a nil client as unavailable and the stub gains a `GetSymbolServability` override.
+  - `GetBars` needs a live DB pool, so its gate is covered by the existing structural source-scan style (`TestGetBarsMarksSymbolWarm` is updated) plus unit tests of `markWarmIfServable`.
+  - `resolvePositiveInt` maps `<= 0` to the default, so the new refresh-interval reader reads `budgetCfg.GetInt` directly to keep the MARKETDATA-5 pause rule.
+- Open decisions for `/sdd-review impl-spec` (not guessed): (a) `refused` always present on agent create/add/replace-update, `watchlist_refused` only when non-empty on `ingest_signal`; (b) no client-side 1000 constant in portfolio (RPC InvalidArgument fails open) despite design.md's "size check before the RPC"; (c) config bound [1,24] vs "<= 0 pauses".

@@ -13,6 +13,7 @@
 | 2026-10-31 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, no blockers; open question resolved from code) |
 | 2026-11-01 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, quick extended to the cap) and approved; recon.md + design.md written |
+| 2026-11-01 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — debated, approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec filter-otc-symbols`_
+- [Implementation Spec](implementation-spec.md) — 15 numbered steps
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -35,13 +36,13 @@ Keep over-the-counter (OTC) symbols out of the bar-ingestion warm set and out of
 
 | Role | Review Focus |
 |---|---|
+| Proto Reviewer | Field number uniqueness, backward compatibility, `buf lint` / `buf breaking` |
 | Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
 | Service owner `xstockstrat-portfolio` | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
-| Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
+| Service owner `xstockstrat-config` | Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability |
 | Service owner `xstockstrat-agent` | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity |
-| Service owner `xstockstrat-ui` | Trading UI correctness, Connect-RPC call safety, environment scope correctness |
-| Proto Reviewer (if the design adds an RPC or field) | Field number uniqueness, backward compatibility, `buf lint` / `buf breaking` |
+| Service owner `xstockstrat-ui` | Connect-RPC call safety, environment scope correctness, UI correctness |
 
 ## Next Action
 
-`/sdd-spec filter-otc-symbols` — generate implementation spec from the approved design
+`/sdd-review filter-otc-symbols impl-spec` — validate implementation spec, then `/sdd-execute filter-otc-symbols`
