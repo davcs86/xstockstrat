@@ -982,3 +982,14 @@ the next `/sdd-batch` run can pick it up.
   - Step 5: `cmd/server/main.go` anchors moved +8 lines (seed block `:137-141`).
 - The 215/254 overlap threads are now moot for anchors, because both are on main-dev and in the merged tree. The
   merge-order rows are still pending an operator yes.
+
+## Session 2026-11-01 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute fix-marketdata-fundamentals-cache sequential`, run by `/sdd-batch-execute` in an isolated
+  worktree. This is the single writer for the feature branch (P-01).
+- Up-front confirmation: the operator approved the up-front plan (sequential mode entry, one commit per step on
+  `feature/fix-marketdata-fundamentals-cache`, no per-step PRs, the checkpoints halt at operator gates).
+- Status: `implementation-ready` → `in-progress`. Steps 1–17 are all `pending`; the re-spec above is the baseline.
+- Tooling: the operator approved CI-equivalent fallbacks (golangci-lint v2.14.0 at `/usr/local/bin`, Docker codegen,
+  `go vet -tags dbtest` for real-Postgres steps). Each one used is logged in the spec's Deviation Log. None was used
+  this session. The host has Node v22 (root `CLAUDE.md` pins 24); this is noted, not a blocker.
