@@ -68,7 +68,7 @@ any code step runs.
 
 ### Step 1 — docs: re-anchor gate and exception inventory on the merged 272/273/215 tree
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (read-only check; the only write is to this feature's `context.md`)
 **Files**:
 - `docs/roadmap/features/275-fix-backtest-silent-symbol-skip/context.md` — modify (append the re-anchor table)
@@ -794,3 +794,11 @@ The PR body carries the Teardown record.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 1 (2026-11-01) — rebase via merge.** Instruction 1 says "rebase the feature branch onto `origin/main-dev`".
+  `main-dev` had moved one docs-only commit (#1392) past the branch base; a rebase would need a force-push, which the
+  run's git protocol forbids. `origin/main-dev` was merged in instead (merge commit `0f3e0c95`, sequential-mode §5.5
+  branch-sync setup). The Verification `git merge-base --is-ancestor origin/main-dev HEAD` passes. No scope change.
+- **Step 1 (2026-11-01) — 215 status.** 215's `status.md` is `in-progress`, not landed; the Step 1 criterion (its value
+  5, `fund_refusals` and `fund_unknown` in the tree) holds, so the gate passes. Recorded, not a blocker.
+- No CI-equivalent tooling fallback was used in Step 1 (grep and git only).

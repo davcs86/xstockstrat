@@ -61,4 +61,4 @@ diagnostics and is scored and persisted as a success. On staging this hid a PERM
 
 ## Next Action
 
-`/sdd-review fix-backtest-silent-symbol-skip impl-spec` — validate implementation spec, then `/sdd-execute fix-backtest-silent-symbol-skip`. Execution starts only after 272, 273 and 215 have landed (Step 1 gate).
+`/sdd-execute fix-backtest-silent-symbol-skip sequential` — Step 1 (re-anchor gate) is done and passed on the merged tree (2026-11-01); continue with Steps 2–3 (proto value 6 + regenerated stubs + UI map key, one commit).

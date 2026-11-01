@@ -648,3 +648,85 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Next: Step 1 (the re-anchor gate, whose answers are pre-recorded above and are re-confirmed by its Verification grep).
 - Open threads carried forward: the merge-order rows (275 after 272, 273 and 215) are still not written to
   `docs/roadmap/features/merge-order.md`, because they are router-owned and need operator confirmation.
+
+### Step 1 — re-anchor gate (2026-11-01, done)
+
+- **Rebase gate.** `origin/main-dev` (`c2a263c0`) had moved one commit past the branch base (#1392, docs/tooling pins
+  only: `tooling-setup.md`, `docker-build.md`, `codegen-toolchain-host-setup.md`; no overlap with this feature). A
+  rebase would need a force-push, so `origin/main-dev` was **merged** in (merge commit `0f3e0c95`, the sequential-mode
+  §5.5 branch-sync setup). `git merge-base --is-ancestor origin/main-dev HEAD` → `REBASED`.
+- **Prerequisites.** 272 and 273 `status.md` = `launched`. 215 `status.md` = `in-progress`, but its gate code is in
+  the tree (`NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5`, `fund_refusals`, `fund_unknown`), which is the Step 1
+  criterion. Gate passes.
+- **Re-anchor table** (`services/xstockstrat-analysis/app/handlers/servicer.py` unless noted; Steps 2–11 use the merged
+  column):
+
+  | symbol | pre-272 line | merged line |
+  |---|---|---|
+  | `_PROPAGATED_HEADERS` | 350 | 353 |
+  | `class _BarFetchError` | 358 | 368 |
+  | `class _FundamentalsPageError` | — | 372 |
+  | `async def RunBacktest` (wrapper) | 785 | 794 |
+  | `asyncio.timeout(limit or None) as cm` | — | 806 |
+  | wrapper `except _BarFetchError as e` → FAILED_PRECONDITION | — | 815-819 |
+  | `async def _run_backtest` | — | 821 |
+  | `propagation_meta` | 806-810 | 842-846 |
+  | `formula_errors: int = 0` | 905 | 941 |
+  | `symbol_intents` | 910 | 946 |
+  | `fund_refusals = 0` | 927 | 963 |
+  | `fund_unknown: list[str] = []` | 928 | 964 |
+  | `for symbol in symbols_to_run:` | 996 | 1032 |
+  | `symbol_intents[symbol] = sym_intent` | 1046 | 1082 |
+  | `_compute_metrics(daily_eq, trades, daily_eq[0])` | 1050 | 1086 |
+  | `except _InsufficientData` | 1065 | 1101 |
+  | `except _FundamentalsUnavailable` | 1086 | 1122 |
+  | `except _FundamentalsUnknown` | 1104 | 1140 |
+  | `except FormulaExecutionError as fe` | 1112-1126 | 1148-1162 |
+  | loop `except _BarFetchError: raise` | — | 1163-1164 |
+  | `except grpc.RpcError as e` (silent skip) | 1127-1129 | 1165-1167 |
+  | `except Exception as e` (silent skip) | 1130-1132 | 1168-1170 |
+  | status gate (or-chain at :1276) | 1235-1242 | 1273-1280 |
+  | `fund_unknown` warnings | 1263-1266 | 1301-1304 |
+  | `disarm()` | — | 1307 |
+  | `self._backtests[backtest_id] = result` | 1267 | 1308 |
+  | `_persist_backtest_run(` call | 1300-1303 | 1341-1351 |
+  | `_persist_backtest_detail` (OK only) | 1313-1314 | 1354-1355 |
+  | recompute `… or fund_refusals > 0` | 1320 | 1361 |
+  | `analysis.backtest.completed` `AppendEvent` | 1344-1352 | 1385-1393 |
+  | `_fetch_bars_paged` | 1394 | 1435-1495 |
+  | `raise_unreadable=True` | 2036 | 2082-2083 |
+  | `def _persist_backtest_run(self, result, symbols, score, …)` | 2848 | 2895 |
+  | `evaluator.py` `class FormulaExecutionError` / `__init__` | 102 / 108 | 102 / 108 (unchanged) |
+  | `evaluator.py` NOT_FOUND-only mapping | 260-263 | 260-263 (unchanged) |
+  | `analysis.proto` last `NoTradeReason` | 201 (`= 4`) | 202 (`FUNDAMENTALS_UNAVAILABLE = 5`) |
+
+- **Re-anchor answers.** (a) The 272 deadline is the wrapper `asyncio.timeout` around `_run_backtest` (:806-807), not
+  an in-loop `wait_for`; design Open Risk 2 stands as decided. (b) `_fetch_bars_paged` awaits
+  `self._marketdata.GetBars(...)` with no `try`, and its only raises are `_BarFetchError` (cursor stall / page cap), so
+  a `GetBars` RPC error reaches the loop as a raw `grpc.RpcError`. AC-2 and AC-5 stand. (c) `NoTradeReason` value 6 is
+  free; Steps 2, 3 and 8 use 6.
+- **Exception inventory** (loop `try:` body → `_backtest_symbol_evaluated` :2042, `_backtest_symbol` :1537,
+  `_resolve_prefixed_bars` :1497, `_fetch_bars_paged` :1435, `_load_fundamentals` :1804, `StrategyEvaluator`,
+  `_compute_metrics` :7305):
+  - Handled by name in the loop: `_InsufficientData`, `_FundamentalsUnavailable`, `_FundamentalsUnknown`,
+    `FormulaExecutionError`.
+  - **Must keep propagating:** `_BarFetchError` (272's re-raise at :1163-1164 stays above the new broad arm) and
+    `asyncio.CancelledError` (a `BaseException`, so `except Exception` does not catch it). Nothing else.
+  - `_FundamentalsPageError` is raised only by `_fetch_historical_fundamentals_paged` (:6537), whose only callers
+    (:1844/:1848) sit inside `_load_fundamentals`, which catches it in its best-effort `except Exception` (:1851). It
+    never reaches the loop. `_GradeInputsUnknown` is raised only on the grade path (:2787) and caught at :1370/:2604,
+    outside the loop. No new sentinel needs to sit above the Step 6 broad arm.
+  - Reaching the broad arm by design: raw `grpc.RpcError` (GetBars; ExecuteFormula non-NOT_FOUND until Step 4;
+    ComputeIndicator) and evaluator `ValueError`s (definition validation, `evaluator.py:809-929`).
+- **Indicators contract** (`services/xstockstrat-indicators/app/handlers/servicer.py`): `ExecuteFormula` (:234)
+  returns NOT_FOUND for a missing formula (:239-241), PERMISSION_DENIED `"admins cannot execute another user's
+  formula"` to an admin non-author (:245-249) and NOT_FOUND to any other non-author (:251-253). The only other
+  PERMISSION_DENIED reachable from `ExecuteFormula` is `_reader`'s `_CallerRejected` for `x-user-id: system` without
+  the internal grant (:126-129, via `_can_read_formula`). The :176-178 and :497-727 sites belong to the template,
+  update, delete and saga RPCs and are not reachable from `ExecuteFormula`. Step 4's "any backtest-path
+  PERMISSION_DENIED → `FormulaExecutionError`" covers both reachable sites.
+- **`_persist_backtest_run` signature** unchanged: `score` is still the 3rd positional parameter (def :2895) and is
+  passed positionally at :1341-1344. The Step 7 AC-4 assertion stands.
+- TDD: N/A (verification/checklist step, no code). The Step 1 Verification grep output matched every merged anchor
+  above.
+- Next: Step 2 (proto `NO_TRADE_REASON_EVALUATION_FAILED = 6`, landing in one commit with Step 3).
