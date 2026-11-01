@@ -946,7 +946,7 @@ the next `/sdd-batch` run can pick it up.
 
 ### Open Threads (sdd-review impl-spec)
 
-- [ ] Step 11: the WARN class label for unstaged enrichment errors (`fmp_client.go:226` build request, and a non-ctx
+- [x] Step 11: the WARN class label for unstaged enrichment errors (`fmp_client.go:226` build request, and a non-ctx
   limiter error at `:229`, e.g. "would exceed context deadline") is not one of the design's six classes
   (cap/ctx/http_<code>/transport/read/decode). They still expire (rule 5). The executor must ask the operator
   for the label (for example `other`) and must not choose one silently (C-11).
@@ -1142,4 +1142,25 @@ the next `/sdd-batch` run can pick it up.
 - Verification: the targeted `-run 'UndecodableExtra|DecodeExtraMetrics'` passes; full `go test ./... -race` passes,
   total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
 - Files modified: `internal/repository/marketdata_repo_test.go`
+
+### Step 11 — service: D-53b (client) — classify enrichment failures, set `EnrichmentFailed` and emit one aggregated WARN [done]
+- `source.Fundamentals` gained a transient `EnrichmentFailed bool`. In `fmp_client.go`, `getJSON` now returns
+  `&statusError{path, code}` for a non-200 response (same text) and wraps the transport (both returns), read and
+  decode errors in `stageError{stage, err}` (text unchanged, `Unwrap` keeps the ctx chain).
+  `enrichmentExpires` (nil → false, cap, ctx, then `case 402, 403, 404` → false, else true) and `enrichmentClass`
+  (`cap`/`ctx`/`http_<code>`/stage/`other`) classify by `errors.Is`/`errors.As` only. The enrichment loop records
+  `SYM:ratios|profile:<class>`, sets the flag only for expiring errors, and emits one
+  `slog.WarnContext(ctx, "fmp enrichment failed", "failures", …, "count", …)` with no error text. `log/slog` imported.
+  `reserve()`/`refund()` and the empty-array success path are unchanged.
+- TDD: AC-5/AC-10 (client half) red: an uncommitted probe failed to compile (`f.EnrichmentFailed undefined`,
+  `undefined: statusError`) → green: the probe passed (profile 503 → flag + `AAPL:profile:http_503`; 404 → no flag +
+  `http_404`; `[{` → flag + `decode`; `[]` → no flag, no WARN; cap=2 → flag, 0 profile calls, `AAPL:profile:cap`;
+  no `SECRET-KEY`/`apikey` in the log; `statusError` text pinned). Probe deleted; Step 12 owns the tests.
+- Verification: build and vet pass; the first grep has no hits; `case 402, 403, 404` has 1 hit; the `err.Error()` grep
+  hits only `stageError.Error()`, which the spec requires (not the WARN); full `go test ./... -race` passes;
+  golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- The Step 11 open thread (class label for unstaged errors) is closed: `other`, per the 2026-10-22 operator decision.
+- Husky: `node_modules` symlinked from the main worktree for the pre-commit hook.
+- Files modified: `internal/source/source.go`, `internal/fmp/fmp_client.go`
+- Deviations: line anchors drifted (+3 to +4); vet scope widened to `./internal/...` (see Deviation Log)
 

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -190,17 +191,30 @@ func (c *Client) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]
 	}
 
 	if c.extended {
+		var failures []string
 		for _, sym := range symbols {
 			f, ok := bySymbol[strings.ToUpper(sym)]
 			if !ok {
 				continue
 			}
-			if r, rErr := c.fetchRatios(ctx, sym); rErr == nil && r != nil {
+			r, rErr := c.fetchRatios(ctx, sym)
+			if rErr != nil {
+				failures = append(failures, sym+":ratios:"+enrichmentClass(rErr))
+				f.EnrichmentFailed = f.EnrichmentFailed || enrichmentExpires(rErr)
+			} else if r != nil {
 				r.apply(f)
 			}
-			if p, pErr := c.fetchProfile(ctx, sym); pErr == nil && p != nil {
+			p, pErr := c.fetchProfile(ctx, sym)
+			if pErr != nil {
+				failures = append(failures, sym+":profile:"+enrichmentClass(pErr))
+				f.EnrichmentFailed = f.EnrichmentFailed || enrichmentExpires(pErr)
+			} else if p != nil {
 				p.apply(f)
 			}
+		}
+		if len(failures) > 0 {
+			// Class labels only: never log the error text (it may carry vendor detail).
+			slog.WarnContext(ctx, "fmp enrichment failed", "failures", failures, "count", len(failures))
 		}
 	}
 
@@ -250,9 +264,9 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if err != nil {
 		var ue *url.Error
 		if errors.As(err, &ue) {
-			return fmt.Errorf("fmp: %s request failed: %w", path, ue.Err)
+			return &stageError{"transport", fmt.Errorf("fmp: %s request failed: %w", path, ue.Err)}
 		}
-		return fmt.Errorf("fmp: %s request failed", path)
+		return &stageError{"transport", fmt.Errorf("fmp: %s request failed", path)}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusOK {
@@ -260,16 +274,74 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("fmp: read %s body: %w", path, err)
+		return &stageError{"read", fmt.Errorf("fmp: read %s body: %w", path, err)}
 	}
 	if resp.StatusCode != http.StatusOK {
 		// Never include the URL (it carries the apikey) in the error.
-		return fmt.Errorf("fmp: %s returned HTTP %d", path, resp.StatusCode)
+		return &statusError{path, resp.StatusCode}
 	}
 	if err := json.Unmarshal(body, dst); err != nil {
-		return fmt.Errorf("fmp: decode %s: %w", path, err)
+		return &stageError{"decode", fmt.Errorf("fmp: decode %s: %w", path, err)}
 	}
 	return nil
+}
+
+// statusError is a non-200 FMP response; its text must never carry the URL (apikey).
+type statusError struct {
+	path string
+	code int
+}
+
+func (e *statusError) Error() string { return fmt.Sprintf("fmp: %s returned HTTP %d", e.path, e.code) }
+
+// stageError tags a getJSON failure with the stage that failed; the text is the wrapped error's.
+type stageError struct {
+	stage string
+	err   error
+}
+
+func (e *stageError) Error() string { return e.err.Error() }
+func (e *stageError) Unwrap() error { return e.err }
+
+// enrichmentExpires reports whether an enrichment error is transient, so the row is stored expired.
+// The ctx check must precede the transport/stage classification: those errors wrap ctx errors.
+func enrichmentExpires(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrFMPDailyCapExceeded) {
+		return true
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var se *statusError
+	if errors.As(err, &se) {
+		switch se.code {
+		case 402, 403, 404:
+			return false
+		}
+	}
+	return true
+}
+
+// enrichmentClass is the WARN label for an enrichment error, in enrichmentExpires' order.
+func enrichmentClass(err error) string {
+	if errors.Is(err, ErrFMPDailyCapExceeded) {
+		return "cap"
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "ctx"
+	}
+	var se *statusError
+	if errors.As(err, &se) {
+		return fmt.Sprintf("http_%d", se.code)
+	}
+	var st *stageError
+	if errors.As(err, &st) {
+		return st.stage
+	}
+	return "other"
 }
 
 func (c *Client) fetchQuotes(ctx context.Context, symbols []string) ([]fmpQuote, error) {

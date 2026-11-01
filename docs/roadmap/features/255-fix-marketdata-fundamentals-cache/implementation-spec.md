@@ -594,7 +594,7 @@ The new logic is in the excluded `repository` package. The CI total must still b
 
 ### Step 11 — service: D-53b (client) — classify enrichment failures, set `EnrichmentFailed` and emit one aggregated WARN
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/source/source.go` — modify
@@ -1165,4 +1165,19 @@ _Populated by /sdd-execute as implementation proceeds._
   `marketdata_repo_test.go` that both tests use (stdlib only, not a shared fixture); it avoids pasting the
   SetDefault/Cleanup block twice (C-18). The operator-approved `/usr/local/bin/golangci-lint` v2.14.0 (CI pin) reported
   `0 issues.`
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 11 — CI-equivalent fallback (golangci-lint), RED via a throwaway probe, line anchors drifted
+- **Spec said**: Verification is `go build ./...`, `go vet ./internal/fmp/ ./internal/source/` and three greps; the
+  paired tests belong to Step 12. The `getJSON` anchors are `:228`/`:230`/`:234`/`:250`/`:252`/`:260`/`:264`/`:267`.
+- **Actual**: the anchors had drifted by +3 to +4 lines (build request `:232`/`:234`, limiter `:237`, transport
+  `:253`/`:255`, read `:263`, non-200 `:267`, decode `:270`); edits were placed by content. The build passes. `go vet`
+  ran as `./internal/fmp/` plus `./internal/...` (a superset that includes `internal/source`), because the session
+  sandbox refuses a literal `./internal/source/` argument. The first grep has no hits and `case 402, 403, 404` has
+  exactly one. The third grep has one hit, `stageError.Error()` returning `e.err.Error()`: Instruction 2 requires
+  that delegation. It is not in the WARN, which logs only the `failures` class labels and `count`. RED/GREEN used an
+  uncommitted probe test (503, 404, decode, empty `[]` and cap=2 cases, plus the `statusError` text). It failed to
+  compile before the change (`f.EnrichmentFailed undefined`, `undefined: statusError`) and passed after, then was
+  deleted (Step 12 owns the committed tests). Full `go test ./... -race` passes. The operator-approved
+  `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported `0 issues.` on the module.
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
