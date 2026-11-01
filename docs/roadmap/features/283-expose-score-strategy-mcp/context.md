@@ -465,3 +465,110 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
   - The agent suite ran after the runbook fix.
   - No CI-equivalent fallback was used. Node v22 vs the pinned 24 was irrelevant here, since no Node or UI step ran.
 - Status: all 10 steps done → `code-completed`. No ledger insight was added: the reusable lesson ("prove a metadata channel through the production interceptor/instrumentor stack with a real-wire loopback before building on it") is feature-local until a second trailer contract exists.
+
+### sdd-batch-execute promotion plan (awaiting operator confirm) — 2026-11-01
+
+```sdd-batch-promotion-plan
+## Promotion plan — expose-score-strategy-mcp (feature 283)
+
+Read-only plan. I checked every existing suite under services/*/acceptance/ and /home/user/xstockstrat/docs/sdd/business-rules/platform.feature for `@feature-283`, `score_strategy`, `ScoreStrategy` and manage_strategy "score". None matched, so there is no DUP. The agent suite has no 283 file yet, so it is a CREATE.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-agent/acceptance/expose-score-strategy-mcp.feature | CREATE | NEW | The Then asserts the manage_strategy tool result shape. |
+| AC-2 | same | CREATE | NEW | Tool-level ownership error. |
+| AC-3 | same | CREATE | NEW | Tool error text. The "stale grade cleared" half lives in analysis; see Notes. |
+| AC-4 | same | CREATE | NEW | Tool error text plus grade unchanged. Same attribution call as AC-3. |
+| AC-5 | same | CREATE | NEW | Tool description disclosure. |
+| AC-6 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Spans agent, UI copilot.ts, docs and the agent suite; see Notes for the overlap with feature 214. |
+| AC-7 | agent suite (same file) | CREATE | NEW | Tool result carries excluded_symbols. |
+| AC-8 | agent suite (same file) | CREATE | NEW | Tool error text. |
+| AC-9 | agent suite (same file) | CREATE | NEW | Client-side argument rejection; no backend call is made. |
+| AC-10 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Docs and skill parity across the runbook and the plugin; same pattern as feature 224 AC-32. |
+| AC-11 | agent suite (same file) | CREATE | NEW | Tool result gives null for excluded_symbols. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/expose-score-strategy-mcp.feature (CREATE) ---
+# Promoted from docs/roadmap/features/283-expose-score-strategy-mcp/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-283` tag.
+Feature: expose-score-strategy-mcp
+  As an operator driving the platform through the MCP agent, I want to refresh a strategy's headline grade and read its evidence provenance, so that I can verify grade-affecting changes without the UI or raw gRPC.
+
+  @AC-1 @FR-1 @feature-283
+  Scenario: Refreshing an owned strategy returns the recomputed grade with provenance
+    Given the caller owns strategy "fundamentals_macd_blend" with 3 eligible evidence symbols over 756 trading days
+    When the caller invokes the MCP tool "manage_strategy" with operation "score" and strategy_id "fundamentals_macd_blend"
+    Then the result contains rating, overall_score, component_scores, evidence_symbols 3, evidence_days 756 and provisional false, with snake_case keys
+
+  @AC-2 @FR-1 @FR-3 @feature-283
+  Scenario: Scoring a strategy the caller does not own is rejected
+    Given strategy "someone_elses_strategy" is owned by another user
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "someone_elses_strategy"
+    Then the tool raises an error stating the strategy was not found or not owned, and no grade is written
+
+  @AC-3 @FR-3 @feature-283
+  Scenario: A strategy with no eligible evidence reports NOT_FOUND and clears the stale grade
+    Given the caller owns strategy "new_strategy" with no backtest evidence cells and a stale stored grade "B"
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "new_strategy"
+    Then the tool raises an error containing "no eligible evidence — run a backtest" and the stored grade for "new_strategy" is absent afterwards
+
+  @AC-4 @FR-3 @feature-283
+  Scenario: Unknown fundamentals availability leaves the grade unchanged
+    Given the fundamentals availability for evidence symbol "SCHD" cannot be determined because marketdata is down
+    When the caller invokes "manage_strategy" with operation "score" for "fundamentals_macd_blend"
+    Then the tool raises an error containing "fundamentals availability unknown — grade unchanged" and the stored grade is identical to before the call
+
+  @AC-5 @FR-2 @feature-283
+  Scenario: The tool description discloses the score side effects
+    When a client lists the agent tools
+    Then the "manage_strategy" description states that operation "score" persists the grade, emits an "analysis.strategy.scored" ledger event and ignores any time range
+
+  @AC-7 @FR-5 @feature-283
+  Scenario: A refresh names the excluded symbols
+    Given analysis.backtest.fundamentals.enabled is on
+    And strategy "fundamentals_macd_blend" has evidence cells for "AAPL", "MSFT" and "SCHD" and "SCHD" has no fundamentals
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "fundamentals_macd_blend"
+    Then the result shows evidence_symbols 2 and an excluded_symbols list equal to ["SCHD"]
+
+  @AC-8 @FR-3 @feature-283
+  Scenario: Every symbol excluded for missing fundamentals reports which ones
+    Given analysis.backtest.fundamentals.enabled is on
+    And the caller owns strategy "fundamentals_only" whose only evidence symbol "SCHD" has no fundamentals
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "fundamentals_only"
+    Then the tool raises an error containing "all evidence symbols excluded (fundamentals unavailable: SCHD)"
+
+  @AC-9 @FR-1 @feature-283
+  Scenario: Strategy-definition arguments are rejected for score
+    When the caller invokes "manage_strategy" with operation "score", strategy_id "fundamentals_macd_blend", cooldown_days 45 and clear_fields ["exit_rule"]
+    Then the tool raises an error stating that "score" accepts only strategy_id, and no backend call is made
+
+  @AC-11 @FR-5 @feature-283
+  Scenario: A refresh whose excluded list was not reported yields null, not an empty list
+    Given strategy "fundamentals_macd_blend" is scored by an analysis build that sets no excluded-symbols trailer
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "fundamentals_macd_blend"
+    Then the result contains the recomputed rating and evidence_symbols, excluded_symbols is null rather than an empty list, and a warning is logged
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+
+  @AC-6 @FR-4 @feature-283
+  Scenario: The tool count is unchanged and its surfaces agree
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    Then every statement states the count 45 (in words or digits) and the registered tool count is 45
+
+  @AC-10 @FR-4 @feature-283
+  Scenario: The score operation is documented in the runbook and the strat-lab skill
+    When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are read
+    Then both describe manage_strategy operation "score" including its side effects, and the documented operations equal the tool's accepted operations
+
+### Notes / ambiguities / conflicts
+- **Attribution (AC-3, AC-4):** the Then clauses mix a tool error string (agent) with persisted grade state (analysis `ScoreStrategy`). Analysis has no existing suite for this. I kept them in the agent suite because the observable subject is the `manage_strategy` tool outcome, and a single 283 file keeps provenance clear. A human may move them to /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/ if they prefer.
+- **AC-6 vs feature 214 AC-1:** /home/user/xstockstrat/services/xstockstrat-agent/acceptance/remove-agent-postgres-mcp.feature line 14 asserts "advertised tool count is 45". That is a partial OVERLAP on the number only. AC-6 asserts agreement across six surfaces, which is a different outcome, so I planned NEW rather than skipping. Consolidation of the hard-coded 45 is a candidate for a human curation step. Nothing was deleted or rewritten.
+- **AC-10 vs platform.feature AC-32 (feature 224, line 301) and AC-5 (feature 149, line 44):** these are the same docs-parity pattern for different tools or operations. They are not OVERLAP, so AC-10 is NEW.
+- **Platform append format:** the append block starts with a blank line so it separates from the file's last scenario.
+- **CONFLICT:** none found. The existing agent `manage_strategy` rules in manage-strategy-accept-object-rules.feature (feature 149) cover entry_rule/exit_rule typing for the other operations and do not constrain "score".
+- **Source path:** the caller's path `docs/roadmap/features/docs/roadmap/features/283-.../acceptance.feature` is doubled. I read the real file at /home/user/xstockstrat/docs/roadmap/features/283-expose-score-strategy-mcp/acceptance.feature on the local working tree, not on origin/feature/expose-score-strategy-mcp. The orchestrator should confirm the branch copy is identical.
+
+### Coverage check
+- Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. That is 9 scenarios in the agent file and 2 in platform.feature. Nothing was skipped, so the counts match.
+```
