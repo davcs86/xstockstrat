@@ -676,3 +676,180 @@ Items 3/3' and 9 of round 6 stand. Round-8 additions (portfolio paths under `ser
   spec ever lists orders at page size 51 it would see lineage orders. Accepted; revisit at Step 10 RED if a spec
   regresses.
 - Files written: implementation-spec.md, context.md.
+
+## Session 2026-10-30 (sdd-execute sequential (sdd-batch-execute))
+
+- Up-front confirmation: the operator approved the plan by standing authorization (operator chat 2026-10-28/30,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints,
+  C-16 promotion auto-confirmed unless it changes an existing @AC rule, merge-train authorized, 255/275 deferred;
+  operator-only DB/prod steps: open PR, hold merge; the 2026-10-30 widening allows test fakes/fixtures/test-registry
+  entries outside Files when no assertion or production behavior changes). Checkpoints: `report`. Rollout
+  verification is staging-only (operator 2026-10-30: "Prod is not running. Staging is enough").
+- Dependency 257 merged to main-dev as `079870fa` (#1371). `origin/main-dev` merged into the branch (one conflict in
+  `docs/roadmap/ledger/fails.md`, both sides kept; ledger-guard clean).
+- Re-spec of all step bodies against current code (see implementation-spec.md "Re-spec 2026-10-30"):
+  - Steps 1-3 `superseded`: the ledger `sequence` keyset `page_token` shipped via 257/263
+    (`ledgerServiceImpl.ts:166-240`); AC-12/AC-13 are held by `db/queryPagination.db.test.ts` and
+    `ledgerServiceImpl.test.ts`; CI `ledger-db-test` exists.
+  - Step 4/5: anchors moved (`trading.go:1832`, `:1849`, `emitLedgerEvent` `:3743`); `side` is still absent from both
+    fill payloads.
+  - Step 6/7: 257 added `collectFills` (1000/page, `ErrLedgerUnavailable`); `SourceService: "trading"` remains at
+    `portfolio_service.go:802`. `ErrRealizedUnavailable` is dropped in favour of `ErrLedgerUnavailable`. 257's
+    `portfolio_pnl_paging_test.go` fixtures (side-less, signed sells) must migrate in Step 6 or they turn RED at Step 7.
+  - Step 8/9: `classifyGetPnLError(err)` at `portfolio_handler.go:426`, call site `:127`; `toGRPCError` `:433`.
+  - Step 10/11: feature 263 forces `ownerOnly` in `traderBff.ts`, so the BFF backstop and `isForeignFillEvent` are
+    dropped; `toPbTradingMode` (`src/lib/tradingMode.ts`) is reused.
+  - Step 12/13: the ledger `page_token` doc edit is dropped (`CLAUDE.md:49`); the 252 note is dropped (252 `launched`).
+- Acceptance wording drift (own feature file) to fix at Step 6: AC-9 (page size 1000, not 500 / 2 calls) and AC-12
+  (ordered by `sequence`). Not edited in this re-spec session.
+- Files written: implementation-spec.md, feature.md, context.md, status.md.
+
+## Session 2026-10-30 — Step 4 executed (sequential)
+
+- Step 4 done: `trading_fill_side_test.go` adds `TestFillEmit251_AC10_CarriesSideSourceAndFees` (2 rows, driven via
+  `CancelOrder` -> `reconcileNotCancelable` -> `applyBrokerOrderStatus`).
+- RED captured: both rows fail with `payload side = "", want ORDER_SIDE_SELL` (source, stream key, qty keys and `fees`
+  assertions come after it and are untested until Step 5). golangci-lint unrunnable here (built with go1.26, module needs 1.27); one `notCancelableSvc` declaration (C-13).
+- Line drift vs the Codebase Evidence in this repo's HEAD: none relied on by the test.
+- Next: Step 5 (add `side` to both fill payloads in `trading.go`) turns this GREEN.
+
+## Session 2026-10-30 — Step 5 executed (sequential)
+
+- Step 5 done: `applyBrokerOrderStatus` in `trading.go` now lifts both fill payloads to locals and adds `side` (`order.Side.String()`) when the side is not UNSPECIFIED; `emitLedgerEvent` unchanged.
+- GREEN: `TestFillEmit251_AC10_CarriesSideSourceAndFees` passes (both rows); `go test ./... -race` passes for the whole trading module. RED was Step 4's commit (`payload side = ""`).
+- golangci-lint unrunnable (go1.26 build vs go1.27 module); `gofmt -l` and `go vet` clean.
+- Next: Step 6 (portfolio RED tests).
+
+## Session 2026-10-30 — Steps 6+7 executed together (sequential, standing rule)
+
+- Merged per the operator's rule ("Merge pairs + standing rule"): Step 6 tests need `tradingSourceService` / `ErrFillUnattributable` from Step 7, so the package could not compile between them. One commit; RED = compile failure (`undefined: tradingSourceService`, `ErrFillUnattributable`); GREEN = `go test ./... -race` passes for the portfolio module.
+- Added `internal/testdata/ledger.go` (fake ledger, `FilledEvent`/`PartialEvent`/`CreatedEvent`), `export_test.go` shim, parity test, 13 `TestGetPnL251_*` tests; migrated 257's paging fixtures to unsigned qty plus `side`. `acceptance.feature` AC-9/AC-12 amended in a separate commit first.
+- GetPnL: `realizedPnL` folds kept fills sorted by ledger `sequence` at (mode, account, symbol) grain; `orderSide` looks up `order.created` then `order.submitted` (stream_key = order id) with a positive-only cache; `collectFills` fails closed on a repeated event_id or an empty page carrying a token. Producer source literal is at `trading.go:3676`.
+- golangci-lint unrunnable (go1.25 build vs go1.27 module); `gofmt -l` clean.
+- Next: Step 8 (handler/wire RED tests).
+
+## Session 2026-10-30 — Step 8 executed (RED)
+
+- Added `internal/service/portfolio_grpc_wire_test.go` (7 `TestWire*` cases through the real `GRPCHandler()` adapter, using the Step 6 shim) and, in `internal/handler/portfolio_handler_test.go`, ctx-first `classifyGetPnLError` calls, `TestClassifyGetPnLError_CtxFirst` and table-driven `TestToGRPCError`. The spec's "extra rows in `TestClassifyGetPnLError`" are a sibling test function to keep the 257/229 assertions untouched.
+- RED captured: handler package fails to compile (`too many arguments in call to classifyGetPnLError`); wire cases fail at runtime: AC4 gets `Internal` (want FailedPrecondition), AC7 cancel/deadline get `Unavailable` (want Canceled/DeadlineExceeded), F127 AC7 delete guard gets `Internal` (want FailedPrecondition). Cases 2, 6, 7 already pass. GREEN is Step 9.
+- golangci-lint not run: the handler test package cannot compile until Step 9. `gofmt -l` clean; one `func FilledEvent` site.
+- Next: Step 9 (ctx-first classifier, explicit `toGRPCError` codes).
+
+## Session 2026-10-30 — Step 9 executed (GREEN)
+
+- `portfolio_handler.go`: `classifyGetPnLError(ctx, err)` (ctx DeadlineExceeded/Canceled first, then Unavailable for quotes/ledger, FailedPrecondition for `ErrFillUnattributable`, else Internal); call site updated; `toGRPCError` gains FailedPrecondition/DeadlineExceeded/Canceled cases.
+- GREEN: `go test ./... -race -count=1` passes for the portfolio module (Step 8 wire + handler tests). Non-excluded packages coverage 64.4% (>= 40%). RED was Step 8's commit (arity compile failure).
+- golangci-lint unrunnable (built with go1.26, module needs 1.27).
+- Next: Step 10 (UI lineage RED).
+
+## Session 2026-10-30 - Step 10 executed (RED)
+
+- Added `src/lib/positionLineage.test.ts` (5 vitest cases), `e2e/trader/position-lineage.spec.ts` (AC-3/18/19/20/21/22), `LINEAGE_FILL_EVENTS` / `lineageOtherUserFills` in `ledgerEvents.ts`, `LINEAGE_ORDERS` / `LINEAGE_LIST_PAGE_SIZE` in `orders.ts`, INVENTORY rows, mock `listOrders` and `queryEvents` lineage branches, and moved `positions.spec.ts` / `api-smoke.spec.ts` to the per-order, canonical-source form.
+- RED captured: vitest fails to import `./positionLineage` (module missing, 346 other tests pass); Playwright `position-lineage.spec.ts` fails AC-3/18/19/21/22 (old hook reads the platform-wide page, sheet empty) and passes AC-20 (preserve guard). `positions.spec.ts`, `ledger-owner-scope.spec.ts` and `api-smoke.spec.ts` stay green; the first test of a cold dev-server run times out at 10s (compile), passes warm, unrelated to this step.
+- The mock lineage branch is narrower than the spec (see Deviation Log) so 263's owner-scope spec keeps its default data.
+- Env: root `node_modules` was a dangling tracked symlink; replaced locally by `pnpm install --frozen-lockfile --filter xstockstrat-ui...` (not committed, the symlink entry is left untouched).
+- Next: Step 11 (`positionLineage.ts`, hook, truncation notice) turns these GREEN.
+
+
+## Session 2026-10-30 - Step 11 executed (GREEN)
+
+- Added `src/lib/positionLineage.ts` (`LINEAGE_MAX_ORDERS = 50`, `fetchPositionLineage`: ListOrders pinned by symbol/account/`toPbTradingMode`, page size 51, per-order QueryEvents with `xstockstrat-trading` at concurrency 3). `usePositionLineage` now returns `{events, truncated}` with `staleTime: 60_000`; `page.tsx` reads `.events`, renders a `CardNotice` when truncated.
+- GREEN: `pnpm run test:unit` 351 passed (Step 10 vitest GREEN); `test:coverage` lines 76%; lint clean (warnings pre-existing); tsc clean for touched files (`e2e/insights/backfills.spec.ts` errors pre-exist); `grep "sourceService: 'trading'" src e2e/trader` empty. Playwright `position-lineage` + `positions` + `api-smoke` GREEN once the dev server is warm; AC-3 (the first test of a cold run) times out at 10s on the first compile, as noted for Step 10, and passes on re-run.
+- Env: root `node_modules` dangling symlink replaced locally by `pnpm install --frozen-lockfile --filter xstockstrat-ui...` (not committed).
+- Next: Step 12 (docs teardown reconciliation).
+
+## Session 2026-10-30 - Step 12 executed (docs)
+
+- Portfolio `CLAUDE.md`: ctx-first `classifyGetPnLError` wording; `order.filled` row gains the `GetPnL` query-time consumer with `side` resolution (payload, `order.created`, `order.submitted`); `order.partially_filled` row gets the same rule plus the account-grain sequence-ordered fold. PORTFOLIO-16 updated; three findings rows added (`req.Range` echo-only, `HydrateStops` page 1, intended wire-code changes).
+- Trading `CLAUDE.md`: stream key of the 11 emitted `order.*` rows is the bare `{order_id}`; `order.approved` (no emit site) and `order_intent.*` keep their prefixes. Ledger `CLAUDE.md` `:34` and `:112` reworded for bare id vs `order_intent.*`. Ledger `page_token` already documented (`:49`).
+- Teardown: the context-forge plugin is not run in this worktree; reconciled by hand against `classifyGetPnLError`, `orderSide`, and `trading.go` emit sites. Record both facts in the PR body.
+- Next: Step 13 (merge-order note).
+
+## Session 2026-10-30 - Step 13 executed (docs)
+
+- `merge-order.md`: added a rebase-only blockquote `Note on 251 fix-getpnl-source-service ↔ 249` after the 252 note (before the `---`). 241 is `launched` so it is dropped per the step; 249 is `code-completed`, kept. The 252 context note is dropped (252 launched, per re-spec). The existing 257 hard row at `:81` is unchanged.
+- Verification: `grep -n "fix-getpnl-source-service" merge-order.md` shows the `:81` row and the new note. TDD N/A (docs).
+- Next: integration PR; PG-1 stays an operator gate.
+
+## Session 2026-10-30 - sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-getpnl-source-service (feature 251)
+
+Source: docs/roadmap/features/251-fix-getpnl-source-service/acceptance.feature (22 scenarios, AC-1..AC-22).
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| 1,2,4,5,6,7,8,9,11,14,15,16,17 | services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts on the GetPnL RPC (realized_pnl or status code) |
+| 18 | services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | Straddles portfolio and ui. The first Then is GetPnL realized_pnl, so portfolio owns it; the second Then is the ui fill lineage. Not duplicated in ui. |
+| 10 | services/xstockstrat-trading/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts trading's emitted ledger event payload |
+| 12,13 | services/xstockstrat-ledger/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts the ledger's QueryEvents paging and page_token handling |
+| 3,19,21,22 | services/xstockstrat-ui/acceptance/fix-getpnl-source-service.feature | CREATE | NEW | The Then asserts the /trader/positions Fill lineage table |
+| 20 | services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature | none | OVERLAP | Feature 263 @AC-1/@AC-2 already guarantee the trader BFF QueryEvents never returns another user's events. Skipped and recorded for human consolidation. |
+
+No scenario is DUP or CONFLICT. Portfolio GetPnL rules from features 229, 231 and 240 cover quote availability and unrealized P&L only.
+
+### Ready-to-write blocks
+Scenario text verbatim from the source, with @feature-251 added to each tag line.
+
+--- services/xstockstrat-portfolio/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Header comment: "# Promoted from docs/roadmap/features/251-fix-getpnl-source-service/acceptance.feature on launch (C-16). Scenarios are verbatim; each carries its source @AC-* and a @feature-251 tag. A rule enters only by promotion."
+Feature: xstockstrat-portfolio - GetPnL reads trading's fills from the ledger and folds them correctly
+Each scenario tag line: "@AC-n <original @FR tags> @regression @feature-251":
+- @AC-1 @FR-1 @FR-2: Realized P&L folds a sell that trading wrote with an unsigned qty (source lines 10-18)
+- @AC-2 @FR-1 @FR-2: A partially filled sell that trading wrote with an unsigned filled_qty is included in realized P&L (lines 21-30)
+- @AC-4 @FR-2: A caller's fill whose side cannot be resolved refuses GetPnL instead of fabricating a figure (lines 44-50)
+- @AC-5 @FR-4: Another user's unresolvable fill does not affect the caller and costs no side lookup (lines 53-59)
+- @AC-6 @FR-5: A ledger read failure mid-drain returns UNAVAILABLE, never a partial realized figure (lines 62-66)
+- @AC-7 @FR-5: Scenario Outline: The caller's own deadline or cancellation maps to its own status code, including its Examples table (lines 69-78)
+- @AC-8 @FR-5: Scenario Outline: A replaying ledger fails GetPnL closed, including its Examples table (lines 81-90)
+- @AC-9 @FR-5: More than one page of fills folds every fill exactly once (lines 93-98)
+- @AC-11 @FR-2: A fill whose payload carries side folds without a sibling lookup (lines 114-119)
+- @AC-14 @FR-4: Fills on different accounts do not net against each other (lines 135-141)
+- @AC-15 @FR-4: A symbol group mixing fills with and without account_id is refused (lines 144-147)
+- @AC-16 @FR-2: Scenario Outline: Fills fold in ledger sequence order whatever order the ledger returns them in, including its two-row Examples table (lines 150-159)
+- @AC-17 @FR-2: A partially filled sell that later fills folds once, from its order.filled event (lines 162-167)
+- @AC-18 @FR-4 @FR-3: A LIVE fill is excluded from paper GetPnL and from the paper fill lineage (lines 170-175)
+
+--- services/xstockstrat-trading/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Same provenance comment, then "Feature: xstockstrat-trading - fill events carry side, canonical source_service and fees".
+- @AC-10 @FR-1 @FR-2 @regression @feature-251: Scenario Outline: Trading's fill events carry the order side, the canonical source_service and the fee, including its Examples table (lines 101-111)
+
+--- services/xstockstrat-ledger/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Same provenance comment, then "Feature: xstockstrat-ledger - QueryEvents pages each event exactly once and rejects bad cursors".
+- @AC-12 @FR-5 @regression @feature-251: The ledger pages QueryEvents exactly once per event, including recorded_at ties (lines 122-126)
+- @AC-13 @FR-5 @regression @feature-251: A malformed page_token is rejected (lines 129-132)
+
+--- services/xstockstrat-ui/acceptance/fix-getpnl-source-service.feature (CREATE) ---
+Same provenance comment, then "Feature: xstockstrat-ui - /trader/positions fill lineage lists the trader's own fills".
+- @AC-3 @FR-3 @regression @feature-251: The position fill lineage lists the trader's own fills that trading wrote to the ledger (lines 33-39)
+- @AC-19 @FR-3 @regression @feature-251: The fill lineage finds the trader's fill even when it is not in the first platform-wide page (lines 178-182)
+- @AC-21 @FR-3 @regression @feature-251: The fill lineage caps at 50 orders and says so (lines 191-195)
+- @AC-22 @FR-3 @regression @feature-251: A fill whose order row still shows a non-filled status is listed (lines 198-202)
+
+### Notes
+- AC-18 is attributed to portfolio: the only scenario with two observable subjects; the ui half is carried by the same scenario.
+- AC-20 is OVERLAP with services/xstockstrat-ui/acceptance/fix-edge-owner-scope.feature (@AC-1, @AC-2, @feature-263). AC-20 uses an order-id stream_key, 263 AC-1 uses an account: key and AC-2 no key. If the reviewer thinks the order-id key is a distinct guarantee, promote as NEW instead.
+- Feature 257 (fix-ledger-query-pagination) GetPnL paging scenarios are not promoted yet and will probably OVERLAP 251 AC-8/AC-9 and ledger AC-12/AC-13 when 257 launches.
+- AC-4 asserts FAILED_PRECONDITION and AC-6 asserts UNAVAILABLE; neither contradicts the quote-unavailable UNAVAILABLE rule in services/xstockstrat-portfolio/acceptance/fix-book-portfolio-page.feature.
+
+### Coverage check
+Source scenarios: 22. Planned: 21 NEW + 0 DUP + 1 OVERLAP = 22.
+```
+
+## Session 2026-10-30 — Staging checks (PG-1 not run)
+
+- **Deployed:** staging deployment `b306cd82` (main-dev `484896de`) carries 251, 257 and 256 together, so the 257-before-251
+  rollout ordering holds. Trading, portfolio and ledger run logs show no ERROR lines after the rollout.
+- **Reads healthy:** `get_positions` and offline `list_positions` return valuations as before.
+- **PG-1 not run, still blocks promotion:** it needs read-only SQL against the ledger (per-type counts, `EXPLAIN ANALYZE`,
+  side-less fill stream keys), a `GetPnL` call and a malformed-token call on the real gRPC path. This session has no database
+  access (egress to `:25060` is blocked) and the staging agent exposes no `GetPnL` or `QueryEvents` tool. The operator runs it.
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

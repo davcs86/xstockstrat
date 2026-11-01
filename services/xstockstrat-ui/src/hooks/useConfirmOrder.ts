@@ -12,5 +12,6 @@ export function useConfirmOrder() {
       req.orderId
         ? [['orders'], ['order', req.orderId], ['portfolios'], ['positions']]
         : [['orders'], ['portfolios'], ['positions']],
+    { meta: { errorHandled: true } },
   );
 }

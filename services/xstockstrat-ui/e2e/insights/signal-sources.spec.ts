@@ -108,6 +108,23 @@ test.describe('Own signal sources — edits through the real BFF', () => {
     expect((await res).status()).toBe(200);
   });
 
+  test('@AC-6 a failed deactivate shows an error', async ({ page }) => {
+    await page.route(`**${MANAGE_SOURCE_BFF}`, (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'unavailable', message: 'deactivate unavailable' }),
+      }),
+    );
+    await openPage(page);
+    await page.getByRole('button', { name: `Actions for ${SIGNAL_SOURCE_WEIGHTED.slug}` }).click();
+    await page.getByRole('menuitem', { name: 'Disable' }).click();
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'deactivate unavailable' }),
+    ).toBeVisible();
+    await expect(page.getByPlaceholder('Display name')).toHaveCount(0);
+  });
+
   test('the inline weight edit persists a masked reliability_weight update', async ({ page }) => {
     await openPage(page);
     const slug = SIGNAL_SOURCE_WEIGHTED.slug;

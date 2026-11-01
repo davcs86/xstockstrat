@@ -163,3 +163,20 @@ func TestFetchIsEtf_ParsesProfileIsEtf(t *testing.T) {
 		}
 	}
 }
+
+// Feature 254 (preserves 217 @AC-4): transport failures refund every reserved slot after redaction.
+func TestGateway_BudgetRefundOnTransportError_AC4(t *testing.T) {
+	c := NewClient(ClientConfig{
+		BaseURL: "http://127.0.0.1:1",
+		APIKey:  "k-secret",
+		Limits:  func() (float64, int) { return 0, 3 },
+	})
+	for i := 0; i < 5; i++ {
+		if _, err := c.FetchSector(context.Background(), "XYZ"); err == nil {
+			t.Fatal("expected a transport error")
+		}
+	}
+	if used, _ := c.BudgetSnapshot(); used != 0 {
+		t.Fatalf("used = %d after transport failures, want 0 (all refunded)", used)
+	}
+}

@@ -5,7 +5,9 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -17,7 +19,21 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, 4 notes; overlap PASS) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec/acceptance amended per design (AC-1 reworded, FR-4, AC-4, AC-5) |
+| 2026-10-28 | `implementation-ready` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Re-spec: Step 5 Codebase Evidence re-anchored agent CI threshold `ci.yml:358-359` → `:368-369` (value still 40); main-dev merged into branch |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 1 done — AC-2 deadline + AC-3 two-symbol validation preservation guards added to `TestScreenSymbols`; green on the unfixed tree |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 2 done — `ScreenerEngine` per-symbol isolation (`_eval_symbol_isolated`, `except Exception`), fail-closed `eval_failed` degraded row, `(score_unavailable, eval_failed, -score)` sort, summary WARN/ERROR + `screener.degraded_count` span attribute |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 3 done — engine tests: AC-1 outline (3 Examples, 49-run oracle), FR-2 cancel passthrough, soft-only fail-closed, all-failed ERROR, feature-144 sort tie, duplicate symbol, span attribute; RED 8 failed / 1 passed on pre-Step-2 engine → GREEN 29 passed; mutations (a)/(b) recorded |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — agent `screen_symbols` forwards `score_unavailable` (`app/client.py`); docstring lists the key, the three `score_unavailable=true` row kinds and the `min_conviction`/`rank_limit` caveat, false "never reported OK/passed" clause removed (`app/tools.py`) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — `test_screen_symbols_sends_grpc_call` asserts the `score_unavailable` key on an OK row (`False`) and an un-evaluated BAD row (`True`, `passed=False`) (AC-5) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — `docs/runbooks/mcp-tools.md` `screen_symbols` parity (C-10): Return JSON gains `"score_unavailable": false`, aside lists the three `score_unavailable=true` row kinds + `min_conviction`/`rank_limit` caveat, Errors table gains the per-symbol evaluation-fault row |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — `SymbolScreening` renders a "Not evaluated" `EmptyState` (wrapper `symbol-screen-unevaluated`) for a `scoreUnavailable` row, INSUFFICIENT_DATA keeps priority; `/insights/screener` `no-criteria-data` tooltip copy covers missing data or an evaluation fault |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done — Playwright AC-4: a `scoreUnavailable` single-symbol ScreenSymbols row (`noCriteriaDataRow`) shows "Not evaluated" in the position-detail Screening section, with no results table or Insufficient-data notice; INVENTORY.md consumer list updated |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 9 done — sibling defect reports filed (`open`): `EvaluateReadiness` gather `servicer.py:3983`; `_compute_opportunities` `_row_for` gather `servicer.py:5776` (catches only `RpcError` `:5693`; feature 185's deliberate `FormulaExecutionError` propagation `:5694-5698` and the screener-only `Exception` divergence recorded) |
+| 2026-10-28 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 10 done — analysis findings row `:20` marked RESOLVED (feature 245); constitution `:42` sort key → `(score_unavailable, eval_failed, -score)`; teardown reconciled by hand (context-forge `context-constitution` unavailable), UI-6 anchor/wording fixed |
+| 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; next: merge-order check, then the integration PR → `main-dev` (PR body records the manual context-constitution teardown) |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers

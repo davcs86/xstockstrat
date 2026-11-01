@@ -28,6 +28,7 @@ from google.protobuf.struct_pb2 import Struct
 from app.engine.live_loop import LiveEvaluationLoop
 from app.handlers.servicer import AnalysisServicer
 from app.services.evaluator import StrategyEvaluator
+from tests.conftest import fundamentals_row
 
 _PE = indicators_pb2.FUNDAMENTAL_METRIC_PE_RATIO
 _ROE = indicators_pb2.FUNDAMENTAL_METRIC_ROE
@@ -91,7 +92,7 @@ def _make_live_loop(evaluator, *, gate=True):
 
 
 def _snapshot_resp(symbol="AAPL", missing=(), **metrics):
-    row = marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
+    row = fundamentals_row(symbol, missing, **metrics)
     return marketdata_pb2.GetFundamentalsResponse(fundamentals=row)
 
 

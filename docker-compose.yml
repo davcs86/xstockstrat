@@ -229,6 +229,7 @@ services:
       GRPC_PORT: "50059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: notify
       DB_POOL_MAX: "1"
@@ -510,7 +511,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       INGEST_ENDPOINT: xstockstrat-ingest:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      SERVICE_NAME: xstockstrat-ui
+      SERVICE_NAME: ui
       DB_POOL_MAX: "1"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       # Public base URL of the MCP agent — the /accounts page shows it as the connector URL and

@@ -129,7 +129,7 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
 
 ### Step 1 — test: IBKR reference fixtures (ibind vectors, test keys, DH params, gitleaks scope)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/testdata/ibkr/signature_key.pem` — create
@@ -149,8 +149,9 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
 - No in-repo vectors or RSA test keys exist (recon.md:252-256). `zz_sigrepro_test.go` was ephemeral.
 - `.gitleaks.toml:33-40` is a single `[allowlist]` table, `regexTarget = "line"`, with four exact-literal
   `regexes`. Each one is documented by a comment block above it (`:6-32`).
-- gitleaks runs in CI via `gitleaks/gitleaks-action@v3` (`.github/workflows/ci.yml:754`). trufflehog runs
-  `--only-verified` (`ci.yml:737`, args `:749`). `which gitleaks` → not installed on this host.
+- gitleaks runs in CI via `gitleaks/gitleaks-action@v3` (`.github/workflows/ci.yml:767`). trufflehog runs
+  `--only-verified` (`ci.yml:750`, `extra_args` `:762`). gitleaks is installed on this host at
+  `~/go/bin/gitleaks` (re-spec 2026-10-28), so both mandatory gitleaks commands below can run here.
 - Reference: ibind @ `759ec3a1` (Execution Summary pins).
 
 **TDD**: `N/A (fixture data only — consumed by the red assertions of Steps 3, 5, 7, 9)`
@@ -216,7 +217,7 @@ Nothing is deferred. Two out-of-scope follow-ups are named in Step Dependencies.
 cd services/xstockstrat-trading && GOWORK=off go vet ./internal/testdata/ && \
   GOWORK=off go test ./internal/testdata/ -count=1   # package compiles; vectors.json decodes
 python3 -c "import json;d=json.load(open('internal/testdata/ibkr/vectors.json'));print(sorted(d))"
-cd ../.. && gitleaks dir services/xstockstrat-trading/internal/testdata/ibkr --config .gitleaks.toml  # brew install gitleaks → "no leaks found"
+cd ../.. && gitleaks dir services/xstockstrat-trading/internal/testdata/ibkr --config .gitleaks.toml  # ~/go/bin/gitleaks (brew install gitleaks) → "no leaks found"
 openssl genrsa 2048 > /tmp/probe.pem && gitleaks dir /tmp/probe.pem --config .gitleaks.toml  # a NEW key is still detected (exit 1)
 ```
 
@@ -224,7 +225,7 @@ openssl genrsa 2048 > /tmp/probe.pem && gitleaks dir /tmp/probe.pem --config .gi
 
 ### Step 2 — service: signer — `authorize` replaces `signRequest`'s base-string/header logic
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -287,7 +288,7 @@ grep -n "oauth_version" internal/broker/ibkr.go   # only inside the not-yet-dele
 
 ### Step 3 — test: signer known-answer vectors (AC-1, AC-2 signer half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr_sign_internal_test.go` — create (package `broker`)
@@ -331,7 +332,7 @@ grep -rn "nonceAAAAAAAAAAA" --include="*_test.go" internal | wc -l   # literals 
 
 ### Step 4 — service: LST session — key material, coalesced handshake, `ssodh/init`, negative cache
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -346,8 +347,8 @@ grep -rn "nonceAAAAAAAAAAA" --include="*_test.go" internal | wc -l   # literals 
   precedent is `services/xstockstrat-marketdata/internal/service/marketdata_service.go:15,60` (recon.md:111-114).
 - `IBKRConfig` (`ibkr.go:24-31`) holds no key material. Instantiate failures are logged with `err`
   (`trading.go:268`, `:2521`, `:2570`), so parse errors must not echo PEM bytes (recon.md:301-303).
-- PEM parse precedent: `internal/mtls/mtls.go:21-37` wraps errors without echoing material (weak precedent,
-  recon.md:119-121).
+- PEM parse precedent: `load()` at `internal/mtls/mtls.go:22-41` wraps errors without echoing material (weak
+  precedent, recon.md:119-121).
 - The TRADING-3 switch to reuse is `ibkr.go:568-576` (401/403 → `ErrInvalidCredentials`, `broker.go:10`).
 - `validateAndRecordCredential`'s 5s `valCtx` is at `trading.go:2603`. The reconcile per-call bound is
   `brokerCallTimeout()` at `trading.go:2440-2446` (5000ms).
@@ -431,7 +432,7 @@ grep -nE 'Errorf\(.*(PEM|pem)\b.*%s.*(Key|key)\)' internal/broker/ibkr*.go   # n
 
 ### Step 5 — test: session handshake, classification, coalescing, negative cache (AC-3/4/5/10 broker half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/testdata/ibkr.go` — modify (add `IBKRAuthHandler`)
@@ -499,7 +500,7 @@ grep -rn "func ibkrAuthServer\|live_session_token" --include="*_test.go" interna
 
 ### Step 6 — service: `c.do` send seam — migrate 11 call sites, 401 retry, lapsed-session re-init, uncertain resend
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -519,8 +520,9 @@ grep -rn "func ibkrAuthServer\|live_session_token" --include="*_test.go" interna
 - `confirmReply` keeps `%w` on transport errors (`:118-119`, `:130`).
 - The duplicate 401/403 branch is `:568-576`.
 - `ErrInvalidCredentials` doc comment is at `broker.go:8-9`.
-- Only two uncertain classifiers exist: `grep -rn "DeadlineExceeded\|Timeout()" internal/ cmd/` →
-  `trading.go:684`, `:1521` (non-test). `alpaca.go:67` is an unrelated method name.
+- Only two uncertain classifiers exist. `grep -rn "DeadlineExceeded\|Timeout()" internal/ cmd/` (non-test) →
+  `trading.go:684`, `:1521`, `:1973`, `:2377`, `:2440`, plus `alpaca.go:67`. Only `:684` and `:1521` classify
+  errors: `:1973`/`:2377`/`:2440` match `brokerCallTimeout()`, and `alpaca.go:67` is the `HTTPTimeout()` method.
 - Lapsed-session reply pinned: HTTP 400 with body containing `no bridge` (ibind `ibkr_client.py:139-143`).
 
 **TDD**: `red-green required`
@@ -593,7 +595,7 @@ grep -n "TRADING_MODE\|TradingMode" internal/broker/ibkr.go   # expect none (no 
 
 ### Step 7 — test: wire-level signing, 401 retry matrix, order-path classification; migrate existing IBKR tests (AC-1/2/6/8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr_do_test.go` — create (package `broker_test`)
@@ -605,7 +607,8 @@ grep -n "TRADING_MODE\|TradingMode" internal/broker/ibkr.go   # expect none (no 
 **Codebase Evidence**:
 - Existing IBKR tests build clients with empty creds and no handshake (recon.md:297-300): `ibkr_test.go:52`, `:101`,
   `:151`, `:220`, `:247`, `:269`, `:305`, `:352`, `:373`, `:397` and `ibkr_reply_test.go:80`, `:102`, `:116`,
-  `:126`, `:139`, `:163`. `TestReplaceOrder_IBKR` asserts only `gotAuth != ""` (`ibkr_test.go:285`, recon.md:300).
+  `:126`, `:139`, `:163`. `TestReplaceOrder_IBKR` (declared `ibkr_test.go:285`) asserts only that the header is
+  non-empty: `if gotAuth == ""` at `ibkr_test.go:323` (recon.md:300).
 - Fill-state tests already exist: `TestGetOrder_IBKRAvgPrice` (`ibkr_test.go:254`) and
   `TestIBKRListOrders_ParsesMultipleOrders` (`:361`).
 
@@ -654,7 +657,7 @@ grep -rn "type IBKRAuthHandler\|func IBKRAuthHandler" --include="*.go" internal 
 
 ### Step 8 — service: trading plumbing — credential shape, Timing keys, IBKR-only validation, uncertain predicate, reconcile skip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -727,7 +730,7 @@ grep -n "TRADING_MODE\|environmentIsPaper" internal/service/trading.go | head   
 
 ### Step 9 — test: service-level credential status, validation, classification, reconcile skip (AC-3..AC-10 service half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_ibkr_auth_test.go` — create
@@ -804,7 +807,7 @@ grep -rn "statusWrites" --include="*_test.go" internal/service | grep "struct\|\
 
 ### Step 10 — config: register `trading.ibkr.*` keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -849,7 +852,7 @@ grep -n "trading.ibkr\." services/xstockstrat-trading/CLAUDE.md docs/patterns/co
 
 ### Step 11 — proto: comment-only IBKR `credentials_json` shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -881,7 +884,7 @@ cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch
 
 ### Step 12 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/trading.pb.go` — modify (generated; comment only)
@@ -920,7 +923,7 @@ git diff --stat packages/proto/gen/ && git diff packages/proto/gen/ | grep '^[-+
 
 ### Step 13 — service: `/trader` IBKR credential form — key-material inputs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify
@@ -974,7 +977,7 @@ grep -n "#[0-9a-fA-F]\{3,6\}\|oklch(\|hsl(" src/components/trader/accountShared.
 
 ### Step 14 — test: `/trader` IBKR register/edit e2e (AC-7 UI half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts` — modify
@@ -1004,7 +1007,9 @@ grep -n "#[0-9a-fA-F]\{3,6\}\|oklch(\|hsl(" src/components/trader/accountShared.
    - `JSON.parse(credentialsJson)` has exactly the 7 keys, and the PEM newlines are preserved;
    - the modal closes.
 3. `@AC-7 IBKR register blocks submit when a key field is empty`: leave `Encryption key (PEM)` empty and submit.
-   The `FieldError` text "This field is required" is visible and no `RegisterBrokerAccount` request was sent.
+   The `Encryption key (PEM)` textarea is `:invalid` (non-empty `validationMessage`), the dialog stays open, and no
+   `RegisterBrokerAccount` request was sent. `FieldError` is not e2e-asserted: native `required` blocks the submit
+   first (operator decision 2026-10-30, Deviation Log "Steps 13 + 14").
 4. `IBKR Edit keys never renders stored values`: open Edit keys on `BROKER_ACCOUNT_IBKR`; all 7 inputs are empty,
    then save, and the request carries 7 keys.
 5. Offline guard: assert the Add form's Offline option renders no credential inputs, and keep
@@ -1022,7 +1027,7 @@ grep -n "IBKR_TEST_CREDENTIALS_INPUT" e2e/fixtures/INVENTORY.md
 
 ### Step 15 — service: agent `manage_account` IBKR shape + runbook parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -1031,10 +1036,12 @@ grep -n "IBKR_TEST_CREDENTIALS_INPUT" e2e/fixtures/INVENTORY.md
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability, `mcp-tools.md` parity, no secret values in tool output
 
 **Codebase Evidence**:
-- `manage_account` is at `tools.py:2138-2147`. The IBKR shape in its docstring is at `:2161-2163`, and the
-  update_credentials error line is at `:2166-2168`. Checks are non-empty only (`:2183-2200`).
-- Passthrough: `client.py:2392-2440` (recon.md:73), unchanged. `_grpc_error_message` is at `tools.py:223`.
-- Runbook row: `docs/runbooks/mcp-tools.md:1391`.
+- `async def manage_account` is at `tools.py:2153` (signature `:2153-2161`). The IBKR shape in its docstring is
+  at `:2175-2177`, and the update_credentials error sentence is at `:2179-2181`. Checks are non-empty only
+  (`:2191-2214`).
+- Passthrough: `client.py` `register_broker_account` `:2393`, `update_broker_account_credentials` `:2421`,
+  `deregister_broker_account` `:2444` (recon.md:73), unchanged. `_grpc_error_message` is at `tools.py:223`.
+- Runbook row: `docs/runbooks/mcp-tools.md:1392`.
 - The tool count is unchanged, so the `fails.md:2068-2085` inventory traps do not trigger (recon.md:319-321).
 
 **TDD**: `red-green required` (paired Step 16)
@@ -1042,9 +1049,9 @@ grep -n "IBKR_TEST_CREDENTIALS_INPUT" e2e/fixtures/INVENTORY.md
 **Covers**: `—`
 
 **Instructions**:
-1. Docstring `:2161-2163`: the IBKR shape lists the 7 keys (the 3 new ones are PEM strings).
-2. `:2166-2168`: add "and an IBKR blob missing any required field (INVALID_ARGUMENT)".
-3. `mcp-tools.md:1391`: the same 7-key IBKR shape. Edit only that row; do not touch the `@AC-32 @feature-224` /
+1. Docstring `:2175-2177`: the IBKR shape lists the 7 keys (the 3 new ones are PEM strings).
+2. `:2179-2181`: add "and an IBKR blob missing any required field (INVALID_ARGUMENT)".
+3. `mcp-tools.md:1392`: the same 7-key IBKR shape. Edit only that row; do not touch the `@AC-32 @feature-224` /
    `@AC-5 @feature-149` sections (recon.md:201).
 4. Tool name, parameters, validation and return shape are unchanged. Trading stays the only validator (C-10).
 
@@ -1058,7 +1065,7 @@ grep -n "signature_key" app/tools.py ../../docs/runbooks/mcp-tools.md   # both p
 
 ### Step 16 — test: agent IBKR rotation no-echo + InvalidArgument surfacing (AC-7 agent half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_broker_account_client.py` — modify
@@ -1101,7 +1108,7 @@ grep -n "def .*fixture\|from .conftest\|conftest" tests/test_broker_account_clie
 
 ### Step 17 — docs: IBKR auth docs, TRADING-3 widening, findings closure, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-trading/docs/ibkr.md` — modify
@@ -1177,3 +1184,259 @@ grep -n "feature 249" services/xstockstrat-trading/docs/context-constitution-fin
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — 2026-10-29 (sdd-execute sequential)
+
+- **`.gitleaks.toml` path allowlist for `vectors.json` (scope expansion, operator Option A).** The spec scoped
+  the gitleaks change to two line regexes for the PEM bodies. The generated `vectors.json` also trips the default
+  rules (fake OAuth tokens, signatures, the encrypted test secret), so the existing `[allowlist]` gains exactly
+  `paths = ['''services/xstockstrat-trading/internal/testdata/ibkr/vectors\.json''']` (OR with the regexes;
+  `regexTarget` unchanged), and the feature-249 comment block names `vectors.json` as generated test data with no
+  real secrets. Operator decision 2026-10-29 (session question tool: "Yes, run both"), confirming the earlier
+  Option A. The `[[allowlists]]` AND fallback was not needed: the line regexes suppress the multi-line
+  `private-key` finding (local `gitleaks dir` → "no leaks found").
+- **Generator: wrong-key decrypt guard for pycryptodome 4.2.0.** `PKCS1_v1_5.decrypt(ct, None)` in pycryptodome
+  4.2.0 returns empty bytes (not the `None` sentinel) for a wrong-key ciphertext, so ibind's
+  `calculate_live_session_token_prepend` returns `""` instead of raising. `gen_vectors.py` accepts either `""` or
+  the older `AttributeError` and fails on anything else. **Carried requirement for Step 4:** the Go decrypt must
+  fail closed on an empty plaintext (an empty prepend is a credential error, never a valid secret).
+- **`ibkr.go` uses one `//go:embed` per variable** instead of the single `//go:embed ibkr/*.pem ibkr/vectors.json`
+  line: each PEM binds to its own exported string, which needs a per-file directive. Same embedded file set.
+- **PEMs force-added past the root `.gitignore` `*.pem` rule** (`.gitignore:55`, "never commit private keys").
+  The three fixture PEMs are tracked with `git add -f`, so the rule stays in force for every other path and
+  `.gitignore` is not edited. The committed keys are the operator-approved test keys (2026-10-29).
+- ibind SHA unchanged (`759ec3a1`). Regenerated locally with pycryptodome 4.2.0 from the pinned ibind source:
+  output byte-identical to the committed `vectors.json`.
+
+### Steps 2 + 3 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 2 and 3 land in one commit (breaks one-commit-per-step, operator decision).** Operator, session question
+  tool, 2026-10-29: "A: Steps 2+3 together (Recommended)". The signer (`ibkr.go`) and its known-answer test
+  (`ibkr_sign_internal_test.go`) are committed together and both steps are marked done. The test file was not on
+  disk at execution time, so it was authored in this session from the Step 3 instructions. RED was a compile failure
+  against the pre-Step-2 tree (no `Now`/`Nonce` seams, `buildBaseString`, `authorize`, `authorizeLST`). GREEN: all
+  four `TestIBKRAuthorize*` tests pass against the ibind vectors.
+- **FR-3 ruling: query params stay in the signature base string.** Operator, 2026-10-29: "Include params (FR-3)".
+  This is the final ruling and does not hold the merge. It deviates from ibind, which excludes them. The inclusion
+  stays isolated in `buildBaseString`.
+- **Shared `oauthParams(signatureMethod)` helper (not named in the spec).** `authorize` and `authorizeLST` both build
+  the five oauth params through one unexported method, and the Step 3 test reuses it. This avoids restating the
+  param set three times (DRY guard rail).
+- **`buildBaseString` keeps every value of a repeated query key** as its own `k=v` pair, sorted by key and then by
+  value. The spec says "every decoded `u.Query()` value" and does not pin an order for repeated keys. No current
+  call site repeats a key.
+- **Verification fallback: golangci-lint rebuilt.** The provisioned `~/go/bin/golangci-lint` v2.14.0 was built with
+  go1.26 and refuses to load a `go 1.27.0` module. The same pinned v2.14.0 was rebuilt with go1.27.0 into a scratch
+  `GOBIN`, then run: 0 issues. The pinned version is unchanged.
+
+### Steps 4 + 5 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 4 and 5 land in one commit (standing operator rule).** Operator decision for the Step 4 blocker, in their
+  own words (session question tool, 2026-10-29): "Merge pairs + standing rule". The rule reads: "if this step's
+  Verification fails ONLY because the consumers or tests of its new code live in the immediately following step
+  … Execute this step and the next one together as ONE commit with one red→green cycle on the next step's tests,
+  mark BOTH steps done". Step 4's new unexported symbols have no consumer before Step 5's in-package tests, so
+  `unused` would fail Step 4's lint alone. Step 5's tests and `testdata.IBKRAuthHandler` were written first. RED
+  was a compile failure (`IBKRTiming`, `SignatureKey`/`EncryptionKey`/`DHPrime`/`Timing`, `ensureSession`
+  undefined). GREEN: all ten session tests pass, `-race`, stable over `-count=20`.
+- **`invalidate`/`reinit` get their own tests in Step 5's file.** Their only production consumer is Step 6's
+  `c.do`, so `TestInvalidate_GenerationGuardAndThrottle` and `TestReinit_RerunsInitOnly` were added to
+  `ibkr_session_internal_test.go`. They keep `unused` green and cover Step 4 instruction 6. They test only Step 4
+  behavior and add no new surface.
+- **`testdata` gains small helpers next to `IBKRAuthHandler`:** `IBKRLSTPath`/`IBKRInitPath`,
+  `IBKRLSTReplyJSON(sig)`, `IBKRInitReplyJSON(auth, competing)` and `IBKRHeaderParam`. The AC-4 rows script
+  replies through them, so no test redeclares the reply shape (C-13). Overrides are set through `SetOverride`, and
+  `Requests`/`Count` read the log under the handler's lock (race-safe for the coalescing test).
+- **Strict replay uses the vector base URL.** The strict handler compares signatures computed over
+  `https://api.ibkr.com/v1/api/...`, so the in-package tests keep `BaseURL` at the vector value and swap
+  `c.httpClient` for a transport that rewrites only scheme+host to the `httptest` server. The handler matches the
+  auth routes by path suffix, so the `/v1/api` prefix is tolerated. Step 7 (`package broker_test`) cannot replace
+  `httpClient` and will need its own way to reach a strict handler; carried as an open item.
+- **`competing:true` row uses `{"authenticated":false,"competing":true}`.** Instruction 5.6 classifies only
+  "2xx lacking `authenticated:true`" as INVALID (with `competing` logged), and the AC-4 row is realized by that
+  reply. An `authenticated:true, competing:true` reply is still treated as established; not changed here.
+- **Empty decrypt plaintext fails closed** (carried from Step 1): `mintLST` returns `ErrInvalidCredentials` for a
+  decrypt error or an empty plaintext.
+- **`ibkrSessionState` is embedded in `IBKRClient`.** The session fields (`sessMu`, `sess`, `negUntil`/`negErr`,
+  the invalidation timestamp, the flight sequence and `flight`) live in `ibkr_session.go`. The joiner re-call rule
+  compares a per-flight sequence number with the one observed at call entry instead of a wall-clock timestamp, so
+  it is independent of the `Now` seam.
+- **DH params must be a `DH PARAMETERS` PEM block** with no trailing ASN.1 bytes; any other block is a `dh_prime`
+  credential error (covered by the `dh_prime_wrong_pem` case).
+- `go mod tidy` also touched the root `go.work.sum`. That change was reverted as out of scope; `go.sum` was
+  unchanged.
+- Verification fallback (as in Steps 2+3): golangci-lint v2.14.0 rebuilt with go1.27; 0 issues.
+
+### Steps 6 + 7 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 6 and 7 land in one commit (standing operator rule).** Operator, session question tool, 2026-10-29, in
+  their own words: "Merge pairs + standing rule". The rule reads: "if this step's Verification fails ONLY because
+  the consumers or tests of its new code live in the immediately following step … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done". Step 6's paired RED
+  test is Step 7's (Step Dependencies: "Step 7 [test] covers Step 6"). Step 6 also breaks every existing IBKR test,
+  because their fakes serve no LST handshake, and Step 7 is the step that migrates them. Step 7's tests were written
+  first. RED came in two parts. First, a compile failure (`broker.ErrOutcomeUncertain` undefined). Second, with a
+  temporary, uncommitted shim declaring only that sentinel, a behavioral failure: AC-1 `GetOrder: status 401` from the
+  strict handler, an AC-8 `order POSTs = 1, want none`, the retry-matrix rows, and `TestReplaceOrder_IBKR` "expected
+  the realm-prefixed LST header". GREEN: the whole broker package passes with `-race` and is stable over `-count=10`.
+- **Strict wire tests reach the handler by swapping `http.DefaultTransport` in `package broker_test`.** This closes
+  the open item from Steps 4+5. `IBKRClient.httpClient` has a nil `Transport`, so it uses `http.DefaultTransport`. The
+  `strictIBKRClient` helper (`ibkr_do_test.go`) points that at a host-rewriting transport for the test's duration and
+  restores it in `t.Cleanup`. The client keeps signing over the vector base URL. No production seam was added, and no
+  broker test runs in parallel.
+- **Helpers not named in the spec.** `do` lives in `ibkr_session.go` alongside `currentSession` (reads the session
+  under `sessMu`), `sendSigned` (signs, sends, reads and closes the body; the body read stays unbounded as before) and
+  `ibkrFinalAuthErr` (the instruction 2.4 error). The single `session: %v` flatten point is a closure inside `do`.
+  `ibkr_do_test.go` adds `ibkrTestConfig`, a vector-keyed config with a fixed clock that keeps the vector LST
+  unexpired. All migrated tests build their clients through it.
+- **Literal readings (no spec text changed):**
+  - The uncertain-resend rule (instruction 2.5) applies only to a resend after a **401**. A resend after a 400
+    no-bridge re-init that fails returns an ordinary error, because the 400 already proved the first send was not
+    processed.
+  - `noResend` blocks only the 401 resend (instruction 2.3). A bracket-leg POST answered 400 no-bridge is still
+    re-inited and resent once.
+  - A "`cOID` duplicate rejection" is detected as a non-2xx resend reply. A 2xx reply that carries a duplicate error
+    is not detected, because its format is not pinned (the AC-6 row uses a 400 body). Carried as an open item.
+  - Every final 401/403 now surfaces from `do` as the wrapped sentinel, so the callers' status switches no longer see
+    401/403. Callers keep their `…: http: %w` wrap unchanged (instruction 4), so a session failure reads
+    `ibkr X: http: ibkr X: session: …`. This is cosmetic only.
+- **Partial-fill coverage is a new test**, `TestGetOrder_IBKRPartialFill` (`filledQuantity` 4 of 10, status
+  `Submitted`). It sits next to `TestGetOrder_IBKRAvgPrice` instead of being a case inside it, so the existing test
+  stays unchanged.
+- Verification fallback (as in Steps 2+3 and 4+5): golangci-lint v2.14.0 was rebuilt with go1.27 and ran with
+  `GOWORK=off`. It reports 0 issues.
+
+### Steps 8 + 9 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 8 and 9 land in one commit (standing operator rule).** Operator, session question tool, 2026-10-29, in
+  their own words: "Merge pairs + standing rule". The rule reads: "if this step's Verification fails ONLY because
+  the consumers or tests of its new code live in the immediately following step … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done". Step 8's RED test
+  is Step 9's (Step Dependencies: "Step 9 [test] covers Step 8"). Step 9's tests were written first. RED came in two
+  parts. First, a compile failure (`svc.ibkrTiming` and `isUncertainBrokerOutcome` undefined). Second, a behavioral
+  failure under a temporary, uncommitted shim that declared only those two symbols with pre-Step-8 behavior (a fixed
+  default `IBKRTiming` and the old timeout-only predicate):
+  - AC-7: `code = OK, want InvalidArgument`, and the update row panics on the unfaked `UpdateCredentials`.
+  - AC-8 / AC-6 row 5: an `ErrOutcomeUncertain`-wrapped error reads `false`.
+  - AC-9: `reconcileTick = (systemic 1, total 2), want (0, 2)` on both rows.
+  - AC-10: `LST requests inside reauth_min_interval = 2, want 1`, because the 120s key was not applied.
+  - The AC-4 `lst_timeout` row took 5s, the hardcoded validate deadline, not the configured 50ms.
+  GREEN: all Step 9 tests pass with `-race`; the AC-10 test is stable over `-count=5`.
+- **The AC-3 strict test signs over the vector base URL, not `BaseURL: srv.URL`.** Step 9 instruction 2 names both a
+  strict `IBKRAuthHandler` and `BaseURL: srv.URL`, but the strict handler only accepts signatures computed over the
+  vector URL. The service test uses the same approach as Step 7 (Steps 6 + 7 log entry): the client keeps the vector
+  base URL and nonce, and `http.DefaultTransport` is swapped for a host-rewriting transport for the test's duration.
+  No `internal/service` test runs in parallel. The same swap serves as the AC-5 no-HTTP guard.
+- **AC-5 is green before Step 8.** Step 4 already fails a legacy 4-field blob locally, with no HTTP call. So the
+  Step 9 AC-5 test is a characterization at the service level, and its RED was the compile failure only.
+- **The AC-4 `lst_timeout` and AC-10 rows read `trading.ibkr.*` through `config.NewSnapshotWatcher`.**
+  `handshake_timeout_ms=50` bounds the timeout row, and `reauth_min_interval_ms=120000` (above the 30s default)
+  proves the reauth key is applied. Both rows exercise `ibkrTiming`, which is passed as `IBKRConfig.Timing`.
+- **`validateIBKRCreds` on a JSON value that is not an object** (for example `[]`) returns `InvalidArgument` with
+  "IBKR credentials_json must be a JSON object of string fields". The spec pins only the missing-field message.
+  Missing fields are listed in the `ibkrCreds` declaration order.
+- **Verification notes.**
+  - Step 9's `-run 'IBKR|Uncertain|InvalidCredentialsNotSystemic|LegacyIBKR'` regex does not match
+    `TestValidateAndRecordCredential_NegativeCacheThenHeal`, so that test was also run by name. It passed.
+  - golangci-lint v2.14.0 was rebuilt with go1.27, as in the earlier steps, and ran with `GOWORK=off`. It reports
+    0 issues.
+- **The husky pre-commit hook did not run.** `core.hooksPath` is `.husky/_`, which does not exist, and the main
+  worktree has no `node_modules` to symlink. The hook's lint-staged glob covers only `services/xstockstrat-ui`, and
+  its duplication scan outside the UI is report-only, so neither check gates this Go-only change.
+
+### Step 11 — 2026-10-29 (sdd-execute sequential)
+
+- **The `buf breaking` baseline is a `git archive` tarball, not `<repo-root>/.git#branch=…`.** This session runs in
+  an isolated git worktree whose sandbox refuses a `.git` input outside the worktree, and the worktree has no local
+  `feature/fix-ibkr-request-signing` branch. The baseline was
+  `git archive -o <scratch>/base.tar origin/feature/fix-ibkr-request-signing packages/proto`, then
+  `buf breaking --against '<scratch>/base.tar#subdir=packages/proto'`. This compares against the same tree, with the
+  same PLAT-10 `subdir=`. Exit code 0; `buf lint` (1.72.0) is clean.
+- The IBKR comment wraps over three `//` lines and keeps the existing alignment. The field number, type and name of
+  `credentials_json = 4` are unchanged (C-09).
+
+### Step 12 — 2026-10-29 (sdd-execute sequential)
+
+- **The Go proto plugins were rebuilt with Go 1.27 on the host before regenerating.** **Disposition**: CI-equivalent
+  fallback. The preinstalled `~/go/bin/protoc-gen-go` v1.36.11 was built with go1.24.7. Its `go/format` reflowed an
+  indented doc comment in `gen/go/analysis/v1/analysis.pb.go`, which is unrelated churn. Following the step's
+  "fix the toolchain, don't commit churn" instruction, `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2` and
+  `protoc-gen-connect-go@v1.19.2` were rebuilt with go1.27.0 into a scratch `GOBIN`, matching the CI
+  `proto-freshness` job. `pnpm install --frozen-lockfile` supplied the lockfile-pinned `tsc`; the global one fails
+  with TS5107. `grpcio-tools` is 1.80.0, as in CI. No repo pin changed.
+- After regeneration `git diff --name-only packages/proto/gen/` lists exactly the 5 **Files**, and every changed line is
+  the IBKR comment. The Python stubs and the serialized descriptors are unchanged.
+- **Spec evidence corrections.** `buf` 1.72.0 *is* installed on this host (`~/go/bin/buf`), so the "`which buf` → none"
+  note is stale. Both `gen/ts/dist/trading/v1/*.d.ts` files did carry the comment and were regenerated, as the
+  **Files** list says.
+
+### Steps 13 + 14 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 13 and 14 land in one commit (standing operator rule, widened).** Operator, session question tool,
+  2026-10-29, in their own words: "Merge pairs + standing rule" ("if this step's Verification fails ONLY because the
+  consumers or tests of its new code live in the immediately following step … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done"). Step 13's RED
+  test is Step 14's e2e. No file outside the two steps' **Files** was touched.
+- **Step 14 instruction 3's assertion changed (operator decision).** Operator, session question tool, 2026-10-30, in
+  their own words: "B: Keep native". Step 13 keeps native `required` on the PEM `Textarea`s (no `noValidate`), so the
+  browser blocks the submit before react-hook-form validates and the `FieldError` text never renders on that path.
+  The test asserts instead that the `Encryption key (PEM)` textarea is `:invalid` with a non-empty
+  `validationMessage`, the dialog stays open, and no `RegisterBrokerAccount` request was sent. `FieldError` is wired
+  (Step 13 instruction 4) but not e2e-asserted.
+- **RED** (built from the pre-Step-13 source): the 3 IBKR tests failed waiting for
+  `getByPlaceholder('Signature key (PEM)', { exact: true })`; the Offline guard and the 7 existing tests passed.
+  **GREEN** (after Step 13, `CI=1` production build, `--retries=0`): `account-selector.spec.ts` +
+  `offline-accounts.spec.ts` 20 passed.
+- **Placeholders are matched with `exact: true`.** `Access Token` is a substring of `Access Token Secret`, so a
+  default `getByPlaceholder` hits a strict-mode violation.
+- **Step 14 instruction 5's Offline guard lives in `account-selector.spec.ts`** (`Add form Offline option renders
+  no credential inputs`). `offline-accounts.spec.ts` is unchanged (PRESERVE) and was run.
+- **`CredentialFields` renders from two input tables** (`IBKR_INPUTS`, `ALPACA_INPUTS`), each input wrapped in
+  `Field` with a `FieldError` under it. The Alpaca inputs therefore gain the same `Field`/`FieldError` wrapper;
+  placeholders, `type="password"` and `required` are unchanged. `credsFromWatch` rebuilds `CredentialState` from the
+  `useWatch({ name: CREDENTIAL_KEYS })` tuple, replacing both index maps.
+- **Verification notes.** `pnpm exec tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts:135-136`
+  (`dataKind`/`timeframeEnum` on `never`). That file is untouched here; no error is in a changed file.
+  Playwright ran with `CI=1` (production build) because the `pnpm dev` first-hit compile times out the 10s local
+  warm-up in this sandbox.
+
+### Steps 15 + 16 — 2026-10-29 (sdd-execute sequential)
+
+- **Steps 15 and 16 land in one commit (standing operator rule).** Operator, 2026-10-29, in their own words: "Merge
+  pairs + standing rule" ("if this step's Verification fails ONLY because the consumers or tests of its new code live
+  in the immediately following step … or the RED test is that next step's test … Execute this step and the next one
+  together as ONE commit with one red→green cycle on the next step's tests, mark BOTH steps done"). Step 15's RED test
+  is Step 16's docstring assertion. No file outside the two steps' **Files** was touched.
+- **Spec evidence corrections.** The line numbers held on this branch (`manage_account` at `tools.py:2153`, runbook
+  row at `mcp-tools.md:1392`). The `register` docstring sentence was reflowed so the 7-key shape fits the line limit.
+  `dh_prime` is a PEM `DH PARAMETERS` block (`internal/broker/ibkr.go:35`), so "the last three as PEM strings" holds.
+- **RED** (before Step 15): `test_manage_account_docstring_lists_ibkr_key_material` failed (`'signature_key' in
+  description`). The no-echo and `INVALID_ARGUMENT` tests characterize the existing passthrough and passed; each
+  asserts a value only the 7-key blob carries. **GREEN**: 520 passed, coverage 81.23% (threshold 40%).
+- **Runbook parity scope.** Only the `credentials_json` row was edited (Step 15 instruction 3). The
+  `update_credentials` result bullet and the `**Errors:**` line still name only "invalid JSON" for `INVALID_ARGUMENT`.
+
+### Step 17 — 2026-10-29 (sdd-execute sequential)
+
+- **Anchors re-stamped to the current branch, not the spec's literals.** The spec cites `trading.go:2951` and
+  `:3084`. After Steps 8+9, `credentialStatusFromError` is at `trading.go:3020` and `instantiateBrokerLocked` at
+  `:3153`, with the `GetInt("trading.broker.timeout_ms")` read at `:3182`. TRADING-3 and the findings rows cite those
+  lines. Verification grep 2 matches on "deterministic". The open question sat at findings `:46` (not `:44`) and the
+  IBKR timeout row at `:29` (not `:28`).
+- **Findings hint fix widened within the same file.** The stale `~L3027` appeared twice: in the IBKR timeout row
+  and in the `GetInt`/`GetFloat` accessor-mismatch row. Both now cite current lines. Stale neighbours in those two
+  rows were fixed too: `IBKRRequestTimeout` const/applied `~L46/~L61` became `~L68/~L83`, and `brokerCallTimeout`
+  `GetFloat` `~L2359` became `~L2476`. The "Filed as defect reports" row for the signature defect stays, because its
+  report sidecar is `triaged`, not resolved.
+- **Teardown: the context-forge `context-constitution` refresh skill is unavailable in this session.** Only
+  `context-forge:context-scrubber` is listed. A manual reconciliation was performed instead, re-reading each context
+  file that Steps 10, 15 and 17 touched against the code:
+  - trading `CLAUDE.md` Config Keys rows match `ibkrTiming` (`trading.go:2484-2495`; 60000/10000/30000, `≤0` →
+    default).
+  - The `config-governance.md` feature 249 entry matches the same reads.
+  - The `mcp-tools.md:1392` row matches the 7 `ibkrCreds` JSON tags.
+  - The trading `CLAUDE.md` credential-health paragraph, the TRADING-3 row and the `ibkr.md` auth section match
+    `ibkr_session.go` and `ibkr.go`.
+  No further drift was found. The integration PR body must record both facts (root `CLAUDE.md` § Teardown).
+- **Not changed:** the `mcp-tools.md` `update_credentials` bullet and `**Errors:**` line, carried from Steps 15+16.
+  They are outside Step 17's **Files**.

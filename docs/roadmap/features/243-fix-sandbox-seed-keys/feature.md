@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-28
 
 ---
 
@@ -17,6 +17,9 @@
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps; @AC-5 appended (design.md § 4) |
+| 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1-5 re-verified against main-dev; Step 1 ci.yml / migration-rerun.sh line drift and Step 2 fails.md cite fixed; Steps 3-5 unchanged |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f) |
+| 2026-10-28 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Step 5 re-spec: NNN check now covers all remote branches; 244 adds config `032` (`d2002841`), so 243 (031) must merge into main-dev before 244 or be renumbered |
 
 ---
 
@@ -51,4 +54,4 @@ Operator decision: fix in code plus a config migration.
 
 ## Next Action
 
-`/sdd-review fix-sandbox-seed-keys impl-spec` — validate implementation spec, then `/sdd-execute fix-sandbox-seed-keys`
+`/sdd-execute fix-sandbox-seed-keys sequential` — Step 5 next (Steps 1-4 done 2026-10-28; Step 5 needs the operator's G1 staging output)

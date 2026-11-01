@@ -61,13 +61,16 @@ function noopWebPush(): any {
 }
 
 // A recording Web Push dispatcher: captures the alerts EmitAlert hands it; can be made to hang.
-function recordingWebPush(opts: { hang?: boolean } = {}): { dispatched: any[]; obj: any } {
+function recordingWebPush(opts: { hang?: boolean } = {}): { dispatched: any[]; mds: any[]; obj: any } {
   const dispatched: any[] = [];
+  const mds: any[] = [];
   return {
     dispatched,
+    mds,
     obj: {
-      dispatch: (alert: any) => {
+      dispatch: (alert: any, md?: any) => {
         dispatched.push(alert);
+        mds.push(md);
         return opts.hang ? new Promise<void>(() => {}) : Promise.resolve();
       },
     },
@@ -561,6 +564,24 @@ describe('emitAlert push isolation (AC-5)', () => {
     assert.equal(sub.received.length, 1);
     await new Promise((r) => setTimeout(r, 0));
     assert.equal(push.dispatched.length, 1, 'push dispatch was scheduled (it just never resolves)');
+  });
+
+  it('@AC-1: an untargeted EmitAlert returns an alert_id, streams, and hands push the inbound metadata', async () => {
+    const push = recordingWebPush();
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, noopFanout(), push.obj);
+    const sub = registerSubscriber(impl);
+    const md = { get: (k: string) => (k === 'x-trace-id' ? ['t-1'] : []) };
+    const res = await new Promise<any>((resolve, reject) =>
+      impl.emitAlert({ request: REQ({ targetUserId: '' }), metadata: md }, (err: any, r: any) =>
+        err ? reject(err) : resolve(r),
+      ),
+    );
+    assert.ok(res.alertId, 'EmitAlert returns an alert_id');
+    assert.equal(sub.received.length, 1, 'in-process StreamAlerts subscriber still receives it');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(push.dispatched.length, 1);
+    assert.equal(push.dispatched[0].alertId, res.alertId);
+    assert.strictEqual(push.mds[0], md, 'push dispatch receives the call metadata');
   });
 });
 

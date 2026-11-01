@@ -193,6 +193,13 @@ export type QueryEventsRequest = Message<"xstockstrat.ledger.v1.QueryEventsReque
      * @generated from field: int64 from_sequence = 6;
      */
     fromSequence: bigint;
+    /**
+     * When true, only rows whose user_id equals the caller's x-user-id (never NULL rows).
+     * Every user-facing edge MUST set it; internal callers leave it false.
+     *
+     * @generated from field: bool owner_only = 7;
+     */
+    ownerOnly: boolean;
 };
 /**
  * Describes the message xstockstrat.ledger.v1.QueryEventsRequest.

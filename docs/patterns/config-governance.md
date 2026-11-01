@@ -23,7 +23,7 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
    and hands the value to an **allow-listed internal service caller** (the `x-internal-caller`
    metadata channel, mirroring feature 102). A grant may additionally require the caller's mTLS peer
    certificate to carry an exact DNS SAN (`peerSan`; the `ingest` grant requires
-   `xstockstrat-ingest`, feature 224). `GetSecret` resolves the **exact** scope named by
+   `xstockstrat-ingest`, feature 224, and the `marketdata` grant `xstockstrat-marketdata`, feature 254). `GetSecret` resolves the **exact** scope named by
    `GetSecretRequest.user_id` (empty = the global row only; a `user_id` = only that user's row — never
    a cross-scope fallback, feature 224). `is_secret` is **row-authoritative on write** (read
    from the stored row, never trusted from the request), so an admin update can never land
@@ -92,19 +92,51 @@ edge, `GetSecret` allow-list, `is_secret` row-authoritative on write).
 
 ## Author-sentinel conventions
 
-A `SetConfigRequest.author` (or equivalent write-attribution field) written by an automated
-process, not a human operator, uses a `system:<process>` sentinel so an investigator can
-distinguish "an operator clicked Save" from "an automated process wrote this" in the audit log —
-without this convention, both look identical (fails.md 2026-07-01).
+`SetConfigRequest.author` is deprecated and ignored (feature 241). `xstockstrat-config` sets an audit
+row's `changed_by` from the request's propagated identity: a human write is credited to its
+`x-user-id`; an automated write is credited to the `callerID` of the `INTERNAL_CALLER_ALLOWLIST`
+grant that authorized it (`services/xstockstrat-config/src/grpc/authz.ts`) and also carries
+`caller_identity IS NOT NULL` — the column that tells "an operator clicked Save" apart from "an
+automated process wrote this" (fails.md 2026-07-01). A write with neither is rejected
+`INVALID_ARGUMENT`.
 
-| Sentinel | Service | Writer |
+| `changed_by` / sentinel | Service | Writer |
 |---|---|---|
-| `system` | `xstockstrat-indicators` | The seeded fundamentals-scoring formula (`app/formulas/fundamentals_value_quality.py`), documented here retroactively per feature 102 |
-| `system:reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102) — paired with the structural `x-internal-caller`/`caller_identity` mechanism (see `services/xstockstrat-config/CLAUDE.md`), not a free-text convention alone |
+| `trading-reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102); `changed_by` = `caller_identity`. Audit rows written before feature 241 keep the old free-text `system:reconciliation-poller`, so the `/config-ui` audit "By" column shows both spellings |
+| `system` | `xstockstrat-indicators` | Not a config write: the `Formula.author` ownership sentinel on the seeded fundamentals-scoring formula, set from the module's `AUTHOR` constant (`app/formulas/fundamentals_value_quality.py`), never from a request body |
+| `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 249 — fix-ibkr-request-signing (`xstockstrat-trading`)
+
+Bounds the IBKR live-session-token (LST) lifecycle that now signs every IBKR call. All three keys follow feature
+102's "no config-service seed migration" pattern: **unseeded** (consumed-with-default), read live per handshake via
+`s.cfgW.GetInt` with the default supplied in Go code (`ibkrTiming`); `≤ 0` reads as the default. No
+`SCALAR_BOUNDS_REGISTRY` entry. Not tied to the broker's `IBKRRequestTimeout` (the per-request HTTP timeout).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh the cached LST this long before `live_session_token_expiration`. |
+| `trading.ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one LST + `ssodh/init` handshake. |
+| `trading.ibkr.reauth_min_interval_ms` | int | `30000` | Negative-cache and 401-invalidation throttle (one LST request per interval per bad account). |
+
+### feature 264 — fix-portfolio-snapshot-surface (`xstockstrat-config` / `xstockstrat-portfolio`)
+
+**Removes** `portfolio.snapshot.interval_minutes` (migration 034) — its only reader, `StartSnapshotWriter`,
+had zero callers and was deleted; snapshots are written per fill only. The up deletes every environment and
+`user_id` row in both stored key forms; the down restores only the two seeded global rows.
+
+### feature 248 — fix-ledger-trimmed-notify-payload (xstockstrat-ledger / xstockstrat-config)
+
+Bounds the `EventNotifier` LISTEN-connection read that resolves a NOTIFY row trimmed over ~7000 chars before live
+fan-out. **Seeded** (staging + production) by config migration `033_ledger_stream_resolve_timeout`, stored as `int`.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `ledger.stream.resolve_timeout_ms` | int | `2000` | clamp: `≤ 0`/non-finite → `2000` | Applied as the listener session's `statement_timeout` (SET-on-change); the client `query_timeout` backstop is 2×. |
 
 ### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
 
@@ -248,21 +280,19 @@ write-side `SCALAR_BOUNDS_REGISTRY` bounds (`configServiceImpl.ts`, feature 184)
 feature-182 two-operand lookup (the seeded `key` column is full-dotted). **5** cadence/TTL/snooze keys
 are seeded **unbounded** (no documented failure mode; under-bounding is the cheap-to-reverse direction).
 Bounds reject only out-of-range future `SetConfig` writes — no read path is affected. Per-key lower bound
-follows the getter: `get_int_present`/`get_float` legitimate-0 keys keep lower `0` (`refresh_hour_utc`,
-`signal_rank_weight`); `get_int` zero-trap keys use lower `1` (a stored `0` already collapses to the code
-default). **Visibility caveat:** a raw migration `INSERT` fires no `pg_notify`, so the keys appear in
+follows the reader: a key where `0` is a legitimate value keeps lower `0` (`refresh_hour_utc`,
+`signal_rank_weight`); a key whose Python reader clamps a stored ≤ 0 to the default (`int_positive`,
+feature 244) uses lower `1`. **Visibility caveat:** a raw migration `INSERT` fires no `pg_notify`, so the keys appear in
 config-ui only after a config-service reload (restart/deploy, or the next analysis-namespace `SetConfig`).
 **Restart caveat:** `max_concurrent_bars_fetches` and `max_concurrent_candidates` are read once in
 `AnalysisServicer.__init__`, so a config-ui edit takes effect only at service restart (noted in each
-seed `description`). **`signal_rank_weight` zero-trap:** read via `get_float` (no `_present`), so a stored
-`0` reads back as the `0.3` default (noted in the seed description); the read-path fix (`get_float_present`)
-is routed to feature 185.
+seed `description`).
 
 | Key | Type | Default | Bounds | Notes |
 |---|---|---|---|---|
 | `analysis.opportunity.refresh_hour_utc` | int | `0` | `[0,23]` | Daily wall-clock UTC anchor. `get_int_present` (`0` = midnight legitimate). |
 | `analysis.opportunity.max_concurrent_bars_fetches` | int | `2` | `[1,5]` | Compute bars-fetch semaphore; ceiling = marketdata PgBouncer pool (feature-141 SEV-2). `get_int`, `__init__` — restart to apply. |
-| `analysis.opportunity.signal_rank_weight` | float | `0.3` | `[0,1]` | Signal-axis weight in the queue ORDER BY. `get_float` — `0` reads as `0.3` default. |
+| `analysis.opportunity.signal_rank_weight` | float | `0.3` | `[0,1]` | Signal-axis weight in the queue ORDER BY. `0` is honoured (feature 244). |
 | `analysis.opportunity.max_universe_size` | int | `100` | `[1,1000]` | Max candidates traced per compute. `get_int`. |
 | `analysis.opportunity.max_live_strategies_per_symbol` | int | `5` | `[1,50]` | Per-symbol live-attribution cap. `get_int`. |
 | `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | `[1,500]` | Non-held live-covered symbol cap per compute. `get_int`. |
@@ -295,7 +325,7 @@ next analysis-namespace `SetConfig`).
 | `analysis.readiness_materializer.enabled` | bool | `false` | — | Master kill-switch. Seeded `false` (no behavior change). `get_bool`. |
 | `analysis.readiness_materializer.refresh_hour_utc` | int | `0` | `[0,23]` | Daily wall-clock UTC anchor. `get_int_present` (`0` = midnight legitimate). |
 | `analysis.readiness_materializer.valid_window_hours` | int | `24` | `[1,168]` | Backstop TTL; authoritative bust is the `bar_epoch` FAST gate. `get_int_present`; 1h floor. |
-| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | `[1,5]` | Materializer bars-fetch semaphore; ceiling = marketdata PgBouncer pool size (feature-141 SEV-2 guard). `get_int` — never set `0`. |
+| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | `[1,5]` | Materializer bars-fetch semaphore; ceiling = marketdata PgBouncer pool size (feature-141 SEV-2 guard). `int_positive` — a stored ≤ 0 reads as the default. |
 
 ### feature 180 — watchlist-readiness-precompute (`xstockstrat-analysis`)
 
@@ -311,12 +341,11 @@ operational knobs (bounded, non-cadence — not the daily anchor). No config mig
 | `analysis.readiness_materializer.enabled` | bool | `false` | Master kill-switch for the loop. `get_bool` (HasField). Default OFF. No-seed. |
 | `analysis.readiness_materializer.refresh_hour_utc` | int | `0` | Dedicated wall-clock UTC anchor for the daily re-warm (decoupled from the opportunity loop, D-2). `get_int_present` (`0` = midnight legitimate). No-seed. |
 | `analysis.readiness_materializer.valid_window_hours` | int | `24` | Backstop TTL for a materialized row's `valid_until`; the authoritative bust is the `bar_epoch`-aware FAST gate. `get_int_present`; 1h floor. No-seed. |
-| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | The loop's own bars-fetch semaphore, separate from `analysis.opportunity.max_concurrent_bars_fetches` (feature-176 priority-inversion guard). `get_int` + `max(1, …)`. No-seed. |
+| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | The loop's own bars-fetch semaphore, separate from `analysis.opportunity.max_concurrent_bars_fetches` (feature-176 priority-inversion guard). `int_positive` (a stored ≤ 0 reads as the default). No-seed. |
 
 ### feature 177 — readiness-caching-poll-discipline (`xstockstrat-analysis` / `xstockstrat-config`)
 
-Registers three `analysis` keys, all read once/per-pass via `get_int_present` (a legitimate `0` must
-not be swallowed by the `get_int` zero-trap). Two are **no-seed** (the `analysis.opportunity.*`
+Registers three `analysis` keys, all read once/per-pass with a legitimate `0` honoured. Two are **no-seed** (the `analysis.opportunity.*`
 pattern); the readiness key adds a **`SCALAR_BOUNDS_REGISTRY` code entry** in `xstockstrat-config`
 (`configServiceImpl.ts`, the feature-161 precedent) enforcing `[0, 86399]` at `SetConfig` — no seed
 migration (the bound is enforced regardless of a seed row; a config-ui-discoverability seed migration
@@ -341,8 +370,8 @@ not a row here (see `services/xstockstrat-indicators/CLAUDE.md`).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.opportunity.max_concurrent_candidates` | int | `4` | Bounds the per-candidate `evaluate_conditions_traced` fan-out in `_compute_opportunities` Phase 2 — **separate** from `analysis.opportunity.max_concurrent_bars_fetches` so a large opportunity compute cannot starve interactive readiness (priority-inversion guard). `max(1, get_int(...))` clamp. No-seed (read at `__init__` via WatchConfig). |
-| `analysis.compute.max_worker_threads` | int | `4` | Size of the dedicated `ThreadPoolExecutor` running the pure-CPU backtest simulator cores + screener sync tail off the event loop (FR-4). Executor threads hold **no** asyncpg connection (F-06: direct pool stays 2). New `analysis.compute.*` category. `max(1, get_int(...))` clamp. No-seed (read at `__init__` via WatchConfig). |
+| `analysis.opportunity.max_concurrent_candidates` | int | `4` | Bounds the per-candidate `evaluate_conditions_traced` fan-out in `_compute_opportunities` Phase 2 — **separate** from `analysis.opportunity.max_concurrent_bars_fetches` so a large opportunity compute cannot starve interactive readiness (priority-inversion guard). `int_positive` (a stored ≤ 0 reads as the default). No-seed (read at `__init__` via WatchConfig). |
+| `analysis.compute.max_worker_threads` | int | `4` | Size of the dedicated `ThreadPoolExecutor` running the pure-CPU backtest simulator cores + screener sync tail off the event loop (FR-4). Executor threads hold **no** asyncpg connection (F-06: direct pool stays 2). New `analysis.compute.*` category. `int_positive` (a stored ≤ 0 reads as the default). No-seed (read at `__init__` via WatchConfig). |
 
 ### feature 168 — fundamentals-blend-universe (`xstockstrat-analysis` / `xstockstrat-config`)
 
@@ -455,10 +484,10 @@ until an operator `SetConfig`s them):
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `analysis.backtest.portfolio_position_weight` | float | `0.10` | Fraction of **initial** capital per concurrent position in portfolio mode. `get_float` (zero-trap intended — a configured `0` disables the portfolio → default). |
-| `analysis.backtest.portfolio_max_concurrent` | int | `9` | Max concurrent positions in portfolio mode. `get_int` + `max(1, …)` clamp (zero-trap intended; clamp guards a negative). |
+| `analysis.backtest.portfolio_position_weight` | float | `0.10` | Fraction of **initial** capital per concurrent position in portfolio mode. `float_positive` — a stored ≤ 0 reads as the default. |
+| `analysis.backtest.portfolio_max_concurrent` | int | `9` | Max concurrent positions in portfolio mode. `int_positive` — a stored ≤ 0 reads as the default. |
 
-A configured `0` for either is a no-op (zero-trap → default), matching the existing
+A configured `0` for either reads as the default, matching the
 `analysis.scoring.shrinkage_days` precedent.
 
 ### feature 147 — config-secrets-and-scoping (`xstockstrat-config`, `xstockstrat-marketdata`)
@@ -539,7 +568,7 @@ migration — mirrors `analysis.series.max_concurrent_components`'s no-seed patt
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.opportunity.max_concurrent_bars_fetches` | int | `2` | Bounds concurrent bars-fetch attempts across simultaneous `_compute_opportunities` passes (different users), so Postgres never sees more concurrent multi-chunk `GetBars` queries than this. `max(1, get_int(...))` clamp. Default `2` (not the sibling semaphore precedents' `4`) to match `xstockstrat-marketdata`'s own `DB_POOL_MAX` default. |
+| `analysis.opportunity.max_concurrent_bars_fetches` | int | `2` | Bounds concurrent bars-fetch attempts across simultaneous `_compute_opportunities` passes (different users), so Postgres never sees more concurrent multi-chunk `GetBars` queries than this. `int_positive` (a stored ≤ 0 reads as the default). Default `2` (not the sibling semaphore precedents' `4`) to match `xstockstrat-marketdata`'s own `DB_POOL_MAX` default. |
 
 ### feature 125 — unified-symbol-page (`xstockstrat-analysis`)
 
@@ -550,7 +579,7 @@ namespace). Read once at servicer construction, not live.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.series.max_concurrent_components` | int | `4` | Bounds concurrent per-component `ComputeIndicator`/`ExecuteFormula` execution across simultaneous `GetIndicatorSeries` calls, so a routinely-visited Symbol page can't starve the analysis live loop. `max(1, get_int(...))` clamp. |
+| `analysis.series.max_concurrent_components` | int | `4` | Bounds concurrent per-component `ComputeIndicator`/`ExecuteFormula` execution across simultaneous `GetIndicatorSeries` calls, so a routinely-visited Symbol page can't starve the analysis live loop. `int_positive` (a stored ≤ 0 reads as the default). |
 
 ### feature 198 — historical-fundamentals-backtest (`xstockstrat-marketdata`, `xstockstrat-analysis`)
 
@@ -685,7 +714,7 @@ Config surface for the materialized opportunity queue (lazy compute-on-read + st
 | `analysis.opportunity.valid_window_hours` | int | `24` | `valid_until` = the compute's session date + this window. |
 | `analysis.opportunity.snooze_default_hours` | int | `24` | Default bounded "snooze until" when a SNOOZE carries no explicit timestamp. |
 | `analysis.opportunity.signal_rank_weight` | float | `0.3` | Weight `w ∈ [0,1]` of the signal axis in the queue ORDER BY (OR-G); `rank = (1−w)·conviction + w·signal_axis`. |
-| `analysis.opportunity.refresh_hour_utc` | int | `0` | Hour (UTC) of the configured **daily refresh** pass — a wall-clock refresh, **not** market close (holiday/DST/early-close drift expected). Read **presence-aware** (mirror `get_bool`'s `HasField`), never `get_int`, since `0` = midnight is legitimate and the zero-trap would swallow it. |
+| `analysis.opportunity.refresh_hour_utc` | int | `0` | Hour (UTC) of the configured **daily refresh** pass — a wall-clock refresh, **not** market close (holiday/DST/early-close drift expected). `0` = midnight is legitimate and is honoured. |
 
 ### feature 083 — opportunities-first UI revamp (`xstockstrat-portfolio`)
 
@@ -702,7 +731,7 @@ Per-strategy re-entry cooldown so a rule-based strategy's `entry_rule` can't imm
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset; `31` sits outside the IRS 30-day-each-side wash-sale window. `get_int` zero-trap: a platform-wide value of `0` reads back as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
+| `analysis.strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset; `31` sits outside the IRS 30-day-each-side wash-sale window. `int_positive`: a platform-wide stored ≤ 0 reads as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
 
 ### feature 068 — backtest results visualization (`xstockstrat-analysis`)
 
@@ -710,7 +739,7 @@ Every OK `RunBacktest` persists its full serialized result (`analysis.backtest_d
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.backtest.detail_retention_per_strategy` | int | `20` | Max persisted detailed runs per strategy; count-based eviction at insert, clamped ≥1. `get_int` zero-trap: `0` reads as the default. |
+| `analysis.backtest.detail_retention_per_strategy` | int | `20` | Max persisted detailed runs per strategy; count-based eviction at insert, `int_positive`: a stored ≤ 0 reads as the default. |
 
 ### feature 065 — cross-stock score derivation (`xstockstrat-analysis`)
 
@@ -718,7 +747,7 @@ The headline strategy grade is derived from per-symbol (symbol × window) eviden
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (trading days) toward the 0.5 prior; perfect evidence earns an A once total evidence `W ≥ 1.5·k`. `get_int` zero-trap: `0` reads as the default. |
+| `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (trading days) toward the 0.5 prior; perfect evidence earns an A once total evidence `W ≥ 1.5·k`. `int_positive`: a stored ≤ 0 reads as the default. |
 | `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the grade is flagged `provisional`. |
 | `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the grade is flagged `provisional`. |
 

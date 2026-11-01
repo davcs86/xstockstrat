@@ -12,7 +12,7 @@
 
 Internal repo tooling and process only; consumer surface is **None** (product spec), so no UI/Agent step is required (C-14 restated as a decision, not an omission). No proto, migration, config key or reader/seed change: the check reads migrations and source and prints keys, never values (F-08). Per design, a zero-dependency Node script `scripts/check-config-wiring.mjs` (plus one stdlib-`ast` Python helper) and its state file `scripts/config-wiring.json` are built bottom-up in red-before-green pairs: seed-side parser (Steps 1-2), reader extraction (3-4), join with collapse and finding kinds (5-6), baseline ratchet and modes (7-8). Then the first real run (9), the OPERATOR environment-baseline decision gate (10), the frozen baseline (11-12), the CI job (13, deliberately after the operator ruling), the `/sdd-execute` and `/sdd-review` process gates (14-17) and the governance doc plus context-map teardown (18).
 
-The environment-baseline gate (Step 10) is performed by the operator: this session has only the staging MCP and cannot read production. Until the operator rules, `policy.envReadUnseeded` in `scripts/config-wiring.json` is `reported` (non-blocking), so nothing in CI depends on the ruling.
+The environment-baseline gate (Step 10) was resolved on 2026-10-23: there is no production deployment, so the three samples were read on staging and the operator ruled `reported-only`. `policy.envReadUnseeded` in `scripts/config-wiring.json` is `reported` (non-blocking); re-open Step 10 when a production environment is created.
 
 ### Scenario Coverage (C-15)
 
@@ -365,6 +365,8 @@ node scripts/check-config-wiring.mjs --final --json | node -e "const j=JSON.pars
 ---
 
 ### Step 10 — docs: OPERATOR decision gate — environment baseline
+
+> **Resolved 2026-10-23 (operator):** there is no production deployment, so the production reads in the Instructions below do not apply. The three samples were read on **staging** (read-only `get_config`): `ledger` `stream.notify_enabled` present, stored bare; `trading` `trading.fill_poller.interval_ms` present, stored dotted (after the 029 heal); `platform` `platform.maintenance_mode` present, stored dotted. The operator ruled **reported-only**: findings that exist only in the `production` environment are printed as `REPORTED:` and stay out of the ratchet; staging findings are blocking. `policy.envReadUnseeded` stays `reported`. Re-open this step, and re-run the production sampling below, when a production environment is created. Step 10's record is in `context.md` ("environment-baseline decision").
 
 **Status**: `pending`
 **Service**: `docs/roadmap/features/278-enforce-config-key-wiring/`
