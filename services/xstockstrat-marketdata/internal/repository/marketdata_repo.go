@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -525,10 +526,24 @@ func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols
 // fundamentalsColumns is the SELECT/scan column order for a fundamentals row.
 const fundamentalsColumns = `symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at`
 
+// decodeExtraMetrics decodes the extra_metrics jsonb column for every fundamentals read; an
+// undecodable value is logged and yields an empty map, never a read failure.
+func decodeExtraMetrics(ctx context.Context, symbol string, raw []byte) map[string]float64 {
+	extra := map[string]float64{}
+	if len(raw) == 0 {
+		return extra
+	}
+	if err := json.Unmarshal(raw, &extra); err != nil {
+		slog.WarnContext(ctx, "fundamentals extra_metrics decode failed", "symbol", symbol, "error", err)
+		return map[string]float64{}
+	}
+	return extra
+}
+
 // GetFundamentals reads one cached fundamentals row by symbol (PK lookup). found=false
 // when no row exists. fetchedAt is returned so the service can apply the TTL/quota logic.
 func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f *source.Fundamentals, fetchedAt time.Time, found bool, err error) {
-	row := r.pool.QueryRow(ctx,
+	row := r.db.QueryRow(ctx,
 		`SELECT `+fundamentalsColumns+` FROM marketdata.fundamentals WHERE symbol = $1`, symbol)
 	var (
 		sym, currency, src                                                   string
@@ -543,10 +558,7 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 		}
 		return nil, time.Time{}, false, fmt.Errorf("get fundamentals %s: %w", symbol, scanErr)
 	}
-	extra := map[string]float64{}
-	if len(extraJSON) > 0 {
-		_ = json.Unmarshal(extraJSON, &extra)
-	}
+	extra := decodeExtraMetrics(ctx, sym, extraJSON)
 	// The scanned locals are already *float64 (NULL-preserving) — pass them through rather than
 	// collapsing a real SQL NULL to 0.0 (metric fields are pointers for exactly this reason).
 	return &source.Fundamentals{
@@ -832,10 +844,7 @@ func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol
 			&marketCap, &pe, &pb, &divYield, &eps, &beta, &roe, &dte, &price, &yHigh, &yLow, &extraJSON); scanErr != nil {
 			return nil, "", fmt.Errorf("scan fundamentals_history %s: %w", symbol, scanErr)
 		}
-		extra := map[string]float64{}
-		if len(extraJSON) > 0 {
-			_ = json.Unmarshal(extraJSON, &extra)
-		}
+		extra := decodeExtraMetrics(ctx, sym, extraJSON)
 		out = append(out, source.HistoricalFundamentalsPeriod{
 			Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
 			AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,
@@ -885,10 +894,7 @@ func (r *MarketDataRepo) LatestHistoricalFundamental(ctx context.Context, symbol
 		}
 		return nil, fmt.Errorf("latest fundamentals_history %s: %w", symbol, err)
 	}
-	extra := map[string]float64{}
-	if len(extraJSON) > 0 {
-		_ = json.Unmarshal(extraJSON, &extra)
-	}
+	extra := decodeExtraMetrics(ctx, sym, extraJSON)
 	return &source.HistoricalFundamentalsPeriod{
 		Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
 		AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,

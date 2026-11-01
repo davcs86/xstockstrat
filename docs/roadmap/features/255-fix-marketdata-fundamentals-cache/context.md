@@ -1114,3 +1114,20 @@ the next `/sdd-batch` run can pick it up.
   passes, total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
 - Files modified: `internal/service/marketdata_service_test.go`
 
+### Step 9 — service: D-53a — one shared `decodeExtraMetrics` helper [done]
+- Added unexported `decodeExtraMetrics(ctx, symbol, raw)` in `marketdata_repo.go`: empty `raw` → empty map; a decode
+  error → `slog.WarnContext(ctx, "fundamentals extra_metrics decode failed", "symbol", …, "error", err)` and an
+  empty map. The three silent `_ = json.Unmarshal(extraJSON, &extra)` blocks (`GetFundamentals`,
+  `QueryHistoricalFundamentals`, `LatestHistoricalFundamental`) now call it with the scanned `sym`. `GetFundamentals`
+  reads through `r.db.QueryRow` (same pool in production: `NewMarketDataRepo` sets `db: pool`) so Step 10 can pgxmock
+  it. `log/slog` imported.
+- TDD: RED: an uncommitted probe test failed to compile (`undefined: decodeExtraMetrics`) → GREEN: the probe passed
+  (pgxmock `GetFundamentals` over `{"total_debt":"n/a"}` → found, empty map, WARN with `symbol=AAPL` and `error=`).
+  Probe deleted; Step 10 owns the tests.
+- Verification: no `_ = json.Unmarshal(extraJSON` hits; `decodeExtraMetrics(` count 4; `go build ./...` passes; full
+  `go test ./... -race` passes; `go vet -tags dbtest ./internal/repository/` passes; golangci-lint 0 issues
+  (CI-equivalent fallback, in the Deviation Log).
+- Husky: the main worktree has no `node_modules`, so `pnpm install --frozen-lockfile --ignore-scripts` ran in this
+  worktree and `.husky/pre-commit` was run by hand on the staged set (`core.hooksPath` points at a missing dir).
+- Files modified: `internal/repository/marketdata_repo.go`
+

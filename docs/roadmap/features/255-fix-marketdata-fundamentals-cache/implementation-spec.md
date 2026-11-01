@@ -506,7 +506,7 @@ The new logic is in the excluded `service` package. The CI total must still be a
 
 ### Step 9 — service: D-53a — one shared `decodeExtraMetrics` helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -1142,4 +1142,15 @@ _Populated by /sdd-execute as implementation proceeds._
   `TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale`; a shared `vendorAxisCfg()` helper builds the
   `snapshot_source: "vendor"` config for the three tests. Source literals use `finnhub.SourceName` and the
   `snapshotSourceEdgar`/`snapshotSourceVendor` constants (DRY), except the single `"edgar+fmp"` case.
+- **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
+
+### 2026-11-01 — Step 9 — CI-equivalent fallback (golangci-lint), RED via a throwaway probe
+- **Spec said**: Verification is the no-hit grep, the 4-count `decodeExtraMetrics(` grep and `go build ./...`; the
+  paired AC-6 tests belong to Step 10.
+- **Actual**: the old-decode grep has no hits, the helper grep counts 4 and the build passes. RED/GREEN used an
+  uncommitted probe test (empty input, plus a pgxmock `GetFundamentals` read of `{"total_debt":"n/a"}` asserting an
+  empty map and the WARN with `symbol=AAPL` and `error=`); it failed to compile before the change
+  (`undefined: decodeExtraMetrics`) and passed after, then was deleted (Step 10 owns the committed tests). Full
+  `go test ./... -race` passes, `go vet -tags dbtest ./internal/repository/` passes, and the operator-approved
+  `/usr/local/bin/golangci-lint` v2.14.0 (the CI pin) reported `0 issues.` on the module.
 - **Disposition**: CI-equivalent fallback; TDD evidence in context.md.
