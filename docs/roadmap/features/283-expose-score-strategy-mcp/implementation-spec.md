@@ -12,9 +12,9 @@
 
 Expose `analysis.v1.AnalysisService/ScoreStrategy` as `manage_strategy operation='score'` (no new tool, count stays 45, `get_strategy` untouched, no proto field, no config key, no migration). The already-computed `excluded` list rides back to the agent in a gRPC trailer `x-score-excluded-symbols` (compact JSON array, 4096-byte cap), read through the call-object form; a missing/unparseable trailer is `excluded_symbols: null` + one WARN, never a fabricated `[]` (P-03).
 
-**Order is risk-first.** The only unproven mechanism is trailer delivery through the production stacks, so the two loopback tests come first, each paired with the smallest production change that can turn it green: Steps 1-2 are the **agent (client) half** (real `client.score_strategy` through a real channel with `GrpcAioInstrumentorClient` installed), Steps 3-4 the **analysis (server) half** (real `ScoreStrategy` behind `server_interceptors()` + `GrpcAioInstrumentorServer`). **Go/no-go gates**: if the Step 2 or Step 4 loopback stays red *because the trailer is dropped* (not because of a typo), stop. Step 2 carries the pre-approved own-interceptor fallback; if that also fails, FR-5 returns to the operator (design.md § Open Risks) and no proto field is adopted. Steps 5-9 add the tool, its guards, the docs parity test and the docs; Step 10 is the root `CLAUDE.md` teardown.
+**Order is risk-first.** The only unproven mechanism is trailer delivery through the production stacks, so the two loopback tests come first, each paired with the smallest production change that can turn it green: Steps 1-2 are the **agent (client) half** (real `client.score_strategy` through a real channel with `GrpcAioInstrumentorClient` installed), Steps 3-4 the **analysis (server) half** (real `ScoreStrategy` behind `server_interceptors()` + `GrpcAioInstrumentorServer`). **Go/no-go gates**: if the Step 2 or Step 4 loopback stays red *because the trailer is dropped* (not because of a typo), stop. Step 2 carries the pre-approved own-interceptor fallback; if that also fails, FR-5 returns to the operator (design.md § Open Risks) and no proto field is adopted. Step 5 adds the tool tests and tool-deadline guard (RED) and Step 6 the `score` branch that turns them green; Steps 7-9 add the call-object deadline matcher, the docs parity test and the docs; Step 10 is the root `CLAUDE.md` teardown.
 
-**Consumer surface (C-14).** Agent only: Steps 2 and 5 (`client.score_strategy`, the `manage_strategy` `score` branch and docstring) plus Step 8/9 docs. **UI: none, deliberately** — the UI BFF already reaches `ScoreStrategy` (`insightsBff.ts`), ignores the trailer, and the tool count is unchanged, so `copilot.ts` / `CopilotRail.tsx` are not edited (product-spec § Consumer Surface).
+**Consumer surface (C-14).** Agent only: Steps 2 and 6 (`client.score_strategy`, the `manage_strategy` `score` branch and docstring) plus Step 8/9 docs. **UI: none, deliberately** — the UI BFF already reaches `ScoreStrategy` (`insightsBff.ts`), ignores the trailer, and the tool count is unchanged, so `copilot.ts` / `CopilotRail.tsx` are not edited (product-spec § Consumer Surface).
 
 **Design refinements found while grounding this spec** (each is a correction of a *mechanism* in design.md, not of the Chosen Approach; they are logged in `context.md` for `/sdd-review impl-spec` to challenge):
 1. **Loopback split in two.** design.md § Chosen Approach 6 has the analysis `tests/test_telemetry.py` drive "the agent's REAL `client.score_strategy`". That cannot work in one process: both services ship a top-level package named `app` (`services/xstockstrat-analysis/app`, `services/xstockstrat-agent/app`) with separate `uv` environments. Each half is proven in its own suite against a real gRPC wire, and together they cover the full path. The analysis half lives in a new `tests/test_score_trailer_loopback.py` (not `test_telemetry.py`), and uses an insecure port: TLS does not touch metadata handling, and the existing `otel_reset` fixtures in both suites monkeypatch `instrument` to a no-op (`xstockstrat-analysis/tests/conftest.py:513`, `xstockstrat-agent/tests/conftest.py:265`), so the new tests must not use them.
@@ -25,17 +25,17 @@ Expose `analysis.v1.AnalysisService/ScoreStrategy` as `manage_strategy operation
 
 | Scenario | Covered by step(s) |
 |---|---|
-| `@AC-1` refresh returns the grade with provenance, snake_case | 1 (client projection), 6 (tool) |
-| `@AC-2` non-owner rejected, no grade written | 3 (analysis: no trailer, no write), 6 (tool message) |
-| `@AC-3` no eligible evidence → NOT_FOUND, stale grade cleared | 3 (analysis), 6 (tool passthrough) |
-| `@AC-4` unknown availability → UNAVAILABLE, grade unchanged | 3 (analysis), 6 (tool) |
-| `@AC-5` description discloses side effects | 6 |
-| `@AC-6` count stays 45, surfaces agree | 8 (existing `test_every_tool_count_surface_states_the_catalog_size` must stay green; no new test, C-18) |
-| `@AC-7` refresh names the excluded symbols | 1 (client half, wire), 3 (server half, wire), 6 (tool) |
-| `@AC-8` all-excluded error names the symbols | 3 (analysis), 6 (tool) |
-| `@AC-9` definition args rejected, no backend call | 6 |
+| `@AC-1` refresh returns the grade with provenance, snake_case | 1 (client projection), 5 (tool) |
+| `@AC-2` non-owner rejected, no grade written | 3 (analysis: no trailer, no write), 5 (tool message) |
+| `@AC-3` no eligible evidence → NOT_FOUND, stale grade cleared | 3 (analysis), 5 (tool passthrough) |
+| `@AC-4` unknown availability → UNAVAILABLE, grade unchanged | 3 (analysis), 5 (tool) |
+| `@AC-5` description discloses side effects | 5 |
+| `@AC-6` count stays 45, surfaces agree | 8 (PRESERVE: existing `test_every_tool_count_surface_states_the_catalog_size` must stay green; no new test and no RED by design, C-18) |
+| `@AC-7` refresh names the excluded symbols | 1 (client half, wire), 3 (server half, wire), 5 (tool) |
+| `@AC-8` all-excluded error names the symbols | 3 (analysis), 5 (tool) |
+| `@AC-9` definition args rejected, no backend call | 5 |
 | `@AC-10` runbook + strat-lab document `score`; operations sets equal | 8 |
-| `@AC-11` missing trailer yields `null`, not `[]`, + WARN | 1 (real channel), 6 (client unit) |
+| `@AC-11` missing trailer yields `null`, not `[]`, + WARN | 1 (real channel), 5 (client unit) |
 
 ## Business Rules (C-16)
 
@@ -47,12 +47,12 @@ Expose `analysis.v1.AnalysisService/ScoreStrategy` as `manage_strategy operation
 ## Step Dependencies
 
 - Step 2 requires Step 1: Step 1's tests are the paired RED for `client.score_strategy`; Step 2 is the client go/no-go gate.
-- Step 4 requires Step 3 (paired RED) and is the server go/no-go gate. Steps 1-2 and 3-4 are independent of each other and may run in either order, but both gates must be green before Step 5 is merged.
-- Step 5 requires Step 2: the tool calls `client.score_strategy`.
-- Step 6 [test] covers Step 5 [service] (and the unit half of Step 2).
-- Step 7 requires Steps 2 and 5: the client matcher needs `score_strategy` to exist; the `_LONG_TOOLS` entry needs `_score_strategy`.
-- Step 8 requires Step 5 (docstring) and edits the runbook and strat-lab skill itself so its RED→GREEN lives in one step.
-- Step 9 requires Steps 4 and 5 (documents behavior that exists).
+- Step 4 requires Step 3 (paired RED) and is the server go/no-go gate. Steps 1-2 and 3-4 are independent of each other and may run in either order, but both gates must be green before Step 6 is merged.
+- Step 5 [test, RED] requires Step 2 (the tool tests patch `client.score_strategy`) and is written before Step 6.
+- Step 6 [service] turns Step 5 green: the `score` branch and `_score_strategy` helper; it calls `client.score_strategy` (Step 2).
+- Step 7 requires Steps 2 and 6: the client matcher needs `score_strategy` to exist; its `_LONG_TOOLS` partner entry already landed in Step 5.
+- Step 8 requires Step 6 (docstring) and edits the runbook and strat-lab skill itself so its RED→GREEN lives in one step.
+- Step 9 requires Steps 4 and 6 (documents behavior that exists).
 - Step 10 is last: it audits every context file Steps 8-9 touched.
 - **Cross-feature**: 283 waits for 215's code on trunk — already satisfied (`merge-order.md:102` row and the "Launch gate: 215 ↔ 283" note at `:321-329` exist and are correct; **no `merge-order.md` edit is needed**, verified). Same-function overlap with 215/275/281 on `manage_strategy` (`tools.py`, `client.py`) and soft overlap on `mcp-tools.md` / `SKILL.md`: rebase onto landed bodies and re-anchor by symbol, never by line number. The tool count is unchanged, so 283 does not race 281's `forty-five` guard.
 - **Post-merge (not a spec step)**: 215 Step 26 (e) is run through `manage_strategy operation='score'` on staging, asserting a non-null `excluded_symbols` (meaningful only if staging runs `OTEL_ENABLED=true` like production). Do not set 215 to `code-completed` before it runs (`merge-order.md:327-330`).
@@ -98,7 +98,8 @@ cd services/xstockstrat-agent && uv run pytest tests/test_score_trailer_loopback
 cd services/xstockstrat-agent && uv run pytest tests/test_tool_deadlines.py tests/test_client_deadlines.py -q   # existing hung_backend users unchanged
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
 ```
-C-13: the `StrategyScore(...)` literal has one consumer in this file (Step 6/8 build their own scenario literals); inline is compliant. Coverage: see Step 6/8 (`--cov-fail-under=40`).
+C-13: the `StrategyScore(...)` literal has one consumer in this file (Steps 5/8 build their own scenario literals); inline is compliant.
+Coverage threshold is enforced at Step 2 / Step 5 / Step 8 / Step 10 (`--cov-fail-under=40`); this RED step adds the command so the gate is never skipped: `cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q` (expected to fail now with the `AttributeError`).
 
 ---
 
@@ -110,6 +111,7 @@ C-13: the `StrategyScore(...)` literal has one consumer in this file (Step 6/8 b
 - `services/xstockstrat-agent/app/client.py` — modify
 - `services/xstockstrat-agent/app/mtls.py` — modify (**contingency only**, see Instructions 5)
 - `services/xstockstrat-agent/app/trailer_capture.py` — create (**contingency only**)
+- `services/xstockstrat-agent/tests/conftest.py` — modify (**contingency only**: `hung_backend`'s `secure_channel` lambda at `:195` is `lambda ep, _svc:` and must forward `interceptors=`)
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
 
@@ -133,11 +135,12 @@ C-13: the `StrategyScore(...)` literal has one consumer in this file (Step 6/8 b
    - parse: read `md.get(_EXCLUDED_TRAILER_KEY)` when `md` is not None; `json.loads`, and accept only a `list` whose items are all `str`; a missing key, `md is None`, invalid JSON or any other shape → `None` plus exactly one `log.warning(...)` naming the reason. Add `import json` to the module imports (`client.py:6-11`) if absent. Never substitute `[]` (P-03).
 3. Update the unknown-operation `ValueError` text at `client.py:938-941` to end `(expected register/update/deactivate/reactivate; 'score' is routed to ScoreStrategy)`. Leave `op_map` literal (rejected: hoisting a shared constant).
 4. **Gate.** Run Step 1's tests. All green ⇒ the client half is proven through the production client instrumentor; continue.
-5. **Contingency (only if Step 1 shows the swallow signature).** Record the evidence in `context.md`, then implement the design's fallback: a small client interceptor in `app/trailer_capture.py` that, inside the OTel wrapper, captures `await call.trailing_metadata()` from the real call, and extend `mtls.secure_channel` (`mtls.py:37-43`) to accept an optional `interceptors=` list; confirm from the installed instrumentor source (Step 1 sub-step 0) that it *prepends* its own interceptors rather than replacing ours, and that `hung_backend`'s `secure_channel` lambda forwards the argument. Re-run Step 1. **If that is also red: stop; FR-5 returns to the operator** — do not add a proto field and do not ship `excluded_symbols` as always-`null`.
+5. **Contingency (only if Step 1 shows the swallow signature).** Record the evidence in `context.md`, then implement the design's fallback: a small client interceptor in `app/trailer_capture.py` that, inside the OTel wrapper, captures `await call.trailing_metadata()` from the real call, and extend `mtls.secure_channel` (`mtls.py:37-43`) to accept an optional `interceptors=` list; confirm from the installed instrumentor source (Step 1 sub-step 0) that it *prepends* its own interceptors rather than replacing ours, and change `hung_backend`'s `secure_channel` lambda (`conftest.py:195`, `lambda ep, _svc:`) to forward `interceptors=` (listed in **Files**). Re-run Step 1. **If that is also red: stop; FR-5 returns to the operator** — do not add a proto field and do not ship `excluded_symbols` as always-`null`.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-agent && uv run pytest tests/test_score_trailer_loopback.py tests/test_client.py -q   # GREEN, including instrumented=True
+cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q   # CI threshold (agent: 40%)
 cd services/xstockstrat-agent && grep -n "x-user-id\|timeout=_LONG_RPC_TIMEOUT_S\|trailing_metadata" app/client.py   # propagation + budget + trailer read present
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
 ```
@@ -157,10 +160,11 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 **Codebase Evidence**:
 - `servicer.py:2566` `async def ScoreStrategy(self, request, context)` decorated `@owner_scoped` (`:2565`); abort paths `:2587-2592` (PERMISSION_DENIED "strategy not found or not owned"), `:2604-2609` (UNAVAILABLE "fundamentals availability unknown — grade unchanged"), `:2626-2631` (NOT_FOUND "no eligible evidence — all evidence symbols excluded (fundamentals unavailable: …)"), `:2633-2635` (NOT_FOUND "no eligible evidence — run a backtest"); success `:2637` `await self._persist_strategy_score(...)`, ledger emit, `:2662` `return score`.
 - `servicer.py:2737` `_exclude_refused_cells`; `:2798` `return list(kept.values()), sorted(set(symbols) - kept.keys())` (already sorted+deduped); `:2852-2853` `if excluded is not None: excluded.extend(dropped)` (single extend).
-- `tests/test_grade_fundamentals_exclusion.py`: `_blend_svc(cells, **kw)` at `:85`, `_wire` `:65`, `_cell` `:49`, `_owned_ctx` imported from `tests.test_analysis_servicer` (`test_analysis_servicer.py:63`, a `MagicMock` ctx whose `abort` raises `Exception("aborted")`, so `ctx.set_trailing_metadata` auto-exists and is assertable), `_UNKNOWN_MSG` `:42`, `_SID = "fundamentals_macd_blend"` `:41`; existing tests to extend: `test_all_excluded_clears_grade_and_score_strategy_names_schd` (`:140`) and `test_pit_outage_raises_and_score_strategy_aborts_unavailable` (`:195-207`). `SCHD_PIT_PERIODS = []` (`tests/conftest.py:116`, i.e. no fundamentals) and `AAPL_PIT_PERIODS` (`:117`).
+- `tests/test_grade_fundamentals_exclusion.py`: `_blend_svc(cells, **kw)` at `:85`, `_wire` `:65`, `_cell` `:53`, `_owned_ctx` imported from `tests.test_analysis_servicer` (`test_analysis_servicer.py:63`, a `MagicMock` ctx whose `abort` raises `Exception("aborted")`, so `ctx.set_trailing_metadata` auto-exists and is assertable), `_UNKNOWN_MSG` `:45`, `_SID = "fundamentals_macd_blend"` `:44`; existing tests to extend: `test_all_excluded_clears_grade_and_score_strategy_names_schd` (`:140`) and `test_pit_outage_raises_and_score_strategy_aborts_unavailable` (`:195-207`). `SCHD_PIT_PERIODS = []` (`tests/conftest.py:116`, i.e. no fundamentals) and `AAPL_PIT_PERIODS` (`:117`).
 - Production wiring to reproduce: `app/main.py:107` `grpc_server = grpc.aio.server(interceptors=server_interceptors())`; `app/telemetry.py` `server_interceptors()` returns `[_CancelStatusInterceptor()]` only when `OTEL_ENABLED=true` (`_enabled()` at `telemetry.py:20-21`); `init_telemetry()` installs `GrpcAioInstrumentorServer().instrument()` (`telemetry.py:206`). Model for an in-process aio server: `tests/test_telemetry.py:365-387` `_serve_sleeper`.
 - The `otel_reset` fixture stubs the instrumentor out (`tests/conftest.py:513`) — do **not** use it.
 - Full RPC path: `/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy` (`analysis.proto:3` package).
+- Re-anchor every cited line in `test_grade_fundamentals_exclusion.py` by **symbol** at execute time (`_cell`, `_SID`, `_UNKNOWN_MSG`, `_wire`, `_blend_svc` drift as 215 edits the file).
 - Trailer constants: **not found** — `_EXCLUDED_TRAILER_KEY` / `_EXCLUDED_TRAILER_MAX_BYTES` are created in Step 4.
 
 **TDD**: `red-green required` — RED: `set_trailing_metadata` never called / `ImportError` on `_EXCLUDED_TRAILER_KEY`.
@@ -191,6 +195,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 **Verification**:
 ```bash
 cd services/xstockstrat-analysis && uv sync --extra dev && uv run pytest tests/test_grade_fundamentals_exclusion.py tests/test_score_trailer_loopback.py -q   # RED now
+cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 -q   # CI threshold (analysis: 40%); expected red now, green after Step 4
 cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 cd services/xstockstrat-analysis && grep -n "from tests\.\|_blend_svc" tests/test_score_trailer_loopback.py   # C-13: imports the existing helper, no second copy of the fixture
 ```
@@ -233,49 +238,14 @@ git diff --stat -- packages/proto   # empty: no proto change
 
 ---
 
-### Step 5 — service: agent `manage_strategy operation='score'`
-
-**Status**: `pending`
-**Service**: `xstockstrat-agent`
-**Files**:
-- `services/xstockstrat-agent/app/tools.py` — modify
-
-**Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
-
-**Codebase Evidence**:
-- `tools.py:12` module-docstring line `manage_strategy     — register/update/deactivate/reactivate stored strategies (update = merge)`; `:908` `async def manage_strategy(`; `:924-925` docstring opens `"""Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.` / `operation: 'register' | 'update' | 'deactivate' | 'reactivate'.`; `:1031-1033` the `RESPONSE CASING` paragraph ends the docstring; `:1039-1042` dict-rule `json.dumps`; `:1044` `supplied = {`; `:1079-1094` identity resolution, `client.manage_strategy(...)` call and the `_grpc_error_message(..., not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S, write=True)` catch.
-- `tools.py:155` `def _caller_user_id(ctx, tool)`; `:223-252` `_grpc_error_message`: NOT_FOUND returns the fixed `not_found` string (`:244-245`), PERMISSION_DENIED returns `exc.details() or "permission denied"` (`:248-249`), UNAVAILABLE falls through to `exc.details() or str(code)` (`:252`), DEADLINE_EXCEEDED builds the "upstream did not respond within …s (deadline exceeded); outcome unknown, verify before retrying" text when `write=True`.
-- Existing module-level helper precedent: `tools._write_source_bearer` (referenced by `tests/test_tool_deadlines.py`), i.e. tools may delegate to module-level `async def` helpers with their own catch site.
-- Deadline AST guard attributes each `_grpc_error_message` call to its **innermost enclosing function** (`tests/test_tool_deadlines.py:_mapper_calls`), so a separate `_score_strategy` helper is what lets `manage_strategy` keep `client._RPC_TIMEOUT_S` while `score` gets `client._LONG_RPC_TIMEOUT_S`.
-- `manage_strategy` accepts `components: list[dict] | None` … `clear_fields: list[str] | None` (`tools.py:908-923`): ten definition arguments (`display_name` … `sector_param_overrides`) plus `clear_fields`.
-
-**TDD**: `red-green required` (paired test: Step 6)
-
-**Covers**: —
-
-**Instructions**:
-1. **Helper.** After `_grpc_error_message` (`tools.py:252`) and before `_EXTRACTOR_TOOL_MAP`, add `async def _score_strategy(ctx: Context, strategy_id: str) -> dict`: `user_id = _caller_user_id(ctx, "manage_strategy")`; `try: return await client.score_strategy(user_id=user_id, strategy_id=strategy_id)`; `except grpc.aio.AioRpcError as e: raise RuntimeError(_grpc_error_message(e, not_found=e.details() or "no eligible evidence", deadline_s=client._LONG_RPC_TIMEOUT_S, write=True)) from e`. The shared mapper is **not** edited (NOT_FOUND detail passthrough is the call-site's `not_found=`). Owner-scoped via the forwarded `x-user-id`; no admin gate, no `_caller_access_scope`.
-2. **Branch.** In `manage_strategy`, make the first statement after the docstring (above the `isinstance(entry_rule, dict)` serialization at `:1039`): `if operation == "score":` build `given = [name for name, value in (("display_name", display_name), ("components", components), ("entry_rule", entry_rule), ("exit_rule", exit_rule), ("signal_params", signal_params), ("cooldown_days", cooldown_days), ("exit_cooldown_days", exit_cooldown_days), ("denied_symbols", denied_symbols), ("signal_eligible", signal_eligible), ("sector_param_overrides", sector_param_overrides), ("clear_fields", clear_fields)) if value is not None]`; if `given`: `raise ValueError(f"manage_strategy(operation='score') accepts only strategy_id; got: {', '.join(given)}")` — this fires before identity resolution or any client call, and a `clear_fields=[]` still counts (AC-9). Otherwise `return await _score_strategy(ctx, strategy_id)`. (The name list is duplicated from `supplied` on purpose to keep this branch first and out of the 215/275/281 merge region; Step 6 drives it from `inspect.signature` so a future argument cannot slip through.)
-3. **Docstring.** Edit only these parts: summary line `Register/update/deactivate/reactivate/score a stored strategy in xstockstrat-analysis.`; `operation: 'register' | 'update' | 'deactivate' | 'reactivate' | 'score'.`; and append a `SCORE (feature 283)` paragraph before the `RESPONSE CASING` paragraph stating, in prose a client can read: `operation='score'` takes **only** `strategy_id` (any other argument is rejected before any call); it recomputes **and persists** the strategy's headline grade and emits an `analysis.strategy.scored` ledger event; any time range is **ignored** (the whole eligible evidence base is used); it returns snake_case `strategy_id, overall_score, component_scores, rating, evidence_symbols (int count), evidence_days, provisional, origin (when set), excluded_symbols`; `excluded_symbols` lists the symbols left with **no surviving evidence cell**, is `[]` when the strategy is not fundamentals-guarded or `analysis.backtest.fundamentals.enabled` is off (so `[]` does not mean "the guard ran and found nothing"), and is `null` when analysis did not report it; errors: `PERMISSION_DENIED` (not owned/missing), `NOT_FOUND` (no eligible evidence — the stale grade is cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)" variant), `UNAVAILABLE` (store down, or fundamentals availability unknown with the grade unchanged); a deadline means the outcome is unknown — verify with `list_strategies` (do not claim an atomic refresh). Also amend the `RESPONSE CASING` paragraph with one clause: `score` returns snake_case, unlike the other operations.
-4. Update the module docstring line `tools.py:12` to `…register/update/deactivate/reactivate stored strategies; score = manual headline-grade refresh (update = merge)`. Do **not** change the tool count text (`tools.py:54` "forty-five" stays).
-5. Do not change `supplied`/`mask`/`update_mask`, the `update` empty-mask guard, or the `client.manage_strategy` call.
-
-**Verification**:
-```bash
-cd services/xstockstrat-agent && uv run pytest tests/test_tools.py tests/test_tool_deadlines.py tests/test_tools_endpoint.py -q   # existing suites still green; new tests land in Steps 6-7
-cd services/xstockstrat-agent && grep -n "operation == \"score\"\|_score_strategy\|client._LONG_RPC_TIMEOUT_S" app/tools.py
-cd services/xstockstrat-agent && ruff check . && ruff format --check .
-```
-
----
-
-### Step 6 — test: agent tool + client unit tests for `score`
+### Step 5 — test: agent tool + client unit tests and tool-deadline guards for `score` (RED)
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (new class `TestManageStrategyScore`)
 - `services/xstockstrat-agent/tests/test_client.py` — modify (new class `TestScoreStrategyClient`)
+- `services/xstockstrat-agent/tests/test_tool_deadlines.py` — modify
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
 
@@ -284,7 +254,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 - Client-test pattern: `tests/test_client.py:74-78` `_channel_cm()`, `:81` `class TestManageStrategyClient`, `:175` the bogus-operation `ValueError` test; `get_strategy` mock pattern `mock_stub.GetStrategy = AsyncMock(return_value=...)` (`:777`).
 - Fake call object required by the call-object form: **not found** in `test_client.py` (all existing stubs are `AsyncMock(return_value=resp)`); a small awaitable with `trailing_metadata()` is new and has one consumer here (C-13: inline).
 
-**TDD**: `red-green required` (Steps 2 and 5 are the implementation; run this step's tests first to capture RED)
+**TDD**: `red-green required` — RED now: the tool tests (AC-1/2/3/4/5/8/9) and the tool-deadline guard fail because `manage_strategy` has no `score` branch and `_score_strategy` does not exist (`long_seen != _LONG_TOOLS`); GREEN after Step 6. The `TestScoreStrategyClient` cases already go green with Step 2 (they cover `client.score_strategy`, which exists by then); only the tool-level cases carry the RED for Step 6.
 
 **Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-8, AC-9, AC-11`
 
@@ -304,11 +274,50 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
    - request carries `strategy_id` and **no** `range`; metadata contains `("x-user-id", "u-owner")`; `timeout == client._LONG_RPC_TIMEOUT_S` (`call_args.kwargs`);
    - the unknown-operation test at `test_client.py:175` additionally asserts the new message mentions `'score' is routed to ScoreStrategy`.
 
+3. `tests/test_tool_deadlines.py` (moved here from the former Step 7 so the guard's RED precedes the service): add `"_score_strategy"` to `_LONG_TOOLS` (`:23`) and `"_score_"` to `_MUTATING_PREFIXES` (`:24-35`) — RED: `test_every_catch_site_passes_deadline_s` reports `long_seen != _LONG_TOOLS` until Step 6 adds the helper. Add a tool-level test modelled on `test_ac1_get_positions_hung_portfolio_surfaces_deadline` (`:70-78`): `hung_backend("ANALYSIS_ENDPOINT")` with `patched_budgets`, `_timed_error(_tool("manage_strategy")(_ctx(ADMIN), operation="score", strategy_id="s"))` → message contains `within 0.6s (deadline exceeded)` and `outcome unknown, verify before retrying`, `elapsed < _LONG_S + _SLACK_S`, `handle.entered == 1` (RED now: the unknown-operation `ValueError` fires instead). `test_fr3_worst_cases_fit_under_57s` stays unchanged and green (PRESERVE `@AC-6 @feature-273`).
+
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run pytest tests/test_tools.py tests/test_client.py -q   # RED before Steps 2/5, GREEN after
+cd services/xstockstrat-agent && uv run pytest tests/test_tools.py tests/test_client.py tests/test_tool_deadlines.py -q   # RED now (tool-level cases + deadline guard); GREEN after Step 6
+cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q   # CI threshold (agent: 40%); run after Step 6
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
 cd services/xstockstrat-agent && grep -rn "def _rpc_error" tests/   # C-13: reuse tests/test_tools.py:931, no new copy introduced
+```
+
+---
+
+### Step 6 — service: agent `manage_strategy operation='score'`
+
+**Status**: `pending`
+**Service**: `xstockstrat-agent`
+**Files**:
+- `services/xstockstrat-agent/app/tools.py` — modify
+
+**Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity
+
+**Codebase Evidence**:
+- `tools.py:12` module-docstring line `manage_strategy     — register/update/deactivate/reactivate stored strategies (update = merge)`; `:908` `async def manage_strategy(`; `:924-925` docstring opens `"""Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.` / `operation: 'register' | 'update' | 'deactivate' | 'reactivate'.`; `:1031-1033` the `RESPONSE CASING` paragraph ends the docstring; `:1039-1042` dict-rule `json.dumps`; `:1044` `supplied = {`; `:1079-1094` identity resolution, `client.manage_strategy(...)` call and the `_grpc_error_message(..., not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S, write=True)` catch.
+- `tools.py:155` `def _caller_user_id(ctx, tool)`; `:223-252` `_grpc_error_message`: NOT_FOUND returns the fixed `not_found` string (`:244-245`), PERMISSION_DENIED returns `exc.details() or "permission denied"` (`:248-249`), UNAVAILABLE falls through to `exc.details() or str(code)` (`:252`), DEADLINE_EXCEEDED builds the "upstream did not respond within …s (deadline exceeded); outcome unknown, verify before retrying" text when `write=True`.
+- Existing module-level helper precedent: `tools._write_source_bearer` (referenced by `tests/test_tool_deadlines.py`), i.e. tools may delegate to module-level `async def` helpers with their own catch site.
+- Deadline AST guard attributes each `_grpc_error_message` call to its **innermost enclosing function** (`tests/test_tool_deadlines.py:_mapper_calls`), so a separate `_score_strategy` helper is what lets `manage_strategy` keep `client._RPC_TIMEOUT_S` while `score` gets `client._LONG_RPC_TIMEOUT_S`.
+- `manage_strategy` accepts `components: list[dict] | None` … `clear_fields: list[str] | None` (`tools.py:908-923`): ten definition arguments (`display_name` … `sector_param_overrides`) plus `clear_fields`.
+
+**TDD**: `red-green required` (paired test: Step 5)
+
+**Covers**: —
+
+**Instructions**:
+1. **Helper.** After `_grpc_error_message` (`tools.py:252`) and before `_EXTRACTOR_TOOL_MAP`, add `async def _score_strategy(ctx: Context, strategy_id: str) -> dict`: `user_id = _caller_user_id(ctx, "manage_strategy")`; `try: return await client.score_strategy(user_id=user_id, strategy_id=strategy_id)`; `except grpc.aio.AioRpcError as e: raise RuntimeError(_grpc_error_message(e, not_found=e.details() or "no eligible evidence", deadline_s=client._LONG_RPC_TIMEOUT_S, write=True)) from e`. The shared mapper is **not** edited (NOT_FOUND detail passthrough is the call-site's `not_found=`). Owner-scoped via the forwarded `x-user-id`; no admin gate, no `_caller_access_scope`.
+2. **Branch.** In `manage_strategy`, make the first statement after the docstring (above the `isinstance(entry_rule, dict)` serialization at `:1039`): `if operation == "score":` build `given = [name for name, value in (("display_name", display_name), ("components", components), ("entry_rule", entry_rule), ("exit_rule", exit_rule), ("signal_params", signal_params), ("cooldown_days", cooldown_days), ("exit_cooldown_days", exit_cooldown_days), ("denied_symbols", denied_symbols), ("signal_eligible", signal_eligible), ("sector_param_overrides", sector_param_overrides), ("clear_fields", clear_fields)) if value is not None]`; if `given`: `raise ValueError(f"manage_strategy(operation='score') accepts only strategy_id; got: {', '.join(given)}")` — this fires before identity resolution or any client call, and a `clear_fields=[]` still counts (AC-9). Otherwise `return await _score_strategy(ctx, strategy_id)`. (The name list is duplicated from `supplied` on purpose to keep this branch first and out of the 215/275/281 merge region; Step 6 drives it from `inspect.signature` so a future argument cannot slip through.)
+3. **Docstring.** Edit only these parts: summary line `Register/update/deactivate/reactivate/score a stored strategy in xstockstrat-analysis.`; `operation: 'register' | 'update' | 'deactivate' | 'reactivate' | 'score'.`; and append a `SCORE (feature 283)` paragraph before the `RESPONSE CASING` paragraph stating, in prose a client can read: `operation='score'` takes **only** `strategy_id` (any other argument is rejected before any call); it recomputes **and persists** the strategy's headline grade and emits an `analysis.strategy.scored` ledger event; any time range is **ignored** (the whole eligible evidence base is used); it returns snake_case `strategy_id, overall_score, component_scores, rating, evidence_symbols (int count), evidence_days, provisional, origin (when set), excluded_symbols`; `excluded_symbols` lists the symbols left with **no surviving evidence cell**, is `[]` when the strategy is not fundamentals-guarded or `analysis.backtest.fundamentals.enabled` is off (so `[]` does not mean "the guard ran and found nothing"), and is `null` when analysis did not report it; errors: `PERMISSION_DENIED` (not owned/missing), `NOT_FOUND` (no eligible evidence — the stale grade is cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)" variant), `UNAVAILABLE` (store down, or fundamentals availability unknown with the grade unchanged); a deadline means the outcome is unknown — verify with `list_strategies` (do not claim an atomic refresh). Also amend the `RESPONSE CASING` paragraph with one clause: `score` returns snake_case, unlike the other operations.
+4. Update the module docstring line `tools.py:12` to `…register/update/deactivate/reactivate stored strategies; score = manual headline-grade refresh (update = merge)`. Do **not** change the tool count text (`tools.py:54` "forty-five" stays).
+5. Do not change `supplied`/`mask`/`update_mask`, the `update` empty-mask guard, or the `client.manage_strategy` call.
+
+**Verification**:
+```bash
+cd services/xstockstrat-agent && uv run pytest tests/test_tools.py tests/test_tool_deadlines.py tests/test_tools_endpoint.py -q   # Step 5's tests now GREEN (tool cases, `_LONG_TOOLS` guard, hung-backend case) and existing suites unchanged
+cd services/xstockstrat-agent && grep -n "operation == \"score\"\|_score_strategy\|client._LONG_RPC_TIMEOUT_S" app/tools.py
+cd services/xstockstrat-agent && ruff check . && ruff format --check .
 ```
 
 ---
@@ -318,7 +327,6 @@ cd services/xstockstrat-agent && grep -rn "def _rpc_error" tests/   # C-13: reus
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
 **Files**:
-- `services/xstockstrat-agent/tests/test_tool_deadlines.py` — modify
 - `services/xstockstrat-agent/tests/test_client_deadlines.py` — modify
 - `services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature` — modify (one Examples row; operator-signed-off EXTEND of `@AC-5 @feature-273`)
 
@@ -335,14 +343,14 @@ cd services/xstockstrat-agent && grep -rn "def _rpc_error" tests/   # C-13: reus
 **Covers**: — (C-16 preservation/extension of `@AC-5`, `@AC-6`, `@AC-10 @feature-273`; no 283 `@AC-*` is verified here)
 
 **Instructions**:
-1. `test_tool_deadlines.py`: add `"_score_strategy"` to `_LONG_TOOLS` (`:23`) and `"_score_"` to `_MUTATING_PREFIXES` (`:24-35`). Add a tool-level test modelled on `test_ac1_get_positions_hung_portfolio_surfaces_deadline`: `hung_backend("ANALYSIS_ENDPOINT")` with `patched_budgets`, `_timed_error(_tool("manage_strategy")(_ctx(ADMIN), operation="score", strategy_id="s"))` → message contains `within 0.6s (deadline exceeded)` and `outcome unknown, verify before retrying`, `elapsed < _LONG_S + _SLACK_S`, `handle.entered == 1`. `test_fr3_worst_cases_fit_under_57s` stays unchanged and green (PRESERVE `@AC-6 @feature-273`).
-2. `test_client_deadlines.py` — **RED first**: set `_MIN_STUB_CALLS = 74` and run: it fails (matcher still sees 73, because `call = stub.ScoreStrategy(...)` is invisible to an `ast.Await`-only matcher). Then extend `_stub_calls` with exactly one added branch: when `node` is an `ast.Assign` whose `value` is an `ast.Call` with `func` an `ast.Attribute` whose `value` is `ast.Name` with `id == "stub"`, yield `(fn.name, node.value.func.attr, node.value)`. **Do not** match bare `ast.Call` nodes (that counts 82 + 1 and sweeps in non-RPC calls); the `Await` branch is unchanged so awaited calls are still counted once. Re-run: count is exactly 74 → green. Record both runs (73→red, 74→green) in `context.md`.
-3. Add `"ScoreStrategy"` to `_LONG_RPCS` (`:48`) and a row to `_AC5_ROWS` (`:20-45`): `("ScoreStrategy", "ANALYSIS_ENDPOINT", lambda: client.score_strategy("u-1", "s-1"), _LONG)`. The fake-channel row (`test_ac5_listed_rpcs_pass_the_production_budget_kwarg`, `:85-101`) uses `AsyncMock(side_effect=_Recorded)`: `call = stub.ScoreStrategy(...)` returns a coroutine and `await call` raises `_Recorded` before `trailing_metadata()` is reached, so no mock change is needed — verify it passes rather than assuming.
-4. `acceptance/fix-agent-client-deadlines.feature`: append `      | ScoreStrategy       | 45.5   |` after the `TriggerBackfill` row (`:53`), column-aligned with the table. This is the signed-off EXTEND of `@AC-5 @feature-273`; keep it in the same commit as the `_AC5_ROWS` tuple.
+1. `test_client_deadlines.py` — **RED first**: set `_MIN_STUB_CALLS = 74` and run: it fails (matcher still sees 73, because `call = stub.ScoreStrategy(...)` is invisible to an `ast.Await`-only matcher). Then extend `_stub_calls` with exactly one added branch: when `node` is an `ast.Assign` whose `value` is an `ast.Call` with `func` an `ast.Attribute` whose `value` is `ast.Name` with `id == "stub"`, yield `(fn.name, node.value.func.attr, node.value)`. **Do not** match bare `ast.Call` nodes (that counts 82 + 1 and sweeps in non-RPC calls); the `Await` branch is unchanged so awaited calls are still counted once. Re-run: count is exactly 74 → green. Record both runs (73→red, 74→green) in `context.md`.
+2. Add `"ScoreStrategy"` to `_LONG_RPCS` (`:48`) and a row to `_AC5_ROWS` (`:20-45`): `("ScoreStrategy", "ANALYSIS_ENDPOINT", lambda: client.score_strategy("u-1", "s-1"), _LONG)`. The fake-channel row (`test_ac5_listed_rpcs_pass_the_production_budget_kwarg`, `:85-101`) uses `AsyncMock(side_effect=_Recorded)`: `call = stub.ScoreStrategy(...)` returns a coroutine and `await call` raises `_Recorded` before `trailing_metadata()` is reached, so no mock change is needed — verify it passes rather than assuming. **Which edits carry the RED:** the `_MIN_STUB_CALLS = 74` bump (red until the matcher is extended) and adding `"ScoreStrategy"` to `_LONG_RPCS` (red until the matcher sees the call-object form: `long_rpcs != _LONG_RPCS`); the `_AC5_ROWS` tuple and the feature-file row go green immediately and are guarded by the parametrised AC-5 tests and the final grep.
+3. `acceptance/fix-agent-client-deadlines.feature`: append `      | ScoreStrategy       | 45.5   |` after the `TriggerBackfill` row (`:53`), column-aligned with the table. This is the signed-off EXTEND of `@AC-5 @feature-273`; keep it in the same commit as the `_AC5_ROWS` tuple.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && uv run pytest tests/test_tool_deadlines.py tests/test_client_deadlines.py -q   # GREEN (ScoreStrategy row parametrised in both AC-5 tests)
+cd services/xstockstrat-agent && uv run pytest tests/test_tool_deadlines.py tests/test_client_deadlines.py -q   # GREEN (ScoreStrategy row parametrised in the AC-5 test)
+cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q   # CI threshold (agent: 40%)
 cd services/xstockstrat-agent && grep -n "ScoreStrategy" tests/test_client_deadlines.py acceptance/fix-agent-client-deadlines.feature   # row present in test tuple and feature file
 cd services/xstockstrat-agent && ruff check . && ruff format --check .
 ```
@@ -369,16 +377,16 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 - `FieldDescriptor.has_presence` availability: confirm against the locked protobuf (`services/xstockstrat-agent/uv.lock`, `name = "protobuf"`) before using it; fall back to `field.message_type is not None or field.containing_oneof` if absent.
 - Strat-lab plugin rules: `docs/patterns/strat-lab-plugin.md` (same-PR rule; validator `python3 plugins/strat-lab/scripts/validate.py`); manifests `plugins/strat-lab/.claude-plugin/plugin.json` and `.cursor-plugin/plugin.json` both `"version": "0.4.0"` (no version bump is made — nothing in the guard rail requires one; if bumped, both stay byte-identical).
 
-**TDD**: `red-green required` — RED: the operations-set assertions fail on all three surfaces because none lists `score`; GREEN after the docs edits below. (The docstring surface turns green with Step 5.)
+**TDD**: `red-green required` — RED: the operations-set assertions fail on the runbook and `SKILL.md` surfaces because neither lists `score` yet; GREEN after the docs edits below. **Which surfaces carry the RED:** the runbook and `SKILL.md` assertions (neither lists `score` until this step's edits); the docstring surface is already green after Step 6 and carries no RED of its own (P-06). `AC-6` is a PRESERVE of the existing count guard and has no RED by design.
 
 **Covers**: `AC-6, AC-10`
 
 **Instructions**:
 1. Write `tests/test_score_strategy_parity.py` **first** and run it RED. Locate everything by **regex markers, never by line numbers** (rebases from 215/275/281 will move them):
-   - `test_score_projection_covers_every_proto_field`: call `client.score_strategy` with a mocked stub/fake call (as in Step 6) returning a `StrategyScore` with every non-presence field set to a non-default value; assert `set(result) - {"excluded_symbols"}` equals `{f.name for f in StrategyScore.DESCRIPTOR.fields if not f.has_presence}`, and pin the opt-out: `{f.name for f in DESCRIPTOR.fields if f.has_presence} == {"origin"}` (a new optional/message field fails until accounted for — `origin` is absent when unset). `excluded_symbols` is the only non-proto key.
+   - `test_score_projection_covers_every_proto_field`: call `client.score_strategy` with a mocked stub/fake call (as in Step 5) returning a `StrategyScore` with every non-presence field set to a non-default value; assert `set(result) - {"excluded_symbols"}` equals `{f.name for f in StrategyScore.DESCRIPTOR.fields if not f.has_presence}`, and pin the opt-out: `{f.name for f in DESCRIPTOR.fields if f.has_presence} == {"origin"}` (a new optional/message field fails until accounted for — `origin` is absent when unset). `excluded_symbols` is the only non-proto key.
    - `test_operation_sets_match_the_enum_on_every_surface`: `expected = {name.removeprefix("STRATEGY_OPERATION_").lower() for name in analysis_pb2.StrategyOperation.keys() if not name.endswith("_UNSPECIFIED")} | {"score"}`. Parse and compare **sets** (not exact strings): (a) the tool description's first line (`^(.+?) a stored strategy`, split on `/`, lower-cased) and its `operation:` line (quoted tokens); (b) the `| \`operation\` |` row inside the `### \`manage_strategy\`` section of `docs/runbooks/mcp-tools.md` (section = from that heading to the next `### `; tokens are the `"…"` literals); (c) a new canonical line in `plugins/strat-lab/skills/backtest/SKILL.md` matching `` `manage_strategy` operations: `register` | `update` | `deactivate` | `reactivate` | `score` `` (regex over backticked tokens). Each parsed set must equal `expected`.
    - `test_score_side_effects_are_documented_on_runbook_and_skill` (**AC-10**): the runbook section and `SKILL.md` each contain `analysis.strategy.scored`, a "persists" statement and an "ignored" time-range statement for `score`.
-   - `test_client_unknown_operation_error_lists_the_four_dispatch_ops`: calling `client.manage_strategy(user_id="u", operation="bogus", definition={})` raises `ValueError` whose text names exactly register/update/deactivate/reactivate.
+   - (The unknown-operation error text is asserted once, in Step 5's extension of `tests/test_client.py:175`; no duplicate here, C-18.)
 2. Runbook (`docs/runbooks/mcp-tools.md`, only inside `### \`manage_strategy\``): add `"score"` to the `operation` row and its description; add a `**`score` (feature 283)**` block after the "Effect on the derived grade" paragraph covering: owner-scoped (`x-user-id`; not admin-gated), `strategy_id` only (other arguments rejected client-side), persists the grade + emits `analysis.strategy.scored`, time range ignored, snake_case return table (`strategy_id, overall_score, component_scores, rating, evidence_symbols (count), evidence_days, provisional, origin, excluded_symbols`), `excluded_symbols` semantics (`[]` / `null` / non-empty, same wording as the Step 5 docstring), a `Return` example, the 45 s budget and the worst-case bound `ceil(symbols/4) × 8 pages × 10 s` (`_FUND_PAGE_TIMEOUT_SECONDS`, `_MAX_FUND_PAGES`, `_INTERACTIVE_DERIVATION_CONCURRENCY` in `servicer.py:305-311`) with "a deadline before persist leaves the grade unchanged; verify with `list_strategies`", and add the `score` rows to the section's **Errors** table (PERMISSION_DENIED, both NOT_FOUND variants with the stale grade cleared, UNAVAILABLE variants). The section's opening sentence still says "**Admin-scoped write**" (stale since feature 133, per agent `CLAUDE.md:125`); leave it alone (not this feature's change) and have the `score` block say "owner-scoped, not admin-gated" explicitly — log the pre-existing drift in `context.md` for the findings log. Do not edit other tools' sections or the `forty-five` count text.
 3. `SKILL.md`: add the canonical `` `manage_strategy` operations: … `score` `` line (e.g. in the Scope paragraph at `:16`), add `score` to the Ownership paragraph's list of ownership-gated operations (`:21`), and add a short "Refreshing the grade" paragraph near the Mutation guard: `manage_strategy(operation="score", strategy_id=...)` persists the grade, emits `analysis.strategy.scored`, ignores any range, returns `excluded_symbols` (`null` = analysis did not report; `[]` ≠ "the guard ran and found nothing"), and clears a stale grade with NOT_FOUND when no evidence is eligible. Keep the frontmatter untouched (an unquoted `: ` in frontmatter silently drops every field — `docs/patterns/strat-lab-plugin.md`).
 4. Run the suite GREEN.
@@ -436,6 +444,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_tools_endpoint.py -q  
 **Service**: `docs`
 **Files**:
 - `docs/roadmap/features/283-expose-score-strategy-mcp/context.md` — modify (session log: loopback evidence, matcher counts, gate outcomes)
+- `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-analysis/docs/scoring.md`, `docs/runbooks/mcp-tools.md`, `plugins/strat-lab/skills/backtest/SKILL.md` — modify **only if** the refresh/manual reconciliation reports drift (already edited in Steps 8-9; listed so a drift fix is not an unlisted-file edit, F-08)
 
 **Reviewers**: none
 
