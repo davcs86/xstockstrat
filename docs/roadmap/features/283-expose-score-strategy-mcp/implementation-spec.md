@@ -149,7 +149,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 3 — test: analysis trailer unit tests + server-half production-wiring loopback (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py` — modify
@@ -478,3 +478,4 @@ git diff --stat -- packages/proto .do docker-compose.yml   # empty: no proto, no
 _Populated by /sdd-execute as implementation proceeds._
 
 - 2026-11-01 — re-spec (sdd-batch-execute, after merging `origin/main-dev`, already up to date): steps 1-10 re-verified against the current codebase; no blocking mismatch. Line anchors re-pointed in Steps 3, 5, 7, 8 and 9 (`test_tools.py` `_make_server`/`_tool_fn` :23/:29, description :1106, `.parameters` :1083, docs guard :1101, error-mapping test :1215; `test_pit_outage_…` :196; `test_ac5_listed_rpcs_…` :81; `SKILL.md` Scope :15; analysis `CLAUDE.md` Evidence exclusion (H) :464-467). Instructions, Files and Verification unchanged; symbols remain authoritative.
+- 2026-11-01 — Step 3 (minor, within Files): the success-path "sorted + deduped" and "oversize" unit tests also carry an eligible `_cell("AAPL", trades=3)`, because ScoreStrategy only reaches `return score` (where the trailer is set) when at least one symbol is eligible; the server loopback's populated case uses `AAPL + SCHD`. The literal-key test also pins `_EXCLUDED_TRAILER_MAX_BYTES == 4096` (the Step 4 value). No CI-equivalent fallback was needed for this step (pytest + ruff ran natively); the analysis `.venv` resolves Python 3.12.3 (`.python-version` 3.12, `requires-python >=3.12`), not the root-table 3.13.
