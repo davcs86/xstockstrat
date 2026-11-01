@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-11-01
 
 ---
 
@@ -17,6 +17,7 @@
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings); OQ-1 resolved by operator: cap `<= 0` = zero budget |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps; AC-5/AC-6 refined, @AC-10 added, FR-4(b) rewritten per operator r3/r4 sign-off |
+| 2026-11-01 | `implementation-ready` (re-spec) | /sdd-execute | Merged `origin/main-dev`; steps 0–17 re-anchored to the current codebase (Step 11 now wraps both `getJSON` transport returns; Step 13 reflects existing `WarnContext`) |
 
 ---
 
