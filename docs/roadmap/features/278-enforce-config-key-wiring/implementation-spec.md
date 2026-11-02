@@ -481,7 +481,12 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 - Contents come from Step 9's run and the Step 10 ruling (`reported-only`); the expected set is Step 9's Codebase Evidence (re-derived against migrations 000-034), with `docs/roadmap/features/277-fix-ingest-seeded-config-keys/recon.md:86-101` (on `main-dev`) as the historical reference only.
 - The ingest defect report `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` exists and is closed `wont-fix`, so entries name a feature as owner, not the report (product spec Out of Scope). Feature 277 is `demoted/canceled`; by the 2026-11-01 operator ruling (context.md) every entry the spec previously gave to 277 is owned by `feature 278`.
 - `031_heal_indicators_sandbox_keys_full_dotted.up.sql` is now on the branch (feature 243, still `in-progress`): it heals `indicators.sandbox.timeout_ms`, `memory_bytes`, `allowed_imports` for both environments, so no `indicators.sandbox.*` form-mismatch is expected. `indicators.sandbox.max_concurrent` (read at indicators `watcher.py:152`, never seeded) is outside 243's scope (`docs/roadmap/features/243-fix-sandbox-seed-keys/product-spec.md:86`).
-- After Step 11, four `dynamic-read` sites remain that index a `values` container which is not a config snapshot; the extractor cannot tell them apart without type information, so they are registered as `registry.dynamic` `[]` (no reads), each justified in `context.md`: `services/xstockstrat-ui/src/components/trader/accountShared.tsx:57` (`credsFromWatch`, `values[i]` over a local array), `services/xstockstrat-ui/src/lib/indicatorChart.ts:33` (`toLineData`, `values[i]?.value`), `services/xstockstrat-analysis/app/handlers/servicer.py` `_load_fundamentals` (`p.values.get(m)` over fundamentals periods) and `services/xstockstrat-analysis/app/services/evaluator.py:95` `_fundamental_as_of_series` (`p.values.get(metric)`).
+- Starting state: `scripts/config-wiring.json` is in its empty shape (`policy.envReadUnseeded` `reported`, `findings` `[]`, `registry` `{forwarders:{}, dynamic:{}, rewriteAllow:[]}`). On the current tree `--final` prints **46** `dynamic-read` sites; Step 11 removes the 3 `configServiceImpl.ts` assignment targets, leaving **43**. They fall into five groups, every one handled by a registry entry below, so the frozen baseline holds **zero** `dynamic-read` entries:
+  - **Forwarder bodies (7 sites, `registry.forwarders`):** `int_positive` in analysis `watcher.py:142`, indicators `watcher.py:155`, ingest `watcher.py:213`; analysis `float_positive` (`:147`) and `str_nonempty` (`:152`), all `keyArg` 1; marketdata `resolvePositiveInt` (`marketdata_service.go:986`, `keyArg` 1); agent `get_config_value` (`services/xstockstrat-agent/app/client.py:1788`, `keyArg` 0). Registering `get_config_value` exposes one more passthrough, agent `_agent_policy(key, default, cast)` (`services/xstockstrat-agent/app/tools.py:2536`, calls `client.get_config_value(key, ...)` at `:2540`), so it is an eighth forwarder (`keyArg` 0). With these eight registered, `signal.alert_threshold` (`_ALERT_THRESHOLD_CONFIG_KEY`, `tools.py:78`, passed at `:656`) resolves through the Python extractor's same-file constant lookup and leaves `seeded-unread`. That closes context.md Step 9 open item 2 in the extractor as it stands, without a baseline entry or a code change. `str_nonempty` closes open item 1 (`fundsignal.source_slug`, `fundsignal_loop.py:44`).
+  - **Getter bodies (28 sites, `registry.dynamic` `[]`):** `ConfigWatcher.get_bool`/`get_float`/`get_int`/`get_str` in analysis, indicators and ingest `app/config/watcher.py` (12), and `getBool`/`getFloat`/`getInt`/`getString` in config, identity, ledger and notify `src/services/configWatcher.ts` (16). They are passthroughs: the built-in getter matchers already attribute each key at its call site, so the body produces no read.
+  - **Runtime-built keys with a closed set (4 sites, `registry.dynamic` enumerated):** marketdata `MarketDataService.GetFundamentalsMulti` (`marketdata_service.go:1697`) and `MarketDataService.resolveFundamentals` (`:1764`) both read `"marketdata."+s.fundProvider+".cache_ttl_hours"`, which is `marketdata.fmp.cache_ttl_hours` or `marketdata.finnhub.cache_ttl_hours`. `MarketDataService.fundamentalsEnabled` (`:1808`) reads `"marketdata."+s.fundProvider+".enabled"`, which is `marketdata.fmp.enabled` or `marketdata.finnhub.enabled`. `fundProvider` is `"fmp"` or `"finnhub"` (`:72-74`). Trading `TradingService.ibkrTiming` (`trading.go:2503-2515`, local closure `ms` around `s.cfgW.GetInt(key, def)`) reads `trading.ibkr.lst_refresh_margin_ms`, `trading.ibkr.handshake_timeout_ms` and `trading.ibkr.reauth_min_interval_ms`. Enumerating them turns Step 9's `seeded-unread` `marketdata.fmp.cache_ttl_hours`, `marketdata.finnhub.cache_ttl_hours` and `marketdata.finnhub.enabled` into reads. Those three were extractor gaps, not dead seeds.
+  - **Non-config `values` containers (4 sites, `registry.dynamic` `[]`):** `services/xstockstrat-ui/src/components/trader/accountShared.tsx:57` (`credsFromWatch`, `values[i]` over a local array), `services/xstockstrat-ui/src/lib/indicatorChart.ts:33` (`toLineData`, `values[i]?.value`), `services/xstockstrat-analysis/app/handlers/servicer.py` `AnalysisServicer._load_fundamentals` (`:1858` `p.values.get(m)` over fundamentals periods) and `services/xstockstrat-analysis/app/services/evaluator.py:95` `_fundamental_as_of_series` (`p.values.get(metric)`). The extractor cannot tell them apart without type information.
+- Projection, re-derived 2026-11-02 against a scratch `--root` with the full registry above but **without** Step 11's extractor fix. The run is authoritative: 19 `form-mismatch`, 5 `seeded-unread` (`ledger` `stream.notify_enabled`, `marketdata.alpaca.paper`, `platform.log_level`, `trading.risk.daily_loss_limit`, `analysis.opportunity.sparkline_bars`), about 101 `read-unseeded` lines (1 printed `REPORTED:`), and 3 `dynamic-read` (the `configServiceImpl.ts` sites Step 11 removes).
 - **Not found**: any seed or reader fix landing in this feature; none is allowed (no reader or seed edit).
 
 **TDD**: `N/A (config data file; verified by Step 13's real-tree test)`
@@ -490,13 +495,14 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 **Instructions**:
 1. Keep `policy.envReadUnseeded` at `reported` (Step 10 ruling).
-2. Fill `findings` with exactly the findings the first run produced, each with `owner: "feature 278"` (form mismatches, the dead seed, every unseeded key including `indicators.sandbox.max_concurrent`); use `feature 243` only for an `indicators.sandbox.*` finding inside 243's declared scope, if the run still produces one. No entry names 277. Record the final count per kind in `context.md` (design leaves the exact count to this run).
-3. Fill `registry.forwarders` / `registry.dynamic` with only the entries the first run required, each justified in one line in `context.md`; expected forwarders: `services/xstockstrat-analysis/app/config/watcher.py:int_positive`, `services/xstockstrat-indicators/app/config/watcher.py:int_positive`, `services/xstockstrat-ingest/app/config/watcher.py:int_positive`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt` (all `keyArg` 1). `registry.rewriteAllow` stays empty (Step 1 models every current rewrite).
-4. Do not add any entry to hide a finding that has a fixable cause in the extractor; fix the extractor in Step 3's code instead (false-dynamic-read count must be zero).
+2. Fill `registry` first, then re-run, then fill `findings`. `registry.forwarders`: the eight entries above, keyed `<file>:<symbol>`, value `{"keyArg": N}`. `registry.dynamic`: the 28 getter bodies and 4 non-config sites as `[]`, and the 4 closed-set sites with their enumerated keys. Use `services/xstockstrat-trading/internal/service/trading.go:TradingService.ibkrTiming` and `services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.<method>`. Each key is the exact `file:symbol` the run prints. `registry.rewriteAllow` stays empty (Step 1 models every current rewrite). Justify each entry, or each group, in one line in `context.md`.
+3. Re-run `node scripts/check-config-wiring.mjs --final` and confirm it prints zero `dynamic-read` lines and no `signal.alert_threshold`, `marketdata.fmp.cache_ttl_hours`, `marketdata.finnhub.cache_ttl_hours` or `marketdata.finnhub.enabled` finding. If a `dynamic-read` remains, stop: it is either a new site that needs the same classification or a fixable extractor cause, and fixing that cause is outside these Files.
+4. Fill `findings` with exactly the blocking findings that run produced, each with `owner: "feature 278"`. That covers the form mismatches, the dead seeds and every unseeded key, including `indicators.sandbox.max_concurrent`. Use `feature 243` only for an `indicators.sandbox.*` finding inside 243's declared scope, if the run still produces one. No entry names 277. No entry has kind `dynamic-read`. Record the final count per kind in `context.md`, plus the delta from the projection above and its cause.
+5. Do not add any entry to hide a finding that has a fixable cause in the extractor (false-dynamic-read count must be zero). Getter bodies, forwarder bodies, closed-set runtime keys and non-config containers are classifications, not hidden findings.
 
 **Verification**:
 ```
-node scripts/check-config-wiring.mjs --final && echo OK
+node scripts/check-config-wiring.mjs --final && node -e "const j=JSON.parse(require('fs').readFileSync('scripts/config-wiring.json','utf8')); const bad=j.findings.filter(f=>f.kind==='dynamic-read'||f.owner!=='feature 278'&&!/^feature 243\b/.test(f.owner)||/^(signal\.alert_threshold|marketdata\.(fmp|finnhub)\.(cache_ttl_hours|enabled))$/.test(f.key)); if(bad.length||Object.keys(j.registry.forwarders).length!==8||j.registry.rewriteAllow.length) {console.error(bad); process.exit(1)}" && echo OK
 ```
 
 ---
@@ -513,13 +519,15 @@ node scripts/check-config-wiring.mjs --final && echo OK
 **Codebase Evidence**:
 - Acceptance wording @AC-7 (baseline lists every 277-sweep finding with owner) and @AC-8 in `acceptance.feature`.
 - The CI job (Step 14) runs `node --test scripts/config-wiring.test.mjs`, so these tests are what keeps a stale baseline from merging.
+- `scripts/check-config-wiring.mjs` exports `tokenize`, `splitStatements`, `statementHash`, `validateState`, `loadState`, `loadRegistry`, `buildStoredSet`, `extractGoReads`/`extractTsReads`/`extractPyReads`/`extractReads`, `join`, `findingLine`, `declaredFromSpec`/`declaredFromMigration`, `ratchet`, `stepTime` and `run`. It has **no** scan-roots constant, and this step does not add one (its Files are the test file only). `BASELINE_KINDS` (`:305`, the four kinds) and `OWNER_RE` (`:306`) are module-private, so test (2) restates the four kinds literally.
+- The scan-roots/CI-filter equality that former Instruction (5) asserted moves to Step 14. The `config-wiring` filter does not exist until Step 14 edits `ci.yml`, so asserting it here could never pass at this step's Verification.
 
 **TDD**: `red-green required` (red proof: run the new tests against the empty-shape `config-wiring.json` from Step 7, restored from git into a scratch `--root`, since Step 12's data already exists in the tree when this step is executed)
 
 **Covers**: `AC-7, AC-8`
 
 **Instructions**:
-Add: (1) a test running the CLI with `--final` against the real repo root, asserting exit 0 (committed baseline equals the tree); (2) every committed `findings[]` entry has a non-empty `owner` and a `kind` among the four; (3) the committed baseline contains at least the 277-sweep set reconciled in Step 9 (asserted by key lists copied from `context.md`, not recomputed); (4) the committed JSON has no value text and no secret-class key; (5) the extractors' scan roots (exported constant) equal the `config-wiring` path filter globs parsed from `.github/workflows/ci.yml`, so a reader outside the filter cannot change without triggering the job.
+Add: (1) a test running the CLI with `--final` against the real repo root, asserting exit 0 (committed baseline equals the tree); (2) every committed `findings[]` entry has a non-empty `owner` and a `kind` among `seeded-unread`, `read-unseeded`, `form-mismatch`, `dynamic-read`, and no entry has kind `dynamic-read` (Step 12 classifies every dynamic site in the registry); (3) the committed baseline contains at least the 277-sweep set reconciled in Step 9 (asserted by key lists copied from `context.md`, not recomputed); (4) the committed JSON has no value text and no secret-class key. Scan-root coverage is Step 14's test (5).
 
 **Verification**:
 ```
@@ -535,31 +543,54 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 **Service**: `.github/workflows/ci.yml`
 **Files**:
 - `.github/workflows/ci.yml` — modify
+- `scripts/config-wiring.test.mjs` — modify (test (5): CI filter covers the extractors' scan roots)
 
 **Reviewers**: Platform Lead — CI job matrix and gate
 
 **Codebase Evidence**:
-- Job shape to copy: `migration-contract-gate` at `.github/workflows/ci.yml:693-709` (`needs: changes`, `if:` on `matched`, `actions/checkout@v7`, one script step). Copy only the gating shape: that job adds `with: fetch-depth: 0` and a `github.event_name == 'pull_request'` guard because it diffs against the base branch; `config-wiring` reads only the checked-out tree, so it takes the default shallow checkout and needs no `pull_request` guard.
-- `changes` job starts at `ci.yml:14`; its `dorny/paths-filter@v4` `filters: |` block runs `:39-108` and has `scripts`, `migrations`, per-service filters and `context-map` (`:92`), and **no aggregate service-source filter**.
-- `ci-gate` at `ci.yml:899`, `needs:` list and echo list through `:945` (`- context-map`, `echo "context-map:     ${{ needs.context-map.result }}"`); a job missing there is not enforced.
+- Job shape to copy: `migration-contract-gate` at `.github/workflows/ci.yml:693-709` (`needs: changes`, `if:` on `matched`, `actions/checkout@v7`, one script step). Copy only the gating shape. That job adds `with: fetch-depth: 0` (`:704`) and a `github.event_name == 'pull_request'` guard (`:697`) because it diffs against the base branch. `config-wiring` reads only the checked-out tree, so it takes the default shallow checkout and needs no `pull_request` guard. The closest guard-free shape is `context-map` (`:787-801`) and `otel-signals` (`:803-814`).
+- `changes` job starts at `ci.yml:14`. Its `dorny/paths-filter@v4` `filters: |` block runs `:39-108` and has `scripts`, `migrations`, per-service filters and `context-map` (`:92`). The last filter is `otel-signals` (`:102-108`). There is **no aggregate service-source filter**.
+- `ci-gate` is at `ci.yml:899`. Its `needs:` list runs `:902-921` and ends `- context-map`, `- otel-signals`, `- ledger-guard`, `- secret-scan`. Its echo list runs `:926-944` and ends with the `secret-scan` echo. A job missing there is not enforced. Append the new entries after `secret-scan` in both lists.
 - `context-map` job (`ci.yml:787`) runs `node --test scripts/workflow-tests/*.test.mjs` (`ci.yml:801`); our test is a separate file and is run by the new job itself.
 - Shell lint (`shell-lint`, `ci.yml:629`) covers `scripts/*.sh .claude/hooks/*.sh` only (`ci.yml:643,646`), so the `.mjs` files are outside shellcheck/shfmt; no `*.test.sh` is added, so the structural-test line `ci.yml:649` is unchanged.
-- Node setup step to copy: `node-lint` (`ci.yml:430`) uses `actions/setup-node@v7` with `node-version: "24"` (`ci.yml:459-461`); drop its `cache: 'pnpm'` lines since the new job installs no packages.
+- Node setup step to copy: `node-lint` (`ci.yml:430`) uses `actions/setup-node@v7` with `node-version: "24"` (`ci.yml:459-462`); drop its `cache: 'pnpm'` lines since the new job installs no packages.
+- Actual extractor scan roots (`scripts/check-config-wiring.mjs`, `scripts/config-wiring-py-reads.py`), which differ by language:
+  - Go walks **all** of `services/<svc>` for `*.go`, excluding `_test.go` (`extractRegexReads`, `check-config-wiring.mjs:542-543`).
+  - TS walks `services/<svc>/src` for `*.ts`/`*.tsx`, excluding `.test`/`.spec`/`.d` (`:542-543`).
+  - Python globs `services/*/app/**/*.py` (`config-wiring-py-reads.py:108`).
+  - Both walks skip `tests`, `test`, `__tests__`, `e2e`, `node_modules`, `vendor`, `.next`, `.venv` and `dist` (`SKIP_DIRS`, `:379`).
+  - The stored set reads `services/xstockstrat-config/migrations` (`MIGRATIONS`, `:13`).
+- The Go walk finds config reads outside `services/*/internal`. On the current tree, `services/xstockstrat-marketdata/cmd/server/main.go` holds reads such as `marketdata.fmp.rate_limit_rps`, the only reader file outside `app/`, `src/` and `internal/`. A filter of `services/*/internal/**` would therefore miss a change there, so the filter follows the extractors' language globs, not directory names.
+- There is no exported scan-roots constant (Step 13 Codebase Evidence), and none is added. Test (5) instead derives the files the extractors actually read from `cw.extractReads(REPO_ROOT)` and asserts that the filter covers each of them.
 
-**TDD**: `N/A (CI workflow; behavior proven by Steps 8 and 13 and a local run)`
+**TDD**: `red-green required` (author test (5) first. It is red because `ci.yml` has no `config-wiring` filter. Then edit `ci.yml` to green.)
 
 **Covers**: `AC-7` (CI job), `AC-8`
 
 **Instructions**:
-1. Add a `config-wiring` filter to `changes`: `services/xstockstrat-config/migrations/**`, `services/*/app/**`, `services/*/internal/**`, `services/*/src/**`, `scripts/check-config-wiring.mjs`, `scripts/config-wiring-py-reads.py`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/**`.
-2. Add job `config-wiring` ("Config key wiring (whole-tree)"): `needs: changes`, `if:` matched `config-wiring` or `ci`, steps: `actions/checkout@v7`, `actions/setup-node@v7` with `node-version: "24"` (from `node-lint`, without the pnpm cache lines), `node --test scripts/config-wiring.test.mjs`, `node scripts/check-config-wiring.mjs --final`.
-3. Add `config-wiring` to `ci-gate` `needs:` and add `echo "config-wiring: ${{ needs.config-wiring.result }}"`.
-4. The filter roots must equal the extractors' scan roots (`services/*/app`, `services/*/internal`, `services/*/src`, covering the ui reader `services/xstockstrat-ui/src/lib/performanceMetrics.ts`); Step 13 test (5) asserts this.
+1. Add test (5) to `scripts/config-wiring.test.mjs`. It reads `.github/workflows/ci.yml` as text, with no YAML dependency, and collects the quoted globs listed under the `config-wiring:` filter key. It then asserts two things:
+   - (a) The list contains, literally, the language-root globs `services/**/*.go`, `services/*/app/**/*.py`, `services/*/src/**/*.ts`, `services/*/src/**/*.tsx` and `services/xstockstrat-config/migrations/**`.
+   - (b) Every `file` in `cw.extractReads(REPO_ROOT)`'s `reads` and `dynamic` matches at least one glob, using a small in-test glob-to-regex where `**/` is zero or more directories and `*` is one segment. This covers `services/xstockstrat-marketdata/cmd/server/main.go`.
+   Capture red.
+2. Add a `config-wiring` filter to `changes`, after `otel-signals`, with these globs:
+   - `services/xstockstrat-config/migrations/**`
+   - `services/**/*.go`
+   - `services/*/app/**/*.py`
+   - `services/*/src/**/*.ts`
+   - `services/*/src/**/*.tsx`
+   - `scripts/check-config-wiring.mjs`
+   - `scripts/config-wiring-py-reads.py`
+   - `scripts/config-wiring.json`
+   - `scripts/config-wiring.test.mjs`
+   - `scripts/config-wiring-fixtures/**`
+   Test files matching these globs trigger the job too. That costs an extra run and is harmless.
+3. Add job `config-wiring` ("Config key wiring (whole-tree)"): `needs: changes`, `if:` matched `config-wiring` or `ci`, steps: `actions/checkout@v7`, `actions/setup-node@v7` with `node-version: "24"` (from `node-lint`, without the pnpm cache lines), `node --test scripts/config-wiring.test.mjs`, `node scripts/check-config-wiring.mjs --final`.
+4. Add `- config-wiring` to `ci-gate` `needs:` after `- secret-scan`, and add `echo "config-wiring:   ${{ needs.config-wiring.result }}"` after the `secret-scan` echo.
 5. Only after Step 12's ruling is recorded does this step run; the job is a whole-tree scan, never the diff.
 
 **Verification**:
 ```
-python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml')); assert 'config-wiring' in d['jobs']; assert 'config-wiring' in d['jobs']['ci-gate']['needs']" && grep -n "config-wiring" .github/workflows/ci.yml && node --test scripts/config-wiring.test.mjs && node scripts/check-config-wiring.mjs --final
+python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml')); assert 'config-wiring' in d['jobs']; assert 'config-wiring' in d['jobs']['ci-gate']['needs']" && grep -n "config-wiring" .github/workflows/ci.yml && node --test scripts/config-wiring.test.mjs && node --check scripts/config-wiring.test.mjs && node scripts/check-config-wiring.mjs --final
 ```
 
 ---
