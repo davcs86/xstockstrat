@@ -48,7 +48,8 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
   interceptor is gone.
 - **Unreadable formula.** An indicators `NOT_FOUND` for a strategy's formula is recorded in the
   evaluator's `unreadable_formulas`; a backtest raises `FormulaExecutionError` (`FORMULA_ERROR`,
-  excluded from evidence), the other surfaces skip the component with a warning.
+  excluded from evidence) on `NOT_FOUND` **or** `PERMISSION_DENIED`, with the run warning
+  `backtest symbol <SYM> not evaluated: <CODE>`; the other surfaces skip the component with a warning.
 - **Blend-id guard.** `_require_admin_for_blend_id` refuses a non-admin REGISTER or
   `InstantiateTemplate` of the configured blend id (`FAILED_PRECONDITION`, checked on the final id);
   `blend_strategy_id(cfg)` is the sole reader of `analysis.engine.fundamentals_blend_strategy_id`.
@@ -106,7 +107,9 @@ well-evidenced grade. The prior per-run headline upsert was removed.
 
 Every completed run (OK **and** INSUFFICIENT_DATA) is also appended to `analysis.backtest_runs`
 (migration `006`, `BacktestRunsRepository`) — a lightweight, durable **run history** of summary metrics
-plus the score the run earned (INSUFFICIENT runs record history with a 0 score / empty rating). The
+plus the score the run earned (INSUFFICIENT runs record history with a null score / empty rating). An
+all-failed run (every symbol `EVALUATION_FAILED` or `FORMULA_ERROR`) is INSUFFICIENT_DATA, and its
+per-symbol rows are in-memory only (on `latest_backtest`, not in history). The
 `ListBacktests(strategy_id, limit)` RPC reads the latest rows back (newest first; `limit` 0 → server
 default of 20) as typed `BacktestRunSummary`s, so past run results survive a restart and are visible in
 the UI's "Past Runs" table. Full trades/diagnostics are **not** copied into history — those remain on the
@@ -440,8 +443,9 @@ Each surface acts on the result:
 - **Backtest refusal.** An UNAVAILABLE symbol is not evaluated. Its diagnostic carries
   `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` plus a `fundamentals_gap` label from marketdata's
   cache-only `GetEtfFlags` (any error leaves `UNSPECIFIED`). It gets no evidence cell, and a WARN log
-  names the symbol and strategy. A refused symbol makes the run INSUFFICIENT_DATA. An UNKNOWN symbol
-  is not refused: it gets no cell and the warning `fundamentals fetch failed for <SYM> — rerun`.
+  names the symbol and strategy. A refused symbol makes the run INSUFFICIENT_DATA when no symbol
+  traded. An UNKNOWN symbol is not refused: it gets no cell and the warning
+  `fundamentals fetch failed for <SYM> — rerun`.
 - **Live deny-entry.** An UNAVAILABLE `(strategy, symbol)` has its entry denied, while exits and
   state replay are untouched. On entering the state the loop emits one WARN log naming
   `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` and one WARNING `EmitAlert` (category `strategy`). The
