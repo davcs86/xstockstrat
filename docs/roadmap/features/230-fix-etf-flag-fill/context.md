@@ -942,3 +942,21 @@ Feature: xstockstrat-marketdata - ETF-flag background fill labels ETFs and expla
 ### Coverage check
 - Source scenarios: 6 (@AC-2 through @AC-7; 3 plain Scenarios and 3 Scenario Outlines, with 14 example rows in total). Planned: 6 NEW, 0 DUP, 0 OVERLAP-skipped. Every @AC-* is accounted for; the only ID not promoted is the retired @AC-1, which is absent from the source file.
 ```
+
+## Session 2026-11-02 — ALL-DONE PATH (C-16 promotion + integration PR)
+
+- **Landing (operator 2026-11-02, "Proceed and pre-approve"):** the merge-order dependency
+  `255-fix-marketdata-fundamentals-cache` merged into `main-dev` as `5bf18403` (PR #1394); verified with
+  `git merge-base --is-ancestor 5bf18403 origin/main-dev`. The `merge-order.md` row (Resolved `No`) is a
+  `main-dev` docs-PR edit, not changed on this branch.
+- **C-16 promotion:** applied the `sdd-batch-promotion-plan` block above verbatim. Pre-write check: the planner read the
+  working-tree copy; `git show origin/feature/fix-etf-flag-fill:.../acceptance.feature` is byte-identical, and the
+  planned scenarios equal the source once `@feature-230` is stripped. Created
+  `services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature` (`@AC-2`–`@AC-7`, 6 NEW, 0 DUP).
+- **Status:** `in-progress` → `code-completed`.
+- **Teardown (root CLAUDE.md) for Step 6's `services/xstockstrat-marketdata/CLAUDE.md` edit:** context-forge plugin
+  unavailable in the execute sessions; the manual reconciliation (paragraph re-read against `etf_flags.go`: reasons,
+  record names, rate-limit slots, `trace_id` condition) is logged in the Step 6 entry and carried in the PR body.
+- **Post-deploy follow-up:** re-run feature 215 Step 26(a) on staging — SCHD should reach `FUNDAMENTALS_GAP_ETF`
+  after a first miss.
+- **Deviations:** none. Severity SEV-3 (unchanged).
