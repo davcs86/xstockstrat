@@ -946,7 +946,7 @@ the next `/sdd-batch` run can pick it up.
 
 ### Open Threads (sdd-review impl-spec)
 
-- [ ] Step 11: the WARN class label for unstaged enrichment errors (`fmp_client.go:226` build request, and a non-ctx
+- [x] Step 11: the WARN class label for unstaged enrichment errors (`fmp_client.go:226` build request, and a non-ctx
   limiter error at `:229`, e.g. "would exceed context deadline") is not one of the design's six classes
   (cap/ctx/http_<code>/transport/read/decode). They still expire (rule 5). The executor must ask the operator
   for the label (for example `other`) and must not choose one silently (C-11).
@@ -964,3 +964,478 @@ the next `/sdd-batch` run can pick it up.
 
 - **Decided:** enrichment errors with no stage (the `build request` error at `fmp_client.go:226` and a non-ctx limiter
   error at `:229`) get the WARN class label `other`. They still expire the row under rule 5. Step 11 uses `other`.
+
+## Session 2026-11-01 — sdd-execute re-spec (sdd-batch-execute)
+
+- Branch setup (§5.3): merged `origin/main-dev` into the branch (`a4e75e48`, normal merge, no conflicts);
+  `scripts/ledger-guard.py --fix` reported clean, so no repair was needed.
+- Re-spec of steps 0–17 (`implementation-spec.md`). Upstream main-dev changed 23 marketdata files since `111b4e25`. The
+  content still matches, and the line anchors were re-pointed. Material changes:
+  - Step 11: feature 254's merged secret-exposure fix rewrote `getJSON`. The transport error now wraps only the
+    `*url.Error` inner cause (`fmp_client.go:250`) and has a second un-wrapped return (`:252`). `stageError{"transport"}`
+    must wrap both. Build-request is now two returns (`:228`/`:230`). The recorded `other` class label (2026-10-22
+    decision) is folded into the step.
+  - Step 13: the service write blocks already use `slog.WarnContext(ctx, ...)` (`:1743`/`:1798`), so the instruction
+    reduces to swapping `ctx` for `wctx`. The verification now expects 5 `context.WithoutCancel(ctx)` hits in total
+    (3 pre-existing). `edgarFinish` upserts only when `live != nil`.
+  - Step 1: config-governance shared-budget prose is now at `:214-216` and the key row is at `:802`.
+  - Step 5: `cmd/server/main.go` anchors moved +8 lines (seed block `:137-141`).
+- The 215/254 overlap threads are now moot for anchors, because both are on main-dev and in the merged tree. The
+  merge-order rows are still pending an operator yes.
+
+## Session 2026-11-01 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute fix-marketdata-fundamentals-cache sequential`, run by `/sdd-batch-execute` in an isolated
+  worktree. This is the single writer for the feature branch (P-01).
+- Up-front confirmation: the operator approved the up-front plan (sequential mode entry, one commit per step on
+  `feature/fix-marketdata-fundamentals-cache`, no per-step PRs, the checkpoints halt at operator gates).
+- Status: `implementation-ready` → `in-progress`. Steps 1–17 are all `pending`; the re-spec above is the baseline.
+- Tooling: the operator approved CI-equivalent fallbacks (golangci-lint v2.14.0 at `/usr/local/bin`, Docker codegen,
+  `go vet -tags dbtest` for real-Postgres steps). Each one used is logged in the spec's Deviation Log. None was used
+  this session. The host has Node v22 (root `CLAUDE.md` pins 24); this is noted, not a blocker.
+
+### Step 1 — docs: D-50 — cap `<= 0` is a zero budget (comments and docs only) [done]
+- Comments and docs now say that cap `<= 0` is a zero budget. The four sites are `fmp_client.go:97`, the
+  `atQuotaAlertThreshold` comment at `marketdata_service.go:1993` (helper unchanged, still 1 definition), marketdata
+  `CLAUDE.md:82` (boot-seed wording changed to `source='fmp'`, as Instruction 3 says), and `config-governance.md`
+  (`:215-217` prose, `:803` key row). TDD: N/A (docs). Verification: only `:36` still matches "uncapped",
+  `zero budget` is found at all four sites, the helper count is 1, `GOWORK=off go build ./...` passes, and
+  golangci-lint reports 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/fmp/fmp_client.go`,
+  `services/xstockstrat-marketdata/internal/service/marketdata_service.go`, `services/xstockstrat-marketdata/CLAUDE.md`,
+  `docs/patterns/config-governance.md`
+- Deviations: the context-forge refresh was done by hand because the plugin is unavailable. The golangci-lint run is a
+  CI-equivalent fallback. Both are in the Deviation Log.
+- Open: the marketdata `CLAUDE.md` boot-seed clause describes the code after Step 5 (`source='fmp'` count). Until
+  Step 5 lands, the doc is ahead of the code.
+
+### Step 2 — test: cap-0 zero-budget behavioural pins (AC-1, AC-9) [done]
+- Added `TestGetFundamentals_CapZeroIsZeroBudget_AC1` and `TestGetFundamentalsMulti_CapZeroIsZeroBudget_AC9` after
+  the `AtCapNoCacheResourceExhausted` analogue. Both wire `fmpBudget = fakeBudget{0,0}` with cap 0 in config. AC-1:
+  uncached single read → `ResourceExhausted`, 0 vendor calls, 0 WARNs. AC-9: a 48h-old AAPL row is served `Stale`,
+  uncached MSFT is dropped, 0 vendor calls, 0 WARNs.
+- TDD: N/A (regression pin of unchanged behaviour, per spec). Green on the first run. A throwaway mutation
+  (`count >= cap` → `count > cap` at both sites, reverted, not committed) made both tests fail, so the pins bite.
+- Verification: the targeted run passes; full `go test ./... -race` passes with total coverage 71.5% (≥ 40%);
+  golangci-lint reports 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+
+### Step 3 — service: S — introduce `fmp.SourceName`/`finnhub.SourceName` and alias `classification.SourceFMP` [done]
+- Added `fmp.SourceName = "fmp"` and `finnhub.SourceName = "finnhub"`; both clients now write `Source: SourceName`.
+  `classification.SourceFMP = fmp.SourceName` (new import `internal/fmp`; no cycle — `go build ./...` clean). Added
+  the 2-line AsOf constraint comment in `fmpQuote.toFundamentals`. C-18 waivers left as-is.
+- TDD red: uncommitted probe tests failed to compile (`undefined: SourceName` in fmp/finnhub,
+  `undefined: fmp.SourceName` in classification) → green: the same probes passed after the change, then were deleted
+  (Step 4 owns the committed tests).
+- Verification: `go build ./...`, `go vet` of fmp/finnhub/classification, the no-literal grep, full `go test ./...`
+  all pass; golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/fmp/fmp_client.go`, `internal/finnhub/finnhub_client.go`, `internal/classification/sector.go`
+
+### Step 4 — test: source-id constants and AsOf-is-fetch-instant [done]
+- Added `TestToFundamentals_SourceAndAsOfIsFetchInstant` (fmp: `f.Source == SourceName`, AsOf age in `[0, 5s)`),
+  `TestSourceFMPAliasesFMPSourceName` (classification: `SourceFMP == fmp.SourceName`), and switched the finnhub
+  `MapsField` source assertion to `SourceName`.
+- TDD red: with Step 3's three production files temporarily restored from the Step 2 commit, the three packages failed
+  to build (`undefined: SourceName`, `undefined: fmp.SourceName`) → green: all three packages pass on `HEAD`.
+- Verification: targeted `go test` passes; full `go test ./... -race` passes, total coverage 71.5% (≥ 40%);
+  golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/fmp/fmp_client_test.go`, `internal/finnhub/finnhub_client_test.go`,
+  `internal/classification/sector_test.go`
+
+### Step 5 — service: D-51 — source-filtered quota counts, the parenthesised seed predicate and the `seedFMPBudget` seam [done]
+- `CountFundamentalsFetchedToday(ctx, src)` and `CountFundamentalsFetchedSince(ctx, src, since)` filter `source = $1`
+  and run on `r.db` (pgxmock-substitutable). Today uses the parenthesised
+  `(fetched_at >= <UTC day> OR as_of >= <UTC day>)` form (design 5.8); Since has no as_of arm. The interface and
+  `fundamentalsQuota` pass `finnhub.SourceName` / `fmp.SourceName` (new `internal/finnhub` import). `main.go`'s inline
+  seed is now `seedFMPBudget(ctx, repo, fmpClient)`, always counting `fmp.SourceName`; its WARN became
+  `slog.WarnContext(ctx, ...)` (sloglint), same message.
+- TDD red: uncommitted probes failed to compile (`too many arguments in call to repo.CountFundamentalsFetchedToday` /
+  `...Since`, `undefined: seedFMPBudget`) → green: the same probes passed (pgxmock regexes
+  `source = \$1 AND \(fetched_at >= .+ OR as_of >= .+\)` with `WithArgs("fmp")` and `source = \$1 AND fetched_at >= \$2`
+  with `WithArgs("finnhub", any)`; a seed fake `{"edgar":30,"fmp":5}` seeded 5 and saw src `fmp`), then were deleted
+  (Step 6 owns the committed tests).
+- Verification: `go build ./...` passes; `go vet` of `repository`/`cmd/server` passes; `go vet ./internal/service/`
+  fails only on the test fake, as Step Dependencies anticipates (Step 6 fixes it); the grep shows every call passes a
+  source; golangci-lint 0 issues on `repository`/`cmd` (CI-equivalent fallback, in the Deviation Log).
+- The marketdata `CLAUDE.md` `daily_request_cap` boot-seed clause, written ahead of the code in Step 1, now matches.
+- Husky: neither this worktree nor the main worktree has `node_modules`, and `core.hooksPath` points at the main
+  worktree's missing `.husky/_`, so the hook cannot fire on commit. `pnpm install --frozen-lockfile --ignore-scripts`
+  ran in the worktree (no git-config change) and `.husky/pre-commit` was run by hand on the staged set.
+- Open: `internal/service` tests do not compile until Step 6 lands; run Step 6 next.
+- Files modified: `cmd/server/main.go`, `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`
+
+### Step 6 — test: source-filtered counts and the boot seed (AC-2, AC-3) [done]
+- `fakeFundRepo` now keys counts by source (`todayBySource`/`sinceBySource`, recording `countSources`); the 17
+  `todayCount`/`sinceCount` references were migrated (FMP tests → `todayBySource["fmp"]`, Finnhub →
+  `sinceBySource["finnhub"]`) with no assertion change. Added `TestGetFundamentals_Finnhub_EdgarRowsDoNotConsumeQuota_AC2`,
+  `TestGetFundamentals_FMPRepoFallback_CountsOnlyFMPRows`, the pgxmock SQL pins
+  `TestCountFundamentalsFetchedToday_SourceAndAsOfPredicate` / `TestCountFundamentalsFetchedSince_SourcePredicate`, and
+  `TestSeedFMPBudget_CountsOnlyFMPRows_AC3` plus `TestSeedFMPBudget_CountErrorStartsFromZero` (local fake counter and
+  recording RoundTripper, cap 7, `{"edgar":30,"fmp":5}`).
+- TDD: AC-2/AC-3 red: with Step 5's production files restored from the Step 4 commit, all three packages failed to build
+  (`*fakeFundRepo does not implement fundamentalsRepo`, `too many arguments` on the repo counts,
+  `undefined: seedFMPBudget`) → green: all new tests pass on `HEAD`. A throwaway mutation (count calls pass `"edgar"`)
+  failed AC-2 (`finnhub request cap 20 reached`), the fallback (`fmp request cap 250 reached`) and AC-3
+  (`seeded used = 30, want 5`); reverted.
+- Verification: full `go test ./... -race` passes, total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent
+  fallback, in the Deviation Log); no `todayCount`/`sinceCount` left. The Step 5 red window for `internal/service`
+  tests is closed.
+- Husky: `pnpm install --frozen-lockfile --ignore-scripts` ran in this worktree (no lockfile change);
+  `core.hooksPath` points at the main worktree's missing `.husky/_`, so `.husky/pre-commit` was run by hand on the
+  staged set.
+- Files modified: `internal/service/marketdata_service_test.go`, `internal/repository/marketdata_repo_test.go`,
+  `cmd/server/main_test.go`
+
+### Step 7 — service: D-52 — vendor-axis fresh check [done]
+- Both vendor-path fresh checks now also require `cacheAxis(<row>.Source) == snapshotSourceVendor`: the multi path
+  (`marketdata_service.go:1713`, row `f`, with a 1-line constraint comment) and `resolveFundamentals` (`:1771`, row
+  `cached`). The stale serves (quota exhausted, `ErrFMPDailyCapExceeded`) are unchanged, so an edgar row can still be
+  served `stale=true` at cap (@feature-215 @AC-7). The spec's line anchors had drifted ~+1; edits were placed by content.
+- TDD: AC-4 red (service half): an uncommitted probe failed — a fresh `edgar` row (single) and `edgar+fmp` row (multi)
+  under the Finnhub vendor path were served fresh with `calls=0` → green: after the change both re-fetch (`calls=1`,
+  price 200) and the at-cap probe serves the edgar row `Stale` with `calls=0`. Probe deleted; Step 8 owns the tests.
+- Verification: the grep has 2 hits; `go build ./...` passes; full `go test ./... -race` passes (incl.
+  `CacheHitNoFMP`, feature-211 edgar tests); golangci-lint 0 issues on `internal/service` (CI-equivalent fallback, in
+  the Deviation Log).
+- Husky: the main worktree has no `node_modules` (a symlink would dangle) and `core.hooksPath` points at its missing
+  `.husky/_`; `pnpm install --frozen-lockfile --ignore-scripts` ran in this worktree and `.husky/pre-commit` was run
+  by hand on the staged set.
+- Files modified: `internal/service/marketdata_service.go`
+
+### Step 8 — test: the vendor path refuses an edgar cache row (AC-4) [done]
+- Added `TestGetFundamentals_VendorPathRefusesEdgarRow_AC4` (fresh `edgar` row, 1 min old → 1 Finnhub call, price 200,
+  `Source=finnhub`, not stale), `TestGetFundamentalsMulti_VendorPathRefusesEdgarRow` (subtests `edgar` and
+  `edgar+fmp`, same assertions on the multi path) and `TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale`
+  (`sinceBySource["finnhub"]=20` → the edgar row is served `Stale` with `Source=edgar`, no error, 0 calls). A small
+  `vendorAxisCfg()` helper pins `snapshot_source: "vendor"` on `enabledCfg("finnhub")`.
+- TDD: RED with `marketdata_service.go` temporarily restored from the Step 6 commit: all four cases failed (single and
+  both multi subtests `got 0` calls; at-cap served the edgar row fresh, not stale) → GREEN on `HEAD` after restoring.
+- Verification: targeted run passes (incl. `CacheHitNoFMP` and every `feature211` test); full `go test ./... -race`
+  passes, total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/service/marketdata_service_test.go`
+
+### Step 9 — service: D-53a — one shared `decodeExtraMetrics` helper [done]
+- Added unexported `decodeExtraMetrics(ctx, symbol, raw)` in `marketdata_repo.go`: empty `raw` → empty map; a decode
+  error → `slog.WarnContext(ctx, "fundamentals extra_metrics decode failed", "symbol", …, "error", err)` and an
+  empty map. The three silent `_ = json.Unmarshal(extraJSON, &extra)` blocks (`GetFundamentals`,
+  `QueryHistoricalFundamentals`, `LatestHistoricalFundamental`) now call it with the scanned `sym`. `GetFundamentals`
+  reads through `r.db.QueryRow` (same pool in production: `NewMarketDataRepo` sets `db: pool`) so Step 10 can pgxmock
+  it. `log/slog` imported.
+- TDD: RED: an uncommitted probe test failed to compile (`undefined: decodeExtraMetrics`) → GREEN: the probe passed
+  (pgxmock `GetFundamentals` over `{"total_debt":"n/a"}` → found, empty map, WARN with `symbol=AAPL` and `error=`).
+  Probe deleted; Step 10 owns the tests.
+- Verification: no `_ = json.Unmarshal(extraJSON` hits; `decodeExtraMetrics(` count 4; `go build ./...` passes; full
+  `go test ./... -race` passes; `go vet -tags dbtest ./internal/repository/` passes; golangci-lint 0 issues
+  (CI-equivalent fallback, in the Deviation Log).
+- Husky: the main worktree has no `node_modules`, so `pnpm install --frozen-lockfile --ignore-scripts` ran in this
+  worktree and `.husky/pre-commit` was run by hand on the staged set (`core.hooksPath` points at a missing dir).
+- Files modified: `internal/repository/marketdata_repo.go`
+
+### Step 10 — test: an undecodable extra column is logged (AC-6) [done]
+- Added `TestGetFundamentals_UndecodableExtraIsLogged_AC6` (pgxmock `GetFundamentals` over a row whose
+  `extra_metrics` is `{"total_debt":"n/a"}`: found, empty `ExtraMetrics`, WARN with `symbol=AAPL` and `error=`) and
+  `TestDecodeExtraMetrics` (valid / empty / type-mismatch table) in `internal/repository/marketdata_repo_test.go`, with a
+  file-local `captureSlog(t)` (stdlib `slog.NewTextHandler`, restored in `t.Cleanup`, no `t.Parallel()`).
+- TDD: AC-6 red: with Step 9's `slog.WarnContext` temporarily stubbed out (uncommitted mutation, restored),
+  "log output missing \"fundamentals extra_metrics decode failed\"" and `type mismatch` "logged=false, want true"
+  failed → green: both tests pass on the committed Step 9 code.
+- Verification: the targeted `-run 'UndecodableExtra|DecodeExtraMetrics'` passes; full `go test ./... -race` passes,
+  total coverage 71.5% (≥ 40%); golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- Files modified: `internal/repository/marketdata_repo_test.go`
+
+### Step 11 — service: D-53b (client) — classify enrichment failures, set `EnrichmentFailed` and emit one aggregated WARN [done]
+- `source.Fundamentals` gained a transient `EnrichmentFailed bool`. In `fmp_client.go`, `getJSON` now returns
+  `&statusError{path, code}` for a non-200 response (same text) and wraps the transport (both returns), read and
+  decode errors in `stageError{stage, err}` (text unchanged, `Unwrap` keeps the ctx chain).
+  `enrichmentExpires` (nil → false, cap, ctx, then `case 402, 403, 404` → false, else true) and `enrichmentClass`
+  (`cap`/`ctx`/`http_<code>`/stage/`other`) classify by `errors.Is`/`errors.As` only. The enrichment loop records
+  `SYM:ratios|profile:<class>`, sets the flag only for expiring errors, and emits one
+  `slog.WarnContext(ctx, "fmp enrichment failed", "failures", …, "count", …)` with no error text. `log/slog` imported.
+  `reserve()`/`refund()` and the empty-array success path are unchanged.
+- TDD: AC-5/AC-10 (client half) red: an uncommitted probe failed to compile (`f.EnrichmentFailed undefined`,
+  `undefined: statusError`) → green: the probe passed (profile 503 → flag + `AAPL:profile:http_503`; 404 → no flag +
+  `http_404`; `[{` → flag + `decode`; `[]` → no flag, no WARN; cap=2 → flag, 0 profile calls, `AAPL:profile:cap`;
+  no `SECRET-KEY`/`apikey` in the log; `statusError` text pinned). Probe deleted; Step 12 owns the tests.
+- Verification: build and vet pass; the first grep has no hits; `case 402, 403, 404` has 1 hit; the `err.Error()` grep
+  hits only `stageError.Error()`, which the spec requires (not the WARN); full `go test ./... -race` passes;
+  golangci-lint 0 issues (CI-equivalent fallback, in the Deviation Log).
+- The Step 11 open thread (class label for unstaged errors) is closed: `other`, per the 2026-10-22 operator decision.
+- Husky: `node_modules` symlinked from the main worktree for the pre-commit hook.
+- Files modified: `internal/source/source.go`, `internal/fmp/fmp_client.go`
+- Deviations: line anchors drifted (+3 to +4); vet scope widened to `./internal/...` (see Deviation Log)
+
+### Step 12 — test: FMP enrichment classification, flag and WARN (AC-5, AC-10, client half) [done]
+- `fmp_gateway_test.go`: `TestEnrichment_ProfileCapExceeded_FlagsAndWarns_AC5`. A cap of 2 is spent by quote and
+  ratios, so profile is refused: the row is flagged, `Beta` is nil, there are 0 profile HTTP calls, and one WARN carries
+  `AAPL:profile:cap`.
+- `fmp_client_test.go`:
+  - `TestEnrichment_Profile503_FlagsTransient_AC10`: flag set, `Beta` nil, ratios applied, `AAPL:profile:http_503`.
+  - `TestEnrichment_Deterministic4xxNotFlagged`: profile 404, ratios 402 and profile 403 (the 403 case is commented as
+    the operator-sanctioned Open Risk). No flag, the metric is nil, and the pair is in the WARN.
+  - `TestEnrichment_FailureClassesFlagRow`: `http_500/400/401/429`, `transport`, `read` (failing body), `decode`
+    (`[{`) and `ctx` (cancelled inside the profile RoundTrip). Each sets the flag and puts one class label in the WARN.
+  - `TestEnrichmentClassifier_StagesAndOther`: both transport forms, a deadline wrapped in transport → `ctx`, unstaged
+    → `other`, plus cap and 404.
+  - `TestEnrichment_WarnDoesNotLeakAPIKey`: the transport error text holds the full URL, and the WARN still has no
+    `SECRET-KEY`/`apikey`.
+  - `TestEnrichment_EmptyProfileIsNotAFailure` and `TestStatusError_TextIsPathAndCode`.
+  - The helpers `captureSlog`, `enrichBodies`, `profileRT` and `failingBody` are file-local, with inline bodies (C-13).
+- TDD: AC-5/AC-10 red came from an uncommitted mutation of Step 11's loop (flag cleared, WARN suppressed). AC-5, AC-10,
+  the 4xx table, all 8 class subtests and the key-leak test failed (e.g. "EnrichmentFailed = false, want true on a
+  profile 503"). Green: all of them pass on the restored committed Step 11 code.
+- Verification: full `go test ./... -race` passes, total coverage 72.6% (≥ 40%); golangci-lint 0 issues (CI-equivalent
+  fallback, in the Deviation Log).
+- Files modified: `internal/fmp/fmp_client_test.go`, `internal/fmp/fmp_gateway_test.go`
+- Deviations: the un-wrapped transport return is unreachable through `http.Client`, so it is pinned at the classifier;
+  `cap` is tested only in AC-5 (see Deviation Log)
+
+### Step 13 — service: D-53b (store) — expire on write, same-source merge and the trace-carrying write ctx [done]
+- `UpsertFundamentals`:
+  - The VALUES `fetched_at` is now `CASE WHEN $17::boolean THEN 'epoch'::timestamptz ELSE now() END`.
+  - The conflict branch sets `fetched_at=EXCLUDED.fetched_at`.
+  - `pb_ratio`, `dividend_yield`, `beta`, `roe` and `debt_to_equity` COALESCE with the existing row only on a flagged
+    same-source overwrite. Every other column, `as_of` and `source` included, is still overwritten.
+  - `f.EnrichmentFailed` binds as `$17`, and the doc comment was rewritten.
+- `marketdata_service.go`: each write block (multi and single) creates one `wctx := context.WithoutCancel(ctx)` for the
+  upsert, the WARN, `seedFromProfile`, `maybeAlertQuota` and `quotaCountAfterFetch`. The read paths are unchanged, and
+  `classification_service.go` was not touched (C-18).
+- TDD, with uncommitted probes that were deleted afterwards (Step 14 owns the committed tests):
+  - RED: a pgxmock regex probe failed with `could not match actual sql`, and a cancel probe failed with
+    `upsert ctx was cancelled (context canceled)`.
+  - GREEN: both probes passed.
+- Verification: the 4 greps match and the build passes. `go vet -tags dbtest ./internal/repository/` passes, and
+  golangci-lint reports 0 issues (CI-equivalent fallback).
+- Open thread, closed by Step 14: `TestUpsertFundamentals_CastsExtraMetricsToJSONB` fails
+  (`expected 16, but got 17 arguments`) until Step 14 Instruction 8 widens its arg list to 17.
+- Files modified: `internal/repository/marketdata_repo.go`, `internal/service/marketdata_service.go`
+- Deviations: the service anchors drifted, and the repository test is red until Step 14 (see Deviation Log)
+
+### Step 14 — test: expired storage, re-fetch, stale at the cap, 4xx kept fresh, cancel survival and SQL pins (AC-5, AC-10, store half) [done]
+- `fakeFundRepo.UpsertFundamentals` now models the Step 13 SQL. It returns `ctx.Err()` on a done ctx, stores a copy,
+  stamps a flagged row at the epoch, and COALESCEs the five enrichment columns from a same-source prior row.
+- Service tests: `TestGetFundamentals_EnrichmentFailedStoredExpired_AC5`,
+  `TestGetFundamentals_TransientEnrichment503StoredExpired` (a real `fmp.Client` against an `httptest` profile 503),
+  `TestGetFundamentals_TransientOverEdgarRow_AC10` (fresh, then stale at the cap with no call, then re-fetched after the
+  reset), `TestGetFundamentals_FlaggedSameSourceKeepsEnrichment`, `TestGetFundamentals_Deterministic4xxRowKeptFresh`
+  and `TestGetFundamentals_UpsertSurvivesRequestCancel` (single and multi).
+- Repo tests: `TestUpsertFundamentals_CastsExtraMetricsToJSONB` widened to 17 args, which closes Step 13's open thread.
+  New: `TestUpsertFundamentals_ExpireAndSameSourceMerge` and the env-gated `TestUpsertFundamentals_LiveDB_EpochAndSeed`.
+- TDD: RED came from restoring Step 13's production files from the Step 12 commit. The output was
+  `expected 17, but got 16 arguments`, `could not match actual sql`, and `upserts = 0, want 1` (single and multi).
+  GREEN came after restoring `HEAD`.
+- Verification: `go test ./... -race` passes with coverage 72.6% (`COVERPKGS` expanded inline). The LiveDB run gave
+  `--- SKIP` (`DATABASE_URL not set`). golangci-lint v2.14.0 reported 0 issues (CI-equivalent fallback).
+- Live-DB record for the PR body: no real Postgres was available in this environment (`DATABASE_URL` unset, and no
+  DB is started per the HARD CONSTRAINT), so the test result is SKIP.
+- Open thread: [ ] the Step 14 live-DB test (`$17::boolean` wire bind under `QueryExecModeExec`, epoch read-back,
+  source-filtered seed count) is unproven in CI. Run it against a migrated staging DB before launch.
+- Files modified: `internal/service/marketdata_service_test.go`, `internal/repository/marketdata_repo_test.go`,
+  `internal/repository/fundamentals_livedb_test.go` (new)
+- Deviations: RED came from reverting Step 13, the seed counts are asserted as a delta, and the live DB was not
+  available (see Deviation Log)
+
+### Step 15 — service: D-19 — stream manager ctx, URL seam, healthy-session reset, cancellable backoff and give-up close [done]
+- `streamManager` gains `ctx`/`stop` (minted in `streamMgr()`, background loop with no originating request) and
+  `streamURL`. `baseCtx()` returns Background for a nil ctx, so the `TestDispatchBarCarries1MinEnum` literal still works.
+- `connectAndRead` returns `(healthy, err)`. It dials `streamURL` when that is set, derives its ctx from `baseCtx()`,
+  and sets `healthy` on a decoded `T == "subscription"` frame (the subscribe ack).
+- `run()` resets `attempts = 0` after a healthy session, so the budget counts consecutive failures only. The backoff is
+  a `select` on `baseCtx().Done()` / `time.After`, with no `time.Sleep`. The give-up keeps the ERROR log with `max`,
+  names `marketdata.stream.max_reconnects`, and calls `closeAllLocked()` under `m.mu` before `running=false`.
+- `add()`'s goroutine now deletes and closes under `m.mu`, and only if the id is still in `subs`, so a sub that
+  `closeAllLocked` already closed is never closed twice. The shared close is `closeSubLocked`.
+- `TIMEFRAME_1MIN` in `dispatch` is untouched.
+- TDD (uncommitted probe, deleted; Step 16 owns the committed AC-7/AC-8 tests):
+  - AC-7 red: `connections = 3, want >= 5 (budget must reset after a healthy session)` → green: passed.
+  - AC-8 red: `subscriber channel not closed after give-up` → green: passed, with no double-close panic after the
+    subscriber ctx was cancelled.
+  - The cancellable-backoff probe (600 s delay, manager ctx cancelled) passed green. It needs the new fields, so it
+    has no pre-change red.
+  - All probes passed `-race -count=3`.
+- Verification: no `time.Sleep` hits; `closeAllLocked`, `streamURL` and `attempts = 0` are present; `go build ./...` and
+  `go vet ./internal/alpaca/` pass; `go test ./... -race` passes; golangci-lint v2.14.0 reported 0 issues
+  (CI-equivalent fallback).
+- Files modified: `internal/alpaca/stream.go`
+- Deviations: the RED probe used a transport rewrite, and the extra `closeSubLocked` helper (see Deviation Log)
+
+### Step 16 — test: Alpaca reconnect budget reset and give-up close (AC-7, AC-8) [done]
+- `stream_test.go` gains an `httptest` + `websocket.Accept` server (`newStreamTestServer`). The manager is built with
+  `MaxReconnects 3`, `ReconnectDelayMs 1`, a `ws://` `streamURL` and a manager ctx that is cancelled in `t.Cleanup`.
+- New tests:
+  - `TestStreamManager_BudgetResetsAfterHealthySession_AC7`: four healthy (acked) drops are followed by a 5th
+    connection, and the subscriber stays open.
+  - `TestStreamManager_GiveUpClosesSubscribers_AC8`: `<-barCh` returns `ok == false`, and the ERROR log has
+    `giving up` and `max=3`. A later subscriber-ctx cancel does not panic.
+  - `TestStreamManager_BackoffCancellable`: cancelling during a 600 s backoff sets `running == false` with no reconnect.
+- `TestDispatchBarCarries1MinEnum` is unchanged.
+- TDD: RED came from temporarily reverting Step 15's reset, give-up close and cancellable backoff in `stream.go`.
+  - AC-7 red: `timed out waiting for a 5th connection` → green: passed.
+  - AC-8 red: `subscriber channel not closed after give-up` → green: passed.
+  - Backoff red: `timed out waiting for run to return…` → green: passed.
+  - GREEN held under `-race -count=3`.
+- Verification: `go test ./... -race` passes with coverage 81.9%. golangci-lint v2.14.0 reported 0 issues
+  (CI-equivalent fallback).
+- Files modified: `internal/alpaca/stream_test.go`
+- Deviations: RED came from a mutation, and there are three extra harness helpers (see Deviation Log)
+
+### Step 17 — test: consumer-surface read-only verification (C-14) [done]
+- `git diff --stat origin/main-dev -- packages/proto/ services/xstockstrat-agent/ services/xstockstrat-ui/` is empty.
+  This branch changes no proto, agent or UI file.
+- Agent `uv run pytest tests/test_fundamental_metrics_tool.py -q`: `2 passed`. The tools read `missing_metrics` as
+  authoritative (`tools.py:314-316`, `:340`) and pass it through (`:456`, `:487`), so a longer list is a valid shape.
+- The BFF grep for `missing_metrics|missingMetrics` in `traderBff.ts`/`insightsBff.ts` has no hits. The `stale|source`
+  hits are comments and the unrelated `sourceService` note field. `getFundamentals` (`traderBff.ts:88`,
+  `insightsBff.ts:110`) and `getFundamentalsMulti` (`insightsBff.ts:121`) are plain `forward(...)` pass-throughs.
+- The integration PR must note two things. Analysis fundsignal (feature 246) benefits from the honest
+  `missing_metrics`. FR-4(b) provenance: a merged stale row shows today's `as_of` with prior enrichment values.
+- TDD: N/A (no code change).
+- Files modified: none
+- Deviations: none (worktree `pnpm install` setup note in Deviation Log)
+
+
+## Session 2026-11-01 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-marketdata-fundamentals-cache (feature 255)
+
+### Verdicts
+All 10 scenarios are observable on marketdata: the FMP/Finnhub clients, the fundamentals cache, GetFundamentals/GetFundamentalsMulti, and the Alpaca stream manager. All 10 go to one new file, so no cross-cutting platform.feature entry is needed. The file does not exist, so it is a CREATE.
+
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature | CREATE | NEW | FMP cap 0 = zero budget, single-symbol path |
+| AC-9 | same | CREATE | NEW | cap 0 on the multi-symbol path |
+| AC-2 | same | CREATE | NEW | edgar rows do not consume the Finnhub quota |
+| AC-3 | same | CREATE | NEW | FMP boot budget seed counts only FMP rows |
+| AC-4 | same | CREATE | NEW | vendor path ignores edgar cache rows |
+| AC-5 | same | CREATE | NEW | failed FMP enrichment is not cached as complete |
+| AC-6 | same | CREATE | NEW | undecodable extra column is logged |
+| AC-7 | same | CREATE | NEW | Alpaca reconnect budget resets after a healthy session |
+| AC-8 | same | CREATE | NEW | subscribers are told when the stream gives up |
+| AC-10 | same | CREATE | NEW | transient enrichment failure over an edgar row is stored already expired |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature (CREATE) ---
+# Promoted from docs/roadmap/features/255-fix-marketdata-fundamentals-cache/acceptance.feature (C-16). Verbatim; do not edit.
+Feature: fix-marketdata-fundamentals-cache (bug fix)
+  Regression guard for docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md:
+  cap-0 comments contradicting the enforced zero budget (D-50), quota counts ignore source (D-51), vendor cache ignores source (D-52),
+  silent decode/enrichment drops (D-53), and a lifetime-cumulative Alpaca reconnect budget (D-19).
+
+  @AC-1 @FR-1 @regression @feature-255
+  Scenario: An FMP daily cap of 0 is a zero budget (FMP disabled)
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 0
+    And the fundamentals cache has no row for "AAPL"
+    When GetFundamentals is called for "AAPL"
+    Then the FMP client makes no HTTP call
+    And the response is ResourceExhausted for quota
+    And no quota WARNING alert is emitted
+
+  @AC-9 @FR-1 @regression @feature-255
+  Scenario: An FMP daily cap of 0 is a zero budget on the multi-symbol path
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 0
+    And the cache holds an "AAPL" row with source "fmp" older than "marketdata.fmp.cache_ttl_hours" and no row for "MSFT"
+    When GetFundamentalsMulti is called for "AAPL" and "MSFT"
+    Then the FMP client makes no HTTP call
+    And the response holds the cached "AAPL" row with stale=true and no entry for "MSFT"
+    And no quota WARNING alert is emitted
+
+  @AC-2 @FR-2 @regression @feature-255
+  Scenario: Edgar snapshot rows do not consume the Finnhub quota
+    Given "marketdata.fundamentals.provider" is "finnhub" with "marketdata.finnhub.symbols_per_minute" 20 and "marketdata.finnhub.rate_window_seconds" 60
+    And 20 fundamentals rows with source "edgar" were fetched in the last 60 seconds
+    And no row with source "finnhub" was fetched in the last 60 seconds
+    When GetFundamentals is called for uncached symbol "MSFT"
+    Then the Finnhub client fetches "MSFT"
+    And the response is fresh fundamentals for "MSFT", not ResourceExhausted
+    And no quota WARNING alert is emitted
+
+  @AC-3 @FR-2 @regression @feature-255
+  Scenario: The FMP boot budget seed counts only FMP rows
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.daily_request_cap" is 7
+    And 30 fundamentals rows fetched today with source "edgar" and 5 with source "fmp"
+    And marketdata has started
+    When GetFundamentals is called for uncached symbol "MSFT"
+    Then the FMP client fetches "MSFT"
+    And the response is fresh fundamentals for "MSFT", not ResourceExhausted
+
+  @AC-4 @FR-3 @regression @feature-255
+  Scenario: The vendor path does not serve an edgar cache row as vendor data
+    Given "marketdata.fundamentals.snapshot_source" is "vendor" and "marketdata.fundamentals.provider" is "finnhub"
+    And the cache holds an "AAPL" row with source "edgar" fetched 1 minute ago
+    When GetFundamentals is called for "AAPL"
+    Then the Finnhub client fetches "AAPL"
+    And the response carries the Finnhub values for "AAPL", not the edgar row's values
+
+  @AC-5 @FR-4 @regression @feature-255
+  Scenario: A failed FMP enrichment is not cached as a fresh complete row
+    Given "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.metrics" is "core,extended"
+    And the quote fetch for "AAPL" succeeds but the profile fetch returns ErrFMPDailyCapExceeded
+    When GetFundamentals is called for "AAPL"
+    Then a WARN is logged naming "AAPL" and the profile enrichment
+    And the response's missing_metrics lists "beta", the metric the profile call supplies
+    When the FMP daily quota resets and GetFundamentals is called for "AAPL" again, within "marketdata.fmp.cache_ttl_hours"
+    Then the FMP client makes the profile fetch for "AAPL"
+
+  @AC-6 @FR-4 @regression @feature-255
+  Scenario: An undecodable extra column is logged, not silently dropped
+    Given the cache holds an "AAPL" row whose extra column is the jsonb object {"total_debt":"n/a"}, which does not decode as name-to-number metrics
+    When GetFundamentals is called for "AAPL"
+    Then a WARN is logged naming "AAPL" and the extra decode error
+
+  @AC-7 @FR-5 @regression @feature-255
+  Scenario: The Alpaca reconnect budget resets after a healthy session
+    Given an Alpaca stream manager with MaxReconnects 3 and one active subscriber
+    When the stream connects successfully and then drops, four times in a row
+    Then the manager is still running and reconnects after the fourth drop
+
+  @AC-8 @FR-5 @regression @feature-255
+  Scenario: Subscribers learn when the Alpaca stream gives up
+    Given an Alpaca stream manager with MaxReconnects 3 and one active bar subscriber
+    When three consecutive connection attempts fail without a healthy session
+    Then the subscriber's receive on its bar channel reports the channel closed
+    And an ERROR is logged naming the exhausted reconnect budget
+
+  @AC-10 @FR-3 @FR-4 @regression @feature-255
+  Scenario: A transient FMP enrichment failure over an edgar cache row is stored already expired
+    Given "marketdata.fundamentals.snapshot_source" is "vendor", "marketdata.fundamentals.provider" is "fmp" and "marketdata.fmp.metrics" is "core,extended"
+    And the cache holds an "AAPL" row with source "edgar" fetched 1 minute ago
+    And the quote and ratios fetches for "AAPL" succeed but the profile fetch returns HTTP 503
+    When GetFundamentals is called for "AAPL"
+    Then the response carries the FMP values for "AAPL" with stale=false and missing_metrics containing "beta"
+    And the cached "AAPL" row has source "fmp" and is already past "marketdata.fmp.cache_ttl_hours"
+    When the FMP daily cap is reached and GetFundamentals is called for "AAPL" again
+    Then the FMP client makes no HTTP call
+    And the response is the cached "AAPL" row with source "fmp" and stale=true
+    When the FMP daily quota resets and GetFundamentals is called for "AAPL" again
+    Then the FMP client fetches "AAPL"
+
+### Notes / ambiguities / conflicts
+- Dedup: I grepped all 17 files in services/xstockstrat-marketdata/acceptance/ and docs/sdd/business-rules/platform.feature for cap-0, MaxReconnects, reconnect, symbols_per_minute, missing_metrics, extra column and @feature-255. There were no matches for these outcomes, so there are no DUP or OVERLAP verdicts.
+- Possible interaction, not a conflict: block-fundamentals-strategy-on-etf.feature:26 uses an 80%-of-daily_request_cap budget threshold. It does not assert zero-cap behaviour, so AC-1 and AC-9 do not contradict it. A human may want to confirm that.
+- AC-7 and AC-8 concern the Alpaca stream manager, not fundamentals. I kept them in the marketdata file because the Alpaca stream lives in marketdata and they trace to the same defect report. The tag order follows the source, with @feature-255 appended.
+- The `# Promoted from ...` header line is my wording. If the existing suites use a different provenance-comment format, the orchestrator should match it.
+- The 255 scenarios do not use any @FR tags that were missing from the source. I added only @feature-255 and changed no @AC or @FR numbers.
+- Scope: `feature.md` lists only xstockstrat-marketdata, agent and ui as reviewers. The agent and ui are read-only, so there are no other service suites.
+
+### Coverage check
+- Source scenarios: 10 (AC-1 to AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
+```
+
+## Session 2026-11-01 — sdd-execute ALL-DONE PATH (sdd-batch-execute)
+
+- Operator confirmed the C-16 promotion plan above (block `sdd-batch-promotion-plan`). Applied as planned: CREATE
+  `services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature`, holding AC-1..AC-10 verbatim with
+  `@feature-255` appended (10 NEW, 0 DUP/OVERLAP/CONFLICT). The provenance comment uses the 4-line header the existing
+  marketdata suites use, as the plan's notes asked, instead of the plan's draft one-liner.
+- status.md: `in-progress` → `code-completed`, with a feature.md history row.
+- **Merge-order override (operator, 2026-11-01, "Do not hold")**: `merge-order.md` still lists 255 as waiting on
+  `block-fundamentals-strategy-on-etf` (215), Resolved `No`. 215's code is already on main-dev (Steps 1–25 done; only
+  post-deploy Step 26 is pending), and this branch is current with main-dev (0 commits behind), so the rebase dependency
+  is satisfied. The integration PR was opened with the gate waived. 215's merge-order row was not edited. The override is
+  also recorded in the PR body.
+- Husky: the main worktree has no `node_modules` and `core.hooksPath` points at its missing `.husky/_`, so the hook
+  cannot fire on commit. `pnpm install --frozen-lockfile --ignore-scripts` ran in this worktree (no lockfile change), and
+  `.husky/pre-commit` was run by hand on each staged set.
+- Open thread carried into the PR test plan: the live-DB test (`internal/repository/fundamentals_livedb_test.go`, Step 14)
+  has only SKIPped locally, so CI's database run is its first real proof.

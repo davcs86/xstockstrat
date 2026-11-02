@@ -59,6 +59,10 @@ type streamSubscriber struct {
 // per account) and fans bars/quotes out to all subscribers. Lazy connect, reconnect with backoff.
 type streamManager struct {
 	cfg ClientConfig
+	// ctx/stop are manager-owned (no originating request); nil ctx reads as Background via baseCtx.
+	ctx       context.Context
+	stop      context.CancelFunc
+	streamURL string
 
 	mu      sync.Mutex
 	subs    map[int]*streamSubscriber
@@ -69,7 +73,8 @@ type streamManager struct {
 // streamMgr lazily builds the per-Client stream manager.
 func (c *Client) streamMgr() *streamManager {
 	c.streamOnce.Do(func() {
-		c.stream = &streamManager{cfg: c.cfg, subs: make(map[int]*streamSubscriber)}
+		ctx, stop := context.WithCancel(context.Background())
+		c.stream = &streamManager{cfg: c.cfg, ctx: ctx, stop: stop, subs: make(map[int]*streamSubscriber)}
 	})
 	return c.stream
 }
@@ -121,19 +126,43 @@ func (m *streamManager) add(ctx context.Context, sub *streamSubscriber) {
 	go func() {
 		<-ctx.Done()
 		m.mu.Lock()
-		delete(m.subs, id)
-		m.mu.Unlock()
-		if sub.barCh != nil {
-			close(sub.barCh)
-		}
-		if sub.quoteCh != nil {
-			close(sub.quoteCh)
+		defer m.mu.Unlock()
+		// closeAllLocked may already have removed and closed this sub; closing again would panic.
+		if _, ok := m.subs[id]; ok {
+			delete(m.subs, id)
+			closeSubLocked(sub)
 		}
 	}()
 }
 
+// baseCtx is the manager-owned context; a manager built without one (test literals) uses Background.
+func (m *streamManager) baseCtx() context.Context {
+	if m.ctx == nil {
+		return context.Background()
+	}
+	return m.ctx
+}
+
+// closeAllLocked removes and closes every subscriber. Caller must hold m.mu.
+func (m *streamManager) closeAllLocked() {
+	for id, sub := range m.subs {
+		delete(m.subs, id)
+		closeSubLocked(sub)
+	}
+}
+
+func closeSubLocked(sub *streamSubscriber) {
+	if sub.barCh != nil {
+		close(sub.barCh)
+	}
+	if sub.quoteCh != nil {
+		close(sub.quoteCh)
+	}
+}
+
 // run maintains the WebSocket connection: dial → auth → subscribe → read, reconnecting with
-// backoff until the max-reconnect budget is exhausted or all subscribers are gone.
+// backoff until the budget of consecutive failed sessions is exhausted, all subscribers are
+// gone, or the manager ctx is cancelled. On give-up every subscriber channel is closed.
 func (m *streamManager) run() {
 	delayMs := m.cfg.ReconnectDelayMs
 	if delayMs <= 0 {
@@ -152,7 +181,7 @@ func (m *streamManager) run() {
 			m.mu.Unlock()
 			return
 		}
-		err := m.connectAndRead()
+		healthy, err := m.connectAndRead()
 		if err == nil {
 			// Clean shutdown (no subscribers / context canceled).
 			m.mu.Lock()
@@ -160,46 +189,61 @@ func (m *streamManager) run() {
 			m.mu.Unlock()
 			return
 		}
+		if healthy {
+			attempts = 0
+		}
 		attempts++
 		slog.Warn("alpaca stream dropped", "attempt", attempts, "error", err)
 		if attempts >= maxReconnects {
-			slog.Error("alpaca stream giving up after max reconnects", "max", maxReconnects)
+			slog.Error("alpaca stream giving up after max reconnects: marketdata.stream.max_reconnects budget exhausted, closing subscribers", "max", maxReconnects)
 			m.mu.Lock()
+			m.closeAllLocked()
 			m.running = false
 			m.mu.Unlock()
 			return
 		}
-		time.Sleep(time.Duration(delayMs) * time.Millisecond)
+		select {
+		case <-m.baseCtx().Done():
+			m.mu.Lock()
+			m.running = false
+			m.mu.Unlock()
+			return
+		case <-time.After(time.Duration(delayMs) * time.Millisecond):
+		}
 	}
 }
 
 // connectAndRead dials, authenticates, subscribes to the union of all subscriber symbols,
-// and reads until error. Returns nil only on a clean stop (no subscribers).
-func (m *streamManager) connectAndRead() error {
+// and reads until error. Returns nil only on a clean stop (no subscribers). healthy reports
+// whether the session got Alpaca's subscription ack, which resets run's failure budget.
+func (m *streamManager) connectAndRead() (healthy bool, err error) {
 	feed := m.cfg.Feed
 	if feed == "" {
 		feed = "iex"
 	}
-	url := fmt.Sprintf("wss://stream.data.alpaca.markets/v2/%s", feed)
+	url := m.streamURL
+	if url == "" {
+		url = fmt.Sprintf("wss://stream.data.alpaca.markets/v2/%s", feed)
+	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.baseCtx())
 	defer cancel()
 
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
-		return fmt.Errorf("dial: %w", err)
+		return false, fmt.Errorf("dial: %w", err)
 	}
 	conn.SetReadLimit(streamReadLimit)
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
 	authMsg := map[string]string{"action": "auth", "key": m.cfg.APIKey, "secret": m.cfg.APISecret}
 	if err := writeJSON(ctx, conn, authMsg); err != nil {
-		return fmt.Errorf("auth write: %w", err)
+		return false, fmt.Errorf("auth write: %w", err)
 	}
 
 	barSyms, quoteSyms := m.unionSymbols()
 	if len(barSyms) == 0 && len(quoteSyms) == 0 {
-		return nil // nothing to do
+		return false, nil // nothing to do
 	}
 	subMsg := map[string]interface{}{"action": "subscribe"}
 	if len(barSyms) > 0 {
@@ -209,17 +253,17 @@ func (m *streamManager) connectAndRead() error {
 		subMsg["quotes"] = quoteSyms
 	}
 	if err := writeJSON(ctx, conn, subMsg); err != nil {
-		return fmt.Errorf("subscribe write: %w", err)
+		return false, fmt.Errorf("subscribe write: %w", err)
 	}
 	slog.Info("alpaca stream connected", "feed", feed, "bars", len(barSyms), "quotes", len(quoteSyms))
 
 	for {
 		if m.subscriberCount() == 0 {
-			return nil
+			return healthy, nil
 		}
 		_, data, err := conn.Read(ctx)
 		if err != nil {
-			return fmt.Errorf("read: %w", err)
+			return healthy, fmt.Errorf("read: %w", err)
 		}
 		var msgs []streamMessage
 		if err := json.Unmarshal(data, &msgs); err != nil {
@@ -227,6 +271,9 @@ func (m *streamManager) connectAndRead() error {
 			continue
 		}
 		for i := range msgs {
+			if msgs[i].T == "subscription" {
+				healthy = true
+			}
 			m.dispatch(&msgs[i])
 		}
 	}
