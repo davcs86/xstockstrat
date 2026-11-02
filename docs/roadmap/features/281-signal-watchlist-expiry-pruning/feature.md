@@ -15,6 +15,7 @@
 | 2026-10-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 21 steps |
 | 2026-11-02 | `implementation-ready` (unchanged) | /sdd-design (quick, amendment) | Seed-key amendment approved after 3 rounds: config migration 035 in Step 11 with the reader, Step 14 parse test, @AC-19; Steps 11-14 and 20 re-specced |
 | 2026-11-02 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | After merging `origin/main-dev` (incl. 278): Steps 4, 10, 17, 18, 20, 21 anchors re-aligned; Step 11 records a BLOCKING config-migration 035 collision with `origin/claude/smoke-test-deployment-0f1z5j` (operator ruling needed before Step 11) |
+| 2026-11-02 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; operator gave the up-front sequential confirmation |
 
 ---
 
@@ -48,4 +49,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-`/sdd-review signal-watchlist-expiry-pruning impl-spec` — validate implementation spec, then `/sdd-execute signal-watchlist-expiry-pruning`
+`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-10 can run; Step 11 waits for the operator's 035 ruling (see context.md)
