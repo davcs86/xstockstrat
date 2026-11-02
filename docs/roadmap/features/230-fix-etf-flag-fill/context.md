@@ -797,3 +797,21 @@ the round-2 block above.
   context-forge refresh (or its manual equivalent).
 - **Deviations:** none. Severity SEV-3 (unchanged).
 - **Files modified:** `services/xstockstrat-marketdata/CLAUDE.md`.
+
+## Session 2026-11-02 — Step 7 (test: consumer-surface read-only verification, C-14)
+
+- **Consumer diff:** `git diff --name-only origin/main-dev...HEAD -- services/xstockstrat-analysis services/xstockstrat-ui services/xstockstrat-agent packages/proto`
+  → empty. No consumer code or contract is touched by 230.
+- **Mapping (unchanged):** `_fundamentals_gap_labels` at `services/xstockstrat-analysis/app/handlers/servicer.py:2042`
+  calls `GetEtfFlags` with `metadata=propagation_meta`, returns `{}` on error, and maps unset → `UNSPECIFIED`,
+  true → `FUNDAMENTALS_GAP_ETF` (`:2057-2058`), false → `NOT_ETF`. Callers `:1313` (backtest refusal diagnostics)
+  and `:2069` (`_label_fundamentals_skip_rows`, `list_opportunities`). So a cache populated per Step 5 reaches
+  `FUNDAMENTALS_GAP_ETF` with no consumer change (`@AC-2` consumer half).
+- **Lint:** `ruff check .` → All checks passed; `ruff format --check .` → 122 files already formatted (ruff 0.16.9).
+- **TDD:** N/A (read-only verification of an unchanged consumer). Coverage N/A (no code in the diff).
+- **End-to-end consumer check (deferred, post-deploy):** the feature 215 Step 26(a) re-run on dev — SCHD reaches
+  `FUNDAMENTALS_GAP_ETF` after a first miss. That re-run must read `marketdata.fmp.enabled` and
+  `marketdata.fundamentals.provider` directly, because a default `fmp_disabled` gate logs its skip only once per
+  process (design.md Open Risks).
+- **Deviations:** none. Severity SEV-3 (unchanged). Citations match the re-spec (`:2042`, `:2046-2061`).
+- **Files modified:** none (read-only); spec/feature/context only.

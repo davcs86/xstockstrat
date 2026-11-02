@@ -25,6 +25,7 @@
 | 2026-11-02 | `in-progress` (Step 4 done) | /sdd-execute | Step 4 — one level-aware `recordingLogHandler`/`installLogRecorder` (`infoRecorder` folded in, heartbeat test moved onto it); `@AC-3`–`@AC-7` ETF fill-visibility tests; RED on the pre-Step-3 tree (overlay: zero Info records) → GREEN under `-race` |
 | 2026-11-02 | `in-progress` (Step 5 done) | /sdd-execute | Step 5 — `TestEtfFlagFiller_LabelledAfterGateReopens_AC2`: a symbol skipped by a closed budget gate (200/250) is re-enqueued, fetched and labelled once the gate reopens (5/250) (`@AC-2`); P-06 waiver (regression guard), mutation RED (closed-gate skip negative-cached → `source calls = 0, want 1`) → GREEN under `-race` |
 | 2026-11-02 | `in-progress` (Step 6 done) | /sdd-execute | Step 6 — marketdata `CLAUDE.md` `GetEtfFlags` paragraph: `etfFlagLogEvery` 1 minute added to the fixed invariants, plus one bullet on the three Info fill records (`skipped` reasons, `failed` class-only, `unlabelled`), their rate limits and `trace_id`; `not_wired` left undocumented. TDD N/A (docs) |
+| 2026-11-02 | `in-progress` (Step 7 done) | /sdd-execute | Step 7 — C-14 read-only consumer check: feature diff vs `origin/main-dev` touches no analysis/ui/agent/proto file; `_fundamentals_gap_labels` (`servicer.py:2042`) still maps `is_etf` true → `FUNDAMENTALS_GAP_ETF` (`:2057-2058`); analysis `ruff check`/`format --check` clean. TDD N/A (read-only). All 7 steps done |
 
 ---
 
@@ -60,4 +61,4 @@ later-call labelling guard plus rate-limited Info-level fill visibility.
 
 ## Next Action
 
-`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 7 (read-only C-14 consumer-surface check); Steps 1–6 done 2026-11-02
+All 7 steps done 2026-11-02. Next: flip `status.md` to `code-completed`, check `merge-order.md` (after 255), then open the integration PR (`/sdd-execute fix-etf-flag-fill sequential` final phase; PR body carries the root CLAUDE.md Teardown record for the Step 6 marketdata `CLAUDE.md` edit)

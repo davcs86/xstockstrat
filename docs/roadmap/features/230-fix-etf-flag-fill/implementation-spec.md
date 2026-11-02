@@ -514,7 +514,7 @@ grep -n "not_wired" services/xstockstrat-marketdata/CLAUDE.md   # no hits
 
 ### Step 7 — test: consumer-surface read-only verification (C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (read-only), `xstockstrat-ui` / `xstockstrat-agent` (read-only)
 **Files**:
 - none (read-only verification; no file is staged)
