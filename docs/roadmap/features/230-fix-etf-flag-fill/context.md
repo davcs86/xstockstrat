@@ -655,3 +655,17 @@ the round-2 block above.
   impl-spec Step 11/12 now `:595-676`/`:677-732`. Step 6 (`CLAUDE.md:165-176`) has no drift.
 - **Informational, outside this feature's directory (F-03):** `merge-order.md:91` says `fix-etf-flag-fill` is
   "already launched" while 230 is not; row `:96` (230 after 255) is correct. Left for a docs-only PR.
+
+## Session 2026-11-02 — sdd-execute sequential (sdd-batch-execute)
+
+- **Mode:** `/sdd-execute fix-etf-flag-fill sequential`, run as one unit of `sdd-batch-execute` in its own worktree
+  (sole writer, P-01). One commit per step on `feature/fix-etf-flag-fill`; a single integration PR at the end.
+- **Up-front confirmation (operator, 2026-11-02):** the up-front plan was approved, together with the two binding
+  re-spec decisions recorded in the entry above (Step 2 extends 255's classifier table; Step 4 folds
+  `infoRecorder` into one level-aware recorder). Lifecycle `implementation-ready` → `in-progress`.
+- **Severity:** SEV-3 (unchanged).
+- **Execution order (P-06, test-first per implementation-spec.md § Step Dependencies):** Step 2 RED
+  (`undefined: ErrorClass`) → Step 1 GREEN; Step 4 RED on the pre-Step-3 tree → Step 3 GREEN; then Steps 5, 6, 7.
+- **Carried open threads:** the docs PR items (merge-order row wording, 255 context note) and the FR-2 "per slot"
+  rewording remain outside this feature's directory or product-spec scope; Step 7 records the post-deploy 215
+  Step 26(a) re-run.
