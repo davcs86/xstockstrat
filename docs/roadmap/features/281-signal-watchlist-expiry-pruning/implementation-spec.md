@@ -305,7 +305,7 @@ then **GO-LINT** (the paired test step runs GO-COVER and GO-DBTEST).
 
 ### Step 6 — test: add-path DB tests (fresh overwrite, merge, MANUAL, untrack, rescue, replace-all)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_signal_expiry_add_dbtest_test.go` — create (`//go:build dbtest`)
@@ -1056,4 +1056,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: TDD red-green paired with Step 6 (Step 6's test is compile-red before Step 5). Instruction 3 lists the three expiry writes "inside the existing tx" of `AddSymbols`.
 - **Done instead**: Step 6 runs after Step 5 in sequential order, so RED was taken from a throwaway `//go:build dbtest` probe in `internal/repository/`. It called `AddSymbols(..., ExpiryIntent{Provenance: &SignalProvenance{...}})` and read `mergeSignalExpirySQL`. Before implementation, `go vet -tags dbtest ./internal/repository/` failed with `undefined: ExpiryIntent`. After implementation it passed, and the probe was deleted (never staged; Step 6 writes the real tests). The three writes live in the unexported `applyExpiryIntentTx`, which `AddSymbols` calls inside the same tx after `touchWatchlistTx` and the insert. The SQL and the branch order match the spec. If the `SELECT source` finds no binding row (the intent symbol was not in the request), nothing is written, the same as the MANUAL case.
 - **Disposition**: in scope. Everything stays inside the step's **Files**, and the behavioral RED/GREEN is Step 6 in CI `portfolio-db-test`.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 6 — compile-RED against the pre-Step-5 repo; DB run deferred to CI
+
+- **Spec said**: compile-red before Step 5, behavioral-red in CI. GO-DBTEST green.
+- **Done instead**: Step 5 had already landed (sequential order). RED was taken by temporarily restoring `watchlist_repo.go` from `d088d1e2` (pre-Step-5) with the new test file present: `go vet -tags dbtest ./internal/repository/` → `undefined: ExpiryIntent`. The file was then restored from HEAD. No database was started (HARD CONSTRAINT): GREEN is offline — `go vet -tags dbtest ./...`, GO-LINT `0 issues`, 7 `TestAddPath_*` functions, the tests skip without `PORTFOLIO_DB_TEST_URL` and fail under `CI=true`, and GO-COVER total 68.6%. The real-DB behavioral run is CI `portfolio-db-test`. Instruction 6's "not removed by a tick" clause is asserted as "row deleted" here; the tick itself is Step 9, and Step 10 covers it. The small assertion helpers (`assertExpiry`, `assertSource`, …) live in the test file because it is their only consumer (C-13); `dbtest_helpers_test.go` is unchanged.
+- **Disposition**: spec-allowed fallback (GO-DBTEST). Everything stays inside the step's **Files**.
 - **Severity**: n/a

@@ -236,3 +236,11 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: RED probe plus the `applyExpiryIntentTx` helper (Deviation Log).
 - Next: Step 6 (add-path DB tests).
 
+### Step 6 — add-path DB tests [done] (2026-11-02)
+
+- Created `internal/repository/watchlist_signal_expiry_add_dbtest_test.go` (`//go:build dbtest`) with 7 `TestAddPath_*` functions. `FreshInsertOverwrites`: fresh stamp, and an orphan row is overwritten to an earlier date, which proves it is not merged. `MergeTrackedSignal` (AC-3/AC-8, table-driven): a later renewal 102 advances the row, and an earlier signal keeps (2026-11-01, 101). `UntrackedStaysUntracked`. `RescueMarkedRow` (AC-17): live 110, and past 111 holds 2026-10-15. `ManualBindingNotTracked`. `Untrack` (AC-9/AC-11): a provenance-less SIGNAL add deletes the row; an UNSPECIFIED add keeps it; a MANUAL add of SIGNAL META leaves `source=2` and the row unchanged. `ReplaceAllKeepsExpiry` (T6): a rename keeps the rows, and a MANUAL re-stamp leaves an orphan row.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/watchlist_signal_expiry_add_dbtest_test.go`.
+- TDD: AC-3/8/9/11/17. RED: with `watchlist_repo.go` temporarily restored from `d088d1e2`, `go vet -tags dbtest ./internal/repository/` failed with `undefined: ExpiryIntent`; the file was then restored. GREEN (offline): `go vet -tags dbtest ./...` OK, GO-LINT `0 issues`, the `TestAddPath_` count is 7, and the tests skip locally and fail under `CI=true` without the URL. GO-COVER total is 68.6%. The behavioral run is CI `portfolio-db-test`, and no database was started.
+- Deviations: compile-RED approach and DB run deferred to CI (Deviation Log).
+- Next: Step 7 (`AddWatchlistSymbols` provenance validation and intent mapping).
+
