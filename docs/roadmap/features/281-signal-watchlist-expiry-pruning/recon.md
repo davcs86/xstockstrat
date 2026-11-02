@@ -157,3 +157,5 @@ Advisory only — final shape depends on the R1 fork resolved in Phase 1:
 - No 281 acceptance scenario asserts the seed, but AC-14's SetConfig "accepts" rows silently depend on it.
 
 **Not found:** none. Out of this amendment's scope: the other unseeded portfolio keys (`portfolio.marketdata.last_close_lookback_days`, `portfolio.marketdata.quote_timeout_ms`) are 278-baseline territory.
+
+**Renumber (2026-11-02, operator).** The "next config migration is `035`" fact above is superseded: feature 280 (PR #1359, `origin/claude/smoke-test-deployment-0f1z5j`) holds `035_smoke_rpc_user_id`/`036_smoke_writes_enabled`, so this seed is `037_portfolio_signal_prune_interval` and 281 merges after 280.
