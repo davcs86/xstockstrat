@@ -25,9 +25,9 @@ version to root `CLAUDE.md` § Language Versions & Tooling — never a floating 
 
 | Step signal | Tools needed | Get it via (only if missing) |
 |---|---|---|
-| Go `service`/`test` (`xstockstrat-{trading,portfolio,marketdata}`) | Go 1.25, `golangci-lint` v2.5.0 | Go toolchain usually present; `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0`; run Go commands with `GOWORK=off` |
-| Python `service`/`test` (`xstockstrat-{indicators,ingest,analysis}`) | Python 3.12, `uv`, `ruff`, pytest | `uv sync --extra dev` in the service dir (installs deps incl. ruff/pytest); `uv` itself via `pip install uv` if absent |
-| Node/Next `service`/`test` (`xstockstrat-{ledger,identity,notify,config,ui}`) | Node 22, `pnpm` 9.15.0 | `corepack enable && corepack prepare pnpm@9.15.0 --activate` (or `npm install -g pnpm@9.15.0`), then `pnpm install --frozen-lockfile` |
+| Go `service`/`test` (`xstockstrat-{trading,portfolio,marketdata}`) | Go 1.27, `golangci-lint` v2.14.0 | Go toolchain usually present; `GOTOOLCHAIN=go1.27.0 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0` — the `GOTOOLCHAIN` pin is required: a linter built with an older Go (a stale binary, or the host default when installed outside a module) refuses the go1.27 modules with `the Go language version (go1.2x) used to build golangci-lint is lower than the targeted Go version`; confirm with `golangci-lint --version` (`built with go1.27`); run Go commands with `GOWORK=off` |
+| Python `service`/`test` (`xstockstrat-{indicators,ingest,analysis}`) | Python 3.13, `uv`, `ruff`, pytest | `uv sync --extra dev` in the service dir (installs deps incl. ruff/pytest); `uv` itself via `python3 -m pip install uv` if absent |
+| Node/Next `service`/`test` (`xstockstrat-{ledger,identity,notify,config,ui}`) | Node 24, `pnpm` 9.15.9 | `corepack enable && corepack prepare pnpm@9.15.9 --activate` (or `npm install -g pnpm@9.15.9`), then `pnpm install --frozen-lockfile` |
 | `xstockstrat-ui` e2e (`test` step using Playwright) | Full suite: the cached `Dockerfile.e2e` image. Single spec: pre-provisioned Chromium (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`) | **Full-suite / CI-parity run → prefer Docker:** `./scripts/run-e2e.sh` builds the image once (cached) and runs Playwright inside it — no host `pnpm install`. **Single-spec iteration stays host-native** (`pnpm --filter xstockstrat-ui exec playwright test <spec>`) — browsers are pre-provisioned, so **never run `playwright install`** (env note). |
 | `proto` / `proto-gen` step | `buf` + Go/TS/Python codegen plugins, pinned to the CI `proto-freshness` job | **Prefer Docker — installs nothing on the host.** `./scripts/localenv-setup.sh` builds the version-pinned `Dockerfile.codegen` image **once** (cached for the rest of the session) and runs `buf-gen.sh` inside it. Start the daemon first if needed (`dockerd &` as root; up in ~1s); the script auto-trusts the agent-proxy CA (`/root/.ccr/ca-bundle.crt`, threaded into the build as a BuildKit secret), so the container path works in agent sessions. **Host-native fallback** — only when the Docker daemon is genuinely unavailable / egress fully blocked: provision per `docs/runbooks/codegen-toolchain-host-setup.md`, then `./scripts/buf-gen.sh`. |
 | `migration` step | **none** | Verified offline (up/down parity + `NNN`). **Do not install or start a database.** |
@@ -47,7 +47,7 @@ missing-package failure is exactly what this phase prevents.
 
 Print a compact summary and append a one-line note to `context.md`:
 ```
-Tooling setup (steps <list>): go1.25 ✓ · golangci-lint ⬇ v2.5.0 · uv ✓ · ruff ✓ (uv) · pnpm ✓ 9.15.0 · buf ✗ (blocked → host fallback)
+Tooling setup (steps <list>): go1.27 ✓ · golangci-lint ⬇ v2.14.0 · uv ✓ · ruff ✓ (uv) · pnpm ✓ 9.15.9 · buf ✗ (blocked → host fallback)
 ```
 Legend: `✓` present · `⬇` installed now · `✗` unavailable (with the decided fallback/blocker).
 
