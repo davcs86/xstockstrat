@@ -469,7 +469,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ### Step 12 — docs: Freeze baseline `findings` and `registry`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.json` — modify

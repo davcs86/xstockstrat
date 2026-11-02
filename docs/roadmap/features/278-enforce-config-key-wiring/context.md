@@ -467,3 +467,43 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22.23.4. The pin is 24; the operator ruled this is not a blocker.
 - Deviations: one, in the Deviation Log. The TS fixture has an extra `??=` write, and case (d) also went red.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 12 (sequential)
+
+- **Step 12 done:** `scripts/config-wiring.json` frozen. `policy.envReadUnseeded` stays `reported` (Step 10 ruling). `registry.rewriteAllow` stays `[]`, since every current rewrite is modelled (Step 9 open-risk check b).
+- **Registry, filled first.** Justification per group:
+  - **`forwarders` (8).** Each is a helper that passes its key parameter to a getter. Registering it attributes reads to the callers and silences the pass-through body.
+    - `int_positive` in analysis, indicators and ingest `app/config/watcher.py` (`keyArg` 1).
+    - Analysis `watcher.py:float_positive` and `watcher.py:str_nonempty` (`keyArg` 1). `str_nonempty` closes Step 9 open item 1 (`fundsignal.source_slug`).
+    - Marketdata `marketdata_service.go:resolvePositiveInt` (`keyArg` 1).
+    - Agent `client.py:get_config_value` and `tools.py:_agent_policy` (`keyArg` 0). With these, `signal.alert_threshold` resolves through `_ALERT_THRESHOLD_CONFIG_KEY`, which closes Step 9 open item 2.
+  - **`dynamic` getter bodies (28, `[]`).** These are `ConfigWatcher.get_bool/get_float/get_int/get_str` in the analysis, indicators and ingest watchers, and `getBool/getFloat/getInt/getString` in the config, identity, ledger and notify `configWatcher.ts`. They are getter implementations whose keys are already attributed at each call site by the built-in getter matchers.
+  - **`dynamic` closed-set runtime keys (4).**
+    - Marketdata `MarketDataService.GetFundamentalsMulti` and `MarketDataService.resolveFundamentals` produce `marketdata.{fmp,finnhub}.cache_ttl_hours`.
+    - `MarketDataService.fundamentalsEnabled` produces `marketdata.{fmp,finnhub}.enabled`. `fundProvider` is one of `fmp` or `finnhub`.
+    - Trading `TradingService.ibkrTiming` produces `trading.ibkr.{lst_refresh_margin_ms,handshake_timeout_ms,reauth_min_interval_ms}`.
+  - **`dynamic` non-config containers (4, `[]`).** These sites index a `values` variable that is not a config snapshot:
+    - ui `accountShared.tsx:credsFromWatch`, a local array.
+    - ui `indicatorChart.ts:toLineData`, a series array.
+    - analysis `servicer.py:AnalysisServicer._load_fundamentals` and `evaluator.py:_fundamental_as_of_series`, both over fundamentals period values.
+- **Re-run with the registry, before `findings` were filled:** `--final` printed 0 `dynamic-read` lines. None of `signal.alert_threshold`, `marketdata.fmp.cache_ttl_hours`, `marketdata.finnhub.cache_ttl_hours` or `marketdata.finnhub.enabled` appeared.
+- **Final counts (frozen `findings`, 124 entries, all `owner: "feature 278"`):**
+
+  | Kind | Count |
+  |---|---|
+  | `form-mismatch` | 19 |
+  | `seeded-unread` | 5 |
+  | `read-unseeded` | 100 blocking (+1 printed `REPORTED:`, `trading.fill_poller.interval_ms:production`, kept out of `findings` per the reported-only ruling) |
+  | `dynamic-read` | 0 |
+
+  - The 5 `seeded-unread` are `ledger` `stream.notify_enabled`, `marketdata.alpaca.paper`, `platform.log_level`, `trading.risk.daily_loss_limit` and `analysis.opportunity.sparkline_bars`.
+  - No `feature 243` entry: no `indicators.sandbox.*` finding inside 243's scope remains. `indicators.sandbox.max_concurrent` is a `feature 278` `read-unseeded`.
+  - No entry names 277.
+- **Delta from the projection:** none. The projection was 19 / 5 / about 101 `read-unseeded` lines (1 `REPORTED:`) / 3 `dynamic-read`. The real run matches it, except that the 3 `configServiceImpl.ts` `dynamic-read` lines are gone, because Step 11 removed them.
+- **Owner overrules:** none. Every entry carries the Step 9 proposed owner.
+- **TDD:** N/A (config data file; verified by Step 13's real-tree test).
+- **Verification:** `node scripts/check-config-wiring.mjs --final && node -e "…" && echo OK` exited 0. It printed only the `REPORTED:` line, then `OK`. As an extra check, `node --test scripts/config-wiring.test.mjs` passed 38/38.
+- Files modified: `scripts/config-wiring.json`, `implementation-spec.md` (Step 12 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.
