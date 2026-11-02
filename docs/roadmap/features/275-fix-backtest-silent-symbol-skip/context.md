@@ -918,3 +918,113 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   exit 0 ("null score" at :109; no "0 score").
 - Instruction 3 (C-16 acceptance promotion) is deferred to the integration PR (§5.6).
 - All 11 steps done → `status.md` → `code-completed` (committed separately). Next: integration PR (§5.6).
+
+### sdd-batch-execute promotion plan (awaiting operator confirm) (2026-11-02)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-backtest-silent-symbol-skip (feature 275)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-analysis/acceptance/fix-backtest-silent-symbol-skip.feature | CREATE | NEW | Admin-run formula PERMISSION_DENIED gives a FORMULA_ERROR diagnostics row and INSUFFICIENT_DATA. No existing scenario asserts it. |
+| AC-2 | same | CREATE | NEW | GetBars RPC error (UNAVAILABLE) is reported, not silently skipped. |
+| AC-6 | same | CREATE | NEW | Partial overlap with 272 @AC-6 (see Notes). The new clause "no diagnostics row for the RPC/exception handling" is not asserted anywhere else. |
+| AC-3 | same | CREATE | NEW | Unexpected ValueError gives a typed diagnostics row. |
+| AC-4 | same | CREATE | NEW | Zero evaluated symbols give a null score and no detail row, evidence cell or headline recompute. |
+| AC-5 | same | CREATE | NEW | A partial run stays OK and still reports the failed symbol. |
+| AC-7 | same | CREATE | NEW | Owner run with indicators NOT_FOUND gets the same FORMULA_ERROR reason as an admin run. |
+
+All 7 scenarios belong to xstockstrat-analysis. The Then clauses assert on RunBacktest results, diagnostics, run history and evidence cells, all of which live in analysis. Marketdata, indicators, ui and agent appear only as Given preconditions or consumers. No scenario spans services, so nothing goes to platform.feature. The acceptance/ directory already exists for analysis, so the file is created without any directory step.
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-backtest-silent-symbol-skip.feature (CREATE) ---
+# Promoted business-rule suite for xstockstrat-analysis (Constitution C-16). Promoted from feature 275's
+# acceptance.feature at launch; @feature-275 marks provenance. These are the guarantees a future
+# feature must not regress (recon reads this suite; the design-adversary enforces it).
+
+Feature: Analysis backtest — a failed symbol is reported, never silently skipped
+  Regression guard: a backtest whose symbols fail with an RPC error or exception must carry a typed
+  diagnostics row and warnings, and must not be scored OK.
+
+  @AC-1 @FR-3 @FR-4 @FR-7 @FR-8 @regression @feature-275
+  Scenario: A symbol whose custom formula is refused by indicators to an admin is reported, and the run is not OK
+    Given strategy "squeeze_breakout_trend" with a custom-formula component "31bb8ea6"
+    And an admin-scoped caller runs the backtest
+    And indicators ExecuteFormula for "31bb8ea6" fails with PERMISSION_DENIED "admins cannot execute another user's formula"
+    When RunBacktest is called for ["AAPL"] from 2026-01-01 to 2026-09-30
+    Then the result has a diagnostics row for "AAPL" with no_trade_reason NO_TRADE_REASON_FORMULA_ERROR
+    And no result warning contains the indicators error detail
+    And the result warnings name "AAPL" and "PERMISSION_DENIED"
+    And the status is BACKTEST_STATUS_INSUFFICIENT_DATA
+
+  @AC-2 @FR-1 @FR-3 @FR-4 @FR-7 @regression @feature-275
+  Scenario: A symbol whose bar fetch fails with an RPC error is reported, and the run is not OK
+    Given marketdata GetBars for "SCHD" fails with gRPC status UNAVAILABLE (an RPC error, not a truncated series)
+    When RunBacktest is called for ["SCHD"] from 2026-01-01 to 2026-09-30
+    Then the result has a diagnostics row for "SCHD" with a typed no_trade_reason other than NO_TRADE_REASON_UNSPECIFIED
+    And the result warnings name "SCHD" and "UNAVAILABLE"
+    And the status is BACKTEST_STATUS_INSUFFICIENT_DATA
+
+  @AC-6 @FR-7 @regression @feature-275
+  Scenario: A truncated bar series still surfaces as FAILED_PRECONDITION, not as a diagnostics row
+    Given feature 272 has landed, so _BarFetchError maps to FAILED_PRECONDITION
+    And marketdata GetBars for "AAPL" returns a truncated bar series that feature 272 converts to _BarFetchError
+    When RunBacktest is called for ["AAPL"] from 2026-01-01 to 2026-09-30
+    Then RunBacktest fails with gRPC status FAILED_PRECONDITION
+    And no diagnostics row is written for "AAPL" by the RPC/exception handling
+
+  @AC-3 @FR-2 @FR-3 @FR-4 @regression @feature-275
+  Scenario: A symbol that raises an unexpected exception is reported, and the run is not OK
+    Given evaluating "AAPL" raises an unexpected ValueError
+    When RunBacktest is called for ["AAPL"] from 2026-01-01 to 2026-09-30
+    Then the result has a diagnostics row for "AAPL" with a typed no_trade_reason other than NO_TRADE_REASON_UNSPECIFIED
+    And the result warnings name "AAPL"
+    And the status is BACKTEST_STATUS_INSUFFICIENT_DATA
+
+  @AC-4 @FR-4 @FR-5 @regression @feature-275
+  Scenario: A run in which no symbol was evaluated is not scored as a success
+    Given indicators ExecuteFormula fails with PERMISSION_DENIED for every requested symbol
+    When RunBacktest is called for ["AAPL", "SCHD"] from 2026-01-01 to 2026-09-30
+    Then the status is BACKTEST_STATUS_INSUFFICIENT_DATA
+    And the run-history row records a null score (not 0) and an empty rating
+    And no backtest detail row is written for the run
+    And no evidence cell is written for "AAPL" or "SCHD"
+    And the headline recompute is not run for the strategy
+
+  @AC-5 @FR-1 @FR-3 @FR-6 @regression @feature-275
+  Scenario: A partial run stays OK and still reports the failed symbol
+    Given "AAPL" evaluates normally and produces at least one trade
+    And marketdata GetBars for "MSFT" fails with UNAVAILABLE
+    When RunBacktest is called for ["AAPL", "MSFT"] from 2026-01-01 to 2026-09-30
+    Then the status is BACKTEST_STATUS_OK
+    And the result has a diagnostics row for "MSFT" with a typed no_trade_reason other than NO_TRADE_REASON_UNSPECIFIED
+    And the result warnings name "MSFT" and "UNAVAILABLE"
+
+  @AC-7 @FR-3 @FR-4 @FR-8 @regression @feature-275
+  Scenario: An owner run of a strategy whose formula the owner cannot read reports the same reason as an admin run
+    Given strategy "squeeze_breakout_trend" with a custom-formula component "31bb8ea6" the owner cannot read
+    And the strategy owner (not admin-scoped) runs the backtest
+    And indicators ExecuteFormula for "31bb8ea6" fails with NOT_FOUND
+    When RunBacktest is called for ["AAPL"] from 2026-01-01 to 2026-09-30
+    Then the result has a diagnostics row for "AAPL" with no_trade_reason NO_TRADE_REASON_FORMULA_ERROR
+    And the result warnings name "AAPL" and "NOT_FOUND"
+    And the status is BACKTEST_STATUS_INSUFFICIENT_DATA
+
+### Notes / ambiguities / conflicts
+- Overlap candidate for human review: 275 @AC-6 shares its FAILED_PRECONDITION outcome with 272 @AC-6 in /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-backtest-bounds.feature (lines 48-55). I marked it NEW because it adds a distinct assertion, "no diagnostics row written by the RPC/exception handling". That assertion guards the new catch-all in 275 against swallowing _BarFetchError. If a human prefers consolidation, merge it later. I did not delete or edit 272's scenario.
+- No CONFLICT. The other analysis suites mention INSUFFICIENT_DATA or NO_TRADE_REASON, but none of them contradicts 275.
+  - /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature covers FUNDAMENTALS_UNAVAILABLE, a different reason.
+  - /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/market-regime-benchmark-operand.feature:39 covers benchmark warmup shortfall.
+- No existing @feature-275 tag was found anywhere, so a re-run would find nothing and this is a first promotion. The platform.feature check found no matching backtest-status rules.
+- The task text gives the source path as docs/roadmap/features/docs/roadmap/features/275-.../acceptance.feature, which is doubled. The real path is /home/user/xstockstrat/docs/roadmap/features/275-fix-backtest-silent-symbol-skip/acceptance.feature. I read it from the working tree, not from origin/feature/fix-backtest-silent-symbol-skip, so the orchestrator should confirm the two match before writing.
+- The affected services come from the Reviewers table in feature.md: analysis, ui, agent and the proto reviewer. Only analysis owns any guarantee, so no ui or agent suite is created.
+- The AC-6 Given "feature 272 has landed" is kept verbatim. 272 is launched per the operator override, so the precondition holds.
+- Orchestrator to-dos from the operator override, outside this promotion:
+  - Record the merge-order override in 275's context.md and the integration PR body.
+  - Do not edit the Resolved column of merge-order.md.
+  - Carry the fails.md candidate "a catch-all hid incomplete test mocks" to docs/roadmap/ledger/fails.md if it is not there yet.
+
+### Coverage check
+- Source scenarios: 7 (AC-1 to AC-7). Planned: 7 (NEW 7, DUP 0, OVERLAP 0). Every @AC-* is accounted for and none were skipped. Counts match.
+```
