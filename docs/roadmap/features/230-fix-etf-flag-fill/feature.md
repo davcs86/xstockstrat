@@ -5,7 +5,7 @@
 **GitHub Issue**: n/a (Issues disabled) — defect report `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-15
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-11-02
 
 ---
 
@@ -17,6 +17,16 @@
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings, overlap WARN); scope narrowed to @AC-2/@AC-3, lands after 255 |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps; acceptance.feature amended (@AC-2 rewritten, @AC-3 split into @AC-3/@AC-5/@AC-6, @AC-4 and @AC-7 added) and product-spec FR-2 trace clause + FR-3 added per design.md |
+| 2026-11-02 | `implementation-ready` (re-spec) | /sdd-execute | Steps 0–7 re-anchored on `cfd240af` after the `origin/main-dev` merge; pre-execution gate passes (255 landed). Operator decisions: Step 2 extends 255's classifier table, Step 4 folds `infoRecorder` into one level-aware recorder |
+| 2026-11-02 | `implementation-ready` → `in-progress` | /sdd-execute | `sequential` mode (sdd-batch-execute); operator up-front confirmation given 2026-11-02 |
+| 2026-11-02 | `in-progress` (Step 1 done) | /sdd-execute | Step 1 — exported `fmp.ErrorClass` (`fmp_client.go:348`) delegating to 255's `enrichmentClass`; RED `undefined: ErrorClass`, GREEN after export |
+| 2026-11-02 | `in-progress` (Step 2 done) | /sdd-execute | Step 2 — `TestEnrichmentClassifier_StagesAndOther` now asserts `ErrorClass == class` and never empty on every row (AC-5); no new rows; RED `undefined: ErrorClass` (overlay), GREEN |
+| 2026-11-02 | `in-progress` (Step 3 done) | /sdd-execute | Step 3 — ETF filler carries the enqueuing trace id (`etfFillItem`), `etfFillGate` reports a skip reason, and three rate-limited Info records (`skipped`/`failed` class-only/`unlabelled`) replace the silent return and raw-error Debug record; RED Step-4-style probe (no Info records) → GREEN |
+| 2026-11-02 | `in-progress` (Step 4 done) | /sdd-execute | Step 4 — one level-aware `recordingLogHandler`/`installLogRecorder` (`infoRecorder` folded in, heartbeat test moved onto it); `@AC-3`–`@AC-7` ETF fill-visibility tests; RED on the pre-Step-3 tree (overlay: zero Info records) → GREEN under `-race` |
+| 2026-11-02 | `in-progress` (Step 5 done) | /sdd-execute | Step 5 — `TestEtfFlagFiller_LabelledAfterGateReopens_AC2`: a symbol skipped by a closed budget gate (200/250) is re-enqueued, fetched and labelled once the gate reopens (5/250) (`@AC-2`); P-06 waiver (regression guard), mutation RED (closed-gate skip negative-cached → `source calls = 0, want 1`) → GREEN under `-race` |
+| 2026-11-02 | `in-progress` (Step 6 done) | /sdd-execute | Step 6 — marketdata `CLAUDE.md` `GetEtfFlags` paragraph: `etfFlagLogEvery` 1 minute added to the fixed invariants, plus one bullet on the three Info fill records (`skipped` reasons, `failed` class-only, `unlabelled`), their rate limits and `trace_id`; `not_wired` left undocumented. TDD N/A (docs) |
+| 2026-11-02 | `in-progress` (Step 7 done) | /sdd-execute | Step 7 — C-14 read-only consumer check: feature diff vs `origin/main-dev` touches no analysis/ui/agent/proto file; `_fundamentals_gap_labels` (`servicer.py:2042`) still maps `is_etf` true → `FUNDAMENTALS_GAP_ETF` (`:2057-2058`); analysis `ruff check`/`format --check` clean. TDD N/A (read-only). All 7 steps done |
+| 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute | ALL-DONE PATH: dependency 255 merged as `5bf18403` (PR #1394); C-16 promotion (operator pre-approved) wrote `@AC-2`–`@AC-7` to `services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature` with `@feature-230`; integration PR opened to `main-dev` |
 
 ---
 
@@ -52,4 +62,4 @@ later-call labelling guard plus rate-limited Info-level fill visibility.
 
 ## Next Action
 
-`/sdd-review fix-etf-flag-fill impl-spec` — validate implementation spec, then `/sdd-execute fix-etf-flag-fill` (only after 255 has merged; see implementation-spec.md § Step Dependencies)
+`code-completed` 2026-11-02; integration PR open to `main-dev`. Next: merge on green CI, then post-deploy re-run feature 215 Step 26(a) on staging (SCHD should reach `FUNDAMENTALS_GAP_ETF` after a first miss)

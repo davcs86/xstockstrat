@@ -633,3 +633,330 @@ the round-2 block above.
   `fmp_client_test.go` (254, 255, 215), `marketdata_service_test.go` (254, 215, 229, 231, 227 — Step 4's
   `installWarnRecorder` wrapper keeps existing callers untouched), marketdata `CLAUDE.md` (docs-only, many).
   Peer 275 (`fix-backtest-silent-symbol-skip`) is `draft`, analysis-only; low risk.
+
+## Session 2026-11-02 — sdd-execute setup: merge + re-spec
+
+- **Branch setup (§5.3):** detached `origin/feature/fix-etf-flag-fill` (`7e234756`), normal `git merge --no-edit
+  origin/main-dev` (`efd5167d`) with no conflicts → merge commit `cfd240af`. `scripts/ledger-guard.py --own-slug
+  fix-etf-flag-fill --base origin/main-dev --fix` reported clean (no repair).
+- **Pre-execution gate: PASSES.** `func enrichmentClass` has exactly one hit (`internal/fmp/fmp_client.go:329`) and
+  its stage-less fallback returns `"other"` (`:344`); 255 `status.md` is `code-completed`; 254 is launched and its
+  `*url.Error` rewrap is in `getJSON` (`:243-248`); no later 215 commit touched `etf_flags.go` (last is `08d63011`).
+- **Operator re-spec decisions (2026-11-02, binding), applied in implementation-spec.md:**
+  1. Step 2: no new classifier table. Extend 255's `TestEnrichmentClassifier_StagesAndOther`
+     (`fmp_client_test.go:443-468`) to also assert the exported `ErrorClass` and a never-empty class on every row,
+     adding only rows it lacks (none at `cfd240af`: `ctx`, `cap`, `other`, `transport` are all present). Dropped the
+     stale "does not pin `other`" claim, the moot "add `fmt`" note, and the pre-254 build-request text.
+  2. Step 4: one level-aware `recordingLogHandler`/`installLogRecorder(t, level)`, with `infoRecorder`
+     (`marketdata_service_test.go:1202-1225`) folded into it and `TestIngestRecentBars_LogsHeartbeatEveryCycle`
+     (`:1229`, `:1243-1246`) moved onto `installLogRecorder(t, slog.LevelInfo)`. All 12 `installWarnRecorder` callers
+     re-anchored (the spec said 10); the wrapper keeps them untouched.
+- **Line drift only:** Steps 1, 3, 5, 7 and the Execution Summary `servicer.py` citation (now `:2042-2062`); 255
+  impl-spec Step 11/12 now `:595-676`/`:677-732`. Step 6 (`CLAUDE.md:165-176`) has no drift.
+- **Informational, outside this feature's directory (F-03):** `merge-order.md:91` says `fix-etf-flag-fill` is
+  "already launched" while 230 is not; row `:96` (230 after 255) is correct. Left for a docs-only PR.
+
+## Session 2026-11-02 — sdd-execute sequential (sdd-batch-execute)
+
+- **Mode:** `/sdd-execute fix-etf-flag-fill sequential`, run as one unit of `sdd-batch-execute` in its own worktree
+  (sole writer, P-01). One commit per step on `feature/fix-etf-flag-fill`; a single integration PR at the end.
+- **Up-front confirmation (operator, 2026-11-02):** the up-front plan was approved, together with the two binding
+  re-spec decisions recorded in the entry above (Step 2 extends 255's classifier table; Step 4 folds
+  `infoRecorder` into one level-aware recorder). Lifecycle `implementation-ready` → `in-progress`.
+- **Severity:** SEV-3 (unchanged).
+- **Execution order (P-06, test-first per implementation-spec.md § Step Dependencies):** Step 2 RED
+  (`undefined: ErrorClass`) → Step 1 GREEN; Step 4 RED on the pre-Step-3 tree → Step 3 GREEN; then Steps 5, 6, 7.
+- **Carried open threads:** the docs PR items (merge-order row wording, 255 context note) and the FR-2 "per slot"
+  rewording remain outside this feature's directory or product-spec scope; Step 7 records the post-deploy 215
+  Step 26(a) re-run.
+
+## Session 2026-11-02 — Step 1 (service: export `fmp.ErrorClass`)
+
+- **Precondition:** `func enrichmentClass` has exactly one hit (`internal/fmp/fmp_client.go:329`); its stage-less
+  fallback returns `"other"` (`:344`). No `ErrorClass` existed before this step.
+- **Change:** added `func ErrorClass(err error) string { return enrichmentClass(err) }` with its one-line
+  constraint comment directly below `enrichmentClass` (`fmp_client.go:347-348`). `enrichmentClass`, its token set and
+  its callers (`:202`, `:209`) are untouched (F-09).
+- **TDD (P-06, test-first):** RED probe = Step 2's loop assertion (`ErrorClass(tc.err) == tc.class && != ""`) added to
+  `TestEnrichmentClassifier_StagesAndOther` on the pre-export tree →
+  `internal/fmp/fmp_client_test.go:461:13: undefined: ErrorClass` / `FAIL ... [build failed]`. After the export:
+  `--- PASS: TestEnrichmentClassifier_StagesAndOther`. The probe edit was reverted before commit, since
+  `fmp_client_test.go` is Step 2's **Files**; Step 2 re-applies it as its committed change.
+- **Verification:** `GOWORK=off go build ./...` and `GOWORK=off go vet ./internal/fmp/` clean; the
+  `^func ErrorClass(err error) string` grep has exactly 1 hit (`:348`). Extra: `go test ./internal/fmp/` ok,
+  `golangci-lint run ./internal/fmp/` 0 issues.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/fmp/fmp_client.go`.
+
+## Session 2026-11-02 — Step 2 (test: `fmp.ErrorClass` classes, AC-5 classifier half)
+
+- **Change (operator decision (1)):** no new table. The loop of 255's `TestEnrichmentClassifier_StagesAndOther`
+  (`internal/fmp/fmp_client_test.go:444`) gained one assertion per row: `ErrorClass(tc.err) == tc.class` and
+  `!= ""` (`:461-463`). No rows added: every AC-5 class (`ctx`, `cap`, `other`, `transport`) is already a row.
+  Rows the table lacks but that are not AC-5 classes (`read`/`decode` stages, limiter, `context.Canceled`, `http_500`)
+  were deliberately not added (spec instruction 2).
+- **TDD:** RED via `go test -overlay` replacing `fmp_client.go` with a copy minus the `ErrorClass` line (no tracked
+  file touched) → `internal/fmp/fmp_client_test.go:461:13: undefined: ErrorClass` / `[build failed]`. GREEN:
+  `--- PASS: TestEnrichmentClassifier_StagesAndOther`, `--- PASS: TestEnrichment_WarnDoesNotLeakAPIKey`.
+- **Verification:** full `go test ./... -race` ok; coverage total 81.9% (>= 40%); `golangci-lint run` 0 issues.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go`.
+
+## Session 2026-11-02 — Step 3 (service: ETF filler trace id, gate reason, rate-limited Info records)
+
+- **Change (`internal/service/etf_flags.go`):** `etfFlagLogEvery = time.Minute` const; `etfFillItem{sym, traceID}`
+  queue item (`chan etfFillItem`); `GetEtfFlags` reads `middleware.FromContext(ctx).TraceID` before locking and passes
+  it to `enqueueLocked(sym, traceID)`; `StartEtfFlagFiller` passes the item on the loop ctx. `etfFillAllowed` removed
+  (sole caller) and replaced by `etfFillGate() (reason, used, cap, snap)` (`not_wired`/`fmp_disabled`/`no_cap`/
+  `budget`/`""`, existing order, still outside `etf.mu`). Rate-limit slots `lastSkipReason`, `budgetLoggedAt`,
+  `failLoggedAt` (map, made in `SetEtfFlagSource`), `unlabelledLoggedAt` under `mu`, with `skipLogLocked`/
+  `failLogLocked`/`unlabelledLogLocked`; an open gate clears `lastSkipReason`. Records `etf flag fill skipped`
+  (`reason`, `used`/`cap` only when snapshotted), `etf flag fill failed` (`class` via `fmp.ErrorClass`, never the
+  error), `etf flag fill unlabelled` (`symbol` only), each `slog.InfoContext` after `mu` is released, `trace_id`
+  appended only when non-empty. Cache write, negative cache, TTL, bound and 80% threshold unchanged.
+  `etf_flags_test.go:226` → `etfFillItem{sym: "NEW"}` (the one compile fix).
+- **TDD (P-06, test-first):** RED probe = Step-4-style assertions (AC-3 budget skip with `used`/`cap`, AC-5 `cap`
+  class with no `error`/`SECRET`, AC-4/AC-6 unlabelled once per window, AC-7 `trace_id=t-1` via
+  `middleware.UnaryServerInterceptor`) added via `go test -overlay` as an untracked `zz_step3_probe_test.go` on the
+  pre-Step-3 tree → all four `FAIL` with zero Info records (`skipped records = []`, `failed records = []`,
+  `unlabelled = 0`, `AC-7: []`). After the change: all four `PASS`, and the eight existing `@AC-14` ETF tests pass
+  under `-race`. The probe was never written to the tree; Step 4 authors the committed tests.
+- **Verification:** `go build ./...` + `go vet ./internal/service/` clean; DebugContext/`"error", err`/`err.Error()`
+  grep no hits; `etfFillAllowed` grep no hits; TraceID/`chan etfFillItem`/`fmp.ErrorClass(err)`/`etfFlagLogEvery`
+  each present. Extra: full `go test ./... -race` ok; `golangci-lint run` 0 issues.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/service/etf_flags.go`,
+  `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.
+
+## Session 2026-11-02 — Step 4 (test: fill visibility, AC-3/4/5/6/7)
+
+- **Recorder (operator decision (2), C-18):** `recordingWarnHandler`/`recordedWarn` → `recordingLogHandler`/
+  `recordedLog` with a `level` field (exact-level match), a `count(msg)` helper next to `find`, and
+  `installLogRecorder(t, level)`. `installWarnRecorder(t)` is now a one-line wrapper, so its 12 callers and the
+  `rec.recs` reads are unchanged. `infoRecorder` is deleted; `TestIngestRecentBars_LogsHeartbeatEveryCycle` now uses
+  `installLogRecorder(t, slog.LevelInfo)`. `grep infoRecorder|recordingWarnHandler|recordedWarn` → no hits.
+- **Tests (`etf_flags_test.go`):** helpers `etfInfo`, `noSecret`, `etfDrain`.
+  - `TestEtfFlagFiller_SkipReasonLogged_AC3`: 4 reasons; `used`/`cap` only for `no_cap`/`budget`.
+  - `TestEtfFlagFiller_FailLogsClassOnly_AC5`: `ctx`/`cap`/`other` from inline `apikey=SECRET` errors; no `error`
+    attr; not cached; re-queued.
+  - `TestEtfFlagFiller_UnlabelledLogged_AC4`.
+  - `TestEtfFlagFiller_RateLimitSlots_AC6`: 7 sub-tests, one per example row.
+  - `TestEtfFlagFiller_CarriesTraceID_AC7`: server ctx via `middleware.UnaryServerInterceptor`, then a no-trace fresh
+    service.
+  - No `t.Parallel()`; every fake is an inline literal (C-13).
+- **TDD (P-06):** RED = the committed Step 4 suite run with `go test -overlay`, which swapped in the pre-Step-3
+  `etf_flags.go` (from `45ab3767`), reverted the `:226` call site and added a shim `etfFlagLogEvery` const (no tracked
+  file touched). All 5 new tests failed with zero Info records (`skipped records = 0`, `failed records = 0`,
+  `unlabelled records = 0`, `@AC-6` counts 0, `@AC-7: skipped record = <nil>`); the 8 existing ETF tests passed.
+  GREEN: all 13 ETF tests pass under `-race`.
+- **Deviation (SEV-3, test order only):** in AC-4 the window checks run before the 24h advance, because a 24h advance
+  already exceeds the 1-minute window (the spec's order made "still one record" impossible). Logged in the spec's
+  Deviation Log.
+- **Verification:** ETF `-run` suite `-race` ok; full `./internal/service/` `-race` ok (12 `installWarnRecorder`
+  callers + the heartbeat test); `t.Parallel` grep and recorder-name grep no hits; coverage total 81.9% (>= 40%);
+  `golangci-lint run` 0 issues.
+- **Files modified:** `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`,
+  `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.
+
+## Session 2026-11-02 — Step 5 (test: labelled after the gate reopens, AC-2)
+
+- **Test (`etf_flags_test.go`):** `TestEtfFlagFiller_LabelledAfterGateReopens_AC2`, placed after `TestGetEtfFlags_TTL`,
+  no new helpers. Gate closed by `fakeBudget{used: 200, cap: 250}` → fill skipped, unset, `src.total()==0`; then
+  `svc.fmpBudget = fakeBudget{used: 5, cap: 250}`, `etfFlags(SCHD)` re-enqueues, drain → `src.total()==1`; a further
+  `etfFlags(SCHD)` returns `is_etf=true` and leaves the queue empty. 2-line comment names the overlap with
+  `HeadroomGate_AC14`/`TTL` and that the 210/5 seed half is 255 `@AC-3`.
+- **TDD (P-06 waiver, recorded as the spec requires):** regression guard; the behaviour already holds on trunk (the
+  fix is 255's FMP-only seed). Red N/A in the strict sense, so a mutation RED was captured instead: temporarily
+  negative-caching the closed-gate skip in `fillEtfFlag` made the test fail with
+  `reopened gate: source calls = 0, want 1 (skipped symbol was not re-enqueued)`; the mutation was reverted
+  (`git checkout`) before GREEN. GREEN: the test passes under `-race`; the whole ETF `-run` suite passes.
+- **Verification:** `go test ./internal/service/ -run TestEtfFlagFiller_LabelledAfterGateReopens_AC2 -race -count=1 -v`
+  PASS; `golangci-lint run --modules-download-mode=mod` 0 issues; `gofmt -l` clean.
+- **Citation drift (no deviation):** the step's evidence cites `HeadroomGate_AC14` at `etf_flags_test.go:118-148` and
+  `TestGetEtfFlags_TTL` at `:151-176`; after Step 4's import additions they are at `:124-154` / `:157-182`.
+  `fakeBudget` moved with Step 4's recorder fold: `marketdata_service_test.go:2358`, value-receiver `BudgetSnapshot`
+  at `:2360` (spec cites `:2370`). The new test is at `etf_flags_test.go:186`.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.
+
+## Session 2026-11-02 — Step 6 (docs: marketdata `CLAUDE.md` fill-log records)
+
+- **Edit (`services/xstockstrat-marketdata/CLAUDE.md`, `GetEtfFlags` paragraph):** `etfFlagLogEvery` 1 minute (the
+  fill-log rate-limit window) appended to the Fixed invariants bullet (`:174-176`); one new bullet after the
+  negative-cache line (`:178-181`) documents the three Info records — `etf flag fill skipped` (`fmp_disabled`/
+  `no_cap`/`budget`, `used`/`cap` only for the last two, config reasons on change, `budget` once per window),
+  `etf flag fill failed` (class only, fallback `other`, once per class per window), `etf flag fill unlabelled`
+  (once per window) — and the conditional `trace_id`. Gate rules not restated; `not_wired` left undocumented.
+  Text checked against the shipped `etf_flags.go` (Step 3: `etfFlagLogEvery` `:28`, records `:154,167,180`).
+- **TDD:** N/A (docs). Pre-edit, the verification grep had no hits (rc=1); post-edit each token is present.
+- **Verification:** `grep etfFlagLogEvery|etf flag fill skipped|failed|unlabelled` → each present (`:175,179-181`);
+  `grep not_wired` → no hits.
+- **Teardown note (root CLAUDE.md):** this step changed a context file (`services/xstockstrat-marketdata/CLAUDE.md`).
+  Manual reconciliation: re-read the edited paragraph against `etf_flags.go` — reasons, record names, rate-limit
+  semantics (`skipLogLocked`/fail/unlabelled slots) and `trace_id` condition match. The integration PR must carry the
+  context-forge refresh (or its manual equivalent).
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/CLAUDE.md`.
+
+## Session 2026-11-02 — Step 7 (test: consumer-surface read-only verification, C-14)
+
+- **Consumer diff:** `git diff --name-only origin/main-dev...HEAD -- services/xstockstrat-analysis services/xstockstrat-ui services/xstockstrat-agent packages/proto`
+  → empty. No consumer code or contract is touched by 230.
+- **Mapping (unchanged):** `_fundamentals_gap_labels` at `services/xstockstrat-analysis/app/handlers/servicer.py:2042`
+  calls `GetEtfFlags` with `metadata=propagation_meta`, returns `{}` on error, and maps unset → `UNSPECIFIED`,
+  true → `FUNDAMENTALS_GAP_ETF` (`:2057-2058`), false → `NOT_ETF`. Callers `:1313` (backtest refusal diagnostics)
+  and `:2069` (`_label_fundamentals_skip_rows`, `list_opportunities`). So a cache populated per Step 5 reaches
+  `FUNDAMENTALS_GAP_ETF` with no consumer change (`@AC-2` consumer half).
+- **Lint:** `ruff check .` → All checks passed; `ruff format --check .` → 122 files already formatted (ruff 0.16.9).
+- **TDD:** N/A (read-only verification of an unchanged consumer). Coverage N/A (no code in the diff).
+- **End-to-end consumer check (deferred, post-deploy):** the feature 215 Step 26(a) re-run on dev — SCHD reaches
+  `FUNDAMENTALS_GAP_ETF` after a first miss. That re-run must read `marketdata.fmp.enabled` and
+  `marketdata.fundamentals.provider` directly, because a default `fmp_disabled` gate logs its skip only once per
+  process (design.md Open Risks).
+- **Deviations:** none. Severity SEV-3 (unchanged). Citations match the re-spec (`:2042`, `:2046-2061`).
+- **Files modified:** none (read-only); spec/feature/context only.
+
+## Session 2026-11-02 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-etf-flag-fill (feature 230)
+
+Source read: /home/user/xstockstrat/docs/roadmap/features/230-fix-etf-flag-fill/acceptance.feature. This is the working-tree copy, not `git show origin/feature/fix-etf-flag-fill:...`, so the orchestrator should confirm the two are identical. The task text gave the path as `docs/roadmap/features/docs/roadmap/features/230-...`. That is doubled and I treated it as a typo.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-2 | /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature | CREATE | NEW | First half (closed gate, no fetch, is_etf unset) overlaps 215 @AC-14. The later-label-on-reopen outcome is not asserted anywhere, so NEW. |
+| AC-3 | same | CREATE | NEW | Scenario Outline with 4 example rows. The Info record and reason are new; the no-fetch clause partly overlaps 215 @AC-14 (budget row). |
+| AC-4 | same | CREATE | NEW | |
+| AC-5 | same | CREATE | NEW | Scenario Outline with 3 example rows. |
+| AC-6 | same | CREATE | NEW | Scenario Outline with 7 example rows. |
+| AC-7 | same | CREATE | NEW | |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature (CREATE) ---
+# Promoted from docs/roadmap/features/230-fix-etf-flag-fill/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-230` tag.
+# Durable business rules xstockstrat-marketdata already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+# The FMP boot-seed over-count guarantee is owned by feature 255 @AC-3, not this file. 230 @AC-1 is
+# retired and its ID is never reused (C-15). The one-minute rate-limit window is the code constant
+# etfFlagLogEvery, not a config key.
+
+Feature: xstockstrat-marketdata - ETF-flag background fill labels ETFs and explains every non-label outcome
+  The background ETF-flag fill labels an ETF once the FMP gate reopens, and every skipped, failed,
+  or unlabelled fill leaves a rate-limited, secret-free Info record.
+
+  @AC-2 @FR-1 @regression @feature-230
+  Scenario: An ETF skipped while the gate was closed is labelled on a later call once the gate reopens
+    Given marketdata.fmp.daily_request_cap is 250 and the shared FMP budget has used 200 of it
+    And the ETF-flag cache has no entry for "SCHD"
+    And the FMP profile for "SCHD" reports isEtf true
+    When GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    Then no FMP profile fetch is made and the response has is_etf unset
+    When the shared FMP budget reports 5 used of 250
+    And GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    And GetEtfFlags is called for "SCHD" again
+    Then exactly one FMP profile fetch has been made
+    And the last response has is_etf set to true
+
+  @AC-3 @FR-2 @regression @feature-230
+  Scenario Outline: A fill skipped by a closed gate logs its reason at Info level
+    Given marketdata.fmp.enabled is <fmp_enabled>
+    And the shared FMP budget is <budget>
+    And the ETF-flag cache has no entry for "SCHD"
+    When GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    Then exactly one Info record "etf flag fill skipped" is emitted with symbol "SCHD" and reason "<reason>"
+    And the record <used_cap> used and cap attributes
+    And no FMP profile fetch is made and "SCHD" is no longer pending
+
+    Examples:
+      | fmp_enabled | budget                | reason       | used_cap      |
+      | false       | used 0 of cap 100     | fmp_disabled | does not have |
+      | true        | used 0 of cap 0       | no_cap       | has           |
+      | true        | used 80 of cap 100    | budget       | has           |
+      | true        | not wired             | not_wired    | does not have |
+
+  @AC-4 @FR-3 @regression @feature-230
+  Scenario: An empty FMP profile logs an unlabelled record and stays negative-cached
+    Given the gate is open and the FMP profile for "NOPROF" has no isEtf value
+    When GetEtfFlags is called for "NOPROF" and the background filler drains the queue
+    Then exactly one Info record "etf flag fill unlabelled" is emitted with symbol "NOPROF"
+    And the record carries no attribute other than symbol and trace_id
+    And a GetEtfFlags call for "NOPROF" one day later returns is_etf unset without enqueuing a fetch
+    And a second empty-profile symbol filled within one minute emits no further unlabelled record
+    And an empty-profile symbol filled after the clock passes one minute emits a second unlabelled record
+
+  @AC-5 @FR-2 @regression @feature-230
+  Scenario Outline: A failed fill logs only the error class, never the raw error text
+    Given the gate is open and the FMP profile fetch for "SCHD" returns <error> whose text contains "apikey=SECRET"
+    When GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    Then exactly one Info record "etf flag fill failed" is emitted with symbol "SCHD" and class "<class>"
+    And the class attribute is never empty
+    And neither the record message nor any attribute value contains "apikey=" or "SECRET"
+    And "SCHD" is not cached and is re-queued by the next GetEtfFlags call
+
+    Examples:
+      | error                                          | class |
+      | a wrapped context.DeadlineExceeded             | ctx   |
+      | a wrapped fmp.ErrFMPDailyCapExceeded           | cap   |
+      | an error carrying no classifier stage          | other |
+
+  @AC-6 @FR-2 @FR-3 @regression @feature-230
+  Scenario Outline: Fill records are rate-limited per slot within the one-minute window
+    Given the gate and the FMP profile source are set up for the sequence <sequence> on distinct symbols
+    When the background filler processes the sequence
+    Then exactly <records> are emitted
+    And no extra FMP profile fetch is made by the logging
+
+    Examples:
+      | sequence                                                                  | records                                   |
+      | 5 budget skips within one minute                                          | 1 "skipped"                               |
+      | 5 budget skips, the clock passes one minute, 1 budget skip                | 2 "skipped"                               |
+      | 5 fmp_disabled skips spread over 3 minutes                                | 1 "skipped"                               |
+      | fmp_disabled, budget, fmp_disabled skips within one minute                | 3 "skipped"                               |
+      | budget skip, a successful fill, budget skip within one minute             | 2 "skipped"                               |
+      | 2 ctx failures, then 1 cap failure within one minute                      | 2 "failed" (one per class)                |
+      | 1 budget skip, 1 ctx failure, 1 empty profile within one minute           | 1 "skipped", 1 "failed", 1 "unlabelled"   |
+
+  @AC-7 @FR-2 @regression @feature-230
+  Scenario: Fill records carry the trace id of the request that enqueued the symbol
+    Given the gate is closed with reason budget
+    And GetEtfFlags for "SCHD" arrives through the marketdata gRPC server interceptor with x-trace-id "t-1"
+    When the background filler drains the queue
+    Then the "etf flag fill skipped" record for "SCHD" has trace_id "t-1"
+    And a logged fill record for a symbol enqueued by a request with no x-trace-id has no trace_id attribute
+
+### Notes / ambiguities / conflicts
+- Single target. Every scenario's observable subject is `GetEtfFlags` and the background filler (`StartEtfFlagFiller`) inside xstockstrat-marketdata. The Reviewers table also lists analysis, but only as read-only for Step 7, so it owns no guarantee here. Nothing is cross-cutting, and a grep of /home/user/xstockstrat/docs/sdd/business-rules/platform.feature for ETF found nothing.
+- The marketdata `acceptance/` directory already exists, so only the file is created.
+- No `@feature-230` or "etf flag fill" text exists in any marketdata suite, so there are no DUPs.
+- OVERLAP, informational and not a skip: /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/block-fundamentals-strategy-on-etf.feature @AC-14 (feature 215) asserts that a gate at or above 80% gives an unset is_etf with no FMP call and no background fetch. 230 @AC-2 (first When/Then) and the @AC-3 budget row restate that same outcome. The 30-day cache clause of 215 @AC-14 is not touched. Each 230 scenario also asserts something 215 does not (later labelling, Info log records), so I wrote them as NEW and consolidation is not warranted.
+- No CONFLICT. 230 does not contradict 215 @AC-14. The seed-count fix is delegated to 255 @AC-3 and is not in 230's feature file. 255 is not in the marketdata suite today, and it is 255's own promotion to add.
+- The retired @AC-1 is not promoted, and its ID stays reserved (C-15). I carried the commentary from the source header into the file comment, not the Gherkin steps. The scenario steps are verbatim and only `@feature-230` is added to each tag line.
+- Landing items for the orchestrator, outside this plan:
+  - Record in context.md and the PR body that 255 merged as 5bf18403 (PR #1394).
+  - Add the root CLAUDE.md Teardown record to the PR body for the Step 6 edit to /home/user/xstockstrat/services/xstockstrat-marketdata/CLAUDE.md: context-forge plugin unavailable, plus the manual reconciliation logged in context.md.
+  - Add the post-deploy follow-up: re-run feature 215 Step 26(a) on staging, where SCHD should reach FUNDAMENTALS_GAP_ETF after a first miss.
+
+### Coverage check
+- Source scenarios: 6 (@AC-2 through @AC-7; 3 plain Scenarios and 3 Scenario Outlines, with 14 example rows in total). Planned: 6 NEW, 0 DUP, 0 OVERLAP-skipped. Every @AC-* is accounted for; the only ID not promoted is the retired @AC-1, which is absent from the source file.
+```
+
+## Session 2026-11-02 — ALL-DONE PATH (C-16 promotion + integration PR)
+
+- **Landing (operator 2026-11-02, "Proceed and pre-approve"):** the merge-order dependency
+  `255-fix-marketdata-fundamentals-cache` merged into `main-dev` as `5bf18403` (PR #1394); verified with
+  `git merge-base --is-ancestor 5bf18403 origin/main-dev`. The `merge-order.md` row (Resolved `No`) is a
+  `main-dev` docs-PR edit, not changed on this branch.
+- **C-16 promotion:** applied the `sdd-batch-promotion-plan` block above verbatim. Pre-write check: the planner read the
+  working-tree copy; `git show origin/feature/fix-etf-flag-fill:.../acceptance.feature` is byte-identical, and the
+  planned scenarios equal the source once `@feature-230` is stripped. Created
+  `services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature` (`@AC-2`–`@AC-7`, 6 NEW, 0 DUP).
+- **Status:** `in-progress` → `code-completed`.
+- **Teardown (root CLAUDE.md) for Step 6's `services/xstockstrat-marketdata/CLAUDE.md` edit:** context-forge plugin
+  unavailable in the execute sessions; the manual reconciliation (paragraph re-read against `etf_flags.go`: reasons,
+  record names, rate-limit slots, `trace_id` condition) is logged in the Step 6 entry and carried in the PR body.
+- **Post-deploy follow-up:** re-run feature 215 Step 26(a) on staging — SCHD should reach `FUNDAMENTALS_GAP_ETF`
+  after a first miss.
+- **Deviations:** none. Severity SEV-3 (unchanged).
