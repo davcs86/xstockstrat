@@ -3,14 +3,14 @@
 **Status**: `in-progress`
 **Created**: 2026-10-23
 **Feature**: `docs/roadmap/features/278-enforce-config-key-wiring/feature.md`
-**Total Steps**: 18
+**Total Steps**: 19
 **Feature Branch**: `feature/enforce-config-key-wiring`
 
 ---
 
 ## Execution Summary
 
-Internal repo tooling and process only; consumer surface is **None** (product spec), so no UI/Agent step is required (C-14 restated as a decision, not an omission). No proto, migration, config key or reader/seed change: the check reads migrations and source and prints keys, never values (F-08). Per design, a zero-dependency Node script `scripts/check-config-wiring.mjs` (plus one stdlib-`ast` Python helper) and its state file `scripts/config-wiring.json` are built bottom-up in red-before-green pairs: seed-side parser (Steps 1-2), reader extraction (3-4), join with collapse and finding kinds (5-6), baseline ratchet and modes (7-8). Then the first real run (9), the OPERATOR environment-baseline decision gate (10), the frozen baseline (11-12), the CI job (13, deliberately after the operator ruling), the `/sdd-execute` and `/sdd-review` process gates (14-17) and the governance doc plus context-map teardown (18).
+Internal repo tooling and process only; consumer surface is **None** (product spec), so no UI/Agent step is required (C-14 restated as a decision, not an omission). No proto, migration, config key or reader/seed change: the check reads migrations and source and prints keys, never values (F-08). Per design, a zero-dependency Node script `scripts/check-config-wiring.mjs` (plus one stdlib-`ast` Python helper) and its state file `scripts/config-wiring.json` are built bottom-up in red-before-green pairs: seed-side parser (Steps 1-2), reader extraction (3-4), join with collapse and finding kinds (5-6), baseline ratchet and modes (7-8). Then the first real run (9), the OPERATOR environment-baseline decision gate (10), the TS/Go extractor assignment-target fix found while freezing (11, inserted by the 2026-11-02 re-spec), the frozen baseline (12-13), the CI job (14, deliberately after the operator ruling), the `/sdd-execute` and `/sdd-review` process gates (15-18) and the governance doc plus context-map teardown (19).
 
 The environment-baseline gate (Step 10) was resolved on 2026-10-23: there is no production deployment, so the three samples were read on staging and the operator ruled `reported-only`. `policy.envReadUnseeded` in `scripts/config-wiring.json` is `reported` (non-blocking); re-open Step 10 when a production environment is created.
 
@@ -21,27 +21,27 @@ The environment-baseline gate (Step 10) was resolved on 2026-10-23: there is no 
 | @AC-1 form-mismatch | 2 (seed side), 4 (reader side), 6 |
 | @AC-2 seeded-unread | 6 |
 | @AC-3 read-unseeded | 6 |
-| @AC-4 step not done while declared key has a finding | 8 (script), 17 (skill text) |
-| @AC-5 unrelated findings do not block | 8, 17 |
-| @AC-6 impl-spec without reader step fails review | 17 |
-| @AC-7 CI fails on new finding | 8, 12 |
-| @AC-8 baseline entry without owner rejected | 8, 12 |
-| @AC-9 runtime-built key is `dynamic-read` | 4, 6 |
-| @AC-10 migration insert triggers the check | 8, 17 |
-| @AC-11 reader step without snapshot-built test fails review | 17 |
+| @AC-4 step not done while declared key has a finding | 8 (script), 18 (skill text) |
+| @AC-5 unrelated findings do not block | 8, 18 |
+| @AC-6 impl-spec without reader step fails review | 18 |
+| @AC-7 CI fails on new finding | 8, 13 |
+| @AC-8 baseline entry without owner rejected | 8, 13 |
+| @AC-9 runtime-built key is `dynamic-read` | 4, 6, 11 |
+| @AC-10 migration insert triggers the check | 8, 18 |
+| @AC-11 reader step without snapshot-built test fails review | 18 |
 
 ## Step Dependencies
 
 - Step 2 [test] covers Step 1 [service]; Step 4 covers Step 3; Step 6 covers Step 5; Step 8 covers Step 7. Each test is authored to fail against the pre-implementation tree (P-06) and `/sdd-execute` captures red before the paired service step.
 - Verification commands of the service steps (1, 3, 5, 7) run `node --test scripts/config-wiring.test.mjs`, a file first created in Step 2. `/sdd-execute` runs each test step's red capture first (paired test authored before its service step, P-06), so by the time a service step's Verification runs the paired tests exist; do not run a service step's Verification before its paired test step.
-- Step 12 and Step 17 are numbered after the data/text they cover but their red proof is manufactured: Step 12 captures red by running against the empty-shape `config-wiring.json` from Step 7 (`git show <Step-7-sha>:scripts/config-wiring.json` into a scratch root), Step 17 against the pre-Step-14..16 skill files (`git show <sha-before-Step-14>:<path>`); neither step is moved.
+- Step 13 and Step 18 are numbered after the data/text they cover but their red proof is manufactured: Step 13 captures red by running against the empty-shape `config-wiring.json` from Step 7 (`git show <Step-7-sha>:scripts/config-wiring.json` into a scratch root), Step 18 against the pre-Step-15..17 skill files (`git show <sha-before-Step-15>:<path>`); neither step is moved.
 - Step 3 requires Step 1 (reuses the stored-set types); Step 5 requires Steps 1 and 3; Step 7 requires Step 5.
 - Step 9 requires Steps 1-8 (the script must exist to run).
 - Step 10 requires Step 9 (it consumes the first-run `read-unseeded env=` list). It is an OPERATOR step.
-- Step 11 requires Step 10 (the operator ruling must be recorded before `findings` freezes). Step 12 covers Step 11.
-- Step 13 requires Steps 11 and 12 (CI must not run before the baseline exists and the real-tree test passes).
-- Steps 14, 15, 16 are independent of each other; each requires Step 7 (flag names). Step 17 requires Steps 14-16. Step 18 requires Steps 14-17 and runs last.
-- Ordering vs PR #1322 (base branch `ccr-fac38b1f-6m24q2`, not merged to `main-dev` at spec time): this feature's artifacts live on that branch; Step 18 records the merge-order row. 243, 244 and 261 will edit `scripts/config-wiring.json` (ratchet) once this lands; Step 18 records that coupling in `docs/roadmap/features/merge-order.md`.
+- Step 11 requires Steps 3-4 (it changes Step 3's extractor and adds a case to Step 4's suite; one step, test authored red first inside it). Step 12 requires Steps 10 and 11 (the operator ruling must be recorded, and the extractor must stop counting writes, before `findings` freezes). Step 13 covers Step 12.
+- Step 14 requires Steps 12 and 13 (CI must not run before the baseline exists and the real-tree test passes).
+- Steps 15, 16, 17 are independent of each other; each requires Step 7 (flag names). Step 18 requires Steps 15-17. Step 19 requires Steps 15-18 and runs last.
+- Ordering vs PR #1322 (base branch `ccr-fac38b1f-6m24q2`, not merged to `main-dev` at spec time): this feature's artifacts live on that branch; Step 19 records the merge-order row. 243, 244 and 261 will edit `scripts/config-wiring.json` (ratchet) once this lands; Step 19 records that coupling in `docs/roadmap/features/merge-order.md`.
 - Out of scope, by decision: fixing any baselined key, any reader or seed edit, runtime enforcement (product spec Out of Scope).
 
 ---
@@ -146,7 +146,7 @@ Author the cases below to fail against the pre-implementation tree (the script d
 ```
 node --test scripts/config-wiring.test.mjs
 ```
-No coverage threshold applies (Node script tests, not a service; C-08 service thresholds are not defined for `scripts/`); the suite is run by the `config-wiring` CI job (Step 13). Lint: `node --check scripts/config-wiring.test.mjs`.
+No coverage threshold applies (Node script tests, not a service; C-08 service thresholds are not defined for `scripts/`); the suite is run by the `config-wiring` CI job (Step 14). Lint: `node --check scripts/config-wiring.test.mjs`.
 
 ---
 
@@ -174,7 +174,7 @@ No coverage threshold applies (Node script tests, not a service; C-08 service th
 **Instructions**:
 1. `config-wiring-py-reads.py`: walk `services/*/app/**/*.py` (skip `tests/`), use `ast` to find calls whose attribute or name is one of the getter names (`get_str`, `get_int`, `get_int_present`, `get_bool`, `get_float`, `get_float_present`, `get_str_present`; the `*_present` names are matched as call names even though they are class-attribute aliases, not `def`s) or `.values.get(...)`/`.values[...]` on a snapshot; for these the key is argument 0. It also receives the Python entries of `registry.forwarders` (passed by the Node script as a JSON argument) and treats a call whose callee name (bare `Name` or `Attribute.attr`) equals a registered forwarder symbol of the same service as a read of argument `keyArg`. Resolve the key argument: string literal, or a module-level `Name` bound to a string literal in the same file; anything else is reported as `{"file","symbol","line","dynamic":true}`. Getter calls inside the body of a registered forwarder whose key argument is the forwarder's own key parameter are the pass-through, not a read, and are skipped. Emit JSON on stdout.
 2. In the Node script add `extractGoReads` and `extractTsReads`: regex over the `Get(String|Int|Float|Bool)\(` call and the `values\[`-index syntax; match across line breaks (`s` flag, balanced to the first argument) so a literal split over lines is not misreported; resolve a bare identifier through a same-service constant (`const X = "..."` / Go `const`/`var`) found in the same package or imported same-service file; otherwise `dynamic-read`. The same forwarder rule applies (calls to a registered Go/TS forwarder read `keyArg`; its own pass-through body is skipped).
-3. Add `registry.forwarders` (key `file:symbol` of the helper, value `{"keyArg": <index>}`): calls to a registered helper are treated as getter calls on the given argument. The real tree needs, at minimum, the three `int_positive` definitions (`services/xstockstrat-{analysis,indicators,ingest}/app/config/watcher.py:int_positive`, `keyArg` 1) and `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt` (`keyArg` 1); Step 11 records them. Without these entries every `int_positive` read (ingest `watcher.py:183`, `mcp_client_loop.py:165`, analysis `servicer.py:3833`, ...) would be missed and the three helper bodies would report false `dynamic-read`. Add `registry.dynamic` (key `file:symbol`, value an array of the keys that call site can produce): an enumerated dynamic site yields those reads instead of a `dynamic-read` finding. The registry lives in `scripts/config-wiring.json` (design: no reader may be edited, no in-code annotation).
+3. Add `registry.forwarders` (key `file:symbol` of the helper, value `{"keyArg": <index>}`): calls to a registered helper are treated as getter calls on the given argument. The real tree needs, at minimum, the three `int_positive` definitions (`services/xstockstrat-{analysis,indicators,ingest}/app/config/watcher.py:int_positive`, `keyArg` 1) and `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt` (`keyArg` 1); Step 12 records them. Without these entries every `int_positive` read (ingest `watcher.py:183`, `mcp_client_loop.py:165`, analysis `servicer.py:3833`, ...) would be missed and the three helper bodies would report false `dynamic-read`. Add `registry.dynamic` (key `file:symbol`, value an array of the keys that call site can produce): an enumerated dynamic site yields those reads instead of a `dynamic-read` finding. The registry lives in `scripts/config-wiring.json` (design: no reader may be edited, no in-code annotation).
 4. Cross-namespace reads are not matched by the consuming service's namespace: reads are plain strings joined against the whole stored set.
 5. Never read `GetSecret` calls as ordinary reads.
 
@@ -306,7 +306,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 - Baseline-with-owner precedent: `.jscpd.json` and `scripts/check-duplication.sh` are the repo's only baseline-style files, but they are threshold-only (`minTokens: 100`, `DUP_REPORT_ONLY=1`), with no per-entry owner; so the owner-bearing ratchet is **Not found**, built new.
 - Step-time versus completion gate: `.claude/skills/sdd-execute/SKILL.md:289` (Verification runs before the `done` flip at `:298-299`); step bodies immutable (`SKILL.md:487`, F-09).
 - Declared-key sources (FR-2): product spec `## Config Key Changes` (`.claude/skills/sdd-story/SKILL.md:198-201`) and a migration inserting into `config.config_values` (@AC-10). The overlap-check regex ``[a-z][a-z-]+\.[a-z]+\.[a-z_]+`` (`.claude/skills/sdd-review/reference/overlap-check.md:25,53`) matches only three-segment keys, so this step defines its own pattern.
-- Owners to be recorded in entries (Step 11): feature 278 and feature 243. Feature 277 (`fix-ingest-seeded-config-keys`) is `demoted/canceled` (`docs/roadmap/features/277-fix-ingest-seeded-config-keys/status.md`), and the operator ruled on 2026-11-01 (context.md, "operator ruling at the sdd-batch-execute up-front gate") that no entry may name it and the owner regex drops 277. Feature 243 is still `in-progress`.
+- Owners to be recorded in entries (Step 12): feature 278 and feature 243. Feature 277 (`fix-ingest-seeded-config-keys`) is `demoted/canceled` (`docs/roadmap/features/277-fix-ingest-seeded-config-keys/status.md`), and the operator ruled on 2026-11-01 (context.md, "operator ruling at the sdd-batch-execute up-front gate") that no entry may name it and the owner regex drops 277. Feature 243 is still `in-progress`.
 
 **TDD**: `red-green required`
 
@@ -431,7 +431,43 @@ grep -n "environment-baseline decision (operator ruling): reported-only" docs/ro
 
 ---
 
-### Step 11 — docs: Freeze baseline `findings` and `registry`
+### Step 11 — service: TS/Go `values[...]` assignment targets are writes, not reads
+
+**Status**: `pending`
+**Service**: `scripts/` (repo tooling)
+**Files**:
+- `scripts/check-config-wiring.mjs` — modify
+- `scripts/config-wiring.test.mjs` — modify
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-ui/src/lib/index_writes.ts` — create
+- `scripts/config-wiring-fixtures/readers/services/xstockstrat-marketdata/internal/config/index_writes.go` — create
+
+**Reviewers**: Platform Lead — cross-service tooling and SDD process
+
+**Codebase Evidence**:
+- `scripts/check-config-wiring.mjs:382` `const INDEX_RE = /\bvalues\s*(?:\?\.\s*)?\[/g` matches every `values[` index, and `extractRegexReads` (`:537`, sites built at `:550`) turns each match into a read or a `dynamic-read` with no check of whether the index is an assignment target, for both `lang === 'go'` and `'ts'`.
+- The Python extractor already reads only loads: `scripts/config-wiring-py-reads.py:97` `isinstance(node.ctx, ast.Load)`.
+- Real-tree false `dynamic-read` sites this causes (reported by the Step 11 freeze attempt, blocker on 2026-11-02, before this re-spec): `services/xstockstrat-config/src/grpc/configServiceImpl.ts:50-54` (`values[k] = { ... }`), `:276` (`byKey[k].values[row.key] = buildConfigValue(row);`), `:300` (`values[row.key] = buildConfigValue(row);`).
+- Test harness: `scripts/config-wiring.test.mjs` reader cases (a)-(k) run `cw.extractReads(READERS, reg())` over `scripts/config-wiring-fixtures/readers/` with helpers `readKeys` / `dynSites`; case (g) covers TS index reads in `services/xstockstrat-ui/src/lib/index_reads.ts`, case (d) asserts zero false `dynamic-read` under `${GO_MD}/config/`.
+
+**TDD**: `red-green required` (paired test inside this step: author case (l) and its two fixtures first, capture red, then change the extractor)
+
+**Covers**: `AC-9`
+
+**Instructions**:
+1. Add the two fixtures. TS `index_writes.ts`: `values[k] = x`, `obj.values[row.key] = y`, `values['performance.window_days'] = z` (literal write), plus two controls that ARE reads: a comparison `if (values['analysis.breakout.enabled'] == y)` and a plain read `const v = values['performance.risk_free_rate_annual']`. Go `index_writes.go`: `values[k] = x` and `cfg.values["marketdata.feed.enabled"] = true`, plus one read `v := values["marketdata.feed.symbols"]`.
+2. Add test (l) "TS and Go `values[...]` assignment targets are neither reads nor dynamic-reads": assert `readKeys` for each fixture equals only its read control, and `dynSites` for each fixture is `[]`. Capture red (the writes appear as reads/dynamic-reads).
+3. In `extractRegexReads`, skip an `INDEX_RE` site whose balanced closing `]` is followed by optional whitespace and a single `=` that is not part of `==`, `===` or `=>` (compound assignments `+=`, `??=`, `||=` are also writes and are skipped). Getter calls and forwarder calls are unaffected. Do not add a registry entry for these sites (Step 12 Instruction 4).
+4. Re-run the real-tree run and record in `context.md` that the three `configServiceImpl.ts` sites no longer appear and that no previously reported read disappeared (diff the read-key set before/after).
+
+**Verification**:
+```
+node --test scripts/config-wiring.test.mjs && node --check scripts/check-config-wiring.mjs && ! node scripts/check-config-wiring.mjs --final | grep -E 'configServiceImpl\.ts:[A-Za-z_]+:dynamic-read' && echo OK
+```
+No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiring.test.mjs`.
+
+---
+
+### Step 12 — docs: Freeze baseline `findings` and `registry`
 
 **Status**: `pending`
 **Service**: `scripts/` (repo tooling)
@@ -445,9 +481,10 @@ grep -n "environment-baseline decision (operator ruling): reported-only" docs/ro
 - Contents come from Step 9's run and the Step 10 ruling (`reported-only`); the expected set is Step 9's Codebase Evidence (re-derived against migrations 000-034), with `docs/roadmap/features/277-fix-ingest-seeded-config-keys/recon.md:86-101` (on `main-dev`) as the historical reference only.
 - The ingest defect report `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` exists and is closed `wont-fix`, so entries name a feature as owner, not the report (product spec Out of Scope). Feature 277 is `demoted/canceled`; by the 2026-11-01 operator ruling (context.md) every entry the spec previously gave to 277 is owned by `feature 278`.
 - `031_heal_indicators_sandbox_keys_full_dotted.up.sql` is now on the branch (feature 243, still `in-progress`): it heals `indicators.sandbox.timeout_ms`, `memory_bytes`, `allowed_imports` for both environments, so no `indicators.sandbox.*` form-mismatch is expected. `indicators.sandbox.max_concurrent` (read at indicators `watcher.py:152`, never seeded) is outside 243's scope (`docs/roadmap/features/243-fix-sandbox-seed-keys/product-spec.md:86`).
+- After Step 11, four `dynamic-read` sites remain that index a `values` container which is not a config snapshot; the extractor cannot tell them apart without type information, so they are registered as `registry.dynamic` `[]` (no reads), each justified in `context.md`: `services/xstockstrat-ui/src/components/trader/accountShared.tsx:57` (`credsFromWatch`, `values[i]` over a local array), `services/xstockstrat-ui/src/lib/indicatorChart.ts:33` (`toLineData`, `values[i]?.value`), `services/xstockstrat-analysis/app/handlers/servicer.py` `_load_fundamentals` (`p.values.get(m)` over fundamentals periods) and `services/xstockstrat-analysis/app/services/evaluator.py:95` `_fundamental_as_of_series` (`p.values.get(metric)`).
 - **Not found**: any seed or reader fix landing in this feature; none is allowed (no reader or seed edit).
 
-**TDD**: `N/A (config data file; verified by Step 12's real-tree test)`
+**TDD**: `N/A (config data file; verified by Step 13's real-tree test)`
 
 **Covers**: —
 
@@ -464,7 +501,7 @@ node scripts/check-config-wiring.mjs --final && echo OK
 
 ---
 
-### Step 12 — test: Real-tree and baseline-integrity tests (authored red)
+### Step 13 — test: Real-tree and baseline-integrity tests (authored red)
 
 **Status**: `pending`
 **Service**: `scripts/` (repo tooling)
@@ -475,9 +512,9 @@ node scripts/check-config-wiring.mjs --final && echo OK
 
 **Codebase Evidence**:
 - Acceptance wording @AC-7 (baseline lists every 277-sweep finding with owner) and @AC-8 in `acceptance.feature`.
-- The CI job (Step 13) runs `node --test scripts/config-wiring.test.mjs`, so these tests are what keeps a stale baseline from merging.
+- The CI job (Step 14) runs `node --test scripts/config-wiring.test.mjs`, so these tests are what keeps a stale baseline from merging.
 
-**TDD**: `red-green required` (red proof: run the new tests against the empty-shape `config-wiring.json` from Step 7, restored from git into a scratch `--root`, since Step 11's data already exists in the tree when this step is executed)
+**TDD**: `red-green required` (red proof: run the new tests against the empty-shape `config-wiring.json` from Step 7, restored from git into a scratch `--root`, since Step 12's data already exists in the tree when this step is executed)
 
 **Covers**: `AC-7, AC-8`
 
@@ -492,7 +529,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ---
 
-### Step 13 — service: CI job `config-wiring` and `ci-gate` wiring
+### Step 14 — service: CI job `config-wiring` and `ci-gate` wiring
 
 **Status**: `pending`
 **Service**: `.github/workflows/ci.yml`
@@ -509,7 +546,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 - Shell lint (`shell-lint`, `ci.yml:629`) covers `scripts/*.sh .claude/hooks/*.sh` only (`ci.yml:643,646`), so the `.mjs` files are outside shellcheck/shfmt; no `*.test.sh` is added, so the structural-test line `ci.yml:649` is unchanged.
 - Node setup step to copy: `node-lint` (`ci.yml:430`) uses `actions/setup-node@v7` with `node-version: "24"` (`ci.yml:459-461`); drop its `cache: 'pnpm'` lines since the new job installs no packages.
 
-**TDD**: `N/A (CI workflow; behavior proven by Steps 8 and 12 and a local run)`
+**TDD**: `N/A (CI workflow; behavior proven by Steps 8 and 13 and a local run)`
 
 **Covers**: `AC-7` (CI job), `AC-8`
 
@@ -517,8 +554,8 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 1. Add a `config-wiring` filter to `changes`: `services/xstockstrat-config/migrations/**`, `services/*/app/**`, `services/*/internal/**`, `services/*/src/**`, `scripts/check-config-wiring.mjs`, `scripts/config-wiring-py-reads.py`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/**`.
 2. Add job `config-wiring` ("Config key wiring (whole-tree)"): `needs: changes`, `if:` matched `config-wiring` or `ci`, steps: `actions/checkout@v7`, `actions/setup-node@v7` with `node-version: "24"` (from `node-lint`, without the pnpm cache lines), `node --test scripts/config-wiring.test.mjs`, `node scripts/check-config-wiring.mjs --final`.
 3. Add `config-wiring` to `ci-gate` `needs:` and add `echo "config-wiring: ${{ needs.config-wiring.result }}"`.
-4. The filter roots must equal the extractors' scan roots (`services/*/app`, `services/*/internal`, `services/*/src`, covering the ui reader `services/xstockstrat-ui/src/lib/performanceMetrics.ts`); Step 12 test (5) asserts this.
-5. Only after Step 11's ruling is recorded does this step run; the job is a whole-tree scan, never the diff.
+4. The filter roots must equal the extractors' scan roots (`services/*/app`, `services/*/internal`, `services/*/src`, covering the ui reader `services/xstockstrat-ui/src/lib/performanceMetrics.ts`); Step 13 test (5) asserts this.
+5. Only after Step 12's ruling is recorded does this step run; the job is a whole-tree scan, never the diff.
 
 **Verification**:
 ```
@@ -527,7 +564,7 @@ python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml'));
 
 ---
 
-### Step 14 — docs: `/sdd-execute` Phase 3 gate and repo conventions
+### Step 15 — docs: `/sdd-execute` Phase 3 gate and repo conventions
 
 **Status**: `pending`
 **Service**: `.claude/skills/sdd-execute/`
@@ -543,7 +580,7 @@ python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml'));
 - Config-key convention line: `.claude/skills/sdd-execute/reference/repo-conventions.md:30` (`- **Config keys**: format is <service-short-name>.<category>.<key>`).
 - Reference files are listed in `.claude/context-map.yaml:83-86` (`sequential-mode.md`, `deviation-handling.md`, `repo-conventions.md`, `tdd-gate.md`); no new reference file is created. All `SKILL.md` and `repo-conventions.md` anchors above re-verified exact on 2026-11-01.
 
-**TDD**: `N/A (docs/skill text; structural assertions in Step 17)`
+**TDD**: `N/A (docs/skill text; structural assertions in Step 18)`
 
 **Covers**: `AC-4, AC-5, AC-10`
 
@@ -560,7 +597,7 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/SKILL.md .claude/skills
 
 ---
 
-### Step 15 — docs: Sequential-mode mirror
+### Step 16 — docs: Sequential-mode mirror
 
 **Status**: `pending`
 **Service**: `.claude/skills/sdd-execute/`
@@ -573,12 +610,12 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/SKILL.md .claude/skills
 - Sequential mode runs Phase 3 unchanged inside the step loop: `.claude/skills/sdd-execute/reference/sequential-mode.md:81-109` (§5.5; "Run **Phase 3 Execution** + Verification unchanged, including the **offline migration check** ...", line 93). The design's cited `:112` is inside §5.5b (`:110-145` smart checkpoints) and is **not** the mirror location; the correct anchors are §5.5 (`:81`) and §5.6 per-feature integration PR (`:146`).
 - Feature-end checkpoint precedes the integration PR (§5.5b, `sequential-mode.md:110-126`, condition 3).
 
-**TDD**: `N/A (docs/skill text; structural assertions in Step 17)`
+**TDD**: `N/A (docs/skill text; structural assertions in Step 18)`
 
 **Covers**: `AC-4, AC-5, AC-10`
 
 **Instructions**:
-In §5.5 add one bullet stating that Phase 3's wiring gate (Step 14) applies unchanged in sequential mode, step-time mode per step; in §5.6, before the integration PR is created, add the `--final` run as a blocking gate on the feature's last step and record its output in `context.md`. Keep the text to the two edits; do not restate the gate rules.
+In §5.5 add one bullet stating that Phase 3's wiring gate (Step 15) applies unchanged in sequential mode, step-time mode per step; in §5.6, before the integration PR is created, add the `--final` run as a blocking gate on the feature's last step and record its output in `context.md`. Keep the text to the two edits; do not restate the gate rules.
 
 **Verification**:
 ```
@@ -587,7 +624,7 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/reference/sequential-mo
 
 ---
 
-### Step 16 — docs: `/sdd-review` B2 row and `/sdd-story` declared-key format
+### Step 17 — docs: `/sdd-review` B2 row and `/sdd-story` declared-key format
 
 **Status**: `pending`
 **Service**: `.claude/skills/sdd-review/`, `.claude/skills/sdd-story/`
@@ -603,7 +640,7 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/reference/sequential-mo
 - Product-spec criterion 6 checks key format only (`.claude/skills/sdd-review/reference/product-spec-criteria.md:25`).
 - Snapshot-built test models: `services/xstockstrat-ingest/tests/test_config_watcher.py:56` (`_int_watcher(**int_values)`), `:74` (empty `ConfigSnapshot()`), `services/xstockstrat-ingest/tests/test_ingest_servicer.py:77` (`ConfigWatcher.__new__`); re-verified 2026-11-01.
 
-**TDD**: `N/A (docs/skill text; structural assertions in Step 17)`
+**TDD**: `N/A (docs/skill text; structural assertions in Step 18)`
 
 **Covers**: `AC-6, AC-11`
 
@@ -618,7 +655,7 @@ grep -n "Config key wiring" .claude/skills/sdd-review/reference/impl-spec-criter
 
 ---
 
-### Step 17 — test: Skill-text structural assertions (authored red)
+### Step 18 — test: Skill-text structural assertions (authored red)
 
 **Status**: `pending`
 **Service**: `scripts/` (repo tooling)
@@ -628,9 +665,9 @@ grep -n "Config key wiring" .claude/skills/sdd-review/reference/impl-spec-criter
 **Reviewers**: Platform Lead — SDD process
 
 **Codebase Evidence**:
-- Process behavior (@AC-4/5/6/10/11) is executed by an LLM following skill text, so the only deterministic proof is that the load-bearing text is present; the script half is proven in Steps 8 and 12. Precedent for text-structure tests of skills/workflows: `scripts/workflow-tests/*.test.mjs`.
+- Process behavior (@AC-4/5/6/10/11) is executed by an LLM following skill text, so the only deterministic proof is that the load-bearing text is present; the script half is proven in Steps 8 and 13. Precedent for text-structure tests of skills/workflows: `scripts/workflow-tests/*.test.mjs`.
 
-**TDD**: `red-green required` (red proof: point the assertions at the skill files as of the commit before Step 14, via `git show`; green is the committed text from Steps 14-16)
+**TDD**: `red-green required` (red proof: point the assertions at the skill files as of the commit before Step 15, via `git show`; green is the committed text from Steps 15-17)
 
 **Covers**: `AC-4, AC-5, AC-6, AC-10, AC-11`
 
@@ -645,7 +682,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ---
 
-### Step 18 — docs: Governance rule, merge-order row, context-map check and teardown
+### Step 19 — docs: Governance rule, merge-order row, context-map check and teardown
 
 **Status**: `pending`
 **Service**: `docs/patterns/`, `docs/roadmap/features/`
@@ -716,7 +753,7 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Deviation: Step 3 — dynamic-site `symbol` and extractor API
 **Spec said**: dynamic entries are `{"file","symbol","line","dynamic":true}`; `registry.dynamic` and `registry.forwarders` are keyed `file:symbol`.
 **Actual**: Python `symbol` is the dotted enclosing scope (`ConfigWatcher.get_str`, `is_enabled`). Go `symbol` is `Receiver.Func` or `Func`. TS `symbol` is the nearest preceding function or method name. All three fall back to `<module>`. The Node API is `extractReads(root, registry)`, which returns `{reads:[{file,line,key}], dynamic:[{file,symbol,line}]}`, plus `extractPyReads`, `extractGoReads` and `extractTsReads`. An identifier argument resolves to a string constant in the same file first, then the same directory or package, then anywhere in the service. A `pkg.Name` argument resolves in a directory named `pkg`. If more than one value matches, the read is reported as `dynamic-read`.
-**Reason**: The spec does not define the symbol format or the function signatures. Steps 5 and 11 key on these.
+**Reason**: The spec does not define the symbol format or the function signatures. Steps 5 and 12 (numbered 11 before the 2026-11-02 re-spec) key on these.
 
 ### Deviation: Steps 5+6 — executed as one TDD cycle
 **Spec said**: "Step 6 covers Step 5 ... `/sdd-execute` captures red before the paired service step" (separate steps, one commit each).

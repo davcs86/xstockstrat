@@ -22,6 +22,7 @@
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 7+8 done as one red-green commit (operator Option A): `config-wiring.json` schema and owner validation, `--final` ratchet with env-list shrink, step-time mode with PENDING/REPORTED, declared keys from spec, migration and `--keys`; ratchet fixtures and tests |
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done: first offline `--final` run recorded (150 findings: 9 form-mismatch, 31 seeded-unread, 64 read-unseeded, 46 dynamic-read, 0 unmodelled-rewrite); reconciled against the expected set, open-risk checks closed |
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done: environment-baseline gate confirmed reported-only (2026-10-23 operator ruling); 1 env-scoped finding reported, `policy.envReadUnseeded` = `reported`; no environment read |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential (re-spec) | Operator option C at the Step 11 blocker: new Step 11 (TS/Go `values[...]` assignment targets are writes, not reads) inserted before the baseline freeze; former Steps 11-18 renumbered 12-19; Total Steps 18 → 19 |
 
 ---
 

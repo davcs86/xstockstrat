@@ -430,3 +430,11 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Deviations: none.
 - Severity: n/a.
 - Step 10 confirmed: reported-only (2026-10-23 operator ruling), 1 env-scoped findings reported (`trading.fill_poller.interval_ms:production`, printed `REPORTED:` and kept out of the ratchet; `policy.envReadUnseeded` is `reported`; no environment was read or written).
+
+## Session 2026-11-02 — re-spec at the Step 11 blocker (operator option C)
+
+- **Blocker (Step 11, freeze baseline):** after registering the forwarders and enumerable dynamic sites, 7 `dynamic-read` sites remained that are not config reads. 3 are assignment targets in `services/xstockstrat-config/src/grpc/configServiceImpl.ts` (`reloadAll` :50-54, `reloadNamespace` :276, `toProtoSnapPayload` :300) — the TS/Go `INDEX_RE` (`scripts/check-config-wiring.mjs:382`) counts `values[k] = ...` writes, while the Python extractor counts only `ast.Load`. 4 index a non-config `values` container (ui `accountShared.tsx:57`, ui `indicatorChart.ts:33`, analysis `servicer.py` `_load_fundamentals`, analysis `evaluator.py:95`). Former Step 11 Instruction 4 forbids hiding a fixable extractor cause in the registry, but its Files excluded the extractor. Nothing was committed by the blocked run.
+- **Operator decision (2026-11-02): option C — re-spec first.** Options A (expand Step 11's Files) and B (registry only, waive Instruction 4) were declined.
+- **Re-spec (this commit):** inserted a new **Step 11** (`scripts/check-config-wiring.mjs` + test case (l) + two reader fixtures; red-green inside the step) that skips `values[...]` sites whose closing `]` is followed by an assignment operator. The baseline freeze is now **Step 12**, whose Codebase Evidence lists the 4 non-config sites to register as `registry.dynamic` `[]`.
+- **Renumbering map (old → new):** 11 → 12, 12 → 13, 13 → 14, 14 → 15, 15 → 16, 16 → 17, 17 → 18, 18 → 19. Step numbers in earlier entries of this file are pre-re-spec and are left as written (append-only log); `implementation-spec.md` cross-references were all updated. Steps 1-10 are unchanged.
+- External references checked: `merge-order.md` row 101 and feature 281's artifacts cite **281's own** Step 13, not 278's; no other feature cites a 278 step number.
