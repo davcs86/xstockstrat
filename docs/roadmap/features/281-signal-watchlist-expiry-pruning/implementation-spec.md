@@ -613,23 +613,24 @@ Pass condition for block 4:
 **Reviewers**: Service owner `xstockstrat-portfolio` — concurrent write safety on watchlist entries
 
 **Codebase Evidence**:
-- `fakeLedger` currently only counts `AppendEvent` calls and can force an error (`watchlist_service_test.go:253-266`) — extend it to append each request to a slice and record `metadata.FromOutgoingContext(ctx)` (the fake receives the ctx the service passed). `fakeConfig` / `wideCaps()` (`:362-367`) show the `intConfig` stub shape (`GetInt`).
+- `fakeLedger` currently only counts `AppendEvent` calls and can force an error (`watchlist_service_test.go:253-266`) — extend it to append each request to a slice and record `metadata.FromOutgoingContext(ctx)` (the fake receives the ctx the service passed). `fakeConfig` (`:244-251`, map-backed `vals map[string]int64`, `GetInt` returns the default only for an absent key) / `wideCaps()` (`:362`) show the `intConfig` stub shape (`GetInt`).
+- `emitEvent` retries `codes.Unavailable` up to 4 attempts with 100 ms doubling backoff (`portfolio_service.go:1159-1175`); any other code breaks out after one attempt.
 - `fakeWatchlistStore.PruneExpiredSignalEntries` from Step 9 returns a configured `PruneResult`.
 - `TestLedgerFailure_NonFatal` (`:505`) is the precedent for ledger-error tolerance.
 - From Step 11 on, the key is seeded by config migration 035 at 300, which equals `defaultPruneIntervalSec`. A seeded key and an unset key read identically. An unset key still occurs in a scope with no row, or after the 035 down. So `TestSignalPrune_IntervalDefaultsWhenUnset` stays the read-path case and no seeded-value case is added.
 
 **TDD**: red-green required — fails before Step 11 (no symbols).
 
-**Covers**: `AC-6, AC-7, AC-8, AC-13, AC-14` — AC-6 (empty `PruneResult` ⇒ zero `AppendEvent` calls, no error); AC-7 (expired entry ⇒ one `portfolio.watchlist.signal_entry_expired` naming user `user-1`, symbol, `signal_id 101`); AC-8 (event names `signal_id 102` for a renewed entry); AC-13 (table: AAPL with `SignalID=101` → `…signal_entry_expired` with `signal_id`+`valid_until "2026-10-01T00:00:00Z"`; ORCL with nil `SignalID` → `…signal_entry_removed_untracked`; each: exactly one event, `req.UserId == "user-1"`, non-empty `x-trace-id` in outgoing metadata, payload holds `user_id`, `watchlist_id`, `symbol`, `strategy_id "strat-9"`, stream key `watchlist:<id>`; the untracked payload has **no** `signal_id`/`valid_until`); AC-14 read half (`clampPruneInterval` table: `0→300s`, `30→60s`, `90000→86400s`, plus `-5→300s`, `60→60s`, `86400→86400s`, `1→60s`, and a `pruneInterval()` check through a stub `intConfig` for an unset key → 300s).
+**Covers**: `AC-6, AC-7, AC-8, AC-13, AC-14` — AC-6 (empty `PruneResult` ⇒ zero `AppendEvent` calls, no error); AC-7 (expired entry ⇒ one `portfolio.watchlist.signal_entry_expired` naming user `user-1`, symbol, `signal_id 101`); AC-8 (event names `signal_id 102` for a renewed entry); AC-13 (table: AAPL with `SignalID=101` → `…signal_entry_expired` with `signal_id`+`valid_until "2026-10-01T00:00:00Z"`; ORCL with nil `SignalID` → `…signal_entry_removed_untracked`; each: exactly one event, `req.UserId == "user-1"`, non-empty `x-trace-id` in outgoing metadata, payload holds `user_id`, `watchlist_id`, `symbol`, `strategy_id "strat-9"`, stream key `watchlist:<id>`; the untracked payload has **no** `signal_id`/`valid_until`); AC-14 read half (`clampPruneInterval` table: `0→300s`, `30→60s`, `90000→86400s`, plus `-5→300s`, `60→60s`, `86400→86400s`, `1→60s`; and `pruneInterval()` driven through `fakeConfig{vals: {signalPruneIntervalKey: 0|30|90000}}` → `300s`/`60s`/`86400s`, plus an unset key → 300s).
 
 **Instructions**:
-1. Name the tests so the Verification `-run` filter cannot match nothing: `TestClampPruneInterval` (table: `0`→300, `-5`→300, `1`→60, `59`→60, `60`→60, `86400`→86400, `90000`→86400); `TestSignalPrune_ExpiredEventPayload`, `TestSignalPrune_UntrackedEventPayload`, `TestSignalPrune_LedgerErrorIsBestEffort`, `TestSignalPrune_NoopTickEmitsNothing`, `TestSignalPrune_IntervalDefaultsWhenUnset` (stub `intConfig` with the key unset → `pruneInterval()` = 300 s; `TestClampPruneInterval` covers the clamp table), and an AC-8 case inside `TestSignalPrune_ExpiredEventPayload` (a renewed entry's event carries `signal_id 102`). They drive one tick through `s.pruneOnce(ctx)` (defined by Step 11), never the sleeping loop.
-2. Event assertions use the extended `fakeLedger`; a ledger error on one emit must not stop the remaining emits (best-effort).
+1. Name the tests so the Verification `-run` filter cannot match nothing: `TestClampPruneInterval` (table: `0`→300, `-5`→300, `1`→60, `59`→60, `60`→60, `86400`→86400, `90000`→86400); `TestSignalPrune_ExpiredEventPayload`, `TestSignalPrune_UntrackedEventPayload`, `TestSignalPrune_LedgerErrorIsBestEffort`, `TestSignalPrune_NoopTickEmitsNothing`, `TestSignalPrune_IntervalDefaultsWhenUnset` (stub `intConfig` with the key unset → `pruneInterval()` = 300 s; `TestClampPruneInterval` covers the clamp table), `TestSignalPrune_IntervalReadsConfig` (table through the existing `fakeConfig{vals: map[string]int64{signalPruneIntervalKey: v}}`: `0`→`300*time.Second`, `30`→`60*time.Second`, `90000`→`86400*time.Second` — the AC-14 read half end-to-end through `pruneInterval()`, not just the pure clamp), and an AC-8 case inside `TestSignalPrune_ExpiredEventPayload` (a renewed entry's event carries `signal_id 102`). They drive one tick through `s.pruneOnce(ctx)` (defined by Step 11), never the sleeping loop.
+2. Event assertions use the extended `fakeLedger`; a ledger error on one emit must not stop the remaining emits (best-effort). `TestSignalPrune_LedgerErrorIsBestEffort` sets `fakeLedger.err` to a **non-`Unavailable`** status (e.g. `status.Error(codes.Internal, "boom")`): `emitEvent` retries `codes.Unavailable` 4× with backoff, which would sleep the test and inflate the call count. Assert one `AppendEvent` call per pruned entry.
 3. Literals inline (single consumer, C-13); reuse the existing `fakeLedger`/`fakeConfig`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-portfolio && [ "$(grep -cE '^func Test(SignalPrune|ClampPrune)' internal/service/signal_prune_test.go)" -ge 6 ] && OUT=$(GOWORK=off go test ./internal/service/ -run 'TestSignalPrune_|TestClampPruneInterval' -race -count=1 -v 2>&1); rc=$?; [ "$rc" -eq 0 ] && [ "$(echo "$OUT" | grep -c '^--- PASS')" -ge 6 ]   # the six named tests exist, run and pass; a filter matching nothing, or any failure, fails the command
+cd services/xstockstrat-portfolio && [ "$(grep -cE '^func Test(SignalPrune|ClampPrune)' internal/service/signal_prune_test.go)" -ge 7 ] && grep -qE '^func TestSignalPrune_IntervalReadsConfig\(' internal/service/signal_prune_test.go && OUT=$(GOWORK=off go test ./internal/service/ -run 'TestSignalPrune_|TestClampPruneInterval' -race -count=1 -v 2>&1); rc=$?; [ "$rc" -eq 0 ] && [ "$(echo "$OUT" | grep -c '^--- PASS')" -ge 7 ]   # the seven named tests exist, run and pass; a filter matching nothing, or any failure, fails the command
 ```
 then **GO-LINT** and **GO-COVER** ("New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient"; total ≥ 40%).
 
@@ -706,25 +707,28 @@ cd services/xstockstrat-config && grep -nF "'portfolio.watchlist.signal_prune_in
      3. The environments are exactly `['production','staging']` (sorted, distinct).
      4. Each row has value_data === default_value === `'300'`, and `Number(value_data)` is an integer in `[60,86400]`.
      5. `splitStatements(findOne(SUFFIX,'down'))` deep-equals `["DELETE FROM config.config_values WHERE namespace = 'portfolio' AND key = 'portfolio.watchlist.signal_prune_interval_seconds' AND user_id IS NULL"]`. This is a full match.
-4. Bounds rows: append two rows to `TIMEOUT_KEY_FORMS`: `{ ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 }` and the full-dotted twin (the existing loop yields the `min-1`/`max+1` rejections, 59 and 86401, and the in-bounds acceptances, 60 and 86400), plus one explicit assertion that `0` is rejected for the full-dotted form (the AC's `0` row; `min-1` only covers 59).
+4. Bounds rows: append two rows to `TIMEOUT_KEY_FORMS`: `{ ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 }` and the full-dotted twin (the existing loop yields the `min-1`/`max+1` rejections, 59 and 86401, and the in-bounds acceptances, 60 and 86400), plus one explicit assertion that `0` is rejected for the full-dotted form (the AC's `0` row; `min-1` only covers 59). Write it as its own case titled `it('rejects portfolio.watchlist.signal_prune_interval_seconds = 0 with INVALID_ARGUMENT and writes nothing', …)` whose body calls `setConfig({ intVal: 0 }, …)` (the Verification greps that title).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-config \
- && [ "$(grep -c 'signal_prune_interval_seconds' src/__tests__/setConfigScalarBounds.test.ts)" -ge 3 ] \
+ && grep -qF "key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400" src/__tests__/setConfigScalarBounds.test.ts \
+ && grep -qF "key: 'portfolio.watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400" src/__tests__/setConfigScalarBounds.test.ts \
+ && [ "$(grep -cF "it('rejects portfolio.watchlist.signal_prune_interval_seconds = 0 with INVALID_ARGUMENT" src/__tests__/setConfigScalarBounds.test.ts)" -eq 1 ] \
  && [ "$(grep -cE "^[[:space:]]*it\('" src/__tests__/signalPruneIntervalSeedMigration.test.ts)" -eq 5 ] \
  && ! grep -nE '^function (findOne|splitStatements)' src/__tests__/zeroTrapDescriptionMigration.test.ts \
  && pnpm run lint \
  && OUT=$(pnpm run build && node --test --test-reporter=tap dist/__tests__/zeroTrapDescriptionMigration.test.js dist/__tests__/signalPruneIntervalSeedMigration.test.js 2>&1); rc=$?; echo "$OUT" | tail -n 10; \
- [ "$rc" -eq 0 ] && echo "$OUT" | grep -q '^# pass 9$' && echo "$OUT" | grep -q '^# fail 0$' \
+ [ "$rc" -eq 0 ] && echo "$OUT" | grep -q '^# fail 0$' && echo "$OUT" | awk '/^# pass [0-9]+$/ { n = $3 } END { exit !(n >= 9) }' \
  && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
 ```
-Both suites must pass, run as exactly those two files (`pnpm test` runs every suite and will not print `# pass 9`): 5 new plain `it()` cases plus zeroTrap's 4 = `# pass 9`, `# fail 0`. Coverage stays at or above 40%.
+Both suites must pass, run as exactly those two files (`pnpm test` runs every suite): 5 new plain `it()` cases plus zeroTrap's 4, so `# fail 0` and a `# pass` count of at least 9. Coverage stays at or above 40%.
 
 Recorded RED, run once and never part of the gate:
 ```bash
-cd services/xstockstrat-config && R=$(mktemp -d "${TMPDIR:-/tmp}/red035.XXXXXX") && mv migrations/035_portfolio_signal_prune_interval.*.sql "$R/" && pnpm run build; node --test --test-reporter=tap dist/__tests__/signalPruneIntervalSeedMigration.test.js; red=$?; mv "$R"/035_*.sql migrations/ && rmdir "$R" && [ "$red" -ne 0 ] && [ -z "$(git status --porcelain migrations/)" ]
+cd services/xstockstrat-config && R=$(mktemp -d "${TMPDIR:-/tmp}/red035.XXXXXX") && mv migrations/035_portfolio_signal_prune_interval.*.sql "$R/" && pnpm run build; RED_OUT=$(node --test --test-reporter=tap dist/__tests__/signalPruneIntervalSeedMigration.test.js 2>&1); red=$?; echo "$RED_OUT"; mv "$R"/035_*.sql migrations/ && rmdir "$R" && [ "$red" -ne 0 ] && echo "$RED_OUT" | grep -q 'expected exactly one' && echo "$RED_OUT" | grep -q '^# fail 5$' && [ -z "$(git status --porcelain migrations/)" ]
 ```
+The RED counts only if the captured output contains `expected exactly one` (`findOne`'s assertion) and `# fail 5`; a non-zero rc from a build or import error is not a RED. The trailing `git status --porcelain migrations/` check assumes the 035 pair is already committed (Step 11); run it on a tree where it is, or the untracked pair makes the check fail.
 
 ---
 
@@ -920,7 +924,7 @@ grep -n "emptied by expiry pruning" e2e/insights/watchlists.spec.ts   # the new 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Config key tables: portfolio `CLAUDE.md` rows `portfolio.watchlist.max_per_user`/`max_symbols_per_list` (`:106-107`) are the format to extend; `docs/patterns/config-governance.md` feature-240 entry (`:140-148`) is the format template (Type/Default/Bounds/Notes). This key is **seeded** (config migration 035), so its Notes cite the migration, not the 227-D2 waiver.
+- Config key tables: portfolio `CLAUDE.md` rows `portfolio.watchlist.max_per_user`/`max_symbols_per_list` (`:106-107`) are the format to extend; `docs/patterns/config-governance.md` feature-240 entry (`:141-150`) is the format template (Type/Default/Bounds/Notes). This key is **seeded** (config migration 035), so its Notes cite the migration, not the 227-D2 waiver.
 - Events: portfolio `CLAUDE.md` § Ledger Events Emitted table (`portfolio.position.opened` … `portfolio.snapshot`) — add `portfolio.watchlist.signal_entry_expired` (payload per design § 4) and `portfolio.watchlist.signal_entry_removed_untracked`, noting the owner is carried in `AppendEventRequest.user_id`.
 - Teardown for this step's files runs once, at the end of Step 21 (root `CLAUDE.md` § Teardown).
 - Overlap review: `docs/patterns/config-governance.md` § Per-Feature Registered Keys is also edited by in-flight features 278, 243 and 255 (append/row edits): place the new entry with the same convention as the nearest sibling entries and expect a rebase-only conflict at merge time (re-read the heading before editing).
@@ -933,17 +937,22 @@ grep -n "emptied by expiry pruning" e2e/insights/watchlists.spec.ts   # the new 
 1. **Portfolio `CLAUDE.md`**: add key row `portfolio.watchlist.signal_prune_interval_seconds | int | 300 | …` (feature 281; read live each iteration; `<=0`→300, `1..59`→60, `>86400`→86400 on read; write bounds `[60,86400]` in `SCALAR_BOUNDS_REGISTRY`; seeded by config migration `035_portfolio_signal_prune_interval`, global staging + production rows at 300; no pause switch); the two events; table `portfolio.watchlist_signal_expiry` (migration `018`; FK to `watchlists` only; open-ended = no row; `signal_id NULL` = backfill mark); a short "Signal-entry expiry prune" paragraph (startup tick + interval loop, `SKIP LOCKED` never-waits, `instance_count: 1` not relied on for correctness but load scales per instance; provenance-less SIGNAL add untracks); the `backfill-signal-expiry` subcommand by name only (**no `docs/runbooks/…md` path in this step** — the runbook does not exist until Step 21, and `scripts/check-context-map.sh` fails on a `CLAUDE.md` reference to a missing `docs/**/*.md` file; Step 21 adds the link). Constraints, not narration.
 2. **Portfolio constitution**: add `PORTFOLIO-17` — the prune is the single deleter of expiry-tracked SIGNAL entries; never waits (`SKIP LOCKED`, delete only the locked set); `UpdateBinding`/`UpdateBindings` lock symbol-then-parent so any new deleter must also use `SKIP LOCKED`; expiry rows FK to `watchlists` (never `watchlist_symbols`) because replace-all deletes bindings; amend `PORTFOLIO-7` for `insertBindingTx`/`ExpiryIntent`.
 3. **`docs/patterns/database.md`**: one sentence under the schema map that `portfolio.watchlist_signal_expiry` (migration `018`) is a plain table (the map is hypertables only) and that the backfill subcommand reads `ingest.newsletter_signals` read-only.
-4. **`docs/patterns/config-governance.md`**: new top entry "feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)" with the key table, same format as feature 240, citing config migration `035_portfolio_signal_prune_interval` as the seed (staging + production, global, `int` 300; the down deletes only the global rows). In the entry's Notes record the **feature 278 interaction**: the key is seeded, not baselined (operator decision 2026-11-02), and is wired with zero `check-config-wiring.mjs --final` findings.
+4. **`docs/patterns/config-governance.md`**: new top entry "feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)" with the key table, same format as feature 240, citing config migration `035_portfolio_signal_prune_interval` as the seed (staging + production, global, `int` 300; the down deletes only the global rows). In the entry's Notes record, under the literal phrase `feature 278 interaction`, that the key is seeded, not baselined (operator decision 2026-11-02), and is wired with zero `check-config-wiring.mjs --final` findings.
 5. **Agent `CLAUDE.md`**: grep `:141` and the tool table; edit only if it describes entry lifetime.
 
 **Verification**:
 ```bash
-grep -n "signal_prune_interval_seconds" services/xstockstrat-portfolio/CLAUDE.md && grep -n "signal_prune_interval_seconds" docs/patterns/config-governance.md
-grep -n "signal_entry_expired" services/xstockstrat-portfolio/CLAUDE.md && grep -n "signal_entry_removed_untracked" services/xstockstrat-portfolio/CLAUDE.md
-grep -n "PORTFOLIO-17" services/xstockstrat-portfolio/docs/context-constitution.md
-bash scripts/check-context-map.sh
+P=services/xstockstrat-portfolio/CLAUDE.md; K=services/xstockstrat-portfolio/docs/context-constitution.md; G=docs/patterns/config-governance.md \
+ && grep -nF "signal_prune_interval_seconds" "$P" && grep -nF "signal_prune_interval_seconds" "$G" \
+ && grep -nF "signal_entry_expired" "$P" && grep -nF "signal_entry_removed_untracked" "$P" \
+ && grep -nF "watchlist_signal_expiry" "$P" && grep -nF "backfill-signal-expiry" "$P" \
+ && grep -nF "035_portfolio_signal_prune_interval" "$P" && grep -nF "035_portfolio_signal_prune_interval" "$G" \
+ && grep -nF "feature 281 — signal-watchlist-expiry-pruning" "$G" && grep -nF "feature 278 interaction" "$G" \
+ && grep -nF "PORTFOLIO-17" "$K" && grep -E '^\| \*\*PORTFOLIO-7\*\*' "$K" | grep -F "ExpiryIntent" | grep -qF "insertBindingTx" \
+ && grep -nF "portfolio.watchlist_signal_expiry" docs/patterns/database.md \
+ && bash scripts/check-context-map.sh
 ```
-(every grep must hit; `check-context-map.sh` must pass — it validates `docs/...` references inside every `CLAUDE.md`.)
+(one `&&` chain: any missing grep hit, or a failing `check-context-map.sh`, fails the block. `check-context-map.sh` validates `docs/...` references inside every `CLAUDE.md`. The strings are the ones Instructions 1-4 write: the `watchlist_signal_expiry` table and the `backfill-signal-expiry` subcommand in the portfolio `CLAUDE.md` (Instruction 1); `035_portfolio_signal_prune_interval` in the portfolio `CLAUDE.md` and in config-governance (Instructions 1 and 4); the amended `PORTFOLIO-7` row naming `insertBindingTx` and `ExpiryIntent` (Instruction 2); the `database.md` sentence (Instruction 3); and the feature-281 entry with its `feature 278 interaction` note (Instruction 4).)
 
 ---
 

@@ -162,3 +162,22 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - **Config migration `035` is reserved** for `035_portfolio_signal_prune_interval`.
 - **Follow-up (not built, C-18):** a platform CI check that every new migration NNN is above the base branch's max.
 - **Next:** advisory `/sdd-review signal-watchlist-expiry-pruning impl-spec` on Steps 11-14 and 20, then `/sdd-execute signal-watchlist-expiry-pruning`. Step 11 must merge `origin/main-dev` ≥ `631028eb` first.
+
+## Session 2026-11-02 — sdd-review impl-spec (advisory, scoped to Steps 11-14, 20)
+
+- **Verdict: PASS WITH WARNINGS** (no blockers). All warnings were addressed by surgical text edits to `implementation-spec.md`, with no new steps and no renumbering.
+- **W1 (Step 12, AC-14 read half):** added `TestSignalPrune_IntervalReadsConfig`, which drives `pruneInterval()` through `fakeConfig{vals: {signalPruneIntervalKey: 0|30|90000}}` and expects 300s/60s/86400s, alongside the pure `TestClampPruneInterval` table. Updated Covers. The Verification guards are now `-ge 7` (test count and `--- PASS`) plus a named grep for the new test.
+- **W2 (Step 14 recorded RED):** the output is captured to `RED_OUT` and must contain `expected exactly one` and `^# fail 5$`; a non-zero rc alone no longer counts. Added a note that the trailing `git status --porcelain migrations/` check assumes the 035 pair is already committed (Step 11).
+- **W3 (Step 14 Verification):** replaced `^# pass 9$` with `# fail 0` plus an awk `# pass N` ≥ 9 check (bash 3.2 safe). Replaced the `grep -c … -ge 3` with fixed-string greps for both `TIMEOUT_KEY_FORMS` rows and an exact-count grep for the explicit 0-rejection case. Instruction 4 now pins that case's `it(...)` title so the grep has a stable target.
+- **W4 (Step 20 Verification):** one `&&` chain, so any miss fails the block. Added greps for:
+  - the `database.md` sentence (`portfolio.watchlist_signal_expiry`)
+  - `watchlist_signal_expiry` and `backfill-signal-expiry` in the portfolio `CLAUDE.md`
+  - `035_portfolio_signal_prune_interval` in the portfolio `CLAUDE.md` and in config-governance
+  - the feature-281 entry heading
+  - the amended `PORTFOLIO-7` row (`insertBindingTx` + `ExpiryIntent`)
+  - the feature-278 note
+
+  Instruction 4 now asks for the literal phrase `feature 278 interaction`. Instruction 4 does not write the table name into config-governance, so `watchlist_signal_expiry` is grepped in the portfolio `CLAUDE.md` only.
+- **W5 (Step 12):** `TestSignalPrune_LedgerErrorIsBestEffort` must force a non-`Unavailable` error (e.g. `codes.Internal`), because `emitEvent` retries `codes.Unavailable` 4× with backoff (`portfolio_service.go:1159-1175`). This is cited in Codebase Evidence and Instruction 2.
+- **W6 (noted, no edit):** Step 16 does **not** cover AC-13; it covers AC-15/16/17. AC-13 maps to Step 12 (Scenario Coverage), and its repo-level half (the pruned entry's `StrategyID == "strat-9"`) is fed by Step 10 Instruction 2. That mapping is sufficient, so this is left as a note.
+- **W7 (citation drift):** Step 12 now cites `fakeConfig` → `watchlist_service_test.go:244-251` and `wideCaps` → `:362`. Step 20 cites the feature-240 entry → `config-governance.md:141-150`, which is correct on this branch. On the feature-278 branch it sits at `:172-181`, a rebase-only shift.
