@@ -651,7 +651,7 @@ then **GO-LINT** and **GO-COVER** ("New logic is in an excluded package — no c
 
 ### Step 13 — config: `SCALAR_BOUNDS_REGISTRY` entry for the prune interval
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -1117,4 +1117,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: TDD red-green, "fails before Step 11 (no symbols)".
 - **Done instead**: Step 11 had already landed (sequential order), so the Step 11 symbols existed. RED was taken by writing `signal_prune_test.go` before extending `fakeLedger`: `go test ./internal/service/ -run 'TestSignalPrune_|TestClampPruneInterval'` failed to build with `ledger.reqs undefined` / `ledger.outMD undefined`. After `fakeLedger` gained `reqs` and `outMD` (`metadata.FromOutgoingContext`), the Verification passed with 7 `--- PASS` lines. `TestClampPruneInterval` also carries the AC-14 `30→60s` row alongside the Instruction 1 rows. The Verification one-liner ran verbatim from a scratchpad script file, because the worktree sandbox refuses it inline.
 - **Disposition**: same checks; only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 13 — Verification run from a script file
+
+- **Spec said**: run the Verification block as written.
+- **Done instead**: the block ran verbatim from a scratchpad script file, because the worktree sandbox refuses it inline. Lint: 0 errors (234 pre-existing `no-explicit-any` warnings). The step-time wiring gate exited 0 with no output. `--final` also exited 0; its one `REPORTED` line is the pre-existing `trading.fill_poller.interval_ms:read-unseeded` baseline, with nothing for this key or the 037/reader files, so Step 11 is not reopened.
+- **Disposition**: same checks. Only the step's **Files** changed.
 - **Severity**: n/a

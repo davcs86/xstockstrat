@@ -337,3 +337,13 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Verification: the step one-liner → `VERIFY_RC=0`; GO-LINT `0 issues`; GO-COVER full `go test ./...` passes, total 68.6% (≥ 40%; new code in excluded `service/`). No database was started.
 - Deviations: RED source (Step 11 already landed) and the Verification run from a script file (Deviation Log).
 - Next: Step 13 (config `SCALAR_BOUNDS_REGISTRY` entry).
+
+### Step 13 — config: `SCALAR_BOUNDS_REGISTRY` entry for the prune interval [done] (2026-11-02)
+
+- `configServiceImpl.ts`: after the feature-240 row, a one-line constraint comment and `'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 }`. `lookupScalarBounds` resolves both key-column forms (bare full-dotted key, or `${namespace}.${key}`), so this one entry covers both. No migration, no env change, no `scripts/config-wiring.json` edit.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
+- TDD: N/A (config category). The write-side bounds behavior is proven by Step 14's `TIMEOUT_KEY_FORMS` rows.
+- Verification: grep hit at `:150`; `pnpm run lint` 0 errors (234 pre-existing warnings); `tsc --noEmit` clean. `check-config-wiring.mjs --declared-from …/product-spec.md` rc 0 with no findings. `--final` rc 0; its only `REPORTED` line is the pre-existing `trading.fill_poller.interval_ms` baseline, so Step 11 is not reopened.
+- Deviations: the Verification ran from a script file because of the sandbox (Deviation Log).
+- Next: Step 14 (config bounds rows + the 037 seed parse test, AC-14/AC-19).
+
