@@ -783,3 +783,82 @@ Feature: Platform-wide guarantees
       | xstockstrat-analysis   | Authorization=Basic%20dGVzdDprZXk%3D     |
       | xstockstrat-ledger     | Authorization=Basic dGVzdDprZXk=         |
       | xstockstrat-ui         | Authorization=Basic%20dGVzdDprZXk%3D     |
+
+  @AC-1 @FR-1 @feature-278
+  Scenario: A key seeded bare but read dotted is reported as a form mismatch
+    Given a config migration seeds namespace "ingest" with key "mcp_client.request_timeout_seconds"
+    And ingest code reads the key "ingest.mcp_client.request_timeout_seconds"
+    When the wiring check runs
+    Then it reports one finding of kind "form-mismatch" naming both strings
+
+  @AC-2 @FR-1 @feature-278
+  Scenario: A seeded key that no code reads is reported as unread
+    Given a config migration seeds namespace "ledger" with key "stream.notify_enabled"
+    And no service code reads "stream.notify_enabled" or "ledger.stream.notify_enabled"
+    When the wiring check runs
+    Then it reports one finding of kind "seeded-unread" for "ledger" "stream.notify_enabled"
+
+  @AC-3 @FR-1 @feature-278
+  Scenario: A key that code reads but no migration seeds is reported as unseeded
+    Given ingest code reads the key "ingest.backfill.retry_on_failure"
+    And no config migration seeds it
+    When the wiring check runs
+    Then it reports one finding of kind "read-unseeded" for "ingest.backfill.retry_on_failure"
+
+  @AC-4 @FR-2 @feature-278
+  Scenario: An execute step that seeds a key is not marked done while its key has a finding
+    Given a "config" step declares the key "analysis.fundsignal.enabled"
+    And the wiring check reports a finding for "analysis.fundsignal.enabled"
+    When /sdd-execute validates the step
+    Then the step stays not-done
+    And the output names the finding and the key
+
+  @AC-5 @FR-2 @feature-278
+  Scenario: A step that touches no config key is not blocked by unrelated findings
+    Given the wiring check reports a finding for "ledger.stream.notify_enabled"
+    And an execute step changes only a Go handler and declares no config key
+    When /sdd-execute validates the step
+    Then the step is marked done
+
+  @AC-6 @FR-3 @feature-278
+  Scenario: An impl-spec with a config key but no reader step fails review
+    Given a product spec lists the config key "analysis.fundsignal.enabled"
+    And its implementation spec has no step naming the reader file and symbol for that key
+    When /sdd-review reviews the implementation spec
+    Then the review reports a failing finding for "analysis.fundsignal.enabled" requiring a reader step and a snapshot-built test
+
+  @AC-7 @FR-4 @feature-278
+  Scenario: CI fails on a new finding that is not in the baseline
+    Given the baseline lists every finding recorded in feature 277's sweep, including its 18 form mismatches, each with an owner
+    And a pull request seeds a key that no code reads
+    When the CI wiring-check job runs
+    Then the job fails and names the new finding
+
+  @AC-8 @FR-4 @feature-278
+  Scenario: A baseline entry without an owner is rejected
+    Given a baseline entry for "ledger" "stream.notify_enabled" that names no owning defect or feature
+    When the CI wiring-check job runs
+    Then the job fails and names the entry
+
+  @AC-9 @FR-1 @feature-278
+  Scenario: A read whose key is built at runtime is reported, not skipped
+    Given analysis code reads a config key built with the expression f"analysis.{name}.enabled" where "name" is a function parameter
+    And no baseline entry or annotation names the key set
+    When the wiring check runs
+    Then it reports one finding of kind "dynamic-read" naming the file and symbol
+
+  @AC-10 @FR-2 @feature-278
+  Scenario: A migration that inserts a config row triggers the check
+    Given an execute step adds a migration inserting key "analysis.fundsignal.enabled" into "config.config_values"
+    And the step is not typed "config"
+    And the wiring check reports a finding for "analysis.fundsignal.enabled"
+    When /sdd-execute validates the step
+    Then the step stays not-done
+    And the output names the check result for that key
+
+  @AC-11 @FR-3 @feature-278
+  Scenario: An impl-spec reader step without a snapshot-built test fails review
+    Given an implementation spec names the reader file and symbol for "analysis.fundsignal.enabled"
+    And no test builds a config snapshot from the seeded key and asserts the reader returns the seeded value
+    When /sdd-review reviews the implementation spec
+    Then the review reports a failing finding for "analysis.fundsignal.enabled" requiring a snapshot-built test
