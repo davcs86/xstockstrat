@@ -323,6 +323,17 @@ window is evaluated fully warm and no trade opens before `start`. Two consequenc
 - If stored history does not reach back far enough to warm the indicators, the run returns
   `BACKTEST_STATUS_INSUFFICIENT_DATA` with `coverage_gaps` covering the **pre-window** span —
   not the window you asked for. Fill it with `trigger_backfill`, then re-run.
+- An `INSUFFICIENT_DATA` run with **empty** `coverage_gaps` is never a backfill case (feature 275).
+  A symbol that could not be evaluated — an upstream RPC error or an unexpected exception — gets
+  `no_trade_reason: NO_TRADE_REASON_EVALUATION_FAILED` and a `warnings` entry
+  `backtest symbol <SYM> not evaluated: <CODE>`. A formula that indicators refuses to run for the
+  strategy owner is `NO_TRADE_REASON_FORMULA_ERROR` with the same warning, `<CODE>` being
+  `PERMISSION_DENIED` (admin caller, or another indicators refusal) or `NOT_FOUND` (owner). Either
+  makes an otherwise trade-less run `BACKTEST_STATUS_INSUFFICIENT_DATA`. Act on `<CODE>`:
+  `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun later; `PERMISSION_DENIED`,
+  `NOT_FOUND` or a Python exception name (e.g. `ValueError`) → report it. A partly failed run that
+  still traded stays `BACKTEST_STATUS_OK` and carries the same rows and warnings for the failed
+  symbols.
 - A strategy that references `VWAP` alongside a longer indicator will see its VWAP values shift
   versus an unwindowed run: VWAP is an expanding average anchored at the first fetched bar, so
   the prefix moves its anchor. Deterministic, but not equal to the rolling-default run.
@@ -394,8 +405,12 @@ applies there, e.g. `volume`.
 
 **No-attachment case.** A run with no diagnostics and no trades — typically
 `BACKTEST_STATUS_INSUFFICIENT_DATA` — returns the summary block only, with `"attachments": []`. Its
-`coverage_gaps` are inline, so the summary is the whole result. The rule is about content, not
-status: any run with nothing to attach behaves this way.
+`coverage_gaps`, `warnings` and per-symbol diagnostics are inline, so the summary is the whole
+result. An all-failed run has `coverage_gaps: []` but non-empty diagnostics with
+`NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR`, plus their `warnings`. The
+rule is about content, not status: any run with nothing to attach behaves this way. An
+`INSUFFICIENT_DATA` run persists no detail, so these rows and warnings live only in this response
+and analysis memory; they are lost on an analysis restart or a Past-Runs reload.
 
 **Degradation.** Whether an attachment is surfaced is client-dependent and outside this platform's
 control, so the summary always stands on its own, and `attachments` names what exists (uri +

@@ -866,3 +866,22 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: `pnpm run lint` passed (pre-existing warnings only); both greps hit; e2e ran in CI mode (Deviation
   Log, CI-equivalent fallback). `tsc --noEmit` shows only two pre-existing `backfills.spec.ts` errors.
 - Next: Step 9 (agent `run_backtest` docstring and `docs/runbooks/mcp-tools.md`).
+
+### Step 9 — agent `run_backtest` docstring and `docs/runbooks/mcp-tools.md` (2026-11-01, done)
+
+- `services/xstockstrat-agent/app/tools.py` (`run_backtest` docstring only): the no-attachment sentence now says an
+  INSUFFICIENT_DATA run's coverage_gaps, warnings and per-symbol diagnostics are inline, and that an all-failed run
+  has `coverage_gaps: []` with EVALUATION_FAILED or FORMULA_ERROR rows. A new "Evaluation failures (feature 275)"
+  paragraph after the feature-215 one gives the reason, the `backtest symbol <SYM> not evaluated: <CODE>` warning, the
+  PERMISSION_DENIED/NOT_FOUND FORMULA_ERROR codes and the discriminator (never backfill with empty gaps; rerun on
+  UNAVAILABLE/DEADLINE_EXCEEDED/RESOURCE_EXHAUSTED; report PERMISSION_DENIED/NOT_FOUND/exception names).
+- `docs/runbooks/mcp-tools.md` `### run_backtest`: the same contract as a bullet after the pre-window `coverage_gaps`
+  → `trigger_backfill` bullet (plus the @AC-5 partial-run sentence), and the **No-attachment case** paragraph corrected
+  the same way, with the Open Risk 8 note (INSUFFICIENT_DATA persists no detail; rows lost on restart or Past-Runs
+  reload). `list_templates`/`instantiate_template` mentions untouched; no `is_public`/`include_public` (@AC-32).
+- TDD: N/A (docs). Baseline: the Verification grep had 0 hits in `tools.py` and none in the `run_backtest` section of
+  `mcp-tools.md` on `d1e52e97`; after: `tools.py:786,816,817`, `mcp-tools.md:328,329,410`.
+- Verification: agent suite 613 passed, coverage 84.17% (≥40); `ruff check` all passed; `ruff format --check` 63
+  files formatted. `is_public` grep: no hits.
+- Next: Step 10 (strat-lab `backtest` skill).
+

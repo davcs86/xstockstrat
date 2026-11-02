@@ -652,7 +652,7 @@ step changes no `src/lib` code.
 
 ### Step 9 — docs: agent `run_backtest` docstring and `docs/runbooks/mcp-tools.md` (C-14, fails.md:307-309)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (docstring only), `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (the `run_backtest` docstring only)
@@ -894,3 +894,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Step 8 (2026-11-01) — pre-existing `tsc` errors.** `tsc --noEmit` reports two errors in
   `e2e/insights/backfills.spec.ts:135-136` (`dataKind` / `timeframeEnum` on `never`). That file is outside this
   step's **Files** and unchanged; none of the four touched files has an error. Left alone (out of scope).
+- **Step 9 (2026-11-01) — stale citation.** Codebase Evidence cites `mcp-tools.md:324-325` as an INSUFFICIENT_DATA
+  `coverage_gaps` → `trigger_backfill` bullet; on the branch head that bullet is :323-325. The new contract bullet sits
+  directly after it. Evidence only, no scope change.
+- **Step 9 (2026-11-01) — Verification grep has pre-existing hits.** `grep "not evaluated"` also matches
+  `mcp-tools.md` `screen_symbols` (:491) and the entry-rule note (:1039); both predate this step and are outside the
+  `run_backtest` section. Left alone (out of scope).
+- **Step 9 (2026-11-01) — partial-run sentence.** The mcp-tools.md bullet adds one sentence that a partly failed run
+  which still traded stays `BACKTEST_STATUS_OK` and carries the failed symbols' rows and warnings (@AC-5), so the
+  "never backfill" rule is not read as INSUFFICIENT_DATA-only. No scope change.
+- No CI-equivalent tooling fallback was used in Step 9 (`uv run pytest` and `uv run ruff`, the service's own harness).

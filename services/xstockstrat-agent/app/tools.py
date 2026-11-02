@@ -781,8 +781,9 @@ def register_tools(server: MCPServer) -> None:
         `application/json` resource carrying the COMPLETE result: the full per-bar `diagnostics`
         (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and the
         full `trades` list. Open it when you need bar-level detail.
-        A run with no diagnostics and no trades (e.g. BACKTEST_STATUS_INSUFFICIENT_DATA) has NO
-        attachment — the summary with `coverage_gaps` is the whole result.
+        An INSUFFICIENT_DATA run has NO attachment; its coverage_gaps, warnings and per-symbol
+        diagnostics are inline. An all-failed run has coverage_gaps: [] but non-empty diagnostics
+        with NO_TRADE_REASON_EVALUATION_FAILED or NO_TRADE_REASON_FORMULA_ERROR.
         `summary["attachments"]` names each attached resource's `uri` and `mime_type`, so you can
         tell the user detail exists even if your client shows no attachment affordance.
         Note: 64-bit integer fields in the attached full result (e.g. per-bar `volume`, and
@@ -810,7 +811,17 @@ def register_tools(server: MCPServer) -> None:
           fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), no
           trades and no evidence cell; a single refused symbol makes the run
           BACKTEST_STATUS_INSUFFICIENT_DATA. A fundamentals fetch OUTAGE is different: it adds a
-          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason."""
+          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason.
+        Evaluation failures (feature 275): a symbol that could not be evaluated (an upstream RPC
+          error or an unexpected exception) gets no_trade_reason NO_TRADE_REASON_EVALUATION_FAILED
+          and a `warnings` entry "backtest symbol <SYM> not evaluated: <CODE>". A formula that
+          indicators refuses to run for the strategy owner is NO_TRADE_REASON_FORMULA_ERROR with the
+          same warning, code PERMISSION_DENIED (admin caller, or another indicators refusal) or
+          NOT_FOUND (owner). Either makes an otherwise trade-less run
+          BACKTEST_STATUS_INSUFFICIENT_DATA. Discriminate by <CODE>: never backfill an
+          INSUFFICIENT_DATA run whose coverage_gaps is empty; on UNAVAILABLE, DEADLINE_EXCEEDED or
+          RESOURCE_EXHAUSTED rerun later; on PERMISSION_DENIED, NOT_FOUND or a Python exception
+          name (e.g. ValueError) report it to the user."""
         # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
         # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
