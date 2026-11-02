@@ -117,3 +117,48 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 
 - Added `docs/roadmap/features/merge-order.md` row: `signal-watchlist-expiry-pruning` (281) must wait for `enforce-config-key-wiring` (278) (Resolved: No). Reason: 278's shrink-only `read-unseeded` ratchet vs this feature's deliberately unseeded key (Step 13 Instructions 3 escalates); shared `ci-gate` block and `config-governance.md` (rebase-only). Escape hatch recorded in the row: 281 may merge first only after the operator records an exemption ruling here.
 - Closes the overlap item "policy interaction with 278" as *tracked* (the operator decision still falls to Step 13 at execute time if 278 has landed).
+
+## Session 2026-11-02 — sdd-design amendment (quick), round 1 — operator decisions
+
+- **Trigger:** 278 merged (`631028eb`). Its shrink-only `config-wiring` baseline makes the 227-D2 unseeded waiver fail CI. **Operator decision: seed the key via a config migration; no baseline entry.** Recon amendment appended to `recon.md`.
+- **Round-1 synthesis:**
+  - Config migration `035_portfolio_signal_prune_interval` lands **inside Step 11** with the reader. Seeding in Step 13 or a separate step was rejected because it leaves `read-unseeded` commits.
+  - A Step 14 migration parse test guards `value_type 'int'`, 2 env rows, `user_id` NULL, value within `[60,86400]`, and the down scope. 278's check ignores `value_type`, and the seed equals the default (ledger fails.md:2333).
+  - Step 11 verifies with `--final --json` and zero findings for this key. The step-time run is a form-mismatch guard only (`PENDING` never fails, `check-config-wiring.mjs:706`).
+  - Idempotence holds by `ON CONFLICT … DO NOTHING`. CI never re-runs 035 (`migration-rerun.sh` replays only the 224/225 list).
+  - Governance: config team plus DBA review for 035. Advisory `/sdd-review impl-spec` re-run on the changed steps.
+  - New `@AC-19`; AC-14 unchanged.
+  - **Config migration number 035 is reserved here**, re-checked at Step 11 and at the integration-PR gate.
+- **Operator decision (2026-11-02):** the 035 down migration deletes **global rows only** (`user_id IS NULL`), never per-user overrides it did not create. This deviates from the 033 precedent on purpose. Then run another round.
+
+## Session 2026-11-02 — sdd-design amendment, round 2 — synthesis (operator: another round)
+
+- **Proposer refinements:**
+  - Exact 035 SQL: the down's header carries the constraint only (rule 5).
+  - Step 14 extracts zeroTrap's `findOne`/`splitStatements` into `src/__tests__/migrationSql.ts` (`mtlsTestPki.ts` precedent) and adds 5 anchored-regex parse cases in `signalPruneIntervalSeedMigration.test.ts`.
+  - Step 13 drops its 278 branching.
+  - Product-spec `:56` must not backtick `config.config_values` (it would match `DECLARED_KEY_RE`).
+- **Adversary (NEEDS WORK, no Floor breach), folded in:**
+  - `--final` exit code 2 (035 parse failure) is a Step 11 failure.
+  - A finding counts as a key hit if its `file` is the 035 file or the reader file (`unmodelled-rewrite` / `dynamic-read` don't name the key).
+  - Unrelated `STALE`/`STALE-IN-PART` lines are judged against a `--final` baseline taken at the merge-base.
+  - Go const: double quotes, no trailing comment on the line, `const (` blocks with `)` at column 0 (`goConsts` `:477`).
+  - The 035 collision check runs `git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'` first, excludes our own 035 file, and is bash 3.2 safe.
+  - One recorded RED for the parse cases (move the 035 pair aside), kept in context/PR only.
+  - `@AC-19` Then becomes static and precise: the down's only statement is limited to global rows of this key. The test full-matches the DELETE.
+  - "Reopen Step 11" means a Deviation Log entry plus a fix step, never a body edit (F-09).
+  - Step 14 Files list zeroTrap and `migrationSql.ts`; zeroTrap's 4 tests still pass.
+
+## Session 2026-11-02 — sdd-design amendment (COMPLETION)
+
+- **Approved** by the operator after 3 quick rounds. Round-3 adversary verdict: **SOUND**, no Floor breach (`F-01`: 035 is a new file, 034 is the highest on main-dev; `F-07`: the bounds constants only clamp).
+- **Round-3 fixes folded in (all approved):**
+  1. The 035 collision check (Step 11 Verification block 2) is re-run immediately before the 281 integration PR merges into `main-dev`, after the final rebase, with its output recorded here (Step 11 Instruction 9 + merge-time note); `merge-order.md` 282-after-281 row now states the hard migration ordering (282's 036/037 after 281's 035).
+  2. Step 11 block 4 extracts the merge-base tree with `git archive "$MB" | tar -x` (no registered worktree; trap is `rm -rf "$T"` only).
+  3. Step 11 Go const wording made consistent (Instruction 1 defers to Instruction 7's column-0 one-line or `const (` block forms; a trailing `//` comment is tolerated by the checker but rule 5 keeps none).
+  4. Step 14 pins `migrationSql.ts` to `services/xstockstrat-config/src/__tests__/migrationSql.ts`, outside the `*.test.ts` glob, a test-only helper importing `node:assert`.
+  5. Step 14 Verification runs exactly `pnpm run build && node --test --test-reporter=tap dist/__tests__/zeroTrapDescriptionMigration.test.js dist/__tests__/signalPruneIntervalSeedMigration.test.js` for `# pass 9` / `# fail 0`; the 5 new cases are plain `it()` (no skip/todo).
+- **Artifacts changed:** `implementation-spec.md` (Execution Summary, merge hazards, Scenario Coverage `AC-19 → 14`, Step Dependencies, Steps 11-14, Step 20), `product-spec.md` (Affected Services, Config Key Changes, governance checkbox), `design.md` (seed wording + `## Amendment 2026-11-02` section), `acceptance.feature` (`@AC-19`), `feature.md` (Status History), `recon.md` (Amendment), `context.md`, `docs/roadmap/features/merge-order.md` (282←281 row; 281←278 row Resolved: Yes).
+- **Config migration `035` is reserved** for `035_portfolio_signal_prune_interval`.
+- **Follow-up (not built, C-18):** a platform CI check that every new migration NNN is above the base branch's max.
+- **Next:** advisory `/sdd-review signal-watchlist-expiry-pruning impl-spec` on Steps 11-14 and 20, then `/sdd-execute signal-watchlist-expiry-pruning`. Step 11 must merge `origin/main-dev` ≥ `631028eb` first.

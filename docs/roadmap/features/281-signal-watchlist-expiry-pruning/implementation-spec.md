@@ -10,7 +10,7 @@
 
 ## Execution Summary
 
-Inputs: `design.md` (4 rounds, user-approved; the Chosen Approach and Rejected Alternatives are binding), `recon.md` (Codebase Map reused as evidence; the items it left open were re-verified in this session and are cited below), `acceptance.feature` (AC-1..AC-18).
+Inputs: `design.md` (4 rounds, user-approved; the Chosen Approach and Rejected Alternatives are binding), `recon.md` (Codebase Map reused as evidence; the items it left open were re-verified in this session and are cited below), `acceptance.feature` (AC-1..AC-19; AC-19 added by the 2026-11-02 seed amendment).
 
 Order: **proto → proto-gen → migration → CI harness → portfolio add path (+tests) → portfolio validation (+tests) → portfolio prune query (+tests) → portfolio loop/events (+tests) → config bounds (+tests) → portfolio backfill subcommand (+tests) → agent provenance (+tests) → UI e2e → docs → premise-evidence check.** Deploy order is proto → portfolio → agent → backfill (design § 5); version skew is safe in either order because a provenance-less SIGNAL add only untracks (never prunes early).
 
@@ -44,7 +44,7 @@ Deployment files: **no new env var and no new port** (the backfill subcommand ru
 ### Merge hazards (impl-spec review, overlap scan — rebase-only unless noted)
 
 - `.github/workflows/ci.yml` `ci-gate` `needs:`/summary block (Step 4) is also edited by `278-enforce-config-key-wiring` (adds `config-wiring`); the job names differ. `docs/patterns/config-governance.md` (Step 20) is edited by 278, 243, 255; `services/xstockstrat-agent/app/{tools,client}.py` and `docs/runbooks/mcp-tools.md` (Steps 17, 21) by 215 and 275 in disjoint regions.
-- **Policy interaction with 278 (needs an operator decision only if 278 lands first):** the unseeded prune-interval key is a `read-unseeded` finding for 278's shrink-only ratchet — Step 13 Instructions 3 stops and escalates instead of baselining it. Whichever feature merges second owns the reconciliation (a `merge-order.md` row `281 after 278` is recommended if both are queued).
+- **Policy interaction with 278 (resolved 2026-11-02):** 278 merged (`631028eb`) and its shrink-only ratchet forbids a baseline entry, so the operator ruled to seed the key with config migration `035_portfolio_signal_prune_interval`. It lands in Step 11 with its reader, and Step 11 Verification gates it with `check-config-wiring.mjs --final` (zero findings for the key). The `merge-order.md` row `281 after 278` is satisfied.
 - `tools.py` anchors (`:628-630`, `:692`, `:2020-2038`) were verified at spec time but feature 273 (launched) already changed `ingest_signal`; re-grep against the base at execute time.
 
 ### Scenario Coverage (C-15)
@@ -69,6 +69,7 @@ Deployment files: **no new env var and no new port** (the backfill subcommand ru
 | AC-16 | 16 |
 | AC-17 | 6, 16 |
 | AC-18 | 8 |
+| AC-19 | 14 |
 
 ### Verification commands (referenced by name from the steps)
 
@@ -87,7 +88,7 @@ Deployment files: **no new env var and no new port** (the backfill subcommand ru
 - Steps 6, 10 and 16 (real-DB tests) also require the Step 4 harness (`testPool` and helpers, the `portfolio-db-test` CI job) in addition to the service step each one covers.
 - Step 7 requires Steps 2 and 5: it reads `req.GetSignalProvenance()` (generated getter) and calls the Step 5 `AddSymbols` signature.
 - Step 9 requires Steps 3 and 5: the prune SQL reads and deletes the expiry rows the add path writes.
-- Step 11 requires Step 9 (repo method) and Step 13 only for deployment ordering, not compilation: the clamp reads the key with `GetInt`, which works whether or not the bounds entry exists.
+- Step 11 requires Step 9 (repo method), and Step 13 only for deployment ordering (the clamp reads the key with `GetInt` whether or not the bounds entry exists). Step 11 also lands config migration 035 in the same commit as its reader: a seed before the reader is `seeded-unread`, and a reader without the seed is `read-unseeded`. Step 14's AC-19 cases additionally require Step 11's 035 pair.
 - Step 15 requires Step 3 only: the backfill writes `portfolio.watchlist_signal_expiry` rows that do not yet exist (`ON CONFLICT DO NOTHING`; it never merges, because its candidate query excludes bindings that already have an expiry row). Step 16's fixtures additionally use Step 5 (`AddSymbols`, for the AC-17 renewal) and Step 9 (`PruneExpiredSignalEntries`, for the marked-entry removal), so Step 16 requires Steps 5, 9 and 15.
 - Step 17 requires Step 2 (Python stubs `gen/portfolio/v1/portfolio_pb2` regenerated) and, at deploy time, Step 7 (an old portfolio drops unknown field 4 under proto3, so the agent may deploy first without harm).
 - Step 19 (UI e2e) has no code dependency; it asserts existing behavior of `WatchlistDetail.tsx:223,249`.
@@ -487,23 +488,33 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages — in
 - `services/xstockstrat-portfolio/internal/service/signal_prune.go` — create
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`emitEvent` at `:1140-1181` gains an owner-aware variant)
 - `services/xstockstrat-portfolio/cmd/server/main.go` — modify (start the goroutine after `:77`)
+- `services/xstockstrat-config/migrations/035_portfolio_signal_prune_interval.up.sql` — create
+- `services/xstockstrat-config/migrations/035_portfolio_signal_prune_interval.down.sql` — create
 
-**Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, position snapshot consistency, concurrent write safety
+**Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, position snapshot consistency, concurrent write safety; Service owner `xstockstrat-config` + config team — new global key seed (naming `<service>.<category>.<key>`, `value_type`, environment/global scoping); DBA — config migration numbering `035`, up+down pair present, down limited to global rows (`user_id IS NULL`)
 
 **Codebase Evidence**:
 - Goroutines start at `cmd/server/main.go:72-77` (`go svc.ConsumeOrderFills(ctx)` … `go svc.HydrateStops(ctx)`); root ctx from `context.WithCancel` (`:38-39`) carries **no `PropagationData`**.
-- Live config read pattern: `s.wlCfg.GetInt("portfolio.watchlist.max_symbols_per_list", default)` (`portfolio_service.go:1872-1874`); `intConfig` interface (`:1782-1784`); `Watcher.GetInt` (`internal/config/config.go:126`) returns the default when the key is unset. Unseeded per the 227-D2 waiver (`docs/patterns/config-governance.md:144`).
+- Live config read pattern: `s.wlCfg.GetInt("portfolio.watchlist.max_symbols_per_list", default)` (`portfolio_service.go:1872-1874`); `intConfig` interface (`:1782-1784`); `Watcher.GetInt` (`internal/config/config.go:126`) returns the default when the key is unset. `GetInt` also returns the default when the stored value is not an int (`:133-136`). Seeded by config migration `035_portfolio_signal_prune_interval` (staging + production, `user_id` NULL, `int` 300 = the code default), which lands in this step (operator decision 2026-11-02; the feature-278 ratchet forbids a baseline entry).
 - `emitEvent(ctx, eventType, streamKey, payload)` (`:1140`) builds `ledgerv1.AppendEventRequest{EventType, SourceService:"portfolio", StreamKey, OccurredAt, Payload, IdempotencyKey: uuid.NewString()}`, retries `codes.Unavailable` 4× with backoff, never returns an error; its callers use `"watchlist:"+id` stream keys (`:2185-2188`). It does **not** set `UserId`; ledger falls back to `x-user-id` metadata, which a background ctx lacks (`ledgerServiceImpl.ts:77-78`).
 - C-03 mechanics: `UnaryClientInterceptor` injects the trio only when ctx carries `PropagationData` (`internal/middleware/propagation.go:39-48`), so a background emit must set outgoing metadata itself. Recorded C-03 exception (design): `x-access-scope` is absent on background emits; owner rides in `AppendEventRequest.user_id`, trace in `x-trace-id`.
 - `uuid`, `structpb`, `timestamppb`, `status`/`codes` are already imported (`portfolio_service.go:12-30`); `metadata` is imported only in `authz.go` — add the import where used.
 - Header propagation (step-constraints §B): the ledger client is built with `grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor)` (`portfolio_service.go:130`); this step reuses it and adds the metadata explicitly because the interceptor is a no-op for a ctx without `PropagationData`.
+- Feature 278 checker on the base (`scripts/check-config-wiring.mjs`):
+  - It reads only `NNN_*.up.sql` (`:354`).
+  - Go const resolution: `goConsts` `:471-482` and `resolveIdent` `:490-507`. `//` comments are blanked before the const scan (`:424-434`, `:545-546`).
+  - A seed is wired when the stored key equals a read string exactly (`:625`).
+  - `--json` writes `{findings, results, counts}` (`:743`):
+    - `findings[]` = `{kind, namespace, key, file, readKey?, envs?, sha256?}` (`:628-642`, `:735`).
+    - `results[]` = `{line, fail}` (`:683-697`).
+  - Exit codes: 1 on any `fail`, 2 on a thrown error (`:745`, `:749-754`).
 
 **TDD**: red-green required (paired with Step 12)
 
-**Covers**: —
+**Covers**: — (the 035 shape this step lands is asserted by Step 14, `AC-19`)
 
 **Instructions**:
-1. `signal_prune.go`: `const signalPruneIntervalKey = "portfolio.watchlist.signal_prune_interval_seconds"`, `defaultPruneIntervalSec = 300`, `minPruneIntervalSec = 60`, `maxPruneIntervalSec = 86400` — reader-safety constants only (F-07: the tunable is the config key; these are the clamp for a stored out-of-range value). `func clampPruneInterval(v int64) time.Duration`: `<=0`→300s; `1..59`→60s; `>86400`→86400s; else `v` seconds.
+1. `signal_prune.go`: constants `signalPruneIntervalKey = "portfolio.watchlist.signal_prune_interval_seconds"` (declared in one of the two shapes Instruction 7 permits), `defaultPruneIntervalSec = 300`, `minPruneIntervalSec = 60`, `maxPruneIntervalSec = 86400` — reader-safety constants only (F-07: the tunable is the config key; these are the clamp for a stored out-of-range value). `func clampPruneInterval(v int64) time.Duration`: `<=0`→300s; `1..59`→60s; `>86400`→86400s; else `v` seconds.
 2. `func (s *PortfolioService) PruneExpiredSignalEntries(ctx context.Context)`: one tick immediately at startup, then loop `select { case <-ctx.Done(): return; case <-time.After(s.pruneInterval()) }` where `pruneInterval()` re-reads `s.wlCfg.GetInt(signalPruneIntervalKey, defaultPruneIntervalSec)` **every iteration** (no change-callback; live per call).
 3. Define the tick body as its own method `func (s *PortfolioService) pruneOnce(ctx context.Context)` — `PruneExpiredSignalEntries` (instruction 2) calls it once at startup and then on each interval, so Step 12 can drive exactly one tick without sleeping (the loop's sleep itself is not unit-tested). `pruneOnce` builds one `tickCtx` per tick and **passes that same `tickCtx` to the repo call and to every `emitEventAs`** (so each emit carries the tick's `x-trace-id`, which Step 12 asserts): `res, err := s.watchlists.PruneExpiredSignalEntries(tickCtx)` where `tickCtx` = `metadata.AppendToOutgoingContext(ctx, "x-trace-id", uuid.NewString())` (fresh trace id per tick). On error: `slog.WarnContext` and continue (never exits the loop). After commit (the repo already committed), for each `res.Removed` row emit exactly one ledger event **owned by that user**, stream key `"watchlist:"+WatchlistID`:
    - `SignalID != nil` → `portfolio.watchlist.signal_entry_expired` payload `{user_id, watchlist_id, symbol, strategy_id, signal_id, valid_until}` with `valid_until` as `ValidUntil.UTC().Format(time.RFC3339)`.
@@ -512,13 +523,82 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages — in
 4. In `portfolio_service.go` refactor `emitEvent` into `emitEventAs(ctx, ownerUserID, eventType, streamKey, payload)` that sets `req.UserId = ownerUserID` when non-empty, and make `emitEvent` call it with `""` — **same retry/idempotency body, no duplication**. Event emission stays best-effort after commit (a crash between commit and emit loses the event; accepted, design Open Risks).
 5. `cmd/server/main.go`: add `go svc.PruneExpiredSignalEntries(ctx)` immediately after `go svc.HydrateStops(ctx)` (`:77`).
 6. No pause switch (user sign-off). `sloglint` (`.golangci.yml`) requires `*Context` slog calls in scope — use `slog.WarnContext/InfoContext`.
+7. **Go const shape (278 `goConsts`, `:475-477`).** Declare `signalPruneIntervalKey` in one of these two forms:
+   - A column-0 single line `const signalPruneIntervalKey = "portfolio.watchlist.signal_prune_interval_seconds"`.
+   - A line inside a `const (` block. The block opens with `const (` alone on its line and closes with `)` at column 0. The member line is indented `signalPruneIntervalKey = "…"`, optionally typed `string`.
 
-**Verification**:
+   The value must be a double-quoted literal; a backtick raw string does not resolve. Leave nothing after the closing quote. A trailing `//` comment is blanked and therefore tolerated, but rule 5 says to keep none. The name must have exactly one value in `internal/service/` (`resolveIdent`). Pass it straight to `s.wlCfg.GetInt(signalPruneIntervalKey, defaultPruneIntervalSec)`, with no wrapper function. A wrapper turns the read into a `dynamic-read` or leaves the seed `seeded-unread`.
+8. **Seed migration in this same commit.** Create the 035 pair with exactly the SQL in design amendment A (header ≤2 lines, constraint only).
+   - Never commit the seed before the reader: that produces `seeded-unread`.
+   - Never commit the reader without the seed: that produces `read-unseeded` (recon Amendment, Ordering hazard).
+   - No `scripts/config-wiring.json` edit; a baseline entry is forbidden (operator decision 2026-11-02).
+9. **035 collision check.** Run Verification block 2 **before** writing the pair. Run it again immediately before opening the integration PR, and again immediately before the 281 integration PR merges into `main-dev` (after the final rebase); record each output in `context.md`.
+   - If it reports anything: stop and ask the operator.
+   - If a renumber is approved: log it in the Deviation Log, rename the pair, and do **not** edit this step body. Step 14's test finds the file by suffix, so it survives a renumber.
+10. Step-time mode is only a form-mismatch guard: it prints `PENDING` for missing-side findings and never fails on them (`:706`). The wiring proof is Verification block 4.
+
+**Verification** (run from the repo root; every numbered block must exit 0; then **GO-LINT**):
 ```bash
-cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./...
-grep -n "x-trace-id" internal/service/signal_prune.go && grep -n "func (s \*PortfolioService) emitEventAs" internal/service/portfolio_service.go && grep -n "go svc.PruneExpiredSignalEntries" cmd/server/main.go
+# 1. build, vet, C-03 greps
+(cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./... \
+  && grep -n "x-trace-id" internal/service/signal_prune.go \
+  && grep -n "func (s \*PortfolioService) emitEventAs" internal/service/portfolio_service.go \
+  && grep -n "go svc.PruneExpiredSignalEntries" cmd/server/main.go)
+
+# 2. 035 pair present and number still free (main-dev: nothing >=035 but ours; any origin branch: no other 035_)
+(
+D=services/xstockstrat-config/migrations
+OURS='^035_portfolio_signal_prune_interval\.(up|down)\.sql$'
+[ -f "$D/035_portfolio_signal_prune_interval.up.sql" ] && [ -f "$D/035_portfolio_signal_prune_interval.down.sql" ] || { echo "FAIL: 035 pair missing"; exit 1; }
+git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' || exit 1
+MAIN=$(git ls-tree --name-only origin/main-dev "$D/" | sed 's#.*/##' | grep -E '^[0-9]{3}_' | grep -Ev "$OURS" | awk -F_ '$1+0 >= 35')
+OTHER=$(git for-each-ref --format='%(refname)' refs/remotes/origin/ | grep -v '/HEAD$' | while read -r ref; do
+  git ls-tree --name-only "$ref" "$D/" | sed 's#.*/##' | grep -E '^035_' | grep -Ev "$OURS" | sed "s#^#${ref#refs/remotes/}: #"
+done)
+[ -z "$MAIN$OTHER" ] || { printf 'FAIL: config migration 035 not free\n%s\n%s\n' "$MAIN" "$OTHER"; exit 1; }
+echo "035 free"
+)
+
+# 3. step-time guard (form-mismatch / declared-migration parse)
+node scripts/check-config-wiring.mjs --declared-from docs/roadmap/features/281-signal-watchlist-expiry-pruning/product-spec.md \
+  --declared-migration services/xstockstrat-config/migrations/035_portfolio_signal_prune_interval.up.sql
+
+# 4. --final gate vs merge-base baseline
+(
+K=portfolio.watchlist.signal_prune_interval_seconds
+UP=services/xstockstrat-config/migrations/035_portfolio_signal_prune_interval.up.sql
+RD=services/xstockstrat-portfolio/internal/service/signal_prune.go
+[ -f scripts/check-config-wiring.mjs ] || { echo "FAIL: 278 checker absent - merge origin/main-dev first"; exit 1; }
+T=$(mktemp -d "${TMPDIR:-/tmp}/cw281.XXXXXX") || exit 1
+trap 'rm -rf "$T"' EXIT
+node scripts/check-config-wiring.mjs --final --json >"$T/head.json" 2>"$T/head.err"; rc=$?
+[ "$rc" -ne 2 ] || { echo "FAIL: --final rc 2"; cat "$T/head.err"; exit 1; }
+MB=$(git merge-base HEAD origin/main-dev) || exit 1
+{ mkdir -p "$T/base" && git archive "$MB" | tar -x -C "$T/base"; } || { echo "FAIL: cannot extract base tree"; exit 1; }
+[ -f "$T/base/scripts/check-config-wiring.mjs" ] || { echo "STOP: merge-base $MB predates 278 - ask the operator"; exit 1; }
+(cd "$T/base" && node scripts/check-config-wiring.mjs --final --json >"$T/base.json" 2>"$T/base.err"); brc=$?
+[ "$brc" -ne 2 ] || { echo "STOP: base --final rc 2 at $MB - ask the operator"; cat "$T/base.err"; exit 1; }
+node -e '
+const fs=require("fs");const [h,b,K,UP,RD]=process.argv.slice(1);
+const head=JSON.parse(fs.readFileSync(h,"utf8")),base=JSON.parse(fs.readFileSync(b,"utf8"));
+const hit=f=>f.key===K||f.readKey===K||(f.namespace&&f.namespace+"."+f.key===K)||f.file===UP||f.file===RD;
+const names=l=>l.includes(K)||l.includes(UP)||l.includes(RD);
+const baseFail=new Set(base.results.filter(r=>r.fail).map(r=>r.line));
+const hits=head.findings.filter(hit);
+const other=head.results.filter(r=>r.fail&&!names(r.line));
+const introduced=other.filter(r=>!baseFail.has(r.line)),pre=other.filter(r=>baseFail.has(r.line));
+hits.forEach(f=>console.log("KEY-HIT: "+JSON.stringify(f)));
+introduced.forEach(r=>console.log("INTRODUCED: "+r.line));
+pre.forEach(r=>console.log("ESCALATE (fails on merge-base too): "+r.line));
+console.log("key hits "+hits.length+", introduced "+introduced.length+", pre-existing "+pre.length);
+process.exit(hits.length||introduced.length?1:0);' "$T/head.json" "$T/base.json" "$K" "$UP" "$RD"
+)
 ```
-Each grep must hit (chained with `&&`): the explicit `x-trace-id` metadata set, the owner-aware emit and the goroutine start (C-03). Then **GO-LINT**.
+Pass condition for block 4:
+- No `KEY-HIT` lines and no `INTRODUCED` lines.
+- If any `ESCALATE` line appears, it is not a Step 11 failure. Copy it into `context.md` and raise it with the operator at the checkpoint. Do not fix it, and do not baseline it.
+
+**Merge-time re-check (required, Instruction 9).** Block 2 must also be re-run immediately before the 281 integration PR merges into `main-dev`, after the final rebase, and its output recorded in `context.md`. golang-migrate has no out-of-order guard: once a higher config migration (036+) is applied in a deployed environment, a later 035 is silently skipped, so any block-2 finding at that point stops the merge.
 
 ---
 
@@ -536,6 +616,7 @@ Each grep must hit (chained with `&&`): the explicit `x-trace-id` metadata set, 
 - `fakeLedger` currently only counts `AppendEvent` calls and can force an error (`watchlist_service_test.go:253-266`) — extend it to append each request to a slice and record `metadata.FromOutgoingContext(ctx)` (the fake receives the ctx the service passed). `fakeConfig` / `wideCaps()` (`:362-367`) show the `intConfig` stub shape (`GetInt`).
 - `fakeWatchlistStore.PruneExpiredSignalEntries` from Step 9 returns a configured `PruneResult`.
 - `TestLedgerFailure_NonFatal` (`:505`) is the precedent for ledger-error tolerance.
+- From Step 11 on, the key is seeded by config migration 035 at 300, which equals `defaultPruneIntervalSec`. A seeded key and an unset key read identically. An unset key still occurs in a scope with no row, or after the 035 down. So `TestSignalPrune_IntervalDefaultsWhenUnset` stays the read-path case and no seeded-value case is added.
 
 **TDD**: red-green required — fails before Step 11 (no symbols).
 
@@ -565,49 +646,84 @@ then **GO-LINT** and **GO-COVER** ("New logic is in an excluded package — no c
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "SCALAR_BOUNDS_REGISTRY" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → `103` (definition), `155` (`lookupScalarBounds`). The last entry is `'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 }` at `:148`; the registry is **full-dotted** and looked up with the bare DB `key` first then `${namespace}.${key}` (`:151-156`), so one full-dotted entry covers both key-column forms.
-- Seeding waiver: unseeded keys are the 227-D2 / feature 240 precedent (`docs/patterns/config-governance.md:140-148`); no config migration is added. Naming `<service>.<category>.<key>` ✓ (`portfolio.watchlist.signal_prune_interval_seconds`).
+- Seeding: the key is seeded by config migration 035 in Step 11, together with its reader. `SCALAR_BOUNDS_REGISTRY` validates writes only (`:99-102`), never a migration INSERT, so this entry is still required; the seeded 300 is inside it. Naming `<service>.<category>.<key>` ✓ (`portfolio.watchlist.signal_prune_interval_seconds`).
 
 **TDD**: N/A (config registry data; behavior proven by the paired test in Step 14)
 
 **Covers**: —
 
 **Instructions**:
-1. After the feature-240 entry (`:147-148`) add a comment line (constraint only: write bound mirrors the reader clamp so a stored value is never silently re-clamped for any writable input) and:
-   `'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 },`
-2. No seed migration, no env change, no other key touched.
-3. **Feature 278 interaction (overlap review) — escalate, never guess (P-03).** `278-enforce-config-key-wiring` (spec `implementation-spec.md`) scans Go getters including portfolio's `Watcher.GetInt` (`config.go:126`) and its ratchet **fails `--final` on any produced `read-unseeded` finding not already in `scripts/config-wiring.json`, and baseline entries may only shrink** (278 spec ratchet rules), so a *new* baseline entry for this key is **not** an allowed fix. This key is deliberately unseeded (227-D2 waiver, design § 4). At execute time: `ls scripts/check-config-wiring.mjs scripts/config-wiring.json`. If only one of the two exists, **stop and ask** (a partially landed 278 is not a state this spec reasons about). If neither exists on the base (278 not landed), do nothing here; `context.md` carries this note for the 278 owner, whose first run will record the key. If both exist, run `node scripts/check-config-wiring.mjs --final`; if it reports `portfolio.watchlist.signal_prune_interval_seconds` as `read-unseeded`, **stop the step and ask the operator** — the 278-compliant fix is to seed the key with a `xstockstrat-config` migration (a **design change** from the D2 waiver, so `/sdd-design` is re-run first), and the alternative is an operator ruling that the key is exempt. The executor must not add a baseline entry, weaken the ratchet, or seed the key on its own.
+1. After the feature-240 entry (`:147-148`), add a comment line. It states the constraint only: the write bound mirrors the reader clamp, so a stored value is never silently re-clamped for any writable input. Then add `'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 },`.
+2. No migration in this step: 035 landed in Step 11 with its reader. No env change, and no other key touched.
+3. The config-key wiring gate (`/sdd-execute` Phase 3) runs step-time mode with `--declared-from …/product-spec.md` and must exit 0.
+   - If it, or any later `--final` run, reports a finding for this key or for the 035/reader files: **reopen Step 11**. That means appending a `## Deviation Log` entry that names the finding, then landing the fix as a new fix step or fix commit under that entry (`reference/deviation-handling.md`).
+   - Never edit Step 11's body (F-09). Never add a `scripts/config-wiring.json` entry. Never weaken the ratchet.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && grep -n "signal_prune_interval_seconds" src/grpc/configServiceImpl.ts && pnpm run lint
+cd services/xstockstrat-config && grep -nF "'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 }" src/grpc/configServiceImpl.ts && pnpm run lint \
+ && cd ../.. && node scripts/check-config-wiring.mjs --declared-from docs/roadmap/features/281-signal-watchlist-expiry-pruning/product-spec.md
 ```
 (NODE-VERIFY runs in Step 14.)
 
 ---
 
-### Step 14 — test: config bounds rows for the prune interval (both key-column forms)
+### Step 14 — test: config bounds rows for the prune interval (both key-column forms) and the 035 seed parse test (AC-19)
 
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
+- `services/xstockstrat-config/src/__tests__/migrationSql.ts` — create (shared, non-`.test` helper; `mtlsTestPki.ts` precedent)
+- `services/xstockstrat-config/src/__tests__/zeroTrapDescriptionMigration.test.ts` — modify (import `MIGRATIONS_DIR`/`findOne`/`splitStatements` from `./migrationSql`; drop its local copies at `:10`, `:29-74`)
+- `services/xstockstrat-config/src/__tests__/signalPruneIntervalSeedMigration.test.ts` — create
 
-**Reviewers**: Service owner `xstockstrat-config` — config key naming, scoping, WatchConfig stream stability
+**Reviewers**: Service owner `xstockstrat-config` — config key naming, scoping, WatchConfig stream stability; DBA — the AC-19 assertions on the 035 down scope
 
 **Codebase Evidence**:
 - `TIMEOUT_KEY_FORMS` table (`setConfigScalarBounds.test.ts:~262-290`) holds `{ ns, key, field, min, max }` rows in both forms (e.g. `{ ns: 'portfolio', key: 'marketdata.last_close_lookback_days', … }` and the full-dotted twin at `:287-288`); the loop below it generates "accepts at bounds" and "rejects just outside" tests asserting `INVALID_ARGUMENT` and the `[min, max]` text, and no INSERT on rejection.
+- zeroTrap `findOne` (`:29-37`) asserts exactly one migration per suffix. Its `splitStatements` (`:39-74`) drops `--` comments and collapses whitespace outside literals.
+- The test globs pick up only `dist/__tests__/*.test.js` (`package.json:12-13`), so `migrationSql.ts` is never run as a suite.
 
-**TDD**: red-green required — fails before Step 13 (a write of 0/59/86401 is accepted because no registry entry exists).
+**TDD**:
+- Bounds rows: red-green as before (they fail before Step 13: a write of 0/59/86401 is accepted because no registry entry exists).
+- AC-19 cases: 035 already landed in Step 11, so RED is recorded **once** by moving the 035 pair into a scratch dir, running the new suite (it must fail on `findOne`'s "expected exactly one" assertion in all 5 cases), and restoring the pair. The capture goes in `context.md` and the PR body only.
 
-**Covers**: `AC-14` — SetConfig half: `0` and `59` rejected (minimum 60), `60` and `86400` accepted, `86401` rejected (maximum 86400), in both `ns:'portfolio', key:'watchlist.signal_prune_interval_seconds'` (namespace-relative) and `key:'portfolio.watchlist.signal_prune_interval_seconds'` (full-dotted) forms.
+**Covers**:
+- `AC-14`: SetConfig half: `0` and `59` rejected (minimum 60), `60` and `86400` accepted, `86401` rejected (maximum 86400), in both `ns:'portfolio', key:'watchlist.signal_prune_interval_seconds'` (namespace-relative) and `key:'portfolio.watchlist.signal_prune_interval_seconds'` (full-dotted) forms.
+- `AC-19`: up is one two-row global `INSERT … ON CONFLICT … DO NOTHING`; down's only statement is the DELETE limited to global rows of the key.
 
 **Instructions**:
-1. Append two rows to `TIMEOUT_KEY_FORMS`: `{ ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 }` and the full-dotted twin. The existing loop yields the `min-1`/`max+1` rejections (59, 86401) and in-bounds acceptances (60, 86400).
-2. Add one explicit assertion that `0` is rejected for the full-dotted form (the AC's `0` row; `min-1` only covers 59).
+1. **`migrationSql.ts`** — at exactly `services/xstockstrat-config/src/__tests__/migrationSql.ts` (`MIGRATIONS_DIR` resolves only from `dist/__tests__/`). Its name must stay out of the `*.test.ts` glob; it is a test-only helper that imports `node:assert`, never imported by `src/` runtime code. Export `MIGRATIONS_DIR = path.resolve(__dirname, '../../migrations')`, `findOne(suffix: string, ext: 'up' | 'down'): string`, and `splitStatements(sql)`. All are moved verbatim from zeroTrap; the only change is that `suffix` becomes a parameter.
+2. **zeroTrap**: import them and call `findOne(SUFFIX, 'up'|'down')`. Its 4 tests are otherwise unchanged and must still pass.
+3. **`signalPruneIntervalSeedMigration.test.ts`**: `SUFFIX = '_portfolio_signal_prune_interval'`, with `KEY` inline (C-13).
+   - Define `LIT = "'((?:[^']|'')*)'"`.
+   - Define `ROW = \\(LIT×8 comma-separated, NULL\\)` (`, ` separators, user_id fixed to `NULL`).
+   - `INSERT_RE = ^INSERT INTO config\.config_values \(namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id\) VALUES ROW, ROW ON CONFLICT \(namespace, key, environment, COALESCE\(user_id, ''\)\) DO NOTHING$`.
+   - Read the files inside each `it` so the RED shows five failures. The five cases are plain `it()` (no `skip`/`todo`):
+     1. up is exactly one statement and full-matches `INSERT_RE`.
+     2. Both rows have namespace `'portfolio'`, key === `KEY`, value_type `'int'` and consuming_service `'xstockstrat-portfolio'`.
+     3. The environments are exactly `['production','staging']` (sorted, distinct).
+     4. Each row has value_data === default_value === `'300'`, and `Number(value_data)` is an integer in `[60,86400]`.
+     5. `splitStatements(findOne(SUFFIX,'down'))` deep-equals `["DELETE FROM config.config_values WHERE namespace = 'portfolio' AND key = 'portfolio.watchlist.signal_prune_interval_seconds' AND user_id IS NULL"]`. This is a full match.
+4. Bounds rows: append two rows to `TIMEOUT_KEY_FORMS`: `{ ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 }` and the full-dotted twin (the existing loop yields the `min-1`/`max+1` rejections, 59 and 86401, and the in-bounds acceptances, 60 and 86400), plus one explicit assertion that `0` is rejected for the full-dotted form (the AC's `0` row; `min-1` only covers 59).
 
 **Verification**:
 ```bash
-cd services/xstockstrat-config && [ "$(grep -c 'signal_prune_interval_seconds' src/__tests__/setConfigScalarBounds.test.ts)" -ge 3 ] && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+cd services/xstockstrat-config \
+ && [ "$(grep -c 'signal_prune_interval_seconds' src/__tests__/setConfigScalarBounds.test.ts)" -ge 3 ] \
+ && [ "$(grep -cE "^[[:space:]]*it\('" src/__tests__/signalPruneIntervalSeedMigration.test.ts)" -eq 5 ] \
+ && ! grep -nE '^function (findOne|splitStatements)' src/__tests__/zeroTrapDescriptionMigration.test.ts \
+ && pnpm run lint \
+ && OUT=$(pnpm run build && node --test --test-reporter=tap dist/__tests__/zeroTrapDescriptionMigration.test.js dist/__tests__/signalPruneIntervalSeedMigration.test.js 2>&1); rc=$?; echo "$OUT" | tail -n 10; \
+ [ "$rc" -eq 0 ] && echo "$OUT" | grep -q '^# pass 9$' && echo "$OUT" | grep -q '^# fail 0$' \
+ && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
+```
+Both suites must pass, run as exactly those two files (`pnpm test` runs every suite and will not print `# pass 9`): 5 new plain `it()` cases plus zeroTrap's 4 = `# pass 9`, `# fail 0`. Coverage stays at or above 40%.
+
+Recorded RED, run once and never part of the gate:
+```bash
+cd services/xstockstrat-config && R=$(mktemp -d "${TMPDIR:-/tmp}/red035.XXXXXX") && mv migrations/035_portfolio_signal_prune_interval.*.sql "$R/" && pnpm run build; node --test --test-reporter=tap dist/__tests__/signalPruneIntervalSeedMigration.test.js; red=$?; mv "$R"/035_*.sql migrations/ && rmdir "$R" && [ "$red" -ne 0 ] && [ -z "$(git status --porcelain migrations/)" ]
 ```
 
 ---
@@ -804,7 +920,7 @@ grep -n "emptied by expiry pruning" e2e/insights/watchlists.spec.ts   # the new 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Config key tables: portfolio `CLAUDE.md` rows `portfolio.watchlist.max_per_user`/`max_symbols_per_list` (`:106-107`) are the format to extend; `docs/patterns/config-governance.md` feature-240 entry (`:140-148`) is the template (Type/Default/Bounds/Notes; "unseeded, 227 D2 waiver; `≤ 0` reads as the default").
+- Config key tables: portfolio `CLAUDE.md` rows `portfolio.watchlist.max_per_user`/`max_symbols_per_list` (`:106-107`) are the format to extend; `docs/patterns/config-governance.md` feature-240 entry (`:140-148`) is the format template (Type/Default/Bounds/Notes). This key is **seeded** (config migration 035), so its Notes cite the migration, not the 227-D2 waiver.
 - Events: portfolio `CLAUDE.md` § Ledger Events Emitted table (`portfolio.position.opened` … `portfolio.snapshot`) — add `portfolio.watchlist.signal_entry_expired` (payload per design § 4) and `portfolio.watchlist.signal_entry_removed_untracked`, noting the owner is carried in `AppendEventRequest.user_id`.
 - Teardown for this step's files runs once, at the end of Step 21 (root `CLAUDE.md` § Teardown).
 - Overlap review: `docs/patterns/config-governance.md` § Per-Feature Registered Keys is also edited by in-flight features 278, 243 and 255 (append/row edits): place the new entry with the same convention as the nearest sibling entries and expect a rebase-only conflict at merge time (re-read the heading before editing).
@@ -814,10 +930,10 @@ grep -n "emptied by expiry pruning" e2e/insights/watchlists.spec.ts   # the new 
 **Covers**: —
 
 **Instructions**:
-1. **Portfolio `CLAUDE.md`**: add key row `portfolio.watchlist.signal_prune_interval_seconds | int | 300 | …` (feature 281; read live each iteration; `<=0`→300, `1..59`→60, `>86400`→86400 on read; write bounds `[60,86400]` in `SCALAR_BOUNDS_REGISTRY`; unseeded, 227-D2 waiver; no pause switch); the two events; table `portfolio.watchlist_signal_expiry` (migration `018`; FK to `watchlists` only; open-ended = no row; `signal_id NULL` = backfill mark); a short "Signal-entry expiry prune" paragraph (startup tick + interval loop, `SKIP LOCKED` never-waits, `instance_count: 1` not relied on for correctness but load scales per instance; provenance-less SIGNAL add untracks); the `backfill-signal-expiry` subcommand by name only (**no `docs/runbooks/…md` path in this step** — the runbook does not exist until Step 21, and `scripts/check-context-map.sh` fails on a `CLAUDE.md` reference to a missing `docs/**/*.md` file; Step 21 adds the link). Constraints, not narration.
+1. **Portfolio `CLAUDE.md`**: add key row `portfolio.watchlist.signal_prune_interval_seconds | int | 300 | …` (feature 281; read live each iteration; `<=0`→300, `1..59`→60, `>86400`→86400 on read; write bounds `[60,86400]` in `SCALAR_BOUNDS_REGISTRY`; seeded by config migration `035_portfolio_signal_prune_interval`, global staging + production rows at 300; no pause switch); the two events; table `portfolio.watchlist_signal_expiry` (migration `018`; FK to `watchlists` only; open-ended = no row; `signal_id NULL` = backfill mark); a short "Signal-entry expiry prune" paragraph (startup tick + interval loop, `SKIP LOCKED` never-waits, `instance_count: 1` not relied on for correctness but load scales per instance; provenance-less SIGNAL add untracks); the `backfill-signal-expiry` subcommand by name only (**no `docs/runbooks/…md` path in this step** — the runbook does not exist until Step 21, and `scripts/check-context-map.sh` fails on a `CLAUDE.md` reference to a missing `docs/**/*.md` file; Step 21 adds the link). Constraints, not narration.
 2. **Portfolio constitution**: add `PORTFOLIO-17` — the prune is the single deleter of expiry-tracked SIGNAL entries; never waits (`SKIP LOCKED`, delete only the locked set); `UpdateBinding`/`UpdateBindings` lock symbol-then-parent so any new deleter must also use `SKIP LOCKED`; expiry rows FK to `watchlists` (never `watchlist_symbols`) because replace-all deletes bindings; amend `PORTFOLIO-7` for `insertBindingTx`/`ExpiryIntent`.
 3. **`docs/patterns/database.md`**: one sentence under the schema map that `portfolio.watchlist_signal_expiry` (migration `018`) is a plain table (the map is hypertables only) and that the backfill subcommand reads `ingest.newsletter_signals` read-only.
-4. **`docs/patterns/config-governance.md`**: new top entry "feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)" with the key table and the unseeded waiver, same format as feature 240. In the entry's Notes also record the **feature 278 interaction**: the key is intentionally unseeded (227-D2 waiver); if 278's ratchet is on the base and flags it, Step 13 Instructions 3 escalates rather than baselining it.
+4. **`docs/patterns/config-governance.md`**: new top entry "feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)" with the key table, same format as feature 240, citing config migration `035_portfolio_signal_prune_interval` as the seed (staging + production, global, `int` 300; the down deletes only the global rows). In the entry's Notes record the **feature 278 interaction**: the key is seeded, not baselined (operator decision 2026-11-02), and is wired with zero `check-config-wiring.mjs --final` findings.
 5. **Agent `CLAUDE.md`**: grep `:141` and the tool table; edit only if it describes entry lifetime.
 
 **Verification**:
