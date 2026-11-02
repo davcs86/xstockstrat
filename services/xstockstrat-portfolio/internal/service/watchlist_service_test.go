@@ -36,6 +36,8 @@ type fakeWatchlistStore struct {
 	// feature 281: last ExpiryIntent passed to AddSymbols, and how many times it was called.
 	lastIntent    repository.ExpiryIntent
 	addSymbolsCnt int
+	// feature 281: what PruneExpiredSignalEntries returns.
+	pruneResult repository.PruneResult
 }
 
 func newFakeStore() *fakeWatchlistStore {
@@ -45,6 +47,11 @@ func newFakeStore() *fakeWatchlistStore {
 // ListAllSymbols returns the configured cross-user union (feature 154).
 func (f *fakeWatchlistStore) ListAllSymbols(_ context.Context) ([]string, error) {
 	return f.allSymbols, f.allSymbolsErr
+}
+
+// PruneExpiredSignalEntries returns the configured prune result (feature 281).
+func (f *fakeWatchlistStore) PruneExpiredSignalEntries(_ context.Context) (repository.PruneResult, error) {
+	return f.pruneResult, nil
 }
 
 func clone(wl *portfoliov1.Watchlist) *portfoliov1.Watchlist {

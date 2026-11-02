@@ -407,7 +407,7 @@ then **GO-LINT** and **GO-COVER** ("New logic is in an excluded package — no c
 
 ### Step 9 — service: repository prune tick (`PruneExpiredSignalEntries`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go` — create
@@ -1077,4 +1077,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: RED = the tests fail against the tree before Step 7. Verification names `SignalSourceSkipsDefault` as "already exists and is updated".
 - **Done instead**: Step 7 had already landed (sequential order). RED was taken by temporarily restoring `portfolio_service.go` from `c625dd5b` (pre-Step-7) with the new tests present: all five `ProvenanceValidation` rows failed with `err = <nil>, want InvalidArgument`, `ProvenanceTracksIntent` failed with `intent.Provenance = nil`, and `NoProvenanceIntent/SIGNAL_binding_untracks` failed with `UntrackSymbols = [], want [AAPL]`. The file was then restored from HEAD. `SignalSourceSkipsDefault` needed no body change: Step 5 already updated the fake's signature, and the provenance-less SIGNAL intent it would exercise is asserted in `NoProvenanceIntent`.
 - **Disposition**: in scope. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 9 — RED via uncommitted probes; commit on every non-skipped list; small helpers
+
+- **Spec said**: TDD red-green paired with Step 10 (Step 10's tests are compile-red before Step 9). Instruction 3.5: "If `len(R) > 0`: `UPDATE portfolio.watchlists SET updated_at = now()`; commit." Instruction 1 names `PruneResult{Removed; Lists, SkippedLists}` without defining `Lists`.
+- **Done instead**: Step 10 runs after Step 9 in sequential order, so RED came from two throwaway probes: a `//go:build dbtest` probe in `internal/repository/` calling `r.PruneExpiredSignalEntries` and reading every `PrunedEntry` field (`go vet -tags dbtest ./internal/repository/` → `r.PruneExpiredSignalEntries undefined`), and a service probe using the fake through `WatchlistStore` (`go test` build failure: `undefined: repository.PruneResult`, `WatchlistStore has no field or method PruneExpiredSignalEntries`, `f.pruneResult undefined`). Both passed after the change and were deleted (never staged). The tx commits on **every** non-skipped list, not only when `len(R) > 0`; only the parent `updated_at` touch is conditional on `R`, so Instruction 3.4's orphan sweep persists on a tick that removes no binding. `Lists` = the count of lists the enumerate query returned (due lists), so `Lists - SkippedLists` were attempted. A list with no due rows after its lock (rows advanced in between) commits a no-op. Unexported helpers `pruneListTx`, `lockDueExpiryTx` and `collectStrings` keep the function small; the SQL text and order match Instructions 2-4, with `source = 2` literal as specified. The fake's `PruneExpiredSignalEntries` returns the configurable `pruneResult` and a nil error (Step 12 needs no error path on the store).
+- **Disposition**: in scope, all inside the step's **Files**. The behavioral RED/GREEN is Step 10 in CI `portfolio-db-test`.
 - **Severity**: n/a

@@ -1776,6 +1776,9 @@ type WatchlistStore interface {
 	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users — cross-user,
 	// not scoped to a caller.
 	ListAllSymbols(ctx context.Context) ([]string, error)
+	// PruneExpiredSignalEntries returns already-committed removals even when err != nil; the caller
+	// must still emit their events.
+	PruneExpiredSignalEntries(ctx context.Context) (repository.PruneResult, error)
 }
 
 // intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).

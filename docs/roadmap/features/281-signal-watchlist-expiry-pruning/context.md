@@ -264,3 +264,13 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Verification: the step command passed with 4 top-level `--- PASS`. GO-LINT reports `0 issues`. GO-COVER total is 68.6%. No database was started.
 - Deviations: the RED method, and `SignalSourceSkipsDefault` needed no body change (Deviation Log).
 - Next: Step 9 (repository prune tick `PruneExpiredSignalEntries`).
+
+### Step 9 — repository prune tick `PruneExpiredSignalEntries` [done] (2026-11-02)
+
+- Created `internal/repository/signal_expiry_repo.go`: `PrunedEntry`, `PruneResult` and `(*WatchlistRepo).PruneExpiredSignalEntries`. It enumerates due lists with `SELECT DISTINCT watchlist_id … valid_until <= now()`, then runs one short tx per list. Parent `FOR NO KEY UPDATE SKIP LOCKED` (no row → `SkippedLists`). Due expiry rows D `FOR UPDATE SKIP LOCKED`. SIGNAL bindings in D `FOR UPDATE SKIP LOCKED` → L. `DELETE … ANY(L) RETURNING symbol, strategy_id` → R. Expiry rows of R plus expired orphans (no SIGNAL binding) are deleted. The parent is touched only when R is non-empty. The tx commits on every non-skipped list. `PrunedEntry` rows come only from R, joined to D (`SignalID` nil for an untracked mark). A per-list error is recorded and the loop continues; the first error is returned with the committed removals. DB `now()` is the only clock; no `lock_timeout` in the statements; no events from the repo.
+- `WatchlistStore` gains `PruneExpiredSignalEntries`; its comment states that committed removals come back even with `err != nil`, which Step 11 relies on. The fake returns the configurable `pruneResult`.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: RED came from uncommitted probes. `go vet -tags dbtest ./internal/repository/` → `r.PruneExpiredSignalEntries undefined (type *WatchlistRepo has no field or method PruneExpiredSignalEntries)`. The service probe build failed with `undefined: repository.PruneResult` / `WatchlistStore has no field or method PruneExpiredSignalEntries`. GREEN: the repo probe vets clean and the service probe passes (`--- PASS`); both probes were then deleted. The behavioral RED/GREEN is Step 10 in CI `portfolio-db-test`.
+- Verification: `go build ./...`, `go vet ./...` and `go vet -tags dbtest ./...` pass. GO-LINT reports `0 issues` after `gofmt` on the new file. The full untagged `go test ./...` passes. No database was started.
+- Deviations: RED probes, commit on every non-skipped list, the `Lists` meaning, and small helpers (Deviation Log).
+- Next: Step 10 (prune tick DB tests).
