@@ -684,7 +684,7 @@ cd services/xstockstrat-config && grep -nF "'portfolio.watchlist.signal_prune_in
 
 ### Step 14 — test: config bounds rows for the prune interval (both key-column forms) and the 037 seed parse test (AC-19)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -1124,4 +1124,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: run the Verification block as written.
 - **Done instead**: the block ran verbatim from a scratchpad script file, because the worktree sandbox refuses it inline. Lint: 0 errors (234 pre-existing `no-explicit-any` warnings). The step-time wiring gate exited 0 with no output. `--final` also exited 0; its one `REPORTED` line is the pre-existing `trading.fill_poller.interval_ms:read-unseeded` baseline, with nothing for this key or the 037/reader files, so Step 11 is not reopened.
 - **Disposition**: same checks. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 14 — RED and Verification run as split plain commands; bounds RED by a temporary Step 13 revert
+
+- **Spec said**: bounds rows red-green ("fail before Step 13"); the AC-19 RED and the Verification as written, one block each.
+- **Done instead**:
+  - The worktree sandbox refuses compound blocks that mix `git`/`node` with runtime-built commands, so both ran as separate plain commands with the same logic. The AC-19 RED moved the 037 pair into a scratchpad dir (not `$TMPDIR`), rebuilt, and ran the suite: rc 1, `# fail 5`, and `expected exactly one` in all 5 cases. The pair was then restored, and `git status --porcelain migrations/` came back empty.
+  - Step 13 had already landed, so the bounds RED came from deleting its registry line in an uncommitted edit: 3 rejection cases failed (both `just outside` cases and the explicit `= 0` case), and both `accepts` cases passed. The line was restored with `git checkout` before GREEN.
+  - Verification: the greps passed; `pnpm run lint` had 0 errors (234 pre-existing warnings); the two-file run gave rc 0, `# pass 9`, `# fail 0`; `test:coverage` gave `# pass 272`, `# fail 0`, 90.61% lines; `c8 check-coverage --lines 40` rc 0.
+- **Disposition**: same checks with equivalent mechanics. Only the step's **Files** changed.
 - **Severity**: n/a

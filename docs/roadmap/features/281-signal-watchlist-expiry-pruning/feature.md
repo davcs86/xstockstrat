@@ -30,6 +30,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done: `signal_prune.go` prune loop (startup tick, live clamped interval), owner-visible `signal_entry_expired`/`signal_entry_removed_untracked` events via `emitEventAs` (+ per-tick `x-trace-id`), goroutine wired in `main.go`, config seed `037_portfolio_signal_prune_interval` in the same commit; `--final` key hits 0 / introduced 0, lint 0 issues |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 12 done: 7 prune service unit tests (`TestClampPruneInterval`, `TestSignalPrune_*`: expired/renewed/untracked payloads, owner `UserId`, per-tick `x-trace-id`, best-effort ledger error, no-op tick, interval default/config clamp — AC-6/7/8/13/14); `fakeLedger` captures requests + outgoing metadata; RED compile-fail → GREEN, lint 0 issues, GO-COVER 68.6% |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 13 done: `SCALAR_BOUNDS_REGISTRY` entry `portfolio.watchlist.signal_prune_interval_seconds` `{ minValue: 60, maxValue: 86400 }` (mirrors the reader clamp); lint 0 errors, step-time wiring gate rc 0, `--final` rc 0 with nothing for this key |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 14 done: `TIMEOUT_KEY_FORMS` rows for the prune interval in both key-column forms + explicit `0` rejection (AC-14); shared `migrationSql.ts` helper (zeroTrap refactored onto it); 5-case `signalPruneIntervalSeedMigration.test.ts` for the 037 seed (AC-19); RED `# fail 5` / bounds RED 3 fails → GREEN 9/9, full suite 272 pass, coverage 90.61% |
 
 ---
 
@@ -63,4 +64,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-13 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); resume at Step 14. 281's integration PR merges only after feature 280 (#1359).
+`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-14 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); resume at Step 15. 281's integration PR merges only after feature 280 (#1359).

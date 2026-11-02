@@ -347,3 +347,14 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: the Verification ran from a script file because of the sandbox (Deviation Log).
 - Next: Step 14 (config bounds rows + the 037 seed parse test, AC-14/AC-19).
 
+### Step 14 — config bounds rows for the prune interval and the 037 seed parse test (AC-14/AC-19) [done] (2026-11-02)
+
+- `setConfigScalarBounds.test.ts`: two `TIMEOUT_KEY_FORMS` rows (`watchlist.signal_prune_interval_seconds` and `portfolio.watchlist.signal_prune_interval_seconds`, `intVal`, `[60, 86400]`). The generated loop covers 60/86400 accepted and 59/86401 rejected. An explicit case covers the full-dotted form `= 0`: rejected `INVALID_ARGUMENT`, `[60, 86400]` text, no INSERT.
+- New `src/__tests__/migrationSql.ts` (test-only, outside the `*.test.js` glob) exports `MIGRATIONS_DIR`, `findOne(suffix, ext)` and `splitStatements`, moved verbatim from zeroTrap. Only change: `suffix` is now a parameter. `zeroTrapDescriptionMigration.test.ts` imports them and drops its local copies; its 4 tests are unchanged and pass.
+- New `signalPruneIntervalSeedMigration.test.ts` has 5 plain `it()` cases. They check: up is one statement that full-matches the two-row global `INSERT … ON CONFLICT … DO NOTHING`; namespace, key, `int` and `xstockstrat-portfolio`; environments `['production','staging']`; `value_data = default_value = '300'`, inside `[60,86400]`; and down deep-equals the single global-row DELETE.
+- Files modified: the four Step 14 **Files**.
+- TDD: AC-19 red (037 pair moved to the scratchpad): rc 1, `# fail 5`, `expected exactly one` (pair restored, `migrations/` clean). Bounds red (Step 13 registry line temporarily removed): 3 rejection cases failed (restored). Green: two-file run `# pass 9 / # fail 0`.
+- Verification: greps OK; lint 0 errors (234 pre-existing warnings); `test:coverage` 272 pass / 0 fail, 90.61% lines; `c8 check-coverage --lines 40` rc 0. `setConfigScalarBounds.test.ts` fails `prettier --check`, but so does the base file (pre-existing), so it was left alone (surgical diff). No database was started.
+- Deviations: split plain commands (sandbox); bounds RED by a temporary Step 13 revert (Deviation Log).
+- Next: Step 15 (`portfolio backfill-signal-expiry` operator subcommand).
+
