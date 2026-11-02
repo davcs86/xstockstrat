@@ -96,8 +96,8 @@ const PR = {
   required: ['url', 'commits'],
 }
 
-function approval(slug) {
-  return APPROVALS[slug] || null
+function approvals(slug) {
+  return [].concat(APPROVALS[slug] || []).filter((x) => x && typeof x.gate === 'string')
 }
 
 function writerRules(f, p) {
@@ -114,7 +114,9 @@ Use ${A.date} for history rows and session headers. Severity tokens: only ${p.se
 
 async function runFeature(f) {
   const out = { slug: f.slug, stage: 'Preflight', halted: null, blocked: null, commits: [], reports: [] }
-  const ap = approval(f.slug)
+  const aps = approvals(f.slug)
+  const proceeds = (gate) => aps.some((x) => x.gate === gate && x.decision === 'proceed')
+  const ap = aps.find((x) => x.gate.indexOf('checkpoint:') === 0 || x.gate.indexOf('blocker:') === 0) || null
 
   const p = await agent(`Read-only preflight for /sdd-execute ${f.slug} sequential. Never write, commit or push. \`git fetch origin\`, then:
 1. Resolve the feature dir on origin/${BASE} (\`git ls-tree --name-only origin/${BASE} docs/roadmap/features/\`, dirs ending \`-${f.slug}\`): exactly one, else a problem ("slug not unique").
@@ -135,12 +137,12 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
   const blockedStep = pending.find((s) => s.status === 'blocked')
 
   // ── Gate: re-spec validation + up-front confirm (§5.3/§5.4) ──────────────
-  const resuming = ap && (ap.gate.indexOf('checkpoint:') === 0 || ap.gate.indexOf('blocker:') === 0)
+  const resuming = !!ap
   if (pending.length && !resuming) {
     out.stage = 'Gate'
     const v = await agent(`${ctx}\n/sdd-execute ${f.slug} sequential §5.3 re-spec gate, READ-ONLY validation (do not commit or push). In your worktree: \`git fetch origin && git checkout --detach origin/${p.devBranch} && git merge --no-edit -X ours origin/main-dev\` (local only). For every pending step of docs/roadmap/features/${p.dir}/implementation-spec.md re-run its **Codebase Evidence** greps/ls and confirm each **Files** path exists; report mismatches per step. Also run .claude/skills/sdd-execute/reference/tooling-setup.md's DETECTION only (no installs) for the toolchains the pending steps need and report any that is unavailable with no documented fallback.`, { phase: 'Gate', schema: VALIDATE, isolation: 'worktree', label: `validate:${f.slug}` })
     if (!v) { out.blocked = 'validation agent died'; return out }
-    if (!(ap && ap.gate === 'upfront' && ap.decision === 'proceed')) {
+    if (!proceeds('upfront')) {
       out.halted = {
         gate: 'upfront',
         directive: f.directive || 'conditional',
@@ -161,9 +163,10 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
   // ── Steps: one commit per step on the dev branch (§5.5) ──────────────────
   out.stage = 'Steps'
   let sinceCheckpoint = 0
-  let operatorNote = ap && ap.decision && ap.decision.indexOf('adjust:') === 0 ? ap.decision.slice(7).trim() : null
+  const adjust = aps.find((x) => typeof x.decision === 'string' && x.decision.indexOf('adjust:') === 0)
+  let operatorNote = adjust ? adjust.decision.slice(7).trim() : null
   if (ap && ap.gate.indexOf('blocker:') === 0) operatorNote = `Operator decision for the blocker on step ${ap.gate.slice(8)}: ${ap.decision}`
-  if (ap && ap.decision === 'stop here') { out.stage = 'stopped'; return out }
+  if (aps.some((x) => x.decision === 'stop here')) { out.stage = 'stopped'; return out }
   for (let i = 0; i < pending.length; i++) {
     const s = pending[i]
     const disc = await agent(`${ctx}\nPhase 1 discovery (read-only) for step ${s.n} — ${s.title} of docs/roadmap/features/${p.dir}/implementation-spec.md (read it from your working tree; if it differs from origin/${p.devBranch} trust the step text quoted in the spec on that branch). Re-run the step's **Codebase Evidence** commands and read its **Files**; return a confirmed/blocked digest with path:line for each symbol and a '## Not found' section.`, { agentType: 'codebase-discovery', phase: 'Steps', label: `discover:${f.slug}:s${s.n}` })
@@ -201,11 +204,11 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
 
   // ── Land: merge-order gate, C-16 promotion, integration PR (§5.6) ────────
   out.stage = 'Land'
-  if (p.mergeOrderBlock && !(ap && ap.gate === 'merge-order' && ap.decision === 'proceed')) {
+  if (p.mergeOrderBlock && !proceeds('merge-order')) {
     out.halted = { gate: 'merge-order', reason: p.mergeOrderBlock, question: "merge-order.md requires another feature first. Create the integration PR anyway? {gate:'merge-order', decision:'proceed'}" }
     return out
   }
-  if (!(ap && ap.gate === 'promotion' && ap.decision === 'proceed') || !p.promotionPlan) {
+  if (!proceeds('promotion') || !p.promotionPlan) {
     const plan = await agent(`${ctx}\nPlan the C-16 promotion of docs/roadmap/features/${p.dir}/acceptance.feature (read it on origin/${p.devBranch}) into the durable suites per .claude/skills/sdd-execute/SKILL.md ALL-DONE PATH step 2.5: target suite per scenario, @feature-${p.nnn} provenance tags, dedup against existing suites. Return the ready-to-write plan.`, { agentType: 'scenario-promoter', phase: 'Land', schema: PLAN, label: `promotion-plan:${f.slug}` })
     if (!plan) { out.blocked = 'promotion planner died'; return out }
     const wp = await agent(`${WR}\n\n${ctx}\nAppend a context.md session entry "sdd-batch-execute promotion plan (awaiting operator confirm)" containing the plan below inside a fenced block tagged \`sdd-batch-promotion-plan\`. Change nothing else. Commit "docs(${f.slug}): C-16 promotion plan awaiting confirm (${p.nnn})", push.\n\n${plan.plan}`, { phase: 'Land', schema: WRITE, isolation: 'worktree', label: `write-plan:${f.slug}` })
