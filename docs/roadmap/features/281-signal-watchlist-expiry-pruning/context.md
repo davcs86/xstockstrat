@@ -189,3 +189,9 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
   - Steps 4, 17, 18, 20, 21: line anchors re-aligned after the merge; content unchanged. `ci-gate` `needs:` now includes `config-wiring`.
   - Step 10: verified that no ingest migration adds an FK on `ingest.newsletter_signals`, so no `signal_sources` fixture row is needed. Closes the spec-time unverified item for Steps 10/16.
   - Step 11: all 278 checker anchors and service evidence still match. **BLOCKING:** Verification block 2 (035 collision) fails. `origin/claude/smoke-test-deployment-0f1z5j` carries config `035_smoke_rpc_user_id` and `036_smoke_writes_enabled`; `origin/main-dev` tops out at `034`. Per Instruction 9, **Step 11 waits for an operator ruling** (renumber 281's seed, or ignore that non-feature `claude/*` branch). Feature 282's planned 036/037 are affected too; 282 not touched.
+
+## Session 2026-11-02 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation:** the operator approved the sequential plan before the batch started (one commit per step on `feature/signal-watchlist-expiry-pruning`, no per-step PRs, one integration PR at the end). Status `implementation-ready` → `in-progress`.
+- Runs the operator-approved seed amendment (design.md `## Amendment 2026-11-02`, `e01736e2` + `be90c5a9`). Config migration 035 lands in Step 11 with its reader. No `scripts/config-wiring.json` entry.
+- **Open at the checkpoint:** the Step 11 035 collision ruling (previous session). The overlap items and Open Threads above carry forward.
