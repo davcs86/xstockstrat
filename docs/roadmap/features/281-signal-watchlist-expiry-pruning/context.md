@@ -195,3 +195,10 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - **Up-front confirmation:** the operator approved the sequential plan before the batch started (one commit per step on `feature/signal-watchlist-expiry-pruning`, no per-step PRs, one integration PR at the end). Status `implementation-ready` → `in-progress`.
 - Runs the operator-approved seed amendment (design.md `## Amendment 2026-11-02`, `e01736e2` + `be90c5a9`). Config migration 035 lands in Step 11 with its reader. No `scripts/config-wiring.json` entry.
 - **Open at the checkpoint:** the Step 11 035 collision ruling (previous session). The overlap items and Open Threads above carry forward.
+
+### Step 1 — proto (2026-11-02)
+
+- Added `message WatchlistSignalProvenance { int64 signal_id = 1; google.protobuf.Timestamp valid_until = 2; }` before `AddWatchlistSymbolsRequest`, and `signal_provenance = 4` on that request (`packages/proto/portfolio/v1/portfolio.proto`). `WatchlistBinding`, enums and existing field numbers untouched; no new import.
+- TDD: N/A (proto contract). Verification: `buf lint` OK and `buf breaking` vs `origin/main-dev` (`1ea1c19c`) rc=0, buf 1.72.0 in the `xstockstrat-codegen` image. The baseline was a `git archive` tarball, not the `.git` ref (Deviation Log, CI-equivalent fallback).
+- Spec citation drift (no effect): the comment-convention anchor is `:346`, not `:347`. The CI buf commands are at `ci.yml:146-166`, not `:139-155`.
+- Next: Step 2 (regenerate stubs via the Docker codegen image).

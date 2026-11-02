@@ -100,7 +100,7 @@ Deployment files: **no new env var and no new port** (the backfill subcommand ru
 
 ### Step 1 — proto: add `WatchlistSignalProvenance` and `AddWatchlistSymbolsRequest.signal_provenance = 4`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -1036,3 +1036,10 @@ grep -n "Premise Verdict" docs/roadmap/features/281-signal-watchlist-expiry-prun
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-11-02 — Step 1 — buf breaking baseline input form
+
+- **Spec said**: `buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto"`.
+- **Done instead**: buf 1.72.0 ran in the pinned `xstockstrat-codegen` image (no host buf). Because the worktree `.git` is a pointer file outside the container mount, the baseline was `git archive origin/main-dev packages/proto` (`1ea1c19c`) passed as `<tar>#subdir=packages/proto`. Same tree, same rules; `buf lint` and `buf breaking` both exited 0.
+- **Disposition**: CI-equivalent fallback. The CI `proto-lint` job runs the exact git-ref form on the PR.
+- **Severity**: n/a
