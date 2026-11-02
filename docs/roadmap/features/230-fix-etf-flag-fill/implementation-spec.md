@@ -307,7 +307,7 @@ grep -n "middleware.FromContext(ctx).TraceID\|chan etfFillItem\|fmp.ErrorClass(e
 
 ### Step 4 — test: fill visibility — reasons, class, unlabelled, rate limit, trace (AC-3, AC-4, AC-5, AC-6, AC-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify (one level-aware log-capture handler; fold `infoRecorder` into it)
@@ -561,3 +561,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
     `TestIngestRecentBars_LogsHeartbeatEveryCycle` moves onto `installLogRecorder(t, slog.LevelInfo)`. 12 (not 10)
     `installWarnRecorder` callers re-anchored.
   - Steps 0, 1, 3, 5, 7 and the Execution Summary: line-drift re-anchors only. Step 6: no drift.
+- **2026-11-02 — Step 4 execute (SEV-3).** (c) AC-4: the unlabelled window checks (second empty symbol inside the
+  window → still 1; past `etfFlagLogEvery` → 2) run *before* the 24h advance, not after it as instruction 5 orders
+  them. The 24h advance itself exceeds the 1-minute window, so the spec's order cannot yield "still one record". The
+  negative-cache assertion follows, with `src.total()==3` (three distinct fills). Test-order only; no behaviour change.

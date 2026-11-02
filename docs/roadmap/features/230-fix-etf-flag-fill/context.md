@@ -727,3 +727,33 @@ the round-2 block above.
 - **Deviations:** none. Severity SEV-3 (unchanged).
 - **Files modified:** `services/xstockstrat-marketdata/internal/service/etf_flags.go`,
   `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.
+
+## Session 2026-11-02 — Step 4 (test: fill visibility, AC-3/4/5/6/7)
+
+- **Recorder (operator decision (2), C-18):** `recordingWarnHandler`/`recordedWarn` → `recordingLogHandler`/
+  `recordedLog` with a `level` field (exact-level match), a `count(msg)` helper next to `find`, and
+  `installLogRecorder(t, level)`. `installWarnRecorder(t)` is now a one-line wrapper, so its 12 callers and the
+  `rec.recs` reads are unchanged. `infoRecorder` is deleted; `TestIngestRecentBars_LogsHeartbeatEveryCycle` now uses
+  `installLogRecorder(t, slog.LevelInfo)`. `grep infoRecorder|recordingWarnHandler|recordedWarn` → no hits.
+- **Tests (`etf_flags_test.go`):** helpers `etfInfo`, `noSecret`, `etfDrain`.
+  - `TestEtfFlagFiller_SkipReasonLogged_AC3`: 4 reasons; `used`/`cap` only for `no_cap`/`budget`.
+  - `TestEtfFlagFiller_FailLogsClassOnly_AC5`: `ctx`/`cap`/`other` from inline `apikey=SECRET` errors; no `error`
+    attr; not cached; re-queued.
+  - `TestEtfFlagFiller_UnlabelledLogged_AC4`.
+  - `TestEtfFlagFiller_RateLimitSlots_AC6`: 7 sub-tests, one per example row.
+  - `TestEtfFlagFiller_CarriesTraceID_AC7`: server ctx via `middleware.UnaryServerInterceptor`, then a no-trace fresh
+    service.
+  - No `t.Parallel()`; every fake is an inline literal (C-13).
+- **TDD (P-06):** RED = the committed Step 4 suite run with `go test -overlay`, which swapped in the pre-Step-3
+  `etf_flags.go` (from `45ab3767`), reverted the `:226` call site and added a shim `etfFlagLogEvery` const (no tracked
+  file touched). All 5 new tests failed with zero Info records (`skipped records = 0`, `failed records = 0`,
+  `unlabelled records = 0`, `@AC-6` counts 0, `@AC-7: skipped record = <nil>`); the 8 existing ETF tests passed.
+  GREEN: all 13 ETF tests pass under `-race`.
+- **Deviation (SEV-3, test order only):** in AC-4 the window checks run before the 24h advance, because a 24h advance
+  already exceeds the 1-minute window (the spec's order made "still one record" impossible). Logged in the spec's
+  Deviation Log.
+- **Verification:** ETF `-run` suite `-race` ok; full `./internal/service/` `-race` ok (12 `installWarnRecorder`
+  callers + the heartbeat test); `t.Parallel` grep and recorder-name grep no hits; coverage total 81.9% (>= 40%);
+  `golangci-lint run` 0 issues.
+- **Files modified:** `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`,
+  `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.

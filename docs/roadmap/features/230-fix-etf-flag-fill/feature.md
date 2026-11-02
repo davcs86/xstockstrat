@@ -22,6 +22,7 @@
 | 2026-11-02 | `in-progress` (Step 1 done) | /sdd-execute | Step 1 — exported `fmp.ErrorClass` (`fmp_client.go:348`) delegating to 255's `enrichmentClass`; RED `undefined: ErrorClass`, GREEN after export |
 | 2026-11-02 | `in-progress` (Step 2 done) | /sdd-execute | Step 2 — `TestEnrichmentClassifier_StagesAndOther` now asserts `ErrorClass == class` and never empty on every row (AC-5); no new rows; RED `undefined: ErrorClass` (overlay), GREEN |
 | 2026-11-02 | `in-progress` (Step 3 done) | /sdd-execute | Step 3 — ETF filler carries the enqueuing trace id (`etfFillItem`), `etfFillGate` reports a skip reason, and three rate-limited Info records (`skipped`/`failed` class-only/`unlabelled`) replace the silent return and raw-error Debug record; RED Step-4-style probe (no Info records) → GREEN |
+| 2026-11-02 | `in-progress` (Step 4 done) | /sdd-execute | Step 4 — one level-aware `recordingLogHandler`/`installLogRecorder` (`infoRecorder` folded in, heartbeat test moved onto it); `@AC-3`–`@AC-7` ETF fill-visibility tests; RED on the pre-Step-3 tree (overlay: zero Info records) → GREEN under `-race` |
 
 ---
 
@@ -57,4 +58,4 @@ later-call labelling guard plus rate-limited Info-level fill visibility.
 
 ## Next Action
 
-`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 4 (fill-visibility tests + level-aware log recorder); Steps 1–3 done 2026-11-02
+`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 5 (`@AC-2` regression guard, P-06 waiver); Steps 1–4 done 2026-11-02
