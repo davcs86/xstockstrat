@@ -1014,7 +1014,7 @@ bash scripts/check-context-map.sh
 
 ### Step 22 — test: premise evidence (FR-1 / AC-1) is recorded
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/281-signal-watchlist-expiry-pruning`
 **Files**:
 - `docs/roadmap/features/281-signal-watchlist-expiry-pruning/recon.md` — verify only (no edit expected)
@@ -1226,4 +1226,11 @@ _Populated by /sdd-execute as implementation proceeds._
     - The REPORT `NEXT:` line's `portfolio` prefix stands for `GOWORK=off go run ./cmd/server`.
     - The legacy owner is the `SEED_USER_ID` of the `db-migrator` job in `.do/app*.yaml`. The runbook names that source and does not copy the value.
 - **Disposition**: in scope. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 22 — recon.md citation drift recorded, not edited
+
+- **Spec said**: confirm the Premise Verdict cites `watchlist_repo.go`, `portfolio_service.go`, `migrations/007`, `tools.py` and `client.py` with line numbers; record any drift in `context.md` without editing `recon.md`.
+- **Done instead**: as specified. Both verification commands pass (heading at `recon.md:9`; 10 matching lines, threshold 4). The drift is recorded in `context.md` § Step 22. Agent `tools.py` lines had already moved on `origin/main-dev` before this feature; the portfolio lines moved because of Steps 5-11.
+- **Disposition**: in scope. `recon.md` is unchanged.
 - **Severity**: n/a

@@ -483,3 +483,14 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Discovery note: the pre-step digest was taken from a stale `main-dev` working tree and reported Steps 15 and 20 as pending. On `origin/feature/signal-watchlist-expiry-pruning` both are done, so there was no blocker.
 - Next: Step 22 (premise-evidence check, verify only).
 
+### Step 22 — test: premise evidence (FR-1 / AC-1) is recorded [done] (2026-11-02)
+
+- `recon.md` § Premise Verdict (`:9`) is present. It cites `watchlist_repo.go`, `portfolio_service.go`, `migrations/007_watchlists.up.sql:16-21`, `tools.py` and `client.py` with line numbers. Verification: the `grep` prints the heading, and 10 lines match against a threshold of 4. `recon.md` was not edited (immutable dossier).
+- The pre-feature citations hold on `origin/main-dev`: `DeleteWatchlist` `portfolio_service.go:2142`, `RemoveWatchlistSymbols` `:2195`, and the repo deletes at `watchlist_repo.go:268,312,210`. `WatchlistBinding` is unchanged at `portfolio.proto:243-249` (fields 1-3, with no signal link). `client.py:319` `add_watchlist_symbol` is unchanged.
+- Citation drift (record only):
+  - Agent `tools.py` had already drifted on `origin/main-dev` before this feature. `ingest_signal` is at `:620`, not `:604`. `valid_until` is passed to ingest at `:658`, not `:642`. The auto-add is at `:707-708`, not `:686-696`. The substance held: the add carried no `signal_id`/`valid_until`.
+  - On the feature branch, Step 17 changed that: `tools.py:710-712` now passes `result.get("signal_id")` and `valid_until` to `add_watchlist_symbol`. This is the by-design end of the "structurally unprunable" premise.
+  - Portfolio lines moved with Steps 5-11. `DeleteWatchlist` is now `portfolio_service.go:2184` and `RemoveWatchlistSymbols` is `:2242`. The `RemoveSymbols` DELETE is now `watchlist_repo.go:337`, and there is a new expiry-row delete at `:577`. The `Delete` (`:268`) and replace-all (`:210`) lines are unchanged.
+- TDD: N/A (evidence check). No service code changed.
+- Next: all 22 steps are done. The integration PR is next, and it must not merge before feature 280 / #1359 (Step 11 block 2 with `MERGE_TIME=1` at merge time).
+
