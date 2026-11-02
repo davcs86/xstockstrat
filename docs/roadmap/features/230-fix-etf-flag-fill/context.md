@@ -757,3 +757,24 @@ the round-2 block above.
   `golangci-lint run` 0 issues.
 - **Files modified:** `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`,
   `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.
+
+## Session 2026-11-02 — Step 5 (test: labelled after the gate reopens, AC-2)
+
+- **Test (`etf_flags_test.go`):** `TestEtfFlagFiller_LabelledAfterGateReopens_AC2`, placed after `TestGetEtfFlags_TTL`,
+  no new helpers. Gate closed by `fakeBudget{used: 200, cap: 250}` → fill skipped, unset, `src.total()==0`; then
+  `svc.fmpBudget = fakeBudget{used: 5, cap: 250}`, `etfFlags(SCHD)` re-enqueues, drain → `src.total()==1`; a further
+  `etfFlags(SCHD)` returns `is_etf=true` and leaves the queue empty. 2-line comment names the overlap with
+  `HeadroomGate_AC14`/`TTL` and that the 210/5 seed half is 255 `@AC-3`.
+- **TDD (P-06 waiver, recorded as the spec requires):** regression guard; the behaviour already holds on trunk (the
+  fix is 255's FMP-only seed). Red N/A in the strict sense, so a mutation RED was captured instead: temporarily
+  negative-caching the closed-gate skip in `fillEtfFlag` made the test fail with
+  `reopened gate: source calls = 0, want 1 (skipped symbol was not re-enqueued)`; the mutation was reverted
+  (`git checkout`) before GREEN. GREEN: the test passes under `-race`; the whole ETF `-run` suite passes.
+- **Verification:** `go test ./internal/service/ -run TestEtfFlagFiller_LabelledAfterGateReopens_AC2 -race -count=1 -v`
+  PASS; `golangci-lint run --modules-download-mode=mod` 0 issues; `gofmt -l` clean.
+- **Citation drift (no deviation):** the step's evidence cites `HeadroomGate_AC14` at `etf_flags_test.go:118-148` and
+  `TestGetEtfFlags_TTL` at `:151-176`; after Step 4's import additions they are at `:124-154` / `:157-182`.
+  `fakeBudget` moved with Step 4's recorder fold: `marketdata_service_test.go:2358`, value-receiver `BudgetSnapshot`
+  at `:2360` (spec cites `:2370`). The new test is at `etf_flags_test.go:186`.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.

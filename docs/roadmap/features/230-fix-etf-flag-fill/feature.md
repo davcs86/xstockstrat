@@ -23,6 +23,7 @@
 | 2026-11-02 | `in-progress` (Step 2 done) | /sdd-execute | Step 2 — `TestEnrichmentClassifier_StagesAndOther` now asserts `ErrorClass == class` and never empty on every row (AC-5); no new rows; RED `undefined: ErrorClass` (overlay), GREEN |
 | 2026-11-02 | `in-progress` (Step 3 done) | /sdd-execute | Step 3 — ETF filler carries the enqueuing trace id (`etfFillItem`), `etfFillGate` reports a skip reason, and three rate-limited Info records (`skipped`/`failed` class-only/`unlabelled`) replace the silent return and raw-error Debug record; RED Step-4-style probe (no Info records) → GREEN |
 | 2026-11-02 | `in-progress` (Step 4 done) | /sdd-execute | Step 4 — one level-aware `recordingLogHandler`/`installLogRecorder` (`infoRecorder` folded in, heartbeat test moved onto it); `@AC-3`–`@AC-7` ETF fill-visibility tests; RED on the pre-Step-3 tree (overlay: zero Info records) → GREEN under `-race` |
+| 2026-11-02 | `in-progress` (Step 5 done) | /sdd-execute | Step 5 — `TestEtfFlagFiller_LabelledAfterGateReopens_AC2`: a symbol skipped by a closed budget gate (200/250) is re-enqueued, fetched and labelled once the gate reopens (5/250) (`@AC-2`); P-06 waiver (regression guard), mutation RED (closed-gate skip negative-cached → `source calls = 0, want 1`) → GREEN under `-race` |
 
 ---
 
@@ -58,4 +59,4 @@ later-call labelling guard plus rate-limited Info-level fill visibility.
 
 ## Next Action
 
-`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 5 (`@AC-2` regression guard, P-06 waiver); Steps 1–4 done 2026-11-02
+`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 6 (marketdata `CLAUDE.md` fill-log docs); Steps 1–5 done 2026-11-02

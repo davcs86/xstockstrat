@@ -181,6 +181,36 @@ func TestGetEtfFlags_TTL(t *testing.T) {
 	}
 }
 
+// @AC-2: overlaps HeadroomGate_AC14 and TTL, but only this test runs closed → reopened on one symbol.
+// The 210/5 boot-seed half of AC-2 is feature 255's @AC-3.
+func TestEtfFlagFiller_LabelledAfterGateReopens_AC2(t *testing.T) {
+	src := &fakeEtfSource{resp: map[string]*bool{"SCHD": boolp(true)}}
+	svc, _ := newEtfSvc(src, fakeBudget{used: 200, cap: 250}, true)
+
+	closed := etfFlags(t, svc, "SCHD")
+	svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+	if closed[0].IsEtf != nil || src.total() != 0 {
+		t.Fatalf("closed gate: flag = %+v, source calls = %d; want unset and 0", closed[0], src.total())
+	}
+
+	svc.fmpBudget = fakeBudget{used: 5, cap: 250}
+	etfFlags(t, svc, "SCHD")
+	for len(svc.etf.queue) > 0 {
+		svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+	}
+	if src.total() != 1 {
+		t.Fatalf("reopened gate: source calls = %d, want 1 (skipped symbol was not re-enqueued)", src.total())
+	}
+
+	flags := etfFlags(t, svc, "SCHD")
+	if flags[0].IsEtf == nil || !flags[0].GetIsEtf() {
+		t.Fatalf("flag = %+v, want SCHD labelled is_etf=true after the gate reopened", flags[0])
+	}
+	if n := len(svc.etf.queue); n != 0 {
+		t.Fatalf("queue len = %d, want 0 (a labelled symbol is not re-queued)", n)
+	}
+}
+
 // (e) An empty profile is negative-cached: unset, and not re-fetched within the TTL.
 func TestGetEtfFlags_EmptyProfileNegativeCached(t *testing.T) {
 	src := &fakeEtfSource{resp: map[string]*bool{}}

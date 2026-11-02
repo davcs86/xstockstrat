@@ -432,7 +432,7 @@ applies to it. The coverage command above still guards the measured total.
 
 ### Step 5 — test: an ETF skipped while the gate was closed is labelled once it reopens (AC-2 regression guard)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/etf_flags_test.go` — modify
