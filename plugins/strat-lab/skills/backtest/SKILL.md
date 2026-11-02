@@ -18,8 +18,10 @@ freshly-edited strategy can silently produce garbage. Each has a fixed, learned 
 staging or prod name (e.g. `mcp__xstockstrat_staging__*`); if the tools are not loaded, find them
 with ToolSearch first. Never assume a tool is absent without searching.
 
-**Ownership (feature 133).** Strategies are **per-user**. `manage_strategy`, `set_strategy_live`,
-`run_backtest`, `get_strategy` and `list_strategies` operate **only on the calling user's own
+`manage_strategy` operations: `register` | `update` | `deactivate` | `reactivate` | `score`
+
+**Ownership (feature 133).** Strategies are **per-user**. `manage_strategy` (every operation,
+`score` included), `set_strategy_live`, `run_backtest`, `get_strategy` and `list_strategies` operate **only on the calling user's own
 strategies** — they are **ownership-gated, not admin-gated** (any authenticated caller manages their
 own; no admin role is required). A `strategy_id` you do not own returns `PERMISSION_DENIED` (uniform —
 never NOT_FOUND, so it does not leak whether another user's id exists). `list_strategies` returns only
@@ -65,6 +67,15 @@ parameter sweep and re-enable it at the end so it never evaluates at a config yo
 `exit_cooldown_days` (the minimum-holding-period sibling to `cooldown_days`) behaves identically
 under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
 to the platform default.
+
+**Refreshing the grade (feature 283).** `manage_strategy(operation="score", strategy_id=...)` takes
+only `strategy_id` and recomputes the headline grade from the stored backtest evidence. It
+**persists** that grade and emits an `analysis.strategy.scored` ledger event, so it is a write, not a
+read. Any time range is **ignored**: the whole eligible evidence base is used. It returns snake_case
+fields, including the int count `evidence_symbols` and `excluded_symbols`. `null` there means
+analysis did not report the list. `[]` does **not** mean "the guard ran and found nothing", because a
+strategy that is not fundamentals-guarded also gets `[]`. When no evidence is eligible it fails
+`NOT_FOUND` and **clears** the stale grade.
 
 **Protected strategy (feature 186).** The strategy identified by the
 `analysis.engine.fundamentals_blend_strategy_id` config key (default

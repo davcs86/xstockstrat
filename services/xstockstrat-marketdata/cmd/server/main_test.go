@@ -1,9 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/fmp"
+	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
 func TestLooksLikePlaceholderCred(t *testing.T) {
@@ -45,5 +52,74 @@ func TestNewFundamentalsSource_AlwaysNonNil(t *testing.T) {
 				t.Fatalf("newFundamentalsSource(%q, %q) returned nil; must always be non-nil", provider, apiKey)
 			}
 		}
+	}
+}
+
+type fakeSeedCounter struct {
+	bySource map[string]int
+	err      error
+	srcs     []string
+}
+
+func (c *fakeSeedCounter) CountFundamentalsFetchedToday(_ context.Context, src string) (int, error) {
+	c.srcs = append(c.srcs, src)
+	if c.err != nil {
+		return 0, c.err
+	}
+	return c.bySource[src], nil
+}
+
+type seedQuoteRT struct{ calls int }
+
+func (rt *seedQuoteRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.calls++
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`[{"symbol":"` + testdata.Msft + `","price":400}]`)),
+		Request:    req,
+	}, nil
+}
+
+func newSeedFMPClient(rt http.RoundTripper) *fmp.Client {
+	return fmp.NewClient(fmp.ClientConfig{
+		BaseURL:    "https://fmp.test",
+		APIKey:     "k",
+		HTTPClient: &http.Client{Transport: rt},
+		Limits:     func() (float64, int) { return 0, 7 },
+	})
+}
+
+// AC-3 (feature 255): the FMP boot seed counts only fmp rows, so edgar rows written today never spend the budget.
+func TestSeedFMPBudget_CountsOnlyFMPRows_AC3(t *testing.T) {
+	ctx := context.Background()
+	counter := &fakeSeedCounter{bySource: map[string]int{"edgar": 30, fmp.SourceName: 5}}
+	rt := &seedQuoteRT{}
+	client := newSeedFMPClient(rt)
+
+	seedFMPBudget(ctx, counter, client)
+
+	if used, _ := client.BudgetSnapshot(); used != 5 {
+		t.Fatalf("seeded used = %d, want 5 (fmp rows only)", used)
+	}
+	if _, err := client.GetFundamentals(ctx, testdata.Msft); err != nil {
+		t.Fatalf("GetFundamentals after seed: %v (budget must not be exhausted)", err)
+	}
+	if rt.calls != 1 {
+		t.Fatalf("HTTP calls = %d, want 1", rt.calls)
+	}
+	if len(counter.srcs) != 1 || counter.srcs[0] != fmp.SourceName {
+		t.Fatalf("counted sources = %v, want [%q]", counter.srcs, fmp.SourceName)
+	}
+}
+
+func TestSeedFMPBudget_CountErrorStartsFromZero(t *testing.T) {
+	counter := &fakeSeedCounter{err: errors.New("db down")}
+	client := newSeedFMPClient(&seedQuoteRT{})
+
+	seedFMPBudget(context.Background(), counter, client)
+
+	if used, _ := client.BudgetSnapshot(); used != 0 {
+		t.Fatalf("seeded used = %d, want 0 after a count error", used)
 	}
 }

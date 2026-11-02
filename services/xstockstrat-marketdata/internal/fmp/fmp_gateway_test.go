@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -97,6 +98,34 @@ func TestGateway_CapExceededMakesNoCall(t *testing.T) {
 	}
 	if len(rt.stamps) != 2 {
 		t.Fatalf("outbound calls = %d, want 2 (third rejected before HTTP)", len(rt.stamps))
+	}
+}
+
+// @AC-5 (client half): quote and ratios spend a cap of 2, so profile is refused before HTTP and the row is flagged.
+func TestEnrichment_ProfileCapExceeded_FlagsAndWarns_AC5(t *testing.T) {
+	logBuf := captureSlog(t)
+	rt := &recordingRT{respond: enrichBodies(200, `[{"beta":1.3}]`)}
+	c := NewClient(ClientConfig{
+		BaseURL: "https://fmp.test", APIKey: "SECRET-KEY", Metrics: []string{"core", "extended"},
+		HTTPClient: &http.Client{Transport: rt},
+		Limits:     func() (float64, int) { return 0, 2 },
+	})
+	f, err := c.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !f.EnrichmentFailed {
+		t.Fatal("EnrichmentFailed = false, want true when profile hits the cap")
+	}
+	if f.Beta != nil {
+		t.Fatalf("Beta = %v, want nil", *f.Beta)
+	}
+	if n := rt.count("/stable/profile"); n != 0 {
+		t.Fatalf("profile calls = %d, want 0 (refused before HTTP)", n)
+	}
+	log := logBuf.String()
+	if enrichmentWarns(log) != 1 || !strings.Contains(log, "AAPL:profile:cap") {
+		t.Fatalf("want one WARN carrying AAPL:profile:cap, got:\n%s", log)
 	}
 }
 

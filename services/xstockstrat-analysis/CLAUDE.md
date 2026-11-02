@@ -469,6 +469,9 @@ Each surface acts on the result:
   (`fetch_all_for_fingerprint`). It drops cells the guard refuses over each cell's window **before**
   the per-symbol dedup, and never deletes a cell. UNKNOWN keeps the previous grade with a warning.
   ScoreStrategy aborts UNAVAILABLE on UNKNOWN, and NOT_FOUND when every evidence symbol is excluded.
+  A successful ScoreStrategy sets trailing metadata `x-score-excluded-symbols` (JSON array of the
+  symbols left with no surviving cell; `"[]"` when none or when the guard does not apply; omitted
+  above 4096 bytes and on every abort path), consumed by the agent's `manage_strategy operation='score'`.
   A refused-only RunBacktest still triggers the recompute.
   - **Gate-off re-includes refused cells** (Open Risk 3), because the exclusion is non-destructive.
   - Post-deploy, a manual `ScoreStrategy` refresh clears a legacy 0-trade ETF contribution from a

@@ -309,6 +309,10 @@ _FUND_PAGE_TIMEOUT_SECONDS = 10
 # Caps concurrent paged GetHistoricalFundamentals per interactive recompute; marketdata's pooled
 # DB budget is 2 (root CLAUDE.md pool table).
 _INTERACTIVE_DERIVATION_CONCURRENCY = 4
+# ScoreStrategy excluded-symbols trailer: key must match the agent's client._EXCLUDED_TRAILER_KEY;
+# a value over the cap is omitted (never truncated) so the agent reports null.
+_EXCLUDED_TRAILER_KEY = "x-score-excluded-symbols"
+_EXCLUDED_TRAILER_MAX_BYTES = 4096
 
 # Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough to
 # warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
@@ -2688,6 +2692,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("failed to emit ledger event for score: %s", e)
 
+        encoded = json.dumps(excluded, separators=(",", ":"))
+        if len(encoded.encode("utf-8")) > _EXCLUDED_TRAILER_MAX_BYTES:
+            log.warning(
+                "score: excluded-symbols trailer omitted (%d bytes > cap) for %s",
+                len(encoded.encode("utf-8")),
+                request.strategy_id,
+            )
+        else:
+            context.set_trailing_metadata(((_EXCLUDED_TRAILER_KEY, encoded),))
         return score
 
     async def _persist_strategy_score(self, user_id: str, score) -> None:
