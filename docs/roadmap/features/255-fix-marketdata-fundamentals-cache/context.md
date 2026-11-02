@@ -1421,3 +1421,21 @@ Feature: fix-marketdata-fundamentals-cache (bug fix)
 ### Coverage check
 - Source scenarios: 10 (AC-1 to AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing was skipped.
 ```
+
+## Session 2026-11-01 — sdd-execute ALL-DONE PATH (sdd-batch-execute)
+
+- Operator confirmed the C-16 promotion plan above (block `sdd-batch-promotion-plan`). Applied as planned: CREATE
+  `services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature`, holding AC-1..AC-10 verbatim with
+  `@feature-255` appended (10 NEW, 0 DUP/OVERLAP/CONFLICT). The provenance comment uses the 4-line header the existing
+  marketdata suites use, as the plan's notes asked, instead of the plan's draft one-liner.
+- status.md: `in-progress` → `code-completed`, with a feature.md history row.
+- **Merge-order override (operator, 2026-11-01, "Do not hold")**: `merge-order.md` still lists 255 as waiting on
+  `block-fundamentals-strategy-on-etf` (215), Resolved `No`. 215's code is already on main-dev (Steps 1–25 done; only
+  post-deploy Step 26 is pending), and this branch is current with main-dev (0 commits behind), so the rebase dependency
+  is satisfied. The integration PR was opened with the gate waived. 215's merge-order row was not edited. The override is
+  also recorded in the PR body.
+- Husky: the main worktree has no `node_modules` and `core.hooksPath` points at its missing `.husky/_`, so the hook
+  cannot fire on commit. `pnpm install --frozen-lockfile --ignore-scripts` ran in this worktree (no lockfile change), and
+  `.husky/pre-commit` was run by hand on each staged set.
+- Open thread carried into the PR test plan: the live-DB test (`internal/repository/fundamentals_livedb_test.go`, Step 14)
+  has only SKIPped locally, so CI's database run is its first real proof.
