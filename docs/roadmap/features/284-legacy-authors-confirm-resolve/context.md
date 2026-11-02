@@ -57,3 +57,15 @@
 - [ ] Parity test samples 5 authors only — revisit if `classify`'s rule changes.
 - [ ] Teardown: context-forge refresh (or manual reconciliation) recorded in the PR body — at PR time.
 - [ ] Overlap with 243 on `services/xstockstrat-indicators/CLAUDE.md` (disjoint hunks) — rebase at integration.
+
+## Session 2026-11-02 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+- Key codebase findings:
+  - All code is in `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py`: `confirm` `:90-108` (single write at `:107`), `main()` confirm branch `:149-154`, apply-branch refusal pattern `:181-184` (reused inline for confirm). `legacy_authors.py` stays untouched (`APPLY_STATUSES :151`, `ApplyRefused :154`, candidate rule `:99-104`).
+  - Default `ask=input` is bound at definition, so `main()` tests must patch `sys.stdin` (not `builtins.input`); the two existing confirm tests (`:62`, `:93`) run without `users.json`, which is why it is loaded lazily.
+  - Acceptance examples differ from `conftest.USERS` (scenarios: `alice` x2 / inactive `bob` / unmapped `carol`; fixtures: `sam` x2 / inactive `olduser`, `carol` is active). Spec Step 2 pins the role mapping (ghost, sam, zed).
+  - Baseline verified: `uv run --extra dev pytest --cov=app --cov-fail-under=50` = 393 passed, 80% coverage; `./scripts/check-context-map.sh` OK.
+  - Test pairing: `@AC-9` and the `main()` EOF exit code pass on the old tree (marked green-on-arrival); red is carried by sibling assertions (prompt count, picker listing).
+- Overlap: 243 edits `services/xstockstrat-indicators/CLAUDE.md` (different sections, rebase-level); 281 only cites the runbook.
+- Teardown for the PR body is specified in Step 6 (context-forge refresh scoped to the runbook, indicators CLAUDE.md, and `INDICATORS-12`; manual reconciliation if the plugin is unavailable).
