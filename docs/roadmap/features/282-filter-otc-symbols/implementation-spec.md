@@ -111,6 +111,7 @@ cd packages/proto && buf lint && buf breaking . --against "../../.git#branch=ori
 - `packages/proto/gen/go/portfolio/v1/portfolio.pb.go`, `portfolio_grpc.pb.go`, `portfoliov1connect/*` — modify (generated)
 - `packages/proto/gen/python/common/v1/common_pb2.py`, `marketdata/v1/marketdata_pb2.py`, `marketdata_pb2_grpc.py`, `portfolio/v1/portfolio_pb2.py` — modify (generated)
 - `packages/proto/gen/ts/common/v1/common.ts`, `common_pb.ts`, `marketdata/v1/{marketdata.ts,marketdata_connect.ts,marketdata_pb.ts}`, `portfolio/v1/*` — modify (generated; plus `gen/ts/dist/`)
+- The wildcard entries (`*connect/*`, `portfolio/v1/*`, `gen/ts/dist/`) are generated directories written whole by `./scripts/buf-gen.sh`, exempt from exact-file listing.
 
 **Reviewers**: Proto Reviewer — field number uniqueness, backward compatibility, `buf lint` / `buf breaking`; Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity, Alpaca feed idempotency; Service owner `xstockstrat-portfolio` — P&L calculation accuracy, concurrent write safety
 
@@ -131,10 +132,12 @@ cd packages/proto && buf lint && buf breaking . --against "../../.git#branch=ori
 **Verification**:
 ```bash
 ./scripts/buf-gen.sh && git status --short packages/proto/gen | head -20
-cd services/xstockstrat-marketdata && GOWORK=off go build ./...   # must succeed: the adapter/handler embed the Unimplemented* types
+(cd services/xstockstrat-marketdata && GOWORK=off go build ./...)   # must succeed: the adapter/handler embed the Unimplemented* types
 grep -n "UNSERVABLE_REASON_OTC" packages/proto/gen/go/common/v1/common.pb.go packages/proto/gen/python/common/v1/common_pb2.py packages/proto/gen/ts/common/v1/common_pb.ts
+# freshness: stage the first run, regenerate, and require no further change
+git add -A packages/proto/gen && ./scripts/buf-gen.sh && git diff --exit-code packages/proto/gen && [ -z "$(git ls-files --others --exclude-standard packages/proto/gen)" ]
 ```
-A second `./scripts/buf-gen.sh` run must produce an empty `git diff` (freshness).
+Run from the repo root. The last line must exit 0: a second `./scripts/buf-gen.sh` run produces no diff and no untracked file (CI `proto-freshness`).
 
 ---
 
@@ -221,7 +224,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 **Reviewers**: Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency. Service owner `xstockstrat-config` + config team — new global key seed (naming, `value_type`, environment/global scoping). DBA — config migration number `038`, the up+down pair, and a down limited to global rows (`user_id IS NULL`).
 
 **Codebase Evidence**:
-- Source path: `MarketDataService.ListAssets` calls `s.registry.Get("")` then `src.ListAssets(ctx, req.AssetClass)` — `marketdata_service.go:1353-1363`; `source.DataSourceClient.ListAssets` `internal/source/source.go:18`; `Registry.Get("")` resolves `"alpaca"` `source.go:172-181`. `alpaca.Client.ListAssets` sends `status=active` (`internal/alpaca/client.go:521`) and skips `!a.Tradable` (`:548`); `asset_class` is appended when non-empty (`:522-524`). Reusing this path means `DataSourceClient` gains no method and the six test fakes (`fakeBackfillSource` `marketdata_service_test.go:703`, etc.) are untouched.
+- Source path: `MarketDataService.ListAssets` calls `s.registry.Get("")` then `src.ListAssets(ctx, req.AssetClass)` — `marketdata_service.go:1353-1363`; `source.DataSourceClient.ListAssets` `internal/source/source.go:18`; `Registry.Get("")` resolves `"alpaca"` `source.go:172-181`. `alpaca.Client.ListAssets` sends `status=active` (`internal/alpaca/client.go:521`) and skips `!a.Tradable` (`:548`); `asset_class` is appended when non-empty (`:522-524`). Reusing this path means `DataSourceClient` gains no method and the six test fakes (`fakeBackfillSource` `marketdata_service_test.go:900`, etc.) are untouched.
 - Cache and poller templates: `etfFlagState` `internal/service/etf_flags.go:33-148` (mutex + map + `now` seam), `GetEtfFlags` batch-in/per-symbol-out `:62-78`; `StartClassificationRefreshPoller` `classification_service.go:224-247` (1-minute ticker, re-reads the interval each tick, `hours <= 0` → `continue`); `normalizeSymbols` (uppercase + trim, drops empties) `classification_service.go:97`.
 - Config seam: `budgetCfg intGetter` (`marketdata_service.go:102`, set only when the watcher is non-nil at `:230-232`); `resolvePositiveInt` (`:986-993`) maps `<= 0` to the default, so it cannot express the "`<= 0` pauses" rule (MARKETDATA-5) — this step reads `s.budgetCfg.GetInt` directly. `config.Watcher.GetInt` returns the default when the key is unset (`internal/config/config.go:157-168`).
 - Warm set: `warmMu`/`warmSymbols` `marketdata_service.go:47-50`; `markWarm` `:1088-1095` (does not normalize); `warmSnapshot` `:1099`; `StartWarmQuotePoller` copies `s.warmSymbols` inline `:1132-1137`.
@@ -251,7 +254,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 7. `(s *MarketDataService) StartAssetSetRefresher(ctx)`: run `refreshAssets` immediately at boot (do not wait a tick); on the first failure while still unloaded log exactly one WARN (`asset set unavailable; treating every symbol as servable`) via `(s *MarketDataService) noteAssetRefreshFailure(ctx, err)` (owns `unloadedWarned`; called by the loop on every failed attempt, so Step 6 can call it directly), then rely on backoff. Then loop on a 1-minute `time.Ticker` (MARKETDATA-5, mirrors `StartClassificationRefreshPoller`): each tick re-read `resolveAssetRefreshInterval(s.budgetCfg)`; interval `0` (paused) → `continue`; run `refreshAssets` when `time.Since(lastSuccess) >= interval` (or the retry deadline has passed); on failure advance the delay with the pure function `nextAssetRetryDelay(cur time.Duration) time.Duration` (`0` → `assetRetryInitial`; else `min(cur*2, assetRetryMax)`), on success reset it to `0`. `refreshAssets`, `noteAssetRefreshFailure` and `nextAssetRetryDelay` are the test seams: the ticker loop itself needs no tests that sleep. Runs on the long-lived `main` ctx (background work carries no propagation headers by design).
 8. `resolveAssetRefreshInterval(cfg intGetter) time.Duration`: nil cfg → `defaultAssetRefreshHours` hours; `v := cfg.GetInt(assetRefreshHoursKey, defaultAssetRefreshHours)`, called directly with the const shape in Instruction 12; `v <= 0` → `0` (paused, keep the set); `v > maxAssetRefreshHours` → 24h; else `v` hours.
 9. `marketdata_handler.go`: add `(h *MarketDataHandler) GetSymbolServability` (copy the `GetEtfFlags` shape: return the service error unwrapped) after `GetEtfFlags` (`:159-167`) and `(a *grpcMarketDataAdapter) GetSymbolServability` after `:360-366`.
-10. `cmd/server/main.go`: add `go svc.StartAssetSetRefresher(ctx)` after `go svc.StartEtfFlagFiller(ctx)` (`:170`).
+10. `cmd/server/main.go`: add `go svc.StartAssetSetRefresher(ctx)` after `go svc.StartEtfFlagFiller(ctx)` (`:166`).
 11. Dry-run check: reuse `normalizeSymbols`; do not copy `etfFlagState`'s TTL/eviction machinery (no TTL, no per-entry state needed — one immutable snapshot).
 12. **Const shape.** `assetRefreshHoursKey = "marketdata.assets.refresh_interval_hours"` is a member line of Instruction 1's `const (` block.
     - The block opens with `const (` alone on its line and closes with `)` at column 0.
@@ -271,7 +274,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
     - Never rename through the Deviation Log: the shell blocks hard-code the numbers (F-08, F-09).
 15. Step-time mode only guards against form mismatches. The wiring proof is block 4.
 
-**Verification**:
+**Verification** (block 1 is a subshell; run from the repo root before blocks 2–4, which use repo-root paths):
 ```bash
 # 1. build, lint, wiring greps
 (cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod \
@@ -279,6 +282,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
   && grep -nE '^[[:space:]]+assetRefreshHoursKey[[:space:]]*=[[:space:]]*"marketdata\.assets\.refresh_interval_hours"$' internal/service/asset_servability.go \
   && grep -n "GetInt(assetRefreshHoursKey, defaultAssetRefreshHours)" internal/service/asset_servability.go)
 
+# Blocks 2-4: run from the repo root.
 # 2. config migration collision check — identical text in Steps 5, 9 and at merge time
 (
 D=services/xstockstrat-config/migrations
@@ -359,10 +363,10 @@ process.exit(hits.length||introduced.length?1:0);' "$T/head.json" "$T/base.json"
 **Reviewers**: Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity, Alpaca feed idempotency
 
 **Codebase Evidence**:
-- Test conventions: struct-literal service construction with a fake registry source (`marketdata_service_test.go:3173` `&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, budgetCfg: cfg}`); `fakeIntGetter` / `budgetCfgMs` (`marketdata_service_test.go:1757`); `fakeBackfillSource.ListAssets` returns nil (`:714`) so a new fake source with a scripted `ListAssets` is needed; `funcBody` structural helper `:1062`.
+- Test conventions: struct-literal service construction with a fake registry source (`newQuoteSvc` `marketdata_service_test.go:3357`, literal `&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, budgetCfg: cfg}` at `:3360`); `fakeIntGetter` (`map[string]int64`, `:1921`) / `budgetCfgMs` (`:1944`); `fakeBackfillSource.ListAssets` returns nil (`:911`) so a new fake source with a scripted `ListAssets` is needed; `funcBody` structural helper `:1231`.
 - Go fixture home: `services/xstockstrat-marketdata/internal/testdata/marks.go` (package `testdata`, C-13). `etf_flags_test.go` is the closest template for a cache-state test file.
 - C-13 verdict: the asset literals (`AAPL`/NASDAQ, `BOSSY`/OTC, `ZZZZ`, DNB absent) have **two consumers** (this step and Step 8), so they live in `internal/testdata/assets.go` from the start.
-- From Step 5 on, `marketdata.assets.refresh_interval_hours` is seeded by 038 at 6, which equals `defaultAssetRefreshHours`, so a seeded key and an unset key read the same. An unset key still occurs in a scope with no row, or after the 038 down migration. AC-24's "unset → 6" therefore stays the read-path case (`fakeIntGetter` with the key absent), and no seeded-value case is added (281 Step 12 precedent, 281 `implementation-spec.md:620`).
+- From Step 5 on, `marketdata.assets.refresh_interval_hours` is seeded by 038 at 6, which equals `defaultAssetRefreshHours`, so a seeded key and an unset key read the same. An unset key still occurs in a scope with no row, or after the 038 down migration. AC-24's "unset → 6" therefore stays the read-path case (`fakeIntGetter` with the key absent). Because default == seed, a read of the wrong key would also yield 6h, so one seeded-key reader case drives the exact seeded key string with a **non-default** value (12 → 12h); this proves Instruction 8 reads `marketdata.assets.refresh_interval_hours` (config-key wiring (b)).
 
 **TDD**: `red-green required` (fails to compile / assert against the tree before Step 5)
 
@@ -380,12 +384,14 @@ process.exit(hits.length||introduced.length?1:0);' "$T/head.json" "$T/base.json"
    - AC-11: with a 10-asset set loaded, a refresh returning 4 assets is rejected and a WARN is logged; an empty refresh is rejected the same way; a 5-of-10 refresh (exactly 50%) is accepted.
    - AC-15: warm `BOSSY` and `AAPL` via `markWarm` while unloaded; first successful load that lists AAPL but not BOSSY removes BOSSY and keeps AAPL; a **later** refresh that stops listing AAPL does not remove it from the warm set.
    - AC-24: `resolveAssetRefreshInterval` with a `fakeIntGetter` → `0` → paused (returns 0), `48` → 24h, key unset → 6h, `nil` cfg → 6h.
+   - Seeded-key reader (config-key wiring (b)): `TestResolveAssetRefreshInterval_ReadsSeededKey` drives `resolveAssetRefreshInterval(fakeIntGetter{"marketdata.assets.refresh_interval_hours": 12})` and asserts `12 * time.Hour`. Write the key as a literal in the test, not via `assetRefreshHoursKey`, so a wrong const fails it.
 3. Use `source.NewRegistry().Register("alpaca", fake)` with a fake whose `ListAssets(ctx, "us_equity")` is scripted and records the asset class it was asked for (assert `"us_equity"`).
 
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print "total " $3 "%"; if ($3+0 < 40) {print "FAIL: coverage below the 40% CI threshold"; exit 1}}'
 grep -rn "Bossy\|BOSSY" --include="*_test.go" internal | head   # C-13: asset literals only via internal/testdata
+[ "$(grep -c '^func TestResolveAssetRefreshInterval_ReadsSeededKey(' internal/service/asset_servability_test.go)" -eq 1 ]
 ```
 New logic is in an excluded package (`service/`) — no coverage threshold applies to it; the repo-wide ≥ 40% command above must still pass and these tests provide the behavioral verification.
 
@@ -405,7 +411,7 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 - `GetBars`: live-fetch fallback `if pageToken == "" { refetch := len(bars) == 0 … if refetch { … s.fetchAndCacheBars(…) … else if len(bars) == 0 { slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none" … } } }` at `:312-332`.
 - `BatchGetBars`: `for _, sym := range req.Symbols { s.markWarm(sym) }` at `:748-750`; cold list built from the `warm` map at `:763-768`; singleflight key from `sortedCold` `:770-772`; `partialColdFetch(ctx, key, cold, fetch)` at `:~809` (its WARN prints `cold`); strict path `s.barsSingleflight.Do(key, …)` returns the fetch error.
 - `BatchGetLatestPrice`: `markWarm` loop `:867-869`; flight key `"batch-price:" + strings.Join(sorted, ",")` from the full request `:871-874`; previous-close read `GetPreviousDailyCloseBatch(fctx, req.Symbols)` `:893`; trade fetch `GetLatestTradesMulti(fctx, req.Symbols)` `:908-945` with per-symbol fallback over `req.Symbols`; response loop omits a symbol with neither trade nor previous close and leaves `LastPrice`/`LastTradeTime` unset when only a previous close exists `:964-979`.
-- Existing structural test that pins the call: `TestGetBarsMarksSymbolWarm` (`marketdata_service_test.go:914-924`) source-scans for `s.markWarm(req.Symbol)` — updated in Step 8.
+- Existing structural test that pins the call: `TestGetBarsMarksSymbolWarm` (`marketdata_service_test.go:1111-1121`) source-scans for `s.markWarm(req.Symbol)` — updated in Step 8.
 - Analysis consumer never treats a present entry as a live price: `HasField("last_price")` and no memoization of a missing price (`services/xstockstrat-analysis/app/handlers/servicer.py:4788,4803`, per design) — no analysis change.
 
 **TDD**: `red-green required`
@@ -422,8 +428,10 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod
-grep -n "markWarm(\|markWarmIfServable(" internal/service/marketdata_service.go   # exactly 3 markWarmIfServable sites (GetBars, BatchGetBars, BatchGetLatestPrice); 3 markWarm sites remain (GetLatestQuote, GetLatestQuotes, GetLatestPrice)
+[ "$(grep -c 'markWarmIfServable(' internal/service/marketdata_service.go)" -eq 3 ]   # GetBars, BatchGetBars, BatchGetLatestPrice (definition lives in asset_servability.go)
+[ "$(grep -c 'markWarm(' internal/service/marketdata_service.go)" -eq 4 ]   # GetLatestQuote, GetLatestQuotes, GetLatestPrice + the markWarm definition
 ```
+`markWarm(` does not match `markWarmIfServable(`, and the `:255` comment ("before markWarm/DB/live") has no `(`, so the two counts are disjoint.
 
 ---
 
@@ -437,9 +445,9 @@ grep -n "markWarm(\|markWarmIfServable(" internal/service/marketdata_service.go 
 **Reviewers**: Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity, Alpaca feed idempotency
 
 **Codebase Evidence**:
-- `TestGetBarsMarksSymbolWarm` (`marketdata_service_test.go:914-924`) asserts `s.markWarm(req.Symbol)` in `GetBars`'s body via `funcBody` (`:1062`); `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` (`:929-938`) asserts the WARN string stays — both structural because `GetBars` needs a live DB pool.
-- f240 fixtures to extend: `fakeBarsStore` serves AAPL's 3 bars (`:3869-3879`), `scriptedBarsSource` counts cold fetches (`:3882-3892`), `partialSvc` builds the service (`:3896-3901`), `batchReq` uses symbols AAPL + MSFT (`:3903-3909`), `hangUntilDone`, `assertOnlyWarmAAPL`, and tests `TestBatchGetBars_AC53_*` / `AC54_*` (`:3933-3960`). Price fakes: `fakeBatchPriceSource` / `fakeLatestTradeOnlySource` (`:1500-1560`), `TestBatchGetLatestPrice_MultipleSymbols` (`:1572`) with `prevClose prevCloseReader` seam on the service.
-- Quote tests: `newQuoteSvc` / `fakeQuoteStore` (`:3175-3210`) for the ungated quote-path scenario.
+- `TestGetBarsMarksSymbolWarm` (`marketdata_service_test.go:1111-1121`) asserts `s.markWarm(req.Symbol)` in `GetBars`'s body via `funcBody` (`:1231`); `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` (`:1126-1135`) asserts the WARN string stays — both structural because `GetBars` needs a live DB pool.
+- f240 fixtures to extend: `fakeBarsStore` serves AAPL's 3 bars (`:4060-4074`), `scriptedBarsSource` counts cold fetches (`:4077`), `partialSvc` builds the service (`:4090-4095`), `batchReq` uses symbols AAPL + MSFT (`:4097`), `hangUntilDone` (`:4105`), `assertOnlyWarmAAPL` (`:4110`), and tests `TestBatchGetBars_AC53_*` / `AC54_*` (`:4120-4146`). Price fakes: `fakeBatchPriceSource` (`:1643`) / `fakeLatestTradeOnlySource` (`:1713`), `TestBatchGetLatestPrice_MultipleSymbols` (`:1741`) with `prevClose prevCloseReader` seam on the service.
+- Quote tests: `fakeQuoteStore` (`:3330`) / `newQuoteSvc` (`:3357-3365`) for the ungated quote-path scenario.
 - C-13 verdict: asset literals come from `internal/testdata/assets.go` (Step 6), the second consumer; the symbol names `FORL`, `BOSSY`, `ZZZZ` are not redeclared inline.
 
 **TDD**: `red-green required` (run before Step 7: unservable symbols are still warmed and fetched, so the new assertions fail)
@@ -512,7 +520,7 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
    - `AddWatchlistSymbols`: after 281, run in this order (`EREA`):
      1. `if _, err := expiryIntentFor(req, existing, add); err != nil { return nil, err }` — 281's validation on the unfiltered request, so 281 `@AC-18` is unchanged and makes no servability call.
      2. `add, refused := s.refuseUnservable(ctx, add)`.
-     3. `len(add) == 0` → return `existing` with `RefusedSymbols: refused`, with no `AddSymbols` (so no expiry write) and no ledger event.
+     3. `len(refused) > 0 && len(add) == 0` (every submitted symbol refused) → return `existing` with `RefusedSymbols: refused`, with no `AddSymbols` (so no expiry write) and no ledger event. An originally empty add (`refused` empty) does not return here: it keeps today's behaviour on 281's branch (`AddSymbols` once, then `portfolio.watchlist.updated`).
      4. `intent, err := expiryIntentFor(req, existing, add)` on the accepted bindings, so `UntrackSymbols` never names a refused symbol. A provenance add has one binding, so it is unchanged here or already returned at step 3.
      5. Cap on the post-filter union.
      6. `s.watchlists.AddSymbols(ctx, …, add, intent)`.
@@ -559,7 +567,9 @@ Record each output in `context.md`; any `STOP` or `FAIL` stops the merge. The re
 - `newSvc(store, cfg, ledger)` leaves `marketdata` nil (`watchlist_service_test.go:275`); `fakeWatchlistStore` / `fakeConfig` / `wideCaps` / `ctxWithUser` helpers; cap tests `TestSymbolCap_InvalidArgument` (`:450`), `TestAddSymbolsCap_HonoredAfterLowering` (`:481`), `TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196` (`:1233`, pins that the cap is enforced from `existing.Symbols`); default-strategy tests `TestAddWatchlistSymbols_SignalSourceSkipsDefault` (`:899`), `TestCreateWatchlist_DefaultAppliedToBareSymbols` (`:829`); masked-update tests `TestUpdateWatchlist_MaskNameOnly_LeavesOthersUntouched` (`:999`).
 - Offline-valuation harness: `offlineListSvc` and `TestListPositions_AC27_QuoteHangFallsBackToLastClose` use `stubMarketData{…}` and its `requested [][]string` counter (`offline_valuation_test.go:288-303`, stub field `requested` at `portfolio_service_test.go`).
 - C-13 verdict: portfolio's Go fixture home `internal/testdata/` exists (`marks.go:15` `Msft`, `offline_pnl.go:15` `Aapl`). Step 10 uses `testdata.Msft`/`testdata.Aapl` and adds no new inline `"MSFT"`/`"AAPL"`. The OTC tickers stay inline, one file each: `CRTD`/`BOSSY` only in `watchlist_service_test.go` and `FORL` only in `offline_valuation_test.go`. Marketdata's `internal/testdata/assets.go` is a different module and cannot be imported. The stub's `unservable` map is the shared seam.
-- 281 Step 8 gives `fakeWatchlistStore.AddSymbols` a recorded intent and a call counter; read their names at Phase 1. This step gives `stubMarketData` `unservable` and `servabilityCalls`.
+- 281 Step 8 gives `fakeWatchlistStore` the fields `lastIntent repository.ExpiryIntent` and `addSymbolsCnt int` (`watchlist_service_test.go:37-38` on 281's branch), set in `(*fakeWatchlistStore).AddSymbols` (`:171-173`); tests read them as `store.lastIntent` and `store.addSymbolsCnt`. This step gives `stubMarketData` `unservable` and `servabilityCalls`.
+- 281's system-managed-list provenance tests seed the list with `seedWatchlist(store, id, userID string, systemManaged bool, binds []*portfoliov1.WatchlistBinding)` (`watchlist_service_test.go:710` on 281's branch), used by `TestAddWatchlistSymbols_ProvenanceValidation` / `_ProvenanceTracksIntent` / `_NoProvenanceIntent` (`:944-1063`); on 281's branch `newSvc` is at `:293`.
+- `expiryIntentFor` (`portfolio_service.go:1856-1885` on 281's branch; checks `:1867-1879`) accepts provenance only on a system-managed list with exactly one SIGNAL binding, `signal_id > 0` and `valid_until` set; any other provenance add is `InvalidArgument`.
 - **Drift in 281's landed symbols.** As in Step 9: any difference between 281's spec and the landed `expiryIntentFor`, `repository.ExpiryIntent`, fake intent recorder or `migrationSql.ts` signatures is called out in the §5.4 summary, and a re-spec must never change the EREA order this step's guard test pins.
 
 **TDD**: `red-green required` (fails against the tree before Step 9)
@@ -579,21 +589,24 @@ Record each output in `context.md`; any `STOP` or `FAIL` stops the merge. The re
    - AC-7 (portfolio half): a symbol absent from the loaded set (stub reports `UNSERVABLE_REASON_NOT_TRADABLE`) is refused with that reason.
    - Never-classify guards: masked `UpdateWatchlist` (name only), `UpdateWatchlistBinding(s)`, `EnsureSignalWatchlist`, `RemoveWatchlistSymbols` make 0 `servabilityCalls` (preserves `@AC-8/@AC-9 @feature-170`, `@AC-1/@AC-3 @feature-167`).
    - All-refused `AddWatchlistSymbols`: repo `AddSymbols` not called, response carries `existing` and the refusals.
+   - Seeded-key reader (config-key wiring (b)): `TestServabilityTimeout_ReadsSeededKey` sets `svc.quoteCfg = &fakeConfig{vals: map[string]int64{"portfolio.marketdata.servability_timeout_ms": 3000}}` and asserts `svc.servabilityTimeout() == 3000*time.Millisecond`. 3000 is non-default and inside `[500,4000]`, so a wrong-key read (default 2000) fails it.
    - Defaults: `default_strategy_id` set, bare MSFT + CRTD → MSFT bound to the default, CRTD refused (EXTEND `@AC-7/@AC-10 @feature-170`).
 3. AC-17 (portfolio half), in `offline_valuation_test.go`: an offline position in an unservable symbol (e.g. FORL with a stored 1d close via `stub.bars`) with `stub.unservable` set; `ListPositions` still requests FORL via `GetLatestQuotes` (`stub.requested` contains FORL) and values it from the quote or the stored close; `servabilityCalls == 0` (reads never classify).
 4. Existing watchlist tests (nil `marketdata`) must pass unmodified: they prove the nil-client fail-open path.
 5. **Filter-before-expiry order guard.** Add `TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry` to `watchlist_service_test.go`, using `svc.marketdata = stub` with `stub.unservable = {BOSSY: UNSERVABLE_REASON_OTC}`:
-   - (a) System list, valid provenance, one SIGNAL binding BOSSY → no error, `RefusedSymbols == [BOSSY]`, zero recorded `AddSymbols` calls.
-   - (b) Provenance-less SIGNAL add `[BOSSY, AAPL]` → the recorded intent's `UntrackSymbols == ["AAPL"]`.
-   - (c) System list, provenance, two SIGNAL bindings `[BOSSY, AAPL]` → `InvalidArgument`, `servabilityCalls == 0`, zero `AddSymbols` calls.
+   - (a) System list (`seedWatchlist(store, "wl-1", "u-1", true, nil)`), valid provenance (`SignalId > 0`, `ValidUntil` set), one SIGNAL binding BOSSY → no error, `RefusedSymbols == [BOSSY]`, `store.addSymbolsCnt == 0`.
+   - (b) Provenance-less SIGNAL add `[BOSSY, AAPL]` → `store.lastIntent.UntrackSymbols == ["AAPL"]`.
+   - (c) System list, provenance, two SIGNAL bindings `[BOSSY, AAPL]` → `InvalidArgument`, `servabilityCalls == 0`, `store.addSymbolsCnt == 0`.
+   - (d) Originally empty add (no `symbols`, no `bindings`) → no error, empty `RefusedSymbols`, `servabilityCalls == 0`, `store.addSymbolsCnt == 1` (unchanged from 281: the all-refused early return fires only when something was refused).
 
-   RED before Step 9, like every other test in this step: (a) records an `AddSymbols` call and (b) untracks `[BOSSY, AAPL]` on the pre-Step-9 tree. (c) is green before Step 9 by design; it guards against filter-first, which would make `servabilityCalls` equal 1.
+   RED before Step 9, like every other test in this step: (a) increments `store.addSymbolsCnt` and (b) untracks `[BOSSY, AAPL]` on the pre-Step-9 tree. (c) and (d) are green before Step 9 by design: (c) guards against filter-first, which would make `servabilityCalls` equal 1; (d) guards against an early return on `len(add) == 0` alone.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print "total " $3 "%"; if ($3+0 < 40) {print "FAIL: coverage below the 40% CI threshold"; exit 1}}'
 grep -rn "\"CRTD\"" --include="*_test.go" internal | head   # ≤ 1 file declares the literal (C-13 single consumer)
 [ "$(grep -c '^func TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry(' internal/service/watchlist_service_test.go)" -eq 1 ]
+[ "$(grep -c '^func TestServabilityTimeout_ReadsSeededKey(' internal/service/watchlist_service_test.go)" -eq 1 ]
 ```
 New logic is in an excluded package (`service/`) — no coverage threshold applies; integration/behavioral verification is the tests above.
 
@@ -750,8 +763,9 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm ru
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm run test:coverage   # vitest.config thresholds lines: 40
-cd services/xstockstrat-ui && pnpm exec playwright test e2e/insights/watchlists.spec.ts e2e/insights/screener.spec.ts --project=chromium --no-deps
+cd services/xstockstrat-ui   # once, from the repo root; every line below runs in services/xstockstrat-ui
+pnpm exec tsc --noEmit && pnpm run lint && pnpm run test:coverage   # vitest.config thresholds lines: 40
+pnpm exec playwright test e2e/insights/watchlists.spec.ts e2e/insights/screener.spec.ts --project=chromium --no-deps
 grep -n "from '../fixtures'\|from './fixtures'\|helpers/auth\|watchlistMock" e2e/insights/watchlists.spec.ts e2e/insights/screener.spec.ts | head
 grep -n "MOCK_UNSERVABLE" e2e/fixtures/INVENTORY.md
 ```
@@ -804,8 +818,11 @@ cd services/xstockstrat-agent && pytest tests/test_watchlist_tools.py -q -k doc_
 
 **Codebase Evidence**:
 - 281 is on `main-dev` before this run starts (merge-order row 92).
-- 281 Step 14 defines `migrationSql.ts` (`MIGRATIONS_DIR`, `findOne(suffix, ext)`, `splitStatements`) and the seed test (`LIT`, `ROW`, `INSERT_RE`, five plain `it()` cases, `KEY` inline). Re-read both at Phase 1. If the case count is not 5, or the regex names or `findOne`'s signature differ, raise a blocker; do not adapt silently.
-- Test globs pick up only `dist/__tests__/*.test.js`, so the helper never runs as a suite. jscpd ignores `**/__tests__/**` (`.jscpd.json:29`), so only this step prevents a second copy of the case logic.
+- 281 Step 14 defines `migrationSql.ts` (`export const MIGRATIONS_DIR`, `export function findOne(suffix: string, ext: 'up' | 'down'): string`, `export function splitStatements(sql: string): string[]`; imports `node:assert/strict`, `node:fs`, `node:path`). Its consumers are 281's seed test (imports `findOne, splitStatements` only) and `zeroTrapDescriptionMigration.test.ts` (imports all three; 4 `it()` cases).
+- 281's seed test `signalPruneIntervalSeedMigration.test.ts` (verified on `origin/feature/signal-watchlist-expiry-pruning` `0657f082`): module-private `SUFFIX = '_portfolio_signal_prune_interval'`, `KEY` (inline), `LIT`, `ROW` (`Array(8).fill(LIT)` plus `NULL`), `INSERT_RE`, an `interface SeedRow` and a `parseUp()` that captures the two rows at group offsets `[1, 9]`. It has one `describe('signal prune interval seed migration (@AC-19)', …)` with five plain `it()` cases, titles not key-prefixed. Case 1 asserts `parseUp().length === 2`, and case 4 asserts `Number.isInteger(n) && n >= 60 && n <= 86400`.
+- 281's seed pair is `037_portfolio_signal_prune_interval.up.sql` and `.down.sql`. Up is `--` comments plus one INSERT: column list `(namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id)`, rows staging then production with 8 literals plus `NULL`, and `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`. Down is one comment plus `DELETE … WHERE namespace = 'portfolio' AND key = '…' AND user_id IS NULL`. `INSERT_RE` is exact after `splitStatements`, so 038/039 must keep that column order and row shape.
+- Re-read all three at Phase 1. If the case count is not 5, or the regex names or `findOne`'s signature differ from the above, raise a blocker; do not adapt silently.
+- Test globs pick up only `dist/__tests__/*.test.js` (`package.json:12-13`), so the helper never runs as a suite. jscpd ignores `**/__tests__/**` (`.jscpd.json:29`), so only this step prevents a second copy of the case logic.
 - 038 lands in Step 5 and 039 in Step 9, so RED is recorded by moving both pairs aside (281 Step 14 precedent).
 - **Drift in 281's landed symbols.** As in Steps 9 and 10: any difference between 281's spec and the landed `migrationSql.ts` signatures (or `expiryIntentFor`, `repository.ExpiryIntent`, the fake intent recorder) is called out in the §5.4 summary, and a re-spec must never change the EREA order of Steps 9-10.
 
@@ -817,17 +834,18 @@ cd services/xstockstrat-agent && pytest tests/test_watchlist_tools.py -q -k doc_
 **Instructions**:
 0. If `src/__tests__/migrationSql.ts` is absent, raise a §5.7 blocker; never copy from 281's branch.
 1. Before editing, run `pnpm run build && node --test --test-reporter=tap dist/__tests__/signalPruneIntervalSeedMigration.test.js` in `services/xstockstrat-config` and record `# pass 5` in `context.md`.
-2. **`globalIntSeedCases.ts`.** Move 281's `LIT`, `ROW` and `INSERT_RE` construction and its five case bodies here verbatim, changing only the parameters.
-   - Export only `interface GlobalIntSeed { suffix: string; namespace: string; key: string; consumingService: string; value: number; min: number; max: number }` and `globalIntSeedCases(seed: GlobalIntSeed): void`. `LIT`, `ROW` and `INSERT_RE` stay module-private.
+2. **`globalIntSeedCases.ts`.** Move 281's `LIT`, `ROW` and `INSERT_RE` construction, its `SeedRow` interface, its `parseUp()` (taking `suffix` as a parameter) and its five case bodies here verbatim, changing only the parameters.
+   - Export only `interface GlobalIntSeed { suffix: string; namespace: string; key: string; consumingService: string; value: number; min: number; max: number }` and `globalIntSeedCases(seed: GlobalIntSeed): void`. `LIT`, `ROW`, `INSERT_RE`, `SeedRow` and `parseUp` stay module-private.
    - `globalIntSeedCases` registers exactly five plain `it()` cases with titles prefixed by `seed.key`. Each case reads its files inside the `it`, through `findOne(seed.suffix, …)`.
    - The five cases:
-     1. up is one statement full-matching `INSERT_RE`;
+     1. up is one statement full-matching `INSERT_RE`, yielding two rows;
      2. both rows have `namespace`, `key`, `value_type 'int'` and `consuming_service`;
      3. the environments are exactly `['production','staging']`;
      4. `value_data === default_value === String(value)`, an integer in `[min,max]`;
      5. `splitStatements(down)` deep-equals `["DELETE FROM config.config_values WHERE namespace = '<ns>' AND key = '<key>' AND user_id IS NULL"]`.
-   - The helper holds no domain data, imports only `node:test`, `node:assert` and `./migrationSql`, and is never imported by `src/` runtime code.
-3. Convert 281's file to `describe(…, () => globalIntSeedCases({ suffix: '_portfolio_signal_prune_interval', namespace: 'portfolio', key: KEY, consumingService: 'xstockstrat-portfolio', value: 300, min: 60, max: 86400 }))` and delete its local `LIT`, `ROW`, `INSERT_RE` and case bodies. `KEY` stays inline.
+   - The helper holds no domain data, imports only `it` from `node:test`, `assert` from `node:assert/strict` and `findOne, splitStatements` from `./migrationSql`, and is never imported by `src/` runtime code.
+   - Prefixing titles with `seed.key` renames 281's five cases. Their assertions are unchanged.
+3. Convert 281's file to `describe('signal prune interval seed migration (@AC-19)', () => globalIntSeedCases({ suffix: SUFFIX, namespace: 'portfolio', key: KEY, consumingService: 'xstockstrat-portfolio', value: 300, min: 60, max: 86400 }))`. Delete its local `LIT`, `ROW`, `INSERT_RE`, `SeedRow`, `parseUp` and case bodies. `SUFFIX` and `KEY` stay inline. Its imports shrink to `describe` from `node:test` and `globalIntSeedCases` from `./globalIntSeedCases`; drop `it`, `assert`, `findOne` and `splitStatements`, or eslint reports them as unused.
 4. **`servabilitySeedMigrations.test.ts`.** Two calls, with the literals inline (single consumer, C-13):
    - `{ suffix: '_marketdata_asset_refresh_interval', namespace: 'marketdata', key: 'marketdata.assets.refresh_interval_hours', consumingService: 'xstockstrat-marketdata', value: 6, min: 1, max: 24 }`
    - `{ suffix: '_portfolio_servability_timeout', namespace: 'portfolio', key: 'portfolio.marketdata.servability_timeout_ms', consumingService: 'xstockstrat-portfolio', value: 2000, min: 500, max: 4000 }`
@@ -858,8 +876,19 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
 
 Recorded RED for the seed cases, run once and never part of the gate:
 ```bash
-(cd services/xstockstrat-config && R=$(mktemp -d "${TMPDIR:-/tmp}/red282.XXXXXX") && mv migrations/038_marketdata_asset_refresh_interval.*.sql migrations/039_portfolio_servability_timeout.*.sql "$R/" && pnpm run build; RED_OUT=$(node --test --test-reporter=tap dist/__tests__/servabilitySeedMigrations.test.js 2>&1); red=$?; echo "$RED_OUT"; mv "$R"/03[89]_*.sql migrations/ && rmdir "$R" && [ "$red" -ne 0 ] && echo "$RED_OUT" | grep -q 'expected exactly one' && echo "$RED_OUT" | grep -q '^# fail 10$' && [ -z "$(git status --porcelain migrations/)" ])
+(
+cd services/xstockstrat-config || exit 1
+R=$(mktemp -d "${TMPDIR:-/tmp}/red282.XXXXXX") || exit 1
+[ -n "$R" ] && [ -d "$R" ] || { echo "FAIL: no temp dir"; exit 1; }
+mv migrations/038_marketdata_asset_refresh_interval.*.sql migrations/039_portfolio_servability_timeout.*.sql "$R/" || exit 1
+built=1; red=0; RED_OUT=''
+pnpm run build && { built=0; RED_OUT=$(node --test --test-reporter=tap dist/__tests__/servabilitySeedMigrations.test.js 2>&1); red=$?; echo "$RED_OUT"; }
+[ -n "$R" ] && mv "$R"/03[89]_*.sql migrations/ && rmdir "$R" || { echo "FAIL: restore the pairs from $R"; exit 1; }
+[ "$built" -eq 0 ] || { echo "FAIL: build"; exit 1; }
+[ "$red" -ne 0 ] && echo "$RED_OUT" | grep -q 'expected exactly one' && echo "$RED_OUT" | grep -q '^# fail 10$' && [ -z "$(git status --porcelain migrations/)" ]
+)
 ```
+The restore always runs, including after a failed build, and only when `$R` is non-empty.
 
 ---
 
