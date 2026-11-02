@@ -392,3 +392,25 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: RED probes; exit-code/output-format choices (Deviation Log).
 - Next: Step 16 (backfill DB tests).
 
+### Step 16 — backfill DB tests [done] (2026-11-02)
+
+- Created `internal/repository/signal_expiry_backfill_dbtest_test.go` (`//go:build dbtest`), which drives `RunBackfill` directly and has 9 `TestBackfill_*` functions:
+  - `ReportIsReadOnly`: the expiry row count is unchanged and the result shows zero writes.
+  - `BoundsRefuseBeforeWrite`: untracked or seed_expired bound exceeded → `ErrBackfillRefused`, nothing written.
+  - `LegacyOwnerRequired`: an empty or blank owner is refused in both modes, and APPLY with a nil bound is refused.
+  - `SeedsFromOwnerRows` (AC-15): the `" aapl"` live row beats an older `"AAPL"` row. REPORT has the exact `SEED` line and APPLY writes `(valid_until, id)`.
+  - `StrictUntrackedRemoval` (AC-16): REPORT has the `UNTRACKED … strat-3 1 Y` and `NO_OWN_SIGNALS` lines. A `live - 1` bound refuses with zero writes. APPLY marks `(now, NULL)`, and the tick returns a `PrunedEntry` with nil `SignalID` and `strat-3`.
+  - `MarkedEntryRescued` (AC-17): a live 110 renewal keeps the entry, and a past 111 renewal is removed with `SignalID` 111.
+  - `OpenEndedStaysUntracked`: the entry is not listed and gets no row, and the tick keeps it.
+  - `Idempotent`: the second APPLY writes nothing.
+  - `IngestInterleavingSkipsChanged` (T4): 10 concurrent APPLY versus ingest+renewal races. The entry is never left due or removed.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go`.
+- TDD: RED compiled the file against a `git archive` of `5f5a755a` (pre-Step-15) → `undefined: BackfillResult`. GREEN (offline):
+  - `go vet -tags dbtest ./...` passes and GO-LINT reports `0 issues`.
+  - The `TestBackfill_` count is 9.
+  - The tests skip without `PORTFOLIO_DB_TEST_URL`.
+  - GO-COVER total is 68.6%.
+  - The behavioral run is CI `portfolio-db-test`. No database was started.
+- Deviations: bounds come from a live REPORT because the classifier is global; dates and ids are DB-relative; AC-16 uses a per-test legacy owner; AC-17 is split into two subtests; T4 runs as a race; the RED method (Deviation Log).
+- Next: Step 17 (agent sends signal provenance on the `direction="watchlist"` auto-add).
+

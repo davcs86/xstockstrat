@@ -789,7 +789,7 @@ then **GO-LINT**.
 
 ### Step 16 — test: backfill DB tests (seed, strict untracked removal, rescue, bounds, idempotence, ingest interleaving)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go` — create (`//go:build dbtest`; drives `repository.RunBackfill`, the exported entry point defined in Step 15)
@@ -1154,4 +1154,17 @@ _Populated by /sdd-execute as implementation proceeds._
   - `RunBackfill` also refuses an unknown `--mode`.
   - `printTo` discards writer errors, so a failed stdout write cannot abort an APPLY partway through.
 - **Disposition**: in scope. Only the step's **Files** changed. The behavioral RED/GREEN is Step 16 in CI `portfolio-db-test`.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 16 — fixture and assertion mechanics for a global classifier
+
+- **Spec said**: AC-15/16/17 fixtures with fixed ids (5, 7) and fixed dates (2026-12-01, 2026-09-01), legacy owner `SEED`, bounds `--expect-untracked 0`/`1` and `--expect-seed-expired 0`. Instruction 4: the interleaving test commits the ingest row and renewal "between the REPORT candidate read and the APPLY row write" and expects APPLY to skip the entry as `changed since REPORT`, or the add's merge/rescue to fix the mark. TDD: compile-red before Step 15.
+- **Done instead**:
+  - `RunBackfill` classifies every SIGNAL binding in the database, not only the test's. So APPLY bounds come from a live REPORT (`TOTALS` line), and refusals use `live - 1`, which equals the spec's `0` on a clean database. Assertions read only the test's own rows and report lines.
+  - Ingest ids are assigned by the sequence (`RETURNING id`), and `valid_until` is relative to DB `now()`. Fixed dates would turn `seed_expired` true once the CI clock passes them, and fixed ids could collide with other rows. The `" aapl"` live row versus the older `"AAPL"` row is kept.
+  - AC-16 uses a per-test legacy owner (`<user>-legacy`) so its `legacy_rows 1 / legacy_live Y` line is exact. The other tests pass `SEED`.
+  - AC-17 runs as two subtests, each with its own marked `ORCL`. Once 110 has rescued a row, the update-only merge keeps the later `valid_until`, so an earlier 111 on the same row could not show the past-renewal case.
+  - `RunBackfill` has no hook between its read and its writes. Instruction 4 therefore runs as a race: 10 iterations, each with APPLY concurrent with an ingest insert plus a renewal `AddSymbols`, on the `lock_timeout=500ms` pool. The test asserts: neither side errors; any expiry row is still in the future; the tick removes nothing; the binding is still SIGNAL. `SkippedChanged` is logged, not asserted, because the spec accepts either outcome.
+  - RED: the test file was vetted against a `git archive` of `5f5a755a` (pre-Step-15) → `undefined: BackfillResult`.
+- **Disposition**: in scope. Only the step's **Files** changed. The behavioral run is CI `portfolio-db-test`, and no database was started.
 - **Severity**: n/a
