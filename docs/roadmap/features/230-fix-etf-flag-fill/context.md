@@ -633,3 +633,25 @@ the round-2 block above.
   `fmp_client_test.go` (254, 255, 215), `marketdata_service_test.go` (254, 215, 229, 231, 227 — Step 4's
   `installWarnRecorder` wrapper keeps existing callers untouched), marketdata `CLAUDE.md` (docs-only, many).
   Peer 275 (`fix-backtest-silent-symbol-skip`) is `draft`, analysis-only; low risk.
+
+## Session 2026-11-02 — sdd-execute setup: merge + re-spec
+
+- **Branch setup (§5.3):** detached `origin/feature/fix-etf-flag-fill` (`7e234756`), normal `git merge --no-edit
+  origin/main-dev` (`efd5167d`) with no conflicts → merge commit `cfd240af`. `scripts/ledger-guard.py --own-slug
+  fix-etf-flag-fill --base origin/main-dev --fix` reported clean (no repair).
+- **Pre-execution gate: PASSES.** `func enrichmentClass` has exactly one hit (`internal/fmp/fmp_client.go:329`) and
+  its stage-less fallback returns `"other"` (`:344`); 255 `status.md` is `code-completed`; 254 is launched and its
+  `*url.Error` rewrap is in `getJSON` (`:243-248`); no later 215 commit touched `etf_flags.go` (last is `08d63011`).
+- **Operator re-spec decisions (2026-11-02, binding), applied in implementation-spec.md:**
+  1. Step 2: no new classifier table. Extend 255's `TestEnrichmentClassifier_StagesAndOther`
+     (`fmp_client_test.go:443-468`) to also assert the exported `ErrorClass` and a never-empty class on every row,
+     adding only rows it lacks (none at `cfd240af`: `ctx`, `cap`, `other`, `transport` are all present). Dropped the
+     stale "does not pin `other`" claim, the moot "add `fmt`" note, and the pre-254 build-request text.
+  2. Step 4: one level-aware `recordingLogHandler`/`installLogRecorder(t, level)`, with `infoRecorder`
+     (`marketdata_service_test.go:1202-1225`) folded into it and `TestIngestRecentBars_LogsHeartbeatEveryCycle`
+     (`:1229`, `:1243-1246`) moved onto `installLogRecorder(t, slog.LevelInfo)`. All 12 `installWarnRecorder` callers
+     re-anchored (the spec said 10); the wrapper keeps them untouched.
+- **Line drift only:** Steps 1, 3, 5, 7 and the Execution Summary `servicer.py` citation (now `:2042-2062`); 255
+  impl-spec Step 11/12 now `:595-676`/`:677-732`. Step 6 (`CLAUDE.md:165-176`) has no drift.
+- **Informational, outside this feature's directory (F-03):** `merge-order.md:91` says `fix-etf-flag-fill` is
+  "already launched" while 230 is not; row `:96` (230 after 255) is correct. Left for a docs-only PR.
