@@ -27,7 +27,10 @@ test mocks.
 - **After proto changes**: regenerate stubs with **`./scripts/localenv-setup.sh`** (Docker codegen
   image — builds once, installs nothing on the host); fall back to `./scripts/buf-gen.sh` (host-native)
   only when the Docker daemon is unavailable. Include the generated files in the commit.
-- **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing.
+- **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing. The
+  stored `key` must equal the reader string verbatim; `scripts/check-config-wiring.mjs` enforces it
+  (SKILL.md Phase 3 wiring gate). Keys created at runtime surface as `read-unseeded` by design and
+  must be seeded in a migration.
 - **Never edit applied migrations**: any applied `.up.sql` file (committed to main-dev) is immutable;
   add a new numbered migration for corrections.
 - **Lint gate**: a `service` step's `**Verification**` (or its paired `test` step's) includes the

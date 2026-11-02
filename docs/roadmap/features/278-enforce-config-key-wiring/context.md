@@ -201,3 +201,529 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - **Fact from the operator:** there is no production deployment. Step 10's production sampling is therefore not applicable; the production-only gap it was designed to probe has no running deployment behind it.
 - **Samples read on staging (read-only `get_config`, nothing written):** `get_config(namespace="ledger")` has `stream.notify_enabled` = true, stored **bare** (the other ledger keys are dotted: `ledger.export.enabled`, `ledger.export.max_window_days`). `get_config(namespace="trading")` has `trading.fill_poller.interval_ms` = 5000.0, stored **dotted** (the 029 heal), alongside the dotted `trading.risk.*` and `trading.approval.*` keys. `get_config(namespace="platform")` has `platform.maintenance_mode` = false, stored **dotted**, alongside `platform.log_level` and `platform.trading_state`. All three match what the offline model predicts for staging. `ledger.stream.notify_enabled` being bare supports the 277 finding that it is a dead seed with no reader.
 - **environment-baseline decision (operator ruling): reported-only.** Findings that exist only in the `production` environment (a key the migrations seed for `staging` but not for `production`) are printed as `REPORTED:` and kept out of the ratchet. Staging findings are blocking. `policy.envReadUnseeded` stays `reported`. Re-open Step 10 and run the production sampling when a production environment exists.
+
+## Session 2026-11-01 — operator ruling at the sdd-batch-execute up-front gate
+
+- **Baseline ownership (operator decision, binding):** feature 277 (`fix-ingest-seeded-config-keys`) is `demoted/canceled`, so no baseline entry may name it. Every entry the spec assigned to "feature 277" is owned by **278** instead, and the owner regex drops 277 (`^(feature )?(243|278)\b`). Re-spec Steps 7, 9 and 11 accordingly.
+- Re-spec must also re-derive the stored set against the current migration tip (`034_retire_portfolio_snapshot_interval`; 031-034 landed under numbers the spec did not anticipate), re-evaluate `indicators.sandbox.*` now that 243's `031_heal_indicators_sandbox_keys_full_dotted` is on the branch, and treat Step 10 as already resolved (2026-10-23 ruling: reported-only) — confirm and flip it rather than reopening an operator gate.
+
+## Session 2026-11-01 — sdd-execute sequential re-spec (§5.3)
+
+- Branch setup: `git merge --no-edit origin/main-dev` was a no-op ("Already up to date"); `scripts/ledger-guard.py --own-slug enforce-config-key-wiring --base origin/main-dev --fix` reported clean, so no merge commit was needed.
+- Re-specced the bodies of Steps 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 18 (directive re-spec, implementation-spec.md):
+  - **Migration set** is now 000-034 (tip `034_retire_portfolio_snapshot_interval`). The closed rewrite model (Step 1) gains: a literal-list prefix heal and a twin-dedupe DELETE (031), a literal DELETE (009, 020, 034), a key-neutral UPDATE (016, 031:74, 032), and a statement splitter that ignores comments and `CREATE TRIGGER ... BEFORE UPDATE` (001:50, 010). New Step 2 fixtures cover each shape. `rewriteAllow` is expected to stay empty: the model is extended, the trigger is not weakened.
+  - **Readers** (Step 3/4): `get_*_present` are class-attribute aliases, not `def`s, and are still matched by call name. Feature 244's module-level `int_positive(cfg, key, default)` (analysis/indicators/ingest `watcher.py`) is a registered forwarder with `keyArg` 1, like Go `resolvePositiveInt` (`marketdata_service.go:986`). Its body's pass-through `get_int(key)` is not counted as a read. Without the forwarder entries, `ingest.backfill.max_concurrent_jobs`, the `mcp_client` keys and about 30 analysis keys would be missed.
+  - **Expected first-run set** (Step 9): analysis `backtest.max_duration_seconds` changes from dead seed to `form-mismatch` (`servicer.py:795-796` reads it dotted). `indicators.sandbox.{timeout_ms,memory_bytes,allowed_imports}` are healed by 031. `indicators.sandbox.max_concurrent` is read but unseeded and sits outside 243's scope, so it is owned by 278.
+  - **Owners** (Steps 7/9/11): the 2026-11-01 operator ruling is applied. The owner regex is `^(feature )?(243|278)\b|...`, and no entry names 277.
+  - **Step 10** is now a confirmation of the recorded 2026-10-23 `reported-only` ruling. It is flipped after Step 9 and is no longer an operator stop.
+  - **Anchors**: ci.yml (`changes` :14 / filters :39-108, migration-contract-gate :693-709 with `fetch-depth: 0` not copied, ci-gate :899-945, context-map :787/:801, shell-lint :643/:646/:649, setup-node :459); sequential-mode.md §5.5 :81 / §5.5b :110 / §5.6 :146; config-governance.md `## Per-Feature Registered Keys` :109. The fails.md:1040 citation in Step 13 was removed because it is unrelated.
+  - **Step 18**: merge-order.md already has a 278 row (:101, 281 vs 278). Only a soft 243-vs-278 row is added. 244, 261 and 264 have launched, and the PR #1322 / `ccr-fac38b1f-6m24q2` reference is stale.
+- Not re-specced (outside the directive): Step 5 still cites `configServiceImpl.ts:188` (now :276), and the Step Dependencies bullet still mentions PR #1322. Both are stale and do not affect execution.
+- Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode-entry and up-front confirmation: given by the operator, who approved the up-front plan for `/sdd-execute enforce-config-key-wiring sequential` through the sdd-batch-execute workflow. Steps run as one commit each on `feature/enforce-config-key-wiring`, and there is a single integration PR at the end.
+- Status: `implementation-ready` → `in-progress`.
+- Step 10 is confirmed after Step 9 against the recorded `reported-only` ruling. It is not an operator stop.
+- Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 1+2
+
+### Step 1 — Seed-side parser (stored set) and CLI skeleton [done]
+- Created `scripts/check-config-wiring.mjs`: a zero-dependency ESM script. It has a tokenizer that drops comments and handles quoted, `$$` and double-quoted text, and a statement splitter. `buildStoredSet(root)` replays `*.up.sql` in NNN order against `config.config_values` only, using the closed model of Instructions 3 (cases 1-7). It returns `stored` (global, non-secret rows keyed `(namespace, key, environment)`, each carrying its inserting migration), `secrets` (keys only, never values) and `unmodelled`. The fail-closed `unmodelled-rewrite` honours `registry.rewriteAllow` (file name plus SHA-256 of the comment-stripped, whitespace-normalised statement). The CLI accepts `--root/--final/--declared-from/--declared-migration/--keys/--json`; only `--root` and `--json` act at this step. Exit codes are 0, 1 and 2, and errors print to stderr with the prefix `config-wiring:`.
+- Real tree (000-034): exit 0, zero `unmodelled-rewrite`, 180 stored entries, 8 secret entries. The four `alpaca`/`fmp`/`finnhub` keys stay bare in `secrets`. `indicators.sandbox.{timeout_ms,memory_bytes,allowed_imports}` are dotted in both environments. `ledger stream.notify_enabled` is staging-only. `analysis backtest.max_duration_seconds` is bare in both environments. `portfolio snapshot.interval_minutes` and `analysis signals.source_weights` are gone.
+- Discovery-digest blocker resolved without allow-listing. The re-spec had already added the 031/034/009/020/016/032 shapes (cases 4-7). 029's second UPDATE (`value_data` only) is key-neutral. The 017 `WITH ranked ... DELETE` collapse is CTE-led, so it is not classified (see Deviation Log).
+- TDD red (captured before implementation): `node --test scripts/config-wiring.test.mjs` failed with `ERR_MODULE_NOT_FOUND ... scripts/check-config-wiring.mjs`, pass 0 / fail 1, so no case could run.
+- TDD green: `node --check scripts/check-config-wiring.mjs && node --test scripts/config-wiring.test.mjs` gave tests 10, pass 10, fail 0.
+- Files modified: `scripts/check-config-wiring.mjs`
+- Deviations: executed as one TDD cycle with Step 2 (operator Option A); a CTE-led DELETE is not classified; non-`VALUES`/non-`DO NOTHING` INSERTs fail closed; the unmodelled line is `file:L<line>:unmodelled-rewrite`. Full detail is in the Deviation Log.
+
+### Step 2 — Parser fixtures and tests (authored red) [done]
+- Authored `scripts/config-wiring.test.mjs` (`node:test`, `node:assert/strict`) with cases 1-9 of the Instructions plus a CLI usage-error case (exit 2). Fixtures are under `scripts/config-wiring-fixtures/seed/{bare-insert,heal-029,rename-017,unmodelled,scope-and-secret,multi-row,heal-031,literal-delete,key-neutral}/`.
+  - `rename-017` also carries the 017 CTE collapse.
+  - `key-neutral` also carries a `$$` function body containing `UPDATE ... SET key`.
+  - `multi-row` carries `''`, `--` and `;` inside string literals and a comment inside VALUES.
+  - The case-5 allow-list and the case-9 negative cases run on temp copies (`fs.mkdtempSync`). This mirrors the merge-train test style, so no extra fixture files were needed.
+- Red and green are as in Step 1, since both steps were one TDD cycle. Lint: `node --check scripts/config-wiring.test.mjs` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/seed/**` (16 files, including the `scope-and-secret/.../001_seed.down.sql` sibling)
+- Deviations: none beyond the shared TDD-cycle entry.
+- Tooling: Node v22.23.4. The root CLAUDE.md pins 24; the operator noted this is not a blocker. No CI-equivalent fallback was used, because Steps 1-2 need only `node`.
+- Open item: the fail-closed trigger does not see CTE-led (`WITH ...`) DML. No current migration other than the 017 collapse uses that shape.
+- Severity: n/a.
+
+## Session 2026-11-01 — operator ruling: option A for every inverted test/impl pair
+
+- **Binding operator decision:** the spec places each implementation step before its paired RED test step (3→4, 5→6, 7→8). Apply the same Option A already used for Steps 1+2 to every remaining pair: author the test step's test cases and fixtures first, capture RED, implement the implementation step, capture GREEN with both steps' Verification commands, and land each pair as **one** red-green commit that flips both Statuses to `done`, staging both steps' Files. Log one Deviation Log entry per pair ("executed as one TDD cycle, operator option A"). Do not raise a blocker for this ordering again.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 3+4
+
+### Step 3 — Reader extraction (Python `ast`, Go and TypeScript regex) [done]
+- `scripts/config-wiring-py-reads.py` is new. It uses stdlib `ast` and runs as `python3 -I <helper> <root> <forwarders-json>`. It scans `services/*/app/**/*.py` and skips `tests/`, `test/`, `__pycache__/` and `.venv/`.
+  - Reads come from the getter names (including the `*_present` aliases) and from `.values.get(...)` / `.values[...]`, with the key at argument 0 or `key=`.
+  - It also handles calls to registered forwarders of the same service, with the key at `keyArg`.
+  - A key argument resolves to a literal or to a module-level string constant. Anything else becomes `{"file","symbol","line","dynamic":true}`.
+  - In a registered forwarder's body, a call that passes the forwarder's own key parameter is treated as pass-through and skipped.
+- `scripts/check-config-wiring.mjs` gains `extractReads`, `extractPyReads`, `extractGoReads` and `extractTsReads`.
+  - Go/TS matching uses a regex over comment-blanked source. A balanced argument scan handles calls split across lines.
+  - Constants resolve in the same file, then the same package, then the service. A `pkg.X` constant resolves in the directory named `pkg`.
+  - The forwarder rule is the same as for Python. `registry.dynamic` turns an enumerated site into reads.
+  - `GetSecret`/`getSecret` are never matched. `run()` is unchanged; Step 5 wires the join and output.
+- Real-tree smoke run (not a gate; it uses the four Step-3 minimum forwarders). It took about 0.4 s and found 213 reads (169 unique keys: 115 py, 83 go, 15 ts/tsx) and 46 dynamic sites. Breakdown of the dynamic sites:
+  - The getter internals of the Python and TS watchers: `ConfigWatcher.get_*` in analysis/indicators/ingest, and `getString/getInt/getFloat/getBool` in config/identity/ledger/notify.
+  - analysis `float_positive` and `str_nonempty`.
+  - agent `client.py:get_config_value`.
+  - `values`-index false positives in config `configServiceImpl.ts`, analysis `servicer.py:1858` / `evaluator.py:95`, ui `accountShared.tsx`/`indicatorChart.ts`, marketdata fundamentals and trading `ibkrTiming`.
+  - Step 9 counts these and Step 11 records them in `registry.forwarders`/`registry.dynamic`. An empty `registry.dynamic` array silences a site.
+- TDD red (before implementation): `node --test scripts/config-wiring.test.mjs` gave tests 21, pass 10, fail 11 (`cw.extractReads is not a function`).
+- TDD green: `node --check scripts/check-config-wiring.mjs && python3 -I -m py_compile scripts/config-wiring-py-reads.py && node --test scripts/config-wiring.test.mjs` gave tests 21, pass 21, fail 0. `ruff check` on the helper passed.
+- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring-py-reads.py`
+- Deviations: Steps 3+4 were executed as one TDD cycle (operator option A). TS uses lower-case `get*` names. The format of the dynamic `symbol` and the extractor API are defined here. See the Deviation Log.
+
+### Step 4 — Reader-extraction fixtures and tests (authored red) [done]
+- Cases (a)-(k) were added to `scripts/config-wiring.test.mjs`. They reach the new exports through `import * as cw`, so red fails per case and not for the whole module. The fixtures are under `scripts/config-wiring-fixtures/readers/` (the 9 files the spec lists).
+  - `split_literal.go` also carries a commented-out `GetString` call.
+  - `index_reads.ts` also carries a TS `getInt` read and a `getSecret` call.
+- Red and green are as recorded for Step 3. Lint: `node --check scripts/config-wiring.test.mjs && python3 -I -m py_compile scripts/config-wiring-py-reads.py` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/readers/**` (9 files)
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker) and python3 3.13. No CI-equivalent fallback was used.
+- Open items for Steps 9/11:
+  - Register `float_positive`/`str_nonempty` (analysis, `keyArg` 1) and agent `get_config_value` (`keyArg` 0) as forwarders.
+  - Handle the Python and TS watcher getter internals and the `values`-index false positives listed above, either through `registry` entries or by tightening the extractor.
+- Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 5+6
+
+### Step 5 — Join with collapse, finding kinds and output [done]
+- `scripts/check-config-wiring.mjs` gains `join(stored, reads)` and `findingLine(f)`, and `run()` now prints the join's findings next to `unmodelled-rewrite`.
+  - Joins are verbatim. A bare-seed/dotted-read pair, or a dotted-seed/bare-read pair, gives one `form-mismatch` and suppresses its `seeded-unread`/`read-unseeded` per environment.
+  - Findings are grouped per `(namespace, key, kind)`.
+  - Only `read-unseeded` carries `:env`, listing the environments where the key is missing when it is seeded in some environments but not others.
+  - Dynamic sites are deduplicated per `file:symbol`.
+  - Output is sorted. The exit code is 1 when there is any finding and 0 otherwise.
+  - Secrets and `GetSecret` never enter the comparison.
+- Real-tree smoke run (not a gate; no `config-wiring.json` yet, so no forwarders are registered) exited 1 with 150 lines:
+  - 9 `form-mismatch`: the analysis `backtest.max_duration_seconds`, seven `fundsignal.*`, and `scoring.signal_decay_half_life_hours`.
+  - 31 `seeded-unread`.
+  - 64 `read-unseeded`, one of them env-scoped: `trading.fill_poller.interval_ms:production`.
+  - 46 `dynamic-read`.
+- The ingest `form-mismatch` group and the remaining `fundsignal.*` keys show up as `seeded-unread` here, because their reads go through `int_positive` and similar forwarders that are not registered yet. Steps 9 and 11 reconcile this once the forwarders are registered.
+- TDD red (before implementation): `node --test scripts/config-wiring.test.mjs` gave tests 28, pass 23, fail 5. The five failures were join cases 1-5. Cases 7 and 8 assert no output, so they already passed.
+- TDD green: `node --check scripts/check-config-wiring.mjs && node --test scripts/config-wiring.test.mjs` gave tests 28, pass 28, fail 0.
+- Files modified: `scripts/check-config-wiring.mjs`
+- Deviations: Steps 5+6 were executed as one TDD cycle (operator option A). The `join` signature, the per-kind key and file fields, and the rule that only `read-unseeded` carries an env are defined here. See the Deviation Log.
+
+### Step 6 — Join and finding-kind tests (authored red) [done]
+- Join cases 1-8 were added to `scripts/config-wiring.test.mjs`. Each asserts exact CLI lines. Case 6 (PRESERVE @AC-3) is folded into case 3, where two reader files read the same key and produce one finding. Case 4 reuses the `readers/` fixture.
+- Fixtures are under `scripts/config-wiring-fixtures/join/{mismatch,seeded-unread,read-unseeded,env-collapse,negative-matches,secret}/` (17 files).
+- Step 2 cases 4 and 5 no longer assert exit 0, because their fixtures' seeds now report `seeded-unread`. See the Deviation Log.
+- Lint: `node --check scripts/config-wiring.test.mjs` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/join/**`
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
+- Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 7+8
+
+### Step 7 — Baseline ratchet, modes, declared keys and policy [done]
+- `scripts/check-config-wiring.mjs` changes:
+  - New: `validateState`/`loadState`. Every run validates `scripts/config-wiring.json` (a missing file counts as the empty shape). A bad entry (owner missing or not matching `^(feature )?(243|278)\b|^(defect|feature) .+`, kind outside the four FR-1 kinds, bad `envs`/`file`) or a bad policy is named on stderr and exits `2`. `loadRegistry` now reads through `loadState`.
+  - New: `ratchet` (`--final`). New findings fail and print as plain lines, gone entries print `STALE:`, and oversized `envs` entries print `STALE-IN-PART:`. Under `policy.envReadUnseeded: reported`, env-scoped `read-unseeded` prints `REPORTED:` and stays out of the ratchet.
+  - New: `stepTime` (default). Only declared keys gate, and missing-side legs print `PENDING:`. Keyless kinds (`dynamic-read`, `unmodelled-rewrite`) fail when they are not baselined. With no declared key the mode prints nothing and exits `0`.
+  - New: `declaredFromSpec` (backticked keys inside `## Config Key Changes` only) and `declaredFromMigration` (`INSERT INTO config.config_values` rows, canonical dotted key). `--keys` takes a comma-separated list.
+- `scripts/config-wiring.json` created with the empty shape (policy `reported`).
+- Real-tree smoke (not a gate):
+  - The default run prints nothing and exits 0.
+  - `--final` gives 150 lines (149 new findings plus 1 `REPORTED:` for `trading.fill_poller.interval_ms:production`) and exits 1. That stays until Step 11 freezes `findings`.
+  - `--keys analysis.fundsignal.enabled` prints the 008 `form-mismatch` and the 46 unbaselined `dynamic-read` lines, and exits 1.
+- TDD red, captured before implementation: `node --test scripts/config-wiring.test.mjs` gave tests 37, pass 27, fail 10. The failures were ratchet 1-9 and join 5.
+- TDD green: `node --check scripts/check-config-wiring.mjs && node -e "JSON.parse(...'scripts/config-wiring.json'...)" && node --test scripts/config-wiring.test.mjs` gave tests 37, pass 37, fail 0.
+- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`
+- Deviations, detailed in the Deviation Log:
+  - Steps 7 and 8 ran as one TDD cycle (operator option A).
+  - Defined here: declared-key matching, step-time keyless kinds, entry identity with an optional `file`, and the `STALE:`/`STALE-IN-PART:`/`PENDING:`/`REPORTED:` line forms.
+
+### Step 8 — Ratchet, owner, mode and declared-key tests (authored red) [done]
+- Ratchet cases 1-9 were added to `scripts/config-wiring.test.mjs`. A `stage()` helper copies fixture trees into a temp root and installs the chosen `config-wiring.json`.
+- Fixtures are under `scripts/config-wiring-fixtures/ratchet/{new-finding,no-owner,stale-in-part,step-time,two-step/{seed-only,reader-only},declared,policy/{reported,blocking}}`, 16 files in all.
+- The Step 2 case 5 and join 1-8 CLI calls now pass `--final`, and join 5 expects the `REPORTED:` prefix. See the Deviation Log.
+- Lint: `node --check scripts/config-wiring.test.mjs` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/ratchet/**`
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
+- Open item for Step 11: until `findings` and `registry.dynamic` are populated, any step-time run with a declared key fails on the real tree's 46 unbaselined `dynamic-read` sites.
+- Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute 278 step 9
+
+### Step 9 — First offline run on the real tree [done]
+- Command: `node scripts/check-config-wiring.mjs --final --json > <scratchpad>/first-run.json`, run against the committed `scripts/config-wiring.json` (empty `findings`, empty registry, policy `reported`). It exited 1. No staging or production read or write was made.
+- Stored set: 180 rows, plus 8 secrets that are excluded from the comparison. Migrations 000-034.
+- First-run counts per kind (150 findings in all):
+
+  | Kind | Count |
+  |---|---|
+  | `form-mismatch` | 9 |
+  | `seeded-unread` | 31 |
+  | `read-unseeded` | 64 (63 blocking, 1 printed `REPORTED:`) |
+  | `dynamic-read` | 46 |
+  | `unmodelled-rewrite` | 0 |
+
+- `read-unseeded env=` entries (1): `trading.fill_poller.interval_ms:production` (`services/xstockstrat-trading/internal/service/trading.go`). It prints `REPORTED:` under `policy.envReadUnseeded: reported`.
+
+**Reconciliation against the Step 9 expected set.**
+- The first run differs from the expected set mainly because no forwarder is registered yet. Reads through `int_positive`, `str_nonempty`, `float_positive` (analysis/indicators/ingest `watcher.py`) and `resolvePositiveInt` (marketdata) are not attributed to a key. So:
+  - The ingest group, four `fundsignal.*` keys, `fundsignal.source_slug` and the 031-healed sandbox keys show as `seeded-unread`.
+  - The forwarder bodies show as `dynamic-read`.
+  - Three of the seven expected unseeded keys are missing: `ingest.backfill.max_concurrent_jobs`, `indicators.sandbox.max_concurrent` and the other `int_positive` readers.
+- Diagnostic re-run, not committed: a scratch `--root` symlinked the real `services/` and used a scratch `config-wiring.json` that registered six forwarders, each with `keyArg` 1. They were the four the Step 11 spec lists plus analysis `watcher.py:str_nonempty` and `watcher.py:float_positive`. Result:
+
+  | Kind | Count |
+  |---|---|
+  | `form-mismatch` | 19 |
+  | `seeded-unread` | 9 |
+  | `read-unseeded` | 91 |
+  | `dynamic-read` | 40 |
+
+- `form-mismatch` 19 matches the expected set exactly:
+  - Ingest (5): `backfill.chunk_max_bars`, `backfill.chunk_window_days`, `backfill.max_concurrent_chunks`, `mcp_client.poll_interval_seconds`, `mcp_client.request_timeout_seconds`.
+  - Analysis (14): the twelve `fundsignal.*` keys, `scoring.signal_decay_half_life_hours` and `backtest.max_duration_seconds`.
+  - `fundsignal.source_slug` is read through `str_nonempty` (`fundsignal_loop.py:44`). That forwarder is absent from Step 11's expected forwarder list, and without it the analysis count is 13.
+- All seven expected `read-unseeded` keys are present: `ingest.backfill.max_concurrent_jobs`, `ingest.backfill.retry_on_failure`, `ingest.backfill.max_retry_attempts`, `ingest.signals.dedup_window_hours`, `analysis.fundsignal.retry_seconds`, `analysis.fundsignal.startup_jitter_seconds` and `indicators.sandbox.max_concurrent`.
+- Expected-gone keys are confirmed gone:
+  - No `indicators.sandbox.timeout_ms`/`memory_bytes`/`allowed_imports` finding remains once forwarders are registered.
+  - There is no `portfolio.snapshot.interval_minutes` finding.
+  - There is no `ledger.stream.resolve_timeout_ms` finding.
+- The expected `seeded-unread` is `ledger` `stream.notify_enabled` (001:65). It is present. The run also reports 8 more `seeded-unread` that were not in the 277-derived expected set:
+  - `marketdata.alpaca.paper`, `platform.log_level` and `trading.risk.daily_loss_limit` (002).
+  - `agent` `signal.alert_threshold` (004).
+  - `marketdata.fmp.cache_ttl_hours` (007).
+  - `marketdata.finnhub.cache_ttl_hours` and `marketdata.finnhub.enabled` (015).
+  - `analysis.opportunity.sparkline_bars` (028).
+
+  A grep found no non-test reader for seven of them. The exception is `signal.alert_threshold`: the agent reads it through the module constant `_ALERT_THRESHOLD_CONFIG_KEY` (`services/xstockstrat-agent/app/tools.py:78`) passed to `get_config_value`. That read is reported as `dynamic-read` (`services/xstockstrat-agent/app/client.py`), so this `seeded-unread` is an extractor gap. Step 11 Instruction 4 says to fix it in the extractor and not to baseline it.
+- The run also reports 84 `read-unseeded` keys beyond the expected 7. These are readers with in-code defaults and no seed row, across:
+  - analysis: `scoring.*`, `backtest.default_*`, `opportunity.*`, `screener.*`, …
+  - marketdata: `stream.*`, `edgar.*`, `fundamentals.history.*`, `quotes.*`, …
+  - trading: `reconciliation.*`, `order.*`, `order_intent.*`, `broker.*`, …
+  - portfolio: `risk.*`, `marketdata.*`, `exposure.factor_map`.
+  - identity: `jwt.*_ttl_seconds`.
+
+  The 277 sweep covered only ingest/analysis/indicators/ledger, so it never listed them. They are real FR-1 findings.
+- The 40 remaining `dynamic-read` sites are the per-service getter bodies (`ConfigWatcher.get_*`, `getInt`/`getBool`/…) and a few runtime-built keys. Step 11 classifies each as either a registered `dynamic` entry or an extractor fix. The false-dynamic-read count must reach zero.
+
+**Open-risk checks.**
+- (a) No migration after 017 renames environments. `SET environment` appears only at `017_config_secrets_and_scoping.up.sql:38-39`. The `environment` references in 029:42 and 031:23/72 are predicates or conflict targets, not renames. **Closed.**
+- (b) No migration trips the fail-closed trigger. The run produced 0 `unmodelled-rewrite`, so every `UPDATE`/`DELETE` on `config.config_values` was classified by the Step 1 closed model: 009, 016, 017, 020, 029, 031, 032 and 034. 002, 005, 025 and 033 are INSERT-only. `registry.rewriteAllow` stays empty. No model extension and no fixture were needed. **Closed.**
+
+**Proposed owners (Instruction 3).**
+- `feature 278`: every `form-mismatch` (19), the dead seed `ledger` `stream.notify_enabled`, every other `seeded-unread`, and every `read-unseeded`, including `indicators.sandbox.max_concurrent`. This follows the 2026-11-01 operator ruling that 277 entries collapse to 278.
+- `feature 243`: none. No `indicators.sandbox.*` finding inside 243's scope remains after 031.
+
+**Open items for Step 11.**
+1. Register `str_nonempty` and `float_positive` (analysis `watcher.py`, `keyArg` 1) next to the four listed forwarders. Without them, `fundsignal.source_slug` mis-classifies as `seeded-unread`.
+2. Before freezing, resolve `signal.alert_threshold` (module-constant key) through the extractor and not the baseline.
+3. The baseline will be far larger than the 277 sweep: roughly 19 + 9 + 91 findings, before `dynamic` triage. The Platform Lead and `xstockstrat-config` owner reviewers on Step 11 should expect this.
+
+- TDD: N/A (non-code-bearing: records a run, writes no code).
+- Verification: `node scripts/check-config-wiring.mjs --final --json | node -e "…console.log(Object.keys(j))" && grep -n "sdd-execute 278 step 9" …/context.md` printed `[ 'findings', 'results', 'counts' ]` and the session-header line.
+- Files modified: `docs/roadmap/features/278-enforce-config-key-wiring/context.md`.
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
+- Deviations: none.
+- Severity: n/a.
+- Step 10 confirmed: reported-only (2026-10-23 operator ruling), 1 env-scoped findings reported (`trading.fill_poller.interval_ms:production`, printed `REPORTED:` and kept out of the ratchet; `policy.envReadUnseeded` is `reported`; no environment was read or written).
+
+## Session 2026-11-02 — re-spec at the Step 11 blocker (operator option C)
+
+- **Blocker (Step 11, freeze baseline):** after registering the forwarders and enumerable dynamic sites, 7 `dynamic-read` sites remained that are not config reads. 3 are assignment targets in `services/xstockstrat-config/src/grpc/configServiceImpl.ts` (`reloadAll` :50-54, `reloadNamespace` :276, `toProtoSnapPayload` :300) — the TS/Go `INDEX_RE` (`scripts/check-config-wiring.mjs:382`) counts `values[k] = ...` writes, while the Python extractor counts only `ast.Load`. 4 index a non-config `values` container (ui `accountShared.tsx:57`, ui `indicatorChart.ts:33`, analysis `servicer.py` `_load_fundamentals`, analysis `evaluator.py:95`). Former Step 11 Instruction 4 forbids hiding a fixable extractor cause in the registry, but its Files excluded the extractor. Nothing was committed by the blocked run.
+- **Operator decision (2026-11-02): option C — re-spec first.** Options A (expand Step 11's Files) and B (registry only, waive Instruction 4) were declined.
+- **Re-spec (this commit):** inserted a new **Step 11** (`scripts/check-config-wiring.mjs` + test case (l) + two reader fixtures; red-green inside the step) that skips `values[...]` sites whose closing `]` is followed by an assignment operator. The baseline freeze is now **Step 12**, whose Codebase Evidence lists the 4 non-config sites to register as `registry.dynamic` `[]`.
+- **Renumbering map (old → new):** 11 → 12, 12 → 13, 13 → 14, 14 → 15, 15 → 16, 16 → 17, 17 → 18, 18 → 19. Step numbers in earlier entries of this file are pre-re-spec and are left as written (append-only log); `implementation-spec.md` cross-references were all updated. Steps 1-10 are unchanged.
+- External references checked: `merge-order.md` row 101 and feature 281's artifacts cite **281's own** Step 13, not 278's; no other feature cites a 278 step number.
+
+## Session 2026-11-02 — sdd-execute sequential re-spec (§5.3), Steps 12-14
+
+- **Branch setup:** `git merge --no-edit origin/main-dev` into the detached `origin/feature/enforce-config-key-wiring` checkout. It was a normal merge with no conflicts; main-dev brought tooling/docs changes only. `scripts/ledger-guard.py --own-slug enforce-config-key-wiring --base origin/main-dev --fix` reported clean, so no repair was needed. `status.md` was already `in-progress`, so no status flip was needed.
+- **Step 12 (freeze baseline):** the mismatch was that "four dynamic-read sites remain after Step 11" holds only after registration. Today's `--final` prints 46 `dynamic-read` sites, and 43 remain after Step 11. A scratch `--root` run, with the real `services/` symlinked and nothing committed, classified all 43:
+  - **8 forwarders.** The four `int_positive`/`resolvePositiveInt` entries, plus analysis `float_positive`/`str_nonempty` (`keyArg` 1) and agent `client.py:get_config_value` (`keyArg` 0). Those three close Step 9 open item 1. Registering `get_config_value` exposed agent `tools.py:_agent_policy`, a `key` passthrough at `:2536-2540`, so it is the eighth (`keyArg` 0).
+  - **28 getter bodies** as `[]`.
+  - **4 closed-set runtime keys.** Marketdata `fundProvider` ∈ {fmp, finnhub} at `GetFundamentalsMulti`/`resolveFundamentals` (`cache_ttl_hours`) and `fundamentalsEnabled` (`enabled`), and trading `ibkrTiming` (three `trading.ibkr.*` keys).
+  - **4 non-config containers** as `[]`.
+- **Step 9 open item 2 (`signal.alert_threshold`):** resolved with no extractor change. Once `get_config_value` is a forwarder, the Python extractor's same-file constant lookup resolves `_ALERT_THRESHOLD_CONFIG_KEY` (`tools.py:78`) at `:656`, so the key leaves `seeded-unread`. The same run shows `marketdata.fmp.cache_ttl_hours`, `marketdata.finnhub.cache_ttl_hours` and `marketdata.finnhub.enabled` were extractor gaps, not dead seeds. Their reads are the `fundProvider`-built keys.
+- **Step 12 projection (scratch run without Step 11's fix):** 19 `form-mismatch`, 5 `seeded-unread`, about 101 `read-unseeded` lines (1 `REPORTED:`), and 3 `dynamic-read`, which are exactly the `configServiceImpl.ts` sites Step 11 removes. The real run at Step 12 is authoritative.
+- **Step 13:** `scripts/check-config-wiring.mjs` exports no scan-roots constant, and adding one would modify a file outside Step 13's Files. The scan-root/CI-filter assertion (former test (5)) could also never pass at Step 13, because the filter is created in Step 14. It moved to Step 14. Step 13 now also asserts that no baseline entry has kind `dynamic-read`.
+- **Step 14:** the extractors do not scan `app/`/`internal/`/`src/` uniformly. Go walks all of `services/<svc>` (`check-config-wiring.mjs:542`), TS walks `services/<svc>/src`, and Python globs `services/*/app/**/*.py` (`config-wiring-py-reads.py:108`). `services/xstockstrat-marketdata/cmd/server/main.go` holds config reads that a `services/*/internal/**` filter would miss.
+  - **Directive choice (keep the extractor, widen the filter):** the filter uses language-root globs (`services/**/*.go`, `services/*/app/**/*.py`, `services/*/src/**/*.ts`, `services/*/src/**/*.tsx`, config migrations). Narrowing the extractor was rejected because it would drop real reads.
+  - Step 14 now owns test (5), which checks that every file `extractReads` reports matches a filter glob. `scripts/config-wiring.test.mjs` was added to Step 14's Files, and Step 14's TDD is now red-green.
+  - Corrected the ci-gate anchors: `needs` `:902-921` and echoes `:926-944` end at `secret-scan`, after `otel-signals` and `ledger-guard`. Setup-node is at `:459-462`.
+- Files modified: `implementation-spec.md` (Steps 12, 13, 14 bodies only), `feature.md` (history row), `context.md` (this entry).
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 11 (sequential)
+
+- **Step 11 done:** `extractRegexReads` (`scripts/check-config-wiring.mjs`) now tags `INDEX_RE` sites and skips one whose balanced closing `]` is followed by `=` or a compound assignment (`+=`, `??=`, `||=`, `&&=`, `**=`, shifts, …), but not `==`/`===`/`=>` (`ASSIGN_AFTER_RE`). Getter and forwarder sites are unaffected. No registry entry was added.
+- **TDD:** red first. Fixtures `readers/services/xstockstrat-ui/src/lib/index_writes.ts` and `readers/services/xstockstrat-marketdata/internal/config/index_writes.go` plus test (l) gave 38 tests, 36 pass, 2 fail: (l), where `performance.window_days` was read from a literal write, and (d), where `index_writes.go:writes` was a false `dynamic-read`. Green: 38/38.
+- **Real-tree diff (Instruction 4):** the `extractReads` read and dynamic set was captured before and after. Only 7 lines disappeared, all `dynamic-read` in `services/xstockstrat-config/src/grpc/configServiceImpl.ts`: lines 50-54 (`toProtoSnapPayload` symbol), 276 and 300. No read key disappeared or appeared. `--final` counts by kind went from dynamic-read 46 → 43, with read-unseeded 64, seeded-unread 31 and form-mismatch 9 unchanged. This matches the re-spec projection of 43 dynamic sites for Step 12.
+- **Verification:** `node --test scripts/config-wiring.test.mjs && node --check scripts/check-config-wiring.mjs && ! node scripts/check-config-wiring.mjs --final | grep -E 'configServiceImpl\.ts:[A-Za-z_]+:dynamic-read' && echo OK` printed `OK`. Lint: `node --check scripts/config-wiring.test.mjs` was clean.
+- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.test.mjs`, the two `index_writes` fixtures, `implementation-spec.md` (Step 11 Status, Deviation Log), `feature.md`, `context.md`.
+- Tooling: Node v22.23.4. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: one, in the Deviation Log. The TS fixture has an extra `??=` write, and case (d) also went red.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 12 (sequential)
+
+- **Step 12 done:** `scripts/config-wiring.json` frozen. `policy.envReadUnseeded` stays `reported` (Step 10 ruling). `registry.rewriteAllow` stays `[]`, since every current rewrite is modelled (Step 9 open-risk check b).
+- **Registry, filled first.** Justification per group:
+  - **`forwarders` (8).** Each is a helper that passes its key parameter to a getter. Registering it attributes reads to the callers and silences the pass-through body.
+    - `int_positive` in analysis, indicators and ingest `app/config/watcher.py` (`keyArg` 1).
+    - Analysis `watcher.py:float_positive` and `watcher.py:str_nonempty` (`keyArg` 1). `str_nonempty` closes Step 9 open item 1 (`fundsignal.source_slug`).
+    - Marketdata `marketdata_service.go:resolvePositiveInt` (`keyArg` 1).
+    - Agent `client.py:get_config_value` and `tools.py:_agent_policy` (`keyArg` 0). With these, `signal.alert_threshold` resolves through `_ALERT_THRESHOLD_CONFIG_KEY`, which closes Step 9 open item 2.
+  - **`dynamic` getter bodies (28, `[]`).** These are `ConfigWatcher.get_bool/get_float/get_int/get_str` in the analysis, indicators and ingest watchers, and `getBool/getFloat/getInt/getString` in the config, identity, ledger and notify `configWatcher.ts`. They are getter implementations whose keys are already attributed at each call site by the built-in getter matchers.
+  - **`dynamic` closed-set runtime keys (4).**
+    - Marketdata `MarketDataService.GetFundamentalsMulti` and `MarketDataService.resolveFundamentals` produce `marketdata.{fmp,finnhub}.cache_ttl_hours`.
+    - `MarketDataService.fundamentalsEnabled` produces `marketdata.{fmp,finnhub}.enabled`. `fundProvider` is one of `fmp` or `finnhub`.
+    - Trading `TradingService.ibkrTiming` produces `trading.ibkr.{lst_refresh_margin_ms,handshake_timeout_ms,reauth_min_interval_ms}`.
+  - **`dynamic` non-config containers (4, `[]`).** These sites index a `values` variable that is not a config snapshot:
+    - ui `accountShared.tsx:credsFromWatch`, a local array.
+    - ui `indicatorChart.ts:toLineData`, a series array.
+    - analysis `servicer.py:AnalysisServicer._load_fundamentals` and `evaluator.py:_fundamental_as_of_series`, both over fundamentals period values.
+- **Re-run with the registry, before `findings` were filled:** `--final` printed 0 `dynamic-read` lines. None of `signal.alert_threshold`, `marketdata.fmp.cache_ttl_hours`, `marketdata.finnhub.cache_ttl_hours` or `marketdata.finnhub.enabled` appeared.
+- **Final counts (frozen `findings`, 124 entries, all `owner: "feature 278"`):**
+
+  | Kind | Count |
+  |---|---|
+  | `form-mismatch` | 19 |
+  | `seeded-unread` | 5 |
+  | `read-unseeded` | 100 blocking (+1 printed `REPORTED:`, `trading.fill_poller.interval_ms:production`, kept out of `findings` per the reported-only ruling) |
+  | `dynamic-read` | 0 |
+
+  - The 5 `seeded-unread` are `ledger` `stream.notify_enabled`, `marketdata.alpaca.paper`, `platform.log_level`, `trading.risk.daily_loss_limit` and `analysis.opportunity.sparkline_bars`.
+  - No `feature 243` entry: no `indicators.sandbox.*` finding inside 243's scope remains. `indicators.sandbox.max_concurrent` is a `feature 278` `read-unseeded`.
+  - No entry names 277.
+- **Delta from the projection:** none. The projection was 19 / 5 / about 101 `read-unseeded` lines (1 `REPORTED:`) / 3 `dynamic-read`. The real run matches it, except that the 3 `configServiceImpl.ts` `dynamic-read` lines are gone, because Step 11 removed them.
+- **Owner overrules:** none. Every entry carries the Step 9 proposed owner.
+- **TDD:** N/A (config data file; verified by Step 13's real-tree test).
+- **Verification:** `node scripts/check-config-wiring.mjs --final && node -e "…" && echo OK` exited 0. It printed only the `REPORTED:` line, then `OK`. As an extra check, `node --test scripts/config-wiring.test.mjs` passed 38/38.
+- Files modified: `scripts/config-wiring.json`, `implementation-spec.md` (Step 12 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 13 (sequential)
+
+- **Step 13 done:** `scripts/config-wiring.test.mjs` gains four tests that run against the real repo root (`REPO = path.resolve(HERE, '..')`):
+  - `baseline 1` (@AC-7): `--final` on the real tree exits 0.
+  - `baseline 2` (@AC-8): `findings` is non-empty, every entry has a non-empty `owner` and a kind among the four, and none is `dynamic-read`.
+  - `baseline 3` (@AC-7): the baseline contains `SWEEP_277`, which holds 19 `form-mismatch`, `seeded-unread` `ledger/stream.notify_enabled` and the 7 `read-unseeded` keys. The list is copied from the Step 9 reconciliation above. This file does not enumerate the 12 `fundsignal.*` names, so they come from 277's recon.md row "fundsignal.* x12 (008)" and match the frozen baseline.
+  - `baseline 4`: each entry has only `namespace`/`key`/`kind`/`owner`/`envs`/`file` and the JSON has no `value`-like field. No `key` equals a secret row's key, bare or `<namespace>.`-prefixed. Secret rows come from `buildStoredSet(REPO).secrets`, which has 8 rows.
+- **TDD:** red first, in a scratch root (scratchpad `red13/`). It had the new test file and the script copied, `services/`, the fixtures and `config-wiring-py-reads.py` symlinked, and the Step 7 empty-shape `config-wiring.json` (from `9ed19573`). Result: 42 tests, 39 passed, 3 failed (`baseline 1`, `baseline 2` "findings is empty", `baseline 3`). `baseline 4` passes vacuously on an empty baseline, which is expected for a guard. Green in the worktree: 42/42.
+- **Verification:** `node --test scripts/config-wiring.test.mjs` passed 42/42. Lint `node --check scripts/config-wiring.test.mjs` was clean.
+- Files modified: `scripts/config-wiring.test.mjs`, `implementation-spec.md` (Step 13 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 14 (sequential)
+
+- **Step 14 done:** `.github/workflows/ci.yml` changes:
+  - `changes` gains a `config-wiring` filter after `otel-signals`. It holds the ten globs from Instruction 2, the language roots plus the checker files.
+  - New job `config-wiring` ("Config key wiring (whole-tree)"), placed after `otel-signals`. It has `needs: changes`, an `if:` on matched `config-wiring` or `ci`, and no `pull_request` guard. Steps: `actions/checkout@v7` (shallow), `actions/setup-node@v7` with `node-version: "24"` and no pnpm cache, `node --test scripts/config-wiring.test.mjs`, then `node scripts/check-config-wiring.mjs --final`.
+  - `ci-gate` gains `- config-wiring` in `needs:` and a `config-wiring:` echo, both after `secret-scan`.
+- **Test `baseline 5` (@AC-7)** in `scripts/config-wiring.test.mjs`. It reads `ci.yml` as text and collects the quoted globs under the `config-wiring:` filter key. It asserts the five language-root globs literally, then checks that every `file` in `extractReads(REPO)` `reads`/`dynamic` (27 files, including `services/xstockstrat-marketdata/cmd/server/main.go`) matches a glob. The in-test glob-to-regex treats `**/` as zero or more directories and `*` as one segment.
+- **TDD:** red first. Before the ci.yml edit the suite ran 43 tests, 42 passed, and `baseline 5` failed with `filter lacks services/**/*.go`. Green after the edit: 43/43.
+- **Verification:** the PyYAML assertion passed, `grep -n config-wiring` listed the filter, job and gate lines, `node --test` passed 43/43, `node --check` was clean, and `--final` exited 0 with only the `REPORTED:` line.
+- Files modified: `.github/workflows/ci.yml`, `scripts/config-wiring.test.mjs`, `implementation-spec.md` (Step 14 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 15 (sequential)
+
+- **Step 15 done:** `.claude/skills/sdd-execute/SKILL.md` changes:
+  - Phase 3 step 3 gains a **Config-key wiring gate** sub-bullet, placed after Verification and before the step 4 `done` flip. It triggers on a `config` step, a migration inserting into `config.config_values`, or a key from the product spec's `## Config Key Changes`. It runs `node scripts/check-config-wiring.mjs --declared-from <FEATURE_DIR>/product-spec.md` (plus `--declared-migration <file>` for a migration step) in step-time mode. Non-zero keeps the step not-done; `PENDING:` lines do not block; unrelated baseline findings do not block a keyless step.
+  - Step 4's all-steps-done branch runs `--final` first; non-zero blocks the `code-completed` flip; output goes to `context.md` (F-09).
+  - ALL-DONE PATH gains item 0: `--final` gates the integration PR.
+  - `reference/repo-conventions.md` config-key line now points at the check (verbatim stored key, runtime-created keys surface as `read-unseeded`, seed them in a migration).
+- **Discovery note:** the workflow's discovery digest described the former numbering (sequential-mode mirror, now Step 16). This step followed the current spec's Step 15 (SKILL.md + repo-conventions.md).
+- **TDD:** N/A (docs/skill text; structural assertions in Step 18).
+- **Verification:** `grep -n check-config-wiring` matched SKILL.md:160, :304, :314 and repo-conventions.md:31; `./scripts/check-context-map.sh` printed `OK - all context-map and doc references resolve.` As a sanity check, the step-time command against 278's own product spec exited 0.
+- Files modified: `.claude/skills/sdd-execute/SKILL.md`, `.claude/skills/sdd-execute/reference/repo-conventions.md`, `implementation-spec.md` (Step 15 Status), `feature.md`, `context.md`.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 16 (sequential)
+
+- **Step 16 done:** `.claude/skills/sdd-execute/reference/sequential-mode.md` gets two edits, as the Instruction asks, without restating the gate rules:
+  - §5.5 step loop gains one bullet: Phase 3's config-key wiring gate (`node scripts/check-config-wiring.mjs`, step-time mode) applies unchanged, per step.
+  - §5.6 per-feature integration PR gains a first bullet: on the feature's last step, run `node scripts/check-config-wiring.mjs --final` before creating the integration PR; non-zero blocks it; output recorded in `context.md`.
+- **Discovery note:** the workflow's discovery digest described the former numbering again (the `/sdd-review` B2 row and `/sdd-story` declared-key format, now Step 17). This step followed the current spec's Step 16.
+- **TDD:** N/A (docs/skill text; structural assertions in Step 18).
+- **Verification:** `grep -n check-config-wiring` matched sequential-mode.md:97 and :150; `./scripts/check-context-map.sh` printed `OK - all context-map and doc references resolve.`
+- Files modified: `.claude/skills/sdd-execute/reference/sequential-mode.md`, `implementation-spec.md` (Step 16 Status), `feature.md`, `context.md`.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 17 (sequential)
+
+- **Operator decision:** Option A on the Step 17 blocker (stale discovery digest read a pre-Step-14 tree), operator's words 2026-11-02: "continue 278, and start wave 2 in parallel if possible". Executed against `origin/feature/enforce-config-key-wiring` at c6d48b5f.
+- **Step 17 done:**
+  - `.claude/skills/sdd-review/reference/impl-spec-criteria.md`: B2 row `Config key wiring` after the `C-14` row, two FAIL clauses only — (a) no step names the reader file and symbol for a declared key (@AC-6); (b) no snapshot-built test asserts the real reader returns the seeded value (@AC-11; model `test_config_watcher.py:56,74`, `test_ingest_servicer.py:77`). Reviewer cites the key by name; prominent despite Mode B advisory, per `C-14`.
+  - `.claude/skills/sdd-story/SKILL.md` `## Config Key Changes` template: one declared key per bullet, a single backticked `<namespace>.<key>` exactly as the migration stores it; the section is the declared set read by `--declared-from`.
+- **Extraction check:** `declaredFromSpec('.claude/skills/sdd-story/SKILL.md')` returns `[]` — the template's angle-bracket placeholders never match `DECLARED_KEY_RE`, so a verbatim-copied template declares nothing.
+- **TDD:** N/A (docs/skill text; structural assertions in Step 18).
+- **Verification:** `grep -n "Config key wiring"` matched impl-spec-criteria.md:32; `grep -n declared` matched sdd-story/SKILL.md:201-203; `./scripts/check-context-map.sh` printed `OK - all context-map and doc references resolve.`; `node --test scripts/config-wiring.test.mjs` 43/43 pass.
+- Files modified: `.claude/skills/sdd-review/reference/impl-spec-criteria.md`, `.claude/skills/sdd-story/SKILL.md`, `implementation-spec.md` (Step 17 Status), `feature.md`, `context.md`.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 18 (sequential)
+
+- **Discovery note:** the workflow's discovery digest described the former numbering (governance doc + merge-order row, now Step 19) and a stale tree. This step followed the current spec's Step 18 on `origin/feature/enforce-config-key-wiring` at 24d21ee1.
+- **Step 18 done:** `scripts/config-wiring.test.mjs` gains four whitespace-normalized text assertions over the real skill files:
+  - `skill 1` (@AC-4/5/10): in `sdd-execute/SKILL.md` Phase 3, the wiring gate follows Verification; the `--declared-from <FEATURE_DIR>/product-spec.md` command precedes the `done` flip; the gate names the three triggers (`config` step, migration inserting into `config.config_values`, `## Config Key Changes` key) and the keyless-step carve-out; `--final` precedes `code-completed` in the all-steps-done branch.
+  - `skill 2` (@AC-4/10): `sequential-mode.md` §5.5 holds the step-time mirror; §5.6 runs `--final` before `create_pull_request`.
+  - `skill 3` (@AC-6/11): the `Config key wiring` B2 row has exactly clauses `(a)` (reader file and symbol) and `(b)` (snapshot-built test) and no backtick/stored-key-quote clause.
+  - `skill 4`: `sdd-story/SKILL.md` `## Config Key Changes` pins one backticked `<namespace>.<key>` per bullet read by `--declared-from`.
+- **TDD:** red first in a scratch root (scratchpad `red18/`, `git archive` of b997cab9, the commit before Step 15, with the new test file copied in): 47 tests, 43 passed, the 4 `skill` tests failed (missing gate span, no §5.5 mirror, no B2 row, no declared-key format). Green in the worktree: 47/47.
+- **Verification:** `node --test scripts/config-wiring.test.mjs` passed 47/47. Lint `node --check scripts/config-wiring.test.mjs` was clean.
+- Files modified: `scripts/config-wiring.test.mjs`, `implementation-spec.md` (Step 18 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 19 (sequential)
+
+- **Discovery note:** the workflow's discovery digest described a stale tree (18 steps, no `scripts/*config-wiring*`). This step followed the current spec's Step 19 on `origin/feature/enforce-config-key-wiring` at d51d0b3b, where Steps 1-18 are done.
+- **Step 19 done:**
+  - `docs/patterns/config-governance.md`: new `## Wiring check (config key must be read under its stored key)` after `## Registering a new config key`, plus registering-list item 5 pointing at it. Registered-keys log untouched.
+  - `docs/roadmap/features/merge-order.md`: one Soft row, `fix-sandbox-seed-keys` (243) / `enforce-config-key-wiring` (278), stating that once 278 lands any further 243 config-key or reader change updates `scripts/config-wiring.json` (shrink-only) in the same PR. The existing 281 vs 278 row is unchanged; no 244/261 row and no PR #1322 mention. The current baseline holds no `feature 243`-owned entry (243's migration 031 is on the tree), so the row names no specific entries.
+  - `.claude/context-map.yaml` not edited (it registers workflow helpers/tests only).
+- **Teardown:** `/context-forge:context-constitution` is not loadable in this session (only `context-forge:context-scrubber` is listed as a skill), so it was done by hand. Every context file this feature touched (`docs/patterns/config-governance.md`, `.claude/skills/sdd-execute/SKILL.md`, `.claude/skills/sdd-execute/reference/repo-conventions.md`, `.claude/skills/sdd-execute/reference/sequential-mode.md`, `.claude/skills/sdd-review/reference/impl-spec-criteria.md`, `.claude/skills/sdd-story/SKILL.md`) was re-read against `scripts/check-config-wiring.mjs` (usage line flags `--final`, `--declared-from`, `--declared-migration`, `--keys`; `PENDING`/`REPORTED`/`STALE` output; `is_secret` rows kept out of the join), `scripts/config-wiring.json` (`policy.envReadUnseeded: reported`, every entry has `owner`) and `.github/workflows/ci.yml` (job `config-wiring` runs the suite and `--final`). No drift found. Out-of-tree line citations of `config-governance.md` (`insights.md:1206`, `fails.md:2744`) were already historical before this step and are ledger evidence; left as is. The integration PR body must record both that the plugin was unavailable and this reconciliation.
+- **TDD:** N/A (docs-only).
+- **Verification:** `./scripts/check-context-map.sh` OK; `grep -n "Wiring check"` hits `config-governance.md:62,64`; the merge-order grep hits line 102; `node --test scripts/config-wiring.test.mjs` 47/47; `node scripts/check-config-wiring.mjs --final` exit 0 (one `REPORTED:` env-scoped `read-unseeded`, `trading.fill_poller.interval_ms:production`, non-blocking under the `reported` policy).
+- Files modified: `docs/patterns/config-governance.md`, `docs/roadmap/features/merge-order.md`, `implementation-spec.md` (Step 19 Status), `feature.md` (history row; artifact step count 18 → 19), `context.md`.
+- Deviations: none.
+- Severity: n/a.
+
+## Session 2026-11-02 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — enforce-config-key-wiring (feature 278)
+
+### Verdicts
+All 11 scenarios go to /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND). The file exists and has no @feature-278 scenarios.
+
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | docs/sdd/business-rules/platform.feature | APPEND | NEW | wiring check, form-mismatch |
+| AC-2 | docs/sdd/business-rules/platform.feature | APPEND | NEW | seeded-unread |
+| AC-3 | docs/sdd/business-rules/platform.feature | APPEND | NEW | read-unseeded |
+| AC-4 | docs/sdd/business-rules/platform.feature | APPEND | NEW | /sdd-execute gate on config step |
+| AC-5 | docs/sdd/business-rules/platform.feature | APPEND | NEW | no block on unrelated findings |
+| AC-6 | docs/sdd/business-rules/platform.feature | APPEND | NEW | /sdd-review requires a reader step |
+| AC-7 | docs/sdd/business-rules/platform.feature | APPEND | NEW | CI fails on a finding not in the baseline |
+| AC-8 | docs/sdd/business-rules/platform.feature | APPEND | NEW | baseline entry needs an owner |
+| AC-9 | docs/sdd/business-rules/platform.feature | APPEND | NEW | dynamic-read |
+| AC-10 | docs/sdd/business-rules/platform.feature | APPEND | NEW | a migration that inserts a config row triggers the check |
+| AC-11 | docs/sdd/business-rules/platform.feature | APPEND | NEW | /sdd-review requires a snapshot-built test |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  @AC-1 @FR-1 @feature-278
+  Scenario: A key seeded bare but read dotted is reported as a form mismatch
+    Given a config migration seeds namespace "ingest" with key "mcp_client.request_timeout_seconds"
+    And ingest code reads the key "ingest.mcp_client.request_timeout_seconds"
+    When the wiring check runs
+    Then it reports one finding of kind "form-mismatch" naming both strings
+
+  @AC-2 @FR-1 @feature-278
+  Scenario: A seeded key that no code reads is reported as unread
+    Given a config migration seeds namespace "ledger" with key "stream.notify_enabled"
+    And no service code reads "stream.notify_enabled" or "ledger.stream.notify_enabled"
+    When the wiring check runs
+    Then it reports one finding of kind "seeded-unread" for "ledger" "stream.notify_enabled"
+
+  @AC-3 @FR-1 @feature-278
+  Scenario: A key that code reads but no migration seeds is reported as unseeded
+    Given ingest code reads the key "ingest.backfill.retry_on_failure"
+    And no config migration seeds it
+    When the wiring check runs
+    Then it reports one finding of kind "read-unseeded" for "ingest.backfill.retry_on_failure"
+
+  @AC-4 @FR-2 @feature-278
+  Scenario: An execute step that seeds a key is not marked done while its key has a finding
+    Given a "config" step declares the key "analysis.fundsignal.enabled"
+    And the wiring check reports a finding for "analysis.fundsignal.enabled"
+    When /sdd-execute validates the step
+    Then the step stays not-done
+    And the output names the finding and the key
+
+  @AC-5 @FR-2 @feature-278
+  Scenario: A step that touches no config key is not blocked by unrelated findings
+    Given the wiring check reports a finding for "ledger.stream.notify_enabled"
+    And an execute step changes only a Go handler and declares no config key
+    When /sdd-execute validates the step
+    Then the step is marked done
+
+  @AC-6 @FR-3 @feature-278
+  Scenario: An impl-spec with a config key but no reader step fails review
+    Given a product spec lists the config key "analysis.fundsignal.enabled"
+    And its implementation spec has no step naming the reader file and symbol for that key
+    When /sdd-review reviews the implementation spec
+    Then the review reports a failing finding for "analysis.fundsignal.enabled" requiring a reader step and a snapshot-built test
+
+  @AC-7 @FR-4 @feature-278
+  Scenario: CI fails on a new finding that is not in the baseline
+    Given the baseline lists every finding recorded in feature 277's sweep, including its 18 form mismatches, each with an owner
+    And a pull request seeds a key that no code reads
+    When the CI wiring-check job runs
+    Then the job fails and names the new finding
+
+  @AC-8 @FR-4 @feature-278
+  Scenario: A baseline entry without an owner is rejected
+    Given a baseline entry for "ledger" "stream.notify_enabled" that names no owning defect or feature
+    When the CI wiring-check job runs
+    Then the job fails and names the entry
+
+  @AC-9 @FR-1 @feature-278
+  Scenario: A read whose key is built at runtime is reported, not skipped
+    Given analysis code reads a config key built with the expression f"analysis.{name}.enabled" where "name" is a function parameter
+    And no baseline entry or annotation names the key set
+    When the wiring check runs
+    Then it reports one finding of kind "dynamic-read" naming the file and symbol
+
+  @AC-10 @FR-2 @feature-278
+  Scenario: A migration that inserts a config row triggers the check
+    Given an execute step adds a migration inserting key "analysis.fundsignal.enabled" into "config.config_values"
+    And the step is not typed "config"
+    And the wiring check reports a finding for "analysis.fundsignal.enabled"
+    When /sdd-execute validates the step
+    Then the step stays not-done
+    And the output names the check result for that key
+
+  @AC-11 @FR-3 @feature-278
+  Scenario: An impl-spec reader step without a snapshot-built test fails review
+    Given an implementation spec names the reader file and symbol for "analysis.fundsignal.enabled"
+    And no test builds a config snapshot from the seeded key and asserts the reader returns the seeded value
+    When /sdd-review reviews the implementation spec
+    Then the review reports a failing finding for "analysis.fundsignal.enabled" requiring a snapshot-built test
+
+### Notes / ambiguities / conflicts
+- Attribution: every scenario's observable subject is the wiring check, the CI wiring-check job, or the /sdd-execute and /sdd-review skills. These run across all services and the repo's CI/SDD tooling, and no single service owns them. That makes them cross-cutting (platform.feature). No services/*/acceptance/ file is created.
+- Dedup: grep of all *.feature files for "wiring check", "seeded-unread", "form-mismatch" and "read-unseeded" matched only feature 278's own acceptance.feature. A grep for @feature-278 matched nothing, so none of these is already promoted (no DUP) and none is an OVERLAP.
+- Closest existing rule: platform.feature line ~181 (@AC-6 @feature-182) asserts only that docs no longer claim the readiness-materializer keys have no seed migration. It is a doc-drift guarantee, so it does not overlap and does not conflict.
+- CONFLICT: none found.
+- The source file's illustrative comment line ("Key names below are illustrative...") is not promoted. Only scenarios are.
+- The 2-space scenario indent and the "@AC @FR @feature" tag order match the existing platform.feature entries. The caller should append after a blank separator line.
+- Timing: the operator re-spec (option C, commit da948803) and the inverted test/impl pairs are unchanged. The scenarios are promoted verbatim from the origin/feature/enforce-config-key-wiring copy. The working-tree copy read here had 11 scenarios, matching the count below. If the branch copy has since changed, re-run.
+
+### Coverage check
+- Source scenarios: 11 (@AC-1 through @AC-11). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing is skipped, so the counts match.
+```
+
+## Session 2026-11-02 — sdd-execute 278 ALL-DONE PATH (sequential)
+
+- **Operator decision:** the C-16 promotion plan above was approved ("Proceed"). It was applied exactly as written: 11 scenarios (@AC-1..@AC-11), each tagged `@feature-278`, were appended to `docs/sdd/business-rules/platform.feature` after a blank separator line. The only difference from `acceptance.feature` is the added provenance tag, checked with a diff. No `services/*/acceptance/` file was created.
+- **Config-key wiring gate (F-09):** `node scripts/check-config-wiring.mjs --final` exited 0. Output: `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`. This finding does not block under `policy.envReadUnseeded: reported`.
+- **Merge-order gate:** `enforce-config-key-wiring` does not appear in the Feature column of `merge-order.md`. Rows 101 and 102 list it only as the counterpart feature, so the gate passes.
+- **Status:** `status.md` changed from `in-progress` to `code-completed`, and a matching history row was added to `feature.md`. No ledger insight was added because nothing new generalizes beyond the entries already recorded.
+- **Teardown (root CLAUDE.md):** the context-forge plugin skill `context-constitution` was unavailable. The integration PR body records this and the manual reconciliation from the Step 19 session above.

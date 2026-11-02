@@ -1,0 +1,831 @@
+{
+  "policy": {
+    "envReadUnseeded": "reported"
+  },
+  "findings": [
+    {
+      "namespace": "",
+      "key": "oauth.allowed_redirect_uris",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "oauth.registration_enabled",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "extract.connect_timeout_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "extract.max_bytes",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "extract.max_redirects",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "extract.read_timeout_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "opportunities.read_timeout_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.strategy.max_concurrent_entry_backfill",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.fundsignal.retry_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.fundsignal.startup_jitter_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.fundamentals.enabled",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.engine.alert_throttle_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.engine.eval_interval_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.engine.max_strategies_per_cycle",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.strategy.default_exit_cooldown_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.snapshot.indicator_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.snapshot.signal_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.default_commission_pct",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.default_fill_model",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.default_slippage_pct",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.detail_retention_per_strategy",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.max_range_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.portfolio_max_concurrent",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.backtest.portfolio_position_weight",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.compute.max_worker_threads",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.opportunity.live_enrich_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.opportunity.read_db_budget_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.patterns.indicator_bucket_count",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.patterns.min_sample_count",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.readiness.stale_after_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.composite_shrinkage_k",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.composite_weight_readiness",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.composite_weight_signal",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.drawdown_weight",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.min_evidence_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.min_evidence_symbols",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.sharpe_weight",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.shrinkage_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.strategy_weight_floor",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.symbol_score_decay",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.scoring.win_rate_weight",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.screener.max_duration_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.series.max_concurrent_components",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.strategy.default_cooldown_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.screener.default_rank_limit",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.screener.max_concurrent_formula_evals",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "analysis.screener.max_universe_size",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "ledger",
+      "key": "stream.notify_enabled",
+      "kind": "seeded-unread",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "backtest.max_duration_seconds",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "marketdata",
+      "key": "marketdata.alpaca.paper",
+      "kind": "seeded-unread",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "platform",
+      "key": "platform.log_level",
+      "kind": "seeded-unread",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.risk.daily_loss_limit",
+      "kind": "seeded-unread",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "ingest",
+      "key": "backfill.chunk_max_bars",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "ingest",
+      "key": "backfill.chunk_window_days",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "ingest",
+      "key": "backfill.max_concurrent_chunks",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.buy_quantile",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.daily_call_budget",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.enabled",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.explicit_symbols",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.max_symbols_per_run",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.min_conviction_to_emit",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.run_interval_hours",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.scoring_formula_id",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.sell_quantile",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.source_slug",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.universe_source",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "fundsignal.valid_days",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "scoring.signal_decay_half_life_hours",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "ingest",
+      "key": "mcp_client.poll_interval_seconds",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "ingest",
+      "key": "mcp_client.request_timeout_seconds",
+      "kind": "form-mismatch",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "analysis.opportunity.sparkline_bars",
+      "kind": "seeded-unread",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "identity.jwt.access_ttl_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "identity.jwt.refresh_ttl_seconds",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "indicators.sandbox.max_concurrent",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "ingest.backfill.max_concurrent_jobs",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "ingest.backfill.max_retry_attempts",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "ingest.backfill.retry_on_failure",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "ingest.signals.dedup_window_hours",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.alpaca.adjustment",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.alpaca.feed",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.backfill.rate_limit_rps",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.edgar.base_url",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.edgar.rate_limit_rps",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.edgar.user_agent",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.fmp.rate_limit_rps",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.stream.max_reconnects",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.stream.reconnect_delay_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.classification.enabled",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.classification.refresh_interval_hours",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.backfill.max_delete_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.fundamentals.history.backfill.max_lookback_years",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.fundamentals.history.backfill.period_types",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.fundamentals.history.enabled",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.fundamentals.history.ratio_enrichment.enabled",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.price.batch_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.quotes.batch_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.quotes.latest_lookback_hours",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.quotes.mark_close_max_age_hours",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.quotes.mark_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.retention.quotes_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.stream.bar_ingest_interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.stream.bar_ingest_lookback_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.stream.bar_ingest_timeframe",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "marketdata.stream.warm_interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "portfolio.exposure.factor_map",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "portfolio.marketdata.last_close_lookback_days",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "portfolio.marketdata.quote_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "portfolio.risk.concentration_limit_pct",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "portfolio.risk.max_drawdown_pct",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.broker.timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.order_intent.stale_multiplier",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.order_intent.sweep_interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.broker.paper",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.credential_health.interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.ibkr.handshake_timeout_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.ibkr.lst_refresh_margin_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.ibkr.reauth_min_interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.order.max_retries",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.order.retry_delay_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.position_sync.interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.reconciliation.grace_ticks",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.reconciliation.halted_poll_interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.reconciliation.interval_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    },
+    {
+      "namespace": "",
+      "key": "trading.reconciliation.systemic_threshold_pct",
+      "kind": "read-unseeded",
+      "owner": "feature 278"
+    }
+  ],
+  "registry": {
+    "forwarders": {
+      "services/xstockstrat-analysis/app/config/watcher.py:int_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-indicators/app/config/watcher.py:int_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-ingest/app/config/watcher.py:int_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-analysis/app/config/watcher.py:float_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-analysis/app/config/watcher.py:str_nonempty": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-agent/app/client.py:get_config_value": {
+        "keyArg": 0
+      },
+      "services/xstockstrat-agent/app/tools.py:_agent_policy": {
+        "keyArg": 0
+      }
+    },
+    "dynamic": {
+      "services/xstockstrat-analysis/app/config/watcher.py:ConfigWatcher.get_bool": [],
+      "services/xstockstrat-analysis/app/config/watcher.py:ConfigWatcher.get_float": [],
+      "services/xstockstrat-analysis/app/config/watcher.py:ConfigWatcher.get_int": [],
+      "services/xstockstrat-analysis/app/config/watcher.py:ConfigWatcher.get_str": [],
+      "services/xstockstrat-analysis/app/handlers/servicer.py:AnalysisServicer._load_fundamentals": [],
+      "services/xstockstrat-analysis/app/services/evaluator.py:_fundamental_as_of_series": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getBool": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getFloat": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getInt": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-identity/src/services/configWatcher.ts:getBool": [],
+      "services/xstockstrat-identity/src/services/configWatcher.ts:getFloat": [],
+      "services/xstockstrat-identity/src/services/configWatcher.ts:getInt": [],
+      "services/xstockstrat-identity/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-indicators/app/config/watcher.py:ConfigWatcher.get_bool": [],
+      "services/xstockstrat-indicators/app/config/watcher.py:ConfigWatcher.get_float": [],
+      "services/xstockstrat-indicators/app/config/watcher.py:ConfigWatcher.get_int": [],
+      "services/xstockstrat-indicators/app/config/watcher.py:ConfigWatcher.get_str": [],
+      "services/xstockstrat-ingest/app/config/watcher.py:ConfigWatcher.get_bool": [],
+      "services/xstockstrat-ingest/app/config/watcher.py:ConfigWatcher.get_float": [],
+      "services/xstockstrat-ingest/app/config/watcher.py:ConfigWatcher.get_int": [],
+      "services/xstockstrat-ingest/app/config/watcher.py:ConfigWatcher.get_str": [],
+      "services/xstockstrat-ledger/src/services/configWatcher.ts:getBool": [],
+      "services/xstockstrat-ledger/src/services/configWatcher.ts:getFloat": [],
+      "services/xstockstrat-ledger/src/services/configWatcher.ts:getInt": [],
+      "services/xstockstrat-ledger/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.GetFundamentalsMulti": [
+        "marketdata.finnhub.cache_ttl_hours",
+        "marketdata.fmp.cache_ttl_hours"
+      ],
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.fundamentalsEnabled": [
+        "marketdata.finnhub.enabled",
+        "marketdata.fmp.enabled"
+      ],
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.resolveFundamentals": [
+        "marketdata.finnhub.cache_ttl_hours",
+        "marketdata.fmp.cache_ttl_hours"
+      ],
+      "services/xstockstrat-notify/src/services/configWatcher.ts:getBool": [],
+      "services/xstockstrat-notify/src/services/configWatcher.ts:getFloat": [],
+      "services/xstockstrat-notify/src/services/configWatcher.ts:getInt": [],
+      "services/xstockstrat-notify/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-trading/internal/service/trading.go:TradingService.ibkrTiming": [
+        "trading.ibkr.handshake_timeout_ms",
+        "trading.ibkr.lst_refresh_margin_ms",
+        "trading.ibkr.reauth_min_interval_ms"
+      ],
+      "services/xstockstrat-ui/src/components/trader/accountShared.tsx:credsFromWatch": [],
+      "services/xstockstrat-ui/src/lib/indicatorChart.ts:toLineData": []
+    },
+    "rewriteAllow": []
+  }
+}
