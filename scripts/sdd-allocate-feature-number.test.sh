@@ -123,6 +123,28 @@ alloc "$c1" zeta
 [ "$(cursor_tip)" = "$before" ] || fail "(h) cursor moved despite a refused push"
 rm -f "${origin}/hooks/pre-receive"
 
+# (j) a lost ref-lock race is retried whatever the git version words it (CI's git 2.56 says
+# "incorrect old value provided"; 2.43 says "failed to update ref"): the shim fails the first push
+shim="${work}/shim"
+mkdir -p "$shim"
+cat >"${shim}/git" <<EOF
+#!/usr/bin/env bash
+if [ "\$1" = push ] && [ ! -e "${work}/shim-fired" ]; then
+  : >"${work}/shim-fired"
+  echo "remote: error: cannot lock ref 'refs/heads/${CURSOR}': is at 0a1b but expected 2c3d" >&2
+  echo " ! [remote rejected] 8b15ddc -> ${CURSOR} (incorrect old value provided)" >&2
+  exit 1
+fi
+exec "$(command -v git)" "\$@"
+EOF
+chmod +x "${shim}/git"
+before="$(cursor_tip)"
+out="$(cd "$c1" && PATH="${shim}:${PATH}" bash "$ALLOC" theta 2>"${work}/err")"
+rc=$?
+[ -e "${work}/shim-fired" ] || fail "(j) shim never fired"
+{ [ "$rc" -eq 0 ] && [ "$out" = "037" ]; } || fail "(j) lost-race wording should retry to 037, got rc=$rc '$out' ($(cat "${work}/err"))"
+[ "$(cursor_tip)" != "$before" ] || fail "(j) cursor did not advance after the retry"
+
 # (i) an unparseable cursor tip fails closed: exit 2, cursor unchanged
 junk="$(git -C "$origin" commit-tree "$(git hash-object -t tree /dev/null)" -p "$(cursor_tip)" -m "hello")"
 git -C "$origin" update-ref "refs/heads/${CURSOR}" "$junk"

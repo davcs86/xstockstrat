@@ -92,7 +92,7 @@ while [ "$tries" -lt "$MAX_TRIES" ]; do
     exit 0
   fi
   case "$out" in
-  *"[rejected]"*"fetch first"* | *"[rejected]"*"non-fast-forward"* | *"[remote rejected]"*"failed to update ref"*)
+  *"[rejected]"*"fetch first"* | *"[rejected]"*"non-fast-forward"* | *"cannot lock ref"* | *"failed to update ref"* | *"incorrect old value"*)
     sleep "0.$(printf '%02d' $((RANDOM % 50)))"
     ;;
   *)
