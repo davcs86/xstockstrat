@@ -226,3 +226,13 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - TDD: N/A (test infrastructure). Offline RED: `no tests to run` before the files existed. Offline GREEN: `go vet -tags dbtest` OK, GO-LINT `0 issues`, skip without the URL and fail under `CI=true`. The untagged `go test ./internal/repository/...` still passes. The real-DB run happens in CI (Deviation Log).
 - Next: Step 5 (repository add path).
 
+### Step 5 — repository add path [done] (2026-11-02)
+
+- `watchlist_repo.go` now has the repo-local `SignalProvenance` / `ExpiryIntent` and `const mergeSignalExpirySQL`. `insertBindingsTx` is split into a per-row `insertBindingTx` (`RowsAffected()==1`) and a loop that returns `map[string]bool` of fresh inserts. `Create` and `Update` discard the map; the SQL is unchanged.
+- `AddSymbols(ctx, id, bindings, intent)` runs touch (parent lock), then insert, then `applyExpiryIntentTx`, in one tx. A fresh insert plus provenance upserts the row (overwrite). An existing binding plus provenance reads `source`; SIGNAL runs the update-only merge, MANUAL or no row writes nothing. `UntrackSymbols` runs `DELETE … symbol = ANY($2)`. `WatchlistStore.AddSymbols` and the fake take the intent. The call site passes `repository.ExpiryIntent{}`, so the service is unchanged until Step 7.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: RED came from an uncommitted dbtest compile probe (`go vet -tags dbtest ./internal/repository/` → `undefined: ExpiryIntent`). GREEN: the same probe vets clean, and then the probe was deleted. The behavioral RED/GREEN for AC-3/8/9/11/17 is Step 6 in CI `portfolio-db-test`.
+- Verification: `go build ./...`, `go vet ./...` and `go vet -tags dbtest ./...` all pass. GO-LINT reports `0 issues`. The untagged `go test ./internal/repository/... ./internal/service/...` passes. No database was started.
+- Deviations: RED probe plus the `applyExpiryIntentTx` helper (Deviation Log).
+- Next: Step 6 (add-path DB tests).
+

@@ -157,7 +157,7 @@ func (f *fakeWatchlistStore) Delete(_ context.Context, watchlistID string) error
 	return nil
 }
 
-func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
+func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, _ repository.ExpiryIntent) (*portfoliov1.Watchlist, error) {
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound

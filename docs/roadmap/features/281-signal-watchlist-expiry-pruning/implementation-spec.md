@@ -257,7 +257,7 @@ Green DB run: CI job `portfolio-db-test` (or GO-DBTEST locally against a migrate
 
 ### Step 5 — service: repository add path (split insert, expiry intent, merge/overwrite/untrack)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify
@@ -1049,4 +1049,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: RED = `TestSignalExpirySchema` against a database migrated to `017`, GREEN = after `018`. Helpers `testPool`, `seedWatchlist`, `seedBinding`, `seedExpiry`, `bindingSource`, `expiryRow`.
 - **Done instead**: no database was started (HARD CONSTRAINT), so the spec's offline fallback was used. Pre-implementation `go test -tags dbtest -run TestSignalExpirySchema` reported `no tests to run`. After implementation, `go vet -tags dbtest ./...` and GO-LINT (with `build-tags: [dbtest]`) are clean. The test skips without `PORTFOLIO_DB_TEST_URL` and fails with `CI=true`. The real-DB RED/GREEN is the CI job `portfolio-db-test`. Two small helpers were added in `dbtest_helpers_test.go`: `insertExpiry` returns the error so the PK-violation case can be asserted, and `testUserID` builds the unique `it-281-` scoped user id.
 - **Disposition**: the spec allows this fallback (GO-DBTEST). The helpers stay inside the step's **Files**. Citation drift with no effect: `scripts/Dockerfile.migrate` copies `services` at `:15`, not `:13`.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 5 — RED via an uncommitted compile probe; expiry write in one helper
+
+- **Spec said**: TDD red-green paired with Step 6 (Step 6's test is compile-red before Step 5). Instruction 3 lists the three expiry writes "inside the existing tx" of `AddSymbols`.
+- **Done instead**: Step 6 runs after Step 5 in sequential order, so RED was taken from a throwaway `//go:build dbtest` probe in `internal/repository/`. It called `AddSymbols(..., ExpiryIntent{Provenance: &SignalProvenance{...}})` and read `mergeSignalExpirySQL`. Before implementation, `go vet -tags dbtest ./internal/repository/` failed with `undefined: ExpiryIntent`. After implementation it passed, and the probe was deleted (never staged; Step 6 writes the real tests). The three writes live in the unexported `applyExpiryIntentTx`, which `AddSymbols` calls inside the same tx after `touchWatchlistTx` and the insert. The SQL and the branch order match the spec. If the `SELECT source` finds no binding row (the intent symbol was not in the request), nothing is written, the same as the MANUAL case.
+- **Disposition**: in scope. Everything stays inside the step's **Files**, and the behavioral RED/GREEN is Step 6 in CI `portfolio-db-test`.
 - **Severity**: n/a

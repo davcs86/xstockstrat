@@ -1763,7 +1763,7 @@ type WatchlistStore interface {
 	// when the row is absent.
 	UpdatePartial(ctx context.Context, watchlistID string, patch repository.WatchlistPatch) (*portfoliov1.Watchlist, error)
 	Delete(ctx context.Context, watchlistID string) error
-	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
+	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, intent repository.ExpiryIntent) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
 	// UpdateBinding rebinds one symbol's strategy_id, returning the updated binding and the parent list's
 	// bumped updated_at; ErrBindingNotFound when the (watchlist_id, symbol) row is absent.
@@ -2181,7 +2181,7 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(resulting), s.maxSymbolsPerList()))
 	}
-	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add)
+	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add, repository.ExpiryIntent{})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
