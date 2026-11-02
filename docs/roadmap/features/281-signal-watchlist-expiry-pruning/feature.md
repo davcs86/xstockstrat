@@ -31,6 +31,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 12 done: 7 prune service unit tests (`TestClampPruneInterval`, `TestSignalPrune_*`: expired/renewed/untracked payloads, owner `UserId`, per-tick `x-trace-id`, best-effort ledger error, no-op tick, interval default/config clamp — AC-6/7/8/13/14); `fakeLedger` captures requests + outgoing metadata; RED compile-fail → GREEN, lint 0 issues, GO-COVER 68.6% |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 13 done: `SCALAR_BOUNDS_REGISTRY` entry `portfolio.watchlist.signal_prune_interval_seconds` `{ minValue: 60, maxValue: 86400 }` (mirrors the reader clamp); lint 0 errors, step-time wiring gate rc 0, `--final` rc 0 with nothing for this key |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 14 done: `TIMEOUT_KEY_FORMS` rows for the prune interval in both key-column forms + explicit `0` rejection (AC-14); shared `migrationSql.ts` helper (zeroTrap refactored onto it); 5-case `signalPruneIntervalSeedMigration.test.ts` for the 037 seed (AC-19); RED `# fail 5` / bounds RED 3 fails → GREEN 9/9, full suite 272 pass, coverage 90.61% |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 15 done: `portfolio backfill-signal-expiry` subcommand. Thin `cmd/server/backfill.go` handles the `DATABASE_URL` refusal (exit 2), the `target host= db=` line and exit codes. `repository.RunBackfill` holds the logic: `BackfillOptions`/`BackfillResult`/`ErrBackfillRefused`, legacy-owner and APPLY-bound refusals before any write, one read-only snapshot for classification, REPORT SEED/UNTRACKED/PER-OWNER/NEXT, APPLY one autocommit `ON CONFLICT DO NOTHING` per row, recomputed at statement time. The CLI never deletes. RED compile-fail probes → GREEN; build/vet/vet-dbtest OK, offline refusal check OK, lint 0 issues |
 
 ---
 
@@ -64,4 +65,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-14 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); resume at Step 15. 281's integration PR merges only after feature 280 (#1359).
+`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-15 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); resume at Step 16. 281's integration PR merges only after feature 280 (#1359).

@@ -358,3 +358,37 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: split plain commands (sandbox); bounds RED by a temporary Step 13 revert (Deviation Log).
 - Next: Step 15 (`portfolio backfill-signal-expiry` operator subcommand).
 
+### Step 15 — `portfolio backfill-signal-expiry` operator subcommand (REPORT / APPLY) [done] (2026-11-02)
+
+- `cmd/server/main.go`: a `backfill-signal-expiry` dispatch right after the `healthcheck` branch, before telemetry, config and mTLS.
+- `cmd/server/backfill.go`, `runBackfillSignalExpiry(args) int`:
+  - Parses `--mode` (default `report`), `--legacy-owner`, `--expect-untracked` and `--expect-seed-expired`. An expect-* pointer is set only when that flag was given (`fs.Visit`), so an unset bound stays nil.
+  - Prints the spec's exact refusal on stderr and returns 2 when `DATABASE_URL` is empty. Otherwise it prints `target host=… db=…` from `pgxpool.ParseConfig` before anything else.
+  - Opens the pool via `NewPortfolioRepo` + `Pool()` (no new `NewPool`) and calls `RunBackfill`.
+  - Exit codes: 3 on `ErrBackfillRefused`, 1 on any other error, 2 on usage errors.
+- `internal/repository/signal_expiry_backfill.go`:
+  - Exports `BackfillOptions`, `BackfillResult` (with `Report` = everything written to `out`), `ErrBackfillRefused`, `RunBackfill`, and the `BackfillModeReport`/`BackfillModeApply` constants.
+  - Refuses before any DB access when the mode is unknown, the legacy owner is empty (both modes), or an APPLY bound is nil.
+  - Classification is one read-only `REPEATABLE READ` transaction over SIGNAL (`source = 2`) bindings on `system_managed` lists that have no expiry row. Each binding's own watchlist-direction rows are matched with `upper(btrim(n.symbol)) = s.symbol` and `lower(n.direction) = 'watchlist'`:
+    - any open-ended row → skipped;
+    - dated rows → seed, using `max(valid_until)` and that row's `id` (ties go to the higher `id`), with `seed_expired` meaning `<= now()`;
+    - no rows → untracked, which gets marked.
+  - `legacy_rows` and `legacy_live` come from rows under `--legacy-owner`. They are informational only.
+  - REPORT prints the header (legacy owner, read-only), SEED rows, UNTRACKED rows, `with_live_legacy_signal`, the PER-OWNER table (with the `NO_OWN_SIGNALS` flag), TOTALS, and the `NEXT:` APPLY command.
+  - APPLY prints its header and the live counts, then refuses (nothing written) if live untracked > N or seed_expired > M. Otherwise it runs one autocommit `INSERT … SELECT … ON CONFLICT DO NOTHING` per row in `(watchlist_id, symbol)` order:
+    - the seed recomputes the latest dated own row and requires that no open-ended row exists;
+    - the mark writes `(now(), NULL)` and requires that no own row exists;
+    - 0 rows affected counts as `changed since REPORT`.
+  - It never deletes a binding, takes no `FOR UPDATE`, and makes no ledger or gRPC call.
+- Files modified: `services/xstockstrat-portfolio/cmd/server/main.go`, `services/xstockstrat-portfolio/cmd/server/backfill.go`, `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill.go`.
+- TDD: RED came from uncommitted probes: `undefined: BackfillResult` (dbtest vet) and `undefined: runBackfillSignalExpiry` (cmd/server test build). GREEN: both probes passed (refused on an empty legacy owner; rc 2 plus the refusal text) and were deleted. The behavioral tests are Step 16.
+- Verification:
+  - `go build ./...`, `go vet ./...` and `go vet -tags dbtest ./...` all pass.
+  - The offline refusal check gives rc 1 (`go run` maps the child's exit status 2), and the output includes `DATABASE_URL is required`.
+  - GO-LINT: `0 issues`.
+  - Full `go test ./...` passes.
+  - The step-time `check-config-wiring.mjs` gate returns rc 0.
+  - No database was started.
+- Deviations: RED probes; exit-code/output-format choices (Deviation Log).
+- Next: Step 16 (backfill DB tests).
+

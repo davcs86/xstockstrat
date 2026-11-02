@@ -747,7 +747,7 @@ The RED counts only if the captured output contains `expected exactly one` (`fin
 
 ### Step 15 — service: `portfolio backfill-signal-expiry` operator subcommand (REPORT / APPLY)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/cmd/server/main.go` — modify (dispatch beside `healthcheck`, `:31`)
@@ -1134,4 +1134,24 @@ _Populated by /sdd-execute as implementation proceeds._
   - Step 13 had already landed, so the bounds RED came from deleting its registry line in an uncommitted edit: 3 rejection cases failed (both `just outside` cases and the explicit `= 0` case), and both `accepts` cases passed. The line was restored with `git checkout` before GREEN.
   - Verification: the greps passed; `pnpm run lint` had 0 errors (234 pre-existing warnings); the two-file run gave rc 0, `# pass 9`, `# fail 0`; `test:coverage` gave `# pass 272`, `# fail 0`, 90.61% lines; `c8 check-coverage --lines 40` rc 0.
 - **Disposition**: same checks with equivalent mechanics. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 15 — RED via uncommitted probes; exit-code and output choices the spec left open
+
+- **Spec said**: TDD red-green paired with Step 16 (Step 16 is compile-red before Step 15). APPLY refusal maps to "a non-zero exit". Output of both modes must be paste-able plain text with a stable column order.
+- **Done instead**:
+  - Step 16 runs after Step 15 in sequential order, and its file is outside this step's **Files**, so RED came from two throwaway probes:
+    - A `//go:build dbtest` probe in `internal/repository/` called `RunBackfill` with the exported contract. `go vet -tags dbtest ./internal/repository/` failed with `undefined: BackfillResult`.
+    - A `cmd/server` probe called `runBackfillSignalExpiry` with an empty `DATABASE_URL`. Its build failed with `undefined: runBackfillSignalExpiry`.
+    - After implementation, both probes passed. The repository probe got `ErrBackfillRefused` for an empty legacy owner with a nil pool. The CLI probe got rc 2 and the refusal text. Both probes were then deleted and never staged.
+  - Exit codes: 2 for a usage error or an empty or unparsable `DATABASE_URL`, 3 for `ErrBackfillRefused`, 1 for any other error.
+  - Output format:
+    - Lines are tab-separated, and the first column is the section tag: `SEED`, `UNTRACKED`, `PER-OWNER` or `RESULT`.
+    - `seed_expired` and `legacy_live` print as `Y`/`N`.
+    - REPORT adds a `TOTALS` line that includes `open_ended_skipped`.
+    - APPLY prints its header and the live counts before the bound check. A refusal prints `REFUSED: …; nothing written`. Each row gets one `RESULT` line, and the run ends with a `DONE` or `ABORTED` summary.
+  - The candidate read is one `REPEATABLE READ READ ONLY` transaction, so REPORT's counts and APPLY's bound check come from a single snapshot.
+  - `RunBackfill` also refuses an unknown `--mode`.
+  - `printTo` discards writer errors, so a failed stdout write cannot abort an APPLY partway through.
+- **Disposition**: in scope. Only the step's **Files** changed. The behavioral RED/GREEN is Step 16 in CI `portfolio-db-test`.
 - **Severity**: n/a
