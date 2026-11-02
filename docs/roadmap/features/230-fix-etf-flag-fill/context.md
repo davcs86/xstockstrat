@@ -815,3 +815,130 @@ the round-2 block above.
   process (design.md Open Risks).
 - **Deviations:** none. Severity SEV-3 (unchanged). Citations match the re-spec (`:2042`, `:2046-2061`).
 - **Files modified:** none (read-only); spec/feature/context only.
+
+## Session 2026-11-02 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-etf-flag-fill (feature 230)
+
+Source read: /home/user/xstockstrat/docs/roadmap/features/230-fix-etf-flag-fill/acceptance.feature. This is the working-tree copy, not `git show origin/feature/fix-etf-flag-fill:...`, so the orchestrator should confirm the two are identical. The task text gave the path as `docs/roadmap/features/docs/roadmap/features/230-...`. That is doubled and I treated it as a typo.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-2 | /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature | CREATE | NEW | First half (closed gate, no fetch, is_etf unset) overlaps 215 @AC-14. The later-label-on-reopen outcome is not asserted anywhere, so NEW. |
+| AC-3 | same | CREATE | NEW | Scenario Outline with 4 example rows. The Info record and reason are new; the no-fetch clause partly overlaps 215 @AC-14 (budget row). |
+| AC-4 | same | CREATE | NEW | |
+| AC-5 | same | CREATE | NEW | Scenario Outline with 3 example rows. |
+| AC-6 | same | CREATE | NEW | Scenario Outline with 7 example rows. |
+| AC-7 | same | CREATE | NEW | |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature (CREATE) ---
+# Promoted from docs/roadmap/features/230-fix-etf-flag-fill/acceptance.feature
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-230` tag.
+# Durable business rules xstockstrat-marketdata already guarantees - a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+# The FMP boot-seed over-count guarantee is owned by feature 255 @AC-3, not this file. 230 @AC-1 is
+# retired and its ID is never reused (C-15). The one-minute rate-limit window is the code constant
+# etfFlagLogEvery, not a config key.
+
+Feature: xstockstrat-marketdata - ETF-flag background fill labels ETFs and explains every non-label outcome
+  The background ETF-flag fill labels an ETF once the FMP gate reopens, and every skipped, failed,
+  or unlabelled fill leaves a rate-limited, secret-free Info record.
+
+  @AC-2 @FR-1 @regression @feature-230
+  Scenario: An ETF skipped while the gate was closed is labelled on a later call once the gate reopens
+    Given marketdata.fmp.daily_request_cap is 250 and the shared FMP budget has used 200 of it
+    And the ETF-flag cache has no entry for "SCHD"
+    And the FMP profile for "SCHD" reports isEtf true
+    When GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    Then no FMP profile fetch is made and the response has is_etf unset
+    When the shared FMP budget reports 5 used of 250
+    And GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    And GetEtfFlags is called for "SCHD" again
+    Then exactly one FMP profile fetch has been made
+    And the last response has is_etf set to true
+
+  @AC-3 @FR-2 @regression @feature-230
+  Scenario Outline: A fill skipped by a closed gate logs its reason at Info level
+    Given marketdata.fmp.enabled is <fmp_enabled>
+    And the shared FMP budget is <budget>
+    And the ETF-flag cache has no entry for "SCHD"
+    When GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    Then exactly one Info record "etf flag fill skipped" is emitted with symbol "SCHD" and reason "<reason>"
+    And the record <used_cap> used and cap attributes
+    And no FMP profile fetch is made and "SCHD" is no longer pending
+
+    Examples:
+      | fmp_enabled | budget                | reason       | used_cap      |
+      | false       | used 0 of cap 100     | fmp_disabled | does not have |
+      | true        | used 0 of cap 0       | no_cap       | has           |
+      | true        | used 80 of cap 100    | budget       | has           |
+      | true        | not wired             | not_wired    | does not have |
+
+  @AC-4 @FR-3 @regression @feature-230
+  Scenario: An empty FMP profile logs an unlabelled record and stays negative-cached
+    Given the gate is open and the FMP profile for "NOPROF" has no isEtf value
+    When GetEtfFlags is called for "NOPROF" and the background filler drains the queue
+    Then exactly one Info record "etf flag fill unlabelled" is emitted with symbol "NOPROF"
+    And the record carries no attribute other than symbol and trace_id
+    And a GetEtfFlags call for "NOPROF" one day later returns is_etf unset without enqueuing a fetch
+    And a second empty-profile symbol filled within one minute emits no further unlabelled record
+    And an empty-profile symbol filled after the clock passes one minute emits a second unlabelled record
+
+  @AC-5 @FR-2 @regression @feature-230
+  Scenario Outline: A failed fill logs only the error class, never the raw error text
+    Given the gate is open and the FMP profile fetch for "SCHD" returns <error> whose text contains "apikey=SECRET"
+    When GetEtfFlags is called for "SCHD" and the background filler drains the queue
+    Then exactly one Info record "etf flag fill failed" is emitted with symbol "SCHD" and class "<class>"
+    And the class attribute is never empty
+    And neither the record message nor any attribute value contains "apikey=" or "SECRET"
+    And "SCHD" is not cached and is re-queued by the next GetEtfFlags call
+
+    Examples:
+      | error                                          | class |
+      | a wrapped context.DeadlineExceeded             | ctx   |
+      | a wrapped fmp.ErrFMPDailyCapExceeded           | cap   |
+      | an error carrying no classifier stage          | other |
+
+  @AC-6 @FR-2 @FR-3 @regression @feature-230
+  Scenario Outline: Fill records are rate-limited per slot within the one-minute window
+    Given the gate and the FMP profile source are set up for the sequence <sequence> on distinct symbols
+    When the background filler processes the sequence
+    Then exactly <records> are emitted
+    And no extra FMP profile fetch is made by the logging
+
+    Examples:
+      | sequence                                                                  | records                                   |
+      | 5 budget skips within one minute                                          | 1 "skipped"                               |
+      | 5 budget skips, the clock passes one minute, 1 budget skip                | 2 "skipped"                               |
+      | 5 fmp_disabled skips spread over 3 minutes                                | 1 "skipped"                               |
+      | fmp_disabled, budget, fmp_disabled skips within one minute                | 3 "skipped"                               |
+      | budget skip, a successful fill, budget skip within one minute             | 2 "skipped"                               |
+      | 2 ctx failures, then 1 cap failure within one minute                      | 2 "failed" (one per class)                |
+      | 1 budget skip, 1 ctx failure, 1 empty profile within one minute           | 1 "skipped", 1 "failed", 1 "unlabelled"   |
+
+  @AC-7 @FR-2 @regression @feature-230
+  Scenario: Fill records carry the trace id of the request that enqueued the symbol
+    Given the gate is closed with reason budget
+    And GetEtfFlags for "SCHD" arrives through the marketdata gRPC server interceptor with x-trace-id "t-1"
+    When the background filler drains the queue
+    Then the "etf flag fill skipped" record for "SCHD" has trace_id "t-1"
+    And a logged fill record for a symbol enqueued by a request with no x-trace-id has no trace_id attribute
+
+### Notes / ambiguities / conflicts
+- Single target. Every scenario's observable subject is `GetEtfFlags` and the background filler (`StartEtfFlagFiller`) inside xstockstrat-marketdata. The Reviewers table also lists analysis, but only as read-only for Step 7, so it owns no guarantee here. Nothing is cross-cutting, and a grep of /home/user/xstockstrat/docs/sdd/business-rules/platform.feature for ETF found nothing.
+- The marketdata `acceptance/` directory already exists, so only the file is created.
+- No `@feature-230` or "etf flag fill" text exists in any marketdata suite, so there are no DUPs.
+- OVERLAP, informational and not a skip: /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/block-fundamentals-strategy-on-etf.feature @AC-14 (feature 215) asserts that a gate at or above 80% gives an unset is_etf with no FMP call and no background fetch. 230 @AC-2 (first When/Then) and the @AC-3 budget row restate that same outcome. The 30-day cache clause of 215 @AC-14 is not touched. Each 230 scenario also asserts something 215 does not (later labelling, Info log records), so I wrote them as NEW and consolidation is not warranted.
+- No CONFLICT. 230 does not contradict 215 @AC-14. The seed-count fix is delegated to 255 @AC-3 and is not in 230's feature file. 255 is not in the marketdata suite today, and it is 255's own promotion to add.
+- The retired @AC-1 is not promoted, and its ID stays reserved (C-15). I carried the commentary from the source header into the file comment, not the Gherkin steps. The scenario steps are verbatim and only `@feature-230` is added to each tag line.
+- Landing items for the orchestrator, outside this plan:
+  - Record in context.md and the PR body that 255 merged as 5bf18403 (PR #1394).
+  - Add the root CLAUDE.md Teardown record to the PR body for the Step 6 edit to /home/user/xstockstrat/services/xstockstrat-marketdata/CLAUDE.md: context-forge plugin unavailable, plus the manual reconciliation logged in context.md.
+  - Add the post-deploy follow-up: re-run feature 215 Step 26(a) on staging, where SCHD should reach FUNDAMENTALS_GAP_ETF after a first miss.
+
+### Coverage check
+- Source scenarios: 6 (@AC-2 through @AC-7; 3 plain Scenarios and 3 Scenario Outlines, with 14 example rows in total). Planned: 6 NEW, 0 DUP, 0 OVERLAP-skipped. Every @AC-* is accounted for; the only ID not promoted is the retired @AC-1, which is absent from the source file.
+```
