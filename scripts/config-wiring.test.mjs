@@ -464,3 +464,54 @@ test('ratchet 9 --declared-from reads keys only from ## Config Key Changes', () 
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
 })
+
+const REPO = path.resolve(HERE, '..')
+const baseline = () => JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'config-wiring.json'), 'utf8'))
+const ids = (findings) => new Set(findings.map((f) => `${f.kind}:${f.namespace}/${f.key}`))
+
+test('baseline 1 @AC-7 --final on the real tree exits 0 (committed baseline equals the tree)', () => {
+  const r = cli(REPO, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
+test('baseline 2 @AC-8 every committed entry has an owner and a baseline kind, and none is dynamic-read', () => {
+  const { findings } = baseline()
+  assert.ok(findings.length > 0, 'findings is empty')
+  for (const f of findings) {
+    assert.ok(typeof f.owner === 'string' && f.owner.trim() !== '', `no owner: ${f.namespace}/${f.key}`)
+    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read'].includes(f.kind), `bad kind: ${f.kind}`)
+    assert.notEqual(f.kind, 'dynamic-read', `dynamic-read baselined: ${f.namespace}/${f.key}`)
+  }
+})
+
+// Copied from context.md (Step 9 reconciliation of the 277 sweep); never recompute it from the tree.
+const SWEEP_277 = [
+  ...['backfill.chunk_max_bars', 'backfill.chunk_window_days', 'backfill.max_concurrent_chunks',
+    'mcp_client.poll_interval_seconds', 'mcp_client.request_timeout_seconds'].map((k) => `form-mismatch:ingest/${k}`),
+  ...['buy_quantile', 'daily_call_budget', 'enabled', 'explicit_symbols', 'max_symbols_per_run', 'min_conviction_to_emit',
+    'run_interval_hours', 'scoring_formula_id', 'sell_quantile', 'source_slug', 'universe_source', 'valid_days',
+  ].map((k) => `form-mismatch:analysis/fundsignal.${k}`),
+  'form-mismatch:analysis/scoring.signal_decay_half_life_hours',
+  'form-mismatch:analysis/backtest.max_duration_seconds',
+  'seeded-unread:ledger/stream.notify_enabled',
+  ...['ingest.backfill.max_concurrent_jobs', 'ingest.backfill.retry_on_failure', 'ingest.backfill.max_retry_attempts',
+    'ingest.signals.dedup_window_hours', 'analysis.fundsignal.retry_seconds', 'analysis.fundsignal.startup_jitter_seconds',
+    'indicators.sandbox.max_concurrent'].map((k) => `read-unseeded:/${k}`),
+]
+
+test('baseline 3 @AC-7 the committed baseline holds at least the 277-sweep set', () => {
+  const have = ids(baseline().findings)
+  assert.deepEqual(SWEEP_277.filter((id) => !have.has(id)), [])
+  assert.equal(SWEEP_277.filter((id) => id.startsWith('form-mismatch:')).length, 19)
+})
+
+test('baseline 4 the committed JSON carries no value text and no secret-class key', () => {
+  const json = baseline()
+  const ENTRY_FIELDS = new Set(['namespace', 'key', 'kind', 'owner', 'envs', 'file'])
+  for (const f of json.findings) assert.deepEqual(Object.keys(f).filter((k) => !ENTRY_FIELDS.has(k)), [], `${f.namespace}/${f.key}`)
+  assert.doesNotMatch(JSON.stringify(json), /"(value|value_data|value_encrypted|default)"\s*:/)
+  const { secrets } = buildStoredSet(REPO)
+  assert.ok(secrets.size > 0, 'no secret rows modelled')
+  const secretForms = new Set([...secrets.values()].flatMap((s) => [s.key, `${s.namespace}.${s.key}`]))
+  assert.deepEqual(json.findings.filter((f) => secretForms.has(f.key)).map((f) => f.key), [])
+})

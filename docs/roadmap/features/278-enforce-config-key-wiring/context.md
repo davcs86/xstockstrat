@@ -507,3 +507,17 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
 - Deviations: none.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 13 (sequential)
+
+- **Step 13 done:** `scripts/config-wiring.test.mjs` gains four tests that run against the real repo root (`REPO = path.resolve(HERE, '..')`):
+  - `baseline 1` (@AC-7): `--final` on the real tree exits 0.
+  - `baseline 2` (@AC-8): `findings` is non-empty, every entry has a non-empty `owner` and a kind among the four, and none is `dynamic-read`.
+  - `baseline 3` (@AC-7): the baseline contains `SWEEP_277`, which holds 19 `form-mismatch`, `seeded-unread` `ledger/stream.notify_enabled` and the 7 `read-unseeded` keys. The list is copied from the Step 9 reconciliation above. This file does not enumerate the 12 `fundsignal.*` names, so they come from 277's recon.md row "fundsignal.* x12 (008)" and match the frozen baseline.
+  - `baseline 4`: each entry has only `namespace`/`key`/`kind`/`owner`/`envs`/`file` and the JSON has no `value`-like field. No `key` equals a secret row's key, bare or `<namespace>.`-prefixed. Secret rows come from `buildStoredSet(REPO).secrets`, which has 8 rows.
+- **TDD:** red first, in a scratch root (scratchpad `red13/`). It had the new test file and the script copied, `services/`, the fixtures and `config-wiring-py-reads.py` symlinked, and the Step 7 empty-shape `config-wiring.json` (from `9ed19573`). Result: 42 tests, 39 passed, 3 failed (`baseline 1`, `baseline 2` "findings is empty", `baseline 3`). `baseline 4` passes vacuously on an empty baseline, which is expected for a guard. Green in the worktree: 42/42.
+- **Verification:** `node --test scripts/config-wiring.test.mjs` passed 42/42. Lint `node --check scripts/config-wiring.test.mjs` was clean.
+- Files modified: `scripts/config-wiring.test.mjs`, `implementation-spec.md` (Step 13 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.

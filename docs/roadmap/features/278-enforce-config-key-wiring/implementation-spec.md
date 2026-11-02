@@ -509,7 +509,7 @@ node scripts/check-config-wiring.mjs --final && node -e "const j=JSON.parse(requ
 
 ### Step 13 — test: Real-tree and baseline-integrity tests (authored red)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
