@@ -657,7 +657,7 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/reference/sequential-mo
 
 ### Step 17 — docs: `/sdd-review` B2 row and `/sdd-story` declared-key format
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/skills/sdd-review/`, `.claude/skills/sdd-story/`
 **Files**:
 - `.claude/skills/sdd-review/reference/impl-spec-criteria.md` — modify

@@ -198,7 +198,9 @@ If a surface is real but deliberately deferred, it must point at a **named follo
 ## Config Key Changes
 
 - [ ] No new config keys
-- OR: list keys in `<service>.<category>.<key>` format
+- OR: one declared key per bullet, a single backticked `<namespace>.<key>` exactly as the migration stores it
+  (`<service>.<category>.<key>`), followed by what reads it. This section is the declared
+  set: `--declared-from` in `scripts/check-config-wiring.mjs` reads every backticked key here.
 
 ## Database Changes
 

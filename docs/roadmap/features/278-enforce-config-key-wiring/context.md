@@ -561,3 +561,16 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Files modified: `.claude/skills/sdd-execute/reference/sequential-mode.md`, `implementation-spec.md` (Step 16 Status), `feature.md`, `context.md`.
 - Deviations: none.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 17 (sequential)
+
+- **Operator decision:** Option A on the Step 17 blocker (stale discovery digest read a pre-Step-14 tree), operator's words 2026-11-02: "continue 278, and start wave 2 in parallel if possible". Executed against `origin/feature/enforce-config-key-wiring` at c6d48b5f.
+- **Step 17 done:**
+  - `.claude/skills/sdd-review/reference/impl-spec-criteria.md`: B2 row `Config key wiring` after the `C-14` row, two FAIL clauses only — (a) no step names the reader file and symbol for a declared key (@AC-6); (b) no snapshot-built test asserts the real reader returns the seeded value (@AC-11; model `test_config_watcher.py:56,74`, `test_ingest_servicer.py:77`). Reviewer cites the key by name; prominent despite Mode B advisory, per `C-14`.
+  - `.claude/skills/sdd-story/SKILL.md` `## Config Key Changes` template: one declared key per bullet, a single backticked `<namespace>.<key>` exactly as the migration stores it; the section is the declared set read by `--declared-from`.
+- **Extraction check:** `declaredFromSpec('.claude/skills/sdd-story/SKILL.md')` returns `[]` — the template's angle-bracket placeholders never match `DECLARED_KEY_RE`, so a verbatim-copied template declares nothing.
+- **TDD:** N/A (docs/skill text; structural assertions in Step 18).
+- **Verification:** `grep -n "Config key wiring"` matched impl-spec-criteria.md:32; `grep -n declared` matched sdd-story/SKILL.md:201-203; `./scripts/check-context-map.sh` printed `OK - all context-map and doc references resolve.`; `node --test scripts/config-wiring.test.mjs` 43/43 pass.
+- Files modified: `.claude/skills/sdd-review/reference/impl-spec-criteria.md`, `.claude/skills/sdd-story/SKILL.md`, `implementation-spec.md` (Step 17 Status), `feature.md`, `context.md`.
+- Deviations: none.
+- Severity: n/a.
