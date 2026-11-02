@@ -321,3 +321,33 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/join/**`
 - Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
 - Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute sequential, Steps 7+8
+
+### Step 7 — Baseline ratchet, modes, declared keys and policy [done]
+- `scripts/check-config-wiring.mjs` changes:
+  - New: `validateState`/`loadState`. Every run validates `scripts/config-wiring.json` (a missing file counts as the empty shape). A bad entry (owner missing or not matching `^(feature )?(243|278)\b|^(defect|feature) .+`, kind outside the four FR-1 kinds, bad `envs`/`file`) or a bad policy is named on stderr and exits `2`. `loadRegistry` now reads through `loadState`.
+  - New: `ratchet` (`--final`). New findings fail and print as plain lines, gone entries print `STALE:`, and oversized `envs` entries print `STALE-IN-PART:`. Under `policy.envReadUnseeded: reported`, env-scoped `read-unseeded` prints `REPORTED:` and stays out of the ratchet.
+  - New: `stepTime` (default). Only declared keys gate, and missing-side legs print `PENDING:`. Keyless kinds (`dynamic-read`, `unmodelled-rewrite`) fail when they are not baselined. With no declared key the mode prints nothing and exits `0`.
+  - New: `declaredFromSpec` (backticked keys inside `## Config Key Changes` only) and `declaredFromMigration` (`INSERT INTO config.config_values` rows, canonical dotted key). `--keys` takes a comma-separated list.
+- `scripts/config-wiring.json` created with the empty shape (policy `reported`).
+- Real-tree smoke (not a gate):
+  - The default run prints nothing and exits 0.
+  - `--final` gives 150 lines (149 new findings plus 1 `REPORTED:` for `trading.fill_poller.interval_ms:production`) and exits 1. That stays until Step 11 freezes `findings`.
+  - `--keys analysis.fundsignal.enabled` prints the 008 `form-mismatch` and the 46 unbaselined `dynamic-read` lines, and exits 1.
+- TDD red, captured before implementation: `node --test scripts/config-wiring.test.mjs` gave tests 37, pass 27, fail 10. The failures were ratchet 1-9 and join 5.
+- TDD green: `node --check scripts/check-config-wiring.mjs && node -e "JSON.parse(...'scripts/config-wiring.json'...)" && node --test scripts/config-wiring.test.mjs` gave tests 37, pass 37, fail 0.
+- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`
+- Deviations, detailed in the Deviation Log:
+  - Steps 7 and 8 ran as one TDD cycle (operator option A).
+  - Defined here: declared-key matching, step-time keyless kinds, entry identity with an optional `file`, and the `STALE:`/`STALE-IN-PART:`/`PENDING:`/`REPORTED:` line forms.
+
+### Step 8 — Ratchet, owner, mode and declared-key tests (authored red) [done]
+- Ratchet cases 1-9 were added to `scripts/config-wiring.test.mjs`. A `stage()` helper copies fixture trees into a temp root and installs the chosen `config-wiring.json`.
+- Fixtures are under `scripts/config-wiring-fixtures/ratchet/{new-finding,no-owner,stale-in-part,step-time,two-step/{seed-only,reader-only},declared,policy/{reported,blocking}}`, 16 files in all.
+- The Step 2 case 5 and join 1-8 CLI calls now pass `--final`, and join 5 expects the `REPORTED:` prefix. See the Deviation Log.
+- Lint: `node --check scripts/config-wiring.test.mjs` passed.
+- Files modified: `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/ratchet/**`
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
+- Open item for Step 11: until `findings` and `registry.dynamic` are populated, any step-time run with a declared key fails on the real tree's 46 unbaselined `dynamic-read` sites.
+- Severity: n/a.

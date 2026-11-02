@@ -294,7 +294,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ### Step 7 — service: Baseline ratchet, modes, declared keys and policy
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -328,7 +328,7 @@ node --check scripts/check-config-wiring.mjs && node -e "JSON.parse(require('fs'
 
 ### Step 8 — test: Ratchet, owner, mode and declared-key tests (authored red)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
@@ -744,3 +744,35 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: Step 2 cases 4 and 5 asserted CLI exit `0` on the `scope-and-secret` fixture and on the allow-listed `unmodelled` fixture.
 **Actual**: With the join wired into `run()`, both fixtures now also report `seeded-unread` for their reader-less seeds, so the exit code is `1`. The assertions now check that the run is not an error (exit `!= 2`), that no secret value appears in the output, and, for case 5, that no `unmodelled-rewrite` line remains. The fixtures are unchanged.
 **Reason**: Those cases test the parser, not wiring. Adding readers to Step 2's fixtures would mix concerns.
+
+### Deviation: Steps 7+8 — executed as one TDD cycle
+**Spec said**: "Step 8 covers Step 7 ... `/sdd-execute` captures red before the paired service step" (separate steps, one commit each).
+**Actual**: Step 8's fixtures and cases 1-9 were authored first, and red was captured: 37 tests, 27 pass, 10 fail. The failures were ratchet cases 1-9 plus join 5, whose expected output changed. Step 7 was then implemented, and green was captured with both Verification commands (37 pass). Steps 7 and 8 landed as one red-green commit that flips both Statuses to `done`.
+**Reason**: Operator decision (Option A) for every inverted test/impl pair, recorded in context.md (commit cdfbeaf6).
+
+### Deviation: Step 7 — step-time semantics for keyless kinds, entry identity and output prefixes
+**Spec said**: Instructions 4-5: step-time failures are "`form-mismatch`, `dynamic-read`, `unmodelled-rewrite`, and declared-key findings that are not missing-side", and "Step-time filtering restricts failures to the union of declared keys; unrelated baseline findings never block". Instruction 1 lists the entry fields as `namespace`, `key`, `kind`, `envs`, `owner`.
+**Actual**:
+- **Declared-key matching.** A finding relates to a declared key when the declared string equals one of these:
+  - for a seed-side finding, the stored key in canonical dotted form (`<ns>.<key>` unless the key is already dotted) or its `readKey`;
+  - for a read-side finding, the read key.
+  `--declared-migration` canonicalises its `(namespace, key)` rows in the same way. `--keys` takes a comma-separated list.
+- **Keyless kinds at step time.** `dynamic-read` and `unmodelled-rewrite` have no config key to relate. At step time they fail only when a declared-key source is given and the finding is not covered by a `findings` entry. With no declared key, step-time mode prints nothing and exits `0`.
+- **Entry identity.** Entries are matched on `(kind, namespace, key)`. An optional `file` field is accepted to tell apart `dynamic-read` entries that share a symbol, such as `<module>`.
+- **Allowed kinds.** Entry `kind` must be one of the four FR-1 kinds. `unmodelled-rewrite` has its own allow-list, `registry.rewriteAllow`, so it cannot be baselined here.
+- **Output lines.**
+  - A new finding prints as its plain line.
+  - A gone entry prints `STALE: config-wiring.json:<ns/key|key>:<kind>[:envs]`.
+  - An oversized entry prints `STALE-IN-PART: <entry> (produced: <envs>)`.
+  - A produced env list that is not a subset of the entry's list prints as a new finding.
+  - At step time, a missing-side declared finding prints `PENDING: <line>` and a reported one prints `REPORTED: <line>`.
+- **Validation.** Owner and schema errors name every bad entry as `findings[<i>] <kind>:<ns/key>: ...` on stderr and exit `2`. A missing `config-wiring.json` counts as the empty shape. `--json` adds `results`.
+**Reason**: The spec gives no rule for relating a keyless finding to a declared key, and no identity for `dynamic-read` entries. A strictly key-filtered gate would never see a new dynamic read added by the step.
+
+### Deviation: Step 8 — Step 2/6 CLI cases now pass `--final`, and fixtures are staged into scratch roots
+**Spec said**: Step 8 fixtures are "`--root` tree ... plus a `config-wiring.json`". The Step 2/6 CLI cases ran with no flags and expected exit `1` on findings.
+**Actual**:
+- Without a declared-key source, the default step-time mode now exits `0` (@AC-5). The CLI assertions of Step 2 case 5 and join cases 1-8 therefore pass `--final`, which against an absent baseline reports every finding as new.
+- Under the default `reported` policy, join case 5's env-scoped line now carries `REPORTED: `.
+- The `ratchet/*` fixtures keep `config-wiring.json` beside the tree, or in `policy/{reported,blocking}/`. Tests copy the tree into an `fs.mkdtempSync` root and install the chosen file as `scripts/config-wiring.json`, so no new CLI flag was needed.
+**Reason**: The loader reads `<root>/scripts/config-wiring.json`, and the two policy files cannot share one directory.

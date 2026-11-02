@@ -302,12 +302,52 @@ function classify(tokens) {
   return head
 }
 
-export function loadRegistry(root) {
-  const file = path.join(root, 'scripts', 'config-wiring.json')
-  if (!fs.existsSync(file)) return { ...EMPTY_REGISTRY }
-  const json = JSON.parse(fs.readFileSync(file, 'utf8'))
-  return { ...EMPTY_REGISTRY, ...(json.registry || {}) }
+const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read'])
+const OWNER_RE = /^(feature )?(243|278)\b|^(defect|feature) .+/
+const POLICIES = new Set(['blocking', 'reported'])
+const isList = (v) => Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s !== '')
+const entryId = (e) => `${e.kind}:${e.namespace ? `${e.namespace}/` : ''}${e.key}`
+
+// Schema errors (any entry without a matching owner included) throw, which the CLI maps to exit 2.
+export function validateState(json) {
+  const errs = []
+  if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('scripts/config-wiring.json: top level must be an object')
+  const policy = json.policy ?? {}
+  const envReadUnseeded = policy.envReadUnseeded ?? 'reported'
+  if (!POLICIES.has(envReadUnseeded)) errs.push(`policy.envReadUnseeded must be "blocking" or "reported", got ${JSON.stringify(envReadUnseeded)}`)
+  const findings = json.findings ?? []
+  if (!Array.isArray(findings)) errs.push('findings must be an array')
+  else {
+    findings.forEach((e, i) => {
+      if (!e || typeof e !== 'object') return errs.push(`findings[${i}]: must be an object`)
+      const id = `findings[${i}] ${entryId(e)}`
+      if (typeof e.namespace !== 'string') errs.push(`${id}: namespace must be a string`)
+      if (typeof e.key !== 'string' || e.key === '') errs.push(`${id}: key must be a non-empty string`)
+      if (!BASELINE_KINDS.has(e.kind)) errs.push(`${id}: kind must be one of ${[...BASELINE_KINDS].join(', ')}`)
+      if (e.envs !== undefined && !isList(e.envs)) errs.push(`${id}: envs must be a non-empty list of environment names`)
+      if (e.file !== undefined && (typeof e.file !== 'string' || e.file === '')) errs.push(`${id}: file must be a non-empty string`)
+      if (typeof e.owner !== 'string' || !OWNER_RE.test(e.owner)) errs.push(`${id}: owner missing or not matching ${OWNER_RE.source}`)
+    })
+  }
+  const registry = json.registry ?? {}
+  if (typeof registry !== 'object' || Array.isArray(registry)) errs.push('registry must be an object')
+  if (errs.length) throw new Error(`scripts/config-wiring.json:\n  ${errs.join('\n  ')}`)
+  return { policy: { envReadUnseeded }, findings, registry: { ...EMPTY_REGISTRY, ...registry } }
 }
+
+export function loadState(root) {
+  const file = path.join(root, 'scripts', 'config-wiring.json')
+  if (!fs.existsSync(file)) return validateState({})
+  let json
+  try {
+    json = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (err) {
+    throw new Error(`scripts/config-wiring.json: ${err.message}`)
+  }
+  return validateState(json)
+}
+
+export const loadRegistry = (root) => loadState(root).registry
 
 export function buildStoredSet(root, { registry = loadRegistry(root) } = {}) {
   const dir = path.join(root, MIGRATIONS)
@@ -602,6 +642,68 @@ export function findingLine(f) {
   return [f.file, key, f.kind, ...(f.envs ? [f.envs.join(',')] : [])].join(':')
 }
 
+const DECLARED_KEY_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/
+const canonical = (ns, key) => (key.startsWith(`${ns}.`) ? key : `${ns}.${key}`)
+
+export function declaredFromSpec(file) {
+  const out = new Set()
+  let inSection = false
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    if (/^##\s/.test(line)) { inSection = /^##\s+Config Key Changes\s*$/.test(line); continue }
+    if (inSection) for (const m of line.matchAll(/`([^`\n]+)`/g)) if (DECLARED_KEY_RE.test(m[1])) out.add(m[1])
+  }
+  return [...out].sort()
+}
+
+export function declaredFromMigration(file) {
+  const out = new Set()
+  for (const tokens of splitStatements(fs.readFileSync(file, 'utf8'))) {
+    if (classify(tokens) !== 'insert') continue
+    const state = new StoredState()
+    if (!applyInsert(tokens, state, path.basename(file))) throw new Error(`${file}:L${tokens[0].line}: INSERT INTO ${TABLE} shape not understood`)
+    for (const r of state.rows.values()) out.add(canonical(r.namespace, r.key))
+  }
+  return [...out].sort()
+}
+
+const MISSING_SIDE = new Set(['seeded-unread', 'read-unseeded'])
+const KEYLESS = new Set(['dynamic-read', 'unmodelled-rewrite'])
+const namesOf = (f) => (f.namespace ? [canonical(f.namespace, f.key), f.readKey].filter(Boolean) : [f.key])
+const isReported = (f, policy) => policy.envReadUnseeded === 'reported' && f.kind === 'read-unseeded' && Boolean(f.envs)
+const sameId = (e, f) => e.kind === f.kind && e.namespace === f.namespace && e.key === f.key && (!e.file || e.file === f.file)
+const entryLine = (e) => `config-wiring.json:${e.namespace ? `${e.namespace}/` : ''}${e.key}:${e.kind}${e.envs ? `:${e.envs.join(',')}` : ''}`
+
+// Entries may only shrink: a produced finding must be covered, and every entry must still be produced at its full env list.
+export function ratchet(findings, state) {
+  const out = []
+  const entries = state.findings.filter((e) => !isReported(e, state.policy))
+  const used = new Set()
+  for (const f of findings) {
+    if (isReported(f, state.policy)) { out.push({ line: `REPORTED: ${findingLine(f)}`, fail: false }); continue }
+    const i = entries.findIndex((e, k) => !used.has(k) && sameId(e, f))
+    if (i >= 0) used.add(i)
+    const e = entries[i]
+    if (!e || (e.envs && (!f.envs || !f.envs.every((env) => e.envs.includes(env))))) { out.push({ line: findingLine(f), fail: true }); continue }
+    if (f.envs && (!e.envs || e.envs.length > f.envs.length)) out.push({ line: `STALE-IN-PART: ${entryLine(e)} (produced: ${f.envs.join(',')})`, fail: true })
+  }
+  entries.forEach((e, k) => { if (!used.has(k)) out.push({ line: `STALE: ${entryLine(e)}`, fail: true }) })
+  return out
+}
+
+// Step-time: only declared keys gate (missing-side legs are PENDING); keyless kinds gate unless baselined.
+export function stepTime(findings, state, declared) {
+  const out = []
+  if (!declared.size) return out
+  for (const f of findings) {
+    if (namesOf(f).some((n) => declared.has(n))) {
+      if (isReported(f, state.policy)) out.push({ line: `REPORTED: ${findingLine(f)}`, fail: false })
+      else if (MISSING_SIDE.has(f.kind)) out.push({ line: `PENDING: ${findingLine(f)}`, fail: false })
+      else out.push({ line: findingLine(f), fail: true })
+    } else if (KEYLESS.has(f.kind) && !state.findings.some((e) => sameId(e, f))) out.push({ line: findingLine(f), fail: true })
+  }
+  return out
+}
+
 export function run(argv) {
   const { values } = parseArgs({
     args: argv,
@@ -615,7 +717,13 @@ export function run(argv) {
     },
   })
   const root = path.resolve(values.root)
-  const registry = loadRegistry(root)
+  const state = loadState(root)
+  const { registry } = state
+  const declared = new Set([
+    ...(values['declared-from'] ? declaredFromSpec(values['declared-from']) : []),
+    ...(values['declared-migration'] ? declaredFromMigration(values['declared-migration']) : []),
+    ...(values.keys ? values.keys.split(',').map((k) => k.trim()).filter(Boolean) : []),
+  ])
   const { stored, secrets, unmodelled } = buildStoredSet(root, { registry })
   const findings = [
     ...unmodelled.map((u) => ({ kind: 'unmodelled-rewrite', namespace: '', key: `L${u.line}`, file: `${SEED_DIR}/${u.file}`, sha256: u.sha256 })),
@@ -624,10 +732,11 @@ export function run(argv) {
     .map((f) => [findingLine(f), f])
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([, f]) => f)
-  const lines = findings.map(findingLine)
-  if (values.json) process.stdout.write(JSON.stringify({ findings, counts: { stored: stored.size, secrets: secrets.size } }, null, 2) + '\n')
+  const results = values.final ? ratchet(findings, state) : stepTime(findings, state, declared)
+  const lines = results.map((r) => r.line)
+  if (values.json) process.stdout.write(JSON.stringify({ findings, results, counts: { stored: stored.size, secrets: secrets.size } }, null, 2) + '\n')
   else if (lines.length) process.stdout.write(lines.join('\n') + '\n')
-  return findings.length ? 1 : 0
+  return results.some((r) => r.fail) ? 1 : 0
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) {

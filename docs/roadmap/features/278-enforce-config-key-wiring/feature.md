@@ -19,6 +19,7 @@
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 1+2 done as one red-green commit (operator Option A): seed-side parser, CLI skeleton, parser fixtures and tests |
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 3+4 done as one red-green commit (operator Option A): reader extraction (Python ast helper, Go/TS regex), forwarder and dynamic registry, reader fixtures and tests |
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 5+6 done as one red-green commit (operator Option A): join with per-environment collapse, four finding kinds, sorted `file:key:kind[:env]` output; join fixtures and tests |
+| 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 7+8 done as one red-green commit (operator Option A): `config-wiring.json` schema and owner validation, `--final` ratchet with env-list shrink, step-time mode with PENDING/REPORTED, declared keys from spec, migration and `--keys`; ratchet fixtures and tests |
 
 ---
 

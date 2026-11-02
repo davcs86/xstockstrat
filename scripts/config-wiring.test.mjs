@@ -74,21 +74,21 @@ test('5 unmodelled rewrite fails closed; allow-list is file plus statement hash'
   assert.match(u.sha256, /^[0-9a-f]{64}$/)
 
   const dir = scratch('unmodelled')
-  let r = cli(dir)
+  let r = cli(dir, '--final')
   assert.equal(r.status, 1)
   assert.match(r.stdout, /002_delete\.up\.sql:.*:unmodelled-rewrite/)
 
   fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true })
   const registry = { forwarders: {}, dynamic: {}, rewriteAllow: [{ file: u.file, sha256: u.sha256, reason: 'fixture' }] }
   fs.writeFileSync(path.join(dir, 'scripts', 'config-wiring.json'), JSON.stringify({ registry }))
-  r = cli(dir)
+  r = cli(dir, '--final')
   assert.notEqual(r.status, 2, r.stderr)
   assert.doesNotMatch(r.stdout, /unmodelled-rewrite/)
   assert.deepEqual(buildStoredSet(dir).unmodelled, [])
 
   const sql = path.join(dir, MIG, '002_delete.up.sql')
   fs.writeFileSync(sql, fs.readFileSync(sql, 'utf8').replace("'staging'", "'production'"))
-  r = cli(dir)
+  r = cli(dir, '--final')
   assert.equal(r.status, 1)
   assert.equal(buildStoredSet(dir).unmodelled.length, 1)
   fs.rmSync(dir, { recursive: true, force: true })
@@ -256,7 +256,7 @@ const SEEDS = 'services/xstockstrat-config/migrations'
 const lines = (r) => r.stdout.split('\n').filter(Boolean)
 
 test('join 1 @AC-1 form-mismatch names both strings and suppresses the pair (both directions)', () => {
-  const r = cli(path.join(JOIN, 'mismatch'))
+  const r = cli(path.join(JOIN, 'mismatch'), '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), [
     `${SEEDS}/001_seed.up.sql:ingest/ingest.signals.window_hours->signals.window_hours:form-mismatch`,
@@ -265,29 +265,29 @@ test('join 1 @AC-1 form-mismatch names both strings and suppresses the pair (bot
 })
 
 test('join 2 @AC-2 seeded-unread names the last seeding migration, no env', () => {
-  const r = cli(path.join(JOIN, 'seeded-unread'))
+  const r = cli(path.join(JOIN, 'seeded-unread'), '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), [`${SEEDS}/002_reseed.up.sql:ledger/stream.notify_enabled:seeded-unread`])
 })
 
 test('join 3+6 @AC-3 read-unseeded is one finding per key across reader files', () => {
-  const r = cli(path.join(JOIN, 'read-unseeded'))
+  const r = cli(path.join(JOIN, 'read-unseeded'), '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), ['services/xstockstrat-ingest/app/config/watcher.py:ingest.backfill.retry_on_failure:read-unseeded'])
 })
 
 test('join 4 @AC-9 an f-string key is one dynamic-read naming file and symbol', () => {
-  const r = cli(READERS)
+  const r = cli(READERS, '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r).filter((l) => l.startsWith(`${PY_A}/dynamic_fstring.py:`)), [`${PY_A}/dynamic_fstring.py:is_enabled:dynamic-read`])
 })
 
 test('join 5 env collapse: missing everywhere has no env; production-only seed reports :staging', () => {
   const root = path.join(JOIN, 'env-collapse')
-  const r = cli(root)
+  const r = cli(root, '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), [
-    'services/xstockstrat-ingest/app/flags.py:ingest.alpha.enabled:read-unseeded:staging',
+    'REPORTED: services/xstockstrat-ingest/app/flags.py:ingest.alpha.enabled:read-unseeded:staging',
     'services/xstockstrat-ingest/app/flags.py:ingest.gamma.enabled:read-unseeded',
   ])
   const j = JSON.parse(cli(root, '--json').stdout)
@@ -298,22 +298,159 @@ test('join 5 env collapse: missing everywhere has no env; production-only seed r
 })
 
 test('join 7 negative matches (dotted, ui/agent bare, 029/031 healed) are wired', () => {
-  const r = cli(path.join(JOIN, 'negative-matches'))
+  const r = cli(path.join(JOIN, 'negative-matches'), '--final')
   assert.equal(r.stdout, '')
   assert.equal(r.status, 0, r.stderr)
 })
 
 test('join 8 a secret row and a GetSecret read give no finding and no value text', () => {
   for (const args of [[], ['--json']]) {
-    const r = cli(path.join(JOIN, 'secret'), ...args)
+    const r = cli(path.join(JOIN, 'secret'), '--final', ...args)
     assert.equal(r.status, 0, r.stdout + r.stderr)
     assert.ok(!(r.stdout + r.stderr).includes('SECRETVALUE-JOIN-913'))
   }
-  assert.equal(cli(path.join(JOIN, 'secret')).stdout, '')
+  assert.equal(cli(path.join(JOIN, 'secret'), '--final').stdout, '')
 })
 
 test('CLI usage errors exit 2', () => {
   const r = spawnSync(process.execPath, [SCRIPT, '--bogus'], { encoding: 'utf8' })
   assert.equal(r.status, 2)
   assert.match(r.stderr, /config-wiring:/)
+})
+
+const RATCHET = path.join(HERE, 'config-wiring-fixtures', 'ratchet')
+const ANALYSIS_MISMATCH = `${SEEDS}/001_seed.up.sql:analysis/fundsignal.enabled->analysis.fundsignal.enabled:form-mismatch`
+const LEDGER_UNREAD = `${SEEDS}/001_seed.up.sql:ledger/stream.notify_enabled:seeded-unread`
+
+// Copies fixture trees into a scratch --root and installs `config` as scripts/config-wiring.json.
+function stage(trees, config) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-ratchet-'))
+  for (const t of trees) fs.cpSync(path.join(RATCHET, t, 'services'), path.join(dir, 'services'), { recursive: true })
+  if (config !== undefined) {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true })
+    const text = typeof config === 'string' ? fs.readFileSync(path.join(RATCHET, config), 'utf8') : JSON.stringify(config)
+    fs.writeFileSync(path.join(dir, 'scripts', 'config-wiring.json'), text)
+  }
+  return dir
+}
+const state = (findings, policy = 'reported') => ({ policy: { envReadUnseeded: policy }, findings, registry: { forwarders: {}, dynamic: {}, rewriteAllow: [] } })
+
+test('ratchet 1 @AC-7 a finding not in the baseline fails --final and is named; a baselined one passes; a gone one is stale', () => {
+  let dir = stage(['new-finding'], 'new-finding/config-wiring.json')
+  let r = cli(dir, '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [LEDGER_UNREAD])
+
+  dir = stage(['new-finding'], state([{ namespace: 'ledger', key: 'stream.notify_enabled', kind: 'seeded-unread', owner: 'feature 278' }]))
+  r = cli(dir, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.equal(r.stdout, '')
+
+  dir = stage(['new-finding'], state([
+    { namespace: 'ledger', key: 'stream.notify_enabled', kind: 'seeded-unread', owner: 'feature 278' },
+    { namespace: 'analysis', key: 'backtest.max_duration_seconds', kind: 'seeded-unread', owner: 'feature 278' },
+  ]))
+  r = cli(dir, '--final')
+  assert.equal(r.status, 1)
+  assert.deepEqual(lines(r), ['STALE: config-wiring.json:analysis/backtest.max_duration_seconds:seeded-unread'])
+})
+
+test('ratchet 2 @AC-8 an entry with an empty or missing owner is rejected by name (exit 2), in every mode', () => {
+  const dir = stage([], 'no-owner/config-wiring.json')
+  for (const args of [[], ['--final'], ['--keys', 'ledger.stream.notify_enabled']]) {
+    const r = cli(dir, ...args)
+    assert.equal(r.status, 2, r.stdout)
+    assert.match(r.stderr, /findings\[1\] seeded-unread:analysis\/backtest\.max_duration_seconds: owner/)
+    assert.match(r.stderr, /findings\[2\] read-unseeded:ingest\.backfill\.retry_on_failure: owner/)
+    assert.doesNotMatch(r.stderr, /findings\[0\]/)
+  }
+  const bogus = stage([], state([{ namespace: 'ledger', key: 'stream.notify_enabled', kind: 'seeded-unread', owner: 'someone' }]))
+  const r = cli(bogus, '--final')
+  assert.equal(r.status, 2)
+  assert.match(r.stderr, /findings\[0\].*owner/)
+})
+
+test('ratchet 3 env-list ratchet: an oversized envs entry is stale-in-part and passes once shrunk', () => {
+  let dir = stage(['stale-in-part'], 'stale-in-part/config-wiring.json')
+  let r = cli(dir, '--final')
+  assert.equal(r.status, 1)
+  assert.deepEqual(lines(r), ['STALE-IN-PART: config-wiring.json:ingest.alpha.enabled:read-unseeded:staging,production (produced: staging)'])
+
+  const shrunk = JSON.parse(fs.readFileSync(path.join(RATCHET, 'stale-in-part', 'config-wiring.json'), 'utf8'))
+  shrunk.findings[0].envs = ['staging']
+  dir = stage(['stale-in-part'], shrunk)
+  r = cli(dir, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+
+  shrunk.findings[0].envs = ['production']
+  dir = stage(['stale-in-part'], shrunk)
+  r = cli(dir, '--final')
+  assert.equal(r.status, 1)
+  assert.ok(lines(r).includes('services/xstockstrat-ingest/app/flags.py:ingest.alpha.enabled:read-unseeded:staging'))
+})
+
+test('ratchet 4 @AC-4 step-time: a form-mismatch on a declared key fails and names finding and key', () => {
+  const r = cli(stage(['step-time']), '--keys', 'analysis.fundsignal.enabled')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
+})
+
+test('ratchet 5 @AC-5 step-time: unrelated findings never block', () => {
+  const dir = stage(['step-time'])
+  let r = cli(dir)
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.equal(r.stdout, '')
+  r = cli(dir, '--keys', 'ingest.some.other_key')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.doesNotMatch(r.stdout, /stream\.notify_enabled/)
+  assert.equal(cli(dir, '--final').status, 1)
+})
+
+test('ratchet 6 @AC-10 --declared-migration on a non-config migration declares its inserted key and fails on its finding', () => {
+  assert.deepEqual(cw.declaredFromMigration(path.join(RATCHET, 'declared', 'migration.up.sql')), ['analysis.fundsignal.enabled'])
+  const r = cli(stage(['step-time']), '--declared-migration', path.join(RATCHET, 'declared', 'migration.up.sql'))
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
+})
+
+test('ratchet 7 two-step: each leg alone is PENDING at step time and fails --final; both legs pass', () => {
+  for (const leg of ['seed-only', 'reader-only']) {
+    const dir = stage([`two-step/${leg}`])
+    let r = cli(dir, '--keys', 'ingest.backfill.new_flag')
+    assert.equal(r.status, 0, r.stdout + r.stderr)
+    assert.equal(lines(r).length, 1)
+    assert.match(lines(r)[0], /^PENDING: .*new_flag:(seeded-unread|read-unseeded)$/)
+    r = cli(dir, '--final', '--keys', 'ingest.backfill.new_flag')
+    assert.equal(r.status, 1)
+    assert.doesNotMatch(r.stdout, /PENDING/)
+  }
+  const both = stage(['two-step/seed-only', 'two-step/reader-only'])
+  assert.equal(cli(both, '--keys', 'ingest.backfill.new_flag').status, 0)
+  assert.equal(cli(both, '--final').status, 0)
+})
+
+test('ratchet 8 policy: reported never changes the exit code; blocking does', () => {
+  const ALPHA = 'services/xstockstrat-ingest/app/flags.py:ingest.alpha.enabled:read-unseeded:staging'
+  let r = cli(stage(['policy'], 'policy/reported/config-wiring.json'), '--final')
+  assert.equal(r.status, 0, r.stderr)
+  assert.deepEqual(lines(r), [`REPORTED: ${ALPHA}`])
+  r = cli(stage(['policy'], 'policy/reported/config-wiring.json'), '--keys', 'ingest.alpha.enabled')
+  assert.equal(r.status, 0, r.stderr)
+  assert.deepEqual(lines(r), [`REPORTED: ${ALPHA}`])
+
+  r = cli(stage(['policy'], 'policy/blocking/config-wiring.json'), '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [ALPHA])
+
+  r = cli(stage(['policy'], { policy: { envReadUnseeded: 'warn' }, findings: [] }), '--final')
+  assert.equal(r.status, 2)
+  assert.match(r.stderr, /envReadUnseeded/)
+})
+
+test('ratchet 9 --declared-from reads keys only from ## Config Key Changes', () => {
+  const spec = path.join(RATCHET, 'declared', 'product-spec.md')
+  assert.deepEqual(cw.declaredFromSpec(spec), ['analysis.fundsignal.enabled', 'ingest.backfill.new_flag', 'ingest.backfill.retry_on_failure'])
+  const r = cli(stage(['step-time']), '--declared-from', spec)
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
 })
