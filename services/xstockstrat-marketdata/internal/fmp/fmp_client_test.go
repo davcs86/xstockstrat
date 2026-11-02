@@ -458,6 +458,9 @@ func TestEnrichmentClassifier_StagesAndOther(t *testing.T) {
 		if got := enrichmentClass(tc.err); got != tc.class {
 			t.Errorf("%s: class = %q, want %q", tc.name, got, tc.class)
 		}
+		if got := ErrorClass(tc.err); got != tc.class || got == "" {
+			t.Errorf("%s: ErrorClass = %q, want %q (never empty, AC-5)", tc.name, got, tc.class)
+		}
 		if got := enrichmentExpires(tc.err); got != tc.expires {
 			t.Errorf("%s: expires = %v, want %v", tc.name, got, tc.expires)
 		}

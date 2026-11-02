@@ -687,3 +687,17 @@ the round-2 block above.
   `golangci-lint run ./internal/fmp/` 0 issues.
 - **Deviations:** none. Severity SEV-3 (unchanged).
 - **Files modified:** `services/xstockstrat-marketdata/internal/fmp/fmp_client.go`.
+
+## Session 2026-11-02 — Step 2 (test: `fmp.ErrorClass` classes, AC-5 classifier half)
+
+- **Change (operator decision (1)):** no new table. The loop of 255's `TestEnrichmentClassifier_StagesAndOther`
+  (`internal/fmp/fmp_client_test.go:444`) gained one assertion per row: `ErrorClass(tc.err) == tc.class` and
+  `!= ""` (`:461-463`). No rows added: every AC-5 class (`ctx`, `cap`, `other`, `transport`) is already a row.
+  Rows the table lacks but that are not AC-5 classes (`read`/`decode` stages, limiter, `context.Canceled`, `http_500`)
+  were deliberately not added (spec instruction 2).
+- **TDD:** RED via `go test -overlay` replacing `fmp_client.go` with a copy minus the `ErrorClass` line (no tracked
+  file touched) → `internal/fmp/fmp_client_test.go:461:13: undefined: ErrorClass` / `[build failed]`. GREEN:
+  `--- PASS: TestEnrichmentClassifier_StagesAndOther`, `--- PASS: TestEnrichment_WarnDoesNotLeakAPIKey`.
+- **Verification:** full `go test ./... -race` ok; coverage total 81.9% (>= 40%); `golangci-lint run` 0 issues.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go`.

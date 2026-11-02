@@ -20,6 +20,7 @@
 | 2026-11-02 | `implementation-ready` (re-spec) | /sdd-execute | Steps 0–7 re-anchored on `cfd240af` after the `origin/main-dev` merge; pre-execution gate passes (255 landed). Operator decisions: Step 2 extends 255's classifier table, Step 4 folds `infoRecorder` into one level-aware recorder |
 | 2026-11-02 | `implementation-ready` → `in-progress` | /sdd-execute | `sequential` mode (sdd-batch-execute); operator up-front confirmation given 2026-11-02 |
 | 2026-11-02 | `in-progress` (Step 1 done) | /sdd-execute | Step 1 — exported `fmp.ErrorClass` (`fmp_client.go:348`) delegating to 255's `enrichmentClass`; RED `undefined: ErrorClass`, GREEN after export |
+| 2026-11-02 | `in-progress` (Step 2 done) | /sdd-execute | Step 2 — `TestEnrichmentClassifier_StagesAndOther` now asserts `ErrorClass == class` and never empty on every row (AC-5); no new rows; RED `undefined: ErrorClass` (overlay), GREEN |
 
 ---
 
@@ -55,4 +56,4 @@ later-call labelling guard plus rate-limited Info-level fill visibility.
 
 ## Next Action
 
-`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 2 (extend 255's classifier table to assert `ErrorClass`); Step 1 done 2026-11-02
+`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 4 RED (fill-visibility tests on the pre-Step-3 tree), then Step 3; Steps 1–2 done 2026-11-02

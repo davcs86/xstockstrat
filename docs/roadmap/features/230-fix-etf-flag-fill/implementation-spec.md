@@ -144,7 +144,7 @@ grep -n "^func ErrorClass(err error) string" services/xstockstrat-marketdata/int
 
 ### Step 2 — test: extend 255's classifier table to pin `fmp.ErrorClass`, never empty (AC-5, classifier half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — modify
