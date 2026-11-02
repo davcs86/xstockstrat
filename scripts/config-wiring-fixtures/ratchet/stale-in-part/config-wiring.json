@@ -1,0 +1,8 @@
+{
+  "policy": { "envReadUnseeded": "blocking" },
+  "findings": [
+    { "namespace": "", "key": "ingest.alpha.enabled", "kind": "read-unseeded", "envs": ["staging", "production"], "owner": "feature 278" },
+    { "namespace": "", "key": "ingest.beta.enabled", "kind": "read-unseeded", "envs": ["production"], "owner": "feature 278" }
+  ],
+  "registry": { "forwarders": {}, "dynamic": {}, "rewriteAllow": [] }
+}

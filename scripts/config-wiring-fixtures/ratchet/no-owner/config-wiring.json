@@ -1,0 +1,9 @@
+{
+  "policy": { "envReadUnseeded": "reported" },
+  "findings": [
+    { "namespace": "ledger", "key": "stream.notify_enabled", "kind": "seeded-unread", "owner": "feature 278" },
+    { "namespace": "analysis", "key": "backtest.max_duration_seconds", "kind": "seeded-unread", "owner": "" },
+    { "namespace": "", "key": "ingest.backfill.retry_on_failure", "kind": "read-unseeded" }
+  ],
+  "registry": { "forwarders": {}, "dynamic": {}, "rewriteAllow": [] }
+}
