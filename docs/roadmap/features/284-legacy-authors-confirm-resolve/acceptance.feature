@@ -120,3 +120,19 @@ Feature: legacy-authors-confirm-resolve
     Given users.json holds no active user whose email local part is "alice"
     When the picker reaches F3 "alice" (ambiguous in the plan)
     Then the output says there is no eligible user for "alice", no prompt is shown for it, and F3 is still "ambiguous"
+
+  @AC-20 @FR-5
+  Scenario: --yes with --map prints the override targets it wrote
+    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb --yes`
+    Then the output lists F1 and F2 with "davcs86 (80880990-2b79-4d85-8761-d8d9102c2efb)" and status "confirmed" before the digest
+
+  @AC-21 @FR-4
+  Scenario: a declined confirmation says so
+    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb`, answer "s" to the picker for "alice" (F3), then answer "n" to the confirmation
+    Then the output contains "Not confirmed; plan.json unchanged." and no digest
+
+  @AC-22 @FR-3
+  Scenario: EOF stops the picker for every remaining author
+    Given plan.json holds F1 "ghost" unmappable and F5 "carol" unmappable, and stdin is closed
+    When I run `confirm`
+    Then the active-user list is printed at most once and F1 and F5 are still "unmappable"

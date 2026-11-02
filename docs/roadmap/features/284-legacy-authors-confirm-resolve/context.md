@@ -41,3 +41,19 @@
 - OQ-4 correction: the picker lists every active user's email local part, which IS new console exposure; runbook §5 must say so and recommend `--map` for recorded/shared sessions.
 - Folded in without a fork (adversary SHOULD-FIX/NIT): parity test pinning the copied candidate rule to `la.classify`; keep the exact current prompt/"No suggested rows" wording when nothing was overridden; print `format_plan` before the picker and before the confirmation; build the display map from the strict `load_users` result.
 - Operator chose to run another round before approving (round 2 follows).
+
+## Session 2026-11-02 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (service: xstockstrat-indicators; key reuse: injected `ask=input`, strict `la.load_users`, `la.ApplyRefused` exit 2, `sub.choices[...]` argparse pattern). Business rules: 8 guarantees from the 276 suite, none CHANGE.
+- Phase 1 Grilling: 2 rounds (quick mandated 1; operator asked for a second). Round 1 adversary: NEEDS WORK, no Floor breach. Round 2 adversary: SOUND, no Floor breach, no blockers.
+- Chosen approach: all code in `legacy_authors_ops.py`; pure helpers + `confirm(work,*,yes,maps=(),ask=input)`; validate-all-then-single-write; lazy strict `users.json`; per-author picker; one combined prompt. Rejected: classify-as-oracle, stored candidates, TTY switch, per-row picker, shared `_refused` helper touching apply.
+- Operator decisions (AskUserQuestion): per-author picker; unreadable `users.json` without `--map` -> skip picker with warning; round-2 design approved incl. broader EOF reading (first EOF stops the picker).
+- Round-2 fold-ins recorded in design.md; spec/acceptance amended (FR-3, FR-4, FR-5; `@AC-20`, `@AC-21`, `@AC-22` added).
+- Constitution rules touched: C-08, C-11, C-13, C-14, C-15, C-16, C-18, P-03, F-04. Floor breaches: none.
+- Status: spec-ready -> design-approved.
+
+### Open Threads
+- [ ] Piped-`y` silent no-op mitigated by the `Not confirmed` line + runbook wording — verify at the docs step.
+- [ ] Parity test samples 5 authors only — revisit if `classify`'s rule changes.
+- [ ] Teardown: context-forge refresh (or manual reconciliation) recorded in the PR body — at PR time.
+- [ ] Overlap with 243 on `services/xstockstrat-indicators/CLAUDE.md` (disjoint hunks) — rebase at integration.
