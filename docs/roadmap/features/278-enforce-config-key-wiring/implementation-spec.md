@@ -364,7 +364,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ### Step 9 — docs: First offline run on the real tree (record counts, no baseline yet)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/278-enforce-config-key-wiring/`
 **Files**:
 - `docs/roadmap/features/278-enforce-config-key-wiring/context.md` — modify (append the run record)

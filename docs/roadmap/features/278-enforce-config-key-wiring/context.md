@@ -351,3 +351,81 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
 - Open item for Step 11: until `findings` and `registry.dynamic` are populated, any step-time run with a declared key fails on the real tree's 46 unbaselined `dynamic-read` sites.
 - Severity: n/a.
+
+## Session 2026-11-01 — sdd-execute 278 step 9
+
+### Step 9 — First offline run on the real tree [done]
+- Command: `node scripts/check-config-wiring.mjs --final --json > <scratchpad>/first-run.json`, run against the committed `scripts/config-wiring.json` (empty `findings`, empty registry, policy `reported`). It exited 1. No staging or production read or write was made.
+- Stored set: 180 rows, plus 8 secrets that are excluded from the comparison. Migrations 000-034.
+- First-run counts per kind (150 findings in all):
+
+  | Kind | Count |
+  |---|---|
+  | `form-mismatch` | 9 |
+  | `seeded-unread` | 31 |
+  | `read-unseeded` | 64 (63 blocking, 1 printed `REPORTED:`) |
+  | `dynamic-read` | 46 |
+  | `unmodelled-rewrite` | 0 |
+
+- `read-unseeded env=` entries (1): `trading.fill_poller.interval_ms:production` (`services/xstockstrat-trading/internal/service/trading.go`). It prints `REPORTED:` under `policy.envReadUnseeded: reported`.
+
+**Reconciliation against the Step 9 expected set.**
+- The first run differs from the expected set mainly because no forwarder is registered yet. Reads through `int_positive`, `str_nonempty`, `float_positive` (analysis/indicators/ingest `watcher.py`) and `resolvePositiveInt` (marketdata) are not attributed to a key. So:
+  - The ingest group, four `fundsignal.*` keys, `fundsignal.source_slug` and the 031-healed sandbox keys show as `seeded-unread`.
+  - The forwarder bodies show as `dynamic-read`.
+  - Three of the seven expected unseeded keys are missing: `ingest.backfill.max_concurrent_jobs`, `indicators.sandbox.max_concurrent` and the other `int_positive` readers.
+- Diagnostic re-run, not committed: a scratch `--root` symlinked the real `services/` and used a scratch `config-wiring.json` that registered six forwarders, each with `keyArg` 1. They were the four the Step 11 spec lists plus analysis `watcher.py:str_nonempty` and `watcher.py:float_positive`. Result:
+
+  | Kind | Count |
+  |---|---|
+  | `form-mismatch` | 19 |
+  | `seeded-unread` | 9 |
+  | `read-unseeded` | 91 |
+  | `dynamic-read` | 40 |
+
+- `form-mismatch` 19 matches the expected set exactly:
+  - Ingest (5): `backfill.chunk_max_bars`, `backfill.chunk_window_days`, `backfill.max_concurrent_chunks`, `mcp_client.poll_interval_seconds`, `mcp_client.request_timeout_seconds`.
+  - Analysis (14): the twelve `fundsignal.*` keys, `scoring.signal_decay_half_life_hours` and `backtest.max_duration_seconds`.
+  - `fundsignal.source_slug` is read through `str_nonempty` (`fundsignal_loop.py:44`). That forwarder is absent from Step 11's expected forwarder list, and without it the analysis count is 13.
+- All seven expected `read-unseeded` keys are present: `ingest.backfill.max_concurrent_jobs`, `ingest.backfill.retry_on_failure`, `ingest.backfill.max_retry_attempts`, `ingest.signals.dedup_window_hours`, `analysis.fundsignal.retry_seconds`, `analysis.fundsignal.startup_jitter_seconds` and `indicators.sandbox.max_concurrent`.
+- Expected-gone keys are confirmed gone:
+  - No `indicators.sandbox.timeout_ms`/`memory_bytes`/`allowed_imports` finding remains once forwarders are registered.
+  - There is no `portfolio.snapshot.interval_minutes` finding.
+  - There is no `ledger.stream.resolve_timeout_ms` finding.
+- The expected `seeded-unread` is `ledger` `stream.notify_enabled` (001:65). It is present. The run also reports 8 more `seeded-unread` that were not in the 277-derived expected set:
+  - `marketdata.alpaca.paper`, `platform.log_level` and `trading.risk.daily_loss_limit` (002).
+  - `agent` `signal.alert_threshold` (004).
+  - `marketdata.fmp.cache_ttl_hours` (007).
+  - `marketdata.finnhub.cache_ttl_hours` and `marketdata.finnhub.enabled` (015).
+  - `analysis.opportunity.sparkline_bars` (028).
+
+  A grep found no non-test reader for seven of them. The exception is `signal.alert_threshold`: the agent reads it through the module constant `_ALERT_THRESHOLD_CONFIG_KEY` (`services/xstockstrat-agent/app/tools.py:78`) passed to `get_config_value`. That read is reported as `dynamic-read` (`services/xstockstrat-agent/app/client.py`), so this `seeded-unread` is an extractor gap. Step 11 Instruction 4 says to fix it in the extractor and not to baseline it.
+- The run also reports 84 `read-unseeded` keys beyond the expected 7. These are readers with in-code defaults and no seed row, across:
+  - analysis: `scoring.*`, `backtest.default_*`, `opportunity.*`, `screener.*`, …
+  - marketdata: `stream.*`, `edgar.*`, `fundamentals.history.*`, `quotes.*`, …
+  - trading: `reconciliation.*`, `order.*`, `order_intent.*`, `broker.*`, …
+  - portfolio: `risk.*`, `marketdata.*`, `exposure.factor_map`.
+  - identity: `jwt.*_ttl_seconds`.
+
+  The 277 sweep covered only ingest/analysis/indicators/ledger, so it never listed them. They are real FR-1 findings.
+- The 40 remaining `dynamic-read` sites are the per-service getter bodies (`ConfigWatcher.get_*`, `getInt`/`getBool`/…) and a few runtime-built keys. Step 11 classifies each as either a registered `dynamic` entry or an extractor fix. The false-dynamic-read count must reach zero.
+
+**Open-risk checks.**
+- (a) No migration after 017 renames environments. `SET environment` appears only at `017_config_secrets_and_scoping.up.sql:38-39`. The `environment` references in 029:42 and 031:23/72 are predicates or conflict targets, not renames. **Closed.**
+- (b) No migration trips the fail-closed trigger. The run produced 0 `unmodelled-rewrite`, so every `UPDATE`/`DELETE` on `config.config_values` was classified by the Step 1 closed model: 009, 016, 017, 020, 029, 031, 032 and 034. 002, 005, 025 and 033 are INSERT-only. `registry.rewriteAllow` stays empty. No model extension and no fixture were needed. **Closed.**
+
+**Proposed owners (Instruction 3).**
+- `feature 278`: every `form-mismatch` (19), the dead seed `ledger` `stream.notify_enabled`, every other `seeded-unread`, and every `read-unseeded`, including `indicators.sandbox.max_concurrent`. This follows the 2026-11-01 operator ruling that 277 entries collapse to 278.
+- `feature 243`: none. No `indicators.sandbox.*` finding inside 243's scope remains after 031.
+
+**Open items for Step 11.**
+1. Register `str_nonempty` and `float_positive` (analysis `watcher.py`, `keyArg` 1) next to the four listed forwarders. Without them, `fundsignal.source_slug` mis-classifies as `seeded-unread`.
+2. Before freezing, resolve `signal.alert_threshold` (module-constant key) through the extractor and not the baseline.
+3. The baseline will be far larger than the 277 sweep: roughly 19 + 9 + 91 findings, before `dynamic` triage. The Platform Lead and `xstockstrat-config` owner reviewers on Step 11 should expect this.
+
+- TDD: N/A (non-code-bearing: records a run, writes no code).
+- Verification: `node scripts/check-config-wiring.mjs --final --json | node -e "…console.log(Object.keys(j))" && grep -n "sdd-execute 278 step 9" …/context.md` printed `[ 'findings', 'results', 'counts' ]` and the session-header line.
+- Files modified: `docs/roadmap/features/278-enforce-config-key-wiring/context.md`.
+- Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
+- Deviations: none.
+- Severity: n/a.
