@@ -26,6 +26,7 @@
 | 2026-11-02 | `in-progress` (Step 5 done) | /sdd-execute | Step 5 — `TestEtfFlagFiller_LabelledAfterGateReopens_AC2`: a symbol skipped by a closed budget gate (200/250) is re-enqueued, fetched and labelled once the gate reopens (5/250) (`@AC-2`); P-06 waiver (regression guard), mutation RED (closed-gate skip negative-cached → `source calls = 0, want 1`) → GREEN under `-race` |
 | 2026-11-02 | `in-progress` (Step 6 done) | /sdd-execute | Step 6 — marketdata `CLAUDE.md` `GetEtfFlags` paragraph: `etfFlagLogEvery` 1 minute added to the fixed invariants, plus one bullet on the three Info fill records (`skipped` reasons, `failed` class-only, `unlabelled`), their rate limits and `trace_id`; `not_wired` left undocumented. TDD N/A (docs) |
 | 2026-11-02 | `in-progress` (Step 7 done) | /sdd-execute | Step 7 — C-14 read-only consumer check: feature diff vs `origin/main-dev` touches no analysis/ui/agent/proto file; `_fundamentals_gap_labels` (`servicer.py:2042`) still maps `is_etf` true → `FUNDAMENTALS_GAP_ETF` (`:2057-2058`); analysis `ruff check`/`format --check` clean. TDD N/A (read-only). All 7 steps done |
+| 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute | ALL-DONE PATH: dependency 255 merged as `5bf18403` (PR #1394); C-16 promotion (operator pre-approved) wrote `@AC-2`–`@AC-7` to `services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature` with `@feature-230`; integration PR opened to `main-dev` |
 
 ---
 
@@ -61,4 +62,4 @@ later-call labelling guard plus rate-limited Info-level fill visibility.
 
 ## Next Action
 
-All 7 steps done 2026-11-02. Next: flip `status.md` to `code-completed`, check `merge-order.md` (after 255), then open the integration PR (`/sdd-execute fix-etf-flag-fill sequential` final phase; PR body carries the root CLAUDE.md Teardown record for the Step 6 marketdata `CLAUDE.md` edit)
+`code-completed` 2026-11-02; integration PR open to `main-dev`. Next: merge on green CI, then post-deploy re-run feature 215 Step 26(a) on staging (SCHD should reach `FUNDAMENTALS_GAP_ETF` after a first miss)
