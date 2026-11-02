@@ -223,7 +223,7 @@ func TestEtfFlagFiller_EvictsOldestAtBound(t *testing.T) {
 	delete(svc.etf.entries, "S0")
 	svc.etf.mu.Unlock()
 
-	svc.fillEtfFlag(context.Background(), "NEW")
+	svc.fillEtfFlag(context.Background(), etfFillItem{sym: "NEW"})
 
 	svc.etf.mu.Lock()
 	defer svc.etf.mu.Unlock()

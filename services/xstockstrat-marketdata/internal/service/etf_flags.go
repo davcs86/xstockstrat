@@ -7,6 +7,8 @@ import (
 	"time"
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/fmp"
+	"github.com/xstockstrat/marketdata/internal/middleware"
 )
 
 // etfFlagSource reads a symbol's vendor ETF flag through the shared FMP gateway (nil = empty profile).
@@ -22,7 +24,12 @@ const (
 	etfFlagCacheMax = 10000
 	// etfFlagQueueCap bounds pending background fills; GetEtfFlags drops (never blocks) when full.
 	etfFlagQueueCap = 256
+	// etfFlagLogEvery is the fill-log rate-limit window: a fixed invariant, not a config key.
+	etfFlagLogEvery = time.Minute
 )
+
+// etfFillItem carries the enqueuing request's trace id to the filler; the request ctx never crosses over.
+type etfFillItem struct{ sym, traceID string }
 
 type etfFlagEntry struct {
 	isEtf     *bool
@@ -35,8 +42,13 @@ type etfFlagState struct {
 	mu      sync.Mutex
 	entries map[string]etfFlagEntry
 	pending map[string]struct{}
-	queue   chan string
+	queue   chan etfFillItem
 	now     func() time.Time
+	// Fill-log rate-limit slots, guarded by mu.
+	lastSkipReason     string
+	budgetLoggedAt     time.Time
+	failLoggedAt       map[string]time.Time
+	unlabelledLoggedAt time.Time
 }
 
 // SetEtfFlagSource wires the FMP profile reader; it must be the same *fmp.Client as the fundamentals
@@ -47,7 +59,8 @@ func (s *MarketDataService) SetEtfFlagSource(src etfFlagSource) {
 	s.etf.src = src
 	s.etf.entries = map[string]etfFlagEntry{}
 	s.etf.pending = map[string]struct{}{}
-	s.etf.queue = make(chan string, etfFlagQueueCap)
+	s.etf.failLoggedAt = map[string]time.Time{}
+	s.etf.queue = make(chan etfFillItem, etfFlagQueueCap)
 }
 
 func (e *etfFlagState) clock() time.Time {
@@ -59,10 +72,11 @@ func (e *etfFlagState) clock() time.Time {
 
 // GetEtfFlags serves cached labels only and never calls FMP; a miss (or expired entry) is unset and
 // queued for the background filler.
-func (s *MarketDataService) GetEtfFlags(_ context.Context, req *marketdatav1.GetEtfFlagsRequest) (*marketdatav1.GetEtfFlagsResponse, error) {
+func (s *MarketDataService) GetEtfFlags(ctx context.Context, req *marketdatav1.GetEtfFlagsRequest) (*marketdatav1.GetEtfFlagsResponse, error) {
 	symbols := normalizeSymbols(req.GetSymbols())
 	resp := &marketdatav1.GetEtfFlagsResponse{Flags: make([]*marketdatav1.EtfFlag, 0, len(symbols))}
 	now := s.etf.clock()
+	tid := middleware.FromContext(ctx).TraceID
 	s.etf.mu.Lock()
 	defer s.etf.mu.Unlock()
 	for _, sym := range symbols {
@@ -73,14 +87,14 @@ func (s *MarketDataService) GetEtfFlags(_ context.Context, req *marketdatav1.Get
 				flag.IsEtf = &v
 			}
 		} else {
-			s.etf.enqueueLocked(sym)
+			s.etf.enqueueLocked(sym, tid)
 		}
 		resp.Flags = append(resp.Flags, flag)
 	}
 	return resp, nil
 }
 
-func (e *etfFlagState) enqueueLocked(sym string) {
+func (e *etfFlagState) enqueueLocked(sym, traceID string) {
 	if e.queue == nil {
 		return
 	}
@@ -88,7 +102,7 @@ func (e *etfFlagState) enqueueLocked(sym string) {
 		return
 	}
 	select {
-	case e.queue <- sym:
+	case e.queue <- etfFillItem{sym: sym, traceID: traceID}:
 		e.pending[sym] = struct{}{}
 	default:
 	}
@@ -106,43 +120,119 @@ func (s *MarketDataService) StartEtfFlagFiller(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case sym := <-q:
-			s.fillEtfFlag(ctx, sym)
+		case item := <-q:
+			s.fillEtfFlag(ctx, item)
 		}
 	}
 }
 
-func (s *MarketDataService) fillEtfFlag(ctx context.Context, sym string) {
+// fillEtfFlag logs only after releasing etf.mu, and never logs the error text (it can carry apikey=).
+func (s *MarketDataService) fillEtfFlag(ctx context.Context, item etfFillItem) {
+	sym := item.sym
 	defer func() {
 		s.etf.mu.Lock()
 		delete(s.etf.pending, sym)
 		s.etf.mu.Unlock()
 	}()
-	if !s.etfFillAllowed() {
+	attrs := func(kv ...any) []any {
+		a := append([]any{"symbol", sym}, kv...)
+		if item.traceID != "" {
+			a = append(a, "trace_id", item.traceID)
+		}
+		return a
+	}
+	reason, used, cap, snap := s.etfFillGate()
+	s.etf.mu.Lock()
+	if reason != "" {
+		log := s.etf.skipLogLocked(reason)
+		s.etf.mu.Unlock()
+		if log {
+			kv := []any{"reason", reason}
+			if snap {
+				kv = append(kv, "used", used, "cap", cap)
+			}
+			slog.InfoContext(ctx, "etf flag fill skipped", attrs(kv...)...)
+		}
 		return
 	}
+	s.etf.lastSkipReason = ""
+	s.etf.mu.Unlock()
 	isEtf, err := s.etf.src.FetchIsEtf(ctx, sym)
 	if err != nil {
-		slog.DebugContext(ctx, "etf flag fill failed", "symbol", sym, "error", err)
+		class := fmp.ErrorClass(err)
+		s.etf.mu.Lock()
+		log := s.etf.failLogLocked(class)
+		s.etf.mu.Unlock()
+		if log {
+			slog.InfoContext(ctx, "etf flag fill failed", attrs("class", class)...)
+		}
 		return
 	}
 	now := s.etf.clock()
 	s.etf.mu.Lock()
-	defer s.etf.mu.Unlock()
 	if _, exists := s.etf.entries[sym]; !exists && len(s.etf.entries) >= etfFlagCacheMax {
 		s.etf.evictOldestLocked()
 	}
 	s.etf.entries[sym] = etfFlagEntry{isEtf: isEtf, fetchedAt: now}
+	log := isEtf == nil && s.etf.unlabelledLogLocked()
+	s.etf.mu.Unlock()
+	if log {
+		slog.InfoContext(ctx, "etf flag fill unlabelled", attrs()...)
+	}
 }
 
-// etfFillAllowed gates the best-effort fill: FMP on, a real (cap > 0) budget, and below the 80% mark
-// so the label never spends the headroom the snapshot path needs.
-func (s *MarketDataService) etfFillAllowed() bool {
-	if s.etf.src == nil || s.fundCfg == nil || !s.fundCfg.GetBool("marketdata.fmp.enabled", false) || s.fmpBudget == nil {
+// etfFillGate gates the best-effort fill: FMP on, a real (cap > 0) budget, and below the 80% mark so the
+// label never spends the snapshot path's headroom. It takes fmp.Client.mu, so never call it under etf.mu.
+func (s *MarketDataService) etfFillGate() (reason string, used, cap int, snap bool) {
+	if s.etf.src == nil || s.fundCfg == nil {
+		return "not_wired", 0, 0, false
+	}
+	if !s.fundCfg.GetBool("marketdata.fmp.enabled", false) {
+		return "fmp_disabled", 0, 0, false
+	}
+	if s.fmpBudget == nil {
+		return "not_wired", 0, 0, false
+	}
+	used, cap = s.fmpBudget.BudgetSnapshot()
+	switch {
+	case cap <= 0:
+		return "no_cap", used, cap, true
+	case atQuotaAlertThreshold(used, cap):
+		return "budget", used, cap, true
+	}
+	return "", used, cap, true
+}
+
+// skipLogLocked logs a config reason on change and "budget" at most once per etfFlagLogEvery.
+func (e *etfFlagState) skipLogLocked(reason string) bool {
+	now := e.clock()
+	if reason == e.lastSkipReason && (reason != "budget" || now.Sub(e.budgetLoggedAt) < etfFlagLogEvery) {
 		return false
 	}
-	used, cap := s.fmpBudget.BudgetSnapshot()
-	return cap > 0 && !atQuotaAlertThreshold(used, cap)
+	e.lastSkipReason = reason
+	if reason == "budget" {
+		e.budgetLoggedAt = now
+	}
+	return true
+}
+
+// failLogLocked keeps one slot per class; the map is bounded by fmp.ErrorClass's finite output.
+func (e *etfFlagState) failLogLocked(class string) bool {
+	now := e.clock()
+	if now.Sub(e.failLoggedAt[class]) < etfFlagLogEvery {
+		return false
+	}
+	e.failLoggedAt[class] = now
+	return true
+}
+
+func (e *etfFlagState) unlabelledLogLocked() bool {
+	now := e.clock()
+	if now.Sub(e.unlabelledLoggedAt) < etfFlagLogEvery {
+		return false
+	}
+	e.unlabelledLoggedAt = now
+	return true
 }
 
 func (e *etfFlagState) evictOldestLocked() {

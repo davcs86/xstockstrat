@@ -701,3 +701,29 @@ the round-2 block above.
 - **Verification:** full `go test ./... -race` ok; coverage total 81.9% (>= 40%); `golangci-lint run` 0 issues.
 - **Deviations:** none. Severity SEV-3 (unchanged).
 - **Files modified:** `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go`.
+
+## Session 2026-11-02 — Step 3 (service: ETF filler trace id, gate reason, rate-limited Info records)
+
+- **Change (`internal/service/etf_flags.go`):** `etfFlagLogEvery = time.Minute` const; `etfFillItem{sym, traceID}`
+  queue item (`chan etfFillItem`); `GetEtfFlags` reads `middleware.FromContext(ctx).TraceID` before locking and passes
+  it to `enqueueLocked(sym, traceID)`; `StartEtfFlagFiller` passes the item on the loop ctx. `etfFillAllowed` removed
+  (sole caller) and replaced by `etfFillGate() (reason, used, cap, snap)` (`not_wired`/`fmp_disabled`/`no_cap`/
+  `budget`/`""`, existing order, still outside `etf.mu`). Rate-limit slots `lastSkipReason`, `budgetLoggedAt`,
+  `failLoggedAt` (map, made in `SetEtfFlagSource`), `unlabelledLoggedAt` under `mu`, with `skipLogLocked`/
+  `failLogLocked`/`unlabelledLogLocked`; an open gate clears `lastSkipReason`. Records `etf flag fill skipped`
+  (`reason`, `used`/`cap` only when snapshotted), `etf flag fill failed` (`class` via `fmp.ErrorClass`, never the
+  error), `etf flag fill unlabelled` (`symbol` only), each `slog.InfoContext` after `mu` is released, `trace_id`
+  appended only when non-empty. Cache write, negative cache, TTL, bound and 80% threshold unchanged.
+  `etf_flags_test.go:226` → `etfFillItem{sym: "NEW"}` (the one compile fix).
+- **TDD (P-06, test-first):** RED probe = Step-4-style assertions (AC-3 budget skip with `used`/`cap`, AC-5 `cap`
+  class with no `error`/`SECRET`, AC-4/AC-6 unlabelled once per window, AC-7 `trace_id=t-1` via
+  `middleware.UnaryServerInterceptor`) added via `go test -overlay` as an untracked `zz_step3_probe_test.go` on the
+  pre-Step-3 tree → all four `FAIL` with zero Info records (`skipped records = []`, `failed records = []`,
+  `unlabelled = 0`, `AC-7: []`). After the change: all four `PASS`, and the eight existing `@AC-14` ETF tests pass
+  under `-race`. The probe was never written to the tree; Step 4 authors the committed tests.
+- **Verification:** `go build ./...` + `go vet ./internal/service/` clean; DebugContext/`"error", err`/`err.Error()`
+  grep no hits; `etfFillAllowed` grep no hits; TraceID/`chan etfFillItem`/`fmp.ErrorClass(err)`/`etfFlagLogEvery`
+  each present. Extra: full `go test ./... -race` ok; `golangci-lint run` 0 issues.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/service/etf_flags.go`,
+  `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.

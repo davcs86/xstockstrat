@@ -192,7 +192,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 3 — service: the ETF filler carries the trace id, reports a gate reason, and emits rate-limited Info records
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/etf_flags.go` — modify
