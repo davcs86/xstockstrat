@@ -15,11 +15,11 @@ As an operator repairing legacy-username formula authors, I want `confirm` to re
 ## Functional Requirements
 
 FR-1. `confirm` accepts a repeatable `--map <legacy_author>=<user_id>`. One mapping resolves every `unmappable` or `ambiguous` row whose `old_author` equals `<legacy_author>` exactly.
-FR-2. A mapping target must be a UUID present in `users.json` with `is_active=true`; for an `ambiguous` row it must also be one of that row's matched candidates. Any invalid `--map` (malformed, inactive or unknown user, or a legacy author matching no unresolved row) aborts `confirm` before the plan is written, exit code non-zero, plan file byte-identical.
+FR-2. A mapping target must be a UUID present in `users.json` with `is_active=true`; for an `ambiguous` row it must also be one of that row's matched candidates. `--map` is split on the last `=`. Any invalid `--map` (malformed, unknown user, inactive user, a legacy author matching no unresolved row, or the same legacy author mapped to two different targets) aborts `confirm` before the plan is written with exit code 2 and the plan file byte-identical. Validation reads `users.json` with the strict `legacy_authors.load_users`, so a missing or malformed file aborts too.
 FR-3. After `--map` is applied, rows still `unmappable` or `ambiguous` are offered one at a time in an interactive numbered picker with a skip option. For an `ambiguous` row the picker lists only its matched candidate users; for an `unmappable` row it lists all active users. EOF or empty input skips the row.
-FR-4. Every row resolved by FR-1 or FR-3 gets `new_author=<user_id>`, `source="override"`, `status="confirmed"`. Resolved rows are listed and need an explicit second `y/N` before the plan is written. Declining writes nothing.
-FR-5. With `--yes`, the picker and the second confirmation are skipped: only rows resolved by explicit `--map` are written, and rows still unresolved stay untouched.
-FR-6. `confirm` also runs when there are no `suggested` rows but unresolved rows exist (today it exits early with "No suggested rows"). `suggested` handling, the printed digest and the exit codes are otherwise unchanged.
+FR-4. Every row resolved by FR-1 or FR-3 gets `new_author=<user_id>`, `source="override"`, `status="confirmed"`. The resolved rows are listed together with any `suggested` rows in the one existing confirmation prompt, and nothing is written until it is answered `y`. Declining writes nothing and exits 0.
+FR-5. With `--yes`, the prompt and the picker are skipped. `suggested` rows are confirmed exactly as today, rows named by `--map` are resolved, and every other unresolved row stays untouched.
+FR-6. `confirm` also runs when there are no `suggested` rows but unresolved rows exist (today it exits early with "No suggested rows"). `suggested` handling and the printed digest are otherwise unchanged, and so are the exit codes for success (0), decline or EOF (0) and a plan with nothing to confirm (0). The picker lists active users in `users.json` order.
 FR-7. `legacy_authors.py` (`validate_for_apply`, `run_apply`, the SQL guards) is not modified; a plan written by FR-4 passes the existing apply-time checks unchanged.
 FR-8. Runbook §5 and the module docstring document the new flow; hand-editing `plan.json` is retained only as a fallback note.
 
@@ -72,6 +72,6 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 None open. Resolved 2026-11-02 by the operator ("go with your recommendations"):
 
 - OQ-1 (resolved). An `ambiguous` row accepts only its matched candidates, from `--map` as well as from the picker: one rule for both paths. An `unmappable` row accepts any active user.
-- OQ-2 (resolved). `--map` plus `--yes` is the non-interactive path; the explicit flag is the decision, so the second y/N is skipped. Without `--yes` the second y/N is always interactive.
+- OQ-2 (resolved). `--map` plus `--yes` is the non-interactive path; the explicit flag is the decision, so the confirmation is skipped. Without `--yes` the confirmation is always interactive, and it is the single prompt that also covers `suggested` rows.
 - OQ-3 (resolved). `--map` matches the stored `old_author` exactly (case-sensitive). Classification stays case-insensitive.
 - OQ-4 (resolved). The resolved-row listing reuses `format_plan` output; no new PII exposure.

@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-02 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, all addressed) |
 
 ---
 
@@ -37,4 +38,4 @@ _No proto, migration or config change, so no Proto Reviewer, DBA or Platform Lea
 
 ## Next Action
 
-`/sdd-review legacy-authors-confirm-resolve product-spec` — AI review of product spec, then `/sdd-design legacy-authors-confirm-resolve quick`
+`/sdd-design legacy-authors-confirm-resolve quick` — quick design recommended (single service, no proto/config/DB change, no consumer surface; the only overlap is a disjoint-hunk WARN on `services/xstockstrat-indicators/CLAUDE.md` with 243)

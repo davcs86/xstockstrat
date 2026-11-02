@@ -17,25 +17,25 @@ Feature: legacy-authors-confirm-resolve
   @AC-2 @FR-2
   Scenario: an inactive target is rejected before anything is written
     When I run `confirm --map ghost=33333333-3333-4333-8333-333333333333 --yes`
-    Then the exit code is non-zero and the output names user 33333333-3333-4333-8333-333333333333 as inactive
+    Then the exit code is 2 and the output names user 33333333-3333-4333-8333-333333333333 as inactive
     And plan.json is byte-identical to before
 
   @AC-3 @FR-2
   Scenario: a map for a legacy author with no unresolved row is rejected
     When I run `confirm --map nobody=80880990-2b79-4d85-8761-d8d9102c2efb --yes`
-    Then the exit code is non-zero and the output says no unresolved row has old_author "nobody"
+    Then the exit code is 2 and the output says no unresolved row has old_author "nobody"
     And plan.json is byte-identical to before
 
   @AC-4 @FR-2
   Scenario: one invalid map in a batch aborts the whole batch
     When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb --map alice=not-a-uuid --yes`
-    Then the exit code is non-zero
+    Then the exit code is 2
     And F1 and F2 are still "unmappable" in plan.json
 
   @AC-5 @FR-3 @FR-4
   Scenario: the picker resolves a row from the numbered list
     When I run `confirm` and answer "1" to the picker for F1, "s" for F3, then "y" to the confirmation
-    Then F1 has source "override" and status "confirmed" with the user chosen at position 1 of the active-user list
+    Then F1 has new_author "80880990-2b79-4d85-8761-d8d9102c2efb" ("davcs86", position 1 in users.json order), source "override" and status "confirmed"
     And F3 is still "ambiguous"
 
   @AC-6 @FR-3
@@ -70,8 +70,7 @@ Feature: legacy-authors-confirm-resolve
   Scenario: a resolved plan passes the existing apply guards
     Given F1, F2 and F3 were resolved to active users by `confirm`
     When I run `apply --confirm-digest <printed sha256>` against a table holding F1, F2 and F3 authored "ghost", "ghost", "alice"
-    Then the result counts show rewritten 3 and skipped_concurrent 0
-    And legacy_authors.py is unchanged in the diff
+    Then the result counts show rewritten 3 and skipped_concurrent 0 and no "refused:" line is printed
 
   @AC-12 @FR-8
   Scenario: the runbook documents the new flow
@@ -81,5 +80,30 @@ Feature: legacy-authors-confirm-resolve
   @AC-13 @FR-2
   Scenario: a map for an ambiguous row must name one of its candidates
     When I run `confirm --map alice=80880990-2b79-4d85-8761-d8d9102c2efb --yes`
-    Then the exit code is non-zero and the output says 80880990-2b79-4d85-8761-d8d9102c2efb is not a candidate for "alice"
+    Then the exit code is 2 and the output says 80880990-2b79-4d85-8761-d8d9102c2efb is not a candidate for "alice"
     And F3 is still "ambiguous" in plan.json
+
+  @AC-14 @FR-2
+  Scenario: a well-formed user id that is not in users.json is rejected
+    When I run `confirm --map ghost=44444444-4444-4444-8444-444444444444 --yes`
+    Then the exit code is 2 and the output says 44444444-4444-4444-8444-444444444444 is not in users.json
+    And plan.json is byte-identical to before
+
+  @AC-15 @FR-2
+  Scenario: one legacy author mapped to two different users is rejected
+    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb --map ghost=11111111-1111-4111-8111-111111111111 --yes`
+    Then the exit code is 2 and the output says "ghost" is mapped to two different users
+    And plan.json is byte-identical to before
+
+  @AC-16 @FR-5 @FR-6
+  Scenario: --yes with --map also confirms suggested rows as it does today
+    Given plan.json also holds F4 aaaaaaaa-0000-4000-8000-000000000004 "davcs86" suggested for 80880990-2b79-4d85-8761-d8d9102c2efb
+    When I run `confirm --map ghost=11111111-1111-4111-8111-111111111111 --yes`
+    Then F4 is "confirmed" and F1 and F2 are "confirmed" with source "override" and new_author "11111111-1111-4111-8111-111111111111"
+    And F3 is still "ambiguous"
+
+  @AC-17 @FR-4
+  Scenario: one prompt covers suggested and resolved rows
+    Given plan.json also holds F4 aaaaaaaa-0000-4000-8000-000000000004 "davcs86" suggested for 80880990-2b79-4d85-8761-d8d9102c2efb
+    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb` and answer "y" once
+    Then F4, F1 and F2 are "confirmed" and exactly one confirmation prompt was shown
