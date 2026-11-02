@@ -225,16 +225,16 @@ ls services/xstockstrat-portfolio/migrations/018_*.up.sql services/xstockstrat-p
 - `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` — create (`//go:build dbtest`)
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_schema_dbtest_test.go` — create (`//go:build dbtest`)
 - `services/xstockstrat-portfolio/.golangci.yml` — modify (`run.build-tags: [dbtest]` so the DB tests are linted)
-- `.github/workflows/ci.yml` — modify (new `portfolio-db-test` job; add to the `ci-gate` aggregate job's `needs:` (`ci.yml:899`) and its summary echo block)
+- `.github/workflows/ci.yml` — modify (new `portfolio-db-test` job; add to the `ci-gate` aggregate job's `needs:` (`ci.yml:933`, `ledger-db-test` entry at `:946`) and its summary echo block (`ledger-db-test` echo at `:970`))
 
 **Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, position snapshot consistency, concurrent write safety
 
 **Codebase Evidence**:
-- Confirmed via: `grep -rnE "dbtest|go:build" services/xstockstrat-{portfolio,trading,marketdata} --include=*.go` → no match: **Not found — the Go real-DB harness must be created from scratch**; the only real-DB CI precedent is `ledger-db-test` (`.github/workflows/ci.yml:712-768`: `timescale/timescaledb:latest-pg16` service, `docker build -f scripts/Dockerfile.migrate`, migrator `docker run` with `SEED_USER_ID`, then the test command).
+- Confirmed via: `grep -rnE "dbtest|go:build" services/xstockstrat-{portfolio,trading,marketdata} --include=*.go` → no match: **Not found — the Go real-DB harness must be created from scratch**; the only real-DB CI precedent is `ledger-db-test` (`.github/workflows/ci.yml:723-781`: `timescale/timescaledb:latest-pg16` service, `docker build -f scripts/Dockerfile.migrate`, migrator `docker run` with `SEED_USER_ID`, then the test command).
 - The migrator image runs every service's migrations incl. ingest (needs `SEED_USER_ID`; `scripts/Dockerfile.migrate:13` copies `services`, `scripts/migration-rerun.sh` passes `SEED_USER_ID="00000000-0000-4000-8000-0000000000c1"`), which the backfill tests (Step 16) need for `ingest.newsletter_signals`.
-- Path-filter names available to `if:`: `xstockstrat-portfolio`, `migrations`, `proto`, `ci`, `go-shared` (`ci.yml:30-70`); the `ledger-db-test` gate shape at `ci.yml:712-720`. The `ci-gate` aggregate job's `needs:` list and summary echoes at `ci.yml:899-937` (`ledger-db-test` entries are the template).
+- Path-filter names available to `if:`: `xstockstrat-portfolio` (`ci.yml:54`), `migrations`, `proto`, `ci`, `go-shared` (`ci.yml:40-70`); the `ledger-db-test` gate shape at `ci.yml:723-731`. The `ci-gate` aggregate job starts at `ci.yml:930`; its `needs:` list (which now also ends with `config-wiring`, from feature 278) and summary echoes follow (`ledger-db-test` entries at `:946` and `:970` are the template).
 - Pool constructor: `repository.NewPortfolioRepo(connStr)` / `Pool()` (`portfolio_repo.go:37,55`); `newPool` sets `MaxConns` from `DB_POOL_MAX` (`pool.go:15-33`). The harness builds its own `pgxpool` with `ConnConfig.RuntimeParams["lock_timeout"]="500ms"` (design § 8 T4) so any wait fails deterministically.
-- Lint config: `services/xstockstrat-portfolio/.golangci.yml` has a `run:` block (`timeout: 5m`) to extend.
+- Lint config: `services/xstockstrat-portfolio/.golangci.yml` has a `run:` block at `:26-27` (`timeout: 5m`, no `build-tags` yet) to extend.
 
 **TDD**: N/A (test infrastructure: the harness and CI job are the means by which Steps 6, 10, 16 prove red-before-green; they add no product behavior). Its own check is `TestSignalExpirySchema`: RED = run it against a database migrated only to `017` (fails with `relation "portfolio.watchlist_signal_expiry" does not exist`), GREEN = after `018` is applied; where no database is available locally the executor records the offline compile proof (`go vet -tags dbtest`) and cites the CI job for both runs. It is the test-side pair of Step 3 (migration) and depends on it (see Step Dependencies).
 
@@ -467,7 +467,7 @@ then **GO-LINT**.
 **Instructions**:
 1. **One `TestPrune_*` function per case** (table-driven only where the shape repeats), **at least nine**: `TestPrune_ExpiredOnlySignalRemoves` (AC-2), `TestPrune_MergedRowRetainsThenRemoves` (AC-3), `TestPrune_UntrackedEntrySurvives` (AC-4), `TestPrune_ManualOrphanSweptEntryKept` (AC-5), `TestPrune_SecondTickIsNoop` (AC-6), `TestPrune_RenewalEventNamesSignal102` (AC-8), `TestPrune_StrategyBoundRemovedLikeAny`, `TestPrune_IngestSignalsDoNotKeepAlive` (AC-10), `TestPrune_ConcurrencyNeverWaits` (AC-12 a/b/c, may be subtests). Cases as above, each asserting the post-state of `watchlist_symbols` **and** `watchlist_signal_expiry`, plus `PrunedEntry` fields (`UserID`, `WatchlistID`, `Symbol`, `StrategyID`, `SignalID`, `ValidUntil`).
 2. Strategy-bound SIGNAL entry (`strat-9`) is removed like any other and `StrategyID == "strat-9"` (feeds AC-13 in Step 12).
-3. AC-10's ingest rows need the ingest schema: columns confirmed from `ingest/migrations/001_newsletter_signals.up.sql` plus `user_id TEXT NOT NULL` (`013:70`, contracted by `014`); re-grep 013/014 for any other NOT NULL/FK before writing the fixture insert (a `signal_sources` FK may apply — **not verified at spec time**; if present, insert a source row first).
+3. AC-10's ingest rows need the ingest schema: columns from `ingest/migrations/001_newsletter_signals.up.sql:9-20` (`source`, `symbol`, `direction`, `valid_from` NOT NULL; `valid_until` nullable) plus `user_id TEXT NOT NULL` (`013:70`; `014` drops the owner-fill trigger, so the fixture sets `user_id` explicitly). **Verified at re-spec (2026-11-02):** no ingest migration 013-0xx adds a `REFERENCES`/FK on `ingest.newsletter_signals`, so no `signal_sources` row is needed.
 4. AC-12 concurrency (both interleavings, `lock_timeout=500ms` on the prune's pool so any wait **fails** rather than hangs): (a) hold an open tx doing `UPDATE watchlist_symbols … RETURNING` on the due binding (mirrors `UpdateBinding` step 1); run a tick → completes without error, binding **not** removed, expiry row **kept**; commit the holder → next tick removes it. (b) hold the parent via `touchWatchlistTx`-equivalent `UPDATE portfolio.watchlists …` (mirrors `AddSymbols`/`RemoveSymbols`/replace-all) → tick skips the list, no error; then run `UpdateBinding`'s second statement while a tick holds the parent to prove no deadlock (assert the `UpdateBinding` caller gets `ErrBindingNotFound` or success, never a `40P01`). Also (c) a concurrent renewal `AddSymbols` and tick interleave without a lock-timeout error (`SQLSTATE 55P03`) or `40P01`.
 5. C-13: literals single-consumer, inline.
 
@@ -508,6 +508,9 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages — in
     - `findings[]` = `{kind, namespace, key, file, readKey?, envs?, sha256?}` (`:628-642`, `:735`).
     - `results[]` = `{line, fail}` (`:683-697`).
   - Exit codes: 1 on any `fail`, 2 on a thrown error (`:745`, `:749-754`).
+  - Re-verified 2026-11-02 after the setup merge of `origin/main-dev` (`631028eb` is an ancestor of HEAD): every anchor above still matches, including `:706`.
+- Re-verified 2026-11-02: goroutines end at `go svc.HydrateStops` (`cmd/server/main.go` ~`:77`), `emitEvent` at `portfolio_service.go:1140`, `GetInt` at `config.go:126`, `UnaryClientInterceptor` at `propagation.go:39`, the ledger client interceptor at `portfolio_service.go:130`, `metadata` imported only in `authz.go`, the ledger `req.userId` fallback at `ledgerServiceImpl.ts:77-78`. `signal_prune.go` and the 035 pair are absent.
+- **035 collision — BLOCKING (pre-execution re-spec, 2026-11-02).** `origin/main-dev` is clean: its highest config migration is `034_retire_portfolio_snapshot_interval`. But the non-feature branch `origin/claude/smoke-test-deployment-0f1z5j` already carries config migrations `035_smoke_rpc_user_id.{up,down}.sql` and `036_smoke_writes_enabled.{up,down}.sql`. Verification block 2 therefore FAILS as written, which triggers Instruction 9's stop. Feature 282's planned `036`/`037` collide with that branch too. Step 11 must not write the 035 pair until the operator rules (renumber, or ignore that `claude/*` branch) and the ruling is recorded in `context.md`.
 
 **TDD**: red-green required (paired with Step 12)
 
@@ -534,6 +537,7 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages — in
    - No `scripts/config-wiring.json` edit; a baseline entry is forbidden (operator decision 2026-11-02).
 9. **035 collision check.** Run Verification block 2 **before** writing the pair. Run it again immediately before opening the integration PR, and again immediately before the 281 integration PR merges into `main-dev` (after the final rebase); record each output in `context.md`.
    - If it reports anything: stop and ask the operator.
+   - At re-spec (2026-11-02) it already reports `origin/claude/smoke-test-deployment-0f1z5j` (`035_smoke_rpc_user_id`, `036_smoke_writes_enabled`); this ruling is outstanding (Codebase Evidence, 035 collision).
    - If a renumber is approved: log it in the Deviation Log, rename the pair, and do **not** edit this step body. Step 14's test finds the file by suffix, so it survives a renumber.
 10. Step-time mode is only a form-mismatch guard: it prints `PENDING` for missing-side findings and never fails on them (`:706`). The wiring proof is Verification block 4.
 
@@ -814,16 +818,16 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages; total
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
 **Files**:
-- `services/xstockstrat-agent/app/client.py` — modify (`add_watchlist_symbol`, `:315-330`)
-- `services/xstockstrat-agent/app/tools.py` — modify (auto-add call at `:692`; `ingest_signal` docstring `:628-630`; `get_watchlist` docstring at `:2020-2038`)
+- `services/xstockstrat-agent/app/client.py` — modify (`add_watchlist_symbol`, `:319-334`)
+- `services/xstockstrat-agent/app/tools.py` — modify (auto-add call at `:708`; `ingest_signal` docstring `:641-644`; `get_watchlist` docstring after `:2088`)
 
 **Reviewers**: Service owner `xstockstrat-agent` — MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync across all six inventory surfaces; statelessness
 
 **Codebase Evidence**:
-- Confirmed via: `grep -nE "add_watchlist_symbol|ensure_signal_watchlist|_iso_to_timestamp" services/xstockstrat-agent/app/client.py services/xstockstrat-agent/app/tools.py` → `client.py:297` (`ensure_signal_watchlist`), `:315` (`add_watchlist_symbol(user_id, watchlist_id, symbol)`), `:99` (`_iso_to_timestamp`); `tools.py:692` calls `await client.add_watchlist_symbol(user_id, wl_id, symbol)` inside `if direction == "watchlist" and not result.get("deduplicated"):` (`:688-696`, bare `except Exception` → `log.warning`).
-- Current request: `AddWatchlistSymbolsRequest(watchlist_id=…, bindings=[binding])` with metadata `_metadata(("x-user-id", user_id))` (`client.py:324-328`) — the existing propagating call; no new outbound RPC (step-constraints §B: reuses the `_metadata` header mechanism, `client.py:68-90`).
+- Confirmed via: `grep -nE "add_watchlist_symbol|ensure_signal_watchlist|_iso_to_timestamp" services/xstockstrat-agent/app/client.py services/xstockstrat-agent/app/tools.py` → `client.py:301` (`ensure_signal_watchlist`), `:319` (`add_watchlist_symbol(user_id, watchlist_id, symbol)`), `:103` (`_iso_to_timestamp`); `tools.py:708` calls `await client.add_watchlist_symbol(user_id, wl_id, symbol)` inside `if direction == "watchlist" and not result.get("deduplicated"):` (`:704`, bare `except Exception` → `log.warning`). Line numbers re-grepped 2026-11-02 after the main-dev merge; re-grep again by symbol before editing.
+- Current request: `AddWatchlistSymbolsRequest(watchlist_id=…, bindings=[binding])` with metadata `_metadata(("x-user-id", user_id))` (`client.py:331`) — the existing propagating call; no new outbound RPC (step-constraints §B: reuses the `_metadata` header mechanism, `client.py:72`).
 - `result` carries `{"signal_id": resp.signal_id, "deduplicated": resp.deduplicated}` (`client.py` `ingest_signal` return) and `valid_until` is the tool's ISO string argument (`tools.py:608-613`).
-- The `ingest_signal` docstring SIDE EFFECT block is at `tools.py:628-630`; `get_watchlist` docstring at `:2020-2031`. Tool count statement: `tools.py:54` ("the tool count stays forty-five").
+- The `ingest_signal` docstring SIDE EFFECT block is at `tools.py:641-644`; the `get_watchlist` docstring follows `async def get_watchlist` at `:2088`. Tool count statement: `tools.py:55` ("the tool count stays forty-five").
 - Agent `CLAUDE.md:141` mentions the SIGNAL path; no edit needed unless it describes lifetimes (checked in Step 20).
 
 **TDD**: red-green required (paired with Step 18)
@@ -831,8 +835,8 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages; total
 **Covers**: —
 
 **Instructions**:
-1. `client.add_watchlist_symbol(user_id, watchlist_id, symbol, signal_id: int | None = None, valid_until: str | None = None)`: build `portfolio_pb2.WatchlistSignalProvenance(signal_id=signal_id, valid_until=_iso_to_timestamp(valid_until))` **only when both `signal_id` is truthy and `valid_until` is a dated ISO string that parses to a timestamp with seconds > 0**. Wrap the `_iso_to_timestamp` call in `try/except ValueError` (`datetime.fromisoformat` raises on bad input, `client.py:99-105`) and treat a failure exactly like an undated value, so a bad string drops the provenance, never the whole auto-add; otherwise omit `signal_provenance` entirely (open-ended / undated → no provenance → portfolio untracks, per design § 3). Pass it as `signal_provenance=` on the `AddWatchlistSymbolsRequest`. Keep binding, metadata and timeout unchanged.
-2. `tools.py:692`: `await client.add_watchlist_symbol(user_id, wl_id, symbol, result.get("signal_id"), valid_until)`. The gate (`:688`) and the best-effort `except` (`:693-696`) are unchanged — a provenance `InvalidArgument` is logged at WARN and drops the auto-add, never failing the ingest.
+1. `client.add_watchlist_symbol(user_id, watchlist_id, symbol, signal_id: int | None = None, valid_until: str | None = None)`: build `portfolio_pb2.WatchlistSignalProvenance(signal_id=signal_id, valid_until=_iso_to_timestamp(valid_until))` **only when both `signal_id` is truthy and `valid_until` is a dated ISO string that parses to a timestamp with seconds > 0**. Wrap the `_iso_to_timestamp` call in `try/except ValueError` (`datetime.fromisoformat` raises on bad input, `client.py:103`) and treat a failure exactly like an undated value, so a bad string drops the provenance, never the whole auto-add; otherwise omit `signal_provenance` entirely (open-ended / undated → no provenance → portfolio untracks, per design § 3). Pass it as `signal_provenance=` on the `AddWatchlistSymbolsRequest`. Keep binding, metadata and timeout unchanged.
+2. `tools.py:708`: `await client.add_watchlist_symbol(user_id, wl_id, symbol, result.get("signal_id"), valid_until)`. The gate (`:704`) and the best-effort `except` that follows the call are unchanged — a provenance `InvalidArgument` is logged at WARN and drops the auto-add, never failing the ingest.
 3. Docstrings (each gains one sentence): `ingest_signal` SIDE EFFECT — the added entry **expires** when every agent-recorded `direction='watchlist'` signal for that symbol has passed its `valid_until` (entries from open-ended signals never expire; failed/deduplicated adds do not renew); `get_watchlist` — reflects the pruned set (expired SIGNAL entries are removed automatically, MANUAL never).
 4. Do not add a tool or change any tool signature; the tool count stays 45 — verify with the grep below (six inventory surfaces unchanged).
 
@@ -856,8 +860,8 @@ then **PY-VERIFY** (run with Step 18's tests).
 **Reviewers**: Service owner `xstockstrat-agent` — MCP tool contract stability and `mcp-tools.md` parity
 
 **Codebase Evidence**:
-- `test_watchlist_client.py:~236-262` already drives `client.add_watchlist_symbol("user-42", "wl-sig", "AAPL")` through `_patch_stub`/`_channel_cm` and asserts metadata; `test_ingest_signal_watchlist.py` asserts `mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA")` (`test_watchlist_direction_adds_symbol`) and covers AC-1..AC-5 of feature 127 with `AsyncMock` patches of `client.*` and `_tool_fn(server, "ingest_signal")`.
-- Fixtures: `tests/conftest.py` provides `TRADER`, `_ctx` (imported by the existing test, `test_ingest_signal_watchlist.py:19`); C-13: no new fixture home — literals stay inline (single consumer each), existing `conftest` helpers reused.
+- `test_watchlist_client.py` (call at `:247`) already drives `client.add_watchlist_symbol("user-42", "wl-sig", "AAPL")` through `_patch_stub`/`_channel_cm` and asserts metadata; `test_ingest_signal_watchlist.py` asserts `mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA")` (`:56`, `test_watchlist_direction_adds_symbol`) and covers AC-1..AC-5 of feature 127 with `AsyncMock` patches of `client.*` and `_tool_fn(server, "ingest_signal")`.
+- Fixtures: `tests/conftest.py` provides `TRADER`, `_ctx` (imported by the existing test, `test_ingest_signal_watchlist.py:18`); C-13: no new fixture home — literals stay inline (single consumer each), existing `conftest` helpers reused.
 
 **TDD**: red-green required — the updated `assert_awaited_once_with("u-2", "wl-sys", "NVDA", 1, None)` and the provenance assertions fail before Step 17.
 
@@ -867,7 +871,7 @@ then **PY-VERIFY** (run with Step 18's tests).
 1. `test_watchlist_client.py`: add tests for the request builder — with `signal_id=102, valid_until="2026-12-01T00:00:00Z"` the captured `AddWatchlistSymbolsRequest` has `signal_provenance.signal_id == 102` and `valid_until.seconds` = that instant; with `valid_until=None` / `signal_id=None` / `valid_until=""` / `valid_until="not-a-date"` (unparseable) the field is unset **and the `AddWatchlistSymbolsRequest` is still sent** (the binding add is not dropped) (`HasField("signal_provenance")` is false); binding source stays `WATCHLIST_ENTRY_SOURCE_SIGNAL`; `x-user-id` appears exactly once (existing assertion pattern).
 2. `test_ingest_signal_watchlist.py`: update the existing add assertions to the new call shape (`("u-2", "wl-sys", "NVDA", 1, None)` for an open-ended signal); add a case with `valid_until` set asserting `mock_add` receives `signal_id` 102 and the ISO string; assert the gate is unchanged (non-watchlist direction and deduplicated results still do not call `add_watchlist_symbol`); assert a portfolio `INVALID_ARGUMENT` from the add is swallowed with a WARN (feature 127 AC-4 shape).
 3. **Mandated new test names** (the Verification counts them): `test_add_watchlist_symbol_sends_provenance`, `test_add_watchlist_symbol_omits_provenance_when_undated`, `test_add_watchlist_symbol_unparseable_valid_until_still_adds`, `test_ingest_signal_passes_signal_id_and_valid_until`, `test_ingest_signal_open_ended_passes_no_valid_until`, `test_add_invalid_argument_is_swallowed` (the existing `test_watchlist_direction_adds_symbol` is updated in place to the new call shape).
-4. Docstring parity: extend the existing AC-5 doc-parity test (it reads the `ingest_signal` docstring and `docs/runbooks/mcp-tools.md`) to assert the docstring now mentions expiry.
+4. Docstring parity: extend the existing AC-5 doc-parity test (`test_doc_parity_docstring_and_runbook`, `test_ingest_signal_watchlist.py:153`; it reads the `ingest_signal` docstring and `docs/runbooks/mcp-tools.md`) to assert the docstring now mentions expiry.
 
 **Verification**:
 ```bash
@@ -915,16 +919,16 @@ grep -n "emptied by expiry pruning" e2e/insights/watchlists.spec.ts   # the new 
 **Status**: `pending`
 **Service**: `docs/`, `xstockstrat-portfolio`, `xstockstrat-agent`
 **Files**:
-- `services/xstockstrat-portfolio/CLAUDE.md` — modify (config key row after `:107`; the two events in § Ledger Events Emitted; `watchlist_signal_expiry` in § Database; the prune loop and the `backfill-signal-expiry` subcommand)
+- `services/xstockstrat-portfolio/CLAUDE.md` — modify (config key row after `:107`; the two events in § Ledger Events Emitted (`:137`); `watchlist_signal_expiry` in § Database (`:128`); the prune loop and the `backfill-signal-expiry` subcommand)
 - `services/xstockstrat-portfolio/docs/context-constitution.md` — modify (new `PORTFOLIO-17` rule; amend `PORTFOLIO-7` (insert path split, add path now takes an `ExpiryIntent`) and re-stamp the anchors you shifted)
-- `docs/patterns/database.md` — modify (portfolio plain-table note near the schema map, `:~12-24`)
-- `docs/patterns/config-governance.md` — modify (new "feature 281" entry in § Per-Feature Registered Keys, `:~111`)
+- `docs/patterns/database.md` — modify (portfolio plain-table note near the schema map, `:~12-20`)
+- `docs/patterns/config-governance.md` — modify (new "feature 281" entry in § Per-Feature Registered Keys, `:140`)
 - `services/xstockstrat-agent/CLAUDE.md` — modify only if `:141` or the tool inventory text states the SIGNAL entry's lifetime (grep first; no edit is a valid outcome)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Config key tables: portfolio `CLAUDE.md` rows `portfolio.watchlist.max_per_user`/`max_symbols_per_list` (`:106-107`) are the format to extend; `docs/patterns/config-governance.md` feature-240 entry (`:141-150`) is the format template (Type/Default/Bounds/Notes). This key is **seeded** (config migration 035), so its Notes cite the migration, not the 227-D2 waiver.
+- Config key tables: portfolio `CLAUDE.md` rows `portfolio.watchlist.max_per_user`/`max_symbols_per_list` (`:106-107`) are the format to extend; `docs/patterns/config-governance.md` feature-240 entry (`:172`) is the format template (Type/Default/Bounds/Notes); § Per-Feature Registered Keys heading is at `:140` and the newest entries sit on top (249, 264, 248, 240, …). `PORTFOLIO-7` exists in the portfolio constitution and `PORTFOLIO-17` does not yet; the `database.md` hypertable map (`:~12-20`) already says it lists hypertables only. Anchors re-grepped 2026-11-02 after the main-dev merge. This key is **seeded** (config migration 035), so its Notes cite the migration, not the 227-D2 waiver.
 - Events: portfolio `CLAUDE.md` § Ledger Events Emitted table (`portfolio.position.opened` … `portfolio.snapshot`) — add `portfolio.watchlist.signal_entry_expired` (payload per design § 4) and `portfolio.watchlist.signal_entry_removed_untracked`, noting the owner is carried in `AppendEventRequest.user_id`.
 - Teardown for this step's files runs once, at the end of Step 21 (root `CLAUDE.md` § Teardown).
 - Overlap review: `docs/patterns/config-governance.md` § Per-Feature Registered Keys is also edited by in-flight features 278, 243 and 255 (append/row edits): place the new entry with the same convention as the nearest sibling entries and expect a rebase-only conflict at merge time (re-read the heading before editing).
@@ -963,14 +967,14 @@ P=services/xstockstrat-portfolio/CLAUDE.md; K=services/xstockstrat-portfolio/doc
 **Files**:
 - `docs/runbooks/signal-watchlist-expiry-backfill.md` — create
 - `docs/runbooks/CLAUDE.md` — modify (index row, table at `:5-17`)
-- `docs/runbooks/mcp-tools.md` — modify (`ingest_signal` entry `:224`, errors table `:254-255`, `get_watchlist` `:1246-1260`)
+- `docs/runbooks/mcp-tools.md` — modify (`ingest_signal` entry `:222`/`:224`, errors table `:254-255`, `get_watchlist` `:1300-1316`, followed by `manage_watchlist` at `:1317`)
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify (add the runbook link to the `backfill-signal-expiry` sentence written in Step 20)
 - `docs/patterns/ci-overview.md` — modify (add the `portfolio-db-test` job row beside `ledger-db-test`, `:19`)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Runbook shape to follow: `docs/runbooks/legacy-formula-authors.md` (§ 1 Scope, § 2 Authority, § 3 Prerequisites incl. pooled `:25061` + `DB_PGBOUNCER=true`, REPORT/APPLY, undo) and `docs/runbooks/operator-db-access.md`. Index table format: `docs/runbooks/CLAUDE.md:5-17` (`| File | Purpose | Key trigger |`).
+- Runbook shape to follow: `docs/runbooks/legacy-formula-authors.md` (§ 1 Scope, § 2 Authority, § 3 Prerequisites incl. pooled `:25061` + `DB_PGBOUNCER=true`, REPORT/APPLY, undo) and `docs/runbooks/operator-db-access.md`. Index table format: `docs/runbooks/CLAUDE.md:5-17` (`| File | Purpose | Key trigger |`, header at `:5`). Re-verified 2026-11-02: `ci-overview.md:19` holds the `ledger-db-test` row; `signal-watchlist-expiry-backfill.md` is absent.
 - `docs/runbooks/mcp-tools.md:224` currently states the add is "best-effort … never fails the already-committed ingest" and that dedup suppresses it; `:254-255` are the matching error-table rows. Tool count stays 45 (no tool added), so the six inventory surfaces are untouched.
 - The backfill contract documented here is the exported `repository.RunBackfill` behavior from Step 15 (required `--legacy-owner`, `--expect-*` bounds, REPORT/APPLY output columns).
 - Teardown rule: root `CLAUDE.md` § Teardown (context-forge refresh or documented manual reconciliation; ledger `fails.md:670`). Overlap review: `docs/runbooks/mcp-tools.md` sections are also edited by in-flight 215 and 275 (`run_backtest`/`set_strategy_live`/`list_opportunities` sections — disjoint from `ingest_signal`/`get_watchlist`); rebase-only.
