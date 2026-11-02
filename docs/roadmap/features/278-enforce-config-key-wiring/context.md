@@ -574,3 +574,18 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Files modified: `.claude/skills/sdd-review/reference/impl-spec-criteria.md`, `.claude/skills/sdd-story/SKILL.md`, `implementation-spec.md` (Step 17 Status), `feature.md`, `context.md`.
 - Deviations: none.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 18 (sequential)
+
+- **Discovery note:** the workflow's discovery digest described the former numbering (governance doc + merge-order row, now Step 19) and a stale tree. This step followed the current spec's Step 18 on `origin/feature/enforce-config-key-wiring` at 24d21ee1.
+- **Step 18 done:** `scripts/config-wiring.test.mjs` gains four whitespace-normalized text assertions over the real skill files:
+  - `skill 1` (@AC-4/5/10): in `sdd-execute/SKILL.md` Phase 3, the wiring gate follows Verification; the `--declared-from <FEATURE_DIR>/product-spec.md` command precedes the `done` flip; the gate names the three triggers (`config` step, migration inserting into `config.config_values`, `## Config Key Changes` key) and the keyless-step carve-out; `--final` precedes `code-completed` in the all-steps-done branch.
+  - `skill 2` (@AC-4/10): `sequential-mode.md` §5.5 holds the step-time mirror; §5.6 runs `--final` before `create_pull_request`.
+  - `skill 3` (@AC-6/11): the `Config key wiring` B2 row has exactly clauses `(a)` (reader file and symbol) and `(b)` (snapshot-built test) and no backtick/stored-key-quote clause.
+  - `skill 4`: `sdd-story/SKILL.md` `## Config Key Changes` pins one backticked `<namespace>.<key>` per bullet read by `--declared-from`.
+- **TDD:** red first in a scratch root (scratchpad `red18/`, `git archive` of b997cab9, the commit before Step 15, with the new test file copied in): 47 tests, 43 passed, the 4 `skill` tests failed (missing gate span, no §5.5 mirror, no B2 row, no declared-key format). Green in the worktree: 47/47.
+- **Verification:** `node --test scripts/config-wiring.test.mjs` passed 47/47. Lint `node --check scripts/config-wiring.test.mjs` was clean.
+- Files modified: `scripts/config-wiring.test.mjs`, `implementation-spec.md` (Step 18 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.

@@ -542,3 +542,50 @@ test('baseline 5 @AC-7 the CI config-wiring filter covers every file the extract
   const res = globs.map(globRe)
   assert.deepEqual(files.filter((f) => !res.some((re) => re.test(f))), [])
 })
+
+const skill = (rel) => fs.readFileSync(path.join(REPO, '.claude', 'skills', rel), 'utf8').replace(/\s+/g, ' ')
+const between = (text, from, to) => {
+  const a = text.indexOf(from)
+  const b = text.indexOf(to, a + from.length)
+  assert.ok(a >= 0 && b > a, `missing span ${from} .. ${to}`)
+  return text.slice(a, b)
+}
+const before = (text, first, second) => {
+  const a = text.indexOf(first)
+  assert.ok(a >= 0, `missing: ${first}`)
+  assert.ok(text.indexOf(second, a) > a, `${first} is not before ${second}`)
+}
+
+test('skill 1 @AC-4 @AC-5 @AC-10 sdd-execute Phase 3 gates the done flip and the code-completed flip', () => {
+  const phase3 = between(skill('sdd-execute/SKILL.md'), '### PHASE 3: Execution', '### STEP COMMIT + PR')
+  const gate = between(phase3, '**Config-key wiring gate.**', '4. If verification **passes**')
+  before(phase3, "Run the step's `**Verification**`", '**Config-key wiring gate.**')
+  before(phase3, 'node scripts/check-config-wiring.mjs --declared-from <FEATURE_DIR>/product-spec.md', '→ `**Status**: \\`done\\``')
+  for (const trigger of ['typed `config`', 'inserts into `config.config_values`', '`## Config Key Changes` lists a key']) {
+    assert.ok(gate.includes(trigger), `gate lacks trigger: ${trigger}`)
+  }
+  assert.match(gate, /a step that declares no key is not blocked/)
+  before(phase3.slice(phase3.indexOf('If **all steps are now done**')), 'node scripts/check-config-wiring.mjs --final', '`code-completed`')
+})
+
+test('skill 2 @AC-4 @AC-10 sequential-mode mirrors the step-time gate (5.5) and --final before the integration PR (5.6)', () => {
+  const seq = skill('sdd-execute/reference/sequential-mode.md')
+  assert.ok(between(seq, '### 5.5 Step loop', '### 5.5b').includes('`node scripts/check-config-wiring.mjs`, step-time mode'))
+  before(between(seq, '### 5.6 Per-feature integration PR', '### 5.7'), 'node scripts/check-config-wiring.mjs --final', 'create_pull_request')
+})
+
+test('skill 3 @AC-6 @AC-11 impl-spec B2 Config key wiring row has exactly two clauses', () => {
+  const row = skill('sdd-review/reference/impl-spec-criteria.md').match(/\| Config key wiring \|[^|]*\|/)
+  assert.ok(row, 'no Config key wiring row')
+  assert.deepEqual(row[0].match(/\([a-z]\)/g), ['(a)', '(b)'])
+  assert.match(row[0], /\(a\) no step names the reader file and symbol/)
+  assert.match(row[0], /\(b\) no test builds a config snapshot from the seeded key/)
+  assert.doesNotMatch(row[0], /backtick|stored-key quote/i)
+})
+
+test('skill 4 sdd-story pins the declared-key format read by --declared-from', () => {
+  const section = between(skill('sdd-story/SKILL.md'), '## Config Key Changes', '## Database Changes')
+  for (const s of ['one declared key per bullet', 'single backticked `<namespace>.<key>`', '--declared-from']) {
+    assert.ok(section.includes(s), `declared-key format lacks: ${s}`)
+  }
+})

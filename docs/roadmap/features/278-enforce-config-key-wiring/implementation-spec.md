@@ -688,7 +688,7 @@ grep -n "Config key wiring" .claude/skills/sdd-review/reference/impl-spec-criter
 
 ### Step 18 — test: Skill-text structural assertions (authored red)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify

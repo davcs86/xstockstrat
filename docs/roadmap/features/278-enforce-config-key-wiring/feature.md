@@ -31,6 +31,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 15 done: `/sdd-execute` SKILL.md Phase 3 gains the step-time config-key wiring gate (after Verification, before the `done` flip) and a `--final` run that blocks the `code-completed` flip and the ALL-DONE integration PR; `repo-conventions.md` config-key line points at the check. TDD: N/A (docs) |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 16 done: `sequential-mode.md` §5.5 gains a bullet applying Phase 3's step-time wiring gate per step; §5.6 runs `--final` on the last step as a blocking gate before the integration PR, output recorded in `context.md`. TDD: N/A (docs) |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 17 done: `impl-spec-criteria.md` B2 gains the `Config key wiring` FAIL row (two clauses: reader file+symbol, snapshot-built test; prominent per the `C-14` precedent); `sdd-story/SKILL.md` `## Config Key Changes` pins one backticked `<namespace>.<key>` per bullet as the declared set read by `--declared-from`. TDD: N/A (docs) |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 18 done: `config-wiring.test.mjs` gains `skill 1`-`skill 4` structural assertions over the Step 15-17 skill text (Phase 3 step-time gate before the `done` flip with its three triggers and the keyless-step carve-out, `--final` before `code-completed`, both sequential-mode mirrors, the two-clause B2 row, the pinned declared-key format). Red against pre-Step-15 text (4/47 fail), green 47/47 |
 
 ---
 
