@@ -2,7 +2,7 @@
 name: sdd-story
 description: Phase 1 of SDD — turn a user story into a feature's first artifacts. Usage — /sdd-story <feature-slug> [story text]. Allocates the next NNN, creates the feature directory with feature.md, product-spec.md, acceptance.feature (Gherkin @AC-* scenarios), and context.md, and fills governance fields (reviewers, proto/config/DB gates, known traps) from docs/runbooks/feature-workflow.md, docs/runbooks/reviewer-registry.md, and the ledger. Use this at the very start of ANY new capability — a new UI page or route, endpoint, RPC, service behavior, agent tool, or config surface — including when the request arrives as a bare "implement X, commit and push", as a GitHub issue, or as a session instruction, because the root CLAUDE.md makes this the mandatory entry point before any code is written. Also triggers on "new feature", "I want it to…", "add support for…", "can we make it also…", "write a spec for…". Confirmed bug fixes go to sdd-triage instead.
 argument-hint: <feature-slug> [story text]
-allowed-tools: Read Write Bash(ls *) Bash(mkdir *) Bash(find *) Bash(printf *)
+allowed-tools: Read Write Bash(ls *) Bash(mkdir *) Bash(find *) Bash(printf *) Bash(bash scripts/sdd-allocate-feature-number.sh *)
 effort: medium
 ---
 
@@ -30,21 +30,19 @@ find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
   - On `overwrite`: continue.
 - If absent: proceed.
 
-### 3. Compute NNN and create directory
+### 3. Reserve NNN and create directory
 
-The next number is **`max(existing NNN) + 1`** — never a count, never a gap-fill. A count-based
-scheme silently collides when a gap exists (two features land on the same number) and is the exact bug
-that produced the historical `020`/`052` duplicates. Derive it from the highest existing prefix, then
-**abort if the computed directory already exists** so two racing `/sdd-story` runs can't collide:
+The number is **reserved on `origin`, never computed from the local tree**: the allocator advances the
+`sdd/feature-cursor` ref with a non-force push (server-side compare-and-swap), so concurrent developers
+and sessions cannot receive the same number. An abandoned reservation is burned, never reused. If the
+script exits non-zero (origin unreachable, push refused, cursor unparseable), **stop and report its
+stderr — never fall back to a local `max+1`**. See `docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ```bash
-MAX_NNN=$(find docs/roadmap/features -maxdepth 1 -type d -name '[0-9][0-9][0-9]-*' \
-  | sed -E 's#.*/([0-9]{3})-.*#\1#' | sort -n | tail -1)
-NEXT_NNN=$(printf "%03d" $(( 10#${MAX_NNN:-0} + 1 )))
+NEXT_NNN=$(bash scripts/sdd-allocate-feature-number.sh "$ARGUMENTS[0]") || exit 1
 FEATURE_DIRNAME="${NEXT_NNN}-$ARGUMENTS[0]"
-if [ -d "docs/roadmap/features/${FEATURE_DIRNAME}" ] || \
-   find docs/roadmap/features -maxdepth 1 -type d -name "${NEXT_NNN}-*" | grep -q .; then
-  echo "ERROR: ${NEXT_NNN} already taken (race?). Re-run to recompute max+1." >&2
+if find docs/roadmap/features -maxdepth 1 -type d -name "${NEXT_NNN}-*" | grep -q .; then
+  echo "ERROR: ${NEXT_NNN} already taken (pre-cursor or hand-made directory)." >&2
   exit 1
 fi
 mkdir -p docs/roadmap/features/${FEATURE_DIRNAME}
