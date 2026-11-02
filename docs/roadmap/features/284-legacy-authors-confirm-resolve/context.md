@@ -81,3 +81,10 @@
   - Step 3 / Step 5: document that the second plan listing shows the proposed `[confirmed]` state before the prompt — [x] addressed in spec revision 1 (2026-11-02) (NIT)
   - Step 5: soften the brittle `! grep "still a hand edit"` — [x] addressed in spec revision 1 (2026-11-02) (NIT)
 - Overlap findings: WARN only — `services/xstockstrat-indicators/CLAUDE.md` also edited by in-progress 243 (disjoint sections; 243 Step 4's `:12` target has drifted and its wording already appears at `:14` on trunk); no migration, proto or config collision; no merge-order entry needed. 284 must not add a `docs/runbooks/CLAUDE.md` index row (281 edits that table).
+
+## Session 2026-11-02 — sdd-review impl-spec (advisory), pass 2
+
+- Result: 0 failures, 0 warnings, 6 nits (advisory). Both pass-1 warnings and all seven pass-1 nits confirmed fixed against the code. No Floor risk.
+- All 6 pass-2 nits fixed in spec revision 2 (wording only): Step 1 constants-vs-functions placement; Step 2 formula-id constant renamed `SAM` -> `SAM_FID` so the case-folding parity string `"SAM"` cannot be confused with it, and the four user ids spelled out in full; Step 3 evidence names `_load_plan`; Step 4 gained the pass/fail C-13 check; Step 6 Files marks the two doc files conditional and lists this `context.md` as append-only. - [x] addressed
+- Overlap findings: WARN only — `services/xstockstrat-indicators/CLAUDE.md` vs `243-fix-sandbox-seed-keys` (disjoint hunks; Step 6 must re-read the file before editing). No new collision on the two files added to Step 6 Files. No merge-order entry needed.
+- Review loop ended: pass 2 had no FAIL or WARN. Spec is clear for `/sdd-execute`.

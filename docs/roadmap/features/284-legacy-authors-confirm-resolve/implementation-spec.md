@@ -58,7 +58,7 @@ No proto, migration, config key, env var, port, dependency or `uv.lock` change. 
 
 - Step 2 [test] covers Step 1 [service]. Step 4 [test] covers Step 3 [service].
 - Step 3 requires Step 1: `confirm` calls `_UNRESOLVED`, `_parse_maps`, `_pick` and `_PICK_ATTEMPTS`.
-- Step 4 reuses the helpers (`_seed`, `_Ask`, `_users_dict`) and constants (`GHOST_DELETED`, `SAM`, `ZED`) that Step 2 adds to the test module, and the two existing confirm tests (`:62`, `:93`) must pass **unchanged** after Step 3.
+- Step 4 reuses the helpers (`_seed`, `_Ask`, `_users_dict`) and constants (`GHOST_DELETED`, `SAM_FID`, `ZED`) that Step 2 adds to the test module, and the two existing confirm tests (`:62`, `:93`) must pass **unchanged** after Step 3.
 - Step 5 requires Step 3: the flag name, message wording, exit code and prompt count it documents are final only then. Step 6 requires Step 5 (it links the runbook section it summarizes).
 - Overlap (file-level, impl-review input): `243-fix-sandbox-seed-keys` (`in-progress`) also edits `services/xstockstrat-indicators/CLAUDE.md`, in different sections than `## Maintenance` (rebase-level; whichever merges second re-reads the file before Step 6). `281-signal-watchlist-expiry-pruning` only cites the runbook as a shape reference (`implementation-spec.md:629,848`), no edit. No migration, proto or config-key collision.
 
@@ -87,8 +87,8 @@ No proto, migration, config key, env var, port, dependency or `uv.lock` change. 
 **Covers**: —
 
 **Instructions**:
-Insert the following between `report` (ends `:87`) and `confirm` (`:90`). Stdlib and `la` only; no new import.
-1. `_UNRESOLVED = la.APPLY_STATUSES - {"confirmed"}` and `_PICK_ATTEMPTS = 3`, as module constants next to `USERS_SQL` (`:25`).
+Constants go after `USERS_SQL` (`:25`); the functions go between `report` (ends `:87`) and `confirm` (`:90`). Stdlib and `la` only; no new import.
+1. `_UNRESOLVED = la.APPLY_STATUSES - {"confirmed"}` and `_PICK_ATTEMPTS = 3`, as module constants right after `USERS_SQL` (`:25`).
 2. `_candidates(author, users) -> list[str]`: `[uid for uid, u in users.items() if u["is_active"] and u["email_local"].lower() == author.lower()]`. Carry one comment, at most 2 lines, stating the constraint only: it must mirror `la.classify`'s candidate rule (`legacy_authors.py:99-104`), which FR-7 forbids importing or changing, and `test_candidates_match_classify_rule` pins the parity.
 3. `_parse_maps(maps, unresolved, users) -> tuple[dict, list[str]]`, pure. For each `raw` in `maps`, in input order, split with `raw.rsplit("=", 1)` (the last `=`) and run these checks in this order, recording at most one reason per entry and moving to the next entry on the first failure. Reason wording is fixed because the acceptance scenarios assert on it:
    1. shape: not two non-empty parts → `f"--map {raw}: expected LEGACY_AUTHOR=USER_ID"`;
@@ -133,34 +133,34 @@ C-13 verdict: no test data in this step.
 - `tests/conftest.py:39-50` `USERS` (users-file entry shape): `davcs86` (`80880990-2b79-4d85-8761-d8d9102c2efb`), `alice` (`1111…`), `bob` (`2222…`), `carol` (`3333…`), `sam` ×2 (`44444444-4444-4444-8444-444444444444`, `55555555-5555-4555-8555-555555555555`, the ambiguous pair) and inactive `olduser` (`66666666-6666-4666-8666-666666666666`).
 - `pyproject.toml:34-36`: `testpaths = ["tests"]`, `asyncio_mode = "auto"`.
 - `la.classify(rows, users, *, clean=0, run_id=None, target=None)` at `legacy_authors.py:97` takes rows with `formula_id` and `author`; used for the parity test with a one-user dict.
-- The acceptance examples differ from `conftest.USERS` (the scenarios say `alice` ×2, inactive `bob`, unmapped `carol`; `USERS` has unique `alice`, `sam` ×2, inactive `olduser`, and `carol` is an active user). Tests use `USERS` and map the scenario roles as: AC "F1"=`GHOST` (`ghost`, unmappable), "F2"=`GHOST_DELETED` (`ghost`, unmappable, soft-deleted), "F3"=`SAM` (`sam`, ambiguous), "F4"=`F1` (`davcs86`, suggested for `OWNER_ID`), "F5"=`ZED` (`zed`, unmappable), inactive target=`olduser`, ambiguous pair=the two `sam` ids. The scenarios stay example values (recon.md § Risks).
+- The acceptance examples differ from `conftest.USERS` (the scenarios say `alice` ×2, inactive `bob`, unmapped `carol`; `USERS` has unique `alice`, `sam` ×2, inactive `olduser`, and `carol` is an active user). Tests use `USERS` and map the scenario roles as: AC "F1"=`GHOST` (`ghost`, unmappable), "F2"=`GHOST_DELETED` (`ghost`, unmappable, soft-deleted), "F3"=`SAM_FID` (`sam`, ambiguous), "F4"=`F1` (`davcs86`, suggested for `OWNER_ID`), "F5"=`ZED` (`zed`, unmappable), inactive target=`olduser`, ambiguous pair=the two `sam` ids. The scenarios stay example values (recon.md § Risks).
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-13, AC-14, AC-15, AC-19, AC-22` — the reason-text and picker legs; the `confirm`/`main()` legs (exit code 2 and byte-identical plan for AC-2, 3, 4, 13, 14, 15; the flow legs of AC-5 and AC-7) are in Step 4.
 
 **Instructions**:
-Imports: add `io`, `re`, `sys` to the stdlib block at `:5-6` (alphabetical: `io`, `json`, `re`, `stat`, `sys`). Add constants `GHOST_DELETED = "aaaaaaaa-0000-4000-8000-000000000004"`, `SAM = "aaaaaaaa-0000-4000-8000-000000000005"`, `ZED = "aaaaaaaa-0000-4000-8000-000000000006"` and the user ids `ALICE_ID` (`1111…`), `SAM_A` (`4444…`), `SAM_B` (`5555…`), `OLD_ID` (`6666…`) after `:17`. Do not redefine or edit `OWNER_ID`, `F1`, `F2`, `GHOST`. Append, after `:132`, these module-local helpers (single consumer, stay inline):
+Imports: add `io`, `re`, `sys` to the stdlib block at `:5-6` (alphabetical: `io`, `json`, `re`, `stat`, `sys`). Add constants `GHOST_DELETED = "aaaaaaaa-0000-4000-8000-000000000004"`, `SAM_FID = "aaaaaaaa-0000-4000-8000-000000000005"`, `ZED = "aaaaaaaa-0000-4000-8000-000000000006"` and the user ids `ALICE_ID = "11111111-1111-4111-8111-111111111111"`, `SAM_A = "44444444-4444-4444-8444-444444444444"`, `SAM_B = "55555555-5555-4555-8555-555555555555"`, `OLD_ID = "66666666-6666-4666-8666-666666666666"` (from `tests/conftest.py:42-48`) after `:17`. Do not redefine or edit `OWNER_ID`, `F1`, `F2`, `GHOST`. Append, after `:132`, these module-local helpers (single consumer, stay inline):
 - `_users_dict(users=USERS)` → `{u["user_id"]: {"email_local": u["email_local"], "is_active": u["is_active"]} for u in users}` (the `la.load_users` shape).
 - `_entry(formula_id, old_author, status, new_author=None)` → plan entry dict with `"source": "heuristic"`.
 - `_Ask(*answers)`: callable with `.prompts` (every prompt string seen) that appends the prompt to `.prompts` **before** returning the next answer or raising `EOFError` (when none remain), so a test can assert `len(prompts)` for the call that hit EOF.
 - `_listing(out)` → the stdout lines matching `re.compile(r"^\s+\d+\) ")`.
 
 Tests (names indicative; one behavior each, no tautologies):
-1. `test_candidates_match_classify_rule` parametrized over `sam`, `SAM`, `davcs86`, `olduser`, `ghost`: `ops._candidates(author, users)` equals the ids for which `la.classify([{"formula_id": GHOST, "author": author}], {uid: u})["entries"][0]["status"] == "suggested"`, evaluated per single-user dict over `_users_dict()`. This is the drift guard.
-2. `_parse_maps` (call it with `unresolved = [_entry(GHOST,"ghost","unmappable"), _entry(GHOST_DELETED,"ghost","unmappable"), _entry(SAM,"sam","ambiguous")]` and `_users_dict()`):
+1. `test_candidates_match_classify_rule` parametrized over the author **strings** `"sam"`, `"SAM"`, `"davcs86"`, `"olduser"`, `"ghost"` (the uppercase `"SAM"` is a string literal, not the formula-id constant `SAM_FID`): `ops._candidates(author, users)` equals the ids for which `la.classify([{"formula_id": GHOST, "author": author}], {uid: u})["entries"][0]["status"] == "suggested"`, evaluated per single-user dict over `_users_dict()`. This is the drift guard.
+2. `_parse_maps` (call it with `unresolved = [_entry(GHOST,"ghost","unmappable"), _entry(GHOST_DELETED,"ghost","unmappable"), _entry(SAM_FID,"sam","ambiguous")]` and `_users_dict()`):
    - valid `ghost=<OWNER_ID>` → `({"ghost": OWNER_ID}, [])`; same author twice with the same uid → accepted; `Ghost=<OWNER_ID>` (case differs) → the `no unresolved row has old_author "Ghost"` reason (OQ-3); a legacy author containing `=` (an `unresolved` row `we=ird`, flag `we=ird=<OWNER_ID>`) maps to author `we=ird` (split on the last `=`).
    - rejects, each asserting a substring of the exact reason and an empty mapping: `ghost=<OLD_ID>` → `user 6666… is inactive` (AC-2); `nobody=<OWNER_ID>` → `no unresolved row has old_author "nobody"` (AC-3); `sam=<OWNER_ID>` → `is not a candidate for "sam"` (AC-13); `ghost=99999999-9999-4999-8999-999999999999` (well-formed, absent from the file) → `is not in users.json` (AC-14); `ghost=<OWNER_ID>` plus `ghost=<ALICE_ID>` → `"ghost" is mapped to two different users` (AC-15); malformed `ghost`, `=<OWNER_ID>`, `ghost=` → shape reason; `sam=not-a-uuid` → `is not a user id (UUID)`.
    - `sam=<SAM_A>` and `sam=<SAM_B>` each accepted (the two candidates).
    - `test_parse_maps_collects_every_reason_in_order`: two bad maps (`ghost=<OLD_ID>`, `nobody=<OWNER_ID>`) → `len(reasons) == 2`, in input order (AC-4 batch leg).
 3. `_pick` (pass `ask=_Ask(...)`, read stdout with `capsys`):
    - `test_pick_asks_once_per_author_for_all_rows`: `ghost` has two rows (live + soft-deleted), answer `"1"` → `{"ghost": OWNER_ID}` and exactly 1 prompt (AC-5 picker leg; option 1 is `davcs86`, `users.json` order).
-   - `test_pick_ambiguous_lists_only_candidates`: unresolved `[SAM]` only, answer `"s"` → `_listing(out)` has exactly 2 lines containing `SAM_A` and `SAM_B`, and neither `OWNER_ID` nor `OLD_ID` appears in `out` (AC-6).
+   - `test_pick_ambiguous_lists_only_candidates`: unresolved `[SAM_FID]` only, answer `"s"` → `_listing(out)` has exactly 2 lines containing `SAM_A` and `SAM_B`, and neither `OWNER_ID` nor `OLD_ID` appears in `out` (AC-6).
    - `test_pick_unmappable_lists_active_users_in_file_order`: unresolved `[GHOST]`, answer `"s"` → the listed ids equal the active ids of `USERS` in order, `OLD_ID` absent.
    - skip: answers `""`, `"s"`, `"S"` each → `{}`; `chosen={"ghost": OWNER_ID}` → `ghost` not offered (0 prompts).
    - invalid answers `"0"`, `"-1"`, `"abc"`, `"99"` consume attempts: for a single-author plan, three invalid answers → `{}`, `len(ask.prompts) == ops._PICK_ATTEMPTS`, and `"3 attempts"` in `out`; `["abc", "2"]` → the second active user (`alice`, `ALICE_ID`).
    - `test_pick_eof_stops_every_remaining_author` (AC-7 picker leg, AC-22): unresolved `[GHOST, ZED]` with `_Ask()` → `{}`, 1 prompt, and `len(_listing(out)) == len(active users)` i.e. the list is printed once, not per author; with `_Ask("1")` the first pick is kept and the EOF at the second author returns `{"ghost": OWNER_ID}`.
-   - `test_pick_skips_author_with_no_eligible_user` (AC-19): users dict without the `sam` entries, unresolved `[SAM]` → `{}`, 0 prompts, `out` contains `there is no eligible user for "sam"`.
+   - `test_pick_skips_author_with_no_eligible_user` (AC-19): users dict without the `sam` entries, unresolved `[SAM_FID]` → `{}`, 0 prompts, `out` contains `there is no eligible user for "sam"`.
 
 **Verification**:
 ```bash
@@ -183,7 +183,7 @@ Red run (captured by `/sdd-execute` before Step 1): the new tests fail with `Att
 **Reviewers**: Service owner `xstockstrat-indicators` — Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution
 
 **Codebase Evidence**:
-- Confirmed via: `sed -n 90,108p services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py` → today's `confirm(work: Path, *, yes: bool, ask=input) -> tuple[int, str | None]`: loads the plan (`:92`), `suggested = [e for e in plan["entries"] if e["status"] == "suggested"]` (`:93`), early exit `print("No suggested rows to confirm.")` / `return 0, None` (`:94-96`), `print(format_plan(plan, _users_by_id(work / "users.json")))` (`:97`), prompt `ask(f"Confirm {len(suggested)} suggested rewrite(s)? [y/N] ")` with `EOFError` → `""` (`:98-102`), decline → `return 0, None` (`:103-104`), in-place `e["status"] = "confirmed"` on the same dict objects as `plan["entries"]` (`:105-106`), the **only** write `_write_private(plan_path, json.dumps(plan, indent=2) + "\n")` (`:107`), `return len(suggested), la.plan_digest(plan_path)` (`:108`).
+- Confirmed via: `sed -n 90,108p services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py` → today's `confirm(work: Path, *, yes: bool, ask=input) -> tuple[int, str | None]`: loads the plan with `_load_plan` (`:39`, called at `:92`), `suggested = [e for e in plan["entries"] if e["status"] == "suggested"]` (`:93`), early exit `print("No suggested rows to confirm.")` / `return 0, None` (`:94-96`), `print(format_plan(plan, _users_by_id(work / "users.json")))` (`:97`), prompt `ask(f"Confirm {len(suggested)} suggested rewrite(s)? [y/N] ")` with `EOFError` → `""` (`:98-102`), decline → `return 0, None` (`:103-104`), in-place `e["status"] = "confirmed"` on the same dict objects as `plan["entries"]` (`:105-106`), the **only** write `_write_private(plan_path, json.dumps(plan, indent=2) + "\n")` (`:107`), `return len(suggested), la.plan_digest(plan_path)` (`:108`).
 - `main()` at `:136-186`: `for name in ("confirm", "apply"):` adds `--yes/-y` (`:142-144`); `sub.choices["apply"].add_argument("--confirm-digest", required=True)` (`:145`, the per-subparser pattern to mirror); confirm branch `:149-154` (`n, digest = confirm(work, yes=args.yes)`; prints `Confirmed {n} row(s)…` and the digest when truthy; `return 0 if digest or n == 0 else 1`); `run_id` is defined at `:147` before the branch; the apply branch handles refusal at `:181-184`: `except la.ApplyRefused as exc: for reason in exc.reasons: la.log(run_id, f"refused: {reason}"); return la.ApplyRefused.exit_code` (`la.log` prints `[run_id=…] msg` to stdout, `legacy_authors.py:43-44`).
 - `_users_by_id` (`:46-50`) is lenient (returns `{}` on any error) and carries no `is_active`, so it is **not** used for validation; `format_plan(plan, users)` (`:53-60`) renders `old -> name (new_author)  [status]` per entry from a `{user_id: email_local}` map.
 - Existing tests constrain the signature: `test_confirm_marks_only_suggested_and_returns_digest_of_written_file` (`tests/test_legacy_authors_ops.py:62`) and `test_confirm_declined_leaves_plan_untouched` (`:93`) call `confirm()` with **no `users.json`** in the work dir and assert the `(int, str | None)` return (`n == 1`, `(0, None)`), so `users.json` must be loaded lazily and the return shape must not change.
@@ -245,22 +245,22 @@ grep -n "_write_private(plan_path" services/xstockstrat-indicators/app/maintenan
 **Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9, AC-10, AC-11, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-20, AC-21`
 
 **Instructions**:
-Add `_seed(tmp_path, entries, users=USERS)` (writes `plan.json` as `json.dumps({"entries": entries})` and, when `users is not None`, `users.json` as `json.dumps(users)`; returns the plan bytes for byte-identity assertions; reuse `_entry`/`_Ask` from Step 2). A standard unresolved plan is `[GHOST ghost unmappable, GHOST_DELETED ghost unmappable, SAM sam ambiguous]`. Tests, with the scenario role mapping from Step 2:
-1. `@AC-1`: `confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}"])` → `n == 2`; `GHOST` and `GHOST_DELETED` have `new_author == OWNER_ID`, `source == "override"`, `status == "confirmed"`; `SAM` is still `ambiguous`; the digest equals `la.plan_digest(plan.json)`; `plan.json` mode is `0o600`.
-2. `@AC-5`: `ask=_Ask("1", "s", "y")` (`yes=False`) → the same two rows resolved to `OWNER_ID` (`davcs86` is option 1), `SAM` ambiguous, exactly 3 prompts (picker `ghost`, picker `sam`, confirmation), `n == 2`.
+Add `_seed(tmp_path, entries, users=USERS)` (writes `plan.json` as `json.dumps({"entries": entries})` and, when `users is not None`, `users.json` as `json.dumps(users)`; returns the plan bytes for byte-identity assertions; reuse `_entry`/`_Ask` from Step 2). A standard unresolved plan is `[GHOST ghost unmappable, GHOST_DELETED ghost unmappable, SAM_FID sam ambiguous]`. Tests, with the scenario role mapping from Step 2:
+1. `@AC-1`: `confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}"])` → `n == 2`; `GHOST` and `GHOST_DELETED` have `new_author == OWNER_ID`, `source == "override"`, `status == "confirmed"`; `SAM_FID` is still `ambiguous`; the digest equals `la.plan_digest(plan.json)`; `plan.json` mode is `0o600`.
+2. `@AC-5`: `ask=_Ask("1", "s", "y")` (`yes=False`) → the same two rows resolved to `OWNER_ID` (`davcs86` is option 1), `SAM_FID` ambiguous, exactly 3 prompts (picker `ghost`, picker `sam`, confirmation), `n == 2`.
 3. `@AC-7` (flow leg): `ask=_Ask()` (EOF at the first prompt), unresolved plan → `(0, None)`, plan byte-identical, and `len(ask.prompts) == 1` (this is the assertion that is red before Step 3).
 4. `@AC-8` + `@AC-21`: `maps=[f"ghost={OWNER_ID}"]`, `ask=_Ask("s", "n")` → `(0, None)`, plan byte-identical, stdout contains `Not confirmed; plan.json unchanged.`; also an `EOF` at the confirmation (`_Ask("s")`) prints the same line and writes nothing.
 5. `@AC-9` (green-on-arrival guard, preserved behavior): `confirm(tmp_path, yes=True)` on the unresolved plan → `(0, None)`, plan byte-identical, `ask` never called (`_Ask().prompts == []`). Passes on both trees; the step's red gate is carried by tests 1-4 and 6-12.
 6. `@AC-10`: plan with only `GHOST`, `GHOST_DELETED`; `maps=[f"ghost={OWNER_ID}"]`, `yes=True` → stdout does not contain `No suggested rows to confirm`; both rows `confirmed`.
-7. `@AC-16`: plan adds `_entry(F1, "davcs86", "suggested", OWNER_ID)`; `maps=[f"ghost={ALICE_ID}"]`, `yes=True` → `F1` `confirmed`; `GHOST`/`GHOST_DELETED` `confirmed` with `source == "override"` and `new_author == ALICE_ID`; `SAM` ambiguous; `n == 3`.
+7. `@AC-16`: plan adds `_entry(F1, "davcs86", "suggested", OWNER_ID)`; `maps=[f"ghost={ALICE_ID}"]`, `yes=True` → `F1` `confirmed`; `GHOST`/`GHOST_DELETED` `confirmed` with `source == "override"` and `new_author == ALICE_ID`; `SAM_FID` ambiguous; `n == 3`.
 8. `@AC-17`: same plan, `maps=[f"ghost={OWNER_ID}"]`, `ask=_Ask("s", "y")` → `F1`, `GHOST`, `GHOST_DELETED` confirmed; exactly one prompt contains `Confirm`, and it reads `Confirm 1 suggested and 2 override rewrite(s)? [y/N] `.
 9. `@AC-18`: `_seed(..., users=None)` (no `users.json`), plan `[F1 suggested, GHOST unmappable]`, `ask=_Ask("y")` → stdout contains `users.json could not be read` and `picker was skipped`; `F1` `confirmed`, `GHOST` `unmappable`; only the confirmation prompt was asked; digest not `None`.
 10. `@AC-20`: covered inside the `main()` test (13) because "before the digest" needs the printed digest; at flow level assert stdout contains `f"  {GHOST}  ghost -> davcs86 ({OWNER_ID})  [confirmed]"` and the same for `GHOST_DELETED`.
 11. FR-2 (no `@AC`): `confirm(..., maps=[f"ghost={OWNER_ID}"])` with `users.json` missing, and again malformed (`"{"`), → `pytest.raises(la.ApplyRefused)` with a reason starting `cannot read users file`, plan byte-identical.
-12. `@AC-11`: `table = _UsersAndFormulas([make_formula_row(GHOST, "ghost"), make_formula_row(GHOST_DELETED, "ghost", deleted=True), make_formula_row(SAM, "sam")])`; `await ops.report(table, ("h", "d"), tmp_path, run_id="r1")`; `n, digest = ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}", f"sam={SAM_A}"])` → `n == 3`; `result = await ops.apply(table, ("h", "d"), tmp_path, digest, run_id="r2")` raises nothing, `result["counts"]["rewritten"] == 3`, `skipped_concurrent == 0`, the three rows' authors equal `OWNER_ID`, `OWNER_ID`, `SAM_A`, and captured stdout has no `refused:`.
+12. `@AC-11`: `table = _UsersAndFormulas([make_formula_row(GHOST, "ghost"), make_formula_row(GHOST_DELETED, "ghost", deleted=True), make_formula_row(SAM_FID, "sam")])`; `await ops.report(table, ("h", "d"), tmp_path, run_id="r1")`; `n, digest = ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}", f"sam={SAM_A}"])` → `n == 3`; `result = await ops.apply(table, ("h", "d"), tmp_path, digest, run_id="r2")` raises nothing, `result["counts"]["rewritten"] == 3`, `skipped_concurrent == 0`, the three rows' authors equal `OWNER_ID`, `OWNER_ID`, `SAM_A`, and captured stdout has no `refused:`.
 13. `main()`-level, using `ops.main(["--work-dir", str(tmp_path), "confirm", ...])` and `capsys`:
     - success (`@AC-1` printed digest, `@AC-20` ordering): `["--map", f"ghost={OWNER_ID}", "--yes"]` → returns `0`; stdout contains `Confirmed 2 row(s)` and `la.plan_digest(plan.json)`, and the line `ghost -> davcs86 ({OWNER_ID})  [confirmed]` occurs at an index before the digest.
-    - refusal, parametrized over the maps below, each passed as repeated `--map` flags with `--yes` → `main` returns `2`; stdout has at least one `[run_id=…] refused: <reason>` line containing the listed substring; `plan.json` byte-identical; `GHOST` and `GHOST_DELETED` still `unmappable` and `SAM` still `ambiguous`:
+    - refusal, parametrized over the maps below, each passed as repeated `--map` flags with `--yes` → `main` returns `2`; stdout has at least one `[run_id=…] refused: <reason>` line containing the listed substring; `plan.json` byte-identical; `GHOST` and `GHOST_DELETED` still `unmappable` and `SAM_FID` still `ambiguous`:
       - `@AC-2`: `ghost={OLD_ID}` → `inactive`
       - `@AC-3`: `nobody={OWNER_ID}` → `no unresolved row has old_author "nobody"`
       - `@AC-4`: `ghost={OWNER_ID}` + `sam=not-a-uuid` → `is not a user id` (also proves `--map` is repeatable and that the valid map is not applied)
@@ -275,7 +275,8 @@ Do not edit the two pre-existing confirm tests.
 cd services/xstockstrat-indicators && uv run --extra dev pytest tests/test_legacy_authors_ops.py -q
 cd services/xstockstrat-indicators && uv run --extra dev pytest --cov=app --cov-fail-under=50 -q
 cd services/xstockstrat-indicators && ruff check . && ruff format --check .
-grep -n "conftest\|from tests.conftest" services/xstockstrat-indicators/tests/test_legacy_authors_ops.py   # C-13: USERS/make_formula_row/FakeFormulasTable still imported from conftest
+grep -n "from tests.conftest import" services/xstockstrat-indicators/tests/test_legacy_authors_ops.py   # C-13: USERS/make_formula_row/FakeFormulasTable still imported from conftest
+test "$(git diff -U0 -- services/xstockstrat-indicators/tests/test_legacy_authors_ops.py | grep '^+' | grep -c 'email_local": "')" = 0   # C-13: no new inline users literal (run before committing the step)
 ```
 Red run (before Step 3): `TypeError: confirm() got an unexpected keyword argument 'maps'` for tests that pass `maps=`, `SystemExit` (argparse: unrecognized `--map`) for the `main()` tests, and failed prompt-count / listing assertions for the picker tests. Green after Step 3. C-13 verdict: `_seed` and the scenario constants are single-consumer, inline in this module; no duplicate `USERS`-style literal is introduced.
 
@@ -330,8 +331,9 @@ grep -n -i "apply" docs/runbooks/legacy-formula-authors.md | grep -i "candidate"
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
-- `docs/runbooks/legacy-formula-authors.md` — modify (only to fix drift the teardown audit finds against the final code; otherwise unchanged)
-- `services/xstockstrat-indicators/docs/context-constitution.md` — modify (only if the `INDICATORS-12` re-read finds drift; expected: no edit)
+- `docs/runbooks/legacy-formula-authors.md` — modify, **conditional**: edit only if the teardown audit finds drift against the final code
+- `services/xstockstrat-indicators/docs/context-constitution.md` — modify, **conditional**: edit only if the `INDICATORS-12` re-read finds drift (expected: no edit)
+- `docs/roadmap/features/284-legacy-authors-confirm-resolve/context.md` — append-only log entry (Instruction 3)
 
 **Reviewers**: none
 
