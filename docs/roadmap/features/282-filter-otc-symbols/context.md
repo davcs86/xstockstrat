@@ -127,3 +127,57 @@
 
 - Merged `origin/main-dev` into the branch (add/add conflicts in the five 282 files resolved to our side; main-dev held only the original story, byte-identical to `4a185fd`).
 - Feature 281 (`signal-watchlist-expiry-pruning`, implementation-ready) overlaps 282 on `AddWatchlistSymbols`, the agent signal-add path and shared docs/tests (no proto field, config key or migration collision). Operator decision: 282 merges AFTER 281. Added a soft `merge-order.md` row; Step Dependencies note updated. Carry into execution: re-anchor Steps 9/11 after 281 lands; keep the servability filter ahead of 281's expiry write so a refused symbol gets no expiry row.
+
+## Session 2026-11-02 — sdd-design amendment (quick), round 1 — operator decisions and synthesis
+
+- **Trigger:** the up-front gate found both new keys unseeded under the 227 waiver: `marketdata.assets.refresh_interval_hours` (int 6, `[1,24]`, `<=0` pauses, reader in Step 5) and `portfolio.marketdata.servability_timeout_ms` (int 2000, `[500,4000]`, reader in Step 9). 278's shrink-only `config-wiring` ratchet (`631028eb`) fails CI on both.
+- **Operator decisions (2026-11-02):**
+  - Seed both via config migrations, following 281's approved pattern (no baseline entry; downs delete global rows only).
+  - Re-spec items: PORTFOLIO-18 / MARKETDATA-15 (15/16 taken, 281 claims 17); reuse `testdata.Msft`/`Aapl` and re-decide C-13 for the OTC tickers; Step 14 rewrites (not extends) the fails-080 rename e2e test and comment; re-anchor drift everywhere else.
+- **Round-1 synthesis** (adversary: NEEDS WORK, no Floor breach):
+  - `036_marketdata_asset_refresh_interval` lands in Step 5 with the marketdata reader. `037_portfolio_servability_timeout` lands in Step 9 with the portfolio reader (literal at the call site; no key-parameter wrapper).
+  - A new config test step holds the shared `globalIntSeedCases.ts` helper, the 036/037 parse tests and an **unconditional** conversion of 281's inline seed test. jscpd ignores test files, so a conditional conversion would never fire. The step requires 281 merged; it imports `migrationSql.ts` from main-dev, never copies it from 281's moving branch.
+  - Explicit ordering: 282 Step 5 requires 281 Step 11 committed. The pre-merge check asserts 281's 035 is on main-dev and numbered below 036. Renumbering goes through the Deviation Log, finding files by suffix. The step-time `--declared-migration` guard also runs for 036/037.
+  - The 036 description says pausing is reader-only (`SetConfig` rejects 0). Step 6's evidence notes that AC-24's "unset" case is a scope with no row.
+  - `@AC-27 @FR-5` is appended. `LIT` is exported from the helper.
+  - Open placement question: the new step at the end (Step 16, docs to 17) or right after Step 10. **Operator: another round.**
+
+## Session 2026-11-02 — sdd-design amendment, round 2 — synthesis (operator: another round)
+
+- **Proposer:**
+  - The new config test step goes at the end (Step 16; docs/teardown becomes 17). That is 3 renumber edits instead of 22, and only Steps 16-17 wait on 281.
+  - It keeps the shared `globalIntSeedCases.ts` helper and converts 281's seed test unconditionally.
+  - It supplies exact 036/037 SQL and full Step 5/9/16 text.
+  - It found a second e2e assertion (`watchlists.spec.ts:626-633`) that the masked rename breaks.
+  - It fixed 281's block-2 ordering bug: the pair-presence check moves to block 3.
+- **Adversary** (NEEDS WORK, no Floor breach; APPROVE-READY once these are fixed):
+  1. Step 16 Verification double `cd` always fails.
+  2. The §5.3 boot gate trips on Step 16's absent 281 files. Mark them "expected absent until 281 merges — do not re-spec".
+  3. "Renumber via Deviation Log" breaks F-08/F-09 because the shell blocks hard-code 036/037. Renumbering goes through stop → re-spec Steps 5, 9, 16. The same latent flaw exists in 281 Step 11 Instr 9, kept as a follow-up and not touched while 281 executes.
+  4. Relax Step 5's precondition to "281 spec names 035; 036/037 free on every branch". A missing 035 file is a WARN; `MODE=merge` (twice) stays binding.
+  5. After merging 281, re-run the Verification of Steps 9-14 and Step 5 block 4, and assert the servability filter runs before 281's expiry write (fails.md:1198).
+  6. Smaller items:
+     - block 4 escalates if the base has any finding on `RD`;
+     - Step 5 Instr 8 vs Instr 12 contradiction;
+     - the `:606` test title;
+     - `LIT` stays private;
+     - align `@AC-24`/`@AC-27` FR tags;
+     - merge-order row 92 becomes **Hard**;
+     - cite 281's durable `@AC-19` suite path.
+- **Open operator choice:** start 282's execution after 281 merges (adversary's alternative), or now in parallel. **Operator: another round.**
+
+## Session 2026-11-02 — sdd-design amendment (COMPLETION)
+
+- **Approved after 3 rounds** (round-3 adversary: no Floor breach; L APPROVE-READY once its fixes were folded; operator approved all round-3 fixes).
+- **Operator: Variant L.** 282's sequential run starts only after 281's integration PR is on `main-dev`. Step 9 implements the `EREA` order in `AddWatchlistSymbols` (281's `expiryIntentFor` on the unfiltered request → `refuseUnservable` → early return when all refused → `expiryIntentFor` on accepted bindings → cap on the post-filter union → `AddSymbols(…, intent)`) with an `awk` SEQ check; Step 10 adds `TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry`. Step 16 is config-only (helper, 038/039 parse tests, 281 037 test conversion); P-only text (step/merge modes, 0b/0c, boot-gate "no re-spec") dropped.
+- **Operator: renumber 036→038, 037→039.** Feature 280 (PR #1359) holds config `035_smoke_rpc_user_id` / `036_smoke_writes_enabled`; feature 281's seed is now `037_portfolio_signal_prune_interval`. Step 5 block 2 asserts all three are on `origin/main-dev` and on this branch (STOP otherwise) and that 038/039 are free on every branch.
+- **Round-3 fixes folded:**
+  - Step 5/9 block 4: a finding on the reader file `RD` is a hit only if new versus the merge-base (multiset on `kind, namespace, key, file`); STOP only for a base `dynamic-read` on `RD`. 281's "any finding on `RD`" rule would always fire in Step 9 (three baselined `read-unseeded` keys attribute to `portfolio_service.go`).
+  - Step 9 Verification: service-dir commands wrapped in a `( … )` subshell; blocks 2-4 run from the repo root.
+  - design.md Business Rules / Amendment name Step 9 (order + SEQ check) and Step 10 (guard test).
+  - Renumber path uses the documented directive `(re-spec Steps 5-16 first)` (`sequential-mode.md:18` parses one range or one step).
+  - Steps 9/10/16 Codebase Evidence: drift in 281's landed symbols is called out in the §5.4 summary; a re-spec never changes the `EREA` order.
+  - SEQ `awk` strips `//` comments before matching.
+  - `merge-order.md` row 92 (282 → 281): Hard, "Merge order only — 281 need not be `launched`", plus the Variant L sentence. This is a design-phase edit staged with this amendment's design commit (P-01), not by an execute step (F-08).
+- **Ledger:** one `fails.md` entry — config-wiring baseline entries are file-less, so a reader-file hit identity must be checked against raw `--final --json` base findings, not `scripts/config-wiring.json`.
+- **Next:** advisory `/sdd-review filter-otc-symbols impl-spec`, then launch `/sdd-execute filter-otc-symbols(re-spec if needed) sequential` after 280's and 281's integration PRs merge.

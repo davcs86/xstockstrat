@@ -3120,3 +3120,15 @@ ambiguity is logged here).
 - **Rule it implies**: When narrowing or surfacing a production catch-all, budget for the tests it was silently
   carrying; a test that asserts an OK/success outcome must also prove the work was actually done (e.g. at least one
   symbol evaluated).
+
+### 2026-11-02 — filter-otc-symbols — config
+- **Mistake**: A design gate counted any `--final` finding on the reader file as a key hit, and was declared safe because
+  `scripts/config-wiring.json` had no entry for that file. Baseline entries carry no `file` field (`sameId` accepts a
+  file-less entry), while the raw findings do: a `read-unseeded` finding is attributed to the smallest runtime reader
+  file. `portfolio_service.go` is that reader for three baselined keys, so the gate would have failed on every run.
+  Both the proposer and the round-2 adversary made the same mistake.
+- **Evidence**: `scripts/check-config-wiring.mjs:609,637,679,743`; `scripts/config-wiring.json:642-658`;
+  `docs/roadmap/features/282-filter-otc-symbols/implementation-spec.md` Step 5 Verification block 4 (feature 282
+  design amendment, round 3, 2026-11-02).
+- **Rule it implies**: Check a reader-file hit identity against the raw `--final --json` findings of the merge-base,
+  never against `scripts/config-wiring.json`, and count a finding on an existing file only if it is new versus the base.
