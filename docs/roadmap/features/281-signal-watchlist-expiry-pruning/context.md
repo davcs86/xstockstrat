@@ -244,3 +244,11 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: compile-RED approach and DB run deferred to CI (Deviation Log).
 - Next: Step 7 (`AddWatchlistSymbols` provenance validation and intent mapping).
 
+### Step 7 — `AddWatchlistSymbols` provenance validation and intent mapping [done] (2026-11-02)
+
+- Added the unexported pure helper `expiryIntentFor(req, existing, add)` beside `requestBindings` in `portfolio_service.go`. With provenance it requires a system-managed list, exactly one normalized binding that is SIGNAL, `signal_id > 0` and `valid_until.seconds > 0` (otherwise `InvalidArgument`), and returns `{Provenance{SignalID, ValidUntil.AsTime()}, Symbol: add[0].Symbol}`. Without provenance it returns `{UntrackSymbols: <SIGNAL symbols in add>}`, which is empty for MANUAL, UNSPECIFIED and flat adds. `AddWatchlistSymbols` calls it right after `requestBindings`, before the cap check and before any write (AC-18), and passes the intent to `s.watchlists.AddSymbols` instead of the zero value. `normalizeBindings`, `requestBindings` and `applyDefaultStrategy` are untouched.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`.
+- TDD: AC-18 red: an uncommitted probe (manual list + one SIGNAL binding + provenance `{101, 2026-11-01}`) failed with `err = <nil>, want InvalidArgument`. Green: the same probe passed after the change, and then it was deleted. The full AC-18 table and the intent assertions are Step 8.
+- Verification: `go build ./...` OK. `go test ./internal/service/ -run 'AddWatchlistSymbols|ExpiryIntent'` → `ok`. `go vet ./...` and `go vet -tags dbtest ./...` OK. The full `go test ./...` passes. GO-LINT reports `0 issues`. No database was started.
+- Deviations: RED came from an uncommitted probe because Step 8's test file is outside this step's Files (Deviation Log).
+- Next: Step 8 (service unit tests for provenance validation and intent mapping).

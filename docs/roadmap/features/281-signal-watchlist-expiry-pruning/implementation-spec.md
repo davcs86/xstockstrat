@@ -341,7 +341,7 @@ GO-DBTEST (CI `portfolio-db-test`) green; then **GO-COVER** (excluded packages: 
 
 ### Step 7 — service: `AddWatchlistSymbols` provenance validation and intent mapping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`AddWatchlistSymbols`, `:2166-2193`)
@@ -1063,4 +1063,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: compile-red before Step 5, behavioral-red in CI. GO-DBTEST green.
 - **Done instead**: Step 5 had already landed (sequential order). RED was taken by temporarily restoring `watchlist_repo.go` from `d088d1e2` (pre-Step-5) with the new test file present: `go vet -tags dbtest ./internal/repository/` → `undefined: ExpiryIntent`. The file was then restored from HEAD. No database was started (HARD CONSTRAINT): GREEN is offline — `go vet -tags dbtest ./...`, GO-LINT `0 issues`, 7 `TestAddPath_*` functions, the tests skip without `PORTFOLIO_DB_TEST_URL` and fail under `CI=true`, and GO-COVER total 68.6%. The real-DB behavioral run is CI `portfolio-db-test`. Instruction 6's "not removed by a tick" clause is asserted as "row deleted" here; the tick itself is Step 9, and Step 10 covers it. The small assertion helpers (`assertExpiry`, `assertSource`, …) live in the test file because it is their only consumer (C-13); `dbtest_helpers_test.go` is unchanged.
 - **Disposition**: spec-allowed fallback (GO-DBTEST). Everything stays inside the step's **Files**.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 7 — RED via an uncommitted service probe test
+
+- **Spec said**: TDD red-green paired with Step 8 (Step 8's tests fail against the tree before Step 7).
+- **Done instead**: Step 8 runs after Step 7 in sequential order, and its file (`watchlist_service_test.go`) is outside Step 7's **Files**. RED therefore came from a throwaway probe `internal/service/zz_step7_red_probe_test.go`: a manual (non-system) list, one SIGNAL `AAPL` binding, provenance `{101, 2026-11-01}`, asserting `InvalidArgument` and no stored binding (AC-18). Before implementation it failed with `err = <nil>, want InvalidArgument`. After implementation it passed, and the probe was deleted (never staged). Step 8 writes the real AC-18 table and intent tests. The validation sits in the pure helper `expiryIntentFor` as specified, with one `InvalidArgument` message per failed rule.
+- **Disposition**: in scope. Everything stays inside the step's **Files**, and the full behavioral RED/GREEN is Step 8.
 - **Severity**: n/a

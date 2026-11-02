@@ -1842,6 +1842,39 @@ func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string,
 	return applyDefaultStrategy(out, defaultStrategyID)
 }
 
+// expiryIntentFor: provenance needs a system-managed list, exactly one SIGNAL binding, signal_id > 0
+// and a set valid_until; a provenance-less add untracks its SIGNAL symbols (version-skew safety).
+func expiryIntentFor(req *portfoliov1.AddWatchlistSymbolsRequest, existing *portfoliov1.Watchlist, add []*portfoliov1.WatchlistBinding) (repository.ExpiryIntent, error) {
+	var signalSymbols []string
+	for _, b := range add {
+		if b.GetSource() == portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL {
+			signalSymbols = append(signalSymbols, b.GetSymbol())
+		}
+	}
+	prov := req.GetSignalProvenance()
+	if prov == nil {
+		return repository.ExpiryIntent{UntrackSymbols: signalSymbols}, nil
+	}
+	switch {
+	case !existing.GetSystemManaged():
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance is only accepted on a system-managed watchlist"))
+	case len(add) != 1 || len(signalSymbols) != 1:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance requires exactly one SIGNAL binding, got %d bindings (%d SIGNAL)", len(add), len(signalSymbols)))
+	case prov.GetSignalId() <= 0:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance.signal_id must be > 0"))
+	case prov.GetValidUntil() == nil || prov.GetValidUntil().GetSeconds() <= 0:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance.valid_until must be set"))
+	}
+	return repository.ExpiryIntent{
+		Provenance: &repository.SignalProvenance{SignalID: prov.GetSignalId(), ValidUntil: prov.GetValidUntil().AsTime()},
+		Symbol:     add[0].GetSymbol(),
+	}, nil
+}
+
 // applyDefaultStrategy stamps the default strategy onto add-time bindings only when the default is
 // non-empty, the binding is unbound, AND its source is NOT SIGNAL. Add-time only — never retroactive.
 func applyDefaultStrategy(bindings []*portfoliov1.WatchlistBinding, defaultStrategyID string) []*portfoliov1.WatchlistBinding {
@@ -2175,13 +2208,18 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	// Add-time default: a bare/MANUAL add inherits the watchlist's persisted default; SIGNAL-sourced
 	// adds are skipped inside applyDefaultStrategy.
 	add := requestBindings(req.GetBindings(), req.GetSymbols(), existing.GetDefaultStrategyId())
+	// Validated before the cap check and any write: a rejected provenance stores nothing (AC-18).
+	intent, err := expiryIntentFor(req, existing, add)
+	if err != nil {
+		return nil, err
+	}
 	// Resulting count = union of current symbols + newly-added symbols (both normalized).
 	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), bindingSymbols(add)...)) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	if len(resulting) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(resulting), s.maxSymbolsPerList()))
 	}
-	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add, repository.ExpiryIntent{})
+	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add, intent)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

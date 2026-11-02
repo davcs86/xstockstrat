@@ -22,6 +22,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 4 done: `//go:build dbtest` real-Postgres harness + `TestSignalExpirySchema`, `.golangci.yml` `build-tags: [dbtest]`, CI job `portfolio-db-test` wired into `ci-gate`; offline vet/lint green, DB run in CI |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 5 done: repo add path — `SignalProvenance`/`ExpiryIntent`, split `insertBindingTx`, overwrite-on-fresh-insert / update-only `mergeSignalExpirySQL` / untrack; `AddSymbols` takes the intent (service passes the zero value); build/vet/lint green |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 6 done: 7 `TestAddPath_*` real-DB tests (fresh overwrite, merge, untracked, rescue, MANUAL, untrack, replace-all; AC-3/8/9/11/17); compile-RED vs pre-Step-5 repo, offline vet/lint/cover green, DB run in CI `portfolio-db-test` |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 7 done: `AddWatchlistSymbols` validates `signal_provenance` (system list, exactly one SIGNAL binding, `signal_id > 0`, `valid_until` set) via `expiryIntentFor` before the cap check and any write, and passes the intent to `AddSymbols`; provenance-less SIGNAL adds untrack; RED probe → GREEN, build/vet/lint/tests green |
 
 ---
 
