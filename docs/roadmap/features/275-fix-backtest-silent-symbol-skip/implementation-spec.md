@@ -757,7 +757,7 @@ Every one of the five files has at least one hit. There are no `is_public` hits.
 
 ### Step 11 — docs: analysis `CLAUDE.md` null-score drift and root Teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (docs)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -914,3 +914,22 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Step 10 (2026-11-01) — no plugin version bump.** The pattern doc only requires the two `plugin.json` versions to
   stay byte-identical; neither was changed (0.4.0). No scope change.
 - No CI-equivalent tooling fallback was used in Step 10 (grep and the plugin's own `validate.py`).
+- **Step 11 (2026-11-01) — stale citation.** Codebase Evidence cites `servicer.py:1290-1299` for `score = None`; on the
+  branch head it is `app/handlers/servicer.py:1361-1362`, and the history row writes `overall_score`/`rating` as `None`
+  at :2964-2965. Evidence only, no code impact.
+- **Step 11 (2026-11-01) — Teardown: context-forge plugin unavailable, manual reconciliation.** The
+  `/context-forge:context-constitution` skill is not available in this session (only `context-forge:context-scrubber`
+  is listed), so Instruction 2 ran by hand: the touched context files (`services/xstockstrat-analysis/CLAUDE.md`,
+  `docs/runbooks/mcp-tools.md` `### run_backtest`, the `run_backtest` docstring in
+  `services/xstockstrat-agent/app/tools.py`, `plugins/strat-lab/skills/backtest/` SKILL.md + references, and
+  `services/xstockstrat-{analysis,agent}/docs/context-constitution*.md`) were re-read against `servicer.py` (gate
+  :1297-1305, surfacing arm :1167-1195, `EVAL_FAILED_WARNING` :354) and `evaluator.py` (`_execute_formula` refusal
+  mapping). Two grounded drifts were found, both in the step's one **Files** entry, and fixed: (1) analysis
+  `CLAUDE.md` § Unreadable formula said only `NOT_FOUND` raises `FormulaExecutionError` on the backtest path; Step 4
+  also maps `PERMISSION_DENIED`, with the `not evaluated: <CODE>` warning; (2) the feature-215 "A refused symbol makes
+  the run INSUFFICIENT_DATA" sentence omitted the gate's no-trades condition (a refused symbol in a run that traded
+  stays OK). mcp-tools.md, the agent docstring and the strat-lab skill matched the code; the per-module
+  context-constitution files carry no backtest-skip claim. The integration PR body must carry this record (fails.md:670).
+- **Step 11 (2026-11-01) — Instruction 3 deferred to integration.** The C-16 promotion of `acceptance.feature` into
+  `services/xstockstrat-analysis/acceptance/` is an integration-time action (§5.6), not part of this step's commit.
+- No CI-equivalent tooling fallback was used in Step 11 (grep only).

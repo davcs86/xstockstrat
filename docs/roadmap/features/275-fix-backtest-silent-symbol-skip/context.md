@@ -902,3 +902,19 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
 - Verification: `validate.py --self-test` and `validate.py` both pass (required by `docs/patterns/strat-lab-plugin.md`).
 - Next: Step 11 (analysis `CLAUDE.md` null-score drift and root Teardown audit).
 
+### Step 11 — analysis `CLAUDE.md` null-score drift and root Teardown audit (2026-11-01, done)
+
+- `services/xstockstrat-analysis/CLAUDE.md` run-history paragraph: "a 0 score" → "a null score", plus one sentence that
+  an all-failed run (every symbol EVALUATION_FAILED or FORMULA_ERROR) is INSUFFICIENT_DATA and its per-symbol rows are
+  in-memory only (on `latest_backtest`, not in history). Code truth: `servicer.py:1361-1362` (`score = None`) and
+  :2964-2965 (history row `None` score/rating).
+- Teardown (manual; context-forge `context-constitution` unavailable in this session). Two grounded drifts fixed in the
+  same file: § Unreadable formula now names `PERMISSION_DENIED` beside `NOT_FOUND` on the backtest path, with the
+  `backtest symbol <SYM> not evaluated: <CODE>` warning (Step 4); the feature-215 refusal bullet now says a refused
+  symbol makes the run INSUFFICIENT_DATA only when no symbol traded (the gate's no-trades condition). mcp-tools.md, the
+  agent docstring, the strat-lab skill and the analysis/agent context-constitution files matched the code. **The
+  integration PR body must state both that the plugin was unavailable and this reconciliation (fails.md:670).**
+- TDD: N/A (docs). RED: the Verification command exited 1 on `3e0e6e2d` (no "null score"; "0 score" at :109). GREEN:
+  exit 0 ("null score" at :109; no "0 score").
+- Instruction 3 (C-16 acceptance promotion) is deferred to the integration PR (§5.6).
+- All 11 steps done → `status.md` → `code-completed` (committed separately). Next: integration PR (§5.6).
