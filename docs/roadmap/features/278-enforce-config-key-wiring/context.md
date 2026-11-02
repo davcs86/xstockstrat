@@ -589,3 +589,17 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
 - Deviations: none.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 19 (sequential)
+
+- **Discovery note:** the workflow's discovery digest described a stale tree (18 steps, no `scripts/*config-wiring*`). This step followed the current spec's Step 19 on `origin/feature/enforce-config-key-wiring` at d51d0b3b, where Steps 1-18 are done.
+- **Step 19 done:**
+  - `docs/patterns/config-governance.md`: new `## Wiring check (config key must be read under its stored key)` after `## Registering a new config key`, plus registering-list item 5 pointing at it. Registered-keys log untouched.
+  - `docs/roadmap/features/merge-order.md`: one Soft row, `fix-sandbox-seed-keys` (243) / `enforce-config-key-wiring` (278), stating that once 278 lands any further 243 config-key or reader change updates `scripts/config-wiring.json` (shrink-only) in the same PR. The existing 281 vs 278 row is unchanged; no 244/261 row and no PR #1322 mention. The current baseline holds no `feature 243`-owned entry (243's migration 031 is on the tree), so the row names no specific entries.
+  - `.claude/context-map.yaml` not edited (it registers workflow helpers/tests only).
+- **Teardown:** `/context-forge:context-constitution` is not loadable in this session (only `context-forge:context-scrubber` is listed as a skill), so it was done by hand. Every context file this feature touched (`docs/patterns/config-governance.md`, `.claude/skills/sdd-execute/SKILL.md`, `.claude/skills/sdd-execute/reference/repo-conventions.md`, `.claude/skills/sdd-execute/reference/sequential-mode.md`, `.claude/skills/sdd-review/reference/impl-spec-criteria.md`, `.claude/skills/sdd-story/SKILL.md`) was re-read against `scripts/check-config-wiring.mjs` (usage line flags `--final`, `--declared-from`, `--declared-migration`, `--keys`; `PENDING`/`REPORTED`/`STALE` output; `is_secret` rows kept out of the join), `scripts/config-wiring.json` (`policy.envReadUnseeded: reported`, every entry has `owner`) and `.github/workflows/ci.yml` (job `config-wiring` runs the suite and `--final`). No drift found. Out-of-tree line citations of `config-governance.md` (`insights.md:1206`, `fails.md:2744`) were already historical before this step and are ledger evidence; left as is. The integration PR body must record both that the plugin was unavailable and this reconciliation.
+- **TDD:** N/A (docs-only).
+- **Verification:** `./scripts/check-context-map.sh` OK; `grep -n "Wiring check"` hits `config-governance.md:62,64`; the merge-order grep hits line 102; `node --test scripts/config-wiring.test.mjs` 47/47; `node scripts/check-config-wiring.mjs --final` exit 0 (one `REPORTED:` env-scoped `read-unseeded`, `trading.fill_poller.interval_ms:production`, non-blocking under the `reported` policy).
+- Files modified: `docs/patterns/config-governance.md`, `docs/roadmap/features/merge-order.md`, `implementation-spec.md` (Step 19 Status), `feature.md` (history row; artifact step count 18 → 19), `context.md`.
+- Deviations: none.
+- Severity: n/a.

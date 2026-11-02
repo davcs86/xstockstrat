@@ -715,7 +715,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ### Step 19 — docs: Governance rule, merge-order row, context-map check and teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `docs/roadmap/features/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify (append-only; keep feature 182's registered-keys entries)

@@ -32,6 +32,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 16 done: `sequential-mode.md` §5.5 gains a bullet applying Phase 3's step-time wiring gate per step; §5.6 runs `--final` on the last step as a blocking gate before the integration PR, output recorded in `context.md`. TDD: N/A (docs) |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 17 done: `impl-spec-criteria.md` B2 gains the `Config key wiring` FAIL row (two clauses: reader file+symbol, snapshot-built test; prominent per the `C-14` precedent); `sdd-story/SKILL.md` `## Config Key Changes` pins one backticked `<namespace>.<key>` per bullet as the declared set read by `--declared-from`. TDD: N/A (docs) |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 18 done: `config-wiring.test.mjs` gains `skill 1`-`skill 4` structural assertions over the Step 15-17 skill text (Phase 3 step-time gate before the `done` flip with its three triggers and the keyless-step carve-out, `--final` before `code-completed`, both sequential-mode mirrors, the two-clause B2 row, the pinned declared-key format). Red against pre-Step-15 text (4/47 fail), green 47/47 |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 19 done: `config-governance.md` gains `## Wiring check (config key must be read under its stored key)` (verbatim stored-key rule, four finding kinds plus fail-closed `unmodelled-rewrite`, step-time vs `--final`, owner-required shrink-only baseline, runtime-created keys, secrets excluded) and a registering-list pointer; `merge-order.md` gains the Soft 243-after/before-278 ratchet-coupling row; context map unchanged and `check-context-map.sh` passes; teardown done by hand (plugin skill not loadable). TDD: N/A (docs) |
 
 ---
 
@@ -41,7 +42,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — approved design, rejected alternatives, open risks
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — 18 steps (Step 10 is an operator decision gate)
+- [Implementation Spec](implementation-spec.md) — 19 steps (Step 10 is an operator decision gate)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
