@@ -414,3 +414,13 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: bounds come from a live REPORT because the classifier is global; dates and ids are DB-relative; AC-16 uses a per-test legacy owner; AC-17 is split into two subtests; T4 runs as a race; the RED method (Deviation Log).
 - Next: Step 17 (agent sends signal provenance on the `direction="watchlist"` auto-add).
 
+### Step 17 — agent sends signal provenance on the `direction="watchlist"` auto-add [done] (2026-11-02)
+
+- `client.add_watchlist_symbol(user_id, watchlist_id, symbol, signal_id=None, valid_until=None)` builds `WatchlistSignalProvenance(signal_id, valid_until)` only when `signal_id` is truthy and `valid_until` parses (`_iso_to_timestamp`, `ValueError` caught) to seconds > 0; otherwise `signal_provenance` is unset, so portfolio untracks the entry. Binding, metadata and timeout are unchanged.
+- `tools.py` `ingest_signal` auto-add passes `result.get("signal_id")` and the tool's `valid_until`. The gate and the best-effort `except`/WARN are unchanged. The `ingest_signal` SIDE EFFECT docstring gains the expiry sentence, and `get_watchlist` gains the pruned-set sentence. No tool added; tool count stays forty-five.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`.
+- TDD: RED from an uncommitted probe → `TypeError: … unexpected keyword argument 'signal_id'`; GREEN probe passed, then deleted.
+- Verification: the tool-count grep passes (diffed against merge base `1ea1c19c`); `ruff check` and `ruff format --check` pass; `check-config-wiring.mjs` rc 0. PY-VERIFY coverage 84.22%, 641 passed / 1 failed. The failure is `test_watchlist_direction_adds_symbol` asserting the pre-feature call shape; Step 18 updates it in place.
+- Deviations: probe RED; PY-VERIFY fully green only after Step 18 (Deviation Log).
+- Next: Step 18 (agent provenance tests).
+

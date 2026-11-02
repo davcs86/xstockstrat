@@ -824,7 +824,7 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages; total
 
 ### Step 17 — service: agent sends signal provenance on the `direction="watchlist"` auto-add
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (`add_watchlist_symbol`, `:319-334`)
@@ -1167,4 +1167,14 @@ _Populated by /sdd-execute as implementation proceeds._
   - `RunBackfill` has no hook between its read and its writes. Instruction 4 therefore runs as a race: 10 iterations, each with APPLY concurrent with an ingest insert plus a renewal `AddSymbols`, on the `lock_timeout=500ms` pool. The test asserts: neither side errors; any expiry row is still in the future; the tick removes nothing; the binding is still SIGNAL. `SkippedChanged` is logged, not asserted, because the spec accepts either outcome.
   - RED: the test file was vetted against a `git archive` of `5f5a755a` (pre-Step-15) → `undefined: BackfillResult`.
 - **Disposition**: in scope. Only the step's **Files** changed. The behavioral run is CI `portfolio-db-test`, and no database was started.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 17 — RED probe and PY-VERIFY timing
+
+- **Spec said**: TDD red-green paired with Step 18 (the Step 18 assertions fail before Step 17); Verification = tool-count grep + ruff, then **PY-VERIFY** "run with Step 18's tests".
+- **Done instead**:
+  - RED came from an uncommitted probe `tests/test_zz_step17_probe.py` (as in Steps 15-16), because Step 18's test edits are that step's **Files**. RED: `TypeError: add_watchlist_symbol() got an unexpected keyword argument 'signal_id'`. GREEN: the probe passed (provenance `(102, 1796083200)`; none for `valid_until` None / `""` / `"not-a-date"` / epoch 0 or `signal_id` None, with the binding still sent) and was deleted.
+  - PY-VERIFY: ruff check/format pass, coverage 84.22% (>= 40), 641 passed and 1 failed. The failure is `test_watchlist_direction_adds_symbol`, which still asserts the old call shape `("u-2", "wl-sys", "NVDA")` against the new actual `("u-2", "wl-sys", "NVDA", 1, None)`. Step 18 instruction 2 updates that assertion in place, so the suite is fully green only after Step 18.
+  - `add_watchlist_symbol` gained a two-line docstring sentence stating the provenance-omission contract.
+- **Disposition**: in scope. Only the step's **Files** changed.
 - **Severity**: n/a
