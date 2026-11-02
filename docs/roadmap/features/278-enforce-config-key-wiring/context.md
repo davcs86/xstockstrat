@@ -521,3 +521,17 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
 - Deviations: none.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 14 (sequential)
+
+- **Step 14 done:** `.github/workflows/ci.yml` changes:
+  - `changes` gains a `config-wiring` filter after `otel-signals`. It holds the ten globs from Instruction 2, the language roots plus the checker files.
+  - New job `config-wiring` ("Config key wiring (whole-tree)"), placed after `otel-signals`. It has `needs: changes`, an `if:` on matched `config-wiring` or `ci`, and no `pull_request` guard. Steps: `actions/checkout@v7` (shallow), `actions/setup-node@v7` with `node-version: "24"` and no pnpm cache, `node --test scripts/config-wiring.test.mjs`, then `node scripts/check-config-wiring.mjs --final`.
+  - `ci-gate` gains `- config-wiring` in `needs:` and a `config-wiring:` echo, both after `secret-scan`.
+- **Test `baseline 5` (@AC-7)** in `scripts/config-wiring.test.mjs`. It reads `ci.yml` as text and collects the quoted globs under the `config-wiring:` filter key. It asserts the five language-root globs literally, then checks that every `file` in `extractReads(REPO)` `reads`/`dynamic` (27 files, including `services/xstockstrat-marketdata/cmd/server/main.go`) matches a glob. The in-test glob-to-regex treats `**/` as zero or more directories and `*` as one segment.
+- **TDD:** red first. Before the ci.yml edit the suite ran 43 tests, 42 passed, and `baseline 5` failed with `filter lacks services/**/*.go`. Green after the edit: 43/43.
+- **Verification:** the PyYAML assertion passed, `grep -n config-wiring` listed the filter, job and gate lines, `node --test` passed 43/43, `node --check` was clean, and `--final` exited 0 with only the `REPORTED:` line.
+- Files modified: `.github/workflows/ci.yml`, `scripts/config-wiring.test.mjs`, `implementation-spec.md` (Step 14 Status), `feature.md`, `context.md`.
+- Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: none.
+- Severity: n/a.

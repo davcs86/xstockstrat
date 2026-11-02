@@ -515,3 +515,30 @@ test('baseline 4 the committed JSON carries no value text and no secret-class ke
   const secretForms = new Set([...secrets.values()].flatMap((s) => [s.key, `${s.namespace}.${s.key}`]))
   assert.deepEqual(json.findings.filter((f) => secretForms.has(f.key)).map((f) => f.key), [])
 })
+
+function ciFilterGlobs(name) {
+  const lines = fs.readFileSync(path.join(REPO, '.github', 'workflows', 'ci.yml'), 'utf8').split('\n')
+  const start = lines.findIndex((l) => l === `            ${name}:`)
+  if (start < 0) return []
+  const globs = []
+  for (const l of lines.slice(start + 1)) {
+    const m = /^ {14}- '([^']+)'$/.exec(l)
+    if (!m) break
+    globs.push(m[1])
+  }
+  return globs
+}
+
+const globRe = (g) => new RegExp(`^${g.split(/(\*\*\/|\*\*|\*)/).map((p) =>
+  p === '**/' ? '(?:[^/]+/)*' : p === '**' ? '.*' : p === '*' ? '[^/]*' : p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('')}$`)
+
+test('baseline 5 @AC-7 the CI config-wiring filter covers every file the extractors read', () => {
+  const globs = ciFilterGlobs('config-wiring')
+  for (const g of ['services/**/*.go', 'services/*/app/**/*.py', 'services/*/src/**/*.ts', 'services/*/src/**/*.tsx',
+    'services/xstockstrat-config/migrations/**']) assert.ok(globs.includes(g), `filter lacks ${g}`)
+  const { reads, dynamic } = cw.extractReads(REPO)
+  const files = [...new Set([...reads, ...dynamic].map((r) => r.file))]
+  assert.ok(files.includes('services/xstockstrat-marketdata/cmd/server/main.go'))
+  const res = globs.map(globRe)
+  assert.deepEqual(files.filter((f) => !res.some((re) => re.test(f))), [])
+})

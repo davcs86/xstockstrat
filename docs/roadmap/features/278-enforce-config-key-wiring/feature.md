@@ -27,6 +27,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done: TS/Go `values[...]` assignment targets (`=` and compound) are skipped by the regex extractor; test (l) + two write fixtures; real-tree `dynamic-read` 46 → 43 (the 7 `configServiceImpl.ts` write sites gone, no read lost) |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 12 done: `scripts/config-wiring.json` frozen. Registry has 8 forwarders, 36 `dynamic` entries (28 getter bodies, 4 non-config containers, 4 closed-set sites) and an empty `rewriteAllow`. Baseline has 124 `feature 278` entries (19 `form-mismatch`, 5 `seeded-unread`, 100 `read-unseeded`) and 0 `dynamic-read`. `--final` exits 0 with 1 `REPORTED:` line |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 13 done: `scripts/config-wiring.test.mjs` gains tests `baseline 1-4`. They check that real-tree `--final` exits 0, that every entry has an owner and a baseline kind with no `dynamic-read`, that the 277-sweep key set is present, and that there is no value text or secret-class key. Red against the Step 7 empty-shape baseline in a scratch root (3 of 4 fail); green 42/42 |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 14 done: `ci.yml` gains the `config-wiring` paths filter (language-root globs incl. `services/**/*.go`), the `config-wiring` job (checker tests + `--final`) and its `ci-gate` `needs`/echo entries; test `baseline 5` asserts the filter covers every extractor-read file (red: filter missing; green 43/43) |
 
 ---
 

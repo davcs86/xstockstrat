@@ -539,7 +539,7 @@ No coverage threshold applies (tooling). Lint: `node --check scripts/config-wiri
 
 ### Step 14 — service: CI job `config-wiring` and `ci-gate` wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/ci.yml`
 **Files**:
 - `.github/workflows/ci.yml` — modify
