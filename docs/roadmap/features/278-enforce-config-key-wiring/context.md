@@ -719,3 +719,11 @@ All 11 scenarios go to /home/user/xstockstrat/docs/sdd/business-rules/platform.f
 ### Coverage check
 - Source scenarios: 11 (@AC-1 through @AC-11). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing is skipped, so the counts match.
 ```
+
+## Session 2026-11-02 — sdd-execute 278 ALL-DONE PATH (sequential)
+
+- **Operator decision:** the C-16 promotion plan above was approved ("Proceed"). It was applied exactly as written: 11 scenarios (@AC-1..@AC-11), each tagged `@feature-278`, were appended to `docs/sdd/business-rules/platform.feature` after a blank separator line. The only difference from `acceptance.feature` is the added provenance tag, checked with a diff. No `services/*/acceptance/` file was created.
+- **Config-key wiring gate (F-09):** `node scripts/check-config-wiring.mjs --final` exited 0. Output: `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`. This finding does not block under `policy.envReadUnseeded: reported`.
+- **Merge-order gate:** `enforce-config-key-wiring` does not appear in the Feature column of `merge-order.md`. Rows 101 and 102 list it only as the counterpart feature, so the gate passes.
+- **Status:** `status.md` changed from `in-progress` to `code-completed`, and a matching history row was added to `feature.md`. No ledger insight was added because nothing new generalizes beyond the entries already recorded.
+- **Teardown (root CLAUDE.md):** the context-forge plugin skill `context-constitution` was unavailable. The integration PR body records this and the manual reconciliation from the Step 19 session above.
