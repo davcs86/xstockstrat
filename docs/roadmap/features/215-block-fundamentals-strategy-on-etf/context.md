@@ -685,3 +685,5 @@ Step 26 re-run after `expose-score-strategy-mcp` (283), `fix-marketdata-fundamen
   - the (a) gap label, owned by 230;
   - the (c) formula `PERMISSION_DENIED`, a new defect.
 - Step 26 stays `blocked`, and `status.md` stays `in-progress`, until the operator rules on them.
+
+**Operator ruling (2026-11-02): hold for 230.** 215 stays `in-progress`, with Step 26 `blocked`, until `230-fix-etf-flag-fill` lands. Then re-run (a) to confirm SCHD's `fundamentals_gap` is set. The (c) formula `PERMISSION_DENIED` is under investigation as a separate defect. It does not gate 215 under this ruling.
