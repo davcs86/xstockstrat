@@ -3108,3 +3108,15 @@ ambiguity is logged here).
 - **Rule it implies**: In a strip-types Node suite, import the target statically with a `.ts` specifier and
   keep the target free of parameter properties. One example is `adminDirectory.test.ts`. Treat any
   try/catch-guarded import as unexecuted until a load check proves otherwise, on every Node version.
+
+### 2026-11-02 — fix-backtest-silent-symbol-skip — assumption
+- **Mistake**: A broad `except Exception: continue` in the `RunBacktest` symbol loop also swallowed test-fixture
+  gaps: a bare-`MagicMock` `GetBars` stub is not awaitable, so its `TypeError` was caught and the symbol skipped. Four
+  tests asserting an OK run passed for the wrong reason (an OK run with no symbol evaluated, the very defect under
+  fix) and went red only when the catch-all was replaced by a surfacing arm.
+- **Evidence**: `docs/roadmap/features/275-fix-backtest-silent-symbol-skip/implementation-spec.md` Deviation Log
+  (Step 6, operator Option A); `context.md` Step 6 entry; `services/xstockstrat-analysis/tests/test_owner_dimension.py`
+  (`_bars()`, `_wired()`).
+- **Rule it implies**: When narrowing or surfacing a production catch-all, budget for the tests it was silently
+  carrying; a test that asserts an OK/success outcome must also prove the work was actually done (e.g. at least one
+  symbol evaluated).
