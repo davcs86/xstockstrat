@@ -99,6 +99,9 @@ for that bar — no forward-fill, no look-ahead. If the benchmark lacks enough h
 component, the backtest returns `BACKTEST_STATUS_INSUFFICIENT_DATA` naming the **benchmark** symbol in
 `coverage_gaps` — `trigger_backfill` the benchmark and re-run. v1 covers a single reference symbol per
 component; true universe breadth (e.g. "% of a universe above its 200-day") is a deferred follow-on.
+Backfill only when `coverage_gaps` names a symbol: an `INSUFFICIENT_DATA` run with **empty**
+`coverage_gaps` and `NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR` rows is
+**never** a backfill case (feature 275) — read the `not evaluated: <CODE>` warnings instead (below).
 
 **Point-in-time fundamental operand (feature 198).** A component with `kind:"fundamental"` and a
 `fundamental_metric` (one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`,
@@ -171,6 +174,19 @@ basket and report it. A fundamentals fetch outage instead leaves a
 `fundamentals fetch failed for <SYM> — rerun` warning: rerun it. `set_strategy_live` does not check
 this at enable time; the live loop denies entry on such a symbol (exits still fire). See
 `reference/output-handling.md`.
+
+**Symbols that could not be evaluated are reported, never skipped (feature 275).** A symbol whose
+evaluation failed (an upstream RPC error or an unexpected exception) carries
+`no_trade_reason: NO_TRADE_REASON_EVALUATION_FAILED` plus a `warnings` entry
+`backtest symbol <SYM> not evaluated: <CODE>`. It is not a 0-trade "no signal". A formula that
+indicators refuses to run for the strategy owner is `NO_TRADE_REASON_FORMULA_ERROR` for **both** admin
+and owner callers, with the same warning naming `PERMISSION_DENIED` (admin caller, or another
+indicators refusal) or `NOT_FOUND` (owner). Either makes an otherwise trade-less run
+`BACKTEST_STATUS_INSUFFICIENT_DATA` with empty `coverage_gaps`; a partly failed run that still traded
+stays `OK` and carries the same rows and warnings. Act on `<CODE>`: never backfill;
+`UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun later; `PERMISSION_DENIED`,
+`NOT_FOUND` or a Python exception name (e.g. `ValueError`) → report it. See
+`reference/output-handling.md` and `reference/backfill.md`.
 
 ## Phase 1 — Ensure data coverage (backfill)
 

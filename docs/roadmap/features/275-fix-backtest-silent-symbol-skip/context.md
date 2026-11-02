@@ -885,3 +885,20 @@ unchanged (spec-ready), per the grilling protocol. The resume state is in the `s
   files formatted. `is_public` grep: no hits.
 - Next: Step 10 (strat-lab `backtest` skill).
 
+### Step 10 — strat-lab `backtest` skill (2026-11-01, done)
+
+- `SKILL.md`: after the feature-152 benchmark backfill teaching, a sentence that an `INSUFFICIENT_DATA` run with empty
+  `coverage_gaps` and EVALUATION_FAILED/FORMULA_ERROR rows is never a backfill case; after the feature-215 paragraph, a
+  feature-275 paragraph (reason 6, the `backtest symbol <SYM> not evaluated: <CODE>` warning, option (a) FORMULA_ERROR
+  for admin and owner callers with PERMISSION_DENIED/NOT_FOUND, partial runs stay OK, the discriminator).
+- `reference/output-handling.md`: new `NO_TRADE_REASON_EVALUATION_FAILED` and `NO_TRADE_REASON_FORMULA_ERROR` bullets
+  beside the FUNDAMENTALS_UNAVAILABLE/outage bullets (no FORMULA_ERROR description existed to extend; Deviation Log).
+- `reference/self-grill.md` §6: two sub-bullets (never average EVALUATION_FAILED in as 0; report a `not evaluated`
+  warning with its code class). `reference/verification.md`: the "silent non-evaluation" line corrected.
+  `reference/backfill.md` `## When to skip`: the backfill-never / rerun-later / report discriminator.
+- TDD: N/A (docs). Baseline: the Verification grep had 0 hits in all five files on `d9ca949a`; after: SKILL.md 4,
+  backfill.md 3, output-handling.md 4, self-grill.md 3, verification.md 2. `is_public`/`include_public`: no hits;
+  `list_templates`/`instantiate_template` mentions untouched (@AC-32).
+- Verification: `validate.py --self-test` and `validate.py` both pass (required by `docs/patterns/strat-lab-plugin.md`).
+- Next: Step 11 (analysis `CLAUDE.md` null-score drift and root Teardown audit).
+

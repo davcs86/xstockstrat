@@ -706,7 +706,7 @@ stays green.
 
 ### Step 10 — docs: strat-lab `backtest` skill (same-PR rule, `docs/patterns/strat-lab-plugin.md`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `plugins/strat-lab/`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
@@ -904,3 +904,13 @@ _Populated by /sdd-execute as implementation proceeds._
   which still traded stays `BACKTEST_STATUS_OK` and carries the failed symbols' rows and warnings (@AC-5), so the
   "never backfill" rule is not read as INSUFFICIENT_DATA-only. No scope change.
 - No CI-equivalent tooling fallback was used in Step 9 (`uv run pytest` and `uv run ruff`, the service's own harness).
+- **Step 10 (2026-11-01) — plugin validator run.** `docs/patterns/strat-lab-plugin.md` requires
+  `python3 plugins/strat-lab/scripts/validate.py --self-test` and `python3 plugins/strat-lab/scripts/validate.py` to
+  pass before a plugin change ships; the step's Verification block omits them. Both were run and passed. No scope
+  change.
+- **Step 10 (2026-11-01) — FORMULA_ERROR text is new, not an extension.** Instruction 2 says to extend the
+  FORMULA_ERROR description in `output-handling.md`, but none existed there. A new `NO_TRADE_REASON_FORMULA_ERROR`
+  bullet (contract error or owner-unreadable formula) was added beside the EVALUATION_FAILED one. No scope change.
+- **Step 10 (2026-11-01) — no plugin version bump.** The pattern doc only requires the two `plugin.json` versions to
+  stay byte-identical; neither was changed (0.4.0). No scope change.
+- No CI-equivalent tooling fallback was used in Step 10 (grep and the plugin's own `validate.py`).
