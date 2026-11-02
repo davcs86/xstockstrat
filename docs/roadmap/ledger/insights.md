@@ -3770,3 +3770,8 @@ reusing.
   round-3/4 adversary findings recorded in its `context.md`.
 - **Rule it implies**: re-check foreign-schema state in the write statement; one deleter per resource; a destructive
   operator path takes an expected-count bound and lists the exact rows for the reviewer.
+
+### 2026-11-02 — legacy-authors-confirm-resolve — design
+- **Pattern**: When an operator CLI gains an interactive prompt, make it validate-all-then-write-once (one write site after every prompt), load its input file lazily and strictly, and write each acceptance scenario's answer sequence against the real prompt count — a scripted `y` that lands on an earlier prompt otherwise fails silently with exit 0. Pair it with an explicit non-interactive path (`--yes` plus explicit flags) and a one-line "not confirmed" notice instead of a TTY switch.
+- **Evidence**: `docs/roadmap/features/284-legacy-authors-confirm-resolve/design.md` (flow, rejected TTY gate); round-1 adversary finding that `@AC-8`/`@AC-17` answer sequences mismatched the prompt count.
+- **Rule it implies**: count the prompts in every interactive scenario's `When`; a twin of a library predicate that cannot be imported (frozen file) gets a parity test, not a comment alone.
