@@ -217,3 +217,12 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - TDD: N/A (migration). Verification: offline only (`ls` of both files + read-through; 0 `ALTER` lines). No database started. The real-DB apply is proven by Step 4's `portfolio-db-test` CI job.
 - Discovery note (no effect): `011_*` uses plain `ADD COLUMN`. The idempotent style the spec cites is in `017_*` (and `007_*`), and that is the style followed here.
 - Next: Step 4 (real-Postgres harness + `portfolio-db-test` CI job).
+
+### Step 4 — real-Postgres harness + CI job (2026-11-02)
+
+- Created `internal/repository/dbtest_helpers_test.go` (`//go:build dbtest`). `testPool` reads `PORTFOLIO_DB_TEST_URL`. When it is unset, the test skips, but `CI=true` makes it fail instead (analysis `real_pg` precedent, `tests/conftest.py:435-439`). The pool sets `lock_timeout=500ms`, and cleanup deletes `portfolio.watchlists` rows `LIKE 'it-281-%'` (cascade). Seed and read helpers: `seedWatchlist`, `seedBinding`, `seedExpiry`/`insertExpiry`, `bindingSource`, `expiryRow`, `testUserID`.
+- Created `signal_expiry_schema_dbtest_test.go`. `TestSignalExpirySchema` checks that a NULL `signal_id` is accepted, that a duplicate `(watchlist_id, symbol)` gives `23505`, and that deleting the watchlist cascades to both the expiry rows and the binding. Every helper is used, because `unused` lints the dbtest files once `build-tags: [dbtest]` is set.
+- `.golangci.yml`: `run.build-tags: [dbtest]`. `ci.yml`: new `portfolio-db-test` job after `ledger-db-test`. It uses the same TimescaleDB service and migrator image, `setup-go@v7` with Go 1.27, and runs `go test -tags dbtest -race -count=1 ./internal/repository/...` with `GOWORK=off`, `CI=true` and `PORTFOLIO_DB_TEST_URL`. The job is added to `ci-gate` `needs:` and to the summary echo. No pnpm/proto build step is needed: the Go stubs are checked in.
+- TDD: N/A (test infrastructure). Offline RED: `no tests to run` before the files existed. Offline GREEN: `go vet -tags dbtest` OK, GO-LINT `0 issues`, skip without the URL and fail under `CI=true`. The untagged `go test ./internal/repository/...` still passes. The real-DB run happens in CI (Deviation Log).
+- Next: Step 5 (repository add path).
+

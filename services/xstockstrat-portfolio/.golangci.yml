@@ -25,3 +25,5 @@ formatters:
 
 run:
   timeout: 5m
+  build-tags:
+    - dbtest

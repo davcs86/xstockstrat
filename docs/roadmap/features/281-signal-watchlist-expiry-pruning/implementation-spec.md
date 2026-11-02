@@ -219,7 +219,7 @@ ls services/xstockstrat-portfolio/migrations/018_*.up.sql services/xstockstrat-p
 
 ### Step 4 — test: real-Postgres harness and `portfolio-db-test` CI job
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio` (plus `.github/workflows/ci.yml`)
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/dbtest_helpers_test.go` — create (`//go:build dbtest`)
@@ -1042,4 +1042,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: `buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto"`.
 - **Done instead**: buf 1.72.0 ran in the pinned `xstockstrat-codegen` image (no host buf). Because the worktree `.git` is a pointer file outside the container mount, the baseline was `git archive origin/main-dev packages/proto` (`1ea1c19c`) passed as `<tar>#subdir=packages/proto`. Same tree, same rules; `buf lint` and `buf breaking` both exited 0.
 - **Disposition**: CI-equivalent fallback. The CI `proto-lint` job runs the exact git-ref form on the PR.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 4 — DB run deferred to CI; two extra helpers
+
+- **Spec said**: RED = `TestSignalExpirySchema` against a database migrated to `017`, GREEN = after `018`. Helpers `testPool`, `seedWatchlist`, `seedBinding`, `seedExpiry`, `bindingSource`, `expiryRow`.
+- **Done instead**: no database was started (HARD CONSTRAINT), so the spec's offline fallback was used. Pre-implementation `go test -tags dbtest -run TestSignalExpirySchema` reported `no tests to run`. After implementation, `go vet -tags dbtest ./...` and GO-LINT (with `build-tags: [dbtest]`) are clean. The test skips without `PORTFOLIO_DB_TEST_URL` and fails with `CI=true`. The real-DB RED/GREEN is the CI job `portfolio-db-test`. Two small helpers were added in `dbtest_helpers_test.go`: `insertExpiry` returns the error so the PK-violation case can be asserted, and `testUserID` builds the unique `it-281-` scoped user id.
+- **Disposition**: the spec allows this fallback (GO-DBTEST). The helpers stay inside the step's **Files**. Citation drift with no effect: `scripts/Dockerfile.migrate` copies `services` at `:15`, not `:13`.
 - **Severity**: n/a
