@@ -1,6 +1,6 @@
 # Implementation Spec: signal-watchlist-expiry-pruning
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-31
 **Feature**: `docs/roadmap/features/281-signal-watchlist-expiry-pruning/feature.md`
 **Total Steps**: 22
