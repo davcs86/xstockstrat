@@ -380,6 +380,7 @@ const SKIP_DIRS = new Set(['tests', 'test', '__tests__', 'e2e', 'node_modules', 
 const LANG_EXT = { py: /\.py$/, go: /\.go$/, ts: /\.tsx?$/ }
 const GETTER_RE = { go: /\.(Get(?:String|Int|Float|Bool))\s*\(/g, ts: /\.(get(?:String|Int|Float|Bool))\s*\(/g }
 const INDEX_RE = /\bvalues\s*(?:\?\.\s*)?\[/g
+const ASSIGN_AFTER_RE = /^\s*(?:\*\*|<<|>>>?|\?\?|&&|\|\||[-+*/%&|^])?=(?![=>])/
 const DECL_RE = {
   go: /^func\s+(?:\(\s*(?:\w+\s+)?\*?\s*(\w+)(?:\[[^\]]*\])?\s*\)\s*)?(\w+)\s*[([]/gm,
   ts: /^[ \t]*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function\s*\*?\s*([A-Za-z_$][\w$]*)|(?:(?:public|private|protected|static|readonly|override|async)\s+)*([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\([^)]*\)\s*(?::\s*[^{;=]+)?\{|(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*(?::\s*[^=]+)?=>)/gm,
@@ -547,15 +548,20 @@ function extractRegexReads(root, registry, lang) {
     const defs = fwds.map((fw) => locateDef(srcs.get(fw.file), fw, lang)).filter(Boolean)
     const fwdRe = fwds.length ? new RegExp(`(?<![\\w$])(${fwds.map((f) => f.symbol).join('|')})\\s*\\(`, 'g') : null
     for (const [file, src] of srcs) {
-      const sites = [...src.matchAll(GETTER_RE[lang]), ...src.matchAll(INDEX_RE)].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0 }))
+      const sites = [
+        ...[...src.matchAll(GETTER_RE[lang])].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0 })),
+        ...[...src.matchAll(INDEX_RE)].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0, index: true })),
+      ]
       for (const m of fwdRe ? src.matchAll(fwdRe) : []) {
         const open = m.index + m[0].length - 1
         if (!defs.some((d) => d.file === file && d.open === open)) sites.push({ open, keyArg: fwds.find((f) => f.symbol === m[1]).keyArg })
       }
       const decls = declsOf(src, lang)
       for (const site of sites.sort((a, b) => a.open - b.open)) {
-        const text = callArgs(src, site.open, lang)?.args[site.keyArg]
+        const call = callArgs(src, site.open, lang)
+        const text = call?.args[site.keyArg]
         if (!text) continue
+        if (site.index && ASSIGN_AFTER_RE.test(src.slice(call.end + 1, call.end + 200))) continue
         const def = defs.find((d) => d.file === file && site.open > d.bodyStart && site.open < d.bodyEnd)
         if (def && text === def.param) continue
         const k = argKey(text, lang)

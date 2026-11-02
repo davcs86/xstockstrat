@@ -251,6 +251,16 @@ test('k a call through the get_int_present alias resolves like get_int', () => {
   assert.equal(r.line, 15)
 })
 
+test('l TS and Go values[...] assignment targets are neither reads nor dynamic-reads', () => {
+  const res = cw.extractReads(READERS, reg())
+  const TS_W = 'services/xstockstrat-ui/src/lib/index_writes.ts'
+  const GO_W = `${GO_MD}/config/index_writes.go`
+  assert.deepEqual(readKeys(res, TS_W), ['analysis.breakout.enabled', 'performance.risk_free_rate_annual'])
+  assert.deepEqual(dynSites(res, TS_W), [])
+  assert.deepEqual(readKeys(res, GO_W), ['marketdata.feed.symbols'])
+  assert.deepEqual(dynSites(res, GO_W), [])
+})
+
 const JOIN = path.join(HERE, 'config-wiring-fixtures', 'join')
 const SEEDS = 'services/xstockstrat-config/migrations'
 const lines = (r) => r.stdout.split('\n').filter(Boolean)

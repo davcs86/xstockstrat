@@ -24,6 +24,7 @@
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done: environment-baseline gate confirmed reported-only (2026-10-23 operator ruling); 1 env-scoped finding reported, `policy.envReadUnseeded` = `reported`; no environment read |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential (re-spec) | Operator option C at the Step 11 blocker: new Step 11 (TS/Go `values[...]` assignment targets are writes, not reads) inserted before the baseline freeze; former Steps 11-18 renumbered 12-19; Total Steps 18 → 19 |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential (re-spec §5.3) | Merged origin/main-dev (ledger-guard clean); Steps 12, 13, 14 re-specced to the current tree. Step 12 classifies all 43 post-Step-11 dynamic sites (8 forwarders incl. `str_nonempty`/`float_positive`/`get_config_value`/`_agent_policy`, 28 getter bodies, 4 closed-set runtime keys, 4 non-config containers). Step 13 drops the nonexistent scan-roots export. Step 14 uses language-root filter globs that cover `cmd/` Go readers and now owns the scan-root test |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done: TS/Go `values[...]` assignment targets (`=` and compound) are skipped by the regex extractor; test (l) + two write fixtures; real-tree `dynamic-read` 46 → 43 (the 7 `configServiceImpl.ts` write sites gone, no read lost) |
 
 ---
 

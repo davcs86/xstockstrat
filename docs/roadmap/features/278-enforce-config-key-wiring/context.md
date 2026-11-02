@@ -456,3 +456,14 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
   - Corrected the ci-gate anchors: `needs` `:902-921` and echoes `:926-944` end at `secret-scan`, after `otel-signals` and `ledger-guard`. Setup-node is at `:459-462`.
 - Files modified: `implementation-spec.md` (Steps 12, 13, 14 bodies only), `feature.md` (history row), `context.md` (this entry).
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 11 (sequential)
+
+- **Step 11 done:** `extractRegexReads` (`scripts/check-config-wiring.mjs`) now tags `INDEX_RE` sites and skips one whose balanced closing `]` is followed by `=` or a compound assignment (`+=`, `??=`, `||=`, `&&=`, `**=`, shifts, …), but not `==`/`===`/`=>` (`ASSIGN_AFTER_RE`). Getter and forwarder sites are unaffected. No registry entry was added.
+- **TDD:** red first. Fixtures `readers/services/xstockstrat-ui/src/lib/index_writes.ts` and `readers/services/xstockstrat-marketdata/internal/config/index_writes.go` plus test (l) gave 38 tests, 36 pass, 2 fail: (l), where `performance.window_days` was read from a literal write, and (d), where `index_writes.go:writes` was a false `dynamic-read`. Green: 38/38.
+- **Real-tree diff (Instruction 4):** the `extractReads` read and dynamic set was captured before and after. Only 7 lines disappeared, all `dynamic-read` in `services/xstockstrat-config/src/grpc/configServiceImpl.ts`: lines 50-54 (`toProtoSnapPayload` symbol), 276 and 300. No read key disappeared or appeared. `--final` counts by kind went from dynamic-read 46 → 43, with read-unseeded 64, seeded-unread 31 and form-mismatch 9 unchanged. This matches the re-spec projection of 43 dynamic sites for Step 12.
+- **Verification:** `node --test scripts/config-wiring.test.mjs && node --check scripts/check-config-wiring.mjs && ! node scripts/check-config-wiring.mjs --final | grep -E 'configServiceImpl\.ts:[A-Za-z_]+:dynamic-read' && echo OK` printed `OK`. Lint: `node --check scripts/config-wiring.test.mjs` was clean.
+- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.test.mjs`, the two `index_writes` fixtures, `implementation-spec.md` (Step 11 Status, Deviation Log), `feature.md`, `context.md`.
+- Tooling: Node v22.23.4. The pin is 24; the operator ruled this is not a blocker.
+- Deviations: one, in the Deviation Log. The TS fixture has an extra `??=` write, and case (d) also went red.
+- Severity: n/a.

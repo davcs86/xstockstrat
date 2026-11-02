@@ -433,7 +433,7 @@ grep -n "environment-baseline decision (operator ruling): reported-only" docs/ro
 
 ### Step 11 — service: TS/Go `values[...]` assignment targets are writes, not reads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -844,3 +844,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - Under the default `reported` policy, join case 5's env-scoped line now carries `REPORTED: `.
 - The `ratchet/*` fixtures keep `config-wiring.json` beside the tree, or in `policy/{reported,blocking}/`. Tests copy the tree into an `fs.mkdtempSync` root and install the chosen file as `scripts/config-wiring.json`, so no new CLI flag was needed.
 **Reason**: The loader reads `<root>/scripts/config-wiring.json`, and the two policy files cannot share one directory.
+
+### Deviation: Step 11 — fixtures carry one extra compound-assignment write; case (d) also went red
+**Spec said**: Instruction 1 lists the TS writes `values[k] = x`, `obj.values[row.key] = y` and `values['performance.window_days'] = z`; Instruction 3 says compound assignments are also writes.
+**Actual**: `index_writes.ts` also holds `values[k] ??= x`, so Instruction 3's compound rule is pinned by a fixture. The Go fixture lives under `${GO_MD}/config/`, so red was 2 failing cases, not 1: (l), and (d), whose false-dynamic-read assertion over that directory saw `index_writes.go:writes`. Both pass after the fix (38/38).
+**Reason**: An untested compound branch could regress silently; (d) going red is the intended zero-false-dynamic gate.
