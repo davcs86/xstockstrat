@@ -1138,6 +1138,11 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, msg string
 }
 
 func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey string, payload map[string]interface{}) {
+	s.emitEventAs(ctx, "", eventType, streamKey, payload)
+}
+
+// emitEventAs sets the ledger event owner explicitly; "" leaves ledger to fall back to x-user-id metadata.
+func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventType, streamKey string, payload map[string]interface{}) {
 	fields := make(map[string]*structpb.Value, len(payload))
 	for k, v := range payload {
 		val, _ := structpb.NewValue(v)
@@ -1152,6 +1157,7 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		// Stable per-emit dedup key, reused across the retries below so a retry after a committed-but-
 		// unacked append returns the stored event instead of writing a duplicate.
 		IdempotencyKey: uuid.NewString(),
+		UserId:         ownerUserID,
 	}
 
 	// Retry transient codes.Unavailable (a ledger GOAWAY) so a deploy-time ledger bounce doesn't drop

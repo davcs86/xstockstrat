@@ -27,6 +27,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done: `WatchlistRepo.PruneExpiredSignalEntries` (per-list never-waiting `SKIP LOCKED` tx, deletes only the locked SIGNAL bindings, sweeps expired orphans, returns `PruneResult`/`PrunedEntry`); `WatchlistStore` method + configurable fake; RED probes → GREEN, build/vet/dbtest-vet green, lint 0 issues |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done: 9 `TestPrune_*` real-DB tests (AC-2/3/4/5/6/8/10/12 + strategy-bound); compile-RED vs pre-Step-9 tree, offline vet/lint/cover green, DB run in CI `portfolio-db-test` |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute (re-spec) | Seed migration renumbered 035 → 037 (feature 280 holds 035/036); 281 merges after 280 |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done: `signal_prune.go` prune loop (startup tick, live clamped interval), owner-visible `signal_entry_expired`/`signal_entry_removed_untracked` events via `emitEventAs` (+ per-tick `x-trace-id`), goroutine wired in `main.go`, config seed `037_portfolio_signal_prune_interval` in the same commit; `--final` key hits 0 / introduced 0, lint 0 issues |
 
 ---
 
@@ -60,4 +61,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-10 done; resume at Step 11 with seed migration `037_portfolio_signal_prune_interval` (operator ruling 2026-11-02). 281's integration PR merges only after feature 280 (#1359).
+`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-11 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); resume at Step 12. 281's integration PR merges only after feature 280 (#1359).

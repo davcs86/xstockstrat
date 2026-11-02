@@ -75,6 +75,7 @@ func main() {
 	go svc.ConsumeBracketUpdates(ctx)
 	go svc.ConsumeAccountDeregistrations(ctx)
 	go svc.HydrateStops(ctx)
+	go svc.PruneExpiredSignalEntries(ctx)
 
 	hdl := handler.NewPortfolioHandler(svc)
 

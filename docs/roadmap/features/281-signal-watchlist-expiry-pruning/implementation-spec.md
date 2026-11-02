@@ -482,7 +482,7 @@ GO-DBTEST (CI `portfolio-db-test`) green; **GO-COVER** (excluded packages — in
 
 ### Step 11 — service: prune loop, owner-visible events, interval clamp, startup wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/signal_prune.go` — create
@@ -1100,4 +1100,14 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: compile-red before Step 9; AC-6 "second tick returns `Removed == nil`"; AC-12(b) "run `UpdateBinding`'s second statement while a tick holds the parent". GO-DBTEST green.
 - **Done instead**: Step 9 had already landed (sequential order). RED was taken by compiling the new test file against a `git archive` of `814956b8` (pre-Step-9) in the scratchpad: `go vet -tags dbtest ./internal/repository/` → `undefined: PrunedEntry`. No database was started (HARD CONSTRAINT): GREEN is offline — `go vet -tags dbtest ./...`, GO-LINT `0 issues`, 9 `TestPrune_*` functions, all skip without `PORTFOLIO_DB_TEST_URL`, GO-COVER total 68.6%. The real-DB run is CI `portfolio-db-test`. The tick is global, so every assertion filters `PruneResult.Removed` to the test's own list (AC-6 asserts that filtered slice is nil) and the tick error must be nil. AC-12(b)'s deadlock half is deterministic: a test tx takes the tick's parent lock, `UpdateBinding` runs in a goroutine, the test polls `pg_stat_activity` until it waits on the parent touch, then the tick's `FOR UPDATE SKIP LOCKED` binding select must return nothing and commit; `UpdateBinding` must then succeed or return `ErrBindingNotFound`. AC-12(c) runs 10 concurrent renewal/tick iterations and asserts either order converges to `(valid_until = renewal, signal_id = 102)`. AC-10 fixture rows are cleaned up by `user_id`.
 - **Disposition**: spec-allowed fallback (GO-DBTEST). Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 11 — RED probe; Verification blocks 2 and 4 run as split plain commands
+
+- **Spec said**: TDD red-green paired with Step 12. Run Verification block 2 before writing the 037 pair and again after. Run blocks 1-4 as written, then GO-LINT.
+- **Done instead**:
+  - RED came from an uncommitted probe `internal/service/zz_step11_probe_test.go`, because Step 12's test file is outside this step's Files. It failed with `undefined: clampPruneInterval`, `undefined: signalPruneIntervalKey`, `s.pruneInterval undefined` and `s.pruneOnce undefined`. After the change the same probe passed: the clamp rows 0/30/90000, `pruneInterval()` at 30 → 60s, and one tick → 2 `AppendEvent` calls. The probe was then deleted.
+  - The worktree sandbox refuses a compound shell script that runs `git`, so blocks 2 and 4 ran as separate plain commands with the same logic. Block 2 ran `git fetch --prune` and `git ls-tree origin/main-dev` (nothing ≥ 035). The per-ref `037_` grep was replaced by `git log --remotes=origin -- 'services/xstockstrat-config/migrations/037_*'`, which came back empty. That command is a superset of the per-ref check, because any file in a ref's tree was added by a commit reachable from that ref. It also ran `has280` on `origin/main-dev` (0/2) and on `origin/claude/smoke-test-deployment-0f1z5j` (2/2), so no WARN. Block 4 extracted the base with `git archive -o` plus `tar` in the scratchpad, ran `--final --json` on base (rc 0) and head (rc 0), and ran the spec's comparison script verbatim from a file.
+  - The pre-write block-2 run left out its first line (pair present), which fails by construction before the pair exists. The post-write run checked the pair with `ls`.
+- **Disposition**: the same checks with equivalent mechanics. Only the step's **Files** changed.
 - **Severity**: n/a

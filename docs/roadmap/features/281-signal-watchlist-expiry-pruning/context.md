@@ -289,3 +289,35 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - **Decision (operator, 2026-11-02):** 280 keeps 035/036. 281's seed becomes `037_portfolio_signal_prune_interval`, and feature 282's seeds become 038/039. golang-migrate has no out-of-order guard, so 281's integration PR merges only after 280's (#1359) is on `main-dev`. If 280 renumbers, 281 re-checks with the operator.
 - **Files changed (docs only, uncommitted):** `implementation-spec.md` (every 035 for this seed → 037; Step 11 Codebase Evidence collision bullet marked resolved; Instruction 9 adds the pre-merge assertion that #1359 is merged; Verification block 2 checks 037, flags any other NNN ≥ 37 on `main-dev`, greps `/037_` on every origin ref, and checks that 280's 035/036 seeds sort below ours: WARN when absent from both `origin/main-dev` and the 280 branch, STOP with `MERGE_TIME=1` unless they are on `origin/main-dev`; Steps 14 and 20 numbers/names only), `design.md`, `product-spec.md`, `acceptance.feature` (`@AC-19` Given renamed: a pre-implementation wording fix, ID kept), `recon.md` (appended note under the Amendment), `feature.md` (Status History row), `docs/roadmap/features/merge-order.md` (new 281 ← 280 row; 282 ← 281 row renumbered to 038/039 and 037).
 - **F-09:** Steps 1-10 are untouched. Step 11's body was edited because Step 11 had not executed (it halted at the blocker with nothing committed). This is the re-spec gate before relaunch, not a post-execution rewrite.
+
+## Session 2026-11-02 — sdd-execute sequential (resume at Step 11)
+
+### Step 11 — prune loop, owner-visible events, interval clamp, startup wiring [done] (2026-11-02)
+
+- Created `internal/service/signal_prune.go`:
+  - Constants: a column-0 `const signalPruneIntervalKey = "portfolio.watchlist.signal_prune_interval_seconds"` and a `const (` block holding default 300, min 60 and max 86400.
+  - `clampPruneInterval`: `<=0` → 300s, `1..59` → 60s, `>86400` → 86400s.
+  - `pruneInterval()` calls `s.wlCfg.GetInt(signalPruneIntervalKey, defaultPruneIntervalSec)` directly, with no wrapper, and re-reads it every iteration.
+  - `PruneExpiredSignalEntries(ctx)` runs one tick at startup, then a `select` on `ctx.Done()` / `time.After(s.pruneInterval())`.
+  - `pruneOnce(ctx)` builds a single `tickCtx` with a fresh outgoing `x-trace-id`. The repo call and every emit share it.
+  - On a repo error it WARNs and still emits for `res.Removed`, because the Step 9 contract returns committed removals even when `err != nil`.
+  - Each removal produces one `emitEventAs(tickCtx, e.UserID, …)` with stream key `watchlist:<id>`:
+    - `signal_entry_expired` carries `{user_id, watchlist_id, symbol, strategy_id, signal_id, valid_until RFC3339 UTC}`.
+    - `signal_entry_removed_untracked` carries `{user_id, watchlist_id, symbol, strategy_id}`.
+  - Each tick ends with one `InfoContext` line: `lists`, `skipped`, `removed`.
+- `portfolio_service.go`: `emitEvent` now delegates to the new `emitEventAs(ctx, ownerUserID, …)`, which keeps the retry and idempotency body unchanged and sets `AppendEventRequest.UserId = ownerUserID`. An empty owner keeps the old behavior, because the proto zero value lets ledger fall back to metadata. `cmd/server/main.go` gains `go svc.PruneExpiredSignalEntries(ctx)` right after `go svc.HydrateStops(ctx)`.
+- Config migration `037_portfolio_signal_prune_interval.{up,down}.sql`: design amendment A SQL verbatim. It is in the same commit as the reader, as Instruction 8 requires. No `scripts/config-wiring.json` edit.
+- Files modified: `services/xstockstrat-portfolio/internal/service/signal_prune.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/cmd/server/main.go`, `services/xstockstrat-config/migrations/037_portfolio_signal_prune_interval.up.sql`, `services/xstockstrat-config/migrations/037_portfolio_signal_prune_interval.down.sql`.
+- TDD:
+  - RED: an uncommitted probe failed with `undefined: clampPruneInterval` / `signalPruneIntervalKey`, `s.pruneInterval undefined` and `s.pruneOnce undefined`.
+  - GREEN: the probe passed (clamp rows, `pruneInterval()` 30 → 60s, one tick → 2 appends) and was then deleted.
+  - The full behavioral table is Step 12.
+- Verification:
+  - Block 1: build, vet and the three greps all pass, and `go vet -tags dbtest ./...` is OK.
+  - Block 2, pre-write (pair line left out): `037` is free on every origin ref, `origin/main-dev` tops out at `034`, and 280's 035/036 are 2/2 on `origin/claude/smoke-test-deployment-0f1z5j` and 0/2 on main-dev, so no WARN. Block 2, post-write: the pair is present and the result is unchanged.
+  - Block 3: rc 0.
+  - Block 4: `key hits 0, introduced 0, pre-existing 0` (stored 182 vs base 180 = the two new rows), so there are no ESCALATE lines. Negative control: with `signal_prune.go` moved aside, `--final` reports `037…:portfolio/portfolio.watchlist.signal_prune_interval_seconds:seeded-unread`. The file was then restored.
+  - GO-LINT: `0 issues`. Full `go test ./...` passes. No database was started.
+- Collision-check record (Instruction 9): pre-write and post-write runs above. Still owed: a re-run before opening the integration PR, and a `MERGE_TIME=1` run after the final rebase, immediately before merge. The second requires PR #1359 (280) on `main-dev`.
+- Deviations: RED probe, and blocks 2 and 4 run as split plain commands (sandbox) (Deviation Log).
+- Next: Step 12 (prune loop service unit tests).
