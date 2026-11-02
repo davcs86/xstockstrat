@@ -19,6 +19,7 @@ import {
   type JwtClaims,
 } from '@/lib/auth';
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
+import { recordBffDuration } from '@/lib/bffMetrics';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
@@ -50,10 +51,6 @@ export function requireAdminScope(claims: JwtClaims): void {
   }
 }
 
-// Bounded deadline for snapshot-fundamentals reads: a stalled upstream must reject (→ the card's error
-// state), never leave the browser's query pending forever (feature 220).
-export const FUNDAMENTALS_TIMEOUT_MS = 15_000;
-
 /**
  * Build a Connect handler for the common case: verify the session, then forward the request
  * to a backend gRPC method with the propagated identity headers. Handlers that inject a
@@ -76,11 +73,12 @@ export function forward<Req, Res>(
   };
 }
 
-/** Like {@link forward}, but gated on admin scope (throws PermissionDenied otherwise). */
+/** Like {@link forward} (same `timeoutMs` option), but gated on admin scope (PermissionDenied). */
 export function forwardAdmin<Req, Res>(
-  call: (req: Req, opts: { headers: Headers }) => Promise<Res>,
+  call: (req: Req, opts: { headers: Headers; timeoutMs?: number }) => Promise<Res>,
+  options: { timeoutMs?: number } = {},
 ): (req: Req, ctx: HandlerContext) => Promise<Res> {
-  return forward(call, { admin: true });
+  return forward(call, { ...options, admin: true });
 }
 
 /** A Connect router preconfigured with the platform's accepted compressions. */
@@ -118,19 +116,36 @@ export function createDispatch(
 ): (req: Request) => Promise<Response> {
   const handlerMap = new Map(router.handlers.map((h) => [prefix + h.requestPath, h]));
 
+  const segment = prefix.split('/')[1];
+
   return async function dispatchConnect(req: Request): Promise<Response> {
+    const startMs = performance.now();
     const pathname = new URL(req.url).pathname;
     const handler = handlerMap.get(pathname);
-    if (!handler) return new Response(null, { status: 404 });
+    if (!handler) {
+      recordBffDuration({ segment, rpcService: 'unmatched', status: 404, startMs });
+      return new Response(null, { status: 404 });
+    }
 
-    const uRes = await handler({
-      httpVersion: '2.0',
-      url: req.url,
-      method: req.method,
-      header: req.headers,
-      body: bodyAsIterable(req.body),
-      signal: req.signal,
-    });
+    // Server-streaming methods resolve on their first message, so only unary calls are timed.
+    const timed = handler.method.methodKind === 'unary';
+    let status = 500;
+    let uRes: Awaited<ReturnType<typeof handler>>;
+    try {
+      uRes = await handler({
+        httpVersion: '2.0',
+        url: req.url,
+        method: req.method,
+        header: req.headers,
+        body: bodyAsIterable(req.body),
+        signal: req.signal,
+      });
+      status = uRes.status;
+    } finally {
+      if (timed) {
+        recordBffDuration({ segment, rpcService: handler.service.typeName, status, startMs });
+      }
+    }
 
     const responseHeaders = new Headers(uRes.header);
     uRes.trailer?.forEach((value, key) => responseHeaders.append(key, value));

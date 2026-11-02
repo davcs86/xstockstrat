@@ -4,7 +4,38 @@ These exercise the real subprocess path — no DB, no gRPC. Run with:
     pytest tests/test_sandbox.py
 """
 
+import subprocess
+
+from app.services import sandbox
 from app.services.sandbox import _sandbox_env, execute_formula
+
+
+class TestSandboxStartupGrace:
+    """The wall deadline adds interpreter + numpy/pandas startup (~2s on staging) to the formula
+    budget, so a loaded host does not time out a trivial run."""
+
+    def test_deadline_includes_startup_grace(self, monkeypatch):
+        seen = {}
+
+        class FakeProc:
+            pid = 999_999_999
+
+            def communicate(self, input=None, timeout=None):
+                if "first" not in seen:
+                    seen["first"] = timeout
+                    raise subprocess.TimeoutExpired(cmd="x", timeout=timeout)
+                return "", ""
+
+        monkeypatch.setattr(sandbox.subprocess, "Popen", lambda *a, **k: FakeProc())
+        monkeypatch.setattr(sandbox, "_killpg", lambda proc: None)
+
+        res = execute_formula(
+            source="result = 1", input_data={}, allowed_imports=["math"], timeout_ms=5000
+        )
+
+        assert seen["first"] == (5000 + sandbox.SANDBOX_STARTUP_GRACE_MS) / 1000
+        assert res.exit_reason == "timeout"
+        assert res.error == "Formula execution timed out after 5000ms"
 
 
 class TestSandboxExecution:
@@ -184,3 +215,60 @@ class TestSandboxParams:
         )
         assert res.success is True
         assert res.output == {"value": False}
+
+
+class TestSandboxNoOutputFails:
+    """D-10 (feature 268): a run that never emits a parseable output line fails."""
+
+    def test_ac1_clean_exit_without_output_fails(self):
+        """AC-1: a clean exit before the output line is a runtime_error, not success."""
+        res = execute_formula(source="raise SystemExit(0)", input_data={}, allowed_imports=[])
+        assert res.success is False
+        assert "produced no output" in res.error
+        assert res.output == {}
+        assert res.exit_reason == "runtime_error"
+
+    def test_ac2_unparseable_output_line_fails(self):
+        """AC-2: a malformed output line is a runtime_error, not an empty success."""
+        res = execute_formula(
+            source='print("__OUTPUT__:{")\nraise SystemExit(0)',
+            input_data={},
+            allowed_imports=[],
+        )
+        assert res.success is False
+        assert "could not be parsed" in res.error
+        assert res.exit_reason == "runtime_error"
+
+    def test_ac3_formula_assigning_result_succeeds(self):
+        """AC-3: a formula that assigns `result` still succeeds with its output."""
+        res = execute_formula(source="result = {'x': 1}", input_data={}, allowed_imports=[])
+        assert res.success is True
+        assert res.output == {"x": 1}
+        assert res.error == ""
+
+    def test_marker_framed_after_unterminated_user_print(self):
+        """Marker framing: a user print without a newline must not hide the marker."""
+        res = execute_formula(
+            source='result = {"x": 1}\nprint("x", end="")',
+            input_data={},
+            allowed_imports=[],
+        )
+        assert res.success is True
+        assert res.output == {"x": 1}
+
+    def test_os_exit_without_output_fails(self):
+        """os._exit(0) reached via numpy traversal skips the output line and fails."""
+        res = execute_formula(
+            source="import numpy\nnumpy.lib._datasource.os._exit(0)",
+            input_data={},
+            allowed_imports=["numpy"],
+        )
+        assert res.success is False
+        assert "produced no output" in res.error
+
+    def test_nonzero_exit_with_empty_stderr_has_error_text(self):
+        """FR-1: SystemExit(1) leaves stderr empty, yet the error must be non-empty."""
+        res = execute_formula(source="raise SystemExit(1)", input_data={}, allowed_imports=[])
+        assert res.success is False
+        assert res.error != ""
+        assert "exited with code 1" in res.error

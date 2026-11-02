@@ -315,6 +315,13 @@ export interface SetUserActiveResponse {
   user?: User | undefined;
 }
 
+export interface ListAdminUserIdsRequest {
+}
+
+export interface ListAdminUserIdsResponse {
+  userIds: string[];
+}
+
 function createBaseAuthenticateUserRequest(): AuthenticateUserRequest {
   return { email: "", password: "" };
 }
@@ -3683,6 +3690,113 @@ export const SetUserActiveResponse: MessageFns<SetUserActiveResponse> = {
   },
 };
 
+function createBaseListAdminUserIdsRequest(): ListAdminUserIdsRequest {
+  return {};
+}
+
+export const ListAdminUserIdsRequest: MessageFns<ListAdminUserIdsRequest> = {
+  encode(_: ListAdminUserIdsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAdminUserIdsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListAdminUserIdsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): ListAdminUserIdsRequest {
+    return {};
+  },
+
+  toJSON(_: ListAdminUserIdsRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListAdminUserIdsRequest>, I>>(base?: I): ListAdminUserIdsRequest {
+    return ListAdminUserIdsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListAdminUserIdsRequest>, I>>(_: I): ListAdminUserIdsRequest {
+    const message = createBaseListAdminUserIdsRequest();
+    return message;
+  },
+};
+
+function createBaseListAdminUserIdsResponse(): ListAdminUserIdsResponse {
+  return { userIds: [] };
+}
+
+export const ListAdminUserIdsResponse: MessageFns<ListAdminUserIdsResponse> = {
+  encode(message: ListAdminUserIdsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.userIds) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAdminUserIdsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListAdminUserIdsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userIds.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListAdminUserIdsResponse {
+    return {
+      userIds: globalThis.Array.isArray(object?.userIds)
+        ? object.userIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.user_ids)
+        ? object.user_ids.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListAdminUserIdsResponse): unknown {
+    const obj: any = {};
+    if (message.userIds?.length) {
+      obj.userIds = message.userIds;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListAdminUserIdsResponse>, I>>(base?: I): ListAdminUserIdsResponse {
+    return ListAdminUserIdsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListAdminUserIdsResponse>, I>>(object: I): ListAdminUserIdsResponse {
+    const message = createBaseListAdminUserIdsResponse();
+    message.userIds = object.userIds?.map((e) => e) || [];
+    return message;
+  },
+};
+
 export type IdentityServiceService = typeof IdentityServiceService;
 export const IdentityServiceService = {
   authenticateUser: {
@@ -3913,6 +4027,21 @@ export const IdentityServiceService = {
       Buffer.from(SetUserActiveResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): SetUserActiveResponse => SetUserActiveResponse.decode(value),
   },
+  /**
+   * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+   * xstockstrat-notify only; every request header is ignored.
+   */
+  listAdminUserIds: {
+    path: "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListAdminUserIdsRequest): Buffer =>
+      Buffer.from(ListAdminUserIdsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListAdminUserIdsRequest => ListAdminUserIdsRequest.decode(value),
+    responseSerialize: (value: ListAdminUserIdsResponse): Buffer =>
+      Buffer.from(ListAdminUserIdsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListAdminUserIdsResponse => ListAdminUserIdsResponse.decode(value),
+  },
 } as const;
 
 export interface IdentityServiceServer extends UntypedServiceImplementation {
@@ -3954,6 +4083,11 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
   updatePassword: handleUnaryCall<UpdatePasswordRequest, UpdatePasswordResponse>;
   setUserRoles: handleUnaryCall<SetUserRolesRequest, SetUserRolesResponse>;
   setUserActive: handleUnaryCall<SetUserActiveRequest, SetUserActiveResponse>;
+  /**
+   * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+   * xstockstrat-notify only; every request header is ignored.
+   */
+  listAdminUserIds: handleUnaryCall<ListAdminUserIdsRequest, ListAdminUserIdsResponse>;
 }
 
 export interface IdentityServiceClient extends Client {
@@ -4288,6 +4422,25 @@ export interface IdentityServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SetUserActiveResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+   * xstockstrat-notify only; every request header is ignored.
+   */
+  listAdminUserIds(
+    request: ListAdminUserIdsRequest,
+    callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void,
+  ): ClientUnaryCall;
+  listAdminUserIds(
+    request: ListAdminUserIdsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void,
+  ): ClientUnaryCall;
+  listAdminUserIds(
+    request: ListAdminUserIdsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void,
   ): ClientUnaryCall;
 }
 

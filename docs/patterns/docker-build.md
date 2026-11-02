@@ -31,7 +31,7 @@ of `docker-compose.yml` but provide hermetic CI/local environments.
 
 ```dockerfile
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 FROM base AS builder
 WORKDIR /workspace
@@ -95,7 +95,7 @@ After pnpm deploy --prod:     ~100MB (80% reduction)
 
 ```dockerfile
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 FROM base AS deps
 WORKDIR /workspace
@@ -350,7 +350,7 @@ When Docker builds encounter npm registry timeouts or network instability, confi
 
 ```dockerfile
 FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 # Configure npm to retry failed requests and use longer timeouts
 RUN npm config set fetch-timeout 120000 && \
     npm config set fetch-retry-mintimeout 20000 && \
@@ -507,7 +507,7 @@ Probe strategy by environment:
 | Alpine (Node.js) | `nc -z` | Busybox nc — supports `-z` |
 | Debian slim (Python) | bash `/dev/tcp` | No `nc` in base image |
 | macOS host | `nc -z` | BSD nc — supports `-z` |
-| Distroless (Go) | Not supported | No shell or nc; rely on upstream healthchecks |
+| Distroless (Go) | `/app/service healthcheck` | No shell or nc; the binary itself calls `grpc.health.v1/Check` on its own port over mTLS (`internal/mtls.Probe`) |
 
 ### `scripts/docker-entrypoint.sh`
 
@@ -536,7 +536,11 @@ When `WAIT_FOR` is unset or empty, it skips probing and starts immediately. This
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50054"]
 ```
 
-**Go / distroless** — no healthcheck possible. These services depend on upstream Node.js/Python services that do have healthchecks, so `condition: service_healthy` on their upstream deps enforces readiness transitively.
+**Go / distroless** — no shell, so the binary probes itself: `service healthcheck` calls `grpc.health.v1/Check` on `127.0.0.1:$GRPC_PORT`, presenting its own mTLS leaf and pinning its own SAN. The health service is registered only once config, DB and broker init have finished, so SERVING means ready. `deploy/homelab/compose.yml` uses it (the gate's `up --wait` rollback needs every service health-checked); local `docker-compose.yml` does not yet, and relies on upstream `service_healthy` deps instead:
+```yaml
+    healthcheck:
+      test: ["CMD", "/app/service", "healthcheck"]
+```
 
 The shared timing anchor in `docker-compose.yml`:
 ```yaml
@@ -559,9 +563,9 @@ x-hc-defaults: &hc-defaults
 | `xstockstrat-ingest` | ✅ (Python, port 50055) | config, ledger, identity |
 | `xstockstrat-analysis` | ✅ (Python, port 50056) | config, ledger, indicators |
 | `xstockstrat-agent` | ✅ (Python, port 9000) | config, identity, ingest, notify, analysis |
-| `xstockstrat-marketdata` | ❌ (Go distroless) | config, ledger, notify via `service_healthy` |
-| `xstockstrat-portfolio` | ❌ (Go distroless) | config, ledger via `service_healthy` |
-| `xstockstrat-trading` | ❌ (Go distroless) | config, ledger, notify, indicators via `service_healthy` |
+| `xstockstrat-marketdata` | ❌ locally (✅ `/app/service healthcheck` in `deploy/homelab/compose.yml`) | config, ledger, notify via `service_healthy` |
+| `xstockstrat-portfolio` | ❌ locally (✅ `/app/service healthcheck` in `deploy/homelab/compose.yml`) | config, ledger via `service_healthy` |
+| `xstockstrat-trading` | ❌ locally (✅ `/app/service healthcheck` in `deploy/homelab/compose.yml`) | config, ledger, notify, indicators via `service_healthy` |
 
 ### Which Deps Belong in `WAIT_FOR`
 

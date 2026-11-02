@@ -396,3 +396,252 @@ Still open (surface at the /sdd-execute checkpoint):
 - `implementation-spec.md` Step 7 drops the "Recorded C-15 divergence" note; test and scenario now agree.
 - No `/sdd-qa defect` is filed for the fill-payload side/sign question (operator chose the reword). The adjacent
   observation that `order.filled`/`order.partially_filled` payloads carry no side remains recorded above for context.
+
+## Session 2026-10-29 — re-spec at branch setup (sdd-execute sequential)
+
+- Merged `origin/main-dev` into the feature branch (normal merge; one conflict in `docs/roadmap/ledger/fails.md`,
+  resolved keeping both sides — the branch side added nothing beyond base there). `ledger-guard.py --fix`: clean.
+- Re-spec'd the bodies of Steps 1–9 against the merged tree (263, 252 and 248 are now in `main-dev`); details in
+  implementation-spec.md § Deviation Log. Highlights:
+  - Step 1: the three merge-order rows already exist (`:78`, `:79`, `:80`). Remaining work: fix row `:78`'s
+    "next free `QueryEventsRequest` field number" clause (257 adds no field) and add the rolling-deploy note.
+  - Steps 2/3/6/7: line citations re-grounded; 263's owner tests and `makeStreamCall(req, 'u-a')` are reused for the
+    owner+token compose case.
+  - Steps 4/5: 248's `Number(...)` forms are replaced by `toSeq`. The new `MAX(sequence)` bound query breaks 248's
+    `makePool`-based `streamEvents` tests, so Step 5 adapts those fakes (no impl fallback for a missing bound),
+    extends `fixtures/streamCall.ts#makeRecordingCall` with `once`/`removeListener`/`emit` (+ `INVENTORY.md`) for
+    `waitForDrain`, and reuses `makeFakeNotifier`.
+  - Step 9: the new invariant is `LEDGER-9` (248 holds `LEDGER-8`); Step 8's timings now live in the CI log.
+- **Operator decision (2026-10-29, own words via the session question tool): "Move it into CI real-DB tier".**
+  Step 8 is no longer a manual real-TimescaleDB run. It is now
+  `services/xstockstrat-ledger/src/__tests__/db/queryPagination.db.test.ts`, run by `pnpm run test:db` in CI job
+  `Ledger DB test (TimescaleDB)` (`.github/workflows/ci.yml:706-762`), and is verified by that job going green, so
+  it is not an operator-only or tooling blocker. No database is started locally; local verification is compile-only,
+  because the tier fails loudly without `LEDGER_DB_TEST_URL` (no-silent-skip convention). This supersedes the r2
+  manual-run evidence plan and design.md's "CI TimescaleDB job" rejected alternative. The `p100_ms` /
+  `token_walk_count` / `per_page_ms` context.md lines are dropped.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `sequential`, one commit per step on `feature/fix-ledger-query-pagination`, single integration PR at the end.
+  Status `implementation-ready` → `in-progress`.
+- **Up-front confirmation:** given by the operator's standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Terms: unattended
+  checkpoints (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train
+  authorized; 255/275 deferred; operator-only DB/prod steps mean open the PR and hold the merge. This feature's
+  blocker decision (2026-10-29, the operator's own words via the session question tool): "Move it into CI real-DB
+  tier" — applied to Step 8 in the re-spec above.
+- Branch setup done: `origin/main-dev` merged, ledger guard clean, Steps 1–9 re-spec'd. Next: Step 1.
+
+### Step 1 — docs: merge-order rows + rolling-deploy note (2026-10-29)
+
+- `docs/roadmap/features/merge-order.md`: row 257 ← 263 (actually at `:79`, spec cited `:78` — one-line shift, no
+  content impact) now says 257 adds no `QueryEventsRequest` field (token rides `PageRequest.page_token`; 263's
+  `owner_only = 7` stays last). Rows 257 ← 252 and 251 ← 257 and all Resolved cells unchanged.
+- Added a 3-line "257 rolling-deploy note" directly under the Blocking Dependencies table: old-build `event_id` token or
+  a repeated page → `GetPnL` `UNAVAILABLE` until every ledger instance runs 257; realized P&L changes on purpose once
+  251 lands (announce as a correction, insights.md:176-188).
+- TDD: N/A (docs). Verification: `grep -c fix-ledger-query-pagination` = 4 (>= 3); "field number after 263" no hit;
+  `UNAVAILABLE` 1 hit (`:101`).
+
+### Steps 2+3 — ledger `queryEvents` keyset token, page clamp, BigInt helper + tests (2026-10-29)
+
+- **Operator decision (2026-10-30, own words via the session question tool): "A: Fix in same commit
+  (Recommended)".** Under the standing rule ("Merge pairs + standing rule", 2026-10-29), Steps 2 and 3 land as one
+  commit with one red→green cycle. Step 2's `ORDER BY sequence ASC` broke the three feature-263 exact-SQL
+  expectations in `ledgerServiceImpl.test.ts`, which were updated from `ORDER BY recorded_at ASC` (params and
+  placeholder order unchanged). Both deviations are in the Deviation Log.
+- `src/grpc/ledgerServiceImpl.ts`: exported `QUERY_EVENTS_DEFAULT_PAGE_SIZE = 100`, `QUERY_EVENTS_MAX_PAGE_SIZE = 1000`,
+  `toSeq`, `parseSequenceToken` (module-private `InvalidPageTokenError` marker and `MAX_BIGINT`). `queryEvents` parses
+  the token first (bad → code 3, no query), appends `sequence > $n::bigint` (string param) after 263's `ownerOnly`,
+  clamps the page size, orders by `sequence`, and encodes the next token via `toSeq(...)`. `streamEvents`,
+  `getEvent`, `exportEvents`, `rowToEvent` untouched.
+- `src/__tests__/ledgerServiceImpl.test.ts`: inline `makeKeysetPool` (single consumer, C-13) + `queryPage`; tests for
+  @AC-1 (string sequences `9`/`10`/`11`), @AC-2 (cap 1000, LIMIT 1001), @AC-7 (default 100, shuffled insert, sequence
+  order), exactly-full last page, four bad tokens → code 3 with no query, owner+token compose, `toSeq` /
+  `parseSequenceToken` units.
+- TDD: RED 12 failing of 53 in the file (3 x 263 SQL literals + 9 new; tsc also reported missing `toSeq` /
+  `parseSequenceToken` exports). GREEN: `pnpm test` 98/98; `test:coverage` 98 pass, ledgerServiceImpl 86.47% lines,
+  `npx c8 check-coverage --lines 40` exit 0; `pnpm run build` and `pnpm run lint` exit 0 (warnings only, 0 errors).
+- Formatting: only the new/changed lines were prettier-formatted; the two files carry pre-existing prettier drift
+  that was left untouched (surgical diff).
+- Worktree tooling: the root `node_modules` symlink broke `pnpm install` (ENOTDIR), so it was replaced by a real
+  install filtered to root + ledger (`--frozen-lockfile`); no manifest or lockfile changed.
+
+### Steps 4+5 — ledger `streamEvents` bounded batched replay, drain backpressure, BigInt `maxSeq` + tests (2026-10-29)
+
+- **Operator decision (2026-10-30, own words via the session question tool): "A: Include the fake fix
+  (Recommended)".** Under the standing rule ("Merge pairs + standing rule", widened 2026-10-30: "Widen the rule
+  (Recommended)"), Steps 4 and 5 land as one commit with one red→green cycle on Step 5's tests. The commit also
+  touches `streamResolveWired.test.ts` (`makeCountingPool` answers `MAX(sequence)`; assertions unchanged). Both are in
+  the Deviation Log.
+- `src/grpc/ledgerServiceImpl.ts`: `REPLAY_BATCH_SIZE = 1000`, exported `waitForDrain(call)` (first of
+  `drain`/`cancelled`/`close`/`error`, listeners removed). `streamEvents`: BigInt `maxSeq` via `toSeq` (seed,
+  `writeRow`, live dedupe, flush); `writeRow` returns `write()`'s result; the replay captures a
+  `COALESCE(MAX(sequence), 0)` bound after subscribe, then walks `sequence > cursor AND <= bound ORDER BY sequence
+  LIMIT 1000` batches on `this.pool`, awaiting drain on a false write. Catch path, `if (cleaned) return;` guard,
+  synchronous flush and `onGap` unchanged.
+- Tests: `streamCall.ts` gains `once`/`removeListener`/`emit` (+ `INVENTORY.md` row); `makeSingleSlotPool` (FIFO
+  one-slot fake answering MAX/INSERT/replay SELECT) + `deferred`/`settle`; 248's streamEvents tests moved onto it
+  (assertions unchanged); new `describe('streamEvents bounded replay')`: AC-5 FIFO interleave (INSERT between batches
+  1 and 2, >= 3 batches, 2500 ascending rows), LEDGER-2 subscribe-before-first-query, `"9"/"10"/"11"` + buffered
+  11/12 dedupe, `fromSequence` kept, drain gating, cancel during drain, failing replay SELECT.
+- TDD: RED (tests applied, impl not): 105 tests, 3 failing (FIFO interleave, drain, cancel-during-drain). GREEN:
+  `test:coverage` 105/105, ledgerServiceImpl 88.52% lines, `npx c8 check-coverage --lines 40` exit 0; `pnpm run build`
+  and `pnpm run lint` exit 0 (warnings only). Step 4 greps: `Number(row.sequence)` / `Number(req.fromSequence)` no
+  hit; `new Client(` 1 hit (`streamExportRows`). `test:db` without `LEDGER_DB_TEST_URL` fails loudly by the tier's
+  convention (no DB started locally).
+- Formatting: new/changed lines prettier-formatted only; pre-existing drift left untouched.
+
+### Steps 6+7 — portfolio `GetPnL` fail-closed paging, repeated-token guard, largest partial + tests (2026-10-29)
+
+- **Standing rule applied (operator, own words: "Merge pairs + standing rule", widened "Widen the rule
+  (Recommended)").** Step 6's Verification is "see Step 7", so Steps 6 and 7 land as one commit with one red→green
+  cycle on Step 7's tests. No file outside the two steps' Files; no existing assertion changed. Deviation Log row added.
+- `portfolio_service.go`: `ErrLedgerUnavailable` next to `ErrQuotesUnavailable`; `const ledgerPnLPageSize = 1000`
+  (matches ledger `QUERY_EVENTS_MAX_PAGE_SIZE`, `ledgerServiceImpl.ts:15`); private `collectFills(ctx, eventType,
+  userID, mode)` walks every page with the unchanged payload/user/mode filters, wraps a page error as
+  `%w: %w` (`ErrLedgerUnavailable`, cause) and fails on `next == token`. Pass 1 and pass 2 sit on it (Warn+break
+  removed); pass 2 keeps the largest `|FilledQty|`, first seen wins a tie. Unrealized side and the partial-apply/fold
+  block unchanged. `SourceService: "trading"` kept (251 owns it).
+- `portfolio_handler.go`: `classifyGetPnLError` also maps `ErrLedgerUnavailable` → `CodeUnavailable`; `toGRPCError`
+  unchanged.
+- Tests: new `portfolio_pnl_paging_test.go` (`pagingLedger` fake, 200/page, index token, `failPage`, `ignoreToken`,
+  100-call safety cap; inline `pnlEvent`): AC-3 (250.00, ≥3 calls, PageSize 1000, user `u-1` on every call, first
+  token empty), AC-3 repeated token, AC-6 ascending/descending (501.00), AC-4 pass-1/pass-2 page failure.
+  `computeRealizedPnL` mirror moved to the largest-`|FilledQty|` rule + `TestRealizedPnL_PartialOrderIndependent`;
+  `TestClassifyGetPnLError` extended (ledger error → CodeUnavailable / codes.Unavailable).
+- TDD: RED (sentinel declared, logic not changed): AC-3 "PageSize = 500, want 1000"; repeated token returned an
+  inflated success (`realized_pnl:10000`, err nil); AC-6 descending "RealizedPnl = 1, want 501.00"; AC-4 both passes
+  success with nil error; mirror "got 100, want 300"; classifier "got internal, want CodeUnavailable". GREEN: all
+  `GetPnL|RealizedPnL|ClassifyGetPnL` tests pass (incl. unchanged AC5/AC6/AC28); full `go test ./... -race` ok,
+  CI-scoped coverage total 68.6% (>= 40%); `go build` ok; `golangci-lint` 0 issues; Step 6 greps clean; one `func pnlEvent`.
+- Tooling: the provisioned `~/go/bin/golangci-lint` (v2.14.0) is built with go1.26 and refuses the go1.27 module;
+  the same pinned v2.14.0 was rebuilt with go1.27.0 into the session scratchpad for the lint run. No repo change.
+
+### Step 8 — CI real-TimescaleDB tier test (2026-10-30)
+
+- Operator decision (2026-10-30, own words: "A: --test-concurrency=1 (Recommended)"): `test:db` in
+  `services/xstockstrat-ledger/package.json` is now `tsc && node --test --test-concurrency=1 dist/__tests__/db/*.test.js`
+  so DB-tier files do not run in parallel against the shared CI database. Deviation Log row added; Step 8 Files updated.
+- New `src/__tests__/db/queryPagination.db.test.ts` (fail-loud `before()` like `streamResolve.db.test.ts`; rows scoped by
+  `randomUUID()` stream_key; `N = 2 * REPLAY_BATCH_SIZE + 500` seeded via `generate_series` with no explicit `sequence`):
+  AC-1 token walk (all rows once, ascending via `toSeq`, `ceil(N/1000)` pages, last token `''`, plus `ownerOnly` walk
+  returning only the caller's rows) and AC-5 (3 concurrent replays on a `max: 1` pool while `appendEvent` loops;
+  each replay equals the DB order exactly; max append latency < 5000 ms; timings `console.log`ged for the CI log).
+- Local verification only: `pnpm run build` ok, `lint` 0 errors, `test:coverage` 105 pass (89% lines), prettier clean.
+  No database started; `test:db` without `LEDGER_DB_TEST_URL` fails loudly by design. RED/GREEN evidence is the CI job.
+  Open: CI job result must be checked on the pushed branch; if it fails, hard stop per Step 8 instruction 6.
+- Tooling note: the worktree's `node_modules` symlink pointed at a main checkout with no install; replaced by a local
+  `pnpm install --frozen-lockfile` (gitignored).
+
+### Step 9 — docs and teardown audit (2026-10-30)
+
+- `services/xstockstrat-ledger/CLAUDE.md`: invariant 4 now "monotonic and may gap (`nextval`; rolled-back inserts burn values) - never decreasing"; Live Streaming section states subscribe -> bounded batched replay (`REPLAY_BATCH_SIZE`, up to a post-subscribe `max(sequence)` bound) -> synchronous flush -> live; one line for the `QueryEvents` keyset token (default 100, cap 1000). Invariant 5 (feature 263) untouched.
+- `services/xstockstrat-ledger/docs/context-constitution.md`: `LEDGER-9` appended (token = decimal last `sequence`, bad token code 3, all compares via `toSeq`, late-commit delivery contract, `pg_snapshot_xmin` follow-up, unbounded notifier buffer accepted, real-pg proof in `queryPagination.db.test.ts`); `LEDGER-5` `StreamEvents` clause amended; header refresh stamp added.
+- `services/xstockstrat-portfolio/CLAUDE.md`: `GetPnL` `UNAVAILABLE` text now also covers ledger page error, deadline and repeated token (`ErrLedgerUnavailable`). The `order.partially_filled` row already matched.
+- Instruction 4: no CI timings are available locally (Step 8 is verified by the CI job); no per-page-ms follow-up recorded. Check the `Ledger DB test (TimescaleDB)` log for the AC-5 numbers before the integration PR merges; if the walk exceeds 50% of the caller deadline, record the user-scoped-walk follow-up (design.md section 3).
+- Teardown: the context-forge plugin was not invoked from this subagent session (availability unconfirmed), so the audit was done by hand. Re-read the three touched files against `ledgerServiceImpl.ts` and `portfolio_handler.go`; re-stamped the stale `~Lnn` hints in the ledger constitution (LEDGER-1..7, gotchas, `toValidDate`) to the current file. The integration PR body must record both facts: plugin unavailable, and this manual reconciliation.
+- Verification greps: `may gap` hit (CLAUDE.md:35); `LEDGER-9` one row mentioning `toSeq`; `ErrLedgerUnavailable` hit in portfolio CLAUDE.md; `then subscribes` no hit.
+
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-ledger-query-pagination (feature 257)
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ledger/acceptance/fix-ledger-query-pagination.feature | CREATE | NEW | QueryEvents next_page_token walk |
+| AC-2 | same ledger file | CREATE | NEW | page_size cap 1000 |
+| AC-7 | same ledger file | CREATE | NEW | default page of 100, oldest first |
+| AC-5 | same ledger file | CREATE | NEW | StreamEvents replay does not starve AppendEvent. Evidence is now the CI real-DB tier (*.db.test.ts), per the operator re-spec. |
+| AC-3 | services/xstockstrat-portfolio/acceptance/fix-ledger-query-pagination.feature | CREATE | NEW | GetPnL folds each fill once. The observable subject is portfolio's GetPnL. |
+| AC-6 | same portfolio file | CREATE | NEW | largest cumulative partial fill |
+| AC-4 | same portfolio file | CREATE | NEW | GetPnL errors rather than returning a partial sum |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-ledger-query-pagination.feature (CREATE) ---
+# Promoted from feature 257 (fix-ledger-query-pagination) at launch, C-16. Do not hand-edit; scenarios are verbatim.
+Feature: fix-ledger-query-pagination (bug fix)
+  Regression guard: QueryEvents honours pageToken, caps page_size, and StreamEvents replay does not starve AppendEvent on the single-connection pool.
+
+  # "Exactly once" covers every matching event committed before the walk passes its sequence; a lower sequence
+  # committing after the walk passed it is not delivered by that walk (operator sign-off 2026-10-22, change (a)).
+  @AC-1 @FR-1 @FR-2 @regression @feature-257
+  Scenario: Following next_page_token returns each event exactly once
+    Given the ledger holds 3 events of type "t" appended in order "e1", "e2", "e3"
+    When QueryEvents is called with event_type "t" and page_size 2
+    Then it returns "e1", "e2" and a non-empty next_page_token
+    When QueryEvents is called again with event_type "t", page_size 2 and that next_page_token
+    Then it returns only "e3" and an empty next_page_token
+
+  @AC-2 @FR-3 @regression @feature-257
+  Scenario: An oversized page_size is capped at 1000
+    Given the ledger holds 20000 events of type "t"
+    When QueryEvents is called with event_type "t" and page_size 1000000
+    Then it returns exactly 1000 events and a non-empty next_page_token
+
+  @AC-7 @FR-4 @regression @feature-257
+  Scenario: Callers that omit page_token still get the oldest first page
+    Given the ledger holds 150 events of type "t" appended in order "e1" to "e150"
+    When QueryEvents is called with event_type "t", no page_size and no page_token
+    Then it returns "e1" to "e100" in ascending sequence order and a non-empty next_page_token
+    When QueryEvents is called with event_type "t", page_size 500 and no page_token
+    Then it returns "e1" to "e150" in ascending sequence order and an empty next_page_token
+
+  # The 2-second bound is the pass threshold. On the buggy code the append waits for the whole replay.
+  @AC-5 @FR-7 @regression @feature-257
+  Scenario: StreamEvents replay does not starve AppendEvent
+    Given the ledger holds 200000 events and its query pool has 1 connection
+    And a StreamEvents call is replaying from sequence 0
+    When AppendEvent is called while the replay is still in progress
+    Then AppendEvent commits within 2 seconds
+    And the replay still delivers, in ascending sequence order and exactly once, every event committed before the replay passed its sequence
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-ledger-query-pagination.feature (CREATE) ---
+# Promoted from feature 257 (fix-ledger-query-pagination) at launch, C-16. Do not hand-edit; scenarios are verbatim.
+Feature: fix-ledger-query-pagination (bug fix)
+  Regression guard: GetPnL pages through ledger QueryEvents without double-counting fills and never returns a partial sum.
+
+  @AC-3 @FR-5 @regression @feature-257
+  Scenario: GetPnL folds each fill exactly once across ledger pages
+    Given the ledger holds 501 "order.filled" events for user "u-1" from trading, alternating buy 1 "AAPL" @ 100.00 and sell 1 "AAPL" @ 101.00, ending with a buy
+    When GetPnL runs for user "u-1"
+    Then realized_pnl is 250.00
+
+  @AC-6 @FR-5 @regression @feature-257
+  Scenario: GetPnL keeps the largest cumulative partial fill of an order that spans ledger pages
+    Given the ledger holds one "order.filled" event for user "u-1" from trading buying 600 "AAPL" @ 100.00
+    And it holds 501 "order.partially_filled" events for user "u-1" from trading for sell order "o-s" on "AAPL" @ 101.00, with sell-signed cumulative filled_qty -1, -2, ... -501 (largest magnitude -501)
+    And order "o-s" has no "order.filled" event
+    When GetPnL runs for user "u-1"
+    Then realized_pnl is 501.00
+
+  @AC-4 @FR-6 @regression @feature-257
+  Scenario: GetPnL fails rather than returning a partial sum when a page cannot be read
+    Given the ledger returns a first page of 500 "order.filled" events for user "u-1" with a non-empty next_page_token
+    And the next QueryEvents call fails with DEADLINE_EXCEEDED
+    When GetPnL runs for user "u-1"
+    Then GetPnL returns an error with code UNAVAILABLE or DEADLINE_EXCEEDED
+    And no realized_pnl value is returned
+
+### Notes / ambiguities / conflicts
+- Attribution: GetPnL is defined in packages/proto/portfolio/v1/portfolio.proto, so AC-3, AC-4 and AC-6 go to the portfolio suite. AC-1, AC-2, AC-5 and AC-7 assert on ledger RPCs (QueryEvents, StreamEvents, AppendEvent), so they go to the ledger suite.
+- The AC-5 source file carries the comment "Evidence: unit FIFO interleave test (CI) + one recorded real-TimescaleDB run (context.md); not a CI job." I dropped it from the promoted block because it is stale under the operator decision of 2026-10-29. AC-5 is now verified by the ledger *.db.test.ts in the "Ledger DB test (TimescaleDB)" CI job. The orchestrator may add a one-line provenance comment pointing at that test once it exists.
+- Dedup: I grepped the five existing ledger suites for pagination, page_token and QueryEvents and found no match. I grepped platform.feature for the same terms and found no match. I grepped the portfolio suites for GetPnL. The existing GetPnL rules (fix-book-portfolio-page, fix-after-hours-positions-priced, offline-account-full-pnl) cover quote availability and unrealized P&L only. None asserts realized_pnl or paging, so there is no OVERLAP and no CONFLICT.
+- fix-ledger-trimmed-notify-payload.feature has StreamEvents live-delivery scenarios. They are a different outcome from AC-5 (replay versus append starvation), so no overlap.
+- No scenario goes to platform.feature.
+- Scenario order within the ledger file follows the source file order but for AC-7, which is moved ahead of AC-5 for grouping. The tags are unchanged.
+
+### Coverage check
+- Source scenarios: 7 (AC-1 to AC-7). Planned: 7 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Every @AC is accounted for and none is skipped.
+```
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

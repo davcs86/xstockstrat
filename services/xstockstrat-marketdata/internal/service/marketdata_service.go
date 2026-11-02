@@ -23,6 +23,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/mtls"
@@ -154,8 +155,8 @@ type fundamentalsConfig interface {
 type fundamentalsRepo interface {
 	GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error)
 	UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error
-	CountFundamentalsFetchedToday(ctx context.Context) (int, error)
-	CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error)
+	CountFundamentalsFetchedToday(ctx context.Context, src string) (int, error)
+	CountFundamentalsFetchedSince(ctx context.Context, src string, since time.Time) (int, error)
 }
 
 // histFundamentalsRepo is the persistence surface for the point-in-time fundamentals store
@@ -324,6 +325,9 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 			// than blanking a chart that has data.
 			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, startImplicit); len(fresh) > 0 {
 				bars, nextToken = fresh, freshToken
+			} else if len(bars) == 0 {
+				slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none",
+					"symbol", req.Symbol, "timeframe", canonicalTf, "start", start, "end", end)
 			}
 		}
 	}
@@ -352,32 +356,32 @@ func (s *MarketDataService) staleCheckDue(symbol, tf string, interval time.Durat
 func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) ([]*marketdatav1.Bar, string) {
 	src, err := s.registry.Get("")
 	if err != nil {
-		slog.Warn("GetBars: resolve source failed", "symbol", symbol, "error", err)
+		slog.WarnContext(ctx, "GetBars: resolve source failed", "symbol", symbol, "error", err)
 		return nil, ""
 	}
 	live, err := src.GetBars(ctx, symbol, tf, start, end)
 	if err != nil {
-		slog.Warn("GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
+		slog.WarnContext(ctx, "GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
 		return nil, ""
 	}
 	if len(live) == 0 {
 		return nil, ""
 	}
 	if err := s.repo.InsertBars(ctx, live); err != nil {
-		slog.Warn("GetBars: cache insert failed", "symbol", symbol, "error", err)
+		slog.WarnContext(ctx, "GetBars: cache insert failed", "symbol", symbol, "error", err)
 		return truncateBars(live, pageSize, recent), ""
 	}
 	if recent {
 		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, end, pageSize)
 		if err != nil {
-			slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+			slog.WarnContext(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
 			return truncateBars(live, pageSize, recent), ""
 		}
 		return bars, ""
 	}
 	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
 	if err != nil {
-		slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+		slog.WarnContext(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
 		return truncateBars(live, pageSize, recent), ""
 	}
 	return bars, nextToken
@@ -557,7 +561,7 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 		return nil, liveErr
 	}
 	if err := s.cacheQuote(ctx, live, since); err != nil {
-		slog.Warn("GetLatestQuote: cache insert failed", "symbol", symbol, "error", err)
+		slog.WarnContext(ctx, "GetLatestQuote: cache insert failed", "symbol", symbol, "error", err)
 	}
 	return live, nil
 }
@@ -621,13 +625,13 @@ func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []strin
 					continue
 				}
 				if insErr := s.cacheQuote(fctx, q, since); insErr != nil {
-					slog.Warn("GetLatestQuotes: cache insert failed", "symbol", q.Symbol, "error", insErr)
+					slog.WarnContext(ctx, "GetLatestQuotes: cache insert failed", "symbol", q.Symbol, "error", insErr)
 				}
 			}
 			return coldMap, nil
 		})
 		if fetchErr != nil {
-			slog.Warn("GetLatestQuotes: cold fetch failed", "cold", len(cold), "error", fetchErr)
+			slog.WarnContext(ctx, "GetLatestQuotes: cold fetch failed", "cold", len(cold), "error", fetchErr)
 		} else if coldMap, ok := v.(map[string]*marketdatav1.Quote); ok {
 			for _, q := range coldMap {
 				if q != nil {
@@ -657,7 +661,7 @@ func (s *MarketDataService) lookupMarkCloses(ctx context.Context, symbols []stri
 		defer cancel()
 		closes, err := s.dailyCloses.GetLatestDailyClosesBatch(cctx, symbols, time.Now().Add(-resolveMarkCloseMaxAge(s.budgetCfg)))
 		if err != nil {
-			slog.Warn("GetLatestQuotes: mark lookup failed", "symbols", len(symbols), "error", err, "ctx_done", ctx.Err() != nil)
+			slog.WarnContext(ctx, "GetLatestQuotes: mark lookup failed", "symbols", len(symbols), "error", err, "ctx_done", ctx.Err() != nil)
 			closes = nil
 		}
 		ch <- closes
@@ -692,13 +696,13 @@ func (s *MarketDataService) GetLatestPrice(ctx context.Context, symbol string) (
 				out.LastPrice = &price
 				out.LastTradeTime = timestamppb.New(ts)
 			} else {
-				slog.Warn("GetLatestPrice: latest-trade fetch failed", "symbol", symbol, "error", tErr)
+				slog.WarnContext(ctx, "GetLatestPrice: latest-trade fetch failed", "symbol", symbol, "error", tErr)
 			}
 		}
 	}
 
 	if prev, ok, err := s.repo.GetPreviousDailyClose(ctx, symbol); err != nil {
-		slog.Warn("GetLatestPrice: prev daily close read failed", "symbol", symbol, "error", err)
+		slog.WarnContext(ctx, "GetLatestPrice: prev daily close read failed", "symbol", symbol, "error", err)
 	} else if ok {
 		out.PrevClose = &prev
 	}
@@ -785,7 +789,7 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 				for _, bars := range coldMap {
 					if len(bars) > 0 {
 						if insErr := s.barsStore.InsertBars(fctx, bars); insErr != nil {
-							slog.Warn("BatchGetBars: cache insert failed", "error", insErr)
+							slog.WarnContext(ctx, "BatchGetBars: cache insert failed", "error", insErr)
 						}
 					}
 				}
@@ -840,7 +844,7 @@ func (s *MarketDataService) partialColdFetch(ctx context.Context, key string, co
 	var budget time.Duration
 	if dl, ok := ctx.Deadline(); ok {
 		if budget = time.Until(dl) - barsPartialMargin; budget <= 0 {
-			slog.Warn("BatchGetBars: no deadline budget for cold fetch; returning stored bars", "cold", cold)
+			slog.WarnContext(ctx, "BatchGetBars: no deadline budget for cold fetch; returning stored bars", "cold", cold)
 			return nil, context.DeadlineExceeded
 		}
 		var cancel context.CancelFunc
@@ -849,7 +853,7 @@ func (s *MarketDataService) partialColdFetch(ctx context.Context, key string, co
 	}
 	v, err, _ := s.barsSingleflight.Do(key, func() (interface{}, error) { return fetch(fctx) })
 	if err != nil {
-		slog.Warn("BatchGetBars: cold fetch failed; returning stored bars",
+		slog.WarnContext(ctx, "BatchGetBars: cold fetch failed; returning stored bars",
 			"cold", cold, "budget_ms", budget.Milliseconds(), "error", err)
 	}
 	return v, err
@@ -889,7 +893,7 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 				defer close(done)
 				pc, pErr := s.prevClose.GetPreviousDailyCloseBatch(fctx, req.Symbols)
 				if pErr != nil {
-					slog.Warn("BatchGetLatestPrice: previous-close lookup failed", "symbols", n, "error", pErr)
+					slog.WarnContext(ctx, "BatchGetLatestPrice: previous-close lookup failed", "symbols", n, "error", pErr)
 					return
 				}
 				prevClose = pc
@@ -899,21 +903,21 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 		var trades map[string]*source.Trade
 		src, sErr := s.registry.Get("")
 		if sErr != nil {
-			slog.Warn("BatchGetLatestPrice: source lookup failed", "symbols", n, "error", sErr)
+			slog.WarnContext(ctx, "BatchGetLatestPrice: source lookup failed", "symbols", n, "error", sErr)
 		} else {
 			// Prefer multi-symbol trade fetch if the source supports it.
 			if ms, ok := src.(source.MultiSymbolSource); ok {
 				var mErr error
 				trades, mErr = ms.GetLatestTradesMulti(fctx, req.Symbols)
 				if mErr != nil {
-					slog.Warn("BatchGetLatestPrice: multi-symbol fetch failed; falling back to per-symbol", "symbols", n, "error", mErr)
+					slog.WarnContext(ctx, "BatchGetLatestPrice: multi-symbol fetch failed; falling back to per-symbol", "symbols", n, "error", mErr)
 				}
 			}
 			// Fall back to per-symbol if multi is nil or the source doesn't support it.
 			if trades == nil {
 				trades = make(map[string]*source.Trade, n)
 				if fctx.Err() != nil {
-					slog.Warn("BatchGetLatestPrice: budget exhausted by multi-symbol fetch; per-symbol fallback skipped",
+					slog.WarnContext(ctx, "BatchGetLatestPrice: budget exhausted by multi-symbol fetch; per-symbol fallback skipped",
 						"symbols", n, "budget_ms", budget.Milliseconds())
 				} else if lt, ok := src.(source.LatestTradeSource); ok {
 					failed, fetched, skipped := 0, 0, 0
@@ -935,7 +939,7 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 						trades[sym] = &source.Trade{Price: price, TradeTime: ts}
 					}
 					if failed+skipped > 0 {
-						slog.Warn("BatchGetLatestPrice: per-symbol fallback incomplete",
+						slog.WarnContext(ctx, "BatchGetLatestPrice: per-symbol fallback incomplete",
 							"failed", failed, "fetched", fetched, "skipped", skipped, "total", n, "sample_error", firstErr)
 					}
 				}
@@ -1048,7 +1052,7 @@ func (s *MarketDataService) runQuoteRetentionStep(ctx context.Context, now time.
 	lookbackH := int64(resolveQuoteLookback(s.budgetCfg) / time.Hour)
 	// Direct DB writes bypass the SetConfig bounds: never drop rows the windowed reads may still serve.
 	if days*24 <= lookbackH {
-		slog.Warn("quote retention skipped: retention within lookback window",
+		slog.WarnContext(ctx, "quote retention skipped: retention within lookback window",
 			"retention_days", days, "lookback_hours", lookbackH)
 		return
 	}
@@ -1059,11 +1063,11 @@ func (s *MarketDataService) runQuoteRetentionStep(ctx context.Context, now time.
 	defer cancel()
 	n, err := s.retention.DropQuoteChunksBefore(dctx, now.Add(-time.Duration(days)*24*time.Hour))
 	if err != nil {
-		slog.Warn("quote retention failed", "retention_days", days, "error", err)
+		slog.WarnContext(ctx, "quote retention failed", "retention_days", days, "error", err)
 		return
 	}
 	if n > 0 {
-		slog.Info("quote retention dropped chunks", "chunks", n, "retention_days", days)
+		slog.InfoContext(ctx, "quote retention dropped chunks", "chunks", n, "retention_days", days)
 	}
 }
 
@@ -1145,12 +1149,12 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 				if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
 					for _, q := range quotes {
 						if err := s.cacheQuote(ctx, q, since); err != nil {
-							slog.Warn("warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
+							slog.WarnContext(ctx, "warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
 						}
 					}
 					continue
 				} else {
-					slog.Warn("warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
+					slog.WarnContext(ctx, "warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
 				}
 			}
 			var fetched, failed int
@@ -1166,13 +1170,13 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 				}
 				fetched++
 				if err := s.cacheQuote(ctx, q, since); err != nil {
-					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
+					slog.WarnContext(ctx, "warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
 			}
 			// Surface per-symbol fetch failures once per cycle (a high failed count with fetched==0
 			// is the signature of a credential/feed problem) instead of dropping them silently.
 			if failed > 0 {
-				slog.Warn("warm poller: per-symbol quote fetch failures",
+				slog.WarnContext(ctx, "warm poller: per-symbol quote fetch failures",
 					"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
 			}
 		}
@@ -1283,35 +1287,67 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 // ingestRecentBarsForTimeframe is ingestRecentBars' per-timeframe body, split out so the
 // caller can size each timeframe's window independently (see minIngestLookback).
 func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
+	began := time.Now()
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	if ms, ok := src.(source.MultiSymbolSource); ok {
 		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
+			var missing []string
+			for _, sym := range symbols {
+				if len(barsBySym[sym]) == 0 {
+					missing = append(missing, sym)
+				}
+			}
 			for sym, bars := range barsBySym {
 				if len(bars) == 0 {
 					continue
 				}
 				if err := s.repo.InsertBars(ctx, bars); err != nil {
-					slog.Warn("bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
+					slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 				}
 			}
+			reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
 			return
 		} else {
-			slog.Warn("bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
+			slog.WarnContext(ctx, "bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
 		}
 	}
+	var missing []string
 	for _, sym := range symbols {
 		bars, err := src.GetBars(ctx, sym, tf, start, end)
 		if err != nil {
-			slog.Warn("bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
+			slog.WarnContext(ctx, "bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
 			continue
 		}
 		if len(bars) == 0 {
+			missing = append(missing, sym)
 			continue
 		}
 		if err := s.repo.InsertBars(ctx, bars); err != nil {
-			slog.Warn("bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
+			slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 		}
 	}
+	reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
+}
+
+// barIngestNoBarsSample caps the symbols named in one bar-ingest no-bars WARN.
+const barIngestNoBarsSample = 10
+
+// reportIngestCycle logs a per-cycle INFO heartbeat (keeps a quiet marketdata visible in short log
+// windows) and one WARN naming the symbols the feed returned no bars for (missing of total).
+func reportIngestCycle(ctx context.Context, tf string, missing []string, total int, start, end time.Time, began time.Time) {
+	slog.InfoContext(ctx, "bar ingest: cycle complete",
+		"timeframe", tf, "symbols", total, "no_bars", len(missing), "elapsed_ms", time.Since(began).Milliseconds())
+	if len(missing) == 0 {
+		return
+	}
+	sort.Strings(missing)
+	sample := missing
+	if len(sample) > barIngestNoBarsSample {
+		sample = sample[:barIngestNoBarsSample]
+	}
+	slog.WarnContext(ctx, "bar ingest: symbols returned no bars",
+		"timeframe", tf, "missing", len(missing), "total", total, "sample", sample,
+		"window_start", start, "window_end", end)
 }
 
 // ListAssets delegates to the default data source.
@@ -1380,7 +1416,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	for _, sym := range req.Symbols {
 		bars, err := src.GetBars(ctx, sym, canonicalTf, start, end)
 		if err != nil {
-			slog.Error("backfill failed", "symbol", sym, "error", err)
+			slog.ErrorContext(ctx, "backfill failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
 			continue
 		}
@@ -1388,12 +1424,12 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 			continue
 		}
 		if err := s.repo.InsertBars(ctx, bars); err != nil {
-			slog.Error("insert bars failed", "symbol", sym, "error", err)
+			slog.ErrorContext(ctx, "insert bars failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
 			continue
 		}
 		totalWritten += int64(len(bars))
-		slog.Info("backfill progress", "symbol", sym, "bars", len(bars))
+		slog.InfoContext(ctx, "backfill progress", "symbol", sym, "bars", len(bars))
 	}
 
 	if len(failedSymbols) > 0 {
@@ -1487,12 +1523,12 @@ func (s *MarketDataService) UnsubscribeQuotes(id string) {
 func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string, timeframe string) {
 	src, err := s.registry.Get("")
 	if err != nil {
-		slog.Error("source registry error", "error", err)
+		slog.ErrorContext(ctx, "source registry error", "error", err)
 		return
 	}
 	feed, err := src.StreamBars(ctx, symbols, timeframe)
 	if err != nil {
-		slog.Error("stream bars failed", "error", err)
+		slog.ErrorContext(ctx, "stream bars failed", "error", err)
 		s.emitAlert(ctx, "marketdata feed stream error: "+err.Error())
 		return
 	}
@@ -1522,12 +1558,12 @@ func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string
 func (s *MarketDataService) StartQuoteStream(ctx context.Context, symbols []string) {
 	src, err := s.registry.Get("")
 	if err != nil {
-		slog.Error("source registry error", "error", err)
+		slog.ErrorContext(ctx, "source registry error", "error", err)
 		return
 	}
 	feed, err := src.StreamQuotes(ctx, symbols)
 	if err != nil {
-		slog.Error("stream quotes failed", "error", err)
+		slog.ErrorContext(ctx, "stream quotes failed", "error", err)
 		return
 	}
 	go func() {
@@ -1559,7 +1595,7 @@ func (s *MarketDataService) emitEvent(ctx context.Context, eventType, streamKey 
 		Payload:       &structpb.Struct{Fields: fields},
 	})
 	if err != nil {
-		slog.Warn("ledger append failed", "event_type", eventType, "error", err)
+		slog.WarnContext(ctx, "ledger append failed", "event_type", eventType, "error", err)
 	}
 }
 
@@ -1572,7 +1608,7 @@ func (s *MarketDataService) emitAlert(ctx context.Context, msg string) {
 		SourceService: "marketdata",
 	})
 	if err != nil {
-		slog.Warn("notify emit failed", "error", err)
+		slog.WarnContext(ctx, "notify emit failed", "error", err)
 	}
 }
 
@@ -1673,7 +1709,8 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		if found && time.Since(fetchedAt) <= ttl {
+		// An edgar-axis row is never a fresh vendor hit; at quota it may still be served stale below.
+		if found && time.Since(fetchedAt) <= ttl && cacheAxis(f.Source) == snapshotSourceVendor {
 			cached[strings.ToUpper(sym)] = s.toProtoFundamentals(f, false)
 			continue
 		}
@@ -1703,14 +1740,15 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 			} else if err != nil {
 				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 			}
+			wctx := context.WithoutCancel(ctx)
 			for _, f := range fetched {
-				if upErr := s.fundRepo.UpsertFundamentals(ctx, f); upErr != nil {
-					slog.Warn("GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
+				if upErr := s.fundRepo.UpsertFundamentals(wctx, f); upErr != nil {
+					slog.WarnContext(wctx, "GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
 				}
-				s.seedFromProfile(ctx, f.Symbol, f.Sector)
+				s.seedFromProfile(wctx, f.Symbol, f.Sector)
 				cached[strings.ToUpper(f.Symbol)] = s.toProtoFundamentals(f, false)
 			}
-			s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+len(fetched)), cap, windowSeconds)
+			s.maybeAlertQuota(wctx, s.quotaCountAfterFetch(wctx, count+len(fetched)), cap, windowSeconds)
 		}
 	}
 
@@ -1731,7 +1769,7 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if found && time.Since(fetchedAt) <= ttl {
+	if found && time.Since(fetchedAt) <= ttl && cacheAxis(cached.Source) == snapshotSourceVendor {
 		return s.toProtoFundamentals(cached, false), nil
 	}
 
@@ -1759,11 +1797,12 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 	}
-	if upErr := s.fundRepo.UpsertFundamentals(ctx, fresh); upErr != nil {
-		slog.Warn("GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
+	wctx := context.WithoutCancel(ctx)
+	if upErr := s.fundRepo.UpsertFundamentals(wctx, fresh); upErr != nil {
+		slog.WarnContext(wctx, "GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
 	}
-	s.seedFromProfile(ctx, fresh.Symbol, fresh.Sector)
-	s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+1), cap, windowSeconds)
+	s.seedFromProfile(wctx, fresh.Symbol, fresh.Sector)
+	s.maybeAlertQuota(wctx, s.quotaCountAfterFetch(wctx, count+1), cap, windowSeconds)
 	return s.toProtoFundamentals(fresh, false), nil
 }
 
@@ -1932,7 +1971,7 @@ func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap i
 		windowSeconds = s.fundCfg.GetInt("marketdata.finnhub.rate_window_seconds", 60)
 		cap = int(s.fundCfg.GetInt("marketdata.finnhub.symbols_per_minute", 20))
 		since := time.Now().Add(-time.Duration(windowSeconds) * time.Second)
-		count, err = s.fundRepo.CountFundamentalsFetchedSince(ctx, since)
+		count, err = s.fundRepo.CountFundamentalsFetchedSince(ctx, finnhub.SourceName, since)
 	default: // "fmp" and any unrecognized value fall back to the existing, well-tested daily-cap shape
 		windowSeconds = 86400
 		if s.fmpBudget != nil {
@@ -1940,7 +1979,7 @@ func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap i
 			return count, cap, windowSeconds, nil
 		}
 		cap = int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
-		count, err = s.fundRepo.CountFundamentalsFetchedToday(ctx)
+		count, err = s.fundRepo.CountFundamentalsFetchedToday(ctx, fmp.SourceName)
 	}
 	return count, cap, windowSeconds, err
 }
@@ -1955,7 +1994,7 @@ func (s *MarketDataService) quotaCountAfterFetch(_ context.Context, estimate int
 	return estimate
 }
 
-// atQuotaAlertThreshold is the single home of the 80%-of-cap threshold; cap <= 0 is never "at threshold".
+// atQuotaAlertThreshold is the single home of the 80%-of-cap threshold; cap <= 0 is a zero budget (FMP disabled), never "at threshold" — no 80% alert.
 func atQuotaAlertThreshold(count, cap int) bool { return cap > 0 && count >= (cap*8)/10 }
 
 // maybeAlertQuota emits one WARNING per active window once the count crosses 80% of cap. The dedup
@@ -1987,7 +2026,7 @@ func (s *MarketDataService) emitWarning(ctx context.Context, msg string) {
 		SourceService: "marketdata",
 	})
 	if err != nil {
-		slog.Warn("notify emit (warning) failed", "error", err)
+		slog.WarnContext(ctx, "notify emit (warning) failed", "error", err)
 	}
 }
 

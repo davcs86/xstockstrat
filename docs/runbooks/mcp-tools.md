@@ -65,7 +65,9 @@ The end-to-end connect flow:
    MCP endpoint returns `401` with
    `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which
    triggers discovery. (`GET /sse` returns **404**, not 401 — it is a removed path, not an
-   unauthenticated one, and it never reaches the auth gate.)
+   unauthenticated one, and it never reaches the auth gate.) If identity cannot be reached in time
+   during token validation, the endpoint returns `503` **without** `WWW-Authenticate`, so the client
+   retries instead of re-authorizing; an invalid token still returns `401` with the pointer.
 2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
    returns a `client_id`, no secret.
 3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
@@ -80,6 +82,19 @@ The end-to-end connect flow:
    not match.
 
 ---
+
+### Backend deadlines
+
+Every backend gRPC call the tools make carries a fixed deadline: **10 s** by default, and **45 s** for
+`run_backtest`, `screen_symbols`, `trigger_backfill` and `run_fundamentals_scan`. `list_opportunities`
+keeps its own config-driven deadline (see that tool). These are code constants, not config keys.
+
+On expiry a **read** tool raises `upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A **write** tool raises
+`upstream did not respond within Ns (deadline exceeded); outcome unknown, verify before retrying` —
+the write may have landed, so confirm with the matching read (`get_backfill_status`,
+`get_watchlist`, or the relevant `list_*` tool) before retrying. When the server returned its own
+deadline detail, that detail is passed through instead.
 
 ## Tools
 
@@ -243,7 +258,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111) — the caller can no longer address an alert to an arbitrary other user.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111); a broadcast's Web Push device notification reaches admin-role devices only (feature 242) — the caller can no longer address an alert to an arbitrary other user.
 
 **Parameters**
 
@@ -253,7 +268,7 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 | `category` | `string` | Yes | Alert category, e.g. `"signal"`, `"system"` |
 | `title` | `string` | Yes | Short alert title |
 | `body` | `string` | Yes | Alert body text |
-| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. No default — omitting it is a schema error. |
+| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. With `true` the in-app stream/history reaches every user, but the Web Push device notification reaches admin-role users only (feature 242). No default — omitting it is a schema error. |
 | `source_service` | `string` | No | Emitting service name (default `"xstockstrat-agent"`) |
 | `context` | `object` | No | Structured JSON context stored + fanned out with the alert (feature 087) |
 | `tags` | `string[]` | No | Tags for filtering/grouping (feature 087) |
@@ -308,6 +323,17 @@ window is evaluated fully warm and no trade opens before `start`. Two consequenc
 - If stored history does not reach back far enough to warm the indicators, the run returns
   `BACKTEST_STATUS_INSUFFICIENT_DATA` with `coverage_gaps` covering the **pre-window** span —
   not the window you asked for. Fill it with `trigger_backfill`, then re-run.
+- An `INSUFFICIENT_DATA` run with **empty** `coverage_gaps` is never a backfill case (feature 275).
+  A symbol that could not be evaluated — an upstream RPC error or an unexpected exception — gets
+  `no_trade_reason: NO_TRADE_REASON_EVALUATION_FAILED` and a `warnings` entry
+  `backtest symbol <SYM> not evaluated: <CODE>`. A formula that indicators refuses to run for the
+  strategy owner is `NO_TRADE_REASON_FORMULA_ERROR` with the same warning, `<CODE>` being
+  `PERMISSION_DENIED` (admin caller, or another indicators refusal) or `NOT_FOUND` (owner). Either
+  makes an otherwise trade-less run `BACKTEST_STATUS_INSUFFICIENT_DATA`. Act on `<CODE>`:
+  `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun later; `PERMISSION_DENIED`,
+  `NOT_FOUND` or a Python exception name (e.g. `ValueError`) → report it. A partly failed run that
+  still traded stays `BACKTEST_STATUS_OK` and carries the same rows and warnings for the failed
+  symbols.
 - A strategy that references `VWAP` alongside a longer indicator will see its VWAP values shift
   versus an unwindowed run: VWAP is an expanding average anchored at the first fetched bar, so
   the prefix moves its anchor. Deterministic, but not equal to the rolling-default run.
@@ -379,8 +405,12 @@ applies there, e.g. `volume`.
 
 **No-attachment case.** A run with no diagnostics and no trades — typically
 `BACKTEST_STATUS_INSUFFICIENT_DATA` — returns the summary block only, with `"attachments": []`. Its
-`coverage_gaps` are inline, so the summary is the whole result. The rule is about content, not
-status: any run with nothing to attach behaves this way.
+`coverage_gaps`, `warnings` and per-symbol diagnostics are inline, so the summary is the whole
+result. An all-failed run has `coverage_gaps: []` but non-empty diagnostics with
+`NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR`, plus their `warnings`. The
+rule is about content, not status: any run with nothing to attach behaves this way. An
+`INSUFFICIENT_DATA` run persists no detail, so these rows and warnings live only in this response
+and analysis memory; they are lost on an analysis restart or a Past-Runs reload.
 
 **Degradation.** Whether an attachment is surfaced is client-dependent and outside this platform's
 control, so the summary always stands on its own, and `attachments` names what exists (uri +
@@ -410,9 +440,15 @@ run gains a `warnings` entry `fundamentals fetch failed for <SYM> — rerun`.
 | Unknown `strategy_id` | `strategy not found` (NOT_FOUND) from analysis |
 | `start` after `end` | `ValueError` raised by the client before any RPC |
 | Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
+| Backtest evaluation exceeds `analysis.backtest.max_duration_seconds` (default 300 s; 0 = no limit) | `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` — narrow the range or symbols; do not retry immediately (the compute thread keeps running) |
+| marketdata re-served a bar page, or bar pagination hit its page cap | `FAILED_PRECONDITION` `backtest bar series incomplete: …` — retrying will not fix it; report it |
 | History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
 | Fundamentals-requiring strategy on a symbol with no usable fundamentals (e.g. an ETF) | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` + `fundamentals_gap` on that symbol (not an RPC error) |
 | Analysis service unreachable | `httpx` connection error propagated |
+
+Through the agent, the MCP 60 s tool cap fires before any server deadline above 60 s (the default is
+300 s), so agent users see the `backtest exceeded Ns deadline` message only when the limit is below
+60 s, and only once feature 273's error pass-through lands.
 
 ---
 
@@ -446,13 +482,13 @@ see the `status` note below for when they aren't).
 ```json
 {
   "results": [
-    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
+    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "score_unavailable": false, "status": "SCREEN_RESULT_STATUS_OK" }
   ],
   "coverage_gaps": [ { "symbol": "TSLA", "timeframe": "TIMEFRAME_1DAY", "bars_have": "5", "bars_need": "50" } ]
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears. `score_unavailable: true` means the row has no comparable score and is unranked. Three row kinds carry it: an **evaluation fault** (`status` `OK`, `passed: false` — the symbol was not evaluated, which is different from a failed screen; the rest of the scan completes); a data-less row with a hard filter (`passed: false`); and a data-less soft-only row (feature 144, `passed: true`). Filter candidates on `passed`. Un-evaluated rows carry score `0.0`, so `min_conviction > 0` also removes them and `rank_limit` may cut them (they rank last); a dropped or cut row's only trace is then the server log.
 
 **Errors**
 
@@ -462,6 +498,7 @@ see the `status` note below for when they aren't).
 | Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
 | Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ValueError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
+| A per-symbol evaluation fault (non-RPC exception for one symbol) | No call error; that symbol returns `status OK`, `passed: false`, `score_unavailable: true` (the rest of the scan completes) |
 
 ---
 
@@ -497,7 +534,7 @@ gate.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, or `"reactivate"` |
+| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, `"reactivate"`, or `"score"` (manual headline-grade refresh, feature 283 — takes only `strategy_id`; see below) |
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
 | `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"\|"fundamental"), indicator, formula_id, params, source_symbol, fundamental_metric}`. `source_symbol` (optional, feature 152) — a fixed benchmark/reference ticker (e.g. `"VOO"`) the component is computed on instead of the evaluated symbol, aligned onto the evaluated symbol's timeline (cross-symbol "market-regime" gates); empty = evaluated symbol. `fundamental_metric` (feature 198) — required when `kind="fundamental"`; one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`, `roe`, `debt_to_equity`, `price`, `year_high`, `year_low`. The operand resolves point-in-time (latest filing with `filed_date < bar_date`, T+1, carried forward; holds before the first filing — no look-ahead). Requires the symbols' fundamentals history backfilled (`trigger_backfill data_kind="fundamentals"`) and `analysis.backtest.fundamentals.enabled` ON. Normalized uppercase/trim server-side; scoring-relevant (enters the definition fingerprint). |
@@ -530,11 +567,50 @@ gate.
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 | `deactivate` on the fundamentals blend strategy (feature 186) | `the fundamentals blend strategy cannot be deactivated; it is a protected platform resource` (FAILED_PRECONDITION) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
+| `score` with any argument besides `strategy_id` (including `clear_fields=[]`) | `ValueError` `manage_strategy(operation='score') accepts only strategy_id; got: …` raised client-side, before any RPC |
+| `score` on a strategy that is missing or not yours | `strategy not found or not owned` (PERMISSION_DENIED); no grade is written |
+| `score` with no eligible evidence | `no eligible evidence — run a backtest` (NOT_FOUND); the stale grade is cleared |
+| `score` where every evidence symbol was excluded by the fundamentals guard | `no eligible evidence — all evidence symbols excluded (fundamentals unavailable: …)` (NOT_FOUND); the stale grade is cleared |
+| `score` while fundamentals availability is unknown | `fundamentals availability unknown — grade unchanged` (UNAVAILABLE) |
+| `score` while an analysis store is down | `strategy store unavailable` / `evidence store unavailable` / `score store unavailable` (UNAVAILABLE) |
+| `score` exceeds the 45 s budget | `upstream did not respond within 45s (deadline exceeded); outcome unknown, verify before retrying` |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
 `cooldown_days`, `exit_cooldown_days`, `signal_params`) changes the strategy's definition
 fingerprint, so its derived grade is cleared until a fresh backtest supplies new evidence. A
 rename does **not** — the fingerprint excludes `display_name`.
+
+**`score` (feature 283).** `manage_strategy(operation="score", strategy_id=...)` is the manual
+headline-grade refresh (analysis `ScoreStrategy`). It is **owner-scoped, not admin-gated**: it
+forwards the caller's `x-user-id` and acts only on the caller's own strategy. It takes **only**
+`strategy_id`; any other argument is rejected client-side before any call. It recomputes the grade
+from the strategy's stored backtest evidence, **persists** it, and emits an
+`analysis.strategy.scored` ledger event. Any time range is **ignored** — the whole eligible
+evidence base is used. Unlike the other operations, it returns **snake_case**:
+
+| Field | Meaning |
+|---|---|
+| `strategy_id` | The scored strategy |
+| `overall_score` | Headline score (double) |
+| `component_scores` | Per-component scores (map: `sharpe`, `drawdown`, `win_rate`) |
+| `rating` | `A`/`B`/`C`/`D`/`F` |
+| `evidence_symbols` | **Count** (int) of distinct symbols contributing eligible evidence cells |
+| `evidence_days` | Total trading days of evidence across those symbols |
+| `provisional` | `true` when the evidence is below the symbol/day floor |
+| `origin` | Template provenance (feature 224); present only when the strategy was instantiated from a template |
+| `excluded_symbols` | Symbols left with **no surviving evidence cell**. `[]` when the strategy is not fundamentals-guarded or `analysis.backtest.fundamentals.enabled` is off, so `[]` does **not** mean "the guard ran and found nothing". `null` when analysis did not report it (the `x-score-excluded-symbols` trailer was missing or unparseable). A non-empty list names the excluded symbols |
+
+```json
+{ "strategy_id": "fundamentals_macd_blend", "overall_score": 0.71, "component_scores": {"sharpe": 0.64},
+  "rating": "B", "evidence_symbols": 2, "evidence_days": 756, "provisional": false,
+  "excluded_symbols": ["SCHD"] }
+```
+
+`score` runs under the **45 s** budget. The server's worst case is
+`ceil(symbols / 4) × 8 pages × 10 s` for the point-in-time fundamentals fan-out
+(`_INTERACTIVE_DERIVATION_CONCURRENCY`, `_MAX_FUND_PAGES`, `_FUND_PAGE_TIMEOUT_SECONDS` in the
+analysis servicer). A deadline before the persist leaves the grade unchanged, but the outcome is
+unknown to the caller: verify with `list_strategies` before retrying.
 
 ---
 
@@ -833,7 +909,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `force` | `bool` | No | `false` default; `true` re-emits today's signals (clears the day's `fundsignal_emitted` idempotency rows first) |
-| `dry_run` | `bool` | No | `false` default; `true` scores + reports what *would* be scanned without emitting or spending cache calls |
+| `dry_run` | `bool` | No | `false` default; `true` reports what *would* be scanned without scoring, emitting or spending cache calls |
 | `symbols` | `string[]` | No | Optional explicit universe override; omitted = the configured `analysis.fundsignal.universe_source` |
 
 **Return** — the `FundamentalsScanSummary`:
@@ -842,7 +918,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 { "run_id": "…", "symbols_processed": 42, "signals_emitted": 7, "calls_spent": 3, "deferred_count": 0, "status": "completed", "finished_at": "2026-08-26T05:06:00+00:00" }
 ```
 
-`status` is `"completed"` | `"budget_deferred"` | `"failed"`.
+`status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. `partial` means a fetch chunk failed and its symbols are in `deferred_count`.
 
 **Errors**
 
@@ -1055,7 +1131,7 @@ Read a namespace's current config values from `xstockstrat-config`. **Read-only.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | `marketdata`, `analysis`, `trading`, `platform`, … |
-| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values |
+| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values. For non-admins it is **bound to the caller**: a non-admin asking for another user's id reads their own (bound, not refused); admins may read any user's (feature 263) |
 
 The **environment is always this agent deployment's own** (`production`/`staging`, from
 `APPLICATION_ENV`) — it is a deployment property, not a caller choice, so there is no `environment`
@@ -1063,7 +1139,8 @@ parameter and the tool cannot read another environment's rows (PR #994). `tradin
 (feature 147 — paper/live is derived from environment).
 
 Returns `{namespace, version, environment, user_id, values}`, each value being
-`{value, value_type, is_secret}`.
+`{value, value_type, is_secret}`. `user_id` is the scope actually read — for a bound non-admin
+request, the caller's own id, not the one passed.
 
 **Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
 the key name, so a flagged-but-unprefixed key is still redacted. Secret values are never returned by
@@ -1081,12 +1158,12 @@ nothing here can leak a secret.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | As above |
-| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys |
+| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys. For non-admins it is **bound to the caller**, as for `get_config` (feature 263) |
 
 The environment is always the agent's own deployment env (from `APPLICATION_ENV`) — no `environment`
 parameter, no `trading_mode` (PR #994 / feature 147).
 
-Returns `{namespace, environment, user_id, keys[]}`; each key carries `key`, `description`,
+Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key`, `description`,
 `default_value`, `is_secret`, `consuming_service`.
 
 Use it to discover what exists — and which keys are secret — before calling `set_config`.
@@ -1104,8 +1181,7 @@ Streamable HTTP transport only.**
 | `key` | string | yes | e.g. `marketdata.fmp.enabled` |
 | `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
 | `value` | string | yes | Converted according to `value_type` |
-| `author` | string | yes | Recorded in `config.config_audit` |
-| `reason` | string | yes | Recorded alongside `author` |
+| `reason` | string | yes | Recorded in `config.config_audit` (`update_reason`); the change is attributed to your verified user id (`x-user-id`), never a parameter (feature 241) |
 | `user_id` | string | no | Per-user override. Omit to write the global value. Per-user secret writes are accepted (feature 224); the value stays redacted on every read edge |
 | `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, key, environment, user_id)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
@@ -1148,11 +1224,11 @@ require a PR" is enforced, not merely conventional.)
   does not update the type column, so for an existing key the stored type wins.
 - Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
 - **Key creation is audited** (feature 091): a `create_key=true` create writes a `config.config_audit`
-  row (author + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
+  row (caller identity + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
   existing `BEFORE UPDATE` audit. Rewriting a key to its existing value still writes no row (the
   update trigger fires only on a value change).
 
-**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → "propagated identity required" (your claims carry no `user_id`; the tool also fails fast at the edge);
 `NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
 
 ---
@@ -1388,7 +1464,7 @@ credential field. Offline accounts are **not** created here — use `manage_offl
 | `account_id` | string | update/deregister/resume | The broker account to act on |
 | `display_name` | string | `register` | Name for the new account |
 | `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
-| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…,"signature_key":…,"encryption_key":…,"dh_prime":…}`, the last three as PEM strings) |
 | `reason` | string | no | Operator-supplied context for why the halt is being cleared (resume only; default `""`) |
 
 - **register** → `{"account": …}` with `credential_status`; the submitted credentials are never

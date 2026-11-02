@@ -5,7 +5,9 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-trading-order-state-audit-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-29
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
 
 ---
 
@@ -17,7 +19,16 @@
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; 2 resolved in-place: AC-8/AC-9 added, FR-4 status clarified) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
+| 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1, 3, 4, 5, 6, 7 re-verified against main-dev; line-drift citations corrected in Steps 1/3/5 (no blocking mismatch) |
+| 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (session_01NpS3HShZK6pSnogA7CFo2f); executing Steps 1–7 sequentially |
+| 2026-10-29 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Merged origin/main-dev; Steps 5 and 7 re-spec'd to current line numbers (Step 5 `Background()` count 36→34 after Step 2; post-2173 sites shifted -1 by the main-dev merge; Step 7 `emitLedgerEvent` NewStruct at `trading.go:3671`). No blocking mismatch |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 4 done — `reclaimStaleIntent` + `reclaimedUnknownPayload`; three reactive reclaims audited and logged; sweeper payload populated (FR-5, FR-6) |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 5 done — RED `TestTrace_*` suite: all 32 request-reachable `Background()` rows assert the inbound x-trace-id and an uncancelled ctx (RED: traceID `""` at every row) |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 6 done — 32 request-reachable `Background()` sites now `context.WithoutCancel(ctx)`; `finalizeCancelIntent` takes ctx; `TestTrace_*` GREEN; only `:2858`/`:2906` (watchdog, background-only) keep `Background()` |
+| 2026-10-29 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 7 done — `order_intent.reclaimed_unknown` row added to trading CLAUDE.md; findings `:13` resolved, bare-`orderID` stream doc-lie and `emitLedgerEvent` NewStruct latent-bug rows added. All 7 steps done |
+| 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | C-16 promotion applied (9 NEW scenarios → `services/xstockstrat-trading/acceptance/fix-trading-order-state-audit.feature`); integration PR opened |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
 ---
 
 ## Reviewers
@@ -50,4 +61,4 @@ reactive intent reclaims leave no `order_intent.reclaimed_unknown` audit event.
 
 ## Next Action
 
-`/sdd-review fix-trading-order-state-audit impl-spec` — validate implementation spec, then `/sdd-execute fix-trading-order-state-audit`
+`/sdd-execute fix-trading-order-state-audit sequential` — all 7 steps done; integration PR open against `main-dev` (merge held for operator)

@@ -30,11 +30,25 @@ useDefault = true
 # field name (also the struct json tag), not a credential. Scoped to that exact identifier so any
 # real, random 20-char Finnhub token is still detected. Site:
 # services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go.
+#
+# False positive (feature 249): the IBKR OAuth signer tests need two fixed, committed RSA test
+# keys so the ibind-generated PKCS#1 v1.5 / RSA-SHA256 reference vectors are reproducible. They
+# were generated locally for testing only, are registered with no IBKR consumer, and authorize
+# nothing. Scoped to a unique substring of each key's first body line so any other private key
+# is still detected. Sites: services/xstockstrat-trading/internal/testdata/ibkr/
+# {signature_key,encryption_key}.pem. The sibling vectors.json is generated test data (by
+# gen_vectors.py from those keys) holding fake OAuth tokens, signatures and an encrypted test secret,
+# with no real secrets, so it is allowlisted by that exact path; every other file is still scanned.
 [allowlist]
+paths = [
+  '''services/xstockstrat-trading/internal/testdata/ibkr/vectors\.json''',
+]
 regexTarget = "line"
 regexes = [
   '''first seeded secret: is_secret=TRUE''',
   '''00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff''',
   '''sk-live-abc123''',
   '''marketCapitalization''',
+  '''msc9FW9K\+LhMwlC2vKMbGIMcJOqLHLuIySZyDfw47JMiN9Bx''',
+  '''5/Wx3MbGJ87zrySzogrw\+FuDmxa/3fnKqNqOEBp6dw0/J78o''',
 ]

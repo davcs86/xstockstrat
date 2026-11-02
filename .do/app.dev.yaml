@@ -24,7 +24,7 @@ ingress:
 # Component-level envs override these when the same key is set.
 envs:
   - key: APPLICATION_ENV
-    value: development
+    value: staging
   - key: TRADING_MODE
     value: paper
   - key: OTEL_ENABLED
@@ -517,6 +517,8 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: WAIT_FOR
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: DATABASE_URL
@@ -654,10 +656,13 @@ services:
       - key: DB_POOL_MAX
         value: "1"
       - key: SERVICE_NAME
-        value: xstockstrat-ui
+        value: ui
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${xstockstrat.CA_CERT}
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.

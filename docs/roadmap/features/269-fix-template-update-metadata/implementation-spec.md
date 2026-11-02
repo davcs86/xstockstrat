@@ -64,13 +64,13 @@ before the fix; the pins are excluded from the red gate.
 - Step 9 runs at integration, after Steps 1–6 are green (C-16 promotion happens at launch/integration).
 - **Merge overlap (soft):** 244-fix-python-config-stored-zero edits `services/xstockstrat-indicators/app/handlers/servicer.py`,
   and 244 plus 245-fix-screener-symbol-isolation edit `services/xstockstrat-analysis/app/handlers/servicer.py`.
-  This feature changes one line in each (`:652`, `:3581`). Whichever lands second rebases. Step 7 records this.
+  This feature changes one line in each (`:652`, `:3588`). Whichever lands second rebases. Step 7 records this.
 
 ---
 
 ### Step 1 — service: Indicators — UPDATE persists name/description; RETIRE stamps updated_at
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formula_templates_repository.py` — modify
@@ -122,7 +122,7 @@ cd services/xstockstrat-indicators && ruff check . && ruff format --check .
 
 ### Step 2 — test: Indicators — red-first repo SQL/bind tests, wiring spy, fake lockstep (@AC-1, @AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formula_templates.py` — modify. This covers the `_FakeTemplates.update` fake (`:83-89`), the SQL tests at `:535` and `:545`, and the handler test class `TestAuthoring` (`:214`, including `test_ac14_admin_update_bumps_version_and_bob_lists_it` at `:241`).
@@ -198,7 +198,7 @@ Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in 
 
 ### Step 3 — service: Analysis — UPDATE persists name/description
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategy_templates.py` — modify
@@ -211,8 +211,8 @@ Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in 
   - `:38` `async def create(self, meta, payload_json: dict, created_by: str)` binds `meta.description` raw at `:48`.
   - `:54` `async def update(self, template_id: str, payload_json: dict) -> dict | None:`, with docstring `:55` and SQL `:59` `SET payload = $2::jsonb, version = version + 1, updated_at = NOW()` / `:60` `WHERE template_id = $1 AND retired_at IS NULL`.
   - `retire` `:68-78`: `:72` `SET retired_at = COALESCE(retired_at, NOW()), updated_at = NOW()`. It already meets FR-3/FR-4, so it does not change.
-- `app/handlers/servicer.py:3581`: `row = await self._strategy_templates_repo.update(meta.template_id, payload_json)`. `meta = request.template.meta` is at `:3542`, and the empty-id/kind guard is at `:3543-3552`.
-- `_row_to_strategy_template` (`servicer.py:7138-7150`) reads `name`, `description` and `updated_at` from the row (re-read this session), so it needs no change.
+- `app/handlers/servicer.py:3588`: `row = await self._strategy_templates_repo.update(meta.template_id, payload_json)`. `meta = request.template.meta` is at `:3550`, and the empty-id/kind guard is at `:3551-3559` (re-verified 2026-10-29 after the main-dev merge).
+- `_row_to_strategy_template` (`servicer.py:7146-7158`) reads `name`, `description` and `updated_at` from the row (re-read this session), so it needs no change.
 - Pattern to REUSE: ingest `source_templates.update` SQL (`source_templates.py:56-58`).
 
 **TDD**: `red-green required`
@@ -233,7 +233,7 @@ Red gate: on the pre-Step-1 tree, tests (a), (b), the `updated_at` assertion in 
    indicators' `or ""`), and `json.dumps(payload_json)`. Update the docstring to "Replace name, description and payload and bump
    ``version`` in one UPDATE; None if missing or retired." Use full-replace semantics, with no `COALESCE`/`NULLIF`.
 2. Leave `retire` (`:68-78`) untouched.
-3. In `servicer.py:3581`, change the call to `row = await self._strategy_templates_repo.update(meta, payload_json)`. Change no other line in `ManageTemplate`.
+3. In `servicer.py:3588`, change the call to `row = await self._strategy_templates_repo.update(meta, payload_json)`. Change no other line in `ManageTemplate`.
 
 **Verification**:
 ```bash
@@ -246,7 +246,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 4 — test: Analysis — red-first repo SQL/bind tests, required real-PG test, wiring spy, fake lockstep (@AC-1, @AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_templates.py` — modify. This covers `FakeTemplates.create` (`:99-103`), `.update` (`:105-110`), `.retire` (`:112-116`, listed but not changed), the SQL test at `:686`, and the handler tests near `:344`.
@@ -266,8 +266,8 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
   - `test_manage_template_update_bumps_version_and_retire_hides` is at `:344-358`.
   - `test_template_update_bumps_version_in_one_statement` (`:686-692`) calls the old `update("tpl", {...})` and uses `pool = AsyncMock(); pool.fetchrow = AsyncMock(return_value=None)`.
 - Real-PG harness:
-  - The `tests/conftest.py:367-368` session fixture `local_pg` yields a DSN. It skips locally when no PG binaries exist, and fails under `CI=true` (`:370-375`).
-  - `.github/workflows/ci.yml:393-397` installs postgresql for the analysis matrix leg.
+  - The `tests/conftest.py:402-403` session fixture `local_pg` yields a DSN. It skips locally when no PG binaries exist, and fails under `CI=true` (`_unavailable`, `:407-410`).
+  - `.github/workflows/ci.yml:405-407` ("install postgresql (analysis real_pg tests)") installs postgresql for the analysis matrix leg.
   - `tests/test_read_budget_real_pg.py:20` uses `pytestmark = pytest.mark.real_pg`, and `:25-28` uses `_pool(dsn, size, **kw)` → `asyncpg.create_pool(dsn, min_size=size, max_size=size, statement_cache_size=0, ...)`.
   - The marker is registered at `pyproject.toml:33`.
 - `migrations/026_owner_dimension_templates.up.sql:89` reads `CREATE TABLE IF NOT EXISTS analysis.strategy_templates (`, and the statement closes with `);` at `:99`. `DEFAULT NOW()` appears at `:97-98`.
@@ -345,7 +345,7 @@ real-PG red proof to CI (`CI=true` fails rather than skips).
 
 ### Step 5 — service: Ingest — RETIRE first-wins; CREATE rejects an empty template_id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/source_templates.py` — modify
@@ -404,7 +404,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check .
 
 ### Step 6 — test: Ingest — red-first RETIRE SQL test, empty-id CREATE tests, UPDATE wiring pin (@AC-1, @AC-2, @AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_source_templates.py` — modify. This covers `test_repo_retire_and_list_active_hide_retired` (`:440-448`, whose assertion at `:445` is rewritten) and `test_admin_update_returns_bumped_version` (`:197-207`), and adds the new @AC-2/@AC-3 tests.
@@ -418,7 +418,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check .
   - `_template_row(...)` at `:29`.
   - `_template_msg(source_type="derived", cfg=None, **payload_over)` at `:63-77` builds `TemplateMeta(template_id="t1", name="Example feed")`.
   - `_manage_req(op, template=None)` at `:80-81`.
-  - `_ctx` and `_aborted_code` are imported at `:17`/`:20`.
+  - `_ctx` and `_aborted_code` are imported at `:18`/`:20`.
   - The pattern is `with patch(f"{_ST}.create", create):` (`:157`).
   - `test_ac13_non_admin_manage_template_permission_denied` (`:126-139`) patches all three writes and asserts none was called.
   - `test_admin_create_validates_payload_like_register` is at `:163`.
@@ -468,18 +468,17 @@ Red gate: on the pre-Step-5 tree, (a), (b) and (c) fail. (d) and (e) pass on bot
 
 ### Step 7 — docs: merge-order.md soft-overlap entry for 244/245
 
-**Status**: `pending`
+**Status**: `done` (deliverable already present; no edit — re-spec 2026-10-29)
 **Service**: `docs/roadmap/features/`
 **Files**:
-- `docs/roadmap/features/merge-order.md` — modify
+- `docs/roadmap/features/merge-order.md` — no change (row already present)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/roadmap/features/merge-order.md` § Blocking Dependencies is a table with the columns `| Feature | Must wait for | Reason | Resolved |`.
-- The coverage note (`:15-19`) says ordinary textual overlap is "intentionally **not** listed". There is precedent for a soft/rebase entry at
-  `:55` (`shadcn-migration-medium-confidence` (121) → (120), "soft/rebase (not blocking)").
-- `grep -n "244\|245\|269" docs/roadmap/features/merge-order.md` → no entry for these features (verified this session).
+- `docs/roadmap/features/merge-order.md:91` (§ Blocking Dependencies, columns `| Feature | Must wait for | Reason | Resolved |`) already holds:
+  `| \`fix-template-update-metadata\` (269) | \`fix-python-config-stored-zero\` (244), \`fix-screener-symbol-isolation\` (245) | Soft rebase only: shared files in the indicators/analysis servicers and tests. 269 rebases after them; 262, 268 and 272 overlap at file level only (operator yes, 2026-10-22) | No |`
+- The row is on `origin/feature/fix-template-update-metadata` and `origin/main-dev`. It records the same soft/rebase, non-blocking overlap the original instruction asked for, in different wording.
 - Overlap source: context.md 2026-10-21 sdd-review overlap findings, and recon.md § Risks "Merge overlap".
 
 **TDD**: `N/A (docs)`
@@ -487,20 +486,19 @@ Red gate: on the pre-Step-5 tree, (a), (b) and (c) fail. (d) and (e) pass on bot
 **Covers**: —
 
 **Instructions**:
-Append one row to the § Blocking Dependencies table, following the `:55` soft-entry form:
-`| \`fix-template-update-metadata\` (269) | \`fix-python-config-stored-zero\` (244), \`fix-screener-symbol-isolation\` (245) | **File-level overlap, soft/rebase (not blocking)**: 269 changes one call-site line in \`services/xstockstrat-indicators/app/handlers/servicer.py\` (\`ManageTemplate\` UPDATE, ~L652) and \`services/xstockstrat-analysis/app/handlers/servicer.py\` (\`ManageTemplate\` UPDATE, ~L3581); 244 edits both files and 245 edits the analysis one. No field, config, or migration collision; whichever lands second rebases. | No |`
-This is a design deliverable (design.md § Spec deliverables; Open Risk 4).
+Do not append a row: a second 269 entry would duplicate `:91`. The design deliverable (design.md § Spec deliverables; Open Risk 4)
+is met by the existing row, so the step is done with no edit.
 
 **Verification**:
 ```bash
-grep -n "fix-template-update-metadata" docs/roadmap/features/merge-order.md
+grep -c "fix-template-update-metadata" docs/roadmap/features/merge-order.md   # expect 1
 ```
 
 ---
 
 ### Step 8 — docs: Durable record of the indicators/ingest real-PG proof gap (debt radar D-41)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/repo-surveyor/`
 **Files**:
 - `docs/repo-surveyor/debt-radar-findings.md` — modify
@@ -510,7 +508,7 @@ grep -n "fix-template-update-metadata" docs/roadmap/features/merge-order.md
 **Codebase Evidence**:
 - `docs/repo-surveyor/debt-radar-findings.md:407`: `### D-41 Template \`ManageTemplate\` UPDATE silently drops \`name\`/\`description\` (indicators + analysis) — SEV-2`. Its bullets are **Evidence** / **Intent asserted** / **Impact** / **Routing** (`:408-416`).
 - The design accepted the residual (design.md § Open Risks, item 1; Rejected Alternatives: "Copying `local_pg` into the indicators and ingest conftests"). fails.md:2255 rule (3) names a shared real-DB fixture as a platform follow-up, not a per-feature rig.
-- Indicators and ingest have no `local_pg`/`real_pg` harness: `grep -rn "real_pg\|local_pg" services/xstockstrat-indicators/tests services/xstockstrat-ingest/tests` → none (recon.md § Risks). Only analysis has one (`tests/conftest.py:367-368`).
+- Indicators and ingest have no `local_pg`/`real_pg` harness: `grep -rn "real_pg\|local_pg" services/xstockstrat-indicators/tests services/xstockstrat-ingest/tests` → none (recon.md § Risks). Only analysis has one (`tests/conftest.py:402-403`).
 - The debt radar was chosen over `docs/context-constitution-findings.md` because it is the D-41 finding's own home. It is also not a context-forge context file, so it does not trigger the root CLAUDE.md teardown.
 
 **TDD**: `N/A (docs)`
@@ -531,7 +529,7 @@ grep -n "Residual proof gap (accepted, follow-up)" docs/repo-surveyor/debt-radar
 
 ### Step 9 — docs: Promote @AC-1..3 into per-service durable suites (C-16) at integration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-{indicators,analysis,ingest}/acceptance/`
 **Files**:
 - `services/xstockstrat-indicators/acceptance/fix-template-update-metadata.feature` — create
@@ -574,3 +572,47 @@ git diff --stat -- 'services/*/acceptance/private-by-default-templates.feature' 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-10-29 — Steps 1 + 2 landed in one commit** (`/sdd-execute` sequential, Step 1 run).
+  - **What**: Step 2's **Files** (`services/xstockstrat-indicators/tests/test_formula_templates.py`) were staged in
+    the Step 1 commit and Step 2's **Status** was set to `done` with it.
+  - **Why**: `## Step Dependencies` requires it ("Steps 1 and 2 land in one commit"). Step 1's signature change breaks
+    `_FakeTemplates.update` and `test_template_update_bumps_version_in_one_update`, so a Step-1-only commit would
+    leave the branch red. `reference/tdd-gate.md` treats the service/test pair as one red-green cycle.
+  - **Disposition**: no behavior deviation; the code and tests follow Step 1 and Step 2 **Instructions** as written.
+    The verification ran `ruff` through `uv run` (the service venv), which is the same pinned tool.
+- **2026-10-29 — Steps 3 + 4 landed in one commit** (`/sdd-execute` sequential, Step 3 run).
+  - **What**: Step 4's **Files** (`services/xstockstrat-analysis/tests/test_strategy_templates.py`,
+    new `tests/test_strategy_templates_real_pg.py`) were staged in the Step 3 commit and Step 4's **Status** set to `done`.
+  - **Why**: `## Step Dependencies` requires it ("Steps 3 and 4 land together"); Step 3's signature change breaks
+    `FakeTemplates.update` and `test_template_update_bumps_version_in_one_statement`.
+  - **Disposition**: no behavior deviation. Line drift only: the `update` call is at `servicer.py:3588` (as re-specced).
+- **2026-10-29 — Step 4 real-PG verification deferred to CI** (never-start-a-database HARD CONSTRAINT).
+  - **What**: `local_pg` starts a throwaway PostgreSQL; SKILL.md forbids starting a database to verify a step, so
+    the `CI=true uv run pytest tests/test_strategy_templates_real_pg.py` line and the real-PG red leg were not run
+    here. Local runs used `-m "not real_pg"` (the coverage run too, since `test_read_budget_real_pg.py` would also
+    start `local_pg`). Offline checks: the file collects 3 tests, the DDL regex extracts the full
+    `analysis.strategy_templates` table through its closing `);`, and only `026_owner_dimension_templates.up.sql`
+    mentions `strategy_templates`.
+  - **Shape**: the (f) legs are three tests (`test_ac1_update_persists_name_description_payload`,
+    `test_update_of_retired_template_returns_none`, `test_ac2_second_retire_keeps_retired_at_and_stamps_updated_at`)
+    so the red UPDATE leg cannot mask the two regression pins. Each opens and closes its own pool.
+  - **Disposition**: CI-equivalent fallback. The CI python job (analysis leg) installs postgresql and fails rather
+    than skips under `CI=true`, so the integration PR's CI is the real-PG proof.
+- **2026-10-29 — Steps 5 + 6 landed in one commit** (`/sdd-execute` sequential, Step 5 run).
+  - **What**: Step 6's **Files** (`services/xstockstrat-ingest/tests/test_source_templates.py`) were staged in the
+    Step 5 commit and Step 6's **Status** was set to `done` with it.
+  - **Why**: `## Step Dependencies` requires it ("Steps 5 and 6 land together"); Step 5 breaks the
+    `"retired_at = NOW()"` assertion in `test_repo_retire_and_list_active_hide_retired`.
+  - **Disposition**: no behavior deviation. Two cosmetic deviations: the Step 5 docstring text is wrapped onto two
+    lines (the single line breaks ruff E501), and the three empty-id tests (b), (c), (e) share a file-local
+    `_empty_id_create(source_type)` builder over `_template_msg` (C-13: same single consumer file, no conftest change).
+- **2026-10-29 — Step 9 verification count is 4, not 3, per file** (`/sdd-execute` sequential, Step 9 run).
+  - **What**: `grep -c "@feature-269"` returns 4 for each new `fix-template-update-metadata.feature`, not the 3 the
+    **Verification** comment expects.
+  - **Why**: Instruction 1 mandates a header line that itself names `@feature-269` (the feature-173 precedent's
+    wording), so the count is 3 scenario tag lines plus that header. `grep -c "^  @AC-.*@feature-269"` returns 3 per
+    file; `git diff --stat` on `private-by-default-templates.feature` is empty.
+  - **Disposition**: verification arithmetic slip in the spec, no content deviation. The blocks were written directly
+    from `acceptance.feature` per the `scenario-promoter` contract (verbatim steps, one `Examples:` row per service),
+    because the subagent is read-only and the plan is fully determined by Instructions 1–3.

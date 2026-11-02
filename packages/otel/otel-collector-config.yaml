@@ -3,10 +3,10 @@
 # OpenTelemetry Collector configuration for local development.
 # Used by the `otel-collector` service in docker-compose.yml.
 #
-# Every xstockstrat service exports traces over OTLP/HTTP to :4318. The gRPC :4317 receiver
+# Every xstockstrat service exports traces, metrics and logs over OTLP/HTTP to :4318. The gRPC :4317 receiver
 # stays for other OTLP clients (e.g. telemetrygen smoke tests).
 #
-# Exports all three signal types (logs, metrics, traces) to Grafana Cloud via OTLP.
+# The traces, metrics and logs pipelines below all forward to Grafana Cloud via OTLP.
 # Requires OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS in the environment
 # (provided via docker-compose from your local .env file).
 #
@@ -32,7 +32,7 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  # Drop spans/metrics/logs when memory exceeds limit — prevents OOM in dev
+  # Drop telemetry when memory exceeds limit — prevents OOM in dev
   memory_limiter:
     check_interval: 1s
     limit_mib: 256
@@ -46,7 +46,7 @@ processors:
 
 
 exporters:
-  # Grafana Cloud OTLP gateway — handles logs, metrics, and traces in one endpoint.
+  # Grafana Cloud OTLP gateway — one endpoint for every OTLP signal the services send.
   # OTEL_EXPORTER_OTLP_ENDPOINT: https://otlp-gateway-<region>.grafana.net/otlp
   # OTEL_EXPORTER_OTLP_HEADERS:  Basic base64(<instanceId>:<apiKey>)  (Grafana provides pre-encoded)
   otlphttp/grafana:

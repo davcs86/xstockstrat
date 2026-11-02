@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/auth';
+import { withBffMetrics } from '@/lib/bffMetrics';
 
 // GET /accounts/api/agent-health — server-side probe of the MCP agent's OAuth discovery endpoint.
 // Returns only reachability/status, never the payload; any fetch failure returns { reachable: false } (HTTP 200).
-export async function GET(req: NextRequest) {
+async function getHandler(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -17,3 +18,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ reachable: false });
   }
 }
+
+export const GET = withBffMetrics('accounts', '/accounts/api/agent-health', getHandler);

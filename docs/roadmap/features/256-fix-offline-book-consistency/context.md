@@ -704,3 +704,443 @@ Each item names the step where it is resolved.
   no-retry alternative is rejected.
 - **Product-spec drift resolved:** Fix Scope now records the two additive proto markers, and OQ-1/OQ-2 are marked
   resolved with the design decisions.
+
+## Session 2026-10-28 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: detached at `origin/feature/fix-offline-book-consistency`, merged `origin/main-dev` with `-X ours` (8f874bde).
+- Re-verified all 16 steps against the current codebase. No blocker; line drift only, corrected in implementation-spec.md:
+  - Step 3: ConfirmOrder offline-only gate `trading.go:909-911` (was :910-912).
+  - Step 5: `recomputeAndEmitOfflinePositions` final `return nil` at `:1078` (was :1077).
+  - Step 7: `ConsumeOrderFills` at `portfolio_service.go:167` (was :168); `clock()` at `offline_valuation.go:54`.
+  - Step 9: `type readValuation` at `offline_valuation.go:28-31` (was :27-30).
+  - Step 11: ListPortfolios `buildAccountPortfolio` callers `:1420`/`:1472` (were :1428/:1478); `allOffline` at `:650` (was :652).
+  - Step 12: `acctScenario` starts at `offline_account_pnl_test.go:27`; quote-deadline non-fatal comment at `:113-114`.
+  - Step 14: INVENTORY.md catalog rows at `:17`, `:41`.
+  - Step 15: `list_positions` `client.py:2357`, `stub.ConfirmOrder` `:2277`, `tools.py` `except grpc.aio.AioRpcError` `:2147`.
+  - Steps 1, 2, 4, 6, 8, 10, 13, 16: all evidence matches, unchanged.
+
+## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute fix-offline-book-consistency sequential`. Every step is one commit on `feature/fix-offline-book-consistency`, with no per-step PRs, and one integration PR at the end.
+- Up-front confirmation: the operator approved the plan through a standing authorization. Source: operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f, quoting "Start executing features 241-276" via batch-execute and "start batch 2 in parallel too". The terms are:
+  - checkpoints run unattended and are reported ('report'), not held;
+  - C-16 promotion is auto-confirmed unless it changes an existing @AC rule;
+  - merge-train is authorized;
+  - 255 and 275 are deferred;
+  - DB and prod steps stay with the operator: open the PR, then hold the merge.
+- Status: `implementation-ready` → `in-progress`. The prior execute-checkpoint decisions still apply (session 2026-10-22): deregistration option (a) and the Step 5 retry for all callers.
+
+## Session 2026-10-28 — Step 1 (proto)
+
+- Added `bool offline_state_unavailable = 17` to `Portfolio` and `= 26` to `Position` in `packages/proto/portfolio/v1/portfolio.proto`, each with a 2-line constraint comment. No other proto change.
+- TDD: N/A (proto). Pre-change `grep offline_state_unavailable` found 0 hits; afterwards it finds 2 (lines 70 and 124).
+- Verification: `buf lint` (buf 1.72.0) passed. `buf breaking` passed against snapshots of the feature-branch and `origin/main-dev` baselines. The `.git#branch=` inputs cannot be resolved from an isolated worktree, so `git archive` snapshots replaced them (Deviation Log).
+- Next: Step 2 regenerates the stubs. Until it lands, `proto-freshness` is red on this branch.
+
+## Session 2026-10-28 — Step 2 (proto-gen)
+
+- Ran `./scripts/buf-gen.sh` with buf 1.72.0, grpcio-tools 1.80.0 and the pnpm workspace `tsc`. It changed 8 files, all under `portfolio/v1`:
+  - Go `.pb.go` and Python `_pb2.py`.
+  - TS `portfolio_pb.ts` and `portfolio.ts` (ts-proto).
+  - The 4 matching files under `dist/`.
+- The gRPC/Connect stubs did not change.
+- The host `protoc-gen-go` had been built with go1.24.7 and produced comment-only drift in `analysis.pb.go`. Rebuilding the pinned plugins under go1.27.0 (matching CI) in a scratch GOBIN removed it (Deviation Log).
+- TDD: N/A (proto-gen). Before the change, `grep OfflineStateUnavailable gen/go/portfolio/v1/` found nothing. After it, the grep matches `portfolio.pb.go`, and `go build ./portfolio/...` passes in `gen/go`.
+- Next: Step 3 (service, D-49 ConfirmOrder validation).
+
+## Session 2026-10-28 — Step 3 (service, D-49)
+
+- `trading.go`: added `isFinite` next to `deriveOfflineStatus`. ConfirmOrder now runs three guards, all before `GetOrder`:
+  - `filled_qty`: rejected if non-finite or < 0, with "filled_qty must be a finite number >= 0".
+  - `filled_avg_price`: rejected if non-finite or < 0, only when `filled_qty > 0`. A qty of 0 (un-confirm) skips this check.
+  - fees: rewritten onto the helper. The message "fees must be >= 0" and the guard's position are unchanged.
+- `SnapshotOfflinePositions` rows at qty and avg-cost now use `!isFinite(...)`. Reasons and ordering are unchanged.
+- Consequence (design §1): a bad value on a broker order now returns INVALID_ARGUMENT instead of FailedPrecondition. The order is not modified in either case.
+- TDD: @AC-4 red. A throwaway test (not committed; Step 4 owns the durable test) sent qty NaN/+Inf and price NaN/+Inf/-1 against an empty sqlmock. All 5 cases failed with `Internal "load order: ... call to method Query() was not expected"`, meaning the load ran. Green: all 5 returned InvalidArgument and the mock expectations were met.
+- Verification:
+  - The spec grep matched 5 lines (861, 897, 900, 1161, 1165).
+  - `go build ./...` passed, and the full `go test ./...` passed.
+  - `golangci-lint` v2.14.0, rebuilt under go1.27.0 because the host binary is go1.26 (Deviation Log), reported 0 issues.
+- Next: Step 4, the durable ConfirmOrder validation tests in `trading_offline_test.go`.
+
+## Session 2026-10-28 — Step 4 (test, D-49 / FR-7)
+
+- `trading_offline_test.go` adds three tests next to the `@AC-9` fees template:
+  - `TestConfirmOrder_AC4_NonFiniteOrNegativeFillRejectedBeforeLoad`: NaN/150, +Inf/150, -1/150, 10/NaN, 10/-5 and 10/+Inf each return InvalidArgument. No `account.positions.synced` is recorded, and the mock expectations are met (no GetOrder or UpsertOrder).
+  - `TestConfirmOrder_AC7_ValidFillsKeepStatusAndEmit`: 4/150 gives PARTIALLY_FILLED and 10/150 gives FILLED. Each records exactly one `account.positions.synced` (the ledger is reset between confirms).
+  - `TestConfirmOrder_AC10_UnconfirmZeroQtyNoPriceValid`: 10/150, then 0/0, gives NEW with no error and one `account.positions.synced`.
+- The `positions.synced` path through `h.ledger` is confirmed: `emitLedgerEvent` calls `recordingLedger.AppendEvent` synchronously.
+- TDD: Step 3 had already landed, so RED ran with the pre-Step-3 `trading.go` restored temporarily. All 5 `@AC-4` value rows failed with `Internal "load order: ... Query() was not expected"`, while the -1 qty row already passed. AC7 and AC10 passed on both trees (non-regression guards). GREEN: all targeted tests pass.
+- Broker-order sweep re-run. The one new hit, `trading_offline_test.go:1966`, is `TestSnapshotOfflinePositions_AC44_NonLatestAsOfChangeRejected`. It is a snapshot test, not a confirm with a bad value, so nothing moves to InvalidArgument.
+- Verification:
+  - Targeted `-run` set passed.
+  - The full `go test ./... -race` passed, with coverage total 72.8% (≥ 40%).
+  - `golangci-lint` v2.14.0, rebuilt under go1.27.0, reported 0 issues.
+- Next: Step 5 (D-63 `appendLedgerEvent` + ConfirmOrder UNAVAILABLE).
+
+## Session 2026-10-29 — re-spec + sdd-execute sequential (sdd-batch-execute)
+
+- Authorization: standing operator approval (operator chat 2026-10-28/29, session_01NpS3HShZK6pSnogA7CFo2f): "Start executing features 241-276" via batch-execute; unattended checkpoints ('report'); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule; merge-train authorized; 255/275 deferred; operator-only DB/prod steps mean open the PR and hold the merge. This serves as the up-front sequential-mode confirmation. Status was already `in-progress`, so it is unchanged.
+- Branch setup: `git merge -X ours origin/main-dev` into the detached checkout. The only trading.go change from main-dev removes one line at :2181 (`Author:` in `escalateSystemic`). Every citation below that line moves by -1.
+- Re-spec, citations only, with no change to instructions or scope:
+  - Step 5: `ledgerEmitTimeout` :3661, `emitLedgerEvent` :3665 (NewStruct :3666, Warn :3675-3677), `confirmLock` :923, swallow :956-959 (replace :955-959), `recomputeAndEmitOfflinePositions` :967 (doc :965-966, queries :969-983, emit :1072, `return nil` :1083), `warnings` :1191-1197, Snapshot call :1229-1232, `Warnings: warnings` :1238. The directive's `return nil :1078` was stale; :1083 was verified.
+  - Step 5: the non-test `emitLedgerEvent(` grep still returns 28 lines. A second `"account.positions.synced"` emit sits at :2414 on the broker sync path. It stays on the void wrapper, and only :1072 changes.
+  - Step 6: AC46 test :2058, AC47 test :2071.
+  - Step 12: the `portfolio_quote_deadline_test.go` "non-fatal" comment is at :115, inside the `expectAllAccounts` doc comment :114-115.
+- Next: Step 5 (D-63 `appendLedgerEvent` + ConfirmOrder UNAVAILABLE).
+
+## Session 2026-10-29 — Step 5 (service, D-63)
+
+- Operator decision (2026-10-29, Option A on the Step 5 blocker): retry wins. `ledger_emit_mtls_test.go` joined the
+  step. `TestEmitLedgerEventFailSoftOneShot` is now `TestEmitLedgerEventFailSoftBoundedRetry` and expects
+  `appendMaxAttempts` attempts. This **supersedes feature 210's one-shot note for `emitLedgerEvent`**. The 2026-10-22
+  "retry for all callers" decision stands.
+- `trading.go`:
+  - New constants: `appendMaxAttempts=2`, `appendRetryBackoff=100ms`, `offlineRecomputeQueryBudget=5s`,
+    `offlineRecomputeTimeout=30s`.
+  - `appendLedgerEvent` returns the NewStruct error. It uses one `IdempotencyKey` across attempts, runs each attempt
+    under `ledgerEmitTimeout`, and retries only `codes.Unavailable`. The backoff also ends on `ctx.Done()`.
+  - `emitLedgerEvent` is now its void wrapper and keeps the "ledger emit failed" Warn.
+  - `recomputeAndEmitOfflinePositions` returns the append error. Only the offline emit changed; the broker-sync
+    `account.positions.synced` emit stays void. The payload is unchanged, `user_id` included.
+  - ConfirmOrder runs the recompute under `WithTimeout(WithoutCancel(ctx), offlineRecomputeTimeout)`. On failure it
+    returns `UNAVAILABLE "positions not published; re-confirm to retry"`. The order row is already persisted.
+  - SnapshotOfflinePositions uses the same ctx and, on failure, appends "positions not published; re-snapshot to retry"
+    to `warnings`. It returns no error.
+- Side effect (open item): `order_intent.reclaimed_unknown` (`order_intent.go:156`) carries a `time.Time`, so
+  `NewStruct` fails. It used to be appended with an empty payload and is now skipped with a Warn. No consumer exists.
+  The fix is a one-line `Format(time.RFC3339Nano)`, outside this step's Files; it needs the operator's call.
+- TDD:
+  - RED: the updated mtls test saw 1 attempt where it wanted 2. A throwaway ConfirmOrder test with a failing ledger got
+    `err=nil` where it wanted UNAVAILABLE.
+  - GREEN: both pass, the throwaway test made 2 AppendEvent calls, and the throwaway file was deleted.
+- Verification:
+  - The spec greps match (appendLedgerEvent, `IdempotencyKey: uuid.NewString()`, `offlineRecomputeTimeout`, both
+    "positions not published" strings, both `WithoutCancel` sites).
+  - `go build ./...` passed, and the full `go test ./... -race` passed.
+  - `golangci-lint` v2.14.0, rebuilt under go1.27.0, reported 0 issues.
+- Next: Step 6 (D-63 durable tests). Its `TestOfflineRecomputeTimeout_CoversRetryBudget` is the test the constant's
+  comment cites.
+
+## Session 2026-10-29 — Step 6 (test, D-63)
+
+- `trading_offline_test.go`:
+  - `recordingLedger` has an optional `failFn` hook, plus a `setFailFn` setter that swaps it under the mutex. A nil
+    hook keeps the old always-succeed behaviour, so existing tests are unaffected.
+  - New tests: `TestConfirmOrder_AC5_EmitFailureIsNotSuccess` (partial 4/10 and full 10/10; a re-confirm after the
+    hook is cleared succeeds and records one more positions.synced), `TestConfirmOrder_AC5_RecomputeQueryFailureIsNotSuccess`,
+    `TestAppendLedgerEvent_RetriesUnavailableWithSameIdempotencyKey`, `TestOfflineRecomputeTimeout_CoversRetryBudget`,
+    `TestRecomputeEmit_PayloadKeepsUserID` and `TestSnapshotOfflinePositions_EmitFailureAddsWarning`.
+  - All helpers and literals stay in this file (single consumer, C-13).
+- TDD:
+  - AC-5 RED, on the pre-Step-5 `trading.go` restored temporarily: ConfirmOrder returned `err=<nil>` where
+    Unavailable was wanted, for partial, full and the baseline-query failure. Snapshot returned `warnings = []`.
+    The retry and timeout tests failed to compile (undefined `appendLedgerEvent`, `appendMaxAttempts`, ...).
+  - GREEN on the Step 5 tree: all targeted tests pass, and the AC46/AC47 PRESERVE guards stay green.
+  - AC-7 (`user_id` in payload) passes on both trees: it is a non-regression guard.
+- Verification: the targeted run passed; the full `go test ./... -race` passed with 72.8% coverage on the CI coverpkg
+  set (≥ 40%); `golangci-lint` v2.14.0 (go1.27.0 build) reported 0 issues.
+- Next: Step 7 (D-47 `boundedRetry`). It still needs the pre-entered operator sign-off on deregistration retry
+  option (a) versus (b).
+
+## Session 2026-10-29 — Steps 7 + 8 (service + test, D-47)
+
+- Operator decision (2026-10-29, session question tool, in their words): "B: merge Steps 7+8". The two steps are one
+  lint-green commit with one red→green cycle on Step 8's tests, and both are marked done (Deviation Log). The
+  deregistration scope stays option (a), signed off 2026-10-22, so that Open Thread is closed.
+- `portfolio_service.go`:
+  - `processPositionSync` returns `error`. Parse failures and nil/empty-account payloads return nil (acked). The
+    offline branch (`RealizedPnl != nil`) attempts every write, keeps each Warn and returns `errors.Join`. The broker
+    branch returns nil. `shouldReconcileSyncDeletions` is unchanged.
+  - `processAccountDeregistered` returns the `errors.Join` of both delete failures, for every account type (option a).
+  - New `syncRetryMinAttempts=5` and `syncRetryFallbackElapsed=10m`, `retryClass`, `classifyConsumerErr` (per-leaf,
+    transient > deterministic > unclassified) and `boundedRetry` (per-sequence state in the closure, clock seam
+    `s.clock()`, one `slog.Error("event parked", ...)` on park).
+  - `ConsumePositionSyncs` and `ConsumeAccountDeregistrations` use `boundedRetry`. Only the bracket and balance
+    consumers keep `ackAlways`. `consumeEventStream` and `streamEventsFrom` are untouched.
+- `portfolio_repo.go`: `DeleteOfflineRealized` now uses `r.db.Exec` (same pool in prod), so pgxmock can fail it.
+- Tests: new `portfolio_sync_retry_test.go` (AC-1 via `streamEventsFrom` + `sliceStream`, try-all, broker acked,
+  malformed acked, AC-2, AC-6 deterministic park, AC-9 transient never parks, unclassified fallback bound,
+  classification table). The three call sites now check the error (the race goroutine uses `t.Errorf`).
+  `warnRecorder` records Error as well as Warn (spec-sanctioned).
+- TDD: RED was a compile failure. The handlers were void (`(no value) used as value` at the three call sites and in
+  the new file), and `svc.boundedRetry` was undefined. GREEN: every targeted test passes.
+- Verification: the spec greps match (only `:1345` bracket and `:1393` balance keep `ackAlways`). `go build`, `go vet`
+  and the full `go test ./... -race` pass, with 68.6% total on the CI coverpkg set (≥ 40%). `golangci-lint` v2.14.0
+  (go1.27.0 build) reported 0 issues.
+- Next: Step 9 (D-48 per-row `GetOfflineStates` decode and `readValuation.unavailable`).
+
+## Session 2026-10-29 — Steps 9 + 10 (service + test, D-48 per-row decode)
+
+- Operator decision (2026-10-29, session question tool, in their words): "Merge pairs + standing rule". Steps 9 and 10
+  are one lint-green commit with one red→green cycle on Step 10's tests; both marked done (Deviation Log).
+- `portfolio_repo.go`: `GetOfflineStates` returns `(map[string]OfflineState, map[string]error, error)`. Query, Scan
+  and `rows.Err` stay whole-call (`nil, nil, err`); a `recent_fills` decode failure goes to `failed[id]` and the
+  account is left out of the states map.
+- `offline_valuation.go`: `readValuation.unavailable` + `degraded(accountID)`. `valueRead` marks every id in `ids` on a
+  whole-call error and only the failed id per row failure, each with a Warn `"offline state unavailable"` carrying
+  `errors.Join(ErrOfflineStateUnavailable, err)`. Broker accounts are never passed in, so never marked. No read path
+  consumes `degraded()` yet — Step 11 does.
+- `portfolio_service.go`: `ErrOfflineStateUnavailable` sentinel beside `ErrQuotesUnavailable` (logs/tests only; no
+  handler mapping change).
+- Tests: `offline_realized_test.go` (two call sites on the 3-value return; AC-8 undecodable row; scan error stays
+  whole-call) and `offline_valuation_test.go` (`TestValueRead_WholeCallErrorMarksEveryRequestedID`,
+  `TestValueRead_RowFailureMarksOnlyThatID`). C-13: the corrupt JSON literal is inline (single-consumer one-off).
+- TDD: RED was a compile failure (3-value return, `degraded`, `ErrOfflineStateUnavailable` undefined) plus a throwaway
+  AC-8 test on the old repo that failed the whole batch on one bad row. GREEN: all six targeted tests pass.
+- Verification: spec greps match; `go build`, `go vet` and the full `go test ./... -race` pass, 68.6% total on the CI
+  coverpkg set (≥ 40%); `golangci-lint` v2.14.0 (go1.27.0 build) 0 issues.
+- Next: Step 11 (D-48 degraded marker and zeroing on every read path).
+
+## Session 2026-10-29 — Steps 11 + 12 (service + test, D-48 degraded marker)
+
+- Standing operator rule (2026-10-29, "Merge pairs + standing rule"): Steps 11 and 12 are one lint-green commit with one
+  red→green cycle on Step 12's tests, and both are marked done (Deviation Log). Step 11's RED tests are Step 12's.
+- `portfolio_service.go`:
+  - `applyAccountPnL` and `buildAccountPortfolio` take `degraded bool`. A degraded account sets
+    `OfflineStateUnavailable`, keeps `Equity = positionsValue`, and returns before the broker and offline branches,
+    so TotalPnl, DayPnl and DayPnlPct are 0 and the optionals are nil.
+  - Every caller passes `val.degraded(id)`.
+  - The GetPortfolio aggregate skips a degraded id's dayPnl/totalPnl/prior/absCost, sets the aggregate marker and
+    forces `allOffline = false`. Equity still sums every position.
+  - `markDegradedPositions` runs in `enrichPositions` (GetPosition/ListPositions), in GetPortfolio after `valueRead`,
+    and in both ListPortfolios branches.
+  - Handler untouched.
+- `offline_valuation.go`: `markDegradedPositions` sits beside `readValuation.degraded`. It changes only offline-sourced
+  rows of degraded accounts.
+- Tests (`offline_account_pnl_test.go`):
+  - `TestAccountPnL_OfflineStatesErrorIsNonFatal` is rewritten as `TestGetPortfolio_AC3_OfflineStateErrorMarksDegraded`.
+    The scenario is a realized 500.00 state the read cannot reach, and AAPL 10 @ 154 at mid 164 (100.00 unrealized).
+    The Warn assertion is kept.
+  - New tests: `TestListPortfolios_AC3_...` (scoped and all-accounts), `TestPositionReads_AC3_...`
+    (ListPositions + GetPosition), `TestListPortfolios_AC8_UndecodableRowDegradesOnlyItsAccount`,
+    `TestListPositions_DegradedOfflineKeepsBrokerRows` and `TestGetPortfolio_AggregateExcludesDegradedAccount`.
+  - The `portfolio_quote_deadline_test.go` `expectAllAccounts` comment states the new contract.
+  - C-13: the scenario literals are local to this file, and symbols and quotes reuse `internal/testdata`.
+- TDD:
+  - AC-3 red: on the pre-Step-11 tree, `offline_state_unavailable = false`, `total_pnl = 100, want 0`, and position
+    `day_pnl=40`, on all four reads.
+  - AC-8 red: acct-off-1 was unmarked, with total 100.
+  - Aggregate red: `total_pnl = 600, want 500`.
+  - Green: every targeted test passes, and `TestAC29_`, `AC39_` and `AC52_` stay green unchanged (PRESERVE).
+- Verification:
+  - The spec greps match, the handler diff is empty, and `error is non-fatal` has no hit.
+  - `go build`, `go vet` and the full `go test ./... -race` pass, with 68.6% on the CI coverpkg set (≥ 40%).
+  - `golangci-lint` v2.14.0 (go1.27.0 build) reported 0 issues.
+- Next: Step 13 (UI gating on `offlineStateUnavailable`). It is the backend→ui surface boundary, so a checkpoint is
+  due.
+
+## Session 2026-10-30 — Steps 13 + 14 (ui service + test, AC-3/AC-4/AC-5)
+
+- Operator decision (session question tool, 2026-10-30): "A: Gate it, drop e2e (Recommended)". Under the standing
+  rule "Merge pairs + standing rule", Steps 13 and 14 are one commit and both are marked done (Deviation Log).
+  `OrderBook.tsx` `PortfolioSummary` is gated, but it is mounted by no route (grep hits only its definition), so its
+  e2e bullet is dropped and `tsc` + lint cover it.
+- `portfolioTotals.ts`: `PNL_UNAVAILABLE_LABEL`, `PortfolioFigures.offlineStateUnavailable` and
+  `PortfolioTotals.incomplete`. A degraded account adds equity/cash/BP but skips the P&L, realized and fee sums.
+- Gated surfaces: PortfolioPanel (single card, combined card, per-account card, with a muted `CardNotice`), the Book
+  page (combined tiles, per-account cards, positions-table Day cell), `/trader/positions` (Day $ and % cells, sheet),
+  `/trader/positions/[symbol]` (header and both Day P&L tiles), and `AccountPortfolioSelector` (selected Day/Total,
+  aggregate Day, with degraded portfolios skipped in the aggregate sum).
+- Tests: a vitest degraded case; 5 `@AC-3` e2e cases in `offline-pnl.spec.ts`; `@AC-4` and `@AC-5` confirm-dialog error
+  cases in `offline-accounts.spec.ts`; two fixtures plus INVENTORY rows (C-12/C-13).
+- TDD: RED was 2 vitest failures and 5 `@AC-3` e2e failures. GREEN: vitest 239/239, the two specs 23/23, and the other
+  affected specs 83/83 (`CI=1` server, Deviation Log). Lint reports 0 errors.
+- Open item: `tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts:135-136`, a file outside this feature.
+- Next: Step 15 (agent pass-through test). It is the ui→agent surface boundary, so a checkpoint is due.
+
+## Session 2026-10-30 — Step 15 (agent test, AC-3/AC-4/AC-5)
+
+- Operator decision (session question tool, 2026-10-30): "A: Widen Step 15 (Recommended)". Files now also include
+  `tests/test_position_parity.py` (`offline_state_unavailable` in `_POSITION_FIELD_SET`, count comment 26, guard B
+  Position sets it True; no assert changed). The marker surfaces through `get_positions` and
+  `manage_offline_account list_positions`.
+- Tests added to `tests/test_offline_client.py`: `test_list_positions_passes_offline_state_unavailable` (True with
+  `day_pnl` 0, healthy False) and a parametrized `manage_offline_account` `confirm_order` test: `INVALID_ARGUMENT` and
+  `UNAVAILABLE` details surface verbatim through the real client wrapper and the tool's error mapping.
+- TDD: N/A per spec (characterization; stubs from Step 2 already exist). Verification: full agent suite 524 passed,
+  81% coverage (>= 40); `ruff check` and `ruff format --check` clean.
+- Next: Step 16 (docs).
+
+## Session 2026-10-30 — Step 16 (docs)
+
+- Edited `services/xstockstrat-portfolio/CLAUDE.md` (degrade wording at the offline-valuation paragraph; `boundedRetry` /
+  `event parked` / `lastSeq` self-heal on the sync row; a new `account.deregistered` consumer row, since none existed,
+  carrying the option-(a) broker scope), `services/xstockstrat-portfolio/docs/context-constitution.md` (PORTFOLIO-3 and
+  PORTFOLIO-11, with the head-of-line-blocking and log-only-park acceptances) and `services/xstockstrat-trading/CLAUDE.md`
+  (filled_qty/filled_avg_price validation, UNAVAILABLE "positions not published").
+- Verified against code: `boundedRetry`/`classifyConsumerErr`/`syncRetryMinAttempts` in `portfolio_service.go`,
+  `readValuation.unavailable` in `offline_valuation.go`, trading.go ConfirmOrder validation and the UNAVAILABLE message.
+- Teardown: `/context-forge:context-constitution refresh` plugin not run in this subagent; manual reconciliation of the three
+  touched files against the code was done as above (record in the PR body).
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+````sdd-batch-promotion-plan
+## Promotion plan - fix-offline-book-consistency (feature 256)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-portfolio/acceptance/fix-offline-book-consistency.feature | CREATE | NEW | Event consumer retry. No existing portfolio rule covers a failed UpsertOfflineRealized. |
+| AC-2 | same portfolio file | CREATE | NEW | Deregistration delete retry. |
+| AC-3 | same portfolio file | CREATE | NEW | offline_state_unavailable on all four reads. Distinct from the quote-error degrade in offline-account-full-pnl.feature (~L146), which is a different failure. |
+| AC-4 | services/xstockstrat-trading/acceptance/fix-offline-book-consistency.feature | CREATE | NEW | ConfirmOrder rejects non-finite or negative fills. Existing trading suites only assert fees >= 0. |
+| AC-5 | same trading file | CREATE | NEW | The emit failure is in trading. |
+| AC-6 | portfolio file | APPEND (same CREATE block) | NEW | Poison event parked after the retry bound. |
+| AC-7 | trading file | APPEND (same CREATE block) | NEW | Weak overlap with feature 240 partial and full confirm scenarios in trading offline-account-full-pnl.feature. Those do not assert the emit. Kept NEW as a regression guard for FR-5 over-rejection. |
+| AC-8 | portfolio file | APPEND (same CREATE block) | NEW | Per-account degradation. |
+| AC-9 | portfolio file | APPEND (same CREATE block) | NEW | Transient failures never park an event. Complements AC-6. |
+| AC-10 | trading file | APPEND (same CREATE block) | NEW | Partial overlap with @AC-48 @feature-240 in trading offline-account-full-pnl.feature (un-confirm with filled_qty 0 gives NEW). AC-10 adds that no price is needed and that the emit still happens. It is consistent with AC-48, so this is not a conflict. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-offline-book-consistency.feature (CREATE) ---
+# Promoted from docs/roadmap/features/256-fix-offline-book-consistency/acceptance.feature (C-16).
+# Scenarios are verbatim. Provenance tag: @feature-256.
+Feature: fix-offline-book-consistency (portfolio)
+  Offline-account books (feature 240) must not drift or misreport P&L on a failed write or a failed state read.
+
+  @AC-1 @FR-1 @regression @feature-256
+  Scenario: A failed offline realized-P&L write is retried, not acked
+    Given user "u-1" has offline account "acct-off-1" with stored realized_pnl 0.00
+    And UpsertOfflineRealized fails once, then succeeds
+    When portfolio consumes an offline "account.positions.synced" event for "acct-off-1" carrying realized_pnl 500.00
+    Then the event cursor does not advance past that event after the first failure
+    And the event is delivered again
+    And the stored realized_pnl for "acct-off-1" is 500.00
+
+  @AC-2 @FR-2 @regression @feature-256
+  Scenario: A failed offline-realized delete on deregistration is retried
+    Given user "u-1" has offline account "acct-off-1" with a realized row
+    And DeleteOfflineRealized fails once, then succeeds
+    When portfolio consumes "account.deregistered" for "acct-off-1"
+    Then the "account.deregistered" event is delivered again after the failed delete
+    And no realized row remains for "acct-off-1"
+    And "acct-off-1" no longer appears in ListPortfolios for "u-1"
+
+  @AC-3 @FR-4 @regression @feature-256
+  Scenario Outline: Offline P&L is never reported as complete when offline state cannot be read
+    Given user "u-1" has offline account "acct-off-1" with realized_pnl 500.00 and an AAPL position with unrealized_pnl 100.00
+    And GetOfflineStates returns an error
+    When <read> is called for "u-1"
+    Then the call succeeds
+    And the "acct-off-1" figures it returns carry offline_state_unavailable true
+    And it does not return total_pnl 100.00, a day_pnl, or a position day_pnl for "acct-off-1" as a complete figure
+
+    Examples:
+      | read           |
+      | ListPortfolios |
+      | GetPortfolio   |
+      | ListPositions  |
+      | GetPosition    |
+
+  @AC-6 @FR-3 @regression @feature-256
+  Scenario: A persistently failing offline sync event is parked and does not block the stream
+    Given user "u-1" has offline account "acct-off-1"
+    And UpsertOfflineRealized always fails for event "evt-1"
+    And event "evt-2" for offline account "acct-off-2" follows "evt-1" on the stream
+    When portfolio consumes "evt-1" and "evt-2"
+    Then "evt-1" is parked with an error log naming "evt-1" once the retry bound is reached
+    And the event cursor advances past "evt-1"
+    And "evt-2" is applied
+
+  @AC-8 @FR-4 @regression @feature-256
+  Scenario: One undecodable offline state degrades only its own account
+    Given user "u-1" has offline account "acct-off-1" whose stored recent_fills cannot be decoded
+    And user "u-1" has offline account "acct-off-2" with realized_pnl 200.00 and no open positions
+    And user "u-1" has broker account "acct-alp-1" with day_pnl 120.00
+    When ListPortfolios is called for "u-1"
+    Then the call succeeds
+    And the "acct-off-1" portfolio carries offline_state_unavailable true
+    And the "acct-off-2" portfolio has total_pnl 200.00 and offline_state_unavailable false
+    And the "acct-alp-1" portfolio has day_pnl 120.00 and offline_state_unavailable false
+
+  @AC-9 @FR-3 @regression @feature-256
+  Scenario: A transient write failure never parks the offline sync event
+    Given user "u-1" has offline account "acct-off-1"
+    And UpsertOfflineRealized fails with a connection error on every attempt for 15 minutes, then succeeds
+    When portfolio consumes an offline "account.positions.synced" event "evt-1" for "acct-off-1"
+    Then "evt-1" is never parked and the event cursor does not advance past it while the write fails
+    And "evt-1" is applied once the write succeeds
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-offline-book-consistency.feature (CREATE) ---
+# Promoted from docs/roadmap/features/256-fix-offline-book-consistency/acceptance.feature (C-16).
+# Scenarios are verbatim. Provenance tag: @feature-256.
+Feature: fix-offline-book-consistency (trading)
+  Offline ConfirmOrder must reject non-finite or negative fills and must not report success when the positions emit fails.
+
+  @AC-4 @FR-5 @regression @feature-256
+  Scenario Outline: ConfirmOrder rejects a non-finite or negative fill
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1"
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty <qty> and filled_avg_price <price>
+    Then the call fails with INVALID_ARGUMENT
+    And order "ord-1" is unchanged and no "account.positions.synced" is emitted
+
+    Examples:
+      | qty  | price |
+      | NaN  | 150.0 |
+      | +Inf | 150.0 |
+      | 10   | NaN   |
+      | 10   | -5.0  |
+      | 10   | +Inf  |
+
+  @AC-5 @FR-6 @regression @feature-256
+  Scenario: ConfirmOrder does not report success when the positions emit fails
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1"
+    And recomputeAndEmitOfflinePositions fails for the account of "ord-1"
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty 10 and filled_avg_price 150.0
+    Then either the emit is retried until "account.positions.synced" is published for the account
+    Or the call returns an error, and a repeat ConfirmOrder with the same values succeeds and emits "account.positions.synced"
+
+  @AC-7 @FR-7 @regression @feature-256
+  Scenario Outline: Valid fills keep the existing offline status derivation
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1"
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty <qty> and filled_avg_price 150.0
+    Then order "ord-1" has status <status>
+    And "account.positions.synced" is emitted for the account of "ord-1"
+
+    Examples:
+      | qty | status           |
+      | 4   | PARTIALLY_FILLED |
+      | 10  | FILLED           |
+
+  @AC-10 @FR-5 @FR-7 @regression @feature-256
+  Scenario: An un-confirm with filled_qty 0 stays valid without a fill price
+    Given an offline BUY order "ord-1" for 10 "AAPL" owned by "u-1" confirmed with filled_qty 10 and filled_avg_price 150.0
+    When "u-1" calls ConfirmOrder for "ord-1" with filled_qty 0 and filled_avg_price 0
+    Then the call succeeds and order "ord-1" has status NEW
+    And "account.positions.synced" is emitted for the account of "ord-1"
+
+### Notes / ambiguities / conflicts
+- Attribution follows the observable subject. Portfolio owns AC-1, 2, 3, 6, 8 and 9 (event consumer, offline_state_unavailable on reads). Trading owns AC-4, 5, 7 and 10 (the ConfirmOrder RPC and its emit).
+- feature.md also lists ui and agent as reviewers (steps 13-15). No scenario asserts on their observable surface, so no ui or agent suite gets a write.
+- No CONFLICT found. AC-10 against @AC-48 @feature-240 (services/xstockstrat-trading/acceptance/offline-account-full-pnl.feature L96-103) is consistent: both give status NEW on filled_qty 0. The AC-48 re-confirm with no fees or filled_at is unaffected by the new non-finite and negative rejection.
+- Weak overlap, no write skipped. AC-7 against the partial and full confirms in trading offline-account-full-pnl.feature and offline-account-portfolios.feature. AC-3 against the quote-error scenarios at portfolio offline-account-full-pnl.feature ~L146. Neither asserts the same outcome. Possible later consolidation candidates for a human.
+- I did not check the platform.feature suite or the agent and ui suites beyond a grep for the key terms (UpsertOfflineRealized, ConfirmOrder, offline_state_unavailable). It found nothing there.
+- The 'account.deregistered' consumer is not covered by any existing portfolio suite, per my grep.
+
+### Coverage check
+- Source scenarios: 10 (AC-1 to AC-10). Planned: 10 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. Nothing skipped. Portfolio gets 6 (AC-1, 2, 3, 6, 8, 9). Trading gets 4 (AC-4, 5, 7, 10).
+````
+
+## Session 2026-10-30 — Staging smoke (partial pass; run via the staging agent MCP + DO run logs)
+
+Staging deployment `b306cd82` (main-dev `484896de`, ACTIVE 11:08Z) carries 256.
+- **D-49 pass:** `manage_offline_account confirm_order` with `filled_qty=-1` and, separately, `filled_avg_price=-5`, against a
+  nonexistent order id. The tool returned a bare `Error executing tool`. The agent run logs (11:20Z) show the underlying
+  gRPC status for both: `INVALID_ARGUMENT` ("filled_qty must be a finite number >= 0" / "filled_avg_price must be a finite
+  number >= 0 when filling"). The order was never loaded (no NOT_FOUND), so the validation runs before the load.
+  A NaN fill cannot be expressed through the MCP's JSON number argument, so it was not exercised here (covered by Step 4's unit tests).
+- **Reads healthy:** `list_positions` for a Schwab offline account and `get_positions` page 1 return valuations and
+  `offline_state_unavailable: false` on every row (the new field is live end to end). Portfolio logs show the five
+  event-stream consumers (fill, bracket, position sync, balance sync, account deregistration) reconnecting with their
+  resume sequences after the rollout; no ERROR lines in trading, portfolio or ledger.
+- **Not run:** the `GetOfflineStates`-failing path (D-48 marker). Staging offers no way to make the offline-state read fail,
+  so it remains covered by Step 12's tests only.
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

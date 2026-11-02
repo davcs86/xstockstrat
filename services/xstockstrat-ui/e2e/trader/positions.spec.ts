@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { LINEAGE_FILL_EVENTS } from '../fixtures/ledgerEvents';
+import { ORDER_FILLED } from '../fixtures/orders';
 
 /**
  * Book → Exposure risk reframe (feature 083, Step 25). The positions table gains
@@ -126,39 +128,35 @@ test.describe('Positions — fill-lineage table overflow at 390px (FR-4c, design
   }) => {
     // Stress the 3-column table with a long order_id — the default mock fixture's short
     // 'mock-order-001' would pass vacuously even if the stacked-layout question were answered
-    // wrong. Only intercepts the lineage query (no streamKey) — the reconciliation query (which
+    // wrong. Only intercepts the order.filled lineage query — the reconciliation query (which
     // sets streamKey: 'account:...') passes through to the default mock-backend handler
     // unchanged, so the rest of the page renders normally.
     await page.route('**/xstockstrat.ledger.v1.LedgerService/QueryEvents', async (route) => {
-      const body = route.request().postDataJSON() as { streamKey?: string };
-      if (body.streamKey) {
+      const body = route.request().postDataJSON() as { streamKey?: string; eventType?: string };
+      if (body.eventType !== 'order.filled') {
         await route.continue();
         return;
       }
+      const base = LINEAGE_FILL_EVENTS[0];
+      const longId = 'mock-order-with-a-very-long-broker-generated-identifier-0000001';
+      // One fill only (the first order's stream) so the long id renders exactly once.
+      const events =
+        body.streamKey && body.streamKey !== ORDER_FILLED.orderId
+          ? []
+          : [
+              {
+                eventId: 'evt-lineage-long-001',
+                eventType: base.eventType,
+                streamKey: longId,
+                sourceService: base.sourceService,
+                payload: { ...base.payload, order_id: longId, qty: 10, fill_price: 180.0 },
+                sequence: '1',
+              },
+            ];
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          events: [
-            {
-              eventId: 'evt-lineage-long-001',
-              eventType: 'order.filled',
-              streamKey: 'order:mock-order-with-a-very-long-broker-generated-identifier-001',
-              sourceService: 'trading',
-              payload: {
-                order_id: 'mock-order-with-a-very-long-broker-generated-identifier-0000001',
-                symbol: 'AAPL',
-                qty: 10,
-                fill_price: 180.0,
-                account_id: 'alpaca-default',
-                trading_mode: 'TRADING_MODE_PAPER',
-                user_id: 'test-user-001',
-              },
-              sequence: '1',
-            },
-          ],
-          page: { nextPageToken: '' },
-        }),
+        body: JSON.stringify({ events, page: { nextPageToken: '' } }),
       });
     });
 

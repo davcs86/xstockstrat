@@ -102,11 +102,17 @@ files.
 **On any FAIL-level overlap**, before deciding the outcome, run the merge-order proposal in
 `reference/overlap-check.md` (§"Merge-order write") — this is the router's job, not the agent's.
 
+**Design-depth recommendation (PASS only).** Apply the **Features** section of
+`docs/sdd/design-depth-rubric.md` yourself from the product spec (Affected Services, consumer surface,
+proto/DB gates) and the A3 overlap report — do not add it to the `spec-reviewer` prompt. Result is
+`full` or `quick` (never `skip`); advisory only, never auto-invoke `/sdd-design` (P-04). The
+A1b duplicate fast path has no A3 report: recommend `full`.
+
 **PASS** (no ✗ in criteria or overlap):
 1. Overwrite `status.md` with `spec-ready` (plain string, replaces the old content).
 2. Edit `feature.md`: append Status History row
    `| <ISO date> | \`draft\` → \`spec-ready\` | /sdd-review | Product spec approved (N warnings) |`;
-   update `## Next Action` to `` `/sdd-spec <slug>` — generate implementation spec ``.
+   update `## Next Action` to `` `/sdd-design <slug> [quick]` — <full|quick> design recommended (<rationale>) ``.
 3. Append to `context.md`:
    ```markdown
    ## Session <ISO timestamp> — sdd-review product-spec
@@ -114,8 +120,9 @@ files.
    - Product spec approved. Status: draft → spec-ready.
    - Warnings: <list or "none">
    - Overlap findings: <list or "none">
+   - Recommended design depth: <full|quick> (<rationale>)
    ```
-4. Print: `Product spec approved. Status: spec-ready. Next: /sdd-spec <slug>`
+4. Print: `Product spec approved. Status: spec-ready. Recommended design depth: <full|quick> (<rationale>). Next: /sdd-design <slug> [quick]`
 
 **FAIL** (any ✗): do NOT modify `feature.md` or `context.md`. Print all failing criteria with
 fix instructions, then: `Product spec review failed. Fix the items above, then re-run

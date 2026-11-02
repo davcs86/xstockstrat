@@ -1,0 +1,320 @@
+# Homelab stack, deployed by .github/workflows/deploy-homelab.yml through homelab-edge's app-deploy gate.
+# The gate ships only this file and .env: no build, no bind mounts; every value comes from .env.
+
+x-common-env: &common-env
+  APPLICATION_ENV: ${APPLICATION_ENV:?APPLICATION_ENV is required}
+  TRADING_MODE: ${TRADING_MODE:?TRADING_MODE is required}
+  OTEL_ENABLED: "false"
+  MTLS_CA_CERT: ${MTLS_CA_CERT:?MTLS_CA_CERT is required}
+
+# Direct :5432 for LISTEN/NOTIFY and migration advisory locks; the six stateless services use PgBouncer :6432.
+x-db-direct: &db-direct
+  DATABASE_URL: postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require
+
+x-db-pooled: &db-pooled
+  DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require
+  DB_PGBOUNCER: "true"
+
+x-svc: &svc
+  restart: unless-stopped
+  logging:
+    driver: local
+    options: {max-size: 10m, max-file: "3"}
+
+# start_period exceeds the Go/Node/Python 90 s config-snapshot wait.
+x-hc: &hc
+  interval: 5s
+  timeout: 5s
+  retries: 6
+  start_period: 120s
+
+services:
+  db-migrator:
+    image: ${IMAGE_DB_MIGRATOR:?IMAGE_DB_MIGRATOR is required}
+    restart: "no"
+    environment:
+      <<: *db-direct
+      SEED_USER_ID: ${SEED_USER_ID:?SEED_USER_ID is required}
+
+  xstockstrat-config:
+    <<: *svc
+    image: ${IMAGE_CONFIG:?IMAGE_CONFIG is required}
+    environment:
+      <<: [*common-env, *db-direct]
+      MTLS_CERT: ${CONFIG_MTLS_CERT:?CONFIG_MTLS_CERT is required}
+      MTLS_KEY: ${CONFIG_MTLS_KEY:?CONFIG_MTLS_KEY is required}
+      GRPC_PORT: "50060"
+      SERVICE_NAME: config
+      DB_POOL_MAX: "2"
+      CONFIG_SECRETS_ENCRYPTION_KEY: ${CONFIG_SECRETS_ENCRYPTION_KEY:?CONFIG_SECRETS_ENCRYPTION_KEY is required}
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50060"]
+    depends_on:
+      db-migrator:
+        condition: service_completed_successfully
+
+  xstockstrat-ledger:
+    <<: *svc
+    image: ${IMAGE_LEDGER:?IMAGE_LEDGER is required}
+    environment:
+      <<: [*common-env, *db-direct]
+      MTLS_CERT: ${LEDGER_MTLS_CERT:?LEDGER_MTLS_CERT is required}
+      MTLS_KEY: ${LEDGER_MTLS_KEY:?LEDGER_MTLS_KEY is required}
+      GRPC_PORT: "50057"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      WAIT_FOR: "xstockstrat-config:50060"
+      SERVICE_NAME: ledger
+      DB_POOL_MAX: "1"
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50057"]
+    depends_on:
+      xstockstrat-config:
+        condition: service_healthy
+
+  xstockstrat-identity:
+    <<: *svc
+    image: ${IMAGE_IDENTITY:?IMAGE_IDENTITY is required}
+    environment:
+      <<: [*common-env, *db-direct]
+      MTLS_CERT: ${IDENTITY_MTLS_CERT:?IDENTITY_MTLS_CERT is required}
+      MTLS_KEY: ${IDENTITY_MTLS_KEY:?IDENTITY_MTLS_KEY is required}
+      GRPC_PORT: "50058"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SERVICE_NAME: identity
+      DB_POOL_MAX: "2"
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50058"]
+    depends_on:
+      xstockstrat-ledger:
+        condition: service_healthy
+
+  xstockstrat-notify:
+    <<: *svc
+    image: ${IMAGE_NOTIFY:?IMAGE_NOTIFY is required}
+    environment:
+      <<: [*common-env, *db-direct]
+      MTLS_CERT: ${NOTIFY_MTLS_CERT:?NOTIFY_MTLS_CERT is required}
+      MTLS_KEY: ${NOTIFY_MTLS_KEY:?NOTIFY_MTLS_KEY is required}
+      GRPC_PORT: "50059"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      SERVICE_NAME: notify
+      DB_POOL_MAX: "1"
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "nc", "-z", "127.0.0.1", "50059"]
+    depends_on:
+      xstockstrat-ledger:
+        condition: service_healthy
+
+  xstockstrat-marketdata:
+    <<: *svc
+    image: ${IMAGE_MARKETDATA:?IMAGE_MARKETDATA is required}
+    environment:
+      <<: [*common-env, *db-pooled]
+      MTLS_CERT: ${MARKETDATA_MTLS_CERT:?MARKETDATA_MTLS_CERT is required}
+      MTLS_KEY: ${MARKETDATA_MTLS_KEY:?MARKETDATA_MTLS_KEY is required}
+      GRPC_PORT: "50053"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      SERVICE_NAME: marketdata
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "/app/service", "healthcheck"]
+    depends_on:
+      xstockstrat-notify:
+        condition: service_healthy
+
+  xstockstrat-portfolio:
+    <<: *svc
+    image: ${IMAGE_PORTFOLIO:?IMAGE_PORTFOLIO is required}
+    environment:
+      <<: [*common-env, *db-pooled]
+      MTLS_CERT: ${PORTFOLIO_MTLS_CERT:?PORTFOLIO_MTLS_CERT is required}
+      MTLS_KEY: ${PORTFOLIO_MTLS_KEY:?PORTFOLIO_MTLS_KEY is required}
+      GRPC_PORT: "50052"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      SERVICE_NAME: portfolio
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "/app/service", "healthcheck"]
+    depends_on:
+      xstockstrat-notify:
+        condition: service_healthy
+
+  xstockstrat-indicators:
+    <<: *svc
+    image: ${IMAGE_INDICATORS:?IMAGE_INDICATORS is required}
+    environment:
+      <<: [*common-env, *db-pooled]
+      MTLS_CERT: ${INDICATORS_MTLS_CERT:?INDICATORS_MTLS_CERT is required}
+      MTLS_KEY: ${INDICATORS_MTLS_KEY:?INDICATORS_MTLS_KEY is required}
+      GRPC_PORT: "50054"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
+      SERVICE_NAME: indicators
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50054"]
+    depends_on:
+      xstockstrat-ledger:
+        condition: service_healthy
+
+  xstockstrat-ingest:
+    <<: *svc
+    image: ${IMAGE_INGEST:?IMAGE_INGEST is required}
+    environment:
+      <<: [*common-env, *db-pooled]
+      MTLS_CERT: ${INGEST_MTLS_CERT:?INGEST_MTLS_CERT is required}
+      MTLS_KEY: ${INGEST_MTLS_KEY:?INGEST_MTLS_KEY is required}
+      GRPC_PORT: "50055"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
+      SERVICE_NAME: ingest
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50055"]
+    depends_on:
+      xstockstrat-identity:
+        condition: service_healthy
+      xstockstrat-marketdata:
+        condition: service_healthy
+
+  xstockstrat-trading:
+    <<: *svc
+    image: ${IMAGE_TRADING:?IMAGE_TRADING is required}
+    environment:
+      <<: [*common-env, *db-pooled]
+      MTLS_CERT: ${TRADING_MTLS_CERT:?TRADING_MTLS_CERT is required}
+      MTLS_KEY: ${TRADING_MTLS_KEY:?TRADING_MTLS_KEY is required}
+      GRPC_PORT: "50051"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      BROKER_ACCOUNTS_ENCRYPTION_KEY: ${BROKER_ACCOUNTS_ENCRYPTION_KEY:?BROKER_ACCOUNTS_ENCRYPTION_KEY is required}
+      SERVICE_NAME: trading
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "/app/service", "healthcheck"]
+    depends_on:
+      xstockstrat-portfolio:
+        condition: service_healthy
+      xstockstrat-indicators:
+        condition: service_healthy
+      xstockstrat-marketdata:
+        condition: service_healthy
+
+  xstockstrat-analysis:
+    <<: *svc
+    image: ${IMAGE_ANALYSIS:?IMAGE_ANALYSIS is required}
+    environment:
+      <<: [*common-env, *db-pooled]
+      MTLS_CERT: ${ANALYSIS_MTLS_CERT:?ANALYSIS_MTLS_CERT is required}
+      MTLS_KEY: ${ANALYSIS_MTLS_KEY:?ANALYSIS_MTLS_KEY is required}
+      GRPC_PORT: "50056"
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054 xstockstrat-trading:50051"
+      SERVICE_NAME: analysis
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/50056"]
+    depends_on:
+      xstockstrat-ingest:
+        condition: service_healthy
+      xstockstrat-trading:
+        condition: service_healthy
+
+  # Published: the edge reaches only :3000 (UI) and :9000 (agent) on this VM.
+  xstockstrat-ui:
+    <<: *svc
+    image: ${IMAGE_UI:?IMAGE_UI is required}
+    environment:
+      <<: [*common-env, *db-direct]
+      MTLS_CERT: ${UI_MTLS_CERT:?UI_MTLS_CERT is required}
+      MTLS_KEY: ${UI_MTLS_KEY:?UI_MTLS_KEY is required}
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
+      APP_URL: ${APP_URL:?APP_URL is required}
+      AGENT_PUBLIC_URL: ${APP_URL}/agent
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SERVICE_NAME: ui
+      DB_POOL_MAX: "1"
+      # Next binds $HOSTNAME, which Docker sets to the container id; the 127.0.0.1 healthcheck needs 0.0.0.0.
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "3000:3000"
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "nc", "-z", "127.0.0.1", "3000"]
+    depends_on:
+      xstockstrat-analysis:
+        condition: service_healthy
+
+  xstockstrat-agent:
+    <<: *svc
+    image: ${IMAGE_AGENT:?IMAGE_AGENT is required}
+    environment:
+      <<: *common-env
+      MTLS_CERT: ${AGENT_MTLS_CERT:?AGENT_MTLS_CERT is required}
+      MTLS_KEY: ${AGENT_MTLS_KEY:?AGENT_MTLS_KEY is required}
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
+      SERVICE_NAME: agent
+      MCP_TRANSPORT: http
+      MCP_HTTP_PORT: "9000"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      UI_BASE_URL: ${APP_URL}
+      AGENT_PUBLIC_URL: ${APP_URL}/agent
+    ports:
+      - "9000:9000"
+    healthcheck:
+      <<: *hc
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9000"]
+    depends_on:
+      xstockstrat-analysis:
+        condition: service_healthy

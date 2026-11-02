@@ -1,10 +1,14 @@
 """Tests for app/client.py — gRPC client helpers."""
 
+import asyncio
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import grpc
 import pytest
 
 from app import client
+from tests.conftest import HANG_GUARD_S
 
 
 def test_metadata_never_includes_secret():
@@ -167,7 +171,7 @@ class TestManageStrategyClient:
 
     @pytest.mark.asyncio
     async def test_unknown_operation_raises(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="'score' is routed to ScoreStrategy"):
             await client.manage_strategy(user_id="u-1", operation="bogus", definition={})
 
     @pytest.mark.asyncio
@@ -188,6 +192,63 @@ class TestManageStrategyClient:
                 )
         sent = mock_stub.ManageStrategy.call_args[0][0]
         assert sent.operation == analysis_pb2.STRATEGY_OPERATION_REACTIVATE
+
+
+class TestScoreStrategyClient:
+    """Feature 283: client.score_strategy reads the excluded-symbols trailer off the call object."""
+
+    class _FakeCall:
+        def __init__(self, resp, trailing):
+            self._resp = resp
+            self._trailing = trailing
+
+        def __await__(self):
+            async def _resp():
+                return self._resp
+
+            return _resp().__await__()
+
+        async def trailing_metadata(self):
+            return self._trailing
+
+    async def _score(self, trailing):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.StrategyScore(
+            strategy_id="s", overall_score=0.7, rating="B", evidence_symbols=2, evidence_days=756
+        )
+        mock_stub = MagicMock()
+        mock_stub.ScoreStrategy = MagicMock(return_value=self._FakeCall(resp, trailing))
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.score_strategy(user_id="u-owner", strategy_id="s")
+        return result, mock_stub.ScoreStrategy
+
+    @pytest.mark.asyncio
+    async def test_trailer_present_yields_excluded_symbols(self):
+        result, _ = await self._score(grpc.aio.Metadata(("x-score-excluded-symbols", '["SCHD"]')))
+        assert result["excluded_symbols"] == ["SCHD"]
+        assert result["evidence_symbols"] == 2
+
+    @pytest.mark.asyncio
+    async def test_no_trailing_metadata_yields_none_and_one_warning(self, caplog):
+        """AC-11 (unit half): a wrapper that swallows trailers must surface null, not []."""
+        import logging  # noqa: PLC0415
+
+        with caplog.at_level(logging.WARNING, logger="app.client"):
+            result, _ = await self._score(None)
+        assert result["excluded_symbols"] is None
+        assert len([r for r in caplog.records if r.name == "app.client"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_request_shape_metadata_and_long_deadline(self):
+        _, rpc = await self._score(grpc.aio.Metadata(("x-score-excluded-symbols", "[]")))
+        sent = rpc.call_args[0][0]
+        assert sent.strategy_id == "s"
+        assert not sent.HasField("range")
+        assert ("x-user-id", "u-owner") in rpc.call_args.kwargs["metadata"]
+        assert rpc.call_args.kwargs["timeout"] == client._LONG_RPC_TIMEOUT_S
 
 
 class TestManageFormulaClient:
@@ -226,7 +287,13 @@ class TestScreenSymbolsClient:
                     criterion_scores={"pe": 1.0},
                     passed=True,
                     status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
-                )
+                ),
+                analysis_pb2.ScreenResult(
+                    symbol="BAD",
+                    passed=False,
+                    status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
+                    score_unavailable=True,
+                ),
             ],
             coverage_gaps=[
                 analysis_pb2.CoverageGap(
@@ -280,7 +347,13 @@ class TestScreenSymbolsClient:
             "criterion_scores": {"pe": 1.0},
             "passed": True,
             "status": "SCREEN_RESULT_STATUS_OK",
+            "score_unavailable": False,
         }
+        # feature 245 (AC-5): an un-evaluated row reaches the agent with score_unavailable set.
+        assert result["results"][1]["symbol"] == "BAD"
+        assert result["results"][1]["passed"] is False
+        assert result["results"][1]["score_unavailable"] is True
+        assert all(isinstance(r["score_unavailable"], bool) for r in result["results"])
         # feature 090: gap detail is projected (timeframe enum name; int64 bars as JSON strings).
         assert result["coverage_gaps"] == [
             {
@@ -877,6 +950,91 @@ class TestGetConfigValueClient:
             with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
                 with pytest.raises(_grpc.aio.AioRpcError):
                     await client.get_config_value("k", namespace="agent", environment="dev")
+
+    @staticmethod
+    async def _mocked_get_config_call():
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # type: ignore
+
+        resp = config_pb2.ConfigSnapshot(
+            namespace="agent", version="1", values={"k": config_pb2.ConfigValue(string_val="v")}
+        )
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(return_value=resp)
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                await client.get_config_value("k", namespace="agent", environment="dev")
+        return mock_stub.GetConfig.call_args
+
+    @pytest.mark.asyncio
+    async def test_getconfig_carries_default_deadline(self):
+        call_args = await self._mocked_get_config_call()
+        assert "timeout" in call_args.kwargs
+        assert call_args.kwargs["timeout"] == client._CONFIG_READ_TIMEOUT_S
+        assert client._CONFIG_READ_TIMEOUT_S == 3.0
+
+    @pytest.mark.asyncio
+    async def test_deadline_constant_is_read_at_call_time(self, monkeypatch):
+        monkeypatch.setattr(client, "_CONFIG_READ_TIMEOUT_S", 0.3, raising=False)
+        call_args = await self._mocked_get_config_call()
+        assert call_args.kwargs["timeout"] == 0.3
+
+    @pytest.mark.asyncio
+    async def test_deadline_exceeded_is_surfaced_and_logged_by_code(self, caplog):
+        from gen.config.v1 import config_pb2_grpc  # type: ignore
+
+        err = grpc.aio.AioRpcError(
+            grpc.StatusCode.DEADLINE_EXCEEDED, None, None, details="detail-sentinel-247"
+        )
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(side_effect=err)
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                with caplog.at_level("WARNING", logger=client.log.name):
+                    with pytest.raises(grpc.aio.AioRpcError):
+                        await client.get_config_value("k", namespace="agent", environment="dev")
+        assert "DEADLINE_EXCEEDED" in caplog.text
+        assert "agent.k" in caplog.text
+        assert "detail-sentinel-247" not in caplog.text
+
+
+# ── get_config_value deadline against a live in-process server (feature 247) ──
+
+
+@pytest.mark.asyncio
+async def test_ac1_stalled_config_read_raises_deadline_exceeded_within_bound(hung_config_server):
+    """@AC-1: a stalled GetConfig fails with DEADLINE_EXCEEDED at the production deadline."""
+    handle = hung_config_server()
+    started = time.monotonic()
+    with pytest.raises(grpc.aio.AioRpcError) as exc_info:
+        await asyncio.wait_for(
+            client.get_config_value(
+                "signal.alert_threshold", namespace="agent", environment="staging"
+            ),
+            HANG_GUARD_S,
+        )
+    elapsed = time.monotonic() - started
+    assert exc_info.value.code() == grpc.StatusCode.DEADLINE_EXCEEDED
+    assert elapsed < 3.0 + 0.5
+    assert handle.entered == 1
+
+
+@pytest.mark.asyncio
+async def test_ac5_healthy_slow_config_read_is_unchanged(hung_config_server):
+    """@AC-5: a healthy config service answering within the deadline returns its value."""
+    from gen.config.v1 import config_pb2  # type: ignore
+
+    handle = hung_config_server(
+        answer_after_s=0.5,
+        values={"signal.alert_threshold": config_pb2.ConfigValue(float_val=0.8)},
+    )
+    out = await asyncio.wait_for(
+        client.get_config_value("signal.alert_threshold", namespace="agent", environment="staging"),
+        HANG_GUARD_S,
+    )
+    assert out == "0.8"
+    assert handle.entered == 1
 
 
 # ── feature 087 additive client fns ────────────────────────────────────────

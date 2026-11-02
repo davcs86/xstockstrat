@@ -35,6 +35,8 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry import metrics
 
+from app.config.watcher import int_positive
+from app.engine.fundsignal_loop import fundsignal_source_slug
 from app.handlers.servicer import (
     _fetch_historical_fundamentals_paged,
     _normalize_symbol,
@@ -43,6 +45,7 @@ from app.handlers.servicer import (
     _row_to_strategy_definition,
     _snapshot_periods,
     blend_strategy_id,
+    default_cooldown_days,
 )
 from app.identity import SYSTEM_IDENTITY, owner_metadata
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
@@ -76,6 +79,11 @@ _TRUNCATION_COUNTER = metrics.get_meter(__name__).create_counter(
     "analysis.live_loop.truncated_pairs",
     description="Live (strategy, symbol) pairs deferred past max_strategies_per_cycle in one cycle",
 )
+
+
+def _pair_label(key: tuple | None) -> str:
+    """Rotation cursor ``(created_at, strategy_id, symbol)`` rendered as ``strategy_id/symbol``."""
+    return "start" if key is None else f"{key[1]}/{key[2]}"
 
 
 def strategy_symbols(definition) -> list[str]:
@@ -159,7 +167,7 @@ async def resolve_fundamentals_universe(ingest, marketdata, cfg) -> set:
         if ingest is None or marketdata is None:
             return set()
         # The fundamentals source slug is config-driven, never hardcoded.
-        slug = cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
+        slug = fundsignal_source_slug(cfg)
         # Signals set S: active signals filtered to the fundamentals source, paginated.
         now = Timestamp()
         now.GetCurrentTime()
@@ -326,7 +334,7 @@ class LiveEvaluationLoop:
     async def run_forever(self):
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
         while True:
-            interval = self._cfg.get_int("analysis.engine.eval_interval_seconds", default=60)
+            interval = int_positive(self._cfg, "analysis.engine.eval_interval_seconds", 60)
             await asyncio.sleep(interval)
             if self._lock.locked():
                 log.info("live_loop: previous cycle still running — skipping")
@@ -334,6 +342,7 @@ class LiveEvaluationLoop:
             async with self._lock:
                 try:
                     await self._run_cycle()
+                    log.info("live_loop: cycle complete")
                 except Exception as e:  # never let one bad cycle kill the loop
                     log.error("live_loop: cycle error: %s", e)
 
@@ -347,7 +356,7 @@ class LiveEvaluationLoop:
         a rotating cursor evaluates at most ``max_strategies_per_cycle`` of them per cycle — so a
         large fleet is covered fairly across cycles instead of the first N always winning.
         """
-        max_pairs = self._cfg.get_int("analysis.engine.max_strategies_per_cycle", default=50)
+        max_pairs = int_positive(self._cfg, "analysis.engine.max_strategies_per_cycle", 50)
         throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
         # Fundamentals-universe force-run: blend_id names the governed strategy; blend_enabled is
         # the operator kill-switch (get_bool honors an explicit false via HasField).
@@ -430,21 +439,31 @@ class LiveEvaluationLoop:
         n = min(max_pairs, len(pairs))
         if n == 0:
             return  # max_pairs misconfigured to 0 → skip without touching the cursor
-        if len(pairs) > max_pairs:
-            # A fleet larger than the per-cycle budget rotates across cycles, not silently dropped.
-            log.warning(
-                "live_loop: %d live (strategy,symbol) pairs exceed "
-                "max_strategies_per_cycle=%d — evaluating %d this cycle, rotating the rest",
-                len(pairs),
-                max_pairs,
-                n,
-            )
-            _TRUNCATION_COUNTER.add(len(pairs) - max_pairs)
         start = bisect_right(pairs, self._cursor_key) if self._cursor_key is not None else 0
         if start >= len(pairs):
             start = 0  # cursor past the end (fleet shrank) → resume at the oldest
+        if len(pairs) > max_pairs:
+            # A fleet larger than the per-cycle budget rotates across cycles, not silently dropped.
+            log.warning(
+                "live_loop: %d live (strategy,symbol) pairs across %d strategies exceed "
+                "max_strategies_per_cycle=%d — evaluating %d this cycle (window %d..%d of %d%s, "
+                "resuming after %s), rotating the rest; full rotation takes ~%d cycles",
+                len(pairs),
+                len({(r[3].user_id, r[1]) for r in records}),
+                max_pairs,
+                n,
+                start,
+                (start + n - 1) % len(pairs),
+                len(pairs),
+                ", wrapping" if start + n > len(pairs) else "",
+                _pair_label(self._cursor_key),
+                -(-len(pairs) // n),
+            )
+            _TRUNCATION_COUNTER.add(len(pairs) - max_pairs)
         last_idx = None
         dataless: list = []
+        errors = 0
+        t0 = time.monotonic()
         for i in range(n):
             idx = (start + i) % len(pairs)
             _ca, strategy_id, symbol, definition, deny_entry = records[idx]
@@ -456,8 +475,18 @@ class LiveEvaluationLoop:
                 ):
                     dataless.append((strategy_id, symbol))
             except Exception as e:
+                errors += 1
                 log.warning("live_loop: (%s,%s) error: %s — continuing", strategy_id, symbol, e)
         self._cursor_key = pairs[last_idx]
+        log.info(
+            "live_loop: evaluated %d/%d pairs in %.1fs (errors=%d, no_bars=%d); cursor now at %s",
+            n,
+            len(pairs),
+            time.monotonic() - t0,
+            errors,
+            len(dataless),
+            _pair_label(self._cursor_key),
+        )
         if dataless:
             # One summarized WARN per cycle with a bounded sample (a per-pair WARN would flood a
             # large fleet); data gaps otherwise surface only in RPC response fields.
@@ -745,10 +774,9 @@ class LiveEvaluationLoop:
         current_bar_dt = bars[-1].time.ToDatetime(tzinfo=UTC)
         cooldown_days = effective_cooldown_days(
             definition.cooldown_days if definition.HasField("cooldown_days") else None,
-            self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+            default_cooldown_days(self._cfg),
         )
-        # get_int_present (not get_int) — a configured 0 is a legitimate exit-cooldown default and
-        # must not be zero-trapped.
+        # A configured 0 is a legitimate exit-cooldown default (no minimum hold).
         exit_cooldown_days = effective_cooldown_days(
             definition.exit_cooldown_days if definition.HasField("exit_cooldown_days") else None,
             self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
@@ -841,6 +869,7 @@ class LiveEvaluationLoop:
                 source_service="xstockstrat-analysis",
                 tags=[f"strategy_id:{definition.strategy_id}"],
                 context=ctx,
+                target_user_id=definition.user_id,
             )
         )
 
@@ -857,6 +886,7 @@ class LiveEvaluationLoop:
                 source_service="xstockstrat-analysis",
                 tags=[f"strategy_id:{definition.strategy_id}"],
                 context=ctx,
+                target_user_id=definition.user_id,
             )
         )
 

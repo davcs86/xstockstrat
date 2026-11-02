@@ -74,6 +74,14 @@ export const POSITION_OFFLINE_AAPL = {
   markAsOf: '2026-10-19T14:00:00Z',
 };
 
+/** Feature 256 AC-3: AAPL from a degraded offline book — marker set, Day P&L zeroed by the backend. */
+export const POSITION_OFFLINE_AAPL_DEGRADED = {
+  ...POSITION_OFFLINE_AAPL,
+  offlineStateUnavailable: true,
+  dayPnl: 0.0,
+  dayPnlPct: 0.0,
+};
+
 /** Marked at the 2026-10-16 daily close (no live quote) → "Last close 2026-10-16" badge. */
 export const POSITION_OFFLINE_XYZ = {
   symbol: 'XYZ',

@@ -1344,7 +1344,7 @@ export type FundamentalsScanSummary = Message<"xstockstrat.analysis.v1.Fundament
      */
     deferredCount: number;
     /**
-     * "completed" | "budget_deferred" | "failed"
+     * "completed" | "budget_deferred" | "partial" | "failed"
      *
      * @generated from field: string status = 6;
      */
@@ -2526,7 +2526,7 @@ export declare enum NoTradeReason {
      */
     INSUFFICIENT_CAPITAL = 3,
     /**
-     * a custom-formula component failed to execute / returned an out-of-contract series
+     * a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal)
      *
      * @generated from enum value: NO_TRADE_REASON_FORMULA_ERROR = 4;
      */
@@ -2536,7 +2536,13 @@ export declare enum NoTradeReason {
      *
      * @generated from enum value: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5;
      */
-    FUNDAMENTALS_UNAVAILABLE = 5
+    FUNDAMENTALS_UNAVAILABLE = 5,
+    /**
+     * not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275)
+     *
+     * @generated from enum value: NO_TRADE_REASON_EVALUATION_FAILED = 6;
+     */
+    EVALUATION_FAILED = 6
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.NoTradeReason.

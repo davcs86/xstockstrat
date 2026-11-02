@@ -18,6 +18,7 @@ import types
 from unittest.mock import AsyncMock, MagicMock
 
 import asyncpg
+import grpc
 import pytest
 
 
@@ -43,12 +44,72 @@ _setup_gen_path()
 
 from datetime import date  # noqa: E402
 
+from gen.marketdata.v1 import marketdata_pb2  # noqa: E402
+
 from app.services.evaluator import FundamentalPeriod  # noqa: E402
 
 
 def fund_period(filed_date, **values):
     """One evaluator PIT filing (feature 215 fixtures)."""
     return FundamentalPeriod(filed_date=filed_date, values=dict(values))
+
+
+def fundamentals_row(symbol, missing=(), **metrics):
+    """A real ``marketdata.v1.Fundamentals`` row; ``missing`` is passed through verbatim."""
+    return marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
+
+
+def snapshot_watcher(**values):
+    """A dial-free ConfigWatcher; each value lands in the oneof member matching its Python type."""
+    from gen.config.v1 import config_pb2
+
+    from app.config.watcher import ConfigWatcher
+
+    # __new__ bypasses __init__'s channel + watch-task dial (fails-074: never a live watcher).
+    w = ConfigWatcher.__new__(ConfigWatcher)
+    w.endpoint = "localhost:50060"
+    w.namespace = "analysis"
+    w._snapshot_event = asyncio.Event()
+    snap = config_pb2.ConfigSnapshot()
+    for key, val in values.items():
+        # bool before int: bool is an int subclass.
+        if isinstance(val, bool):
+            snap.values[key].bool_val = val
+        elif isinstance(val, int):
+            snap.values[key].int_val = val
+        elif isinstance(val, float):
+            snap.values[key].float_val = val
+        elif isinstance(val, str):
+            snap.values[key].string_val = val
+        else:
+            raise TypeError(f"snapshot_watcher: unsupported value type for {key}: {type(val)!r}")
+    w._snapshot = snap
+    return w
+
+
+def real_live_loop(ingest, indicators, rows, *, config_watcher, marketdata_stub):
+    """A real ``LiveEvaluationLoop`` over ``rows`` with empty portfolio pages; no cooldowns repo."""
+    from app.engine.live_loop import LiveEvaluationLoop
+    from app.services.evaluator import StrategyEvaluator
+
+    eof = types.SimpleNamespace(next_page_token="")
+    db = MagicMock()
+    db.fetch = AsyncMock(return_value=rows)
+    portfolio = MagicMock()
+    portfolio.ListPositions = AsyncMock(return_value=types.SimpleNamespace(positions=[], page=eof))
+    portfolio.ListWatchlists = AsyncMock(
+        return_value=types.SimpleNamespace(watchlists=[], page=eof)
+    )
+    return LiveEvaluationLoop(
+        config_watcher=config_watcher,
+        db_pool=db,
+        marketdata_stub=marketdata_stub,
+        ingest_stub=ingest,
+        notify_stub=AsyncMock(),
+        ledger_stub=AsyncMock(),
+        evaluator=StrategyEvaluator(indicators, ()),
+        portfolio_stub=portfolio,
+    )
 
 
 # Feature 215 PIT fixtures: SCHD (an ETF) has no SEC filings; AAPL has quarterly filings carrying
@@ -74,6 +135,11 @@ def ctx_with(headers):
     ctx.invocation_metadata = MagicMock(return_value=list(headers))
     ctx.abort = AsyncMock(side_effect=Exception("aborted"))
     return ctx
+
+
+def aio_rpc_error(code, details=""):
+    """A ``grpc.aio.AioRpcError`` with ``code`` and ``details`` and empty metadata."""
+    return grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), details)
 
 
 OWNER_HEADERS = [("x-user-id", "u-1"), ("x-access-scope", "1"), ("x-trace-id", "t-1")]
@@ -433,17 +499,34 @@ def local_pg():
 
 @pytest.fixture
 def otel_reset(monkeypatch):
-    """Isolate a test calling init_telemetry: the OTel tracer provider is set-once per process."""
-    from opentelemetry import trace
+    """Isolate a test calling init_telemetry: the OTel providers are set-once per process."""
+    import logging
+
+    from opentelemetry import metrics, trace
+    from opentelemetry._logs import _internal as logs_internal
     from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
+    from opentelemetry.metrics import _internal as metrics_internal
     from opentelemetry.util._once import Once
 
     monkeypatch.setattr(trace, "_TRACER_PROVIDER_SET_ONCE", Once())
     monkeypatch.setattr(trace, "_TRACER_PROVIDER", None)
+    monkeypatch.setattr(metrics_internal, "_METER_PROVIDER_SET_ONCE", Once())
+    monkeypatch.setattr(metrics_internal, "_METER_PROVIDER", None)
+    monkeypatch.setattr(logs_internal, "_LOGGER_PROVIDER_SET_ONCE", Once())
+    monkeypatch.setattr(logs_internal, "_LOGGER_PROVIDER", None)
     monkeypatch.setenv("NO_PROXY", "127.0.0.1")
     monkeypatch.setenv("no_proxy", "127.0.0.1")
     monkeypatch.setattr(GrpcAioInstrumentorServer, "instrument", lambda self, **kw: None)
+    root = logging.getLogger()
+    handlers_before = list(root.handlers)
     yield
-    provider = trace.get_tracer_provider()
-    if hasattr(provider, "shutdown"):
-        provider.shutdown()
+    for h in list(root.handlers):
+        if h not in handlers_before:
+            root.removeHandler(h)
+    for provider in (
+        trace.get_tracer_provider(),
+        metrics.get_meter_provider(),
+        logs_internal.get_logger_provider(),
+    ):
+        if hasattr(provider, "shutdown"):
+            provider.shutdown()

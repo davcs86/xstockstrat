@@ -5,12 +5,15 @@ Exercises the discovery metadata, the removed-transport 404s, the surviving Stre
 against build_http_app(). All identity gRPC calls are mocked at the app.client / app.auth boundary.
 """
 
+import concurrent.futures
+import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from starlette.testclient import TestClient
 
 from app import client
+from tests.conftest import HANG_GUARD_S
 
 
 def _app():
@@ -187,6 +190,32 @@ def test_register_survives_config_read_failure():
             r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
     assert r.status_code == 201
     assert r.json()["client_id"] == "oauthc_y"
+
+
+def test_ac4_register_does_not_hang_on_stalled_config(hung_config_server, monkeypatch):
+    """@AC-4 (feature 247): both DCR config reads hit D and registration still answers 201."""
+    handle = hung_config_server()
+    monkeypatch.setattr(client, "_CONFIG_READ_TIMEOUT_S", 0.3, raising=False)
+    registered = {"client_id": "oauthc_247", "redirect_uris": ["https://client.example/cb"]}
+
+    def post_register():
+        with TestClient(_app()) as tc:
+            return tc.post("/oauth/register", json={"redirect_uris": ["https://client.example/cb"]})
+
+    # Never `with ThreadPoolExecutor`: its exit joins a hung worker before the server is stopped.
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    with patch.object(client, "register_oauth_client", AsyncMock(return_value=registered)):
+        try:
+            start = time.monotonic()
+            r = executor.submit(post_register).result(timeout=HANG_GUARD_S)
+            elapsed = time.monotonic() - start
+        finally:
+            executor.shutdown(wait=False)
+    assert elapsed < 2 * 0.3 + 1.0
+    assert r.status_code == 201
+    assert r.json()["client_id"] == "oauthc_247"
+    assert r.json()["redirect_uris"] == ["https://client.example/cb"]
+    assert handle.entered == 2
 
 
 # ── /oauth/authorize validation (AC-B3) ─────────────────────────────────────

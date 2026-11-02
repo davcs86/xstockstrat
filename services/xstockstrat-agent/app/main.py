@@ -23,7 +23,8 @@ import os
 from mcp.server.mcpserver import MCPServer
 
 from app.scopes import MCP_CLAIMS_SCOPE_KEY
-from app.tools import register_prompts, register_tools
+from app.tool_metrics import ToolMetricsMiddleware
+from app.tools import _new_trace_id, register_prompts, register_tools
 
 # Server-level instructions are returned in the MCP `initialize` result, so every client — including
 # a fully-autonomous agent that never invokes a prompt — receives this cross-tool correlation
@@ -78,6 +79,7 @@ def create_server() -> MCPServer:
     server = MCPServer("xstockstrat-agent", instructions=LIST_CORRELATION_INSTRUCTIONS)
     register_tools(server)
     register_prompts(server)
+    server.middleware.append(ToolMetricsMiddleware(server))
     return server
 
 
@@ -100,7 +102,7 @@ def build_http_app():
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Mount, Route
 
-    from app.auth import validate_bearer_claims
+    from app.auth import IDENTITY_UNAVAILABLE, validate_bearer_claims
     from app.oauth_metadata import (
         authorization_server_metadata,
         protected_resource_metadata,
@@ -142,20 +144,25 @@ def build_http_app():
     )
     session_manager = server.session_manager
 
-    async def _authorized(scope) -> bool:
+    async def _authorized(scope) -> bool | object:
         """OAuth 2.1 gate for the Streamable HTTP transport.
 
         Requires an aud-bound JWT presented as `Authorization: Bearer <jwt>` (a token whose aud is
-        wrong is rejected — FR-B8).
+        wrong is rejected — FR-B8). Returns ``IDENTITY_UNAVAILABLE`` (truthy) when identity could
+        not answer, so callers must test for it before the boolean check.
         """
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
         token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
         if not token:
             return False
-        claims = await validate_bearer_claims(token)
+        trace_id = _new_trace_id()
+        claims = await validate_bearer_claims(token, trace_id=trace_id)
+        if claims is IDENTITY_UNAVAILABLE:
+            return IDENTITY_UNAVAILABLE
         if claims is None:
             return False
+        claims["trace_id"] = trace_id
         # Stamp verified claims on the request scope (tools read them via ctx...request.scope); the
         # dict dies with the scope, so the agent stays stateless and multi-instance safe.
         scope.setdefault("state", {})[MCP_CLAIMS_SCOPE_KEY] = claims
@@ -172,6 +179,12 @@ def build_http_app():
                 )
             },
         )
+        await response(scope, receive, send)
+
+    async def _send_identity_unavailable(scope, receive, send) -> None:
+        # No WWW-Authenticate: a 401 here would make the OAuth client re-auth against the same
+        # stalled identity.
+        response = Response("Service Unavailable", status_code=503, media_type="text/plain")
         await response(scope, receive, send)
 
     async def _send_transport_removed(scope, receive, send) -> None:
@@ -203,7 +216,11 @@ def build_http_app():
             await _send_transport_removed(scope, receive, send)
             return
 
-        if not await _authorized(scope):
+        verdict = await _authorized(scope)
+        if verdict is IDENTITY_UNAVAILABLE:
+            await _send_identity_unavailable(scope, receive, send)
+            return
+        if not verdict:
             await _send_unauthorized(scope, receive, send)
             return
 

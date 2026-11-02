@@ -233,11 +233,28 @@ class TestFetchBarsPaged:
         second = svc._marketdata.GetBars.await_args_list[1].args[0]
         assert second.page.page_token == "tok"
 
-    async def test_identical_page_with_identical_token_terminates(self):
+    async def test_identical_page_with_identical_token_raises(self):
         """marketdata falls back to `cursor = start` on an unparseable page token, re-serving
-        the same page with the same token. Without the monotonicity guard this loops forever."""
+        the same page with the same token. This test once asserted a silent [1, 2] return,
+        locking the truncation bug in; the inversion is deliberate (feature 272, C-18)."""
         repeated = [_page([_bar(1), _bar(2)], token="stuck") for _ in range(_MAX_BAR_PAGES + 5)]
         svc = _svc_with_pages(repeated)
+        with pytest.raises(_BarFetchError, match="refusing to return a truncated series"):
+            await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        assert svc._marketdata.GetBars.await_count == 2
+
+    async def test_three_bar_eof_returns_full_series(self):
+        svc = _svc_with_pages([_page([_bar(1), _bar(2)], token="t1"), _page([_bar(3)])])
+        bars = await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        assert [b.time.seconds for b in bars] == [1, 2, 3]
+
+    async def test_empty_page_with_reissued_token_raises(self):
+        svc = _svc_with_pages([_page([_bar(1), _bar(2)], token="t1"), _page([], token="t1")])
+        with pytest.raises(_BarFetchError, match="refusing to return a truncated series"):
+            await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+
+    async def test_empty_terminal_page_after_sent_token_is_eof(self):
+        svc = _svc_with_pages([_page([_bar(1), _bar(2)], token="t1"), _page([])])
         bars = await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
         assert [b.time.seconds for b in bars] == [1, 2]
         assert svc._marketdata.GetBars.await_count == 2

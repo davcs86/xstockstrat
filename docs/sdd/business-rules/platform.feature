@@ -440,3 +440,356 @@ Feature: Platform-wide guarantees
     When the feature's migrations are applied
     Then both "acc-1" orders have fees 0.00 and the "alp-1" order has no fees value
     And "acc-1" lifetime realized P&L is 450.00, fees_since_snapshot is 0.00, and fees_lifetime is 0.00
+
+  @AC-1 @FR-1 @regression @feature-244
+  Scenario Outline: A stored zero is honoured by the Python config getters
+    Given the <service> ConfigWatcher snapshot holds "<key>" as a <type> value <stored>
+    When the watcher's <getter> reads "<key>" with default <default>
+    Then it returns <stored>
+
+    Examples:
+      | service                | key                                     | type   | stored | getter    | default |
+      | xstockstrat-analysis   | analysis.opportunity.signal_rank_weight | float  | 0.0    | get_float | 0.3     |
+      | xstockstrat-analysis   | analysis.engine.alert_throttle_seconds  | int    | 0      | get_int   | 300     |
+      | xstockstrat-analysis   | analysis.test.zero_string               | string | ""     | get_str   | "x"     |
+      | xstockstrat-indicators | indicators.test.zero_int                | int    | 0      | get_int   | 7       |
+      | xstockstrat-indicators | indicators.test.zero_float              | float  | 0.0    | get_float | 0.5     |
+      | xstockstrat-indicators | indicators.test.zero_string             | string | ""     | get_str   | "x"     |
+      | xstockstrat-ingest     | ingest.test.zero_int                    | int    | 0      | get_int   | 7       |
+      | xstockstrat-ingest     | ingest.test.zero_float                  | float  | 0.0    | get_float | 0.5     |
+      | xstockstrat-ingest     | ingest.test.zero_string                 | string | ""     | get_str   | "x"     |
+
+  @AC-4 @FR-2 @regression @feature-244
+  Scenario Outline: An unset or mismatched value still resolves to the coded default
+    Given the <service> ConfigWatcher <state>
+    When the watcher's <getter> reads "<key>" with default <default>
+    Then it returns <default>
+
+    Examples:
+      | service                | state                                         | getter    | key                                      | default |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_float | analysis.backtest.default_commission_pct | 0.001   |
+      | xstockstrat-analysis   | snapshot has no entry for the key             | get_int   | analysis.engine.alert_throttle_seconds   | 300     |
+      | xstockstrat-analysis   | has received no snapshot                      | get_str   | analysis.test.unset_string               | "x"     |
+      | xstockstrat-indicators | has received no snapshot                      | get_int   | indicators.test.unset_int                | 7       |
+      | xstockstrat-indicators | snapshot holds the key as a string value "5"  | get_float | indicators.test.mismatched_float         | 0.5     |
+      | xstockstrat-indicators | snapshot has no entry for the key             | get_str   | indicators.test.unset_string             | "x"     |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_str   | ingest.test.unset_string                 | "x"     |
+      | xstockstrat-ingest     | snapshot holds the key as a float value 2.5   | get_int   | ingest.test.mismatched_int               | 7       |
+      | xstockstrat-ingest     | snapshot has no entry for the key             | get_float | ingest.test.unset_float                  | 0.5     |
+
+  @AC-6 @FR-3 @regression @feature-244
+  Scenario Outline: A trap-dependent site keeps the coded default for a stored zero
+    Given "<key>" is stored as the <type> value <stored>
+    When <service> resolves it for <site>
+    Then the effective value is <effective>
+
+    Examples:
+      | service                | key                                              | type   | stored | site                                  | effective                 |
+      | xstockstrat-ingest     | ingest.backfill.max_concurrent_chunks            | int    | 0      | the backfill chunk semaphore capacity | 3                         |
+      | xstockstrat-ingest     | ingest.backfill.chunk_max_bars                   | int    | 0      | the chunk planner's bar cap           | 200000                    |
+      | xstockstrat-ingest     | ingest.backfill.chunk_window_days                | int    | 0      | the chunk planner's window in days    | 90                        |
+      | xstockstrat-ingest     | ingest.mcp_client.poll_interval_seconds          | int    | 0      | the mcp_client poll loop              | 300                       |
+      | xstockstrat-indicators | indicators.sandbox.timeout_ms                    | int    | 0      | ExecuteFormula                        | 5000                      |
+      | xstockstrat-indicators | indicators.sandbox.memory_bytes                  | int    | 0      | ExecuteFormula                        | 134217728                 |
+      | xstockstrat-indicators | indicators.sandbox.max_concurrent                | int    | 0      | the sandbox semaphore capacity        | 4                         |
+      | xstockstrat-analysis   | analysis.engine.eval_interval_seconds            | int    | 0      | the live-loop sleep between cycles    | 60                        |
+      | xstockstrat-analysis   | analysis.engine.max_strategies_per_cycle         | int    | 0      | the live-loop per-cycle pair budget   | 50                        |
+      | xstockstrat-analysis   | analysis.engine.fundamentals_blend_strategy_id   | string | ""     | the blend-governed strategy id        | "fundamentals_macd_blend" |
+      | xstockstrat-analysis   | analysis.strategy.default_cooldown_days          | int    | 0      | the default re-entry cooldown in days | 31                        |
+      | xstockstrat-analysis   | analysis.scoring.shrinkage_days                  | int    | 0      | the headline-grade shrinkage k        | 250                       |
+      | xstockstrat-analysis   | analysis.screener.max_duration_seconds           | int    | 0      | the ScreenSymbols deadline            | 120                       |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_position_weight      | float  | 0.0    | portfolio-mode sizing                 | 0.10                      |
+      | xstockstrat-analysis   | analysis.backtest.detail_retention_per_strategy  | int    | 0      | backtest-detail retention             | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_bars_fetches | int    | 0      | the opportunity bars-fetch semaphore  | 2                         |
+      | xstockstrat-analysis   | analysis.backtest.default_fill_model             | int    | 0      | a RunBacktest without fill_model      | FILL_MODEL_SAME_BAR_CLOSE |
+      | xstockstrat-analysis   | analysis.backtest.max_range_days                 | int    | 0      | the RunBacktest range cap in days     | 730                       |
+      | xstockstrat-analysis   | analysis.snapshot.indicator_timeout_ms           | int    | 0      | the snapshot indicator timeout in ms  | 500                       |
+      | xstockstrat-analysis   | analysis.screener.max_universe_size              | int    | 0      | the ScreenSymbols universe cap        | 100                       |
+      | xstockstrat-analysis   | analysis.opportunity.max_universe_size           | int    | 0      | the opportunity universe cap          | 100                       |
+      | xstockstrat-analysis   | analysis.fundsignal.run_interval_hours           | int    | 0      | the fundsignal loop interval in hours | 24                        |
+      | xstockstrat-analysis   | analysis.fundsignal.daily_call_budget            | int    | 0      | the fundsignal daily call budget      | 200                       |
+      | xstockstrat-ingest     | ingest.mcp_client.request_timeout_seconds        | int    | 0      | the mcp_client per-call timeout       | 30                        |
+      | xstockstrat-analysis   | analysis.strategy.max_concurrent_entry_backfill  | int    | 0      | the entry-backfill semaphore          | 4                         |
+      | xstockstrat-analysis   | analysis.backtest.portfolio_max_concurrent       | int    | 0      | portfolio-mode max open positions     | 9                         |
+      | xstockstrat-analysis   | analysis.series.max_concurrent_components        | int    | 0      | the series component semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_concurrent_candidates   | int    | 0      | the opportunity candidate semaphore   | 4                         |
+      | xstockstrat-analysis   | analysis.compute.max_worker_threads              | int    | 0      | the compute thread pool size          | 4                         |
+      | xstockstrat-analysis   | analysis.readiness_materializer.max_concurrent_bars_fetches | int | 0 | the materializer bars semaphore | 2                         |
+      | xstockstrat-analysis   | analysis.screener.max_concurrent_formula_evals   | int    | 0      | the screener formula semaphore        | 4                         |
+      | xstockstrat-analysis   | analysis.fundsignal.source_slug                  | string | ""     | the fundamentals source slug          | "fundamentals"            |
+      | xstockstrat-analysis   | analysis.fundsignal.max_symbols_per_run          | int    | 0      | the fundsignal per-run symbol cap     | 200                       |
+      | xstockstrat-analysis   | analysis.fundsignal.valid_days                   | int    | 0      | the fundsignal signal validity days   | 90                        |
+      | xstockstrat-analysis   | analysis.snapshot.signal_timeout_ms              | int    | 0      | the snapshot signal timeout in ms     | 500                       |
+      | xstockstrat-analysis   | analysis.patterns.indicator_bucket_count         | int    | 0      | the P&L-pattern indicator buckets     | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_strategies_per_symbol | int | 0      | the per-symbol live attribution cap   | 5                         |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_only_symbols_per_compute | int | 0   | the live-only symbol cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.max_live_held_symbols_per_compute | int | 0   | the held-symbol live cap per compute  | 20                        |
+      | xstockstrat-analysis   | analysis.opportunity.valid_window_hours          | int    | 0      | the opportunity validity window hours | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.snooze_default_hours        | int    | 0      | the default snooze hours              | 24                        |
+      | xstockstrat-analysis   | analysis.opportunity.read_db_budget_ms           | int    | 0      | the ListOpportunities DB read budget  | 20000                     |
+      | xstockstrat-analysis   | analysis.opportunity.live_enrich_timeout_ms      | int    | 0      | the live-enrich timeout in ms         | 3000                      |
+
+  # Promoted from feature 252 (fix-identity-ledger-test-suites): identity and ledger test-suite integrity.
+  @AC-3 @FR-3 @regression @feature-252
+  Scenario Outline: an unloadable test subject fails the run instead of passing
+    Given in services/<service>, the subject import in <test_file> points at the nonexistent module "<missing>"
+    When "pnpm run test:coverage" runs in services/<service>
+    Then the command exits non-zero
+    And no test in <test_file> is reported as passed
+
+    Examples:
+      | service              | test_file                                 | missing                             |
+      | xstockstrat-identity | src/__tests__/identityServiceImpl.test.ts | ../grpc/identityServiceImpl.missing |
+      | xstockstrat-ledger   | src/__tests__/ledgerServiceImpl.test.ts   | ../grpc/ledgerServiceImpl.missing   |
+      | xstockstrat-ledger   | src/__tests__/eventNotifier.test.ts       | ../services/eventNotifier.missing   |
+
+  @AC-4 @FR-4 @regression @feature-252
+  Scenario: the coverage gate measures the implementation
+    Given each service's c8-wrapped "pnpm run test:coverage" run
+    When "pnpm run test:coverage" runs in services/xstockstrat-identity and services/xstockstrat-ledger
+    Then the identity coverage report has a row with non-zero line coverage for identityServiceImpl and for authz
+    And the ledger coverage report has a row with non-zero line coverage for ledgerServiceImpl and for eventNotifier
+    And "c8 check-coverage --lines 40", run in each of those services right after its run, exits 0 and the report shows a numeric All files % Lines of at least 40
+    # Rows are matched by module name, whether c8 reports them under src/ or dist/.
+
+  @AC-5 @FR-5 @feature-252
+  Scenario Outline: existing tests still pass once they actually execute
+    Given the tests in services/<service>/src/__tests__ on main-dev
+    When "pnpm run test:coverage" runs in services/<service> after the fix
+    Then the test summary reports 0 failed tests
+    And no existing test is deleted, marked skip or todo, or has an assertion removed
+
+    Examples:
+      | service              |
+      | xstockstrat-identity |
+      | xstockstrat-ledger   |
+
+  @AC-6 @FR-3 @regression @feature-252
+  Scenario Outline: a compiled test whose compiled subject is missing fails instead of passing
+    Given "tsc" has completed in services/<service>
+    And "node --test --test-reporter=tap <compiled_test>" exits 0 with a "# pass" count above 0
+    When <compiled_subject> is deleted and "node --test --test-reporter=tap <compiled_test>" runs again
+    Then the command exits non-zero
+    And the TAP summary reports "# pass 0"
+
+    Examples:
+      | service              | compiled_test                              | compiled_subject                 |
+      | xstockstrat-identity | dist/__tests__/identityServiceImpl.test.js | dist/grpc/identityServiceImpl.js |
+      | xstockstrat-ledger   | dist/__tests__/ledgerServiceImpl.test.js   | dist/grpc/ledgerServiceImpl.js   |
+      | xstockstrat-ledger   | dist/__tests__/eventNotifier.test.js       | dist/services/eventNotifier.js   |
+
+  @AC-5 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher reconnects after a non-gRPC exception
+    Given the <service> ConfigWatcher whose first WatchConfig stream raises RuntimeError "boom"
+    And whose second WatchConfig stream yields a snapshot with version "v2"
+    When the watcher runs
+    Then WatchConfig is called a second time after a backoff
+    And the watcher's snapshot version is "v2"
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
+
+  @AC-8 @FR-3 @regression @feature-259
+  Scenario Outline: A config watcher task that ends unexpectedly is retained and its exit is logged
+    Given the <service> ConfigWatcher has started its watch task
+    When the watch coroutine ends with RuntimeError "boom"
+    Then an error naming the watch task and "boom" is logged
+
+    Examples:
+      | service    |
+      | analysis   |
+      | indicators |
+      | ingest     |
+
+  # ─── Database TLS fail-closed (feature 266) ───────────────────────────────
+  # Node backends and the UI audit route never connect to a TLS database without verifying the certificate. Provenance: @feature-266.
+
+  @AC-1 @FR-1 @feature-266
+  Scenario Outline: A Node backend refuses to boot against a TLS database with no CA configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT is unset
+    When <service> starts
+    Then it exits non-zero before serving gRPC
+    And it logs that DATABASE_CA_CERT is required for a TLS database connection
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-2 @FR-2 @feature-266
+  Scenario Outline: A Node backend verifies the database certificate when a CA is configured
+    Given DATABASE_URL is "postgres://u:p@db.example:25060/xstockstrat?sslmode=require"
+    And DATABASE_CA_CERT holds a CA that did not sign the server's certificate
+    When <service> starts
+    Then the database connection is rejected with a certificate verification error
+    And it exits non-zero and logs the certificate verification error
+
+    Examples:
+      | service               |
+      | xstockstrat-ledger    |
+      | xstockstrat-config    |
+      | xstockstrat-identity  |
+      | xstockstrat-notify    |
+
+  @AC-5 @FR-5 @feature-266
+  Scenario Outline: Every deployed component that reaches the database directly is given the CA
+    Given the DigitalOcean app spec <spec>
+    Then every component with DATABASE_URL among xstockstrat-ledger, xstockstrat-config, xstockstrat-identity, xstockstrat-notify and xstockstrat-ui also has DATABASE_CA_CERT bound to "${xstockstrat.CA_CERT}"
+
+    Examples:
+      | spec              |
+      | .do/app.yaml      |
+      | .do/app.dev.yaml  |
+
+  @AC-1 @FR-1 @FR-3 @regression @feature-250
+  Scenario: Every alert rule queries a metric series or log stream that some workload produces
+    Given the provisioned alert rules in packages/otel/alerts/alert-rules.yaml
+    And the produced-signal set: the metric names and log streams exported by the 12 runtimes or the collector, plus the metric names that a Grafana-side span-metrics path derives from exported traces, admitted only with recorded evidence (design.md) that the path returns those series for the stack
+    And today that set holds no PromQL metric name and no Loki log stream, because the runtimes export traces only (feature 226)
+    When each alert rule's PromQL and LogQL query is checked against that set
+    Then every PromQL metric name the rule queries, including "rpc_server_duration_milliseconds_count" and "rpc_server_duration_milliseconds_bucket" if still present, is in the produced set
+    And every LogQL stream selector the rule queries, including {service_name="analysis"} of "xstk-analysis-no-scoring" if still present, matches a log stream in the produced set
+
+  @AC-2 @FR-2 @FR-3 @regression @feature-250
+  Scenario: Every dashboard query targets a metric series or log stream that some workload produces
+    Given the dashboards in packages/otel/dashboards/
+    And the same produced-signal set as AC-1
+    When each panel query and template-variable query is checked against that set
+    Then no query references a PromQL metric name outside the produced set
+    And every LogQL stream selector, including those of the LogQL panels in signal-pipeline-throughput.json, infrastructure.json, service-health.json and trading-service.json if still present, matches a log stream in the produced set
+
+  @AC-3 @FR-4 @regression @feature-250
+  Scenario: The observability docs list only the signals actually exported
+    Given the FR-4 docs: docs/setup/grafana-cloud.md, docs/setup/CLAUDE.md, docs/patterns/observability.md, docs/launch-pdfs/product-features.md, packages/otel/alerts/README.md, packages/otel/dashboards/README.md, the packages/otel/otel-collector-config.yaml header comment, packages/otel/CLAUDE.md and packages/otel/docs/context-constitution.md
+    And any other doc under docs/ or packages/otel/ outside docs/roadmap/ and docs/reports/
+    When each states which OTLP signals the workloads emit, or which series or datasources the provisioned alerts and dashboards read
+    Then each signal type it says a workload emits (traces, metrics, logs) has an exporter in every runtime's telemetry module, or the claim is scoped to the workloads that have one
+    And each metric series, log stream or datasource it says an alert or dashboard reads is in, or holds, the produced-signal set of AC-1
+    And docs/setup/grafana-cloud.md does not state that every workload "emits traces, metrics, and logs via OTLP" while no runtime exports metrics or logs
+
+  # ─── otel metrics + logs export (feature 274) ──────────────────────────────
+  # Feature 274 extends 226 @AC-1 (traces) to metrics and logs, and supersedes parts of 250:
+  #  - 250 @AC-1/@AC-2: only their Given sentence "that set holds no PromQL metric name and no Loki log
+  #    stream" is stale; their Then clauses are preserved and extended by 274 @AC-8 and @AC-14.
+  #  - 250 @AC-3 is CHANGED by 274 @AC-9 (operator-signed C-16 CHANGE, 274 context.md R1 gate, 2026-10-21):
+  #    the docs now state three signals. Read the 250 scenario as superseded by 274 @AC-9.
+
+  @AC-2 @FR-2 @regression @feature-274
+  Scenario Outline: Every gRPC backend records the server duration histogram with its status code
+    Given <service> runs with OTEL_ENABLED="true"
+    When a client calls one of its unary RPCs and the handler returns gRPC status NOT_FOUND (5)
+    Then the next metric export contains a histogram data point for that method with rpc.grpc.status_code=5
+    And in Grafana Cloud the series rpc_server_duration_milliseconds_count{service_name="<name>",rpc_grpc_status_code="5"} increases by 1
+    And rpc_server_duration_milliseconds_bucket{service_name="<name>"} exists, which is the same series name the alert rules and dashboards query
+
+    Examples:
+      | service                | name        |
+      | xstockstrat-trading    | trading     |
+      | xstockstrat-portfolio  | portfolio   |
+      | xstockstrat-marketdata | marketdata  |
+      | xstockstrat-indicators | indicators  |
+      | xstockstrat-ingest     | ingest      |
+      | xstockstrat-analysis   | analysis    |
+      | xstockstrat-ledger     | ledger      |
+      | xstockstrat-identity   | identity    |
+      | xstockstrat-notify     | notify      |
+      | xstockstrat-config     | config      |
+
+  @AC-8 @FR-6 @regression @feature-274
+  Scenario: Restored alert rules query only produced series
+    Given feature 250 has merged and this feature restores xstk-error-rate-high, xstk-p99-latency-high and the re-derived analysis scoring-stall rule
+    When scripts/check-otel-produced-signals.sh runs in CI
+    Then it exits 0
+    And adding a rule that queries the unproduced metric "rpc_client_bogus_total" makes it exit non-zero
+
+  @AC-9 @FR-7 @regression @feature-274
+  Scenario: Docs state the three exported signals
+    Given docs/patterns/observability.md and docs/setup/grafana-cloud.md after this feature
+    When an operator reads the signal list
+    Then both list traces, metrics and logs with the endpoints "/v1/traces", "/v1/metrics" and "/v1/logs"
+    And the root findings row for "metrics and logs are never sent" is marked RESOLVED (feature 274)
+    And the PLAT-3 row of docs/context-constitution.md names the "/v1/metrics" and "/v1/logs" exporters
+    And OTEL-1 and OTEL-2 in packages/otel/docs/context-constitution.md name rpc_server_duration_milliseconds and the service_name Loki stream as produced
+    And packages/otel/CLAUDE.md and the packages/otel findings row for the unproduced RPC metric state the signals as produced
+
+  # AC-1 and AC-10 sample one runtime per language; AC-2 exercises metric export on all 10 gRPC backends.
+
+  @AC-10 @FR-1 @regression @feature-274
+  Scenario Outline: Each runtime language exports metrics with its resource attributes
+    Given <service> runs with OTEL_ENABLED="true", SERVICE_NAME="<name>" and APPLICATION_ENV="staging"
+    When one metric export interval elapses
+    Then the collector receives a POST to "/v1/metrics" whose resource has service.name="<name>", deployment.environment="staging" and platform="xstockstrat"
+
+    Examples:
+      | service                | name       |
+      | xstockstrat-indicators | indicators |
+      | xstockstrat-agent      | agent      |
+      | xstockstrat-notify     | notify     |
+      | xstockstrat-ui         | ui         |
+
+  @AC-11 @FR-3 @regression @feature-274
+  Scenario Outline: Each runtime language bridges its logger to OTLP with trace correlation
+    Given <service> runs with OTEL_ENABLED="true"
+    When it logs a WARN record through <logger> inside an active server span
+    Then the collector receives a POST to "/v1/logs" containing that record with severity WARN
+    And the record's trace_id equals the active span's trace_id
+
+    Examples:
+      | service                | logger           |
+      | xstockstrat-trading    | log/slog         |
+      | xstockstrat-agent      | Python logging   |
+      | xstockstrat-identity   | winston          |
+      | xstockstrat-ui         | the server logger |
+
+  @AC-14 @FR-6 @regression @feature-274
+  Scenario: Restored mute timing and dashboards reference only produced series
+    Given feature 250 has merged and this feature's packages/otel assets are applied
+    When packages/otel/alerts/ and packages/otel/dashboards/*.json are inspected
+    Then the mute timing "outside-us-market-hours" exists and is referenced by the re-derived analysis scoring-stall rule
+    And the service-health dashboard's $service variable queries rpc_server_duration_milliseconds_count
+    And scripts/check-otel-produced-signals.sh reports 0 panel exprs targeting an unproduced series
+
+  # Added by /sdd-design (2026-10-21, design.md § Acceptance additions)
+
+  @AC-15 @FR-2 @regression @feature-274
+  Scenario: Python and Node RPC recorders satisfy the shared status vectors
+    Given scripts/testdata/rpc-status-vectors.json with vectors "ok", "abort NOT_FOUND", "unhandled ValueError", "bare Exception", "node error without code", "node string code" and "ERROR status only"
+    When each vector's span is ended through the Python recorder and through the Node recorder
+    Then each recorded rpc.grpc.status_code equals the vector's expected code (0, 5, 2, 2, 2, 2, 2)
+    And every histogram data point uses bucket boundaries [0,5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000]
+
+  @AC-17 @FR-6 @regression @feature-274
+  Scenario: The guard pins the proto-derived stream exclusion on every restored selector
+    Given packages/otel/alerts/alert-rules.yaml restored by this feature
+    When a rule's rpc_server_duration_milliseconds_sum selector omits the rpc_method stream matcher
+    Then scripts/check-otel-produced-signals.sh exits non-zero
+    And adding "rpc StreamFoo(Req) returns (stream Resp);" to a proto without updating the matcher also makes it exit non-zero
+
+  @AC-19 @FR-1 @regression @feature-274
+  Scenario Outline: Metrics and logs honour the path-prefixed gateway and both header forms
+    Given <service> runs with OTEL_ENABLED="true", OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:<port>/otlp" and OTEL_EXPORTER_OTLP_HEADERS="<headers>"
+    When it records one metric and one log record and exports
+    Then the receiver gets POST "/otlp/v1/metrics" and POST "/otlp/v1/logs", each with Authorization "Basic dGVzdDprZXk="
+
+    Examples:
+      | service                | headers                                  |
+      | xstockstrat-trading    | Authorization=Basic dGVzdDprZXk=         |
+      | xstockstrat-analysis   | Authorization=Basic%20dGVzdDprZXk%3D     |
+      | xstockstrat-ledger     | Authorization=Basic dGVzdDprZXk=         |
+      | xstockstrat-ui         | Authorization=Basic%20dGVzdDprZXk%3D     |
+
+  @AC-6 @FR-4 @feature-283
+  Scenario: The tool count is unchanged and its surfaces agree
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    Then every statement states the count 45 (in words or digits) and the registered tool count is 45
+
+  @AC-10 @FR-4 @feature-283
+  Scenario: The score operation is documented in the runbook and the strat-lab skill
+    When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are read
+    Then both describe manage_strategy operation "score" including its side effects, and the documented operations equal the tool's accepted operations

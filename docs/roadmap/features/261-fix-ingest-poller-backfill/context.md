@@ -572,3 +572,298 @@ halt). design.md is not written and status stays `spec-ready`.
 - [ ] Step 8: record the O-3 RED run.
 - Ledger: no new line.
 - Next: `/sdd-execute fix-ingest-poller-backfill`.
+
+## Session 2026-10-29 — re-spec (sdd-execute sequential, sdd-batch-execute)
+
+- Branch setup: `git merge --no-edit origin/main-dev` into the detached checkout merged cleanly (no conflicts);
+  `ledger-guard --own-slug fix-ingest-poller-backfill --base origin/main-dev --fix` reported clean, so no repair.
+- Re-spec of Steps 1–9 step bodies only (Evidence / Files / Instructions / Verification), re-grepped 2026-10-29:
+  - Steps 1, 3: `run_one_cycle` per-source catch is now `:140-150` (`except` `:142`, `mark_source_error` `:145`).
+    `_extract_result_items` `:34-52`, loop `:124-125`, `_build_external_signal` `:72-74`, `log` `:28` unchanged.
+  - Steps 2, 4, 6: `test_mcp_client_loop.py` anchors drifted (+3 for the fakes; `test_source_failure_...` `:208`,
+    `_PerOwnerCfgWatcher.resolve_secret` `:247`, `test_resolve_secret_sends_exact_user_scope` `:320`); the
+    `_watcher_with` import is `:19`; the inline `AioRpcError` builder is `test_ingest_servicer.py:552`.
+  - Step 5: `resolve_secret` `watcher.py:150`, `GetSecret` call `:159-167`, return `:168`. `grpc.aio.AioRpcError`
+    is no longer caught anywhere in `watcher.py` (259 made `_watch` catch `Exception`); `import grpc` `:10` still
+    covers the new catch. **Feature 244 is merged** (code-completed): `run_one_cycle` reads the timeout via
+    `int_positive(...)` at `:133-135`, so Step 5 takes the "pass 244's clamped value" branch.
+  - Step 7: all `servicer.py` evidence matched exactly; only the cited test line moved (`:640`).
+  - Step 8: `test_ingest_servicer.py` helper anchors drifted; `job_row` is already imported as `_job_row` (`:26`),
+    so the step reuses that alias.
+  - Step 9: dropped the planned `2026-10-22-ingest-mcp-client-timeout-seed-key-form-defect.md/.status` create. The
+    defect is already filed as `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` (sidecar
+    `wont-fix`, `ref: feature:277-fix-ingest-seeded-config-keys`; 277 demoted/canceled by the operator 2026-10-23).
+    Step 9 now cites that report in the findings entry instead. Cited dotted read moved to `mcp_client_loop.py:134`.
+- § Step Dependencies (outside the re-spec scope, left as written) is now stale on two points, both resolved: the
+  `int_positive` "Not found" claim (244 merged) and the "not written" merge-order row (it exists at
+  `merge-order.md:82`).
+
+### Open Threads
+
+- [x] Add the `merge-order.md` row 244 → 261 (WARN) — exists at `merge-order.md:82`.
+- [x] Confirm 244 merge state before Step 5 — merged into main-dev; Step 5 re-specced onto `int_positive`.
+- [ ] Step 8: record the O-3 RED run.
+
+## Session 2026-10-29 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `sequential` (one commit per step on `feature/fix-ingest-poller-backfill`, single integration PR at the end).
+  Status: `implementation-ready` → `in-progress`.
+- Up-front confirmation: given by the operator's standing authorization (operator chat 2026-10-28/29,
+  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute; unattended checkpoints;
+  merge-train authorized; 255/275 deferred; operator-only DB/prod steps — open the PR, hold the merge). Per-feature
+  blocker decisions of 2026-10-29 were given by the operator through the session's question tool. Checkpoints:
+  `report`. C-16 promotion auto-confirmed unless it changes an existing `@AC` rule (the `@AC-4 @feature-166` EXTEND
+  in `mcp-client-signal-source.feature` extends, not changes, so it is in scope of the auto-confirm only if it adds
+  a scenario without rewording the existing one).
+- Plan: Steps 1–9 as re-specced above (TDD red-before-green for every service/test pair; Step 8 records the O-3 RED
+  run here).
+
+### Step 1 — service: FR-6 `_select_signal_list` (done 2026-10-29)
+
+- Added `_select_signal_list` above `_extract_result_items` in `services/xstockstrat-ingest/app/engine/mcp_client_loop.py`
+  (design.md § FR-6 rule order); the dict branch and the dict text-fallback route through it; `json.loads` stays
+  unguarded. The `ambiguous result` `ValueError` reaches the existing `run_one_cycle` catch (no new plumbing).
+- TDD: FR-6 red (scratch test, not committed — Step 2 owns the real tests): `signals`-alongside-`warnings`, two
+  candidate lists raising `ambiguous result`, single object with `tags` list wrapped, sole all-dict list, text-fallback
+  envelope → 6 failed / 4 passed on the pre-implementation tree → green: 10 passed. Scratch file removed.
+- Verification: grep hits; `ruff check` + `ruff format --check` clean; full suite 346 passed, coverage 82.57% (≥40%).
+- Deviations: none.
+
+### Step 2 — test: FR-6 selection rule (done 2026-10-29)
+
+- Added to `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`: `test_ac5_signals_key_selected_alongside_other_list`,
+  `test_ac7_two_candidate_lists_records_ambiguous_error`, `test_single_signal_object_with_tags_is_wrapped` (parametrized
+  `["ai"]` / `[]` — the `@AC-4 @feature-166` EXTEND), `test_all_empty_envelope_returns_no_items_silently` (O-2, `caplog`),
+  `test_sole_dict_list_selected`, `test_text_fallback_signals_envelope`; shared via inline `_item` / `_run_cycle_with`
+  helpers (C-13: single consumer, no fixture home).
+- TDD: AC-5 red: one ingest expected, none awaited; AC-7 red: `ambiguous result` not recorded (alerts ingested); tags
+  wrap red (both variants); text-fallback red → 5 failed / 12 passed against the pre-Step-1 `mcp_client_loop.py`
+  (`0c6aae42`, swapped in temporarily) → green: 17 passed. All-empty envelope and sole dict list are characterization
+  (already green on the old first-list rule).
+- Verification: module 17 passed; full suite 353 passed, coverage 84.10% (≥40%); `ruff check` + `ruff format --check`
+  clean. Run with `uv run --extra dev` (plain `uv run` re-syncs without the dev extra and falls back to a global pytest).
+- Deviations: none.
+
+### Step 3 — service: FR-1 per-item guard, summary log, all-fail raise (done 2026-10-29)
+
+- `poll_one_source` in `services/xstockstrat-ingest/app/engine/mcp_client_loop.py` now wraps each ingest in
+  `try/except` (`item skipped` warning), always logs `polled ingested=<n> skipped=<m>` before any raise, and raises
+  `RuntimeError("all <N> items failed: <first_err>")` only when every parsed item failed, so the existing
+  `run_one_cycle` catch records it as `last_error`. A partial failure does not call `mark_source_error`; `owner=owner`
+  is kept on every ingest.
+- TDD: AC-1 red: partial batch aborted on the first failing item (1 of 3 awaited, `boom BAD` recorded as source error);
+  AC-8 red: `last_error` was `boom BAD`, not `all 2 items failed` → 2 failed on the pre-implementation tree → green: 2
+  passed. Scratch test (ingest mock raising per symbol), not committed — Step 4 owns the real tests; file removed.
+- Verification: grep hits at `:149`/`:153`/`:155`; `ruff check` + `ruff format --check` clean; full suite 353 passed,
+  coverage 83.83% (≥40%).
+- Deviations: none.
+
+### Step 4 — test: FR-1 isolation and all-fail (done 2026-10-29)
+
+- Added to `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`: `test_ac1_one_failing_item_does_not_drop_batch`
+  and `test_ac8_all_items_failed_records_last_error` (source `src-a`, owner `u-1`, `caplog` on `app.engine.mcp_client_loop`
+  at INFO). `_run_cycle_with` gained optional `source=` / `ingest=` kwargs so both reuse the Step 2 helper (C-13:
+  single consumer, data inline).
+- TDD: AC-1 red: `assert 2 == 3` awaits (batch aborted at the failing item); AC-8 red: `all 1 items failed` not
+  recorded (`last_error` was `boom`) → 2 failed / 17 passed against the pre-Step-3 `mcp_client_loop.py` (`f847487f`,
+  swapped in temporarily, then restored) → green: 19 passed.
+- Verification: module 19 passed; full suite 355 passed, coverage 84.24% (≥40%); `ruff check` + `ruff format --check`
+  clean. `test_source_failure_records_health_and_continues` and `test_second_identical_cycle_deduplicates` stay green.
+- Deviations: none.
+
+### Steps 5 + 6 — FR-5 GetSecret deadline + AC-4 tests (done 2026-10-29, one commit)
+
+- Operator decision (session question tool, 2026-10-29, own words): "Merge pairs + standing rule" — Step 5's call-site
+  change breaks Step 6's fakes and Step 5's RED test is Step 6's, so both land as one commit (Deviation Log).
+- `ConfigWatcher.resolve_secret` (`app/config/watcher.py`) takes `timeout: float | None = None`, passes `timeout=` to
+  `GetSecret` (request + `x-internal-caller` metadata unchanged), and translates only `DEADLINE_EXCEEDED` into
+  `RuntimeError("GetSecret deadline exceeded after <t>s")` (no key/value; `__cause__` kept); other codes re-raise
+  untranslated. `poll_one_source` passes `timeout=float(timeout_seconds)` (244's `int_positive` read untouched).
+- Tests: fakes widened with `timeout`; `test_resolve_secret_passes_timeout_and_translates_deadline`,
+  `test_resolve_secret_permission_denied_is_not_translated` (`test_mcp_client.py`) and
+  `test_ac4_hung_getsecret_is_bounded_and_recorded` (`test_mcp_client_loop.py`). C-13: the shared `AioRpcError`
+  builder's new home is `tests/_helpers.py::rpc_error` (two consumers).
+- TDD: red → 3 failed / 23 passed (`TypeError: resolve_secret() got an unexpected keyword argument 'timeout'` ×2;
+  AC-4 `assert [None, None] == [2.0, 2.0]`, GetSecret unbounded) → green: 26 passed.
+- Verification: Step 5 greps hit (call-site grep in its ruff-wrapped form, per operator); full suite 358 passed,
+  coverage 84.29% (≥40%); `ruff check` + `ruff format --check` clean; `DEADLINE_EXCEEDED` present in `tests/`.
+- Deviations: Steps 5+6 merged; Step 5 grep form (both logged in the Deviation Log).
+
+### Step 7 — service: FR-2/FR-3/FR-4 cancel guards and resumed-job trace id (done 2026-10-29)
+
+- `services/xstockstrat-ingest/app/handlers/servicer.py`: FR-2 guard is the first statement inside
+  `async with self._backfill_sem:` in `_run_backfill` (discard + `canceled while queued; not starting` + return, no DB
+  read; 2-line constraint comment: single-instance ingest, `CancelBackfill` adds to `_canceled_jobs` before its
+  CANCELED write); the same guard is the first statement of its blanket `except` (no FAILED write/event/alert for a
+  canceled job); FR-3 guard in `_execute_fundamentals_backfill` between `failed = ...` and the COMPLETED/PARTIAL
+  `update_job`; FR-4 in `_resume_job` skips a persisted `CANCELED` row after the `row is None` return, then mints
+  `meta = (("x-trace-id", str(uuid.uuid4())),)` and passes it to `_run_chunks` / `_finalize_backfill`. No `await`
+  between any check and the write it guards. `resume_incomplete_jobs`, `_finalize_backfill`, `run_one` and the
+  `data_kind` dispatch untouched.
+- TDD: scratch probe (not committed; Step 8 owns the real tests) — queued cancel bars/fundamentals (RUNNING written,
+  `assert 2 not in [2, 4]` / `[2, 3]`), fundamentals cancel mid-run (`[2, 3] == [2]`), cancel-then-error (`assert 4
+  not in [2, 4]`, FAILED written), canceled job resumed (`TypeError` from the unpatched chunk path — resume ran),
+  resumed-job trace id (`{}.get('x-trace-id')` → None) → 6 failed on the pre-implementation tree → green: 6 passed.
+  Scratch file removed.
+- Verification: `_canceled_jobs` / `skipping resume of canceled job` / `x-trace-id", str(uuid.uuid4())` greps hit;
+  full suite 358 passed, coverage 83.65% (≥40%); `ruff check` + `ruff format --check` clean.
+- Deviations: none. The standing "merge pairs" rule did not apply: Step 7's Verification passes on its own.
+
+### Step 8 — test: cancel durability (AC-2 outline, AC-3, AC-6) + O-3 ordering guard (done 2026-10-29)
+
+- `services/xstockstrat-ingest/tests/test_ingest_servicer.py`: new `TestCancelDurability` (after the resume tests) with
+  `test_ac2_queued_cancel_never_runs[bars|fundamentals]`, `test_ac3_canceled_job_not_resumed_after_restart`,
+  `test_ac6_fundamentals_canceled_mid_run_stays_canceled`, `test_o3_cancel_registers_set_before_canceled_write`,
+  `test_resume_job_sends_minted_trace_id`, plus module helpers `_status_writes` / `_events_for` / `_until`. Cancels go
+  through `CancelBackfill(_ctx("4"))` + repo fakes; `_canceled_jobs` is never mutated, and is read only by the O-3
+  fake at the CANCELED write (the invariant itself). `job_row` reused via the existing `_job_row` alias (C-13);
+  event-gated marketdata fakes stay inline. Existing resume tests untouched and green.
+- TDD: Step 7 had already landed, so RED was taken against a temporarily restored pre-Step-7 `servicer.py` (then
+  restored): 5 failed / 1 passed — AC-2 bars `assert 2 not in [6, 2]` and fundamentals `assert 2 not in [6, 2, 3]`
+  (job-B written RUNNING), AC-3 `update_job` "Awaited 4 times" (canceled job resumed), AC-6 `assert 3 not in [2, 6, 3]`
+  (COMPLETED over CANCELED), trace id `{}.get('x-trace-id')` → None; O-3 passed (regression guard). O-3 RED (P-06):
+  set-add moved after the CANCELED `update_job` in `CancelBackfill` → `assert [False] == [True]`; order restored,
+  `servicer.py` unchanged by this commit. GREEN: 6 passed.
+- Verification: `test_ingest_servicer.py` + `test_cancel_backfill.py` 119 passed; full suite 364 passed, coverage
+  84.19% (≥40%); `ruff check` + `ruff format --check` clean; `_job_row` import grep hits `:26`.
+- Deviations: none. The standing "merge pairs" rule did not apply.
+
+### Step 9 — docs: teardown (resume drift, single-instance invariant, findings) (done 2026-10-29)
+
+- `services/xstockstrat-ingest/CLAUDE.md` § Database (`ingest.backfill_jobs`): startup reconciles every
+  RUNNING/QUEUED job to FAILED, then `resume_incomplete_jobs` re-drives jobs with PENDING/FAILED chunks, skipping a
+  persisted `CANCELED` job; a job canceled while QUEUED never starts. The "FR-3 — no automatic resume" claim is gone.
+- `services/xstockstrat-ingest/docs/context-constitution.md`: **INGEST-10** — cancel guards read only the in-memory
+  `_canceled_jobs` set; valid only with `instance_count: 1` (`.do/app.yaml` and `.do/app.dev.yaml`, both checked) and
+  `CancelBackfill` as the sole CANCELED writer (grep: the only `status=…CANCELED` write in `app/`), set-add before
+  write; guard test `test_o3_cancel_registers_set_before_canceled_write` (present at `tests/test_ingest_servicer.py:842`,
+  landed in Step 8). Scaling past one instance re-opens D-34.
+- `services/xstockstrat-ingest/docs/context-constitution-findings.md`: "Documentation that lies" rows for the
+  `app/main.py` ~L66 / ~L117-118 comment drift (fix when `main.py` is next touched; `main.py` untouched) and for the
+  inert seeded `mcp_client.request_timeout_seconds` (re-confirmed: both 025 rows bare at `:34`/`:37`; config
+  `reloadNamespace` keys by raw `row.key` `configServiceImpl.ts:204-213`; only 025 mentions the key among config
+  migrations; 029 excludes `ingest`), citing the existing `wont-fix` report
+  `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md`. No new report filed (re-spec 2026-10-29).
+- Teardown: the context-forge `context-constitution` skill is not available in this session (only
+  `context-scrubber`), so the scoped refresh was manual — drifted `~L` hints into `servicer.py`,
+  `mcp_client_loop.py` and `config/watcher.py` re-resolved and re-stamped in both constitution docs; header stamps
+  updated. The integration PR body must state this (root CLAUDE.md § Teardown).
+- TDD: N/A (docs). Verification: all four greps hit and the duplicate report path is absent.
+- Deviations: manual teardown reconciliation (Deviation Log). The standing "merge pairs" rule did not apply.
+
+## Session 2026-10-29 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-ingest-poller-backfill (feature 261)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-ingest/acceptance/fix-ingest-poller-backfill.feature | CREATE | NEW | per-item isolation in the mcp_client batch. Related to 166 AC-4 but asserts different outcomes. |
+| AC-2 (Outline, bars + fundamentals) | same | CREATE | NEW | queued-cancel stays CANCELED. No existing suite covers CancelBackfill lifecycle. |
+| AC-3 | same | CREATE | NEW | canceled job is not resumed after restart. |
+| AC-4 | same | CREATE | NEW | GetSecret is bounded by request_timeout_seconds. 166 AC-3/AC-5 do not assert a deadline. |
+| AC-5 | same | CREATE | NEW | signal list is found when another list is present. |
+| AC-6 | same | CREATE | NEW | cancel mid-run is not finalized as COMPLETED or PARTIAL. |
+| AC-7 | same | CREATE | NEW | ambiguous result shape is recorded as a source error. |
+| AC-8 | same | CREATE | NEW | all-items-failed batch is recorded as a source error. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-ingest/acceptance/fix-ingest-poller-backfill.feature (CREATE) ---
+# Promoted from docs/roadmap/features/261-fix-ingest-poller-backfill/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-261` tag.
+# Durable business rules xstockstrat-ingest guarantees for the mcp_client poller and backfill cancel lifecycle.
+
+Feature: xstockstrat-ingest - mcp_client poller isolates failures and backfill cancel is final
+  Regression guard for docs/reports/2026-10-21-ingest-poller-backfill-defect.md:
+  the ingest mcp_client poller drops or stalls signals, and canceled backfills are revived.
+
+  @AC-1 @FR-1 @regression @feature-261
+  Scenario: One failing item does not drop the rest of an mcp_client batch
+    Given an active mcp_client source "src-a" for user "u-1" whose fetch returns 3 items that all pass extraction
+    And ingesting item 2 raises an error
+    When one poll cycle runs
+    Then the signals for item 1 and item 3 are ingested for user "u-1"
+    And the poll emits a log record for source "src-a" with a skipped count of 1
+    And source "src-a" has no last_error from this poll
+
+  @AC-2 @FR-2 @regression @feature-261
+  Scenario Outline: A backfill canceled while queued stays CANCELED and never runs
+    Given ingest.backfill.max_concurrent_jobs is 1
+    And backfill job "job-A" is RUNNING and a <kind> backfill job "job-B" is QUEUED behind it
+    When job "job-B" is canceled and then job "job-A" finishes
+    Then job "job-B" status is CANCELED
+    And no "ingest.backfill.running" event is emitted for "job-B"
+    And marketdata <rpc> is never called for "job-B"
+
+    Examples:
+      | kind         | rpc                  |
+      | bars         | BackfillBars         |
+      | fundamentals | BackfillFundamentals |
+
+  @AC-3 @FR-4 @regression @feature-261
+  Scenario: A canceled backfill is not resumed after a restart
+    Given backfill job "job-C" is CANCELED and still has 2 PENDING chunks
+    When ingest restarts and resume_incomplete_jobs runs
+    Then job "job-C" status is CANCELED
+    And no chunk of job "job-C" is executed
+
+  @AC-4 @FR-5 @regression @feature-261
+  Scenario: A hung GetSecret is bounded and recorded as that source's error
+    Given ingest.mcp_client.request_timeout_seconds is 2
+    And active mcp_client sources "src-a" and "src-b"
+    And GetSecret for "src-a" never responds
+    When one poll cycle runs
+    Then the cycle completes within 10 seconds
+    And ListSignalSources shows a deadline error in the last_error of "src-a"
+    And source "src-b" is polled in the same cycle
+
+  @AC-5 @FR-6 @regression @feature-261
+  Scenario: The signal list is found when the result also carries another list
+    Given an active mcp_client source "src-a" whose fetch returns structured content {"warnings": [], "signals": [one valid AAPL item]}
+    When one poll cycle runs
+    Then 1 signal for "AAPL" is ingested
+
+  @AC-6 @FR-3 @regression @feature-261
+  Scenario: A fundamentals backfill canceled mid-run is not finalized as COMPLETED or PARTIAL
+    Given fundamentals backfill job "job-D" is RUNNING with its BackfillFundamentals call in flight
+    When job "job-D" is canceled and then the BackfillFundamentals call returns success
+    Then job "job-D" status is CANCELED
+    And get_backfill_status for "job-D" reports CANCELED
+
+  @AC-7 @FR-6 @regression @feature-261
+  Scenario: An ambiguous result shape is recorded as a source error
+    Given an active mcp_client source "src-a" whose fetch returns structured content {"alerts": [one valid MSFT item], "rows": [one valid TSLA item]}
+    And no rule selects either list as the signal list
+    When one poll cycle runs
+    Then no signal is ingested for source "src-a"
+    And ListSignalSources shows an ambiguous-result error in the last_error of "src-a"
+
+  @AC-8 @FR-1 @regression @feature-261
+  Scenario: A batch in which every item fails is recorded as the source's error
+    Given an active mcp_client source "src-a" for user "u-1" whose fetch returns 1 item that passes extraction
+    And ingesting that item raises an error
+    When one poll cycle runs
+    Then no signal is ingested for source "src-a"
+    And the poll emits a log record for source "src-a" with a skipped count of 1 before the error is recorded
+    And ListSignalSources shows an "all 1 items failed" error in the last_error of "src-a"
+
+### Notes / ambiguities / conflicts
+- Attribution: every scenario's observable subject (poller, backfill_jobs, ListSignalSources, get_backfill_status) is in xstockstrat-ingest. No platform.feature entry is needed. The acceptance/ directory already exists, so only the file is created.
+- No CONFLICT and no OVERLAP. Checked against these suites:
+  - services/xstockstrat-ingest/acceptance/mcp-client-signal-source.feature (feature 166) has AC-3 (GetSecret bearer), AC-4 (parse into ExternalSignals) and AC-5 (unreachable endpoint records health). These are extended by 261 (per-item isolation, deadline, list selection), not contradicted.
+  - historical-fundamentals-backtest.feature, fix-python-config-stored-zero.feature and fix-python-config-zero-trap.feature cover other backfill facets.
+  - docs/sdd/business-rules/platform.feature only has the per-user mcp_client credential scenario at ~line 307 and config-key zero-trap rows.
+- services/xstockstrat-ingest/CLAUDE.md says startup reconciles RUNNING/QUEUED jobs to FAILED with no automatic resume, while chunk-level re-drive exists. AC-3 only constrains CANCELED jobs and does not contradict this.
+- @AC numbers repeat across suites (166 AC-4 and 261 AC-4, for example). They are disambiguated by the @feature-NNN tag, as in the existing files.
+
+### Coverage check
+- Source scenarios: 8 (AC-1..AC-8, with AC-2 an Outline of 2 examples). Planned: 8 NEW, 0 DUP, 0 OVERLAP, 0 skipped. Counts match.
+```
+
+## Session 2026-10-30 (CI: feature status automation)
+
+- Promotion PR #1368 merged to main
+- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-30

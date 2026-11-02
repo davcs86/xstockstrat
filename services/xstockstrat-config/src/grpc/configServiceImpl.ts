@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { getLogger } from '../services/logger';
 import {
   ADMIN_SCOPE_ERROR,
@@ -6,6 +6,7 @@ import {
   MISSING_AUTHOR_ERROR,
   PER_USER_SCOPE_ERROR,
   SECRET_SCOPE_ERROR,
+  boundReadUserId,
   first,
   hasAdminAccessScope,
   hasInternalCallerAuthority,
@@ -90,7 +91,9 @@ interface Subscriber {
   userId: string; // '' = global subscriber
   clientId: string;
   call: any;
-  lastVersion: string;
+  pending: boolean;
+  missedDelta: boolean;
+  traceId?: string;
 }
 
 // Scalar numeric bounds, keyed on the FULL config key path. Looked up (feature 182) with a two-operand
@@ -108,13 +111,13 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.readiness_materializer.valid_window_hours': { minValue: 1, maxValue: 168 },
   // Ceiling tracks marketdata's PgBouncer pool size (root CLAUDE.md § Connection Pool Budget): an
   // operator raising this above what marketdata can execute re-opens the feature-141 SEV-2 (TimescaleDB
-  // "out of shared memory"). min 1 — 0 is not "unlimited" (the get_int reader would collapse it to 2).
+  // "out of shared memory"). min 1 — a Python reader clamps ≤ 0 to the default, so 0 is never "unlimited".
   'analysis.readiness_materializer.max_concurrent_bars_fetches': { minValue: 1, maxValue: 5 },
   // feature 184: opportunity-queue tuning keys, operator-editable in config-ui once seeded
   // (migration 028). Write-edge-only guardrails on the numeric footguns; the 5 cadence/TTL/snooze
-  // keys are seeded unbounded. Lower 0 where the getter honors a legitimate 0 (refresh_hour_utc =
-  // midnight, signal_rank_weight = a valid weight); lower 1 on get_int zero-trap keys where 0 already
-  // collapses to the code default. max_concurrent_bars_fetches ceiling = marketdata PgBouncer pool.
+  // keys are seeded unbounded. Lower 0 where 0 is a legitimate value (refresh_hour_utc = midnight,
+  // signal_rank_weight); lower 1 where the Python reader clamps ≤ 0 to the default.
+  // max_concurrent_bars_fetches ceiling = marketdata PgBouncer pool.
   'analysis.opportunity.refresh_hour_utc': { minValue: 0, maxValue: 23 },
   'analysis.opportunity.max_concurrent_bars_fetches': { minValue: 1, maxValue: 5 },
   'analysis.opportunity.signal_rank_weight': { minValue: 0, maxValue: 1 },
@@ -152,25 +155,110 @@ function lookupScalarBounds(namespace: string, key: string) {
   return SCALAR_BOUNDS_REGISTRY[key] ?? SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
 }
 
+// Code constants, not config keys: config cannot watch its own keys.
+const LISTENER_BACKOFF_INITIAL_MS = 1000;
+const LISTENER_BACKOFF_MAX_MS = 30000;
+
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
   // snapKey → global snapshot (keyed by "namespace:env")
   private snapshots: Map<string, any> = new Map();
+  private listener: PoolClient | null = null;
+  private connectedOnce = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private backoffMs = LISTENER_BACKOFF_INITIAL_MS;
+  // Serializes reloads and notification work so a stale reloadAll cannot overwrite a newer reloadNamespace.
+  private chain: Promise<void> = Promise.resolve();
 
   constructor(private readonly pool: Pool) {}
 
   async initialize() {
+    await this.connectListener();
+  }
+
+  private serial<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.chain.then(fn);
+    this.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async connectListener(): Promise<void> {
+    let c: PoolClient | undefined;
+    try {
+      c = await this.pool.connect();
+      const client = c;
+      client.on('error', (e: Error) => this.dropListener(client, e));
+      client.on('end', () => this.dropListener(client, new Error('LISTEN connection ended')));
+      client.on('notification', (msg: { payload?: string }) => this.onNotification(client, msg));
+      this.listener = client;
+      // LISTEN before the reload, so a change committed during the reload is not lost.
+      await client.query('LISTEN config_changed');
+      await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()));
+      this.connectedOnce = true;
+      this.backoffMs = LISTENER_BACKOFF_INITIAL_MS;
+      log.info('Config service initialised, listening for config_changed notifications');
+    } catch (err: any) {
+      if (c) this.dropListener(c, err);
+      else if (this.connectedOnce) this.scheduleReconnect();
+      if (!this.connectedOnce) throw err;
+    }
+  }
+
+  private dropListener(c: PoolClient, err: Error) {
+    if (this.listener !== c) return;
+    this.listener = null;
+    c.removeAllListeners('notification');
+    try {
+      c.release(err);
+    } catch {
+      /* already released */
+    }
+    log.error('config LISTEN connection lost', { error: err.message });
+    if (this.connectedOnce) this.scheduleReconnect();
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+    const delay = this.backoffMs;
+    this.backoffMs = Math.min(this.backoffMs * 2, LISTENER_BACKOFF_MAX_MS);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connectListener().catch(() => {
+        /* every failure path reschedules itself */
+      });
+    }, delay);
+  }
+
+  private async resyncAll() {
     await this.reloadAll();
-    const pgClient = await this.pool.connect();
-    await pgClient.query('LISTEN config_changed');
-    pgClient.on('notification', async (msg: any) => {
-      if (!msg.payload) return;
-      const { namespace, environment } = JSON.parse(msg.payload);
-      const env = (environment ?? 'staging') as EnvStr;
-      await this.reloadNamespace(namespace, env);
-      await this.broadcastToSubscribers(namespace, env);
-    });
-    log.info('Config service initialised, listening for config_changed notifications');
+    const pairs = new Map<string, { ns: string; env: EnvStr }>();
+    for (const sub of this.subscribers.values()) {
+      pairs.set(snapKey(sub.namespace, sub.environment), { ns: sub.namespace, env: sub.environment });
+    }
+    for (const { ns, env } of pairs.values()) {
+      await this.broadcastToSubscribers(ns, env);
+    }
+  }
+
+  private onNotification(c: PoolClient, msg: { payload?: string }) {
+    if (this.listener !== c || !msg.payload) return;
+    let namespace: unknown;
+    let environment: unknown;
+    try {
+      ({ namespace, environment } = JSON.parse(msg.payload));
+    } catch {
+      return; /* malformed payload */
+    }
+    if (typeof namespace !== 'string' || !namespace) return; /* payload without a namespace */
+    const ns = namespace;
+    const env = (environment ?? 'staging') as EnvStr;
+    this.serial(async () => {
+      await this.reloadNamespace(ns, env);
+      await this.broadcastToSubscribers(ns, env);
+    }).catch((err) => log.error('config_changed handling failed', { namespace: ns, env, error: err?.message }));
   }
 
   private async reloadAll() {
@@ -261,16 +349,36 @@ export class ConfigServiceImpl {
     let count = 0;
     for (const [id, sub] of this.subscribers) {
       if (sub.namespace !== namespace || sub.environment !== env) continue;
+      if (sub.pending) {
+        sub.missedDelta = true;
+        continue;
+      }
       try {
         const payload = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
         sub.call.write(payload);
         count++;
       } catch (err) {
-        log.warn('Failed to write to subscriber', { clientId: sub.clientId });
-        this.subscribers.delete(id);
+        this.endSubscriber(id, sub, err);
       }
     }
     log.info(`Broadcast config update namespace=${namespace} env=${env} subscribers=${count}`);
+  }
+
+  // Ends only the registration it was given; a replaced or cancelled subscriber is left alone.
+  private endSubscriber(id: string, sub: Subscriber, err: any) {
+    if (this.subscribers.get(id) !== sub) return;
+    this.subscribers.delete(id);
+    log.error('WatchConfig subscriber terminated', {
+      subId: id,
+      clientId: sub.clientId,
+      traceId: sub.traceId,
+      error: err?.message,
+    });
+    try {
+      sub.call.destroy({ code: 13, message: `Internal error: ${err?.message}` });
+    } catch {
+      /* call already closed */
+    }
   }
 
   /**
@@ -299,24 +407,39 @@ export class ConfigServiceImpl {
       userId,
       clientId: req.client_id,
       call,
-      lastVersion: '0',
+      pending: true,
+      missedDelta: false,
+      traceId: first(call.metadata, 'x-trace-id') || undefined,
     };
+    // Registered before the snapshot read so a change landing mid-read is recorded as missedDelta.
+    this.subscribers.set(subId, sub);
 
-    this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT)
-      .then((payload) => {
-        call.write(payload);
-        this.subscribers.set(subId, sub);
-      })
-      .catch((err) => {
-        log.warn('Failed to send initial snapshot', { subId, error: err?.message });
-      });
+    (async () => {
+      const snap = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT);
+      if (this.subscribers.get(subId) !== sub) return;
+      call.write(snap);
+      while (sub.missedDelta && this.subscribers.get(subId) === sub) {
+        sub.missedDelta = false;
+        const d = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
+        if (this.subscribers.get(subId) !== sub) break;
+        call.write(d);
+      }
+      sub.pending = false;
+    })().catch((err) => this.endSubscriber(subId, sub, err));
   }
 
   async getConfig(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const userId = requestUserId(call.request);
+    const userId = boundReadUserId(call, requestUserId(call.request));
     const namespace = call.request.namespace;
-    const values = await this.resolveOverlayValues(namespace, env, userId);
+    let values: Record<string, any>;
+    try {
+      values = await this.resolveOverlayValues(namespace, env, userId);
+    } catch (err: any) {
+      log.error('getConfig failed', { namespace, env, userId, error: err.message });
+      callback({ code: 13, message: err.message });
+      return;
+    }
     const global = this.snapshots.get(snapKey(namespace, env));
     callback(null, toProtoSnapPayload({
       namespace,
@@ -375,14 +498,16 @@ export class ConfigServiceImpl {
     const userIdParam = userId === '' ? null : userId;
     const callerUserId = userIdFrom(call.metadata); // propagated x-user-id (edge-injected)
 
-    if (userIdParam === null) {
-      const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
-      const internalCallerAuthorized = hasInternalCallerAuthority(
+    const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
+    const internalCallerAuthorized =
+      userIdParam === null &&
+      hasInternalCallerAuthority(
         call.metadata,
         call.request?.namespace,
         call.request?.key,
         rawValue,
       );
+    if (userIdParam === null) {
       if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
         log.warn('SetConfig denied — global write without admin scope or internal-caller authority', {
           namespace: call.request?.namespace,
@@ -407,7 +532,7 @@ export class ConfigServiceImpl {
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
 
-    const author = call.request.author || userIdFrom(call.metadata);
+    const author = callerUserId || (internalCallerAuthorized ? (callerIdentity ?? '') : '');
     if (!author) {
       callback(MISSING_AUTHOR_ERROR);
       return;
@@ -444,22 +569,29 @@ export class ConfigServiceImpl {
     // Existence gate + row-authoritative is_secret: encryption is decided by the STORED flag, never
     // a request field, so a secret key can never land plaintext in value_data.
     const createKey = call.request.createKey ?? call.request.create_key ?? false;
-    const existing = await this.pool.query(
-      `SELECT is_secret FROM config.config_values
-       WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
-      [namespace, key, env, userIdParam]
-    );
-
-    // A first per-user override of an already-registered GLOBAL key is legitimate: when no exact per-user
-    // row exists, fall back to the global (user_id IS NULL) row; create_key covers a key absent at BOTH.
+    let existing: any;
     let globalRow: any = null;
-    if (existing.rows.length === 0 && userIdParam !== null) {
-      const globalExisting = await this.pool.query(
+    try {
+      existing = await this.pool.query(
         `SELECT is_secret FROM config.config_values
-         WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
-        [namespace, key, env]
+         WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
+        [namespace, key, env, userIdParam]
       );
-      globalRow = globalExisting.rows[0] ?? null;
+
+      // A first per-user override of an already-registered GLOBAL key is legitimate: when no exact per-user
+      // row exists, fall back to the global (user_id IS NULL) row; create_key covers a key absent at BOTH.
+      if (existing.rows.length === 0 && userIdParam !== null) {
+        const globalExisting = await this.pool.query(
+          `SELECT is_secret FROM config.config_values
+           WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
+          [namespace, key, env]
+        );
+        globalRow = globalExisting.rows[0] ?? null;
+      }
+    } catch (err: any) {
+      log.error('setConfig existence gate failed', { namespace, key, env, error: err.message });
+      callback({ code: 13, message: err.message });
+      return;
     }
 
     const keyRegistered = existing.rows.length > 0 || globalRow !== null;
@@ -524,7 +656,7 @@ export class ConfigServiceImpl {
 
   async listKeys(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const userId = requestUserId(call.request);
+    const userId = boundReadUserId(call, requestUserId(call.request));
     try {
       // Global keys overlaid with the caller's per-user rows (per-user wins over global for the same key).
       const result = await this.pool.query(

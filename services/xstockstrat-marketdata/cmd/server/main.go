@@ -13,6 +13,8 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
@@ -32,16 +34,22 @@ import (
 )
 
 func main() {
+	// Container healthcheck (distroless has no shell): `service healthcheck` probes this process over mTLS.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	shutdownOtel, err := telemetry.Init(ctx)
+	shutdownOtel, forceFlushOtel, err := telemetry.Init(ctx)
 	if err != nil {
-		slog.Warn("otel init failed — continuing without tracing", "error", err)
+		slog.Warn("otel init failed — continuing without telemetry export", "error", err)
 	} else {
+		slog.SetDefault(slog.New(telemetry.WrapLogHandler(logger.Handler())))
 		defer func() {
 			ctx2, c := context.WithTimeout(context.Background(), 5*time.Second)
 			defer c()
@@ -124,13 +132,9 @@ func main() {
 	// service — they must stay coupled. Per-RPC enablement is live (fundamentalsEnabled), not here.
 	fundProvider := cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub")
 	fmpClient := newFMPClient(cfgWatcher, cfg.FMPAPIKey)
-	// Boot-seed the shared budget so a mid-day restart cannot re-grant a fresh full cap (row count
-	// is a conservative floor of today's FMP calls).
-	if n, err := repo.CountFundamentalsFetchedToday(ctx); err == nil {
-		fmpClient.SeedBudget(n)
-	} else {
-		slog.Warn("FMP budget boot-seed failed; starting from 0", "error", err)
-	}
+	// Boot-seed the shared budget so a mid-day restart cannot re-grant a fresh full cap (today's
+	// source='fmp' row count is a conservative floor of today's FMP calls), whatever fundProvider is.
+	seedFMPBudget(ctx, repo, fmpClient)
 	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, fmpClient, cfg.FinnhubAPIKey)
 
 	// Historical point-in-time fundamentals source (feature 198): SEC EDGAR, keyless (non-secret
@@ -185,6 +189,8 @@ func main() {
 		}),
 	)
 	marketdatav1.RegisterMarketDataServiceServer(grpcServer, hdl.GRPCHandler())
+	hs := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, hs)
 	reflection.Register(grpcServer)
 
 	slog.Info("marketdata service starting", "grpc_port", cfg.GRPCPort)
@@ -194,7 +200,8 @@ func main() {
 	go func() {
 		<-quit
 		slog.Info("shutting down marketdata service")
-		grpcServer.GracefulStop()
+		hs.Shutdown()
+		telemetry.StopServer(forceFlushOtel, grpcServer.GracefulStop, grpcServer.Stop, 2*time.Second, 3*time.Second)
 		cancel()
 	}()
 
@@ -249,4 +256,25 @@ func newFMPClient(cfgWatcher *config.Watcher, apiKey string) *fmp.Client {
 				int(cfgWatcher.GetInt("marketdata.fmp.daily_request_cap", 250))
 		},
 	})
+}
+
+// seedFMPBudget seeds the shared FMP budget from today's fmp-source row count; on error it starts from 0.
+func seedFMPBudget(ctx context.Context, counter interface {
+	CountFundamentalsFetchedToday(context.Context, string) (int, error)
+}, b interface{ SeedBudget(int) }) {
+	if n, err := counter.CountFundamentalsFetchedToday(ctx, fmp.SourceName); err == nil {
+		b.SeedBudget(n)
+	} else {
+		slog.WarnContext(ctx, "FMP budget boot-seed failed; starting from 0", "error", err)
+	}
+}
+
+func healthcheck() int {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := mtls.Probe(ctx, "127.0.0.1:"+config.LoadFromEnv().GRPCPort, "xstockstrat-marketdata"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
 }
