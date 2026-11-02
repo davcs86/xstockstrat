@@ -18,8 +18,10 @@ freshly-edited strategy can silently produce garbage. Each has a fixed, learned 
 staging or prod name (e.g. `mcp__xstockstrat_staging__*`); if the tools are not loaded, find them
 with ToolSearch first. Never assume a tool is absent without searching.
 
-**Ownership (feature 133).** Strategies are **per-user**. `manage_strategy`, `set_strategy_live`,
-`run_backtest`, `get_strategy` and `list_strategies` operate **only on the calling user's own
+`manage_strategy` operations: `register` | `update` | `deactivate` | `reactivate` | `score`
+
+**Ownership (feature 133).** Strategies are **per-user**. `manage_strategy` (every operation,
+`score` included), `set_strategy_live`, `run_backtest`, `get_strategy` and `list_strategies` operate **only on the calling user's own
 strategies** — they are **ownership-gated, not admin-gated** (any authenticated caller manages their
 own; no admin role is required). A `strategy_id` you do not own returns `PERMISSION_DENIED` (uniform —
 never NOT_FOUND, so it does not leak whether another user's id exists). `list_strategies` returns only
@@ -66,6 +68,15 @@ parameter sweep and re-enable it at the end so it never evaluates at a config yo
 under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
 to the platform default.
 
+**Refreshing the grade (feature 283).** `manage_strategy(operation="score", strategy_id=...)` takes
+only `strategy_id` and recomputes the headline grade from the stored backtest evidence. It
+**persists** that grade and emits an `analysis.strategy.scored` ledger event, so it is a write, not a
+read. Any time range is **ignored**: the whole eligible evidence base is used. It returns snake_case
+fields, including the int count `evidence_symbols` and `excluded_symbols`. `null` there means
+analysis did not report the list. `[]` does **not** mean "the guard ran and found nothing", because a
+strategy that is not fundamentals-guarded also gets `[]`. When no evidence is eligible it fails
+`NOT_FOUND` and **clears** the stale grade.
+
 **Protected strategy (feature 186).** The strategy identified by the
 `analysis.engine.fundamentals_blend_strategy_id` config key (default
 `"fundamentals_macd_blend"`) is a protected platform resource. `manage_strategy` with
@@ -99,6 +110,9 @@ for that bar — no forward-fill, no look-ahead. If the benchmark lacks enough h
 component, the backtest returns `BACKTEST_STATUS_INSUFFICIENT_DATA` naming the **benchmark** symbol in
 `coverage_gaps` — `trigger_backfill` the benchmark and re-run. v1 covers a single reference symbol per
 component; true universe breadth (e.g. "% of a universe above its 200-day") is a deferred follow-on.
+Backfill only when `coverage_gaps` names a symbol: an `INSUFFICIENT_DATA` run with **empty**
+`coverage_gaps` and `NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR` rows is
+**never** a backfill case (feature 275) — read the `not evaluated: <CODE>` warnings instead (below).
 
 **Point-in-time fundamental operand (feature 198).** A component with `kind:"fundamental"` and a
 `fundamental_metric` (one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`,
@@ -171,6 +185,19 @@ basket and report it. A fundamentals fetch outage instead leaves a
 `fundamentals fetch failed for <SYM> — rerun` warning: rerun it. `set_strategy_live` does not check
 this at enable time; the live loop denies entry on such a symbol (exits still fire). See
 `reference/output-handling.md`.
+
+**Symbols that could not be evaluated are reported, never skipped (feature 275).** A symbol whose
+evaluation failed (an upstream RPC error or an unexpected exception) carries
+`no_trade_reason: NO_TRADE_REASON_EVALUATION_FAILED` plus a `warnings` entry
+`backtest symbol <SYM> not evaluated: <CODE>`. It is not a 0-trade "no signal". A formula that
+indicators refuses to run for the strategy owner is `NO_TRADE_REASON_FORMULA_ERROR` for **both** admin
+and owner callers, with the same warning naming `PERMISSION_DENIED` (admin caller, or another
+indicators refusal) or `NOT_FOUND` (owner). Either makes an otherwise trade-less run
+`BACKTEST_STATUS_INSUFFICIENT_DATA` with empty `coverage_gaps`; a partly failed run that still traded
+stays `OK` and carries the same rows and warnings. Act on `<CODE>`: never backfill;
+`UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun later; `PERMISSION_DENIED`,
+`NOT_FOUND` or a Python exception name (e.g. `ValueError`) → report it. See
+`reference/output-handling.md` and `reference/backfill.md`.
 
 ## Phase 1 — Ensure data coverage (backfill)
 

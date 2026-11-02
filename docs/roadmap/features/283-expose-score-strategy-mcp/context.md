@@ -312,3 +312,263 @@ Debate halted at the approval gate after round 3 (gate policy: halt). design.md 
 - Fixed across passes: Steps 5/6 swapped so the tool tests (incl. `_LONG_TOOLS`/`_MUTATING_PREFIXES` guard + hung-backend case) precede the `score` branch (P-06); `--cov-fail-under=40` added to the test steps; Step 2 / Step 10 Files lists cover contingency and conditional files (F-08); Step 3 anchors re-pointed by symbol; redundant "four ops" parity test dropped; Step 7 keeps a real RED (`_MIN_STUB_CALLS`=74 + `_LONG_RPCS`); Covers/Scenario Coverage reconciled for AC-1/AC-7 (C-15); stale step pointers and change-history prose removed.
 - Unresolved ✗ / ⚠ carried into execution: none.
 - Overlap findings (no FAIL-level): same-function overlap with 215 on analysis `ScoreStrategy` (`servicer.py`) and `tests/test_grade_fundamentals_exclusion.py` — rebase and re-anchor by symbol after 215's final edits; disjoint-function overlap with 215/275/281/282 in agent `tools.py`/`client.py` and soft overlap on `mcp-tools.md`, `SKILL.md`, agent/analysis `CLAUDE.md`. `merge-order.md` row 102 corrected: 215's spec does not edit `manage_strategy` (was claimed as same-function).
+
+## Session 2026-11-01 — sdd-execute re-spec (sdd-batch-execute)
+
+- Merged `origin/main-dev` into the detached `origin/feature/expose-score-strategy-mcp` checkout: already up to date (no conflicts); `scripts/ledger-guard.py --own-slug expose-score-strategy-mcp --base origin/main-dev --fix` reported clean (no repair).
+- Re-verified Steps 1-10 against the current tree: no blocking mismatch; every cited symbol resolves, and the expected-absent symbols (`client.score_strategy`, `_EXCLUDED_TRAILER_*`, the `score` branch, both `test_score_trailer_loopback.py` files, `test_score_strategy_parity.py`) are still absent, so the planned REDs hold. `import json` is still missing from agent `client.py` (Step 2 Instruction 2 adds it). AST matcher on `client.py` re-measured at 73 awaited stub calls, 0 `Assign = stub.X(...)` (Step 7's 73→74 plan holds). Locked protobuf 6.33.6 exposes `FieldDescriptor.has_presence` (Step 8).
+- Line anchors re-pointed (symbols authoritative): `test_tools.py` `_make_server`/`_tool_fn` :23/:29, description :1106, `.parameters` :1083, docs guard :1101, `test_grpc_error_reraised_as_clear_message` :1215; `test_pit_outage_…` :196; `test_ac5_listed_rpcs_…` :81; `SKILL.md` Scope :15; analysis `CLAUDE.md` Evidence exclusion (H) :464-467. Instructions, Files and Verification unchanged.
+
+## Session 2026-11-01 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `/sdd-execute expose-score-strategy-mcp sequential`, run by the sdd-batch-execute workflow in its own worktree (sole writer, P-01). The operator approved the up-front plan (the sequential mode-entry confirmation, given once for this feature); per-step operator checkpoints still apply.
+- Status: `implementation-ready` → `in-progress`. Branch base: `origin/feature/expose-score-strategy-mcp` merged with `origin/main-dev` (already up to date) and re-spec committed first (see the session above).
+- Next: Step 1 (agent client-half loopback, RED).
+
+### Step 1 — test: agent client-half production-wiring loopback (RED) — 2026-11-01
+
+- Sub-step 0 (installed OTel, `opentelemetry-instrumentation-grpc` 0.66b1 in the agent `.venv`): (a) `GrpcAioInstrumentorClient` has `instrument()` and `uninstrument()` (`BaseInstrumentor.uninstrument`, `instrumentor.py:119`; `_uninstrument` restores `grpc.aio.insecure_channel`/`secure_channel`, `grpc/__init__.py:537-539`). (b) The aio unary client interceptor returns the **call object**, not the response (`_aio_client.py` `_wrap_unary_response`: `call = await continuation()` … `return call`). Also: `_add_interceptors` **prepends** OTel's interceptors to any caller-supplied `interceptors=` (`grpc/__init__.py:495-515`), which is what Step 2's contingency needs.
+- `hung_backend` replies accept an optional third element `trailers` (`delay_s, outcome, *rest = reply`; `context.set_trailing_metadata(rest[0])` after the abort branch). Existing 2-tuple users unchanged: `test_tool_deadlines.py`, `test_client_deadlines.py`, `test_auth_deadline.py` → 42 passed.
+- New `tests/test_score_trailer_loopback.py`: `instrument_client` fixture (params plain/instrumented, real `GrpcAioInstrumentorClient().instrument()`/`.uninstrument()`, no `otel_reset`); populated (both), empty `[]`, absent → `None` + 1 WARN, malformed ×4 → `None` + 1 WARN (instrumented), `_EXCLUDED_TRAILER_KEY` literal.
+- TDD (AC-1, AC-7, AC-11) red: 9 failed — 8× `AttributeError: module 'app.client' has no attribute 'score_strategy'`, 1× `... no attribute '_EXCLUDED_TRAILER_KEY'` → green due in Step 2. Full suite with coverage: 9 failed (the new tests only), 613 passed. `ruff check` + `ruff format --check` clean.
+
+### Step 2 — service: agent `client.score_strategy` (go/no-go gate: client half) — 2026-11-01
+
+- `app/client.py`: top-level `import json`; `_EXCLUDED_TRAILER_KEY = "x-score-excluded-symbols"` beside `_LONG_RPC_TIMEOUT_S`; `score_strategy(user_id, strategy_id)` after `get_strategy` (call-object form, `_LONG_RPC_TIMEOUT_S`, `x-user-id` via `_metadata`, `get_strategy` projection + `excluded_symbols`); parsing in a private `_parse_excluded_trailer` (missing / `md is None` / bad JSON / non-`list[str]` → `None` + one WARN, never `[]`); `manage_strategy` unknown-operation `ValueError` now ends `; 'score' is routed to ScoreStrategy)`.
+- **Gate: GREEN through the production client instrumentor** — `test_score_trailer_loopback.py` 9 passed incl. every `instrumented` case, so the OTel aio client wrapper does not swallow trailers. **Contingency not triggered**: `app/mtls.py`, `app/trailer_capture.py` and the `conftest.py` `secure_channel` lambda are untouched.
+- TDD red (from Step 1): 9 failed (`AttributeError` on `score_strategy` / `_EXCLUDED_TRAILER_KEY`) → green: 9 passed. Verification: loopback + `test_client.py` 76 passed; full suite `--cov=app --cov-fail-under=40` 622 passed, 84.36%; ruff check + format clean.
+- `ScoreStrategy` is not yet seen by the `@AC-10` AST deadline guard (call-object form, not awaited) — expected; Step 7 extends `_stub_calls` (73 → 74).
+
+
+### Step 3 — test: analysis trailer unit tests + server-half production-wiring loopback (RED) — 2026-11-01
+
+- Sub-step 0 (installed OTel, `opentelemetry-instrumentation-grpc` 0.66b1 in the analysis `.venv`): `GrpcAioInstrumentorServer` has `uninstrument()` (`BaseInstrumentor`); `_instrument` swaps the module attribute `grpc.aio.server` for a wrapper that prepends `aio_server_interceptor` to `interceptors=`, so it must be installed **before** `grpc.aio.server(...)` is built. `_uninstrument` restores the original.
+- `tests/test_grade_fundamentals_exclusion.py`: imports `_EXCLUDED_TRAILER_KEY`/`_EXCLUDED_TRAILER_MAX_BYTES`; new literal test (key + 4096 cap); success-path AC-7 (`'["SCHD"]'`, `evidence_symbols == 2`), none-excluded (`"[]"`), sorted+deduped (`'["QQQ","SCHD"]'`), over-cap (cap monkeypatched to 5 → no trailer + WARNING); abort paths assert no trailer: AC-4 extension (+ no upsert/delete), AC-8 extension (exact excluded message), new AC-3 (`_blend_svc([])`, delete awaited) and AC-2 (not owned, no upsert/delete). Success-path cases carry an eligible AAPL cell (see Deviation Log).
+- New `tests/test_score_trailer_loopback.py`: `production_wiring` fixture (`OTEL_ENABLED=true`, real `GrpcAioInstrumentorServer().instrument()`/`.uninstrument()`, no `otel_reset`); real servicer via imported `_blend_svc`/`_cell` (C-13: no second fixture copy) behind `grpc.aio.server(interceptors=server_interceptors())` (asserts `_CancelStatusInterceptor` present); raw `unary_unary` client with the header trio; populated `'["SCHD"]'`, present-empty `"[]"`, aborted NOT_FOUND carries no key.
+- TDD (AC-2, AC-3, AC-4, AC-7, AC-8) red: both files `ImportError: cannot import name '_EXCLUDED_TRAILER_KEY'` (the spec's stated RED). Behavioral-RED and green-reachability probe with a **temporary, reverted** Step-4-shaped `servicer.py` (not committed): constants only → 6 failed (`set_trailing_metadata` called 0 times ×3, no WARN, wire key absent ×2), 23 passed; constants + trailer block → 29 passed through the real instrumentor + `_CancelStatusInterceptor`. Green is due in Step 4.
+- Verification: full suite `--cov=app --cov-fail-under=40 --continue-on-collection-errors` → 1479 passed, 2 collection errors (the two RED files only); `ruff check` + `ruff format --check` clean; C-13 grep shows `from tests.test_grade_fundamentals_exclusion import _blend_svc, _cell`.
+
+### Step 4 — service: analysis `ScoreStrategy` sets the excluded-symbols trailer (go/no-go gate: server half) — 2026-11-01
+
+- `app/handlers/servicer.py`: `_EXCLUDED_TRAILER_KEY = "x-score-excluded-symbols"` and `_EXCLUDED_TRAILER_MAX_BYTES = 4096` after `_INTERACTIVE_DERIVATION_CONCURRENCY` (2-line constraint comment); in `ScoreStrategy`, after the ledger-emit try/except and immediately before `return score`, `json.dumps(excluded, separators=(",", ":"))` → over-cap = one `log.warning` and no trailer, else `context.set_trailing_metadata(((_EXCLUDED_TRAILER_KEY, encoded),))`. Abort paths, `_fetch_and_aggregate`, `_exclude_refused_cells`, grade maths and proto untouched; no try/except around the trailer call.
+- **Gate: GREEN through the production server wiring** — `test_score_trailer_loopback.py` passes behind `server_interceptors()` (`_CancelStatusInterceptor`, `OTEL_ENABLED=true`) + a real `GrpcAioInstrumentorServer`: populated `'["SCHD"]'`, present-empty `"[]"`, aborted NOT_FOUND carries no key. With Step 2's client gate also green, both go/no-go gates hold; no proto field, FR-5 stays as designed.
+- TDD red (from Step 3, re-captured before implementing): 2 collection errors, `ImportError: cannot import name '_EXCLUDED_TRAILER_KEY' from 'app.handlers.servicer'` → green: `test_grade_fundamentals_exclusion.py` + `test_score_trailer_loopback.py` + `test_analysis_servicer.py` 418 passed.
+- Verification: full suite `--cov=app --cov-fail-under=40` 1508 passed, 90.26%; `ruff check` + `ruff format --check` clean; `git diff --stat -- packages/proto` empty. No CI-equivalent fallback used (pytest/ruff ran natively).
+
+### Step 5 — test: agent tool + client unit tests and tool-deadline guards for `score` (RED) — 2026-11-01
+
+- `tests/test_tools.py`: new `TestManageStrategyScore` (after `TestManageStrategyTool`; `import inspect`, `import re`): AC-1 (grade returned unchanged, `score_strategy` awaited once with `user_id="u-1", strategy_id=…`, no `access_scope`, snake_case keys), AC-7 (`excluded_symbols` passed through), AC-2/3/4/8 parametrized (server detail surfaces in the `RuntimeError`; reuses the file's `_rpc_error`, C-13), AC-9 (example args, `clear_fields=[]`, and the `inspect.signature` backstop over every non-`ctx`/`operation`/`strategy_id` parameter, each with `client.manage_strategy`/`score_strategy` not awaited), AC-5 (description: `analysis.strategy.scored`, `persists`, a range…ignored clause, `'score'` on the `operation:` line).
+- `tests/test_client.py`: new `TestScoreStrategyClient` with an inline awaitable `_FakeCall` exposing `trailing_metadata()` (single consumer, C-13): trailer present → `["SCHD"]`; `trailing_metadata()` → `None` gives `excluded_symbols is None` + one WARN (AC-11 unit half); request has `strategy_id` and no `range`, metadata carries `("x-user-id", "u-owner")`, `timeout == client._LONG_RPC_TIMEOUT_S`. `test_unknown_operation_raises` now matches `'score' is routed to ScoreStrategy`. These are green already (Step 2), as the spec states.
+- `tests/test_tool_deadlines.py`: `_score_strategy` in `_LONG_TOOLS`, `_score_` in `_MUTATING_PREFIXES`; new `test_manage_strategy_score_hung_analysis_surfaces_long_deadline` (hung `ANALYSIS_ENDPOINT`, `within 0.6s (deadline exceeded)` + `outcome unknown, verify before retrying`, `elapsed < _LONG_S + _SLACK_S`, `entered == 1`). `test_fr3_worst_cases_fit_under_57s` unchanged (PRESERVE `@AC-6 @feature-273`).
+- TDD (AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9, AC-11) red: 12 failed — 8× `ValueError: unknown operation 'score'` from `client.manage_strategy` (no `score` branch), 2× AC-9 `DID NOT RAISE`/regex mismatch, AC-5 `'analysis.strategy.scored'` not in description, `long_seen` missing `_score_strategy`; 208 passed in the three files. Green-reachability probe with a **temporary, reverted** Step-6-shaped `tools.py` (not committed): 220 passed. Green is due in Step 6.
+- Verification: full suite `--cov=app` → 12 failed (the RED cases only), 624 passed, coverage 84% (the 40% gate re-runs after Step 6); `ruff check` + `ruff format --check` clean; `def _rpc_error` grep shows only the two pre-existing copies (`test_tools.py`, `test_tool_deadlines.py`), no new one. No CI-equivalent fallback used.
+
+### Step 6 — service: agent `manage_strategy operation='score'` — 2026-11-01
+
+- `app/tools.py`: module-level `_score_strategy(ctx, strategy_id)` between `_grpc_error_message` and `_EXTRACTOR_TOOL_MAP`. It resolves `x-user-id` via `_caller_user_id` (owner-scoped; no admin gate, no `_caller_access_scope`) and calls `client.score_strategy`. Its own catch site passes `not_found=e.details() or "no eligible evidence"`, `deadline_s=client._LONG_RPC_TIMEOUT_S` and `write=True`. The shared mapper is not edited.
+- `manage_strategy`: the first statement after the docstring is `if operation == "score":`. It builds the 11-name `given` list (ten definition args plus `clear_fields`), raises `ValueError("manage_strategy(operation='score') accepts only strategy_id; got: …")` before any identity resolution or client call, and otherwise returns `_score_strategy`. `supplied`/`mask`/`update_mask`, the `update` empty-mask guard and the `client.manage_strategy` call are untouched.
+- Docstring changes:
+  - The summary line and the `operation:` line now include `score`.
+  - A new `SCORE (feature 283)` paragraph sits before `RESPONSE CASING`. It covers: only `strategy_id`; recomputes and persists the grade; the `analysis.strategy.scored` event; range ignored; the snake_case fields; the `excluded_symbols` `[]`/`null` semantics; PERMISSION_DENIED/NOT_FOUND/UNAVAILABLE; and that a deadline means the outcome is unknown, so verify with `list_strategies`.
+  - `RESPONSE CASING` gains the `score` snake_case clause.
+  - The module docstring line is updated and wrapped for E501 (see the Deviation Log). The "forty-five" tool-count text is unchanged.
+- TDD (paired RED from Step 5, re-captured before implementing): 12 failed, 147 passed in `test_tools.py` + `test_tool_deadlines.py` + `test_tools_endpoint.py`. The failures were 10× `TestManageStrategyScore`, the hung-analysis deadline case, and `test_every_catch_site_passes_deadline_s` (`long_seen` missing `_score_strategy`). After implementing: 159 passed.
+- Verification:
+  - The three files: 159 passed.
+  - The grep shows `operation == "score"`, `_score_strategy` and `client._LONG_RPC_TIMEOUT_S` at the new catch site.
+  - `ruff check` and `ruff format --check` are clean.
+  - Full suite with `--cov=app --cov-fail-under=40`: 636 passed, 84.44%.
+  - No CI-equivalent fallback was used.
+
+### Step 7 — test: deadline guards, call-object matcher and the 273 durable row — 2026-11-01
+
+- `tests/test_client_deadlines.py`: `_MIN_STUB_CALLS = 74`; `"ScoreStrategy"` added to `_LONG_RPCS` (reflowed one per line, E501); `_AC5_ROWS` gains `("ScoreStrategy", "ANALYSIS_ENDPOINT", lambda: client.score_strategy("u-1", "s-1"), _LONG)`; `_stub_calls` gains exactly one branch — an `ast.Assign` whose value is `Call(Attribute(Name('stub')))` yields `(fn.name, rpc, call)` — ahead of the unchanged `ast.Await` filter. No bare-`ast.Call` matching.
+- `acceptance/fix-agent-client-deadlines.feature`: `| ScoreStrategy       | 45.5   |` appended after `TriggerBackfill` (signed-off EXTEND of `@AC-5 @feature-273`), same commit as the `_AC5_ROWS` tuple.
+- TDD (C-16 preservation/extension of `@AC-5`, `@AC-6`, `@AC-10 @feature-273`) red: with the bump + `_LONG_RPCS` edit and the matcher unchanged, 1 failed / 21 passed — `AssertionError: matcher found only 73 stub calls` (`assert 73 >= 74`). Green after the Assign branch: matcher count exactly 74 (`('score_strategy', 'ScoreStrategy')` included); the fake-channel `ScoreStrategy` row passes with no mock change (`await call` raises `_Recorded` before `trailing_metadata()`), and the hung-backend row passes.
+- Verification: `test_tool_deadlines.py` + `test_client_deadlines.py` 42 passed (incl. PRESERVE `test_fr3_worst_cases_fit_under_57s`); full suite `--cov=app --cov-fail-under=40` 638 passed, 84.44%; `ScoreStrategy` grep hits the test tuple, `_LONG_RPCS` and the feature row; `ruff check` + `ruff format --check` clean. No CI-equivalent fallback used.
+
+### Step 8 — test: descriptor + operations-set parity guard, with the runbook and strat-lab skill edits it forces — 2026-11-01
+
+- `tests/test_score_strategy_parity.py` (new). Every surface is located by a regex marker, never by line number.
+  - `test_score_projection_covers_every_proto_field` pins `{f for f in StrategyScore.DESCRIPTOR.fields if f.has_presence} == {"origin"}` and checks that `client.score_strategy`'s keys minus `excluded_symbols` equal the no-presence descriptor fields. `FieldDescriptor.has_presence` is present in the locked protobuf, so the fallback was not needed.
+  - `test_operation_sets_match_the_enum_on_every_surface` checks that `StrategyOperation` minus `UNSPECIFIED`, plus `score`, matches four surfaces: the tool summary line, the docstring `operation:` line, the runbook `| \`operation\` |` row inside `### \`manage_strategy\``, and the new canonical `SKILL.md` line.
+  - `test_score_side_effects_are_documented_on_runbook_and_skill` is parametrized over the runbook and skill (AC-10): `analysis.strategy.scored`, `persists`, and a range…ignored clause.
+  - The fake call and `_channel_cm` come from the `tests.test_client` module (see the Deviation Log).
+- `docs/runbooks/mcp-tools.md`, inside `### \`manage_strategy\`` only:
+  - `"score"` is added to the `operation` row.
+  - Seven `score` rows are added to **Errors**: client-side `ValueError`, PERMISSION_DENIED, both NOT_FOUND variants with the stale grade cleared, the availability-unknown UNAVAILABLE, the store-down UNAVAILABLE variants, and the 45 s deadline.
+  - A `**\`score\` (feature 283).**` block follows "Effect on the derived grade". It covers: owner-scoped, not admin-gated; `strategy_id` only; persists the grade and emits `analysis.strategy.scored`; range ignored; a snake_case field table with `excluded_symbols` `[]`/`null` semantics; a Return example; and the 45 s budget with the `ceil(symbols/4) × 8 × 10 s` bound, plus "verify with `list_strategies`".
+  - The count text was not touched.
+- `plugins/strat-lab/skills/backtest/SKILL.md`:
+  - The canonical line `` `manage_strategy` operations: `register` | `update` | `deactivate` | `reactivate` | `score` `` is added after the Scope paragraph.
+  - The Ownership paragraph now names `manage_strategy` "(every operation, `score` included)".
+  - A new **Refreshing the grade (feature 283)** paragraph follows the Mutation guard.
+  - Frontmatter is untouched. No plugin version bump: the manifests were not edited.
+- Pre-existing drift, not fixed here (for the findings log):
+  - The runbook `manage_strategy` opener still says "**Admin-scoped write**", although the section has been ownership-gated since feature 133 (agent `CLAUDE.md` § Management-tool authorization). The new `score` block states "owner-scoped, not admin-gated" explicitly.
+  - The `client.manage_strategy` docstring also still says "admin-scoped".
+- TDD (AC-6, AC-10):
+  - RED: 3 failed, 1 passed. The failures were the runbook operation set missing `score` (the docstring surfaces already passed after Step 6), plus the runbook and SKILL.md missing `analysis.strategy.scored`. The projection test was already green from Step 2.
+  - GREEN after the docs edits: 4 passed.
+- Verification:
+  - `test_tools_endpoint.py` + `test_tools.py`: 139 passed. This includes the AC-6 count guard (45) and the feature-149 docs guard, both PRESERVE.
+  - Full suite with `--cov=app --cov-fail-under=40`: 642 passed, 84.44%.
+  - `ruff check` and `ruff format --check` are clean.
+  - `validate.py --self-test` and `validate.py` are OK.
+  - No CI-equivalent fallback was used.
+
+
+### Step 9 — docs: service CLAUDE.md files and scoring doc — 2026-11-01
+
+- `services/xstockstrat-agent/CLAUDE.md`:
+  - The `manage_strategy` tool-table row now reads register/update/deactivate/reactivate, plus "`operation='score'` refreshes the headline grade (owner-scoped, feature 283)".
+  - A new paragraph after the feature-133 ownership-gated paragraph names the trailer contract: key `x-score-excluded-symbols`, a compact JSON array of strings, read via the call-object form; missing or unparseable ⇒ `excluded_symbols: null` plus WARN; the key literal is asserted in both services' `tests/test_score_trailer_loopback.py`; a second trailer would justify a `PLAT-*` row (not added).
+  - The "forty-five" count text was not touched.
+- `services/xstockstrat-analysis/CLAUDE.md`: one sentence on the **Evidence exclusion (H)** bullet. It says a successful ScoreStrategy sets the trailer (`"[]"` when none or the guard does not apply; omitted above 4096 bytes and on every abort path), consumed by the agent's `manage_strategy operation='score'`. These semantics were checked against `servicer.py` (`_EXCLUDED_TRAILER_MAX_BYTES = 4096`, set only on the success return) and `client._parse_excluded_trailer`.
+- `services/xstockstrat-analysis/docs/scoring.md`: one clause on the manual-refresh paragraph. It says the refresh is reachable via the agent tool and reports excluded symbols through the trailer.
+- `merge-order.md` and the root `CLAUDE.md` were not touched.
+- TDD: N/A (docs).
+  - Baseline: before the edits, the trailer-key grep matched nothing in the three files (exit 1).
+  - After the edits, the grep hits all three files (agent `:134`, analysis `:468`, scoring `:45`), and `forty-five` is unchanged (`:44`, `:50`).
+- Verification:
+  - `test_tools_endpoint.py`: 9 passed (AC-6 count surfaces).
+  - As an extra check, `test_tools.py` + `test_score_strategy_parity.py`: 134 passed.
+  - No CI-equivalent fallback was used.
+
+### Step 10 — docs: root CLAUDE.md teardown and full-suite verification — 2026-11-01
+
+- **Teardown, for the integration PR body.**
+  - `/context-forge:context-constitution refresh` is **unavailable** in this session: only `context-forge:context-scrubber` is invocable. The manual reconciliation below replaces it, per root `CLAUDE.md` § Teardown and `fails.md:670`.
+  - Each of the five context files was re-read against the current code (`client.score_strategy`, `_parse_excluded_trailer`, `tools._score_strategy`, the `operation == "score"` branch, and the analysis trailer block with `_EXCLUDED_TRAILER_KEY` / `_EXCLUDED_TRAILER_MAX_BYTES`).
+  - `services/xstockstrat-agent/CLAUDE.md`: matches the code. The row says register/update/deactivate/reactivate + `score`. The trailer paragraph (call-object form, missing/unparseable ⇒ `null` + WARN, literal asserted in both loopback suites) is accurate. `forty-five` is unchanged.
+  - `services/xstockstrat-analysis/CLAUDE.md` § Evidence exclusion (H): matches the code. The trailer is set only on the success return, as `json.dumps(excluded, separators=(",", ":"))`. It is `"[]"` when nothing is excluded or the guard is off. Above 4096 bytes it is omitted with a WARN, and every abort path returns before it is set. The `analysis.strategy.scored` row stays "`ScoreStrategy` RPC only", which is still true: the agent reaches that RPC.
+  - `services/xstockstrat-analysis/docs/scoring.md`: matches the code. The manual-refresh paragraph names the agent route and the trailer.
+  - `docs/runbooks/mcp-tools.md`: one drift, **fixed**. The `score` field table gave the `component_scores` keys as `sharpe`, `drawdown`, `consistency`, but `_score_from_metrics` emits `sharpe`, `drawdown`, `win_rate`, and `_aggregate_cells` keeps those keys. The errors table, the 45 s bound and the `excluded_symbols` semantics match the servicer abort strings and `_grpc_error_message`.
+  - `plugins/strat-lab/skills/backtest/SKILL.md`: matches the code. The canonical operations line, the ownership wording and the Refreshing-the-grade paragraph are accurate.
+  - Pre-existing drift **not** introduced by 283 and left for a findings entry (already noted at Step 8): the runbook's `manage_strategy` opener still says "Admin-scoped write", and the `client.manage_strategy` docstring still says "admin-scoped". Both have been ownership-gated since feature 133.
+- **Execution findings roll-up.**
+  - Sub-step 0, installed `opentelemetry-instrumentation-grpc` 0.66b1:
+    - Client side: the aio unary interceptor returns the call object, and `_add_interceptors` prepends OTel interceptors.
+    - Server side: `GrpcAioInstrumentorServer` swaps `grpc.aio.server`, so it must be installed before the server is built.
+  - Gates:
+    - Step 2 client gate GREEN through `GrpcAioInstrumentorClient`; the contingency interceptor was not needed.
+    - Step 4 server gate GREEN behind `server_interceptors()` (`_CancelStatusInterceptor`) and a real `GrpcAioInstrumentorServer`.
+    - No proto field was added; FR-5 stands as designed.
+  - Step 7 matcher: 73 (red) → 74 (green), via the single `ast.Assign` branch.
+- **Pre-existing divergence, unfixed and out of scope.** This is in the `score is None` branch of `ScoreStrategy`. `servicer.py:2622` pops the in-memory grade before `:2625` deletes the DB row. A server-side cancel between the two leaves memory cleared while the persisted grade survives, and `hydrate_scores()` restores it at the next boot. (The spec cites `:2618`/`:2621`; Step 4's trailer constants shifted the lines by 4.)
+- TDD: N/A (docs/process).
+- Verification:
+  - Agent: `uv run pytest --cov=app --cov-fail-under=40 -q` gave 642 passed, 84.44%. `ruff check` and `ruff format --check` are clean.
+  - Analysis: the same command gave 1508 passed, 90.26%. `ruff check` and `ruff format --check` are clean.
+  - `python3 plugins/strat-lab/scripts/validate.py` reports OK.
+  - `git diff --stat -- packages/proto .do docker-compose.yml` is empty, and so is the same check against `origin/main-dev...HEAD`.
+  - The agent suite ran after the runbook fix.
+  - No CI-equivalent fallback was used. Node v22 vs the pinned 24 was irrelevant here, since no Node or UI step ran.
+- Status: all 10 steps done → `code-completed`. No ledger insight was added: the reusable lesson ("prove a metadata channel through the production interceptor/instrumentor stack with a real-wire loopback before building on it") is feature-local until a second trailer contract exists.
+
+### sdd-batch-execute promotion plan (awaiting operator confirm) — 2026-11-01
+
+```sdd-batch-promotion-plan
+## Promotion plan — expose-score-strategy-mcp (feature 283)
+
+Read-only plan. I checked every existing suite under services/*/acceptance/ and /home/user/xstockstrat/docs/sdd/business-rules/platform.feature for `@feature-283`, `score_strategy`, `ScoreStrategy` and manage_strategy "score". None matched, so there is no DUP. The agent suite has no 283 file yet, so it is a CREATE.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | /home/user/xstockstrat/services/xstockstrat-agent/acceptance/expose-score-strategy-mcp.feature | CREATE | NEW | The Then asserts the manage_strategy tool result shape. |
+| AC-2 | same | CREATE | NEW | Tool-level ownership error. |
+| AC-3 | same | CREATE | NEW | Tool error text. The "stale grade cleared" half lives in analysis; see Notes. |
+| AC-4 | same | CREATE | NEW | Tool error text plus grade unchanged. Same attribution call as AC-3. |
+| AC-5 | same | CREATE | NEW | Tool description disclosure. |
+| AC-6 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Spans agent, UI copilot.ts, docs and the agent suite; see Notes for the overlap with feature 214. |
+| AC-7 | agent suite (same file) | CREATE | NEW | Tool result carries excluded_symbols. |
+| AC-8 | agent suite (same file) | CREATE | NEW | Tool error text. |
+| AC-9 | agent suite (same file) | CREATE | NEW | Client-side argument rejection; no backend call is made. |
+| AC-10 | /home/user/xstockstrat/docs/sdd/business-rules/platform.feature | APPEND | NEW | Docs and skill parity across the runbook and the plugin; same pattern as feature 224 AC-32. |
+| AC-11 | agent suite (same file) | CREATE | NEW | Tool result gives null for excluded_symbols. |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/expose-score-strategy-mcp.feature (CREATE) ---
+# Promoted from docs/roadmap/features/283-expose-score-strategy-mcp/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-283` tag.
+Feature: expose-score-strategy-mcp
+  As an operator driving the platform through the MCP agent, I want to refresh a strategy's headline grade and read its evidence provenance, so that I can verify grade-affecting changes without the UI or raw gRPC.
+
+  @AC-1 @FR-1 @feature-283
+  Scenario: Refreshing an owned strategy returns the recomputed grade with provenance
+    Given the caller owns strategy "fundamentals_macd_blend" with 3 eligible evidence symbols over 756 trading days
+    When the caller invokes the MCP tool "manage_strategy" with operation "score" and strategy_id "fundamentals_macd_blend"
+    Then the result contains rating, overall_score, component_scores, evidence_symbols 3, evidence_days 756 and provisional false, with snake_case keys
+
+  @AC-2 @FR-1 @FR-3 @feature-283
+  Scenario: Scoring a strategy the caller does not own is rejected
+    Given strategy "someone_elses_strategy" is owned by another user
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "someone_elses_strategy"
+    Then the tool raises an error stating the strategy was not found or not owned, and no grade is written
+
+  @AC-3 @FR-3 @feature-283
+  Scenario: A strategy with no eligible evidence reports NOT_FOUND and clears the stale grade
+    Given the caller owns strategy "new_strategy" with no backtest evidence cells and a stale stored grade "B"
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "new_strategy"
+    Then the tool raises an error containing "no eligible evidence — run a backtest" and the stored grade for "new_strategy" is absent afterwards
+
+  @AC-4 @FR-3 @feature-283
+  Scenario: Unknown fundamentals availability leaves the grade unchanged
+    Given the fundamentals availability for evidence symbol "SCHD" cannot be determined because marketdata is down
+    When the caller invokes "manage_strategy" with operation "score" for "fundamentals_macd_blend"
+    Then the tool raises an error containing "fundamentals availability unknown — grade unchanged" and the stored grade is identical to before the call
+
+  @AC-5 @FR-2 @feature-283
+  Scenario: The tool description discloses the score side effects
+    When a client lists the agent tools
+    Then the "manage_strategy" description states that operation "score" persists the grade, emits an "analysis.strategy.scored" ledger event and ignores any time range
+
+  @AC-7 @FR-5 @feature-283
+  Scenario: A refresh names the excluded symbols
+    Given analysis.backtest.fundamentals.enabled is on
+    And strategy "fundamentals_macd_blend" has evidence cells for "AAPL", "MSFT" and "SCHD" and "SCHD" has no fundamentals
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "fundamentals_macd_blend"
+    Then the result shows evidence_symbols 2 and an excluded_symbols list equal to ["SCHD"]
+
+  @AC-8 @FR-3 @feature-283
+  Scenario: Every symbol excluded for missing fundamentals reports which ones
+    Given analysis.backtest.fundamentals.enabled is on
+    And the caller owns strategy "fundamentals_only" whose only evidence symbol "SCHD" has no fundamentals
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "fundamentals_only"
+    Then the tool raises an error containing "all evidence symbols excluded (fundamentals unavailable: SCHD)"
+
+  @AC-9 @FR-1 @feature-283
+  Scenario: Strategy-definition arguments are rejected for score
+    When the caller invokes "manage_strategy" with operation "score", strategy_id "fundamentals_macd_blend", cooldown_days 45 and clear_fields ["exit_rule"]
+    Then the tool raises an error stating that "score" accepts only strategy_id, and no backend call is made
+
+  @AC-11 @FR-5 @feature-283
+  Scenario: A refresh whose excluded list was not reported yields null, not an empty list
+    Given strategy "fundamentals_macd_blend" is scored by an analysis build that sets no excluded-symbols trailer
+    When the caller invokes "manage_strategy" with operation "score" and strategy_id "fundamentals_macd_blend"
+    Then the result contains the recomputed rating and evidence_symbols, excluded_symbols is null rather than an empty list, and a warning is logged
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+
+  @AC-6 @FR-4 @feature-283
+  Scenario: The tool count is unchanged and its surfaces agree
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    Then every statement states the count 45 (in words or digits) and the registered tool count is 45
+
+  @AC-10 @FR-4 @feature-283
+  Scenario: The score operation is documented in the runbook and the strat-lab skill
+    When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are read
+    Then both describe manage_strategy operation "score" including its side effects, and the documented operations equal the tool's accepted operations
+
+### Notes / ambiguities / conflicts
+- **Attribution (AC-3, AC-4):** the Then clauses mix a tool error string (agent) with persisted grade state (analysis `ScoreStrategy`). Analysis has no existing suite for this. I kept them in the agent suite because the observable subject is the `manage_strategy` tool outcome, and a single 283 file keeps provenance clear. A human may move them to /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/ if they prefer.
+- **AC-6 vs feature 214 AC-1:** /home/user/xstockstrat/services/xstockstrat-agent/acceptance/remove-agent-postgres-mcp.feature line 14 asserts "advertised tool count is 45". That is a partial OVERLAP on the number only. AC-6 asserts agreement across six surfaces, which is a different outcome, so I planned NEW rather than skipping. Consolidation of the hard-coded 45 is a candidate for a human curation step. Nothing was deleted or rewritten.
+- **AC-10 vs platform.feature AC-32 (feature 224, line 301) and AC-5 (feature 149, line 44):** these are the same docs-parity pattern for different tools or operations. They are not OVERLAP, so AC-10 is NEW.
+- **Platform append format:** the append block starts with a blank line so it separates from the file's last scenario.
+- **CONFLICT:** none found. The existing agent `manage_strategy` rules in manage-strategy-accept-object-rules.feature (feature 149) cover entry_rule/exit_rule typing for the other operations and do not constrain "score".
+- **Source path:** the caller's path `docs/roadmap/features/docs/roadmap/features/283-.../acceptance.feature` is doubled. I read the real file at /home/user/xstockstrat/docs/roadmap/features/283-expose-score-strategy-mcp/acceptance.feature on the local working tree, not on origin/feature/expose-score-strategy-mcp. The orchestrator should confirm the branch copy is identical.
+
+### Coverage check
+- Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. That is 9 scenarios in the agent file and 2 in platform.feature. Nothing was skipped, so the counts match.
+```

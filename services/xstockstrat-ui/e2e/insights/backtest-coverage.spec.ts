@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { BACKTEST_EVAL_FAILED_WARNING } from '../fixtures';
 
 /**
  * Epoch millis from a `google.protobuf.Timestamp` as it appears **on the wire**.
@@ -121,6 +122,24 @@ test.describe('Backtest data coverage', () => {
     await expect(banner).not.toContainText('entry condition was never satisfied');
     await expect(page.getByTestId('insufficient-data')).toHaveCount(0);
     await expect(page.getByTestId('sizing-mode-badge')).toHaveCount(0);
+  });
+
+  // feature 275: an INSUFFICIENT_DATA run with no coverage gap; the EVALUATION_FAILED key and the
+  // per-symbol warning must both reach the page (C-10/C-14 reachability, not just tsc).
+  test('evaluation-failed backtest renders the not-evaluated reason and the warning', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-eval-failed-001');
+
+    await page.getByRole('button', { name: 'Run Backtest' }).click();
+
+    await expect(page.getByTestId('no-trade-reason')).toContainText(
+      'stopped this symbol from being evaluated',
+      { timeout: 10000 },
+    );
+    await expect(page.getByTestId('backtest-warnings')).toContainText(BACKTEST_EVAL_FAILED_WARNING);
+    await expect(page.getByTestId('insufficient-data')).toHaveCount(0);
   });
 
   // feature 065: the derived "Strategy Grade" card and the per-run "Run score" column are BOTH

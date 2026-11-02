@@ -75,6 +75,7 @@ import {
   SOURCE_TEMPLATE_NEWSLETTER,
   FUNDAMENTALS_AAPL,
   FUNDAMENTALS_STALL_SYMBOL,
+  BACKTEST_EVAL_FAILED_WARNING,
 } from './fixtures';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -1136,6 +1137,27 @@ export async function startMockBackend(): Promise<void> {
                   warmupBars: 0,
                   noTradeReason: 5, // NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE
                   fundamentalsGap: 1, // FUNDAMENTALS_GAP_ETF
+                  bars: [],
+                },
+              ],
+            };
+          }
+          if (req.strategyId === 'strat-eval-failed-001') {
+            // feature 275: AAPL's evaluation failed upstream — reason 6 + its per-symbol warning.
+            return {
+              backtestId: 'bt-eval-failed-1',
+              strategyId: req.strategyId,
+              status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
+              totalTrades: 0,
+              trades: [],
+              coverageGaps: [],
+              warnings: [BACKTEST_EVAL_FAILED_WARNING],
+              diagnostics: [
+                {
+                  symbol: 'AAPL',
+                  barsTotal: 0,
+                  warmupBars: 0,
+                  noTradeReason: 6, // NO_TRADE_REASON_EVALUATION_FAILED
                   bars: [],
                 },
               ],

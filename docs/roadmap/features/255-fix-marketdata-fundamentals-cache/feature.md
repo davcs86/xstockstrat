@@ -5,7 +5,7 @@
 **GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-10-21
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-11-01
 
 ---
 
@@ -17,6 +17,9 @@
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings); OQ-1 resolved by operator: cap `<= 0` = zero budget |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps; AC-5/AC-6 refined, @AC-10 added, FR-4(b) rewritten per operator r3/r4 sign-off |
+| 2026-11-01 | `implementation-ready` (re-spec) | /sdd-execute | Merged `origin/main-dev`; steps 0–17 re-anchored to the current codebase (Step 11 now wraps both `getJSON` transport returns; Step 13 reflects existing `WarnContext`) |
+| 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (sdd-batch-execute); operator gave the up-front confirmation |
+| 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–17 done; AC-1..AC-10 promoted to `services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature` (C-16); integration PR opened (merge-order 215 gate waived by operator override, see context.md) |
 
 ---
 
@@ -56,4 +59,4 @@ Five marketdata defects in the fundamentals path:
 
 ## Next Action
 
-`/sdd-review fix-marketdata-fundamentals-cache impl-spec` — validate implementation spec, then `/sdd-execute fix-marketdata-fundamentals-cache`
+Integration PR `feature/fix-marketdata-fundamentals-cache` → `main-dev` is open; merge when CI passes and reviewers approve.

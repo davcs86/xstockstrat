@@ -37,6 +37,12 @@ tool call to make. Report only what survives.
      cell, so drop it from the basket and report it, naming its `fundamentals_gap` (ETF or not).
    - A `fundamentals fetch failed for <SYM> — rerun` warning means that symbol was never assessed.
      Rerun before reporting anything about it.
+   - `NO_TRADE_REASON_EVALUATION_FAILED` means the symbol was not evaluated. It must never be averaged
+     in as a 0; drop it from the basket and report it. `NO_TRADE_REASON_FORMULA_ERROR` reads the same
+     for an owner-unreadable formula whether you call as admin or as the owner.
+   - A `backtest symbol <SYM> not evaluated: <CODE>` warning must be reported with its code class:
+     transient (`UNAVAILABLE`, `DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED` — rerun later) or permanent
+     (`PERMISSION_DENIED`, `NOT_FOUND`, a Python exception name — report it). Never backfill for it.
 
 7. **Does the aggregate hide the scatter?** If you are reporting a basket number, does the per-symbol
    picture agree with it, or is one symbol (or a different best-parameter per symbol) driving it?
