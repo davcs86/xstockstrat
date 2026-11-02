@@ -1028,3 +1028,18 @@ Feature: Analysis backtest — a failed symbol is reported, never silently skipp
 ### Coverage check
 - Source scenarios: 7 (AC-1 to AC-7). Planned: 7 (NEW 7, DUP 0, OVERLAP 0). Every @AC-* is accounted for and none were skipped. Counts match.
 ```
+
+## Session 2026-11-02 — sdd-execute (ALL-DONE PATH, sdd-batch-execute)
+
+- **Merge-order operator override (2026-11-02, "Override and pre-approve")**: the `merge-order.md` row for 275
+  (blockers 272, 273, 215; Resolved `No`) is overridden. 272 and 273 are launched; 215's code is merged to `main-dev`
+  (Steps 1-25 done; only post-deploy Step 26 pending). `merge-order.md`'s Resolved column is left unedited, per the
+  operator. The override is also recorded in the integration PR body.
+- **C-16 promotion plan confirmed** by the operator (pre-approved): the `sdd-batch-promotion-plan` block above is
+  applied verbatim — 7 scenarios (AC-1…AC-7, all NEW) → CREATE
+  `services/xstockstrat-analysis/acceptance/fix-backtest-silent-symbol-skip.feature`, each tagged `@feature-275`.
+  No ui/agent/platform suite. The AC-6 overlap with 272 @AC-6 is kept as NEW (distinct "no diagnostics row" clause).
+- **Ledger**: the Step 6 fails.md candidate ("a catch-all hid incomplete test mocks") was not in
+  `docs/roadmap/ledger/fails.md`; it is appended in this integration PR.
+- `status.md` is already `code-completed`; no history row added. Node v22 vs pinned 24 is not a blocker (operator).
+- Next: integration PR `feature/fix-backtest-silent-symbol-skip` → `main-dev`.
