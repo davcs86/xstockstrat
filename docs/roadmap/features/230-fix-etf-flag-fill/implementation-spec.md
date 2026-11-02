@@ -476,7 +476,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 6 — docs: marketdata `CLAUDE.md` — fill log records and the window invariant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify

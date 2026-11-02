@@ -778,3 +778,22 @@ the round-2 block above.
   at `:2360` (spec cites `:2370`). The new test is at `etf_flags_test.go:186`.
 - **Deviations:** none. Severity SEV-3 (unchanged).
 - **Files modified:** `services/xstockstrat-marketdata/internal/service/etf_flags_test.go`.
+
+## Session 2026-11-02 — Step 6 (docs: marketdata `CLAUDE.md` fill-log records)
+
+- **Edit (`services/xstockstrat-marketdata/CLAUDE.md`, `GetEtfFlags` paragraph):** `etfFlagLogEvery` 1 minute (the
+  fill-log rate-limit window) appended to the Fixed invariants bullet (`:174-176`); one new bullet after the
+  negative-cache line (`:178-181`) documents the three Info records — `etf flag fill skipped` (`fmp_disabled`/
+  `no_cap`/`budget`, `used`/`cap` only for the last two, config reasons on change, `budget` once per window),
+  `etf flag fill failed` (class only, fallback `other`, once per class per window), `etf flag fill unlabelled`
+  (once per window) — and the conditional `trace_id`. Gate rules not restated; `not_wired` left undocumented.
+  Text checked against the shipped `etf_flags.go` (Step 3: `etfFlagLogEvery` `:28`, records `:154,167,180`).
+- **TDD:** N/A (docs). Pre-edit, the verification grep had no hits (rc=1); post-edit each token is present.
+- **Verification:** `grep etfFlagLogEvery|etf flag fill skipped|failed|unlabelled` → each present (`:175,179-181`);
+  `grep not_wired` → no hits.
+- **Teardown note (root CLAUDE.md):** this step changed a context file (`services/xstockstrat-marketdata/CLAUDE.md`).
+  Manual reconciliation: re-read the edited paragraph against `etf_flags.go` — reasons, record names, rate-limit
+  semantics (`skipLogLocked`/fail/unlabelled slots) and `trace_id` condition match. The integration PR must carry the
+  context-forge refresh (or its manual equivalent).
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/CLAUDE.md`.
