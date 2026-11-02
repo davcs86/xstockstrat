@@ -20,7 +20,13 @@ _LONG_S = 0.6
 _CONFIG_S = 0.2
 _SLACK_S = 0.5
 
-_LONG_TOOLS = {"run_backtest", "screen_symbols", "trigger_backfill", "run_fundamentals_scan"}
+_LONG_TOOLS = {
+    "run_backtest",
+    "screen_symbols",
+    "trigger_backfill",
+    "run_fundamentals_scan",
+    "_score_strategy",
+}
 _MUTATING_PREFIXES = (
     "manage_",
     "set_",
@@ -32,6 +38,7 @@ _MUTATING_PREFIXES = (
     "ingest_",
     "run_fundamentals_",
     "_write_",
+    "_score_",
 )
 
 
@@ -74,6 +81,21 @@ async def test_ac1_get_positions_hung_portfolio_surfaces_deadline(patched_budget
 
     assert "within 0.2s (deadline exceeded)" in message
     assert elapsed < _RPC_S + _SLACK_S
+    assert handle.entered == 1
+
+
+async def test_manage_strategy_score_hung_analysis_surfaces_long_deadline(
+    patched_budgets, hung_backend
+):
+    handle = hung_backend("ANALYSIS_ENDPOINT")
+
+    message, elapsed = await _timed_error(
+        _tool("manage_strategy")(_ctx(ADMIN), operation="score", strategy_id="s")
+    )
+
+    assert "within 0.6s (deadline exceeded)" in message
+    assert "outcome unknown, verify before retrying" in message
+    assert elapsed < _LONG_S + _SLACK_S
     assert handle.entered == 1
 
 

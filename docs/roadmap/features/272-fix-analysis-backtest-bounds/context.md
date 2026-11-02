@@ -898,3 +898,10 @@ Feature: Analysis backtest — bar pagination and wall-clock bounds
 - Effect: staging `RunBacktest` calls longer than 60 s now fail with `DEADLINE_EXCEEDED` ("backtest exceeded 60s deadline").
   No run was exercised in this session. The bare 300 s seed row is unchanged and unused.
 - Not applied anywhere else (prod is not running). Roll back by `set_config` to 300 or 0 (no limit).
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

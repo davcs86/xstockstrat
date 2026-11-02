@@ -2,8 +2,10 @@
 
 import asyncio
 import base64
+import inspect
 import json
 import logging
+import re
 import socket
 import time
 from pathlib import Path
@@ -1223,6 +1225,106 @@ class TestManageStrategyTool:
                 await _tool_fn(server, "manage_strategy")(
                     ctx=_ctx(ADMIN), operation="update", strategy_id="x", display_name="X"
                 )
+
+
+class TestManageStrategyScore:
+    """Feature 283: manage_strategy operation='score' → client.score_strategy (ScoreStrategy)."""
+
+    _SID = "fundamentals_macd_blend"
+
+    async def _score(self, score_mock: AsyncMock, **kwargs):
+        server = _make_server()
+        with patch.object(client, "score_strategy", score_mock):
+            return await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="score", strategy_id=self._SID, **kwargs
+            )
+
+    @pytest.mark.asyncio
+    async def test_ac1_returns_grade_with_provenance_snake_case(self):
+        grade = {
+            "strategy_id": self._SID,
+            "overall_score": 0.71,
+            "component_scores": {"sharpe": 0.8, "drawdown": 0.6},
+            "rating": "B",
+            "evidence_symbols": 3,
+            "evidence_days": 756,
+            "provisional": False,
+            "excluded_symbols": [],
+        }
+        m = AsyncMock(return_value=grade)
+        result = await self._score(m)
+        assert result == grade
+        m.assert_awaited_once_with(user_id="u-1", strategy_id=self._SID)
+        assert "access_scope" not in m.call_args.kwargs
+        assert all(re.fullmatch(r"[a-z_]+", k) for k in result)
+
+    @pytest.mark.asyncio
+    async def test_ac7_excluded_symbols_returned_unchanged(self):
+        grade = {"strategy_id": self._SID, "evidence_symbols": 2, "excluded_symbols": ["SCHD"]}
+        result = await self._score(AsyncMock(return_value=dict(grade)))
+        assert result == grade
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "code_name, details",
+        [
+            ("PERMISSION_DENIED", "strategy not found or not owned"),  # AC-2
+            ("NOT_FOUND", "no eligible evidence — run a backtest"),  # AC-3
+            ("UNAVAILABLE", "fundamentals availability unknown — grade unchanged"),  # AC-4
+            (
+                "NOT_FOUND",
+                "no eligible evidence — all evidence symbols excluded "
+                "(fundamentals unavailable: SCHD)",
+            ),  # AC-8
+        ],
+    )
+    async def test_server_detail_surfaces_in_error(self, code_name, details):
+        import grpc  # noqa: PLC0415
+
+        err = _rpc_error(getattr(grpc.StatusCode, code_name), details)
+        with pytest.raises(RuntimeError) as exc_info:
+            await self._score(AsyncMock(side_effect=err))
+        assert details in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_ac9_definition_args_rejected_without_backend_call(self):
+        m = AsyncMock()
+        with patch.object(client, "manage_strategy", AsyncMock()) as manage:
+            with pytest.raises(ValueError, match="accepts only strategy_id") as exc_info:
+                await self._score(m, cooldown_days=45, clear_fields=["exit_rule"])
+        assert "cooldown_days" in str(exc_info.value)
+        assert "clear_fields" in str(exc_info.value)
+        m.assert_not_awaited()
+        manage.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_ac9_empty_clear_fields_still_rejected(self):
+        m = AsyncMock()
+        with pytest.raises(ValueError, match="accepts only strategy_id; got: clear_fields"):
+            await self._score(m, clear_fields=[])
+        m.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_ac9_every_definition_parameter_is_rejected(self):
+        """Signature-driven: a definition argument added later must also be rejected for score."""
+        params = inspect.signature(_tool_fn(_make_server(), "manage_strategy")).parameters
+        names = [n for n in params if n not in {"ctx", "operation", "strategy_id"}]
+        assert len(names) >= 11
+        for name in names:
+            m = AsyncMock()
+            with patch.object(client, "manage_strategy", AsyncMock()) as manage:
+                with pytest.raises(ValueError, match=rf"accepts only strategy_id; got: {name}$"):
+                    await self._score(m, **{name: []})
+            m.assert_not_awaited()
+            manage.assert_not_awaited()
+
+    def test_ac5_description_discloses_side_effects(self):
+        description = _make_server()._tool_manager.get_tool("manage_strategy").description or ""
+        normalized = " ".join(description.split())
+        assert "analysis.strategy.scored" in normalized
+        assert "persists" in normalized
+        assert re.search(r"range\b[^.]*\bignored", normalized, re.IGNORECASE)
+        assert re.search(r"operation: [^.]*'score'", normalized)
 
 
 class TestManageFormulaTool:

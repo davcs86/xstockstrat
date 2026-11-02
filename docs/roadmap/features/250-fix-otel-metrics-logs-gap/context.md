@@ -444,3 +444,10 @@ Accountability:
   specs ship `OTEL_ENABLED: "false"` (dev is `"true"`; env-config wording, outside FR-4); no ledger entries were added.
 - Unaddressed review warnings: Step 7 touches 6 files (not split, operator call); guard heuristics are vocabulary-bound (C-18).
 - Deviations this session: Deviation 1 (session-branch layout), 2 (lint tooling via uvx wheels), 3 (Step 9 stamp phrase).
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

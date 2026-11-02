@@ -51,6 +51,7 @@ Feature: xstockstrat-agent - backend gRPC calls are deadline-bounded
       | ScreenSymbols       | 45.5   |
       | RunFundamentalsScan | 45.5   |
       | TriggerBackfill     | 45.5   |
+      | ScoreStrategy       | 45.5   |
 
   @AC-6 @regression @FR-3 @feature-273
   Scenario: A tool whose backends all stall still answers before the MCP client gives up

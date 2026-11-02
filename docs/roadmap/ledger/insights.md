@@ -3758,3 +3758,15 @@ reusing.
   homelab-edge `inventories/prod/group_vars/all/main.yml:118-133`, `roles/stack/templates/gatus-config.yaml.j2:77,95`.
 - **Rule it implies**: For cross-repo infra features, the other repo's provisioning code outranks an earlier verbal
   value; re-read it at the last design gate and record which commit the design was grounded in.
+
+### 2026-10-31 — signal-watchlist-expiry-pruning — design
+- **Pattern**: When an operator tool decides a destructive action from another service's data (here: portfolio entries
+  vs `ingest.newsletter_signals`), recompute the decision from that data **inside each write statement**, not from a
+  precomputed plan — a check-then-act across two services' commits has no shared lock, so a signal ingested between the
+  report and the write otherwise gets its entry removed. Pair it with "the tool only marks; the owning service's one
+  existing deleter removes", which also avoids a second deleter, lock-order inversions, and giving a CLI the service's
+  mTLS/ledger identity.
+- **Evidence**: `docs/roadmap/features/281-signal-watchlist-expiry-pruning/design.md` §5 (APPLY recompute, mark-then-prune);
+  round-3/4 adversary findings recorded in its `context.md`.
+- **Rule it implies**: re-check foreign-schema state in the write statement; one deleter per resource; a destructive
+  operator path takes an expected-count bound and lists the exact rows for the reviewer.

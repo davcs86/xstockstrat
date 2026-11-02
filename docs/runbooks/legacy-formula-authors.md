@@ -10,6 +10,26 @@ row that still stores a legacy username is invisible to the user who owns it (fe
 connection. It has two modes: REPORT (the default, which only runs SELECTs) and APPLY (which needs a
 digest-matched, fully-confirmed plan).
 
+**Workflow wrapper**: `python -m app.maintenance.legacy_authors_ops` runs §4–§6 as `report` →
+`confirm` → `apply` (same guards; it adds no authority of its own). It needs only asyncpg + the
+stdlib, so it also runs in the indicators image: from the component's DO console in `/app`
+(`DATABASE_URL` and `DB_PGBOUNCER` are already set there), or locally with
+`cd services/xstockstrat-indicators && uv run python -m app.maintenance.legacy_authors_ops …`.
+`report` exports `identity.users` itself (or takes `--users <file>` if the DB role cannot read it),
+`confirm` only marks `suggested` rows `confirmed` and prints the digest to record, and `apply` still
+needs that digest passed explicitly. Files default to `/tmp/legacy-authors` (0600). Overrides for
+`unmappable` / `ambiguous` rows (§5) are still a hand edit of `plan.json` before `confirm`.
+
+```bash
+python -m app.maintenance.legacy_authors_ops report
+python -m app.maintenance.legacy_authors_ops confirm      # prints the sha256 for the DBA record
+python -m app.maintenance.legacy_authors_ops apply --confirm-digest <sha256>
+```
+
+**In a DO console the filesystem is lost on the restart that §8 requires.** `apply` therefore prints
+the whole `plan.result.json` (the only undo/audit record): copy it into the DBA change record
+**before** restarting, and copy `plan.json` too.
+
 ---
 
 ## 1. Scope
@@ -38,9 +58,9 @@ It does not prove that anyone authorized the run.**
 - `uv` (`brew install uv`) and a checkout of this repo. Run the CLI from
   `services/xstockstrat-indicators/` after `uv sync`.
 - The DigitalOcean cluster's trusted sources must include your workstation (`doctl` and cluster
-  access as in [`operator-db-access.md`](operator-db-access.md)). **Do not use a DO-console
-  session.** The plan and result files must survive on disk, and a console session does not keep
-  them.
+  access as in [`operator-db-access.md`](operator-db-access.md)). **A DO-console session does not keep
+  files.** Use it only through the `legacy_authors_ops` wrapper above, which echoes the result to
+  stdout; otherwise the plan and result files are lost.
 - **`DATABASE_URL` is required.** The CLI has no `.env` or localhost fallback. If the variable is
   missing it exits non-zero before connecting.
 - **Use the pooled `:25061` URL with `DB_PGBOUNCER=true`.** Take the direct URI from

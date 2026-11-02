@@ -28,3 +28,14 @@ backtest.
 Skip Phase 1 only when the caller explicitly guarantees the symbols are already covered (e.g. you
 just ran another backtest on the same names this session). When in doubt, a `get_backfill_status`
 check is cheap; a wrong conclusion from missing data is not.
+
+Backfill is also the wrong fix when a symbol was **not evaluated** (feature 275). Discriminate on
+the result before triggering anything:
+
+- **Backfill never** — an `INSUFFICIENT_DATA` run with empty `coverage_gaps` and
+  `NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR` rows. Only a symbol named in
+  `coverage_gaps` is a backfill case.
+- **Rerun later** — a `backtest symbol <SYM> not evaluated: <CODE>` warning whose code is
+  `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` (transient upstream failure).
+- **Report** — the same warning with `PERMISSION_DENIED`, `NOT_FOUND` or a Python exception name
+  (e.g. `ValueError`); a rerun or a backfill will not change it.

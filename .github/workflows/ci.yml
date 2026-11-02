@@ -106,6 +106,17 @@ jobs:
               - '.do/**'
               - 'scripts/check-otel-produced-signals*.sh'
               - 'scripts/testdata/otel-produced-signals/**'
+            config-wiring:
+              - 'services/xstockstrat-config/migrations/**'
+              - 'services/**/*.go'
+              - 'services/*/app/**/*.py'
+              - 'services/*/src/**/*.ts'
+              - 'services/*/src/**/*.tsx'
+              - 'scripts/check-config-wiring.mjs'
+              - 'scripts/config-wiring-py-reads.py'
+              - 'scripts/config-wiring.json'
+              - 'scripts/config-wiring.test.mjs'
+              - 'scripts/config-wiring-fixtures/**'
 
       - name: Print matched filters
         run: |
@@ -896,6 +907,26 @@ jobs:
       - name: Build and render staging/production, override, mTLS and broken-render cases
         run: bash scripts/homelab-render.test.sh
 
+  config-wiring:
+    name: Config key wiring (whole-tree)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'config-wiring') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Config-wiring checker tests
+        run: node --test scripts/config-wiring.test.mjs
+
+      - name: Seeded keys and reads join against the committed baseline
+        run: node scripts/check-config-wiring.mjs --final
+
   ci-gate:
     name: CI Gate
     if: always()
@@ -919,6 +950,7 @@ jobs:
       - otel-signals
       - ledger-guard
       - secret-scan
+      - config-wiring
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate upstream results
@@ -942,6 +974,7 @@ jobs:
           echo "otel-signals:    ${{ needs.otel-signals.result }}"
           echo "ledger-guard:    ${{ needs.ledger-guard.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
+          echo "config-wiring:   ${{ needs.config-wiring.result }}"
 
       - name: Fail on upstream failure or cancellation
         if: >-

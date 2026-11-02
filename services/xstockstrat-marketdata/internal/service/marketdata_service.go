@@ -23,6 +23,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/mtls"
@@ -154,8 +155,8 @@ type fundamentalsConfig interface {
 type fundamentalsRepo interface {
 	GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error)
 	UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error
-	CountFundamentalsFetchedToday(ctx context.Context) (int, error)
-	CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error)
+	CountFundamentalsFetchedToday(ctx context.Context, src string) (int, error)
+	CountFundamentalsFetchedSince(ctx context.Context, src string, since time.Time) (int, error)
 }
 
 // histFundamentalsRepo is the persistence surface for the point-in-time fundamentals store
@@ -1708,7 +1709,8 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		if found && time.Since(fetchedAt) <= ttl {
+		// An edgar-axis row is never a fresh vendor hit; at quota it may still be served stale below.
+		if found && time.Since(fetchedAt) <= ttl && cacheAxis(f.Source) == snapshotSourceVendor {
 			cached[strings.ToUpper(sym)] = s.toProtoFundamentals(f, false)
 			continue
 		}
@@ -1738,14 +1740,15 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 			} else if err != nil {
 				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 			}
+			wctx := context.WithoutCancel(ctx)
 			for _, f := range fetched {
-				if upErr := s.fundRepo.UpsertFundamentals(ctx, f); upErr != nil {
-					slog.WarnContext(ctx, "GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
+				if upErr := s.fundRepo.UpsertFundamentals(wctx, f); upErr != nil {
+					slog.WarnContext(wctx, "GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
 				}
-				s.seedFromProfile(ctx, f.Symbol, f.Sector)
+				s.seedFromProfile(wctx, f.Symbol, f.Sector)
 				cached[strings.ToUpper(f.Symbol)] = s.toProtoFundamentals(f, false)
 			}
-			s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+len(fetched)), cap, windowSeconds)
+			s.maybeAlertQuota(wctx, s.quotaCountAfterFetch(wctx, count+len(fetched)), cap, windowSeconds)
 		}
 	}
 
@@ -1766,7 +1769,7 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if found && time.Since(fetchedAt) <= ttl {
+	if found && time.Since(fetchedAt) <= ttl && cacheAxis(cached.Source) == snapshotSourceVendor {
 		return s.toProtoFundamentals(cached, false), nil
 	}
 
@@ -1794,11 +1797,12 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 	}
-	if upErr := s.fundRepo.UpsertFundamentals(ctx, fresh); upErr != nil {
-		slog.WarnContext(ctx, "GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
+	wctx := context.WithoutCancel(ctx)
+	if upErr := s.fundRepo.UpsertFundamentals(wctx, fresh); upErr != nil {
+		slog.WarnContext(wctx, "GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
 	}
-	s.seedFromProfile(ctx, fresh.Symbol, fresh.Sector)
-	s.maybeAlertQuota(ctx, s.quotaCountAfterFetch(ctx, count+1), cap, windowSeconds)
+	s.seedFromProfile(wctx, fresh.Symbol, fresh.Sector)
+	s.maybeAlertQuota(wctx, s.quotaCountAfterFetch(wctx, count+1), cap, windowSeconds)
 	return s.toProtoFundamentals(fresh, false), nil
 }
 
@@ -1967,7 +1971,7 @@ func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap i
 		windowSeconds = s.fundCfg.GetInt("marketdata.finnhub.rate_window_seconds", 60)
 		cap = int(s.fundCfg.GetInt("marketdata.finnhub.symbols_per_minute", 20))
 		since := time.Now().Add(-time.Duration(windowSeconds) * time.Second)
-		count, err = s.fundRepo.CountFundamentalsFetchedSince(ctx, since)
+		count, err = s.fundRepo.CountFundamentalsFetchedSince(ctx, finnhub.SourceName, since)
 	default: // "fmp" and any unrecognized value fall back to the existing, well-tested daily-cap shape
 		windowSeconds = 86400
 		if s.fmpBudget != nil {
@@ -1975,7 +1979,7 @@ func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap i
 			return count, cap, windowSeconds, nil
 		}
 		cap = int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
-		count, err = s.fundRepo.CountFundamentalsFetchedToday(ctx)
+		count, err = s.fundRepo.CountFundamentalsFetchedToday(ctx, fmp.SourceName)
 	}
 	return count, cap, windowSeconds, err
 }
@@ -1990,7 +1994,7 @@ func (s *MarketDataService) quotaCountAfterFetch(_ context.Context, estimate int
 	return estimate
 }
 
-// atQuotaAlertThreshold is the single home of the 80%-of-cap threshold; cap <= 0 is never "at threshold".
+// atQuotaAlertThreshold is the single home of the 80%-of-cap threshold; cap <= 0 is a zero budget (FMP disabled), never "at threshold" — no 80% alert.
 func atQuotaAlertThreshold(count, cap int) bool { return cap > 0 && count >= (cap*8)/10 }
 
 // maybeAlertQuota emits one WARNING per active window once the count crosses 80% of cap. The dedup

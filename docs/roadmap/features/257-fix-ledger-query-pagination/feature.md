@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
 
 ---
 
@@ -27,6 +29,7 @@
 | 2026-10-30 | `in-progress` | /sdd-execute | Step 9 done (docs): ledger CLAUDE.md invariant 4 (may gap) + subscribe-first batched-replay order + `QueryEvents` token line, ledger constitution `LEDGER-9` (LEDGER-5 amended, line hints re-stamped), portfolio CLAUDE.md `ErrLedgerUnavailable` -> `UNAVAILABLE`; teardown reconciled by hand |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done; C-16 promotion applied; integration PR to `main-dev` opened. Step 8 is verified by CI job `Ledger DB test (TimescaleDB)` going green |
 
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
 ---
 
 ## Reviewers

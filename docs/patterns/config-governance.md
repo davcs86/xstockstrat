@@ -59,6 +59,37 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 2. Declare it in the consuming service's `CLAUDE.md` under "Config Keys Consumed".
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
 4. Add a row to the "Per-Feature Registered Keys" log below.
+5. Prove the key is read under its stored key — see "Wiring check" below.
+
+## Wiring check (config key must be read under its stored key)
+
+The stored key (the `key` column a config migration inserts, which a reader sees as
+`values[row.key]`) must equal the reader's string **verbatim** — the check never normalizes bare
+vs dotted forms. `node scripts/check-config-wiring.mjs` (feature 278) joins the migration-derived
+stored set against the Go/Python/TypeScript reader literals and prints `file:key:kind[:env]` lines:
+
+| Kind | Meaning |
+|---|---|
+| `form-mismatch` | Seeded in one form (e.g. bare `foo.bar`) but read in another (`<ns>.foo.bar`) — the read silently falls back to its default |
+| `seeded-unread` | Seeded, but no reader reads it under any form (dead seed) |
+| `read-unseeded` | Read, but never seeded; `:env` lists the environments that lack it when it is seeded in only some |
+| `dynamic-read` | The reader builds the key at runtime, so it cannot be joined; enumerate its keys in `registry.dynamic` |
+
+A config migration statement the parser cannot model also fails closed as `unmodelled-rewrite`
+(allow-listed only by file + statement hash in `registry.rewriteAllow`).
+
+- **Step time vs `--final`.** `/sdd-execute` runs the step-time mode after each step's Verification
+  (`--declared-from <product-spec.md>`, `--declared-migration`, or `--keys`): only findings for the
+  feature's declared keys block, and a missing leg (seed or reader not written yet) is `PENDING`.
+  `--final` runs once before `code-completed` / the integration PR and in the CI `config-wiring`
+  job, and fails on every finding not in the baseline.
+- **Baseline.** Known findings live in `findings` of `scripts/config-wiring.json`. Every entry needs
+  an `owner`, and entries may only **shrink**: an entry the check no longer produces must be removed
+  (`STALE`), and a new finding cannot be baselined. `policy.envReadUnseeded` (`reported`) keeps
+  env-scoped `read-unseeded` non-blocking until a production environment exists.
+- **Runtime-created keys** (`SetConfig create_key=true`, config-ui) are invisible to the migration
+  set and show as `read-unseeded` by design; the remedy is to seed them in a config migration.
+- **Secrets** (`is_secret=true`) are excluded from the join, and the check never prints a value.
 
 ## Registering a new vendor credential (an encrypted secret config row)
 
@@ -213,7 +244,8 @@ Adds **3** non-secret keys, consumed-with-default via the `WatchConfig` typed ge
 migration). Defaults declared in `services/xstockstrat-marketdata/CLAUDE.md` § Config Keys Consumed.
 The FMP gateway has **one** throttle authority: `rate_limit_rps` (burst = 1) shapes per-second load and
 the pre-existing `marketdata.fmp.daily_request_cap` is the single shared UTC-day budget across every FMP
-path (fundamentals snapshot, ratio enrichment, classification refresh) — no second cap.
+path (fundamentals snapshot, ratio enrichment, classification refresh) — no second cap; a cap `<= 0` is a
+zero budget that disables every FMP path.
 
 - `marketdata.fmp.rate_limit_rps` (int, `5`) — FMP token-bucket ceiling (5 rps = FMP Starter's
   300/min); `0` = unthrottled. Read live per call.
@@ -799,7 +831,7 @@ Establishes the `marketdata.<source>.enabled` convention (a source is off until 
 | `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source; off by default |
 | ~~`secret.marketdata.fmp.api_key`~~ | — | — | **Removed by feature 076** (migration `009`). The FMP credential is now the `FMP_API_KEY` secret env var, matching Alpaca/JWT/MCP-agent. Credentials do not belong in config: values are plaintext and stream to every `WatchConfig` subscriber. No `secret://` resolver was ever built |
 | `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before re-fetch |
-| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget) |
+| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget); <= 0 = zero budget (FMP disabled), large = effectively uncapped |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |
 | `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch (`core`, `extended`) |
 

@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-30
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-10-30 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode, session branch `ccr-4f43fb65-lagupv`) |
 | 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done (sequential); integration PR #1377 |
 
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
 ---
 
 ## Reviewers

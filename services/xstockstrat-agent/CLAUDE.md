@@ -58,7 +58,7 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `emit_alert` | Emit an alert via xstockstrat-notify |
 | `run_backtest` | Trigger a backtest via xstockstrat-analysis (optional `start`/`end` evaluation window — feature 071; optional `sizing_mode="portfolio"` for a shared-capital portfolio model — feature 150; optional `fill_model="next_bar_open"` for bias-free next-bar-open fills — feature 151); returns a compact summary block (incl. `sizing_mode`, `fill_model`, + a `capital_skips` count) plus the full result as an attached `application/json` resource (feature 072) |
 | `screen_symbols` | Scan a symbol universe via xstockstrat-analysis and return ranked candidates (read-only) |
-| `manage_strategy` | Register/update/deactivate stored strategies (`update` is a **partial merge** — feature 070) |
+| `manage_strategy` | Register/update/deactivate/reactivate stored strategies (`update` is a **partial merge** — feature 070); `operation='score'` refreshes the headline grade (owner-scoped, feature 283) |
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
 | `manage_formula` | Register/update/delete custom formulas; `fundamental_inputs` (FundamentalMetric enum NAME-strings) declares a fundamentals-only formula (feature 205) |
 | `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
@@ -129,6 +129,13 @@ and a non-owner is rejected `PERMISSION_DENIED`. Both tools (and the read tools 
 `get_strategy`, `list_strategies`) forward the caller's own **`x-user-id`** — resolved via
 `_caller_user_id(ctx, tool)` — so analysis resolves ownership from the header (never the request
 body). They still also forward `x-access-scope` for defence-in-depth, but it is no longer the gate.
+
+**`manage_strategy operation='score'` depends on a gRPC trailer contract (feature 283).** It reads
+trailer `x-score-excluded-symbols` (a compact JSON array of strings) from analysis's `ScoreStrategy`
+via the call-object form (`call = stub.ScoreStrategy(...)`, then `await call.trailing_metadata()`);
+a missing or unparseable trailer yields `excluded_symbols: null` plus a WARN. Both services' suites
+assert the key literal (`tests/test_score_trailer_loopback.py`). A second trailer contract would
+justify a `PLAT-*` row in `docs/context-constitution.md`; one does not.
 
 **The watchlist tools are ownership-gated too (feature 148).** `list_watchlists`, `get_watchlist`,
 `manage_watchlist`, and `manage_watchlist_symbols` forward **only** the caller's own `x-user-id` (via

@@ -156,7 +156,7 @@ All values are sourced from `xstockstrat-config` namespace `indicators`:
 
 | Constraint | Config Key | Default |
 |---|---|---|
-| Execution timeout | `indicators.sandbox.timeout_ms` | `5000` ms |
+| Execution timeout (formula budget; a fixed 5000 ms startup grace is added to the wall clock) | `indicators.sandbox.timeout_ms` | `5000` ms |
 | Memory headroom (above the interpreter/library baseline) | `indicators.sandbox.memory_bytes` | `128 MiB` |
 | Allowed imports | `indicators.sandbox.allowed_imports` | `numpy,pandas,math,statistics` |
 | Max concurrent evals | `indicators.sandbox.max_concurrent` | `4` |

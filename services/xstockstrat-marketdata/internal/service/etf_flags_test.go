@@ -4,11 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/metadata"
+
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/fmp"
+	"github.com/xstockstrat/marketdata/internal/middleware"
 )
 
 // fakeEtfSource counts FetchIsEtf calls and answers from a per-symbol table.
@@ -175,6 +181,36 @@ func TestGetEtfFlags_TTL(t *testing.T) {
 	}
 }
 
+// @AC-2: overlaps HeadroomGate_AC14 and TTL, but only this test runs closed → reopened on one symbol.
+// The 210/5 boot-seed half of AC-2 is feature 255's @AC-3.
+func TestEtfFlagFiller_LabelledAfterGateReopens_AC2(t *testing.T) {
+	src := &fakeEtfSource{resp: map[string]*bool{"SCHD": boolp(true)}}
+	svc, _ := newEtfSvc(src, fakeBudget{used: 200, cap: 250}, true)
+
+	closed := etfFlags(t, svc, "SCHD")
+	svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+	if closed[0].IsEtf != nil || src.total() != 0 {
+		t.Fatalf("closed gate: flag = %+v, source calls = %d; want unset and 0", closed[0], src.total())
+	}
+
+	svc.fmpBudget = fakeBudget{used: 5, cap: 250}
+	etfFlags(t, svc, "SCHD")
+	for len(svc.etf.queue) > 0 {
+		svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+	}
+	if src.total() != 1 {
+		t.Fatalf("reopened gate: source calls = %d, want 1 (skipped symbol was not re-enqueued)", src.total())
+	}
+
+	flags := etfFlags(t, svc, "SCHD")
+	if flags[0].IsEtf == nil || !flags[0].GetIsEtf() {
+		t.Fatalf("flag = %+v, want SCHD labelled is_etf=true after the gate reopened", flags[0])
+	}
+	if n := len(svc.etf.queue); n != 0 {
+		t.Fatalf("queue len = %d, want 0 (a labelled symbol is not re-queued)", n)
+	}
+}
+
 // (e) An empty profile is negative-cached: unset, and not re-fetched within the TTL.
 func TestGetEtfFlags_EmptyProfileNegativeCached(t *testing.T) {
 	src := &fakeEtfSource{resp: map[string]*bool{}}
@@ -223,7 +259,7 @@ func TestEtfFlagFiller_EvictsOldestAtBound(t *testing.T) {
 	delete(svc.etf.entries, "S0")
 	svc.etf.mu.Unlock()
 
-	svc.fillEtfFlag(context.Background(), "NEW")
+	svc.fillEtfFlag(context.Background(), etfFillItem{sym: "NEW"})
 
 	svc.etf.mu.Lock()
 	defer svc.etf.mu.Unlock()
@@ -264,5 +300,307 @@ func TestEtfFlags_ConcurrentReadersAndFiller(t *testing.T) {
 	case <-stopped:
 	case <-time.After(2 * time.Second):
 		t.Fatal("filler did not stop on ctx.Done()")
+	}
+}
+
+// ── feature 230: fill visibility (Info records, rate-limited, trace-carrying) ────
+
+func etfInfo(t *testing.T) *recordingLogHandler {
+	t.Helper()
+	return installLogRecorder(t, slog.LevelInfo)
+}
+
+// noSecret fails when any record's msg or attribute value carries the API key (a *url.Error leaks apikey=).
+func noSecret(t *testing.T, rec *recordingLogHandler) {
+	t.Helper()
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	for _, r := range rec.recs {
+		vals := []string{r.msg}
+		for _, v := range r.attrs {
+			vals = append(vals, v)
+		}
+		for _, v := range vals {
+			if strings.Contains(v, "apikey=") || strings.Contains(v, "SECRET") {
+				t.Fatalf("record leaks secret material: %q %v", r.msg, r.attrs)
+			}
+		}
+	}
+}
+
+func etfDrain(svc *MarketDataService) {
+	for len(svc.etf.queue) > 0 {
+		svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+	}
+}
+
+// @AC-3: a closed gate is skipped at Info with its reason; used/cap only when the budget was read.
+func TestEtfFlagFiller_SkipReasonLogged_AC3(t *testing.T) {
+	cases := []struct {
+		reason    string
+		budget    fmpBudget
+		fmpOn     bool
+		used, cap string
+	}{
+		{"fmp_disabled", fakeBudget{used: 0, cap: 100}, false, "", ""},
+		{"no_cap", fakeBudget{used: 0, cap: 0}, true, "0", "0"},
+		{"budget", fakeBudget{used: 80, cap: 100}, true, "80", "100"},
+		{"not_wired", nil, true, "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.reason, func(t *testing.T) {
+			rec := etfInfo(t)
+			src := &fakeEtfSource{resp: map[string]*bool{"SCHD": boolp(true)}}
+			svc, _ := newEtfSvc(src, tc.budget, tc.fmpOn)
+			etfFlags(t, svc, "SCHD")
+			svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+
+			if n := rec.count("etf flag fill skipped"); n != 1 {
+				t.Fatalf("@AC-3: skipped records = %d, want 1 (%v)", n, rec.recs)
+			}
+			r := rec.find("etf flag fill skipped")
+			if r.attrs["symbol"] != "SCHD" || r.attrs["reason"] != tc.reason {
+				t.Fatalf("@AC-3: attrs = %v, want symbol=SCHD reason=%s", r.attrs, tc.reason)
+			}
+			used, hasUsed := r.attrs["used"]
+			capV, hasCap := r.attrs["cap"]
+			if wantSnap := tc.used != ""; hasUsed != wantSnap || hasCap != wantSnap || used != tc.used || capV != tc.cap {
+				t.Fatalf("@AC-3: used/cap = %q/%q (present %v/%v), want %q/%q", used, capV, hasUsed, hasCap, tc.used, tc.cap)
+			}
+			if src.total() != 0 {
+				t.Fatalf("@AC-3: source calls = %d, want 0", src.total())
+			}
+			svc.etf.mu.Lock()
+			_, pending := svc.etf.pending["SCHD"]
+			svc.etf.mu.Unlock()
+			if pending {
+				t.Fatal("@AC-3: pending not cleared")
+			}
+		})
+	}
+}
+
+// @AC-5: a failed fill logs only the error class, never the error text, and is not cached.
+func TestEtfFlagFiller_FailLogsClassOnly_AC5(t *testing.T) {
+	cases := []struct {
+		class string
+		err   error
+	}{
+		{"ctx", fmt.Errorf("fmp: /stable/profile?apikey=SECRET: %w", context.DeadlineExceeded)},
+		{"cap", fmt.Errorf("fmp: /stable/profile?apikey=SECRET: %w", fmp.ErrFMPDailyCapExceeded)},
+		{"other", errors.New("fmp: /stable/profile?apikey=SECRET build request")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.class, func(t *testing.T) {
+			rec := etfInfo(t)
+			src := &fakeEtfSource{err: tc.err}
+			svc, _ := newEtfSvc(src, fakeBudget{cap: 100}, true)
+			etfFlags(t, svc, "SCHD")
+			svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+
+			if n := rec.count("etf flag fill failed"); n != 1 {
+				t.Fatalf("@AC-5: failed records = %d, want 1 (%v)", n, rec.recs)
+			}
+			r := rec.find("etf flag fill failed")
+			if r.attrs["symbol"] != "SCHD" || r.attrs["class"] != tc.class || r.attrs["class"] == "" {
+				t.Fatalf("@AC-5: attrs = %v, want symbol=SCHD class=%s", r.attrs, tc.class)
+			}
+			if _, ok := r.attrs["error"]; ok {
+				t.Fatalf("@AC-5: error attribute present: %v", r.attrs)
+			}
+			noSecret(t, rec)
+			svc.etf.mu.Lock()
+			_, cached := svc.etf.entries["SCHD"]
+			svc.etf.mu.Unlock()
+			if cached {
+				t.Fatal("@AC-5: failed fill was cached")
+			}
+			etfFlags(t, svc, "SCHD")
+			if len(svc.etf.queue) != 1 || src.total() != 1 {
+				t.Fatalf("@AC-5: not re-queued (len %d) or extra fetch (calls %d)", len(svc.etf.queue), src.total())
+			}
+		})
+	}
+}
+
+// @AC-4: an empty profile logs an unlabelled record (symbol only) and stays negative-cached.
+func TestEtfFlagFiller_UnlabelledLogged_AC4(t *testing.T) {
+	rec := etfInfo(t)
+	src := &fakeEtfSource{resp: map[string]*bool{}}
+	svc, clk := newEtfSvc(src, fakeBudget{cap: 100}, true)
+	etfFlags(t, svc, "NOPROF")
+	svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+
+	if n := rec.count("etf flag fill unlabelled"); n != 1 {
+		t.Fatalf("@AC-4: unlabelled records = %d, want 1 (%v)", n, rec.recs)
+	}
+	r := rec.find("etf flag fill unlabelled")
+	if len(r.attrs) != 1 || r.attrs["symbol"] != "NOPROF" {
+		t.Fatalf("@AC-4: attrs = %v, want exactly {symbol: NOPROF}", r.attrs)
+	}
+
+	// The window checks run before the 24h advance, which would itself close the window.
+	etfFlags(t, svc, "NOPROF2")
+	etfDrain(svc)
+	if n := rec.count("etf flag fill unlabelled"); n != 1 {
+		t.Fatalf("@AC-4: unlabelled records inside the window = %d, want 1", n)
+	}
+	clk.t = clk.t.Add(etfFlagLogEvery)
+	etfFlags(t, svc, "NOPROF3")
+	etfDrain(svc)
+	if n := rec.count("etf flag fill unlabelled"); n != 2 {
+		t.Fatalf("@AC-4: unlabelled records after the window = %d, want 2", n)
+	}
+
+	clk.t = clk.t.Add(24 * time.Hour)
+	flags := etfFlags(t, svc, "NOPROF")
+	if flags[0].IsEtf != nil || len(svc.etf.queue) != 0 || src.total() != 3 {
+		t.Fatalf("@AC-4: negative cache lost: flag %v, queue %d, calls %d", flags[0].IsEtf, len(svc.etf.queue), src.total())
+	}
+}
+
+// @AC-6: each log slot (skip reason, fail class, unlabelled) is rate-limited independently.
+func TestEtfFlagFiller_RateLimitSlots_AC6(t *testing.T) {
+	closed := fakeBudget{used: 80, cap: 100}
+	open := fakeBudget{used: 0, cap: 100}
+	fill := func(t *testing.T, svc *MarketDataService, sym string) {
+		t.Helper()
+		etfFlags(t, svc, sym)
+		etfDrain(svc)
+	}
+	setFMP := func(svc *MarketDataService, on bool) {
+		svc.fundCfg = &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": on}}
+	}
+	setErr := func(src *fakeEtfSource, err error) {
+		src.mu.Lock()
+		src.err = err
+		src.mu.Unlock()
+	}
+
+	t.Run("5 budget skips log once", func(t *testing.T) {
+		rec := etfInfo(t)
+		src := &fakeEtfSource{}
+		svc, _ := newEtfSvc(src, closed, true)
+		for i := 0; i < 5; i++ {
+			fill(t, svc, fmt.Sprintf("B%d", i))
+		}
+		if n := rec.count("etf flag fill skipped"); n != 1 || src.total() != 0 {
+			t.Fatalf("@AC-6: skipped = %d (calls %d), want 1 (0)", n, src.total())
+		}
+	})
+
+	t.Run("budget logs again after the window", func(t *testing.T) {
+		rec := etfInfo(t)
+		src := &fakeEtfSource{}
+		svc, clk := newEtfSvc(src, closed, true)
+		for i := 0; i < 5; i++ {
+			fill(t, svc, fmt.Sprintf("B%d", i))
+		}
+		clk.t = clk.t.Add(etfFlagLogEvery)
+		fill(t, svc, "B5")
+		if n := rec.count("etf flag fill skipped"); n != 2 || src.total() != 0 {
+			t.Fatalf("@AC-6: skipped = %d (calls %d), want 2 (0)", n, src.total())
+		}
+	})
+
+	t.Run("a config reason logs on change only", func(t *testing.T) {
+		rec := etfInfo(t)
+		src := &fakeEtfSource{}
+		svc, clk := newEtfSvc(src, open, false)
+		for i := 0; i < 5; i++ {
+			fill(t, svc, fmt.Sprintf("D%d", i))
+			clk.t = clk.t.Add(time.Minute)
+		}
+		if n := rec.count("etf flag fill skipped"); n != 1 || src.total() != 0 {
+			t.Fatalf("@AC-6: skipped = %d (calls %d), want 1 (0)", n, src.total())
+		}
+	})
+
+	t.Run("each reason change logs", func(t *testing.T) {
+		rec := etfInfo(t)
+		src := &fakeEtfSource{}
+		svc, _ := newEtfSvc(src, closed, false)
+		fill(t, svc, "R1")
+		setFMP(svc, true)
+		fill(t, svc, "R2")
+		setFMP(svc, false)
+		fill(t, svc, "R3")
+		if n := rec.count("etf flag fill skipped"); n != 3 || src.total() != 0 {
+			t.Fatalf("@AC-6: skipped = %d (calls %d), want 3 (0)", n, src.total())
+		}
+	})
+
+	t.Run("an open gate clears the last skip reason", func(t *testing.T) {
+		rec := etfInfo(t)
+		src := &fakeEtfSource{resp: map[string]*bool{"OK": boolp(true)}}
+		svc, _ := newEtfSvc(src, closed, true)
+		fill(t, svc, "G1")
+		svc.fmpBudget = open
+		fill(t, svc, "OK")
+		svc.fmpBudget = closed
+		fill(t, svc, "G2")
+		if n := rec.count("etf flag fill skipped"); n != 2 || src.total() != 1 {
+			t.Fatalf("@AC-6: skipped = %d (calls %d), want 2 (1)", n, src.total())
+		}
+	})
+
+	t.Run("fail slots are per class", func(t *testing.T) {
+		rec := etfInfo(t)
+		src := &fakeEtfSource{err: fmt.Errorf("fmp: /stable/profile: %w", context.DeadlineExceeded)}
+		svc, _ := newEtfSvc(src, open, true)
+		fill(t, svc, "F1")
+		fill(t, svc, "F2")
+		setErr(src, fmt.Errorf("fmp: /stable/profile: %w", fmp.ErrFMPDailyCapExceeded))
+		fill(t, svc, "F3")
+		if n := rec.count("etf flag fill failed"); n != 2 || src.total() != 3 {
+			t.Fatalf("@AC-6: failed = %d (calls %d), want 2 (3)", n, src.total())
+		}
+	})
+
+	t.Run("slots are independent", func(t *testing.T) {
+		rec := etfInfo(t)
+		src := &fakeEtfSource{resp: map[string]*bool{}}
+		svc, _ := newEtfSvc(src, closed, true)
+		fill(t, svc, "I1")
+		svc.fmpBudget = open
+		setErr(src, fmt.Errorf("fmp: /stable/profile: %w", context.DeadlineExceeded))
+		fill(t, svc, "I2")
+		setErr(src, nil)
+		fill(t, svc, "I3")
+		skipped, failed, unlabelled := rec.count("etf flag fill skipped"), rec.count("etf flag fill failed"), rec.count("etf flag fill unlabelled")
+		if skipped != 1 || failed != 1 || unlabelled != 1 || src.total() != 2 {
+			t.Fatalf("@AC-6: skipped/failed/unlabelled = %d/%d/%d (calls %d), want 1/1/1 (2)", skipped, failed, unlabelled, src.total())
+		}
+	})
+}
+
+// @AC-7: the fill record carries the enqueuing request's trace id, and omits the key when there is none.
+func TestEtfFlagFiller_CarriesTraceID_AC7(t *testing.T) {
+	rec := etfInfo(t)
+	svc, _ := newEtfSvc(&fakeEtfSource{}, fakeBudget{used: 80, cap: 100}, true)
+	incoming := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-trace-id", "t-1"))
+	var serverCtx context.Context
+	_, _ = middleware.UnaryServerInterceptor(incoming, nil, nil, func(c context.Context, _ interface{}) (interface{}, error) {
+		serverCtx = c
+		return nil, nil
+	})
+	if _, err := svc.GetEtfFlags(serverCtx, &marketdatav1.GetEtfFlagsRequest{Symbols: []string{"SCHD"}}); err != nil {
+		t.Fatalf("GetEtfFlags: %v", err)
+	}
+	svc.fillEtfFlag(context.Background(), <-svc.etf.queue)
+	if r := rec.find("etf flag fill skipped"); r == nil || r.attrs["trace_id"] != "t-1" {
+		t.Fatalf("@AC-7: skipped record = %v, want trace_id=t-1", r)
+	}
+
+	rec2 := etfInfo(t)
+	svc2, _ := newEtfSvc(&fakeEtfSource{}, fakeBudget{used: 80, cap: 100}, true)
+	etfFlags(t, svc2, "SCHD")
+	svc2.fillEtfFlag(context.Background(), <-svc2.etf.queue)
+	r2 := rec2.find("etf flag fill skipped")
+	if r2 == nil {
+		t.Fatalf("@AC-7: no skipped record (%v)", rec2.recs)
+	}
+	if _, ok := r2.attrs["trace_id"]; ok {
+		t.Fatalf("@AC-7: trace_id present without a trace: %v", r2.attrs)
 	}
 }

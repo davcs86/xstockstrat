@@ -101,3 +101,6 @@ export const BACKTEST_SEED_SPAN_RESULT = {
   diagnostics: [],
   warnings: [BACKTEST_SEED_SPAN_WARNING],
 };
+
+// Feature 275 — mirrors analysis EVAL_FAILED_WARNING filled with symbol AAPL and code UNAVAILABLE.
+export const BACKTEST_EVAL_FAILED_WARNING = 'backtest symbol AAPL not evaluated: UNAVAILABLE';

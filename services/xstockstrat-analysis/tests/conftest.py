@@ -18,6 +18,7 @@ import types
 from unittest.mock import AsyncMock, MagicMock
 
 import asyncpg
+import grpc
 import pytest
 
 
@@ -134,6 +135,11 @@ def ctx_with(headers):
     ctx.invocation_metadata = MagicMock(return_value=list(headers))
     ctx.abort = AsyncMock(side_effect=Exception("aborted"))
     return ctx
+
+
+def aio_rpc_error(code, details=""):
+    """A ``grpc.aio.AioRpcError`` with ``code`` and ``details`` and empty metadata."""
+    return grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), details)
 
 
 OWNER_HEADERS = [("x-user-id", "u-1"), ("x-access-scope", "1"), ("x-trace-id", "t-1")]

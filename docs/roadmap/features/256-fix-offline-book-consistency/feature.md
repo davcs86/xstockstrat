@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-30
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
 
 ---
 
@@ -34,6 +36,7 @@
 | 2026-10-30 | `in-progress` (step 16 done) | /sdd-execute sequential (sdd-batch-execute) | Step 16: portfolio/trading service docs and PORTFOLIO-3/-11 updated for the retry/park, degrade and confirm contracts. |
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 16 steps done; C-16 acceptance scenarios promoted to portfolio and trading durable suites. |
 
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
 ---
 
 ## Reviewers

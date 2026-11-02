@@ -94,6 +94,8 @@ no per-step STOP):
   start a DB — SKILL.md Phase 3 / HARD CONSTRAINTS) and the verification fallbacks in
   `## Sequential-mode verification fallbacks` below. A verification failure that would require a spec
   deviation → a **blocker** (§5.7).
+- Phase 3's **config-key wiring gate** (`node scripts/check-config-wiring.mjs`, step-time mode)
+  applies unchanged, per step.
 - **Commit the step directly on `<dev-branch>`** (this replaces STEP COMMIT + PR):
   ```bash
   git add <the step's **Files**> $FEATURE_DIR/implementation-spec.md $FEATURE_DIR/feature.md $FEATURE_DIR/context.md
@@ -145,6 +147,8 @@ warnings surface (the failure this mode is being fixed to prevent).
 
 ### 5.6 Per-feature integration PR
 After all of this feature's steps are done (the feature-end checkpoint has passed):
+- On the feature's last step, run `node scripts/check-config-wiring.mjs --final` before creating the
+  integration PR; a non-zero exit blocks it. Record its output in `context.md`.
 - Run the merge-order gate (ALL-DONE PATH step 1), then **promote acceptance scenarios into the
   durable business-rule suites** (ALL-DONE PATH step 2.5, Constitution C-16 — confirm with the
   operator, stage the suite files into this feature's integration PR), then

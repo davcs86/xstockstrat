@@ -1137,3 +1137,10 @@ Staging deployment `b306cd82` (main-dev `484896de`, ACTIVE 11:08Z) carries 256.
   resume sequences after the rollout; no ERROR lines in trading, portfolio or ledger.
 - **Not run:** the `GetOfflineStates`-failing path (D-48 marker). Staging offers no way to make the offline-state read fail,
   so it remains covered by Step 12's tests only.
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

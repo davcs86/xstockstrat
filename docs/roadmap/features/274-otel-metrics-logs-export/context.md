@@ -470,3 +470,10 @@ Constitution rows: PLAT-3 now names the /v1/metrics and /v1/logs exporters with 
 PR-B teardown (manual: the /context-forge:context-constitution refresh command is not available in this session; `ls .claude/skills | grep -i context-forge` finds nothing). Re-read against the code as changed: docs/patterns/observability.md (signals, labels verified on Grafana for mcp_tool and http_server; module table against the telemetry files), docs/setup/grafana-cloud.md (header, signal list, dashboards and alert sections), docs/context-constitution.md PLAT-3 cites (otel.go:37-45, analysis telemetry.py:181-183, ledger telemetry.ts:168-173, ui telemetry.ts:52-59; docker-compose OTLP cites still resolve), docs/context-constitution-findings.md row, packages/otel/CLAUDE.md, packages/otel/docs/* (OTEL-1/2 and two findings rows), alerts/README.md, dashboards/README.md. Drift found and fixed: the docs/setup/CLAUDE.md index row for grafana-cloud.md and the packages/otel constitution "where" row still said Tempo dashboard / alert-rule cleanup. No "Metrics and logs are not exported" remains outside roadmap/reports. Final run: guard exit 0, guard tests 57/57, shellcheck + shfmt clean. merge-order.md unchanged (PR order did not change).
 
 Step 48 (G1 operator gate) closed: handoff and q1-q7 are recorded above (PR #1382); the one contradiction (UI exported as xstockstrat-ui, environment development) was resolved by #1380 and re-verified. Feature branch re-sync not needed: this work continues on the session branch restarted from main-dev after each merge.
+
+## Session 2026-10-31 (CI: feature status automation)
+
+- Promotion PR #1387 merged to main
+- Feature promoted and committed: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-10-31

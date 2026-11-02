@@ -3,6 +3,8 @@
 **Development Branch**: `feature/otel-metrics-logs-export`
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-21
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-10-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1-2 done (sequential, session branch `ccr-4f43fb65-lagupv`) |
 | 2026-10-31 | `in-progress` → `code-completed` | /sdd-execute | All 59 steps done: PR-A #1379 and follow-ups #1380/#1382 merged, G1 dev proof recorded, PR-B (steps 49-59) open; prod stays OTEL_ENABLED="false" |
 
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
 ---
 
 ## Artifacts
