@@ -181,3 +181,11 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - **W5 (Step 12):** `TestSignalPrune_LedgerErrorIsBestEffort` must force a non-`Unavailable` error (e.g. `codes.Internal`), because `emitEvent` retries `codes.Unavailable` 4× with backoff (`portfolio_service.go:1159-1175`). This is cited in Codebase Evidence and Instruction 2.
 - **W6 (noted, no edit):** Step 16 does **not** cover AC-13; it covers AC-15/16/17. AC-13 maps to Step 12 (Scenario Coverage), and its repo-level half (the pruned entry's `StrategyID == "strat-9"`) is fed by Step 10 Instruction 2. That mapping is sufficient, so this is left as a note.
 - **W7 (citation drift):** Step 12 now cites `fakeConfig` → `watchlist_service_test.go:244-251` and `wideCaps` → `:362`. Step 20 cites the feature-240 entry → `config-governance.md:141-150`, which is correct on this branch. On the feature-278 branch it sits at `:172-181`, a rebase-only shift.
+
+## Session 2026-11-02 — sdd-execute pre-execution re-spec (sdd-batch-execute)
+
+- Setup: merged `origin/main-dev` into the feature branch (`e82c2f0a`); `631028eb` (278) is now an ancestor. One conflict in `docs/roadmap/features/merge-order.md`, resolved by hand: the 281←278 row keeps the branch side; main-dev's new 243←278 soft row is kept. `ledger-guard --fix`: clean.
+- Re-spec (`implementation-spec.md`, commit `9ea2c6e3`). Step bodies Instructions/Evidence/Files/Verification only:
+  - Steps 4, 17, 18, 20, 21: line anchors re-aligned after the merge; content unchanged. `ci-gate` `needs:` now includes `config-wiring`.
+  - Step 10: verified that no ingest migration adds an FK on `ingest.newsletter_signals`, so no `signal_sources` fixture row is needed. Closes the spec-time unverified item for Steps 10/16.
+  - Step 11: all 278 checker anchors and service evidence still match. **BLOCKING:** Verification block 2 (035 collision) fails. `origin/claude/smoke-test-deployment-0f1z5j` carries config `035_smoke_rpc_user_id` and `036_smoke_writes_enabled`; `origin/main-dev` tops out at `034`. Per Instruction 9, **Step 11 waits for an operator ruling** (renumber 281's seed, or ignore that non-feature `claude/*` branch). Feature 282's planned 036/037 are affected too; 282 not touched.
