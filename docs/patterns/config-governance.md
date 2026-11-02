@@ -59,6 +59,37 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 2. Declare it in the consuming service's `CLAUDE.md` under "Config Keys Consumed".
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
 4. Add a row to the "Per-Feature Registered Keys" log below.
+5. Prove the key is read under its stored key — see "Wiring check" below.
+
+## Wiring check (config key must be read under its stored key)
+
+The stored key (the `key` column a config migration inserts, which a reader sees as
+`values[row.key]`) must equal the reader's string **verbatim** — the check never normalizes bare
+vs dotted forms. `node scripts/check-config-wiring.mjs` (feature 278) joins the migration-derived
+stored set against the Go/Python/TypeScript reader literals and prints `file:key:kind[:env]` lines:
+
+| Kind | Meaning |
+|---|---|
+| `form-mismatch` | Seeded in one form (e.g. bare `foo.bar`) but read in another (`<ns>.foo.bar`) — the read silently falls back to its default |
+| `seeded-unread` | Seeded, but no reader reads it under any form (dead seed) |
+| `read-unseeded` | Read, but never seeded; `:env` lists the environments that lack it when it is seeded in only some |
+| `dynamic-read` | The reader builds the key at runtime, so it cannot be joined; enumerate its keys in `registry.dynamic` |
+
+A config migration statement the parser cannot model also fails closed as `unmodelled-rewrite`
+(allow-listed only by file + statement hash in `registry.rewriteAllow`).
+
+- **Step time vs `--final`.** `/sdd-execute` runs the step-time mode after each step's Verification
+  (`--declared-from <product-spec.md>`, `--declared-migration`, or `--keys`): only findings for the
+  feature's declared keys block, and a missing leg (seed or reader not written yet) is `PENDING`.
+  `--final` runs once before `code-completed` / the integration PR and in the CI `config-wiring`
+  job, and fails on every finding not in the baseline.
+- **Baseline.** Known findings live in `findings` of `scripts/config-wiring.json`. Every entry needs
+  an `owner`, and entries may only **shrink**: an entry the check no longer produces must be removed
+  (`STALE`), and a new finding cannot be baselined. `policy.envReadUnseeded` (`reported`) keeps
+  env-scoped `read-unseeded` non-blocking until a production environment exists.
+- **Runtime-created keys** (`SetConfig create_key=true`, config-ui) are invisible to the migration
+  set and show as `read-unseeded` by design; the remedy is to seed them in a config migration.
+- **Secrets** (`is_secret=true`) are excluded from the join, and the check never prints a value.
 
 ## Registering a new vendor credential (an encrypted secret config row)
 

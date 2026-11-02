@@ -157,6 +157,9 @@ other selector.
 
 When invoked and all steps are already complete (lifecycle `code-completed`):
 
+0. **Config-key wiring gate** — run `node scripts/check-config-wiring.mjs --final`; a non-zero exit
+   blocks the integration PR. Record its output in `context.md` (**F-09**).
+
 1. **Merge-order gate** — same check as STEP COMMIT + PR step 4:
    a. Read `docs/roadmap/features/merge-order.md`.
    b. If `<slug>` appears in the **Feature** column and **Resolved** ≠ `Yes`:
@@ -295,12 +298,22 @@ red), then implement, then confirm it **passes** (capture green). Record both in
      `psql` against a spun-up instance, **substitute the offline check** and record the substitution
      as a `## Deviation Log` entry (`**Disposition**: offline migration check — live apply deferred
      to CI`). Do not sit waiting on a container to become ready.
+   - **Config-key wiring gate.** When the step is typed `config`, or its `**Files**` include a
+     migration whose body inserts into `config.config_values`, or the product spec's
+     `## Config Key Changes` lists a key this step touches, also run
+     `node scripts/check-config-wiring.mjs --declared-from <FEATURE_DIR>/product-spec.md` (add
+     `--declared-migration <file>` for a migration step) in the default step-time mode. A non-zero
+     exit keeps the step not-done; the output names the finding and key. Missing-side findings
+     print `PENDING:` and do not block at step time, and a step that declares no key is not blocked
+     by unrelated baseline findings. For `config`/`migration` steps (TDD-exempt) this is the only gate.
 4. If verification **passes**:
    - Update **only** the step's `**Status**` field in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
    - **Do NOT modify any other part of the step** — `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` are immutable records of the original plan. Deviations go in the `## Deviation Log` only.
    - If this is the **first step completed** in the feature: overwrite `status.md` with
      `in-progress` and append a `feature.md` status history row.
-   - If **all steps are now done**: overwrite `status.md` with `code-completed` and append a
+   - If **all steps are now done**: first run `node scripts/check-config-wiring.mjs --final`; a
+     non-zero exit blocks the flip. Record its output in `context.md`, never in a step body
+     (**F-09**). Then overwrite `status.md` with `code-completed` and append a
      `feature.md` status history row.
      Then, if the feature surfaced a **reusable pattern** worth carrying to future features (a clean
      abstraction, an ordering that paid off, a perf win), append a one-line entry to
