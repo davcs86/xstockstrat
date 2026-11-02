@@ -274,3 +274,11 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Verification: `go build ./...`, `go vet ./...` and `go vet -tags dbtest ./...` pass. GO-LINT reports `0 issues` after `gofmt` on the new file. The full untagged `go test ./...` passes. No database was started.
 - Deviations: RED probes, commit on every non-skipped list, the `Lists` meaning, and small helpers (Deviation Log).
 - Next: Step 10 (prune tick DB tests).
+
+### Step 10 — prune tick DB tests [done] (2026-11-02)
+
+- Created `internal/repository/signal_expiry_prune_dbtest_test.go` (`//go:build dbtest`) with 9 `TestPrune_*` functions: `ExpiredOnlySignalRemoves` (AC-2, list survives), `MergedRowRetainsThenRemoves` (AC-3, two `AddSymbols` merges then expire → `SignalID` 102), `UntrackedEntrySurvives` (AC-4, 3 ticks), `ManualOrphanSweptEntryKept` (AC-5), `SecondTickIsNoop` (AC-6), `RenewalEventNamesSignal102` (AC-8), `StrategyBoundRemovedLikeAny` (`strat-9`), `IngestSignalsDoNotKeepAlive` (AC-10, a live `buy` + an `mcp_client` `watchlist` row; no FK, `user_id` supplied), `ConcurrencyNeverWaits` (AC-12 a/b/c subtests). `valid_until` is set relative to DB `now()`; every `PrunedEntry` field is asserted against the pre-tick row. The `UpdateBinding` SQL-order dependency is a test comment.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_prune_dbtest_test.go`.
+- TDD: RED: the new file compiled against a `git archive` of `814956b8` (pre-Step-9) → `undefined: PrunedEntry`. GREEN (offline): `go vet -tags dbtest ./...` OK, GO-LINT `0 issues`, `TestPrune_` count 9, tests skip without the URL, GO-COVER total 68.6%. Behavioral run is CI `portfolio-db-test`; no database was started.
+- Deviations: RED method, per-list filtering of the global tick, deterministic AC-12(b) via `pg_stat_activity` polling (Deviation Log).
+- Next: Step 11 (prune loop, events, interval clamp, startup wiring, config migration 035).

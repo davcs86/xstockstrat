@@ -25,6 +25,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 7 done: `AddWatchlistSymbols` validates `signal_provenance` (system list, exactly one SIGNAL binding, `signal_id > 0`, `valid_until` set) via `expiryIntentFor` before the cap check and any write, and passes the intent to `AddSymbols`; provenance-less SIGNAL adds untrack; RED probe → GREEN, build/vet/lint/tests green |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 8 done: `ProvenanceValidation` (5 AC-18 rejections, no store call), `ProvenanceTracksIntent`, `NoProvenanceIntent`; fake records the last `ExpiryIntent` + call count; RED vs pre-Step-7 service → GREEN, lint 0 issues, cover 68.6% |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done: `WatchlistRepo.PruneExpiredSignalEntries` (per-list never-waiting `SKIP LOCKED` tx, deletes only the locked SIGNAL bindings, sweeps expired orphans, returns `PruneResult`/`PrunedEntry`); `WatchlistStore` method + configurable fake; RED probes → GREEN, build/vet/dbtest-vet green, lint 0 issues |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done: 9 `TestPrune_*` real-DB tests (AC-2/3/4/5/6/8/10/12 + strategy-bound); compile-RED vs pre-Step-9 tree, offline vet/lint/cover green, DB run in CI `portfolio-db-test` |
 
 ---
 

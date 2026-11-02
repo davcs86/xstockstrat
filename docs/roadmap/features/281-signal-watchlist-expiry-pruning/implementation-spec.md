@@ -449,7 +449,7 @@ then **GO-LINT**.
 
 ### Step 10 — test: prune tick DB tests (expiry, retention, idempotence, never-waits)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/signal_expiry_prune_dbtest_test.go` — create (`//go:build dbtest`)
@@ -1084,4 +1084,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: TDD red-green paired with Step 10 (Step 10's tests are compile-red before Step 9). Instruction 3.5: "If `len(R) > 0`: `UPDATE portfolio.watchlists SET updated_at = now()`; commit." Instruction 1 names `PruneResult{Removed; Lists, SkippedLists}` without defining `Lists`.
 - **Done instead**: Step 10 runs after Step 9 in sequential order, so RED came from two throwaway probes: a `//go:build dbtest` probe in `internal/repository/` calling `r.PruneExpiredSignalEntries` and reading every `PrunedEntry` field (`go vet -tags dbtest ./internal/repository/` → `r.PruneExpiredSignalEntries undefined`), and a service probe using the fake through `WatchlistStore` (`go test` build failure: `undefined: repository.PruneResult`, `WatchlistStore has no field or method PruneExpiredSignalEntries`, `f.pruneResult undefined`). Both passed after the change and were deleted (never staged). The tx commits on **every** non-skipped list, not only when `len(R) > 0`; only the parent `updated_at` touch is conditional on `R`, so Instruction 3.4's orphan sweep persists on a tick that removes no binding. `Lists` = the count of lists the enumerate query returned (due lists), so `Lists - SkippedLists` were attempted. A list with no due rows after its lock (rows advanced in between) commits a no-op. Unexported helpers `pruneListTx`, `lockDueExpiryTx` and `collectStrings` keep the function small; the SQL text and order match Instructions 2-4, with `source = 2` literal as specified. The fake's `PruneExpiredSignalEntries` returns the configurable `pruneResult` and a nil error (Step 12 needs no error path on the store).
 - **Disposition**: in scope, all inside the step's **Files**. The behavioral RED/GREEN is Step 10 in CI `portfolio-db-test`.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 10 — compile-RED against the pre-Step-9 tree; per-list assertions; deterministic AC-12(b)
+
+- **Spec said**: compile-red before Step 9; AC-6 "second tick returns `Removed == nil`"; AC-12(b) "run `UpdateBinding`'s second statement while a tick holds the parent". GO-DBTEST green.
+- **Done instead**: Step 9 had already landed (sequential order). RED was taken by compiling the new test file against a `git archive` of `814956b8` (pre-Step-9) in the scratchpad: `go vet -tags dbtest ./internal/repository/` → `undefined: PrunedEntry`. No database was started (HARD CONSTRAINT): GREEN is offline — `go vet -tags dbtest ./...`, GO-LINT `0 issues`, 9 `TestPrune_*` functions, all skip without `PORTFOLIO_DB_TEST_URL`, GO-COVER total 68.6%. The real-DB run is CI `portfolio-db-test`. The tick is global, so every assertion filters `PruneResult.Removed` to the test's own list (AC-6 asserts that filtered slice is nil) and the tick error must be nil. AC-12(b)'s deadlock half is deterministic: a test tx takes the tick's parent lock, `UpdateBinding` runs in a goroutine, the test polls `pg_stat_activity` until it waits on the parent touch, then the tick's `FOR UPDATE SKIP LOCKED` binding select must return nothing and commit; `UpdateBinding` must then succeed or return `ErrBindingNotFound`. AC-12(c) runs 10 concurrent renewal/tick iterations and asserts either order converges to `(valid_until = renewal, signal_id = 102)`. AC-10 fixture rows are cleaned up by `user_id`.
+- **Disposition**: spec-allowed fallback (GO-DBTEST). Only the step's **Files** changed.
 - **Severity**: n/a
