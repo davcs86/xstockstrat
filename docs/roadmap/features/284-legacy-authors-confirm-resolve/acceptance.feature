@@ -34,8 +34,8 @@ Feature: legacy-authors-confirm-resolve
 
   @AC-5 @FR-3 @FR-4
   Scenario: the picker resolves a row from the numbered list
-    When I run `confirm` and answer "1" to the picker for F1, "s" for F3, then "y" to the confirmation
-    Then F1 has new_author "80880990-2b79-4d85-8761-d8d9102c2efb" ("davcs86", position 1 in users.json order), source "override" and status "confirmed"
+    When I run `confirm` and answer "1" to the picker for "ghost" (F1 and F2 together), "s" to the picker for "alice" (F3), then "y" to the confirmation
+    Then F1 and F2 have new_author "80880990-2b79-4d85-8761-d8d9102c2efb" ("davcs86", position 1 in users.json order), source "override" and status "confirmed"
     And F3 is still "ambiguous"
 
   @AC-6 @FR-3
@@ -51,7 +51,7 @@ Feature: legacy-authors-confirm-resolve
 
   @AC-8 @FR-4
   Scenario: declining the second confirmation writes nothing
-    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb` and answer "n"
+    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb`, answer "s" to the picker for "alice" (F3), then answer "n" to the confirmation
     Then plan.json is byte-identical to before and no digest is printed
 
   @AC-9 @FR-5
@@ -105,5 +105,18 @@ Feature: legacy-authors-confirm-resolve
   @AC-17 @FR-4
   Scenario: one prompt covers suggested and resolved rows
     Given plan.json also holds F4 aaaaaaaa-0000-4000-8000-000000000004 "davcs86" suggested for 80880990-2b79-4d85-8761-d8d9102c2efb
-    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb` and answer "y" once
+    When I run `confirm --map ghost=80880990-2b79-4d85-8761-d8d9102c2efb`, answer "s" to the picker for "alice" (F3), then answer "y" to the confirmation
     Then F4, F1 and F2 are "confirmed" and exactly one confirmation prompt was shown
+
+  @AC-18 @FR-3
+  Scenario: an unreadable users.json skips the picker and keeps the suggested-only flow
+    Given users.json is missing and plan.json holds F4 aaaaaaaa-0000-4000-8000-000000000004 "davcs86" suggested plus F1 "ghost" unmappable
+    When I run `confirm` and answer "y" to the confirmation
+    Then the output warns that users.json could not be read and the picker was skipped
+    And F4 is "confirmed", F1 is still "unmappable", and the exit code is 0
+
+  @AC-19 @FR-3
+  Scenario: an author with no eligible user is skipped without a prompt
+    Given users.json holds no active user whose email local part is "alice"
+    When the picker reaches F3 "alice" (ambiguous in the plan)
+    Then the output says there is no eligible user for "alice", no prompt is shown for it, and F3 is still "ambiguous"

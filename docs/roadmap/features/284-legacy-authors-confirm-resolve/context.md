@@ -32,3 +32,12 @@
   - `_users_by_id` returns `{}` on any read error; the new validation must use strict `legacy_authors.load_users`.
 - Overlap findings: WARN only. `services/xstockstrat-indicators/CLAUDE.md` is also edited by in-progress `243-fix-sandbox-seed-keys` in different sections (rebase-level, no merge-order entry needed). No config, proto or migration collision.
 - Recommended design depth: quick (single service, no proto/config/DB, no consumer surface).
+
+## Session 2026-11-02 — sdd-design round 1 (quick) — operator decisions
+
+- Round 1: proposer + adversary ran; adversary verdict NEEDS WORK, no Floor breach. Single write site in `confirm` keeps `plan.json` byte-identical on every abort/decline/EOF (verified against code).
+- OPERATOR DECISION (AskUserQuestion, 2026-11-02): picker asks **once per legacy author**, covering all its rows incl. soft-deleted siblings. FR-3 amended; `@AC-5` Then now asserts F1 and F2; `@AC-8`/`@AC-17` answer sequences reworded (skip F3 at the picker, then answer the confirmation).
+- OPERATOR DECISION: with no `--map` and an unreadable `users.json`, **skip the picker with a warning** and keep today's suggested-only flow; `--map` still refuses with exit 2. `@AC-18` added. Also `@AC-19` (no eligible user -> skipped, no prompt).
+- OQ-4 correction: the picker lists every active user's email local part, which IS new console exposure; runbook §5 must say so and recommend `--map` for recorded/shared sessions.
+- Folded in without a fork (adversary SHOULD-FIX/NIT): parity test pinning the copied candidate rule to `la.classify`; keep the exact current prompt/"No suggested rows" wording when nothing was overridden; print `format_plan` before the picker and before the confirmation; build the display map from the strict `load_users` result.
+- Operator chose to run another round before approving (round 2 follows).
