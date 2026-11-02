@@ -69,3 +69,15 @@
   - Test pairing: `@AC-9` and the `main()` EOF exit code pass on the old tree (marked green-on-arrival); red is carried by sibling assertions (prompt count, picker listing).
 - Overlap: 243 edits `services/xstockstrat-indicators/CLAUDE.md` (different sections, rebase-level); 281 only cites the runbook.
 - Teardown for the PR body is specified in Step 6 (context-forge refresh scoped to the runbook, indicators CLAUDE.md, and `INDICATORS-12`; manual reconciliation if the plugin is unavailable).
+
+## Session 2026-11-02 — sdd-review impl-spec (advisory), pass 1
+
+- Result: 0 failures, 2 warnings, 7 nits (advisory — did not block). No Floor risk.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4 / Step 2: AC-3, AC-13, AC-14, AC-15 assert "exit 2 and byte-identical plan" but only the pure `_parse_maps` reason text is tested; the `main()` refusal test covers AC-2 and AC-4 only (C-15, C-08) — [x] addressed in spec revision 1 (2026-11-02)
+  - Step 6: Instructions allow fixing drift in `docs/runbooks/legacy-formula-authors.md` and `services/xstockstrat-indicators/docs/context-constitution.md` but Files lists only `services/xstockstrat-indicators/CLAUDE.md` (F-08) — [x] addressed in spec revision 1 (2026-11-02)
+  - Step 1: verification prints a set literal (nondeterministic repr); say "pre-existing 6 + Step 2 tests" — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+  - Step 2: replace the `grep -c "ghost\|USERS"` C-13 count with a pass/fail check; state `_Ask` appends to `.prompts` before raising `EOFError` — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+  - Step 3 / Step 5: document that the second plan listing shows the proposed `[confirmed]` state before the prompt — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+  - Step 5: soften the brittle `! grep "still a hand edit"` — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+- Overlap findings: WARN only — `services/xstockstrat-indicators/CLAUDE.md` also edited by in-progress 243 (disjoint sections; 243 Step 4's `:12` target has drifted and its wording already appears at `:14` on trunk); no migration, proto or config collision; no merge-order entry needed. 284 must not add a `docs/runbooks/CLAUDE.md` index row (281 edits that table).

@@ -24,7 +24,7 @@ No proto, migration, config key, env var, port, dependency or `uv.lock` change. 
 |---|---|
 | @AC-1 `--map` resolves every row of one author; sha256 printed | 4 |
 | @AC-2 inactive target rejected before any write | 2 (reason text), 4 (exit 2 via `main()`, plan byte-identical) |
-| @AC-3 map for an author with no unresolved row rejected | 2 |
+| @AC-3 map for an author with no unresolved row rejected | 2 (reason text), 4 (exit 2 via `main()`, plan byte-identical) |
 | @AC-4 one invalid map aborts the whole batch | 2 (both reasons collected in order), 4 (exit 2, repeatable flag via `main()`) |
 | @AC-5 picker resolves both rows of an author from the numbered list | 2 (picker leg), 4 (flow leg incl. the `y` prompt) |
 | @AC-6 ambiguous picker lists only its candidates | 2 |
@@ -34,9 +34,9 @@ No proto, migration, config key, env var, port, dependency or `uv.lock` change. 
 | @AC-10 `confirm` proceeds with only unresolved rows | 4 |
 | @AC-11 resolved plan passes the existing apply guards | 4 |
 | @AC-12 runbook documents the new flow | 5 (doc check; also verified at impl-review per design.md) |
-| @AC-13 ambiguous row needs one of its candidates | 2 |
-| @AC-14 well-formed id not in `users.json` rejected | 2 |
-| @AC-15 one author mapped to two users rejected | 2 |
+| @AC-13 ambiguous row needs one of its candidates | 2 (reason text), 4 (exit 2 via `main()`, plan byte-identical) |
+| @AC-14 well-formed id not in `users.json` rejected | 2 (reason text), 4 (exit 2 via `main()`, plan byte-identical) |
+| @AC-15 one author mapped to two users rejected | 2 (reason text), 4 (exit 2 via `main()`, plan byte-identical) |
 | @AC-16 `--yes --map` still confirms `suggested` rows | 4 |
 | @AC-17 one prompt covers suggested and resolved rows | 4 |
 | @AC-18 unreadable `users.json` skips the picker, suggested-only flow | 4 |
@@ -110,9 +110,9 @@ Insert the following between `report` (ends `:87`) and `confirm` (`:90`). Stdlib
 
 **Verification**:
 ```bash
-cd services/xstockstrat-indicators && uv run --extra dev python -c "from app.maintenance import legacy_authors_ops as o; print(o._UNRESOLVED, o._PICK_ATTEMPTS, o._candidates('x', {}))"   # {'ambiguous', 'unmappable'} 3 []
+cd services/xstockstrat-indicators && uv run --extra dev python -c "from app.maintenance import legacy_authors_ops as o; print(sorted(o._UNRESOLVED), o._PICK_ATTEMPTS, o._candidates('x', {}))"   # ['ambiguous', 'unmappable'] 3 []
 cd services/xstockstrat-indicators && ruff check . && ruff format --check .
-cd services/xstockstrat-indicators && uv run --extra dev pytest tests/test_legacy_authors_ops.py -q   # the 6 pre-existing tests still pass
+cd services/xstockstrat-indicators && uv run --extra dev pytest tests/test_legacy_authors_ops.py -q   # the 6 pre-existing tests and the Step 2 helper tests pass
 git diff --stat -- services/xstockstrat-indicators/app/maintenance/legacy_authors.py   # empty: FR-7
 ```
 C-13 verdict: no test data in this step.
@@ -137,13 +137,13 @@ C-13 verdict: no test data in this step.
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-13, AC-14, AC-15, AC-19, AC-22` — the reason-text and picker legs; the `confirm`/`main()` legs of AC-2, 4, 5, 7 are in Step 4.
+**Covers**: `AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-13, AC-14, AC-15, AC-19, AC-22` — the reason-text and picker legs; the `confirm`/`main()` legs (exit code 2 and byte-identical plan for AC-2, 3, 4, 13, 14, 15; the flow legs of AC-5 and AC-7) are in Step 4.
 
 **Instructions**:
 Imports: add `io`, `re`, `sys` to the stdlib block at `:5-6` (alphabetical: `io`, `json`, `re`, `stat`, `sys`). Add constants `GHOST_DELETED = "aaaaaaaa-0000-4000-8000-000000000004"`, `SAM = "aaaaaaaa-0000-4000-8000-000000000005"`, `ZED = "aaaaaaaa-0000-4000-8000-000000000006"` and the user ids `ALICE_ID` (`1111…`), `SAM_A` (`4444…`), `SAM_B` (`5555…`), `OLD_ID` (`6666…`) after `:17`. Do not redefine or edit `OWNER_ID`, `F1`, `F2`, `GHOST`. Append, after `:132`, these module-local helpers (single consumer, stay inline):
 - `_users_dict(users=USERS)` → `{u["user_id"]: {"email_local": u["email_local"], "is_active": u["is_active"]} for u in users}` (the `la.load_users` shape).
 - `_entry(formula_id, old_author, status, new_author=None)` → plan entry dict with `"source": "heuristic"`.
-- `_Ask(*answers)`: callable with `.prompts` (every prompt string seen) that returns the next answer and raises `EOFError` when none remain.
+- `_Ask(*answers)`: callable with `.prompts` (every prompt string seen) that appends the prompt to `.prompts` **before** returning the next answer or raising `EOFError` (when none remain), so a test can assert `len(prompts)` for the call that hit EOF.
 - `_listing(out)` → the stdout lines matching `re.compile(r"^\s+\d+\) ")`.
 
 Tests (names indicative; one behavior each, no tautologies):
@@ -167,7 +167,7 @@ Tests (names indicative; one behavior each, no tautologies):
 cd services/xstockstrat-indicators && uv run --extra dev pytest tests/test_legacy_authors_ops.py -q
 cd services/xstockstrat-indicators && uv run --extra dev pytest --cov=app --cov-fail-under=50 -q
 cd services/xstockstrat-indicators && ruff check . && ruff format --check .
-grep -c "ghost\|USERS" services/xstockstrat-indicators/tests/test_legacy_authors_ops.py   # C-13: domain users come from conftest.USERS; no second inline users literal
+test "$(git diff -U0 -- services/xstockstrat-indicators/tests/test_legacy_authors_ops.py | grep '^+' | grep -c 'email_local": "')" = 0   # C-13: no new inline users literal (run before committing the step)
 ```
 Red run (captured by `/sdd-execute` before Step 1): the new tests fail with `AttributeError: module 'app.maintenance.legacy_authors_ops' has no attribute '_candidates'` (or `_parse_maps` / `_pick`). Green: all pass after Step 1. C-13 verdict: `_users_dict`, `_entry`, `_Ask`, `_listing` have one consumer (this module), so inline is compliant; domain users are imported from `conftest.USERS`.
 
@@ -204,7 +204,7 @@ Red run (captured by `/sdd-execute` before Step 1): the new tests fail with `Att
    6. `if users is not None and not yes and unresolved: mapping.update(_pick(unresolved, mapping, users, ask))`. With `--yes` the picker is skipped and only `--map` rows resolve (FR-5).
    7. `overrides = [e for e in unresolved if e["old_author"] in mapping]`; in memory, for each: `e.update(new_author=mapping[e["old_author"]], source="override", status="confirmed")`. No write yet.
    8. `if not suggested and not overrides:` `print(_NOTHING_TO_CONFIRM)`, `return 0, None` (everything skipped, or the picker was unavailable and no row is suggested).
-   9. `if overrides: print(format_plan(plan, names))` so the written targets are on stdout (FR-5, `@AC-20`); with no overrides the output is identical to today's single listing.
+   9. `if overrides: print(format_plan(plan, names))` so the written targets are on stdout (FR-5, `@AC-20`); with no overrides the output is identical to today's single listing. This second listing shows the **proposed** final state (`[confirmed]`) before the operator answers the prompt; nothing is written until the answer is `y`.
    10. `if not yes`: ask the **one** combined prompt through `ask` — `f"Confirm {len(suggested)} suggested rewrite(s)? [y/N] "` when `overrides` is empty (today's exact text), `f"Confirm {len(suggested)} suggested and {len(overrides)} override rewrite(s)? [y/N] "` otherwise; `EOFError` → `""`. If the stripped, lowercased answer is not `y`/`yes`: `print("Not confirmed; plan.json unchanged.")`, `return 0, None`.
    11. `for e in suggested: e["status"] = "confirmed"`; `_write_private(plan_path, json.dumps(plan, indent=2) + "\n")` as the **single write site** (every refusal, decline, EOF and skip path above returned or raised before it, so `plan.json` stays byte-identical); `return len(suggested) + len(overrides), la.plan_digest(plan_path)`.
    Do not add other comments than constraints worth keeping (≤ 2 lines each).
@@ -242,7 +242,7 @@ grep -n "_write_private(plan_path" services/xstockstrat-indicators/app/maintenan
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-2, AC-4, AC-5, AC-7, AC-8, AC-9, AC-10, AC-11, AC-16, AC-17, AC-18, AC-20, AC-21`
+**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-7, AC-8, AC-9, AC-10, AC-11, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-20, AC-21`
 
 **Instructions**:
 Add `_seed(tmp_path, entries, users=USERS)` (writes `plan.json` as `json.dumps({"entries": entries})` and, when `users is not None`, `users.json` as `json.dumps(users)`; returns the plan bytes for byte-identity assertions; reuse `_entry`/`_Ask` from Step 2). A standard unresolved plan is `[GHOST ghost unmappable, GHOST_DELETED ghost unmappable, SAM sam ambiguous]`. Tests, with the scenario role mapping from Step 2:
@@ -260,7 +260,13 @@ Add `_seed(tmp_path, entries, users=USERS)` (writes `plan.json` as `json.dumps({
 12. `@AC-11`: `table = _UsersAndFormulas([make_formula_row(GHOST, "ghost"), make_formula_row(GHOST_DELETED, "ghost", deleted=True), make_formula_row(SAM, "sam")])`; `await ops.report(table, ("h", "d"), tmp_path, run_id="r1")`; `n, digest = ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}", f"sam={SAM_A}"])` → `n == 3`; `result = await ops.apply(table, ("h", "d"), tmp_path, digest, run_id="r2")` raises nothing, `result["counts"]["rewritten"] == 3`, `skipped_concurrent == 0`, the three rows' authors equal `OWNER_ID`, `OWNER_ID`, `SAM_A`, and captured stdout has no `refused:`.
 13. `main()`-level, using `ops.main(["--work-dir", str(tmp_path), "confirm", ...])` and `capsys`:
     - success (`@AC-1` printed digest, `@AC-20` ordering): `["--map", f"ghost={OWNER_ID}", "--yes"]` → returns `0`; stdout contains `Confirmed 2 row(s)` and `la.plan_digest(plan.json)`, and the line `ghost -> davcs86 ({OWNER_ID})  [confirmed]` occurs at an index before the digest.
-    - refusal, parametrized (`@AC-2`, `@AC-4`): `[f"ghost={OLD_ID}"]` and `[f"ghost={OWNER_ID}", "sam=not-a-uuid"]`, each with `--yes` → returns `2`; stdout has `refused:` lines (`[run_id=…] refused: <reason>` shape) and `inactive` / `is not a user id` respectively; plan byte-identical, `GHOST` and `GHOST_DELETED` still `unmappable`. The second case also proves `--map` is repeatable.
+    - refusal, parametrized over the maps below, each passed as repeated `--map` flags with `--yes` → `main` returns `2`; stdout has at least one `[run_id=…] refused: <reason>` line containing the listed substring; `plan.json` byte-identical; `GHOST` and `GHOST_DELETED` still `unmappable` and `SAM` still `ambiguous`:
+      - `@AC-2`: `ghost={OLD_ID}` → `inactive`
+      - `@AC-3`: `nobody={OWNER_ID}` → `no unresolved row has old_author "nobody"`
+      - `@AC-4`: `ghost={OWNER_ID}` + `sam=not-a-uuid` → `is not a user id` (also proves `--map` is repeatable and that the valid map is not applied)
+      - `@AC-13`: `sam={OWNER_ID}` → `is not a candidate for "sam"`
+      - `@AC-14`: `ghost=99999999-9999-4999-8999-999999999999` → `is not in users.json`
+      - `@AC-15`: `ghost={OWNER_ID}` + `ghost={ALICE_ID}` → `"ghost" is mapped to two different users`
     - EOF (`@AC-7` exit code): `monkeypatch.setattr(sys, "stdin", io.StringIO(""))`, argv `["confirm"]` → returns `0`, plan byte-identical, stdout contains `f"1) davcs86 ({OWNER_ID})"` (the picker ran; red before Step 3 since there is no picker). The `0` return alone is also true on the old tree.
 Do not edit the two pre-existing confirm tests.
 
@@ -302,7 +308,7 @@ Red run (before Step 3): `TypeError: confirm() got an unexpected keyword argumen
    - What is left is offered once per legacy author in a numbered picker (`s` or Enter skips; the first EOF stops the picker for all remaining authors; three invalid answers skip the author). An `ambiguous` author lists only its candidates, an `unmappable` author lists all active users in `users.json` order. If `users.json` is unreadable and no `--map` was given, the picker is skipped with a warning and the `suggested` rows still run.
    - There is **one** confirmation prompt covering `suggested` and resolved rows; declining or EOF prints `Not confirmed; plan.json unchanged.` and exits 0. **`--yes --map` is the only scripted path**; `--yes` alone confirms `suggested` rows and never resolves another row. A piped `y` against a plan with unresolved rows lands on the picker, not the confirmation, and writes nothing.
    - PII: the picker prints every active user's email local part and id and the plan listing prints legacy usernames, so use `--map` when the console session is recorded or shared. A malformed `users.json` entry's message echoes that entry once (`legacy_authors.py:76` is out of scope for this feature).
-   - The counts line shown is the report's and is not recomputed; resolved rows are listed by `format_plan`.
+   - The counts line shown is the report's and is not recomputed; resolved rows are listed by `format_plan`, and the second listing shows the proposed final state (`[confirmed]`) before the prompt is answered.
    - Scope of 276's "left unchanged": the automatic fix never guesses; an override is an explicit operator action. The ambiguous-candidate rule is enforced by `confirm` only, **not** by `apply` (`validate_for_apply` does not re-check it), so a hand-edited `plan.json` can still bypass it.
    - Hand-editing `plan.json` is retained only as a **fallback** (for example to override a wrong `suggested` match, which `--map` does not touch), with the existing `new_author` / `"source": "override"` / `"status": "confirmed"` recipe and the "Do not change `formula_id` or `old_author`" rule kept.
 3. Leave §§1-4 and 6-10 unchanged, except that no sentence elsewhere may still say overrides need a hand edit (grep below).
@@ -310,7 +316,7 @@ Red run (before Step 3): `TypeError: confirm() got an unexpected keyword argumen
 **Verification**:
 ```bash
 grep -n -e "--map" -e "picker" docs/runbooks/legacy-formula-authors.md        # intro and §5 both hit
-! grep -n "still a hand edit" docs/runbooks/legacy-formula-authors.md          # old sentence gone
+grep -n -i "hand.edit" docs/runbooks/legacy-formula-authors.md               # every hit is the fallback note; none may say overrides need a hand edit
 grep -n -i "fallback" docs/runbooks/legacy-formula-authors.md                  # hand edit named only as a fallback
 grep -n -i "apply" docs/runbooks/legacy-formula-authors.md | grep -i "candidate"   # any hit must say apply does NOT enforce the rule
 ./scripts/check-context-map.sh                                                 # all doc references resolve
@@ -324,6 +330,8 @@ grep -n -i "apply" docs/runbooks/legacy-formula-authors.md | grep -i "candidate"
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
+- `docs/runbooks/legacy-formula-authors.md` — modify (only to fix drift the teardown audit finds against the final code; otherwise unchanged)
+- `services/xstockstrat-indicators/docs/context-constitution.md` — modify (only if the `INDICATORS-12` re-read finds drift; expected: no edit)
 
 **Reviewers**: none
 
