@@ -29,6 +29,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 13 done: `scripts/config-wiring.test.mjs` gains tests `baseline 1-4`. They check that real-tree `--final` exits 0, that every entry has an owner and a baseline kind with no `dynamic-read`, that the 277-sweep key set is present, and that there is no value text or secret-class key. Red against the Step 7 empty-shape baseline in a scratch root (3 of 4 fail); green 42/42 |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 14 done: `ci.yml` gains the `config-wiring` paths filter (language-root globs incl. `services/**/*.go`), the `config-wiring` job (checker tests + `--final`) and its `ci-gate` `needs`/echo entries; test `baseline 5` asserts the filter covers every extractor-read file (red: filter missing; green 43/43) |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 15 done: `/sdd-execute` SKILL.md Phase 3 gains the step-time config-key wiring gate (after Verification, before the `done` flip) and a `--final` run that blocks the `code-completed` flip and the ALL-DONE integration PR; `repo-conventions.md` config-key line points at the check. TDD: N/A (docs) |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 16 done: `sequential-mode.md` §5.5 gains a bullet applying Phase 3's step-time wiring gate per step; §5.6 runs `--final` on the last step as a blocking gate before the integration PR, output recorded in `context.md`. TDD: N/A (docs) |
 
 ---
 

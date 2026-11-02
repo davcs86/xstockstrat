@@ -549,3 +549,15 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Files modified: `.claude/skills/sdd-execute/SKILL.md`, `.claude/skills/sdd-execute/reference/repo-conventions.md`, `implementation-spec.md` (Step 15 Status), `feature.md`, `context.md`.
 - Deviations: none.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 16 (sequential)
+
+- **Step 16 done:** `.claude/skills/sdd-execute/reference/sequential-mode.md` gets two edits, as the Instruction asks, without restating the gate rules:
+  - §5.5 step loop gains one bullet: Phase 3's config-key wiring gate (`node scripts/check-config-wiring.mjs`, step-time mode) applies unchanged, per step.
+  - §5.6 per-feature integration PR gains a first bullet: on the feature's last step, run `node scripts/check-config-wiring.mjs --final` before creating the integration PR; non-zero blocks it; output recorded in `context.md`.
+- **Discovery note:** the workflow's discovery digest described the former numbering again (the `/sdd-review` B2 row and `/sdd-story` declared-key format, now Step 17). This step followed the current spec's Step 16.
+- **TDD:** N/A (docs/skill text; structural assertions in Step 18).
+- **Verification:** `grep -n check-config-wiring` matched sequential-mode.md:97 and :150; `./scripts/check-context-map.sh` printed `OK - all context-map and doc references resolve.`
+- Files modified: `.claude/skills/sdd-execute/reference/sequential-mode.md`, `implementation-spec.md` (Step 16 Status), `feature.md`, `context.md`.
+- Deviations: none.
+- Severity: n/a.

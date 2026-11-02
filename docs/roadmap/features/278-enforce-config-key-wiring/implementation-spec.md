@@ -630,7 +630,7 @@ grep -n "check-config-wiring" .claude/skills/sdd-execute/SKILL.md .claude/skills
 
 ### Step 16 — docs: Sequential-mode mirror
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/skills/sdd-execute/`
 **Files**:
 - `.claude/skills/sdd-execute/reference/sequential-mode.md` — modify
