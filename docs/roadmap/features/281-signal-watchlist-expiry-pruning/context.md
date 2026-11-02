@@ -433,3 +433,18 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Verification: ruff check/format pass; mandated test-name count >= 6; targeted pytest 26 passed; PY-VERIFY full suite 650 passed, coverage 84.49%.
 - Deviations: RED method; the swallow test is a regression guard and passes pre-Step-17 (Deviation Log).
 - Next: Step 19 (UI e2e — an emptied system-managed list renders and cannot be deleted).
+
+### Step 19 — UI e2e: an emptied system-managed list renders and cannot be deleted [done] (2026-11-02)
+
+- `e2e/insights/watchlists.spec.ts`: new test `system-managed watchlist emptied by expiry pruning: renders "No symbols", no delete affordance (AC-2)`, placed right after the feature-127 system-managed test.
+  - Seed: `wl-sys` (`systemManaged: true`, `bindings: []`, `symbols: []`) through the existing `mockWatchlists`.
+  - Assertions: `No symbols` is visible, `Delete Signals` has count 0, Rename is visible, and the add-symbols input is enabled.
+- No UI code change. No new fixture, so INVENTORY.md is unchanged.
+- Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.
+- TDD: N/A (frontend e2e regression guard over existing behavior).
+- Verification:
+  - The local `pnpm test:e2e … -g "emptied by expiry pruning"` run timed out twice in the dev-server warmup setup (10 s).
+  - Re-running with `CI=1` (production build) gave 2 passed.
+  - The grep finds the test at line 373.
+- Deviations: verification ran under `CI=1` (Deviation Log).
+- Next: Step 20 (docs: service, pattern and constitution documentation).

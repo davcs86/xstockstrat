@@ -892,7 +892,7 @@ pytest --cov=app --cov-fail-under=40   # full suite (cwd is already services/xst
 
 ### Step 19 — test: UI e2e — an emptied system-managed list renders and cannot be deleted
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify
@@ -1187,4 +1187,14 @@ _Populated by /sdd-execute as implementation proceeds._
   - `test_add_invalid_argument_is_swallowed` passes before Step 17 as well. It guards the unchanged best-effort `except`, so it is a regression guard rather than a red-to-green test.
   - `test_add_watchlist_symbol_omits_provenance_when_undated` is parametrized over `valid_until=None`, `signal_id=None` and `valid_until=""`. The unparseable case is its own mandated test.
 - **Disposition**: in scope. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 19 — e2e verification run under `CI=1`
+
+- **Spec said**: run `pnpm test:e2e e2e/insights/watchlists.spec.ts -g "emptied by expiry pruning"`.
+- **Done instead**:
+  - The plain local run failed twice in the `[setup]` warmup project: `pre-warm SSR routes` hit the 10 s local test timeout while `pnpm dev` compiled 24 routes cold. The new test never ran. This is a harness timing problem, not a test failure.
+  - The same command was re-run with `CI=1`, which builds and starts Next.js in production mode with the CI timeouts. Result: 2 passed (warmup plus the new test). The Docker runner was not needed.
+  - `TDD: N/A` as the spec says. The test asserts behavior that already exists, so it is a regression guard.
+- **Disposition**: in scope. Only the step's **Files** changed. `INVENTORY.md` is unchanged because no fixture was added, and the test reuses the existing `mockWatchlists` seed.
 - **Severity**: n/a
