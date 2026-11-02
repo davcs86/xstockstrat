@@ -321,3 +321,19 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Collision-check record (Instruction 9): pre-write and post-write runs above. Still owed: a re-run before opening the integration PR, and a `MERGE_TIME=1` run after the final rebase, immediately before merge. The second requires PR #1359 (280) on `main-dev`.
 - Deviations: RED probe, and blocks 2 and 4 run as split plain commands (sandbox) (Deviation Log).
 - Next: Step 12 (prune loop service unit tests).
+
+### Step 12 — prune loop events, interval clamp and no-op tick (service unit tests) [done] (2026-11-02)
+
+- Created `internal/service/signal_prune_test.go` with 7 tests, each driving one tick via `s.pruneOnce(ctx)` (never the sleeping loop):
+  - `TestClampPruneInterval`: `0`/`-5` → 300s, `1`/`30`/`59`/`60` → 60s, `86400`/`90000` → 86400s (AC-14 read half).
+  - `TestSignalPrune_ExpiredEventPayload`: subtests `expired` (`signal_id 101`, AC-7/AC-13) and `renewed` (`signal_id 102`, AC-8). Each asserts exactly one `portfolio.watchlist.signal_entry_expired`, `UserId == "user-1"`, stream key `watchlist:wl-1`, a non-empty `x-trace-id` in outgoing metadata, and payload `user_id`/`watchlist_id`/`symbol`/`strategy_id "strat-9"`/`valid_until "2026-10-01T00:00:00Z"`.
+  - `TestSignalPrune_UntrackedEventPayload`: ORCL with nil `SignalID` → one `…signal_entry_removed_untracked`, same owner/stream/trace/payload checks, no `signal_id`/`valid_until` keys (AC-13).
+  - `TestSignalPrune_LedgerErrorIsBestEffort`: `codes.Internal` ledger error on every emit → still 2 `AppendEvent` calls for 2 removals.
+  - `TestSignalPrune_NoopTickEmitsNothing`: empty `PruneResult` → 0 calls (AC-6).
+  - `TestSignalPrune_IntervalDefaultsWhenUnset` (unset key → 300s) and `TestSignalPrune_IntervalReadsConfig` (`fakeConfig` `0`/`30`/`90000` → 300s/60s/86400s through `pruneInterval()`).
+- `watchlist_service_test.go`: `fakeLedger` gains `reqs []*ledgerv1.AppendEventRequest` and `outMD []metadata.MD`; `AppendEvent` records the request and `metadata.FromOutgoingContext(ctx)`. Existing behavior (`calls`, `err`) unchanged.
+- Files modified: `services/xstockstrat-portfolio/internal/service/signal_prune_test.go`, `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: AC-13 red: build failed `ledger.reqs undefined` / `ledger.outMD undefined` → green: 7 `--- PASS`, `ok internal/service`.
+- Verification: the step one-liner → `VERIFY_RC=0`; GO-LINT `0 issues`; GO-COVER full `go test ./...` passes, total 68.6% (≥ 40%; new code in excluded `service/`). No database was started.
+- Deviations: RED source (Step 11 already landed) and the Verification run from a script file (Deviation Log).
+- Next: Step 13 (config `SCALAR_BOUNDS_REGISTRY` entry).

@@ -617,7 +617,7 @@ Pass condition for block 4:
 
 ### Step 12 — test: prune loop events, interval clamp and no-op tick (service unit tests)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/signal_prune_test.go` — create
@@ -1110,4 +1110,11 @@ _Populated by /sdd-execute as implementation proceeds._
   - The worktree sandbox refuses a compound shell script that runs `git`, so blocks 2 and 4 ran as separate plain commands with the same logic. Block 2 ran `git fetch --prune` and `git ls-tree origin/main-dev` (nothing ≥ 035). The per-ref `037_` grep was replaced by `git log --remotes=origin -- 'services/xstockstrat-config/migrations/037_*'`, which came back empty. That command is a superset of the per-ref check, because any file in a ref's tree was added by a commit reachable from that ref. It also ran `has280` on `origin/main-dev` (0/2) and on `origin/claude/smoke-test-deployment-0f1z5j` (2/2), so no WARN. Block 4 extracted the base with `git archive -o` plus `tar` in the scratchpad, ran `--final --json` on base (rc 0) and head (rc 0), and ran the spec's comparison script verbatim from a file.
   - The pre-write block-2 run left out its first line (pair present), which fails by construction before the pair exists. The post-write run checked the pair with `ls`.
 - **Disposition**: the same checks with equivalent mechanics. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 12 — RED from the `fakeLedger` capture fields, not missing Step 11 symbols
+
+- **Spec said**: TDD red-green, "fails before Step 11 (no symbols)".
+- **Done instead**: Step 11 had already landed (sequential order), so the Step 11 symbols existed. RED was taken by writing `signal_prune_test.go` before extending `fakeLedger`: `go test ./internal/service/ -run 'TestSignalPrune_|TestClampPruneInterval'` failed to build with `ledger.reqs undefined` / `ledger.outMD undefined`. After `fakeLedger` gained `reqs` and `outMD` (`metadata.FromOutgoingContext`), the Verification passed with 7 `--- PASS` lines. `TestClampPruneInterval` also carries the AC-14 `30→60s` row alongside the Instruction 1 rows. The Verification one-liner ran verbatim from a scratchpad script file, because the worktree sandbox refuses it inline.
+- **Disposition**: same checks; only the step's **Files** changed.
 - **Severity**: n/a

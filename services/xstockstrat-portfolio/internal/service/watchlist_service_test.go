@@ -268,10 +268,15 @@ type fakeLedger struct {
 	ledgerv1.LedgerServiceClient
 	calls int
 	err   error
+	reqs  []*ledgerv1.AppendEventRequest
+	outMD []metadata.MD
 }
 
-func (f *fakeLedger) AppendEvent(_ context.Context, _ *ledgerv1.AppendEventRequest, _ ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
+func (f *fakeLedger) AppendEvent(ctx context.Context, req *ledgerv1.AppendEventRequest, _ ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
 	f.calls++
+	f.reqs = append(f.reqs, req)
+	md, _ := metadata.FromOutgoingContext(ctx)
+	f.outMD = append(f.outMD, md)
 	if f.err != nil {
 		return nil, f.err
 	}

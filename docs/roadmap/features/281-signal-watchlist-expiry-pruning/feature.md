@@ -28,6 +28,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done: 9 `TestPrune_*` real-DB tests (AC-2/3/4/5/6/8/10/12 + strategy-bound); compile-RED vs pre-Step-9 tree, offline vet/lint/cover green, DB run in CI `portfolio-db-test` |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute (re-spec) | Seed migration renumbered 035 → 037 (feature 280 holds 035/036); 281 merges after 280 |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 11 done: `signal_prune.go` prune loop (startup tick, live clamped interval), owner-visible `signal_entry_expired`/`signal_entry_removed_untracked` events via `emitEventAs` (+ per-tick `x-trace-id`), goroutine wired in `main.go`, config seed `037_portfolio_signal_prune_interval` in the same commit; `--final` key hits 0 / introduced 0, lint 0 issues |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 12 done: 7 prune service unit tests (`TestClampPruneInterval`, `TestSignalPrune_*`: expired/renewed/untracked payloads, owner `UserId`, per-tick `x-trace-id`, best-effort ledger error, no-op tick, interval default/config clamp — AC-6/7/8/13/14); `fakeLedger` captures requests + outgoing metadata; RED compile-fail → GREEN, lint 0 issues, GO-COVER 68.6% |
 
 ---
 
@@ -61,4 +62,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-11 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); resume at Step 12. 281's integration PR merges only after feature 280 (#1359).
+`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-12 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); resume at Step 13. 281's integration PR merges only after feature 280 (#1359).
