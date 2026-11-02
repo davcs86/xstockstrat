@@ -202,3 +202,10 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - TDD: N/A (proto contract). Verification: `buf lint` OK and `buf breaking` vs `origin/main-dev` (`1ea1c19c`) rc=0, buf 1.72.0 in the `xstockstrat-codegen` image. The baseline was a `git archive` tarball, not the `.git` ref (Deviation Log, CI-equivalent fallback).
 - Spec citation drift (no effect): the comment-convention anchor is `:346`, not `:347`. The CI buf commands are at `ci.yml:146-166`, not `:139-155`.
 - Next: Step 2 (regenerate stubs via the Docker codegen image).
+
+### Step 2 — proto-gen (2026-11-02)
+
+- Ran `./scripts/buf-gen.sh` inside the pinned `xstockstrat-codegen` image (rebuilt from the current `Dockerfile.codegen`, cached). Changed: `gen/go/portfolio/v1/portfolio.pb.go`, `gen/python/portfolio/v1/portfolio_pb2.py`, `gen/ts/portfolio/v1/{portfolio.ts,portfolio_pb.ts}` and `gen/ts/dist/portfolio/v1/{portfolio,portfolio_pb}.{js,d.ts}` (8 files, +582/-199). Nothing outside `portfolio/v1`; no `_grpc`/`_connect` change (no RPC added).
+- TDD: N/A (generated code). Verification: the second run was a no-op (identical `git status --porcelain` + `git diff` cksum `3205474957`).
+- Worktree gotchas: the `tsc` stage needs the worktree's own `pnpm install --frozen-lockfile` (a symlinked root `node_modules` does not reach `gen/ts/node_modules` or the container mount). The script's built-in `buf breaking` skips silently in the container (the worktree `.git` pointer is outside the mount); Step 1's explicit `buf breaking` vs `origin/main-dev` is the gate.
+- Next: Step 3 (migration `018_watchlist_signal_expiry`).
