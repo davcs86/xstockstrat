@@ -1,12 +1,16 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +25,7 @@ import (
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/testdata"
@@ -179,15 +184,21 @@ func TestResolveDeletePlan(t *testing.T) {
 // ── Fundamentals (feature 059) ───────────────────────────────────────────────
 
 type fakeFundRepo struct {
-	rows       map[string]*source.Fundamentals
-	fetchedAt  map[string]time.Time
-	todayCount int
-	sinceCount int
-	upserts    int
+	rows          map[string]*source.Fundamentals
+	fetchedAt     map[string]time.Time
+	todayBySource map[string]int
+	sinceBySource map[string]int
+	countSources  []string
+	upserts       int
 }
 
 func newFakeFundRepo() *fakeFundRepo {
-	return &fakeFundRepo{rows: map[string]*source.Fundamentals{}, fetchedAt: map[string]time.Time{}}
+	return &fakeFundRepo{
+		rows:          map[string]*source.Fundamentals{},
+		fetchedAt:     map[string]time.Time{},
+		todayBySource: map[string]int{},
+		sinceBySource: map[string]int{},
+	}
 }
 
 func (r *fakeFundRepo) GetFundamentals(_ context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error) {
@@ -198,24 +209,43 @@ func (r *fakeFundRepo) GetFundamentals(_ context.Context, symbol string) (*sourc
 	return f, r.fetchedAt[symbol], true, nil
 }
 
-func (r *fakeFundRepo) UpsertFundamentals(_ context.Context, f *source.Fundamentals) error {
+// UpsertFundamentals mirrors the repo SQL (feature 255): a flagged row is stored at the epoch and a
+// flagged same-source overwrite COALESCEs the enrichment columns; a done ctx fails like a real Exec.
+func (r *fakeFundRepo) UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	r.upserts++
-	r.rows[f.Symbol] = f
-	r.fetchedAt[f.Symbol] = time.Now()
-	r.todayCount++
+	stored := *f
+	at := time.Now()
+	if f.EnrichmentFailed {
+		at = time.Unix(0, 0)
+		if prior := r.rows[f.Symbol]; prior != nil && prior.Source == f.Source {
+			stored.PBRatio = cmp.Or(f.PBRatio, prior.PBRatio)
+			stored.DividendYield = cmp.Or(f.DividendYield, prior.DividendYield)
+			stored.ROE = cmp.Or(f.ROE, prior.ROE)
+			stored.DebtToEquity = cmp.Or(f.DebtToEquity, prior.DebtToEquity)
+			stored.Beta = cmp.Or(f.Beta, prior.Beta)
+		}
+	}
+	r.rows[f.Symbol] = &stored
+	r.fetchedAt[f.Symbol] = at
+	r.todayBySource[f.Source]++
 	return nil
 }
 
-func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context) (int, error) {
-	return r.todayCount, nil
+func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context, src string) (int, error) {
+	r.countSources = append(r.countSources, src)
+	return r.todayBySource[src], nil
 }
 
 // CountFundamentalsFetchedSince is the rolling-window sibling (feature 129, Step 4).
-// Tests set sinceCount directly, mirroring how todayCount is set directly today rather
+// Tests set sinceBySource directly, mirroring how todayBySource is set directly today rather
 // than derived from real timestamps — the dispatch logic under test (fundamentalsQuota)
 // only cares which repo method gets called for which provider, not real time math.
-func (r *fakeFundRepo) CountFundamentalsFetchedSince(_ context.Context, _ time.Time) (int, error) {
-	return r.sinceCount, nil
+func (r *fakeFundRepo) CountFundamentalsFetchedSince(_ context.Context, src string, _ time.Time) (int, error) {
+	r.countSources = append(r.countSources, src)
+	return r.sinceBySource[src], nil
 }
 
 type fakeFundSource struct {
@@ -381,7 +411,7 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
-	repo.todayCount = 250
+	repo.todayBySource["fmp"] = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
@@ -400,13 +430,62 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 // Acceptance #3b: at-cap miss with NO cache returns ResourceExhausted.
 func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.todayCount = 250
+	repo.todayBySource["fmp"] = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+// AC-1 (feature 255): daily_request_cap 0 is a zero budget — an uncached single read is refused, never fetched.
+func TestGetFundamentals_CapZeroIsZeroBudget_AC1(t *testing.T) {
+	cfg := enabledCfg("fmp")
+	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(cfg, repo, src, notify, "fmp")
+	svc.fmpBudget = fakeBudget{used: 0, cap: 0}
+
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cap 0 must not call the vendor, got %d calls", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("cap 0 must not raise the quota WARN, got %d", notify.warnings)
+	}
+}
+
+// AC-9 (feature 255): daily_request_cap 0 on the multi path serves stale rows and drops uncached symbols.
+func TestGetFundamentalsMulti_CapZeroIsZeroBudget_AC9(t *testing.T) {
+	cfg := enabledCfg("fmp")
+	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: "fmp"}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(cfg, repo, src, notify, "fmp")
+	svc.fmpBudget = fakeBudget{used: 0, cap: 0}
+
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL", testdata.Msft})
+	if err != nil {
+		t.Fatalf("GetFundamentalsMulti: %v", err)
+	}
+	if len(out) != 1 || out[0].Symbol != "AAPL" || !out[0].Stale {
+		t.Fatalf("expected exactly one stale AAPL row, got %+v", out)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cap 0 must not call the vendor, got %d calls", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("cap 0 must not raise the quota WARN, got %d", notify.warnings)
 	}
 }
 
@@ -483,7 +562,7 @@ func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
 // FR-7: crossing 80% of the cap emits exactly one WARNING (deduped per day).
 func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.todayCount = 199 // post-fetch 200 == 80% of 250
+	repo.todayBySource["fmp"] = 199 // post-fetch 200 == 80% of 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, notify, "fmp")
@@ -537,13 +616,13 @@ func TestGetFundamentals_Finnhub_CacheHitNoFetch(t *testing.T) {
 }
 
 // Mirrors TestGetFundamentals_AtCapStale, using the rolling-window counter
-// (sinceCount) against marketdata.finnhub.symbols_per_minute (20) instead of FMP's
-// todayCount against daily_request_cap.
+// (sinceBySource) against marketdata.finnhub.symbols_per_minute (20) instead of FMP's
+// todayBySource against daily_request_cap.
 func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
-	repo.sinceCount = 20
+	repo.sinceBySource["finnhub"] = 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
@@ -562,13 +641,131 @@ func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 // Mirrors TestGetFundamentals_AtCapNoCacheResourceExhausted.
 func TestGetFundamentals_Finnhub_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 20
+	repo.sinceBySource["finnhub"] = 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+// AC-2 (feature 255): edgar rows inside the window do not consume the Finnhub quota.
+func TestGetFundamentals_Finnhub_EdgarRowsDoNotConsumeQuota_AC2(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.sinceBySource["edgar"] = 20 // == finnhub symbols_per_minute
+	repo.sinceBySource[finnhub.SourceName] = 0
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), testdata.Msft)
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Stale {
+		t.Fatalf("expected a fresh fetch, got stale %+v", f)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 Finnhub call, got %d", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("expected 0 quota WARNINGs, got %d", notify.warnings)
+	}
+	if !slices.Contains(repo.countSources, finnhub.SourceName) {
+		t.Fatalf("quota count sources = %v, want %q", repo.countSources, finnhub.SourceName)
+	}
+}
+
+// The FMP repo-count fallback (no shared budget wired) counts only fmp rows, not edgar ones (feature 255).
+func TestGetFundamentals_FMPRepoFallback_CountsOnlyFMPRows(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.todayBySource["edgar"] = 250 // == daily_request_cap
+	repo.todayBySource[fmp.SourceName] = 0
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 FMP call, got %d", src.calls)
+	}
+	if !slices.Contains(repo.countSources, fmp.SourceName) {
+		t.Fatalf("quota count sources = %v, want %q", repo.countSources, fmp.SourceName)
+	}
+}
+
+// vendorAxisCfg is the Finnhub vendor path with snapshot_source pinned to "vendor" (feature 255, AC-4).
+func vendorAxisCfg() *fakeCfg {
+	cfg := enabledCfg(finnhub.SourceName)
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": snapshotSourceVendor}
+	return cfg
+}
+
+// AC-4 (feature 255): a fresh edgar cache row is not served as vendor data on the vendor path.
+func TestGetFundamentals_VendorPathRefusesEdgarRow_AC4(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Price: f64p(100)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+	svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 Finnhub call for an edgar cache row, got %d", src.calls)
+	}
+	if f.Price != 200 || f.Source != finnhub.SourceName || f.Stale {
+		t.Fatalf("expected fresh finnhub data (price 200), got %+v", f)
+	}
+}
+
+// AC-4 multi path: edgar and edgar+fmp rows are both on the edgar axis, so neither is a fresh vendor hit.
+func TestGetFundamentalsMulti_VendorPathRefusesEdgarRow(t *testing.T) {
+	for _, rowSource := range []string{snapshotSourceEdgar, "edgar+fmp"} {
+		t.Run(rowSource, func(t *testing.T) {
+			repo := newFakeFundRepo()
+			repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: rowSource, Price: f64p(100)}
+			repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+			src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+			svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+			out, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
+			if err != nil {
+				t.Fatalf("GetFundamentalsMulti: %v", err)
+			}
+			if src.calls != 1 {
+				t.Fatalf("expected 1 Finnhub call for a %s cache row, got %d", rowSource, src.calls)
+			}
+			if len(out) != 1 || out[0].Price != 200 || out[0].Source != finnhub.SourceName || out[0].Stale {
+				t.Fatalf("expected fresh finnhub data (price 200), got %+v", out)
+			}
+		})
+	}
+}
+
+// AC-4 keeps the at-quota stale serve (@feature-215 @AC-7): a fresh edgar row is served stale, labelled edgar.
+func TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Price: f64p(100)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	repo.sinceBySource[finnhub.SourceName] = 20 // == finnhub symbols_per_minute
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+	svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("expected a stale serve, not an error: %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("at-cap must not call Finnhub, got %d", src.calls)
+	}
+	if !f.Stale || f.Source != snapshotSourceEdgar || f.Price != 100 {
+		t.Fatalf("expected the edgar row served stale, got %+v", f)
 	}
 }
 
@@ -620,7 +817,7 @@ func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 // design.md called for: unlike FMP's UTC-day dedup (which fires once and stays silent
 // for the rest of the day), Finnhub's rolling-window dedup must re-fire once the window
 // bucket changes. There is no injectable clock on maybeAlertQuota, so — exactly like
-// repo.sinceCount/todayCount are set directly elsewhere in this suite to force a quota
+// repo.sinceBySource/todayBySource are set directly elsewhere in this suite to force a quota
 // precondition without issuing real requests — this test forces the bucket-changed
 // precondition directly by overwriting quotaAlertBucket between calls, isolating the
 // exact comparison branch under test (see the 2026-07-30 082-fix-fmp-config-boot-only
@@ -628,7 +825,7 @@ func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 // end-to-end test — here, a real 60s sleep to observe a genuine new window).
 func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 15 // post-fetch 16 == 80% of 20
+	repo.sinceBySource["finnhub"] = 15 // post-fetch 16 == 80% of 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
@@ -665,7 +862,7 @@ func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 // TestGetFundamentalsMulti_ThreeCallsPerSymbol proves separately at the client level.
 func TestGetFundamentals_Finnhub_ThreeCallsPerSymbolCostsQuota(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
+	repo.sinceBySource["finnhub"] = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
@@ -3116,7 +3313,7 @@ func TestFundamentals_EdgarKillSwitchBothRPCs_feature215(t *testing.T) {
 // the edgar fallback (quota is an outage, never omitted as absence).
 func TestFundamentals_QuotaExhaustedNotOmitted_feature215(t *testing.T) {
 	svc, repo := absenceSvc(edgarCfg(true, true), &fakeFundSource{resp: &source.Fundamentals{}})
-	repo.sinceCount = 20 // == finnhub symbols_per_minute
+	repo.sinceBySource["finnhub"] = 20 // == finnhub symbols_per_minute
 	if _, err := svc.GetFundamentals(context.Background(), "SCHD"); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("single code = %v, want ResourceExhausted", connect.CodeOf(err))
 	}
@@ -4073,4 +4270,222 @@ func TestFundamentals_TransportErrorStatusIsKeyFree_feature254(t *testing.T) {
 		_, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
 		assertKeyFree(t, err)
 	})
+}
+
+// ── Feature 255 D-53b (store half): expired storage, re-fetch and the trace-carrying write ctx ──
+
+// containsMissing reports whether the wire message lists name in missing_metrics.
+func containsMissing(f *marketdatav1.Fundamentals, name string) bool {
+	return slices.Contains(f.GetMissingMetrics(), name)
+}
+
+// AC-5 (store half): a flagged fetch is served fresh-but-incomplete, stored at the epoch, and re-fetched next call.
+func TestGetFundamentals_EnrichmentFailedStoredExpired_AC5(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1), EnrichmentFailed: true}}
+	svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if f.Stale || !containsMissing(f, "beta") {
+		t.Fatalf("call 1: want fresh with beta missing, got stale=%v missing=%v", f.Stale, f.GetMissingMetrics())
+	}
+	if !repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatalf("stored fetched_at = %v, want the epoch", repo.fetchedAt["AAPL"])
+	}
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if src.calls != 2 {
+		t.Fatalf("source calls = %d, want 2 (the flagged row is not fresh within the TTL)", src.calls)
+	}
+}
+
+// A real FMP client whose profile answers 503: the flag reaches the store end to end and the row is re-fetched.
+func TestGetFundamentals_TransientEnrichment503StoredExpired(t *testing.T) {
+	var quoteCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/stable/quote":
+			quoteCalls.Add(1)
+			_, _ = w.Write([]byte(`[{"symbol":"AAPL","price":1}]`))
+		case "/stable/ratios-ttm":
+			_, _ = w.Write([]byte(`[{"priceToBookRatioTTM":3}]`))
+		default:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer srv.Close()
+	client := fmp.NewClient(fmp.ClientConfig{BaseURL: srv.URL, APIKey: "k", Metrics: []string{"core", "extended"}})
+	repo := newFakeFundRepo()
+	svc := newFundSvc(enabledCfg(fmp.SourceName), repo, client, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if f.Stale || !containsMissing(f, "beta") {
+		t.Fatalf("call 1: want fresh with beta missing, got stale=%v missing=%v", f.Stale, f.GetMissingMetrics())
+	}
+	if !repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatalf("stored fetched_at = %v, want the epoch", repo.fetchedAt["AAPL"])
+	}
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if n := quoteCalls.Load(); n != 2 {
+		t.Fatalf("FMP quote calls = %d, want 2 (the flagged row is not fresh within the TTL)", n)
+	}
+}
+
+// AC-10: a transient failure over an edgar row stores an expired fmp row, served stale at the cap and re-fetched after.
+func TestGetFundamentals_TransientOverEdgarRow_AC10(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Beta: f64p(0.9)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, PBRatio: f64p(3), EnrichmentFailed: true}}
+	cfg := enabledCfg(fmp.SourceName)
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": snapshotSourceVendor}
+	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if f.Stale || f.PbRatio != 3 || !containsMissing(f, "beta") {
+		t.Fatalf("call 1: want fresh pb=3 with beta missing, got %+v", f)
+	}
+	stored := repo.rows["AAPL"]
+	if stored.Source != fmp.SourceName || !repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatalf("stored row source=%q fetched_at=%v, want fmp at the epoch", stored.Source, repo.fetchedAt["AAPL"])
+	}
+	if stored.Beta != nil {
+		t.Fatalf("stored beta = %v, want nil (no merge across sources)", *stored.Beta)
+	}
+
+	svc.fmpBudget = fakeBudget{used: 250, cap: 250}
+	f, err = svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if src.calls != 1 || !f.Stale || f.Source != fmp.SourceName {
+		t.Fatalf("call 2 at cap: calls=%d stale=%v source=%q, want 1/true/fmp", src.calls, f.Stale, f.Source)
+	}
+
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 3: %v", err)
+	}
+	if src.calls != 2 {
+		t.Fatalf("call 3 after the quota reset: calls=%d, want 2", src.calls)
+	}
+}
+
+// A flagged same-source overwrite keeps last-known-good beta in the store; the response stays honest.
+func TestGetFundamentals_FlaggedSameSourceKeepsEnrichment(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		flagged  bool
+		wantBeta *float64
+	}{
+		{"flagged merges", true, f64p(1.2)},
+		{"unflagged overwrites", false, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newFakeFundRepo()
+			repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: fmp.SourceName, Beta: f64p(1.2)}
+			repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+			src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1), EnrichmentFailed: tc.flagged}}
+			svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+			svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+			f, err := svc.GetFundamentals(context.Background(), "AAPL")
+			if err != nil {
+				t.Fatalf("GetFundamentals: %v", err)
+			}
+			if !containsMissing(f, "beta") {
+				t.Fatalf("response missing_metrics = %v, want beta listed", f.GetMissingMetrics())
+			}
+			got := repo.rows["AAPL"].Beta
+			if (got == nil) != (tc.wantBeta == nil) || (got != nil && *got != *tc.wantBeta) {
+				t.Fatalf("stored beta = %v, want %v", got, tc.wantBeta)
+			}
+		})
+	}
+}
+
+// Operator r3 (2): an unflagged (deterministic 4xx) incomplete row is cached fresh and not re-fetched.
+func TestGetFundamentals_Deterministic4xxRowKeptFresh(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1)}}
+	svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatal("unflagged row stored at the epoch, want a fresh fetched_at")
+	}
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if src.calls != 1 || !containsMissing(f, "beta") {
+		t.Fatalf("call 2: calls=%d missing=%v, want 1 call and beta missing", src.calls, f.GetMissingMetrics())
+	}
+}
+
+// cancellingFundSource cancels the inbound request ctx before returning, like a client hanging up mid-fetch.
+type cancellingFundSource struct {
+	fakeFundSource
+	cancel context.CancelFunc
+}
+
+func (s *cancellingFundSource) GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, error) {
+	s.cancel()
+	return s.fakeFundSource.GetFundamentals(ctx, symbol)
+}
+
+func (s *cancellingFundSource) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*source.Fundamentals, error) {
+	s.cancel()
+	return s.fakeFundSource.GetFundamentalsMulti(ctx, symbols)
+}
+
+// Design 5.6: the cache write survives a cancelled request ctx (the write uses context.WithoutCancel).
+func TestGetFundamentals_UpsertSurvivesRequestCancel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func(ctx context.Context, svc *MarketDataService) error
+	}{
+		{"single", func(ctx context.Context, svc *MarketDataService) error {
+			_, err := svc.GetFundamentals(ctx, "AAPL")
+			return err
+		}},
+		{"multi", func(ctx context.Context, svc *MarketDataService) error {
+			_, err := svc.GetFundamentalsMulti(ctx, []string{"AAPL"})
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			repo := newFakeFundRepo()
+			src := &cancellingFundSource{fakeFundSource: fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1)}}, cancel: cancel}
+			svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+			svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+			if err := tc.call(ctx, svc); err != nil {
+				t.Fatalf("call: %v", err)
+			}
+			if repo.upserts != 1 {
+				t.Fatalf("upserts = %d, want 1 (the write must not inherit the request cancel)", repo.upserts)
+			}
+		})
+	}
 }

@@ -244,7 +244,8 @@ Adds **3** non-secret keys, consumed-with-default via the `WatchConfig` typed ge
 migration). Defaults declared in `services/xstockstrat-marketdata/CLAUDE.md` § Config Keys Consumed.
 The FMP gateway has **one** throttle authority: `rate_limit_rps` (burst = 1) shapes per-second load and
 the pre-existing `marketdata.fmp.daily_request_cap` is the single shared UTC-day budget across every FMP
-path (fundamentals snapshot, ratio enrichment, classification refresh) — no second cap.
+path (fundamentals snapshot, ratio enrichment, classification refresh) — no second cap; a cap `<= 0` is a
+zero budget that disables every FMP path.
 
 - `marketdata.fmp.rate_limit_rps` (int, `5`) — FMP token-bucket ceiling (5 rps = FMP Starter's
   300/min); `0` = unthrottled. Read live per call.
@@ -830,7 +831,7 @@ Establishes the `marketdata.<source>.enabled` convention (a source is off until 
 | `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source; off by default |
 | ~~`secret.marketdata.fmp.api_key`~~ | — | — | **Removed by feature 076** (migration `009`). The FMP credential is now the `FMP_API_KEY` secret env var, matching Alpaca/JWT/MCP-agent. Credentials do not belong in config: values are plaintext and stream to every `WatchConfig` subscriber. No `secret://` resolver was ever built |
 | `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before re-fetch |
-| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget) |
+| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget); <= 0 = zero budget (FMP disabled), large = effectively uncapped |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |
 | `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch (`core`, `extended`) |
 

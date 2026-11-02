@@ -784,6 +784,16 @@ Feature: Platform-wide guarantees
       | xstockstrat-ledger     | Authorization=Basic dGVzdDprZXk=         |
       | xstockstrat-ui         | Authorization=Basic%20dGVzdDprZXk%3D     |
 
+  @AC-6 @FR-4 @feature-283
+  Scenario: The tool count is unchanged and its surfaces agree
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    Then every statement states the count 45 (in words or digits) and the registered tool count is 45
+
+  @AC-10 @FR-4 @feature-283
+  Scenario: The score operation is documented in the runbook and the strat-lab skill
+    When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are read
+    Then both describe manage_strategy operation "score" including its side effects, and the documented operations equal the tool's accepted operations
+
   @AC-1 @FR-1 @feature-278
   Scenario: A key seeded bare but read dotted is reported as a form mismatch
     Given a config migration seeds namespace "ingest" with key "mcp_client.request_timeout_seconds"

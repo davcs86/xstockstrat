@@ -120,8 +120,8 @@ func TestGetFundamentals_MapsField(t *testing.T) {
 	if f.Currency != "USD" {
 		t.Fatalf("profile mapping wrong: %+v", f)
 	}
-	if f.Source != "finnhub" {
-		t.Fatalf("source: got %q want finnhub", f.Source)
+	if f.Source != SourceName {
+		t.Fatalf("source: got %q want %q", f.Source, SourceName)
 	}
 }
 

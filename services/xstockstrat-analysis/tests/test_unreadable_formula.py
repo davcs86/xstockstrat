@@ -10,12 +10,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
+import pytest
 from gen.analysis.v1 import analysis_pb2
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 
-from app.services.evaluator import StrategyEvaluator
-from tests.conftest import RecordingStub, ctx_with
+from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
+from tests.conftest import RecordingStub, aio_rpc_error, ctx_with
 from tests.test_analysis_servicer import (
     _EOF_PAGE,
     _FIRING_BARS,
@@ -31,9 +32,7 @@ _WARNING = "formula f-zscore not readable by owner"
 
 
 def _not_found():
-    return grpc.aio.AioRpcError(
-        grpc.StatusCode.NOT_FOUND, grpc.aio.Metadata(), grpc.aio.Metadata(), "formula not found"
-    )
+    return aio_rpc_error(grpc.StatusCode.NOT_FOUND, "formula not found")
 
 
 def _definition(z_ref="z"):
@@ -128,6 +127,66 @@ async def test_ac5_get_strategy_warns_not_readable():
 
     assert _WARNING in resp.warnings
     assert {dict(m)["x-user-id"] for _n, _r, m in svc._indicators.of("GetFormula")} == {"bob"}
+
+
+# ── Feature 275 AC-1/AC-7: backtest-path refusal mapping (unit level) ──────────────────────────
+
+
+_ADMIN_REFUSAL = "admins cannot execute another user's formula"
+
+
+def _evaluator(error, *, raise_unreadable):
+    indicators = MagicMock()
+    indicators.ExecuteFormula = AsyncMock(side_effect=error)
+    return StrategyEvaluator(indicators, (("x-user-id", "bob"),), raise_unreadable=raise_unreadable)
+
+
+async def _execute(ev):
+    return await ev._execute_formula(SimpleNamespace(formula_id="f-zscore"), MagicMock())
+
+
+async def test_backtest_permission_denied_maps_to_formula_error_with_code():
+    ev = _evaluator(
+        aio_rpc_error(grpc.StatusCode.PERMISSION_DENIED, _ADMIN_REFUSAL), raise_unreadable=True
+    )
+    with pytest.raises(FormulaExecutionError) as excinfo:
+        await _execute(ev)
+    exc = excinfo.value
+    assert exc.code == "PERMISSION_DENIED"
+    assert exc.formula_id == "f-zscore"
+    assert "admins cannot" not in str(exc)
+    assert "admins cannot" not in exc.error
+
+
+async def test_backtest_not_found_maps_to_formula_error_with_code():
+    ev = _evaluator(_not_found(), raise_unreadable=True)
+    with pytest.raises(FormulaExecutionError) as excinfo:
+        await _execute(ev)
+    assert excinfo.value.code == "NOT_FOUND"
+
+
+def test_contract_error_formula_error_has_no_code():
+    assert FormulaExecutionError("f-1", "boom").code == ""
+
+
+async def test_live_path_permission_denied_still_reraises():
+    ev = _evaluator(
+        aio_rpc_error(grpc.StatusCode.PERMISSION_DENIED, _ADMIN_REFUSAL), raise_unreadable=False
+    )
+    with pytest.raises(grpc.aio.AioRpcError):
+        await _execute(ev)
+
+
+async def test_live_path_not_found_still_skips():
+    ev = _evaluator(_not_found(), raise_unreadable=False)
+    assert await _execute(ev) is None
+    assert ev.unreadable_formulas == {"f-zscore"}
+
+
+async def test_backtest_unavailable_still_reraises():
+    ev = _evaluator(aio_rpc_error(grpc.StatusCode.UNAVAILABLE, "down"), raise_unreadable=True)
+    with pytest.raises(grpc.aio.AioRpcError):
+        await _execute(ev)
 
 
 # ── AC-30: write-time warning ────────────────────────────────────────────────────────────────────

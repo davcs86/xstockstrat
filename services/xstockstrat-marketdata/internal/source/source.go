@@ -62,6 +62,9 @@ type Fundamentals struct {
 	// Sector is the FMP profile's free-text sector; transient (not persisted) — it only feeds the
 	// classification epoch-seed write-through (feature 217).
 	Sector string
+	// EnrichmentFailed is transient (not persisted): true means a transient enrichment failure,
+	// so the cache stores the row already expired.
+	EnrichmentFailed bool
 }
 
 // ErrNoFundamentals: vendor has no fundamentals for the symbol — absence, not an outage (feature 215).

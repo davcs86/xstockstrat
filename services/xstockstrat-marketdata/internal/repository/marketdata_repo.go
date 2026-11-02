@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -525,10 +526,24 @@ func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols
 // fundamentalsColumns is the SELECT/scan column order for a fundamentals row.
 const fundamentalsColumns = `symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at`
 
+// decodeExtraMetrics decodes the extra_metrics jsonb column for every fundamentals read; an
+// undecodable value is logged and yields an empty map, never a read failure.
+func decodeExtraMetrics(ctx context.Context, symbol string, raw []byte) map[string]float64 {
+	extra := map[string]float64{}
+	if len(raw) == 0 {
+		return extra
+	}
+	if err := json.Unmarshal(raw, &extra); err != nil {
+		slog.WarnContext(ctx, "fundamentals extra_metrics decode failed", "symbol", symbol, "error", err)
+		return map[string]float64{}
+	}
+	return extra
+}
+
 // GetFundamentals reads one cached fundamentals row by symbol (PK lookup). found=false
 // when no row exists. fetchedAt is returned so the service can apply the TTL/quota logic.
 func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f *source.Fundamentals, fetchedAt time.Time, found bool, err error) {
-	row := r.pool.QueryRow(ctx,
+	row := r.db.QueryRow(ctx,
 		`SELECT `+fundamentalsColumns+` FROM marketdata.fundamentals WHERE symbol = $1`, symbol)
 	var (
 		sym, currency, src                                                   string
@@ -543,10 +558,7 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 		}
 		return nil, time.Time{}, false, fmt.Errorf("get fundamentals %s: %w", symbol, scanErr)
 	}
-	extra := map[string]float64{}
-	if len(extraJSON) > 0 {
-		_ = json.Unmarshal(extraJSON, &extra)
-	}
+	extra := decodeExtraMetrics(ctx, sym, extraJSON)
 	// The scanned locals are already *float64 (NULL-preserving) — pass them through rather than
 	// collapsing a real SQL NULL to 0.0 (metric fields are pointers for exactly this reason).
 	return &source.Fundamentals{
@@ -569,8 +581,8 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 	}, fetched, true, nil
 }
 
-// UpsertFundamentals inserts or refreshes a cached fundamentals row, bumping fetched_at
-// to now() so the quota count (CountFundamentalsFetchedToday) and TTL reflect the fetch.
+// UpsertFundamentals stores a row flagged EnrichmentFailed already expired (fetched_at = epoch), and a
+// flagged same-source overwrite keeps the last-known-good enrichment columns.
 func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error {
 	extraJSON, err := json.Marshal(f.ExtraMetrics)
 	if err != nil {
@@ -590,21 +602,26 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 		INSERT INTO marketdata.fundamentals
 		  (symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe,
 		   debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16, now())
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,
+		        CASE WHEN $17::boolean THEN 'epoch'::timestamptz ELSE now() END)
 		ON CONFLICT (symbol) DO UPDATE SET
 		  as_of=EXCLUDED.as_of, market_cap=EXCLUDED.market_cap, pe_ratio=EXCLUDED.pe_ratio,
-		  pb_ratio=EXCLUDED.pb_ratio, dividend_yield=EXCLUDED.dividend_yield, eps=EXCLUDED.eps,
-		  beta=EXCLUDED.beta, roe=EXCLUDED.roe, debt_to_equity=EXCLUDED.debt_to_equity,
+		  pb_ratio=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.pb_ratio, fundamentals.pb_ratio) ELSE EXCLUDED.pb_ratio END,
+		  dividend_yield=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.dividend_yield, fundamentals.dividend_yield) ELSE EXCLUDED.dividend_yield END,
+		  eps=EXCLUDED.eps,
+		  beta=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.beta, fundamentals.beta) ELSE EXCLUDED.beta END,
+		  roe=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.roe, fundamentals.roe) ELSE EXCLUDED.roe END,
+		  debt_to_equity=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.debt_to_equity, fundamentals.debt_to_equity) ELSE EXCLUDED.debt_to_equity END,
 		  price=EXCLUDED.price, year_high=EXCLUDED.year_high, year_low=EXCLUDED.year_low,
 		  extra_metrics=EXCLUDED.extra_metrics, currency=EXCLUDED.currency, source=EXCLUDED.source,
-		  fetched_at=now()`
+		  fetched_at=EXCLUDED.fetched_at`
 	asOf := f.AsOf
 	if asOf.IsZero() {
 		asOf = time.Now().UTC()
 	}
 	_, err = r.db.Exec(ctx, q,
 		f.Symbol, asOf, f.MarketCap, f.PERatio, f.PBRatio, f.DividendYield, f.EPS, f.Beta, f.ROE,
-		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSONText, f.Currency, src)
+		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSONText, f.Currency, src, f.EnrichmentFailed)
 	if err != nil {
 		return fmt.Errorf("upsert fundamentals %s: %w", f.Symbol, err)
 	}
@@ -651,25 +668,26 @@ func (r *MarketDataRepo) SumDividendsInWindow(ctx context.Context, symbol string
 	return sum, total > 0, nil
 }
 
-// CountFundamentalsFetchedToday counts rows fetched within the current UTC day — the
-// FR-4 daily quota window. The idx_fundamentals_fetched_at index backs this scan.
-func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context) (int, error) {
+// CountFundamentalsFetchedToday counts src's rows fetched (or as-of) within the current UTC day — the
+// FR-4 daily quota window. The as_of arm keeps an epoch-expired fmp row written today counted.
+func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context, src string) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx,
+	err := r.db.QueryRow(ctx,
 		`SELECT count(*) FROM marketdata.fundamentals
-		 WHERE fetched_at >= date_trunc('day', now() AT TIME ZONE 'UTC')`).Scan(&n)
+		 WHERE source = $1 AND (fetched_at >= date_trunc('day', now() AT TIME ZONE 'UTC') OR as_of >= date_trunc('day', now() AT TIME ZONE 'UTC'))`,
+		src).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count fundamentals fetched today: %w", err)
 	}
 	return n, nil
 }
 
-// CountFundamentalsFetchedSince counts rows fetched since `since` — the rolling-window quota
+// CountFundamentalsFetchedSince counts src's rows fetched since `since` — the rolling-window quota
 // shape a per-minute-limited provider (Finnhub) needs, vs CountFundamentalsFetchedToday's UTC day.
-func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error) {
+func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, src string, since time.Time) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx,
-		`SELECT count(*) FROM marketdata.fundamentals WHERE fetched_at >= $1`, since).Scan(&n)
+	err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM marketdata.fundamentals WHERE source = $1 AND fetched_at >= $2`, src, since).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count fundamentals fetched since %s: %w", since, err)
 	}
@@ -831,10 +849,7 @@ func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol
 			&marketCap, &pe, &pb, &divYield, &eps, &beta, &roe, &dte, &price, &yHigh, &yLow, &extraJSON); scanErr != nil {
 			return nil, "", fmt.Errorf("scan fundamentals_history %s: %w", symbol, scanErr)
 		}
-		extra := map[string]float64{}
-		if len(extraJSON) > 0 {
-			_ = json.Unmarshal(extraJSON, &extra)
-		}
+		extra := decodeExtraMetrics(ctx, sym, extraJSON)
 		out = append(out, source.HistoricalFundamentalsPeriod{
 			Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
 			AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,
@@ -884,10 +899,7 @@ func (r *MarketDataRepo) LatestHistoricalFundamental(ctx context.Context, symbol
 		}
 		return nil, fmt.Errorf("latest fundamentals_history %s: %w", symbol, err)
 	}
-	extra := map[string]float64{}
-	if len(extraJSON) > 0 {
-		_ = json.Unmarshal(extraJSON, &extra)
-	}
+	extra := decodeExtraMetrics(ctx, sym, extraJSON)
 	return &source.HistoricalFundamentalsPeriod{
 		Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
 		AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,

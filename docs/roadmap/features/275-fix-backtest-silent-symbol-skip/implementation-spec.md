@@ -68,37 +68,49 @@ any code step runs.
 
 ### Step 1 — docs: re-anchor gate and exception inventory on the merged 272/273/215 tree
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (read-only check; the only write is to this feature's `context.md`)
 **Files**:
 - `docs/roadmap/features/275-fix-backtest-silent-symbol-skip/context.md` — modify (append the re-anchor table)
 
 **Reviewers**: none
 
-**Codebase Evidence**:
-- 272 plans the shapes this step re-checks (`docs/roadmap/features/272-fix-analysis-backtest-bounds/implementation-spec.md`):
-  - Step 3 (:251, :267): rename the body to `async def _run_backtest`, and insert `except _BarFetchError: raise`
-    immediately before `except grpc.RpcError as e:`.
-  - Step 5 (:402-412): `async with asyncio.timeout(limit or None) as cm:` wraps `_run_backtest` in the
-    `RunBacktest` wrapper, **not** inside the loop. An inner `TimeoutError` while `cm` has not expired is re-raised
-    (:419).
-  - Step 6 T-inner-timeout (:513-519): patches `_load_benchmark_bars`, which is awaited before the symbol loop, so it
-    is outside the new arm.
-- Pre-272 anchors on this branch (`grep -n` on `services/xstockstrat-analysis/app/handlers/servicer.py`):
-  `_PROPAGATED_HEADERS` :350; `class _BarFetchError` :358; `async def RunBacktest` :785; `propagation_meta` :806-810;
-  `formula_errors: int = 0` :905; `symbol_intents` :910; `fund_refusals = 0` :927; `fund_unknown` :928;
-  `for symbol in symbols_to_run:` :996; `symbol_intents[symbol] = sym_intent` :1046; `_compute_metrics` :1050;
-  `except _InsufficientData` :1065; `except _FundamentalsUnavailable` :1086; `except _FundamentalsUnknown` :1104;
-  `except FormulaExecutionError as fe` :1112-1126; `except grpc.RpcError as e` :1127-1129;
-  `except Exception as e` :1130-1132; gate :1235-1242; `fund_unknown` warnings :1263-1266;
-  `self._backtests[backtest_id] = result` :1267; `_persist_backtest_detail` :1313-1314; recompute condition :1320;
-  `analysis.backtest.completed` `AppendEvent` :1344-1352; `raise_unreadable=True` :2036.
+**Codebase Evidence** (re-spec 2026-11-01, `/sdd-execute` sequential: re-grepped on `c5400f8a`, which contains
+`origin/main-dev`; 272 and 273 are `launched`, and 215 is `in-progress` with value 5, `fund_refusals` and
+`fund_unknown` already in the tree):
+- 272 landed the shapes this step re-checks:
+  - `async def RunBacktest` :794 is now a thin wrapper. `async with asyncio.timeout(limit or None) as cm:` (:806)
+    wraps `await self._run_backtest(request, context, lambda: cm.reschedule(None))` (:807). An inner `TimeoutError`
+    while `cm` has not expired is re-raised (:808-810). `except _BarFetchError as e:` (:815-819) aborts
+    `FAILED_PRECONDITION`. The body is `async def _run_backtest(self, request, context, disarm)` :821.
+  - In the symbol loop, `except _BarFetchError: raise` (:1163-1164) sits immediately before the two catch-alls.
+  - `disarm()` :1307 sits directly before `self._backtests[backtest_id] = result` :1308. Its comment says no awaited
+    state-writing call may move above it.
+- Merged anchors (`grep -n` on `services/xstockstrat-analysis/app/handlers/servicer.py`; pre-272 line in brackets):
+  `_PROPAGATED_HEADERS` :353 [350]; `class _BarFetchError` :368 [358]; `class _FundamentalsPageError` :372 (new);
+  `propagation_meta` :842-846 [806-810]; `formula_errors: int = 0` :941 [905]; `symbol_intents` :946 [910];
+  `fund_refusals = 0` :963 [927]; `fund_unknown` :964 [928]; `for symbol in symbols_to_run:` :1032 [996];
+  `symbol_intents[symbol] = sym_intent` :1082 [1046]; `_compute_metrics` :1086 [1050];
+  `except _InsufficientData` :1101 [1065]; `except _FundamentalsUnavailable` :1122 [1086];
+  `except _FundamentalsUnknown` :1140 [1104]; `except FormulaExecutionError as fe` :1148-1162 [1112-1126];
+  `except _BarFetchError: raise` :1163-1164 (new); `except grpc.RpcError as e` / `except Exception as e` :1165-1170
+  [1127-1132]; gate :1273-1280 [1235-1242]; `fund_unknown` warnings :1301-1304 [1263-1266];
+  `self._backtests[backtest_id] = result` :1308 [1267]; `_persist_backtest_run(` call :1341-1351 [1300-1303];
+  `_persist_backtest_detail` :1354-1355 [1313-1314]; recompute condition :1361 [1320];
+  `analysis.backtest.completed` `AppendEvent` :1385-1393 [1344-1352]; `raise_unreadable=True` :2082-2083 [2036];
+  `def _persist_backtest_run(self, result, symbols, score, …)` :2895 [2848] (`score` is still the 3rd positional
+  argument at the call site).
 - `services/xstockstrat-analysis/app/services/evaluator.py`: `class FormulaExecutionError` :102-110 (`__init__(self,
-  formula_id, error)` :107); `_execute_formula` :254-266 (`if e.code() != grpc.StatusCode.NOT_FOUND: raise` :260-261).
-  `raise_unreadable=True` is set **only** at `servicer.py:2036`. The other `StrategyEvaluator(` sites are :3874,
-  :4175, :4416, :4869, :5485 and :5964, plus `app/main.py:156`, and all use the default `False`.
-- `packages/proto/analysis/v1/analysis.proto:196-203`: the last `NoTradeReason` value is
-  `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5`.
+  formula_id, error)` :108); `_execute_formula` :254-266 (`if e.code() != grpc.StatusCode.NOT_FOUND: raise` :260-261).
+  `raise_unreadable=True` is set **only** at `servicer.py:2082-2083`. The other `StrategyEvaluator(` sites are :3921,
+  :4222, :4463, :4914, :5530 and :6010, plus `app/main.py:157`, and all use the default `False`.
+- `packages/proto/analysis/v1/analysis.proto:197-202`: the last `NoTradeReason` value is
+  `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5` (:202). Value 6 is free.
+- Pre-answered by the re-spec, and confirmed again by this step's grep: (a) the deadline is the wrapper
+  `asyncio.timeout`, not an in-loop `wait_for`. (b) `_fetch_bars_paged` (:1435-1495) does not wrap `GetBars` errors,
+  so a raw `grpc.RpcError` still reaches the loop. (c) value 6 is free. Exception inventory: the only new custom
+  exception is `_FundamentalsPageError` (:372), which `_load_fundamentals` catches internally (:1851). No new
+  sentinel needs to sit above the broad arm. The indicators anchors (`servicer.py:126-129`, `:243-253`) match.
 
 **TDD**: N/A (verification/checklist step; no code)
 
@@ -116,7 +128,7 @@ any code step runs.
      `wait_for`? If it is in-loop, **stop**: the decision not to re-raise `TimeoutError` must be revisited with the
      operator (design Open Risk 2).
    - (b) Does a `GetBars` RPC error still reach the loop as a raw `grpc.RpcError`, not wrapped in `_BarFetchError`?
-     Check `_fetch_bars_paged`, near :1394 pre-272. If it is wrapped, AC-2 and AC-5 need re-design, so **stop**.
+     Check `_fetch_bars_paged` (:1435-1495 merged). If it is wrapped, AC-2 and AC-5 need re-design, so **stop**.
    - (c) Is `NoTradeReason` value 6 still free? If it is taken, use the next free value and record it. Steps 2, 3
      and 8 then use that number.
 4. **Exception inventory (design §8).** Re-grep every `raise` and every custom exception class reachable from the
@@ -134,8 +146,8 @@ any code step runs.
    and NOT_FOUND to anyone else for an unreadable formula (design Open Risk 6). Also list every other
    `PERMISSION_DENIED` that `ExecuteFormula` can return (today `_reader`'s system-identity grant check, :126-129),
    because Step 4 maps any backtest-path PERMISSION_DENIED to FORMULA_ERROR.
-6. Re-check the `_persist_backtest_run(self, result, symbols, score, …)` signature (pre-272 :2848-2858; call
-   :1300-1303). Step 7 AC-4 asserts `score` as the 3rd positional arg. If 272 or 215 reordered it or made it a
+6. Re-check the `_persist_backtest_run(self, result, symbols, score, …)` signature (merged :2895; call
+   :1341-1351). Step 7 AC-4 asserts `score` as the 3rd positional arg. If 272 or 215 reordered it or made it a
    keyword argument, adjust that assertion and record the change in `context.md`.
 
 **Verification**:
@@ -152,7 +164,7 @@ grep -n "NO_TRADE_REASON_.* = [0-9]*;" packages/proto/analysis/v1/analysis.proto
 
 ### Step 2 — proto: add `NO_TRADE_REASON_EVALUATION_FAILED = 6` and draw the 6-vs-4 boundary
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -189,7 +201,7 @@ A feature-branch baseline would miss a break made earlier on the branch. `--git-
 
 ### Step 3 — proto-gen: regenerate stubs and add the exhaustive UI `NO_TRADE_MESSAGE` key (same commit)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`, `xstockstrat-ui`
 **Files**:
 - `packages/proto/gen/**` — modify (generated by `./scripts/buf-gen.sh`; never hand-edited). The exact paths
@@ -230,7 +242,7 @@ empty `git diff packages/proto/gen/`.
 
 ### Step 4 — service: map backtest-path `ExecuteFormula` PERMISSION_DENIED to `FormulaExecutionError` with a status code
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -289,7 +301,7 @@ Behavior is verified in Step 5.
 
 ### Step 5 — test: evaluator refusal mapping (design test (f), unit level)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (add the shared `aio_rpc_error` builder)
@@ -302,7 +314,8 @@ Behavior is verified in Step 5.
   `grpc.aio.AioRpcError(grpc.StatusCode.NOT_FOUND, grpc.aio.Metadata(), grpc.aio.Metadata(), "formula not found")`.
 - It imports `StrategyEvaluator` (:17) and `RecordingStub, ctx_with` from `tests.conftest` (:18).
 - `test_ac5_live_loop_skips_unreadable_component_as_owner` (:90) is the live-path pin.
-- `tests/conftest.py:71`: `def ctx_with(headers)`. Line :79: `OWNER_HEADERS` (scope `"1"`, trace `"t-1"`).
+- `tests/conftest.py:131` (re-spec 2026-11-01; was :71): `def ctx_with(headers)`. Line :139 (was :79):
+  `OWNER_HEADERS` (scope `"1"`, trace `"t-1"`). No `aio_rpc_error` exists yet.
 
 **TDD**: red-green required
 
@@ -357,33 +370,39 @@ builder lives only in `conftest.py`.
 
 ### Step 6 — service: one inline `except Exception` arm, the `eval_failures` gate term and per-symbol warnings
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
+- `services/xstockstrat-analysis/tests/test_owner_dimension.py` — modify (fixture wiring only; operator Option A, 2026-11-01)
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (fixture wiring only, `TestRunBacktestPersistence`; operator Option A, 2026-11-01)
 
 **Reviewers**: `xstockstrat-analysis` owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
-**Codebase Evidence** (pre-272 lines; use the Step 1 table):
-- `servicer.py:350`: `_PROPAGATED_HEADERS = ("x-user-id", "x-access-scope", "x-trace-id")`.
-- `:806-810`: `propagation_meta = [(k, v) for k, v in context.invocation_metadata() if k in (…)]`. This is the
+**Codebase Evidence** (merged lines, re-spec 2026-11-01; pre-272 line in brackets where it moved):
+- `servicer.py:353` [350]: `_PROPAGATED_HEADERS = ("x-user-id", "x-access-scope", "x-trace-id")`.
+- `:842-846` [806-810], inside `_run_backtest`: `propagation_meta = [(k, v) for k, v in context.invocation_metadata() if k in (…)]`. This is the
   run-scoped trace source; mint no new context (operator 2026-10-21, C-03).
-- `:905`: `formula_errors: int = 0`. `:910`: `symbol_intents: dict[str, list[BarIntent]] = {}`.
-  `:928`: `fund_unknown: list[str] = []`.
-- `:1046`: `symbol_intents[symbol] = sym_intent` is buffered **before** `_compute_metrics` at `:1050` (the design §3
-  pop target). `_simulate_portfolio(symbol_intents, …)` is called at `:1182-1183`.
-- `:1112-1126`: the `except FormulaExecutionError as fe:` row template
+- `:941` [905]: `formula_errors: int = 0`. `:946` [910]: `symbol_intents: dict[str, list[BarIntent]] = {}`.
+  `:964` [928]: `fund_unknown: list[str] = []`.
+- `:1082` [1046]: `symbol_intents[symbol] = sym_intent` is buffered **before** `_compute_metrics` at `:1086` [1050]
+  (the design §3 pop target). `_simulate_portfolio(symbol_intents, …)` is called after the loop.
+- `:1148-1162` [1112-1126]: the `except FormulaExecutionError as fe:` row template
   (`SymbolDiagnostics(symbol=…, bars=[], no_trade_reason=…, bars_total=0, warmup_bars=0)`, then
   `formula_errors += 1`, then `continue`).
-- `:1127-1132`: the defect. `except grpc.RpcError as e: log.warning(...); continue` and
+- `:1163-1164`: 272's `except _BarFetchError: raise`, which stays first.
+- `:1165-1170` [1127-1132]: the defect. `except grpc.RpcError as e: log.warning(...); continue` and
   `except Exception as e: log.warning(...); continue`.
-- `:1235-1241`: the gate `if (not all_trades and len(daily_equity) <= 1 and (coverage_gaps or formula_errors or
+- `:1273-1280` [1235-1241] (comment above it at `:1271-1272`): the gate `if (not all_trades and len(daily_equity) <= 1 and (coverage_gaps or formula_errors or
   fund_refusals or fund_unknown)):` sets `INSUFFICIENT_DATA`.
-- `:1263-1266`: `if fund_unknown: result.warnings.extend(f"fundamentals fetch failed for {sym} — rerun" for sym in
+- `:1301-1304` [1263-1266]: `if fund_unknown: result.warnings.extend(f"fundamentals fetch failed for {sym} — rerun" for sym in
   fund_unknown)`.
-- `:1290-1299`: `score = None` unless OK. `:1313-1314`: detail only when OK. `:1320`: recompute when
+- `:1307`: `disarm()`, then `:1308` `self._backtests[backtest_id] = result`. The new warnings block is a
+  synchronous `extend`, so it may sit above `disarm()`.
+- `score = None` unless OK. `:1341-1351`: `_persist_backtest_run`. `:1354-1355`: detail only when OK. `:1361` [1320]:
+  recompute when
   `status == OK or fund_refusals > 0`. This **stays unchanged** (@AC-11 @feature-215).
-- `:1344-1352`: `analysis.backtest.completed` `AppendEvent(…, metadata=propagation_meta)`. Unchanged.
+- `:1385-1393` [1344-1352]: `analysis.backtest.completed` `AppendEvent(…, metadata=propagation_meta)`. Unchanged.
 
 **TDD**: red-green required
 
@@ -397,8 +416,8 @@ builder lives only in `conftest.py`.
 3. In the `except FormulaExecutionError as fe:` arm, keep the row and `formula_errors += 1`. Before `continue`, add
    `if fe.code: eval_failures.append((symbol, fe.code))`. This gives the FR-3/FR-8 warning to the mapped refusals
    only. Contract errors keep their no-warning behavior (design Open Risk 5, confirmed at `/sdd-review impl-spec`).
-4. Replace the two catch-alls (`:1127-1132` pre-272; post-272 they sit after 272's `except _BarFetchError: raise`,
-   which **stays first**) with any new sentinel re-raises from the Step 1 inventory, then exactly **one** arm:
+4. Replace the two catch-alls (`:1165-1170`, directly after 272's `except _BarFetchError: raise` at `:1163-1164`,
+   which **stays first**) with exactly **one** arm. The Step 1 inventory found no new sentinel to re-raise:
    ```python
    except Exception as e:
        code = e.code().name if isinstance(e, grpc.RpcError) and callable(getattr(e, "code", None)) else type(e).__name__
@@ -423,11 +442,11 @@ builder lives only in `conftest.py`.
    - Do not add `except TimeoutError` (Rejected Alternatives). 272's deadline arrives as `CancelledError`, which is a
      `BaseException` and passes through.
    - There is one arm and no helper (C-18).
-5. Gate: add `or eval_failures` to the or-chain at `:1238` **only**. Do not touch `:1320`.
-6. Warnings: immediately after the `fund_unknown` block (`:1263-1266`), add:
+5. Gate: add `or eval_failures` to the or-chain at `:1276` **only**. Do not touch `:1361`.
+6. Warnings: immediately after the `fund_unknown` block (`:1301-1304`), and before `disarm()` (`:1307`), add:
    `if eval_failures: result.warnings.extend(EVAL_FAILED_WARNING.format(symbol=s, code=c) for s, c in eval_failures)`
    - The server log carries the full error. The client warning carries the code name only, never `e.details()`.
-7. Update the gate comment above `:1235` in one line, so it names evaluation failures as a gate term.
+7. Update the gate comment at `:1271-1272` in one line, so it names evaluation failures as a gate term.
 
 **Verification**:
 ```bash
@@ -436,14 +455,14 @@ cd services/xstockstrat-analysis \
   && ruff check . && ruff format --check .
 ```
 Inspect the loop by hand: no `except grpc.RpcError` arm and no second `except Exception` remain in the `RunBacktest`
-symbol loop, and `except _BarFetchError: raise` precedes the single arm. The `:1320` condition is still
+symbol loop, and `except _BarFetchError: raise` precedes the single arm. The `:1361` condition is still
 `status == OK or fund_refusals > 0`. Behavior is verified in Step 7.
 
 ---
 
 ### Step 7 — test: RunBacktest evaluation-failure surfacing (AC-1 … AC-7, design tests (a)–(g))
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (new class
@@ -452,15 +471,18 @@ symbol loop, and `except _BarFetchError: raise` precedes the single arm. The `:1
 **Reviewers**: `xstockstrat-analysis` owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `tests/test_analysis_servicer.py:1614`: `class TestFormulaErrorSurfacing`, with helpers `_req(definition, symbols)`,
-  `_formula_def()` (custom-formula component `f-1`, entry `ff > 0`) and `_wire(svc, bars, execute_side_effect)`
+- `tests/test_analysis_servicer.py:1703` (re-spec 2026-11-01; was :1614): `class TestFormulaErrorSurfacing`, with
+  helpers `_req(definition, symbols)` :1707, `_formula_def()` :1715 (custom-formula component `f-1`, entry `ff > 0`)
+  and `_wire(svc, bars, execute_side_effect)` :1727
   (ledger, marketdata `GetBars`, indicators `ExecuteFormula`/`GetFormula`).
-  - Its tests `test_partial_run_stamps_formula_error_and_keeps_sibling` and `test_all_failed_run_is_insufficient_and_unscored`
-    are the exact shape to mirror.
-- `make_servicer` :36; `_owned_ctx` :63 (scope `"7"`, admin bit set, trace `"t1"`); `_EOF_PAGE` :136; `_bar` :1396.
-- `tests/conftest.py`: `ctx_with` :71, `OWNER_HEADERS` :79 (scope `"1"`), and Step 5's `aio_rpc_error`.
-- `tests/test_warmup.py:260`: `pytest.raises(_BarFetchError, match=...)` style.
-- `tests/test_backtest_fundamentals_guard.py:192-207`: the `caplog.at_level(logging.WARNING)` record-scan style.
+  - Its tests `test_partial_run_stamps_formula_error_and_keeps_sibling` (:1739) and
+    `test_all_failed_run_is_insufficient_and_unscored` (:1773) are the exact shape to mirror.
+- `make_servicer` :36; `_owned_ctx` :63 (scope `"7"`, admin bit set, trace `"t1"`); `_EOF_PAGE` :135; `_bar` :1485.
+- `tests/conftest.py`: `ctx_with` :131, `OWNER_HEADERS` :139 (scope `"1"`), and Step 5's `aio_rpc_error`.
+- `tests/test_warmup.py:242`, `:253`, `:277`: `pytest.raises(_BarFetchError, match=...)` style.
+- `tests/test_backtest_fundamentals_guard.py:194`: the `caplog.at_level(logging.WARNING)` record-scan style.
+- The methods the step patches all exist on the servicer: `_backtest_symbol_evaluated`, `_persist_symbol_cells`,
+  `_recompute_headline`, `_persist_backtest_detail` and `_persist_backtest_run` (`score` 3rd positional, :2895).
 
 **TDD**: red-green required
 
@@ -536,8 +558,8 @@ symbol loop, and `except _BarFetchError: raise` precedes the single arm. The `:1
      - Assert the AAPL row is EVALUATION_FAILED.
    - **(e)** `test_bar_fetch_error_still_propagates_past_broad_arm` (AC-6; needs 272, gated by Step 1):
      - Input: `_backtest_symbol_evaluated` raises `_BarFetchError("…")`.
-     - Assert the call fails, either as `pytest.raises(Exception, match="aborted")` with `ctx.abort` awaited with
-       `grpc.StatusCode.FAILED_PRECONDITION`, or by matching 272's landed wrapper shape (re-anchored in Step 1).
+     - Assert the call fails as 272's landed wrapper shapes it: `RunBacktest` catches `_BarFetchError`
+       (`servicer.py:815-819`) and awaits `ctx.abort(grpc.StatusCode.FAILED_PRECONDITION, …)`.
      - Assert no EVALUATION_FAILED row was produced, i.e. `_persist_backtest_run` was not awaited with one.
    - **(f) run level**: covered by AC-1 and AC-7 above. Also add
      `test_formula_contract_error_adds_no_eval_warning`: `ExecuteFormula` returns
@@ -567,7 +589,7 @@ cd services/xstockstrat-analysis \
 
 ### Step 8 — test: `/insights` reachability of the new reason and warning (C-10, C-12, C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/backtests.ts` — modify
@@ -578,15 +600,15 @@ cd services/xstockstrat-analysis \
 **Reviewers**: `xstockstrat-ui` owner — analytics display accuracy, Connect-RPC call safety
 
 **Codebase Evidence**:
-- `e2e/mock-backend.ts:1050-1069`: the `strat-fundamentals-etf-001` sentinel branch returns `status: 2`,
-  `coverageGaps: []` and one diagnostic `noTradeReason: 5`. Lines :1071-1090 hold the `strat-formula-error-001`
-  branch.
+- `e2e/mock-backend.ts:1123-1142` (re-spec 2026-11-01; was :1050-1069): the `strat-fundamentals-etf-001` sentinel
+  branch returns `status: 2` (:1128), `coverageGaps: []` and one diagnostic `noTradeReason: 5` (:1137). The
+  `strat-formula-error-001` branch starts at :1144.
 - `e2e/insights/backtest-coverage.spec.ts:97-108` (FORMULA_ERROR banner) and :110-127 (refused-only
   INSUFFICIENT_DATA run, `getByTestId('no-trade-reason')`, `getByTestId('insufficient-data')` count 0).
-- The view renders warnings in `src/app/insights/strategies/[id]/page.tsx:509-516` (`data-testid="backtest-warnings"`)
-  and `<BacktestDiagnostics>` for INSUFFICIENT_DATA at :569-574.
+- The view renders warnings in `src/app/insights/strategies/[id]/page.tsx:510` (`data-testid="backtest-warnings"`)
+  and `<BacktestDiagnostics>` for INSUFFICIENT_DATA at :573.
 - `e2e/fixtures/backtests.ts:91-94`: the `BACKTEST_SEED_SPAN_WARNING` / `BACKTEST_SEED_SPAN_RESULT` warning-fixture
-  pattern. `INVENTORY.md:32` holds its catalog row, and :60-62 hold the sentinel rows.
+  pattern. `INVENTORY.md:36` holds its catalog row, and :66-67 hold the backtest sentinel rows.
 
 **TDD**: red-green required (the spec fails until the mock branch and fixture exist)
 
@@ -596,16 +618,16 @@ cd services/xstockstrat-analysis \
 1. **C-12.** The warning string is used by both the mock and the spec, so centralize it. In `e2e/fixtures/backtests.ts`,
    add `export const BACKTEST_EVAL_FAILED_WARNING = 'backtest symbol AAPL not evaluated: UNAVAILABLE';`.
    - It mirrors analysis `EVAL_FAILED_WARNING`, filled with symbol `AAPL` and code `UNAVAILABLE`.
-   - Add an `INVENTORY.md` table row beside :32: `Evaluation-failed warning (275) | BACKTEST_EVAL_FAILED_WARNING | e2e/fixtures/backtests.ts | BacktestResult (warnings) | e2e/mock-backend.ts, e2e/insights/backtest-coverage.spec.ts`.
+   - Add an `INVENTORY.md` table row beside :36: `Evaluation-failed warning (275) | BACKTEST_EVAL_FAILED_WARNING | e2e/fixtures/backtests.ts | BacktestResult (warnings) | e2e/mock-backend.ts, e2e/insights/backtest-coverage.spec.ts`.
 2. In `mock-backend.ts`, before the `strat-formula-error-001` branch, add a `strat-eval-failed-001` sentinel branch
-   modeled on :1050-1069:
+   modeled on :1123-1142:
    - `status: 2` (INSUFFICIENT_DATA), `totalTrades: 0`, `trades: []`, `coverageGaps: []`
    - `warnings: [BACKTEST_EVAL_FAILED_WARNING]`
    - one diagnostic `{ symbol: 'AAPL', barsTotal: 0, warmupBars: 0, noTradeReason: 6, bars: [] }`, using the Step 1
      number
    - a trailing `// NO_TRADE_REASON_EVALUATION_FAILED` comment
 
-   Add the sentinel row beside `INVENTORY.md:62`.
+   Add the sentinel row beside `INVENTORY.md:67`.
 3. In `backtest-coverage.spec.ts`, add `test('evaluation-failed backtest renders the not-evaluated reason and the
    warning', …)`, cloned from :110-127:
    - `goto('/insights/strategies/strat-eval-failed-001')`, then click Run Backtest.
@@ -630,7 +652,7 @@ step changes no `src/lib` code.
 
 ### Step 9 — docs: agent `run_backtest` docstring and `docs/runbooks/mcp-tools.md` (C-14, fails.md:307-309)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (docstring only), `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (the `run_backtest` docstring only)
@@ -639,10 +661,12 @@ step changes no `src/lib` code.
 **Reviewers**: none (docs). The `xstockstrat-agent` owner's MCP-contract-parity focus applies at PR review.
 
 **Codebase Evidence**:
-- `services/xstockstrat-agent/app/tools.py:749-750`: "A run with no diagnostics and no trades (e.g.
+- `services/xstockstrat-agent/app/tools.py:784-785` (re-spec 2026-11-01; was :749-750): "A run with no diagnostics and no trades (e.g.
   BACKTEST_STATUS_INSUFFICIENT_DATA) has NO attachment — the summary with `coverage_gaps` is the whole result."
-- The feature-215 paragraph at :768-778 is the style to mirror.
-- `docs/runbooks/mcp-tools.md:308-310`: the INSUFFICIENT_DATA `coverage_gaps` → `trigger_backfill` bullet.
+- The feature-215 paragraph at :803-813 (was :768-778) is the style to mirror.
+- `docs/runbooks/mcp-tools.md:324-325` (was :308-310): the INSUFFICIENT_DATA `coverage_gaps` → `trigger_backfill`
+  bullet. `:395-398` holds the **No-attachment case** paragraph, which also says the summary with `coverage_gaps` is
+  the whole result.
 - `backtest_view.py` passes warnings (:73-74) and per-symbol `no_trade_reason` (`_SYMBOL_KEYS` :51) through. A new
   enum **value** needs no `_INTENTIONALLY_DROPPED` decision (recon.md).
 
@@ -651,10 +675,10 @@ step changes no `src/lib` code.
 **Covers**: —
 
 **Instructions**:
-1. Replace `tools.py:749-750` with the design §7 text: "An INSUFFICIENT_DATA run has NO attachment; its
+1. Replace `tools.py:784-785` with the design §7 text: "An INSUFFICIENT_DATA run has NO attachment; its
    coverage_gaps, warnings and per-symbol diagnostics are inline. An all-failed run has coverage_gaps: [] but
    non-empty diagnostics with NO_TRADE_REASON_EVALUATION_FAILED or NO_TRADE_REASON_FORMULA_ERROR."
-2. After the :768-778 paragraph, add one paragraph covering three points:
+2. After the :803-813 paragraph, add one paragraph covering three points:
    - A symbol that could not be evaluated gets `NO_TRADE_REASON_EVALUATION_FAILED` and a
      `backtest symbol <SYM> not evaluated: <CODE>` warning.
    - A formula that indicators refuses to run for the owner is `NO_TRADE_REASON_FORMULA_ERROR` with a
@@ -663,7 +687,8 @@ step changes no `src/lib` code.
      - Never backfill an INSUFFICIENT_DATA run with empty `coverage_gaps`.
      - On UNAVAILABLE, DEADLINE_EXCEEDED or RESOURCE_EXHAUSTED, rerun later.
      - On PERMISSION_DENIED, NOT_FOUND or a Python exception name, report it.
-3. Add the same contract as a bullet next to `mcp-tools.md:308-310`. Also note that INSUFFICIENT_DATA runs persist no
+3. Add the same contract as a bullet next to `mcp-tools.md:324-325`, and correct the `:395-398` No-attachment
+   paragraph the same way as the docstring (an all-failed run's diagnostics and warnings are inline too). Also note that INSUFFICIENT_DATA runs persist no
    detail, so these rows are lost on restart or a Past-Runs reload (design Open Risk 8).
 4. Keep `list_templates` / `instantiate_template` mentions intact and never mention `is_public` / `include_public`
    (@AC-32 @feature-224 PRESERVE).
@@ -681,7 +706,7 @@ stays green.
 
 ### Step 10 — docs: strat-lab `backtest` skill (same-PR rule, `docs/patterns/strat-lab-plugin.md`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `plugins/strat-lab/`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
@@ -732,7 +757,7 @@ Every one of the five files has at least one hit. There are no `is_public` hits.
 
 ### Step 11 — docs: analysis `CLAUDE.md` null-score drift and root Teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (docs)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -771,3 +796,140 @@ The PR body carries the Teardown record.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 1 (2026-11-01) — rebase via merge.** Instruction 1 says "rebase the feature branch onto `origin/main-dev`".
+  `main-dev` had moved one docs-only commit (#1392) past the branch base; a rebase would need a force-push, which the
+  run's git protocol forbids. `origin/main-dev` was merged in instead (merge commit `0f3e0c95`, sequential-mode §5.5
+  branch-sync setup). The Verification `git merge-base --is-ancestor origin/main-dev HEAD` passes. No scope change.
+- **Step 1 (2026-11-01) — 215 status.** 215's `status.md` is `in-progress`, not landed; the Step 1 criterion (its value
+  5, `fund_refusals` and `fund_unknown` in the tree) holds, so the gate passes. Recorded, not a blocker.
+- No CI-equivalent tooling fallback was used in Step 1 (grep and git only).
+- **Step 2 (2026-11-01) — buf via the pinned codegen image.** **Disposition**: CI-equivalent fallback. Host `buf` is
+  not installed. The `xstockstrat-codegen` image was built from `Dockerfile.codegen` (buf 1.72.0, the CI pin) with the
+  same `docker build` command `scripts/localenv-setup.sh` uses; the script itself was not run, because its codegen
+  half writes `packages/proto/gen/`, which is Step 3's **Files**. `buf lint` and `buf breaking --against
+  "/home/user/xstockstrat/.git#branch=origin/main-dev,subdir=packages/proto"` (the literal `--git-common-dir`
+  value) ran inside the container with the repo mounted at its host path → both clean.
+- **Step 2 (2026-11-01) — separate commit from Step 3.** Step Dependencies say Steps 2–3 land in one commit, because the
+  exhaustive `NO_TRADE_MESSAGE` breaks `tsc` once the stubs carry value 6. The run harness executes one commit per
+  step, so Step 2 (the `.proto` source only) is committed alone; `packages/proto/gen/` is untouched, so the UI build is
+  not broken at this commit. The intermediate commit is stale against `proto-freshness` until Step 3 regenerates the
+  stubs and adds the UI key. Sequential mode has no per-step PR, so CI only sees the integration head. No scope change.
+- **Step 3 (2026-11-01) — codegen via the pinned codegen image.** **Disposition**: CI-equivalent fallback.
+  `./scripts/buf-gen.sh` ran inside `xstockstrat-codegen:latest` (built from `Dockerfile.codegen` in Step 2: buf 1.72.0
+  and the pinned Go plugins) with the worktree mounted at `/workspace`, which is the same `docker run` that
+  `scripts/localenv-setup.sh` performs. The whole script was not run because it also builds the image again and writes
+  dev mTLS material, neither of which this step needs. The script's `buf breaking` stage was skipped inside the
+  container (no git there); Step 2 already ran it clean against `origin/main-dev`. The first run failed at the
+  `gen/ts` `tsc` compile because the worktree had no `node_modules`. `pnpm install --frozen-lockfile` was run on the
+  host and the script re-run. A second run left the `gen/` diff byte-identical (same diff hash), so the output is
+  idempotent. Host Node is v22; root CLAUDE.md pins 24. Noted, not a blocker.
+- **Step 3 (2026-11-01) — generated files.** `git diff --name-only packages/proto/gen/`:
+  `gen/go/analysis/v1/analysis.pb.go`, `gen/python/analysis/v1/analysis_pb2.py`, `gen/ts/analysis/v1/analysis.ts`,
+  `gen/ts/analysis/v1/analysis_pb.ts`, `gen/ts/dist/analysis/v1/{analysis.d.ts,analysis.js,analysis_pb.d.ts,analysis_pb.js}`.
+- **Step 3 (2026-11-01) — not in one commit with Step 2.** This follows from the Step 2 entry above. Step 3 is its own
+  commit, and the branch head is `proto-freshness`-consistent again from this commit on.
+- **Step 4 (2026-11-01) — TDD evidence via a scratch probe.** The step's paired tests are Step 5's **Files**
+  (`tests/conftest.py`, `tests/test_unreadable_formula.py`), so committing them here would break F-08. The red→green
+  cycle ran against an uncommitted scratch test that mirrors the six Step 5 cases (outside the repo, loaded with
+  `-p tests.conftest`). Step 5 lands the durable tests. No scope change.
+- **Step 4 (2026-11-01) — stale citation.** Codebase Evidence cites `servicer.py:2036` for `raise_unreadable=True`; on
+  the merged tree it is `app/handlers/servicer.py:2083`. Evidence only, no code impact.
+- **Step 5 (2026-11-01) — RED against the pre-Step-4 evaluator.** Step 4 had already landed, so the new tests could not
+  be red on the branch head. RED was captured by temporarily restoring `evaluator.py` from `c7c287a0` (pre-Step-4),
+  running the test file (3 failed, 10 passed), then restoring the Step 4 file (no diff to `evaluator.py` in this
+  commit). No scope change.
+- **Step 5 (2026-11-01) — `import grpc` in `tests/conftest.py`.** The spec's `aio_rpc_error` needs `grpc`, which
+  conftest did not import; added to the top-level import block (not the `# noqa: E402` block).
+- **Step 5 (2026-11-01) — no `test_ac30_*` change.** The three `test_ac30_*` tests use `_not_found()`, which now
+  delegates to `aio_rpc_error`; they stay unchanged and green. Eight other test files still carry inline
+  `AioRpcError` builders; they are outside this step's **Files** and were left alone (out of scope).
+- No CI-equivalent tooling fallback was used in Step 5 (`uv run pytest` and `uv run ruff`, the service's own harness).
+- **Step 4 (2026-11-01) — one inline comment.** `_execute_formula` gained a one-line constraint comment ("Never
+  e.details() …") to keep Instruction 3 load-bearing at the raise site. No CI-equivalent tooling fallback was used in
+  Step 4 (`uv run ruff` and `uv run pytest`, the service's own harness).
+- **Step 6 (2026-11-01) — Files expanded: four tests relied on the catch-all (operator Option A).** With the two
+  catch-alls replaced by the single surfacing arm, four tests went red: `test_owner_dimension.py`
+  `TestAC21SameStrategyIdTwoOwners::{test_alice_backtest_leaves_bob_score_runs_and_details_untouched,
+  test_owner_reads_own_backtest, test_admin_foreign_get_backtest_is_denied}` and `test_analysis_servicer.py`
+  `TestRunBacktestPersistence::test_ok_run_appends_history_row`. Their `_marketdata` was a bare `MagicMock` channel
+  stub, so `await GetBars(...)` raised `TypeError`, the old `except Exception` swallowed it, and the run reported
+  OK. The tests passed for the wrong reason, which is the defect itself. The operator chose Option A: Step 6's
+  **Files** gained both test files, with fixture wiring only. `GetBars` now returns 60 real flat bars (at least
+  `slow_period(50)+2`), and `ComputeIndicator` returns tail-aligned points (the `TestFormulaErrorSurfacing._wire` /
+  `TestBacktestDiagnostics._svc_with` pattern; `RecordingStub` responses in `_wired()`). Each test again exercises
+  an evaluated OK run, and no assertion changed. fails.md candidate recorded in `context.md`.
+- **Step 6 (2026-11-01) — TDD evidence via a scratch probe.** Step 7 owns the durable AC-1…AC-7 tests, so the red→green
+  cycle ran against an uncommitted scratch probe outside the repo, loaded with `-p tests.conftest` (the Step 4 method).
+  RED: 3 failed (all-RpcError run OK instead of INSUFFICIENT_DATA; `ValueError` run OK; no PERMISSION_DENIED
+  warning). GREEN: all passed. No CI-equivalent tooling fallback was used in Step 6 (`uv run pytest` and `uv run ruff`,
+  the service's own harness).
+- **Step 7 (2026-11-01) — RED against the pre-Step-6 servicer.** Step 6 had already landed, so RED was captured by
+  temporarily restoring `servicer.py` from `2f5a5a83` (post-Step-4, pre-Step-6). A scratch-only `EVAL_FAILED_WARNING`
+  constant was appended so the test module imports. The Step 6 file was then restored, so this commit has no diff to
+  `servicer.py`. RED: 11 failed, 7 passed. GREEN: 18 passed.
+- **Step 7 (2026-11-01) — AC-4 and (b) differ from the spec's RED forecast.** AC-4
+  (`test_ac4_all_failed_run_is_unscored_and_not_persisted_as_ok`) passes pre-Step-6. Step 4 already maps its
+  PERMISSION_DENIED input to `FormulaExecutionError`, so `formula_errors` drives INSUFFICIENT_DATA. It stays as the
+  persistence pin. (b) fails pre-Step-6 only on its added MSFT `EVALUATION_FAILED` row assertion; its recompute pin
+  holds on both trees. Pin (a') and the (e) `_BarFetchError` pin passed pre-Step-6, as designed. (c) and (d) were also
+  RED pre-Step-6, because both assert the new row.
+- **Step 7 (2026-11-01) — `_svc` side-effect wrapping.** `TestFormulaErrorSurfacing._wire` passes its argument as an
+  `AsyncMock` `side_effect`, which rejects a bare response object. The new class's `_svc` passes exceptions through and
+  wraps a response as `lambda *a, **kw: outcome`, so `_wire` is reused unchanged (C-13).
+- **Step 7 (2026-11-01) — C-13 grep.** `grep -rn "grpc.aio.AioRpcError(" tests/test_analysis_servicer.py` hits two
+  pre-existing inline builders outside this step's class; the diff adds none. They were left alone (out of scope).
+- No CI-equivalent tooling fallback was used in Step 7 (`uv sync --extra dev`, `uv run pytest` and `uv run ruff`, the
+  service's own harness).
+- **Step 8 (2026-11-01) — stale citations.** Codebase Evidence cites `backtest-coverage.spec.ts:97-108` and :110-127;
+  on the branch head they were :94-107 and :109-124 (now :98-111 and :113-128 after the added import line). Evidence
+  only, no code impact.
+- **Step 8 (2026-11-01) — e2e run in CI mode.** **Disposition**: CI-equivalent fallback. The local `pnpm test:e2e`
+  default (`pnpm dev`, 10s test timeout) timed out in the `warmup.setup.ts` SSR pre-warm on a cold dev server. The
+  spec was run the way CI runs it: `pnpm build`, then `CI=1 E2E_PREBUILT=1 pnpm test:e2e
+  e2e/insights/backtest-coverage.spec.ts --project=chromium` (`next start`, CI timeouts, one retry, the
+  pre-installed Chromium from `PLAYWRIGHT_BROWSERS_PATH`). `pnpm install --frozen-lockfile` was run in the worktree
+  first (no `node_modules` here, none in the main worktree to symlink). Host Node is v22; root CLAUDE.md pins 24.
+  Noted, not a blocker.
+- **Step 8 (2026-11-01) — pre-existing `tsc` errors.** `tsc --noEmit` reports two errors in
+  `e2e/insights/backfills.spec.ts:135-136` (`dataKind` / `timeframeEnum` on `never`). That file is outside this
+  step's **Files** and unchanged; none of the four touched files has an error. Left alone (out of scope).
+- **Step 9 (2026-11-01) — stale citation.** Codebase Evidence cites `mcp-tools.md:324-325` as an INSUFFICIENT_DATA
+  `coverage_gaps` → `trigger_backfill` bullet; on the branch head that bullet is :323-325. The new contract bullet sits
+  directly after it. Evidence only, no scope change.
+- **Step 9 (2026-11-01) — Verification grep has pre-existing hits.** `grep "not evaluated"` also matches
+  `mcp-tools.md` `screen_symbols` (:491) and the entry-rule note (:1039); both predate this step and are outside the
+  `run_backtest` section. Left alone (out of scope).
+- **Step 9 (2026-11-01) — partial-run sentence.** The mcp-tools.md bullet adds one sentence that a partly failed run
+  which still traded stays `BACKTEST_STATUS_OK` and carries the failed symbols' rows and warnings (@AC-5), so the
+  "never backfill" rule is not read as INSUFFICIENT_DATA-only. No scope change.
+- No CI-equivalent tooling fallback was used in Step 9 (`uv run pytest` and `uv run ruff`, the service's own harness).
+- **Step 10 (2026-11-01) — plugin validator run.** `docs/patterns/strat-lab-plugin.md` requires
+  `python3 plugins/strat-lab/scripts/validate.py --self-test` and `python3 plugins/strat-lab/scripts/validate.py` to
+  pass before a plugin change ships; the step's Verification block omits them. Both were run and passed. No scope
+  change.
+- **Step 10 (2026-11-01) — FORMULA_ERROR text is new, not an extension.** Instruction 2 says to extend the
+  FORMULA_ERROR description in `output-handling.md`, but none existed there. A new `NO_TRADE_REASON_FORMULA_ERROR`
+  bullet (contract error or owner-unreadable formula) was added beside the EVALUATION_FAILED one. No scope change.
+- **Step 10 (2026-11-01) — no plugin version bump.** The pattern doc only requires the two `plugin.json` versions to
+  stay byte-identical; neither was changed (0.4.0). No scope change.
+- No CI-equivalent tooling fallback was used in Step 10 (grep and the plugin's own `validate.py`).
+- **Step 11 (2026-11-01) — stale citation.** Codebase Evidence cites `servicer.py:1290-1299` for `score = None`; on the
+  branch head it is `app/handlers/servicer.py:1361-1362`, and the history row writes `overall_score`/`rating` as `None`
+  at :2964-2965. Evidence only, no code impact.
+- **Step 11 (2026-11-01) — Teardown: context-forge plugin unavailable, manual reconciliation.** The
+  `/context-forge:context-constitution` skill is not available in this session (only `context-forge:context-scrubber`
+  is listed), so Instruction 2 ran by hand: the touched context files (`services/xstockstrat-analysis/CLAUDE.md`,
+  `docs/runbooks/mcp-tools.md` `### run_backtest`, the `run_backtest` docstring in
+  `services/xstockstrat-agent/app/tools.py`, `plugins/strat-lab/skills/backtest/` SKILL.md + references, and
+  `services/xstockstrat-{analysis,agent}/docs/context-constitution*.md`) were re-read against `servicer.py` (gate
+  :1297-1305, surfacing arm :1167-1195, `EVAL_FAILED_WARNING` :354) and `evaluator.py` (`_execute_formula` refusal
+  mapping). Two grounded drifts were found, both in the step's one **Files** entry, and fixed: (1) analysis
+  `CLAUDE.md` § Unreadable formula said only `NOT_FOUND` raises `FormulaExecutionError` on the backtest path; Step 4
+  also maps `PERMISSION_DENIED`, with the `not evaluated: <CODE>` warning; (2) the feature-215 "A refused symbol makes
+  the run INSUFFICIENT_DATA" sentence omitted the gate's no-trades condition (a refused symbol in a run that traded
+  stays OK). mcp-tools.md, the agent docstring and the strat-lab skill matched the code; the per-module
+  context-constitution files carry no backtest-skip claim. The integration PR body must carry this record (fails.md:670).
+- **Step 11 (2026-11-01) — Instruction 3 deferred to integration.** The C-16 promotion of `acceptance.feature` into
+  `services/xstockstrat-analysis/acceptance/` is an integration-time action (§5.6), not part of this step's commit.
+- No CI-equivalent tooling fallback was used in Step 11 (grep only).

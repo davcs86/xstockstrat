@@ -9,7 +9,8 @@ Forty-five tools:
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
-  manage_strategy     — register/update/deactivate/reactivate stored strategies (update = merge)
+  manage_strategy     — register/update/deactivate/reactivate stored strategies;
+                        score = manual headline-grade refresh (update = merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
   manage_formula      — registers/updates(partial merge)/soft-deletes custom formulas in indicators
   get_formula         — reads one stored formula's full definition incl. `deleted` (read-only)
@@ -250,6 +251,21 @@ def _grpc_error_message(
     if code == grpc.StatusCode.INVALID_ARGUMENT:
         return exc.details() or "invalid argument"
     return exc.details() or str(code)
+
+
+async def _score_strategy(ctx: Context, strategy_id: str) -> dict:
+    user_id = _caller_user_id(ctx, "manage_strategy")
+    try:
+        return await client.score_strategy(user_id=user_id, strategy_id=strategy_id)
+    except grpc.aio.AioRpcError as e:
+        raise RuntimeError(
+            _grpc_error_message(
+                e,
+                not_found=e.details() or "no eligible evidence",
+                deadline_s=client._LONG_RPC_TIMEOUT_S,
+                write=True,
+            )
+        ) from e
 
 
 # source_type → extractor_tool (derived at the agent layer only).
@@ -781,8 +797,9 @@ def register_tools(server: MCPServer) -> None:
         `application/json` resource carrying the COMPLETE result: the full per-bar `diagnostics`
         (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and the
         full `trades` list. Open it when you need bar-level detail.
-        A run with no diagnostics and no trades (e.g. BACKTEST_STATUS_INSUFFICIENT_DATA) has NO
-        attachment — the summary with `coverage_gaps` is the whole result.
+        An INSUFFICIENT_DATA run has NO attachment; its coverage_gaps, warnings and per-symbol
+        diagnostics are inline. An all-failed run has coverage_gaps: [] but non-empty diagnostics
+        with NO_TRADE_REASON_EVALUATION_FAILED or NO_TRADE_REASON_FORMULA_ERROR.
         `summary["attachments"]` names each attached resource's `uri` and `mime_type`, so you can
         tell the user detail exists even if your client shows no attachment affordance.
         Note: 64-bit integer fields in the attached full result (e.g. per-bar `volume`, and
@@ -810,7 +827,17 @@ def register_tools(server: MCPServer) -> None:
           fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), no
           trades and no evidence cell; a single refused symbol makes the run
           BACKTEST_STATUS_INSUFFICIENT_DATA. A fundamentals fetch OUTAGE is different: it adds a
-          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason."""
+          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason.
+        Evaluation failures (feature 275): a symbol that could not be evaluated (an upstream RPC
+          error or an unexpected exception) gets no_trade_reason NO_TRADE_REASON_EVALUATION_FAILED
+          and a `warnings` entry "backtest symbol <SYM> not evaluated: <CODE>". A formula that
+          indicators refuses to run for the strategy owner is NO_TRADE_REASON_FORMULA_ERROR with the
+          same warning, code PERMISSION_DENIED (admin caller, or another indicators refusal) or
+          NOT_FOUND (owner). Either makes an otherwise trade-less run
+          BACKTEST_STATUS_INSUFFICIENT_DATA. Discriminate by <CODE>: never backfill an
+          INSUFFICIENT_DATA run whose coverage_gaps is empty; on UNAVAILABLE, DEADLINE_EXCEEDED or
+          RESOURCE_EXHAUSTED rerun later; on PERMISSION_DENIED, NOT_FOUND or a Python exception
+          name (e.g. ValueError) report it to the user."""
         # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
         # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
@@ -921,8 +948,8 @@ def register_tools(server: MCPServer) -> None:
         sector_param_overrides: list[dict] | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
-        """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
-        operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
+        """Register/update/deactivate/reactivate/score a stored strategy in xstockstrat-analysis.
+        operation: 'register' | 'update' | 'deactivate' | 'reactivate' | 'score'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
         components: list of {ref_name, kind ('builtin'|'formula'|'fundamental'), indicator,
@@ -1028,9 +1055,50 @@ def register_tools(server: MCPServer) -> None:
         returns ALREADY_EXISTS and DROPS the submitted definition — it does not overwrite; use
         'update' to revise, or 'reactivate' to bring back a deactivated strategy.
 
+        SCORE (feature 283): operation='score' takes ONLY strategy_id — any other argument
+        (including clear_fields) is rejected before any backend call. It recomputes AND persists
+        the strategy's headline grade from its stored backtest evidence and emits an
+        analysis.strategy.scored ledger event. Any time range is ignored: the whole eligible
+        evidence base is used. Returns snake_case strategy_id, overall_score, component_scores,
+        rating, evidence_symbols (an int count), evidence_days, provisional, origin (when set) and
+        excluded_symbols. excluded_symbols lists the symbols left with no surviving evidence cell;
+        it is [] when the strategy is not fundamentals-guarded or
+        'analysis.backtest.fundamentals.enabled' is off (so [] does not mean "the guard ran and
+        found nothing"), and null when analysis did not report it. Errors: PERMISSION_DENIED
+        (strategy missing or not owned); NOT_FOUND (no eligible evidence — the stale grade is
+        cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)"
+        variant); UNAVAILABLE (store down, or fundamentals availability unknown — grade
+        unchanged). A deadline means the outcome is unknown: verify with list_strategies rather
+        than assuming the grade was or was not refreshed.
+
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
-        `entryRule`), UNLIKE get_strategy, which returns snake_case. To round-trip an edit, fetch
-        with get_strategy (snake_case matches this tool's INPUT), not from this response."""
+        `entryRule`), UNLIKE get_strategy, which returns snake_case — except operation='score',
+        which returns the snake_case grade above. To round-trip an edit, fetch with get_strategy
+        (snake_case matches this tool's INPUT), not from this response."""
+        if operation == "score":
+            given = [
+                name
+                for name, value in (
+                    ("display_name", display_name),
+                    ("components", components),
+                    ("entry_rule", entry_rule),
+                    ("exit_rule", exit_rule),
+                    ("signal_params", signal_params),
+                    ("cooldown_days", cooldown_days),
+                    ("exit_cooldown_days", exit_cooldown_days),
+                    ("denied_symbols", denied_symbols),
+                    ("signal_eligible", signal_eligible),
+                    ("sector_param_overrides", sector_param_overrides),
+                    ("clear_fields", clear_fields),
+                )
+                if value is not None
+            ]
+            if given:
+                raise ValueError(
+                    "manage_strategy(operation='score') accepts only strategy_id; "
+                    f"got: {', '.join(given)}"
+                )
+            return await _score_strategy(ctx, strategy_id)
         # Send ONLY what the caller supplied (is not None) — shipping defaulted ""/[] on update
         # is what wiped stored strategies.
         #
