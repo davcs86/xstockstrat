@@ -377,7 +377,7 @@ then **GO-LINT**.
 
 ### Step 8 — test: provenance validation and intent mapping (service unit tests)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify (extend `fakeWatchlistStore.AddSymbols` to record the last `ExpiryIntent`; add tests)
@@ -1070,4 +1070,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: TDD red-green paired with Step 8 (Step 8's tests fail against the tree before Step 7).
 - **Done instead**: Step 8 runs after Step 7 in sequential order, and its file (`watchlist_service_test.go`) is outside Step 7's **Files**. RED therefore came from a throwaway probe `internal/service/zz_step7_red_probe_test.go`: a manual (non-system) list, one SIGNAL `AAPL` binding, provenance `{101, 2026-11-01}`, asserting `InvalidArgument` and no stored binding (AC-18). Before implementation it failed with `err = <nil>, want InvalidArgument`. After implementation it passed, and the probe was deleted (never staged). Step 8 writes the real AC-18 table and intent tests. The validation sits in the pure helper `expiryIntentFor` as specified, with one `InvalidArgument` message per failed rule.
 - **Disposition**: in scope. Everything stays inside the step's **Files**, and the full behavioral RED/GREEN is Step 8.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 8 — RED against the pre-Step-7 service; `SignalSourceSkipsDefault` body unchanged
+
+- **Spec said**: RED = the tests fail against the tree before Step 7. Verification names `SignalSourceSkipsDefault` as "already exists and is updated".
+- **Done instead**: Step 7 had already landed (sequential order). RED was taken by temporarily restoring `portfolio_service.go` from `c625dd5b` (pre-Step-7) with the new tests present: all five `ProvenanceValidation` rows failed with `err = <nil>, want InvalidArgument`, `ProvenanceTracksIntent` failed with `intent.Provenance = nil`, and `NoProvenanceIntent/SIGNAL_binding_untracks` failed with `UntrackSymbols = [], want [AAPL]`. The file was then restored from HEAD. `SignalSourceSkipsDefault` needed no body change: Step 5 already updated the fake's signature, and the provenance-less SIGNAL intent it would exercise is asserted in `NoProvenanceIntent`.
+- **Disposition**: in scope. Only the step's **Files** changed.
 - **Severity**: n/a

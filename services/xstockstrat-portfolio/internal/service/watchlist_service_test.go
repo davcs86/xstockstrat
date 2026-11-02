@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
@@ -32,6 +33,9 @@ type fakeWatchlistStore struct {
 	// DISTINCT dedup; the service just passes this through).
 	allSymbols    []string
 	allSymbolsErr error
+	// feature 281: last ExpiryIntent passed to AddSymbols, and how many times it was called.
+	lastIntent    repository.ExpiryIntent
+	addSymbolsCnt int
 }
 
 func newFakeStore() *fakeWatchlistStore {
@@ -157,7 +161,9 @@ func (f *fakeWatchlistStore) Delete(_ context.Context, watchlistID string) error
 	return nil
 }
 
-func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, _ repository.ExpiryIntent) (*portfoliov1.Watchlist, error) {
+func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, intent repository.ExpiryIntent) (*portfoliov1.Watchlist, error) {
+	f.addSymbolsCnt++
+	f.lastIntent = intent
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
@@ -917,6 +923,130 @@ func TestAddWatchlistSymbols_SignalSourceSkipsDefault(t *testing.T) {
 	}
 	if b.GetSource() != portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL {
 		t.Errorf("NVDA source = %v, want SIGNAL (preserved)", b.GetSource())
+	}
+}
+
+// ─── feature 281: signal provenance validation and expiry-intent mapping ─────
+
+// AC-18: every invalid provenance is rejected InvalidArgument and nothing reaches the store.
+func TestAddWatchlistSymbols_ProvenanceValidation(t *testing.T) {
+	signal := portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL
+	validUntil := timestamppb.New(time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC))
+	cases := []struct {
+		name          string
+		systemManaged bool
+		bindings      []*portfoliov1.WatchlistBinding
+		prov          *portfoliov1.WatchlistSignalProvenance
+	}{
+		{"manual list with SIGNAL binding", false,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: validUntil}},
+		{"system list with two SIGNAL bindings", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}, {Symbol: "MSFT", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: validUntil}},
+		{"system list with one MANUAL binding", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_MANUAL}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: validUntil}},
+		{"signal_id 0", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 0, ValidUntil: validUntil}},
+		{"valid_until unset", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			seedWatchlist(store, "wl-1", "u-1", tc.systemManaged, nil)
+			svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+			_, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+				WatchlistId: "wl-1", Bindings: tc.bindings, SignalProvenance: tc.prov,
+			})
+			if connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatalf("err = %v, want InvalidArgument", err)
+			}
+			if store.addSymbolsCnt != 0 {
+				t.Errorf("AddSymbols called %d times, want 0 (no binding, no expiry record)", store.addSymbolsCnt)
+			}
+			if len(store.byID["wl-1"].GetBindings()) != 0 {
+				t.Errorf("bindings = %v, want none stored", store.byID["wl-1"].GetBindings())
+			}
+		})
+	}
+}
+
+// Valid provenance on a system list maps to a tracking intent for the single SIGNAL symbol.
+func TestAddWatchlistSymbols_ProvenanceTracksIntent(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", true, nil)
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+	validUntil := time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC)
+
+	_, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1",
+		Bindings: []*portfoliov1.WatchlistBinding{
+			{Symbol: "aapl", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL},
+		},
+		SignalProvenance: &portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: timestamppb.New(validUntil)},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if store.addSymbolsCnt != 1 {
+		t.Fatalf("AddSymbols called %d times, want 1", store.addSymbolsCnt)
+	}
+	got := store.lastIntent
+	if got.Provenance == nil {
+		t.Fatalf("intent.Provenance = nil, want {101, %v}", validUntil)
+	}
+	if got.Provenance.SignalID != 101 || !got.Provenance.ValidUntil.Equal(validUntil) {
+		t.Errorf("intent.Provenance = %+v, want {101, %v}", *got.Provenance, validUntil)
+	}
+	if got.Symbol != "AAPL" {
+		t.Errorf("intent.Symbol = %q, want normalized AAPL", got.Symbol)
+	}
+	if len(got.UntrackSymbols) != 0 {
+		t.Errorf("intent.UntrackSymbols = %v, want empty", got.UntrackSymbols)
+	}
+}
+
+// A provenance-less SIGNAL add untracks its symbol; MANUAL and flat-symbols adds carry no intent.
+func TestAddWatchlistSymbols_NoProvenanceIntent(t *testing.T) {
+	cases := []struct {
+		name        string
+		req         *portfoliov1.AddWatchlistSymbolsRequest
+		wantUntrack []string
+	}{
+		{"SIGNAL binding untracks", &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-1",
+			Bindings: []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL}}},
+			[]string{"AAPL"}},
+		{"MANUAL binding", &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-1",
+			Bindings: []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_MANUAL}}},
+			nil},
+		{"flat symbols", &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-1", Symbols: []string{"AAPL"}},
+			nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			seedWatchlist(store, "wl-1", "u-1", true, nil)
+			svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+			if _, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), tc.req); err != nil {
+				t.Fatalf("add: %v", err)
+			}
+			if store.addSymbolsCnt != 1 {
+				t.Fatalf("AddSymbols called %d times, want 1", store.addSymbolsCnt)
+			}
+			got := store.lastIntent
+			if got.Provenance != nil || got.Symbol != "" {
+				t.Errorf("intent = %+v, want no provenance", got)
+			}
+			if fmt.Sprint(got.UntrackSymbols) != fmt.Sprint(tc.wantUntrack) {
+				t.Errorf("intent.UntrackSymbols = %v, want %v", got.UntrackSymbols, tc.wantUntrack)
+			}
+		})
 	}
 }
 

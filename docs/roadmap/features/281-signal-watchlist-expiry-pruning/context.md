@@ -252,3 +252,15 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Verification: `go build ./...` OK. `go test ./internal/service/ -run 'AddWatchlistSymbols|ExpiryIntent'` → `ok`. `go vet ./...` and `go vet -tags dbtest ./...` OK. The full `go test ./...` passes. GO-LINT reports `0 issues`. No database was started.
 - Deviations: RED came from an uncommitted probe because Step 8's test file is outside this step's Files (Deviation Log).
 - Next: Step 8 (service unit tests for provenance validation and intent mapping).
+
+### Step 8 — provenance validation and intent mapping tests [done] (2026-11-02)
+
+- `fakeWatchlistStore.AddSymbols` now records the last `ExpiryIntent` (`lastIntent`) and a call count (`addSymbolsCnt`). Dedupe is unchanged. Three new tests:
+  - `TestAddWatchlistSymbols_ProvenanceValidation` is a table of the five AC-18 rejections. Each row asserts `InvalidArgument`, zero `AddSymbols` calls and no stored binding.
+  - `TestAddWatchlistSymbols_ProvenanceTracksIntent`: the intent carries `Provenance{101, 2026-11-30}` and the normalized `Symbol` `AAPL`.
+  - `TestAddWatchlistSymbols_NoProvenanceIntent`: a SIGNAL add untracks `[AAPL]`; MANUAL and flat-symbols adds carry an empty intent.
+- Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: AC-18 red: with `portfolio_service.go` temporarily restored to pre-Step-7 (`c625dd5b`), all five rejection rows failed with `err = <nil>, want InvalidArgument`. In the same run the tracking test failed with `Provenance = nil` and the SIGNAL untrack case failed with `UntrackSymbols = [], want [AAPL]`. Green: all passed after the file was restored from HEAD.
+- Verification: the step command passed with 4 top-level `--- PASS`. GO-LINT reports `0 issues`. GO-COVER total is 68.6%. No database was started.
+- Deviations: the RED method, and `SignalSourceSkipsDefault` needed no body change (Deviation Log).
+- Next: Step 9 (repository prune tick `PruneExpiredSignalEntries`).
