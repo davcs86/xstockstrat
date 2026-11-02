@@ -154,7 +154,7 @@ only the locked set (a locked list is retried next tick). Events are emitted aft
 loses the event, never the removal. Correctness does not rely on `instance_count: 1`, but prune load scales per
 instance. A SIGNAL add without `signal_provenance` deletes that symbol's expiry row (untracked, never pruned).
 Legacy SIGNAL entries are classified by the operator subcommand `portfolio backfill-signal-expiry`
-(`--mode=report|apply`, pooled `DATABASE_URL`).
+(`--mode=report|apply`, pooled `DATABASE_URL`); procedure → [`docs/runbooks/signal-watchlist-expiry-backfill.md`](../../docs/runbooks/signal-watchlist-expiry-backfill.md).
 
 **`portfolio.position.closed` payload — producer contract (feature 042).** The full-close emit in
 `ConsumeOrderFills` carries `{user_id, symbol, account_id, trading_mode, realized_pnl}`, where

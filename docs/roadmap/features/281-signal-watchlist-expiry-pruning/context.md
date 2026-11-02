@@ -463,3 +463,23 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: anchor re-stamp scope, citation drift and no agent edit (Deviation Log).
 - Next: Step 21 (backfill runbook, runbooks index, MCP tools reference and context teardown).
 
+### Step 21 — docs: backfill runbook, runbooks index, MCP tools reference and context teardown [done] (2026-11-02)
+
+- New `docs/runbooks/signal-watchlist-expiry-backfill.md`. It names the key `portfolio.watchlist.signal_prune_interval_seconds` ("raising the interval is not a pause") and both full event names, and covers:
+  - Scope: the three-class table and the known strictness for `legacy_live` entries.
+  - Authority: never APPLY without a REPORT.
+  - Prerequisites: workstation only (distroless image); pooled `:25061` with `DB_PGBOUNCER=true`; `DB_POOL_MAX` unset; `SEED_USER_ID` from the `db-migrator` job; the `has_table_privilege` preflight on `ingest.newsletter_signals`.
+  - REPORT/APPLY commands, and the output columns quoted from `signal_expiry_backfill.go`.
+  - No grace period; emergency stop (`DELETE … WHERE signal_id IS NULL` / `TRUNCATE`) within one interval; rollback as the second line.
+  - Accepted residuals, and deploy order proto → portfolio → agent → backfill.
+- `docs/runbooks/CLAUDE.md`: new index row, placed after `proto-versioning.md` (alphabetical).
+- `docs/runbooks/mcp-tools.md`:
+  - The `ingest_signal` intro and the `get_watchlist` entry each gain an expiry sentence ("expires"), matching the Step 17 docstrings.
+  - Error rows: a provenance `INVALID_ARGUMENT` drops the auto-add with a WARN, and `deduplicated: true` does not renew expiry. Tool count is unchanged (45).
+- Portfolio `CLAUDE.md`: the `backfill-signal-expiry` sentence now links to the runbook.
+- `docs/patterns/ci-overview.md`: new `portfolio-db-test` row after `ledger-db-test`.
+- TDD: N/A (documentation). Verification: every grep hits, both awk ranges contain `expires`, `check-context-map.sh` reports OK, and `markdownlint-cli2` with `.markdownlint.yaml` reports 0 errors on the touched CLAUDE.md files and the runbook.
+- **Teardown (root `CLAUDE.md`), for the PR body:** the context-forge plugin's `context-constitution` refresh is **unavailable** in this session (only `context-scrubber` is exposed). The manual reconciliation re-read the touched context files of Steps 20-21 against the code: the portfolio `CLAUDE.md`, the portfolio `docs/context-constitution.md`, `docs/runbooks/CLAUDE.md`, the new runbook, `docs/patterns/{database,config-governance,ci-overview}.md` and `mcp-tools.md`. Every `PORTFOLIO-7`/`PORTFOLIO-17` anchor resolves, and the key, clamp, events, payloads, table, CI job and backfill output names match the code. No drift was found (Deviation Log has the detail).
+- Discovery note: the pre-step digest was taken from a stale `main-dev` working tree and reported Steps 15 and 20 as pending. On `origin/feature/signal-watchlist-expiry-pruning` both are done, so there was no blocker.
+- Next: Step 22 (premise-evidence check, verify only).
+

@@ -971,7 +971,7 @@ P=services/xstockstrat-portfolio/CLAUDE.md; K=services/xstockstrat-portfolio/doc
 
 ### Step 21 — docs: backfill runbook, runbooks index, MCP tools reference and context teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `xstockstrat-agent`
 **Files**:
 - `docs/runbooks/signal-watchlist-expiry-backfill.md` — create
@@ -1207,5 +1207,23 @@ _Populated by /sdd-execute as implementation proceeds._
   - Citation drift with no effect: the § Per-Feature Registered Keys heading is at `:140`, and the new entry sits above the feature 249 entry (`:144`, now pushed down).
   - The prune paragraph and the `backfill-signal-expiry` sentence sit right after the § Ledger Events Emitted table in the portfolio `CLAUDE.md`. There is no runbook link yet; Step 21 adds it.
   - Agent `CLAUDE.md`: `:148-149` and the tool table state no SIGNAL entry lifetime, so it is unedited (a valid outcome per Instruction 5).
+- **Disposition**: in scope. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 21 — teardown by manual reconciliation; runbook adds exit-code and prefix notes
+
+- **Spec said**: Instruction 6 says to run `/context-forge:context-constitution refresh`, scoped to the files of Steps 20-21. Instruction 1 gives the commands as `go run ./cmd/server backfill-signal-expiry …`.
+- **Done instead**:
+  - The `context-constitution` skill is not available in this session; the context-forge plugin exposes only `context-scrubber`. The teardown was therefore done by hand, re-reading every touched context file against the current code:
+    - Portfolio `CLAUDE.md`: key row and clamp checked against `signal_prune.go:15-17,20-30`; events and payloads against `signal_prune.go:57-75`; table against `018_watchlist_signal_expiry.up.sql`; startup tick against `main.go:81` and `signal_prune.go:37-47`; subcommand dispatch against `main.go:34`.
+    - Portfolio constitution: the `PORTFOLIO-17` and `PORTFOLIO-7` anchors resolve (`signal_expiry_repo.go#PruneExpiredSignalEntries:35` / `#pruneListTx:61` / `#lockDueExpiryTx:148`; `watchlist_repo.go#AddSymbols:301`, `#UpdateBinding:350`, `#UpdateBindings:388`, `#insertBindingsTx:519`, `#insertBindingTx:535`, `#applyExpiryIntentTx:548`; `portfolio_service.go#expiryIntentFor:1856`; guard tests `TestPrune_ConcurrencyNeverWaits`, `TestAddPath_ReplaceAllKeepsExpiry`).
+    - Config-governance entry checked against `037_portfolio_signal_prune_interval.*.sql` and `configServiceImpl.ts:150`.
+    - `ci-overview.md` row checked against `ci.yml` `portfolio-db-test` (`:783-830`) and `ci-gate` `needs:`.
+    - Runbooks index and the new runbook checked against `signal_expiry_backfill.go` and `cmd/server/backfill.go`.
+    - No drift was found, and none was fixed. The integration PR body must record both the plugin's unavailability and this reconciliation.
+  - Runbook additions that are not in the spec:
+    - `go run` reports any child failure as exit `1`, while the binary itself returns `2`/`3`.
+    - The REPORT `NEXT:` line's `portfolio` prefix stands for `GOWORK=off go run ./cmd/server`.
+    - The legacy owner is the `SEED_USER_ID` of the `db-migrator` job in `.do/app*.yaml`. The runbook names that source and does not copy the value.
 - **Disposition**: in scope. Only the step's **Files** changed.
 - **Severity**: n/a
