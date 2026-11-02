@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/signal-watchlist-expiry-pruning`
 **Created**: 2026-10-31
-**Last Updated**: 2026-10-31
+**Last Updated**: 2026-11-02
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-10-31 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, quick mode user-extended) and approved; recon.md + design.md written. Skipped /sdd-review (operator-confirmed proceed-from-draft); product-spec.md + acceptance.feature rewritten post-design (FR-2/FR-3 narrowed by user sign-off; AC-1..AC-18). Renumbered 280 → 281 (collision with `280-smoke-check-runtime`). |
 | 2026-10-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 21 steps |
 | 2026-11-02 | `implementation-ready` (unchanged) | /sdd-design (quick, amendment) | Seed-key amendment approved after 3 rounds: config migration 035 in Step 11 with the reader, Step 14 parse test, @AC-19; Steps 11-14 and 20 re-specced |
+| 2026-11-02 | `implementation-ready` (unchanged) | /sdd-execute (re-spec) | After merging `origin/main-dev` (incl. 278): Steps 4, 10, 17, 18, 20, 21 anchors re-aligned; Step 11 records a BLOCKING config-migration 035 collision with `origin/claude/smoke-test-deployment-0f1z5j` (operator ruling needed before Step 11) |
 
 ---
 
