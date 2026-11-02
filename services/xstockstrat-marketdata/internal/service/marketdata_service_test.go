@@ -1199,31 +1199,6 @@ func TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars(t *testing.T) {
 	})
 }
 
-// infoRecorder captures slog.LevelInfo messages and attrs; slog.SetDefault is process-global, so
-// tests using it must not call t.Parallel().
-type infoRecorder struct {
-	mu   sync.Mutex
-	recs []recordedWarn
-}
-
-func (h *infoRecorder) Enabled(context.Context, slog.Level) bool { return true }
-func (h *infoRecorder) Handle(_ context.Context, r slog.Record) error {
-	if r.Level != slog.LevelInfo {
-		return nil
-	}
-	rec := recordedWarn{msg: r.Message, attrs: map[string]string{}}
-	r.Attrs(func(a slog.Attr) bool {
-		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
-		return true
-	})
-	h.mu.Lock()
-	h.recs = append(h.recs, rec)
-	h.mu.Unlock()
-	return nil
-}
-func (h *infoRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *infoRecorder) WithGroup(string) slog.Handler      { return h }
-
 // TestIngestRecentBars_LogsHeartbeatEveryCycle: every cycle and timeframe logs one INFO line, with
 // or without gaps, so marketdata appears in a short log window even when nothing is wrong.
 func TestIngestRecentBars_LogsHeartbeatEveryCycle(t *testing.T) {
@@ -1240,10 +1215,7 @@ func TestIngestRecentBars_LogsHeartbeatEveryCycle(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := &infoRecorder{}
-			prev := slog.Default()
-			slog.SetDefault(slog.New(h))
-			t.Cleanup(func() { slog.SetDefault(prev) })
+			h := installLogRecorder(t, slog.LevelInfo)
 			(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), tc.src, tc.symbols, "1d", start, end)
 			if len(h.recs) != 1 || h.recs[0].msg != msg {
 				t.Fatalf("want exactly one %q INFO, got %v", msg, h.recs)
@@ -1877,24 +1849,25 @@ func TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource(t *testing.T) {
 
 // ── feature 227: BatchGetLatestPrice detached budget + dropped-error logs ────────
 
-// recordingWarnHandler keeps WARN records. slog.SetDefault is process-global, so tests using it
-// must not call t.Parallel().
-type recordingWarnHandler struct {
-	mu   sync.Mutex
-	recs []recordedWarn
+// recordingLogHandler keeps records of exactly one level. slog.SetDefault is process-global, so tests
+// using it must not call t.Parallel().
+type recordingLogHandler struct {
+	level slog.Level
+	mu    sync.Mutex
+	recs  []recordedLog
 }
 
-type recordedWarn struct {
+type recordedLog struct {
 	msg   string
 	attrs map[string]string
 }
 
-func (h *recordingWarnHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (h *recordingWarnHandler) Handle(_ context.Context, r slog.Record) error {
-	if r.Level != slog.LevelWarn {
+func (h *recordingLogHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *recordingLogHandler) Handle(_ context.Context, r slog.Record) error {
+	if r.Level != h.level {
 		return nil
 	}
-	rec := recordedWarn{msg: r.Message, attrs: map[string]string{}}
+	rec := recordedLog{msg: r.Message, attrs: map[string]string{}}
 	r.Attrs(func(a slog.Attr) bool {
 		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
 		return true
@@ -1904,10 +1877,10 @@ func (h *recordingWarnHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Unlock()
 	return nil
 }
-func (h *recordingWarnHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *recordingWarnHandler) WithGroup(string) slog.Handler      { return h }
+func (h *recordingLogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingLogHandler) WithGroup(string) slog.Handler      { return h }
 
-func (h *recordingWarnHandler) find(msg string) *recordedWarn {
+func (h *recordingLogHandler) find(msg string) *recordedLog {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for i := range h.recs {
@@ -1919,13 +1892,30 @@ func (h *recordingWarnHandler) find(msg string) *recordedWarn {
 	return nil
 }
 
-func installWarnRecorder(t *testing.T) *recordingWarnHandler {
+func (h *recordingLogHandler) count(msg string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for i := range h.recs {
+		if h.recs[i].msg == msg {
+			n++
+		}
+	}
+	return n
+}
+
+func installLogRecorder(t *testing.T, level slog.Level) *recordingLogHandler {
 	t.Helper()
-	h := &recordingWarnHandler{}
+	h := &recordingLogHandler{level: level}
 	prev := slog.Default()
 	slog.SetDefault(slog.New(h))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return h
+}
+
+func installWarnRecorder(t *testing.T) *recordingLogHandler {
+	t.Helper()
+	return installLogRecorder(t, slog.LevelWarn)
 }
 
 type fakeIntGetter map[string]int64

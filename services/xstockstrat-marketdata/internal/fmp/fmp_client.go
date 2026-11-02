@@ -344,6 +344,9 @@ func enrichmentClass(err error) string {
 	return "other"
 }
 
+// ErrorClass is the secret-free class of an FMP error (never its text, which can carry apikey=).
+func ErrorClass(err error) string { return enrichmentClass(err) }
+
 func (c *Client) fetchQuotes(ctx context.Context, symbols []string) ([]fmpQuote, error) {
 	var quotes []fmpQuote
 	params := url.Values{}

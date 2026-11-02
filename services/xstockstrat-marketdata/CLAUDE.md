@@ -172,8 +172,13 @@ fundamentals-refusal reason. It is **cache-only**:
   below 80% of `marketdata.fmp.daily_request_cap`, the same single 80% helper as the quota alert.
   The label therefore never spends the guard's FMP headroom.
 - Fixed invariants (not config keys): `etfFlagTTL` 30 days, `etfFlagCacheMax` 10000 (oldest
-  evicted), `etfFlagQueueCap` 256 (a full queue drops).
+  evicted), `etfFlagQueueCap` 256 (a full queue drops), `etfFlagLogEvery` 1 minute (the fill-log
+  rate-limit window).
 - An empty profile is negative-cached; a fetch error is not cached.
+- The filler logs at Info, each record with the enqueuing request's `trace_id` when present:
+  `etf flag fill skipped` (`reason` `fmp_disabled`/`no_cap`/`budget`; `used`/`cap` only for `no_cap`/`budget`;
+  config reasons log on change, `budget` once per window), `etf flag fill failed` (error `class` only, never its
+  text, fallback `other`; once per class per window), and `etf flag fill unlabelled` (empty profile; once per window).
 
 Both providers share the **identical** read-through DB cache (`marketdata.fundamentals` table) and
 RPC layer: cache hit within `cache_ttl_hours` → no provider call; miss/stale → quota-guarded fetch;
