@@ -209,3 +209,11 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - TDD: N/A (generated code). Verification: the second run was a no-op (identical `git status --porcelain` + `git diff` cksum `3205474957`).
 - Worktree gotchas: the `tsc` stage needs the worktree's own `pnpm install --frozen-lockfile` (a symlinked root `node_modules` does not reach `gen/ts/node_modules` or the container mount). The script's built-in `buf breaking` skips silently in the container (the worktree `.git` pointer is outside the mount); Step 1's explicit `buf breaking` vs `origin/main-dev` is the gate.
 - Next: Step 3 (migration `018_watchlist_signal_expiry`).
+
+### Step 3 — migration (2026-11-02)
+
+- Created `services/xstockstrat-portfolio/migrations/018_watchlist_signal_expiry.{up,down}.sql`: the design § 1 DDL verbatim (`CREATE TABLE IF NOT EXISTS portfolio.watchlist_signal_expiry`, PK `(watchlist_id, symbol)`, FK to `portfolio.watchlists` `ON DELETE CASCADE`, `signal_id BIGINT` nullable = backfill "untracked" marker; `watchlist_signal_expiry_valid_until_idx`). Down is `DROP TABLE IF EXISTS` (index drops with it). No ALTER of any existing table; no applied migration touched (F-01).
+- `018` still free: no portfolio `018_*` in the tree, and `git log --remotes=origin -- 'services/xstockstrat-portfolio/migrations/018_*'` is empty.
+- TDD: N/A (migration). Verification: offline only (`ls` of both files + read-through; 0 `ALTER` lines). No database started. The real-DB apply is proven by Step 4's `portfolio-db-test` CI job.
+- Discovery note (no effect): `011_*` uses plain `ADD COLUMN`. The idempotent style the spec cites is in `017_*` (and `007_*`), and that is the style followed here.
+- Next: Step 4 (real-Postgres harness + `portfolio-db-test` CI job).

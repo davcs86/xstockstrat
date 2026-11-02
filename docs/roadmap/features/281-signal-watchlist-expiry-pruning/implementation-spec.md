@@ -174,7 +174,7 @@ Confirm only `portfolio/v1` outputs changed.
 
 ### Step 3 — migration: `018_watchlist_signal_expiry`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/018_watchlist_signal_expiry.up.sql` — create

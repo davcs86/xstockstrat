@@ -18,6 +18,7 @@
 | 2026-11-02 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; operator gave the up-front sequential confirmation |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 1 done: `WatchlistSignalProvenance` + `AddWatchlistSymbolsRequest.signal_provenance = 4`; `buf lint`/`buf breaking` vs `origin/main-dev` clean |
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 2 done: stubs regenerated with `./scripts/buf-gen.sh` in the `xstockstrat-codegen` image; only `portfolio/v1` outputs changed (Go, Python, TS + `gen/ts/dist`); second run a no-op |
+| 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 3 done: portfolio migration `018_watchlist_signal_expiry` up/down pair (new table + `valid_until` index, FK to `watchlists` only); offline verification, no database started |
 
 ---
 
