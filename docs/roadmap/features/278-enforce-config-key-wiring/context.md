@@ -535,3 +535,17 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22. The pin is 24; the operator ruled this is not a blocker.
 - Deviations: none.
 - Severity: n/a.
+
+## Session 2026-11-02 — sdd-execute 278 step 15 (sequential)
+
+- **Step 15 done:** `.claude/skills/sdd-execute/SKILL.md` changes:
+  - Phase 3 step 3 gains a **Config-key wiring gate** sub-bullet, placed after Verification and before the step 4 `done` flip. It triggers on a `config` step, a migration inserting into `config.config_values`, or a key from the product spec's `## Config Key Changes`. It runs `node scripts/check-config-wiring.mjs --declared-from <FEATURE_DIR>/product-spec.md` (plus `--declared-migration <file>` for a migration step) in step-time mode. Non-zero keeps the step not-done; `PENDING:` lines do not block; unrelated baseline findings do not block a keyless step.
+  - Step 4's all-steps-done branch runs `--final` first; non-zero blocks the `code-completed` flip; output goes to `context.md` (F-09).
+  - ALL-DONE PATH gains item 0: `--final` gates the integration PR.
+  - `reference/repo-conventions.md` config-key line now points at the check (verbatim stored key, runtime-created keys surface as `read-unseeded`, seed them in a migration).
+- **Discovery note:** the workflow's discovery digest described the former numbering (sequential-mode mirror, now Step 16). This step followed the current spec's Step 15 (SKILL.md + repo-conventions.md).
+- **TDD:** N/A (docs/skill text; structural assertions in Step 18).
+- **Verification:** `grep -n check-config-wiring` matched SKILL.md:160, :304, :314 and repo-conventions.md:31; `./scripts/check-context-map.sh` printed `OK - all context-map and doc references resolve.` As a sanity check, the step-time command against 278's own product spec exited 0.
+- Files modified: `.claude/skills/sdd-execute/SKILL.md`, `.claude/skills/sdd-execute/reference/repo-conventions.md`, `implementation-spec.md` (Step 15 Status), `feature.md`, `context.md`.
+- Deviations: none.
+- Severity: n/a.

@@ -597,7 +597,7 @@ python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml'));
 
 ### Step 15 — docs: `/sdd-execute` Phase 3 gate and repo conventions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/skills/sdd-execute/`
 **Files**:
 - `.claude/skills/sdd-execute/SKILL.md` — modify
