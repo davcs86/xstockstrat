@@ -698,3 +698,19 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
 - The target file is created lazily. The acceptance/ directory already exists for portfolio.
 ```
 
+## Session 2026-11-02 — sdd-execute ALL-DONE path (landing, operator: "Open PR now, pre-approve plan")
+
+- **Promotion plan approved with one orchestrator correction.** The plan above was written from a stale 18-scenario copy and left out `@AC-19`. Re-read `acceptance.feature` from `origin/feature/signal-watchlist-expiry-pruning`: 19 scenarios. A script compared the plan's portfolio block line by line with that copy: AC-2..AC-18 match verbatim (158 lines, only the `@feature-281` tag added). Applied:
+  - AC-2..AC-18 → `services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature` (CREATE, the plan's block exactly). AC-14 goes whole to portfolio.
+  - **Correction:** `@AC-19` (the 037 seed guarantee) → NEW `services/xstockstrat-config/acceptance/signal-watchlist-expiry-pruning.feature`, verbatim plus `@feature-281`, with the same header convention as the portfolio suite. Feature 282's spec expects it there.
+  - AC-1 is not promoted (pre-feature premise check, confirmed skip). Coverage: 18 promoted + 1 skipped = 19.
+- **Merge-order override (operator, 2026-11-02).** The `merge-order.md` 281 ← 278 row on `main-dev` is stale: 278 merged as `631028eb` and the row is resolved on this branch. **BINDING:** the integration PR must NOT merge before feature 280's PR #1359. Config migrations 035/036 must apply before 281's 037, and golang-migrate has no out-of-order guard. The PR body carries a top-of-body DO NOT MERGE note.
+- **Config-wiring gate (F-09)**, `node scripts/check-config-wiring.mjs --final`: rc 0. Only line: `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`, a pre-existing baseline. No finding for this feature's key.
+- **Step 11 block 2, pre-PR re-run** (after `git fetch --prune` of all heads): `037 free; 280 seeds on main-dev: 0/2; on origin/claude/smoke-test-deployment-0f1z5j: 2/2`. No WARN. Still owed: the `MERGE_TIME=1` run after the final rebase, immediately before merge.
+- **Open items carried into the PR:**
+  - Step 16 backfill dbtests (and all `portfolio-db-test` tests) first run in CI `portfolio-db-test`.
+  - Runbook preflight: the portfolio DB role's `SELECT` on `ingest.newsletter_signals` is unverified.
+  - Step 21 teardown: the context-forge plugin was unavailable, so it was a manual reconciliation (no drift).
+  - Node v22 locally vs pinned 24: not a blocker.
+- Status `in-progress` → `code-completed`; `implementation-spec.md` header → `complete` (22/22 steps done).
+
