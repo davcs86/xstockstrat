@@ -18,6 +18,7 @@
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps; acceptance.feature amended (@AC-2 rewritten, @AC-3 split into @AC-3/@AC-5/@AC-6, @AC-4 and @AC-7 added) and product-spec FR-2 trace clause + FR-3 added per design.md |
 | 2026-11-02 | `implementation-ready` (re-spec) | /sdd-execute | Steps 0–7 re-anchored on `cfd240af` after the `origin/main-dev` merge; pre-execution gate passes (255 landed). Operator decisions: Step 2 extends 255's classifier table, Step 4 folds `infoRecorder` into one level-aware recorder |
+| 2026-11-02 | `implementation-ready` → `in-progress` | /sdd-execute | `sequential` mode (sdd-batch-execute); operator up-front confirmation given 2026-11-02 |
 
 ---
 
@@ -53,4 +54,4 @@ later-call labelling guard plus rate-limited Info-level fill visibility.
 
 ## Next Action
 
-`/sdd-review fix-etf-flag-fill impl-spec` — validate implementation spec, then `/sdd-execute fix-etf-flag-fill` (only after 255 has merged; see implementation-spec.md § Step Dependencies)
+`/sdd-execute fix-etf-flag-fill sequential` — continue with Step 2 (test-first) then Step 1 (255 has landed; pre-execution gate passed 2026-11-02)
