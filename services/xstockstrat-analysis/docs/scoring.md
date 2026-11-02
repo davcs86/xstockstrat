@@ -40,7 +40,9 @@ fingerprint**).
   cells and, on zero eligible evidence, clears the stale grade (in-memory pop + non-best-effort DB
   delete) then returns `NOT_FOUND "no eligible evidence — run a backtest"`; unregistered →
   `NOT_FOUND`; store/cells error → `UNAVAILABLE`. **`ScoreStrategyRequest.range` is ignored** (the
-  evidence base is the whole eligible cell set, not a window).
+  evidence base is the whole eligible cell set, not a window). The refresh is also reachable through
+  the agent's `manage_strategy operation='score'`, which reports the excluded symbols from the
+  `x-score-excluded-symbols` trailer.
 - **Rename / revert semantics (FR-3).** Because the fingerprint excludes `display_name`/`active`/
   `live_enabled`, a **rename or live-toggle does not reset** evidence; reverting a definition to a prior
   content **resurrects** that content's evidence base (evidence describes definition content, not a
