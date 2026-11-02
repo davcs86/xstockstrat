@@ -77,3 +77,9 @@ Feature: legacy-authors-confirm-resolve
   Scenario: the runbook documents the new flow
     When I read docs/runbooks/legacy-formula-authors.md §5
     Then it describes `confirm --map` and the picker, and names hand-editing plan.json only as a fallback
+
+  @AC-13 @FR-2
+  Scenario: a map for an ambiguous row must name one of its candidates
+    When I run `confirm --map alice=80880990-2b79-4d85-8761-d8d9102c2efb --yes`
+    Then the exit code is non-zero and the output says 80880990-2b79-4d85-8761-d8d9102c2efb is not a candidate for "alice"
+    And F3 is still "ambiguous" in plan.json

@@ -15,10 +15,10 @@ As an operator repairing legacy-username formula authors, I want `confirm` to re
 ## Functional Requirements
 
 FR-1. `confirm` accepts a repeatable `--map <legacy_author>=<user_id>`. One mapping resolves every `unmappable` or `ambiguous` row whose `old_author` equals `<legacy_author>` exactly.
-FR-2. A mapping target must be a UUID present in `users.json` with `is_active=true`. Any invalid `--map` (malformed, inactive or unknown user, or a legacy author matching no unresolved row) aborts `confirm` before the plan is written, exit code non-zero, plan file byte-identical.
+FR-2. A mapping target must be a UUID present in `users.json` with `is_active=true`; for an `ambiguous` row it must also be one of that row's matched candidates. Any invalid `--map` (malformed, inactive or unknown user, or a legacy author matching no unresolved row) aborts `confirm` before the plan is written, exit code non-zero, plan file byte-identical.
 FR-3. After `--map` is applied, rows still `unmappable` or `ambiguous` are offered one at a time in an interactive numbered picker with a skip option. For an `ambiguous` row the picker lists only its matched candidate users; for an `unmappable` row it lists all active users. EOF or empty input skips the row.
 FR-4. Every row resolved by FR-1 or FR-3 gets `new_author=<user_id>`, `source="override"`, `status="confirmed"`. Resolved rows are listed and need an explicit second `y/N` before the plan is written. Declining writes nothing.
-FR-5. With `--yes`, the picker and the second confirmation are skipped: only rows resolved by explicit `--map` are written, and rows still unresolved stay untouched. (See Open Question 2.)
+FR-5. With `--yes`, the picker and the second confirmation are skipped: only rows resolved by explicit `--map` are written, and rows still unresolved stay untouched.
 FR-6. `confirm` also runs when there are no `suggested` rows but unresolved rows exist (today it exits early with "No suggested rows"). `suggested` handling, the printed digest and the exit codes are otherwise unchanged.
 FR-7. `legacy_authors.py` (`validate_for_apply`, `run_apply`, the SQL guards) is not modified; a plan written by FR-4 passes the existing apply-time checks unchanged.
 FR-8. Runbook §5 and the module docstring document the new flow; hand-editing `plan.json` is retained only as a fallback note.
@@ -69,7 +69,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] OQ-1. For an `ambiguous` row, must a `--map` target also be one of its matched candidates (as the picker enforces), or any active user? Proposed: candidates only, so both paths share one rule.
-- [ ] OQ-2. Is an explicit `--map` plus `--yes` enough confirmation, or must the second `y/N` always be interactive? Proposed: `--map --yes` is the non-interactive path and the flag is the explicit decision.
-- [ ] OQ-3. Is `--map` matching case-sensitive on `old_author`? Classification matches case-insensitively, but rows keep the stored spelling. Proposed: exact, case-sensitive match on the stored `old_author`.
-- [ ] OQ-4. Does the second confirmation also print the resolved rows to stdout in the console log (PII: legacy usernames, email local parts)? `format_plan` already prints them today; proposed: same, no new exposure.
+None open. Resolved 2026-11-02 by the operator ("go with your recommendations"):
+
+- OQ-1 (resolved). An `ambiguous` row accepts only its matched candidates, from `--map` as well as from the picker: one rule for both paths. An `unmappable` row accepts any active user.
+- OQ-2 (resolved). `--map` plus `--yes` is the non-interactive path; the explicit flag is the decision, so the second y/N is skipped. Without `--yes` the second y/N is always interactive.
+- OQ-3 (resolved). `--map` matches the stored `old_author` exactly (case-sensitive). Classification stays case-insensitive.
+- OQ-4 (resolved). The resolved-row listing reuses `format_plan` output; no new PII exposure.
