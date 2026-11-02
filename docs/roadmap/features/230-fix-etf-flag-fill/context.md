@@ -669,3 +669,21 @@ the round-2 block above.
 - **Carried open threads:** the docs PR items (merge-order row wording, 255 context note) and the FR-2 "per slot"
   rewording remain outside this feature's directory or product-spec scope; Step 7 records the post-deploy 215
   Step 26(a) re-run.
+
+## Session 2026-11-02 — Step 1 (service: export `fmp.ErrorClass`)
+
+- **Precondition:** `func enrichmentClass` has exactly one hit (`internal/fmp/fmp_client.go:329`); its stage-less
+  fallback returns `"other"` (`:344`). No `ErrorClass` existed before this step.
+- **Change:** added `func ErrorClass(err error) string { return enrichmentClass(err) }` with its one-line
+  constraint comment directly below `enrichmentClass` (`fmp_client.go:347-348`). `enrichmentClass`, its token set and
+  its callers (`:202`, `:209`) are untouched (F-09).
+- **TDD (P-06, test-first):** RED probe = Step 2's loop assertion (`ErrorClass(tc.err) == tc.class && != ""`) added to
+  `TestEnrichmentClassifier_StagesAndOther` on the pre-export tree →
+  `internal/fmp/fmp_client_test.go:461:13: undefined: ErrorClass` / `FAIL ... [build failed]`. After the export:
+  `--- PASS: TestEnrichmentClassifier_StagesAndOther`. The probe edit was reverted before commit, since
+  `fmp_client_test.go` is Step 2's **Files**; Step 2 re-applies it as its committed change.
+- **Verification:** `GOWORK=off go build ./...` and `GOWORK=off go vet ./internal/fmp/` clean; the
+  `^func ErrorClass(err error) string` grep has exactly 1 hit (`:348`). Extra: `go test ./internal/fmp/` ok,
+  `golangci-lint run ./internal/fmp/` 0 issues.
+- **Deviations:** none. Severity SEV-3 (unchanged).
+- **Files modified:** `services/xstockstrat-marketdata/internal/fmp/fmp_client.go`.

@@ -95,7 +95,7 @@ Step 7 pins that no change is needed. The log surface is Step 3/4.
 
 ### Step 1 — service: export the FMP error classifier as `fmp.ErrorClass`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify
