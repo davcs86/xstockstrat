@@ -448,3 +448,18 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
   - The grep finds the test at line 373.
 - Deviations: verification ran under `CI=1` (Deviation Log).
 - Next: Step 20 (docs: service, pattern and constitution documentation).
+
+### Step 20 — docs: service, pattern and constitution documentation [done] (2026-11-02)
+
+- `services/xstockstrat-portfolio/CLAUDE.md`:
+  - Key row `portfolio.watchlist.signal_prune_interval_seconds` (read clamp, `[60,86400]` write bounds, seeded by `037_portfolio_signal_prune_interval`, no pause switch).
+  - § Database row `portfolio.watchlist_signal_expiry` (migration `018`, FK to `watchlists` only).
+  - § Ledger Events Emitted rows `signal_entry_expired` and `signal_entry_removed_untracked`, plus a prune-loop paragraph that names `backfill-signal-expiry`. There is no runbook link yet; Step 21 adds it.
+- `services/xstockstrat-portfolio/docs/context-constitution.md`: new `PORTFOLIO-17` (single deleter, `SKIP LOCKED` locked-set delete, lock order versus `UpdateBinding(s)`, FK to `watchlists`) and an amended `PORTFOLIO-7` (`insertBindingTx` split, `ExpiryIntent` / `applyExpiryIntentTx`). The watchlist anchors in rows 7, 8, 12 and 13 were re-stamped, and the header changelog was amended.
+- `docs/patterns/database.md`: plain-table sentence plus the backfill's read-only read of `ingest.newsletter_signals`.
+- `docs/patterns/config-governance.md`: new top entry `feature 281 — signal-watchlist-expiry-pruning` with the `feature 278 interaction` note.
+- `services/xstockstrat-agent/CLAUDE.md`: no lifetime statement, so no edit.
+- TDD: N/A (documentation). The verification block was RED (exit 1) before the edits and GREEN (exit 0, `check-context-map.sh` OK) after.
+- Deviations: anchor re-stamp scope, citation drift and no agent edit (Deviation Log).
+- Next: Step 21 (backfill runbook, runbooks index, MCP tools reference and context teardown).
+

@@ -925,7 +925,7 @@ grep -n "emptied by expiry pruning" e2e/insights/watchlists.spec.ts   # the new 
 
 ### Step 20 — docs: service, pattern and constitution documentation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `xstockstrat-portfolio`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify (config key row after `:107`; the two events in § Ledger Events Emitted (`:137`); `watchlist_signal_expiry` in § Database (`:128`); the prune loop and the `backfill-signal-expiry` subcommand)
@@ -1197,4 +1197,15 @@ _Populated by /sdd-execute as implementation proceeds._
   - The same command was re-run with `CI=1`, which builds and starts Next.js in production mode with the CI timeouts. Result: 2 passed (warmup plus the new test). The Docker runner was not needed.
   - `TDD: N/A` as the spec says. The test asserts behavior that already exists, so it is a regression guard.
 - **Disposition**: in scope. Only the step's **Files** changed. `INVENTORY.md` is unchanged because no fixture was added, and the test reuses the existing `mockWatchlists` seed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 20 — anchor re-stamp scope, citation drift, no agent edit
+
+- **Spec said**: amend `PORTFOLIO-7` and re-stamp the anchors you shifted; config-governance entry at `:140` in the feature-240 format (`:172`); agent `CLAUDE.md` edited only if it states the SIGNAL entry's lifetime.
+- **Done instead**:
+  - Feature 281's `watchlist_repo.go` and `portfolio_service.go` insertions shifted the watchlist anchors of `PORTFOLIO-7`, `PORTFOLIO-8`, `PORTFOLIO-12` and `PORTFOLIO-13`. All four were re-stamped to the current lines. The non-watchlist rows were not touched.
+  - Citation drift with no effect: the § Per-Feature Registered Keys heading is at `:140`, and the new entry sits above the feature 249 entry (`:144`, now pushed down).
+  - The prune paragraph and the `backfill-signal-expiry` sentence sit right after the § Ledger Events Emitted table in the portfolio `CLAUDE.md`. There is no runbook link yet; Step 21 adds it.
+  - Agent `CLAUDE.md`: `:148-149` and the tool table state no SIGNAL entry lifetime, so it is unedited (a valid outcome per Instruction 5).
+- **Disposition**: in scope. Only the step's **Files** changed.
 - **Severity**: n/a
