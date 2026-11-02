@@ -46,7 +46,7 @@ Step 4 proves the change against @AC-3–@AC-7. Step 5 is the @AC-2 regression g
 - operator logs.
 
 No UI or agent code step is needed. The first two surfaces read the existing, unchanged analysis mapping
-`_fundamentals_gap_labels` (`services/xstockstrat-analysis/app/handlers/servicer.py:1962-1981`) over the unchanged
+`_fundamentals_gap_labels` (`services/xstockstrat-analysis/app/handlers/servicer.py:2042-2062`) over the unchanged
 `GetEtfFlags` RPC. They move from `UNSPECIFIED` to `ETF` only through the cache that Step 5 proves gets populated.
 Step 7 pins that no change is needed. The log surface is Step 3/4.
 
@@ -56,6 +56,10 @@ Step 7 pins that no change is needed. The log surface is Step 3/4.
   `feature/fix-etf-flag-fill` must be rebased onto it before Step 1. Check with
   `grep -n "func enrichmentClass" services/xstockstrat-marketdata/internal/fmp/fmp_client.go` (exactly one hit).
   If 255 has not merged, stop under C-11; do not re-create its classifier.
+  **Gate result (re-spec 2026-11-02, branch merged with `origin/main-dev` at `cfd240af`): PASSES.**
+  `func enrichmentClass` has exactly one hit (`internal/fmp/fmp_client.go:329`), and its stage-less fallback returns
+  `"other"` (`:344`). 255 `status.md` is `code-completed`. 254 is launched, and its `*url.Error` rewrap is present in
+  `getJSON` (`:243-248`). No later 215 commit touched `etf_flags.go`; the last one is still `08d63011`.
 - **Docs PR (not a step; operator 2026-10-22):** two edits land through a docs-only PR to `main-dev`, never through
   a 230 step PR (F-03):
   - the `docs/roadmap/features/merge-order.md` row `fix-etf-flag-fill` (230) → must wait for
@@ -71,7 +75,7 @@ Step 7 pins that no change is needed. The log surface is Step 3/4.
 - Step 6 requires Step 3, because it documents the shipped tokens.
 - Step 7 has no code dependency; run it last.
 - **Red-before-green order (P-06).** Steps 1 and 3 are `red-green required`, but their RED lives in the following
-  test step. Execute each pair test-first: author Step 2's table before Step 1's export (RED = `undefined:
+  test step. Execute each pair test-first: author Step 2's table extension before Step 1's export (RED = `undefined:
   ErrorClass`), and author Step 4's tests on the pre-Step-3 tree, without Step 3's `:226` call-site edit (RED =
   runtime failures (a)–(e); the drains and `GetEtfFlags` calls compile against `chan string`). Capture each RED
   output, then apply the service step and re-run to GREEN.
@@ -80,10 +84,12 @@ Step 7 pins that no change is needed. The log surface is Step 3/4.
   `etf_flags_test.go`) is already on `main-dev` (#1243, `08d63011`); only its Step 26 measurement remains. The
   existing merge-order row puts 215 before 255, so 230 (after 255) follows 215 transitively. Re-check on rebase that
   no later 215 commit touched `etf_flags.go`.
-- Line numbers cited below are from `main-dev` `c25efbdc`. After the 255 (and 215/254) rebase, re-anchor by symbol
-  name. `etf_flags.go` has no drift from 255, but `fmp_client.go` does.
-- Soft overlap with `254-fix-marketdata-secret-exposure` (`fmp_client.go:226/:243`). If 254 has landed, its
-  `*url.Error` rewrap must still classify as `transport` (Step 2 checks this only when 254 is present).
+- Line numbers cited below were re-anchored on 2026-11-02 against `cfd240af` (the branch after its merge of
+  `origin/main-dev`, which includes 255, 254 and 215's marketdata code). `etf_flags.go` has no drift from 255, but
+  `fmp_client.go` and `marketdata_service_test.go` do. Re-anchor by symbol name if they drift again.
+- 255's step citations: impl-spec Step 11 is now `:595-676`, Step 12 is `:677-732`.
+- Overlap with `254-fix-marketdata-secret-exposure` (`fmp_client.go:243-251`). 254 has landed, so its `*url.Error`
+  rewrap must still classify as `transport` (Step 2 checks this).
 
 ---
 
@@ -97,19 +103,20 @@ Step 7 pins that no change is needed. The log surface is Step 3/4.
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
 **Codebase Evidence**:
-- 255 impl-spec Step 11 (`docs/roadmap/features/255-fix-marketdata-fundamentals-cache/implementation-spec.md:587-663`)
-  adds three pieces:
-  - an unexported `func enrichmentClass(err error) string` that returns `cap` / `ctx` / `http_<code>` / the
-    `stageError` stage (`transport`, `read`, `decode`), using `errors.Is`/`errors.As` only;
+- 255 impl-spec Step 11 (`docs/roadmap/features/255-fix-marketdata-fundamentals-cache/implementation-spec.md:595-676`)
+  added three pieces, now on the branch:
+  - an unexported `func enrichmentClass(err error) string` (`internal/fmp/fmp_client.go:329-345`) that returns
+    `cap` / `ctx` / `http_<code>` / the `stageError` stage (`transport`, `read`, `decode`), using
+    `errors.Is`/`errors.As` only, and `"other"` for a stage-less error (`:344`);
   - the `statusError` type;
   - the `stageError` type.
-- Stage-less errors are the build-request error (`fmp_client.go:226` `fmt.Errorf("fmp: build request: %w", err)`)
-  and the limiter error (`:229` `fmt.Errorf("fmp: rate limiter: %w", err)`). The operator chose the token `other`
-  for these at the 230 round-3 gate (context.md § "Operator decisions at the design gate").
-- The service package already imports `internal/fmp`: `internal/service/marketdata_service.go:1697`
-  `errors.Is(err, fmp.ErrFMPDailyCapExceeded)` and `classification_service.go:200`.
-- No exported classifier exists on trunk today. `grep -n "func ErrorClass\|func enrichmentClass" internal/fmp/`
-  finds nothing before 255.
+- Stage-less errors are the build-request error, now 254's `fmt.Errorf("fmp: %s build request: %w", path, ue.Err)`
+  (`fmp_client.go:246`) or a bare `fmt.Errorf("fmp: %s build request", path)` when the error is not a `*url.Error`
+  (`:248`), and the limiter error (`:251` `fmt.Errorf("fmp: rate limiter: %w", err)`). The operator chose the token
+  `other` for these at the 230 round-3 gate (context.md § "Operator decisions at the design gate").
+- The service package already imports `internal/fmp`: `internal/service/marketdata_service.go:1734` and `:1788`
+  `errors.Is(err, fmp.ErrFMPDailyCapExceeded)`, and `classification_service.go:200`.
+- `enrichmentClass` exists (`:329`) and `func ErrorClass` does not: the correct precondition for this step.
 
 **TDD**: `red-green required`
 
@@ -119,7 +126,7 @@ Step 7 pins that no change is needed. The log surface is Step 3/4.
 1. Precondition: `grep -n "func enrichmentClass" internal/fmp/fmp_client.go` returns exactly one hit (255 merged).
    Read its body and confirm that a stage-less error returns `other`. If it returns `""` or any other token, **stop**
    (C-11 / P-03). The token must come from 255 per the operator, so report the gap and do not add a fallback in 230.
-2. Directly below `enrichmentClass`, add the export:
+2. Directly below `enrichmentClass` (after its closing brace at `:345`), add the export:
    ```go
    // ErrorClass is the secret-free class of an FMP error (never its text, which can carry apikey=).
    func ErrorClass(err error) string { return enrichmentClass(err) }
@@ -135,7 +142,7 @@ grep -n "^func ErrorClass(err error) string" services/xstockstrat-marketdata/int
 
 ---
 
-### Step 2 — test: `fmp.ErrorClass` classes, including the `other` fallback (AC-5, classifier half)
+### Step 2 — test: extend 255's classifier table to pin `fmp.ErrorClass`, never empty (AC-5, classifier half)
 
 **Status**: `pending`
 **Service**: `xstockstrat-marketdata`
@@ -144,30 +151,39 @@ grep -n "^func ErrorClass(err error) string" services/xstockstrat-marketdata/int
 
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
-**Codebase Evidence**:
-- `internal/fmp/fmp_client_test.go:1` is `package fmp`, and it already imports `context` and `errors` (`:3-10`).
-- `ErrFMPDailyCapExceeded` is at `internal/fmp/fmp_client.go:24`.
-- 255 Step 12 tests the classes through the enrichment WARN (impl-spec `:665-718`). It does not pin the exported
-  name or the `other` fallback. design.md rejects only an httptest leak test, not this pure unit table.
+**Codebase Evidence** (re-specced 2026-11-02, operator decision (1)):
+- `internal/fmp/fmp_client_test.go:1` is `package fmp`. Its import block (`:3-19`) already imports `context`,
+  `errors` and `fmt` (`:7`).
+- `ErrFMPDailyCapExceeded` is at `internal/fmp/fmp_client.go:28`.
+- 255 Step 12 (impl-spec `:677-732`) landed `TestEnrichmentClassifier_StagesAndOther` (comment `:443`, func
+  `:444-468`). Its rows are: `transport cause` → `transport`, `transport un-wrapped` → `transport`,
+  `transport deadline` → `ctx`, `build request` (`errors.New("fmp: p build request")`) → `other`, `cap` → `cap`,
+  and `http 404` → `http_404`. Every class Step 2 planned (`ctx`, `cap`, `other`) is already represented, and so is
+  `transport`.
+- The table asserts the unexported `enrichmentClass` (`:458`) and `enrichmentExpires`. It does not assert the
+  exported `ErrorClass` and has no never-empty assertion.
+- 254 is present (`*url.Error` rewrap in `getJSON`, `fmp_client.go:243-248`), so the transport sub-check is in
+  scope. The `transport cause` row is the shape `getJSON` returns after that rewrap (a `stageError` over the inner
+  cause), and `TestEnrichment_WarnDoesNotLeakAPIKey` (`:471`) already drives a URL-bearing transport failure
+  through a real client to the `transport` class. The `recordingRT`/`newTestClient` helpers are at `:22` and `:53`.
 
 **TDD**: `red-green required`. RED: before Step 1, the test does not compile (`undefined: ErrorClass`).
 
 **Covers**: `AC-5`
 
 **Instructions**:
-1. Add `TestErrorClass_IsNeverEmpty_AC5` as a table test. Each row is an error built inline and its expected class:
-   - `fmt.Errorf("fmp: /stable/profile?apikey=SECRET: %w", context.DeadlineExceeded)` → `ctx`;
-   - `fmt.Errorf("fmp: /stable/profile?apikey=SECRET: %w", ErrFMPDailyCapExceeded)` → `cap`;
-   - `errors.New("fmp: build request: parse \"https://x?apikey=SECRET\"")` → `other`.
-   Assert `got == want`, and also `got != ""`. Add `fmt` to the imports if 255 has not already added it.
-2. If 254 has merged (its `*url.Error` rewrap is present in `getJSON`), also check that a transport failure through
-   the existing `recordingRT`/`newTestClient` helpers classifies as `transport`. If 254 has not merged, skip this
-   check and do not add a placeholder.
-3. C-13: the error values are per-row inline literals with one consumer.
+1. Do **not** add a new classifier test or table (operator decision (1), C-18). Extend the loop body of
+   `TestEnrichmentClassifier_StagesAndOther` so every row also asserts:
+   - `ErrorClass(tc.err) == tc.class` (the exported name agrees with `enrichmentClass`);
+   - `ErrorClass(tc.err) != ""` (AC-5: never empty).
+2. Add a row only for an AC-5 class (`ctx`, `cap`, `other`, `transport`) the table lacks. At `cfd240af` it lacks
+   none, so expect no new rows. Do not add a separate client-driven transport test: the existing `transport cause`
+   row plus `TestEnrichment_WarnDoesNotLeakAPIKey` cover the 254 path.
+3. C-13: the error values stay per-row inline literals with one consumer.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/fmp/ -run TestErrorClass -count=1 -v
+cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/fmp/ -run 'TestEnrichmentClassifier_StagesAndOther|TestEnrichment_WarnDoesNotLeakAPIKey' -count=1 -v
 cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
@@ -192,7 +208,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
   `s.etf.enqueueLocked(sym)` at `:76`.
 - `enqueueLocked(sym string)` `:83-95`: the `pending` dedup at `:87-89`, then `case e.queue <- sym:` at `:91`.
 - `StartEtfFlagFiller` `:98-113`: `case sym := <-q: s.fillEtfFlag(ctx, sym)` (`:109-110`) on the loop ctx from
-  `cmd/server/main.go:162`.
+  `cmd/server/main.go:166`.
 - `fillEtfFlag(ctx, sym string)` `:115-136`:
   - the deferred `pending` delete at `:116-120`;
   - the silent `if !s.etfFillAllowed() { return }` at `:121-123`;
@@ -201,17 +217,18 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
   - the cache write at `:129-135`, under `s.etf.mu.Lock(); defer s.etf.mu.Unlock()` (`:130-131`).
 - `etfFillAllowed() bool` `:140-146` checks, in order: `src == nil || fundCfg == nil || !GetBool("marketdata.fmp.enabled", false) || fmpBudget == nil`,
   then `used, cap := s.fmpBudget.BudgetSnapshot()`, then `cap > 0 && !atQuotaAlertThreshold(used, cap)`.
-- `atQuotaAlertThreshold` is at `internal/service/marketdata_service.go:1959`. `BudgetSnapshot` takes
-  `fmp.Client.mu` (`internal/fmp/fmp_client.go:98`), so the gate must not run under `etf.mu`.
+- `atQuotaAlertThreshold` is at `internal/service/marketdata_service.go:1998`. `BudgetSnapshot` takes
+  `fmp.Client.mu` (`internal/fmp/fmp_client.go:102`), so the gate must not run under `etf.mu`.
 - Trace source: `middleware.FromContext(ctx).TraceID` (`internal/middleware/propagation.go:20-23`). It is set by
-  `UnaryServerInterceptor` (`:27-35`), which is wired at `cmd/server/main.go:179`. The service package already imports
-  `github.com/xstockstrat/marketdata/internal/middleware` (`marketdata_service.go:27`, used at `:518`). The gRPC
+  `UnaryServerInterceptor` (`:27-35`), which is wired at `cmd/server/main.go:183`. The service package already imports
+  `github.com/xstockstrat/marketdata/internal/middleware` (`marketdata_service.go:28`, used at `:522`). The gRPC
   handler forwards the request ctx to `svc.GetEtfFlags` (`internal/handler/marketdata_handler.go:161`).
-- `FetchIsEtf` returns `(nil, nil)` when the profile is empty or has no `isEtf` (`internal/fmp/fmp_client.go:374-380`).
+- `FetchIsEtf` returns `(nil, nil)` when the profile is empty or has no `isEtf` (`internal/fmp/fmp_client.go:460-466`).
 - The only test call site that passes a bare string is `etf_flags_test.go:226`
   `svc.fillEtfFlag(context.Background(), "NEW")`. The four `<-svc.etf.queue` drains (`:136,156,183,200`) compile
   unchanged once the channel element type changes.
-- The process logger runs at Info (`cmd/server/main.go:34-35`, `slog.NewJSONHandler(os.Stdout, nil)`).
+- The process logger runs at Info (`cmd/server/main.go:42-43`, `slog.NewJSONHandler(os.Stdout, nil)`; `:52` wraps
+  it in `telemetry.WrapLogHandler`).
 
 **TDD**: `red-green required` (the RED run is Step 4's suite against the pre-change tree)
 
@@ -293,26 +310,31 @@ grep -n "middleware.FromContext(ctx).TraceID\|chan etfFillItem\|fmp.ErrorClass(e
 **Status**: `pending`
 **Service**: `xstockstrat-marketdata`
 **Files**:
-- `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify (generalise the log-capture handler)
+- `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify (one level-aware log-capture handler; fold `infoRecorder` into it)
 - `services/xstockstrat-marketdata/internal/service/etf_flags_test.go` — modify
 
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
-**Codebase Evidence**:
-- `recordingWarnHandler` (`marketdata_service_test.go:1549-1587`):
-  - its `Handle` (`:1560-1563`) drops every record whose level is not `slog.LevelWarn`;
-  - `recordedWarn{msg, attrs map[string]string}` is at `:1554`;
-  - `find(msg)` is at `:1577`;
-  - `installWarnRecorder` (`:1589-1596`) calls `slog.SetDefault`, which is process-global, so callers must not use
+**Codebase Evidence** (re-specced 2026-11-02, operator decision (2)):
+- `recordingWarnHandler` (`marketdata_service_test.go:1880-1920`; type `:1882`):
+  - its `Handle` (`:1893-1906`) drops every record whose level is not `slog.LevelWarn` (`:1894`);
+  - `recordedWarn{msg, attrs map[string]string}` is at `:1887`;
+  - `find(msg)` is at `:1910`;
+  - `installWarnRecorder` (`:1922-1929`) calls `slog.SetDefault`, which is process-global, so callers must not use
     `t.Parallel()`.
-- `installWarnRecorder` has 10 existing callers (`:1666,1692,1716,1762,1782,3202,3292,3316,3325,3491`), and
-  `rec.recs` is read at `:1676,1706,1750,1772,1791,3327-3328`.
+- `installWarnRecorder` has 12 existing callers (`:1169,1186,1999,2025,2049,2095,2115,3535,3625,3649,3658,3824`),
+  and `rec.recs` is read at `:2009,2039,2083,2105,2124,3660-3661`.
+- A second, Info-only copy of the same handler exists: `infoRecorder` (`:1202-1225`; comment `:1202-1203`, type
+  `:1204` with `recs []recordedWarn` at `:1206`, `Handle` `:1210` with a `LevelInfo` filter at `:1211`). Its only
+  user is `TestIngestRecentBars_LogsHeartbeatEveryCycle` (func `:1229`): `h := &infoRecorder{}` at `:1243` and an
+  inline `SetDefault`/`Cleanup` at `:1244-1246`; it reads `h.recs` at `:1248-1251`.
+- `countingWarnHandler` (`:1002-1011`) only counts records and is out of scope.
 - The ETF harness in `etf_flags_test.go`:
   - `fakeEtfSource{calls, resp, err}` with `total()` (`:15-43`);
   - `newEtfSvc(src, budget, fmpOn)` returns `*etfClock` (`:51-60`);
   - `etfFlags` (`:62-69`) calls `GetEtfFlags(context.Background(), …)`;
   - the existing `@AC-14` table with the `"no budget wired", nil` case (`:118-148`).
-- `fakeBudget{used, cap}` has a value receiver (`marketdata_service_test.go:2035-2037`), and `fakeCfg` is used by
+- `fakeBudget{used, cap}` has a value receiver (`marketdata_service_test.go:2368-2370`), and `fakeCfg` is used by
   `newEtfSvc` (`:54`).
 - The interceptor-routed ctx pattern is in `internal/middleware/propagation_test.go:70-82`:
   `metadata.NewIncomingContext` → `middleware.UnaryServerInterceptor(…, handler)` captures the server ctx. A bare
@@ -328,14 +350,18 @@ names its `@AC-*`.
 **Covers**: `AC-3, AC-4, AC-5, AC-6, AC-7`
 
 **Instructions**:
-1. **Generalise the capture handler (C-18, no copy).** Rename `recordingWarnHandler` → `recordingLogHandler` and
-   `recordedWarn` → `recordedLog`.
+1. **One level-aware capture handler (C-18, no copy; operator decision (2)).** Rename `recordingWarnHandler` →
+   `recordingLogHandler` and `recordedWarn` → `recordedLog`.
    - Add a `level slog.Level` field. `Handle` keeps records with `r.Level == h.level`. That is exact-level matching:
      a record captured at exact Info satisfies AC's "Info or higher".
    - Add `installLogRecorder(t, level)` with the current install/cleanup body. Keep `installWarnRecorder(t)` as a
-     one-line wrapper, `return installLogRecorder(t, slog.LevelWarn)`, so its 10 callers and the `rec.recs` reads
+     one-line wrapper, `return installLogRecorder(t, slog.LevelWarn)`, so its 12 callers and the `rec.recs` reads
      stay untouched.
    - Add a `count(msg string) int` helper next to `find`.
+   - **Fold `infoRecorder` in.** Delete `infoRecorder` and its comment (`:1202-1225`). In
+     `TestIngestRecentBars_LogsHeartbeatEveryCycle`, replace `h := &infoRecorder{}` and the inline
+     `SetDefault`/`Cleanup` (`:1243-1246`) with `h := installLogRecorder(t, slog.LevelInfo)`. Its `h.recs` reads
+     (`:1248-1251`) compile unchanged against `[]recordedLog`. After the fold, `grep -n "infoRecorder"` finds nothing.
 2. In `etf_flags_test.go`, add an `etfInfo(t)` helper that calls `installLogRecorder(t, slog.LevelInfo)`. Add a
    `noSecret(t, rec)` helper that fails when `msg` or any attribute value contains `apikey=` or `SECRET`. None of the
    new tests call `t.Parallel()`. Each asserts a `src.total()` delta, so logging adds no fetch.
@@ -350,8 +376,11 @@ names its `@AC-*`.
    - `used`/`cap` attrs present only for `no_cap` and `budget`, and for `budget` equal to `80`/`100`;
    - `src.total()==0`;
    - `pending` cleared.
-4. (b) **AC-5** `TestEtfFlagFiller_FailLogsClassOnly_AC5`: a table whose `fakeEtfSource.err` values are the Step 2
-   errors (`ctx`, `cap`, `other`), each with `apikey=SECRET` in the text. For each row assert:
+4. (b) **AC-5** `TestEtfFlagFiller_FailLogsClassOnly_AC5`: a table whose `fakeEtfSource.err` values are inline
+   errors for `ctx`, `cap` and `other`, each with `apikey=SECRET` in the text:
+   `fmt.Errorf("fmp: /stable/profile?apikey=SECRET: %w", context.DeadlineExceeded)`,
+   `fmt.Errorf("fmp: /stable/profile?apikey=SECRET: %w", fmp.ErrFMPDailyCapExceeded)` and
+   `errors.New("fmp: /stable/profile?apikey=SECRET build request")`. For each row assert:
    - exactly one `etf flag fill failed` record with `symbol=SCHD` and that `class`;
    - `class != ""`;
    - no `error` attribute;
@@ -390,8 +419,9 @@ names its `@AC-*`.
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -run 'EtfFlag|EtfFlags' -race -count=1 -v
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1   # the 10 installWarnRecorder callers still pass
+cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1   # the 12 installWarnRecorder callers and TestIngestRecentBars_LogsHeartbeatEveryCycle still pass
 grep -n "t.Parallel()" services/xstockstrat-marketdata/internal/service/etf_flags_test.go                    # no hits
+grep -n "infoRecorder\|recordingWarnHandler\|recordedWarn" services/xstockstrat-marketdata/internal/service/marketdata_service_test.go   # no hits
 cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
@@ -412,12 +442,13 @@ applies to it. The coverage command above still guards the measured total.
 **Codebase Evidence**:
 - The cache write that the later call reads is `etf_flags.go:135`
   `s.etf.entries[sym] = etfFlagEntry{isEtf: isEtf, fetchedAt: now}`.
-- `fakeBudget` has a value receiver (`marketdata_service_test.go:2037`), so `svc.fmpBudget = fakeBudget{used: 5, cap: 250}`
+- `fakeBudget` has a value receiver (`marketdata_service_test.go:2370`), so `svc.fmpBudget = fakeBudget{used: 5, cap: 250}`
   reassigns the snapshot.
 - Overlapping tests are `TestEtfFlagFiller_HeadroomGate_AC14` (`etf_flags_test.go:118-148`) and
-  `TestGetEtfFlags_TTL` (`:151-176`). Neither combines closed → reopened on one symbol.
-- The FMP-only seed that makes `used` small in production is 255's `seedFMPBudget` (255 impl-spec Step 5). Its
-  test, `TestSeedFMPBudget_CountsOnlyFMPRows_AC3`, lives in 255.
+  `TestGetEtfFlags_TTL` (`:151-176`). Neither combines closed → reopened on one symbol. `boolp` is at
+  `etf_flags_test.go:45`.
+- The FMP-only seed that makes `used` small in production is 255's `seedFMPBudget` (`cmd/server/main.go:262`). Its
+  test, `TestSeedFMPBudget_CountsOnlyFMPRows_AC3`, is at `cmd/server/main_test.go:94`.
 
 **TDD**: `regression-guard`. P-06 waiver: this test passes on trunk semantics, because the fix for this path is
 255's seed. Record the waiver in context.md when this step executes.
@@ -491,9 +522,9 @@ grep -n "not_wired" services/xstockstrat-marketdata/CLAUDE.md   # no hits
 **Reviewers**: xstockstrat-analysis owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- `_fundamentals_gap_labels` (`services/xstockstrat-analysis/app/handlers/servicer.py:1962`) calls `GetEtfFlags`
-  with `metadata=propagation_meta` (`:1966-1969`). On error it logs a warning and returns `{}` (`:1970-1972`). It
-  maps unset → `UNSPECIFIED`, true → `ETF`, false → `NOT_ETF` (`:1974-1981`).
+- `_fundamentals_gap_labels` (`services/xstockstrat-analysis/app/handlers/servicer.py:2042`) calls `GetEtfFlags`
+  with `metadata=propagation_meta` (`:2046-2049`). On error it logs a warning and returns `{}` (`:2050-2052`). It
+  maps unset → `UNSPECIFIED`, true → `ETF`, false → `NOT_ETF` (`:2054-2061`).
 - The product spec states that there is no proto, UI text or agent-tool contract change.
 
 **TDD**: `N/A (read-only verification of an unchanged consumer)`. Coverage threshold: N/A, no code changes in
@@ -521,4 +552,12 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **2026-11-02 — re-spec at sdd-execute setup** (branch merged with `origin/main-dev`, `cfd240af`). Pre-execution
+  gate passes (255 `code-completed`, `enrichmentClass` at `fmp_client.go:329` returns `other`, 254 landed).
+  - Step 2 (operator decision (1)): no new classifier table. Extend 255's `TestEnrichmentClassifier_StagesAndOther`
+    to assert `ErrorClass` and a never-empty class; add only missing rows (none at re-spec). Stale evidence
+    (`does not pin other`, `add fmt`, pre-254 build-request text) dropped.
+  - Step 4 (operator decision (2)): one level-aware `recordingLogHandler`; `infoRecorder` is folded into it and
+    `TestIngestRecentBars_LogsHeartbeatEveryCycle` moves onto `installLogRecorder(t, slog.LevelInfo)`. 12 (not 10)
+    `installWarnRecorder` callers re-anchored.
+  - Steps 0, 1, 3, 5, 7 and the Execution Summary: line-drift re-anchors only. Step 6: no drift.
