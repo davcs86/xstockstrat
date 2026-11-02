@@ -860,7 +860,7 @@ then **PY-VERIFY** (run with Step 18's tests).
 
 ### Step 18 — test: agent provenance (client request builder + tool path)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_watchlist_client.py` — modify
@@ -1176,5 +1176,15 @@ _Populated by /sdd-execute as implementation proceeds._
   - RED came from an uncommitted probe `tests/test_zz_step17_probe.py` (as in Steps 15-16), because Step 18's test edits are that step's **Files**. RED: `TypeError: add_watchlist_symbol() got an unexpected keyword argument 'signal_id'`. GREEN: the probe passed (provenance `(102, 1796083200)`; none for `valid_until` None / `""` / `"not-a-date"` / epoch 0 or `signal_id` None, with the binding still sent) and was deleted.
   - PY-VERIFY: ruff check/format pass, coverage 84.22% (>= 40), 641 passed and 1 failed. The failure is `test_watchlist_direction_adds_symbol`, which still asserts the old call shape `("u-2", "wl-sys", "NVDA")` against the new actual `("u-2", "wl-sys", "NVDA", 1, None)`. Step 18 instruction 2 updates that assertion in place, so the suite is fully green only after Step 18.
   - `add_watchlist_symbol` gained a two-line docstring sentence stating the provenance-omission contract.
+- **Disposition**: in scope. Only the step's **Files** changed.
+- **Severity**: n/a
+
+### 2026-11-02 — Step 18 — RED method and the non-red swallow test
+
+- **Spec said**: TDD red-green — the updated call-shape assertion and the provenance assertions fail before Step 17.
+- **Done instead**:
+  - Step 17 was already committed, so RED ran with `app/client.py` and `app/tools.py` temporarily restored from `b889a6e8` (pre-Step-17), then restored to HEAD. RED: 9 failed / 17 passed — all five client provenance cases, `test_watchlist_direction_adds_symbol`, both new tool-path tests, and the doc-parity test (no expiry sentence).
+  - `test_add_invalid_argument_is_swallowed` passes before Step 17 as well. It guards the unchanged best-effort `except`, so it is a regression guard rather than a red-to-green test.
+  - `test_add_watchlist_symbol_omits_provenance_when_undated` is parametrized over `valid_until=None`, `signal_id=None` and `valid_until=""`. The unparseable case is its own mandated test.
 - **Disposition**: in scope. Only the step's **Files** changed.
 - **Severity**: n/a

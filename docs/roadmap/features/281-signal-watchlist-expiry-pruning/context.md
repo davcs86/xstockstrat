@@ -424,3 +424,12 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 - Deviations: probe RED; PY-VERIFY fully green only after Step 18 (Deviation Log).
 - Next: Step 18 (agent provenance tests).
 
+### Step 18 — agent provenance tests (client request builder + tool path) [done] (2026-11-02)
+
+- `tests/test_watchlist_client.py`: `_send_signal_add` / `_assert_signal_binding` helpers, plus `test_add_watchlist_symbol_sends_provenance` (signal 102, `valid_until.seconds` = 2026-12-01T00:00:00Z), `test_add_watchlist_symbol_omits_provenance_when_undated` (parametrized: open-ended, no signal_id, empty string) and `test_add_watchlist_symbol_unparseable_valid_until_still_adds`. Each asserts the request is still sent with the SIGNAL binding and exactly one `x-user-id`.
+- `tests/test_ingest_signal_watchlist.py`: `test_watchlist_direction_adds_symbol` updated in place to `("u-2", "wl-sys", "NVDA", 1, None)`. New `_ingest_watchlist` helper, plus `test_ingest_signal_passes_signal_id_and_valid_until`, `test_ingest_signal_open_ended_passes_no_valid_until` and `test_add_invalid_argument_is_swallowed` (WARN logged, ingest result returned). The doc-parity test now also asserts the docstring mentions expiry. The gate tests are unchanged.
+- Files modified: `services/xstockstrat-agent/tests/test_watchlist_client.py`, `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py`.
+- TDD: RED against the pre-Step-17 app files (temporarily restored from `b889a6e8`) → 9 failed / 17 passed. GREEN → 26 passed.
+- Verification: ruff check/format pass; mandated test-name count >= 6; targeted pytest 26 passed; PY-VERIFY full suite 650 passed, coverage 84.49%.
+- Deviations: RED method; the swallow test is a regression guard and passes pre-Step-17 (Deviation Log).
+- Next: Step 19 (UI e2e — an emptied system-managed list renders and cannot be deleted).

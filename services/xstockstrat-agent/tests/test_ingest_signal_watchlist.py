@@ -53,7 +53,7 @@ async def test_watchlist_direction_adds_symbol():
         )
     assert result == {"signal_id": 1, "deduplicated": False}
     mock_ensure.assert_awaited_once_with("u-2")
-    mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA")
+    mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA", 1, None)
 
 
 # ── AC-2: non-watchlist direction → no watchlist mutation ───────────────────────
@@ -147,6 +147,63 @@ async def test_watchlist_add_failure_is_nonblocking(caplog):
     assert "UNAVAILABLE" in warnings[0].message or "portfolio down" in warnings[0].message
 
 
+# ── feature 281: the auto-add forwards signal provenance (AC-8, AC-9 agent half) ─
+
+
+async def _ingest_watchlist(mock_add, signal_id: int, **extra):
+    mock_ingest = AsyncMock(return_value={"signal_id": signal_id, "deduplicated": False})
+    mock_ensure = AsyncMock(return_value="wl-sys")
+    mock_config = AsyncMock(return_value=None)
+    with (
+        patch.object(client, "ingest_signal", mock_ingest),
+        patch.object(client, "ensure_signal_watchlist", mock_ensure),
+        patch.object(client, "add_watchlist_symbol", mock_add),
+        patch.object(client, "get_config_value", mock_config),
+    ):
+        server = _make_server()
+        return await _tool_fn(server, "ingest_signal")(
+            ctx=_ctx(TRADER),
+            source="unusual_whales",
+            symbol="NVDA",
+            direction="watchlist",
+            valid_from="2026-05-01T00:00:00Z",
+            **extra,
+        )
+
+
+@pytest.mark.asyncio
+async def test_ingest_signal_passes_signal_id_and_valid_until():
+    mock_add = AsyncMock(return_value=None)
+    await _ingest_watchlist(mock_add, 102, valid_until="2026-12-01T00:00:00Z")
+    mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA", 102, "2026-12-01T00:00:00Z")
+
+
+@pytest.mark.asyncio
+async def test_ingest_signal_open_ended_passes_no_valid_until():
+    mock_add = AsyncMock(return_value=None)
+    await _ingest_watchlist(mock_add, 103)
+    mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA", 103, None)
+
+
+@pytest.mark.asyncio
+async def test_add_invalid_argument_is_swallowed(caplog):
+    err = grpc.aio.AioRpcError(
+        grpc.StatusCode.INVALID_ARGUMENT, None, None, details="bad signal_provenance"
+    )
+    mock_add = AsyncMock(side_effect=err)
+    with caplog.at_level("WARNING"):
+        result = await _ingest_watchlist(mock_add, 104, valid_until="2026-12-01T00:00:00Z")
+    assert result == {"signal_id": 104, "deduplicated": False}
+    mock_add.assert_awaited_once()
+    warnings = [
+        r for r in caplog.records if r.levelname == "WARNING" and "Watchlist auto-add" in r.message
+    ]
+    assert warnings, "expected a WARNING log for the rejected watchlist auto-add"
+    assert (
+        "INVALID_ARGUMENT" in warnings[0].message or "bad signal_provenance" in warnings[0].message
+    )
+
+
 # ── AC-5: doc parity — docstring AND mcp-tools.md both document the side effect ──
 
 
@@ -164,6 +221,7 @@ def test_doc_parity_docstring_and_runbook():
     assert mentions_watchlist_add(doc), (
         "ingest_signal docstring must document the watchlist auto-add"
     )
+    assert "expire" in doc.lower(), "ingest_signal docstring must document the entry expiry"
     # scope the runbook check to the ingest_signal section so an unrelated mention can't pass it
     section = runbook.split("### `ingest_signal`", 1)[1].split("### `emit_alert`", 1)[0]
     assert mentions_watchlist_add(section), (
