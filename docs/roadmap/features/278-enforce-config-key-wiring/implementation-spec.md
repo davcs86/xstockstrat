@@ -401,7 +401,7 @@ node scripts/check-config-wiring.mjs --final --json | node -e "const j=JSON.pars
 
 > **Resolved 2026-10-23 (operator):** there is no production deployment, so the production reads in the Instructions below do not apply. The three samples were read on **staging** (read-only `get_config`): `ledger` `stream.notify_enabled` present, stored bare; `trading` `trading.fill_poller.interval_ms` present, stored dotted (after the 029 heal); `platform` `platform.maintenance_mode` present, stored dotted. The operator ruled **reported-only**: findings that exist only in the `production` environment are printed as `REPORTED:` and stay out of the ratchet; staging findings are blocking. `policy.envReadUnseeded` stays `reported`. Re-open this step, and re-run the production sampling below, when a production environment is created. Step 10's record is in `context.md` ("environment-baseline decision").
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/278-enforce-config-key-wiring/`
 **Files**:
 - `docs/roadmap/features/278-enforce-config-key-wiring/context.md` — modify (one confirmation line in the Step 9/10 session entry; the operator record itself already exists)

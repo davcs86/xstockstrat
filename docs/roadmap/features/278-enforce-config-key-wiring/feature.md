@@ -21,6 +21,7 @@
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 5+6 done as one red-green commit (operator Option A): join with per-environment collapse, four finding kinds, sorted `file:key:kind[:env]` output; join fixtures and tests |
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Steps 7+8 done as one red-green commit (operator Option A): `config-wiring.json` schema and owner validation, `--final` ratchet with env-list shrink, step-time mode with PENDING/REPORTED, declared keys from spec, migration and `--keys`; ratchet fixtures and tests |
 | 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Step 9 done: first offline `--final` run recorded (150 findings: 9 form-mismatch, 31 seeded-unread, 64 read-unseeded, 46 dynamic-read, 0 unmodelled-rewrite); reconciled against the expected set, open-risk checks closed |
+| 2026-11-01 | `in-progress` (unchanged) | /sdd-execute sequential | Step 10 done: environment-baseline gate confirmed reported-only (2026-10-23 operator ruling); 1 env-scoped finding reported, `policy.envReadUnseeded` = `reported`; no environment read |
 
 ---
 

@@ -429,3 +429,4 @@ Verdict: PASS WITH WARNINGS (no FAIL). Overlap: WARN (file-level only; no key/pr
 - Tooling: Node v22 (the root CLAUDE.md pins 24; the operator said this is not a blocker). No CI-equivalent fallback was used.
 - Deviations: none.
 - Severity: n/a.
+- Step 10 confirmed: reported-only (2026-10-23 operator ruling), 1 env-scoped findings reported (`trading.fill_poller.interval_ms:production`, printed `REPORTED:` and kept out of the ratchet; `policy.envReadUnseeded` is `reported`; no environment was read or written).
