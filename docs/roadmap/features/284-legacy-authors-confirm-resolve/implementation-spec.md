@@ -1,6 +1,6 @@
 # Implementation Spec: legacy-authors-confirm-resolve
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-02
 **Feature**: `docs/roadmap/features/284-legacy-authors-confirm-resolve/feature.md`
 **Total Steps**: 6

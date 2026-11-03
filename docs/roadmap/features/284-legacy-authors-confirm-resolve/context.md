@@ -128,3 +128,16 @@
 - **Teardown audit (root CLAUDE.md § Teardown) — for the PR body.** The `context-forge:context-constitution refresh` command was **unavailable** in this session (only the `context-forge:context-scrubber` skill is installed), so the equivalent was done **by hand**: re-read `docs/runbooks/legacy-formula-authors.md`, `services/xstockstrat-indicators/CLAUDE.md` § Maintenance and `services/xstockstrat-indicators/docs/context-constitution.md` (INDICATORS-12) against the final `legacy_authors_ops.py` and the frozen `legacy_authors.py`. Findings: (1) no stale claim anywhere in the repo — a repo-wide grep for "only marks suggested" / "still a hand edit" finds nothing outside this feature's and 276's own dirs; (2) the runbook's quoted behavior matches the code — flag `--map`, exit 2 on refusal, the `[run_id=…] refused:` line shape (same `la.log` as APPLY), `Not confirmed; plan.json unchanged.`, the picker warning, 3 invalid attempts, first-EOF-stops-picker, `--yes` semantics; (3) INDICATORS-12 needs **no edit** — the sole repair entry point and the system/UUID guard in `REWRITE_SQL` (`legacy_authors.py:32-36`, verified) are unchanged and `confirm` only writes `plan.json`; (4) the runbook was edited in Step 5 and needed no further drift fix; (5) `./scripts/check-context-map.sh` OK. `markdownlint-cli2` is not installed locally (npx would need a download), so the lint of the edited `CLAUDE.md` paragraph is left to the CI `markdownlint` job.
 - Files modified: `services/xstockstrat-indicators/CLAUDE.md`
 - Deviations: none (the two conditional Files, the runbook and `context-constitution.md`, needed no edit in this step).
+
+### Feature end — integration gates (sequential mode §5.6)
+- Config-key wiring gate `node scripts/check-config-wiring.mjs --final`: exit 0. Its single `REPORTED:` line concerns `xstockstrat-trading` (`trading.fill_poller.interval_ms`, read-unseeded) — pre-existing baseline, unrelated; this feature declares no config key.
+- Merge-order gate: no `merge-order.md` entry for this feature.
+- C-16 promotion (operator-approved via AskUserQuestion, 2026-11-03): created `services/xstockstrat-indicators/acceptance/legacy-authors-confirm-resolve.feature` with 21 scenarios (`@AC-1`..`@AC-11`, `@AC-13`..`@AC-22`), each tagged `@feature-284`; `@AC-12` skipped as doc-only (it asserts runbook text). Planned by the `scenario-promoter` subagent: 0 duplicates / overlaps / conflicts against the 276 suite or `platform.feature`.
+- Final state: 6/6 steps done; indicators suite 445 passed, coverage 85.4% (gate 50%); status `code-completed`.
+- Accountability: out-of-scope changes — none; open items — none unresolved (design risks tracked above); unaddressed review warnings — none; deviations — D-1 only.
+
+## Session 2026-11-03 — sdd-execute
+**Steps this session**: 1, 2, 3, 4, 5, 6
+**Progress**: 6 done / 6 total
+**Stopped at**: all complete (integration PR opened next)
+**Next**: merge the integration PR into main-dev

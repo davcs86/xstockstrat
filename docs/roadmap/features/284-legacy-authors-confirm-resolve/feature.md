@@ -20,6 +20,7 @@
 | 2026-11-03 | `in-progress` | /sdd-execute | Step 4 done |
 | 2026-11-03 | `in-progress` | /sdd-execute | Step 5 done |
 | 2026-11-03 | `in-progress` | /sdd-execute | Step 6 done; all steps complete |
+| 2026-11-03 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done; 21 scenarios promoted to the indicators business-rule suite; integration PR next |
 
 ---
 
@@ -48,4 +49,4 @@ _No proto, migration or config change, so no Proto Reviewer, DBA or Platform Lea
 
 ## Next Action
 
-`/sdd-review legacy-authors-confirm-resolve impl-spec` — validate implementation spec, then `/sdd-execute legacy-authors-confirm-resolve`
+Merge the integration PR into `main-dev` (squash), then `/sdd-sync` / `/promote` as usual
