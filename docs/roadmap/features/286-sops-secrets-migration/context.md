@@ -71,3 +71,24 @@
   `digitalocean` now holds only PROJECT_ID. @AC-17 was rewritten pre-design (same ID).
 - Operator: design depth = **full**.
 - Phase 0 recon written (recon.md). Corrected the spec's gate-var name to HOMELAB_STAGING_ENABLED/HOMELAB_PRODUCTION_ENABLED (recon finding).
+
+## Session 2026-11-03 — sdd-design (full) Phase 1, round 1
+
+- Proposal: Python resolver `scripts/sops_secrets.py` (resolve/build, one KEYS table), unified
+  `scripts/do-render-app-spec.py` (replaces do-inject-prod-secrets.py), composite `.github/actions/setup-sops`,
+  env-bound deploy.yml, app-ID by name, bootstrap matrix → ciphertext artifacts → single PR job.
+- Adversary verdict: NEEDS WORK — 1 blocker, 6 major, no Floor breach.
+  - O1 BLOCKER (C-16 @feature-210 @AC-2/@AC-4): in an `environment:`-bound reusable job, the env secret
+    `MTLS_CA` (homelab CA) shadows the caller-passed `MTLS_CA` (DEV_/PROD_MTLS_CA), which silently swaps DO's CA
+    at rollout step 1. Fix: read legacy values only under DEV_/PROD_ names via `secrets: inherit`.
+  - O2: homelab detaches to the image commit (deploy-homelab.yml:64-81), so tooling and SOPS must resolve before detach / from GITHUB_SHA.
+  - O3: force guard fails open (depth-1 checkout has no origin/main-dev). Rollout needs promotion to main
+    before the bootstrap can be dispatched (default branch = main). deploy-homelab.yml:19 says production "needs the
+    environment's reviewers", which contradicts the "no protection rules" answer, so re-confirm with the operator.
+  - O4: APP_ENV render not byte-safe (compose-go `$`/` #` expansion), so single-quote the common keys. Parser must
+    mirror the `owned` regex (export/KEY:) and render common LAST so DO wins.
+  - O5: `build` must mask exploded/1P values. Render script masks yaml_pem leaf/CA strings. Errors name keys only.
+  - O6: warn when the SOPS value differs from the legacy value (names only). A force reseed lists changed keys by hash in the PR body.
+  - O7: avoid exporting secrets to GITHUB_ENV in DO (resolve+render in one process). SHA-pin actions where it is kept.
+  - Minors: platform @AC-8 names the deleted script (EXTEND); derive placeholders from KEYS; refuse non-string
+    leaves; 1Password-in-bootstrap is YAGNI for a non-live homelab (operator call); verify the sops ≥3.9 CLI at spec time.
