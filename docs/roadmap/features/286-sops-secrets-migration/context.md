@@ -31,3 +31,17 @@
   an existing file unless `force: true` (FR-5f, @AC-15); prod-up aligned to the full key set incl. VAPID +
   mTLS (FR-9, @AC-16 — a deliberate behavior change); `production` environment has no protection rules
   that would block binding the DO deploy jobs to it.
+
+## Session 2026-11-03 — sdd-review product-spec
+
+- First pass FAILED on criterion 9 (C-11): three unchecked Open Questions. Fixed by moving the Ledger
+  traps (fails.md L1095, L443) into `## Notes for Design / Spec` and resolving the sops pin approach.
+  Also applied the advisory fixes: AC-10/AC-12 Thens reworded as outcomes, @FR-9 added to AC-11, FR order corrected.
+- Re-review: PASS WITH WARNINGS. Status: draft → spec-ready.
+- Warnings carried to design/spec:
+  - [ ] Pin the exact sops/age version + SHA-256 at spec time.
+  - [ ] Enumerate required vs optional keys per namespace (fail-closed must be testable per key).
+  - [ ] Tighten AC-12's "VM reports healthy" into a concrete signal (e.g. `gate status` exit 0).
+- Overlap findings: none in flight. Trunk context: rebase onto launched 279's `deploy-homelab.yml`,
+  the `HOMELAB_DEPLOY_ENABLED` gate in deploy-dev/prod, and the `homelab-release-env.sh` contract.
+- Recommended design depth: full (rubric default; two deploy targets, five workflows, secret custody).

@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-03 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review sops-secrets-migration product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design sops-secrets-migration` — full design recommended (rubric default: no runtime service, but spans two independent deploy targets (DO + homelab), five workflows, and secret-custody/security semantics)

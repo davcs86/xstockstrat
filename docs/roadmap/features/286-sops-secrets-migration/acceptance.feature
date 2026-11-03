@@ -77,9 +77,9 @@ Feature: sops-secrets-migration
     Given CONFIG_SECRETS_ENCRYPTION_KEY is in neither secrets/staging.enc.yaml nor DEV_CONFIG_SECRETS_ENCRYPTION_KEY
     When deploy-dev.yml deploys staging
     Then the job fails with "CONFIG_SECRETS_ENCRYPTION_KEY is in neither SOPS nor the GitHub secrets"
-    And doctl apps update is never invoked
+    And the DO app's active deployment ID is unchanged after the run
 
-  @AC-11 @FR-6
+  @AC-11 @FR-6 @FR-9
   Scenario: Prod bring-up resolves secrets the same way
     Given secrets/production.enc.yaml has digitalocean.JWT_SECRET="jwt-sops"
     When prod-up.yml runs with no existing prod app
@@ -89,7 +89,8 @@ Feature: sops-secrets-migration
   Scenario: Homelab deploy no longer touches 1Password
     Given secrets/staging.enc.yaml has the full homelab namespace
     When deploy-homelab.yml deploys staging
-    Then no step downloads the op CLI or calls 1password/load-secrets-action
+    And OP_SERVICE_ACCOUNT_TOKEN is unset for the staging environment
+    Then the deploy succeeds and the VM reports the new release as healthy
     And the step summary lists "sops" for TS_AUTHKEY, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS, APP_ENV and MTLS_CA
     And the release .env passed to the VM contains APP_URL from homelab.app_env
 

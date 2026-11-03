@@ -73,13 +73,13 @@ secret (`vars.TS_AUTHKEY_EXPIRES` for the expiry). It re-renders `app_env` to a 
 `scripts/homelab-release-env.sh`, whose contract does not change. The source report and the
 fail-closed rule match FR-6.
 
-FR-9. **Prod bring-up parity.** `prod-up.yml` (via `scripts/do-inject-prod-secrets.py`) injects the
-same full key set as `deploy.yml` — adding VAPID_PRIVATE_KEY/PUBLIC_KEY/SUBJECT and minting the mTLS
-leaves from `digitalocean.MTLS_CA` — so a recreated prod app is not missing keys a regular deploy sets.
-
 FR-8. **Operator runbook.** Document key generation, environment setup, running the bootstrap,
 local edit/rotation (`sops secrets/<env>.enc.yaml` with the operator key), adding a key, and the
 follow-up removal of legacy secrets once every key reports `sops`.
+
+FR-9. **Prod bring-up parity.** `prod-up.yml` (via `scripts/do-inject-prod-secrets.py`) injects the
+same full key set as `deploy.yml` — adding VAPID_PRIVATE_KEY/PUBLIC_KEY/SUBJECT and minting the mTLS
+leaves from `digitalocean.MTLS_CA` — so a recreated prod app is not missing keys a regular deploy sets.
 
 ## Out of Scope
 
@@ -139,16 +139,25 @@ secrets are removed in a follow-up.
 See `acceptance.feature` (scenarios `@AC-*`), the single source of acceptance truth (Constitution
 **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
+## Notes for Design / Spec
+
+Known traps from the Ledger (Constitution **P-05**). These are obligations on `/sdd-design` and `/sdd-spec`, not open questions:
+- **`fails.md` L1095 (FINNHUB_API_KEY):** secret wiring spans the reusable `deploy.yml` `secrets:`
+  block, the `deploy-dev.yml`/`deploy-prod.yml` passthrough, `scripts/do-inject-prod-secrets.py`,
+  `prod-up.yml`, `docs/setup/digitalocean.md` and `docs/runbooks/infra-cost-reduction.md`. The impl
+  spec must cite every one of these surfaces as Codebase Evidence.
+- **`fails.md` L443:** a spec'd secret name must never be swapped during execute without re-running `/sdd-spec`.
+- `deploy-dev.yml:73` / `deploy-prod.yml:72` already set `environment:` on the homelab caller job. The
+  impl spec must name exactly which jobs gain the binding: the reusable `deploy.yml` `deploy` job and `prod-up.yml` `up`.
+- Keep 279's `HOMELAB_DEPLOY_ENABLED` gate in `deploy-dev.yml`/`deploy-prod.yml` intact, and keep the
+  `scripts/homelab-release-env.sh` contract unchanged.
+
 ## Open Questions
 
-- [ ] **Known trap (`fails.md` 2026-… FINNHUB_API_KEY, L1095):** secret wiring spans the reusable
-  `deploy.yml` `secrets:` block, the `deploy-dev/prod.yml` passthrough, `scripts/do-inject-prod-secrets.py`,
-  `prod-up.yml`, `docs/setup/digitalocean.md` and `docs/runbooks/infra-cost-reduction.md`. The impl
-  spec must cite every one of these surfaces.
-- [ ] **Known trap (`fails.md` L443):** a spec'd secret name must not be swapped during execute
-  without re-running `/sdd-spec`.
 - [x] `production` environment protection rules: the operator confirmed there are none that block
   binding the DO deploy jobs to it (2026-11-03).
 - [x] `prod-up.yml` key set: **align to the full set** (operator, 2026-11-03). See FR-9.
-- [ ] `sops` is not preinstalled on `ubuntu-latest`. Pin the version + SHA-256 like `OP_CLI_*`/`TAILSCALE_*`.
 - [x] Bootstrap re-run: refuse unless `force: true` (operator, 2026-11-03). See FR-5(f).
+- [x] `sops` binary: not preinstalled on `ubuntu-latest`. Resolved: install a pinned `sops` release
+  and `age` with SHA-256 verification, following the `OP_CLI_*`/`TAILSCALE_*` env-pin pattern in
+  `deploy-homelab.yml`. The exact version is chosen at spec time.
