@@ -63,7 +63,7 @@ later with `sops set`, per the runbook. 1Password is not read anywhere (operator
 (b) derives the env recipient from `SOPS_AGE_KEY` via `age-keygen -y` and writes `.sops.yaml`;
 (c) encrypts the file;
 (d) self-verifies by decrypting with `SOPS_AGE_KEY` and comparing the key set and per-value SHA-256
-against the sources, plus an APP_ENV parse→render round-trip;
+against the sources,;
 (e) pushes branch `chore/sops-bootstrap` and opens a PR to `main-dev` with `GH_PAT`;
 (f) refuses to run for an environment whose `secrets/<env>.enc.yaml` already exists on `main-dev`
 unless the `force` input is `true`.
@@ -79,8 +79,10 @@ fails closed only when a required key is in neither store. Every decrypted value
 
 FR-7. **Homelab consumption.** `deploy-homelab.yml` drops 1Password entirely: no op CLI install, no
 `load-secrets-action`, no `OP_SERVICE_ACCOUNT_TOKEN`/`OP_VAULT`/`OP_TOKEN_EXPIRES` reads. It
-resolves each key SOPS first (`common` + `homelab`), with a per-key fallback to the same-named legacy
-GitHub environment secret (`vars.TS_AUTHKEY_EXPIRES` for the expiry). It renders `common`'s app keys
+resolves each key SOPS first (`common` + `homelab`), with a per-key fallback to the legacy GitHub
+secret. `common` keys fall back to the `DEV_*`/`PROD_*` repo secrets, as on DO, so FR-10 holds in every state.
+Homelab-only keys fall back to the same-named environment secrets (`vars.TS_AUTHKEY_EXPIRES` for the expiry). In
+the legacy-APP_ENV branch, blob lines whose key is a `common` key are dropped, and the DO common values are appended last. It renders `common`'s app keys
 plus `homelab.app_env` into the dotenv blob that `scripts/homelab-release-env.sh` consumes as
 `APP_ENV`, and it passes `common.MTLS_CA` as `MTLS_CA`. The script's contract does not change. The
 source report and the fail-closed rule match FR-6, and every homelab key is required here.

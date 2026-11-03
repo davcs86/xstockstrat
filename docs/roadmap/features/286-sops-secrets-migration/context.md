@@ -127,3 +127,10 @@
     - prod-up hard-fail is a deliberate behaviour change; include PROD_MTLS_CA
     - preflight checks that no env secret is named DEV_*/PROD_*
     - A2 sops/age CLI smoke test as the first, gating execute step
+- Gate after round 2 (operator, 2026-11-03):
+  - Homelab common-key fallbacks read DEV_/PROD_ (fix 1a). FR-7 text updated. The legacy APP_ENV blob is stripped
+    of common keys, and DO values are appended last. The stale FR-5(d) APP_ENV round-trip text is struck.
+  - Homelab GITHUB_ENV export: the operator noted TS_AUTHKEY/DEPLOY_SSH_KEY are infra creds like the DO token.
+    Accepted (waived): first-party same-repo scripts, no third-party `uses:` after resolve, whereas the DO token already
+    goes to a floating-tag third-party action. Re-confirmed at the round-3 gate.
+  - Operator chose to run round 3 (fold the conditions, re-review) rather than approve with conditions.
