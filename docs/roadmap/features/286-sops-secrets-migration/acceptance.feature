@@ -154,3 +154,10 @@ Feature: sops-secrets-migration
     When deploy-homelab.yml resolves staging
     Then the job fails with "homelab.app_env must not contain common key JWT_SECRET"
     And neither value appears in the log
+
+  @AC-24 @FR-6 @FR-9
+  Scenario: MCP_AGENT_SECRET stays absent from every new deploy-secret surface
+    Given scripts/do-render-app-spec.py, scripts/sops_secrets.py, .github/workflows/sops-bootstrap.yml and secrets/*.enc.yaml exist and scripts/do-inject-prod-secrets.py is deleted
+    When the repository is searched for "MCP_AGENT_SECRET"
+    Then there are no matches in any of those files, the deploy workflows, prod-up.yml or .do/app*.yaml
+    # Promoted at launch to EXTEND platform.feature @AC-8 @feature-147 (its Then names the deleted script).

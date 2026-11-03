@@ -151,3 +151,4 @@
   - Also: the AC-8 leaf key pubkey must equal the same-suffix cert's; sentinels must be fixed-width and delimited; values
     get no normalisation, asserted with trailing whitespace/newline; record the C-13 waiver for the inline fixture CA builder.
   - Rulings: agreed with the proposer on validate-job rationale, force-with-lease refspec, and the C-13 outcome.
+- Round 4: platform.feature @AC-8 EXTEND moved to own @AC-24 (promoted at launch). Reason: docs/sdd/business-rules/CLAUDE.md:51 forbids hand-authoring rules there.
