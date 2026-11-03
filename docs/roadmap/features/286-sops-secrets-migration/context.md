@@ -92,3 +92,11 @@
   - O7: avoid exporting secrets to GITHUB_ENV in DO (resolve+render in one process). SHA-pin actions where it is kept.
   - Minors: platform @AC-8 names the deleted script (EXTEND); derive placeholders from KEYS; refuse non-string
     leaves; 1Password-in-bootstrap is YAGNI for a non-live homelab (operator call); verify the sops ≥3.9 CLI at spec time.
+- Gate after round 1 (operator, 2026-11-03):
+  - Shared CA confirmed (FR-10). Shadowing is made **structurally impossible**: callers use `secrets: inherit`,
+    and deploy.yml reads fallbacks only under DEV_/PROD_ names (@AC-22).
+  - `production` **has required reviewers**, which corrects the earlier answer. The operator accepts the approval gate on
+    every DO prod deploy and prod-up.
+  - **Drop 1Password from the bootstrap.** The bootstrap seeds common + digitalocean only, and homelab is filled by hand via
+    `sops set` later. FR-5(a)/(a2) rewritten. @AC-3, @AC-4 and @AC-19 RETIRED (own pre-launch ACs; IDs kept).
+    @AC-2 rewritten. @AC-23 added: app_env may not hold a common key, which enforces DO-wins.

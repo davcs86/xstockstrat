@@ -14,21 +14,14 @@ Feature: sops-secrets-migration
 
   @AC-2 @FR-1 @FR-3 @FR-4
   Scenario: Keys land in exactly one of common, digitalocean, homelab
-    Given DEV_JWT_SECRET="jwt-do", DO_DEV_PROJECT_ID="proj-9", the staging env secret TS_AUTHKEY="tskey-x"
-    And staging APP_ENV holds the two lines "APP_URL=https://s.example" and "JWT_SECRET=jwt-do"
+    Given DEV_JWT_SECRET="jwt-do", DO_DEV_PROJECT_ID="proj-9", and the staging env secret TS_AUTHKEY="tskey-x"
     When the bootstrap runs for staging
-    Then the decrypted file has common.JWT_SECRET="jwt-do", digitalocean.PROJECT_ID="proj-9", homelab.TS_AUTHKEY="tskey-x"
-    And homelab.app_env equals {APP_URL: "https://s.example"} and has no JWT_SECRET key
+    Then the decrypted file has common.JWT_SECRET="jwt-do" and digitalocean.PROJECT_ID="proj-9"
+    And the file has no homelab namespace, and "tskey-x" appears nowhere in it
     And DIGITALOCEAN_ACCESS_TOKEN, GH_PAT, BUF_TOKEN and any APP_ID appear in no namespace
 
-  @AC-19 @FR-5
-  Scenario: DigitalOcean wins a common-key conflict and only key names are reported
-    Given PROD_JWT_SECRET="jwt-do" and production APP_ENV contains "JWT_SECRET=jwt-homelab"
-    And PROD_MTLS_CA="caDO" and the production env secret MTLS_CA="caHL"
-    When the bootstrap runs for production
-    Then common.JWT_SECRET has the SHA-256 of "jwt-do" and common.MTLS_CA has the SHA-256 of "caDO"
-    And the log warns "DigitalOcean value kept for: JWT_SECRET, MTLS_CA"
-    And neither "jwt-homelab" nor "caHL" appears in the log or the file
+  # @AC-19 RETIRED 2026-11-03 (operator): the bootstrap no longer reads homelab sources (1Password/env
+  # secrets) and no longer reconciles homelab values. ID kept, never reused (append-only).
 
   @AC-20 @FR-4 @FR-5
   Scenario: Bootstrap succeeds with no homelab values configured
@@ -37,20 +30,11 @@ Feature: sops-secrets-migration
     Then the job succeeds and the decrypted file has no homelab namespace keys
     And the step summary lists every homelab key as "absent (optional)"
 
-  @AC-3 @FR-5
-  Scenario: Bootstrap sources homelab values from 1Password when its token is usable
-    Given OP_SERVICE_ACCOUNT_TOKEN is set with OP_TOKEN_EXPIRES 30 days ahead
-    And 1Password item tailnet-authkey/authkey="tskey-1p" and the GitHub secret TS_AUTHKEY="tskey-gh"
-    When the bootstrap runs for production
-    Then the decrypted homelab.TS_AUTHKEY has the SHA-256 of "tskey-1p"
-    And the step summary lists "TS_AUTHKEY: 1password"
+  # @AC-3 RETIRED 2026-11-03 (operator): the bootstrap no longer reads homelab sources (1Password/env
+  # secrets) and no longer reconciles homelab values. ID kept, never reused (append-only).
 
-  @AC-4 @FR-5
-  Scenario: Bootstrap falls back to the GitHub secret when the 1Password token has expired
-    Given OP_TOKEN_EXPIRES is 1 day in the past and the GitHub secret TS_AUTHKEY="tskey-gh"
-    When the bootstrap runs for staging
-    Then the decrypted homelab.TS_AUTHKEY has the SHA-256 of "tskey-gh"
-    And the step summary lists "TS_AUTHKEY: github"
+  # @AC-4 RETIRED 2026-11-03 (operator): the bootstrap no longer reads homelab sources (1Password/env
+  # secrets) and no longer reconciles homelab values. ID kept, never reused (append-only).
 
   @AC-5 @FR-4 @FR-5
   Scenario: APP_ENV is exploded losslessly and round-trips
@@ -157,3 +141,17 @@ Feature: sops-secrets-migration
     Given secrets/production.enc.yaml has common.VAPID_PUBLIC_KEY="BPub" and common.MTLS_CA set
     When prod-up.yml runs with no existing prod app
     Then /tmp/app.yaml contains "BPub" and no "YOUR_PROD_VAPID_" or "YOUR_PROD_MTLS_" placeholder remains
+
+  @AC-22 @FR-6
+  Scenario: A same-named environment secret cannot shadow the DigitalOcean fallback
+    Given secrets/staging.enc.yaml does not exist, DEV_MTLS_CA="caDO", and the staging environment holds a secret MTLS_CA="caOther"
+    When deploy-dev.yml deploys staging
+    Then the minted leaves verify against the CA decoded from "caDO"
+    And the step summary lists "MTLS_CA: github"
+
+  @AC-23 @FR-4 @FR-7
+  Scenario: Homelab app_env may not carry a common key
+    Given secrets/staging.enc.yaml has common.JWT_SECRET="jwt-do" and homelab.app_env.JWT_SECRET="jwt-x"
+    When deploy-homelab.yml resolves staging
+    Then the job fails with "homelab.app_env must not contain common key JWT_SECRET"
+    And neither value appears in the log

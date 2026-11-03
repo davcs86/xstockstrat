@@ -55,12 +55,11 @@ any key that belongs to `common` is excluded from it. Homelab is not live yet, s
 
 FR-5. **Bootstrap workflow.** A `workflow_dispatch` workflow runs once per environment (matrix
 `staging`/`production`, each job bound to its GitHub Environment). It:
-(a) resolves every in-scope value from its **currently effective** source. For homelab that is
-1Password when `OP_SERVICE_ACCOUNT_TOKEN` is usable (same expiry rule as today), else the GitHub
-secret. For DO it is the `DEV_*`/`PROD_*` repo secret;
-(a2) builds `common` from the DO sources. **DigitalOcean wins:** when a homelab source (APP_ENV or the
-homelab MTLS_CA) holds a different value for a `common` key, the DO value is kept and the homelab value
-is dropped. The job logs a warning that lists only the conflicting key *names*;
+(a) resolves `common` and `digitalocean` from the `DEV_*`/`PROD_*` and `DO_{DEV,PROD}_PROJECT_ID` repo
+secrets. The **`homelab` namespace is not seeded** (homelab is not live). The operator adds homelab values
+later with `sops set`, per the runbook. 1Password is not read anywhere (operator, 2026-11-03);
+(a2) builds `common` from the DO sources. **DigitalOcean wins** is the standing rule for `common` keys:
+`homelab.app_env` may never hold a `common` key (the resolver refuses one), so homelab always receives DO's value;
 (b) derives the env recipient from `SOPS_AGE_KEY` via `age-keygen -y` and writes `.sops.yaml`;
 (c) encrypts the file;
 (d) self-verifies by decrypting with `SOPS_AGE_KEY` and comparing the key set and per-value SHA-256
@@ -184,6 +183,11 @@ Known traps from the Ledger (Constitution **P-05**). These are obligations on `/
   binding the DO deploy jobs to it (2026-11-03).
 - [x] `prod-up.yml` key set: **align to the full set** (operator, 2026-11-03). See FR-9.
 - [x] Bootstrap re-run: refuse unless `force: true` (operator, 2026-11-03). See FR-5(f).
+- [x] `production` environment **has required reviewers** (operator, 2026-11-03, correcting the earlier
+  answer). Binding the DO prod deploy and prod-up to it puts every push to main and every prod-up run behind
+  that approval. The operator accepted this gate.
+- [x] Legacy fallback reads (design round 1, O1): read only under `DEV_*`/`PROD_*` names via `secrets: inherit`,
+  so an environment secret can never shadow a caller-passed value.
 - [x] `sops` binary: not preinstalled on `ubuntu-latest`. Resolved: install a pinned `sops` release
   and `age` with SHA-256 verification, following the `OP_CLI_*`/`TAILSCALE_*` env-pin pattern in
   `deploy-homelab.yml`. The exact version is chosen at spec time.
