@@ -100,3 +100,30 @@
   - **Drop 1Password from the bootstrap.** The bootstrap seeds common + digitalocean only, and homelab is filled by hand via
     `sops set` later. FR-5(a)/(a2) rewritten. @AC-3, @AC-4 and @AC-19 RETIRED (own pre-launch ACs; IDs kept).
     @AC-2 rewritten. @AC-23 added: app_env may not hold a common key, which enforces DO-wins.
+
+## Session 2026-11-03 — sdd-design (full) Phase 1, round 2
+
+- Revised proposal:
+  - The resolver library is imported by `do-render-app-spec.py`, so DO resolves and renders in one process with no GITHUB_ENV export.
+  - Homelab resolves before the image-commit detach.
+  - `LEGACY_*` fallbacks are read via `secrets[format('{0}_K', P)]` under `secrets: inherit`.
+  - Bootstrap guard does an explicit fetch of main-dev, with fetch-fail ≠ absent.
+  - KEYS-derived placeholders, so a new secret needs one KEYS edit.
+- Adversary: APPROVABLE WITH CONDITIONS, no Floor breach, O1–O10 resolved (O7 homelab partial, A2 partial).
+  - C1 (major): homelab legacy fallbacks (own MTLS_CA env secret; JWT etc. via the APP_ENV blob) contradict
+    FR-10/FR-5(a2), an intra-spec contradiction (fails.md:455). Fix 1a: homelab common-key fallbacks read DEV_/PROD_ too.
+  - C2 (major): stdlib has no YAML emitter. Pipe JSON (`--input-type json --output-type yaml`) and assert str leaves.
+  - C3 (major): "byte-identical spec" is false, because leaves are re-minted per deploy. Parity = identical after normalising
+    leaf yaml_pem blocks. Permanent reverse-substitution identity test plus a one-time old-vs-new check.
+  - Minors:
+    - validate `inputs.environment` ∈ {staging, production} first
+    - resolve the app ID before decrypting; name = `xstockstrat-<env>`, asserted against the spec
+    - rm the rendered spec with `if: always()`
+    - push with `--force-with-lease`
+    - homelab per-name 0600 files instead of GITHUB_ENV (or waive)
+    - skip masks shorter than 4 chars
+    - no `python3 -I` / insert sys.path
+    - ruff check + format in the new CI job
+    - prod-up hard-fail is a deliberate behaviour change; include PROD_MTLS_CA
+    - preflight checks that no env secret is named DEV_*/PROD_*
+    - A2 sops/age CLI smoke test as the first, gating execute step
