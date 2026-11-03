@@ -134,3 +134,20 @@
     Accepted (waived): first-party same-repo scripts, no third-party `uses:` after resolve, whereas the DO token already
     goes to a floating-tag third-party action. Re-confirmed at the round-3 gate.
   - Operator chose to run round 3 (fold the conditions, re-review) rather than approve with conditions.
+
+## Session 2026-11-03 — sdd-design (full) Phase 1, round 3
+
+- Final consolidation folded every round-2 condition in, plus:
+  - a validate job (no environment) ahead of input-driven env-bound jobs
+  - app-ID-first ordering, with an always-run cleanup step
+  - homelab APP_ENV = body + DO common tail
+  - bootstrap feeds JSON to sops encrypt, with cwd=$RUNNER_TEMP
+  - fetch refspec, then force-with-lease
+  - a permanent reverse-substitution test (AC-8)
+  - an A2 smoke test as execute step 1
+- Adversary: APPROVABLE WITH CONDITIONS; all round-2 conditions MET; no Floor breach; no C-16 regression.
+  - Major: the AC-22 static test must also pin the right-hand side of every LEGACY_ line and the P expression.
+    Otherwise a crossed fallback deploys wrong values and is then seeded into SOPS (C-16 trading @AC-4, config @AC-16, @AC-9).
+  - Also: the AC-8 leaf key pubkey must equal the same-suffix cert's; sentinels must be fixed-width and delimited; values
+    get no normalisation, asserted with trailing whitespace/newline; record the C-13 waiver for the inline fixture CA builder.
+  - Rulings: agreed with the proposer on validate-job rationale, force-with-lease refspec, and the C-13 outcome.
