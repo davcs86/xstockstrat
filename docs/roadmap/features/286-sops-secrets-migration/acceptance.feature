@@ -14,12 +14,12 @@ Feature: sops-secrets-migration
 
   @AC-2 @FR-1 @FR-3 @FR-4
   Scenario: Keys land in exactly one of common, digitalocean, homelab
-    Given DEV_JWT_SECRET="jwt-do", DO_DEV_APP_ID="app-123", DO_DEV_PROJECT_ID="proj-9", the staging env secret TS_AUTHKEY="tskey-x"
+    Given DEV_JWT_SECRET="jwt-do", DO_DEV_PROJECT_ID="proj-9", the staging env secret TS_AUTHKEY="tskey-x"
     And staging APP_ENV holds the two lines "APP_URL=https://s.example" and "JWT_SECRET=jwt-do"
     When the bootstrap runs for staging
-    Then the decrypted file has common.JWT_SECRET="jwt-do", digitalocean.APP_ID="app-123", digitalocean.PROJECT_ID="proj-9", homelab.TS_AUTHKEY="tskey-x"
+    Then the decrypted file has common.JWT_SECRET="jwt-do", digitalocean.PROJECT_ID="proj-9", homelab.TS_AUTHKEY="tskey-x"
     And homelab.app_env equals {APP_URL: "https://s.example"} and has no JWT_SECRET key
-    And DIGITALOCEAN_ACCESS_TOKEN, GH_PAT and BUF_TOKEN appear in no namespace
+    And DIGITALOCEAN_ACCESS_TOKEN, GH_PAT, BUF_TOKEN and any APP_ID appear in no namespace
 
   @AC-19 @FR-5
   Scenario: DigitalOcean wins a common-key conflict and only key names are reported
@@ -118,12 +118,19 @@ Feature: sops-secrets-migration
     When deploy-homelab.yml deploys staging
     Then the step summary lists "DEPLOY_KNOWN_HOSTS: github" and the deploy proceeds
 
-  @AC-17 @FR-6 @FR-9
-  Scenario: Prod bring-up tells the operator to update the SOPS app ID
-    Given prod-up.yml creates a new prod app with ID "app-new"
-    When the job finishes
-    Then the run's warning names "digitalocean.APP_ID in secrets/production.enc.yaml" and "app-new"
-    And a following deploy-prod.yml run with digitalocean.APP_ID="app-new" updates app "app-new"
+  @AC-17 @FR-11
+  Scenario: Deploy targets the app resolved by spec name, even after a prod recreate
+    Given prod-up.yml recreated the prod app, so "xstockstrat-production" now has ID "app-new"
+    And the legacy secret DO_PROD_APP_ID still holds the deleted ID "app-old"
+    When deploy-prod.yml deploys production
+    Then app "app-new" receives the new deployment, and the step summary shows "app: xstockstrat-production → app-new"
+
+  @AC-21 @FR-11
+  Scenario: Deploy fails closed when the app name does not resolve to exactly one app
+    Given no DigitalOcean app named "xstockstrat-staging" exists
+    When deploy-dev.yml deploys staging
+    Then the job fails with "expected exactly 1 app named xstockstrat-staging, found 0"
+    And no app is updated
 
   @AC-18 @FR-10 @FR-7
   Scenario: Homelab mints its mTLS leaves from the shared common CA

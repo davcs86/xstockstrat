@@ -65,3 +65,8 @@
 - Re-review of the revised spec: PASS WITH WARNINGS, no blockers; status stays spec-ready. Applied:
   FR-6 now reads `common` + `digitalocean` explicitly, and AC-2 asserts `digitalocean.PROJECT_ID`.
   Carried: AC-14 is inspection-only (accepted); sops/age pin at spec time; AC-12 health signal to tighten.
+- Operator (2026-11-03): DO app ID is **resolved by spec name** at deploy time (FR-11, @AC-17/@AC-21)
+  instead of being stored. This removes the stale-ID-after-prod-up hazard outright. The rejected
+  alternative, prod-up running `sops set` and opening a PR, leaves main stale until merge + promotion.
+  `digitalocean` now holds only PROJECT_ID. @AC-17 was rewritten pre-design (same ID).
+- Operator: design depth = **full**.

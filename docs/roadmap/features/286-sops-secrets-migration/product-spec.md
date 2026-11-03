@@ -42,8 +42,8 @@ omitted when absent.)
   SENDGRID_API_KEY (O), VAPID_PRIVATE_KEY (O), VAPID_PUBLIC_KEY (O), VAPID_SUBJECT (O),
   OTEL_EXPORTER_OTLP_ENDPOINT (O), OTEL_EXPORTER_OTLP_HEADERS (O). Today these come from the
   `DEV_*` (staging) / `PROD_*` (production) repo secrets.
-- `digitalocean`: APP_ID (R for DO deploys), PROJECT_ID (O). Today these come from
-  `DO_DEV_APP_ID`/`DO_PROD_APP_ID` and `DO_DEV_PROJECT_ID`/`DO_PROD_PROJECT_ID`.
+- `digitalocean`: PROJECT_ID (O), moved from `DO_DEV_PROJECT_ID`/`DO_PROD_PROJECT_ID`. The DO app ID
+  is **not stored anywhere** (FR-11).
 - Platform credentials stay native GitHub secrets: DIGITALOCEAN_ACCESS_TOKEN (the account credential,
   shared across environments and used by the environment-less `prod-down.yml`), GH_PAT, GH_PAT_SCAN,
   BUF_TOKEN and GITHUB_TOKEN.
@@ -92,14 +92,19 @@ follow-up removal of legacy secrets once every key reports `sops`.
 
 FR-9. **Prod bring-up parity.** `prod-up.yml` (via `scripts/do-inject-prod-secrets.py`) injects the
 same full key set as `deploy.yml` — adding VAPID_PRIVATE_KEY/PUBLIC_KEY/SUBJECT and minting the mTLS
-leaves from `common.MTLS_CA` — so a recreated prod app is not missing keys a regular deploy sets. Because a recreated app gets a
-new ID, prod-up's closing instruction changes to "update `digitalocean.APP_ID` in
-`secrets/production.enc.yaml`" (SOPS takes precedence over the legacy `DO_PROD_APP_ID`).
+leaves from `common.MTLS_CA` — so a recreated prod app is not missing keys a regular deploy sets.
 
 FR-10. **Unified mTLS CA.** DO and homelab share one platform CA per environment (`common.MTLS_CA`,
 seeded from DO's `DEV_MTLS_CA`/`PROD_MTLS_CA`). This reverses the "separate CA from DO's" rule in
 `docs/patterns/inter-service-mtls.md`, and that doc is updated. There is no disruption because homelab
 is not live, and DO's CA does not change.
+
+FR-11. **App ID by name.** `deploy.yml` resolves the target app ID at run time from the app spec's
+`name:` (`xstockstrat-staging` / `xstockstrat-production`) via `doctl apps list`, the same way
+`prod-up.yml`/`prod-down.yml` already do. It fails closed unless exactly one app matches. The
+`DO_APP_ID` reusable-workflow input and its `DO_DEV_APP_ID`/`DO_PROD_APP_ID` passthrough are removed,
+and the legacy secrets become dead (deleted in the follow-up). `prod-up.yml`'s "update DO_PROD_APP_ID"
+warning is removed, because nothing needs updating after a recreate.
 
 ## Out of Scope
 
@@ -170,9 +175,6 @@ Known traps from the Ledger (Constitution **P-05**). These are obligations on `/
 - **`fails.md` L443:** a spec'd secret name must never be swapped during execute without re-running `/sdd-spec`.
 - `deploy-dev.yml:73` / `deploy-prod.yml:72` already set `environment:` on the homelab caller job. The
   impl spec must name exactly which jobs gain the binding: the reusable `deploy.yml` `deploy` job and `prod-up.yml` `up`.
-- Stale-ID hazard: once `digitalocean.APP_ID` exists, updating only the legacy `DO_PROD_APP_ID`
-  after prod-up has no effect. The fallback is per key and SOPS wins. Deploy fails safely (doctl errors
-  on an unknown ID), but the runbook and prod-up's warning must point at the SOPS file.
 - Keep 279's `HOMELAB_DEPLOY_ENABLED` gate in `deploy-dev.yml`/`deploy-prod.yml` intact, and keep the
   `scripts/homelab-release-env.sh` contract unchanged.
 
