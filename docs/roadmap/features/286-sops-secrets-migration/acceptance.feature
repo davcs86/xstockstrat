@@ -37,9 +37,9 @@ Feature: sops-secrets-migration
 
   @AC-5 @FR-4 @FR-7
   Scenario: The homelab APP_ENV is rendered so compose reads every value literally
-    Given homelab.app_env = {APP_URL: "https://x.example", DB_PASSWORD: "p$w #1 'x'"} and common.JWT_SECRET="j$t"
+    Given homelab.app_env = {APP_URL: "https://x.example", DB_PASSWORD: "p$w #1 \"x\""} and common.JWT_SECRET="j$t"
     When deploy-homelab.yml renders the release .env for staging
-    Then `docker compose config` resolves DB_PASSWORD to exactly "p$w #1 'x'" and JWT_SECRET to exactly "j$t"
+    Then `docker compose config` resolves DB_PASSWORD to exactly "p$w #1 \"x\"" and JWT_SECRET to exactly "j$t"
     And common keys are rendered after app_env keys
 
   @AC-6 @FR-5
