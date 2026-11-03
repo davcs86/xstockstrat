@@ -88,3 +88,14 @@
 - All 6 pass-2 nits fixed in spec revision 2 (wording only): Step 1 constants-vs-functions placement; Step 2 formula-id constant renamed `SAM` -> `SAM_FID` so the case-folding parity string `"SAM"` cannot be confused with it, and the four user ids spelled out in full; Step 3 evidence names `_load_plan`; Step 4 gained the pass/fail C-13 check; Step 6 Files marks the two doc files conditional and lists this `context.md` as append-only. - [x] addressed
 - Overlap findings: WARN only — `services/xstockstrat-indicators/CLAUDE.md` vs `243-fix-sandbox-seed-keys` (disjoint hunks; Step 6 must re-read the file before editing). No new collision on the two files added to Step 6 Files. No merge-order entry needed.
 - Review loop ended: pass 2 had no FAIL or WARN. Spec is clear for `/sdd-execute`.
+
+## Session 2026-11-03 — sdd-execute (sequential)
+
+- Mode-entry and per-feature confirmations given by the operator. Branch `feature/legacy-authors-confirm-resolve` created from `main-dev` (`eeb98ebf`) and pushed; ledger-guard clean. Re-spec gate: every cited path, symbol and line matched the live code, no re-spec.
+- Tooling setup (Steps 1-6): python 3.13 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest ⬇ via `uv sync --extra dev`. Baseline before changes: 6 tests pass, ruff clean.
+- TDD (Steps 1+2 cycle): RED — 30 new tests failed with `AttributeError: module 'app.maintenance.legacy_authors_ops' has no attribute '_candidates' / '_parse_maps' / '_pick'` (5/13/12). GREEN — all 36 pass; full indicators suite 423 passed, coverage 81.5% (gate 50%); `ruff check` + `ruff format --check` clean; `git diff -- app/maintenance/legacy_authors.py` empty (FR-7).
+
+### Step 1 — `--map` validation and picker helpers [done]
+- Added `_UNRESOLVED`, `_PICK_ATTEMPTS`, `_candidates`, `_parse_maps`, `_pick` to `legacy_authors_ops.py`; `confirm` and `main` untouched. Reason and notice strings match the spec exactly.
+- Files modified: `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py`
+- Deviations: none

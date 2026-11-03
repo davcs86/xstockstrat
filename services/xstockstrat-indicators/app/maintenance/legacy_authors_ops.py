@@ -23,6 +23,8 @@ from app.maintenance import legacy_authors as la
 DEFAULT_WORK_DIR = Path(tempfile.gettempdir()) / "legacy-authors"
 # identity.users shares the database (runbook §4); only the email local part leaves this module.
 USERS_SQL = "SELECT user_id, email, is_active FROM identity.users ORDER BY created_at"
+_UNRESOLVED = la.APPLY_STATUSES - {"confirmed"}
+_PICK_ATTEMPTS = 3
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -85,6 +87,79 @@ async def report(conn, target, work: Path, *, users_file=None, run_id=None) -> d
     plan_path.chmod(0o600)
     print(format_plan(plan, _users_by_id(users_path)))
     return plan
+
+
+def _candidates(author: str, users: dict) -> list[str]:
+    # Must mirror la.classify's candidate rule (legacy_authors.py is frozen, FR-7); parity-tested.
+    return [
+        uid
+        for uid, u in users.items()
+        if u["is_active"] and u["email_local"].lower() == author.lower()
+    ]
+
+
+def _parse_maps(maps, unresolved: list[dict], users: dict) -> tuple[dict, list[str]]:
+    mapping: dict[str, str] = {}
+    reasons: list[str] = []
+    for raw in maps:
+        author, sep, uid = raw.rpartition("=")
+        rows = [e for e in unresolved if e["old_author"] == author]
+        if not (sep and author and uid):
+            reasons.append(f"--map {raw}: expected LEGACY_AUTHOR=USER_ID")
+        elif not la.is_uuid(uid):
+            reasons.append(f"--map {raw}: {uid!r} is not a user id (UUID)")
+        elif uid not in users:
+            reasons.append(f'--map "{author}": user {uid} is not in users.json')
+        elif not users[uid]["is_active"]:
+            reasons.append(f'--map "{author}": user {uid} is inactive')
+        elif not rows:
+            reasons.append(f'no unresolved row has old_author "{author}"')
+        elif any(e["status"] == "ambiguous" for e in rows) and uid not in _candidates(
+            author, users
+        ):
+            reasons.append(f'user {uid} is not a candidate for "{author}"')
+        elif mapping.get(author, uid) != uid:
+            reasons.append(f'"{author}" is mapped to two different users')
+        else:
+            mapping[author] = uid
+    return mapping, reasons
+
+
+def _pick(unresolved: list[dict], chosen: dict, users: dict, ask) -> dict:
+    groups: dict[str, list[dict]] = {}
+    for e in unresolved:
+        if e["old_author"] not in chosen:
+            groups.setdefault(e["old_author"], []).append(e)
+    picks: dict[str, str] = {}
+    for author, rows in groups.items():
+        ambiguous = any(e["status"] == "ambiguous" for e in rows)
+        options = (
+            _candidates(author, users)
+            if ambiguous
+            else [uid for uid, u in users.items() if u["is_active"]]
+        )
+        if not options:
+            print(f'Skipped: there is no eligible user for "{author}".')
+            continue
+        kind = "ambiguous" if ambiguous else "unmappable"
+        print(f'"{author}": {len(rows)} {kind} row(s) - choose its owner:')
+        for i, uid in enumerate(options, 1):
+            print(f"  {i}) {users[uid]['email_local']} ({uid})")
+        for _ in range(_PICK_ATTEMPTS):
+            try:
+                answer = (
+                    ask(f'Owner for "{author}" [1-{len(options)}, s to skip]: ').strip().lower()
+                )
+            except EOFError:
+                return picks
+            if answer in ("", "s"):
+                break
+            if answer.isdecimal() and 1 <= int(answer) <= len(options):
+                picks[author] = options[int(answer) - 1]
+                break
+        else:
+            print(f'No valid answer for "{author}" after {_PICK_ATTEMPTS} attempts; skipped.')
+    return picks
 
 
 def confirm(work: Path, *, yes: bool, ask=input) -> tuple[int, str | None]:

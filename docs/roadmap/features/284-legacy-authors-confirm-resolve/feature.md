@@ -14,6 +14,7 @@
 | 2026-11-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, all addressed) |
 | 2026-11-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick extended) and approved; recon.md + design.md written |
 | 2026-11-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-11-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode, feature branch `feature/legacy-authors-confirm-resolve`) |
 
 ---
 

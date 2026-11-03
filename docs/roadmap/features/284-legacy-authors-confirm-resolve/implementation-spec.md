@@ -66,7 +66,7 @@ No proto, migration, config key, env var, port, dependency or `uv.lock` change. 
 
 ### Step 1 — service: `--map` validation and picker helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py` — modify
