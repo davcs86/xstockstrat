@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Reserves the next feature NNN by advancing the sdd/feature-cursor ref with a non-force push
-# (server-side compare-and-swap) and prints it. Never falls back to a local max+1.
-# Exit: 1 usage, 2 unparseable cursor tip, 3 cannot reserve (unreachable, push refused, retries spent).
+# Prints the reserved feature NNN. Exit: 1 usage, 2 unparseable cursor tip, 3 cannot reserve.
+# Never fall back to a local max+1 on failure: it reintroduces the cross-session race.
 set -euo pipefail
 
 REMOTE="${SDD_CURSOR_REMOTE:-origin}"

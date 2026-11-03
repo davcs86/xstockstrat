@@ -124,6 +124,11 @@ These tracking fields make production audits easy: you can always see exactly wh
 | `/sdd-review <slug> impl-spec` | 2.5 | AI review: advisory quality check + overlap scan |
 | `/sdd-execute <slug> [step\|next\|all]` | 3 | Execute steps with discovery + confirmation |
 | `/sdd-status [slug]` | — | Read-only status summary |
+| `/sdd-triage <issue\|--from-report path>` | — | Classify a bug and route it to Track A (hotfix), B (config) or C (SDD) |
+| `/sdd-sync [slug]` | — | Sync spec files between feature branches and `main-dev` |
+| `/sdd-distill <slug>` | — | Compact an in-progress feature's `context.md` |
+| `/sdd-archiver [slug\|all\|reports]` | — | Distil and prune completed features and resolved defect reports into durable memory |
+| `/sdd-batch`, `/sdd-batch-execute`, `/merge-train` | — | Saved workflows for many features at once (doc phases, parallel execute, progressive PR merges) |
 
 ---
 
@@ -136,3 +141,5 @@ These tracking fields make production audits easy: you can always see exactly wh
 3. **Run `/sdd-status` for a live summary of all features.** It reflects the current state pulled from each feature's `status.md`.
 
 4. **Current lifecycle status lives only in `status.md`.** Never add a `**Lifecycle Status**` field back to `feature.md` — that field was removed specifically to avoid two files disagreeing about the same fact. `feature.md`'s `## Status History` table remains the append-only audit trail of transitions; it is a different concern (history, not current state).
+
+5. **Reserve feature numbers only through `scripts/sdd-allocate-feature-number.sh`** (run by `/sdd-story` and `/sdd-triage`). Never `mkdir` a numbered feature directory by hand and never write to `sdd/feature-cursor` — see `docs/runbooks/feature-workflow.md` § Feature Numbering.
