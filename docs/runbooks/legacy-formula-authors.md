@@ -23,7 +23,9 @@ passed explicitly. Files default to `/tmp/legacy-authors` (0600).
 ```bash
 python -m app.maintenance.legacy_authors_ops report
 python -m app.maintenance.legacy_authors_ops confirm      # prints the sha256 for the DBA record
-python -m app.maintenance.legacy_authors_ops confirm --map ghost=<user_id> --yes   # scripted; --map repeatable
+python -m app.maintenance.legacy_authors_ops confirm --map ghost=<user_id> --yes   # scripted; one pair
+python -m app.maintenance.legacy_authors_ops confirm --yes \
+  --map ghost=<user_id_1> --map zed=<user_id_2>   # several pairs: repeat --map once per legacy author
 python -m app.maintenance.legacy_authors_ops apply --confirm-digest <sha256>
 ```
 
@@ -120,7 +122,18 @@ soft-deleted rows included.
 - **`--map <legacy_author>=<user_id>`** (repeatable, split on the last `=`) resolves every
   `unmappable` or `ambiguous` row whose `old_author` equals `<legacy_author>` exactly (case-sensitive),
   soft-deleted rows included. The target must be an **active** user in `users.json`; for an
-  `ambiguous` author it must also be one of that author's matched candidates.
+  `ambiguous` author it must also be one of that author's matched candidates. To map several
+  authors, repeat the flag once per legacy author (quote a pair that contains spaces):
+
+  ```bash
+  python -m app.maintenance.legacy_authors_ops confirm --yes \
+    --map ghost=<user_id_1> \
+    --map zed=<user_id_2> \
+    --map "old name=<user_id_3>"
+  ```
+
+  All pairs are validated together before anything is written, and every problem is listed in the
+  one refusal.
 - **Any invalid `--map`** (malformed, unknown or inactive user, no matching unresolved row, not a
   candidate, one author mapped to two users, or a missing or malformed `users.json`) refuses the whole
   run: exit `2`, one `[run_id=<uuid>] refused: <reason>` line per reason (the same line shape as
