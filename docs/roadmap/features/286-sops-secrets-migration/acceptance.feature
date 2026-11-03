@@ -24,11 +24,10 @@ Feature: sops-secrets-migration
   # secrets) and no longer reconciles homelab values. ID kept, never reused (append-only).
 
   @AC-20 @FR-4 @FR-5
-  Scenario: Bootstrap succeeds with no homelab values configured
-    Given no homelab secret, 1Password item or APP_ENV exists for staging
+  Scenario: Bootstrap seeds only common and digitalocean
+    Given the staging environment holds homelab secrets TS_AUTHKEY and APP_ENV
     When the bootstrap runs for staging
-    Then the job succeeds and the decrypted file has no homelab namespace keys
-    And the step summary lists every homelab key as "absent (optional)"
+    Then the job succeeds and the decrypted file's top-level keys are exactly "common" and "digitalocean"
 
   # @AC-3 RETIRED 2026-11-03 (operator): the bootstrap no longer reads homelab sources (1Password/env
   # secrets) and no longer reconciles homelab values. ID kept, never reused (append-only).
@@ -36,12 +35,12 @@ Feature: sops-secrets-migration
   # @AC-4 RETIRED 2026-11-03 (operator): the bootstrap no longer reads homelab sources (1Password/env
   # secrets) and no longer reconciles homelab values. ID kept, never reused (append-only).
 
-  @AC-5 @FR-4 @FR-5
-  Scenario: APP_ENV is exploded losslessly and round-trips
-    Given APP_ENV is the three lines "APP_URL=https://x.example", "# note", "ALERT_EMAIL_TO=\"a@b.c\""
-    When the bootstrap runs
-    Then homelab.app_env equals {APP_URL: "https://x.example", ALERT_EMAIL_TO: "\"a@b.c\""}
-    And re-rendering homelab.app_env yields the two non-comment lines byte-identical to the input
+  @AC-5 @FR-4 @FR-7
+  Scenario: The homelab APP_ENV is rendered so compose reads every value literally
+    Given homelab.app_env = {APP_URL: "https://x.example", DB_PASSWORD: "p$w #1 'x'"} and common.JWT_SECRET="j$t"
+    When deploy-homelab.yml renders the release .env for staging
+    Then `docker compose config` resolves DB_PASSWORD to exactly "p$w #1 'x'" and JWT_SECRET to exactly "j$t"
+    And common keys are rendered after app_env keys
 
   @AC-6 @FR-5
   Scenario: Bootstrap never leaks plaintext and fails on a missing required value
