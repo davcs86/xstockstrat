@@ -225,7 +225,7 @@ grep -n "_write_private(plan_path" services/xstockstrat-indicators/app/maintenan
 
 ### Step 4 — test: `confirm` flow and `main()` exit codes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py` — modify

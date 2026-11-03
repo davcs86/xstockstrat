@@ -109,3 +109,10 @@
 - Rewrote `confirm(work, *, yes, maps=(), ask=input)` (return shape unchanged): validate all `--map` first, lazy strict `users.json` (refusal with `--map`, warning + picker skipped without), per-author picker, in-memory overrides, one combined prompt, a single write site; `main()` gains `confirm --map` (repeatable) and prints `refused:` lines / exits 2 on `la.ApplyRefused`; module docstring updated. `apply`, `report` and `legacy_authors.py` untouched.
 - Files modified: `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py`
 - Deviations: none
+
+### Step 4 — `confirm` flow and `main()` exit codes [done]
+- Added 22 flow/`main()` tests covering AC-1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 20, 21 (the `main()` refusal test is parametrized over AC-2/3/4/13/14/15, each asserting exit 2, the `refused:` line, and a byte-identical plan); `io`/`sys` imports added here (see D-1). AC-11 drives `report` -> `confirm --map` -> `apply` and asserts `rewritten == 3`, `skipped_concurrent == 0`, no `refused:`.
+- TDD: RED (against the pre-Step-3 `confirm`) — 21 failed: 10x `TypeError: confirm() got an unexpected keyword argument 'maps'`, 7x argparse `SystemExit: 2` (unrecognized `--map`), and failed prompt-count / listing / warning assertions (`assert 0 == 1`, missing `1) davcs86 (...)`, missing `users.json could not be read`). Green-on-arrival by design: `test_yes_without_map_never_resolves_a_row` (AC-9, preserved behavior; the red gate is carried by its siblings). GREEN — 58 passed in `tests/test_legacy_authors_ops.py`; full suite 445 passed, coverage 85.4% (gate 50%).
+- Verification: ruff check/format clean; exactly one `_write_private(plan_path` in `confirm`; `git diff -- app/maintenance/legacy_authors.py` empty (FR-7); `confirm --help` shows `--map`; C-13 check passes (no new inline users literal).
+- Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py`
+- Deviations: none beyond D-1.

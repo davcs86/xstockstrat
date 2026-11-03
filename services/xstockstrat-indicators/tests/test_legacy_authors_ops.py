@@ -2,9 +2,11 @@
 stdlib + asyncpg only, files at 0600, the full result echoed to stdout because a console filesystem
 does not survive the post-apply restart."""
 
+import io
 import json
 import re
 import stat
+import sys
 
 import pytest
 
@@ -327,3 +329,197 @@ def test_pick_skips_author_with_no_eligible_user(capsys):
     assert ops._pick([_entry(SAM_FID, "sam", "ambiguous")], {}, users, ask) == {}
     assert ask.prompts == []
     assert 'there is no eligible user for "sam"' in capsys.readouterr().out
+
+
+def _seed(tmp_path, entries, users=USERS):
+    plan = json.dumps({"entries": entries})
+    (tmp_path / "plan.json").write_text(plan)
+    if users is not None:
+        (tmp_path / "users.json").write_text(json.dumps(users))
+    return plan
+
+
+def _rows(tmp_path):
+    entries = json.loads((tmp_path / "plan.json").read_text())["entries"]
+    return {e["formula_id"]: e for e in entries}
+
+
+def _suggested_davcs86():
+    return _entry(F1, "davcs86", "suggested", OWNER_ID)
+
+
+def test_map_resolves_every_row_of_one_author(tmp_path):
+    _seed(tmp_path, _unresolved())
+    n, digest = ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}"])
+    rows = _rows(tmp_path)
+    assert n == 2
+    for fid in (GHOST, GHOST_DELETED):
+        assert rows[fid]["new_author"] == OWNER_ID
+        assert (rows[fid]["source"], rows[fid]["status"]) == ("override", "confirmed")
+    assert rows[SAM_FID]["status"] == "ambiguous"
+    assert digest == la.plan_digest(tmp_path / "plan.json")
+    assert _mode(tmp_path / "plan.json") == 0o600
+
+
+def test_picker_resolves_an_author_and_skips_another(tmp_path):
+    _seed(tmp_path, _unresolved())
+    ask = _Ask("1", "s", "y")
+    n, digest = ops.confirm(tmp_path, yes=False, ask=ask)
+    rows = _rows(tmp_path)
+    assert n == 2 and digest is not None
+    assert rows[GHOST]["new_author"] == rows[GHOST_DELETED]["new_author"] == OWNER_ID
+    assert rows[GHOST]["source"] == "override"
+    assert rows[SAM_FID]["status"] == "ambiguous"
+    assert len(ask.prompts) == 3
+
+
+def test_eof_at_the_picker_changes_nothing_and_asked_once(tmp_path):
+    plan = _seed(tmp_path, _unresolved())
+    ask = _Ask()
+    assert ops.confirm(tmp_path, yes=False, ask=ask) == (0, None)
+    assert (tmp_path / "plan.json").read_text() == plan
+    assert len(ask.prompts) == 1
+
+
+def test_declined_confirmation_says_so_and_writes_nothing(tmp_path, capsys):
+    plan = _seed(tmp_path, _unresolved())
+    ask = _Ask("s", "n")
+    assert ops.confirm(tmp_path, yes=False, maps=[f"ghost={OWNER_ID}"], ask=ask) == (0, None)
+    assert (tmp_path / "plan.json").read_text() == plan
+    assert "Not confirmed; plan.json unchanged." in capsys.readouterr().out
+
+
+def test_eof_at_the_confirmation_says_so_and_writes_nothing(tmp_path, capsys):
+    plan = _seed(tmp_path, _unresolved())
+    ask = _Ask("s")
+    assert ops.confirm(tmp_path, yes=False, maps=[f"ghost={OWNER_ID}"], ask=ask) == (0, None)
+    assert (tmp_path / "plan.json").read_text() == plan
+    assert "Not confirmed; plan.json unchanged." in capsys.readouterr().out
+
+
+def test_yes_without_map_never_resolves_a_row(tmp_path):
+    plan = _seed(tmp_path, _unresolved())
+    ask = _Ask()
+    assert ops.confirm(tmp_path, yes=True, ask=ask) == (0, None)
+    assert (tmp_path / "plan.json").read_text() == plan
+    assert ask.prompts == []
+
+
+def test_confirm_proceeds_when_only_unresolved_rows_exist(tmp_path, capsys):
+    entries = [_entry(GHOST, "ghost", "unmappable"), _entry(GHOST_DELETED, "ghost", "unmappable")]
+    _seed(tmp_path, entries)
+    n, _ = ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}"])
+    assert n == 2
+    assert "No suggested rows" not in capsys.readouterr().out
+    assert {r["status"] for r in _rows(tmp_path).values()} == {"confirmed"}
+
+
+def test_yes_with_map_also_confirms_suggested_rows(tmp_path):
+    _seed(tmp_path, [*_unresolved(), _suggested_davcs86()])
+    n, _ = ops.confirm(tmp_path, yes=True, maps=[f"ghost={ALICE_ID}"])
+    rows = _rows(tmp_path)
+    assert n == 3 and rows[F1]["status"] == "confirmed"
+    for fid in (GHOST, GHOST_DELETED):
+        assert rows[fid]["new_author"] == ALICE_ID and rows[fid]["source"] == "override"
+    assert rows[SAM_FID]["status"] == "ambiguous"
+
+
+def test_one_prompt_covers_suggested_and_overrides(tmp_path):
+    _seed(tmp_path, [*_unresolved(), _suggested_davcs86()])
+    ask = _Ask("s", "y")
+    n, _ = ops.confirm(tmp_path, yes=False, maps=[f"ghost={OWNER_ID}"], ask=ask)
+    confirmations = [p for p in ask.prompts if p.startswith("Confirm")]
+    assert n == 3
+    assert confirmations == ["Confirm 1 suggested and 2 override rewrite(s)? [y/N] "]
+    assert {_rows(tmp_path)[f]["status"] for f in (F1, GHOST, GHOST_DELETED)} == {"confirmed"}
+
+
+def test_unreadable_users_file_skips_the_picker_and_keeps_the_suggested_flow(tmp_path, capsys):
+    _seed(tmp_path, [_suggested_davcs86(), _entry(GHOST, "ghost", "unmappable")], users=None)
+    ask = _Ask("y")
+    n, digest = ops.confirm(tmp_path, yes=False, ask=ask)
+    out = capsys.readouterr().out
+    rows = _rows(tmp_path)
+    assert "users.json could not be read" in out and "picker was skipped" in out
+    assert n == 1 and digest is not None
+    assert rows[F1]["status"] == "confirmed" and rows[GHOST]["status"] == "unmappable"
+    assert ask.prompts == ["Confirm 1 suggested rewrite(s)? [y/N] "]
+
+
+@pytest.mark.parametrize("users_body", [None, "{"])
+def test_map_without_a_readable_users_file_is_refused(tmp_path, users_body):
+    plan = _seed(tmp_path, _unresolved(), users=None)
+    if users_body is not None:
+        (tmp_path / "users.json").write_text(users_body)
+    with pytest.raises(la.ApplyRefused) as exc:
+        ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}"])
+    assert exc.value.reasons[0].startswith("cannot read users file")
+    assert (tmp_path / "plan.json").read_text() == plan
+
+
+def test_override_targets_are_listed_on_stdout(tmp_path, capsys):
+    _seed(tmp_path, _unresolved())
+    ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}"])
+    out = capsys.readouterr().out
+    for fid in (GHOST, GHOST_DELETED):
+        assert f"  {fid}  ghost -> davcs86 ({OWNER_ID})  [confirmed]" in out
+
+
+async def test_resolved_plan_passes_the_existing_apply_guards(tmp_path, capsys):
+    table = _UsersAndFormulas(
+        [
+            make_formula_row(GHOST, "ghost"),
+            make_formula_row(GHOST_DELETED, "ghost", deleted=True),
+            make_formula_row(SAM_FID, "sam"),
+        ]
+    )
+    await ops.report(table, ("h", "d"), tmp_path, run_id="r1")
+    n, digest = ops.confirm(tmp_path, yes=True, maps=[f"ghost={OWNER_ID}", f"sam={SAM_A}"])
+    result = await ops.apply(table, ("h", "d"), tmp_path, digest, run_id="r2")
+    authors = [table.rows[f]["author"] for f in (GHOST, GHOST_DELETED, SAM_FID)]
+    assert n == 3
+    assert (result["counts"]["rewritten"], result["counts"]["skipped_concurrent"]) == (3, 0)
+    assert authors == [OWNER_ID, OWNER_ID, SAM_A]
+    assert "refused:" not in capsys.readouterr().out
+
+
+def test_main_confirm_map_yes_prints_targets_before_the_digest(tmp_path, capsys):
+    _seed(tmp_path, _unresolved())
+    argv = ["--work-dir", str(tmp_path), "confirm", "--map", f"ghost={OWNER_ID}", "--yes"]
+    assert ops.main(argv) == 0
+    out = capsys.readouterr().out
+    digest = la.plan_digest(tmp_path / "plan.json")
+    target = f"  {GHOST}  ghost -> davcs86 ({OWNER_ID})  [confirmed]"
+    assert "Confirmed 2 row(s)" in out and digest in out
+    assert out.index(target) < out.index(digest)
+
+
+@pytest.mark.parametrize(
+    ("maps", "expected"),
+    [
+        ([f"ghost={OLD_ID}"], "inactive"),
+        ([f"nobody={OWNER_ID}"], 'no unresolved row has old_author "nobody"'),
+        ([f"ghost={OWNER_ID}", "sam=not-a-uuid"], "is not a user id"),
+        ([f"sam={OWNER_ID}"], 'is not a candidate for "sam"'),
+        (["ghost=99999999-9999-4999-8999-999999999999"], "is not in users.json"),
+        ([f"ghost={OWNER_ID}", f"ghost={ALICE_ID}"], '"ghost" is mapped to two different users'),
+    ],
+)
+def test_main_confirm_refuses_invalid_maps_with_exit_2(tmp_path, capsys, maps, expected):
+    plan = _seed(tmp_path, _unresolved())
+    argv = ["--work-dir", str(tmp_path), "confirm", "--yes"]
+    for m in maps:
+        argv += ["--map", m]
+    assert ops.main(argv) == 2
+    out = capsys.readouterr().out
+    assert "refused:" in out and expected in out
+    assert (tmp_path / "plan.json").read_text() == plan
+    assert {r["status"] for r in _rows(tmp_path).values()} == {"unmappable", "ambiguous"}
+
+
+def test_main_confirm_eof_shows_the_picker_and_exits_0(tmp_path, capsys, monkeypatch):
+    plan = _seed(tmp_path, _unresolved())
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    assert ops.main(["--work-dir", str(tmp_path), "confirm"]) == 0
+    assert f"1) davcs86 ({OWNER_ID})" in capsys.readouterr().out
+    assert (tmp_path / "plan.json").read_text() == plan
