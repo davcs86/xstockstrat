@@ -84,7 +84,7 @@ Feature: sops-secrets-migration
   Scenario: Prod bring-up resolves secrets the same way
     Given secrets/production.enc.yaml has common.JWT_SECRET="jwt-sops"
     When prod-up.yml runs with no existing prod app
-    Then /tmp/app.yaml carries JWT_SECRET "jwt-sops"
+    Then the rendered spec at $RUNNER_TEMP/app.yaml carries JWT_SECRET "jwt-sops"
 
   @AC-12 @FR-7
   Scenario: Homelab deploy no longer touches 1Password
@@ -139,7 +139,7 @@ Feature: sops-secrets-migration
   Scenario: Prod bring-up injects the full key set including VAPID and mTLS
     Given secrets/production.enc.yaml has common.VAPID_PUBLIC_KEY="BPub" and common.MTLS_CA set
     When prod-up.yml runs with no existing prod app
-    Then /tmp/app.yaml contains "BPub" and no "YOUR_PROD_VAPID_" or "YOUR_PROD_MTLS_" placeholder remains
+    Then the rendered spec at $RUNNER_TEMP/app.yaml contains "BPub" and no "YOUR_PROD_VAPID_" or "YOUR_PROD_MTLS_" placeholder remains
 
   @AC-22 @FR-6
   Scenario: A same-named environment secret cannot shadow the DigitalOcean fallback

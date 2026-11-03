@@ -152,3 +152,13 @@
     get no normalisation, asserted with trailing whitespace/newline; record the C-13 waiver for the inline fixture CA builder.
   - Rulings: agreed with the proposer on validate-job rationale, force-with-lease refspec, and the C-13 outcome.
 - Round 4: platform.feature @AC-8 EXTEND moved to own @AC-24 (promoted at launch). Reason: docs/sdd/business-rules/CLAUDE.md:51 forbids hand-authoring rules there.
+
+## Session 2026-11-03 — sdd-design (full) Phase 1, round 4
+
+- Proposer wrote the complete design, folding in A1–A5, both preflight lists, and P in the homelab job env. Its flags
+  were resolved by the orchestrator: @AC-24 instead of a platform.feature hand-edit; A1 tightened (each name exactly once,
+  a single job-level P, the matrix pinned).
+- Adversary: APPROVABLE WITH CONDITIONS. All amendments are MET, with no major/blocker issue, no Floor breach and no
+  C-16 regression. Six wording edits were applied to the draft: AC-1 stderr text, AC-8 summary-label coverage, AC-12
+  word-boundary regex, the AC-11/16 path (acceptance.feature updated to $RUNNER_TEMP/app.yaml), Rounds wording, and the
+  type of the environment input plus the E env var.
