@@ -23,32 +23,44 @@ so that secrets are versioned, reviewable and rotatable without service disrupti
 ## Functional Requirements
 
 FR-1. **Layout.** One SOPS file per environment, `secrets/staging.enc.yaml` and
-`secrets/production.enc.yaml`, encrypted with age. Top-level namespaces are `digitalocean:` (DO App
-Platform runtime secrets) and `homelab:` (homelab deploy secrets). The two targets use different mTLS
-CAs, so keys must never be shared across namespaces. `.sops.yaml` maps each file to exactly two
-recipients: that environment's age public key and the operator recipient.
+`secrets/production.enc.yaml`, encrypted with age, with three top-level namespaces:
+`common:` holds what the app needs to run regardless of hosting, `digitalocean:` holds values used only
+by the DO App Platform deploy, and `homelab:` holds values used only by the homelab deploy. A key
+lives in exactly one namespace, and consumers read `common` + their own target namespace.
+`.sops.yaml` maps each file to exactly two recipients: that environment's age public key and the
+operator recipient.
 
 FR-2. **Key custody.** Each environment's age private key is stored only in the GitHub Environment
 secret `SOPS_AGE_KEY` of the existing `staging`/`production` environments. The operator's personal
 age public key is the repo variable `SOPS_OPERATOR_AGE_RECIPIENT`. The staging key must not be able
 to decrypt the production file, and the production key must not be able to decrypt the staging file.
 
-FR-3. **Scope, DigitalOcean.** The file's `digitalocean:` namespace holds BROKER_ACCOUNTS_ENCRYPTION_KEY,
-JWT_SECRET, CONFIG_SECRETS_ENCRYPTION_KEY, SLACK_WEBHOOK_URL, SENDGRID_API_KEY, VAPID_PRIVATE_KEY,
-VAPID_PUBLIC_KEY, VAPID_SUBJECT, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS and MTLS_CA.
-Today these come from the `DEV_*` (staging) and `PROD_*` (production) repo secrets. Platform
-credentials stay native GitHub secrets: DIGITALOCEAN_ACCESS_TOKEN, DO_*_APP_ID, DO_*_PROJECT_ID,
-GH_PAT, GH_PAT_SCAN, BUF_TOKEN and GITHUB_TOKEN.
+FR-3. **Scope and requiredness.** (R = required: fail-closed when it is in neither store. O = optional:
+omitted when absent.)
+- `common`: JWT_SECRET (R), BROKER_ACCOUNTS_ENCRYPTION_KEY (R), CONFIG_SECRETS_ENCRYPTION_KEY (R),
+  MTLS_CA (R; a single platform CA shared by both targets, see FR-10), SLACK_WEBHOOK_URL (O),
+  SENDGRID_API_KEY (O), VAPID_PRIVATE_KEY (O), VAPID_PUBLIC_KEY (O), VAPID_SUBJECT (O),
+  OTEL_EXPORTER_OTLP_ENDPOINT (O), OTEL_EXPORTER_OTLP_HEADERS (O). Today these come from the
+  `DEV_*` (staging) / `PROD_*` (production) repo secrets.
+- `digitalocean`: APP_ID (R for DO deploys), PROJECT_ID (O). Today these come from
+  `DO_DEV_APP_ID`/`DO_PROD_APP_ID` and `DO_DEV_PROJECT_ID`/`DO_PROD_PROJECT_ID`.
+- Platform credentials stay native GitHub secrets: DIGITALOCEAN_ACCESS_TOKEN (the account credential,
+  shared across environments and used by the environment-less `prod-down.yml`), GH_PAT, GH_PAT_SCAN,
+  BUF_TOKEN and GITHUB_TOKEN.
 
-FR-4. **Scope, homelab.** The `homelab:` namespace holds TS_AUTHKEY, TS_AUTHKEY_EXPIRES,
-DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS, MTLS_CA and `app_env`. `app_env` is APP_ENV exploded into a
-`{KEY: VALUE}` map, with values kept as raw strings.
+FR-4. **Scope, homelab.** `homelab`: TS_AUTHKEY, TS_AUTHKEY_EXPIRES, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS,
+and `app_env`. `app_env` is APP_ENV exploded into a `{KEY: VALUE}` map with raw string values, and
+any key that belongs to `common` is excluded from it. Homelab is not live yet, so every homelab key is
+**O at bootstrap** (omitted when absent) and **R at homelab deploy time** (FR-7).
 
 FR-5. **Bootstrap workflow.** A `workflow_dispatch` workflow runs once per environment (matrix
 `staging`/`production`, each job bound to its GitHub Environment). It:
 (a) resolves every in-scope value from its **currently effective** source. For homelab that is
 1Password when `OP_SERVICE_ACCOUNT_TOKEN` is usable (same expiry rule as today), else the GitHub
 secret. For DO it is the `DEV_*`/`PROD_*` repo secret;
+(a2) builds `common` from the DO sources. **DigitalOcean wins:** when a homelab source (APP_ENV or the
+homelab MTLS_CA) holds a different value for a `common` key, the DO value is kept and the homelab value
+is dropped. The job logs a warning that lists only the conflicting key *names*;
 (b) derives the env recipient from `SOPS_AGE_KEY` via `age-keygen -y` and writes `.sops.yaml`;
 (c) encrypts the file;
 (d) self-verifies by decrypting with `SOPS_AGE_KEY` and comparing the key set and per-value SHA-256
@@ -61,17 +73,18 @@ file, never written as an empty string. A missing required value fails the job.
 
 FR-6. **DO deploy consumption.** `deploy.yml` (called by `deploy-dev.yml`/`deploy-prod.yml`) and
 `prod-up.yml` bind their jobs to the `staging`/`production` environment. They decrypt
-`secrets/<env>.enc.yaml` and resolve each key **SOPS first, with a per-key fallback to the legacy
+`secrets/<env>.enc.yaml`, read `common` + `digitalocean`, and resolve each key **SOPS first, with a per-key fallback to the legacy
 GitHub secret**. Every key's source (`sops`/`github`/`MISSING`) goes to the step summary. The job
 fails closed only when a required key is in neither store. Every decrypted value is masked
 (`::add-mask::`) before any further step runs.
 
 FR-7. **Homelab consumption.** `deploy-homelab.yml` drops 1Password entirely: no op CLI install, no
 `load-secrets-action`, no `OP_SERVICE_ACCOUNT_TOKEN`/`OP_VAULT`/`OP_TOKEN_EXPIRES` reads. It
-resolves each key SOPS first, with a per-key fallback to the same-named legacy GitHub environment
-secret (`vars.TS_AUTHKEY_EXPIRES` for the expiry). It re-renders `app_env` to a dotenv blob before
-`scripts/homelab-release-env.sh`, whose contract does not change. The source report and the
-fail-closed rule match FR-6.
+resolves each key SOPS first (`common` + `homelab`), with a per-key fallback to the same-named legacy
+GitHub environment secret (`vars.TS_AUTHKEY_EXPIRES` for the expiry). It renders `common`'s app keys
+plus `homelab.app_env` into the dotenv blob that `scripts/homelab-release-env.sh` consumes as
+`APP_ENV`, and it passes `common.MTLS_CA` as `MTLS_CA`. The script's contract does not change. The
+source report and the fail-closed rule match FR-6, and every homelab key is required here.
 
 FR-8. **Operator runbook.** Document key generation, environment setup, running the bootstrap,
 local edit/rotation (`sops secrets/<env>.enc.yaml` with the operator key), adding a key, and the
@@ -79,7 +92,14 @@ follow-up removal of legacy secrets once every key reports `sops`.
 
 FR-9. **Prod bring-up parity.** `prod-up.yml` (via `scripts/do-inject-prod-secrets.py`) injects the
 same full key set as `deploy.yml` — adding VAPID_PRIVATE_KEY/PUBLIC_KEY/SUBJECT and minting the mTLS
-leaves from `digitalocean.MTLS_CA` — so a recreated prod app is not missing keys a regular deploy sets.
+leaves from `common.MTLS_CA` — so a recreated prod app is not missing keys a regular deploy sets. Because a recreated app gets a
+new ID, prod-up's closing instruction changes to "update `digitalocean.APP_ID` in
+`secrets/production.enc.yaml`" (SOPS takes precedence over the legacy `DO_PROD_APP_ID`).
+
+FR-10. **Unified mTLS CA.** DO and homelab share one platform CA per environment (`common.MTLS_CA`,
+seeded from DO's `DEV_MTLS_CA`/`PROD_MTLS_CA`). This reverses the "separate CA from DO's" rule in
+`docs/patterns/inter-service-mtls.md`, and that doc is updated. There is no disruption because homelab
+is not live, and DO's CA does not change.
 
 ## Out of Scope
 
@@ -96,6 +116,7 @@ No runtime service changes. Only CI/deploy plumbing changes:
 - `.github/workflows/` — `deploy.yml`, `deploy-dev.yml`, `deploy-prod.yml`, `prod-up.yml`,
   `deploy-homelab.yml`, plus a new `sops-bootstrap.yml`
 - `scripts/` — `do-inject-prod-secrets.py` (prod-up consumer) and a new shared SOPS resolve helper
+- `.github/workflows/prod-down.yml` — read only to confirm it needs no change (it uses only DIGITALOCEAN_ACCESS_TOKEN)
 - `docs/` — `docs/setup/digitalocean.md` (secrets table), `docs/runbooks/infra-cost-reduction.md`
   (prod bring-up secret list), `docs/patterns/inter-service-mtls.md` (CA location), a new
   `docs/runbooks/sops-secrets.md`, and `services/xstockstrat-identity/CLAUDE.md` +
@@ -149,6 +170,9 @@ Known traps from the Ledger (Constitution **P-05**). These are obligations on `/
 - **`fails.md` L443:** a spec'd secret name must never be swapped during execute without re-running `/sdd-spec`.
 - `deploy-dev.yml:73` / `deploy-prod.yml:72` already set `environment:` on the homelab caller job. The
   impl spec must name exactly which jobs gain the binding: the reusable `deploy.yml` `deploy` job and `prod-up.yml` `up`.
+- Stale-ID hazard: once `digitalocean.APP_ID` exists, updating only the legacy `DO_PROD_APP_ID`
+  after prod-up has no effect. The fallback is per key and SOPS wins. Deploy fails safely (doctl errors
+  on an unknown ID), but the runbook and prod-up's warning must point at the SOPS file.
 - Keep 279's `HOMELAB_DEPLOY_ENABLED` gate in `deploy-dev.yml`/`deploy-prod.yml` intact, and keep the
   `scripts/homelab-release-env.sh` contract unchanged.
 

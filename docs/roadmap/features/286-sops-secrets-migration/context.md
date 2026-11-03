@@ -45,3 +45,23 @@
 - Overlap findings: none in flight. Trunk context: rebase onto launched 279's `deploy-homelab.yml`,
   the `HOMELAB_DEPLOY_ENABLED` gate in deploy-dev/prod, and the `homelab-release-env.sh` contract.
 - Recommended design depth: full (rubric default; two deploy targets, five workflows, secret custody).
+
+## Session 2026-11-03 — operator revision (post spec-ready)
+
+- Operator: three namespaces — `common` (app needs it regardless of hosting), `digitalocean` (DO-only),
+  `homelab` (homelab-only). Supersedes the two-namespace layout.
+- Operator: on a common-key conflict between DO and homelab sources, **DigitalOcean wins** (only the
+  key names are logged). Homelab is **not live yet**, so this is non-disruptive.
+- Operator: **unify MTLS_CA** into `common` from DO's CA (FR-10). This reverses
+  `docs/patterns/inter-service-mtls.md:105` ("a separate CA from DO's"), and that doc must be updated.
+- Operator: `digitalocean` holds APP_ID (R) + PROJECT_ID (O), moved from `DO_{DEV,PROD}_{APP,PROJECT}_ID`.
+  DIGITALOCEAN_ACCESS_TOKEN stays native (account-wide; environment-less `prod-down.yml` uses it).
+- Derived: every homelab key is optional at bootstrap (not live) and required at homelab deploy.
+  The required/optional matrix is in FR-3, which closes the review warning "enumerate required vs optional".
+- New hazard recorded: a stale `digitalocean.APP_ID` after prod-up recreation fails safe. prod-up's
+  warning now points at the SOPS file (@AC-17).
+- New scenarios: @AC-17..@AC-20. AC-2 rewritten for the 3-namespace split (same ID, pre-design).
+- Spec materially changed after the review gate, so re-review was run (see next entry).
+- Re-review of the revised spec: PASS WITH WARNINGS, no blockers; status stays spec-ready. Applied:
+  FR-6 now reads `common` + `digitalocean` explicitly, and AC-2 asserts `digitalocean.PROJECT_ID`.
+  Carried: AC-14 is inspection-only (accepted); sops/age pin at spec time; AC-12 health signal to tighten.

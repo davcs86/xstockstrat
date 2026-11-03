@@ -13,11 +13,29 @@ Feature: sops-secrets-migration
     And each file's sops.age metadata lists exactly 2 recipients: the env key and SOPS_OPERATOR_AGE_RECIPIENT
 
   @AC-2 @FR-1 @FR-3 @FR-4
-  Scenario: Namespaces keep the DigitalOcean and homelab CAs apart
-    Given DEV_MTLS_CA="caA" (repo secret) and the staging environment's MTLS_CA="caB"
+  Scenario: Keys land in exactly one of common, digitalocean, homelab
+    Given DEV_JWT_SECRET="jwt-do", DO_DEV_APP_ID="app-123", DO_DEV_PROJECT_ID="proj-9", the staging env secret TS_AUTHKEY="tskey-x"
+    And staging APP_ENV holds the two lines "APP_URL=https://s.example" and "JWT_SECRET=jwt-do"
     When the bootstrap runs for staging
-    Then the decrypted file has digitalocean.MTLS_CA="caA" and homelab.MTLS_CA="caB"
-    And DIGITALOCEAN_ACCESS_TOKEN, GH_PAT and BUF_TOKEN are absent from the file
+    Then the decrypted file has common.JWT_SECRET="jwt-do", digitalocean.APP_ID="app-123", digitalocean.PROJECT_ID="proj-9", homelab.TS_AUTHKEY="tskey-x"
+    And homelab.app_env equals {APP_URL: "https://s.example"} and has no JWT_SECRET key
+    And DIGITALOCEAN_ACCESS_TOKEN, GH_PAT and BUF_TOKEN appear in no namespace
+
+  @AC-19 @FR-5
+  Scenario: DigitalOcean wins a common-key conflict and only key names are reported
+    Given PROD_JWT_SECRET="jwt-do" and production APP_ENV contains "JWT_SECRET=jwt-homelab"
+    And PROD_MTLS_CA="caDO" and the production env secret MTLS_CA="caHL"
+    When the bootstrap runs for production
+    Then common.JWT_SECRET has the SHA-256 of "jwt-do" and common.MTLS_CA has the SHA-256 of "caDO"
+    And the log warns "DigitalOcean value kept for: JWT_SECRET, MTLS_CA"
+    And neither "jwt-homelab" nor "caHL" appears in the log or the file
+
+  @AC-20 @FR-4 @FR-5
+  Scenario: Bootstrap succeeds with no homelab values configured
+    Given no homelab secret, 1Password item or APP_ENV exists for staging
+    When the bootstrap runs for staging
+    Then the job succeeds and the decrypted file has no homelab namespace keys
+    And the step summary lists every homelab key as "absent (optional)"
 
   @AC-3 @FR-5
   Scenario: Bootstrap sources homelab values from 1Password when its token is usable
@@ -65,7 +83,7 @@ Feature: sops-secrets-migration
 
   @AC-9 @FR-6
   Scenario: DO deploy prefers SOPS and falls back per key
-    Given secrets/production.enc.yaml has digitalocean.JWT_SECRET="jwt-sops" and no SENDGRID_API_KEY
+    Given secrets/production.enc.yaml has common.JWT_SECRET="jwt-sops" and no SENDGRID_API_KEY
     And PROD_JWT_SECRET="jwt-gh" and PROD_SENDGRID_API_KEY="sg-gh"
     When deploy-prod.yml deploys production
     Then the app spec carries JWT_SECRET "jwt-sops" and SENDGRID_API_KEY "sg-gh"
@@ -81,13 +99,13 @@ Feature: sops-secrets-migration
 
   @AC-11 @FR-6 @FR-9
   Scenario: Prod bring-up resolves secrets the same way
-    Given secrets/production.enc.yaml has digitalocean.JWT_SECRET="jwt-sops"
+    Given secrets/production.enc.yaml has common.JWT_SECRET="jwt-sops"
     When prod-up.yml runs with no existing prod app
     Then /tmp/app.yaml carries JWT_SECRET "jwt-sops"
 
   @AC-12 @FR-7
   Scenario: Homelab deploy no longer touches 1Password
-    Given secrets/staging.enc.yaml has the full homelab namespace
+    Given secrets/staging.enc.yaml has common.MTLS_CA and the full homelab namespace
     When deploy-homelab.yml deploys staging
     And OP_SERVICE_ACCOUNT_TOKEN is unset for the staging environment
     Then the deploy succeeds and the VM reports the new release as healthy
@@ -99,6 +117,19 @@ Feature: sops-secrets-migration
     Given secrets/staging.enc.yaml lacks homelab.DEPLOY_KNOWN_HOSTS and the env secret DEPLOY_KNOWN_HOSTS is set
     When deploy-homelab.yml deploys staging
     Then the step summary lists "DEPLOY_KNOWN_HOSTS: github" and the deploy proceeds
+
+  @AC-17 @FR-6 @FR-9
+  Scenario: Prod bring-up tells the operator to update the SOPS app ID
+    Given prod-up.yml creates a new prod app with ID "app-new"
+    When the job finishes
+    Then the run's warning names "digitalocean.APP_ID in secrets/production.enc.yaml" and "app-new"
+    And a following deploy-prod.yml run with digitalocean.APP_ID="app-new" updates app "app-new"
+
+  @AC-18 @FR-10 @FR-7
+  Scenario: Homelab mints its mTLS leaves from the shared common CA
+    Given common.MTLS_CA="caDO" in secrets/staging.enc.yaml
+    When deploy-homelab.yml builds the release .env for staging
+    Then MTLS_CA_CERT in the release .env is the CA certificate decoded from "caDO"
 
   @AC-14 @FR-8
   Scenario: Runbook covers the full operator lifecycle
@@ -116,6 +147,6 @@ Feature: sops-secrets-migration
 
   @AC-16 @FR-9
   Scenario: Prod bring-up injects the full key set including VAPID and mTLS
-    Given secrets/production.enc.yaml has digitalocean.VAPID_PUBLIC_KEY="BPub" and digitalocean.MTLS_CA set
+    Given secrets/production.enc.yaml has common.VAPID_PUBLIC_KEY="BPub" and common.MTLS_CA set
     When prod-up.yml runs with no existing prod app
     Then /tmp/app.yaml contains "BPub" and no "YOUR_PROD_VAPID_" or "YOUR_PROD_MTLS_" placeholder remains
