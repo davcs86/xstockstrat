@@ -104,3 +104,8 @@
 - Added constants, helpers (`_users_dict`, `_entry`, `_Ask`, `_listing`, `_unresolved`) and 30 test cases covering AC-2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 22 (reason-text and picker legs) plus the `_candidates`/`classify` parity drift guard. TDD: RED `AttributeError` on `_candidates`/`_parse_maps`/`_pick` (30 failed) -> GREEN 36 passed (see session header above).
 - Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py`
 - Deviations: D-1 — `io`/`sys` imports moved to Step 4 to satisfy ruff F401 (full detail in Deviation Log).
+
+### Step 3 — `confirm` resolves unmappable/ambiguous rows; `--map` flag; docstring [done]
+- Rewrote `confirm(work, *, yes, maps=(), ask=input)` (return shape unchanged): validate all `--map` first, lazy strict `users.json` (refusal with `--map`, warning + picker skipped without), per-author picker, in-memory overrides, one combined prompt, a single write site; `main()` gains `confirm --map` (repeatable) and prints `refused:` lines / exits 2 on `la.ApplyRefused`; module docstring updated. `apply`, `report` and `legacy_authors.py` untouched.
+- Files modified: `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py`
+- Deviations: none

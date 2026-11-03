@@ -175,7 +175,7 @@ Red run (captured by `/sdd-execute` before Step 1): the new tests fail with `Att
 
 ### Step 3 — service: `confirm` resolves unmappable/ambiguous rows; `--map` flag; docstring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py` — modify

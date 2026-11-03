@@ -16,6 +16,7 @@
 | 2026-11-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-11-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode, feature branch `feature/legacy-authors-confirm-resolve`) |
 | 2026-11-03 | `in-progress` | /sdd-execute | Step 2 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 3 done |
 
 ---
 

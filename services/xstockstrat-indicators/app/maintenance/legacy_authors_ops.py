@@ -2,8 +2,9 @@
 
 Runs in the indicators image (DO console) or locally with only asyncpg + the stdlib:
     python -m app.maintenance.legacy_authors_ops report
-    python -m app.maintenance.legacy_authors_ops confirm
+    python -m app.maintenance.legacy_authors_ops confirm [--map LEGACY=USER_ID ...] [--yes]
     python -m app.maintenance.legacy_authors_ops apply --confirm-digest <sha256 from confirm>
+`confirm` also resolves unmappable/ambiguous rows: repeatable --map, then a numbered picker.
 Runbook: docs/runbooks/legacy-formula-authors.md. A console filesystem does not survive the restart
 the runbook requires after apply, so `apply` echoes the full result to stdout.
 """
@@ -25,6 +26,7 @@ DEFAULT_WORK_DIR = Path(tempfile.gettempdir()) / "legacy-authors"
 USERS_SQL = "SELECT user_id, email, is_active FROM identity.users ORDER BY created_at"
 _UNRESOLVED = la.APPLY_STATUSES - {"confirmed"}
 _PICK_ATTEMPTS = 3
+_NOTHING_TO_CONFIRM = "No suggested rows to confirm."
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -162,25 +164,61 @@ def _pick(unresolved: list[dict], chosen: dict, users: dict, ask) -> dict:
     return picks
 
 
-def confirm(work: Path, *, yes: bool, ask=input) -> tuple[int, str | None]:
+def confirm(work: Path, *, yes: bool, maps=(), ask=input) -> tuple[int, str | None]:
     plan_path = work / "plan.json"
     plan = _load_plan(plan_path)
     suggested = [e for e in plan["entries"] if e["status"] == "suggested"]
-    if not suggested:
-        print("No suggested rows to confirm.")
+    unresolved = [e for e in plan["entries"] if e["status"] in _UNRESOLVED]
+    need_users = bool(maps) or (bool(unresolved) and not yes)
+    if not suggested and not need_users:
+        print(_NOTHING_TO_CONFIRM)
         return 0, None
-    print(format_plan(plan, _users_by_id(work / "users.json")))
-    if not yes:
+    users = None
+    if need_users:
         try:
-            answer = ask(f"Confirm {len(suggested)} suggested rewrite(s)? [y/N] ")
+            users = la.load_users(work / "users.json")
+        except SystemExit as exc:
+            if maps:
+                raise la.ApplyRefused([str(exc)]) from exc
+            print(f"WARNING: users.json could not be read; the picker was skipped. ({exc})")
+    mapping: dict[str, str] = {}
+    if maps:
+        mapping, reasons = _parse_maps(maps, unresolved, users)
+        if reasons:
+            raise la.ApplyRefused(reasons)
+    names = (
+        {uid: u["email_local"] for uid, u in users.items()}
+        if users is not None
+        else _users_by_id(work / "users.json")
+    )
+    print(format_plan(plan, names))
+    if users is not None and not yes and unresolved:
+        mapping.update(_pick(unresolved, mapping, users, ask))
+    overrides = [e for e in unresolved if e["old_author"] in mapping]
+    for e in overrides:
+        e.update(new_author=mapping[e["old_author"]], source="override", status="confirmed")
+    if not suggested and not overrides:
+        print(_NOTHING_TO_CONFIRM)
+        return 0, None
+    if overrides:
+        print(format_plan(plan, names))
+    if not yes:
+        prompt = (
+            f"Confirm {len(suggested)} suggested and {len(overrides)} override rewrite(s)? [y/N] "
+            if overrides
+            else f"Confirm {len(suggested)} suggested rewrite(s)? [y/N] "
+        )
+        try:
+            answer = ask(prompt)
         except EOFError:
             answer = ""
         if answer.strip().lower() not in ("y", "yes"):
+            print("Not confirmed; plan.json unchanged.")
             return 0, None
     for e in suggested:
         e["status"] = "confirmed"
     _write_private(plan_path, json.dumps(plan, indent=2) + "\n")
-    return len(suggested), la.plan_digest(plan_path)
+    return len(suggested) + len(overrides), la.plan_digest(plan_path)
 
 
 async def apply(conn, target, work: Path, digest: str, *, run_id=None) -> dict:
@@ -218,11 +256,23 @@ def main(argv=None) -> int:
         p = sub.add_parser(name)
         p.add_argument("--yes", "-y", action="store_true", help="skip the prompt")
     sub.choices["apply"].add_argument("--confirm-digest", required=True)
+    sub.choices["confirm"].add_argument(
+        "--map",
+        action="append",
+        default=[],
+        metavar="LEGACY=USER_ID",
+        help="resolve every unmappable/ambiguous row of LEGACY to USER_ID (repeatable)",
+    )
     args = parser.parse_args(argv)
     work, run_id = _work_dir(args.work_dir), str(uuid.uuid4())
 
     if args.cmd == "confirm":
-        n, digest = confirm(work, yes=args.yes)
+        try:
+            n, digest = confirm(work, yes=args.yes, maps=args.map)
+        except la.ApplyRefused as exc:
+            for reason in exc.reasons:
+                la.log(run_id, f"refused: {reason}")
+            return la.ApplyRefused.exit_code
         if digest:
             print(f"\nConfirmed {n} row(s). Record this digest in the DBA change record:")
             print(f"  {digest}\n\nThen: apply --confirm-digest {digest}")
