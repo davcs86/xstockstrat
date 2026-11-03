@@ -175,7 +175,7 @@ Known traps from the Ledger (Constitution **P-05**). These are obligations on `/
 - **`fails.md` L443:** a spec'd secret name must never be swapped during execute without re-running `/sdd-spec`.
 - `deploy-dev.yml:73` / `deploy-prod.yml:72` already set `environment:` on the homelab caller job. The
   impl spec must name exactly which jobs gain the binding: the reusable `deploy.yml` `deploy` job and `prod-up.yml` `up`.
-- Keep 279's `HOMELAB_DEPLOY_ENABLED` gate in `deploy-dev.yml`/`deploy-prod.yml` intact, and keep the
+- Keep 279's `vars.HOMELAB_STAGING_ENABLED`/`vars.HOMELAB_PRODUCTION_ENABLED` gates in `deploy-dev.yml`/`deploy-prod.yml` intact, and keep the
   `scripts/homelab-release-env.sh` contract unchanged.
 
 ## Open Questions

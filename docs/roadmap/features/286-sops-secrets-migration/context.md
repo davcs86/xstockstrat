@@ -70,3 +70,4 @@
   alternative, prod-up running `sops set` and opening a PR, leaves main stale until merge + promotion.
   `digitalocean` now holds only PROJECT_ID. @AC-17 was rewritten pre-design (same ID).
 - Operator: design depth = **full**.
+- Phase 0 recon written (recon.md). Corrected the spec's gate-var name to HOMELAB_STAGING_ENABLED/HOMELAB_PRODUCTION_ENABLED (recon finding).
