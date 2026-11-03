@@ -1,6 +1,6 @@
 # Implementation Spec: legacy-authors-confirm-resolve
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-02
 **Feature**: `docs/roadmap/features/284-legacy-authors-confirm-resolve/feature.md`
 **Total Steps**: 6
@@ -66,7 +66,7 @@ No proto, migration, config key, env var, port, dependency or `uv.lock` change. 
 
 ### Step 1 — service: `--map` validation and picker helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py` — modify
@@ -121,7 +121,7 @@ C-13 verdict: no test data in this step.
 
 ### Step 2 — test: helper and picker unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py` — modify
@@ -175,7 +175,7 @@ Red run (captured by `/sdd-execute` before Step 1): the new tests fail with `Att
 
 ### Step 3 — service: `confirm` resolves unmappable/ambiguous rows; `--map` flag; docstring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py` — modify
@@ -225,7 +225,7 @@ grep -n "_write_private(plan_path" services/xstockstrat-indicators/app/maintenan
 
 ### Step 4 — test: `confirm` flow and `main()` exit codes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py` — modify
@@ -284,7 +284,7 @@ Red run (before Step 3): `TypeError: confirm() got an unexpected keyword argumen
 
 ### Step 5 — docs: runbook intro and §5 describe `confirm --map` and the picker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/legacy-formula-authors.md` — modify
@@ -327,7 +327,7 @@ grep -n -i "apply" docs/runbooks/legacy-formula-authors.md | grep -i "candidate"
 
 ### Step 6 — docs: indicators `CLAUDE.md` § Maintenance and teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -365,4 +365,8 @@ grep -c "legacy_authors_ops" services/xstockstrat-indicators/CLAUDE.md          
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — Step 2: `io` and `sys` imports deferred to Step 4
+- **Spec said**: Step 2 adds `io`, `re`, `sys` to the test module's stdlib imports.
+- **Actual**: Step 2 adds only `re`; `io` and `sys` arrive in Step 4.
+- **Why**: nothing in Step 2 uses `io` or `sys` (they serve the `main()` EOF test in Step 4), so adding them now fails `ruff check` with F401 — the step's own lint gate.
+- **Disposition**: in-scope lint correctness for the step's own lines; no behavior or coverage change.

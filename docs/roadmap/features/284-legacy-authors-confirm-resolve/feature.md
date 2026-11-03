@@ -14,6 +14,13 @@
 | 2026-11-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, all addressed) |
 | 2026-11-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick extended) and approved; recon.md + design.md written |
 | 2026-11-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-11-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode, feature branch `feature/legacy-authors-confirm-resolve`) |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 2 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 3 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 4 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 5 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 6 done; all steps complete |
+| 2026-11-03 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done; 21 scenarios promoted to the indicators business-rule suite; integration PR next |
 
 ---
 
@@ -42,4 +49,4 @@ _No proto, migration or config change, so no Proto Reviewer, DBA or Platform Lea
 
 ## Next Action
 
-`/sdd-review legacy-authors-confirm-resolve impl-spec` — validate implementation spec, then `/sdd-execute legacy-authors-confirm-resolve`
+Merge the integration PR into `main-dev` (squash), then `/sdd-sync` / `/promote` as usual
