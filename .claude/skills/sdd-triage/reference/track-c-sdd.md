@@ -25,7 +25,8 @@ If a directory is found: ask the user to confirm overwrite or stop.
 ### C-2. Reserve NNN and create feature directory
 
 The number is reserved atomically on `origin` (same allocator as `/sdd-story`); on a non-zero exit stop
-and report stderr — never compute a number locally. See `docs/runbooks/feature-workflow.md` § Feature Numbering.
+and report stderr — never compute a number locally, write to `sdd/feature-cursor` by hand, or rewrite its
+history. See `docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ```bash
 NEXT_NNN=$(bash scripts/sdd-allocate-feature-number.sh "<slug>") || exit 1

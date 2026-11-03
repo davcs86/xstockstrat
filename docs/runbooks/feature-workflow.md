@@ -112,10 +112,16 @@ Feature directories are `docs/roadmap/features/NNN-<slug>/`, where `NNN` is a ze
   and a deleted feature's number stays retired; gaps are expected.
 - **Numbers are immutable once `launched`.** Before that, a number may be changed only to resolve a
   collision.
+- **Cursor history is immutable.** Never force-push, amend, rebase, reset or delete `sdd/feature-cursor`,
+  and never write to it by hand — only the allocator advances it. A rewind or deletion can re-issue
+  numbers that are reserved but not yet in any branch tree. If it is damaged, an admin restores the last
+  good tip from any clone that fetched it (`git push origin <sha>:refs/heads/sdd/feature-cursor`); a
+  missing ref only re-seeds from the highest NNN already in a branch tree, so it cannot recover
+  unmerged reservations.
 - **Cursor operations.** Sessions can create and fast-forward `sdd/*` refs but cannot delete them (HTTP
   403), which suits an append-only cursor. A repo admin should protect `sdd/feature-cursor` against
-  force-push and deletion so a rewrite cannot rewind it. Migration `NNN` ordering is a separate,
-  order-sensitive problem and is not covered by the cursor.
+  force-push and deletion so the rule above is enforced, not just stated. Migration `NNN` ordering is a
+  separate, order-sensitive problem and is not covered by the cursor.
 - **Collision resolution (manual bypass only).** A collision can now arise only from a number created
   without the allocator (hand-made directory, or a pre-cursor branch). Renumber the later one to the
   next free number with `git mv`, then update: the moved dir's own `**Feature**`/`**Product

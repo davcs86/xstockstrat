@@ -36,7 +36,8 @@ The number is **reserved on `origin`, never computed from the local tree**: the 
 `sdd/feature-cursor` ref with a non-force push (server-side compare-and-swap), so concurrent developers
 and sessions cannot receive the same number. An abandoned reservation is burned, never reused. If the
 script exits non-zero (origin unreachable, push refused, cursor unparseable), **stop and report its
-stderr — never fall back to a local `max+1`**. See `docs/runbooks/feature-workflow.md` § Feature Numbering.
+stderr — never fall back to a local `max+1`**. Never write to `sdd/feature-cursor` by hand or rewrite its
+history (force-push, amend, reset, delete). See `docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ```bash
 NEXT_NNN=$(bash scripts/sdd-allocate-feature-number.sh "$ARGUMENTS[0]") || exit 1
