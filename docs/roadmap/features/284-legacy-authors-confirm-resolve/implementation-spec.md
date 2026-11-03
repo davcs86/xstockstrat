@@ -327,7 +327,7 @@ grep -n -i "apply" docs/runbooks/legacy-formula-authors.md | grep -i "candidate"
 
 ### Step 6 — docs: indicators `CLAUDE.md` § Maintenance and teardown audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
