@@ -687,3 +687,20 @@ Step 26 re-run after `expose-score-strategy-mcp` (283), `fix-marketdata-fundamen
 - Step 26 stays `blocked`, and `status.md` stays `in-progress`, until the operator rules on them.
 
 **Operator ruling (2026-11-02): hold for 230.** 215 stays `in-progress`, with Step 26 `blocked`, until `230-fix-etf-flag-fill` lands. Then re-run (a) to confirm SCHD's `fundamentals_gap` is set. The (c) formula `PERMISSION_DENIED` is under investigation as a separate defect. It does not gate 215 under this ruling.
+
+## Session 2026-11-02 — staging verification (a) re-run
+
+Re-run under the operator's "hold for 230" ruling, after `230-fix-etf-flag-fill` merged (PR #1399, `1ea1c19c`). Staging deployment `0de48de3` was ACTIVE at 2026-11-02T02:49:26Z, every service on image `1ea1c19`, all 12 components HEALTHY. Each run was `run_backtest(fundamentals_macd_blend, ["SCHD"], start 2026-01-01, end 2026-09-30)`.
+
+| backtest_id | completed_at | status | no_trade_reason | fundamentals_gap |
+|---|---|---|---|---|
+| `a031e16f-8578-4f45-804a-bfaf3fc647fe` | 2026-11-02T03:15:01.642588Z | `BACKTEST_STATUS_INSUFFICIENT_DATA` | `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` | `FUNDAMENTALS_GAP_UNSPECIFIED` |
+| `4f599c76-67c2-45eb-9116-070ae2f91ca7` | 2026-11-02T03:15:06.841496Z | `BACKTEST_STATUS_INSUFFICIENT_DATA` | `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` | `FUNDAMENTALS_GAP_UNSPECIFIED` |
+| `4812483e-3bdf-4131-a2d7-c7412bd3f322` | 2026-11-02T03:32:55.660890Z | `BACKTEST_STATUS_INSUFFICIENT_DATA` | `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` | `FUNDAMENTALS_GAP_UNSPECIFIED` |
+
+All three returned `bars_total` 0, `warnings` `[]` and `coverage_gaps` `[]`.
+
+- **Refusal passes. The ETF label is still unset after 18 minutes,** so a slow background fill is ruled out.
+- **The fill gate's config inputs are open.** `get_config("marketdata")` (staging) shows `marketdata.fmp.enabled=true`, `marketdata.fmp.daily_request_cap=250`, `marketdata.fundamentals.provider=finnhub` and `marketdata.fundamentals.snapshot_source=edgar`. 255 (merged) counts only `source='fmp'` rows toward the FMP quota.
+- **The remaining causes are only visible in 230's new Info records.** They are an FMP profile fetch failure (`etf flag fill failed`, class), an empty profile (`etf flag fill unlabelled`, negative-cached), or a skip reason (`etf flag fill skipped`). `apps-get-logs` returns only a token-bearing live URL, which this session does not fetch (credential use).
+- **Open (operator):** search the `xstockstrat-marketdata` RUN logs for `etf flag fill` (deployment `0de48de3`, around 03:15–03:33Z) and report the record, reason and class. Step 26 stays `blocked`.

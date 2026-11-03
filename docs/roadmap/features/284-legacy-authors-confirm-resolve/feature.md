@@ -13,6 +13,7 @@
 | 2026-11-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, all addressed) |
 | 2026-11-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick extended) and approved; recon.md + design.md written |
+| 2026-11-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — debated, approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec legacy-authors-confirm-resolve`_
+- [Implementation Spec](implementation-spec.md) — 6 numbered steps (2 code+test pairs, 2 docs)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -41,4 +42,4 @@ _No proto, migration or config change, so no Proto Reviewer, DBA or Platform Lea
 
 ## Next Action
 
-`/sdd-spec legacy-authors-confirm-resolve` — generate implementation spec from the approved design
+`/sdd-review legacy-authors-confirm-resolve impl-spec` — validate implementation spec, then `/sdd-execute legacy-authors-confirm-resolve`

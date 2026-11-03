@@ -57,3 +57,34 @@
 - [ ] Parity test samples 5 authors only — revisit if `classify`'s rule changes.
 - [ ] Teardown: context-forge refresh (or manual reconciliation) recorded in the PR body — at PR time.
 - [ ] Overlap with 243 on `services/xstockstrat-indicators/CLAUDE.md` (disjoint hunks) — rebase at integration.
+
+## Session 2026-11-02 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+- Key codebase findings:
+  - All code is in `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py`: `confirm` `:90-108` (single write at `:107`), `main()` confirm branch `:149-154`, apply-branch refusal pattern `:181-184` (reused inline for confirm). `legacy_authors.py` stays untouched (`APPLY_STATUSES :151`, `ApplyRefused :154`, candidate rule `:99-104`).
+  - Default `ask=input` is bound at definition, so `main()` tests must patch `sys.stdin` (not `builtins.input`); the two existing confirm tests (`:62`, `:93`) run without `users.json`, which is why it is loaded lazily.
+  - Acceptance examples differ from `conftest.USERS` (scenarios: `alice` x2 / inactive `bob` / unmapped `carol`; fixtures: `sam` x2 / inactive `olduser`, `carol` is active). Spec Step 2 pins the role mapping (ghost, sam, zed).
+  - Baseline verified: `uv run --extra dev pytest --cov=app --cov-fail-under=50` = 393 passed, 80% coverage; `./scripts/check-context-map.sh` OK.
+  - Test pairing: `@AC-9` and the `main()` EOF exit code pass on the old tree (marked green-on-arrival); red is carried by sibling assertions (prompt count, picker listing).
+- Overlap: 243 edits `services/xstockstrat-indicators/CLAUDE.md` (different sections, rebase-level); 281 only cites the runbook.
+- Teardown for the PR body is specified in Step 6 (context-forge refresh scoped to the runbook, indicators CLAUDE.md, and `INDICATORS-12`; manual reconciliation if the plugin is unavailable).
+
+## Session 2026-11-02 — sdd-review impl-spec (advisory), pass 1
+
+- Result: 0 failures, 2 warnings, 7 nits (advisory — did not block). No Floor risk.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4 / Step 2: AC-3, AC-13, AC-14, AC-15 assert "exit 2 and byte-identical plan" but only the pure `_parse_maps` reason text is tested; the `main()` refusal test covers AC-2 and AC-4 only (C-15, C-08) — [x] addressed in spec revision 1 (2026-11-02)
+  - Step 6: Instructions allow fixing drift in `docs/runbooks/legacy-formula-authors.md` and `services/xstockstrat-indicators/docs/context-constitution.md` but Files lists only `services/xstockstrat-indicators/CLAUDE.md` (F-08) — [x] addressed in spec revision 1 (2026-11-02)
+  - Step 1: verification prints a set literal (nondeterministic repr); say "pre-existing 6 + Step 2 tests" — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+  - Step 2: replace the `grep -c "ghost\|USERS"` C-13 count with a pass/fail check; state `_Ask` appends to `.prompts` before raising `EOFError` — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+  - Step 3 / Step 5: document that the second plan listing shows the proposed `[confirmed]` state before the prompt — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+  - Step 5: soften the brittle `! grep "still a hand edit"` — [x] addressed in spec revision 1 (2026-11-02) (NIT)
+- Overlap findings: WARN only — `services/xstockstrat-indicators/CLAUDE.md` also edited by in-progress 243 (disjoint sections; 243 Step 4's `:12` target has drifted and its wording already appears at `:14` on trunk); no migration, proto or config collision; no merge-order entry needed. 284 must not add a `docs/runbooks/CLAUDE.md` index row (281 edits that table).
+
+## Session 2026-11-02 — sdd-review impl-spec (advisory), pass 2
+
+- Result: 0 failures, 0 warnings, 6 nits (advisory). Both pass-1 warnings and all seven pass-1 nits confirmed fixed against the code. No Floor risk.
+- All 6 pass-2 nits fixed in spec revision 2 (wording only): Step 1 constants-vs-functions placement; Step 2 formula-id constant renamed `SAM` -> `SAM_FID` so the case-folding parity string `"SAM"` cannot be confused with it, and the four user ids spelled out in full; Step 3 evidence names `_load_plan`; Step 4 gained the pass/fail C-13 check; Step 6 Files marks the two doc files conditional and lists this `context.md` as append-only. - [x] addressed
+- Overlap findings: WARN only — `services/xstockstrat-indicators/CLAUDE.md` vs `243-fix-sandbox-seed-keys` (disjoint hunks; Step 6 must re-read the file before editing). No new collision on the two files added to Step 6 Files. No merge-order entry needed.
+- Review loop ended: pass 2 had no FAIL or WARN. Spec is clear for `/sdd-execute`.
