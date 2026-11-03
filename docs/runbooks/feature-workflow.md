@@ -99,14 +99,32 @@ until this check passes** — `buf lint` and `buf breaking` failures block the m
 
 Feature directories are `docs/roadmap/features/NNN-<slug>/`, where `NNN` is a zero-padded ordinal.
 
-- **Next number = `max(existing NNN) + 1`.** Compute it from the highest existing prefix, never from a
-  directory *count* (a count collides the moment a gap exists). `/sdd-story` does this automatically and
-  aborts if the computed directory already exists.
-- **Never reuse a number and never backfill a gap.** If a feature is deleted, its number stays retired.
+- **The next number is reserved, not computed.** `/sdd-story` and `/sdd-triage` (Track C) run
+  `scripts/sdd-allocate-feature-number.sh`, which pushes an empty commit `sdd-cursor: <NNN> <slug>` onto
+  the orphan `sdd/feature-cursor` ref on `origin`. The non-force push is a server-side compare-and-swap:
+  a racing allocator is rejected, refetches and retries (bounded), so no two developers or sessions get
+  the same number. The candidate is `max(cursor, highest NNN on origin/main-dev, local tree) + 1`; the
+  first run, with no cursor yet, seeds from the highest NNN on any origin branch.
+- **Fail closed.** If origin is unreachable, the push is refused, or the cursor tip is unparseable, the
+  allocator exits non-zero and the skill stops. Never fall back to a local `max+1` — that reintroduces
+  the race.
+- **Never reuse a number and never backfill a gap.** A reservation whose story is abandoned is burned,
+  and a deleted feature's number stays retired; gaps are expected.
 - **Numbers are immutable once `launched`.** Before that, a number may be changed only to resolve a
   collision.
-- **Collision resolution.** If two `/sdd-story` runs race and produce the same `NNN`, renumber the later
-  one to the next free number with `git mv`, then update: the moved dir's own `**Feature**`/`**Product
+- **Cursor history is immutable.** Never force-push, amend, rebase, reset or delete `sdd/feature-cursor`,
+  and never write to it by hand — only the allocator advances it. A rewind or deletion can re-issue
+  numbers that are reserved but not yet in any branch tree. If it is damaged, an admin restores the last
+  good tip from any clone that fetched it (`git push origin <sha>:refs/heads/sdd/feature-cursor`); a
+  missing ref only re-seeds from the highest NNN already in a branch tree, so it cannot recover
+  unmerged reservations.
+- **Cursor operations.** Sessions can create and fast-forward `sdd/*` refs but cannot delete them (HTTP
+  403), which suits an append-only cursor. A repo admin should protect `sdd/feature-cursor` against
+  force-push and deletion so the rule above is enforced, not just stated. Migration `NNN` ordering is a
+  separate, order-sensitive problem and is not covered by the cursor.
+- **Collision resolution (manual bypass only).** A collision can now arise only from a number created
+  without the allocator (hand-made directory, or a pre-cursor branch). Renumber the later one to the
+  next free number with `git mv`, then update: the moved dir's own `**Feature**`/`**Product
   Spec**`/`**Implementation Spec**` path lines and any self-referential `NNN` in its `context.md`;
   `CHANGELOG.md` and `merge-order.md` only if they cite the moved feature by number (both key off the
   slug, so usually no change). Branches use the slug, so no branch rename is needed.

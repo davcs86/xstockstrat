@@ -2,9 +2,9 @@
 
 Each subdirectory tracks one feature from user story through implementation and deployment.
 Directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a
-zero-padded sequence number assigned by `/sdd-story` or `/sdd-triage` as `max(existing NNN) + 1`
-(never a count, never reusing a number or backfilling a gap — see `docs/runbooks/feature-workflow.md`
-§ Feature Numbering). Git branch names use only the slug without the prefix: `feature/<slug>`.
+zero-padded sequence number reserved by `/sdd-story` or `/sdd-triage` via the `sdd/feature-cursor` ref
+on `origin` (never computed locally, never reusing a number or backfilling a gap — see
+`docs/runbooks/feature-workflow.md` § Feature Numbering). Git branch names use only the slug without the prefix: `feature/<slug>`.
 
 ---
 
@@ -124,6 +124,11 @@ These tracking fields make production audits easy: you can always see exactly wh
 | `/sdd-review <slug> impl-spec` | 2.5 | AI review: advisory quality check + overlap scan |
 | `/sdd-execute <slug> [step\|next\|all]` | 3 | Execute steps with discovery + confirmation |
 | `/sdd-status [slug]` | — | Read-only status summary |
+| `/sdd-triage <issue\|--from-report path>` | — | Classify a bug and route it to Track A (hotfix), B (config) or C (SDD) |
+| `/sdd-sync [slug]` | — | Sync spec files between feature branches and `main-dev` |
+| `/sdd-distill <slug>` | — | Compact an in-progress feature's `context.md` |
+| `/sdd-archiver [slug\|all\|reports]` | — | Distil and prune completed features and resolved defect reports into durable memory |
+| `/sdd-batch`, `/sdd-batch-execute`, `/merge-train` | — | Saved workflows for many features at once (doc phases, parallel execute, progressive PR merges) |
 
 ---
 
@@ -136,3 +141,5 @@ These tracking fields make production audits easy: you can always see exactly wh
 3. **Run `/sdd-status` for a live summary of all features.** It reflects the current state pulled from each feature's `status.md`.
 
 4. **Current lifecycle status lives only in `status.md`.** Never add a `**Lifecycle Status**` field back to `feature.md` — that field was removed specifically to avoid two files disagreeing about the same fact. `feature.md`'s `## Status History` table remains the append-only audit trail of transitions; it is a different concern (history, not current state).
+
+5. **Reserve feature numbers only through `scripts/sdd-allocate-feature-number.sh`** (run by `/sdd-story` and `/sdd-triage`). Never `mkdir` a numbered feature directory by hand and never write to `sdd/feature-cursor` — see `docs/runbooks/feature-workflow.md` § Feature Numbering.
