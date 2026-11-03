@@ -121,7 +121,7 @@ C-13 verdict: no test data in this step.
 
 ### Step 2 — test: helper and picker unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py` — modify
@@ -365,4 +365,8 @@ grep -c "legacy_authors_ops" services/xstockstrat-indicators/CLAUDE.md          
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — Step 2: `io` and `sys` imports deferred to Step 4
+- **Spec said**: Step 2 adds `io`, `re`, `sys` to the test module's stdlib imports.
+- **Actual**: Step 2 adds only `re`; `io` and `sys` arrive in Step 4.
+- **Why**: nothing in Step 2 uses `io` or `sys` (they serve the `main()` EOF test in Step 4), so adding them now fails `ruff check` with F401 — the step's own lint gate.
+- **Disposition**: in-scope lint correctness for the step's own lines; no behavior or coverage change.

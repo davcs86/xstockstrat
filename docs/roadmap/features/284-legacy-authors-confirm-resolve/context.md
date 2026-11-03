@@ -99,3 +99,8 @@
 - Added `_UNRESOLVED`, `_PICK_ATTEMPTS`, `_candidates`, `_parse_maps`, `_pick` to `legacy_authors_ops.py`; `confirm` and `main` untouched. Reason and notice strings match the spec exactly.
 - Files modified: `services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py`
 - Deviations: none
+
+### Step 2 — helper and picker unit tests [done]
+- Added constants, helpers (`_users_dict`, `_entry`, `_Ask`, `_listing`, `_unresolved`) and 30 test cases covering AC-2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 22 (reason-text and picker legs) plus the `_candidates`/`classify` parity drift guard. TDD: RED `AttributeError` on `_candidates`/`_parse_maps`/`_pick` (30 failed) -> GREEN 36 passed (see session header above).
+- Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py`
+- Deviations: D-1 — `io`/`sys` imports moved to Step 4 to satisfy ruff F401 (full detail in Deviation Log).
