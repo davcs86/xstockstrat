@@ -116,3 +116,9 @@
 - Verification: ruff check/format clean; exactly one `_write_private(plan_path` in `confirm`; `git diff -- app/maintenance/legacy_authors.py` empty (FR-7); `confirm --help` shows `--map`; C-13 check passes (no new inline users literal).
 - Files modified: `services/xstockstrat-indicators/tests/test_legacy_authors_ops.py`
 - Deviations: none beyond D-1.
+
+### Step 5 — runbook intro and §5 describe `confirm --map` and the picker [done]
+- Rewrote the wrapper paragraph (`confirm` now resolves unmappable/ambiguous rows), added a `confirm --map … --yes` line to the command block, retitled §5 "report, then confirm (or edit) the plan", added the "With the wrapper" flow (exact-match `--map`, exit 2 + `refused:` line shape, per-author picker, one prompt, `--yes --map` as the only scripted path, PII note, 276 scoping, candidate rule not enforced by APPLY) and demoted the hand edit to a fallback. TDD: N/A (docs).
+- Verification: `--map`/`picker` hit in the intro and §5; the only remaining "hand-edit" is the sentence that a hand-edited plan can bypass the candidate rule; the apply+candidate grep shows APPLY does NOT enforce it; `./scripts/check-context-map.sh` OK. Nothing else links to the retitled §5 heading.
+- Files modified: `docs/runbooks/legacy-formula-authors.md`
+- Deviations: none

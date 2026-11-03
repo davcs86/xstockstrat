@@ -16,13 +16,14 @@ stdlib, so it also runs in the indicators image: from the component's DO console
 (`DATABASE_URL` and `DB_PGBOUNCER` are already set there), or locally with
 `cd services/xstockstrat-indicators && uv run python -m app.maintenance.legacy_authors_ops …`.
 `report` exports `identity.users` itself (or takes `--users <file>` if the DB role cannot read it),
-`confirm` only marks `suggested` rows `confirmed` and prints the digest to record, and `apply` still
-needs that digest passed explicitly. Files default to `/tmp/legacy-authors` (0600). Overrides for
-`unmappable` / `ambiguous` rows (§5) are still a hand edit of `plan.json` before `confirm`.
+`confirm` marks `suggested` rows `confirmed`, resolves `unmappable` / `ambiguous` rows with `--map`
+or an interactive picker (§5), and prints the digest to record, and `apply` still needs that digest
+passed explicitly. Files default to `/tmp/legacy-authors` (0600).
 
 ```bash
 python -m app.maintenance.legacy_authors_ops report
 python -m app.maintenance.legacy_authors_ops confirm      # prints the sha256 for the DBA record
+python -m app.maintenance.legacy_authors_ops confirm --map ghost=<user_id> --yes   # scripted; --map repeatable
 python -m app.maintenance.legacy_authors_ops apply --confirm-digest <sha256>
 ```
 
@@ -99,7 +100,7 @@ uv run scripts/manage-users.py list-users --json > "$WORK/users.json"
 The file is a JSON array of `{"user_id", "email_local", "is_active"}`. It carries the email local
 part only, with no full email and no roles. Only **active** users are eligible targets.
 
-## 5. Step B: report, then edit the plan
+## 5. Step B: report, then confirm (or edit) the plan
 
 ```bash
 cd services/xstockstrat-indicators
@@ -112,7 +113,44 @@ REPORT runs only SELECTs. It prints one line per `unmappable` or `ambiguous` row
 sha256. Every log line carries the run's `[run_id=<uuid>]`.
 
 Each plan entry is `{formula_id, old_author, new_author, status, source}`, one per formula row,
-soft-deleted rows included. Edit `plan.json` by hand:
+soft-deleted rows included.
+
+**With the wrapper**, `confirm` resolves `unmappable` and `ambiguous` rows without editing the file:
+
+- **`--map <legacy_author>=<user_id>`** (repeatable, split on the last `=`) resolves every
+  `unmappable` or `ambiguous` row whose `old_author` equals `<legacy_author>` exactly (case-sensitive),
+  soft-deleted rows included. The target must be an **active** user in `users.json`; for an
+  `ambiguous` author it must also be one of that author's matched candidates.
+- **Any invalid `--map`** (malformed, unknown or inactive user, no matching unresolved row, not a
+  candidate, one author mapped to two users, or a missing or malformed `users.json`) refuses the whole
+  run: exit `2`, one `[run_id=<uuid>] refused: <reason>` line per reason (the same line shape as
+  APPLY's refusals in §6), and `plan.json` is left byte-identical.
+- **Without `--yes`**, each remaining legacy author is offered once in a numbered picker that covers
+  all of its rows. An `ambiguous` author lists only its candidates; an `unmappable` author lists every
+  active user in `users.json` order. A number picks a user. `s` or Enter skips the author, three
+  invalid answers skip it, and the first EOF skips it and stops the picker for all remaining authors.
+  If `users.json` cannot be read and no `--map` was given, the picker is skipped with a warning and the
+  `suggested` rows still run.
+- **One confirmation prompt** covers the `suggested` and the resolved rows, and nothing is written
+  until you answer `y`. The listing printed before the prompt shows the proposed final state
+  (`[confirmed]`); the counts line is the report's and is not recomputed. Declining or EOF prints
+  `Not confirmed; plan.json unchanged.` and exits `0`.
+- **`--yes --map` is the only scripted path.** `--yes` skips the picker and the prompt, confirms the
+  `suggested` rows as before, resolves only the rows named by `--map`, and never resolves another row.
+  A piped answer such as `printf 'y\n' | … confirm` against a plan with unresolved rows lands on the
+  picker, not the confirmation, and writes nothing.
+- **Resolved rows** get `new_author`, `"source": "override"` and `"status": "confirmed"`. Record why in
+  the change record.
+- **PII**: the picker prints the email local part and `user_id` of every active user, and the plan
+  listing prints legacy usernames. Use `--map` when the console session is recorded or shared. A
+  malformed `users.json` entry is echoed once in the refusal or warning message.
+- **Scope**: the automatic classification still never guesses (feature 276: an `unmappable` or
+  `ambiguous` author is left unchanged); an override is always an explicit operator action. The
+  ambiguous-candidate rule is enforced by `confirm` only, **not** by APPLY, so a hand-edited
+  `plan.json` can still bypass it.
+
+**Fallback (bare CLI, or to correct a `suggested` match that `--map` does not touch):** edit
+`plan.json` by hand:
 
 - **`suggested` → `confirmed`** once you have verified the match. A `suggested` entry is a heuristic
   match: its `old_author` equals exactly one active user's email local part, ignoring case. It is

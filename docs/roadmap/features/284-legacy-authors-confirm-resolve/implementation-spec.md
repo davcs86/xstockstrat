@@ -284,7 +284,7 @@ Red run (before Step 3): `TypeError: confirm() got an unexpected keyword argumen
 
 ### Step 5 — docs: runbook intro and §5 describe `confirm --map` and the picker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/legacy-formula-authors.md` — modify
