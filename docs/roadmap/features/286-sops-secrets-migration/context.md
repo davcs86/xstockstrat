@@ -162,3 +162,29 @@
   C-16 regression. Six wording edits were applied to the draft: AC-1 stderr text, AC-8 summary-label coverage, AC-12
   word-boundary regex, the AC-11/16 path (acceptance.feature updated to $RUNNER_TEMP/app.yaml), Rounds wording, and the
   type of the environment input plus the E env var.
+
+## Session 2026-11-03 — sdd-design (completion)
+
+- Phase 0 Recon: wrote recon.md (surfaces: DO deploy chain, homelab chain, CI harness, docs). Key reuse patterns: the pinned-binary
+  install (deploy-homelab.yml:198-204) and the GH_PAT PR mechanics (sync-main-to-maindev.yml).
+- Phase 1 Grilling: 4 rounds (full). Operator approved at the round-4 gate.
+  - Chosen approach: one KEYS table in `scripts/sops_secrets.py`. DO resolves and renders in one process
+    (`do-render-app-spec.py`). Homelab resolves before the image-commit detach. Fallbacks use `inherit` +
+    `secrets[format('{0}_K', P)]`, with right-hand sides pinned by a static test. Composite setup-sops action. Bootstrap
+    matrix → ciphertext artifacts → one PR. A permanent reverse-substitution parity test.
+  - Rejected: explicit passthrough / LEGACY_DO_* (CA shadowing), toJSON(secrets), image-commit resolution, golden
+    files, 1Password in the bootstrap, a stored APP_ID, per-name files for homelab (waived).
+- Constitution rules touched: C-01, F-04, C-08, C-10, C-11, C-13 (waiver), C-14, C-15, C-16, C-18, P-03, F-02.
+  Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Execute step 1: gating sops/age/compose smoke test, plus `secrets[format()]` under inherit (design Risk 7).
+- [ ] Execute (render step): one-time normalised old-vs-new parity comparison recorded here (Risk 2); the reverse-map line
+      assumption fails closed (Risk 1).
+- [ ] Execute (bootstrap step): gitleaks allowlist for the age armor if flagged (Risk 5).
+- [ ] Rollout, homelab enablement: GITHUB_ENV trailing-newline behaviour (Risk 3); `sops set` homelab.app_env first (Risk 6).
+- [ ] Runbook: a newline in a common value is refused for homelab (Risk 4); the production reviewer gate on every prod deploy (Risk 8).
+- [ ] Spec: pin the sops/age versions and SHA-256 values, plus the action SHAs; grep placeholder coverage; ci.yml filter list.
+- Ledger: appended an insights.md entry (environment-secret shadowing in env-bound reusable workflows).
