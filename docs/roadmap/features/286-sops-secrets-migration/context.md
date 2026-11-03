@@ -26,3 +26,8 @@
   - Bootstrap: PR to main-dev via GH_PAT, self-verifying.
   - SDD: operator chose to run the full SDD entry point (story → design quick) rather than treat this as process-only.
 - Feature number 286 reserved via scripts/sdd-allocate-feature-number.sh (local max+1 would have given 285, which another session already holds on the cursor).
+- Operator answers (2026-11-03, pre-review): work on `feature/sops-secrets-migration` + single squash PR
+  into main-dev (overrides the harness "push only to main-dev" directive); bootstrap refuses to overwrite
+  an existing file unless `force: true` (FR-5f, @AC-15); prod-up aligned to the full key set incl. VAPID +
+  mTLS (FR-9, @AC-16 — a deliberate behavior change); `production` environment has no protection rules
+  that would block binding the DO deploy jobs to it.

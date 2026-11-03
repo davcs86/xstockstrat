@@ -53,7 +53,9 @@ secret. For DO it is the `DEV_*`/`PROD_*` repo secret;
 (c) encrypts the file;
 (d) self-verifies by decrypting with `SOPS_AGE_KEY` and comparing the key set and per-value SHA-256
 against the sources, plus an APP_ENV parse→render round-trip;
-(e) pushes branch `chore/sops-bootstrap` and opens a PR to `main-dev` with `GH_PAT`.
+(e) pushes branch `chore/sops-bootstrap` and opens a PR to `main-dev` with `GH_PAT`;
+(f) refuses to run for an environment whose `secrets/<env>.enc.yaml` already exists on `main-dev`
+unless the `force` input is `true`.
 It never prints, uploads or caches a plaintext value. An absent optional value is omitted from the
 file, never written as an empty string. A missing required value fails the job.
 
@@ -70,6 +72,10 @@ resolves each key SOPS first, with a per-key fallback to the same-named legacy G
 secret (`vars.TS_AUTHKEY_EXPIRES` for the expiry). It re-renders `app_env` to a dotenv blob before
 `scripts/homelab-release-env.sh`, whose contract does not change. The source report and the
 fail-closed rule match FR-6.
+
+FR-9. **Prod bring-up parity.** `prod-up.yml` (via `scripts/do-inject-prod-secrets.py`) injects the
+same full key set as `deploy.yml` — adding VAPID_PRIVATE_KEY/PUBLIC_KEY/SUBJECT and minting the mTLS
+leaves from `digitalocean.MTLS_CA` — so a recreated prod app is not missing keys a regular deploy sets.
 
 FR-8. **Operator runbook.** Document key generation, environment setup, running the bootstrap,
 local edit/rotation (`sops secrets/<env>.enc.yaml` with the operator key), adding a key, and the
@@ -141,11 +147,8 @@ See `acceptance.feature` (scenarios `@AC-*`), the single source of acceptance tr
   spec must cite every one of these surfaces.
 - [ ] **Known trap (`fails.md` L443):** a spec'd secret name must not be swapped during execute
   without re-running `/sdd-spec`.
-- [ ] Binding `deploy.yml`'s job to `production` subjects every `main` push to that environment's
-  protection rules (required reviewers / wait timer). The operator accepted this. Verify the current
-  rules before merge, because a reviewer gate would turn the auto-deploy into a gated one.
-- [ ] `prod-up.yml` currently injects only a subset of keys (no VAPID/MTLS). Keep that subset
-  (minimal diff) or align it to the full set? Default: keep the subset; changing it is out of scope.
+- [x] `production` environment protection rules: the operator confirmed there are none that block
+  binding the DO deploy jobs to it (2026-11-03).
+- [x] `prod-up.yml` key set: **align to the full set** (operator, 2026-11-03). See FR-9.
 - [ ] `sops` is not preinstalled on `ubuntu-latest`. Pin the version + SHA-256 like `OP_CLI_*`/`TAILSCALE_*`.
-- [ ] Should the bootstrap be re-runnable, overwriting existing files? Or refuse when
-  `secrets/<env>.enc.yaml` already exists unless `force: true`?
+- [x] Bootstrap re-run: refuse unless `force: true` (operator, 2026-11-03). See FR-5(f).

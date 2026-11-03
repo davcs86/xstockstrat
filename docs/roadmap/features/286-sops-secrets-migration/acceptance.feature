@@ -105,3 +105,16 @@ Feature: sops-secrets-migration
     When an operator follows it from scratch
     Then it has sections for key generation, environment setup, bootstrap, local edit, rotation, adding a key and legacy-secret removal
     And every command is macOS/Homebrew-compatible (brew install sops age)
+
+  @AC-15 @FR-5
+  Scenario: Bootstrap refuses to overwrite an existing SOPS file without force
+    Given secrets/staging.enc.yaml exists on main-dev
+    When the bootstrap is dispatched with force=false
+    Then the staging job fails with "secrets/staging.enc.yaml already exists; re-run with force=true to overwrite"
+    And no branch is pushed
+
+  @AC-16 @FR-9
+  Scenario: Prod bring-up injects the full key set including VAPID and mTLS
+    Given secrets/production.enc.yaml has digitalocean.VAPID_PUBLIC_KEY="BPub" and digitalocean.MTLS_CA set
+    When prod-up.yml runs with no existing prod app
+    Then /tmp/app.yaml contains "BPub" and no "YOUR_PROD_VAPID_" or "YOUR_PROD_MTLS_" placeholder remains
