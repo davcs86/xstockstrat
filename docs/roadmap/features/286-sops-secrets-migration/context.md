@@ -534,3 +534,15 @@
   markdownlint and ledger-guard are all green.
 - otel-signals initially failed on my Step 20 wording `secrets/<env>.enc.yaml` in `docs/setup/grafana-cloud.md:169`. Its rule P3-file requires `.yaml` tokens in
   observability docs to name real files. The wording is now "the environment's SOPS file under `secrets/`". It was a fix of the step's own change, re-verified.
+
+## Session 2026-11-04 — sdd-execute (sequential) — summary
+**Steps this session**: 1–21
+**Progress**: 21 done / 21 total
+**Stopped at**: all complete; integration PR https://github.com/davcs86/xstockstrat/pull/1405 (subscribed for CI)
+**Deviations**: D-1 (sops wrong-key text), D-2 (cleanup header check narrowed, operator), D-3 (ruff via setup-python), D-4 (teardown anchor fix)
+**Open Threads still live**:
+- [ ] rollout step 3: confirm `secrets[format()]` under inherit (first deploy-dev summary shows `github` for every key)
+- [ ] secret-scan on the bootstrap PR: allowlist the age armor in `.gitleaks.toml` if it flags it (Risk 5)
+- [ ] homelab enablement: trailing-newline hand-off and `sops set homelab.app_env` first (Risks 3/6)
+- [ ] follow-up feature: legacy-secret + 1Password removal
+**Next**: merge #1405 when CI passes → operator rollout per docs/runbooks/sops-secrets.md
