@@ -237,7 +237,7 @@ Print a checklist before starting any phase:
 
 ```
 P1 ✓  doctl authenticated
-P2 ✓  database xstockstrat-db found
+P2 ✓  database xstockstrat found
 P3 →  connect GitHub to DigitalOcean
 P4 →  create dev app
 ...
@@ -286,7 +286,7 @@ Confirm the output shows a context marked `(current)` before proceeding.
 1. Show the exact creation command and ask the user to confirm before running:
 
 ```bash
-doctl databases create xstockstrat-db \
+doctl databases create xstockstrat \
   --engine pg \
   --version 15 \
   --region nyc1 \
@@ -300,7 +300,7 @@ doctl databases create xstockstrat-db \
 doctl databases list
 ```
 
-3. Enable TimescaleDB. Ask the user to paste their database connection string (from the DO console: Databases → xstockstrat-db → Connection Details → URI), then show:
+3. Enable TimescaleDB. Ask the user to paste their database connection string (from the DO console: Databases → xstockstrat → Connection Details → URI), then show:
 
 ```bash
 psql "$CONNECTION_STRING" -c 'CREATE EXTENSION IF NOT EXISTS timescaledb;'
@@ -627,7 +627,7 @@ doctl apps logs "$DEV_APP_ID" --component xstockstrat-config --follow
 Setup complete!
 
   ✓ doctl authenticated
-  ✓ Managed PostgreSQL created (xstockstrat-db) with TimescaleDB enabled
+  ✓ Managed PostgreSQL created (xstockstrat) with TimescaleDB enabled
   ✓ GitHub connected to DigitalOcean
   ✓ GHCR packages public (ghcr.io/davcs86/xstockstrat/<service>) — 15 services
   ✓ Dev app created  (App ID: <DEV_APP_ID>, Project ID: <DEV_PROJECT_ID>)

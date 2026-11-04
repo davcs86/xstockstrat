@@ -227,3 +227,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `platform.feature` lists 288's AC-1/AC-2 before 287's AC-1..AC-4.
 - No semantic clash. 288 changes deploy.yml's wait loop only. prod-up keeps 287's design: on SUPERSEDED it follows the newest deployment, with one gated redeploy.
 - Full suite after the merge: 12/12 groups ok. shellcheck and shfmt clean.
+
+## Session 2026-11-04 (operator request: skill cluster name)
+- At the operator's request, fixed the follow-up flagged in Step 9: `.claude/skills/digitalocean-setup/SKILL.md` used the cluster name `xstockstrat-db` in four places (P2 checklist line, P2 `doctl databases create`, P2 console path, final summary). All four now say `xstockstrat`, matching the specs' `cluster_name: xstockstrat` and `docs/setup/digitalocean.md` Step 3. The `lookup` the skill's P4/P5 call now resolves on a cluster the skill created.
+- Unrelated `xstockstrat-db` hits were left alone: the local compose container, the `xstockstrat-db-migrator` image, and the setup guide's temp-file name.
+- Also noticed, not changed (operator scoped this to the name): the skill's P2 and the setup guide's Step 3 both create PG `--version 15`, while both specs declare `databases[].version: "18"`.
