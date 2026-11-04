@@ -34,3 +34,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Timeout for the detached cache insert: config key vs justified invariant (F-07) — decide in round 2.
 - [ ] Partial application (k of N upserts, no transaction) accepted risk; repaired by boot replay.
 - [ ] Follow-up defect report for warm-poller/ingest cancel WARNs only if Loki shows a flood there.
+
+---
+
+## Session 2026-11-04 — sdd-design (round 2 + approval)
+
+- Round 2 (full): proposer → adversary NEEDS WORK, no Floor breach; all findings adopted. Gate (P-04): operator chose the marketdata variant **"Detach, post-departure bound + 1 writer"**; design.md written; status `draft` → `design-approved` (/sdd-review skipped on operator instruction).
+- Chosen: portfolio `ctx.Err()` stop (one local closure, checks inside the reconcile / `RealizedPnl` branches, return never break, broker sync returns the cancel error to stop draining); marketdata `fetchAndCacheBars` writes on a detached context bounded **only after the client leaves**, at most one departed-client writer at a time (others skipped silently), re-read skipped when the client is gone.
+- Round-2 adversary caught: a plain 5 s `WithTimeout(WithoutCancel)` would also cut a LIVE caller's write and return a full page with no next-page token that analysis reads as end of data (`servicer.py:1482-1484`, `@feature-272`) — fixed by the post-departure bound; burst shape measured in Loki (max 27 cancels/minute across distinct symbols; 9 minute-buckets in 7 days) — motivates the one-writer slot.
+- **Operator sign-off recorded (C-18/F-07 precedent): the post-departure write grace is a FIXED resource-protection invariant, not a config key** — it decides neither what the caller receives nor how old data can be. Value to be sized from a measured `InsertBars` p99 (~1000-bar slice) at spec time (provisional 5 s). Goes into marketdata `CLAUDE.md` (GetBars bullet) and MARKETDATA-3 prose; the stale doc comment at `marketdata_service.go:354-355` is rewritten.
+- Follow-up artifact created (closes the earlier conditional Open Thread): `docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md` (+ `.status` open).
+- Product-spec and acceptance.feature revised at this gate (FR-1/FR-2, root cause from Loki, consumer surface = internal; `@AC-1` keeps its meaning, new IDs appended).
+- Business rules: PRESERVE set per design.md; EXTEND `@AC-8 @feature-196`; no CHANGE.
+- Status: draft → design-approved.
+
+## Open Threads (supersedes the earlier list)
+
+- [ ] Size `grace` from a measured `InsertBars` p99 — marketdata spec step; record the measurement here.
+- [ ] Teardown (Step): marketdata `CLAUDE.md` GetBars bullet + MARKETDATA-3 prose + the stale comment at `:354-355`; portfolio doc comment `:1379-1380`.
+- [ ] RED tests need two new inline fakes (bar-returning source that cancels; recording `barsBatchStore`) and an inline portfolio DB variant whose `Exec` cancels — list them in the step's Files (fails.md:2708-2711).
+- [ ] Partial application on portfolio cancel — accepted (boot replay); no transaction.

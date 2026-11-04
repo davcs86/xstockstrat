@@ -127,3 +127,11 @@
 
 - Merged `origin/main-dev` into the branch (add/add conflicts in the five 282 files resolved to our side; main-dev held only the original story, byte-identical to `4a185fd`).
 - Feature 281 (`signal-watchlist-expiry-pruning`, implementation-ready) overlaps 282 on `AddWatchlistSymbols`, the agent signal-add path and shared docs/tests (no proto field, config key or migration collision). Operator decision: 282 merges AFTER 281. Added a soft `merge-order.md` row; Step Dependencies note updated. Carry into execution: re-anchor Steps 9/11 after 281 lands; keep the servability filter ahead of 281's expiry write so a refused symbol gets no expiry row.
+
+---
+
+## Session 2026-11-04 — cross-feature sign-off from feature 291 (fix-marketdata-dead-symbol-ingest)
+
+- Operator decision (2026-11-04, recorded here and in 291's context.md): this feature's invariant "the gate applies at warm-add sites only; warm-set readers are never filtered" (`design.md:24`, `:42`) is narrowed to: *"No reader filters the warm set by servability. The bar ingester may leave a symbol out of a cycle's vendor request because of feature-291 no-bars hold state, and never removes it from the warm set. Quote/price readers are never filtered."* When 282's constitution text lands it must use this wording.
+- Feature 291 is the per-symbol negative cache that `design.md:48` put out of scope; it does not change 282's scope. 282 R6 (`design.md:59`, ingester no-bars noise from re-warmed held unservable symbols) is **addressed by 291**.
+- Shared region: `markWarm` (`marketdata_service.go:1089-1096`) and the GetBars/batch warm-add sites. 291 does not edit them; whichever lands second keeps any new-add hold-state delete inside `markWarmIfServable`. `merge-order.md` row added (independent, rebase-only).
