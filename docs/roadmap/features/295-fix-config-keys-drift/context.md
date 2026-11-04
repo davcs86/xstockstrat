@@ -175,3 +175,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   decision 6). No other live collision.
 - Recommended design depth: **full**. Rationale: 12 services, config migrations, a possible
   additive proto change, and the cross-service config contract.
+
+## Session 2026-11-04 — sdd-design Phase 0 (recon) + indicators symptom pinned
+
+- Phase 0 recon written: `recon.md`. Six targeted passes (deviation recorded in the recon.md
+  header): config server + harness, 278 checker, Go, Python/agent, Node/UI, scenario-recon (C-16).
+- **Indicators symptom (operator, 2026-11-04):** the observed error text was
+  `Formula execution timed out after 5000ms`.
+  - That string is produced inside indicators from the `timeout_ms` it resolved
+    (`services/xstockstrat-indicators/app/services/sandbox.py:394`). So indicators was running on
+    5000 while the DB held 15000. This is **cause (c), a stale/missing snapshot value**, or the
+    pre-031 bare-key era. It is not the agent's 10 s deadline, cause (d).
+  - Migration 031 reached staging on 2026-10-29 (`0099647f`) and resets global sandbox rows to
+    defaults (`031…up.sql:29-46`). So the stored 15000 was set after 2026-10-29.
+    - If the error was seen after that edit, a live watcher stall is confirmed.
+    - If it was seen before, the cause was naming. The question was put to the operator.
+- **Staging probe (read-only `test_formula` dry runs):**
+  - 2M iterations took 2784 ms; 5M took 4129 ms; 9M took 5490 ms, all success.
+  - 20M (~25 s) failed with a bare `Error executing tool test_formula`: the agent's fixed 10 s
+    deadline fired and the error message was lost.
+  - Non-discriminating by construction: the sandbox kills at `timeout_ms + 5000` grace, so with
+    `timeout_ms=5000` any run under 10 s succeeds, and runs over 10 s hit the agent deadline first.
+    The MCP path **cannot observe** the configured sandbox timeout at all. This strengthens FR-12.
+  - New minor defect: agent deadline errors on `test_formula` surface without a message
+    (AGENT-5 `_grpc_error_message` is apparently not applied on this path). Folded into FR-12's
+    scope at spec time.
