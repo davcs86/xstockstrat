@@ -850,7 +850,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 16 — service: New `sops-bootstrap.yml`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `.github/workflows/sops-bootstrap.yml` — create

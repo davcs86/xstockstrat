@@ -433,3 +433,16 @@
 - Blocker → operator: narrow the cleanup header check (D-2). shellcheck + shfmt clean.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: D-2
+
+### Step 16 — New `sops-bootstrap.yml` [done]
+- Created the workflow:
+  - workflow_dispatch with a boolean force, contents: read;
+  - `seed`: pinned matrix {staging/DEV, production/PROD}, fail-fast, env-bound. It runs setup-sops, then `build` with 12 LEGACY_ (matrix.prefix) + SOPS_AGE_KEY + the operator var,
+    then a pinned upload (ciphertext + recipient + names-only changes, retention 1);
+  - `pr`: a GH_PAT guard, then a main-dev checkout with GH_PAT and a pinned download, then `.sops.yaml` via `sops-config`. The bot commits on `chore/sops-bootstrap`,
+    fetches the refspec, pushes with force-with-lease and retry, and edits or creates the PR to main-dev.
+- TDD GREEN: `bootstrap: ok`, `build: ok`; no trunk push; yq parses.
+- gitleaks (conditional `.gitleaks.toml`, design Risk 5): gitleaks is not installed locally, so the check was not run here. It moves to the integration PR's CI
+  `secret-scan` job. If that job flags `secrets/*.enc.yaml` / `.sops.yaml`, the bootstrap PR (where those files first appear) gets the allowlist. `.gitleaks.toml` is unchanged.
+- Files modified: `.github/workflows/sops-bootstrap.yml`
+- Deviations: none
