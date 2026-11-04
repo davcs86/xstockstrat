@@ -902,7 +902,7 @@ grep -nE "git push.*(main-dev|main)\b" .github/workflows/sops-bootstrap.yml ; te
 
 ### Step 17 — service: Comment and secret-name cleanup in scripts and app specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`, `.do/`
 **Files**:
 - `.do/app.yaml` — modify (comments `:1-4`, `:381-382`)

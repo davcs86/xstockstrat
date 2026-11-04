@@ -446,3 +446,11 @@
   `secret-scan` job. If that job flags `secrets/*.enc.yaml` / `.sops.yaml`, the bootstrap PR (where those files first appear) gets the allowlist. `.gitleaks.toml` is unchanged.
 - Files modified: `.github/workflows/sops-bootstrap.yml`
 - Deviations: none
+
+### Step 17 — Comment and secret-name cleanup in scripts and app specs [done]
+- `.do/app*.yaml` headers: the project ID lives in `secrets/<env>.enc.yaml` with a legacy fallback, and the app is found by name. The agent comment no longer names the retired secret.
+  `do-setup-check.sh` REQUIRED_SECRETS no longer lists DO_*_APP_ID. The `mtls-provision.sh` header/usage now say `common.MTLS_CA` is shared by DO and homelab, with set-secret
+  as the legacy fallback. The dev/prod separate-CA sentence is kept (D-2). No behaviour changed.
+- TDD GREEN: `ac24: ok`, `cleanup: ok`, `render: ok` (RED was Step 15). shellcheck + shfmt clean.
+- Files modified: `.do/app.yaml`, `.do/app.dev.yaml`, `scripts/do-setup-check.sh`, `scripts/mtls-provision.sh`
+- Deviations: none
