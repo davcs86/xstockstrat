@@ -691,7 +691,7 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
 - AC-10 and AC-11 and the agent-side stamping of signal_provenance have an agent half. The observable subject is portfolio (the entry's presence and the binding), so no agent suite entry is added.
 - Dedup against services/xstockstrat-portfolio/acceptance/ (consolidate-watchlist-signal.feature, watchlist-single-strategy-update.feature, watchlist-bulk-default-strategy.feature, fundsignal-watchlist-universe.feature) and docs/sdd/business-rules/platform.feature found no @feature-281 pair and no matching Then. There is no OVERLAP or DUP.
 - AC-12 and AC-11 interact with the rule in services/xstockstrat-portfolio/acceptance/watchlist-single-strategy-update.feature (UpdateWatchlistBinding rebind). They are complementary and not contradictory, and I did not edit that file.
-- Landing context for the orchestrator, outside the promotion itself. The PR must carry a DO NOT MERGE before #1359 note at the top, and the merge-order override goes in context.md. The Step 21 teardown record, the Step 16 CI open item and the ingest.newsletter_signals SELECT runbook preflight also go in the PR body. None of these touch the suites.
+- Landing context for the orchestrator, outside the promotion itself. The PR must carry a DO NOT MERGE before #1359 note at the top, and the merge-order override goes in context.md. The Step 21 teardown record, the Step 16 CI open item and the ingest.newsletter_signals SELECT runbook preflight also go in the PR body. None of these touch the suites. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
 
 ### Coverage check
 - Source scenarios: 18. Planned: 17 NEW, 0 DUP, 0 OVERLAP, plus 1 CONFLICT (AC-1) deliberately not written. 17 + 1 = 18, so every @AC-* is accounted for.
@@ -722,7 +722,7 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
   - Step 11: ~~config 037 depends on feature 280 migrations 035/036 (PR #1359)~~ — [x] superseded by operator ruling 2026-11-04: 280 now depends on 281 and renumbers above 037 (merge-order.md); the 280 clauses of block 2 are waived (see Deviation Log). Block 2's `037 free` check still runs before merge.
   - Steps 4/6/10/16: real-DB tests. Run locally 2026-11-04 on Postgres 16 with a `create_hypertable` stand-in (pass); first green on real TimescaleDB is CI portfolio-db-test. Do not merge until green. — [ ] unaddressed (CI half only)
   - Step 16: ingest-interleaving test is a probabilistic race, not deterministic. — [x] fixed 2026-11-04 (deterministic lock-wait test; race kept as a separate invariant test)
-  - Step 21 / PR body: record BOTH context-forge plugin unavailability AND the manual teardown reconciliation (fails.md:670). — [ ] unaddressed
+  - Step 21 / PR body: record BOTH context-forge plugin unavailability AND the manual teardown reconciliation (fails.md:670). — [x] PR #1401 body records both (updated 2026-11-04, incl. the main-dev merge resolutions); the plugin is still unavailable
   - C-16: AC-1 must not be promoted as a runtime guarantee. — [ ] unaddressed
 - Overlap findings: WARN, no FAIL. Same-function/file overlap with 282 (portfolio_service.go AddWatchlistSymbols, agent client.py/tools.py, configServiceImpl.ts SCALAR_BOUNDS_REGISTRY); covered by merge-order row 92 (281 first, 282 rebases).
 

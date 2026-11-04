@@ -216,7 +216,7 @@ DELETE FROM config.config_values
 
 ### Open risks
 
-- **golang-migrate has no out-of-order guard.** A config migration 038+ applied in a deployed environment before 037 makes `up` silently skip 037, leaving the key unseeded there; 278's static check would still pass. The same hazard applies if 280's 035/036 land after 037 is applied. Mitigated by the pre-merge collision re-check (Step 11 Verification block 2, re-run after the final rebase), the `merge-order.md` row ordering 281 after 280 (#1359), and the row ordering 282 after 281 (282's 038/039 depend on 037).
+- **golang-migrate has no out-of-order guard.** A config migration 038+ applied in a deployed environment before 037 makes `up` silently skip 037, leaving the key unseeded there; 278's static check would still pass. The same hazard applies if 280's 035/036 land after 037 is applied. Mitigated by the pre-merge collision re-check (Step 11 Verification block 2, re-run after the final rebase), the `merge-order.md` row ordering 281 after 280 (#1359), and the row ordering 282 after 281 (282's 038/039 depend on 037). [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
 - **Platform CI rule "new migration NNN > base max"** would close this for every feature; logged as a follow-up, not built (platform scope, C-18).
 
 ### Constitution rules touched
