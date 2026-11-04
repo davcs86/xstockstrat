@@ -16,7 +16,7 @@ loop with a dead context. Every symbol logs a WARN and the delete step logs one 
 - `upsert position from sync failed` — 2,770 lines
 - `delete positions not in sync failed` — 545 lines
 
-in 9 hourly bursts over 7 days (largest 582 + 118 lines in one hour on 2026-11-03). The bursts line up with
+in 9 hourly bursts over 7 days (largest 582 + 118 lines in the hour ending 2026-11-03 00:00 UTC). The bursts line up with
 cluster-wide `config watcher stream error` / `order fill stream error … RST_STREAM CANCEL` events.
 
 Marketdata shows the same class on request contexts: `GetBars: cache insert failed — begin tx: context canceled`

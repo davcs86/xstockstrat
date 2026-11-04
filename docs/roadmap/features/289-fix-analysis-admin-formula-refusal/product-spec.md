@@ -9,7 +9,7 @@
 
 ## Problem Statement
 
-Indicators refuses an admin executing another user's formula (`PERMISSION_DENIED`, AC-28). `_compute_opportunities` catches every `grpc.RpcError` as an indicators outage, marks the symbol `fetch_failed` and emits an empty readiness row (reported as data-unavailable). `EvaluateReadiness` lets the same `AioRpcError` escape, logged ERROR `Unexpected [AioRpcError] raised by servicer method`. ~4.2k log lines in 7 days (bursts 2026-11-01 and 2026-11-03).
+Indicators refuses an admin executing another user's formula (`PERMISSION_DENIED`, AC-28). `_compute_opportunities` catches every `grpc.RpcError` as an indicators outage, marks the symbol `fetch_failed` and emits an empty readiness row (reported as data-unavailable). `EvaluateReadiness` lets the same `AioRpcError` escape, logged ERROR `Unexpected [AioRpcError] raised by servicer method`. ~4.2k log lines in 7 days (bursts 2026-10-31 and 2026-11-02; last seen 2026-11-02 04:07 UTC).
 
 ## Reproduction Steps
 

@@ -19,7 +19,7 @@ wrongly on two read paths that feature 275 did not cover (275 fixed only the bac
 - `EvaluateReadiness` lets the same `AioRpcError` escape, logged at ERROR as
   `Unexpected [AioRpcError] raised by servicer method [/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness]`.
 
-About 4.2k matching lines in 7 days, in two bursts (2026-11-01: 3,298; 2026-11-03: 920).
+About 4.2k matching lines in 7 days, in two bursts (2026-10-31: 3,298; 2026-11-02: 920; none since 2026-11-02 04:07 UTC as of 2026-11-04 23:28 UTC).
 
 ## Expected
 
