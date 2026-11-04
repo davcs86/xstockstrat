@@ -1,682 +1,83 @@
-# Context Log: fix-config-audit-author-spoof
+# Context: fix-config-audit-author-spoof  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-20 (/sdd-triage)
+**What**: SEV-2 bug fix (feature 241, PR #1368, launched 2026-10-30). `SetConfig` now stamps `updated_by` / `config_audit.changed_by` only from propagated headers: `author = callerUserId || (internalCallerAuthorized ? callerIdentity : '')`; `SetConfigRequest.author` (field 4) is ignored and `[deprecated = true]` in place (no `reserved`, no migration). A write with neither `x-user-id` nor an authorized `x-internal-caller` is `INVALID_ARGUMENT` ("propagated identity required: ..."). The agent lost its `author` parameter (`set_config`, `client.set_config`, `_write_source_bearer`), trading deleted its `Author: "system:reconciliation-poller"` line, and both UI BFFs dropped their `author: claims.user_id` stamps. AC-1..AC-3 are promoted to the config suite and AC-4 to the agent suite (already on trunk, verbatim-checked 2026-11-04).
 
-- Bug recorded as defect report `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md`
-  (Issues disabled): SetConfig audit author is caller-supplied free text, not the verified identity.
-- Severity: SEV-2. Environment: dev (main-dev) @ 1302e6d. Config-only fix: no. Routed to SDD path (Track C).
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1 human write, AC-2 internal-caller write), context.md.
-- Affected services (from report): xstockstrat-config, xstockstrat-agent.
-- Root cause hypothesis: `author` predates header propagation; authz moved to verified headers (feature 074,
-  PR #994) but attribution stayed on `call.request.author || userIdFrom(metadata)` (`configServiceImpl.ts:404`).
-- Confirmation evidence (report, confidence high, static): repro is an admin MCP `set_config` with
-  `author="someone-else@example.com"` producing `config_audit.changed_by = someone-else@example.com`. Triage re-grep
-  on 2026-10-20 confirmed `configServiceImpl.ts:388,404,507`, `tools.py:1694`, `configUiBff.ts:53`.
-- Additional triage findings (not in report):
-  - `tools.py:353` (signal-source bearer write) passes `author=tool`; attribution there also changes.
-  - trading's reconciliation poller sends `Author: "system:reconciliation-poller"` with
-    `x-internal-caller: trading-reconciliation-poller` (`trading.go:2086-2094`); `caller_identity` already
-    records the structural identity. The `system:<process>` sentinel convention
-    (`docs/patterns/config-governance.md` § Author-sentinel conventions) is a free-text-author convention and
-    must be reconciled with the fix.
-  - `MISSING_AUTHOR_ERROR` (`configServiceImpl.ts:405-407`) and config CLAUDE.md invariant #5 describe the
-    `author`-or-`x-user-id` rule.
-  - No durable acceptance scenario in `services/xstockstrat-{config,agent}/acceptance/` pins free-text author
-    attribution (grep `author|changed_by|updated_by`: no hits), so no C-16 CHANGE expected.
-- Design forks for /sdd-design: (a) reject vs ignore vs store-separately a mismatched free-text `author`;
-  (b) deprecate `SetConfigRequest.author` (proto field 4) or keep it as non-authoritative note;
-  (c) agent tool contract: drop or make optional the `author` parameter (MCP contract change);
-  (d) attribution for internal callers (`x-internal-caller` value vs `system:<process>` sentinel); AC-2 assumes
-  the report's expected `x-internal-caller` fallback and may be refined at design.
-- Recommended design depth: full → `/sdd-design fix-config-audit-author-spoof` (rationale: SEV-2; 2 affected
-  services (config, agent); possible proto deprecation of `SetConfigRequest.author` and possible migration if a
-  separate non-authoritative column is chosen).
-- Development branch: feature/fix-config-audit-author-spoof
+**Why (irrecoverable rationale)**:
+- Operator decisions of 2026-10-20 (binding; relayed verbatim by the workflow orchestrator). Standing authorization: "designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below." Attribution: "Author comes from verified identity only: config stamps changed_by from the verified x-user-id, or the x-internal-caller grant id for automated writers; request.author is ignored and the proto field is marked [deprecated = true] (non-breaking); the agent stops sending free-text author; trading's reconciliation-poller sentinel moves to the x-internal-caller identity." The design gate was auto-approved under this authorization after 2 rounds (adversary r2 SOUND, no Floor breach, 8 non-blocking objections folded in).
+- "Ignore, don't reject" a mismatched body `author`: chosen by the operator, which is why no migration or separate non-authoritative column exists and the conditional migration `031` clash with feature 243 was moot.
+- "Identity" means propagated, not authenticated. The SetConfig `trading-reconciliation-poller` grant (`services/xstockstrat-config/src/grpc/authz.ts`, `INTERNAL_CALLER_ALLOWLIST`) has no `peerSan`, so anything reaching `:50060` can forge the header and, since this fix, be credited as `changed_by`. The fix removes free-text body attribution only. "Propagated identity" wording was applied to acceptance.feature, product-spec, the error message and config CLAUDE.md #5/#7 (P-03).
+- Q1 (precedence): `x-user-id` wins so a human sending a forged poller header is recorded as the human, while `caller_identity` still stores the raw header on both tables (`017:73,87-88` triggers copy `updated_by` into `changed_by`; no migration needed).
+- Q2 (agent parameter): removed with no fallback. mcp `ArgModelBase` has no `extra` setting (pydantic default ignore; `model_dump_one_level` iterates `model_fields`; no server-side inputSchema validation), settled at design time by a source read of the pinned wheel, then reconfirmed behaviourally on mcp 2.3.0 at Step 8. `tests/test_streamable_http_auth.py:86` (`"author": "a@b.c"` undeclared argument) was kept ON PURPOSE as the CI probe, an explicit exception to the fails.md:1329 "fix every instance" sweep; it asserts `isError is False` plus `"author" not in mock_set.await_args.kwargs` (`:102-103`).
+- Q3: trading deletes the `Author` line (no nolint). Q4: both BFF stamps dropped. Q5: `set_config` calls `_caller_user_id(ctx, "set_config")` as a deliberate edge fail-fast (return value discarded, config stays authoritative).
+- `_write_source_bearer` `reason` became `f"{tool}: bearer for signal source {slug}"` so tool provenance survives now that `changed_by` is the caller's `x-user-id` instead of the tool name.
 
-## Session 2026-10-20 — sdd-review product-spec
+**Rejected alternatives**:
+- Grant id wins over `x-user-id` when both present — hides the human who sent a forged poller header.
+- Bind the grant credit to mTLS peer SAN `xstockstrat-trading` via `peerDnsSans` now — changes the feature-102 authz gate, would be a C-16 CHANGE, needs peer context in the test harness. Became the follow-up defect instead.
+- Repurpose proto field 4 / keep `author` as a non-authoritative note (triage fork (b)) — rejected by the operator decision (product-spec Fix Scope: "Repurposing the field is rejected by the operator decision"; context.md triage session fork list). Likewise a separate non-authoritative column (fork (a)) -> no migration.
+- Keep the agent `author` parameter accepted-but-ignored — advertises a no-op parameter; against the feature-111 `manage_formula` precedent (`tests/test_tools.py:1260-1273`).
+- Gate re-entry / keep-and-ignore fallback in case mcp used `extra=forbid` — moot once the source read showed no `extra`.
+- Settle the mcp question by printing `ArgModelBase.model_config` only — reads config, not behaviour.
+- BFFs stamping `author: ''` instead of deleting the line — keeps a reference to a deprecated field config already ignores.
+- Keeping the `insightsBff.test.ts:59` `'user-mallory'` fixture and asserting inert passthrough — tests a meaningless passthrough; config AC-1 is the guard.
+- Making `hasInternalCallerAuthority` return the grant id — would change 7 boolean assertions for no behavioural gain (C-18); boolean plus the mandatory AC-2 `params[6]` pin suffices.
+- Mutable `let internalCallerAuthorized` set inside the global branch — superseded by one hoisted `const` guarded by `userIdParam === null`.
+- `nolint:staticcheck` on `trading.go` — would have been trading's first nolint; deleting the line avoids SA1019.
+- Retiring the `config-governance.md:103` sentinel row without a replacement — would leave the new automated `changed_by` value class undocumented.
+- Adding metadata to the `config-rollout.md` emergency/rollback snippets but keeping bare keys — a broken procedure would look fixed (migration 029 renamed the keys, so they fail NOT_FOUND at the existence gate).
+- DB migration deriving `changed_by` — unnecessary.
+- Moving the `MISSING_AUTHOR` rejection after the enum/bounds/existence checks — rejected per fails.md:2780-2782; it stays code 3, before them.
 
-- Product spec approved. Status: draft → spec-ready. Criteria verdict PASS WITH WARNINGS (0 fails, 0 Floor
-  breaches); overlap verdict WARN (no FAIL).
-- Warnings (9), with resolution in this session:
-  1. Line cites drifted (C-01). Re-anchored in product-spec.md against trunk:
-     - `configServiceImpl.ts`: `:386` global gate, `:394` per-user branch, `:410` author, `:411-414`
-       `MISSING_AUTHOR_ERROR`, `:513` INSERT params;
-     - `trading.go:2168-2176`.
-     Earlier entries in this log keep the old SHA-1302e6d cites.
-  2. The proto approval route was unstated, and C-09 was mis-tagged. Fix Scope now says:
-     - non-breaking `[deprecated = true]`, precedent `config.proto:129`;
-     - approval by the Proto Reviewer + `packages/proto` owner;
-     - the breaking route does not apply;
-     - C-09 cited for buf lint/breaking only.
-  3. No migration strategy for the conditional DB change. Moot: the operator decision ignores `author`, so
-     there is no column and no migration. Recorded as `[x] No DB migration`.
-  4. Docs item unchecked. Now checked, with `services/xstockstrat-config/CLAUDE.md:40,55,97`,
-     `config-governance.md:93-103` and `mcp-tools.md:1096` listed.
-  5. AC-1 scope values were not integers. Changed to `4` (ADMIN_SCOPE, `authz.ts:8`) and `1`.
-  6. AC-1 had no prior-value precondition. Added a `<prior>` column: `2` for the global row (021 seed) and
-     `absent` for the per-user INSERT. The same precondition was added to AC-2 (`ACTIVE`, the 011 seed),
-     since the trigger at 017:69 has the same trap.
-  7. No negative scenario. Added AC-3 (append-only, C-15): an admin-scope write with no `x-user-id`, with
-     `x-internal-caller` either absent or present but unauthorized for the key, must be rejected with
-     `INVALID_ARGUMENT` and leave the row unchanged. Precedence when both `x-user-id` and an authorized
-     `x-internal-caller` are present is left open for /sdd-design.
-  8. AC-2 pre-empted fork (d). Settled by the operator decision below: the `system:reconciliation-poller`
-     sentinel is retired as a `changed_by` value. product-spec.md now lists `trading.go:2176`,
-     `trading_reconciliation_test.go:789-790`, `internalCallerSetConfig.test.ts:73` and
-     `config-governance.md:103`. No durable suite pins this, so no C-16 sign-off is needed.
-  9. The consumer surface list was incomplete. Added `instantiate_template` (`tools.py:1222`) next to
-     `manage_signal_source` (`tools.py:1309`), both via `_write_source_bearer` (`tools.py:341-360`), plus
-     `client.py:2094,2100,2142`.
-- Overlap findings (WARN, all rebase-only once the migration fork closed):
-  - Migration `031` vs 243 (`fix-sandbox-seed-keys`): conditional, and moot now that there is no migration.
-    No `merge-order.md` entry needed.
-  - `configServiceImpl.ts` vs 244 / 243: SCALAR_BOUNDS `:115-117`, a disjoint region.
-  - `tools.py` vs 247 (`get_config_value` `wait_for`, `:1550-1556`) and vs 249 (`manage_account`). `client.py`
-    vs 247 (`get_config_value`, `:1729`). Different functions in each case.
-  - `trading.go` `escalateSystemic` vs 251: the `SourceService` literal at `:2188`, in the same function.
-  - `mcp-tools.md` vs 247 / 249: section-disjoint.
-  - Proto: clean (no peer touches `config.proto`). Config: clean.
-  - 240 is already on trunk.
-- Design forks still open for /sdd-design:
-  - (c) remove the `set_config` `author` tool parameter, or keep it accepted-but-ignored;
-  - the identity precedence noted above;
-  - whether trading drops the `Author` line and the UI BFFs drop their `author` sends (staticcheck SA1019,
-    `.golangci.yml:7`; C-10).
-- Operator decisions (binding, recorded 2026-10-20; relayed verbatim by the workflow orchestrator):
-  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
-  - Author comes from verified identity only: config stamps changed_by from the verified x-user-id, or the x-internal-caller grant id for automated writers; request.author is ignored and the proto field is marked [deprecated = true] (non-breaking); the agent stops sending free-text author; trading's reconciliation-poller sentinel moves to the x-internal-caller identity.
-- Next: `/sdd-design fix-config-audit-author-spoof` (full).
+**Scars & gotchas**:
+- Code-only rejection tests pass vacuously once a new earlier guard returns the same code: `setConfigScalarBounds.test.ts` (incl. a fourth case, `intVal 56`, found at spec time) and `tradingStateValidation.test.ts` rejection cases asserted only `INVALID_ARGUMENT`, so the new identity rejection would have satisfied them. Each now `assert.match`es its own message (e.g. `/\[30, 55\]/`, `/\[0, 8760\]/`). Four admin-scope fixtures plus others needed `x-user-id: tester` (75/180 config tests went red between Steps 3 and 4).
+- `changed_by` could not be proven end-to-end: no real-DB harness, so it is shown via INSERT `params[6]` (`updated_by`) / `params[10]` (`caller_identity`) plus a SQL review of `017:66-91`. The audit-trigger path stays unexecuted by tests. The cross-file equality `authz.ts` grant `callerID` == `first(md, HEADER_INTERNAL_CALLER)` == `callerIdentity` is guarded only by the mandatory AC-2 `params[6] === 'trading-reconciliation-poller'` pin (`internalCallerSetConfig.test.ts`); do not drop it.
+- Secret re-writes are NOT audited: a secret UPDATE keeps `value_data = '[redacted]'`, so the `017:69` UPDATE trigger never fires and only `config_values.updated_by` changes; `config_audit.changed_by` is not written (recon.md:229-231). `_write_source_bearer` escapes only because it always INSERTs a fresh key (`tools.py:346,356`), so the INSERT trigger (`017:81-91`) carries the new attribution.
+- Why AC-2 is required: it is the only guard on the trading kill-switch escalation. `config.go:257-263` (`Watcher.SetConfig`) sends only `x-internal-caller` and `x-trace-id`, no `x-user-id`. Had FR-3 landed with FR-2 wrong, `escalateSystemic` would fail `INVALID_ARGUMENT` and only log a Warn (`trading.go:2234`, was `:2180` at recon time), silently disabling the escalation (recon.md:196-197; context.md 2026-10-20 re-review).
+- `setConfigAuthz.test.ts:304` (per-user write by scope 7, no `x-user-id`; was `:264`) deliberately sends no `x-user-id`: it asserts the per-user owner gate's `PERMISSION_DENIED`, not the identity or existence gate. Do not "fix" it by adding `x-user-id` (context.md Step 4 session).
+- The "verified" -> "propagated identity" wording sweep deliberately skipped the agent's "verified claims" wording (acceptance.feature AC-4 Given, agent docs): the OAuth JWT really is verified; only the config-side header identity is merely propagated (context.md sdd-spec session).
+- UPDATE audit trigger fires only when `value_data` changes (`017:69`), so every config scenario pins a prior value different from the written one; `absent` prior = INSERT path; blank `<target>` = global row.
+- Absence of a deprecated proto field in Go must be asserted via reflection (`req.ProtoReflect().Descriptor().Fields().ByName("author")` + `Has`, `trading_reconciliation_test.go:795-797`), not `req.Author`, which trips SA1019 (2 hits seen between Steps 5 and 6).
+- protoc-gen-go must be built with go1.27 for codegen; the preinstalled go1.24 build reformats an unrelated doc comment in `gen/go/analysis/v1/analysis.pb.go` and would fail `proto-freshness`. golangci-lint v2.14.0 provisioned here was built with go1.26 and refuses the go1.27 module; rebuild with go1.27.0 into a scratch GOBIN.
+- `buf breaking --against ".git#branch=..."` does not resolve in a detached worktree; the CI-equivalent fallback is `git archive origin/<branch>:packages/proto` to a dir and `--against <dir>`.
+- Sequential single-writer execution left declared red windows after Steps 3, 5, 7, 9 (service step committed before its test step); each closed in the next step. RED was captured by an uncommitted scratch test or by restoring the pre-step files, then reverted.
+- C-13 re-decision at re-spec: feature 240 had created `services/xstockstrat-trading/internal/testdata/` and the literal `"trading-reconciliation-poller"` already sat in `internal/config/config_test.go:232,238,239,255`, so a second consumer file made centralisation mandatory: `testdata.ReconciliationPollerCallerID` (`internal/testdata/caller_ids.go`). Production `trading.go` keeps its literal.
+- `bound_admin` fixture added to agent `tests/conftest.py` (consumers `test_config_tools.py`, `test_template_tools.py`); existing `bound_caller` binds TRADER while AC-4 needs ADMIN `u-1`. `instantiate_template` is tested directly, not via `_run`, which forces TRADER.
+- The follow-up peerSan defect report was a Step 11 docs step, not written at spec time, because the spec session's single-writer scope (P-01) was limited to the feature directory (P-03: recorded, not dropped).
+- Docs drift fixed in passing: `config-rollout.md` documented a `RolloutConfig` RPC that `config.proto` never declared (rewritten as sequential `SetConfig`), bare keys at `:93,:213,:228` failed NOT_FOUND after migration 029, and `header-propagation.md` still claimed a feature-049 formula-write admin override (removed by feature 224).
+- Teardown: `/context-forge:context-constitution refresh` was unavailable in the session (only `context-forge:context-scrubber` listed); touched context files were reconciled by hand against `setConfig`, `authz.ts`, `configUiBff.ts`, `insightsBff.ts`, `tools.py#set_config`.
 
-## Session 2026-10-20 — sdd-review product-spec (re-run of A4)
+**Permanent deviations**:
+- design said "address the peerSan defect report at /sdd-spec" -> shipped as Step 11 (docs), filed `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` (status `open`) -> because the spec session's writes were confined to the feature dir.
+- design said a trading test asserts `callerID` and UI header pins as the P-06 RED -> shipped with extra RED assertions (proto-reflection "author unset" in trading, `expect(sent.author).toBe('')` in UI) -> because the callerID / `x-user-id` pins already hold green on the pre-fix tree.
+- design left the trading test literal inline -> shipped `testdata.ReconciliationPollerCallerID` -> C-13 second-consumer rule after feature 240 (see Scars).
+- design cited mcp 2.2.0 -> shipped against mcp 2.3.0 (uv.lock at execute time); Q2 conclusion unchanged and behaviourally confirmed by the kept probe.
+- design said EXTEND platform `@AC-9 @FR-5 @regression @feature-196` "request-only dead fields stay server-ignored" (design.md "Business Rules Touched"; recon.md:181 deferred the call to `scenario-promoter`) -> shipped NO platform.feature change -> the promoter judged "platform.feature has nothing relevant" and sent AC-1..AC-3 to the config suite and AC-4 to the agent suite (context.md promotion plan). `docs/sdd/business-rules/platform.feature:337-341` still names only `user_id` on owner-scoped requests, `is_paper` and the deprecated `operation` string; `SetConfigRequest.author` is not in that rule.
+- Step 13 re-anchored the config constitution `:34` cites (`internalCallerAuthorized` `~L379-388`, `callerIdentity` `~L407`, `const author = callerUserId || ...` `~L412`, per the Step 13 Deviation Log entry); that is routine drift repair, not a design deviation. Config findings `:47` row gained `-> fix: feature 241` but stays until the defect report is resolved after merge.
 
-- Re-run on an already `spec-ready` spec, after Phase 0 recon (`recon.md`, commit 95130ba3). Status unchanged:
-  spec-ready. Criteria verdict PASS WITH WARNINGS (0 fails, 0 Floor breaches). Overlap verdict WARN (no FAIL).
-- Both verdicts read the pre-revision triage draft. They cite `product-spec.md:22-24` either/or Expected, the
-  unchecked boxes at `:48,49,51` and `configServiceImpl.ts:388/404/507`, all fixed in the prior session.
-  Warnings (8), with resolution:
-  1. No `## Functional Requirements` and no `@FR-N` tags (C-15). Resolved:
-     - added FR-1 (human → `x-user-id`), FR-2 (authorized internal caller → grant `callerID`), FR-3 (no
-       verified identity → `INVALID_ARGUMENT`) and FR-4 (agent sends no free-text `author`);
-     - tagged AC-1 `@FR-1`, AC-2 `@FR-2`, AC-3 `@FR-3 @FR-2` and AC-4 `@FR-4`.
-     The Track C template (`.claude/skills/sdd-triage/reference/track-c-sdd.md:103-163`) prescribes neither,
-     yet C-15 requires both. That template/criteria gap is a ledger candidate. Not written: A4 calls for no
-     ledger line.
-  2. AC-1/AC-2 pre-resolve forks. Settled by the operator decision (prior session): ignore `author`, no reject;
-     credit the grant id, not the `system:` sentinel. AC-2 is kept as the kill-switch escalation guard
-     (`config.go:257-263` sends no `x-user-id`).
-  3. Coverage gaps.
-     - (a) Agent path: added AC-4 (append-only), covering `set_config`, `manage_signal_source` and
-       `instantiate_template`. It asserts the outbound `SetConfigRequest.author == ""` and `x-user-id` = the
-       claims `user_id`. It fails today: `tools.py:353` sends the tool name and `:1694` sends the caller's
-       text.
-     - (b) No-identity rejection: AC-3 (prior session).
-     - (c) Precedence: now Open Question Q1.
-     - Test pins `setConfigAuthz.test.ts:144,183-199`, `test_config_tools.py:110,133,152,171,237,255` and
-       `test_streamable_http_auth.py:86` added to § Affected Services. `client.py` was already listed.
-  4. Proto gate unclassified. Already resolved: non-breaking `[deprecated = true]`, Proto Reviewer + owner route.
-  5. Migration strategy. Moot: no migration (operator decision).
-  6. Forks only in context.md. Added `## Open Questions` Q1-Q5, owned by /sdd-design and closed before
-     `design-approved`:
-     - Q1 identity precedence;
-     - Q2 `set_config` param removed vs ignored (`mcp` 2.2.0 undeclared-arg behaviour unverified);
-     - Q3 trading `Author` line;
-     - Q4 UI BFF stamps;
-     - Q5 agent `_caller_user_id` fail-fast.
-     The last unchecked Fix Scope box is now `[x]` and points at Q2.
-  7. Stale cites (C-01). Already re-anchored. Re-verified against the tree:
-     - `configServiceImpl.ts:376,380,386,394,405,410-414`
-     - `authz.ts:46-50,82-97`
-     - `tools.py:341-360,1641-1701`
-     - `client.py:2094-2151`
-  8. Example concreteness. Integer scopes were already done. The feature description now states that a blank
-     `<target>` is `user_id ""` (global row, NULL) and that `absent` is the INSERT path.
-- Overlap findings (WARN, rebase-only, no FAIL, no `merge-order.md` row required):
-  - `configServiceImpl.ts`: this feature's `:394-513` vs 240 (SCALAR_BOUNDS row `:145`, code-completed) and 244
-    (bounds rows `:100-127`, conditional). Disjoint hunks.
-  - `tools.py`: `:353,1642-1699` vs 240 (`manage_offline_account` `:2035`) and 215 (in-progress; docstrings
-    `:735,760-763`, `set_strategy_live` `:1309-1335`). Disjoint.
-  - `client.py`: `:2094-2142` vs 240 (`confirm_offline_order` `:2245-2271`). Disjoint.
-  - `config-governance.md`: § Author-sentinel conventions `:93-103` vs 240's Per-Feature Registered Keys log.
-    Section-disjoint.
-  - `mcp-tools.md`: § `set_config` vs 240's `manage_offline_account` / `get_positions`. Conditional on Q2,
-    section-disjoint.
-  - Trading: `trading.go` is also edited by 240, 249 and 251 (conditional). Disjoint unless the poller line
-    moves (Q3).
-  - Migration `031` is pre-reserved by 243. Moot, since 241 takes no migration.
-  - Proto: clean. Config keys: clean. 247 and the other drafts are disjoint.
-  - 241 rebases onto 240, which is already in the checkout. Re-run the Mode B overlap at impl-spec.
-- Since recon predates AC-4 and the FRs, /sdd-design must fold AC-4 / FR-4 into the design and the C-16 notes.
-  Recon's "AC-1..AC-3 become the first guards" now reads AC-1..AC-4.
-- Operator decisions (binding, recorded 2026-10-20; relayed verbatim by the workflow orchestrator):
-  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
-  - Author comes from verified identity only: config stamps changed_by from the verified x-user-id, or the x-internal-caller grant id for automated writers; request.author is ignored and the proto field is marked [deprecated = true] (non-breaking); the agent stops sending free-text author; trading's reconciliation-poller sentinel moves to the x-internal-caller identity.
-- Next: `/sdd-design fix-config-audit-author-spoof` (full; Phase 0 recon is done, Phase 1 grilling is next).
+**Cross-feature signal**:
+- Same trusted-header family as feature 210 (insights.md:3587, enumerate forgeable-header gates) and feature 203 (fails.md header-only identity): attribution moved to headers but headers remain self-asserted without peerSan.
+- Follows the feature-111 no-`author` MCP tool precedent and the deprecate-in-place precedent `trading_mode = 7` (`config.proto`). It did NOT extend feature 196's platform `@AC-9` (see Permanent deviations).
+- Fixture-identity sweep: any tightening of a handler's identity gate requires every admin-scope fixture (config, UI, agent) to send `x-user-id`; touched feature 224/214/219 write-edge rules were preserved.
+- Track C triage template (`.claude/skills/sdd-triage/reference/track-c-sdd.md:100-125`) still emits no `## Functional Requirements` / `@FR-N`, so each triaged bug's first product-spec review warns (C-15); recorded as a fails.md entry.
 
-## Session 2026-10-20 — sdd-design
+**Deferred follow-ons**:
+- Bind the SetConfig `trading-reconciliation-poller` grant to peer SAN `xstockstrat-trading` (`peerDnsSans`, `authz.ts:131-162`): `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md`, status `open`; route with `/sdd-triage --from-report`. It is a C-16 CHANGE.
+- Agent `set_config` per-user-secret docstring (`services/xstockstrat-agent/app/tools.py` `set_config` docstring, text "Secret keys are global-scope only") still contradicts feature 224 (`services/xstockstrat-agent/docs/context-constitution-findings.md:20`).
+- No deprecation lint rule exists in config or UI ESLint/tsconfig (recon.md:319, grep `deprecat`: none), so a TS reference to the deprecated `author` would not be flagged; only the Go side is caught (SA1019).
+- Browser can still send `author` via `insightsBff.ts:176` `...req`; inert at config, guarded by config AC-1. Accepted.
+- Historical `config_audit.changed_by` rows keep free text / `system:reconciliation-poller`; the `/config-ui` audit "By" column therefore shows two spellings. Not rewritten (out of scope).
+- Raw `x-internal-caller` is stored in `caller_identity` even when the grant did not authorize it (`configServiceImpl.ts` `callerIdentity`); explicit out-of-scope.
+- Residual rollout risk: `verifyAccessToken` (`services/xstockstrat-ui/src/lib/auth.ts:22-31`) does not reject an empty `user_id`; such a UI session (or an agent session whose claims carry no `user_id`) now gets `INVALID_ARGUMENT` from config FR-3 through the BFF. This is the only rollout behaviour change (recon.md:275-276,:356-358); not observed in practice, no guard added.
+- `config-rollout.md` STALE Connect block keeps its bare key (Step 12 only dropped `"author"`; Deviation Log Step 12), so it still fails NOT_FOUND after migration 029. `scripts/integration-test.sh:507-519` targets removed `:8060` and is wired into no workflow (`.github/workflows` has no reference); both are dead procedures left unfixed.
+- Overlap with feature 251 on `escalateSystemic` in `trading.go`: whichever merges second reconciles by hand (context.md sdd-review impl-spec session).
+- Config findings `:47` row to be resolved after the peerSan report is closed.
 
-- Phase 0 Recon: wrote recon.md (services: config, agent, trading, ui). Key reuse patterns:
-  - hoist `internalCallerAuthorized` (`configServiceImpl.ts:380-385`);
-  - deprecate-in-place (`config.proto:129`);
-  - feature-111 no-`author` tool precedent (`tools.py:1113`).
-- Phase 1 Grilling: 2 rounds (full). Adversary r2 verdict SOUND: no Floor breach, no blocking objection. All 8
-  non-blocking objections are folded into design.md.
-- Termination: auto-approved by the orchestrator under the operator standing authorization (2026-10-20). Gate:
-  rounds ≥ 2, no F-* breach, no blocking objection, no @AC CHANGE.
-- Chosen approach: `author = callerUserId || (internalCallerAuthorized ? callerIdentity : '')`. In detail:
-  - `request.author` is ignored and field 4 is `[deprecated = true]`;
-  - `MISSING_AUTHOR_ERROR` stays code 3, before enum/bounds/existence, with the message reworded to
-    "propagated identity";
-  - trading deletes `Author`;
-  - the agent removes the `author` param from `set_config`, `client.set_config` and `_write_source_bearer`;
-  - the UI drops both BFF stamps;
-  - one PR, ordered proto → config → trading → agent → ui → docs.
-- Rejected:
-  - grant id wins over `x-user-id`;
-  - peerSan binding now (it becomes a follow-up defect);
-  - keeping the agent param ignored;
-  - nolint on `trading.go:2176`;
-  - a migration.
-- Decisions (Q1-Q5 closed; copied into product-spec § Open Questions this session, per fails.md:2860):
-  - Q1: `x-user-id` wins; `caller_identity` keeps the raw header.
-  - Q2: remove the param, no fallback. Evidence is a source read of the pinned mcp 2.2.0 wheel
-    (`func_metadata.py:112` has no `extra`; `:105` iterates `model_fields`; no server-side inputSchema
-    validation). `tests/test_streamable_http_auth.py:86` is kept on purpose as the CI probe, with
-    `isError is False` and `author` absent from kwargs.
-  - Q3: delete `trading.go:2176`, and `fakeConfigSetter` records `callerID`.
-  - Q4: drop the stamps, delete the `insightsBff.test.ts:59` fixture, assert `Headers.get(HEADER_USER_ID)`, and
-    add a new `configUiBff` vitest.
-  - Q5: `set_config` calls `_caller_user_id` as an edge fail-fast, with a ≤2-line comment.
-- Constitution rules touched: C-01, C-09, C-10, C-11, C-14, C-15, C-16, C-18, P-02, P-03, F-09.
-  Floor breaches: none.
-- Business rules:
-  - EXTEND platform `@AC-9 @feature-196`, covered by the operator decision;
-  - PRESERVE `@AC-3` and `@AC-5 @feature-196` and the config/agent/ui write-edge rules;
-  - CHANGE none.
-- Open Threads (from design.md § Open Risks; target step at /sdd-spec):
-  - [ ] Trusted-header residual (no `peerSan` on the SetConfig grant, `authz.ts:66-76`). Two obligations: file a
-    named defect report under `docs/reports/` (peerDnsSans binding to `xstockstrat-trading`), and use
-    "propagated, not authenticated" wording in FR-2/AC-1/AC-2, `acceptance.feature:3,6`, product-spec `:22-30`,
-    the error message and config CLAUDE.md #5/#7. → spec time + docs step.
-  - [ ] mcp 2.2.0 undeclared-arg confirmed by source read only. The `:86` probe is a named step with a fixed
-    expected result. → agent step.
-  - [ ] Mandatory named pins (fails.md:2810). → config / trading / agent / ui steps.
-    - AC-2 `params[6] === 'trading-reconciliation-poller'`;
-    - the trading callerID assertion;
-    - the `:86` author-not-in-kwargs line;
-    - the `configUiBff` header test;
-    - the agent removed-parameter RED.
-  - [ ] Code-only rejection tests (`setConfigScalarBounds.test.ts:103-117`, `tradingStateValidation.test.ts:115-121`)
-    gain `assert.match` on their own message. → config step.
-  - [ ] No real-DB harness: show `changed_by` via INSERT params `[6]`/`[10]` plus a SQL review of `017:66-91`.
-    → config step.
-  - [ ] Audit "By" spelling: new rows read `trading-reconciliation-poller`, historical rows keep
-    `system:reconciliation-poller`. Note it in the rewritten config-governance § Author-sentinel conventions.
-    → docs step.
-  - [ ] Browser `author` via `insightsBff.ts:176` `...req` is inert at config. Accepted; the guard is config AC-1.
-  - [ ] Deprecation markers vs linters unverified. Run golangci-lint and the UI/TS lint in the PR.
-    → trading / ui steps.
-  - [ ] Adjacent drift for the teardown → docs step / teardown:
-    - `config-rollout.md:122-124` and `:150-163` (`RolloutConfig`, which does not exist);
-    - `tools.py:1665-1667`;
-    - `config-governance.md:102` indicators row.
-  - [ ] Docs sweep (C-10). → docs step.
-    - `header-propagation.md:38-46`: the whole paragraph.
-    - `config-rollout.md:77-81`, `:95`, `:100`, `:119`, `:141`, `:210-217`, `:225-232`, including the
-      full-dotted key fix (migration 029).
-    - The `config-governance.md:93-103` rewrite.
-    - Config CLAUDE.md `:40`, `:42-56`, `:84`, `:97`.
-    - `mcp-tools.md:1096-1156`.
-    - The constitution and findings rows.
-- Ledger: no new line. The traps this debate hit are already in the ledger:
-  - fails.md:75-78, :1329, :1425, :2780, :2810, :2827, :2860;
-  - insights.md:3587.
-- Status: spec-ready → design-approved.
-
-## Session 2026-10-20 — sdd-spec
-
-- Generated implementation-spec.md with 13 steps. Status → implementation-ready.
-- Order: proto (1) → proto-gen (2) → config service + test (3-4) → trading (5-6) → agent (7-8) → ui (9-10) →
-  docs (11-13).
-- Scenario coverage:
-  - AC-1 → Step 4;
-  - AC-2 → Steps 4 and 6 (the config half `params[6]`/`[10]`, the trading half callerID with no author);
-  - AC-3 → Step 4;
-  - AC-4 → Step 8.
-
-  Every design "Tests MUST" pin is mapped to a step (fails.md:2810).
-- Key codebase findings (all confirmed in the tree at this branch head):
-  - `configServiceImpl.ts`:
-    - `:376` `callerUserId`;
-    - `:378-393` global branch, with the block-scoped `internalCallerAuthorized` at `:380-385`;
-    - `:405` `callerIdentity`;
-    - `:410-414` the defect;
-    - `:513` INSERT params (`[6]` `updated_by`, `[10]` `caller_identity`);
-    - `:424`/`:438` enum and bounds messages.
-  - `authz.ts:46-50` `MISSING_AUTHOR_ERROR`; `:82-97` `hasInternalCallerAuthority`.
-  - Config's last migration is `030`; no migration is needed.
-  - A fourth vacuous-pass rejection case not in recon: `setConfigScalarBounds.test.ts:304-312` (`intVal 56`,
-    code-only). It is added to the Step 4 `assert.match` list with `/\[30, 55\]/` (`configServiceImpl.ts:133`).
-  - Agent anchors:
-    - `tools.py:1642,1648,1663-1664,1683,1694` (`set_config`);
-    - `tools.py:341,353-354,357` (`_write_source_bearer`);
-    - `client.py:2094,2100,2142,2149`.
-  - Trading:
-    - `trading.go:2176` is the only Go `Author:` site;
-    - the `fakeConfigSetter` at `trading_reconciliation_test.go:746-756` drops `callerID`;
-    - the assertion sits at `:789-790`.
-  - UI:
-    - `configUiBff.ts:53` and `insightsBff.ts:179` are the stamps;
-    - no `configUiBff` unit test exists;
-    - the canonical test-JWT home is `e2e/helpers/auth.ts:29` `signTestJwt` (C-12).
-  - Docs: `config-rollout.md:150-163` documents a `RolloutConfig` RPC that `config.proto:20-35` does not
-    declare. Bare keys at `:93`, `:213` and `:228` fail NOT_FOUND after migration 029:24-28.
-- Spec-time decisions (no design deviation; each records how a design item is realised):
-  - **P-06 RED where the design pin is green on both trees.**
-    - The trading callerID pin and the UI `x-user-id` header pins already hold before the fix.
-    - Step 6 therefore adds a proto-reflection "author unset" assertion
-      (`req.ProtoReflect().Has(…ByName("author"))`), which names no deprecated Go symbol, so there is no SA1019
-      and no nolint.
-    - Step 10 adds `expect(sent.author).toBe('')`.
-    - Both are test reads only. The rejected alternatives (keep a BFF `author: ''` stamp, keep the
-      `'user-mallory'` passthrough) stay rejected.
-  - **C-13: `bound_admin` fixture in `tests/conftest.py`.** It has two consumer files, `test_config_tools.py`
-    and `test_template_tools.py`. The existing `bound_caller` binds TRADER, while AC-4 names ADMIN `u-1`.
-  - **The follow-up peerSan defect report is a Step 11 docs step, not written at spec time.** design.md § Open
-    Risks says "address at /sdd-spec", but this session's single-writer scope (P-01) restricts writes to the
-    feature directory. Step 11 lands it in the same PR (P-03: recorded, not dropped).
-  - **"Propagated, not authenticated" wording applied now** (design.md item 6, C-15):
-    - `acceptance.feature` lines 3-5, plus the titles of the AC-1 and AC-3 scenarios (IDs unchanged);
-    - product-spec Expected, FR-3 and the AC-3 summary line.
-    - The agent "verified claims" wording is left alone: the OAuth JWT is verified.
-- Open Threads routed (from the design-session list):
-  - [ ] trusted-header residual → Step 11 (defect report) + Steps 3/12/13 (wording);
-  - [ ] mcp probe → Step 8;
-  - [ ] named pins → Steps 4, 6, 8, 10;
-  - [ ] code-only rejection tests → Step 4;
-  - [ ] no real-DB harness → the Step 4 SQL-review note;
-  - [ ] audit "By" spelling → Step 12;
-  - [ ] deprecation linters → the Steps 5/6 golangci-lint and Steps 9/10 `pnpm run lint`;
-  - [ ] adjacent drift → Step 12 fixes `config-rollout.md:122-124,150-163`, Step 13 records `tools.py:1665-1667`;
-  - [ ] docs sweep → Steps 12-13 + teardown.
-- Ledger: no new line.
-
-## Session 2026-10-20 — sdd-review impl-spec
-
-- Mode B, advisory. Status unchanged: `implementation-ready`. Criteria verdict PASS WITH WARNINGS (0 fails, 0 Floor
-  breaches, 11 warnings). Overlap verdict WARN, file-level only: no config key, proto field number or migration
-  NNN collision, so no `merge-order.md` row.
-- Addressed in implementation-spec.md (each claim re-verified against the tree):
-  - W1 (C-01, P-06) Step 3 self-contradiction. The new `authz.ts:46` doc comment now reads "the deprecated body
-    author field is ignored", so the strict `request\.author` Verification grep holds. Today it hits
-    `configServiceImpl.ts:410` and `authz.ts:46,49`, all removed by Step 3.
-  - W4 Step 8 `instantiate_template` case. It now states the `patch("app.client.mtls")` +
-    `secure_channel.return_value = _channel_cm()` patch that `_run` applies (`test_template_tools.py:84-85`).
-  - W5 Steps 9/10 e2e. Step 10 evidence notes that the mock `setConfig` (`e2e/mock-backend.ts:1393-1409`) never
-    reads `author`, and that no config-ui or signal-sources spec asserts it. No Playwright step is needed.
-  - W6 Step 6 Verification. `GOWORK=off` now sits on `go list` (inside `$()`), `go test` and `go tool cover`.
-  - W8 Step 13 UI-3. It also rewrites the generic `{ ...req, userId/author }` phrase to `{ ...req, userId }`, and
-    its grep checks `userId/author`.
-  - W10 Step 3 evidence links the Step 11 peerSan report path (P-03 residual).
-  - W11 / overlap. The Step Dependencies overlap note is replaced with the scan result:
-    - 251 shares `escalateSystemic` in `trading.go`; whichever merges second reconciles by hand;
-    - 244 is disjoint in `configServiceImpl.ts`, and 243 is unconfirmed there;
-    - 215 and 247 are disjoint in the agent files;
-    - 240 is on trunk and disjoint;
-    - 249 does not overlap (`ibkr.go`, `trading.proto:267` only).
-- Open Threads (accepted, not edited; for the operator at the /sdd-execute checkpoint):
-  - [ ] W2 Step 2 `**Files**` lists the generated `gen/` directories. Accepted precedent
-    (240 implementation-spec.md:216-218), since generated output cannot be enumerated.
-  - [ ] W3 Step 4 touches 8 files and Step 13 touches 6, over the 5-file split threshold. Kept: both are cohesive
-    fixture or doc sweeps.
-  - [ ] W7 `changed_by` is proven only through INSERT `params[6]` plus a SQL review of `017:66-91`. No real-DB
-    harness exists (recon.md:225-228), so the audit-trigger path stays unexecuted by tests.
-  - [ ] W9 Step 10 imports `e2e/helpers/auth.ts` into vitest with no exact precedent. The inline-`SignJWT`
-    fallback is already a recorded Deviation Log path.
-  - [ ] Overlap limitation: peers 242-251 have no implementation-spec on trunk. Re-check `trading.go` against 251
-    (which must re-anchor its stale `:1861/:2106/:2674` cites to `:1943/:2188/:2756`) and the agent files
-    against 215/247 before the integration PR.
-- Ledger: no new line.
-
-## Session 2026-10-28 — re-spec (sdd-execute sequential, pre-execution)
-
-- Branch setup (§5.3): `git merge -X ours origin/main-dev` into the detached `origin/feature/fix-config-audit-author-spoof`
-  checkout, pushed as e5a36f3e.
-- Re-spec, implementation-spec.md only (Instructions / Codebase Evidence / Files / Verification of steps 6, 7, 8,
-  10, 12, 13), each cite re-grepped against the merged tree:
-  - Step 6: **C-13 verdict re-decided.** `services/xstockstrat-trading/internal/testdata/` now exists (feature 240)
-    and `"trading-reconciliation-poller"` already appears as a test literal in `internal/config/config_test.go:232,
-    238,239,255`, so Step 6 would make it a second consumer file. Chosen: centralize as
-    `testdata.ReconciliationPollerCallerID` in a new `internal/testdata/caller_ids.go`, used by both test files
-    (Files gain `caller_ids.go` create + `config_test.go` modify). Rejected: recorded inline exception — C-13's
-    second-consumer rule applies and the home exists. Production `trading.go:2168` keeps its literal.
-  - Step 7: tools.py line drift (+9: `set_config` :1651, `author` :1657, docstring :1672-1673, scope :1692,
-    forward :1703; `_write_source_bearer` callers :1230/:1317; precedent :1121); client.py `set_config` :2095,
-    `author` :2101/:2143, `_metadata` :2150. Note: the directive cited `set_caller` :40 / `reset_caller` :51; the
-    tree shows `client.py:41` and `:49` (spec's original cites), so those were left unchanged.
-  - Step 8: mcp pin is 2.3.0 (uv.lock, both branches); `ArgModelBase` still has no `extra` setting, Q2 holds.
-  - Step 10: `post()` :39-48, `SET_CONFIG` :49; `configUiBff.test.ts` is created by the step.
-  - Step 12: indicators comment `servicer.py:398`; mcp-tools.md +1 (:1097/:1108/:1109/:1152/:1156); config-rollout
-    grounding `tools.py:1651-1660`.
-  - Step 13: per-user-secret docstring drift now `tools.py:1674-1676`.
-- Deviation Log entry added to implementation-spec.md.
-
-## Session 2026-10-28 — sdd-execute sequential (sdd-batch-execute)
-
-- Status `implementation-ready` → `in-progress`.
-- Up-front confirmation: the operator approved the plan by standing authorization (operator chat 2026-10-28,
-  session_01NpS3HShZK6pSnogA7CFo2f: "Start executing features 241-276" via batch-execute). Answers recorded:
-  unattended checkpoints (`report`); C-16 promotion auto-confirmed unless it changes an existing `@AC` rule;
-  merge-train authorized; defer 255/275; operator-only DB/prod steps — open the PR, hold the merge.
-- Mode: sequential, one commit per step on `feature/fix-config-audit-author-spoof`; single integration PR at the end.
-- Steps 1-13 pending; next: Step 1.
-
-## Session 2026-10-28 — sdd-execute sequential, Step 1
-
-- Step 1 (proto) done: `config.proto` `SetConfigRequest.author = 4` now `[deprecated = true]` with the feature-241
-  deprecation comment; name and number kept, no `reserved` (PROTO-2). TDD: N/A (proto).
-- Verification: `buf lint` exit 0; `buf breaking` exit 0 against a `git archive` export of
-  `origin/feature/fix-config-audit-author-spoof:packages/proto` (CI-equivalent fallback — the spec's
-  `.git#branch=…` input does not resolve in a detached worktree; Deviation Log entry added).
-- Stubs not regenerated in this step (Step 2 owns `packages/proto/gen/**`).
-- Next: Step 2 (proto-gen).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 2
-
-- Step 2 (proto-gen) done: `./scripts/buf-gen.sh` regenerated `packages/proto/gen/**`; the diff is limited to
-  `config/v1` (Go, Python, TS source + `dist/`). TDD: N/A (proto-gen).
-- Verification: second `buf-gen.sh` run left the gen diff byte-identical; `GOWORK=off go build ./...` in trading
-  and `pnpm run build` in config both pass.
-- Codegen ran host-natively with CI `proto-freshness` pins (Deviation Log entry). `protoc-gen-go` must be built
-  with go1.27 — the go1.24 build reformats an analysis doc comment and would fail `proto-freshness`.
-- Next: Step 3 (service: config `SetConfig`).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 3
-
-- Step 3 (service) done: `setConfig` hoists `rawValue` + `internalCallerAuthorized` (`userIdParam === null &&
-  hasInternalCallerAuthority(...)`) above the scope branch; the `:386` gate expression is unchanged. `author` is now
-  `callerUserId || (internalCallerAuthorized ? (callerIdentity ?? '') : '')` — `call.request.author` is no longer
-  read. `MISSING_AUTHOR_ERROR` keeps name/code; message → `propagated identity required: send x-user-id or an
-  authorized x-internal-caller`.
-- TDD: AC-1/AC-2/AC-3 red: scratch loopback test (uncommitted, deleted) failed 4/4 (`params[6]` =
-  `'someone-else@example.com'`; AC-3 writes accepted) → green: 4/4 passed. Durable tests land in Step 4.
-- Verification: `request.author` grep — no hits; `const internalCallerAuthorized` (:379) and `const author =
-  callerUserId` (:412) both precede `callback(MISSING_AUTHOR_ERROR)` (:414); `pnpm run build` pass; `pnpm run lint`
-  0 errors; prettier-wrapped the hoisted `hasInternalCallerAuthority(...)` call (same expression).
-- Known red window: config `pnpm test` 75/180 fail until Step 4 (admin-scope fixtures without `x-user-id` now hit
-  the identity rejection). Deviation Log note added.
-- Next: Step 4 (test: config attribution, rejection and fixture identity).
-
-
-## Session 2026-10-28 — sdd-execute sequential, Step 4
-
-- Step 4 (test) done across the 8 config test files. `setConfigAuthz`: helper default author
-  `someone-else@example.com`; `@AC-1` global update (`params[6]` `admin-7`, body author absent from params) and
-  per-user INSERT (`params[6]`/`[9]` `user-42`); `@AC-3` ×2 (admin scope only / + ungranted
-  `trading-reconciliation-poller`) → `INVALID_ARGUMENT`, `/propagated identity required/`, zero queries.
-  `internalCallerSetConfig`: helper author removed; `@AC-2` pins `params[6]` and `params[10]` to
-  `trading-reconciliation-poller` with body author `someone-else@example.com`.
-- Fixture identity: admin-scope fixtures now send `x-user-id: tester` (ScalarBounds, tradingState ×2,
-  secretsAndScope, perUserSecrets, configValueRoundtrip, scopeResolution). Four vacuous rejection cases gain
-  `assert.match` on their messages; the stale roundtrip params comment lists the 11-param order.
-- `setConfigAuthz` `:264` (per-user write, scope 7, no `x-user-id`) left unchanged — it deliberately asserts the
-  per-user owner gate's `PERMISSION_DENIED`, not the existence gate.
-- TDD: AC-1/AC-2/AC-3 red (config impl swapped back to the pre-Step-3 `79aeb858` files, uncommitted): 7/182 failed
-  (`params[6]` `'someone-else@example.com'` ≠ `admin-7`/`user-42`/`trading-reconciliation-poller`; AC-3 writes
-  accepted) → green on HEAD: 182/182 pass. Closes the Step 3 red window.
-- Verification: `pnpm run test:coverage` exit 0 (c8 lines 86.77% ≥ 40); `pnpm run lint` 0 errors (158 pre-existing
-  warnings); AC-3 and AC-2 greps hit; `__tests__/fixtures` grep no hits (C-13 inline).
-- Next: Step 5 (service: trading reconciliation poller stops sending `Author`).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 5
-
-- Step 5 (service) done: deleted `Author: "system:reconciliation-poller"` from the `SetConfigRequest` that
-  `escalateSystemic` builds (`trading.go`). The callerID `trading-reconciliation-poller` and the alert are
-  unchanged, and gofmt shifted no alignment.
-- TDD: an uncommitted scratch reflection test failed first ("author is set"), then passed; it was deleted.
-- Verification:
-  - the `Author` grep on `trading.go` has no hits;
-  - `GOWORK=off go build ./...` passes;
-  - golangci-lint v2.14.0, rebuilt with go1.27.0, reports 0 issues with `--tests=false`.
-- Known red window until Step 6: `trading_reconciliation_test.go:789-790` still pins `req.Author`, so `go test`
-  fails and lint raises 2 SA1019. A Deviation Log note was added.
-- Next: Step 6 (test: trading escalation sends the grant callerID and no author).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 6
-
-- Step 6 (test) is done. `fakeConfigSetter` now records `callerIDs`. The escalation test pins
-  `callerIDs[0] == testdata.ReconciliationPollerCallerID` and checks via proto reflection
-  (`Has(ByName("author"))`) that `author` is unset; it no longer reads the SA1019-deprecated `req.Author`.
-- C-13: `internal/testdata/caller_ids.go` declares `ReconciliationPollerCallerID`. The four literals in
-  `internal/config/config_test.go` now use it. Production `trading.go:2168` keeps its literal.
-- TDD: the RED came from a scratch re-insert of `Author` in `escalateSystemic`, which failed with "must not send
-  the deprecated author field". After the revert it was GREEN.
-- Verification:
-  - `TestReconcileTick_` passes with `-race`;
-  - the full `go test ./... -race` with the CI coverpkg set passes (total 72.8% ≥ 40);
-  - golangci-lint v2.14.0 (go1.27.0 rebuild) reports 0 issues;
-  - the literal grep finds only `trading.go:2168` and `testdata/caller_ids.go`.
-- Step 5's red window is now closed.
-- Next: Step 7 (service: the agent sends no free-text `author`).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 7
-
-- Step 7 (service) is done.
-  - `client.set_config` drops the `author` parameter and request field; its docstring notes attribution is the
-    caller's `x-user-id` (feature 241).
-  - The `set_config` tool drops `author`, rewords the `reason` docstring, and calls `_caller_user_id(ctx,
-    "set_config")` fail-fast after `_caller_access_scope`.
-  - `_write_source_bearer` drops `author=tool` and records the tool in `reason`
-    (`f"{tool}: bearer for signal source {slug}"`).
-  - The per-user-secret docstring drift next to `set_config` was left alone (Step 13 records it).
-- TDD: AC-4 red came from an uncommitted scratch test. It failed 3/3 (`author` still a parameter; `TypeError`
-  missing `author`; `req.author == 'manage_signal_source'`), then passed 3/3 green, and was deleted.
-- Verification:
-  - both Step 7 greps have no hits;
-  - `ruff check` and `ruff format --check` are clean (the `reason:` docstring line was wrapped for E501);
-  - the full `pytest` run has 510 passed and 7 failed. All 7 are `test_config_tools.py` call sites still passing
-    `author=`, which is Step 8's break-list. The undeclared-`author` transport probe in
-    `test_streamable_http_auth.py` passes, which matches Q2.
-- Known red window until Step 8; a Deviation Log entry was added.
-- Next: Step 8 (test: agent outbound SetConfig carries no author, the parameter is gone, the probe holds).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 8
-
-- Step 8 (test) is done (AC-4).
-  - `tests/conftest.py` gains the `bound_admin` fixture (C-13 canonical home; consumed by `test_config_tools.py`
-    and `test_template_tools.py`).
-  - `test_config_tools.py`: the 7 `author=` call sites are removed; the parity exclusion is
-    `{"trading_mode", "author"}`; `test_set_config_exposes_no_author_parameter` sits next to the environment
-    test; `TestSetConfigCarriesNoAuthor` pins `req.author == ""` and `x-user-id == [ADMIN]` at the stub for
-    `set_config` and the `manage_signal_source` bearer write.
-  - `test_template_tools.py`: `test_instantiate_template_set_config_carries_no_author` does the same for the
-    `instantiate_template` bearer write (called directly, not via `_run`, which forces `TRADER`).
-  - `test_streamable_http_auth.py`: the `"author": "a@b.c"` undeclared-argument probe is kept on purpose; it now
-    also asserts `author` is not forwarded. It passes with `isError is False` on mcp 2.3.0, the behavioural
-    confirmation of Q2.
-- TDD: RED from a scratch restore of the pre-Step-7 `app/` files (4/4 new assertions failed as predicted);
-  reverted; GREEN.
-- Verification: the three files pass (43); full `pytest --cov` 521 passed at 81.29%; `ruff check` and
-  `ruff format --check` clean; one `bound_admin` home; probe grep 1 hit. Step 7's red window is closed.
-- Next: Step 9 (service: UI BFFs drop the `author` stamp).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 9
-
-- Step 9 (service) is done.
-  - `configUiBff.setConfig` sends `{ ...req, environment }`; the `:36-37` comment now says the explicit body
-    exists for the environment fill/reject.
-  - `insightsBff.setConfig` no longer stamps `author: claims.user_id`. Identity reaches config only through
-    `backendHeaders` (`x-user-id`), unchanged.
-- TDD: red came from an uncommitted scratch vitest file. It failed 2/2 (`author` was `'test-user-001'`, not
-  `''`, for `/config-ui` and `/insights`), then passed 2/2 green, and was deleted.
-- Verification: the `author` grep (minus "authoring") has no hits; `pnpm run lint` exits 0 (pre-existing
-  warnings only, none in the two files).
-- Known red window until Step 10: `insightsBff.test.ts:69` fails (`'user-mallory'` passes through `...req` from
-  the `:59` fixture). A Deviation Log entry was added.
-- Out of scope, not touched: `tsc --noEmit` reports 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`
-  (not in this step's verification).
-- Next: Step 10 (test: UI BFF setConfig sends the session identity as `x-user-id` and no author).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 10
-
-- Step 10 (test) is done.
-  - `insightsBff.test.ts`: the `author: 'user-mallory'` fixture is gone; the test asserts `sent.author === ''` and
-    the `setConfig` call's `x-user-id` header is `SESSION_USER`.
-  - New `configUiBff.test.ts`: admin JWT from `signTestJwt(['admin'])` / `TEST_JWT_SECRET` (`e2e/helpers/auth`, C-12),
-    POST SetConfig with no environment; asserts 200, `author === ''`, `x-user-id === TEST_USER_ID`.
-- TDD: no `@AC-*` scenario (UI guard). Red: scratch restore of the pre-Step-9 BFFs; 2/2 `author` assertions failed
-  (`expected 'test-user-001' to be ''`, `expected 'user-alice' to be ''`); reverted. Green: 5/5 in the two files.
-- Verification: `pnpm run test:coverage` 47 files / 238 tests pass (All files 71.73% lines, thresholds met);
-  `pnpm run lint` exits 0 (pre-existing warnings only); the C-12 grep hits `:3` and `:4`.
-- Step 9's `insightsBff.test.ts:69` red window is closed.
-- Next: Step 11 (docs: file the SetConfig internal-caller peerSan follow-up defect).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 11
-
-- Step 11 (docs) is done: `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` plus its
-  `.status` sidecar (`open`). It records that the SetConfig `trading-reconciliation-poller` grant (`authz.ts:66-76`)
-  has no `peerSan`, so a forged `x-internal-caller` is both authorized and, since Step 3, credited as `changed_by`;
-  the expected fix binds the grant to peer SAN `xstockstrat-trading` (`authz.ts:131-162`). Route it with
-  `/sdd-triage --from-report`.
-- `Impact type` was not in the step's field list; set to `forgeable-config-write-attribution` (Deviation Log).
-- TDD: N/A (docs). Verification: both files exist; `head -1` is `open`; 6 template headings; exactly one SEV token.
-- Next: Step 12 (docs: platform patterns and runbooks).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 12
-
-- Step 12 (docs) is done. `config-governance.md` § Author-sentinel conventions: `changed_by` is the propagated
-  `x-user-id` or the authorizing `INTERNAL_CALLER_ALLOWLIST` `callerID`; automated writes are found by
-  `caller_identity IS NOT NULL`; the poller row is `trading-reconciliation-poller` (historical rows keep
-  `system:reconciliation-poller`); the `system` row is re-described as the indicators `Formula.author` sentinel.
-- `header-propagation.md`: indicators `RegisterFormula` and config `SetConfig` take identity from headers only;
-  missing identity rejected; presence, not authenticity. Also dropped the stale feature-049 formula-write admin
-  override (Deviation Log).
-- `config-rollout.md`: snippets use full-dotted keys, `x-user-id: <operator-id>` metadata and no `author`;
-  `RolloutConfig` marked not an RPC (sequential `SetConfig`); MCP note corrected (no `environment`/`trading_mode`,
-  secrets writable). `mcp-tools.md` § `set_config`: `author` row removed, error text "propagated identity required".
-- TDD: N/A (docs). Verification: all four spec greps as expected.
-- Left for Step 13: `services/xstockstrat-config/CLAUDE.md` invariant #5 and § Webhooks still say "explicit
-  `author`". Noticed, out of scope: the agent `set_config` docstring says secrets are global-scope only, which
-  contradicts feature 224 and `mcp-tools.md`.
-- Next: Step 13 (docs: service context files + teardown).
-
-## Session 2026-10-28 — sdd-execute sequential, Step 13
-
-- Step 13 (docs) is done.
-  - Config `CLAUDE.md`: invariant #5 now says a write with no propagated identity is rejected and
-    `request.author` is ignored; #7 says the internal-caller `changed_by` is the grant `callerID`; the INSERT-audit
-    line and § Webhooks no longer mention an author.
-  - Config constitution `:34`: cites re-anchored to `setConfig` `~L379-412`. Config findings `:47` gains
-    `→ fix: feature 241`; the row stays until the report is resolved after merge.
-  - Agent `CLAUDE.md` `set_config` row: no `author` parameter. Agent findings `:42` → **resolved (feature 241)**.
-  - UI-3: author-stamp exception removed. The surviving explicit bodies are the cross-user filters, the insights
-    per-user secret target row and the config-ui `environment` fill.
-- Teardown: the context-forge refresh skill is unavailable here, so Steps 12-13 files were reconciled by hand
-  (Deviation Log). The integration PR body must state both the unavailability and that reconciliation.
-- Drift recorded, not fixed: `app/tools.py:1673-1675` per-user-secret docstring (contradicts feature 224). The
-  `config-governance.md:102` concern is gone after Step 12.
-- TDD: N/A (docs). Verification: config and UI greps return no hits; the agent findings line shows resolved.
-- All 13 steps are done. Next: the integration PR (§5.6).
-
-## Session 2026-10-28 — sdd-batch-execute promotion plan (awaiting operator confirm)
-
-```sdd-batch-promotion-plan
-## Promotion plan - fix-config-audit-author-spoof (feature 241)
-
-### Verdicts
-| @AC | target suite (path) | CREATE/APPEND | verdict | note |
-|---|---|---|---|---|
-| AC-1 | services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | config_values.updated_by and config_audit.changed_by come from the propagated x-user-id. Observable subject is config tables. |
-| AC-2 | services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | Internal-caller attribution (changed_by and caller_identity). |
-| AC-3 | services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | Free-text author with no x-user-id is rejected INVALID_ARGUMENT. |
-| AC-4 | services/xstockstrat-agent/acceptance/fix-config-audit-author-spoof.feature | CREATE | NEW | Asserts only the outbound SetConfigRequest and x-user-id from agent tools. The Then outcome lives in agent code, so it goes to agent, not config. |
-
-Dedup: grepped all services/*/acceptance/*.feature for updated_by, changed_by, caller_identity and SetConfigRequest. There were no hits, so there is no DUP or OVERLAP. The config suites contain nothing about audit attribution. platform.feature has nothing relevant.
-
-### Ready-to-write blocks
---- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature (CREATE) ---
-# Promoted from docs/roadmap/features/241-fix-config-audit-author-spoof/acceptance.feature
-# Source: @AC-1, @AC-2, @AC-3 - config service scenarios. @feature-241 marks provenance. Do not hand-author or rewrite.
-Feature: fix-config-audit-author-spoof (config)
-  "Identity" means the platform-propagated x-user-id or an allowlist-authorized x-internal-caller:
-  propagated, not authenticated. x-access-scope is an integer bitmap (ADMIN_SCOPE = 4).
-  The UPDATE audit trigger fires only when value_data changes, so each scenario pins a prior value that differs from the written one.
-  user_id "" (a blank <target>) is the global row (user_id NULL); a prior of "absent" means no row exists at that scope, so the write is an INSERT.
-
-  @AC-1 @FR-1 @regression @feature-241
-  Scenario Outline: A human SetConfig write is attributed to the propagated x-user-id, not the request author
-    Given a caller with x-user-id "<caller>" and x-access-scope "<scope>"
-    And the "notify.push.min_severity" row in environment "staging" with user_id "<target>" holds "<prior>"
-    When SetConfig writes "notify.push.min_severity" = 3 in environment "staging" with user_id "<target>" and author "someone-else@example.com"
-    Then the write succeeds
-    And the config.config_values row's updated_by is "<caller>"
-    And the newest config.config_audit row for "notify.push.min_severity" has changed_by "<caller>"
-    And no config.config_audit row for that write has changed_by "someone-else@example.com"
-
-    Examples:
-      | caller      | scope | target      | prior  |
-      | admin-7     | 4     |             | 2      |
-      | user-42     | 1     | user-42     | absent |
-
-  @AC-2 @FR-2 @regression @feature-241
-  Scenario: An automated internal-caller write is attributed to its x-internal-caller identity
-    Given a caller with no x-user-id and x-internal-caller "trading-reconciliation-poller"
-    And the "platform.trading_state" row in environment "staging" with user_id "" holds "ACTIVE"
-    When SetConfig writes "platform.trading_state" = "REDUCE_ONLY" in environment "staging" with author "someone-else@example.com"
-    Then the write succeeds
-    And the newest config.config_audit row for "platform.trading_state" has changed_by "trading-reconciliation-poller"
-    And its caller_identity is "trading-reconciliation-poller"
-
-  @AC-3 @FR-3 @FR-2 @regression @feature-241
-  Scenario Outline: A write with a free-text author but no propagated identity is rejected
-    Given a caller with no x-user-id, x-access-scope "4" and x-internal-caller "<internal_caller>"
-    And the "notify.push.min_severity" row in environment "staging" with user_id "" holds "2"
-    When SetConfig writes "notify.push.min_severity" = 3 in environment "staging" with user_id "" and author "someone-else@example.com"
-    Then the write fails with INVALID_ARGUMENT
-    And the "notify.push.min_severity" row in environment "staging" with user_id "" still holds "2"
-    And no config.config_audit row has changed_by "someone-else@example.com"
-
-    Examples:
-      | internal_caller               |
-      | absent                        |
-      | trading-reconciliation-poller |
-
---- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-config-audit-author-spoof.feature (CREATE) ---
-# Promoted from docs/roadmap/features/241-fix-config-audit-author-spoof/acceptance.feature
-# Source: @AC-4 - agent scenario. @feature-241 marks provenance. Do not hand-author or rewrite.
-Feature: fix-config-audit-author-spoof (agent)
-  AC-4 asserts only the outbound request; the set_config input shape is product-spec Open Question Q2.
-
-  @AC-4 @FR-4 @regression @feature-241
-  Scenario Outline: An agent tool's SetConfig carries no free-text author and forwards the caller as x-user-id
-    Given an MCP session whose verified claims carry user_id "u-1" and role "admin"
-    When the agent tool "<tool>" issues its SetConfig for <write>
-    Then the outbound SetConfigRequest.author is ""
-    And the outbound x-user-id metadata is "u-1"
-
-    Examples:
-      | tool                 | write                                                   |
-      | set_config           | the global "notify.push.min_severity" value 3           |
-      | manage_signal_source | the registered source's bearer secret                   |
-      | instantiate_template | the instantiated signal_source template's bearer secret |
-
-### Notes / ambiguities / conflicts
-- Routing: AC-1..3 go to config (the Then asserts on config.config_values / config_audit). AC-4 goes to agent (outbound request shape). The acceptance/ dir already exists for both services, so only the new files are created.
-- No CONFLICT with any promoted @AC-* rule (no existing suite mentions these tables or SetConfigRequest).
-- Behavior note, not a promoted-rule conflict: services/xstockstrat-config/CLAUDE.md Critical Invariant #5 says SetConfig rejects only when a write has neither an explicit author nor an x-user-id. AC-3 tightens this: an explicit author without a propagated identity is now also rejected. The implementation should update that invariant text. No existing @AC rule is changed.
-- Header comment lines in the CREATE blocks follow the existing convention in config/surface-signal-weight-decay-config.feature. The Feature description lines are condensed from the source's preamble, and the scenario bodies are verbatim.
-- The @regression tag from the source is kept alongside the added @feature-241.
-
-### Coverage check
-- Source scenarios: 4 (AC-1, AC-2, AC-3, AC-4). Planned: 4 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. None skipped.
-```
-
-## Session 2026-10-30 (CI: feature status automation)
-
-- Promotion PR #1368 merged to main
-- Feature promoted and committed: df521ff51091a86e813950b34afff09ac4e8821b
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-10-30
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-11-04 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**:
+- CONFIG-*: `setConfig` attribution rule `author = callerUserId || (internalCallerAuthorized ? callerIdentity : '')`; `request.author` is never read; `MISSING_AUTHOR_ERROR` (code 3) runs before enum/bounds/existence checks; `x-user-id` wins and `caller_identity` keeps the raw header. Largely already in config CLAUDE.md #5/#7 and the config constitution `:34` (re-anchored in Step 13); confirm a PLAT/CONFIG row exists for the "propagated, not authenticated" residual.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958.
