@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-edgar-companyfacts-decode`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-21
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md` |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md) |
 | 2026-10-21 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 2 steps (design skipped per triage; `/sdd-review product-spec` not run) |
 | 2026-10-21 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; test-first (Step 2 RED) then Step 1 |
 | 2026-10-21 | `in-progress` → `code-completed` | /sdd-execute | Both steps done; integration PR #1274 → `main-dev` |

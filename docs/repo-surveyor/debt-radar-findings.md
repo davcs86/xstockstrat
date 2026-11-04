@@ -487,7 +487,7 @@
 - **Evidence:**
   - `services/xstockstrat-portfolio/internal/service/portfolio_service.go:750-791` and `:795-836`: `Page: &commonv1.PageRequest{PageSize: 500, PageToken: pageToken}`, `pageToken = resp.GetPage().GetNextPageToken()`, and on error `slog.Warn(...)` then `break`.
   - Ledger returns a non-empty `nextPageToken` whenever a page is full, but never reads `pageToken` (D-13, `ledgerServiceImpl.ts:157-171`).
-- **What it risks:** With more than 500 matching events, the loop re-reads page 1 and appends duplicate fills until the ctx deadline. The deadline error then hits the warn-and-`break` path, and `GetPnL` returns an **inflated** realized P&L instead of an error. Today `2026-10-20-portfolio-getpnl-source-service-mismatch-defect` masks this (the query returns 0 rows). Fixing that defect exposes this one, at bug-triage SEV-1 ("P&L calculation is wrong").
+- **What it risks:** With more than 500 matching events, the loop re-reads page 1 and appends duplicate fills until the ctx deadline. The deadline error then hits the warn-and-`break` path, and `GetPnL` returns an **inflated** realized P&L instead of an error. Today `2026-10-20-portfolio-getpnl-source-service-mismatch-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md) masks this (the query returns 0 rows). Fixing that defect exposes this one, at bug-triage SEV-1 ("P&L calculation is wrong").
 - **Benefit / LOE:** S (estimate). Fix D-13 (the keyset), and make the loop fail on error rather than return a partial sum.
 - **Trade-off:**
   - **Not fixing:** a wrong P&L as soon as the masking defect is fixed.

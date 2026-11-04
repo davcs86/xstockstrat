@@ -1,5 +1,5 @@
 Feature: fix-edgar-companyfacts-decode (bug fix)
-  Regression guard for docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md:
+  Regression guard for docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md):
   EDGAR companyfacts decode fails when SEC returns `cik` as a string.
 
   @AC-1 @regression

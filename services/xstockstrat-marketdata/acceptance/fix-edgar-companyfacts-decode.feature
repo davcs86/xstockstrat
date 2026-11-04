@@ -4,7 +4,7 @@
 # from a reviewed feature acceptance.feature, never by hand-authoring.
 
 Feature: xstockstrat-marketdata — EDGAR companyfacts decode tolerates either JSON type for cik
-  Regression guard for docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md:
+  Regression guard for docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md):
   EDGAR companyfacts decode fails when SEC returns `cik` as a string.
 
   @AC-1 @regression @feature-253
