@@ -44,4 +44,12 @@ low
 
 ## Triage (classification only, 2026-11-04)
 
-Track B (config-only) per the config-only field. No config key changed; status remains `open`.
+Track B (config-only) per the config-only field. No config key changed; status remains `open` until the
+operator applies the value and confirms (B-3).
+
+Triage findings (2026-11-04): `analysis.engine.max_strategies_per_cycle` is **not registered** in the staging
+config (absent from `get_config` / `list_config_keys` for `analysis`), so the service runs on its code default
+of 50 and a plain `SetConfig` is refused `NOT_FOUND` by the feature 091 existence gate. Applying the fix therefore
+needs `set_config(..., create_key=true, value_type=int)`. That creates a runtime key invisible to migrations
+(`docs/patterns/config-governance.md:90`) — a follow-up seed migration is the durable alternative. The value is
+an operator decision: capacity of indicators/marketdata at larger batches was not verified.
