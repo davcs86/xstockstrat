@@ -250,3 +250,57 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     package.
   - Step A0 is the gate triage table, which **freezes scope**.
 - The adversary pass is running.
+
+## Session 2026-11-04 — sdd-design round 1 synthesis + operator re-scope
+
+- **R1 adversary verdict: NEEDS WORK, no Floor breach.**
+  - Blocker-weight:
+    - **B1:** the heal/alias are computed from the migration-only model (278 gate), not live rows;
+      ad-hoc rows exist and production is unseen.
+    - **B2:** the server re-send masks a dead config-server LISTEN feed (no keepalive/heartbeat on
+      the pg LISTEN client). The confirmed indicators stall may be this server half.
+  - Major:
+    - M1: ComputePool leaks the @feature-176 bound on cancellation. Release the slot on thread
+      completion.
+    - M2: per-user rows must get the same read-spelling heal.
+    - M3: never UPDATE `value_data`. Retype only where stored == default; list the rest for
+      sign-off. `default-mismatch` compares `default_value` vs the code default only.
+    - M4: no default namespace attribution in the gate, plus a runtime WARN for an absent seeded key.
+    - M5: 037/038 race. Strip again inside the CHECK migration, guard replay, and extend the
+      migration-rerun lists.
+    - M6: client keepalive vs server enforcement policy; spike it.
+    - M7: the derived deadline duplicates the indicators grace constant and can be capped by stored
+      values > bound.
+  - Minor: m1–m14. All adopted into round 2 state.
+- **Operator decisions (explicit sign-off, 2026-11-04, continued):**
+  11. **Live inventory.** The operator can run **a Python script from the DO console**, not SQL.
+      A0 ships a read-only Python inventory tool following the `legacy_authors_ops` precedent
+      (`services/xstockstrat-indicators/app/maintenance/legacy_authors_ops.py`, run in `/app` with
+      the component's `DATABASE_URL`). All components share one DB/user (`.do/app.yaml`
+      `${xstockstrat.USERNAME}`), so it can read `config.config_values`.
+      - It must never print secret material: never select `value_encrypted`; for `is_secret` rows
+        print only metadata.
+      - The operator runs it on staging and production, and the redacted output is committed.
+      - Heal migrations become data-driven from it.
+  12. **Alias activation: only after the rename.**
+      - The rename migration writes a marker and `pg_notify`. Servers alias only once they observe
+        the marker, with a periodic reload backstop for a lost NOTIFY.
+      - Release A reads are byte-identical to today, so unmodelled rows get zero exposure.
+      - This reverses 277's no-NOTIFY choice. 277's rationale ("boot reloadAll + reconnect cover
+        it") does not hold for a rename that changes which spelling exists.
+  13. **Release B is a separate feature.**
+      - 295 = Release A (expand). It launches normally at its promotion.
+      - A new feature owns Release B (contract): rename migration with `-- contract-of:`, CHECK,
+        relative getter literals, rejection of prefixed keys, marker activation. It gets a
+        merge-order row "waits for 295 launched".
+      - AC-1, AC-2, AC-5, AC-21 and the relative half of AC-19/AC-20 move to it.
+      - **Requires a 295 product-spec re-scope + re-review before round 2** (277 scope-creep rule,
+        fails.md:3437-3441).
+  14. **FR-12: derived deadline** (the operator chose it over the recommended fixed 56 s).
+      - Resolution of M7: make the sandbox startup grace a seeded indicators config key instead of
+        the private constant `SANDBOX_STARTUP_GRACE_MS` (`sandbox.py:205`). This also removes an
+        F-07 hardcode.
+      - The agent subscribes to `indicators` and derives
+        `min(cap, timeout + grace + slack)`.
+      - Bounds plus a migration assertion keep stored values under the cap.
+      - When the derived value would exceed the cap: clamp + WARN, never silent.
