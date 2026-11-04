@@ -96,3 +96,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "Formula execution timed out after 5000ms" → (c), a stale stream.
 - `_clamp_override` (`servicer.py:66`) only tightens; the agent sends 0 unless the caller passes
   `timeout_ms`, so it is not a cap here.
+
+## Session 2026-11-04 (sdd-review product-spec — prior-art findings)
+
+- **A1b — demoted 277 `fix-ingest-seeded-config-keys`.** Its operator note says a revival "is
+  re-created under a new NNN". 295 is that revival with a much wider scope (all namespaces,
+  relative canonical form, live reload), so it runs a full review, not the duplicate fast path.
+  277's archive synthesis (`docs/roadmap/features/277-*/context.md`) is **mandatory design input**.
+  Notably:
+  - a twin-aware rename (`config_values_scope_uniq` aborts a blind UPDATE);
+  - a key-only UPDATE writes no audit row (the migration must write `config_audit` itself);
+  - harness ordering (`scripts/migration-rerun.sh` runs `up` before the assertions, so a
+    dedicated goto pass is needed);
+  - db-migrator is PRE_DEPLOY, so staging heals on the main-dev merge;
+  - verify per key per environment by read-back, never by row count (`fails.md:2335`).
+
+  It was demoted because scope grew round by round. 295's design must fix the scope up front.
+- **Launched 278 `enforce-config-key-wiring` already provides the parity gate:**
+  `scripts/check-config-wiring.mjs` + `config-wiring-py-reads.py` + `scripts/config-wiring.json`,
+  CI job `config-wiring` in `ci-gate`, with `/sdd-execute` step and `--final` gates, an
+  `/sdd-review` B2 row and the `/sdd-story` declared-key format.
+  - It shipped a **baseline of 124 accepted findings** (19 form-mismatch, 5 seeded-unread,
+    100 read-unseeded) with no fixing owner. That baseline is exactly this defect.
+  - Process root cause, refined: the guard rail exists, but (a) its baseline lets known drift
+    persist with no owner; (b) its stored-form rule mirrors CONFIG-9's "no convention"; (c) it
+    does not check `value_type` vs getter arm, live-vs-restart, or caller-deadline coupling.
+  - **295 must extend 278's checker and drain its baseline to zero — not build a second gate**
+    (DRY, C-18).
