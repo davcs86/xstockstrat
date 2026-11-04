@@ -185,7 +185,7 @@ consecutive failures, has a cancellable backoff and closes subscribers on give-u
 - Under the finnhub provider the FMP boot seed reads ~0 (mid-day restart re-grants the full cap); classification spend and `edgar+fmp`
   rows write no counted row; documented as a "floor" in marketdata `CLAUDE.md:82`.
 - The `timestamp` vs `timestamptz` seed-query comparison (session-TZ dependence) remains.
-- Defect report `docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md` has sidecar `triaged`, `ref: feature:255-...`;
+- Defect report `docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md) has sidecar `triaged`, `ref: feature:255-...`;
   the fix is launched, so it is prunable by /sdd-archiver reports mode.
 - Stale-state: old context.md@1ed63958:909-910, :953, :983-984 said the merge-order rows were "still pending an operator yes"; they exist now
   (`docs/roadmap/features/merge-order.md:90` 255 after 215, with the soft 254 note, Resolved `No`; `:96` 230 hard-blocked on 255, Resolved `No`).

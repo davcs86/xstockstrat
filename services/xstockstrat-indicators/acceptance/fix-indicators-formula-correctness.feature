@@ -4,7 +4,7 @@
 # from a reviewed feature acceptance.feature, never by hand-authoring.
 
 Feature: xstockstrat-indicators — formula execution reports failures, built-ins are honestly named, saga copies are immutable
-  Regression guard for docs/reports/2026-10-21-indicators-formula-correctness-defect.md:
+  Regression guard for docs/reports/2026-10-21-indicators-formula-correctness-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-indicators-formula-correctness-defect.md):
   silent empty formula success (D-10), misnamed ATR/VWAP (D-18), and mutation of hidden saga copies (D-54).
 
   @AC-1 @FR-1 @regression @feature-268

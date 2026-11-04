@@ -1,5 +1,5 @@
 Feature: fix-trading-order-state-audit (bug fix)
-  Regression guard for docs/reports/2026-10-21-trading-order-state-audit-defect.md:
+  Regression guard for docs/reports/2026-10-21-trading-order-state-audit-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-trading-order-state-audit-defect.md):
   trading discards UpsertOrder errors (D-04) and reactive ReclaimOrphanIntent results (D-62).
 
   @AC-1 @FR-1 @regression

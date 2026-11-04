@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-config-audit-author-spoof`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (9 warnings) |
 | 2026-10-20 | `spec-ready` (unchanged) | /sdd-review | Product spec re-reviewed, PASS WITH WARNINGS (8 warnings); FR-1..FR-4, AC-4, Open Questions Q1-Q5 added |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |

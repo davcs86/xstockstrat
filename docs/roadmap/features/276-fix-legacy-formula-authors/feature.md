@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-legacy-formula-authors`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-22
 **Last Updated**: 2026-10-29

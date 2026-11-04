@@ -1,5 +1,5 @@
 Feature: fix-etf-flag-fill (bug fix)
-  Regression guard for defect report docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md:
+  Regression guard for defect report docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md):
   the background ETF-flag fill never labels an ETF and the cause is invisible at Info level.
   Narrowed 2026-10-22 (operator): the FMP boot-seed over-count is fixed and tested by
   255-fix-marketdata-fundamentals-cache (@AC-3 there); 230 lands after 255. 215 @AC-14 must keep passing.
