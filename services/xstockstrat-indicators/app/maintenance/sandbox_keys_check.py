@@ -64,12 +64,15 @@ def evaluate(rows: list[dict], snapshot: list[dict] | None, versions: list[tuple
             hit = [r for r in globals_ if r["key"] == key]
             if not hit:
                 problems.append(f"[{env}] missing full-dotted global row {key}")
+            elif hit[0]["updated_by"] != HEALED_BY:
+                # Edited after 031: a deliberate operator value is not a heal failure.
+                verb = "overridden" if hit[0]["value_data"] != want else "re-saved"
+                notes.append(
+                    f"[{env}] {key} {verb} after 031 by {hit[0]['updated_by']!r}: "
+                    f"{hit[0]['value_data']!r} (seed {want!r}), confirm intentional"
+                )
             elif hit[0]["value_data"] != want:
                 problems.append(f"[{env}] {key} = {hit[0]['value_data']!r}, expected {want!r}")
-            elif hit[0]["updated_by"] != HEALED_BY:
-                notes.append(
-                    f"[{env}] {key} OK but updated_by={hit[0]['updated_by']!r}: edited after 031"
-                )
         notes += [
             f"[{env}] per-user row {r['key']} user_id={r['user_id']!r} (031 only renames these)"
             for r in in_env
