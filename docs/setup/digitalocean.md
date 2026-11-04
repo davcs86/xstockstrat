@@ -26,7 +26,7 @@ This runbook walks through creating and configuring the DigitalOcean infrastruct
 |---|---|
 | App Platform (staging) | Hosts all 13 services; paper trading; deploys from `main-dev` |
 | App Platform (production) | Hosts all 13 services; live trading; deploys from `main` |
-| Managed PostgreSQL 15 (×1) | Single TimescaleDB cluster (`xstockstrat`) with two logical databases: `xstockstrat-staging` and `xstockstrat-production` |
+| Managed PostgreSQL 18 (×1) | Single TimescaleDB cluster (`xstockstrat`) with two logical databases: `xstockstrat-staging` and `xstockstrat-production` |
 | GitHub Actions | CI/CD; auto-deploys on push to `main-dev` or `main` via `doctl` |
 
 Architecture spec files:
@@ -126,7 +126,7 @@ Authenticate with a Personal Access Token (PAT):
 
 ## Step 3 — Create the Managed PostgreSQL Database Cluster
 
-A single PostgreSQL 15 cluster (`xstockstrat`) hosts two logical databases — `xstockstrat-staging` and `xstockstrat-production`. Both environments share CPU, RAM, and IOPS, but data is fully isolated at the database level.
+A single PostgreSQL 18 cluster (`xstockstrat`) hosts two logical databases — `xstockstrat-staging` and `xstockstrat-production`. Both environments share CPU, RAM, and IOPS, but data is fully isolated at the database level.
 
 | Environment | Cluster | Database | App spec reference |
 |---|---|---|---|
@@ -138,7 +138,7 @@ A single PostgreSQL 15 cluster (`xstockstrat`) hosts two logical databases — `
 Via console: **Databases → Create Database**
 
 ```
-Engine:  PostgreSQL 15
+Engine:  PostgreSQL 18
 Region:  NYC1 (matches app.yaml region: nyc)
 Name:    xstockstrat
 Plan:    Production (shared by both environments — size up accordingly)
@@ -149,7 +149,7 @@ Or via doctl:
 ```bash
 doctl databases create xstockstrat \
   --engine pg \
-  --version 15 \
+  --version 18 \
   --region nyc1 \
   --size db-s-2vcpu-4gb \
   --num-nodes 2

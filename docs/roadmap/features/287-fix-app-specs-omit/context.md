@@ -232,3 +232,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - At the operator's request, fixed the follow-up flagged in Step 9: `.claude/skills/digitalocean-setup/SKILL.md` used the cluster name `xstockstrat-db` in four places (P2 checklist line, P2 `doctl databases create`, P2 console path, final summary). All four now say `xstockstrat`, matching the specs' `cluster_name: xstockstrat` and `docs/setup/digitalocean.md` Step 3. The `lookup` the skill's P4/P5 call now resolves on a cluster the skill created.
 - Unrelated `xstockstrat-db` hits were left alone: the local compose container, the `xstockstrat-db-migrator` image, and the setup guide's temp-file name.
 - Also noticed, not changed (operator scoped this to the name): the skill's P2 and the setup guide's Step 3 both create PG `--version 15`, while both specs declare `databases[].version: "18"`.
+
+## Session 2026-11-04 (operator request: PG version)
+- At the operator's request, aligned the PostgreSQL version with the specs' `databases[].version: "18"` and the live cluster, which `db-cluster-get` reports as `"version":"18"`:
+  - `.claude/skills/digitalocean-setup/SKILL.md` P2: `doctl databases create … --version 18`.
+  - `docs/setup/digitalocean.md`: the overview table (`:29`), the Step 3 prose (`:129`), the summary (`:141`) and `--version 18` (`:152`).

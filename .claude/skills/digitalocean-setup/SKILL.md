@@ -288,7 +288,7 @@ Confirm the output shows a context marked `(current)` before proceeding.
 ```bash
 doctl databases create xstockstrat \
   --engine pg \
-  --version 15 \
+  --version 18 \
   --region nyc1 \
   --size db-s-1vcpu-1gb \
   --num-nodes 1
