@@ -15,3 +15,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: full -> `/sdd-design fix-ctx-cancel-warn-flood` (rationale: two affected services (rubric escalate signal); SEV-3)
 - Development branch: feature/fix-ctx-cancel-warn-flood
 - Number 290 reserved via scripts/sdd-allocate-feature-number.sh (triage authorized by the operator, 2026-11-04)
+
+---
+
+## Session 2026-11-04 — sdd-design (Phase 0 + round 1)
+
+- Status: `draft` (design not yet approved). `/sdd-review` skipped on the operator's instruction to work on 290/291 right away.
+- Phase 0 recon written (`recon.md`): portfolio + marketdata discovery, 23 PRESERVE business rules (0 EXTEND / 0 CHANGE).
+- **Root-cause evidence (Loki, staging, 2026-11-04 06:07 UTC):** portfolio logged `shutting down portfolio service` at :53.6 and the first `upsert position from sync failed … context canceled` at :54.94 on the same process; ~39 `account.positions.synced` events (5 upserts + 1 delete each) were handled in ~10 ms after the cancel, every one returning nil (acked). So the handler ctx IS done at flood time and the flood is shutdown draining buffered events — resolves the recon Risk "root cause unresolved". Portfolio restarts are frequent (start→shutdown pairs ~26 s apart, ~15 in the first 2 days of the window).
+- Marketdata `GetBars: cache insert failed … begin tx: context canceled` fires ~3 min after marketdata's own shutdown line with no restart: client-cancelled request contexts while the process is alive. Warm-poller/ingest sites showed no flood in the checked window.
+- Round 1 (full mode): proposer → adversary (NEEDS WORK, no Floor breach). Accepted: honest rationale ("stop draining; cursor irrelevant at shutdown" — the 2 s sleep at `portfolio_service.go:205` is never reached when `ctx.Err()!=nil` at `:197`; `lastSeq` is in memory, replay from 0 at boot); checks placed inside the reconcile / `RealizedPnl != nil` branches so the feature-206 skip path is untouched; extra RED cases (Exec-that-cancels, live-ctx pgx `context.Canceled` negative control, boundedRetry no-park, 206 skip path); reuse `s.barsStore` instead of a second `InsertBars` interface; Debug not Info; update the doc comment at `portfolio_service.go:1379-1380`; observable acceptance phrasing; FR tags.
+- **Operator steers at the round-1 gate (P-04):** (A) detach the GetBars cache insert (bounded `context.WithoutCancel`) so bars persist after a client cancel — removes the WARN and the repeated Alpaca fetch; extends `@AC-8 @feature-196`, does not break it. (B) marketdata scope = `fetchAndCacheBars` only; warm-poller / ingest / `:564` out of scope.
+- Rejected: wrapping the portfolio sync in a transaction (scope creep; partial state is repaired by boot replay); shared cross-module helper (separate Go modules); `errors.Is(err, context.Canceled)` as the stop test (would hide ctx-alive pgx cancels).
+- Open: round 2 in progress (full mode mandates ≥2).
+
+## Open Threads
+
+- [ ] Timeout for the detached cache insert: config key vs justified invariant (F-07) — decide in round 2.
+- [ ] Partial application (k of N upserts, no transaction) accepted risk; repaired by boot replay.
+- [ ] Follow-up defect report for warm-poller/ingest cancel WARNs only if Loki shows a flood there.
