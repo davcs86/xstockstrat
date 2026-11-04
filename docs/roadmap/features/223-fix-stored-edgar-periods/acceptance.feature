@@ -1,5 +1,5 @@
 Feature: fix-stored-edgar-periods (bug fix)
-  Regression guard for defect report docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md:
+  Regression guard for defect report docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md):
   Stored EDGAR periods still carry total-liabilities D/E after feature 211's financial-debt D/E launched.
 
   @AC-1 @regression
