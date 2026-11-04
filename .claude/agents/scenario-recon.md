@@ -44,6 +44,8 @@ launch-time promotion *into* the suites, you surface what is already *in* them f
   `xstockstrat-agent` — the caller flags per C-14).
 - The suite paths to read: `services/xstockstrat-<svc>/acceptance/*.feature` for each affected service
   (some may not exist yet) and `docs/sdd/business-rules/platform.feature`.
+- A `Tree: <branch>@<sha> ...` checkout stamp (the caller verified the working tree is current; you
+  cannot run git). Echo it verbatim as the `Checkout:` line below, or `Checkout: UNSTAMPED` if absent.
 
 ## Method
 
@@ -58,6 +60,8 @@ launch-time promotion *into* the suites, you surface what is already *in* them f
 
 ```
 ## Existing Business Rules — <slug>
+
+Checkout: <the caller's Tree: stamp, verbatim | UNSTAMPED>
 
 ### Relevant guarantees
 | @AC | suite (path) | verdict (PRESERVE/EXTEND/CHANGE) | observable subject | note |
