@@ -470,3 +470,15 @@
   #1327, so it's a local-version difference. Not touched (out of scope).
 - Files modified: `.github/workflows/ci.yml`, `.gitignore`
 - Deviations: D-3 (ruff install via setup-python)
+
+### Step 19 — Operator runbook `docs/runbooks/sops-secrets.md` [done]
+- Created the runbook:
+  - a namespace/key table and the resolution model;
+  - Key generation (brew; keys outside the repo) and Environment setup (gh secret/variable plus both preflight lists);
+  - Bootstrap (promotion first, the prod reviewer pause, force semantics) and Local edit;
+  - Rotation (`sops set`, mTLS CA, never the encryption keys) and Adding a key (4 touch points);
+  - Homelab enablement (Risks 3/4/6), Production reviewer gate (Risk 8) and Legacy-secret removal.
+  Added the index row to `docs/runbooks/CLAUDE.md`.
+- Verification: all required sections present, `brew install sops age`, no GNU-only/bare-pip commands, markdownlint-cli2 0 issues (AC-14 inspection).
+- Files modified: `docs/runbooks/sops-secrets.md`, `docs/runbooks/CLAUDE.md`
+- Deviations: none

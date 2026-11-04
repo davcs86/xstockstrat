@@ -984,7 +984,7 @@ Then the PR's CI run shows `sops-secrets` passing and `CI Gate` green.
 
 ### Step 19 — docs: Operator runbook `docs/runbooks/sops-secrets.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/sops-secrets.md` — create
