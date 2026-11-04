@@ -618,7 +618,7 @@ no_unprefixed() {
 
 group_deploy() {
   need yq python3
-  local wf=.github/workflows/deploy.yml f run rows rc e
+  local wf=.github/workflows/deploy.yml f run rows rc e wait phase polls
   for f in "$wf" .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml; do
     yq e 'true' "$f" >/dev/null || fail "deploy: $f does not parse"
   done
@@ -632,6 +632,12 @@ group_deploy() {
   [ "$(yq e '.jobs.deploy.environment' "$wf")" = '${{ inputs.environment }}' ] || fail "deploy: job environment binding"
   [ "$(yq e '.jobs.validate | has("environment")' "$wf")" = false ] || fail "deploy: validate must have no environment"
   [ "$(yq e '.jobs.deploy.needs' "$wf")" = validate ] || fail "deploy: deploy must need validate"
+  # AC-2: deploys to one DO app serialise on a job-level group that is defined here only
+  # shellcheck disable=SC2016 # the literal expression is asserted
+  [ "$(yq e '.jobs.deploy.concurrency.group' "$wf")" = 'deploy-${{ inputs.environment }}' ] || fail "AC-2: deploy job concurrency group"
+  [ "$(yq e '.jobs.deploy.concurrency.cancel-in-progress' "$wf")" = false ] || fail "AC-2: cancel-in-progress must be false (never abort an in-flight deployment)"
+  [ "$(yq e '.jobs.validate | has("concurrency")' "$wf")" = false ] || fail "AC-2: validate must not carry the deploy group"
+  [ "$(yq e 'has("concurrency")' "$wf")" = false ] || fail "AC-2: no workflow-level concurrency in the reusable workflow"
   # AC-17/AC-21: the real resolve-app-id step against a stub doctl
   run="$(yq e '.jobs.deploy.steps[] | select(.id == "resolve-app-id") | .run' "$wf")"
   [ -n "$run" ] && [ "$run" != null ] || fail "deploy: no resolve-app-id step"
@@ -661,10 +667,52 @@ group_deploy() {
       ;;
     esac
   done
+  # AC-1: the real "Wait for deployment" step against stub doctl/sleep, one run per DO phase
+  wait="$(yq e '.jobs.deploy.steps[] | select(.name == "Wait for deployment") | .run' "$wf")"
+  [ -n "$wait" ] && [ "$wait" != null ] || fail "deploy: no Wait for deployment step"
+  printf '%s\n' "$wait" >"$work/wait.sh"
+  {
+    echo '#!/bin/sh'
+    echo 'case "$2" in'
+    echo '  list-deployments) echo dep-1 ;;'
+    echo "  get-deployment) echo x >>\"$work/polls\"; echo \"\$STUB_PHASE\" ;;"
+    echo 'esac'
+  } >"$work/stub/doctl"
+  printf '#!/bin/sh\necho x >>"%s/sleeps"\n' "$work" >"$work/stub/sleep"
+  chmod +x "$work/stub/doctl" "$work/stub/sleep"
+  for phase in SUPERSEDED ACTIVE ERROR CANCELED BUILDING; do
+    : >"$work/polls"
+    : >"$work/sleeps"
+    rc=0
+    env -i PATH="$work/stub:$PATH" HOME="$HOME" APP_ID=app-1 STUB_PHASE="$phase" \
+      bash -eo pipefail "$work/wait.sh" >"$work/wout" 2>&1 || rc=$?
+    polls="$(wc -l <"$work/polls" | tr -d ' ')"
+    case "$phase" in
+    SUPERSEDED)
+      [ "$rc" = 0 ] || fail "AC-1: SUPERSEDED exited $rc after $polls polls ($(tail -1 "$work/wout"))"
+      [ "$polls" = 1 ] && [ ! -s "$work/sleeps" ] || fail "AC-1: SUPERSEDED did not end the loop on its first poll ($polls polls)"
+      if grep -qF 'Timeout:' "$work/wout"; then fail "AC-1: SUPERSEDED reached the timeout"; fi
+      grep -qF '::warning::' "$work/wout" || fail "AC-1: SUPERSEDED must emit a ::warning::"
+      ;;
+    ACTIVE)
+      [ "$rc" = 0 ] && [ "$polls" = 1 ] || fail "AC-1: ACTIVE exited $rc after $polls polls"
+      ;;
+    ERROR | CANCELED)
+      [ "$rc" = 1 ] && [ "$polls" = 1 ] || fail "AC-1: $phase exited $rc after $polls polls"
+      grep -qF "Deployment failed with phase: $phase" "$work/wout" || fail "AC-1: $phase failure message"
+      ;;
+    BUILDING)
+      [ "$rc" = 1 ] && [ "$polls" = 60 ] || fail "AC-1: BUILDING exited $rc after $polls polls"
+      grep -qF 'Timeout: deployment did not complete within 15 minutes.' "$work/wout" || fail "AC-1: BUILDING timeout message"
+      ;;
+    esac
+  done
   # callers: secrets inherit + environment; homelab caller jobs and their gates intact
   for e in staging production; do
     f=.github/workflows/deploy-dev.yml
     [ "$e" = production ] && f=.github/workflows/deploy-prod.yml
+    [ "$(yq e '.jobs.deploy | has("concurrency")' "$f")" = false ] && [ "$(yq e 'has("concurrency")' "$f")" = false ] ||
+      fail "AC-2: $f must not define its own concurrency (the group lives in deploy.yml)"
     [ "$(yq e '.jobs.deploy.secrets' "$f")" = inherit ] || fail "deploy: $f job deploy must use secrets: inherit"
     [ "$(yq e '.jobs.deploy.with.environment' "$f")" = "$e" ] || fail "deploy: $f with.environment"
     if grep -nE 'DO_(DEV|PROD)_APP_ID' "$f"; then fail "deploy: $f still passes the app ID"; fi
