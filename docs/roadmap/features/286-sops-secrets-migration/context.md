@@ -178,6 +178,25 @@
   Floor breaches: none.
 - Status: spec-ready → design-approved.
 
+## Session 2026-11-04T01:10:00Z — sdd-spec
+
+- Generated implementation-spec.md with 20 steps. Status → implementation-ready.
+- Key codebase findings:
+  - **Pins:** sops v3.13.3 (SHA-256 `e5bec334…ef6b`, matches upstream checksums.txt), age v1.3.2 (`cbe24006…ac10`, computed
+    from the asset), action-doctl v2.5.2 `3cb39531…`, upload-artifact v7.0.2 `cf430e03…`, download-artifact v7.0.0
+    `37930b1c…`, checkout v7.0.1 `3d3c42e5…` (already at `deploy-homelab.yml:60`). Resolved via `git ls-remote` and
+    shallow tag fetches; `gh api` is not enabled for those repos in this session.
+  - **Placeholder coverage:** the 10 non-MTLS `YOUR_(DEV|PROD)_*` names in `.do/app*.yaml` are exactly the 10 non-MTLS
+    `common` KEYS. Every placeholder sits alone on a `value:` line, which settles design Risk 1 for today's specs.
+  - **AC-24 gap the design missed:** `.do/app.yaml:381` and `.do/app.dev.yaml:383` comments still name `MCP_AGENT_SECRET`
+    (pre-existing drift against platform @AC-8 as well). Step 17 rewords them.
+  - **Spec-time detail:** `.sops.yaml` generation lives in a `sops_secrets.py sops-config` subcommand so it can be unit-tested
+    (design AC-7 row). `sops-secrets.test.sh` takes group names so each test/code pair can go red then green. The
+    `sops` CI filter includes `.do/**` because AC-8 renders the real specs.
+  - `scripts/do-inject-prod-secrets.py` has exactly one caller (`prod-up.yml:60`), so deleting it in Step 12 is safe.
+- Step order: smoke gate (1) → setup-sops (2) → resolver/build/renderer test+code pairs (3–8) → per-workflow static-test +
+  rewrite pairs (9–16) → script/spec comment cleanup (17) → CI wiring (18) → runbook (19) → docs sweep (20).
+
 ## Open Threads
 
 - [ ] Execute step 1: gating sops/age/compose smoke test, plus `secrets[format()]` under inherit (design Risk 7).
@@ -186,5 +205,5 @@
 - [ ] Execute (bootstrap step): gitleaks allowlist for the age armor if flagged (Risk 5).
 - [ ] Rollout, homelab enablement: GITHUB_ENV trailing-newline behaviour (Risk 3); `sops set` homelab.app_env first (Risk 6).
 - [ ] Runbook: a newline in a common value is refused for homelab (Risk 4); the production reviewer gate on every prod deploy (Risk 8).
-- [ ] Spec: pin the sops/age versions and SHA-256 values, plus the action SHAs; grep placeholder coverage; ci.yml filter list.
+- [x] Spec: pin the sops/age versions and SHA-256 values, plus the action SHAs; grep placeholder coverage; ci.yml filter list (done 2026-11-04, see implementation-spec.md § Execution Summary).
 - Ledger: appended an insights.md entry (environment-secret shadowing in env-bound reusable workflows).
