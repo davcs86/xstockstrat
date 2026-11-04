@@ -704,6 +704,27 @@ group_produp() {
   echo "produp: ok"
 }
 
+group_homelab() {
+  need yq python3
+  local wf=.github/workflows/deploy-homelab.yml resolve_ln detach_ln
+  yq e 'true' "$wf" >/dev/null || fail "homelab: $wf does not parse"
+  if grep -nE '\bop\b|\bOP_' "$wf"; then fail "homelab: AC-12 op/OP_ reference remains"; fi
+  if grep -niE '1password|load-secrets-action' "$wf"; then fail "homelab: AC-12 1Password reference remains"; fi
+  check_legacy "$wf" homelab homelab
+  check_p "$wf" homelab deploy
+  no_unprefixed "$wf" homelab
+  [ "$(yq e '.jobs.validate | has("environment")' "$wf")" = false ] || fail "homelab: validate must have no environment"
+  [ "$(yq e '.jobs.deploy.needs' "$wf")" = validate ] || fail "homelab: deploy must need validate"
+  resolve_ln="$(grep -n 'sops_secrets.py resolve' "$wf" | head -1 | cut -d: -f1)"
+  detach_ln="$(grep -n 'git checkout --quiet --detach' "$wf" | head -1 | cut -d: -f1)"
+  [ -n "$resolve_ln" ] && [ -n "$detach_ln" ] && [ "$resolve_ln" -lt "$detach_ln" ] ||
+    fail "homelab: resolve must run before the image-commit detach"
+  if tail -n "+$resolve_ln" "$wf" | grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:'; then
+    fail "homelab: a uses: step runs after resolve"
+  fi
+  echo "homelab: ok"
+}
+
 groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"

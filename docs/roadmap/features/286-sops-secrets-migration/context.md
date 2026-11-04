@@ -396,3 +396,13 @@
 - Deliberate behaviour changes (design C5): a missing required key now fails instead of warning; MTLS is required and minted; an absent optional key renders ''.
 - Files modified: `.github/workflows/prod-up.yml`, `scripts/do-inject-prod-secrets.py` (deleted)
 - Deviations: none
+
+### Step 13 — Static rules for `deploy-homelab.yml` (group `homelab`) [done]
+- Checks:
+  - AC-12: case-sensitive `\bop\b|\bOP_` and case-insensitive `1password|load-secrets-action` both find nothing;
+  - 14 LEGACY_ pins (9 common read via DEV_/PROD_ format, 4 same-named secrets, 1 var) and a single job-level P;
+  - no unprefixed common secrets; a validate job;
+  - resolve comes before the image-commit detach, with no `uses:` after resolve.
+- TDD RED: `ASSERT FAIL: homelab: AC-12 op/OP_ reference remains`. shellcheck + shfmt clean.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none

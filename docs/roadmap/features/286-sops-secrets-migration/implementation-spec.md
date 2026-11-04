@@ -702,7 +702,7 @@ grep -rn --exclude=sops-secrets.test.sh "do-inject-prod-secrets" .github/ script
 
 ### Step 13 — test: Static rules for `deploy-homelab.yml`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (group `homelab`)
