@@ -207,12 +207,17 @@
 
 - Result: 1 failure, 4 warnings (advisory — did not block). 17 steps, all pending.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 2: Files lists wildcard generated dirs (marketdatav1connect/*, portfolio/v1/*, gen/ts/dist/); spec self-exempts as generated output — waive or enumerate. — [ ] unaddressed
-  - Step 5: 6 files / 15 instructions; consider splitting migration 038 + wiring proof from the Go code. — [ ] unaddressed
+  - Step 2: Files lists wildcard generated dirs (marketdatav1connect/*, portfolio/v1/*, gen/ts/dist/); spec self-exempts as generated output — waive or enumerate. — [x] enumerated 2026-11-04 (12 exact dist paths; unchanged portfolio grpc/connect stubs dropped)
+  - Step 5: 6 files / 15 instructions; consider splitting migration 038 + wiring proof from the Go code. — [x] kept as one step with a recorded rationale (seed and reader must land together for the config-wiring check)
   - Steps 9, 10, 16: depend on feature 281 symbols (expiryIntentFor, ExpiryIntent, fakeWatchlistStore.lastIntent, migrationSql.ts) not in this tree. 281 must land on main-dev first; re-verify anchors, raise a blocker rather than adapt. — [ ] unaddressed
-  - Step 7: line citations ~1 line stale; re-anchor at execution. — [ ] unaddressed
+  - Step 7: line citations ~1 line stale; re-anchor at execution. — [x] markWarm call-site anchors re-stamped 2026-11-04; other :NNN anchors are find-by-symbol and drift again when 215 lands
 - Overlap findings: WARN, no FAIL. No migration/proto/config-key collision (038/039 free; 037 is 281). Hard ordering 281 -> 282 per merge-order row 92 (optionally extend it to name the migrationSql.ts / signalPruneIntervalSeedMigration.test.ts test dependency).
 
 ## Session 2026-11-04 — merge-order ruling: 280 depends on 281 (operator)
 
 - 282's block 2 no longer requires feature 280's 035/036 on main-dev; it requires 281's 037 only. Feature 280 now renumbers above the highest config migration at its merge time (merge-order.md row in the 281 branch/PR #1401). If 280 merges before 282 with numbers >= 038, block 2 STOPs and 282 re-specs its numbers.
+
+## Session 2026-11-04 — impl-spec review loop (3 iterations, advisory)
+
+- Iteration 3 result: PASS, 0 failures, 0 fixable warnings. Remaining: one external gate. Steps 9, 10 and 16 (and Step 5 block 2's `037` check) need 281's symbols and migration on main-dev (PR #1401) — [ ] unaddressed (external).
+- Optional wording tidy, not a warning: `design.md:113,177,178` still describe the old 035/036 check; the spec's block 2 is authoritative.
