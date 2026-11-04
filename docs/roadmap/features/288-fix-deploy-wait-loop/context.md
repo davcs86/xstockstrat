@@ -47,3 +47,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD AC-1 green: `bash scripts/sops-secrets.test.sh deploy` → `deploy: ok` / `all assertions passed (deploy)` (exit 0; was red in Step 1). `yq e 'true'` parses; `actionlint .github/workflows/deploy.yml` exit 0 (without shellcheck).
 - Files modified: `.github/workflows/deploy.yml`
 - Deviations: none
+
+### Step 3 — test: RED assertion for the deploy concurrency group (AC-2) [done]
+- Pinned in `group_deploy`: `jobs.deploy.concurrency.group == deploy-${{ inputs.environment }}`, `cancel-in-progress == false`, no `concurrency` on `validate` or at workflow root of `deploy.yml`, and none on `jobs.deploy` / root of `deploy-dev.yml` and `deploy-prod.yml` (inside the existing caller loop). Config pin only; GitHub's queueing is observed post-merge.
+- TDD AC-2 red: `bash scripts/sops-secrets.test.sh deploy` → `ASSERT FAIL: AC-2: deploy job concurrency group` (exit 1) on the tree after Step 2; the Step 1 AC-1 assertions run first and pass. Green follows Step 4.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none

@@ -632,6 +632,12 @@ group_deploy() {
   [ "$(yq e '.jobs.deploy.environment' "$wf")" = '${{ inputs.environment }}' ] || fail "deploy: job environment binding"
   [ "$(yq e '.jobs.validate | has("environment")' "$wf")" = false ] || fail "deploy: validate must have no environment"
   [ "$(yq e '.jobs.deploy.needs' "$wf")" = validate ] || fail "deploy: deploy must need validate"
+  # AC-2: deploys to one DO app serialise on a job-level group that is defined here only
+  # shellcheck disable=SC2016 # the literal expression is asserted
+  [ "$(yq e '.jobs.deploy.concurrency.group' "$wf")" = 'deploy-${{ inputs.environment }}' ] || fail "AC-2: deploy job concurrency group"
+  [ "$(yq e '.jobs.deploy.concurrency.cancel-in-progress' "$wf")" = false ] || fail "AC-2: cancel-in-progress must be false (never abort an in-flight deployment)"
+  [ "$(yq e '.jobs.validate | has("concurrency")' "$wf")" = false ] || fail "AC-2: validate must not carry the deploy group"
+  [ "$(yq e 'has("concurrency")' "$wf")" = false ] || fail "AC-2: no workflow-level concurrency in the reusable workflow"
   # AC-17/AC-21: the real resolve-app-id step against a stub doctl
   run="$(yq e '.jobs.deploy.steps[] | select(.id == "resolve-app-id") | .run' "$wf")"
   [ -n "$run" ] && [ "$run" != null ] || fail "deploy: no resolve-app-id step"
@@ -705,6 +711,8 @@ group_deploy() {
   for e in staging production; do
     f=.github/workflows/deploy-dev.yml
     [ "$e" = production ] && f=.github/workflows/deploy-prod.yml
+    [ "$(yq e '.jobs.deploy | has("concurrency")' "$f")" = false ] && [ "$(yq e 'has("concurrency")' "$f")" = false ] ||
+      fail "AC-2: $f must not define its own concurrency (the group lives in deploy.yml)"
     [ "$(yq e '.jobs.deploy.secrets' "$f")" = inherit ] || fail "deploy: $f job deploy must use secrets: inherit"
     [ "$(yq e '.jobs.deploy.with.environment' "$f")" = "$e" ] || fail "deploy: $f with.environment"
     if grep -nE 'DO_(DEV|PROD)_APP_ID' "$f"; then fail "deploy: $f still passes the app ID"; fi

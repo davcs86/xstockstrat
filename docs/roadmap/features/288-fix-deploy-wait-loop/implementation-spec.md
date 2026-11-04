@@ -164,7 +164,7 @@ PR body that it was not run.
 
 ### Step 3 — test: RED assertion for the deploy concurrency group (AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows` (CI/CD; no registry service owner), test lives in `scripts/`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (extend `group_deploy`)
