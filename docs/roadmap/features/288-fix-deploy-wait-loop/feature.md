@@ -16,6 +16,7 @@
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (`--from-report`) |
 | 2026-11-04 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps (design phase skipped per triage `skip`; product-spec not yet AI-reviewed) |
 | 2026-11-04 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (RED harness for AC-1) committed; sequential mode |
+| 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (sequential); config-wiring `--final` exit 0 |
 
 ---
 
@@ -42,4 +43,4 @@ deploys to one app.
 
 ## Next Action
 
-`/sdd-review fix-deploy-wait-loop impl-spec` — validate implementation spec, then `/sdd-execute fix-deploy-wait-loop`
+Integration PR `feature/fix-deploy-wait-loop` → `main-dev`; then post-merge observation of AC-2 (two quick pushes) — see context.md Step 4

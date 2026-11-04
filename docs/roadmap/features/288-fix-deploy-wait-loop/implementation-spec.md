@@ -1,6 +1,6 @@
 # Implementation Spec: fix-deploy-wait-loop
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/288-fix-deploy-wait-loop/feature.md`
 **Total Steps**: 5
@@ -253,7 +253,7 @@ shows the middle run as cancelled.
 
 ### Step 5 — docs: state the new wait/serialisation behavior in the CI overview
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/ci-overview.md` — modify (one sentence at L57)

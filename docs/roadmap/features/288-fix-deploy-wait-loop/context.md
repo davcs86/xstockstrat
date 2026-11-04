@@ -60,3 +60,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Not verifiable here (post-merge, operator): push two commits to `main-dev` within ~1 min and confirm the second run's "Deploy to dev" shows *Waiting for a concurrent run*, no run ends red, and a third push in the window cancels the middle run's pending deploy job.
 - Files modified: `.github/workflows/deploy.yml`
 - Deviations: none
+
+### Step 5 — docs: state the new wait/serialisation behavior in the CI overview [done]
+- Replaced the single sentence at `docs/patterns/ci-overview.md:57` with the SUPERSEDED-as-success and `deploy-<environment>` serialisation behavior. TDD: N/A (docs).
+- Verification: `grep -n "SUPERSEDED\|deploy-<environment>" docs/patterns/ci-overview.md` → both present (L57, L59).
+- Teardown (root CLAUDE.md): not triggered — no `CLAUDE.md`, constitution or findings doc changed; `ci-overview.md` is not in `.agents/context-forge.json` `scrubberExtraTargets` (`README.md`, `docs/patterns/ui-ux-governance.md`); no context file describes the wait loop (grepped `CLAUDE.md`, `docs/context-constitution*.md`, `docs/runbooks/*.md`, `README.md`).
+- Files modified: `docs/patterns/ci-overview.md`
+- Deviations: none
+
+## Session 2026-11-04 — sdd-execute (sequential)
+**Steps this session**: 1, 2, 3, 4, 5
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete (feature-end checkpoint; integration PR next)
+- `node scripts/check-config-wiring.mjs --final` → exit 0; one pre-existing unrelated `REPORTED: ...trading.fill_poller.interval_ms:read-unseeded:production` line, no finding for this feature (no config keys declared).
+- Open follow-up (not fixed, out of scope per product-spec): `prod-up.yml:93-109` has the same wait loop without a SUPERSEDED branch (serialised by `concurrency: prod-lifecycle`).
+- Open follow-up: `DEPLOY_ID` is taken from `list-deployments | head -1`, which can pick another run's deployment; not made race-free here.
+**Next**: integration PR to `main-dev`
