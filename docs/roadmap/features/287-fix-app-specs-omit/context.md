@@ -219,3 +219,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - approximate line ranges in Step 2;
   - no coverage threshold, which is N/A for `scripts/`;
   - Step 9 size.
+
+## Session 2026-11-04 (PR #1411: merge main-dev)
+- The PR was `dirty` because feature 288 (fix-deploy-wait-loop, #1409) landed on main-dev. It touched `deploy.yml` (deploy concurrency, wait loop ends on SUPERSEDED), `scripts/sops-secrets.test.sh` and `platform.feature`.
+- Merged main-dev and kept both sides:
+  - `group_deploy` now has 287's db/render/update order asserts followed by 288's wait-loop stub run.
+  - `platform.feature` lists 288's AC-1/AC-2 before 287's AC-1..AC-4.
+- No semantic clash. 288 changes deploy.yml's wait loop only. prod-up keeps 287's design: on SUPERSEDED it follows the newest deployment, with one gated redeploy.
+- Full suite after the merge: 12/12 groups ok. shellcheck and shfmt clean.

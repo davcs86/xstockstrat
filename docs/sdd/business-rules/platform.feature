@@ -1024,6 +1024,18 @@ Feature: Platform-wide guarantees
     When the repository is searched for "MCP_AGENT_SECRET"
     Then there are no matches in any of those files, the deploy workflows, prod-up.yml or .do/app*.yaml
 
+  @AC-1 @regression @feature-288
+  Scenario: A superseded deployment ends the wait loop immediately instead of timing out
+    Given the deployment being waited on reports phase SUPERSEDED
+    When the "Wait for deployment" step polls it
+    Then the step exits on that poll, well before the 60-iteration timeout, and does not print the timeout message
+
+  @AC-2 @regression @feature-288
+  Scenario: Two quick pushes to main-dev deploy the same app one at a time
+    Given two pushes to main-dev land within a minute
+    When both "Deploy dev" runs reach the deploy job
+    Then the second run's deploy job waits for the first to finish before it starts, and neither run is red
+
   @AC-1 @regression @feature-287
   Scenario: A rendered app spec is attached to the database cluster's VPC
     Given cluster "xstockstrat" has private network UUID "d7afff57-f807-4893-9fbf-20fff8bb82dd"
