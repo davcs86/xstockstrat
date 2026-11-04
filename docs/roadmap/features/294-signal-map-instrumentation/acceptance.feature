@@ -49,18 +49,21 @@ Feature: signal-map-instrumentation
     And no metric attribute contains the text "insufficient buying power"
 
   @AC-6 @FR-2
-  Scenario: A loop gauge advances after each successful tick and never on a failed one
-    Given the trading fill poller with interval 5 seconds and the gauge "trading.loop.last_success_timestamp" for loop "fill_poller"
-    When one tick completes successfully at 1700000100 and the next tick fails at 1700000105
-    Then the gauge value for loop "fill_poller" is 1700000100
-    And the loop continues to the following tick with unchanged timing
+  Scenario: A loop writes one record per successful tick and none for a failed tick
+    Given the trading fill poller with interval 5 seconds
+    When tick 1 completes successfully in 120 ms and tick 2 fails with a broker error
+    Then exactly 1 INFO record "loop tick ok" is written, with loop "fill_poller" and duration_ms 120
+    And no "loop tick ok" record is written for tick 2
+    And tick 3 starts 5 seconds after tick 2 with unchanged timing
 
   @AC-7 @FR-2
-  Scenario: Every service exposes only fixed loop names
-    Given the services trading, marketdata, ingest, analysis and portfolio with OTEL_ENABLED "true"
-    When their loop gauges are read
+  Scenario: Loop records use fixed loop names and loops with an existing cycle record do not double up
+    Given trading, marketdata, ingest, analysis and portfolio with their background loops running
+    When one successful tick of each loop completes
     Then every "loop" attribute value belongs to a fixed set of at most 6 names per service
-    And no attribute value contains an account, user, symbol or order identifier
+    And no record attribute contains an account, user, symbol or order identifier
+    And the analysis live loop writes only "live_loop: cycle complete" for that tick
+    And trading position sync writes only "position sync cycle complete" for that tick
 
   @AC-8 @FR-3
   Scenario: Portfolio counts a stalled and a parked consumer event

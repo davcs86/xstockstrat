@@ -1,6 +1,6 @@
 # Feature: signal-map-instrumentation
 
-**Development Branch**: `feature/signal-map-instrumentation`
+**Development Branch**: `ccr-b4aace27-zvuaby` (operator override 2026-11-04: sequential execute on the current branch; no `feature/<slug>` branch)
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
 

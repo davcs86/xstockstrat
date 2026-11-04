@@ -17,11 +17,14 @@ As the platform operator, I want the instrumentation gaps, noisy signals and fea
 1. **Scope: everything in the report.** Gaps S-01…S-26 (11 SEV-2, 15 SEV-3), noisy signals N-01…N-07, gauges M-01…M-05. The implementation spec orders steps SEV-2 first.
 2. **Signals only.** Counters, gauges, histograms, spans and log-level / log-content fixes. **No behavior change**: no new halts or pages, no status-code remaps (503 vs 401), no timeouts, no status or health-semantics changes, no job-state changes, no dedupe or backoff logic. A finding whose fix needs a behavior change is split: its signal half is in scope, its behavior half is a deferred follow-up (FR-16).
 3. **Instrument only.** No alert rules, no dashboards, no `packages/otel/produced-signals.tsv` rows. A later feature registers and alerts on the new series.
-4. **Delivery: `/sdd-execute sequential`.** One commit per step on `feature/signal-map-instrumentation`, one integration PR into `main-dev`.
+4. **Delivery: `/sdd-execute sequential`, on the current branch.** One commit per step directly on `ccr-b4aace27-zvuaby` (no `feature/signal-map-instrumentation` branch is created), and PR #1427 into `main-dev` is the single integration PR. A `ccr-*` branch is squash-merged into `main-dev`.
+5. **Naming: dotted OTel names** (`mcp.tool.duration` style); the exporter adds the unit and `_total` suffixes.
+6. **Loop liveness: one log record per successful tick** (FR-2), not a gauge. The operator accepted the Loki volume this implies for the 5 s pollers.
+7. **CI behavior of unregistered series: agreed.** The assumption that new series with no alert or dashboard referencing them pass `scripts/check-otel-produced-signals.sh` is accepted; `/sdd-design` still runs the script once to confirm it.
 
 ## Functional Requirements
 
-Report anchors are in brackets. Instrument names below are working names in OTel dotted form (exporter adds `_total` / `_milliseconds`); the design phase fixes the final naming convention (Open Question 1).
+Report anchors are in brackets. Instrument names below are OTel dotted names (operator decision 5; the exporter adds `_total` / `_milliseconds`); the design phase fixes only the exact units and the `_total` handling for counters (Open Question 1).
 
 FR-1. **Trading outcome counters** [S-01, S-02, S-03, M-04, N-04]. Add:
   - `trading.flatten.outcome{outcome}` for every exit of `flattenAndHalt`, with the lookup-error branch distinct from the legitimately-flat branch;
@@ -31,7 +34,7 @@ FR-1. **Trading outcome counters** [S-01, S-02, S-03, M-04, N-04]. Add:
   - a count of repeated systemic escalation (the dedupe itself is deferred).
   Log-level fixes only: the lookup-error flatten branch logs at `ERROR`.
 
-FR-2. **Loop liveness gauge** [S-04]. One observable gauge per service, `<service>.loop.last_success_timestamp{loop}`, set at the end of each successful tick, with `loop` a fixed name from a bounded set (≤ 6 per service). Sites: the six trading pollers, the five marketdata pollers, the ingest mcp_client loop, the analysis supervised loops and live loop, and the portfolio consumers. It does not change loop timing, ordering or error handling.
+FR-2. **Loop liveness log record** [S-04]. Each background loop writes exactly one structured `INFO` record per successful tick, with the fixed message `loop tick ok` and attributes `loop` (a fixed name from a bounded set, ≤ 6 per service) and `duration_ms`. There is **no gauge and no shared helper**: staleness is read from Loki, and the record is written inline at each loop's tick-success point. A loop that already writes one cycle record per tick keeps it as its record and does not write a second: trading position sync (`position sync cycle complete`), the analysis live loop (`live_loop: cycle complete`, text unchanged), and marketdata bar ingest (`bar ingest: cycle complete`). Sites: the six trading pollers, the five marketdata pollers, the ingest mcp_client loop, the analysis supervised loops and live loop, and the portfolio consumers (one record per successfully processed event batch, not per event). It does not change loop timing, ordering or error handling, and a failed tick writes no `loop tick ok` record.
 
 FR-3. **Portfolio** [S-05, S-06, M-02, N-03]. Add `portfolio.consumer.events{consumer, outcome}`, `portfolio.marketdata_fetch{op, outcome}`, `portfolio.snapshot{outcome}` and `portfolio.mark_source{mark_source, path}`. Log the `InsertSnapshot` error that is dropped today. Collapse the per-position "latest quote has no usable price" `WARN` into one aggregated log per call that keeps `trace_id`.
 
@@ -69,6 +72,7 @@ FR-15. **Cross-cutting constraints** (binding on every FR).
   - (d) New signals use only the OTel SDK and logging already present per language; no new dependency.
   - (e) Telemetry stays non-fatal and a no-op when `OTEL_ENABLED` is not `true`.
   - (f) Go server metric drop views still cover any new `rpc.client.*` instrument.
+  - (g) Instrument names are dotted OTel names.
 
 FR-16. **Deferred follow-ups recorded.** The behavior halves are listed in `context.md` § Deferred behavior follow-ups for debt-radar. They are not implemented here.
 
@@ -118,7 +122,7 @@ _Constitution **C-14**._ The end-user-reachable surface(s) this capability is co
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/signal-map-instrumentation` (branch from `main-dev`)
+Branch: the current harness branch `ccr-b4aace27-zvuaby` (based on `main-dev`; no `feature/<slug>` branch is created — operator decision 4). PR #1427 is the integration PR.
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto or config change) — one per affected service (12), no proto or config change
 - [ ] 2 service owners + platform lead (breaking proto change) — not applicable
@@ -136,9 +140,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] 1. **Instrument naming convention.** The report wrote Prometheus-style names; the existing instruments are dotted OTel names (`mcp.tool.duration`, exported as `mcp_tool_duration_milliseconds_*`). Design decides the exact names, units and whether counters carry the `_total` suffix themselves, so the later registry feature can match them.
-- [ ] 2. **Where the loop-liveness helper lives** (FR-2): one small helper per telemetry module (Go `internal/telemetry`, Python `app/telemetry.py`, Node `src/telemetry.ts`) versus inline per loop, given the DRY guard rail (`docs/patterns/dry-guard-rail.md`).
-- [ ] 3. **CI behavior with unregistered series.** `scripts/check-otel-produced-signals.sh` fails on an alert or dashboard querying an unregistered series. Confirm that new series with no alert or dashboard referencing them pass the guard, so "instrument only" is CI-safe.
+- [x] 1. **Instrument naming convention — RESOLVED 2026-11-04: dotted OTel names.** Remaining for design: exact units per instrument and whether counters carry the `_total` suffix themselves (exporter-added today), so the later registry feature can match them.
+- [x] 2. **Loop liveness form — RESOLVED 2026-11-04: one log record per successful tick, no gauge, no helper** (FR-2). Remaining for design: the record shape must stay identical across Go `slog`, Python `logging` and Node `winston` so one LogQL filter works, and the DRY guard rail (`docs/patterns/dry-guard-rail.md`) must accept the repeated log call. Volume: the 5 s pollers each write ~17k records a day.
+- [ ] 3. **CI behavior with unregistered series — assumption AGREED 2026-11-04.** `scripts/check-otel-produced-signals.sh` fails on an alert or dashboard querying an unregistered series. `/sdd-design` runs the script once on a scratch instrument to confirm that new series with no alert or dashboard referencing them pass.
 - [ ] 4. **Grafana-side rules outside the repo** may match the log text demoted or reworded by N-01…N-07 (report NC-8). Decide whether to keep the old text at `DEBUG` or accept the risk.
 - [ ] 5. **Report Needs-confirmation items that change a FR's shape:** NC-2 (does the Node status code metric record `callback({code})`?), NC-4 (is the agent `_txn_key` exception logged?) and NC-1 (Node pool `'error'` handlers) — NC-1 is a behavior-adjacent finding and is excluded here unless design decides otherwise.
-- [ ] 6. **Feature branch vs the harness branch.** This session works on `ccr-b4aace27-zvuaby` (PR #1427 open with the report). `/sdd-execute sequential` needs `feature/signal-map-instrumentation` off `main-dev`; confirm the push to that branch name.
+- [x] 6. **Feature branch vs the harness branch — RESOLVED 2026-11-04: sequential on the current branch `ccr-b4aace27-zvuaby`.** Remaining for `/sdd-execute`: its sequential mode assumes `feature/<slug>`; record the branch override as a deviation in `context.md` and confirm the skill accepts the current branch. PR #1427 now carries the survey report, the SDD artifacts and the implementation commits, so its description must be rewritten before it is merged.
