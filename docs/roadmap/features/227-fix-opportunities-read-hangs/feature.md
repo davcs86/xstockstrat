@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-opportunities-read-hangs`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-14-opportunities-read-hangs-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-opportunities-read-hangs-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-14
 **Last Updated**: 2026-10-14
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` |
+| 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-opportunities-read-hangs-defect.md) |
 | 2026-10-14 | `draft` → `design-approved` | /sdd-design | Full mode, 6 rounds (round 6 by operator cap override); operator approved round-6 design |
 | 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-10-15 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done |

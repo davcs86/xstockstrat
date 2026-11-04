@@ -6,7 +6,7 @@
 # (services/xstockstrat-ui/acceptance/opportunity-composite-score.feature).
 
 Feature: fix-opportunity-composite-score (ui-service guarantees)
-  Regression guard for defect report docs/reports/2026-10-06-ui-composite-score-grade-colour-defect.md:
+  Regression guard for defect report docs/reports/2026-10-06-ui-composite-score-grade-colour-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-ui-composite-score-grade-colour-defect.md):
   Opportunity composite score is coloured with strategy-grade thresholds, so neutral reads as bearish.
 
   @AC-1 @regression @feature-221

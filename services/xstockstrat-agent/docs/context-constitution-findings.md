@@ -65,7 +65,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 |---|---|
 | [`2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect`](../../../docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md) | Signal-source bearer secret is orphaned when the source register fails |
 | [`2026-10-19-agent-mcp-transport-stdio-fallthrough-defect`](../../../docs/reports/2026-10-19-agent-mcp-transport-stdio-fallthrough-defect.md) | Agent silently starts stdio transport when MCP_TRANSPORT is unset or mistyped |
-| [`2026-10-19-agent-tools-missing-grpc-error-mapping-defect`](../../../docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.md) | Six agent MCP tools leak raw gRPC errors (no `_grpc_error_message` mapping) |
+| `2026-10-19-agent-tools-missing-grpc-error-mapping-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.md) | Six agent MCP tools leak raw gRPC errors (no `_grpc_error_message` mapping) |
 | [`2026-10-19-agent-ui-claude-md-drift-defect`](../../../docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md) | Agent and UI CLAUDE.md / tool docstring drift from current code |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 
