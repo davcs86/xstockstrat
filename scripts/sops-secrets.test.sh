@@ -850,15 +850,15 @@ error-unchanged|1|0|d1|ERROR|APPENDED=false
 error-twice|1|1|d1|ERROR ERROR|CREATED=app1
 superseded|0|0|d1 d2|SUPERSEDED ACTIVE|CREATED=app1
 canceled|1|0|d1|CANCELED|CREATED=app1
-create-fails|1|1|d1|ERROR|CREATED=app1 CREATE_RC=3
+create-fails|3|1|d1|ERROR|CREATED=app1 CREATE_RC=3
 create-empty|1|1|d1|ERROR|CREATED=app1 CREATE_OUT=
 late-list|0|0|- - d1|ACTIVE|CREATED=app1
 never-listed|1|0|-|ACTIVE|CREATED=app1
 CASES
   wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ=d1 PHASES="ERROR ACTIVE" CREATED=app1
-  grep -qx 'apps get-deployment app1 new1' "$work/wlog" || fail "produp: wait must follow the redeployment it created"
+  grep -qF 'apps get-deployment app1 new1 --format Phase' "$work/wlog" || fail "produp: wait must follow the redeployment it created"
   wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ="d1 d2" PHASES="SUPERSEDED ACTIVE" CREATED=app1
-  grep -qx 'apps get-deployment app1 d2' "$work/wlog" || fail "produp: wait must follow the newest deployment after SUPERSEDED"
+  grep -qF 'apps get-deployment app1 d2 --format Phase' "$work/wlog" || fail "produp: wait must follow the newest deployment after SUPERSEDED"
   wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ=d1 PHASES=PENDING_DEPLOY CREATED=app1
   [ "$rc" = 0 ] && grep -q '^::warning::' "$work/wso" || fail "produp: wait timeout must warn and exit 0"
   [ "$(grep -c '^apps get-deployment' "$work/wlog")" = 60 ] || fail "produp: wait must poll 60 times"

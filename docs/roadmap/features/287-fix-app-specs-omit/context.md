@@ -65,7 +65,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Result: 0 failures, 7 warnings. Advisory; did not block.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Steps 5/6: prod-up `wait`/`report` (and assign) have no `id:` today, and Step 6 does not say to add one. Step 5's asserts and the `steps.*` references need them (C-01). [ ] unaddressed
+  - Steps 5/6: prod-up `wait`/`report` (and assign) have no `id:` today, and Step 6 does not say to add one. Step 5's asserts and the `steps.*` references need them (C-01). [x] resolved in Step 6 (D1)
   - Steps 7/8: the prod-down summary step needs an explicit `id:` for the order assert (C-01). [ ] unaddressed
   - Step 2: the cited spec line ranges are approximate. `cluster_name` is at `.do/app.yaml:692` and `.do/app.dev.yaml:694`. Cosmetic. [ ] unaddressed
   - Step 1: no coverage threshold is stated. `scripts/` has no CI coverage gate, so N/A (C-08). [ ] unaddressed
@@ -133,3 +133,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Selecting by step `id` needs `id: assign`, `id: wait` and `id: report`, which Step 6 adds; this is the impl-spec review's warning.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: Step 6 adds `id: assign`, which no step named (see Deviation Log D1).
+
+### Step 6 — service: prod-up check / trust / wait / report [done]
+- **check**: fails when more than 1 app exists, and prints the A9 message.
+- **trust**: new step after assign. Its `APP_ID` is created || existing.
+- **wait**:
+  - gated on created || appended, with env `APP_ID`, `CREATED` and `APPENDED`;
+  - tolerates 4 empty polls;
+  - on ERROR, redeploys once when gated, pinning the new deployment;
+  - on SUPERSEDED, follows the newest deployment;
+  - a timeout warns and exits 0 (one constraint comment records this).
+- **report**: same gate as wait, with env `APP_ID` (A1).
+- **Header**: 2 lines added.
+- GREEN: `produp: ok`, `render: ok`, `dbnet: ok`. YAML parses.
+- Files modified: `.github/workflows/prod-up.yml`, `scripts/sops-secrets.test.sh` (D2)
+- Deviations: D1 (step ids), D2 (test precision). Both are in the Deviation Log; D2 was approved at the F-08 blocker.

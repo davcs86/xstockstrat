@@ -476,7 +476,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 6 — service: prod-up check / trust / wait (one gated redeploy) / report
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows` (deploy pipeline)
 **Files**:
 - `.github/workflows/prod-up.yml` — modify
@@ -764,4 +764,14 @@ shellcheck scripts/*.sh .claude/hooks/*.sh && shfmt -d -i 2 scripts/*.sh .claude
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D1 — Step 6 adds `id: assign` (and `id: wait` / `id: report`)
+- **Expected**: Step 6's Instructions name only `id: trust`. Step 5's order and wiring asserts select `assign`, `wait` and `report` by `id` (impl-spec review warning, Steps 5/6).
+- **Actual**: Step 6 also adds `id: assign`, `id: wait` and `id: report` to prod-up.yml. These ids are labels only and change no behaviour.
+- **Disposition**: approved in the operator's up-front plan confirmation.
+
+### D2 — Step 6 also stages two assertion-precision fixes in `scripts/sops-secrets.test.sh`
+- **Expected**: Step 6 Files = `prod-up.yml` only.
+- **Actual**: two fixes to Step 5's test, neither of which weakens a guarantee:
+  - Under the default `bash -e`, a failing `create-deployment` exits with doctl's own rc (3), so the case expects 3. The spec says rc≠0.
+  - The follow-the-redeploy checks match `get-deployment app1 <id> --format Phase` as a prefix rather than an exact line, because the argv carries trailing flags.
+- **Disposition**: operator chose Option A (fold into Step 6) at the F-08 blocker.
