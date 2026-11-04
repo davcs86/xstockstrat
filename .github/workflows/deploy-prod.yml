@@ -43,22 +43,9 @@ jobs:
     name: Deploy to prod
     needs: [prepare, build-images]
     uses: ./.github/workflows/deploy.yml
-    secrets:
-      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      DO_APP_ID: ${{ secrets.DO_PROD_APP_ID }}
-      DO_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}
-      BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
-      JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
-      CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.PROD_CONFIG_SECRETS_ENCRYPTION_KEY }}
-      SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
-      SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
-      VAPID_PRIVATE_KEY: ${{ secrets.PROD_VAPID_PRIVATE_KEY }}
-      VAPID_PUBLIC_KEY: ${{ secrets.PROD_VAPID_PUBLIC_KEY }}
-      VAPID_SUBJECT: ${{ secrets.PROD_VAPID_SUBJECT }}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_ENDPOINT }}
-      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_HEADERS }}
-      MTLS_CA: ${{ secrets.PROD_MTLS_CA }}
+    secrets: inherit
     with:
+      environment: production
       app_spec: .do/app.yaml
       image_tag: ${{ needs.prepare.outputs.short_sha }}
 

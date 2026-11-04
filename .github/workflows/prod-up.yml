@@ -5,9 +5,8 @@ name: Prod — bring up
 # docs/runbooks/infra-cost-reduction.md). Run this when you need prod live, then
 # run "Prod — tear down" when you're finished.
 #
-# Recreating the app from scratch assigns a NEW app id and (without a custom
-# domain) a NEW *.ondigitalocean.app URL. The job prints both and reminds you
-# to refresh the DO_PROD_APP_ID secret so push-to-main deploys keep working.
+# Recreating the app assigns a NEW app id and (without a custom domain) a NEW
+# *.ondigitalocean.app URL. Deploys find the app by its spec name, so nothing needs updating.
 
 on:
   workflow_dispatch:
@@ -22,10 +21,13 @@ concurrency: prod-lifecycle
 jobs:
   up:
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: digitalocean/action-doctl@v2
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f  # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
@@ -39,44 +41,53 @@ jobs:
           fi
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Render app spec with secrets
+      - uses: ./.github/actions/setup-sops
+        if: steps.check.outputs.app_id == ''
+
+      - name: Render app spec (SOPS first, PROD_ fallback)
+        id: render
         if: steps.check.outputs.app_id == ''
         env:
-          JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
-          BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
-          # Feature 147: config-secrets master key replaces the vendor keys + MCP_AGENT_SECRET here.
-          CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.PROD_CONFIG_SECRETS_ENCRYPTION_KEY }}
-          # Feature 020: app-level notify fanout secrets (optional; off until set).
-          SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
-          SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
-          # OTel: Grafana Cloud OTLP gateway (optional; OTel is off until OTEL_ENABLED=true).
-          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_ENDPOINT }}
-          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_HEADERS }}
-        run: |
-          sed \
-            -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
-            -e "s|YOUR_IMAGE_TAG|${{ inputs.image_tag }}|g" \
-            .do/app.yaml \
-          | python3 scripts/do-inject-prod-secrets.py > /tmp/app.yaml
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          LEGACY_JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+          LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
+          LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.PROD_CONFIG_SECRETS_ENCRYPTION_KEY }}
+          LEGACY_MTLS_CA: ${{ secrets.PROD_MTLS_CA }}
+          LEGACY_SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
+          LEGACY_SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
+          LEGACY_VAPID_PRIVATE_KEY: ${{ secrets.PROD_VAPID_PRIVATE_KEY }}
+          LEGACY_VAPID_PUBLIC_KEY: ${{ secrets.PROD_VAPID_PUBLIC_KEY }}
+          LEGACY_VAPID_SUBJECT: ${{ secrets.PROD_VAPID_SUBJECT }}
+          LEGACY_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_ENDPOINT }}
+          LEGACY_OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_HEADERS }}
+          LEGACY_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}
+        run: >-
+          python3 scripts/do-render-app-spec.py
+          --env production
+          --spec .do/app.yaml
+          --app-name xstockstrat-production
+          --image-tag "${{ inputs.image_tag }}"
+          --org "${{ github.repository_owner }}"
+          --out "$RUNNER_TEMP/app.yaml"
 
       - name: Create prod app
         if: steps.check.outputs.app_id == ''
         id: create
         run: |
-          APP_ID=$(doctl apps create --spec /tmp/app.yaml --format ID --no-header)
+          APP_ID=$(doctl apps create --spec "$RUNNER_TEMP/app.yaml" --format ID --no-header)
           echo "Created app $APP_ID"
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
 
       - name: Assign to project
         if: steps.create.outputs.app_id != ''
         env:
-          DO_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}
+          DO_PROJECT_ID: ${{ steps.render.outputs.project_id }}
         run: |
           if [ -n "$DO_PROJECT_ID" ]; then
             doctl projects resources assign "$DO_PROJECT_ID" \
               --resource "do:app:${{ steps.create.outputs.app_id }}"
           else
-            echo "DO_PROD_PROJECT_ID not set — app stays in the default project."
+            echo "digitalocean.PROJECT_ID not set — app stays in the default project."
           fi
 
       - name: Wait for deployment
@@ -102,5 +113,8 @@ jobs:
         run: |
           APP_ID="${{ steps.create.outputs.app_id }}"
           URL=$(doctl apps get "$APP_ID" --format DefaultIngress --no-header)
-          echo "Production is up at: $URL"
-          echo "::warning::Prod recreated with app id $APP_ID. Update the DO_PROD_APP_ID GitHub secret to this value so push-to-main deploys target the new app."
+          echo "Production is up at: $URL (app id $APP_ID)"
+
+      - name: Remove the rendered spec
+        if: always()
+        run: rm -f "$RUNNER_TEMP/app.yaml"

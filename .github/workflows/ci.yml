@@ -83,6 +83,17 @@ jobs:
               - 'scripts/gen-dev-certs.sh'
               - 'scripts/mtls-provision.sh'
               - '.github/workflows/deploy-homelab.yml'
+            sops:
+              - 'scripts/sops_secrets.py'
+              - 'scripts/do-render-app-spec.py'
+              - 'scripts/sops-secrets.test.sh'
+              - '.github/actions/setup-sops/**'
+              - '.github/workflows/deploy*.yml'
+              - '.github/workflows/prod-up.yml'
+              - '.github/workflows/sops-bootstrap.yml'
+              - '.do/**'
+              - '.sops.yaml'
+              - 'secrets/**'
             ledger:
               - 'docs/roadmap/ledger/**'
               - 'scripts/ledger-guard.py'
@@ -907,6 +918,32 @@ jobs:
       - name: Build and render staging/production, override, mTLS and broken-render cases
         run: bash scripts/homelab-render.test.sh
 
+  sops-secrets:
+    name: SOPS deploy-secret tooling + workflow static rules
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'sops') ||
+      contains(fromJson(needs.changes.outputs.matched), 'homelab') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-sops
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: ruff (the two SOPS scripts)
+        run: |
+          pip install ruff
+          ruff check scripts/sops_secrets.py scripts/do-render-app-spec.py
+          ruff format --check scripts/sops_secrets.py scripts/do-render-app-spec.py
+
+      - name: All test groups (resolve, build, render, static workflow rules, AC-24)
+        run: bash scripts/sops-secrets.test.sh
+
   config-wiring:
     name: Config key wiring (whole-tree)
     needs: changes
@@ -945,6 +982,7 @@ jobs:
       - migration-contract-gate
       - ledger-db-test
       - homelab-render
+      - sops-secrets
       - markdown-lint
       - context-map
       - otel-signals
@@ -969,6 +1007,7 @@ jobs:
           echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
           echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"
           echo "homelab-render:  ${{ needs.homelab-render.result }}"
+          echo "sops-secrets:    ${{ needs.sops-secrets.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
           echo "otel-signals:    ${{ needs.otel-signals.result }}"

@@ -30,19 +30,17 @@ interpolates.
 
 `.do/app.dev.yaml` / `.do/app.yaml` carry **placeholders** (`YOUR_{DEV,PROD}_MTLS_CA_CERT`,
 `…_MTLS_CERT_<SVC>`, `…_MTLS_KEY_<SVC>`) for all 12 components. The deploy stores **only the CA**
-(cert + key) as **one GitHub secret per environment** — a `base64(JSON {ca_cert, ca_key})` — and
-`.github/workflows/deploy.yml` mints the 12 per-service leaves off it **on every deploy**:
+(cert + key) **per environment** — a `base64(JSON {ca_cert, ca_key})` — as `common.MTLS_CA` in `secrets/<env>.enc.yaml`,
+shared by DO and homelab (feature 286). `scripts/do-render-app-spec.py` mints the 12 per-service leaves off it **on every deploy**:
 
-| Secret | Used by | Produced by |
+| Value | Used by | Produced by |
 |---|---|---|
-| `DEV_MTLS_CA` | `deploy-dev.yml` → `.do/app.dev.yaml` | `scripts/mtls-provision.sh ca dev` |
-| `PROD_MTLS_CA` | `deploy-prod.yml` → `.do/app.yaml` | `scripts/mtls-provision.sh ca prod` |
+| `common.MTLS_CA` in `secrets/staging.enc.yaml` (legacy fallback `DEV_MTLS_CA`) | `deploy-dev.yml` → `.do/app.dev.yaml`, homelab staging | `scripts/mtls-provision.sh ca dev` |
+| `common.MTLS_CA` in `secrets/production.enc.yaml` (legacy fallback `PROD_MTLS_CA`) | `deploy-prod.yml` / `prod-up.yml` → `.do/app.yaml`, homelab production | `scripts/mtls-provision.sh ca prod` |
 
 ```bash
-scripts/mtls-provision.sh set-secret dev    # mints ./certs (dev CA) + sets DEV_MTLS_CA via gh
-scripts/mtls-provision.sh set-secret prod   # mints ./certs-prod (prod CA) + sets PROD_MTLS_CA
-# …or emit to stdout and paste into GitHub → Settings → Secrets:
-scripts/mtls-provision.sh ca dev
+scripts/mtls-provision.sh ca dev    # mints ./certs (dev CA) and prints the bundle; store it with sops set (docs/runbooks/sops-secrets.md)
+scripts/mtls-provision.sh set-secret dev    # legacy: sets the DEV_MTLS_CA fallback via gh
 ```
 
 **Deploy flow** (`deploy.yml`): a *Mint mTLS leaves* step writes the CA from the secret to a temp dir

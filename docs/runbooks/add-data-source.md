@@ -85,10 +85,10 @@ follow up in a separate PR once the gap was noticed:
 | 2 | `docker-compose.yml` | `<VENDOR>_API_KEY: ${<VENDOR>_API_KEY:-}` in the service's `environment:` block, immediately after the existing vendor key |
 | 3 | `.do/app.dev.yaml` | `- key: <VENDOR>_API_KEY` / `scope: RUN_TIME` / `value: YOUR_DEV_<VENDOR>_API_KEY` / `type: SECRET`, immediately after the existing vendor key's block |
 | 4 | `.do/app.yaml` | Same block, `value: YOUR_PROD_<VENDOR>_API_KEY` |
-| 5 | `.github/workflows/deploy.yml` | A `<VENDOR>_API_KEY:` entry under `on.workflow_call.secrets` (`required: false` for an optional vendor key); the `env:` block of the "Substitute app spec placeholders" step; the `python3 -c` heredoc's `content.replace('YOUR_DEV_<VENDOR>_API_KEY', ...)` / `YOUR_PROD_...` pair |
-| 6 | `.github/workflows/deploy-dev.yml` | `<VENDOR>_API_KEY: ${{ secrets.DEV_<VENDOR>_API_KEY }}` under the `deploy` job's `secrets:` |
-| 7 | `.github/workflows/deploy-prod.yml` | `<VENDOR>_API_KEY: ${{ secrets.PROD_<VENDOR>_API_KEY }}` under the `deploy` job's `secrets:` |
-| 8 | `.github/workflows/prod-up.yml` + `scripts/do-inject-prod-secrets.py` | `<VENDOR>_API_KEY: ${{ secrets.PROD_<VENDOR>_API_KEY }}` in prod-up's "Render app spec with secrets" `env:` block, **and** a `("YOUR_PROD_<VENDOR>_API_KEY", "<VENDOR>_API_KEY")` tuple in the script's `PLACEHOLDER_KEYS` (required vendor) or `OPTIONAL_PLACEHOLDER_KEYS` (optional vendor, off-by-default pipeline) |
+| 5 | `scripts/sops_secrets.py` | One `("common", "<VENDOR>_API_KEY", <required>, ("do",))` tuple in `KEYS`. Feature 286 made this the only code edit: `do-render-app-spec.py` derives the `YOUR_{DEV,PROD}_<VENDOR>_API_KEY` placeholders from `KEYS`, and `deploy.yml` / `prod-up.yml` need no change |
+| 6 | `secrets/staging.enc.yaml` | `sops set secrets/staging.enc.yaml '["common"]["<VENDOR>_API_KEY"]' '"<value>"'` (see `docs/runbooks/sops-secrets.md`) |
+| 7 | `secrets/production.enc.yaml` | The same `sops set` for production |
+| 8 | `docs/runbooks/sops-secrets.md` | A row in its key table |
 
 Then document it — two more files, both non-optional:
 

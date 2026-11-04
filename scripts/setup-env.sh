@@ -290,8 +290,7 @@ cat >>"$ENV_FILE" <<'EOF'
 # Secret Name               Used by workflow            How to obtain
 # ─────────────────────────────────────────────────────────────────────
 # DIGITALOCEAN_ACCESS_TOKEN deploy-dev / deploy-prod    DigitalOcean API PAT
-# DO_DEV_APP_ID             deploy-dev                  doctl apps list
-# DO_PROD_APP_ID            deploy-prod                 doctl apps list
+# SOPS_AGE_KEY (env secret) deploy-* / prod-up / bootstrap  age-keygen (docs/runbooks/sops-secrets.md)
 # BUF_TOKEN                 deploy-dev / deploy-prod    buf.build → Settings → Tokens
 # GH_PAT_SCAN               ci (secret-scan)            GitHub PAT with repo read
 #
