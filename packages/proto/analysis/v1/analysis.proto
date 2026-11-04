@@ -198,8 +198,9 @@ enum NoTradeReason {
   NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = 1;  // the whole range was warm-up
   NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;     // entry condition never satisfied
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3; // reserved; not emitted this version
-  NO_TRADE_REASON_FORMULA_ERROR = 4;        // a custom-formula component failed to execute / returned an out-of-contract series
+  NO_TRADE_REASON_FORMULA_ERROR = 4;        // a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal)
   NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = 5; // strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215)
+  NO_TRADE_REASON_EVALUATION_FAILED = 6; // not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275)
 }
 
 // feature 215 — best-effort marketdata label for a fundamentals refusal; never affects the guard

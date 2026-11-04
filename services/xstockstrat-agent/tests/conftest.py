@@ -148,8 +148,9 @@ def hung_backend(monkeypatch):
 
     ``start(endpoint_attr, *, module=None, answers=None)`` redirects ``module.<endpoint_attr>``
     (default module ``app.client``). Per method name, ``answers`` maps to ``(delay_s, msg)`` (answer
-    ``msg`` after the delay) or ``(delay_s, grpc.StatusCode)`` (abort after the delay); an absent
-    method hangs until the caller's deadline. The handle exposes ``port``, ``calls`` (a list of
+    ``msg`` after the delay), ``(delay_s, msg, trailers)`` (also set ``trailers`` as trailing
+    metadata) or ``(delay_s, grpc.StatusCode)`` (abort after the delay); an absent method hangs
+    until the caller's deadline. The handle exposes ``port``, ``calls`` (a list of
     ``(method, metadata_dict)``) and ``entered``. Config paths keep 247's ``hung_config_server``
     (typed ConfigService); this fixture serves every other service, untyped (raw bytes).
     """
@@ -173,10 +174,12 @@ def hung_backend(monkeypatch):
                 while context.is_active() and not stop.is_set():
                     stop.wait(0.05)
                 return b""
-            delay_s, outcome = reply
+            delay_s, outcome, *rest = reply
             stop.wait(delay_s)
             if isinstance(outcome, grpc.StatusCode):
                 context.abort(outcome, "rejected")
+            if rest:
+                context.set_trailing_metadata(rest[0])
             return outcome.SerializeToString()
 
         class _AnyMethod(grpc.GenericRpcHandler):

@@ -97,8 +97,11 @@ Read **`reference/recon-checklist.md`** and follow it. In short:
    `$FEATURE_DIR/recon.md` using
    `templates/recon.md`. The **Patterns to REUSE** section is the anti-duplication core — list real,
    existing patterns the implementation should reuse rather than re-create.
-4. Present a 4–6 line recon summary to the user and continue to Phase 1 (no separate gate here — the
-   gate is at the end of the debate).
+4. Present a 4–6 line recon summary to the user. **If the mode is `quick`**, check recon.md against the
+   *Post-Recon escalation* section of `docs/sdd/design-depth-rubric.md`; on a hit, ask via
+   `AskUserQuestion` — *Upgrade to full* / *Keep quick* — and record the outcome in `context.md`.
+   Never downgrade `full`. Then continue to Phase 1 (otherwise no separate gate here — the gate is at
+   the end of the debate).
 
 **Write `recon.md` now** (this is the first write; it is allowed — the lifecycle flip happens only
 after Phase 1 approval).

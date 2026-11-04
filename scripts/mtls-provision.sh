@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Provision the inter-service mTLS CA (feature 210) for local dev AND the DO deploy pipeline.
 #
-# The deploy stores ONLY the platform CA (cert + key) as one GitHub secret per environment
-# (DEV_MTLS_CA / PROD_MTLS_CA, a base64(JSON {ca_cert, ca_key})). .github/workflows/deploy.yml then
-# mints the 12 per-service leaves off that CA on every deploy (reusing gen-dev-certs.sh) and substitutes
-# them into the MTLS_* placeholders in .do/app*.yaml. The CA stays stable across deploys (no rolling-
-# deploy handshake mismatch); leaves auto-rotate each deploy. Trade-off: the CA signing key lives in CI
+# The deploy stores ONLY the platform CA (cert + key), a base64(JSON {ca_cert, ca_key}), as common.MTLS_CA
+# in secrets/<env>.enc.yaml, shared by DO and homelab (feature 286; the legacy DEV_/PROD_MTLS_CA repo secret
+# is only a fallback). scripts/do-render-app-spec.py mints the 12 per-service leaves off that CA on every
+# deploy (reusing gen-dev-certs.sh) and substitutes them into the MTLS_* placeholders in .do/app*.yaml.
+# The CA stays stable across deploys (no rolling-deploy handshake mismatch); leaves auto-rotate each deploy. Trade-off: the CA signing key lives in CI
 # — acceptable for this operator's threat model (same class as JWT_SECRET / DB creds already in CI).
 #
 # Dev and prod get SEPARATE CAs (distinct ./certs and ./certs-prod trees) — the runbook's
@@ -14,8 +14,8 @@
 # Usage:
 #   scripts/mtls-provision.sh local                 # mint ./certs (dev CA + leaves) for docker-compose
 #                                                   #   then: source scripts/mtls-dev-env.sh && docker compose up -d
-#   scripts/mtls-provision.sh ca <dev|prod>         # print the base64 CA bundle for {DEV,PROD}_MTLS_CA to stdout
-#   scripts/mtls-provision.sh set-secret <dev|prod> # gh secret set {DEV,PROD}_MTLS_CA (requires an authenticated gh)
+#   scripts/mtls-provision.sh ca <dev|prod>         # print the base64 CA bundle (pipe into: sops set … common.MTLS_CA)
+#   scripts/mtls-provision.sh set-secret <dev|prod> # gh secret set the legacy {DEV,PROD}_MTLS_CA fallback (authenticated gh)
 #   scripts/mtls-provision.sh decode-ca <certs_dir> # write $MTLS_CA's CA into <certs_dir>/_ca (deploy pipelines)
 #
 # bash 3.2 compatible (macOS default); BSD/GNU openssl compatible (via gen-dev-certs.sh).

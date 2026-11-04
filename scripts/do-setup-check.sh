@@ -108,7 +108,7 @@ fi
 # ── GitHub Actions Secrets ────────────────────────────────────────────────────
 section "GitHub Actions Secrets:"
 
-REQUIRED_SECRETS=(DIGITALOCEAN_ACCESS_TOKEN DO_DEV_APP_ID DO_PROD_APP_ID BUF_TOKEN)
+REQUIRED_SECRETS=(DIGITALOCEAN_ACCESS_TOKEN BUF_TOKEN)
 
 if [ "$GH_AUTH_OK" -eq 1 ]; then
   SECRET_LIST=$(gh secret list 2>/dev/null || true)

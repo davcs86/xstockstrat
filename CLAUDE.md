@@ -349,13 +349,13 @@ Every backend service **that makes outbound per-request gRPC calls** must propag
 | `feature/<slug>` | Feature implementation branches (SDD workflow); also used for SDD-path bug fixes (Track C) |
 | `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
 | `hotfix/<slug>` | Urgent production bug fixes — branches from `main`, PR targets `main`; back-merged into `main-dev` after merge |
-| `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — always branched from and PR'd into `main-dev`; never use as base for features |
+| `claude/*`, `ccr-*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`, `ccr-88d8f6f9-t0yqae`) — always branched from and PR'd into `main-dev`; never use as base for features |
 
 ### Merge Strategy
 
 | PR direction | Required merge type | Reason |
 |---|---|---|
-| `feature/*` or `claude/*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
+| `feature/*`, `claude/*` or `ccr-*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
 | `hotfix/*` → `main` | **Create a merge commit** — never squash | Preserves ancestry; back-merge into `main-dev` required immediately after |
 | `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
 
@@ -372,7 +372,7 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is `max(existing NNN) + 1` — never reuse a number, never backfill a gap, and once a feature reaches `launched` its number is immutable. If two `/sdd-story` runs race and collide on a number, renumber the later one to the next free `NNN` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.sh` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
 - `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
 - `feature.md` — Status History audit log, links to all artifacts
@@ -447,6 +447,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
+| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.sh`, `scripts/sdd-allocate-feature-number.test.sh` |
 | User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | E2E test container | `Dockerfile.e2e` |
@@ -476,4 +477,4 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 
 **The harness must always check out `main-dev` at session start.** Never begin work on a harness-assigned branch (e.g. `claude/*`). SDD skills read authoritative artifacts from `origin/feature/<slug>` or `origin/main-dev` via `git show` — the working-tree checkout must be `main-dev` so that any fallback reads and branch operations start from the correct base.
 
-**All `claude/*` branches must be based on `main-dev`, not `main`.** When the harness creates or checks out a `claude/*` branch, it must branch from `main-dev` and open PRs targeting `main-dev`. Branching from `main` will pollute the PR with unrelated production commits.
+**All `claude/*` and `ccr-*` branches must be based on `main-dev`, not `main`.** When the harness creates or checks out one of these branches, it must branch from `main-dev` and open PRs targeting `main-dev`. Branching from `main` will pollute the PR with unrelated production commits.

@@ -83,6 +83,17 @@ jobs:
               - 'scripts/gen-dev-certs.sh'
               - 'scripts/mtls-provision.sh'
               - '.github/workflows/deploy-homelab.yml'
+            sops:
+              - 'scripts/sops_secrets.py'
+              - 'scripts/do-render-app-spec.py'
+              - 'scripts/sops-secrets.test.sh'
+              - '.github/actions/setup-sops/**'
+              - '.github/workflows/deploy*.yml'
+              - '.github/workflows/prod-up.yml'
+              - '.github/workflows/sops-bootstrap.yml'
+              - '.do/**'
+              - '.sops.yaml'
+              - 'secrets/**'
             ledger:
               - 'docs/roadmap/ledger/**'
               - 'scripts/ledger-guard.py'
@@ -106,6 +117,17 @@ jobs:
               - '.do/**'
               - 'scripts/check-otel-produced-signals*.sh'
               - 'scripts/testdata/otel-produced-signals/**'
+            config-wiring:
+              - 'services/xstockstrat-config/migrations/**'
+              - 'services/**/*.go'
+              - 'services/*/app/**/*.py'
+              - 'services/*/src/**/*.ts'
+              - 'services/*/src/**/*.tsx'
+              - 'scripts/check-config-wiring.mjs'
+              - 'scripts/config-wiring-py-reads.py'
+              - 'scripts/config-wiring.json'
+              - 'scripts/config-wiring.test.mjs'
+              - 'scripts/config-wiring-fixtures/**'
 
       - name: Print matched filters
         run: |
@@ -646,7 +668,7 @@ jobs:
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
       - name: Migration tooling structural tests
-        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh && bash scripts/sdd-allocate-feature-number.test.sh
 
   # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
   # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
@@ -896,6 +918,52 @@ jobs:
       - name: Build and render staging/production, override, mTLS and broken-render cases
         run: bash scripts/homelab-render.test.sh
 
+  sops-secrets:
+    name: SOPS deploy-secret tooling + workflow static rules
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'sops') ||
+      contains(fromJson(needs.changes.outputs.matched), 'homelab') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-sops
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: ruff (the two SOPS scripts)
+        run: |
+          pip install ruff
+          ruff check scripts/sops_secrets.py scripts/do-render-app-spec.py
+          ruff format --check scripts/sops_secrets.py scripts/do-render-app-spec.py
+
+      - name: All test groups (resolve, build, render, static workflow rules, AC-24)
+        run: bash scripts/sops-secrets.test.sh
+
+  config-wiring:
+    name: Config key wiring (whole-tree)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'config-wiring') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Config-wiring checker tests
+        run: node --test scripts/config-wiring.test.mjs
+
+      - name: Seeded keys and reads join against the committed baseline
+        run: node scripts/check-config-wiring.mjs --final
+
   ci-gate:
     name: CI Gate
     if: always()
@@ -914,11 +982,13 @@ jobs:
       - migration-contract-gate
       - ledger-db-test
       - homelab-render
+      - sops-secrets
       - markdown-lint
       - context-map
       - otel-signals
       - ledger-guard
       - secret-scan
+      - config-wiring
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate upstream results
@@ -937,11 +1007,13 @@ jobs:
           echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
           echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"
           echo "homelab-render:  ${{ needs.homelab-render.result }}"
+          echo "sops-secrets:    ${{ needs.sops-secrets.result }}"
           echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
           echo "context-map:     ${{ needs.context-map.result }}"
           echo "otel-signals:    ${{ needs.otel-signals.result }}"
           echo "ledger-guard:    ${{ needs.ledger-guard.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
+          echo "config-wiring:   ${{ needs.config-wiring.result }}"
 
       - name: Fail on upstream failure or cancellation
         if: >-

@@ -171,7 +171,7 @@ class TestManageStrategyClient:
 
     @pytest.mark.asyncio
     async def test_unknown_operation_raises(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="'score' is routed to ScoreStrategy"):
             await client.manage_strategy(user_id="u-1", operation="bogus", definition={})
 
     @pytest.mark.asyncio
@@ -192,6 +192,63 @@ class TestManageStrategyClient:
                 )
         sent = mock_stub.ManageStrategy.call_args[0][0]
         assert sent.operation == analysis_pb2.STRATEGY_OPERATION_REACTIVATE
+
+
+class TestScoreStrategyClient:
+    """Feature 283: client.score_strategy reads the excluded-symbols trailer off the call object."""
+
+    class _FakeCall:
+        def __init__(self, resp, trailing):
+            self._resp = resp
+            self._trailing = trailing
+
+        def __await__(self):
+            async def _resp():
+                return self._resp
+
+            return _resp().__await__()
+
+        async def trailing_metadata(self):
+            return self._trailing
+
+    async def _score(self, trailing):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.StrategyScore(
+            strategy_id="s", overall_score=0.7, rating="B", evidence_symbols=2, evidence_days=756
+        )
+        mock_stub = MagicMock()
+        mock_stub.ScoreStrategy = MagicMock(return_value=self._FakeCall(resp, trailing))
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.score_strategy(user_id="u-owner", strategy_id="s")
+        return result, mock_stub.ScoreStrategy
+
+    @pytest.mark.asyncio
+    async def test_trailer_present_yields_excluded_symbols(self):
+        result, _ = await self._score(grpc.aio.Metadata(("x-score-excluded-symbols", '["SCHD"]')))
+        assert result["excluded_symbols"] == ["SCHD"]
+        assert result["evidence_symbols"] == 2
+
+    @pytest.mark.asyncio
+    async def test_no_trailing_metadata_yields_none_and_one_warning(self, caplog):
+        """AC-11 (unit half): a wrapper that swallows trailers must surface null, not []."""
+        import logging  # noqa: PLC0415
+
+        with caplog.at_level(logging.WARNING, logger="app.client"):
+            result, _ = await self._score(None)
+        assert result["excluded_symbols"] is None
+        assert len([r for r in caplog.records if r.name == "app.client"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_request_shape_metadata_and_long_deadline(self):
+        _, rpc = await self._score(grpc.aio.Metadata(("x-score-excluded-symbols", "[]")))
+        sent = rpc.call_args[0][0]
+        assert sent.strategy_id == "s"
+        assert not sent.HasField("range")
+        assert ("x-user-id", "u-owner") in rpc.call_args.kwargs["metadata"]
+        assert rpc.call_args.kwargs["timeout"] == client._LONG_RPC_TIMEOUT_S
 
 
 class TestManageFormulaClient:
