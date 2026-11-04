@@ -387,25 +387,7 @@ openssl rand -base64 48
 
 Injected at deploy time from `common.JWT_SECRET` in `secrets/<env>.enc.yaml` (legacy fallback: the `DEV_JWT_SECRET` / `PROD_JWT_SECRET` repo secrets, see Step 9). It substitutes into the `YOUR_DEV_JWT_SECRET` / `YOUR_PROD_JWT_SECRET` placeholders. You may use the same value for both or separate ones per environment.
 
-### MCP agent secret
-Set on: `xstockstrat-agent`
-
-```bash
-# Generate:
-openssl rand -hex 32
-```
-
-Set as `MCP_AGENT_SECRET` on both apps (dev and prod). It is required for the agent's OAuth 2.1
-login flow (`app/oauth_server.py` HMAC-signs the `txn` blob with it) — `xstockstrat-ingest`,
-`xstockstrat-notify`, and `xstockstrat-analysis` do not read this variable.
-
-```bash
-doctl apps update $DO_DEV_APP_ID \
-  --set-env MCP_AGENT_SECRET=<your-secret>
-
-doctl apps update $DO_PROD_APP_ID \
-  --set-env MCP_AGENT_SECRET=<your-secret>
-```
+The same `JWT_SECRET` is also injected into `xstockstrat-agent` (same placeholders), which HMAC-signs its OAuth 2.1 `txn` blob with it (`app/oauth_server.py`). There is no separate agent secret — `MCP_AGENT_SECRET` was retired by feature 147; do not set it.
 
 ### Broker accounts encryption key
 Set on: `xstockstrat-trading`
