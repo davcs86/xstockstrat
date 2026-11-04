@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-ledger-query-pagination`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ledger-query-pagination-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ledger-query-pagination-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ledger-query-pagination-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
 **Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
 **Launched date**: 2026-10-31
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ledger-query-pagination-defect.md` (debt-radar D-13, D-27, D-46) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ledger-query-pagination-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ledger-query-pagination-defect.md) (debt-radar D-13, D-27, D-46) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 248, 251, 263) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator signed off FR-1/FR-7/AC-5 late-commit wording and FR-5 max-cumulative pass 2; 263 merges first |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec FR-1/FR-4/FR-5/FR-6/FR-7 and acceptance AC-1/AC-5 restated per operator sign-off (a)/(b) |
@@ -30,6 +31,7 @@
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done; C-16 promotion applied; integration PR to `main-dev` opened. Step 8 is verified by CI job `Ledger DB test (TimescaleDB)` going green |
 
 | 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -47,11 +49,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — Phase 0 codebase dossier
-- [Design](design.md) — approved design (chosen approach, rejected alternatives, open risks)
-- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios promoted at launch (ledger + portfolio suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

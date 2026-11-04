@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-screener-symbol-isolation`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
 **Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
 **Launched date**: 2026-10-30
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, 4 notes; overlap PASS) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec/acceptance amended per design (AC-1 reworded, FR-4, AC-4, AC-5) |
@@ -34,6 +35,7 @@
 | 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 10 steps done; next: merge-order check, then the integration PR → `main-dev` (PR body records the manual context-constitution teardown) |
 
 | 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -51,11 +53,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-21
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — Phase 0 grounded codebase dossier
-- [Design](design.md) — approved design (4 rounds, full): chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 9 steps (analysis 1-3, agent 4-6, UI 7-8, docs 9)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to services/xstockstrat-{agent,analysis,ui}/acceptance/fix-screener-symbol-isolation.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

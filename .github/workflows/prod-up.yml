@@ -7,6 +7,8 @@ name: Prod — bring up
 #
 # Recreating the app assigns a NEW app id and (without a custom domain) a NEW
 # *.ondigitalocean.app URL. Deploys find the app by its spec name, so nothing needs updating.
+# Bring-up also makes the app a trusted source of DB cluster xstockstrat (scripts/do-db-cluster.sh);
+# the spec's vpc: block is filled from that cluster's VPC at render time.
 
 on:
   workflow_dispatch:
@@ -36,10 +38,21 @@ jobs:
         run: |
           APP_ID=$(doctl apps list --format ID,Spec.Name --no-header \
             | awk '$2=="xstockstrat-production"{print $1}')
+          n=$(printf '%s' "$APP_ID" | grep -c . || true)
+          if [ "$n" -gt 1 ]; then
+            echo "::error::expected at most 1 app named xstockstrat-production, found $n"
+            exit 1
+          fi
           if [ -n "$APP_ID" ]; then
-            echo "Prod app already running ($APP_ID) — nothing to do."
+            echo "Prod app $APP_ID already exists — ensuring it is a trusted source; redeploys only if the rule was just added and the latest deployment failed."
           fi
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Look up the database cluster (VPC + cluster ID)
+        id: db
+        env:
+          SPEC: .do/app.yaml
+        run: bash scripts/do-db-cluster.sh lookup
 
       - uses: ./.github/actions/setup-sops
         if: steps.check.outputs.app_id == ''
@@ -48,6 +61,7 @@ jobs:
         id: render
         if: steps.check.outputs.app_id == ''
         env:
+          VPC_ID: ${{ steps.db.outputs.vpc_id }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
           LEGACY_JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
           LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
@@ -68,6 +82,7 @@ jobs:
           --app-name xstockstrat-production
           --image-tag "${{ inputs.image_tag }}"
           --org "${{ github.repository_owner }}"
+          --vpc-id "$VPC_ID"
           --out "$RUNNER_TEMP/app.yaml"
 
       - name: Create prod app
@@ -79,7 +94,9 @@ jobs:
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
 
       - name: Assign to project
+        id: assign
         if: steps.create.outputs.app_id != ''
+        continue-on-error: true
         env:
           DO_PROJECT_ID: ${{ steps.render.outputs.project_id }}
         run: |
@@ -90,28 +107,74 @@ jobs:
             echo "digitalocean.PROJECT_ID not set — app stays in the default project."
           fi
 
+      - name: Make the app a trusted source of the DB cluster
+        id: trust
+        env:
+          APP_ID: ${{ steps.create.outputs.app_id || steps.check.outputs.app_id }}
+          CLUSTER_ID: ${{ steps.db.outputs.cluster_id }}
+        run: bash scripts/do-db-cluster.sh trust "$CLUSTER_ID" "$APP_ID"
+
       - name: Wait for deployment
-        if: steps.create.outputs.app_id != ''
+        id: wait
+        if: steps.create.outputs.app_id != '' || steps.trust.outputs.appended == 'true'
+        env:
+          APP_ID: ${{ steps.create.outputs.app_id || steps.check.outputs.app_id }}
+          CREATED: ${{ steps.create.outputs.app_id }}
+          APPENDED: ${{ steps.trust.outputs.appended }}
+        # Timeout warns instead of failing (unlike deploy.yml): bring-up is attended and Report must still print the URL.
         run: |
-          APP_ID="${{ steps.create.outputs.app_id }}"
+          redeployed=0
+          pin=""
           for i in $(seq 1 60); do
-            DEPLOY_ID=$(doctl apps list-deployments "$APP_ID" --format ID --no-header | head -1)
-            PHASE=$(doctl apps get-deployment "$APP_ID" "$DEPLOY_ID" --format Phase --no-header)
-            echo "  [$i/60] Phase: $PHASE"
-            if [ "$PHASE" = "ACTIVE" ]; then
-              echo "Deployment succeeded."
-              break
-            elif [ "$PHASE" = "ERROR" ] || [ "$PHASE" = "CANCELED" ]; then
-              echo "Deployment failed with phase: $PHASE"
-              exit 1
+            DEPLOY_ID="${pin:-$(doctl apps list-deployments "$APP_ID" --format ID --no-header | head -1)}"
+            if [ -z "$DEPLOY_ID" ]; then
+              if [ "$i" -gt 4 ]; then
+                echo "::error::no deployment found for app $APP_ID"
+                exit 1
+              fi
+              sleep 15
+              continue
             fi
+            PHASE=$(doctl apps get-deployment "$APP_ID" "$DEPLOY_ID" --format Phase --no-header)
+            echo "  [$i/60] $DEPLOY_ID: $PHASE"
+            case "$PHASE" in
+              ACTIVE)
+                echo "Deployment succeeded."
+                exit 0
+                ;;
+              ERROR)
+                if [ "$redeployed" = 0 ] && { [ -n "$CREATED" ] || [ "$APPENDED" = true ]; }; then
+                  new=$(doctl apps create-deployment "$APP_ID" --format ID --no-header)
+                  if [ -z "$new" ]; then
+                    echo "::error::create-deployment returned no deployment ID"
+                    exit 1
+                  fi
+                  echo "Deployment $DEPLOY_ID failed; redeploying once now that the app is a trusted source ($new)."
+                  redeployed=1
+                  pin="$new"
+                else
+                  echo "Deployment failed with phase: ERROR"
+                  exit 1
+                fi
+                ;;
+              CANCELED)
+                echo "Deployment failed with phase: CANCELED"
+                exit 1
+                ;;
+              SUPERSEDED)
+                pin=""
+                ;;
+            esac
             sleep 15
           done
+          echo "::warning::deployment of $APP_ID did not finish within 15 minutes"
 
       - name: Report URL and app id
-        if: steps.create.outputs.app_id != ''
+        id: report
+        if: steps.create.outputs.app_id != '' || steps.trust.outputs.appended == 'true'
+        env:
+          APP_ID: ${{ steps.create.outputs.app_id || steps.check.outputs.app_id }}
         run: |
-          APP_ID="${{ steps.create.outputs.app_id }}"
           URL=$(doctl apps get "$APP_ID" --format DefaultIngress --no-header)
           echo "Production is up at: $URL (app id $APP_ID)"
 

@@ -1,7 +1,7 @@
 # xstockstrat-config — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (DELTA carries the full namespace + wholesale replace, defaults from call-site not DB `default_value`, enum→scope-string maps, pg_notify env+mode requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ camelCase/snake_case trading-mode scoping collapse, audit-on-UPDATE-only) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (DELTA carries the full namespace + wholesale replace, defaults from call-site not DB `default_value`, enum→scope-string maps, pg_notify env+user_id scope requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (cross-key deadline bounds unenforced, `SCALAR_BOUNDS_REGISTRY` guarding unread values, unvalidated `onNotification` env cast, migration `031` overwrite) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -109,18 +109,6 @@ reconnect path runs; a client cancel or transport error only unregisters the sub
 ## Config Keys Managed
 
 See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.
-
-## Webhooks
-
-_No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060 — which requires the ADMIN scope bit (or an authorized internal caller) and a propagated identity (see Critical Invariants #5)._
-
-## Config Governance
-
-All config changes must comply with the governance rules in the root `CLAUDE.md`. Key rules:
-
-- New keys are seeded by a config migration and registered in `docs/patterns/config-governance.md` § Per-Feature Registered Keys. A `packages/proto/` PR is needed only for a new RPC or field.
-- Sensitive keys (`is_secret=true`) are stored as AES-256-GCM ciphertext in `value_encrypted` (never plaintext), redacted at every read edge, and readable only via `GetSecret` under the `SECRET_CALLER_ALLOWLIST` (feature 147)
-- All changes are written to `config.config_audit` automatically
 
 ## Environment Variables
 

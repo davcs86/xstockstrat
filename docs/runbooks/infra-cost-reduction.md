@@ -40,11 +40,12 @@ concurrency group so they can't race):
 
 | Workflow | What it does |
 |---|---|
-| **Prod — bring up** (`prod-up.yml`) | `doctl apps create` from `.do/app.yaml`, injecting all runtime secrets, waits for the deploy, prints the URL + new app id. Input: `image_tag` (default `latest`). |
-| **Prod — tear down** (`prod-down.yml`) | Looks the app up by name and `doctl apps delete`s it. Requires typing `destroy-prod` to confirm. |
+| **Prod — bring up** (`prod-up.yml`) | `doctl apps create` from `.do/app.yaml`, injecting all runtime secrets and the `xstockstrat` cluster's VPC (`vpc:`), makes the new app a trusted source of that cluster, waits for the deploy (redeploying once if the first deployment fails, e.g. because the migrator started before the trusted source landed), prints the URL + new app id. Re-running it on an existing app re-ensures the trusted source. Input: `image_tag` (default `latest`). |
+| **Prod — tear down** (`prod-down.yml`) | Looks the app up by name, `doctl apps delete`s it, then removes only that app's trusted-source rule from the cluster (best-effort; a failure is named in the run summary and never empties the trusted-source list). Requires typing `destroy-prod` to confirm. |
 
-**Data safety:** teardown deletes only the App Platform app. The managed
-Postgres cluster `xstockstrat` is a separate resource and is never touched.
+**Data safety:** teardown deletes only the App Platform app and its own
+trusted-source rule. The managed Postgres cluster `xstockstrat` is a separate
+resource: cluster data untouched.
 
 **Required secrets.** Bring-up injects the full deploy key set, because a fresh
 `doctl apps create` does *not* inherit dashboard-set SECRET values the way
@@ -64,5 +65,13 @@ neither store fails the run before `doctl apps create`, and the step summary lis
   environment, so it waits for that environment's required reviewers.
 - **First bring-up needs validation.** Confirm `doctl apps create` *attaches*
   the existing `xstockstrat` cluster (via the spec `databases:` block) rather
-  than provisioning a new one, and that all secrets landed (check the running
+  than provisioning a new one, that the app joined the cluster's VPC and is in
+  its trusted sources (`doctl databases firewalls list <cluster-id>`), that the
+  `db-migrator` job connects, and that all secrets landed (check the running
   spec / service logs).
+- **An existing prod app picks up `vpc:` only on its next `deploy-prod`.**
+  `prod-up` re-renders only when it creates the app; on an existing one it only
+  re-ensures the trusted source.
+- **The deploy token needs database scope.** Every deploy looks up the cluster's
+  VPC (database read), and bring-up/tear-down edit its trusted sources
+  (database update).

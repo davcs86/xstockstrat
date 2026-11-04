@@ -13,6 +13,12 @@ permissions:
 jobs:
   changes:
     name: Detect changed paths
+    # A main-dev -> main promotion PR's head is the main-dev tip, whose push run already ran this CI.
+    # Skipping here skips every downstream job; ci-gate treats skipped as passing.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.base_ref != 'main' ||
+      github.head_ref != 'main-dev'
     runs-on: ubuntu-latest
     # Scoped to this job only. A workflow-level `permissions:` block sets
     # every unlisted scope to `none` for ALL jobs, which silently strips
@@ -86,10 +92,12 @@ jobs:
             sops:
               - 'scripts/sops_secrets.py'
               - 'scripts/do-render-app-spec.py'
+              - 'scripts/do-db-cluster.sh'
               - 'scripts/sops-secrets.test.sh'
               - '.github/actions/setup-sops/**'
               - '.github/workflows/deploy*.yml'
               - '.github/workflows/prod-up.yml'
+              - '.github/workflows/prod-down.yml'
               - '.github/workflows/sops-bootstrap.yml'
               - '.do/**'
               - '.sops.yaml'

@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-etf-flag-fill`
-**GitHub Issue**: n/a (Issues disabled) — defect report `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`
+**GitHub Issue**: n/a (Issues disabled) — defect report `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-15
 **Last Updated**: 2026-11-02
 **Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
 **Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md` |
+| 2026-10-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings, overlap WARN); scope narrowed to @AC-2/@AC-3, lands after 255 |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps; acceptance.feature amended (@AC-2 rewritten, @AC-3 split into @AC-3/@AC-5/@AC-6, @AC-4 and @AC-7 added) and product-spec FR-2 trace clause + FR-3 added per design.md |
@@ -31,15 +32,16 @@
 | 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute | ALL-DONE PATH: dependency 255 merged as `5bf18403` (PR #1394); C-16 promotion (operator pre-approved) wrote `@AC-2`–`@AC-7` to `services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature` with `@feature-230`; integration PR opened to `main-dev` |
 
 | 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

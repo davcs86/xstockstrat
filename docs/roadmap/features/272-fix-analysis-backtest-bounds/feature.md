@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-analysis-backtest-bounds`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-analysis-backtest-bounds-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-analysis-backtest-bounds-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-analysis-backtest-bounds-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
 **Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
 **Launched date**: 2026-10-31
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-backtest-bounds-defect.md` (debt-radar D-28, D-29) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-backtest-bounds-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-analysis-backtest-bounds-defect.md) (debt-radar D-28, D-29) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN, no FAIL) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator gate approval: D-28 option (a) + new AC-7; I-2 owned by 273 (merge 273 before 272) |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; @AC-5..7 added to acceptance.feature |
@@ -30,6 +31,7 @@
 | 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 9 (G-1) closed by operator sign-off: threshold 60 s, no measurements (no analysis traces, no ledger access, prod not running). All 9 steps done. |
 
 | 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -48,11 +50,11 @@ pass-through I-2 is owned by feature 273).
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

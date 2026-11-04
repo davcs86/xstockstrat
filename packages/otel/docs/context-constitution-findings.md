@@ -1,6 +1,6 @@
 # packages/otel — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 doc-lie (OTLP headers comment), +1 open question (RPC histogram never exported); hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — export-gap rows narrowed or resolved, collector hints re-stamped). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 doc-lie (OTLP headers comment), +1 open question (RPC histogram never exported); hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — export-gap rows narrowed or resolved, collector hints re-stamped); re-verified 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — both open rows still reproduce: the contradictory `OTEL_EXPORTER_OTLP_HEADERS` comment is unchanged at `otel-collector-config.yaml` ~L13-15, and `memory_limiter` is still 256/64 MiB). For triage/fixing, not
 governance. The `observability.md` doc-lie about the OTLP port is recorded at the root (cross-cutting).
 
 ## Documentation that lies (docs claim behavior the code lacks)
@@ -15,7 +15,7 @@ governance. The `observability.md` doc-lie about the OTLP port is recorded at th
 ## Resolved
 
 - **`alerts/README.md` implies `${DS_PROMETHEUS_UID}`/`${DS_LOKI_UID}` placeholders resolve automatically** — retired 2026-08-09 (refresh): this row misdiagnosed its own evidence. `alerts/README.md:19-29` ("## Substitutions before provisioning") already explicitly instructs "replace them before applying" with a table of what to substitute; `docs/setup/grafana-cloud.md#**Apply:** substitute (~L261-264)` is equally explicit. No `envsubst`/templating tooling was ever implied or expected. Confirmed no such tooling exists (repo-wide grep for `DS_PROMETHEUS_UID|DS_LOKI_UID|envsubst`, only doc references). Not a real doc-lie — dropped. The placeholders were later removed with the alert rules (feature 250, defect `otel-metrics-logs-never-exported-defect`).
-- **No service exports OTel metrics or logs, so the Grafana alerts and dashboards read nothing** — resolved by feature 250 (alerts/dashboards narrowed to traces, docs corrected) and **RESOLVED (feature 274)**: export restored in all 12 runtimes and the assets restored on the proven series; report [`2026-10-19-otel-metrics-logs-never-exported-defect`](../../../docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md); `docs/roadmap/features/274-otel-metrics-logs-export/`.
+- **No service exports OTel metrics or logs, so the Grafana alerts and dashboards read nothing** — resolved by feature 250 (alerts/dashboards narrowed to traces, docs corrected) and **RESOLVED (feature 274)**: export restored in all 12 runtimes and the assets restored on the proven series; report `2026-10-19-otel-metrics-logs-never-exported-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md); `docs/roadmap/features/274-otel-metrics-logs-export/`.
 
 
 ## Filed as defect reports (2026-10-19)

@@ -1,5 +1,5 @@
 Feature: fix-opportunity-composite-score (bug fix)
-  Regression guard for defect report docs/reports/2026-10-06-ui-composite-score-grade-colour-defect.md:
+  Regression guard for defect report docs/reports/2026-10-06-ui-composite-score-grade-colour-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-ui-composite-score-grade-colour-defect.md):
   Opportunity composite score is coloured with strategy-grade thresholds, so neutral reads as bearish.
   Supersedes the "colored via the existing scoreColor scale" clause of feature 199 @AC-8 (C-16 CHANGE).
 

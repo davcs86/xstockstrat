@@ -229,7 +229,7 @@ Parse its output to build a per-phase skip map:
 | P4.5 (make GHCR public) | Ask the user: "Are your GitHub Container Registry packages public? (y/n)" |
 | P5 (create prod app) | An app sourced from `main` branch exists in `doctl apps list` |
 | P6 (set DO secrets) | Ask the user: "Have you already set Alpaca/JWT secrets on both DO apps? (y/n)" |
-| P7 (attach DB) | `doctl apps get $DEV_APP_ID` output contains a `db` component |
+| P7 (attach DB) | `doctl apps get $DEV_APP_ID` output contains an `xstockstrat` database component |
 | P8 (GitHub secrets) | `gh secret list` shows `DIGITALOCEAN_ACCESS_TOKEN`, `DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`, `BUF_TOKEN`, and `gh secret list --env staging` / `--env production` each show `SOPS_AGE_KEY` (the deploy finds each app by its spec name, so no app-ID secret exists) |
 | P9 (verify) | Never skipped — always run |
 
@@ -237,7 +237,7 @@ Print a checklist before starting any phase:
 
 ```
 P1 ✓  doctl authenticated
-P2 ✓  database xstockstrat-db found
+P2 ✓  database xstockstrat found
 P3 →  connect GitHub to DigitalOcean
 P4 →  create dev app
 ...
@@ -286,9 +286,9 @@ Confirm the output shows a context marked `(current)` before proceeding.
 1. Show the exact creation command and ask the user to confirm before running:
 
 ```bash
-doctl databases create xstockstrat-db \
+doctl databases create xstockstrat \
   --engine pg \
-  --version 15 \
+  --version 18 \
   --region nyc1 \
   --size db-s-1vcpu-1gb \
   --num-nodes 1
@@ -300,7 +300,7 @@ doctl databases create xstockstrat-db \
 doctl databases list
 ```
 
-3. Enable TimescaleDB. Ask the user to paste their database connection string (from the DO console: Databases → xstockstrat-db → Connection Details → URI), then show:
+3. Enable TimescaleDB. Ask the user to paste their database connection string (from the DO console: Databases → xstockstrat → Connection Details → URI), then show:
 
 ```bash
 psql "$CONNECTION_STRING" -c 'CREATE EXTENSION IF NOT EXISTS timescaledb;'
@@ -357,11 +357,17 @@ Store as `DEV_PROJECT_ID` in working context.
 
 3. Substitute all placeholders and create the app — pipe directly, no temp file. Use `latest-dev` as the initial image tag; the CI deploy workflow will replace it with the real commit SHA on the first push:
 
+`YOUR_VPC_ID` is the VPC of the spec's database cluster — the app must join it to reach the database. Look it up first (fails closed if the spec's `cluster_name` does not resolve to exactly one cluster):
+
 ```bash
+DB_ENV=$(SPEC="$REPO_ROOT/.do/app.dev.yaml" bash "$REPO_ROOT/scripts/do-db-cluster.sh" lookup)
+CLUSTER_ID=$(printf '%s\n' "$DB_ENV" | sed -n 's/^cluster_id=//p')
+VPC_ID=$(printf '%s\n' "$DB_ENV" | sed -n 's/^vpc_id=//p')
 sed \
   -e "s|YOUR_GITHUB_ORG|${GH_ORG}|g" \
   -e "s|YOUR_REGISTRY_NAME|${REGISTRY_NAME}|g" \
   -e "s|YOUR_IMAGE_TAG|latest-dev|g" \
+  -e "s|YOUR_VPC_ID|${VPC_ID}|g" \
   "$REPO_ROOT/.do/app.dev.yaml" \
   | doctl apps create --spec /dev/stdin
 ```
@@ -372,7 +378,11 @@ sed \
 Dev App ID: <id>   ← copy this — you will need it in Phase 8
 ```
 
-Store as `DEV_APP_ID` in working context.
+Store as `DEV_APP_ID` in working context. Then make the app a trusted source of the cluster (a no-op if it already is):
+
+```bash
+bash "$REPO_ROOT/scripts/do-db-cluster.sh" trust "$CLUSTER_ID" "$DEV_APP_ID"
+```
 
 5. Assign the app to the dev project:
 
@@ -438,11 +448,17 @@ Store as `PROD_PROJECT_ID` in working context.
 
 3. Create the prod app — substitute all placeholders. Use `latest` as the initial image tag; CI replaces it with the real SHA on every push to `main`:
 
+`YOUR_VPC_ID` is the VPC of the spec's database cluster — the app must join it to reach the database. Look it up first (fails closed if the spec's `cluster_name` does not resolve to exactly one cluster):
+
 ```bash
+DB_ENV=$(SPEC="$REPO_ROOT/.do/app.yaml" bash "$REPO_ROOT/scripts/do-db-cluster.sh" lookup)
+CLUSTER_ID=$(printf '%s\n' "$DB_ENV" | sed -n 's/^cluster_id=//p')
+VPC_ID=$(printf '%s\n' "$DB_ENV" | sed -n 's/^vpc_id=//p')
 sed \
   -e "s|YOUR_GITHUB_ORG|${GH_ORG}|g" \
   -e "s|YOUR_REGISTRY_NAME|${REGISTRY_NAME}|g" \
   -e "s|YOUR_IMAGE_TAG|latest|g" \
+  -e "s|YOUR_VPC_ID|${VPC_ID}|g" \
   "$REPO_ROOT/.do/app.yaml" \
   | doctl apps create --spec /dev/stdin
 ```
@@ -453,7 +469,11 @@ sed \
 Prod App ID: <id>   ← copy this — you will need it in Phase 8
 ```
 
-Store as `PROD_APP_ID` in working context.
+Store as `PROD_APP_ID` in working context. Then make it a trusted source of the cluster (`prod-down` removes this rule; `prod-up` re-adds it for each recreated app):
+
+```bash
+bash "$REPO_ROOT/scripts/do-db-cluster.sh" trust "$CLUSTER_ID" "$PROD_APP_ID"
+```
 
 5. Assign the app to the prod project:
 
@@ -487,7 +507,7 @@ Display all three generated values so the user can record them externally. Dev a
 - `DEV_ALPACA_SECRET` — matching paper trading secret
 - `PROD_ALPACA_KEY` — live trading API key
 - `PROD_ALPACA_SECRET` — matching live trading secret
-- `DO_TOKEN` — DigitalOcean Personal Access Token (same one used in P1, or a new one with Read + Write scopes)
+- `DO_TOKEN` — a **dedicated custom-scoped** DigitalOcean Personal Access Token for CI (not the P1 operator token), with exactly: `app` create/read/update/delete, `database` read/update, `project` read/assign_resource, `vpc` read, and `actions`/`regions`/`sizes` read. Rationale per scope: `docs/setup/digitalocean.md` § CI token scopes
 
 **Optional — OTEL (Grafana Cloud):**
 
@@ -500,73 +520,24 @@ Ask: "Do you have Grafana Cloud OTLP credentials? (y/n — you can add them late
 
 Both `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` are the same for dev and prod apps (same Grafana Cloud stack). When provided, apply them to both app specs.
 
-### Apply to dev app — secrets stay in memory, never touch disk
+### Apply the secrets — through the deploy workflows
 
-```bash
-python3 << PYEOF | doctl apps update "$DEV_APP_ID" --spec /dev/stdin
-import re, os
-
-content = open('$REPO_ROOT/.do/app.dev.yaml').read()
-content = content.replace('YOUR_GITHUB_ORG',    os.environ['GH_ORG'])
-content = content.replace('YOUR_REGISTRY_NAME', os.environ['REGISTRY_NAME'])
-content = content.replace('YOUR_IMAGE_TAG',     'latest-dev')
-content = content.replace('YOUR_DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY', os.environ['DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY'])
-
-# Inject value: "" vars (ALPACA, JWT) — match existing empty-value pattern
-for key, val in [
-    ('ALPACA_API_KEY',    os.environ['DEV_ALPACA_KEY']),
-    ('ALPACA_API_SECRET', os.environ['DEV_ALPACA_SECRET']),
-    ('JWT_SECRET',        os.environ['JWT_SECRET']),
-]:
-    content = re.sub(
-        r'(key: ' + key + r'\n(?:.*\n)*?.*?value: )""',
-        r'\g<1>"' + val + '"',
-        content
-    )
-
-# Inject OTEL vars — these have scope: RUN_TIME but no value: field; insert it
-otel_endpoint = os.environ.get('OTEL_ENDPOINT', '')
-otel_headers  = os.environ.get('OTEL_HEADERS', '')
-if otel_endpoint:
-    content = re.sub(
-        r'(- key: OTEL_EXPORTER_OTLP_ENDPOINT\n    scope: RUN_TIME)',
-        r'\1\n    value: "' + otel_endpoint + '"',
-        content
-    )
-if otel_headers:
-    content = re.sub(
-        r'(- key: OTEL_EXPORTER_OTLP_HEADERS\n    scope: RUN_TIME\n    type: SECRET)',
-        r'\1\n    value: "' + otel_headers + '"',
-        content
-    )
-
-print(content)
-PYEOF
-```
-
-Repeat for the prod app using `PROD_ALPACA_KEY` / `PROD_ALPACA_SECRET` and `$PROD_APP_ID` (same `OTEL_ENDPOINT` / `OTEL_HEADERS` — same Grafana Cloud stack). In the prod Python block, replace `'latest-dev'` with `'latest'`, `app.dev.yaml` with `app.yaml`, and replace the placeholder substitution line with:
-
-```python
-content = content.replace('YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY', os.environ['PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY'])
-```
-
-Verify each `doctl apps update` exits 0 before proceeding.
+Deploy-time secrets are rendered from the SOPS files (`secrets/<env>.enc.yaml`) by `scripts/do-render-app-spec.py`, which also fills `YOUR_VPC_ID` and fails closed on any unfilled placeholder. Do not pipe a hand-edited spec into `doctl apps update`. Store the collected values per `docs/runbooks/sops-secrets.md`, then deploy with the **Deploy dev** workflow (push to `main-dev`) and **Prod — bring up** (`prod-up.yml`) for production.
 
 ---
 
 ## P7 — Attach Database to App(s) (Browser Step)
 
-**Skip if**: `doctl apps get $DEV_APP_ID` output contains a `db` component.
+**Skip if**: `doctl apps get $DEV_APP_ID` output contains an `xstockstrat` database component.
 
-This step requires the DO console — `doctl` cannot attach a managed database to an existing app.
+The attach is spec-based: each spec's `databases:` block (`cluster_name: xstockstrat`) and its `vpc:` block attach the cluster and its VPC when the app is created (P4/P5) and on every workflow deploy, and P4/P5's `trust` call adds the app to the cluster's trusted sources. No console step is needed.
 
-Walk the user through (repeat for both dev and prod apps):
+Fallback only if the spec-based attach failed (repeat for both apps):
 
 1. DO Console → **Apps** → select `xstockstrat-staging` (or `xstockstrat-production`)
-2. **Settings** → **App-Level Environment Variables** — note the `${db.DATABASE_URL}` placeholder is already in the spec
-3. **Components** → select any component → **Attach Database**
-4. Choose `xstockstrat-db` → set component name to exactly **`db`** (required — `${db.DATABASE_URL}` injection depends on this name)
-5. Save
+2. **Components** → select any component → **Attach Database**
+3. Choose the `xstockstrat` cluster → set component name to exactly **`xstockstrat`** (required — `${xstockstrat.DATABASE_URL}` injection depends on this name)
+4. Save
 
 Verify after the user confirms:
 
@@ -656,7 +627,7 @@ doctl apps logs "$DEV_APP_ID" --component xstockstrat-config --follow
 Setup complete!
 
   ✓ doctl authenticated
-  ✓ Managed PostgreSQL created (xstockstrat-db) with TimescaleDB enabled
+  ✓ Managed PostgreSQL created (xstockstrat) with TimescaleDB enabled
   ✓ GitHub connected to DigitalOcean
   ✓ GHCR packages public (ghcr.io/davcs86/xstockstrat/<service>) — 15 services
   ✓ Dev app created  (App ID: <DEV_APP_ID>, Project ID: <DEV_PROJECT_ID>)

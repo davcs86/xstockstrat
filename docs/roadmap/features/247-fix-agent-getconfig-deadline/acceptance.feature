@@ -1,5 +1,5 @@
 Feature: fix-agent-getconfig-deadline (bug fix)
-  Regression guard for docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md:
+  Regression guard for docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md):
   the agent's get_config_value issues GetConfig with no deadline.
   D is the get_config_value deadline: 3.0 s, aligned with _POLICY_READ_TIMEOUT_S, final value fixed at design.
 

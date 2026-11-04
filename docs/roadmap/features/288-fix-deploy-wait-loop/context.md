@@ -1,79 +1,48 @@
-# Context Log: fix-deploy-wait-loop
+# Context: 288-fix-deploy-wait-loop  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-11-04 (/sdd-triage)
+**What**: SEV-3 Track C bug (Type bug, `--from-report` of `docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md)). Run #1213 of "Deploy dev" went red after a 16-minute poll because its DO deployment reached the terminal phase `SUPERSEDED` (newer push, run #1214, deployed ~45 s later) and the "Wait for deployment" loop in the reusable `.github/workflows/deploy.yml` only ended on `ACTIVE`/`ERROR`/`CANCELED`; the app was healthy. Shipped in 5 steps on `feature/fix-deploy-wait-loop` (promoted via PR #1422, `0ef77aa1`): a `SUPERSEDED` branch that `::warning::`s and `exit 0`s (`deploy.yml:126`), a job-level `concurrency` group `deploy-${{ inputs.environment }}` with `cancel-in-progress: false` on the `deploy` job (`deploy.yml:35`), RED/GREEN assertions in `group_deploy` of `scripts/sops-secrets.test.sh` (AC-1 stub-run L709-, AC-2 config pins L666-671), and one doc sentence at `docs/patterns/ci-overview.md:57`. No proto, migration, config key or service change; the feature-286 SOPS steps were untouched. Both `@AC-*` are already promoted to `docs/sdd/business-rules/platform.feature` (`@feature-288`, L1027/L1033).
 
-- Bug reported via `--from-report`: `docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md` (Issues disabled)
-- Severity: SEV-3; env dev; not config-only → Track C
-- Created: feature.md, product-spec.md, acceptance.feature (regression scenarios), context.md
-- Affected: `.github/workflows/deploy.yml`, `deploy-dev.yml`, `deploy-prod.yml`
-- Root cause: confirmed from job 126410876732 log — phase literal is `SUPERSEDED` (not guessed); no concurrency group
-- Recommended design depth: skip → `/sdd-spec fix-deploy-wait-loop` (rationale: SEV-3, CI-only, no proto/migration/config, root cause known)
-- Development branch: feature/fix-deploy-wait-loop
-- Findings carried to spec: `deploy.yml` is called by both dev and prod, so a job-level `concurrency` on its `deploy` job keyed on `inputs.environment` covers both (group `deploy-staging` / `deploy-production`; `deploy-homelab.yml:54` uses `deploy-homelab-<env>`, `prod-up/down` use `prod-lifecycle` — no collision). GitHub keeps one pending run per group and cancels older pending ones (cancelled, not failed).
-- Open decision for spec: SUPERSEDED as success-with-warning vs distinct failure. Leaning success+`::warning::` (our commit is carried by the newer deployment; concurrency removes the CI-internal source).
-- `scripts/sops-secrets.test.sh` `group_deploy` pins `.jobs.deploy.environment`, `.needs`, `resolve-app-id`; it does not pin `concurrency`, so adding it should not trip the static checks — verify by running it. `actionlint` is not installed in this sandbox.
-- Local checkout of main-dev was behind origin (lacked feature 286); fast-forwarded before reading `deploy.yml`.
+**Why (irrecoverable rationale)**:
+- Two compounding causes, both fixed: the missing terminal branch (the literal `doctl` phase string `SUPERSEDED` was confirmed from job 126410876732's log, iterations 24-60, not guessed) and no `concurrency` group serialising runs against one DO app. The concurrency group removes the CI-internal source of supersession; the branch handles the rest.
+- D-1: SUPERSEDED is success-with-warning, not a distinct failure, because the reported defect is a falsely red run for a healthy app, a newer deployment of the same app took over, and that deployment's own run reports the outcome. Operator confirmed D-1 at the execute session (the spec had not been AI-reviewed; `/sdd-review` was never run and the operator chose to proceed).
+- One group in `deploy.yml` covers both callers because `deploy-dev.yml:43-51` and `deploy-prod.yml:42-50` both `uses:` it; the group resolves to exactly two values (`deploy-staging` / `deploy-production`) since `validate` restricts `inputs.environment`. No collision with `deploy-homelab-<env>` (`deploy-homelab.yml:54-56`) or `prod-lifecycle` (`prod-up/down`).
+- GitHub semantics relied on: a group keeps one running and one pending job, and a newer push's pending job replaces the older pending one, which ends cancelled (grey), not failed.
 
-## Session 2026-11-04 — sdd-spec
+**Rejected alternatives**:
+- SUPERSEDED exits 1 with a distinct message — lost because it keeps the false-red the bug reports. Residual accepted risk: a deployment superseded by one created outside CI (console, manual `doctl`) now reports green.
+- `cancel-in-progress: true` — lost because it would abort a deployment already in flight; `false` mirrors `deploy-homelab.yml:54-56`.
+- Workflow-level `concurrency` in the reusable workflow — lost; a workflow-level group in a called workflow is evaluated alongside the caller's and is the known route to cancel or deadlock a caller, so the group lives on the `deploy` job only.
+- A group on each caller (`deploy-dev.yml`/`deploy-prod.yml`) — lost because the group should be defined once, in `deploy.yml`, with both callers inheriting it. The test pins that `validate`, the `deploy.yml` root and both callers carry no `concurrency` (`sops-secrets.test.sh:666-671` plus the caller loop at L754).
+- Adding an `id:` to the wait step to select it in tests — lost; the step is selected by `.name == "Wait for deployment"` instead (the spec states the rule, "do not add an `id:`", without a reason).
 
-- Generated implementation-spec.md with 5 steps. Status draft → implementation-ready. Design phase was skipped per the triage `skip` recommendation (no recon.md/design.md); the product spec had not been AI-reviewed, and the guard's "proceed anyway" was taken from the triage Next Action (`/sdd-spec` directly), not an interactive yes. Confirm at `/sdd-review impl-spec`.
-- Key codebase findings:
-  - "Wait for deployment" is `deploy.yml:105-122`, no `id:`; the SUPERSEDED branch goes between the ACTIVE (L112-114) and ERROR/CANCELED (L115-117) branches. The `deploy` job header takes `concurrency` after `environment:` (L34), mirroring `deploy-homelab.yml:54-56`. Callers `deploy-dev.yml:43-51` / `deploy-prod.yml:42-50` need no change.
-  - `group_deploy` (`scripts/sops-secrets.test.sh:619-680`) already runs a stub-`doctl` harness for `resolve-app-id`; the wait step can be tested the same way with stub `doctl` + `sleep`. A prototype against the unmodified file reproduced the defect (SUPERSEDED rc=1, 60 polls, timeout message) and showed ACTIVE/ERROR/CANCELED unchanged.
-  - Sandbox `yq` is the Python kislyuk yq, so `need` in the test script fails here; run the test on a host with mikefarah yq (CI `sops-secrets` job on ubuntu-24.04 does). `actionlint` is not installed here and has no CI job.
-  - Decision D-1 (SUPERSEDED exits 0 with `::warning::`) and D-2 (`cancel-in-progress: false`) are recorded in the spec; D-1 needs reviewer confirmation.
-  - `prod-up.yml:93-109` has an identical wait loop with no SUPERSEDED branch; out of scope per product-spec, serialised by `prod-lifecycle`. Surfaced as an open follow-up.
-  - Feature 258 context.md:794 records the same false-red once before (run for `1f341870` SUPERSEDED) and accepted it; this is a recurrence.
-  - `docs/patterns/ci-overview.md:57` is the only doc describing the wait; it is not a context-forge teardown target.
+**Scars & gotchas**:
+- The sandbox `yq` is the Python kislyuk yq, so `need yq` in `scripts/sops-secrets.test.sh` fails there; the script needs mikefarah yq v4 (CI `sops-secrets` job on ubuntu-24.04 has it; macOS `brew install yq`). The execute session installed mikefarah v4.44.3 and actionlint v1.7.7 via `go install` into the scratchpad, and ran the full suite (all groups) only after building sops v3.13.3 locally.
+- `actionlint` has no CI job in `.github/workflows/ci.yml`; it was run locally (exit 0, without shellcheck) and is not gated; shellcheck and shfmt were absent, so the test file's shell style was checked by eye.
+- AC-2's runtime behavior (second run shows "Waiting for a concurrent run", no red run, a third push cancels the middle run's pending deploy) cannot be tested hermetically; only the config is pinned. The post-merge two-quick-pushes observation was handed to the operator and no result is recorded in context.md.
+- The local main-dev checkout was behind origin (lacked feature 286) during triage; it was fast-forwarded before reading `deploy.yml`.
+- `scripts/sops-secrets.test.sh` `group_deploy` previously pinned only `.jobs.deploy.environment`, `.needs` and `resolve-app-id`, so adding job-level `concurrency` could not trip existing assertions (verified by running all groups).
+- Step 1's harness overwrites the earlier `resolve-app-id` stub `doctl` and adds a stub `sleep` that records calls, so the 60-iteration BUILDING case runs instantly and SUPERSEDED can assert zero sleeps.
 
-## Session 2026-11-04 — sdd-execute (sequential)
+- Rule interpretation (spec lines 66-67): C-08 coverage pairing is a service-coverage rule and does not apply to workflow files, so no coverage threshold applies to a CI-only fix, but paired tests stay mandatory under P-06/C-15.
+- The spec session proceeded without `/sdd-review` on the triage Next Action's recommendation, not an interactive yes; the operator's explicit D-1 confirmation came at the execute session.
+- `check-config-wiring.mjs --final` reported a pre-existing, unrelated `trading.fill_poller.interval_ms:read-unseeded:production` line during execute (no finding for this feature); recorded here because the old context.md was its only record.
 
-- Operator decisions (AskUserQuestion, this session): D-1 confirmed — SUPERSEDED exits 0 with `::warning::`; branch `feature/fix-deploy-wait-loop` with an integration PR into `main-dev`; run `/sdd-spec` then `/sdd-execute` rather than implementing directly. Product spec was never AI-reviewed (`/sdd-review` not run); operator chose to proceed.
-- Re-spec gate: branch is 0 behind `origin/main-dev`; every step's Codebase Evidence grep matched the live tree. No re-spec.
-- Tooling setup (steps 1-5): mikefarah yq v4.44.3 ⬇ (go install, scratchpad bin) · actionlint v1.7.7 ⬇ (same) · jq ✓ · python3 ✓ · shellcheck ✗ · shfmt ✗ (not required by any step's Verification; actionlint runs without shellcheck integration, test-file shell style checked by eye) · no DB, none needed.
+**Permanent deviations**: none. Design depth was `skip` (no `recon.md`/`design.md` exist); the spec's D-1/D-2 were the only decisions and shipped as written.
 
-### Step 1 — test: RED harness for the SUPERSEDED wait-loop branch (AC-1) [done]
-- Extended `group_deploy` with a stub `doctl`/`sleep` harness that runs the real "Wait for deployment" script for SUPERSEDED, ACTIVE, ERROR, CANCELED and BUILDING.
-- TDD AC-1 red: `bash scripts/sops-secrets.test.sh deploy` → `ASSERT FAIL: AC-1: SUPERSEDED exited 1 after 60 polls (Timeout: deployment did not complete within 15 minutes.)` (exit 1) — the reported defect, against unmodified `deploy.yml`. Green follows Step 2.
-- Files modified: `scripts/sops-secrets.test.sh`
-- Deviations: none
+**Cross-feature signal**:
+- Recurrence of feature 258: `docs/roadmap/features/258-fix-config-stream-resilience/context.md:39` records the same false-red (deploy run for `1f341870` marked "failed" because DO SUPERSEDED it by `9bd923f3`) and accepted it as noise; 288 is the same defect hitting again (spec session, old context.md@d5cdb712:30).
+- Interacts with feature 286 (SOPS handling in `deploy.yml`): 288 edits the same file but deliberately leaves `resolve-app-id`, `setup-sops` and the render steps alone (product-spec Fix Scope).
 
-### Step 2 — service: end the wait loop on SUPERSEDED (AC-1) [done]
-- Added `elif [ "$PHASE" = "SUPERSEDED" ]` (`::warning::` + `exit 0`) between the ACTIVE and ERROR/CANCELED branches of "Wait for deployment" in `deploy.yml`; nothing else in the step or file touched (diff = 3 added lines; SOPS steps untouched).
-- TDD AC-1 green: `bash scripts/sops-secrets.test.sh deploy` → `deploy: ok` / `all assertions passed (deploy)` (exit 0; was red in Step 1). `yq e 'true'` parses; `actionlint .github/workflows/deploy.yml` exit 0 (without shellcheck).
-- Files modified: `.github/workflows/deploy.yml`
-- Deviations: none
+**Deferred follow-ons**:
+- `prod-up.yml` had the same wait loop without a SUPERSEDED branch at spec time (out of scope for 288). Already handled afterwards, differently: at HEAD (d5cdb712) its loop (`prod-up.yml:124-169`) has a `SUPERSEDED)` case that clears the pin and keeps polling (L163-165), redeploys once on ERROR, and warns instead of failing on timeout (L169); `concurrency: prod-lifecycle` is at L21. Not a live gap — do not rediscover it from the stale pointer in the pruned spec or old context.md.
+- `DEPLOY_ID` is taken from `doctl apps list-deployments | head -1` (`deploy.yml:118` at d5cdb712), which can pick another run's deployment; not made race-free (product-spec Out of Scope). The new concurrency group narrows but does not remove the window.
+- Post-merge operator observation of AC-2 (see Scars) is unrecorded.
 
-### Step 3 — test: RED assertion for the deploy concurrency group (AC-2) [done]
-- Pinned in `group_deploy`: `jobs.deploy.concurrency.group == deploy-${{ inputs.environment }}`, `cancel-in-progress == false`, no `concurrency` on `validate` or at workflow root of `deploy.yml`, and none on `jobs.deploy` / root of `deploy-dev.yml` and `deploy-prod.yml` (inside the existing caller loop). Config pin only; GitHub's queueing is observed post-merge.
-- TDD AC-2 red: `bash scripts/sops-secrets.test.sh deploy` → `ASSERT FAIL: AC-2: deploy job concurrency group` (exit 1) on the tree after Step 2; the Step 1 AC-1 assertions run first and pass. Green follows Step 4.
-- Files modified: `scripts/sops-secrets.test.sh`
-- Deviations: none
-
-### Step 4 — service: serialise deploys to one DO app with a job-level concurrency group (AC-2) [done]
-- Added `concurrency: {group: deploy-${{ inputs.environment }}, cancel-in-progress: false}` to the `deploy` job header of `deploy.yml` (after `environment:`). Callers `deploy-dev.yml` / `deploy-prod.yml` unchanged; they inherit it through `uses:`. Total `deploy.yml` diff vs `main-dev` after Steps 2+4: 6 added lines.
-- TDD AC-2 green: `bash scripts/sops-secrets.test.sh deploy` → `deploy: ok` (exit 0; was `ASSERT FAIL: AC-2: deploy job concurrency group` in Step 3). Full script, all groups (action resolve build render deploy produp homelab bootstrap ac24 cleanup) → `all assertions passed` (exit 0) with mikefarah yq v4.44.3 and sops v3.13.3 built locally. `actionlint` on `deploy.yml`, `deploy-dev.yml`, `deploy-prod.yml` → exit 0 (no shellcheck integration).
-- Not verifiable here (post-merge, operator): push two commits to `main-dev` within ~1 min and confirm the second run's "Deploy to dev" shows *Waiting for a concurrent run*, no run ends red, and a third push in the window cancels the middle run's pending deploy job.
-- Files modified: `.github/workflows/deploy.yml`
-- Deviations: none
-
-### Step 5 — docs: state the new wait/serialisation behavior in the CI overview [done]
-- Replaced the single sentence at `docs/patterns/ci-overview.md:57` with the SUPERSEDED-as-success and `deploy-<environment>` serialisation behavior. TDD: N/A (docs).
-- Verification: `grep -n "SUPERSEDED\|deploy-<environment>" docs/patterns/ci-overview.md` → both present (L57, L59).
-- Teardown (root CLAUDE.md): not triggered — no `CLAUDE.md`, constitution or findings doc changed; `ci-overview.md` is not in `.agents/context-forge.json` `scrubberExtraTargets` (`README.md`, `docs/patterns/ui-ux-governance.md`); no context file describes the wait loop (grepped `CLAUDE.md`, `docs/context-constitution*.md`, `docs/runbooks/*.md`, `README.md`).
-- Files modified: `docs/patterns/ci-overview.md`
-- Deviations: none
-
-## Session 2026-11-04 — sdd-execute (sequential)
-**Steps this session**: 1, 2, 3, 4, 5
-**Progress**: 5 done / 5 total
-**Stopped at**: all complete (feature-end checkpoint; integration PR next)
-- `node scripts/check-config-wiring.mjs --final` → exit 0; one pre-existing unrelated `REPORTED: ...trading.fill_poller.interval_ms:read-unseeded:production` line, no finding for this feature (no config keys declared).
-- Open follow-up (not fixed, out of scope per product-spec): `prod-up.yml:93-109` has the same wait loop without a SUPERSEDED branch (serialised by `concurrency: prod-lifecycle`).
-- Open follow-up: `DEPLOY_ID` is taken from `list-deployments | head -1`, which can pick another run's deployment; not made race-free here.
-**Next**: integration PR to `main-dev`
-- C-16 promotion (operator-approved): `@AC-1` and `@AC-2` appended to `docs/sdd/business-rules/platform.feature` tagged `@feature-288` (CI-workflow guarantees, no owning service). No merge-order entry for 288.
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-11-04 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: none (CI-only; no context file describes the wait loop, per the execute session's grep of `CLAUDE.md`, `docs/context-constitution*.md`, `docs/runbooks/*.md`, `README.md`). `ci-overview.md` is not a context-forge scrubber target.
+**Pruned artifacts**: product-spec.md, implementation-spec.md — last present at d5cdb712. (No recon.md or design.md ever existed for this feature.)

@@ -18,10 +18,6 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 ## Ports
 
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50058` | Internal service-to-service (protobuf) |
-
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing every
 `IdentityService` method, including: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
 the OAuth 2.1 backend RPCs (feature 049 Part B)

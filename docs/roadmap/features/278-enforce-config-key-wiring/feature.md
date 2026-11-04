@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-02
 **Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
 **Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -38,15 +39,16 @@
 | 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute sequential | All 19 steps done; `check-config-wiring.mjs --final` exit 0 (one non-blocking `REPORTED:` line); C-16 promotion applied as approved: 11 scenarios appended to `docs/sdd/business-rules/platform.feature` with `@feature-278` |
 
 | 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — approved design, rejected alternatives, open risks
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — 19 steps (Step 10 is an operator decision gate)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios already promoted at launch (see feature's acceptance.feature and service suites)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
