@@ -3,7 +3,7 @@
 # Durable business rules xstockstrat-ingest guarantees for the mcp_client poller and backfill cancel lifecycle.
 
 Feature: xstockstrat-ingest - mcp_client poller isolates failures and backfill cancel is final
-  Regression guard for docs/reports/2026-10-21-ingest-poller-backfill-defect.md:
+  Regression guard for docs/reports/2026-10-21-ingest-poller-backfill-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ingest-poller-backfill-defect.md):
   the ingest mcp_client poller drops or stalls signals, and canceled backfills are revived.
 
   @AC-1 @FR-1 @regression @feature-261

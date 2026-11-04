@@ -1,5 +1,5 @@
 Feature: fix-portfolio-snapshot-surface (bug fix)
-  Regression guard for docs/reports/2026-10-21-portfolio-snapshot-surface-defect.md:
+  Regression guard for docs/reports/2026-10-21-portfolio-snapshot-surface-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-portfolio-snapshot-surface-defect.md):
   StreamPortfolioUpdates fans every user's snapshot to every subscriber (D-24), and the periodic
   snapshot writer behind portfolio.snapshot.interval_minutes is never started (D-12).
   FR-4 takes branch (b), retire the key; the branch (a) scenario @AC-4 was deleted at design (operator, 2026-10-22).

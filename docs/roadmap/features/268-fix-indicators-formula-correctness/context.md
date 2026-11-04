@@ -62,7 +62,7 @@
 - `docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md` (sidecar `open`): a formula that never assigns `result` still returns `success=True, output={}` (`sandbox.py:315`, `.get('result', {{}})`). Provisional SEV-2; run `/sdd-triage --from-report` on it (feature.md Next Action).
 - Accepted debt (C-18): ATR/VWAP description text duplicated in `indicators_engine.py` and `strategyCatalog.ts`; named follow-up is to source the UI catalog from `ListIndicators` (`app/handlers/servicer.py:355`). No durable item (report or feature) was found filed for it at archive time — still only in this note.
 - Soft `merge-order.md` row for 268 vs 244: not added; moot post-launch (268 vs 269 is already recorded at `merge-order.md:94`).
-- Defect report `docs/reports/2026-10-21-indicators-formula-correctness-defect.md` has sidecar `triaged` with ref to this feature; now launched, so it is a candidate for `/sdd-archiver reports`.
+- Defect report `docs/reports/2026-10-21-indicators-formula-correctness-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-indicators-formula-correctness-defect.md) has sidecar `triaged` with ref to this feature; now launched, so it is a candidate for `/sdd-archiver reports`.
 
 **Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-11-04 entries.
 
