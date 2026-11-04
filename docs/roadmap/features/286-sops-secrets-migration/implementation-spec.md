@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/286-sops-secrets-migration/feature.md`
-**Total Steps**: 20
+**Total Steps**: 21
 **Feature Branch**: `feature/sops-secrets-migration`
 
 ---
@@ -17,8 +17,9 @@ Steps 2–8 then build the shared tooling, each test step before its code step (
 `scripts/do-render-app-spec.py`. All of it is tested hermetically by one new `scripts/sops-secrets.test.sh`.
 Steps 9–16 switch the consumers over one workflow at a time (DO deploy + callers, prod-up, homelab,
 bootstrap). Each workflow step comes after a static-rule test that pins its `LEGACY_*` lines (AC-22).
-Step 17 cleans up comments and secret names left in scripts and app specs, Step 18 wires CI, and Steps
-19–20 do the runbook and docs sweep.
+Step 17 cleans up comments and secret names left in scripts and app specs (RED in Step 15's `ac24`/`cleanup`
+groups), Step 18 wires CI, and Steps 19–21 do the runbook and the docs sweep (`docs/` tree in Step 20; the remaining
+repo surfaces plus the CLAUDE.md teardown in Step 21).
 
 The rollout itself (operator key setup, preflight, merge, bootstrap dispatch, promotions) is **not** a
 step. It is the operator procedure in design.md § Rollout and the new runbook (Step 19). The live checks
@@ -58,8 +59,15 @@ returned nothing. This settles design Risk 1 for the current specs.
    row) but places the generation inline in the bootstrap `pr` job. This spec puts it in a small
    `sops-config` subcommand of `scripts/sops_secrets.py` so the test can call it (Step 5/6).
 3. **The test file needs group selection.** `scripts/sops-secrets.test.sh` takes optional group names
-   (`resolve build render deploy produp homelab bootstrap`; no argument runs all). Without that, each
-   test/code pair could not show red-then-green on its own slice of the one test file.
+   (`action resolve build render deploy produp homelab bootstrap ac24 cleanup`; no argument runs all). Without that, each
+   test/code pair could not show red-then-green on its own slice of the one test file. Step 1 creates the
+   skeleton and the `action` group, so Step 2 also has a RED-first test.
+5. **Workflow YAML is parsed with `yq` (mikefarah v4)**, which is preinstalled on GitHub's ubuntu-24.04 runner image
+   (`brew install yq` locally). Every static group first asserts that its workflow parses (`yq e 'true' <file>`). That is the
+   workflow lint, since the repo has no actionlint (recon § Not found). The tool check fails loudly with the install hint.
+6. **Merge-order (impl-spec overlap scan, WARN only).** 278 and 281 append to the same `ci.yml` ci-gate `needs`/echo
+   lists, and 281 also appends to the `docs/runbooks/CLAUDE.md` index and the `docs/patterns/ci-overview.md` CI table. These are textual,
+   non-blocking conflicts: whichever lands second rebases and keeps every entry. No `merge-order.md` row is required.
 4. **The `sops` CI filter also includes `.do/**`.** The AC-8 reverse-substitution test renders the real
    `.do/app*.yaml`, so a spec edit must re-run it.
 
@@ -76,18 +84,18 @@ returned nothing. This settles design Risk 1 for the current specs.
 | AC-9 | Step 3 (precedence, labels, masks emitted first) + Step 7 (rendered values) | auto |
 | AC-10 | Step 3 (exact error) + Step 7 (`--out` never written) | auto |
 | AC-11 | Step 7 (prod-up render to `$RUNNER_TEMP/app.yaml`) + Step 11 (static prod-up wiring) | auto |
-| AC-12 | Step 13 (static: no `\bop\b\|1password\|OP_`) | static; live at homelab enablement (`gate status` exit 0) |
+| AC-12 | Step 13 (static, case-sensitive: no `\bop\b\|\bOP_`; case-insensitive: no `1password\|load-secrets-action`) | static; live at homelab enablement (`gate status` exit 0) |
 | AC-13 | Step 3 | auto |
 | AC-14 | Step 19 (inspection) | inspection |
 | AC-15 | Step 5 (guard message; a fetch failure reports `cannot fetch main-dev`) | auto |
 | AC-16 | Step 7 | auto |
-| AC-17 | Step 9 (static) + Step 10 verification (stub `doctl`, 1 match) | execute-time stub |
+| AC-17 | Step 9 (static + the `resolve-app-id` step run against a stub `doctl`, 1 match) | auto (permanent) |
 | AC-18 | Step 3 | auto |
 | AC-20 | Step 5 | auto |
-| AC-21 | Step 10 verification (stub `doctl`, 0 and 2 matches) | execute-time stub |
+| AC-21 | Step 9 (the `resolve-app-id` step against a stub `doctl`, 0 and 2 matches) | auto (permanent) |
 | AC-22 | Step 3 (behaviour) + Steps 9/11/13/15 (static RHS pins) | auto + static |
 | AC-23 | Step 3 | auto |
-| AC-24 | Step 18 (`MCP_AGENT_SECRET` absent from the named surfaces) | static |
+| AC-24 | Step 15 (group `ac24`: `MCP_AGENT_SECRET` absent from the named surfaces; GREEN after Steps 16–17), run in CI by Step 18 | static |
 
 AC-3, AC-4 and AC-19 are RETIRED in `acceptance.feature` (append-only IDs, operator 2026-11-03), so no step
 covers them.
@@ -95,17 +103,18 @@ covers them.
 ## Step Dependencies
 
 - Step 1 (gating smoke) blocks every later step. Any failed check stops the work and goes back to the operator (design § Rollout).
-- Step 2 [service] pins the binaries that Steps 3–8 and CI (Step 18) install. Step 2 is verified by the install itself; there is no paired test step (TDD N/A).
+- Step 2 [service] pins the binaries that Steps 3–8 and CI (Step 18) install. It is covered by Step 1's `action` group (RED before Step 2).
 - Step 4 [service] is covered by Step 3 [test]. Step 6 [service] by Step 5 [test]. Step 8 [service] by Step 7 [test].
 - Step 6 requires Step 4: `build` reuses the module's KEYS, masking and decrypt helpers.
 - Step 8 requires Step 4: `do-render-app-spec.py` imports `sops_secrets.resolve`.
-- Step 10 [service] is covered by Step 9 [test]; Step 12 by Step 11; Step 14 by Step 13; Step 16 by Step 15.
+- Step 10 [service] is covered by Step 9 [test]; Step 12 by Step 11; Step 14 by Step 13; Steps 16 and 17 by Step 15 (`bootstrap`, `ac24`, `cleanup`).
+- Step 10 requires Step 2 (`uses: ./.github/actions/setup-sops`) and Step 8 (it calls `do-render-app-spec.py`). Likewise Step 12 requires Steps 2 and 8, Step 14 requires Steps 2 and 4, and Step 16 requires Steps 2 and 6.
 - Steps 9, 11, 13 and 15 require Step 4: the static rules derive the expected `LEGACY_*` name sets from KEYS through `python3 -c` (design § AC-22 static rules).
 - Step 12 requires Step 8 (prod-up calls the new renderer). It deletes `scripts/do-inject-prod-secrets.py`, and that is safe only once nothing invokes it (`prod-up.yml:60` is its only caller, confirmed by grep).
 - Step 14 requires Step 4 (the homelab `resolve` CLI).
 - Step 16 requires Step 6 (`build`, `sops-config`).
-- Step 18 requires Steps 2–17: the new CI job runs the whole test file and the composite action, and its `ac24` group checks the `.do/` comments that Step 17 rewords.
-- Step 19 (runbook) and Step 20 (docs sweep) come last. They describe the shipped workflows.
+- Step 18 requires Steps 2–17: the new CI job runs the whole test file (every group, including `ac24`) and the composite action.
+- Step 19 (runbook), Step 20 (`docs/` sweep) and Step 21 (remaining surfaces + teardown) come last. They describe the shipped workflows. Step 21 requires Step 20 (the teardown audits every touched context file).
 - Design Risk 7 (`secrets[format()]` under `secrets: inherit` in a reusable job's step env) cannot be tested hermetically. It is confirmed at rollout step 3, the first deploy-dev after merge, and a failure there fails closed with MISSING. Step 1 records that it is deferred.
 - Rollout (not steps): operator setup, preflight, merge, promote, bootstrap dispatch and bootstrap PR merge (design § Rollout 1–7). The legacy-secret deletion is a follow-up feature, out of scope (product spec § Out of Scope).
 
@@ -114,9 +123,10 @@ covers them.
 ### Step 1 — test: Gating smoke test of the pinned sops/age/compose behaviour
 
 **Status**: `pending`
-**Service**: `scripts/` (tooling spike; no committed file)
+**Service**: `scripts/` (tooling spike + test skeleton)
 **Files**:
 - `docs/roadmap/features/286-sops-secrets-migration/context.md` — modify (record each check's result)
+- `scripts/sops-secrets.test.sh` — create (skeleton + group `action`)
 
 **Reviewers**: Platform Lead — cross-workflow deploy topology (DO + homelab)
 
@@ -126,7 +136,7 @@ covers them.
 - Install pattern to mirror: `deploy-homelab.yml:198-204`, which runs `curl -fsSLO` → `sha256sum -c -` → `sudo install -m 0755`.
 - The compose interpretation under test is the release `.env` path: `scripts/homelab-release-env.sh:36`, which passes APP_ENV lines through, and `scripts/homelab-render-check.sh:13`, which runs `docker compose --env-file … config`.
 
-**TDD**: `N/A (gating spike: proves third-party CLI behaviour before any code; no repo code under test)`
+**TDD**: `red-green required` for the `action` group (RED before Step 2). The smoke items 1–8 are a gating spike with no repo code under test.
 
 **Covers**: — (de-risks the assumptions behind AC-1, AC-5, AC-7 and AC-15; those scenarios are asserted in Steps 3, 5 and 7)
 
@@ -143,11 +153,27 @@ with the exact command in context.md:
 6. `docker compose --env-file f.env -f c.yml config --format json` with `f.env` holding `A='p$w #1 "x"'`, `B='j$t'` and `C='tr ail '` resolves A, B and C byte-exactly (single quotes disable `$` interpolation and keep the trailing space). Also record how `$$` inside single quotes is treated.
 7. A JSON round-trip of `"trail-v \n"` through encrypt → `decrypt --output-type json` → `json.loads` is byte-equal.
 8. Record design Risk 7 (`secrets[format('{0}_K', env.P)]` under `secrets: inherit`) as **deferred to the first deploy-dev** (rollout step 3). It cannot be exercised outside Actions.
+9. Confirm `yq --version` reports mikefarah v4 locally, and record it. The runner image ships it (spec-time finding 5).
 
+**Test skeleton.** Create `scripts/sops-secrets.test.sh`, executable and shellcheck/shfmt clean (`-i 2`). It has:
+- `#!/usr/bin/env bash`, a 2-line header naming what it tests, and `set -uo pipefail`;
+- `fail()` and a `work` mktemp with an EXIT trap;
+- a per-group tool check: `yq` for every group, plus `sops age age-keygen docker jq python3 openssl git` for the groups that run them. A missing tool fails with an install hint;
+- group dispatch: `groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"`. Each group is a function, and an unknown name fails. The later test steps add the remaining functions.
+
+Group `action` asserts, on `.github/actions/setup-sops/action.yml`:
+- the file exists and parses (`yq e 'true'`), and `.runs.using == "composite"`;
+- the step env holds exactly `SOPS_VERSION=3.13.3`, `AGE_VERSION=1.3.2` and the two full SHA-256 values from the pins table;
+- the run text holds two `sha256sum -c -` checks and the two release URLs built from `${SOPS_VERSION}`/`${AGE_VERSION}`;
+- the file has 0 `uses:` lines.
 **Verification**:
-Every item 1–7 is recorded PASS in context.md, with the commands used. If any item is FAIL, stop: mark the
+Every item 1–7 and 9 is recorded PASS in context.md, with the commands used. If any item is FAIL, stop: mark the
 step `blocked` and escalate to the operator (design § Rollout: "Any failure stops the work"). Item 8 is
 recorded as deferred.
+```bash
+bash scripts/sops-secrets.test.sh action   # RED (action.yml absent) before Step 2
+shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
+```
 
 ---
 
@@ -166,9 +192,9 @@ recorded as deferred.
 - The pin values are in § Execution Summary pins table.
 - Design C3 (design.md:107-112): no third-party `uses:` inside the action, 5 consumers.
 
-**TDD**: `N/A (CI install manifest, no branching logic; verified by executing its install commands)`
+**TDD**: `red-green required` (covered by Step 1's `action` group)
 
-**Covers**: —
+**Covers**: — (covered by Step 1)
 
 **Instructions**:
 Create a `runs: using: composite` action with no inputs. Put the pins in a single step's `env`:
@@ -183,8 +209,10 @@ versions, so bump them here.
 
 **Verification**:
 ```bash
-# From a scratch dir: run the action's run-block verbatim, with RUNNER_TEMP=$(mktemp -d), and confirm both checksum lines print OK
-grep -c 'uses:' .github/actions/setup-sops/action.yml   # expect 0
+bash scripts/sops-secrets.test.sh action   # GREEN
+# Execute the install for real: extract the run block and run it against a scratch RUNNER_TEMP with the step env
+T=$(mktemp -d); yq e '.runs.steps[0].run' .github/actions/setup-sops/action.yml >"$T/install.sh"
+env $(yq e '.runs.steps[0].env | to_entries | .[] | .key + "=" + .value' .github/actions/setup-sops/action.yml) RUNNER_TEMP="$T" bash "$T/install.sh"
 sops --version | grep -q '3.13.3' && age --version | grep -q 'v1.3.2'
 ```
 
@@ -195,7 +223,7 @@ sops --version | grep -q '3.13.3' && age --version | grep -q 'v1.3.2'
 **Status**: `pending`
 **Service**: `scripts/`
 **Files**:
-- `scripts/sops-secrets.test.sh` — create (group `resolve`)
+- `scripts/sops-secrets.test.sh` — modify (group `resolve`)
 
 **Reviewers**: Security — no plaintext in logs; fail-closed resolution
 
@@ -210,10 +238,7 @@ sops --version | grep -q '3.13.3' && age --version | grep -q 'v1.3.2'
 **Covers**: `AC-5, AC-9, AC-10, AC-13, AC-18, AC-22, AC-23`
 
 **Instructions**:
-Create the test file, executable, shellcheck/shfmt clean (`-i 2`). Give it `#!/usr/bin/env bash`, a 2-line
-header naming what it tests, `set -uo pipefail`, `fail()`, a `work` mktemp with an EXIT trap, and a tool check
-for `sops age age-keygen docker jq python3 openssl git`. Add group dispatch: `groups="${*:-resolve build render deploy produp homelab bootstrap ac24}"`.
-Each group is a function, and an unknown name fails. Add a helper that generates throwaway staging,
+Extend the Step 1 skeleton. Add a helper that generates throwaway staging,
 production and operator age keys, and a helper that writes a test SOPS file. The helper calls
 `sops encrypt --input-type json --output-type yaml --age <env>,<operator>` with `cwd=$work`, to
 `$work/repo/secrets/<env>.enc.yaml`. The resolver is pointed at that file with a `--file` argument (CLI) or
@@ -329,6 +354,7 @@ copy from the clone. Cases:
 bash scripts/sops-secrets.test.sh build   # RED before Step 6; GREEN after
 shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
 ```
+`scripts/` has no CI coverage threshold (`docs/patterns/ci-overview.md`). The hermetic suite is the verification.
 
 ---
 
@@ -410,11 +436,15 @@ and `.do/app.yaml` with `--env production --app-name xstockstrat-production`):
    - Every `yaml_pem` string (CA, leaf cert, leaf key) and every value is preceded by its `::add-mask::` on stdout.
    - `GITHUB_OUTPUT` receives `app_name=` and `project_id=` only.
 
+Implement the reverse map (line diff, sentinel/PEM map-back, openssl checks) as a single `python3 - <<'PY'` heredoc
+inside the group function, with the openssl calls via `subprocess`. Do not hand-roll it in bash, and add no new file (C-18).
+
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh render   # RED before Step 8; GREEN after
 shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
 ```
+`scripts/` has no CI coverage threshold (`docs/patterns/ci-overview.md`). The hermetic suite is the verification.
 
 ---
 
@@ -483,30 +513,38 @@ grep -n "normalised old-vs-new" docs/roadmap/features/286-sops-secrets-migration
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-17, AC-22`
+**Covers**: `AC-17, AC-21, AC-22`
 
 **Instructions**:
-Add group `deploy`. Derive the do-target legacy name set from KEYS with
+Add group `deploy`. First assert that each of `deploy.yml`, `deploy-dev.yml` and `deploy-prod.yml` parses (`yq e 'true'`). Derive the do-target legacy name set from KEYS with
 `python3 -c 'import sys; sys.path.insert(0,"scripts"); import sops_secrets as s; …'`. Assert on `.github/workflows/deploy.yml`:
 - Every `^\s*LEGACY_[A-Z0-9_]+:` line exactly equals `LEGACY_<K>: ${{ secrets[format('{0}_<K>', env.P)] }}`, or for PROJECT_ID `LEGACY_PROJECT_ID: ${{ secrets[format('DO_{0}_PROJECT_ID', env.P)] }}`. There are 12 such lines, the name set equals the KEYS set, and each name occurs once.
 - Exactly one job-level `P: ${{ inputs.environment == 'production' && 'PROD' || 'DEV' }}`, and no step-level `P:`.
 - No unprefixed `secrets.<common K>`.
 - No `DO_APP_ID`, `DO_DEV_APP_ID` or `DO_PROD_APP_ID`.
 - An `environment: ${{ inputs.environment }}` on job `deploy`, plus a `validate` job with no `environment:`.
-- The app-ID step contains `expected exactly 1 app named` and writes `app: ` to `$GITHUB_STEP_SUMMARY` (AC-17 static half).
+- The app-ID step has `id: resolve-app-id`.
+- **AC-17/AC-21 behaviour (permanent).** Extract the step's run block with
+  `yq e '.jobs.deploy.steps[] | select(.id == "resolve-app-id") | .run' .github/workflows/deploy.yml`. Run it under
+  `env -i` with a `PATH` stub `doctl` that prints 0, 1 (`app-new xstockstrat-staging`) or 2 matching rows, plus an unrelated
+  `x9 xstockstrat-production` row in every case. Set `APP_NAME=xstockstrat-staging`, and point `GITHUB_ENV`/`GITHUB_STEP_SUMMARY` at `$work` files.
+  - 0 rows: exit 1 with `expected exactly 1 app named xstockstrat-staging, found 0`.
+  - 1 row: exit 0, `GITHUB_ENV` has `APP_ID=app-new`, and the summary has `app: xstockstrat-staging → app-new`.
+  - 2 rows: exit 1, `found 2`.
 
 On `deploy-dev.yml` / `deploy-prod.yml`, assert:
 - job `deploy` has `secrets: inherit` and no `secrets:` mapping;
 - `with:` carries `environment: staging` / `environment: production`;
-- the `deploy-homelab` jobs and their `vars.HOMELAB_*_ENABLED` gates are byte-unchanged against `git show origin/main-dev:<file>` for that job block.
+- the `deploy-homelab` job keeps `if: vars.HOMELAB_STAGING_ENABLED == 'true'` (`deploy-dev.yml`) or `if: vars.HOMELAB_PRODUCTION_ENABLED == 'true'` (`deploy-prod.yml`) (`yq e '.jobs.deploy-homelab.if'`), `uses: ./.github/workflows/deploy-homelab.yml`, `secrets: inherit`, and `with.environment` staging/production. The assertion is on content, not a cross-branch diff, so it works on CI's shallow checkout.
 
-Parse the YAML with awk/grep only (no PyYAML; the runner python is stdlib-only).
+Use `yq` for structure, and grep for the exact `LEGACY_*`/`P:` line texts.
 
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh deploy   # RED before Step 10; GREEN after
 shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
 ```
+`scripts/` has no CI coverage threshold (`docs/patterns/ci-overview.md`). The hermetic suite is the verification.
 
 ---
 
@@ -533,7 +571,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 **TDD**: `red-green required`
 
-**Covers**: — (covered by Step 9; AC-17/AC-21 stub check in Verification)
+**Covers**: — (covered by Step 9, including AC-17/AC-21)
 
 **Instructions**:
 Rewrite `deploy.yml` per design C4 and § Per-workflow step order (design.md:153-168).
@@ -549,7 +587,7 @@ Rewrite `deploy.yml` per design C4 and § Per-workflow step order (design.md:153
 - Steps:
   1. Pinned checkout `3d3c42e5…  # v7.0.1`.
   2. Pinned doctl `3cb39531…  # v2.5.2` with `secrets.DIGITALOCEAN_ACCESS_TOKEN`.
-  3. **Resolve app ID:** `ids=$(doctl apps list --format ID,Spec.Name --no-header | awk -v n="$APP_NAME" '$2==n{print $1}')`, then `n=$(printf '%s' "$ids" | grep -c . || true)`. Unless `n` is 1, fail with `expected exactly 1 app named $APP_NAME, found $n`. Write `APP_ID=…` to `$GITHUB_ENV` and `app: $APP_NAME → $ids` to `$GITHUB_STEP_SUMMARY`.
+  3. **Resolve app ID** (`id: resolve-app-id`): `ids=$(doctl apps list --format ID,Spec.Name --no-header | awk -v n="$APP_NAME" '$2==n{print $1}')`, then `n=$(printf '%s' "$ids" | grep -c . || true)`. Unless `n` is 1, fail with `expected exactly 1 app named $APP_NAME, found $n`. Write `APP_ID=…` to `$GITHUB_ENV` and `app: $APP_NAME → $ids` to `$GITHUB_STEP_SUMMARY`.
   4. `uses: ./.github/actions/setup-sops`.
   5. **Render** (`id: render`): `env:` holds `SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}` plus the 12 `LEGACY_*` lines in the exact Step 9 text. Run `python3 scripts/do-render-app-spec.py --env "${{ inputs.environment }}" --spec "${{ inputs.app_spec }}" --app-name "$APP_NAME" --image-tag "${{ inputs.image_tag }}" --org "${{ github.repository_owner }}" --out "$RUNNER_TEMP/app.yaml"`.
   6. `doctl apps update "$APP_ID" --spec "$RUNNER_TEMP/app.yaml" --update-sources`.
@@ -565,16 +603,9 @@ touch the `prepare`, `buf-push*`, `build-images` or `deploy-homelab` jobs.
 
 **Verification**:
 ```bash
-bash scripts/sops-secrets.test.sh deploy
-# AC-17/AC-21 execute-time stub (design § Assumptions): extract the "Resolve app ID" run block and run it against a PATH stub doctl
-S=$(mktemp -d); sed -n '/name: Resolve app ID/,/^      - /p' .github/workflows/deploy.yml | sed -n '/run: |/,$p' | sed '1d;$d' | sed 's/^          //' >"$S/step.sh"
-for rows in "" "app-new xstockstrat-staging" $'a1 xstockstrat-staging\na2 xstockstrat-staging'; do
-  printf '#!/bin/sh\nprintf "%%s\\n" "%s"\n' "$rows" >"$S/doctl"; chmod +x "$S/doctl"
-  ( PATH="$S:$PATH" APP_NAME=xstockstrat-staging GITHUB_ENV="$S/env" GITHUB_STEP_SUMMARY="$S/sum" bash "$S/step.sh" ); echo "exit=$?"
-done
-# expect: 0 rows → exit 1 "found 0" (AC-21); 1 row → exit 0, sum has "app: xstockstrat-staging → app-new" (AC-17); 2 rows → exit 1 "found 2"
+bash scripts/sops-secrets.test.sh deploy render   # GREEN (includes the AC-17/AC-21 stub-doctl cases)
+yq e 'true' .github/workflows/deploy.yml .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml >/dev/null
 ```
-Record the three outcomes in context.md.
 
 ---
 
@@ -601,7 +632,7 @@ Record the three outcomes in context.md.
 **Covers**: `AC-11, AC-22`
 
 **Instructions**:
-Add group `produp`. Assert on `.github/workflows/prod-up.yml`:
+Add group `produp`. Assert on `.github/workflows/prod-up.yml`, after it parses (`yq e 'true'`):
 - exactly 12 `LEGACY_*` lines, each equal to `LEGACY_<K>: ${{ secrets.PROD_<K> }}` or `LEGACY_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}`, with the name set equal to the do-target KEYS set;
 - job `up` has `environment: production` and `permissions:` with `contents: read`;
 - checkout and doctl are pinned to the SHAs in the pins table;
@@ -655,6 +686,7 @@ Per design C5 and § Per-workflow step order (design.md:123-135, :170):
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh produp render
+yq e 'true' .github/workflows/prod-up.yml >/dev/null
 grep -rn "do-inject-prod-secrets" .github/ scripts/ ; test $? -eq 1
 ```
 
@@ -679,8 +711,10 @@ grep -rn "do-inject-prod-secrets" .github/ scripts/ ; test $? -eq 1
 **Covers**: `AC-12, AC-22`
 
 **Instructions**:
-Add group `homelab`. Assert on `.github/workflows/deploy-homelab.yml`:
-- no match for `\bop\b|1password|OP_` (case-insensitive) (AC-12 static);
+Add group `homelab`. Assert on `.github/workflows/deploy-homelab.yml`, after it parses (`yq e 'true'`):
+- AC-12 static, with two greps that must both return nothing:
+  - case-sensitive `grep -nE '\bop\b|\bOP_'`, so `STOP_`, `--output-type` and `options` don't match;
+  - case-insensitive `grep -niE '1password|load-secrets-action'`;
 - exactly 14 `LEGACY_*` lines: the 9 homelab-targeted common keys in the `secrets[format('{0}_<K>', env.P)]` form, `LEGACY_<H>: ${{ secrets.<H> }}` for TS_AUTHKEY / DEPLOY_SSH_KEY / DEPLOY_KNOWN_HOSTS / APP_ENV, and `LEGACY_TS_AUTHKEY_EXPIRES: ${{ vars.TS_AUTHKEY_EXPIRES }}`, with the name set equal to the KEYS-derived homelab set;
 - exactly one job-level `P:` line with the C6 text, and none at step level;
 - no `secrets.MTLS_CA` or unprefixed `secrets.<common K>`;
@@ -744,17 +778,18 @@ Per design C6 and design.md:172-188:
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh homelab resolve
+yq e 'true' .github/workflows/deploy-homelab.yml >/dev/null
 bash scripts/homelab-render.test.sh   # 279 contract unchanged
 ```
 
 ---
 
-### Step 15 — test: Static rules for `sops-bootstrap.yml`
+### Step 15 — test: Static rules for `sops-bootstrap.yml`, plus the `ac24` and `cleanup` groups
 
 **Status**: `pending`
 **Service**: `.github/workflows`
 **Files**:
-- `scripts/sops-secrets.test.sh` — modify (group `bootstrap`)
+- `scripts/sops-secrets.test.sh` — modify (groups `bootstrap`, `ac24`, `cleanup`)
 
 **Reviewers**: Security — matrix pinned, ciphertext-only artifact, GH_PAT required
 
@@ -764,10 +799,10 @@ bash scripts/homelab-render.test.sh   # 279 contract unchanged
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-7, AC-22`
+**Covers**: `AC-7, AC-22, AC-24`
 
 **Instructions**:
-Add group `bootstrap`. Assert on `.github/workflows/sops-bootstrap.yml`:
+Add group `bootstrap`. Assert on `.github/workflows/sops-bootstrap.yml`, after it parses (`yq e 'true'`):
 - trigger `workflow_dispatch` with a boolean `force`; workflow `permissions: contents: read`;
 - job `seed` matrix `include` is exactly `{environment: staging, prefix: DEV}` and `{environment: production, prefix: PROD}`, with `fail-fast: true` and `environment: ${{ matrix.environment }}`;
 - exactly 12 `LEGACY_*` lines of the form `LEGACY_<K>: ${{ secrets[format('{0}_<K>', matrix.prefix)] }}` / `LEGACY_PROJECT_ID: ${{ secrets[format('DO_{0}_PROJECT_ID', matrix.prefix)] }}`;
@@ -776,11 +811,28 @@ Add group `bootstrap`. Assert on `.github/workflows/sops-bootstrap.yml`:
 - job `pr` has `needs: seed`, fails on an empty `GH_PAT`, checks out `main-dev` with `GH_PAT`, pins download-artifact to `37930b1c…`, calls `scripts/sops_secrets.py sops-config`, pushes `chore/sops-bootstrap` with `--force-with-lease`, and runs `gh pr create --base main-dev` under `GH_TOKEN: ${{ secrets.GH_PAT }}`;
 - no `git push` targets `main-dev` or `main` (F-02).
 
+Add group `ac24` (AC-24):
+- `grep -n MCP_AGENT_SECRET` over `scripts/do-render-app-spec.py`, `scripts/sops_secrets.py`,
+  `.github/workflows/sops-bootstrap.yml`, `.github/workflows/deploy*.yml`, `.github/workflows/prod-up.yml`, `.do/app.yaml`,
+  `.do/app.dev.yaml` and any existing `secrets/*.enc.yaml` returns nothing;
+- `scripts/do-inject-prod-secrets.py` is absent.
+
+It is RED today (`.do/app.yaml:381`, `.do/app.dev.yaml:383`) and GREEN after Step 17.
+
+Add group `cleanup`:
+- no `DO_(DEV|PROD)_APP_ID` in `.do/app.yaml`, `.do/app.dev.yaml` or `scripts/do-setup-check.sh`;
+- `scripts/do-setup-check.sh` has `REQUIRED_SECRETS=(DIGITALOCEAN_ACCESS_TOKEN BUF_TOKEN)`;
+- the `scripts/mtls-provision.sh` header (lines 1–20) names `common.MTLS_CA` and no longer says the DO/homelab CAs are separate.
+
+It is RED before Step 17 and GREEN after.
+
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh bootstrap   # RED before Step 16; GREEN after
+bash scripts/sops-secrets.test.sh ac24 cleanup   # RED before Step 17; GREEN after
 shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
 ```
+`scripts/` has no CI coverage threshold (`docs/patterns/ci-overview.md`). The hermetic suite is the verification.
 
 ---
 
@@ -790,6 +842,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 **Service**: `.github/workflows`
 **Files**:
 - `.github/workflows/sops-bootstrap.yml` — create
+- `.gitleaks.toml` — modify (**conditional**, design Risk 5: only when gitleaks flags the age armor or recipients; path-scoped allowlist for `secrets/*.enc.yaml` and `.sops.yaml`)
 
 **Reviewers**: Security — one-shot seeding from effective values, refuse overwrite without force; Platform Lead — PR to main-dev only
 
@@ -824,11 +877,12 @@ Create the workflow per design.md:190-208.
 
 A failed `seed` skips `pr` by default `needs` semantics, so nothing is pushed.
 
-**gitleaks (design Risk 5):** after the step is green, run `gitleaks detect --no-git --source .github/workflows/sops-bootstrap.yml` and the same on a Step 5 test output file when gitleaks is available locally. If it flags the age armor or the recipients, add a path-scoped allowlist entry to `.gitleaks.toml` for `secrets/*.enc.yaml` / `.sops.yaml` only, and record that in the Deviation Log (it adds a file to this step).
+**gitleaks (design Risk 5):** after the step is green, run `gitleaks detect --no-git --source .github/workflows/sops-bootstrap.yml` and the same on a Step 5 test output file when gitleaks is available locally. If it flags the age armor or the recipients, add a path-scoped allowlist entry to the existing `.gitleaks.toml` for `secrets/*.enc.yaml` / `.sops.yaml` only (the conditional file above).
 
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh bootstrap build
+yq e 'true' .github/workflows/sops-bootstrap.yml >/dev/null
 grep -nE "git push.*(main-dev|main)\b" .github/workflows/sops-bootstrap.yml ; test $? -eq 1
 ```
 
@@ -852,9 +906,9 @@ grep -nE "git push.*(main-dev|main)\b" .github/workflows/sops-bootstrap.yml ; te
 - `scripts/do-setup-check.sh:111` is `REQUIRED_SECRETS=(DIGITALOCEAN_ACCESS_TOKEN DO_DEV_APP_ID DO_PROD_APP_ID BUF_TOKEN)`.
 - `scripts/mtls-provision.sh:4-12` (the "SEPARATE CAs" and `DEV_MTLS_CA / PROD_MTLS_CA` narrative), `:18` (usage) and `:125-128` (`gh secret set`).
 
-**TDD**: `N/A (comment edits plus one list literal; covered by the Step 18 ac24 group and shell lint)`
+**TDD**: `red-green required` (covered by Step 15's `ac24` and `cleanup` groups)
 
-**Covers**: — (enables AC-24 in Step 18)
+**Covers**: — (covered by Step 15; makes AC-24 green)
 
 **Instructions**:
 - **`.do/` headers.** In both specs, change `:2-4` to say the project ID lives in `secrets/<env>.enc.yaml` `digitalocean.PROJECT_ID` (legacy `DO_*_PROJECT_ID` fallback), and that deploys find the app by its `name:`. Drop the APP_ID line.
@@ -867,7 +921,7 @@ grep -nE "git push.*(main-dev|main)\b" .github/workflows/sops-bootstrap.yml ; te
 grep -n MCP_AGENT_SECRET .do/app.yaml .do/app.dev.yaml ; test $? -eq 1
 grep -nE "DO_(DEV|PROD)_APP_ID" .do/app.yaml .do/app.dev.yaml scripts/do-setup-check.sh ; test $? -eq 1
 shellcheck scripts/do-setup-check.sh scripts/mtls-provision.sh && shfmt -d -i 2 scripts/do-setup-check.sh scripts/mtls-provision.sh
-bash scripts/sops-secrets.test.sh render
+bash scripts/sops-secrets.test.sh ac24 cleanup render   # GREEN
 ```
 
 ---
@@ -879,7 +933,6 @@ bash scripts/sops-secrets.test.sh render
 **Files**:
 - `.github/workflows/ci.yml` — modify
 - `.gitignore` — modify
-- `scripts/sops-secrets.test.sh` — modify (group `ac24`)
 
 **Reviewers**: Platform Lead — CI gate completeness
 
@@ -892,9 +945,9 @@ bash scripts/sops-secrets.test.sh render
 - `.gitignore:54-61` lists the secret file types. `git check-ignore` confirms that `secrets/staging.enc.yaml` and `.sops.yaml` are **not** ignored (the `secrets.*` rule at `:59` does not match the directory layout), and that `keys.txt` / `*.agekey` are not ignored either (the entries must be added).
 - AC-24 surfaces: today `MCP_AGENT_SECRET` appears at `prod-up.yml:47` (removed in Step 12), `.do/app.yaml:381` and `.do/app.dev.yaml:383` (removed in Step 17), and `scripts/do-inject-prod-secrets.py:19` (deleted in Step 12).
 
-**TDD**: `N/A (CI wiring; the job's first run is the verification)`. The `ac24` group added here is a static check, green once Step 17 has landed.
+**TDD**: `N/A (CI wiring; the job's first run is the verification)`
 
-**Covers**: `AC-24`
+**Covers**: — (runs every group in CI, including Step 15's `ac24` for AC-24)
 
 **Instructions**:
 1. **Filter.** Add a filter key `sops:` with `'scripts/sops_secrets.py'`, `'scripts/do-render-app-spec.py'`, `'scripts/sops-secrets.test.sh'`, `'.github/actions/setup-sops/**'`, `'.github/workflows/deploy*.yml'`, `'.github/workflows/prod-up.yml'`, `'.github/workflows/sops-bootstrap.yml'`, `'.do/**'` and `'.sops.yaml'`.
@@ -904,9 +957,8 @@ bash scripts/sops-secrets.test.sh render
    - `python3 -m pip install ruff`;
    - `ruff check scripts/sops_secrets.py scripts/do-render-app-spec.py` and `ruff format --check` on the same files;
    - `bash scripts/sops-secrets.test.sh`.
-3. **Gate.** Add `sops-secrets` to the ci-gate `needs` and add its echo line.
-4. **Group `ac24`.** Add group `ac24` to the test: `grep -n MCP_AGENT_SECRET` over `scripts/do-render-app-spec.py`, `scripts/sops_secrets.py`, `.github/workflows/sops-bootstrap.yml`, `.github/workflows/deploy*.yml`, `.github/workflows/prod-up.yml`, `.do/app.yaml`, `.do/app.dev.yaml` and any `secrets/*.enc.yaml` returns nothing, and `scripts/do-inject-prod-secrets.py` is absent.
-5. **`.gitignore`.** Append `*.agekey` and `keys.txt` under the secret-file-types block (`:54-61`).
+3. **Gate.** Add `sops-secrets` to the ci-gate `needs` and add its echo line. Features 278 and 281 also append there, so the second to land rebases and keeps every entry (spec-time finding 6).
+4. **`.gitignore`.** Append `*.agekey` and `keys.txt` under the secret-file-types block (`:54-61`).
 
 **Verification**:
 ```bash
@@ -960,10 +1012,10 @@ grep -n "brew install sops age" docs/runbooks/sops-secrets.md && grep -n "sops-s
 
 ---
 
-### Step 20 — docs: Docs sweep of legacy secret names, CA location and deploy wiring
+### Step 20 — docs: Docs sweep of the `docs/` tree (legacy secret names, CA location, deploy wiring)
 
 **Status**: `pending`
-**Service**: `docs/`, service docs, skill
+**Service**: `docs/`
 **Files**:
 - `docs/setup/digitalocean.md` — modify (`:48`, `:55`, `:238`, `:276`, `:368-369`, `:385`, `:400-403`, `:463-464`, `:477-509` secrets table, `:526-531`, `:564-579`)
 - `docs/runbooks/infra-cost-reduction.md` — modify (`:53-71`)
@@ -974,19 +1026,20 @@ grep -n "brew install sops age" docs/runbooks/sops-secrets.md && grep -n "sops-s
 - `docs/runbooks/add-data-source.md` — modify (`:91` row 8, plus any sibling rows naming the deploy passthrough)
 - `docs/setup/grafana-cloud.md` — modify (`:169`, `:177`)
 - `docs/launch-pdfs/infra-ci.md` — modify (`:188`, `:199`, `:324`)
-- `.env.example` — modify (comments `:99-100`)
-- `scripts/setup-env.sh` — modify (comments `:293-294`)
-- `.claude/skills/digitalocean-setup/SKILL.md` — modify (`:233`, `:596-597`, `:610-611`, `:663`)
-- `services/xstockstrat-identity/CLAUDE.md` — modify (`:99`)
-- `services/xstockstrat-identity/docs/operations.md` — modify (`:32-33`)
-- `services/xstockstrat-notify/CLAUDE.md` — modify (`:130`)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Every line above was confirmed by a spec-time grep for `DO_(DEV|PROD)_APP_ID|DEV_MTLS_CA|PROD_MTLS_CA|do-inject-prod-secrets|DEV_JWT_SECRET|PROD_JWT_SECRET|separate CA` (2026-11-04). Examples: `docs/patterns/inter-service-mtls.md:105` "(GitHub environment secret or 1Password `mtls-ca`; a separate CA from DO's)"; `docs/runbooks/infra-cost-reduction.md:53` (stale `PROD_ALPACA_API_KEY`), `:59` (`do-inject-prod-secrets.py`), `:66-70` (stale `DO_PROD_APP_ID`); `docs/patterns/ci-overview.md:52` (`DO_APP_ID`).
-- This is the `fails.md` L1095 doc surfaces (`docs/setup/digitalocean.md` secrets table, `docs/runbooks/infra-cost-reduction.md` bring-up list) plus recon § Risks enumerated surfaces.
-- Out of sweep scope, deliberately: `docs/repo-surveyor/feature-gap-findings.md` (a dated point-in-time report, `docs/CLAUDE.md` `reports/`-style), `docs/sdd/business-rules/platform.feature` (hand-editing forbidden by `docs/sdd/business-rules/CLAUDE.md:51`; @AC-24 is promoted at launch), and `docs/roadmap/**` history.
+- Every line above was confirmed by a spec-time grep for `DO_(DEV|PROD)_APP_ID|DEV_MTLS_CA|PROD_MTLS_CA|do-inject-prod-secrets|DEV_JWT_SECRET|PROD_JWT_SECRET|separate CA` (2026-11-04). Examples:
+  - `docs/patterns/inter-service-mtls.md:105`: "(GitHub environment secret or 1Password `mtls-ca`; a separate CA from DO's)"
+  - `docs/runbooks/infra-cost-reduction.md:53` (stale `PROD_ALPACA_API_KEY`), `:59` (`do-inject-prod-secrets.py`), `:66-70` (stale `DO_PROD_APP_ID`)
+  - `docs/patterns/ci-overview.md:52` (`DO_APP_ID`)
+- These are the `fails.md` L1095 doc surfaces (the `docs/setup/digitalocean.md` secrets table and the `docs/runbooks/infra-cost-reduction.md` bring-up list).
+- Deliberately out of scope:
+  - `docs/repo-surveyor/feature-gap-findings.md` (a dated point-in-time report);
+  - `docs/sdd/business-rules/platform.feature` (`docs/sdd/business-rules/CLAUDE.md:51` forbids hand-editing it; @AC-24 is promoted at launch);
+  - `docs/roadmap/**` history.
+- Line numbers are spec-time. The executor re-greps with the Verification pattern and edits the lines it finds; the grep, not the numbers, is authoritative.
 
 **TDD**: `N/A (docs)`
 
@@ -1000,17 +1053,61 @@ For each surface, replace the legacy wiring with the SOPS model:
 - prod-up injects the full key set via `scripts/do-render-app-spec.py`.
 - One `MTLS_CA` per environment is shared by DO and homelab. This reverses `inter-service-mtls.md:105`; say so in one sentence.
 
-In `docs/setup/digitalocean.md`, rebuild the secrets table: drop the stale ALPACA/FMP/FINNHUB rows, add the missing CONFIG/VAPID/OTEL/MTLS rows, mark the legacy rows as fallback-only, and add `SOPS_AGE_KEY` (env secret) and `SOPS_OPERATOR_AGE_RECIPIENT` (repo var). Link `docs/runbooks/sops-secrets.md` from `digitalocean.md`, `infra-cost-reduction.md`, `inter-service-mtls.md` and the identity/notify docs.
+In `docs/setup/digitalocean.md`, rebuild the secrets table:
+- drop the stale ALPACA/FMP/FINNHUB rows;
+- add the missing CONFIG/VAPID/OTEL/MTLS rows;
+- mark the legacy rows as fallback-only;
+- add `SOPS_AGE_KEY` (env secret) and `SOPS_OPERATOR_AGE_RECIPIENT` (repo var).
 
-Keep each edit surgical (How to Act #3). Do not restructure surrounding sections.
-
-Then run the CLAUDE.md teardown: `/context-forge:context-constitution refresh` scoped to the touched context files, or, if the plugin is unavailable, the manual reconciliation described in root `CLAUDE.md` § Teardown, recorded in the PR body.
+Link `docs/runbooks/sops-secrets.md` from `digitalocean.md`, `infra-cost-reduction.md` and `inter-service-mtls.md`. Feature 281 also adds a row to the `ci-overview.md` CI table; keep both rows if it lands first (spec-time finding 6). Keep each edit surgical (How to Act #3).
 
 **Verification**:
 ```bash
-grep -rnE "DO_(DEV|PROD)_APP_ID|do-inject-prod-secrets|1Password .mtls-ca|separate CA from DO" docs/setup docs/runbooks docs/patterns docs/launch-pdfs .env.example scripts/setup-env.sh .claude/skills/digitalocean-setup services/xstockstrat-identity services/xstockstrat-notify
+grep -rnE "DO_(DEV|PROD)_APP_ID|do-inject-prod-secrets|1Password .mtls-ca|separate CA from DO" docs/setup docs/runbooks docs/patterns docs/launch-pdfs
 # expect: only lines that explicitly describe the legacy fallback / follow-up removal
-pnpm exec markdownlint-cli2 docs/runbooks/sops-secrets.md docs/setup/digitalocean.md docs/runbooks/infra-cost-reduction.md docs/patterns/inter-service-mtls.md 2>/dev/null || npx --yes markdownlint-cli2 docs/runbooks/sops-secrets.md
+npx --yes markdownlint-cli2 docs/runbooks/sops-secrets.md docs/setup/digitalocean.md docs/runbooks/infra-cost-reduction.md docs/patterns/inter-service-mtls.md docs/patterns/ci-overview.md
+```
+
+---
+
+### Step 21 — docs: Remaining surfaces (env example, setup script comments, skill, service docs) + CLAUDE.md teardown
+
+**Status**: `pending`
+**Service**: repo root, `scripts/`, `.claude/skills/`, service docs
+**Files**:
+- `.env.example` — modify (comments `:99-100`)
+- `scripts/setup-env.sh` — modify (comments `:293-294`)
+- `.claude/skills/digitalocean-setup/SKILL.md` — modify (`:233`, `:596-597`, `:610-611`, `:663`)
+- `services/xstockstrat-identity/CLAUDE.md` — modify (`:99`)
+- `services/xstockstrat-identity/docs/operations.md` — modify (`:32-33`)
+- `services/xstockstrat-notify/CLAUDE.md` — modify (`:130`)
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- Same spec-time grep as Step 20. Line numbers are spec-time; the Verification grep is authoritative.
+- The teardown rule: root `CLAUDE.md` § Teardown (it applies because Steps 20–21 change context files and documented behaviour).
+
+**TDD**: `N/A (docs/comments)`
+
+**Covers**: —
+
+**Instructions**:
+Apply the Step 20 SOPS-model wording to each surface:
+- the skill's `gh secret set DO_*_APP_ID` / `DEV_/PROD_MTLS_CA` steps become `SOPS_AGE_KEY` environment secrets plus `sops set`, with the legacy secrets noted as fallback-only;
+- `.env.example` and `setup-env.sh` comment tables drop `DO_*_APP_ID`;
+- the identity docs name `common.JWT_SECRET` in `secrets/<env>.enc.yaml` (legacy `DEV_/PROD_JWT_SECRET` fallback);
+- the notify doc names the new renderer instead of `do-inject-prod-secrets.py`.
+
+Link the runbook from the identity and notify docs.
+
+Then run the CLAUDE.md teardown: `/context-forge:context-constitution refresh`, scoped to every context file touched in Steps 17–21. If the plugin is unavailable, do the manual reconciliation described in root `CLAUDE.md` § Teardown and record it in the PR body.
+
+**Verification**:
+```bash
+grep -nE "DO_(DEV|PROD)_APP_ID|do-inject-prod-secrets|DEV_MTLS_CA|PROD_MTLS_CA" .env.example scripts/setup-env.sh .claude/skills/digitalocean-setup/SKILL.md services/xstockstrat-identity/CLAUDE.md services/xstockstrat-identity/docs/operations.md services/xstockstrat-notify/CLAUDE.md
+# expect: only lines that explicitly describe the legacy fallback / follow-up removal
+shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh
 ```
 
 ---

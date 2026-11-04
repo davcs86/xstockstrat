@@ -207,3 +207,20 @@
 - [ ] Runbook: a newline in a common value is refused for homelab (Risk 4); the production reviewer gate on every prod deploy (Risk 8).
 - [x] Spec: pin the sops/age versions and SHA-256 values, plus the action SHAs; grep placeholder coverage; ci.yml filter list (done 2026-11-04, see implementation-spec.md § Execution Summary).
 - Ledger: appended an insights.md entry (environment-secret shadowing in env-bound reusable workflows).
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory), iteration 1 → fixes
+
+- Result: 0 failures, ~13 warnings (advisory), no Floor breach. Overlap: WARN only. 278 and 281 append to the
+  `ci.yml` ci-gate lists, and 281 also to the `docs/runbooks/CLAUDE.md` index and the `ci-overview.md` table. Recorded as
+  spec-time finding 6; no merge-order row needed.
+- Addressed in the spec (pre-execution edit; F-09 applies only once execution starts):
+  - [x] P-06: Step 1 now creates the test skeleton + `action` group, giving Step 2 a RED-first test. Step 15 adds the `ac24` +
+        `cleanup` groups, giving Step 17 a RED-first test. Step 18 is CI wiring only.
+  - [x] Step 9: the cross-branch `git show origin/main-dev` comparison is replaced by content assertions on the homelab gates.
+  - [x] AC-17/AC-21 are now permanent: the `resolve-app-id` step is extracted with yq and run against a stub doctl (group `deploy`).
+  - [x] Step 10 deps (Steps 2, 8) added. Workflow YAML is parse-checked with yq in every static group and workflow step.
+  - [x] Step 13 AC-12 regex: case-sensitive `\bop\b|\bOP_` + case-insensitive `1password|load-secrets-action`.
+  - [x] Steps 5/7/9/15 now state the no-coverage-threshold note.
+  - [x] Step 7: the reverse map runs as an inline python heredoc (C-18).
+  - [x] Step 16: `.gitleaks.toml` declared as a conditional file.
+  - [x] Step 20 split into Step 20 (`docs/`) and Step 21 (remaining surfaces + teardown). Total is now 21 steps; a grep, not line numbers, is authoritative.
