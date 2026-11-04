@@ -415,3 +415,21 @@
 - TDD GREEN: `homelab: ok`, `resolve: ok`; `homelab-render.test.sh` (279 contract) still passes; yq parses.
 - Files modified: `.github/workflows/deploy-homelab.yml`
 - Deviations: none
+
+### Step 15 — Static rules for `sops-bootstrap.yml` + groups `ac24`, `cleanup` [done]
+- `bootstrap` checks:
+  - the boolean force input and contents: read;
+  - the exact matrix pairs with no extra axes, fail-fast, and the seed environment binding;
+  - 12 LEGACY_ pins with matrix.prefix and the operator recipient var;
+  - pinned upload with retention 1; pr needs seed;
+  - GH_PAT guard, pinned download, sops-config, force-with-lease, `gh pr create --base main-dev`, and the main-dev checkout;
+  - no trunk push (F-02).
+- `ac24`: MCP_AGENT_SECRET is absent from the named surfaces (each must exist) and from existing secrets/*.enc.yaml (the accepted carve-out), and the old script is gone.
+- `cleanup`: no DO_*_APP_ID; the REQUIRED_SECRETS literal; the mtls-provision header assertion (narrowed, D-2).
+- TDD RED, all three groups:
+  - bootstrap: `sops-bootstrap.yml does not exist`;
+  - ac24: the same (it runs after Step 16, then Step 17 clears the .do comments);
+  - cleanup: `DO_*_APP_ID still referenced`.
+- Blocker → operator: narrow the cleanup header check (D-2). shellcheck + shfmt clean.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: D-2

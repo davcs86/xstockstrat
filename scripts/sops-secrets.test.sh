@@ -725,6 +725,65 @@ group_homelab() {
   echo "homelab: ok"
 }
 
+UPLOAD_PIN='actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+DOWNLOAD_PIN='actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131'
+
+group_bootstrap() {
+  need yq python3
+  local wf=.github/workflows/sops-bootstrap.yml a
+  [ -f "$wf" ] || fail "bootstrap: $wf does not exist"
+  yq e 'true' "$wf" >/dev/null || fail "bootstrap: $wf does not parse"
+  [ "$(yq e '.on.workflow_dispatch.inputs.force.type' "$wf")" = boolean ] || fail "bootstrap: force must be a boolean input"
+  [ "$(yq e '.permissions.contents' "$wf")" = read ] || fail "bootstrap: workflow permissions contents: read"
+  [ "$(yq -o=json -I=0 e '.jobs.seed.strategy.matrix.include' "$wf")" = \
+    '[{"environment":"staging","prefix":"DEV"},{"environment":"production","prefix":"PROD"}]' ] || fail "bootstrap: matrix pairs"
+  [ "$(yq e '.jobs.seed.strategy.matrix | keys | join(",")' "$wf")" = include ] || fail "bootstrap: matrix has extra axes"
+  [ "$(yq e '.jobs.seed.strategy.fail-fast' "$wf")" = true ] || fail "bootstrap: fail-fast"
+  # shellcheck disable=SC2016
+  [ "$(yq e '.jobs.seed.environment' "$wf")" = '${{ matrix.environment }}' ] || fail "bootstrap: seed environment binding"
+  check_legacy "$wf" bootstrap bootstrap
+  grep -qF 'SOPS_OPERATOR_AGE_RECIPIENT: ${{ vars.SOPS_OPERATOR_AGE_RECIPIENT }}' "$wf" || fail "bootstrap: operator recipient var"
+  [ "$(yq e '.jobs.seed.steps[] | select(.uses == "'"$UPLOAD_PIN"'") | .with.retention-days' "$wf")" = 1 ] ||
+    fail "bootstrap: pinned upload-artifact with retention-days 1"
+  [ "$(yq e '.jobs.pr.needs' "$wf")" = seed ] || fail "bootstrap: pr must need seed"
+  for a in 'GH_PAT is required' "$DOWNLOAD_PIN" 'scripts/sops_secrets.py sops-config' \
+    'git push --force-with-lease origin chore/sops-bootstrap' 'gh pr create --base main-dev' 'GH_TOKEN: ${{ secrets.GH_PAT }}'; do
+    grep -qF -- "$a" "$wf" || fail "bootstrap: missing '$a'"
+  done
+  [ "$(yq e '.jobs.pr.steps[] | select(.uses == "'"$CHECKOUT_PIN"'") | .with.ref' "$wf")" = main-dev ] ||
+    fail "bootstrap: pr checks out main-dev"
+  if grep -nE 'git push[^#]*[[:space:]](main-dev|main)([[:space:]]|$)' "$wf"; then fail "bootstrap: F-02 push to a trunk"; fi
+  echo "bootstrap: ok"
+}
+
+group_ac24() {
+  local f files=(scripts/do-render-app-spec.py scripts/sops_secrets.py .github/workflows/sops-bootstrap.yml
+    .github/workflows/deploy.yml .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml
+    .github/workflows/deploy-homelab.yml .github/workflows/prod-up.yml .do/app.yaml .do/app.dev.yaml)
+  for f in secrets/*.enc.yaml; do [ -f "$f" ] && files+=("$f"); done
+  for f in "${files[@]}"; do
+    [ -f "$f" ] || fail "ac24: $f does not exist"
+    if grep -n MCP_AGENT_SECRET "$f"; then fail "ac24: MCP_AGENT_SECRET in $f"; fi
+  done
+  [ ! -e scripts/do-inject-prod-secrets.py ] || fail "ac24: scripts/do-inject-prod-secrets.py still exists"
+  echo "ac24: ok"
+}
+
+group_cleanup() {
+  if grep -nE 'DO_(DEV|PROD)_APP_ID' .do/app.yaml .do/app.dev.yaml scripts/do-setup-check.sh; then
+    fail "cleanup: DO_*_APP_ID still referenced"
+  fi
+  grep -qx 'REQUIRED_SECRETS=(DIGITALOCEAN_ACCESS_TOKEN BUF_TOKEN)' scripts/do-setup-check.sh || fail "cleanup: REQUIRED_SECRETS"
+  local hdr
+  hdr="$(sed -n 1,20p scripts/mtls-provision.sh)"
+  grep -q 'common\.MTLS_CA' <<<"$hdr" || fail "cleanup: mtls-provision header must name common.MTLS_CA"
+  grep -qiE 'DO and homelab|homelab and DO' <<<"$hdr" || fail "cleanup: mtls-provision header must say DO and homelab share the CA"
+  if grep -qF 'DEV_MTLS_CA / PROD_MTLS_CA' <<<"$hdr"; then
+    fail "cleanup: mtls-provision header still presents DEV_/PROD_MTLS_CA as the CA store"
+  fi
+  echo "cleanup: ok"
+}
+
 groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"

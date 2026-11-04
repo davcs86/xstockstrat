@@ -795,7 +795,7 @@ bash scripts/homelab-render.test.sh   # 279 contract unchanged
 
 ### Step 15 — test: Static rules for `sops-bootstrap.yml`, plus the `ac24` and `cleanup` groups
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (groups `bootstrap`, `ac24`, `cleanup`)
@@ -1132,3 +1132,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: decrypting with the other env's key fails with stderr containing `no matching keys` (AC-1, Step 1 item 3, Step 5 case 2).
 - **Actual**: sops 3.13.3 prints `Failed to get the data key required to decrypt the SOPS file … identity did not match any of the recipients`.
 - **Disposition**: Step 1 item 3 pre-authorised asserting the recorded text. Step 5 asserts `identity did not match any of the recipients`. The intent of AC-1's Then (refused, no value printed) is unchanged. The acceptance.feature wording is reconciled at C-16 promotion (ALL-DONE 2.5) to the real sops text.
+
+### D-2 — Step 15: `cleanup` mtls-provision header assertion narrowed
+- **Spec said**: `! sed -n 1,20p scripts/mtls-provision.sh | grep -qiE 'separate CAs?|DEV_MTLS_CA / PROD_MTLS_CA'`.
+- **Actual**: the header's "Dev and prod get SEPARATE CAs" is still true. FR-10 shares one CA between DO and homelab *within* an environment, and staging and
+  production keep distinct CAs. The literal assertion would force deleting a correct statement.
+- **Disposition** (operator, 2026-11-04, sequential blocker): the assertion now requires `common.MTLS_CA` plus an explicit "DO and homelab" sharing statement,
+  and bans only the stale `DEV_MTLS_CA / PROD_MTLS_CA` primary-store wording. Step 17's header edit follows this.
+
