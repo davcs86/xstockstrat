@@ -242,3 +242,11 @@
   - [x] Step 8 parity verification was vacuous. The step now writes a distinct `- PARITY RECORD (286 step 8):` line and greps for it.
   - [x] `ac24`'s read of `secrets/*.enc.yaml` is kept, with an explicit carve-out (a read-only grep of ciphertext key names, never decrypting).
   - [x] The test skeleton does `cd "$(git rev-parse --show-toplevel)"`.
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory), iteration 4 → fixes
+
+- Result: 0 failures, 3 minor ⚠; iteration-3 items 4/4 RESOLVED; the cross-step RED/GREEN walk is sound for every group. Fixed:
+  - [x] W1: the Step 8 parity line wording now matches its `^- PARITY RECORD` grep.
+  - [x] W2: the `cleanup` mtls-provision header assertion is now two concrete greps over lines 1–20.
+  - [x] W3: the Step 2 real install is host-mutating. It is proven by the Step 18 CI job on an ephemeral runner, or optionally
+        run in an ephemeral execute sandbox, never on a developer host.

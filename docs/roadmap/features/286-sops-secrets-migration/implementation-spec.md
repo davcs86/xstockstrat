@@ -210,7 +210,11 @@ versions, so bump them here.
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh action   # GREEN
-# Execute the install for real: extract the run block and run it against a scratch RUNNER_TEMP with the step env
+```
+The real install (`sudo install … /usr/local/bin`) mutates its host, so it is **not** run on a developer machine.
+It is proven by the Step 18 CI job, which `uses: ./.github/actions/setup-sops` on an ephemeral runner and then runs every
+group against the installed binaries. In an ephemeral execute sandbox, the install block may also be run directly:
+```bash
 T=$(mktemp -d); yq e '.runs.steps[0].run' .github/actions/setup-sops/action.yml >"$T/install.sh"
 env $(yq e '.runs.steps[0].env | to_entries | .[] | .key + "=" + .value' .github/actions/setup-sops/action.yml) RUNNER_TEMP="$T" bash "$T/install.sh"
 sops --version | grep -q '3.13.3' && age --version | grep -q 'v1.3.2'
@@ -488,8 +492,8 @@ Never write the spec to stdout.
 **Parity record (design Risk 2):** once green, run the old inline python (`git show HEAD:.github/workflows/deploy.yml`,
 extract the `:130-198` block) and the new renderer on `.do/app.dev.yaml`, using the same sentinel `LEGACY_*`
 values and the same fixture CA tree (point both at one pre-minted `MTLS_CERTS_DIR` by reusing the minted
-dir). Diff the outputs after normalising the leaf `yaml_pem` blocks. Record the result in context.md as a line
-starting `PARITY RECORD (286 step 8):`, followed by "identical" or the exact differences.
+dir). Diff the outputs after normalising the leaf `yaml_pem` blocks. Record the result in context.md as the list-item line
+`- PARITY RECORD (286 step 8): identical`, or `- PARITY RECORD (286 step 8): <exact differences>`.
 
 **Verification**:
 ```bash
@@ -829,7 +833,8 @@ It is RED today (`.do/app.yaml:381`, `.do/app.dev.yaml:383`) and GREEN after Ste
 Add group `cleanup`:
 - no `DO_(DEV|PROD)_APP_ID` in `.do/app.yaml`, `.do/app.dev.yaml` or `scripts/do-setup-check.sh`;
 - `scripts/do-setup-check.sh` has `REQUIRED_SECRETS=(DIGITALOCEAN_ACCESS_TOKEN BUF_TOKEN)`;
-- the `scripts/mtls-provision.sh` header (lines 1–20) names `common.MTLS_CA` and no longer says the DO/homelab CAs are separate.
+- `sed -n 1,20p scripts/mtls-provision.sh | grep -q 'common\.MTLS_CA'`, and
+  `! sed -n 1,20p scripts/mtls-provision.sh | grep -qiE 'separate CAs?|DEV_MTLS_CA / PROD_MTLS_CA'`. Both are RED today (`:4-12`).
 
 It is RED before Step 17 and GREEN after.
 
