@@ -8,6 +8,7 @@
 **Last Updated**: 2026-11-01
 **Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
 **Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -24,6 +25,7 @@
 | 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 11 steps done on `feature/fix-backtest-silent-symbol-skip`; Step 11 closed the analysis `CLAUDE.md` null-score drift and the manual root Teardown audit |
 
 | 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -47,11 +49,11 @@ Canonical snapshot from `/sdd-spec` (2026-10-22), collected from the per-step `*
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
