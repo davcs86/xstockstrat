@@ -451,7 +451,7 @@
 
 ### D-23 ⚠ security — Identity single-use auth codes and refresh rotation are check-then-act — SEV-2  *(carried, open — partly covered)*
 - **Evidence:** `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:461-482` (auth code: SELECT, JS check, unconditional UPDATE), plus refresh at `:253` and `:519-525`.
-- **Covered by:** `2026-10-19-identity-refresh-rotation-not-atomic-defect` (`open`) covers **refresh rotation only**. The single-use **auth-code** race is untracked.
+- **Covered by:** `2026-10-19-identity-refresh-rotation-not-atomic-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md) (`open`) covers **refresh rotation only**. The single-use **auth-code** race is untracked.
 - **Routing:** Human triage. Use a conditional `UPDATE … WHERE consumed_at IS NULL RETURNING`.
 
 ### D-25 ⚠ security — Trader BFF `queryEvents` forwards any non-copilot stream key to an unscoped ledger — SEV-2  *(carried, open)*
@@ -505,7 +505,7 @@
 
 ### D-33 ⚠ Indicators `timeout_ms_override` / `memory_bytes_override` unclamped and reachable from MCP — SEV-2 · leverage H÷XS  *(carried, open — covered)*
 - **Evidence:** `services/xstockstrat-indicators/app/handlers/servicer.py:277-278` (`override or cfg`) and agent `tools.py:1494`.
-- **Covered by:** `2026-10-19-indicators-sandbox-overrides-unclamped-defect` (`open`).
+- **Covered by:** `2026-10-19-indicators-sandbox-overrides-unclamped-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md) (`open`).
 
 ### D-34 Ingest backfill cancel is overwritten to RUNNING; resume revives canceled jobs — SEV-2 · leverage M÷S  *(carried, open)*
 - **Evidence:**
