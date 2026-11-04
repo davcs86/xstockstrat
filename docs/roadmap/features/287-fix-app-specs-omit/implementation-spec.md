@@ -1,6 +1,6 @@
 # Implementation Spec: fix-app-specs-omit
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/287-fix-app-specs-omit/feature.md`
 **Total Steps**: 10
@@ -108,7 +108,7 @@ confirm `db-migrator` connects, then run `prod-down`.
 
 ### Step 1 — test: `dbnet` group (lookup / trust / untrust against a stub doctl)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (deploy pipeline)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (new `group_dbnet`; register `dbnet` in the default list at `:787`)

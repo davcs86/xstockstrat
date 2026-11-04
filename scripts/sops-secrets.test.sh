@@ -27,6 +27,7 @@ SOPS_PIN_VERSION=3.13.3
 SOPS_PIN_SHA256=e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
 AGE_PIN_VERSION=1.3.2
 AGE_PIN_SHA256=cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+FIXTURE_VPC=d7afff57-f807-4893-9fbf-20fff8bb82dd
 
 group_action() {
   need yq
@@ -784,7 +785,172 @@ group_cleanup() {
   echo "cleanup: ok"
 }
 
-groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"
+DB_CID=11111111-2222-4333-8444-555555555555
+DB_APP=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee
+DB_OTHER=99999999-8888-4777-8666-555555555555
+DB_RULE=12345678-1234-4234-8234-123456789abc
+
+# dbx [VAR=value ...] -- <subcommand args>: run the real do-db-cluster.sh against the stub doctl.
+dbx() {
+  local envs=()
+  while [ "$1" != -- ]; do
+    envs+=("$1")
+    shift
+  done
+  shift
+  : >"$work/doctl.log"
+  : >"$work/dout"
+  : >"$work/dsum"
+  rc=0
+  env -i PATH="$work/stub:$PATH" HOME="$HOME" W="$work" GITHUB_OUTPUT="$work/dout" \
+    GITHUB_STEP_SUMMARY="$work/dsum" ${envs[@]+"${envs[@]}"} \
+    bash "$PWD/scripts/do-db-cluster.sh" "$@" >"$work/dso" 2>"$work/dse" || rc=$?
+}
+
+no_doctl_write() {
+  if grep -vE '^databases (list -o json|firewalls (list|append|remove) .*)$' "$work/doctl.log" | grep -q .; then
+    fail "dbnet: $1: unexpected doctl call ($(cat "$work/doctl.log"))"
+  fi
+}
+
+group_dbnet() {
+  need yq jq
+  local fw
+  mkdir -p "$work/stub"
+  cat >"$work/stub/doctl" <<'EOF'
+#!/bin/sh
+echo "$*" >>"$W/doctl.log"
+case "$*" in
+"databases list -o json") cat "$W/dbs.json" ;;
+"databases firewalls list "*" -o json")
+  [ "${FW_LIST_RC:-0}" = 0 ] || exit "$FW_LIST_RC"
+  cat "$W/fw.json"
+  ;;
+"databases firewalls append "*) exit "${FW_APPEND_RC:-0}" ;;
+"databases firewalls remove "*) exit "${FW_REMOVE_RC:-0}" ;;
+*)
+  echo "stub doctl: unexpected $*" >&2
+  exit 99
+  ;;
+esac
+EOF
+  chmod +x "$work/stub/doctl"
+  printf 'databases:\n  - name: xstockstrat\n    cluster_name: xstockstrat\n' >"$work/spec.yaml"
+  local one="{\"id\":\"$DB_CID\",\"name\":\"xstockstrat\",\"private_network_uuid\":\"$FIXTURE_VPC\"}"
+  local decoy="{\"id\":\"$DB_OTHER\",\"name\":\"other\",\"private_network_uuid\":\"$FIXTURE_VPC\"}"
+
+  # lookup: exactly one cluster (a decoy is ignored) → cluster_id + vpc_id
+  echo "[$decoy,$one]" >"$work/dbs.json"
+  dbx SPEC="$work/spec.yaml" -- lookup
+  [ "$rc" = 0 ] || fail "dbnet: lookup 1 cluster exited $rc ($(cat "$work/dse"))"
+  grep -qx "cluster_id=$DB_CID" "$work/dout" || fail "dbnet: lookup cluster_id not in GITHUB_OUTPUT"
+  grep -qx "vpc_id=$FIXTURE_VPC" "$work/dout" || fail "dbnet: lookup vpc_id not in GITHUB_OUTPUT"
+  grep -qx "vpc_id=$FIXTURE_VPC" "$work/dso" || fail "dbnet: lookup vpc_id not on stdout"
+  no_doctl_write lookup
+  # lookup: 0 clusters ([] and null), 2 same-named
+  for fw in '[]' null "[$one,$one]"; do
+    echo "$fw" >"$work/dbs.json"
+    dbx SPEC="$work/spec.yaml" -- lookup
+    [ "$rc" != 0 ] || fail "dbnet: lookup accepted $fw"
+    local want=0
+    [ "$fw" = "[$one,$one]" ] && want=2
+    grep -qF "expected exactly 1 database cluster named xstockstrat, found $want" "$work/dse" ||
+      fail "dbnet: lookup message for $fw ($(cat "$work/dse"))"
+  done
+  # lookup: empty / absent private_network_uuid
+  for fw in "[{\"id\":\"$DB_CID\",\"name\":\"xstockstrat\",\"private_network_uuid\":\"\"}]" \
+    "[{\"id\":\"$DB_CID\",\"name\":\"xstockstrat\"}]"; do
+    echo "$fw" >"$work/dbs.json"
+    dbx SPEC="$work/spec.yaml" -- lookup
+    [ "$rc" != 0 ] || fail "dbnet: lookup accepted a cluster without a VPC"
+    grep -qF 'private_network_uuid' "$work/dse" || fail "dbnet: VPC failure must name private_network_uuid"
+    ! grep -q . "$work/dout" || fail "dbnet: VPC failure wrote GITHUB_OUTPUT"
+  done
+  # lookup: two databases entries on the same cluster → ok; on different clusters → fail
+  echo "[$one]" >"$work/dbs.json"
+  printf 'databases:\n  - name: a\n    cluster_name: xstockstrat\n  - name: b\n    cluster_name: xstockstrat\n' >"$work/spec2.yaml"
+  dbx SPEC="$work/spec2.yaml" -- lookup
+  [ "$rc" = 0 ] || fail "dbnet: lookup rejected two entries on one cluster"
+  printf 'databases:\n  - name: a\n    cluster_name: xstockstrat\n  - name: b\n    cluster_name: other\n' >"$work/spec2.yaml"
+  dbx SPEC="$work/spec2.yaml" -- lookup
+  [ "$rc" != 0 ] || fail "dbnet: lookup accepted two different clusters"
+  grep -qF 'cluster_name' "$work/dse" || fail "dbnet: two-cluster message must name cluster_name"
+
+  # trust: rule absent → one append, appended=true
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" >"$work/fw.json"
+  dbx -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" = 0 ] || fail "dbnet: trust exited $rc ($(cat "$work/dse"))"
+  [ "$(grep -c 'firewalls append' "$work/doctl.log")" = 1 ] || fail "dbnet: trust must append once"
+  grep -qx "databases firewalls append $DB_CID --rule app:$DB_APP" "$work/doctl.log" || fail "dbnet: trust append argv"
+  grep -qx 'appended=true' "$work/dout" || fail "dbnet: trust appended=true"
+  no_doctl_write trust
+  # trust: rule present → no append, appended=false
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_APP\"}]" >"$work/fw.json"
+  dbx -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" = 0 ] || fail "dbnet: trust (present) exited $rc"
+  ! grep -q 'firewalls append' "$work/doctl.log" || fail "dbnet: trust appended a present rule"
+  grep -qx 'appended=false' "$work/dout" || fail "dbnet: trust (present) appended=false"
+  # trust: empty list ([] / null) → warning, rc 0, no append
+  for fw in '[]' null; do
+    echo "$fw" >"$work/fw.json"
+    dbx -- trust "$DB_CID" "$DB_APP"
+    [ "$rc" = 0 ] || fail "dbnet: trust on an open cluster ($fw) exited $rc"
+    grep -q '^::warning::.*open to all' "$work/dso" || fail "dbnet: trust on an open cluster must warn"
+    ! grep -q 'firewalls append' "$work/doctl.log" || fail "dbnet: trust restricted an open cluster"
+    grep -qx 'appended=false' "$work/dout" || fail "dbnet: trust (open) appended=false"
+  done
+  # trust: list / append failure → rc≠0 with the re-run hint
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" >"$work/fw.json"
+  dbx FW_LIST_RC=1 -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: trust ignored a list failure"
+  ! grep -q 'firewalls append' "$work/doctl.log" || fail "dbnet: trust appended after a list failure"
+  grep -qF 're-run Prod — bring up' "$work/dse" || fail "dbnet: trust list failure hint"
+  dbx FW_APPEND_RC=1 -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: trust ignored an append failure"
+  grep -qF 're-run Prod — bring up' "$work/dse" || fail "dbnet: trust append failure hint"
+  # trust/untrust: non-UUID ids → rc≠0 and no doctl call
+  for fw in trust untrust; do
+    dbx -- "$fw" not-a-uuid "$DB_APP"
+    [ "$rc" != 0 ] && ! grep -q . "$work/doctl.log" || fail "dbnet: $fw accepted a non-UUID cluster id"
+    dbx -- "$fw" "$DB_CID" AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE
+    [ "$rc" != 0 ] && ! grep -q . "$work/doctl.log" || fail "dbnet: $fw accepted an uppercase app id"
+  done
+
+  # untrust: a match among other rules → removed by uuid
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_APP\"},{\"uuid\":\"$DB_OTHER\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" >"$work/fw.json"
+  dbx -- untrust "$DB_CID" "$DB_APP"
+  [ "$rc" = 0 ] || fail "dbnet: untrust exited $rc ($(cat "$work/dse"))"
+  [ "$(grep -c 'firewalls remove' "$work/doctl.log")" = 1 ] || fail "dbnet: untrust must remove exactly once"
+  grep -qx "databases firewalls remove $DB_CID --uuid $DB_RULE" "$work/doctl.log" || fail "dbnet: untrust remove argv"
+  no_doctl_write untrust
+  # untrust: remove failure → rc≠0, summary names the rule
+  dbx FW_REMOVE_RC=1 -- untrust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: untrust ignored a remove failure"
+  grep -qF "$DB_RULE" "$work/dsum" || fail "dbnet: untrust remove failure must name the rule in the summary"
+  # untrust: no match, empty list → rc 0, no remove
+  for fw in "[{\"uuid\":\"$DB_OTHER\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" '[]' null; do
+    echo "$fw" >"$work/fw.json"
+    dbx -- untrust "$DB_CID" "$DB_APP"
+    [ "$rc" = 0 ] || fail "dbnet: untrust with no match ($fw) exited $rc"
+    ! grep -q 'firewalls remove' "$work/doctl.log" || fail "dbnet: untrust removed a non-matching rule"
+  done
+  # untrust: the match is the only rule → refuse (would open the cluster), summary names it
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_APP\"}]" >"$work/fw.json"
+  dbx -- untrust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: untrust emptied the trusted-source list"
+  ! grep -q 'firewalls remove' "$work/doctl.log" || fail "dbnet: untrust removed the last rule"
+  grep -qF "$DB_RULE" "$work/dsum" || fail "dbnet: last-rule refusal must name the rule in the summary"
+
+  # ::error:: only under GitHub Actions; stderr always
+  dbx GITHUB_ACTIONS=true -- untrust "$DB_CID" "$DB_APP"
+  grep -q '^::error::' "$work/dso" || fail "dbnet: no ::error:: under GITHUB_ACTIONS"
+  dbx -- untrust "$DB_CID" "$DB_APP"
+  ! grep -q '::error::' "$work/dso" || fail "dbnet: ::error:: outside GitHub Actions"
+  grep -q . "$work/dse" || fail "dbnet: failure must write stderr"
+  echo "dbnet: ok"
+}
+
+groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"
   "group_$g"

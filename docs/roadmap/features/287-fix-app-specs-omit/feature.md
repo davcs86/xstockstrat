@@ -17,6 +17,7 @@
 | 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds; invoked quick, operator extended it to the cap) and approved. recon.md and design.md written. The operator confirmed proceeding without /sdd-review |
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 
+| 2026-11-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started (Step 1 done) |
 ---
 
 ## Artifacts

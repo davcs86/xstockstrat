@@ -73,3 +73,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings:
   - `.github/workflows/ci.yml` overlaps with 281-signal-watchlist-expiry-pruning in disjoint regions (the `sops` filter at 86-96 vs ci-gate at 899-937). Textual-merge risk only; no merge-order row required.
   - No migration, proto or config-key collisions.
+
+## Session 2026-11-04 (sdd-execute sequential)
+
+- Mode entry and the feature plan were confirmed by the operator. There was no re-spec. main-dev was merged in (one unrelated docs change); ledger-guard reported clean.
+- Tooling installed on this host: mikefarah yq v4.44.3, sops 3.13.3 (sha256 verified), shellcheck 0.10.0, shfmt 3.10.0. The baseline suite was green (10 groups).
+
+### Step 1 — test: `dbnet` group [done]
+- Added `group_dbnet` (stub doctl, `dbx` runner, `no_doctl_write`), `FIXTURE_VPC`, and the `DB_*` UUID fixtures, and registered `dbnet`.
+- RED: `ASSERT FAIL: dbnet: lookup 1 cluster exited 127 (bash: …/scripts/do-db-cluster.sh: No such file or directory)`.
+- The uppercase-id case uses a literal rather than `${x^^}`, for bash 3.2 compatibility.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none
