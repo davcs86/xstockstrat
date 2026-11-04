@@ -8,6 +8,7 @@
 **Last Updated**: 2026-11-01
 **Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
 **Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -24,6 +25,7 @@
 | 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–17 done; AC-1..AC-10 promoted to `services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature` (C-16); integration PR opened (merge-order 215 gate waived by operator override, see context.md) |
 
 | 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -41,11 +43,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md`, taken by `/sdd-spec` on 2026
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 17 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios promoted at launch (marketdata suite)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

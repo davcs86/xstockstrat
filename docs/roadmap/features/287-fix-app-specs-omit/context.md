@@ -237,3 +237,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - At the operator's request, aligned the PostgreSQL version with the specs' `databases[].version: "18"` and the live cluster, which `db-cluster-get` reports as `"version":"18"`:
   - `.claude/skills/digitalocean-setup/SKILL.md` P2: `doctl databases create … --version 18`.
   - `docs/setup/digitalocean.md`: the overview table (`:29`), the Step 3 prose (`:129`), the summary (`:141`) and `--version 18` (`:152`).
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1422 merged to main
+- Feature promoted and committed: 0ef77aa123c69b59d022e2edcac45009599595a7
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04
