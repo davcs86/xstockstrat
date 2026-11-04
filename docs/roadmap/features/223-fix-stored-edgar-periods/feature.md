@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-stored-edgar-periods`
-**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md`
+**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-06
 **Last Updated**: 2026-10-06
 **Committed to main**: 595bd1d4effdc73153752d8dce5cee69d1a6f656
 **Launched date**: 2026-10-08
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,18 +16,19 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md` |
+| 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-edgar-stored-de-predates-financial-debt-defect.md) |
 | 2026-10-06 | `draft` → `implementation-ready` → `in-progress` → `code-completed` | /sdd-spec + /sdd-execute sequential | derivation_version + guarded in-place upgrade + edgar snapshot invalidation + golden drift guard |
 
 | 2026-10-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1233; committed 595bd1d4effdc73153752d8dce5cee69d1a6f656 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 3 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — steps + deviation log
-- [Design](design.md) — operator decision + approach
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); promoted to services/xstockstrat-marketdata/acceptance/fix-stored-edgar-periods.feature (C-16)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

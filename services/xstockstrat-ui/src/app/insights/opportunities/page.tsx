@@ -49,6 +49,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { TriangleAlert } from 'lucide-react';
 import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
+import { CardNotice } from '@/components/shared/CardNotice';
+import { errMessage } from '@/lib/errMessage';
 
 type SortKey = 'conviction' | 'expiry' | 'symbolScore';
 // Persist the min-conviction floor so it survives a reload / navigation away and back.
@@ -120,6 +122,7 @@ export default function OpportunitiesPage() {
   // Actions are server-persisted (SetOpportunityAction) and the read is filtered server-side, so
   // acting on a row + invalidating drops it on the next fetch.
   const setAction = useSetOpportunityAction();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Sync the page-0 facet into state (feature 190, O1 — page 0 only, never flat-mapped). Only when
   // the facet is actually PRESENT: while a filter-change refetch is in flight `data` is momentarily
@@ -153,7 +156,10 @@ export default function OpportunitiesPage() {
   };
 
   const act = (o: Opportunity, action: OpportunityAction) =>
-    setAction.mutate({ opportunityKey: o.opportunityKey, action });
+    setAction.mutate(
+      { opportunityKey: o.opportunityKey, action },
+      { onSuccess: () => setActionError(null), onError: (e) => setActionError(errMessage(e)) },
+    );
 
   const reviewHref = (o: Opportunity) =>
     o.strategyId
@@ -292,6 +298,8 @@ export default function OpportunitiesPage() {
             </span>
           </label>
         </div>
+
+        {actionError && <CardNotice variant="error">{actionError}</CardNotice>}
 
         <div className="sm:hidden">
           {isLoading ? (

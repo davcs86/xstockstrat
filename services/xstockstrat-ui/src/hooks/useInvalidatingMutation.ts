@@ -10,16 +10,18 @@ import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-quer
  * @param options.mutationKey  optional TanStack mutation key, so an ancestor that never remounts can
  *                              detect an in-flight write via `useIsMutating` even after the component
  *                              that started it unmounts (cross-instance concurrency guard).
+ * @param options.meta  `meta.errorHandled === true` opts out of the global mutation error fallback.
  */
 export function useInvalidatingMutation<TInput, TResult>(
   mutationFn: (input: TInput) => Promise<TResult>,
   invalidateKeys: QueryKey[] | ((input: TInput, result: TResult) => QueryKey[]),
-  options?: { mutationKey?: QueryKey },
+  options?: { mutationKey?: QueryKey; meta?: Record<string, unknown> },
 ) {
   const queryClient = useQueryClient();
   return useMutation<TResult, Error, TInput>({
     mutationFn,
     mutationKey: options?.mutationKey,
+    meta: options?.meta,
     onSuccess: (result, input) => {
       const keys =
         typeof invalidateKeys === 'function' ? invalidateKeys(input, result) : invalidateKeys;

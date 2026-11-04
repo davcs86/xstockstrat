@@ -10,7 +10,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
+import { IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity';
 import * as mtls from '../mtls';
+import { createAdminDirectory } from '../services/adminDirectory';
 
 const SVC = 'xstockstrat-test';
 const METHOD = '/test.Echo/Call';
@@ -28,6 +30,8 @@ interface Pki {
   clientKey: string;
   foreignCert: string;
   foreignKey: string;
+  identityCert: string;
+  identityKey: string;
 }
 
 function mintLeaf(dir: string, name: string, ca: string, caKey: string): [string, string] {
@@ -45,11 +49,22 @@ function mintPki(): Pki {
   sh('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', caKey, '-out', ca, '-days', '1', '-subj', '/CN=test-ca');
   const [serverCert, serverKey] = mintLeaf(dir, SVC, ca, caKey);
   const [clientCert, clientKey] = mintLeaf(dir, 'xstockstrat-client', ca, caKey);
+  const [identityCert, identityKey] = mintLeaf(dir, 'xstockstrat-identity', ca, caKey);
   const fca = join(dir, 'fca.pem');
   const fcaKey = join(dir, 'fca-key.pem');
   sh('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', fcaKey, '-out', fca, '-days', '1', '-subj', '/CN=foreign-ca');
   const [foreignCert, foreignKey] = mintLeaf(dir, 'xstockstrat-client', fca, fcaKey);
-  return { ca: readFileSync(ca, 'utf8'), serverCert, serverKey, clientCert, clientKey, foreignCert, foreignKey };
+  return {
+    ca: readFileSync(ca, 'utf8'),
+    serverCert,
+    serverKey,
+    clientCert,
+    clientKey,
+    foreignCert,
+    foreignKey,
+    identityCert,
+    identityKey,
+  };
 }
 
 function setEnv(cert: string, key: string, ca: string): void {
@@ -140,5 +155,49 @@ describe('inter-service mTLS', () => {
 
   it('negative matrix (wrong-SAN): a valid-CA cert pinned to the wrong name is rejected', async () => {
     await assert.rejects(call(mtls.clientCredentials(), mtls.targetOverride('xstockstrat-wrong'), new grpc.Metadata()));
+  });
+});
+
+describe('AdminDirectory over mTLS to identity', () => {
+  let pki: Pki;
+  let server: grpc.Server;
+  let port: number;
+  let capturedMd: grpc.Metadata | undefined;
+
+  before(async () => {
+    pki = mintPki();
+    setEnv(pki.identityCert, pki.identityKey, pki.ca);
+    server = new grpc.Server();
+    server.addService(IdentityServiceService, {
+      listAdminUserIds: (
+        call: grpc.ServerUnaryCall<unknown, unknown>,
+        cb: grpc.sendUnaryData<unknown>,
+      ) => {
+        capturedMd = call.metadata;
+        cb(null, { userIds: ['user-99'] });
+      },
+    });
+    port = await new Promise<number>((resolve, reject) => {
+      server.bindAsync('127.0.0.1:0', mtls.serverCredentials(), (err, p) =>
+        err ? reject(err) : resolve(p),
+      );
+    });
+  });
+
+  after(() => {
+    server?.forceShutdown();
+  });
+
+  it('AdminDirectory relays the header trio to identity over mTLS', async () => {
+    setEnv(pki.clientCert, pki.clientKey, pki.ca);
+    const md = new grpc.Metadata();
+    md.set('x-user-id', 'u-1');
+    md.set('x-access-scope', '7');
+    md.set('x-trace-id', 't-1');
+    const ids = await createAdminDirectory(`127.0.0.1:${port}`).listAdminUserIds(md);
+    assert.deepEqual(ids, ['user-99']);
+    assert.equal(capturedMd?.get('x-user-id')[0], 'u-1');
+    assert.equal(capturedMd?.get('x-access-scope')[0], '7');
+    assert.equal(capturedMd?.get('x-trace-id')[0], 't-1');
   });
 });

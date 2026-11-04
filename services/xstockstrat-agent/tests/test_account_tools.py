@@ -156,6 +156,32 @@ async def test_deregister_permission_denied_maps_to_runtimeerror():
 
 
 @pytest.mark.asyncio
+async def test_update_credentials_ibkr_incomplete_maps_invalid_argument():
+    """@AC-7: trading's INVALID_ARGUMENT for an incomplete IBKR blob surfaces as a RuntimeError."""
+    err = grpc.aio.AioRpcError(
+        grpc.StatusCode.INVALID_ARGUMENT,
+        None,
+        None,
+        details="IBKR credentials_json missing required field(s): dh_prime",
+    )
+    with patch.object(client, "update_broker_account_credentials", AsyncMock(side_effect=err)):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="dh_prime"):
+            await _tool_fn(server, "manage_account")(
+                ctx=_ctx(TRADER),
+                operation="update_credentials",
+                account_id="acct-8",
+                credentials_json='{"consumer_key":"ck"}',
+            )
+
+
+def test_manage_account_docstring_lists_ibkr_key_material():
+    description = _make_server()._tool_manager.get_tool("manage_account").description
+    for key in ("signature_key", "encryption_key", "dh_prime"):
+        assert key in description
+
+
+@pytest.mark.asyncio
 async def test_unknown_operation_rejected():
     """@AC-8: an unknown operation is rejected listing the expected verbs."""
     server = _make_server()

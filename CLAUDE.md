@@ -173,7 +173,7 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 
 ## Config Governance Rules
 
-Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`). Secret rows may be **per-user** (feature 224, an operator override of feature 147, which allowed global secrets only); `GetSecret` resolves the exact `user_id` scope with no cross-scope fallback. `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`, plus the mTLS peer DNS SAN for grants that set `peerSan`). Secret rows may be **per-user** (feature 224, an operator override of feature 147, which allowed global secrets only); `GetSecret` resolves the exact `user_id` scope with no cross-scope fallback. `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 
@@ -324,6 +324,7 @@ xstockstrat-ui (UI — trader/insights/config-ui segments)
 All services → xstockstrat-config (WatchConfig stream at startup)
 All services → xstockstrat-ledger (event writes)
 All services → xstockstrat-notify (alert emissions)
+xstockstrat-notify → xstockstrat-identity (ListAdminUserIds, untargeted push audience)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
@@ -333,7 +334,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls that need this trio, so the unused `src/middleware/propagation.ts` helper each carried was removed (feature 175). identity's admin-audit calls to ledger forward the trio via `ledgerAudit.ts`'s own `PROPAGATED_HEADERS` const, not that helper. **Recorded exception (feature 224):** analysis's fundamentals producer (loop and `RunFundamentalsScan`) replaces `x-user-id` with the reserved `system` identity plus `x-internal-caller: analysis-fundsignal`, keeping `x-trace-id`; ingest and indicators honour `x-user-id: system` only with an allow-listed `x-internal-caller` grant **and** an mTLS peer SAN of `xstockstrat-analysis`; analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225).
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. Of the Node leaf services (ledger, identity, notify, config), two make outbound per-request calls and forward the trio via an inline `PROPAGATED_HEADERS` const: identity's admin-audit calls to ledger (`ledgerAudit.ts`) and notify's untargeted-push admin lookup, notify → identity `ListAdminUserIds` (`src/services/adminDirectory.ts`, feature 242). The unused `src/middleware/propagation.ts` helper each leaf carried was removed (feature 175). **Recorded exception (feature 224):** analysis's fundamentals producer (loop and `RunFundamentalsScan`) replaces `x-user-id` with the reserved `system` identity plus `x-internal-caller: analysis-fundsignal`, keeping `x-trace-id`; ingest and indicators honour `x-user-id: system` only with an allow-listed `x-internal-caller` grant **and** an mTLS peer SAN of `xstockstrat-analysis`; analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225).
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 
@@ -348,13 +349,13 @@ Every backend service **that makes outbound per-request gRPC calls** must propag
 | `feature/<slug>` | Feature implementation branches (SDD workflow); also used for SDD-path bug fixes (Track C) |
 | `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
 | `hotfix/<slug>` | Urgent production bug fixes — branches from `main`, PR targets `main`; back-merged into `main-dev` after merge |
-| `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — always branched from and PR'd into `main-dev`; never use as base for features |
+| `claude/*`, `ccr-*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`, `ccr-88d8f6f9-t0yqae`) — always branched from and PR'd into `main-dev`; never use as base for features |
 
 ### Merge Strategy
 
 | PR direction | Required merge type | Reason |
 |---|---|---|
-| `feature/*` or `claude/*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
+| `feature/*`, `claude/*` or `ccr-*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
 | `hotfix/*` → `main` | **Create a merge commit** — never squash | Preserves ancestry; back-merge into `main-dev` required immediately after |
 | `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
 
@@ -371,7 +372,7 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is `max(existing NNN) + 1` — never reuse a number, never backfill a gap, and once a feature reaches `launched` its number is immutable. If two `/sdd-story` runs race and collide on a number, renumber the later one to the next free `NNN` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.sh` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
 - `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
 - `feature.md` — Status History audit log, links to all artifacts
@@ -430,10 +431,6 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Generated Go stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/go/` |
 | Generated Python stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/python/` |
 | Generated TS stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/ts/` (compiled JS in `gen/ts/dist/`) |
-| Go services | `services/xstockstrat-{trading,portfolio,marketdata}/` |
-| Python services | `services/xstockstrat-{indicators,ingest,analysis}/` |
-| Node.js services | `services/xstockstrat-{ledger,identity,notify,config}/` |
-| Next.js UI | `services/xstockstrat-ui/` |
 | Docker Compose | `docker-compose.yml` |
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
 | DO prod app spec | `.do/app.yaml` |
@@ -446,6 +443,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
+| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.sh`, `scripts/sdd-allocate-feature-number.test.sh` |
 | User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | E2E test container | `Dockerfile.e2e` |
@@ -475,4 +473,4 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 
 **The harness must always check out `main-dev` at session start.** Never begin work on a harness-assigned branch (e.g. `claude/*`). SDD skills read authoritative artifacts from `origin/feature/<slug>` or `origin/main-dev` via `git show` — the working-tree checkout must be `main-dev` so that any fallback reads and branch operations start from the correct base.
 
-**All `claude/*` branches must be based on `main-dev`, not `main`.** When the harness creates or checks out a `claude/*` branch, it must branch from `main-dev` and open PRs targeting `main-dev`. Branching from `main` will pollute the PR with unrelated production commits.
+**All `claude/*` and `ccr-*` branches must be based on `main-dev`, not `main`.** When the harness creates or checks out one of these branches, it must branch from `main-dev` and open PRs targeting `main-dev`. Branching from `main` will pollute the PR with unrelated production commits.

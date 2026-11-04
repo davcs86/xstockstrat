@@ -95,6 +95,9 @@ const (
 	// IdentityServiceSetUserActiveProcedure is the fully-qualified name of the IdentityService's
 	// SetUserActive RPC.
 	IdentityServiceSetUserActiveProcedure = "/xstockstrat.identity.v1.IdentityService/SetUserActive"
+	// IdentityServiceListAdminUserIdsProcedure is the fully-qualified name of the IdentityService's
+	// ListAdminUserIds RPC.
+	IdentityServiceListAdminUserIdsProcedure = "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds"
 )
 
 // IdentityServiceClient is a client for the xstockstrat.identity.v1.IdentityService service.
@@ -129,6 +132,9 @@ type IdentityServiceClient interface {
 	UpdatePassword(context.Context, *connect.Request[v1.UpdatePasswordRequest]) (*connect.Response[v1.UpdatePasswordResponse], error)
 	SetUserRoles(context.Context, *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error)
 	SetUserActive(context.Context, *connect.Request[v1.SetUserActiveRequest]) (*connect.Response[v1.SetUserActiveResponse], error)
+	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+	// xstockstrat-notify only; every request header is ignored.
+	ListAdminUserIds(context.Context, *connect.Request[v1.ListAdminUserIdsRequest]) (*connect.Response[v1.ListAdminUserIdsResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the xstockstrat.identity.v1.IdentityService
@@ -268,6 +274,12 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("SetUserActive")),
 			connect.WithClientOptions(opts...),
 		),
+		listAdminUserIds: connect.NewClient[v1.ListAdminUserIdsRequest, v1.ListAdminUserIdsResponse](
+			httpClient,
+			baseURL+IdentityServiceListAdminUserIdsProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ListAdminUserIds")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -294,6 +306,7 @@ type identityServiceClient struct {
 	updatePassword          *connect.Client[v1.UpdatePasswordRequest, v1.UpdatePasswordResponse]
 	setUserRoles            *connect.Client[v1.SetUserRolesRequest, v1.SetUserRolesResponse]
 	setUserActive           *connect.Client[v1.SetUserActiveRequest, v1.SetUserActiveResponse]
+	listAdminUserIds        *connect.Client[v1.ListAdminUserIdsRequest, v1.ListAdminUserIdsResponse]
 }
 
 // AuthenticateUser calls xstockstrat.identity.v1.IdentityService.AuthenticateUser.
@@ -401,6 +414,11 @@ func (c *identityServiceClient) SetUserActive(ctx context.Context, req *connect.
 	return c.setUserActive.CallUnary(ctx, req)
 }
 
+// ListAdminUserIds calls xstockstrat.identity.v1.IdentityService.ListAdminUserIds.
+func (c *identityServiceClient) ListAdminUserIds(ctx context.Context, req *connect.Request[v1.ListAdminUserIdsRequest]) (*connect.Response[v1.ListAdminUserIdsResponse], error) {
+	return c.listAdminUserIds.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the xstockstrat.identity.v1.IdentityService
 // service.
 type IdentityServiceHandler interface {
@@ -434,6 +452,9 @@ type IdentityServiceHandler interface {
 	UpdatePassword(context.Context, *connect.Request[v1.UpdatePasswordRequest]) (*connect.Response[v1.UpdatePasswordResponse], error)
 	SetUserRoles(context.Context, *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error)
 	SetUserActive(context.Context, *connect.Request[v1.SetUserActiveRequest]) (*connect.Response[v1.SetUserActiveResponse], error)
+	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+	// xstockstrat-notify only; every request header is ignored.
+	ListAdminUserIds(context.Context, *connect.Request[v1.ListAdminUserIdsRequest]) (*connect.Response[v1.ListAdminUserIdsResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -569,6 +590,12 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("SetUserActive")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceListAdminUserIdsHandler := connect.NewUnaryHandler(
+		IdentityServiceListAdminUserIdsProcedure,
+		svc.ListAdminUserIds,
+		connect.WithSchema(identityServiceMethods.ByName("ListAdminUserIds")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.identity.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceAuthenticateUserProcedure:
@@ -613,6 +640,8 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceSetUserRolesHandler.ServeHTTP(w, r)
 		case IdentityServiceSetUserActiveProcedure:
 			identityServiceSetUserActiveHandler.ServeHTTP(w, r)
+		case IdentityServiceListAdminUserIdsProcedure:
+			identityServiceListAdminUserIdsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -704,4 +733,8 @@ func (UnimplementedIdentityServiceHandler) SetUserRoles(context.Context, *connec
 
 func (UnimplementedIdentityServiceHandler) SetUserActive(context.Context, *connect.Request[v1.SetUserActiveRequest]) (*connect.Response[v1.SetUserActiveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.SetUserActive is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ListAdminUserIds(context.Context, *connect.Request[v1.ListAdminUserIdsRequest]) (*connect.Response[v1.ListAdminUserIdsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ListAdminUserIds is not implemented"))
 }

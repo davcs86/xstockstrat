@@ -147,7 +147,7 @@ func (s *TradingService) reclaimStaleIntent(ctx context.Context, intentID string
 	bg := context.WithoutCancel(ctx)
 	reclaimed, out, err := s.orderIntentRepo.ReclaimOrphanIntent(bg, intentID, staleBefore)
 	if err != nil {
-		slog.Warn("order intent reclaim failed", "intent_id", intentID, "trigger", trigger, "error", err)
+		slog.WarnContext(ctx, "order intent reclaim failed", "intent_id", intentID, "trigger", trigger, "error", err)
 		return
 	}
 	if !reclaimed {
@@ -163,13 +163,13 @@ func (s *TradingService) sweepOrderIntents(ctx context.Context) {
 	staleBefore := time.Now().Add(-staleThreshold(s.cfgW))
 	stale, err := s.orderIntentRepo.SweepStalePending(ctx, staleBefore, 100)
 	if err != nil {
-		slog.Warn("order intent sweep: select failed", "error", err)
+		slog.WarnContext(ctx, "order intent sweep: select failed", "error", err)
 		return
 	}
 	for _, rec := range stale {
 		reclaimed, out, err := s.orderIntentRepo.ReclaimOrphanIntent(ctx, rec.IntentID, staleBefore)
 		if err != nil {
-			slog.Warn("order intent sweep: reclaim failed", "intent_id", rec.IntentID, "error", err)
+			slog.WarnContext(ctx, "order intent sweep: reclaim failed", "intent_id", rec.IntentID, "error", err)
 			continue
 		}
 		if !reclaimed {

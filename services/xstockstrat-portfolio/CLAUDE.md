@@ -26,7 +26,7 @@ required"`.
 across all accounts (one deadline, one price per symbol). `GetPnL` values broker-synced positions from the broker
 `current_price` and the rest through the shared `applyQuotes` rule; if a needed quote is unavailable it returns
 gRPC **`UNAVAILABLE`** (`ErrQuotesUnavailable` → `classifyGetPnLError`) instead of a silent 0 — so one
-un-quotable offline holding (e.g. a delisted symbol) makes that user's `GetPnL` `UNAVAILABLE` (accepted).
+un-quotable offline holding (e.g. a delisted symbol) makes that user's `GetPnL` `UNAVAILABLE` (accepted). `classifyGetPnLError(ctx, err)` checks the request context first (`DEADLINE_EXCEEDED` / `CANCELED`), then maps `ErrQuotesUnavailable` and `ErrLedgerUnavailable` (a ledger page error or a repeated page token) to `UNAVAILABLE` rather than a partial fold, and `ErrFillUnattributable` (a fill whose side cannot be resolved) to `FAILED_PRECONDITION`.
 Every path values a position broker-first, then marketdata `mark_price`, then a two-sided mid (`markOf`; a one-sided
 quote is never averaged, feature 231). `broadcastSnapshot` and the concentration check in `checkRiskLimits` are
 **skipped with a WARN when any position is unpriced** (no understated equity); the drawdown check is unaffected. A
@@ -38,6 +38,9 @@ permanently unpriceable holding therefore stops snapshots and concentration chec
 with provenance (`mark_source`/`mark_as_of`) and broker-style Day P&L from trading's `recent_fills`. Mark rule
 (operator D-1): a quote counts only if two-sided and from the reference session; off-session the session's own
 close wins; otherwise the last close in the lookback; else `MARK_SOURCE_NONE` (listed, excluded from sums).
+An unreadable offline-state read degrades per account (`readValuation.unavailable`): that account's
+`Portfolio.offline_state_unavailable` (17) / `Position.offline_state_unavailable` (26) is set and its Day/Total P&L
+is zeroed (not meaningful); position reads never fail on it.
 `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` never use it (231 behaviour kept). Fixed invariants, not
 config: the NYSE calendar (`internal/marketsession`, rule holidays, no early closes), a bar's session date =
 NY date of `time + 6h`, and the 1-minute truncation of the bars `End` (singleflight coalescing).
@@ -49,6 +52,8 @@ ListOfflineAccountIdsByUser` set the all-accounts branch trusts). `GetSnapshot` 
 `PermissionDenied` unless `portfolio_id == caller` — a snapshot's `portfolio_id` **is** the owning
 `user_id` (snapshots are written as `InsertSnapshot(userID, userID, …)`), so a caller can read only
 their own. Previously both returned another user's equity/positions for any supplied id.
+`StreamPortfolioUpdates` delivers only snapshots whose `portfolio_id == x-user-id`; an empty caller is
+rejected `InvalidArgument` on both paths before subscribing (feature 264).
 
 **Cross-user watchlist enumeration & first authz gate (feature 154).** `ListAllWatchlistSymbols`
 returns the **distinct union of watchlist symbols across ALL users** (`SELECT DISTINCT symbol FROM
@@ -96,7 +101,6 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `portfolio.snapshot.interval_minutes` | int | `5` | How often to write portfolio snapshots |
 | `portfolio.risk.max_drawdown_pct` | float | `0.10` | Per-account drawdown alert — a WARNING alert is emitted when an account's peak-to-current drawdown (broker `account_balances.equity` vs persisted `peak_equity` HWM) exceeds this pct (feature 172) |
 | `portfolio.risk.concentration_limit_pct` | float | `0.20` | Alert if single position > 20% of portfolio |
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
@@ -105,18 +109,14 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 | `portfolio.marketdata.last_close_lookback_days` | int | `21` | Feature 240 — how many calendar days back the offline-valuation `BatchGetBars` (`allow_partial`) searches for a daily close to mark an offline position that has no live quote (`MARK_SOURCE_LAST_CLOSE`), and the window for Day P&L's previous close. Read live per read; nil/`≤ 0` → `21`. Unseeded (227 D2 waiver); SetConfig-bounded `[5,60]`. |
 | `portfolio.marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. Must exceed max(`marketdata.quotes.batch_timeout_ms` (2500), `marketdata.quotes.mark_timeout_ms` (500)) plus the warm read so a cold timeout still returns the warm subset. Read live; nil/`≤ 0` → `4000`. Unseeded; SetConfig-bounded `[500,8000]`. |
 
-> `platform.ledger_endpoint` was removed from this table by the 2026-08-07 config audit — no code
-> in this service reads it via the config watcher. The ledger address is the `LEDGER_ENDPOINT` env
-> var (see Environment Variables below), matching `xstockstrat-trading`'s own findings log
-> (`docs/context-constitution-findings.md:14`), which flagged the same stale row.
-
 ## Ledger Events Consumed
 
 | Event Type | Consumer | Effect |
 |---|---|---|
-| `order.filled` | `ConsumeOrderFills` (live stream) | Live-update the `positions` table from completed order fills (`user_id` + `account_id` from payload). Uses the incremental `qty` field. Its read-compute-write is serialized with `ConsumePositionSyncs` and account deregistration by `positionsMu`. That mutex is correct only while portfolio runs `instance_count: 1`. |
-| `order.partially_filled` | `GetPnL` (query time) | Consumed in `GetPnL` Pass 2 for realized P&L on orders that never reached `order.filled`, deduplicated per order ID keeping the highest cumulative `filled_qty`. **Not** consumed by the live `positions` stream — partial fills converge into the positions table via the `account.positions.synced` broker reconciliation poller. |
-| `account.positions.synced` | `ConsumePositionSyncs` (live stream) | Reconcile positions against a broker snapshot (`user_id` + `account_id`). **Empty-snapshot delete guard (feature 206):** `DeletePositionsNotInSync` runs only when `shouldReconcileSyncDeletions` is true — a **broker** sync (`realized_pnl` absent → nil pointer) carrying **no** positions is a non-authoritative empty read and must **not** purge (it would wipe a just-order-filled row and trip a reconciliation false halt in trading); an offline recompute (`realized_pnl` present, even `$0`) with an empty list is a legitimate full-close and still purges, and any non-empty snapshot still reconciles removals. Also stores the broker's per-position mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) so `ListPortfolios` reconciles with broker equity instead of recomputing from marketdata marks, plus the broker's intraday/today's P&L (`day_pnl`/`day_pnl_pct`; migration `006`) surfaced as the positions table's "Today's P/L". Per-position `source` and `as_of` provenance fields (feature 163) are passed through when present: `source` = `ORDERS`/`BASELINE`/`MIXED`; `as_of` = baseline effective date |
+| `order.filled` | `ConsumeOrderFills` (live stream); also `GetPnL` (query time) | `GetPnL` folds fills at query time, resolving `side` from the payload, then `order.created`, then `order.submitted` (`orderSide`, stream_key = bare order id). Live: update the `positions` table from completed order fills (`user_id` + `account_id` from payload). Uses the incremental `qty` field. Its read-compute-write is serialized with `ConsumePositionSyncs` and account deregistration by `positionsMu`. That mutex is correct only while portfolio runs `instance_count: 1`. |
+| `order.partially_filled` | `GetPnL` (query time) | Consumed in `GetPnL` Pass 2 for realized P&L on orders that never reached `order.filled`, deduplicated per order ID keeping the highest cumulative `filled_qty`, with the same `side` resolution as `order.filled`; the fold is account-grain and sequence-ordered. **Not** consumed by the live `positions` stream — partial fills converge into the positions table via the `account.positions.synced` broker reconciliation poller. |
+| `account.positions.synced` | `ConsumePositionSyncs` (live stream) | Reconcile positions against a broker snapshot (`user_id` + `account_id`). **Empty-snapshot delete guard (feature 206):** `DeletePositionsNotInSync` runs only when `shouldReconcileSyncDeletions` is true — a **broker** sync (`realized_pnl` absent → nil pointer) carrying **no** positions is a non-authoritative empty read and must **not** purge (it would wipe a just-order-filled row and trip a reconciliation false halt in trading); an offline recompute (`realized_pnl` present, even `$0`) with an empty list is a legitimate full-close and still purges, and any non-empty snapshot still reconciles removals. Also stores the broker's per-position mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) so `ListPortfolios` reconciles with broker equity instead of recomputing from marketdata marks, plus the broker's intraday/today's P&L (`day_pnl`/`day_pnl_pct`; migration `006`) surfaced as the positions table's "Today's P/L". Per-position `source` and `as_of` provenance fields (feature 163) are passed through when present: `source` = `ORDERS`/`BASELINE`/`MIXED`; `as_of` = baseline effective date **Retry/park (feature 256):** a write failure returns through `boundedRetry` (cursor withheld, redelivered): SQLSTATE class 22/23 park after 5 attempts; transient 08/40/53/57, deadline and network errors never park; unclassified errors park after >= 5 attempts and >= 10 min. A park is one Error log `"event parked"` (log-only) and the event self-heals on the next boot, because `lastSeq` starts at 0 and the full history replays (absolute recompute makes replay safe). |
+| `account.deregistered` | `ConsumeAccountDeregistrations` (live stream) | Purge the account's positions and offline realized row. Same `boundedRetry` retry/park/self-heal contract as the sync row, applied to every deregistration including broker accounts (the payload carries no account type; both deletes are idempotent; feature 256 option (a)). |
 | `account.balance.synced` | `ConsumeBalanceSyncs` (live stream) | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
 | `order.bracket_updated` | `ConsumeBracketUpdates` (live stream) | Upsert `stop_order_id`/`take_profit_order_id` from trading's bracket state machine (feature 030); empty string clears |
 
@@ -127,7 +127,6 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 - Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`. **Offline accounts have no row here** (feature 157) — their equity derives from position market value and cash/buying-power/day-P&L are `0`.
 - Table: `portfolio.offline_account_realized` — the offline-exclusive account marker + account-grain realized P&L (feature 157, migration `012`); migration `017` (feature 240) adds `realized_carried`, `fees_since_snapshot`, `fees_carried` and `recent_fills` (JSONB), written from the offline `account.positions.synced` payload — lifetime realized = `realized_carried + realized_pnl`, read user-scoped via `GetOfflineStates` (`user_id` + `account_id`); broker accounts never get a row. `ListPortfolios`' **all-accounts** view enumerates `account_balances` ∪ this offline set (`ListOfflineAccountIdsByUser`, feature 159), so an offline account is **shown** in the combined view with meaningful-only fields (excluded from the summed cash/buying-power aggregates, since it contributes `0`) — closing the `ListPositions`↔`ListPortfolios` read-path parity gap (C-10(b)).
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
-- Migration tool: `golang-migrate`
 
 ## Ledger Events Emitted
 
@@ -136,7 +135,7 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 | `portfolio.position.opened` | New position created |
 | `portfolio.position.closed` | Position fully closed |
 | `portfolio.risk.drawdown_breach` | Max drawdown exceeded |
-| `portfolio.snapshot` | Periodic snapshot written |
+| `portfolio.snapshot` | Snapshot written after each processed fill |
 
 **`portfolio.position.closed` payload — producer contract (feature 042).** The full-close emit in
 `ConsumeOrderFills` carries `{user_id, symbol, account_id, trading_mode, realized_pnl}`, where

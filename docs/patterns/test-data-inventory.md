@@ -70,17 +70,17 @@ signing or re-declare the secret.
 - **Backend test data is in scope under C-13, but materializes lazily.** A domain literal in a
   Go/Python/Node test may stay inline while it has exactly **one** consumer; the **second**
   consumer moves it to that service's canonical home. No service is required to create a fixture
-  module, a catalog, or an `INVENTORY.md` until a second consumer exists. With identity at one test
-  file, notify at one, and config/ledger at two, the expected near-term outcome is that **no new
-  home is created at all** — the rule exists so the second copy is never written, not so four
-  inventories appear.
+  module, a catalog, or an `INVENTORY.md` until a second consumer exists. Ledger reached that
+  second consumer in feature 248 and now has a home; the other Node services gain one only when a
+  domain literal gets its second consumer — the rule exists so the second copy is never written,
+  not so four inventories appear.
 
   | Language | Canonical home | Status today |
   |---|---|---|
   | Next.js | `e2e/fixtures/*.ts` + `INVENTORY.md`; auth `e2e/helpers/auth.ts` | Materialized |
   | Python | `tests/conftest.py` | Exists in all four services |
   | Go | `internal/testdata/` | Materialized in trading, marketdata, portfolio (feature 231) |
-  | Node | `src/__tests__/fixtures/` | Not materialized — on second consumer only |
+  | Node | `src/__tests__/fixtures/` | Materialized in ledger (feature 248): `src/__tests__/fixtures/` + `INVENTORY.md`; other Node services on second consumer only |
 - `scripts/integration-test.sh` posts live smoke data against real services — not mocks,
   not in scope.
 - jscpd already ignores test/fixture files (`.jscpd.json`), so the inventory does not

@@ -196,13 +196,55 @@ async def test_admin_create_duplicate_template_id_already_exists():
 @pytest.mark.asyncio
 async def test_admin_update_returns_bumped_version():
     svc = make_servicer(db=MagicMock())
-    update = AsyncMock(return_value=_template_row(version=2))
+    update = AsyncMock(
+        return_value={**_template_row(version=2), "name": "New", "description": "d2"}
+    )
+    tpl = _template_msg()
+    tpl.meta.name = "New"
+    tpl.meta.description = "d2"
     with patch(f"{_ST}.update", update):
         resp = await svc.ManageTemplate(
-            _manage_req(common_pb2.TEMPLATE_OPERATION_UPDATE), _ctx("4", user_id="admin1")
+            _manage_req(common_pb2.TEMPLATE_OPERATION_UPDATE, tpl), _ctx("4", user_id="admin1")
         )
-    assert update.call_args.args[1] == "t1"
+    assert update.call_args.args[1:4] == ("t1", "New", "d2")
+    assert resp.meta.name == "New" and resp.meta.description == "d2"
     assert resp.meta.version == 2
+
+
+def _empty_id_create(source_type="derived"):
+    tpl = _template_msg(source_type)
+    tpl.meta.template_id = ""
+    return _manage_req(common_pb2.TEMPLATE_OPERATION_CREATE, tpl)
+
+
+@pytest.mark.asyncio
+async def test_admin_create_with_empty_template_id_invalid_argument():
+    svc = make_servicer(db=MagicMock())
+    ctx = _ctx("4", user_id="admin1")
+    create = AsyncMock()
+    with patch(f"{_ST}.create", create):
+        code = await _aborted_code(svc.ManageTemplate(_empty_id_create(), ctx), ctx)
+    assert code == grpc.StatusCode.INVALID_ARGUMENT
+    create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_admin_create_empty_id_with_bad_payload_reports_id_error():
+    svc = make_servicer(db=MagicMock())
+    ctx = _ctx("4", user_id="admin1")
+    with patch(f"{_ST}.create", AsyncMock()):
+        code = await _aborted_code(svc.ManageTemplate(_empty_id_create("mcp_client"), ctx), ctx)
+    assert code == grpc.StatusCode.INVALID_ARGUMENT
+    assert "template_id required" in ctx.abort.call_args[0][1]
+
+
+@pytest.mark.asyncio
+async def test_non_admin_empty_id_create_is_permission_denied():
+    svc = make_servicer(db=MagicMock())
+    ctx = _ctx("0", user_id="bob")
+    with patch(f"{_ST}.create", AsyncMock()):
+        code = await _aborted_code(svc.ManageTemplate(_empty_id_create(), ctx), ctx)
+    assert code == grpc.StatusCode.PERMISSION_DENIED
 
 
 @pytest.mark.asyncio
@@ -442,7 +484,10 @@ async def test_repo_retire_and_list_active_hide_retired():
     db.fetchrow = AsyncMock(return_value=_template_row(retired=True))
     db.fetch = AsyncMock(return_value=[])
     await source_templates.retire(db, "t1")
-    assert "retired_at = NOW()" in db.fetchrow.call_args.args[0]
+    sql = db.fetchrow.call_args.args[0]
+    assert "retired_at = COALESCE(retired_at, NOW())" in sql and "updated_at = NOW()" in sql
+    assert "retired_at IS NULL" not in sql
+    assert db.fetchrow.call_args.args[1] == "t1"
     assert await source_templates.list_active(db) == []
     assert "retired_at IS NULL" in db.fetch.call_args.args[0]
 

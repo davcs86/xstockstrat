@@ -312,8 +312,11 @@ type Portfolio struct {
 	RealizedPnlLifetime *float64 `protobuf:"fixed64,14,opt,name=realized_pnl_lifetime,json=realizedPnlLifetime,proto3,oneof" json:"realized_pnl_lifetime,omitempty"` // offline accounts only
 	FeesSinceSnapshot   *float64 `protobuf:"fixed64,15,opt,name=fees_since_snapshot,json=feesSinceSnapshot,proto3,oneof" json:"fees_since_snapshot,omitempty"`       // offline accounts only
 	FeesLifetime        *float64 `protobuf:"fixed64,16,opt,name=fees_lifetime,json=feesLifetime,proto3,oneof" json:"fees_lifetime,omitempty"`                        // offline accounts only
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+	// day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+	OfflineStateUnavailable bool `protobuf:"varint,17,opt,name=offline_state_unavailable,json=offlineStateUnavailable,proto3" json:"offline_state_unavailable,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Portfolio) Reset() {
@@ -458,6 +461,13 @@ func (x *Portfolio) GetFeesLifetime() float64 {
 	return 0
 }
 
+func (x *Portfolio) GetOfflineStateUnavailable() bool {
+	if x != nil {
+		return x.OfflineStateUnavailable
+	}
+	return false
+}
+
 type Position struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Symbol           string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
@@ -507,9 +517,12 @@ type Position struct {
 	Source     PositionSource `protobuf:"varint,23,opt,name=source,proto3,enum=xstockstrat.portfolio.v1.PositionSource" json:"source,omitempty"`
 	MarkSource MarkSource     `protobuf:"varint,24,opt,name=mark_source,json=markSource,proto3,enum=xstockstrat.portfolio.v1.MarkSource" json:"mark_source,omitempty"`
 	// LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE.
-	MarkAsOf      *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=mark_as_of,json=markAsOf,proto3" json:"mark_as_of,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MarkAsOf *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=mark_as_of,json=markAsOf,proto3" json:"mark_as_of,omitempty"`
+	// Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+	// day_pnl_pct are then zero — not a real $0.
+	OfflineStateUnavailable bool `protobuf:"varint,26,opt,name=offline_state_unavailable,json=offlineStateUnavailable,proto3" json:"offline_state_unavailable,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Position) Reset() {
@@ -715,6 +728,13 @@ func (x *Position) GetMarkAsOf() *timestamppb.Timestamp {
 		return x.MarkAsOf
 	}
 	return nil
+}
+
+func (x *Position) GetOfflineStateUnavailable() bool {
+	if x != nil {
+		return x.OfflineStateUnavailable
+	}
+	return false
 }
 
 type PortfolioSnapshot struct {
@@ -2764,7 +2784,7 @@ var File_portfolio_v1_portfolio_proto protoreflect.FileDescriptor
 
 const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\n" +
-	"\x1cportfolio/v1/portfolio.proto\x12\x18xstockstrat.portfolio.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/field_mask.proto\x1a\x16common/v1/common.proto\"\xd8\x05\n" +
+	"\x1cportfolio/v1/portfolio.proto\x12\x18xstockstrat.portfolio.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/field_mask.proto\x1a\x16common/v1/common.proto\"\x94\x06\n" +
 	"\tPortfolio\x12!\n" +
 	"\fportfolio_id\x18\x01 \x01(\tR\vportfolioId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x16\n" +
@@ -2784,12 +2804,13 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\rtotal_pnl_pct\x18\r \x01(\x01H\x01R\vtotalPnlPct\x88\x01\x01\x127\n" +
 	"\x15realized_pnl_lifetime\x18\x0e \x01(\x01H\x02R\x13realizedPnlLifetime\x88\x01\x01\x123\n" +
 	"\x13fees_since_snapshot\x18\x0f \x01(\x01H\x03R\x11feesSinceSnapshot\x88\x01\x01\x12(\n" +
-	"\rfees_lifetime\x18\x10 \x01(\x01H\x04R\ffeesLifetime\x88\x01\x01B\x0f\n" +
+	"\rfees_lifetime\x18\x10 \x01(\x01H\x04R\ffeesLifetime\x88\x01\x01\x12:\n" +
+	"\x19offline_state_unavailable\x18\x11 \x01(\bR\x17offlineStateUnavailableB\x0f\n" +
 	"\r_realized_pnlB\x10\n" +
 	"\x0e_total_pnl_pctB\x18\n" +
 	"\x16_realized_pnl_lifetimeB\x16\n" +
 	"\x14_fees_since_snapshotB\x10\n" +
-	"\x0e_fees_lifetime\"\x9b\b\n" +
+	"\x0e_fees_lifetime\"\xd7\b\n" +
 	"\bPosition\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x10\n" +
 	"\x03qty\x18\x02 \x01(\x01R\x03qty\x12&\n" +
@@ -2822,7 +2843,8 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\vmark_source\x18\x18 \x01(\x0e2$.xstockstrat.portfolio.v1.MarkSourceR\n" +
 	"markSource\x128\n" +
 	"\n" +
-	"mark_as_of\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\bmarkAsOf\"\xc9\x02\n" +
+	"mark_as_of\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\bmarkAsOf\x12:\n" +
+	"\x19offline_state_unavailable\x18\x1a \x01(\bR\x17offlineStateUnavailable\"\xc9\x02\n" +
 	"\x11PortfolioSnapshot\x12!\n" +
 	"\fportfolio_id\x18\x01 \x01(\tR\vportfolioId\x12?\n" +
 	"\rsnapshot_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fsnapshotTime\x12\x16\n" +

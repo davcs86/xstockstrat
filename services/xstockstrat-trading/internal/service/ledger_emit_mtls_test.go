@@ -29,11 +29,9 @@ func (f *failingLedgerClient) AppendEvent(_ context.Context, _ *ledgerv1.AppendE
 	return nil, grpcstatus.Error(codes.Unavailable, "simulated mTLS handshake mismatch")
 }
 
-// TestEmitLedgerEventFailSoftOneShot: a handshake failure on the emit dial must NOT crash or wedge
-// the calling goroutine (fail-soft — warn-and-return), and emitLedgerEvent attempts AppendEvent
-// exactly ONCE (one-shot; no built-in retry — the design's accepted, operator-signed-off bounded loss,
-// same class as any ledger restart). This is the behavior the flat-book cutover precondition protects.
-func TestEmitLedgerEventFailSoftOneShot(t *testing.T) {
+// A failing emit dial must not wedge the caller (fail-soft) and is retried exactly appendMaxAttempts
+// times — the bounded retry the flat-book cutover precondition relies on (feature 256 supersedes 210's one-shot).
+func TestEmitLedgerEventFailSoftBoundedRetry(t *testing.T) {
 	stub := &failingLedgerClient{}
 	s := &TradingService{ledger: stub}
 
@@ -54,7 +52,7 @@ func TestEmitLedgerEventFailSoftOneShot(t *testing.T) {
 	stub.mu.Lock()
 	calls := stub.calls
 	stub.mu.Unlock()
-	if calls != 1 {
-		t.Errorf("emitLedgerEvent attempted AppendEvent %d times, want exactly 1 (one-shot, no retry)", calls)
+	if calls != appendMaxAttempts {
+		t.Errorf("emitLedgerEvent attempted AppendEvent %d times, want exactly %d (bounded retry)", calls, appendMaxAttempts)
 	}
 }

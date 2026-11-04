@@ -424,3 +424,71 @@ async def test_list_positions_prints_new_fields():
     assert p["unrealized_pnl_pct"] == 0
     assert p["mark_source"] == "MARK_SOURCE_QUOTE"
     assert p["mark_as_of"] == "2026-10-19T14:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_list_positions_passes_offline_state_unavailable():
+    """@AC-3: the degraded marker and the zeroed day_pnl both reach the MCP dict, and a healthy
+    position carries an explicit False (always_print_fields_with_no_presence)."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    degraded = portfolio_pb2.Position(
+        symbol="AAPL", qty=10, account_id="off-1", offline_state_unavailable=True, day_pnl=0
+    )
+    healthy = portfolio_pb2.Position(symbol="MSFT", qty=5, account_id="off-1", day_pnl=12.5)
+    mock_stub = MagicMock()
+    mock_stub.ListPositions = AsyncMock(
+        return_value=portfolio_pb2.ListPositionsResponse(positions=[degraded, healthy])
+    )
+
+    grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_positions("user-42", "off-1")
+
+    by_symbol = {p["symbol"]: p for p in out["positions"]}
+    assert by_symbol["AAPL"]["offline_state_unavailable"] is True
+    assert by_symbol["AAPL"]["day_pnl"] == 0
+    assert by_symbol["MSFT"]["offline_state_unavailable"] is False
+    assert by_symbol["MSFT"]["day_pnl"] == 12.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("code", "details"),
+    [
+        ("INVALID_ARGUMENT", "filled_qty must be a finite number >= 0"),
+        ("UNAVAILABLE", "positions not published; re-confirm to retry"),
+    ],
+)
+async def test_manage_offline_account_confirm_order_surfaces_error_details(code, details):
+    """@AC-4 @AC-5: a ConfirmOrder rejection or publish-failure reaches the caller with the
+    backend's exact details, via the real client wrapper and the tool's error mapping."""
+    import grpc
+    from mcp.server.mcpserver import MCPServer
+
+    from app.tools import register_tools
+    from tests.conftest import TRADER, _ctx
+
+    err = grpc.aio.AioRpcError(getattr(grpc.StatusCode, code), None, None, details=details)
+    mock_stub = MagicMock()
+    mock_stub.ConfirmOrder = AsyncMock(side_effect=err)
+    server = MCPServer("test-agent")
+    register_tools(server)
+    fn = server._tool_manager.get_tool("manage_offline_account").fn
+
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            with pytest.raises(RuntimeError) as excinfo:
+                await fn(
+                    _ctx(TRADER),
+                    operation="confirm_order",
+                    order_id="ord-1",
+                    filled_qty=10,
+                    filled_avg_price=190.25,
+                )
+
+    assert str(excinfo.value) == details

@@ -56,7 +56,7 @@ describe('hasSecretCallerAuthority', () => {
 
   it('preserves the marketdata exact-keys grant (feature 147 regression)', () => {
     assert.equal(
-      hasSecretCallerAuthority(callWith('marketdata'), 'marketdata', 'alpaca.api_key'),
+      hasSecretCallerAuthority(callWith('marketdata', 'DNS:xstockstrat-marketdata'), 'marketdata', 'alpaca.api_key'),
       true,
     );
   });

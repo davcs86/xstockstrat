@@ -45,10 +45,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	shutdownOtel, err := telemetry.Init(ctx)
+	shutdownOtel, forceFlushOtel, err := telemetry.Init(ctx)
 	if err != nil {
-		slog.Warn("otel init failed — continuing without tracing", "error", err)
+		slog.Warn("otel init failed — continuing without telemetry export", "error", err)
 	} else {
+		slog.SetDefault(slog.New(telemetry.WrapLogHandler(logger.Handler())))
 		defer func() {
 			ctx2, c := context.WithTimeout(context.Background(), 5*time.Second)
 			defer c()
@@ -131,13 +132,9 @@ func main() {
 	// service — they must stay coupled. Per-RPC enablement is live (fundamentalsEnabled), not here.
 	fundProvider := cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub")
 	fmpClient := newFMPClient(cfgWatcher, cfg.FMPAPIKey)
-	// Boot-seed the shared budget so a mid-day restart cannot re-grant a fresh full cap (row count
-	// is a conservative floor of today's FMP calls).
-	if n, err := repo.CountFundamentalsFetchedToday(ctx); err == nil {
-		fmpClient.SeedBudget(n)
-	} else {
-		slog.Warn("FMP budget boot-seed failed; starting from 0", "error", err)
-	}
+	// Boot-seed the shared budget so a mid-day restart cannot re-grant a fresh full cap (today's
+	// source='fmp' row count is a conservative floor of today's FMP calls), whatever fundProvider is.
+	seedFMPBudget(ctx, repo, fmpClient)
 	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, fmpClient, cfg.FinnhubAPIKey)
 
 	// Historical point-in-time fundamentals source (feature 198): SEC EDGAR, keyless (non-secret
@@ -204,7 +201,7 @@ func main() {
 		<-quit
 		slog.Info("shutting down marketdata service")
 		hs.Shutdown()
-		grpcServer.GracefulStop()
+		telemetry.StopServer(forceFlushOtel, grpcServer.GracefulStop, grpcServer.Stop, 2*time.Second, 3*time.Second)
 		cancel()
 	}()
 
@@ -259,6 +256,17 @@ func newFMPClient(cfgWatcher *config.Watcher, apiKey string) *fmp.Client {
 				int(cfgWatcher.GetInt("marketdata.fmp.daily_request_cap", 250))
 		},
 	})
+}
+
+// seedFMPBudget seeds the shared FMP budget from today's fmp-source row count; on error it starts from 0.
+func seedFMPBudget(ctx context.Context, counter interface {
+	CountFundamentalsFetchedToday(context.Context, string) (int, error)
+}, b interface{ SeedBudget(int) }) {
+	if n, err := counter.CountFundamentalsFetchedToday(ctx, fmp.SourceName); err == nil {
+		b.SeedBudget(n)
+	} else {
+		slog.WarnContext(ctx, "FMP budget boot-seed failed; starting from 0", "error", err)
+	}
 }
 
 func healthcheck() int {

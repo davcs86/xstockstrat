@@ -86,6 +86,13 @@ export type Portfolio = Message<"xstockstrat.portfolio.v1.Portfolio"> & {
      * @generated from field: optional double fees_lifetime = 16;
      */
     feesLifetime?: number | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+     * day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+     *
+     * @generated from field: bool offline_state_unavailable = 17;
+     */
+    offlineStateUnavailable: boolean;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Portfolio.
@@ -230,6 +237,13 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: google.protobuf.Timestamp mark_as_of = 25;
      */
     markAsOf?: Timestamp | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+     * day_pnl_pct are then zero — not a real $0.
+     *
+     * @generated from field: bool offline_state_unavailable = 26;
+     */
+    offlineStateUnavailable: boolean;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.

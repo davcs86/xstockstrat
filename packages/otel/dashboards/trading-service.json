@@ -17,11 +17,17 @@
       "pluginName": "Loki"
     }
   ],
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "tags": ["xstockstrat", "phase7", "trading"],
+  "tags": [
+    "xstockstrat",
+    "phase7",
+    "trading"
+  ],
   "templating": {
     "list": [
       {
@@ -42,20 +48,36 @@
       }
     ]
   },
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "title": "xstockstrat — Trading Service",
   "uid": "xstk-trading-service",
   "panels": [
     {
       "title": "Order submission rate (PlaceOrder req/s)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (rpc_grpc_status_code) (rate(rpc_server_duration_milliseconds_count{service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m]))",
+          "expr": "sum by (rpc_grpc_status_code) (rate(rpc_server_duration_milliseconds_count{rpc_method!~\"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig\", service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m]))",
           "legendFormat": "status {{rpc_grpc_status_code}}"
         }
       ]
@@ -63,34 +85,32 @@
     {
       "title": "PlaceOrder latency (P50 / P99 ms)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{rpc_method!~\"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig\", service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{rpc_method!~\"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig\", service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m])))",
           "legendFormat": "p99"
-        }
-      ]
-    },
-    {
-      "title": "Order fills per 5m (order.filled ledger events)",
-      "description": "Counted from xstockstrat-trading ledger lifecycle log lines.",
-      "type": "timeseries",
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(count_over_time({service_name=\"trading\"} |= \"order.filled\" [5m]))",
-          "legendFormat": "fills"
         }
       ]
     },
@@ -98,13 +118,26 @@
       "title": "Trading error logs (rate)",
       "description": "Bracket/order rejection and risk-check failures surface as error-level logs. Inspect lines to distinguish bracket-order failures.",
       "type": "timeseries",
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate({service_name=\"trading\"} | json | level=~\"error|ERROR\" [5m]))",
+          "expr": "sum(rate({service_name=\"trading\"} | detected_level=\"error\" [5m]))",
           "legendFormat": "errors/s"
         }
       ]

@@ -26,7 +26,7 @@ This runbook walks through creating and configuring the DigitalOcean infrastruct
 |---|---|
 | App Platform (staging) | Hosts all 13 services; paper trading; deploys from `main-dev` |
 | App Platform (production) | Hosts all 13 services; live trading; deploys from `main` |
-| Managed PostgreSQL 15 (×1) | Single TimescaleDB cluster (`xstockstrat`) with two logical databases: `xstockstrat-staging` and `xstockstrat-production` |
+| Managed PostgreSQL 18 (×1) | Single TimescaleDB cluster (`xstockstrat`) with two logical databases: `xstockstrat-staging` and `xstockstrat-production` |
 | GitHub Actions | CI/CD; auto-deploys on push to `main-dev` or `main` via `doctl` |
 
 Architecture spec files:
@@ -45,8 +45,8 @@ Two separate IDs are needed for each environment. They serve different purposes 
 
 | Identifier | What it is | How it's created | Where it's used |
 |---|---|---|---|
-| **App ID** (`DO_DEV_APP_ID`, `DO_PROD_APP_ID`) | Identifies a specific App Platform application — the deployed unit containing all services, workers, and jobs defined in the app spec | Returned by `doctl apps create` | `doctl apps update`, `doctl apps list-deployments`, `doctl apps logs` — everything that interacts with the running app |
-| **Project ID** (`DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`) | Identifies a DO Project — an organizational folder that groups resources across any DO product (apps, databases, droplets, etc.) for billing and console grouping | Returned by `doctl projects create` | `doctl projects resources assign` — to place the app into a project; has no effect on how the app runs |
+| **App ID** (`$DO_DEV_APP_ID`, `$DO_PROD_APP_ID` shell variables) | Identifies a specific App Platform application — the deployed unit containing all services, workers, and jobs defined in the app spec | Returned by `doctl apps create` | Manual `doctl apps update` / `list-deployments` / `logs`. The deploy workflows **look the app up by its spec `name:`**, so the app ID is not a GitHub secret (feature 286) |
+| **Project ID** (`digitalocean.PROJECT_ID` in `secrets/<env>.enc.yaml`; legacy `DO_DEV_PROJECT_ID` / `DO_PROD_PROJECT_ID`) | Identifies a DO Project — an organizational folder that groups resources across any DO product (apps, databases, droplets, etc.) for billing and console grouping | Returned by `doctl projects create` | `doctl projects resources assign` — to place the app into a project; has no effect on how the app runs |
 
 The relationship looks like this:
 
@@ -110,7 +110,7 @@ sudo mv doctl /usr/local/bin
 Authenticate with a Personal Access Token (PAT):
 
 1. DigitalOcean console → **API → Tokens → Generate New Token**
-2. Name: `xstockstrat-deploy`; Scopes: **Read + Write** (required for App Platform and database management)
+2. Name: `xstockstrat-operator`; Scopes: **Read + Write**. This is your own `doctl` login for the one-time setup below (it creates the cluster, apps and projects). The CI deploy token is a separate, custom-scoped token — see Step 9.
 3. Copy the token immediately — it is only shown once
 4. Run:
    ```bash
@@ -126,7 +126,7 @@ Authenticate with a Personal Access Token (PAT):
 
 ## Step 3 — Create the Managed PostgreSQL Database Cluster
 
-A single PostgreSQL 15 cluster (`xstockstrat`) hosts two logical databases — `xstockstrat-staging` and `xstockstrat-production`. Both environments share CPU, RAM, and IOPS, but data is fully isolated at the database level.
+A single PostgreSQL 18 cluster (`xstockstrat`) hosts two logical databases — `xstockstrat-staging` and `xstockstrat-production`. Both environments share CPU, RAM, and IOPS, but data is fully isolated at the database level.
 
 | Environment | Cluster | Database | App spec reference |
 |---|---|---|---|
@@ -138,7 +138,7 @@ A single PostgreSQL 15 cluster (`xstockstrat`) hosts two logical databases — `
 Via console: **Databases → Create Database**
 
 ```
-Engine:  PostgreSQL 15
+Engine:  PostgreSQL 18
 Region:  NYC1 (matches app.yaml region: nyc)
 Name:    xstockstrat
 Plan:    Production (shared by both environments — size up accordingly)
@@ -149,7 +149,7 @@ Or via doctl:
 ```bash
 doctl databases create xstockstrat \
   --engine pg \
-  --version 15 \
+  --version 18 \
   --region nyc1 \
   --size db-s-2vcpu-4gb \
   --num-nodes 2
@@ -224,22 +224,20 @@ The dev app deploys from `main-dev`, runs all services in `TRADING_MODE=paper`, 
 
 > **Prerequisite:** Push to `main-dev` first and wait for the CI `docker-build` job to complete before running `doctl apps create`. The app spec references GHCR images by commit SHA; the first deploy will fail if no images have been pushed yet.
 
-The app spec contains `YOUR_GITHUB_ORG` and `YOUR_IMAGE_TAG` as placeholders. In normal CI-driven deploys these are substituted automatically by the deploy workflow. For the initial manual creation, substitute only `YOUR_GITHUB_ORG` — the CI workflow handles the image tag on subsequent deploys:
+The app spec contains `YOUR_GITHUB_ORG`, `YOUR_IMAGE_TAG` and `YOUR_VPC_ID` as placeholders. In normal CI-driven deploys these are substituted automatically by the deploy workflow. For the initial manual creation, substitute `YOUR_GITHUB_ORG` and `YOUR_VPC_ID` — the CI workflow handles the image tag on subsequent deploys. `YOUR_VPC_ID` is the VPC of the cluster from Step 3, which the app must join to reach the database (requires `brew install yq jq`):
 
 ```bash
-sed "s|YOUR_GITHUB_ORG|<your-github-org>|g" .do/app.dev.yaml > /tmp/app.dev.yaml
-doctl apps create --spec /tmp/app.dev.yaml
+SPEC=.do/app.dev.yaml bash scripts/do-db-cluster.sh lookup > /tmp/xstockstrat-db.env
+CLUSTER_ID=$(sed -n 's/^cluster_id=//p' /tmp/xstockstrat-db.env)
+VPC_ID=$(sed -n 's/^vpc_id=//p' /tmp/xstockstrat-db.env)
+sed -e "s|YOUR_GITHUB_ORG|<your-github-org>|g" -e "s|YOUR_VPC_ID|$VPC_ID|g" .do/app.dev.yaml > /tmp/app.dev.yaml
+export DO_DEV_APP_ID=$(doctl apps create --spec /tmp/app.dev.yaml --format ID --no-header)
+
+# Make the new app a trusted source of the cluster (no-op if it already is):
+bash scripts/do-db-cluster.sh trust "$CLUSTER_ID" "$DO_DEV_APP_ID"
 ```
 
-Note the **App ID** printed in the output — you will need it for GitHub Actions.
-
-```bash
-# Save it:
-export DO_DEV_APP_ID=<app-id-from-output>
-
-# Or retrieve it later:
-doctl apps list
-```
+Keep the **App ID** (`$DO_DEV_APP_ID`) for the manual commands below; retrieve it later with `doctl apps list`.
 
 **What the dev spec configures:**
 
@@ -253,7 +251,7 @@ doctl apps list
 | Instance size (Go/Node services) | `basic-xxs` (512 MB — `trading`, `portfolio`, `marketdata`, `ledger`, `identity`, `notify`) |
 | Instance size (Python/UI services) | `basic-xs` (1 GB — `indicators`, `ingest`, `analysis`, `agent`, `ui`) |
 | xstockstrat-config instance size | `basic-s` (WatchConfig streaming needs more headroom) |
-| Database | Managed PostgreSQL attached as `db` |
+| Database | Managed PostgreSQL attached as `xstockstrat` (and its VPC, via `vpc:`) |
 
 Inter-service routing uses DigitalOcean private networking: `${xstockstrat-config.PRIVATE_URL}`, `${xstockstrat-ledger.PRIVATE_URL}`, etc. These resolve automatically within the App Platform private network — no manual configuration needed.
 
@@ -265,15 +263,15 @@ The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and 
 
 > **Prerequisite:** Ensure CI has pushed images to GHCR from the `main` branch before creating the prod app. Check `https://github.com/davcs86?tab=packages` or the `docker-build` workflow run. The first CI push happens automatically when `main-dev` is promoted via the `/promote` workflow.
 
-Substitute `YOUR_GITHUB_ORG` before creating:
+Production is normally created by the **Prod — bring up** workflow (`prod-up.yml`), which renders the spec, attaches the cluster's VPC and adds the trusted source for you (see `docs/runbooks/infra-cost-reduction.md`). For a manual first creation, substitute `YOUR_GITHUB_ORG` and `YOUR_VPC_ID` the same way as Step 5:
 
 ```bash
-sed "s|YOUR_GITHUB_ORG|<your-github-org>|g" .do/app.yaml > /tmp/app.yaml
-doctl apps create --spec /tmp/app.yaml
-```
-
-```bash
-export DO_PROD_APP_ID=<app-id-from-output>
+SPEC=.do/app.yaml bash scripts/do-db-cluster.sh lookup > /tmp/xstockstrat-db.env
+CLUSTER_ID=$(sed -n 's/^cluster_id=//p' /tmp/xstockstrat-db.env)
+VPC_ID=$(sed -n 's/^vpc_id=//p' /tmp/xstockstrat-db.env)
+sed -e "s|YOUR_GITHUB_ORG|<your-github-org>|g" -e "s|YOUR_VPC_ID|$VPC_ID|g" .do/app.yaml > /tmp/app.yaml
+export DO_PROD_APP_ID=$(doctl apps create --spec /tmp/app.yaml --format ID --no-header)
+bash scripts/do-db-cluster.sh trust "$CLUSTER_ID" "$DO_PROD_APP_ID"
 ```
 
 **What the prod spec configures:**
@@ -360,14 +358,17 @@ channel (no `.enabled`-style guard, same as the fundamentals credentials above).
 Set on: **every** component (all 12 services require `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, fail-closed)
 
 Backends run **mutual TLS** on every inter-service gRPC hop. The deploy stores **only the CA**
-(cert + key) as **one secret per environment**; `.github/workflows/deploy.yml` mints the 12 per-service
-leaves off it on every deploy. Generate and install the CA with the provisioning script — this is
-**required**, or the deploy aborts fail-closed (a placeholder would crash-loop every service):
+(cert + key) per environment, as `common.MTLS_CA` in `secrets/<env>.enc.yaml`. One CA per environment is shared by DO and homelab.
+`scripts/do-render-app-spec.py` mints the 12 per-service leaves off it on every deploy. Generate the CA with the
+provisioning script and store it with `sops set` (see [`docs/runbooks/sops-secrets.md`](../runbooks/sops-secrets.md)). This is **required**, or the deploy aborts
+fail-closed (a placeholder would crash-loop every service):
 
 ```bash
-scripts/mtls-provision.sh set-secret dev    # mints ./certs (dev CA) → sets DEV_MTLS_CA
-scripts/mtls-provision.sh set-secret prod   # mints ./certs-prod (prod CA) → sets PROD_MTLS_CA
+scripts/mtls-provision.sh ca dev    # mints ./certs (dev CA) → print the bundle for common.MTLS_CA (staging)
+scripts/mtls-provision.sh ca prod   # mints ./certs-prod (prod CA) → print the bundle for common.MTLS_CA (production)
 ```
+
+`set-secret dev|prod` still writes the legacy `DEV_MTLS_CA` / `PROD_MTLS_CA` repo secret. The deploy reads it only as a per-key fallback.
 
 The CA (byte-stable across deploys) backs the `YOUR_{DEV,PROD}_MTLS_{CA_CERT,CERT_<SVC>,KEY_<SVC>}`
 placeholders in `.do/app*.yaml` (each `MTLS_KEY` stays `type: SECRET`). This keeps the CA **signing
@@ -382,27 +383,9 @@ Set on: `xstockstrat-identity`
 openssl rand -base64 48
 ```
 
-Injected at deploy time via GitHub Actions secrets (same reasoning as the broker key and Alpaca credentials above). Add `DEV_JWT_SECRET` and `PROD_JWT_SECRET` as GitHub Actions secrets (see Step 9) — they substitute into the `YOUR_DEV_JWT_SECRET` / `YOUR_PROD_JWT_SECRET` placeholders. You may use the same value for both or separate ones per environment.
+Injected at deploy time from `common.JWT_SECRET` in `secrets/<env>.enc.yaml` (legacy fallback: the `DEV_JWT_SECRET` / `PROD_JWT_SECRET` repo secrets, see Step 9). It substitutes into the `YOUR_DEV_JWT_SECRET` / `YOUR_PROD_JWT_SECRET` placeholders. You may use the same value for both or separate ones per environment.
 
-### MCP agent secret
-Set on: `xstockstrat-agent`
-
-```bash
-# Generate:
-openssl rand -hex 32
-```
-
-Set as `MCP_AGENT_SECRET` on both apps (dev and prod). It is required for the agent's OAuth 2.1
-login flow (`app/oauth_server.py` HMAC-signs the `txn` blob with it) — `xstockstrat-ingest`,
-`xstockstrat-notify`, and `xstockstrat-analysis` do not read this variable.
-
-```bash
-doctl apps update $DO_DEV_APP_ID \
-  --set-env MCP_AGENT_SECRET=<your-secret>
-
-doctl apps update $DO_PROD_APP_ID \
-  --set-env MCP_AGENT_SECRET=<your-secret>
-```
+The same `JWT_SECRET` is also injected into `xstockstrat-agent` (same placeholders), which HMAC-signs its OAuth 2.1 `txn` blob with it (`app/oauth_server.py`). There is no separate agent secret — `MCP_AGENT_SECRET` was retired by feature 147; do not set it.
 
 ### Broker accounts encryption key
 Set on: `xstockstrat-trading`
@@ -445,7 +428,7 @@ Both apps reference the same cluster (`xstockstrat`) but with different `db_name
 | `xstockstrat-staging` | `xstockstrat` | `xstockstrat-staging` |
 | `xstockstrat-production` | `xstockstrat` | `xstockstrat-production` |
 
-The app specs already declare `cluster_name: xstockstrat` and `db_name` for each environment, so `doctl apps update` will wire them automatically once the cluster exists.
+The app specs already declare `cluster_name: xstockstrat` and `db_name` for each environment, plus a top-level `vpc: id: YOUR_VPC_ID` that the deploy workflows fill from the cluster's VPC (`scripts/do-db-cluster.sh lookup`). Removing `vpc:` from a spec detaches the app, so the spec always carries it. The cluster's trusted sources must also list each app: `prod-up` adds the new prod app and `prod-down` removes it; the staging app is added once (Step 5). Don't run `scripts/db-connect.sh` while `prod-up`/`prod-down` runs — every `doctl databases firewalls append`/`remove` rewrites the whole rule list.
 
 > **Connection pooling (both environments).** Because both environments share one small cluster (~22
 > usable connections), the six stateless-query Go/Python services connect through a **PgBouncer
@@ -457,12 +440,7 @@ The app specs already declare `cluster_name: xstockstrat` and `db_name` for each
 > `.do/app.yaml`), each referenced as `:25061/<pool-name>`. Full rationale and the `DB_PGBOUNCER`
 > driver requirements → `docs/patterns/database.md` § Connection pooling (PgBouncer).
 
-Via doctl:
-
-```bash
-doctl apps update $DO_DEV_APP_ID  --spec .do/app.dev.yaml
-doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
-```
+Via the deploy workflows: push to `main-dev` (staging) or run **Prod — bring up** (production). Don't `doctl apps update --spec .do/app*.yaml` directly — the raw spec still holds `YOUR_*` placeholders, which the workflows render and validate (they fail closed on an unfilled `YOUR_VPC_ID`).
 
 Via console (if the spec-based attach fails):
 
@@ -470,39 +448,43 @@ Via console (if the spec-based attach fails):
 2. Click **Attach Database**
 3. Select the cluster `xstockstrat`
 4. Set **Database** to `xstockstrat-staging` (dev) or `xstockstrat-production` (prod)
-5. Component name must be `db` (matches the YAML spec: `databases: - name: db`)
+5. Component name must be `xstockstrat` (matches the YAML spec: `databases: - name: xstockstrat`)
 
 ---
 
 ## Step 9 — Configure GitHub Actions Secrets
 
-The CI/CD workflows need the following repository secrets. Go to:
-**GitHub → repository → Settings → Secrets and variables → Actions → New repository secret**
+Deploy-time secrets live in the SOPS files `secrets/staging.enc.yaml` / `secrets/production.enc.yaml` (feature 286). Setup, the
+one-shot bootstrap from the legacy secrets, rotation and adding a key are in [`docs/runbooks/sops-secrets.md`](../runbooks/sops-secrets.md). GitHub only holds the
+platform credentials, the decryption keys and (until the follow-up removal) the legacy fallbacks:
+**GitHub → repository → Settings → Secrets and variables → Actions** (and **Environments** for the per-environment rows).
 
-| Secret Name | Value | Used by |
-|---|---|---|
-| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | deploy-dev, deploy-prod (`doctl apps update`) |
-| `DO_DEV_APP_ID` | App ID of the staging app (from Step 5) | deploy-dev |
-| `DO_PROD_APP_ID` | App ID of the production app (from Step 6) | deploy-prod |
-| `DO_DEV_PROJECT_ID` | Project ID of the staging DO project (from Step 5) | deploy-dev — assigns app to project on every deploy |
-| `DO_PROD_PROJECT_ID` | Project ID of the production DO project (from Step 6) | deploy-prod — assigns app to project on every deploy |
-| `BUF_TOKEN` | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
-| `DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_JWT_SECRET` | JWT signing secret for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_JWT_SECRET` | JWT signing secret for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_ALPACA_API_KEY` | Alpaca **paper** API key (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `DEV_ALPACA_API_SECRET` | Alpaca **paper** API secret (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_ALPACA_API_KEY` | Alpaca **live** API key (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `PROD_ALPACA_API_SECRET` | Alpaca **live** API secret (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_FMP_API_KEY` | FMP API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_FMP_API_KEY` | FMP API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_FINNHUB_API_KEY` | Finnhub API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_FINNHUB_API_KEY` | Finnhub API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_SLACK_WEBHOOK_URL` | Slack incoming webhook for staging alert fanout, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_SLACK_WEBHOOK_URL` | Slack incoming webhook for production alert fanout, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_SENDGRID_API_KEY` | SendGrid API key for staging email fanout, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_SENDGRID_API_KEY` | SendGrid API key for production email fanout, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| Secret / variable | Where | Value | Used by |
+|---|---|---|---|
+| `DIGITALOCEAN_ACCESS_TOKEN` | repo secret | A dedicated **custom-scoped** PAT (not the Step 2 operator token) — see [CI token scopes](#ci-token-scopes) | deploy-dev, deploy-prod, prod-up, prod-down (`doctl`) |
+| `BUF_TOKEN` | repo secret | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
+| `GH_PAT` | repo secret | PAT with repo write access | sops-bootstrap (opens its PR), promote, sync-main-to-maindev |
+| `SOPS_AGE_KEY` | **environment** secret (`staging`, `production`) | That environment's age private key | deploy, prod-up, deploy-homelab, sops-bootstrap |
+| `SOPS_OPERATOR_AGE_RECIPIENT` | repo variable | The operator's age public key (second recipient of every file) | sops-bootstrap |
+| `DEV_*` / `PROD_*` for `JWT_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `CONFIG_SECRETS_ENCRYPTION_KEY`, `MTLS_CA`, `SLACK_WEBHOOK_URL`, `SENDGRID_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` | repo secrets | **Legacy fallback only.** Seeds the bootstrap; read per key only when `secrets/<env>.enc.yaml` lacks the key | deploy, prod-up, sops-bootstrap |
+| `DO_DEV_PROJECT_ID` / `DO_PROD_PROJECT_ID` | repo secrets | **Legacy fallback only** for `digitalocean.PROJECT_ID` | deploy, prod-up, sops-bootstrap |
+
+The DO app IDs are **not** secrets: the deploy resolves the app by its spec `name:`. The vendor credentials (Alpaca, FMP, Finnhub)
+are encrypted config rows, not deploy secrets (feature 147).
+
+### CI token scopes
+
+Create `DIGITALOCEAN_ACCESS_TOKEN` under **API → Tokens → Generate New Token → Custom Scopes**, with an expiry that matches your rotation policy and exactly these scopes (everything the deploy workflows' `doctl` calls need, nothing more):
+
+| Scope | Why |
+|---|---|
+| `app`: create, read, update, delete | prod-up `apps create`, deploy `apps update`, prod-down `apps delete`, the deployment waits and the one redeploy |
+| `database`: read, update | `do-db-cluster.sh lookup` (`databases list`), and `trust`/`untrust` editing the cluster's trusted sources (`firewalls list/append/remove`) |
+| `project`: read, assign_resource | `projects resources assign` (put a newly created app in its DO project) |
+| `vpc`: read | `apps create` with the spec's `vpc:` block |
+| `actions`, `regions`, `sizes`: read | read-only lookups `doctl` makes alongside app operations |
+
+Not needed: `registry` (images come from GHCR, not DOCR), `vpc_peering`, and the create/update/delete verbs of `project`, `vpc` and `database` (and `database: view_credentials`). Each missing scope fails the step that needs it with `403 Forbidden` (e.g. `missing vpc read permission` on `apps create`); a missing `project: assign_resource` only leaves a new prod app in the default project, since prod-up's assign step is best-effort.
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 
@@ -521,15 +503,14 @@ The deploy workflows push proto definitions to the Buf Schema Registry on every 
 
 **How the deployment secrets are used:**
 
-- `.github/workflows/deploy-dev.yml` — triggers on push to `main-dev`:
+- `.github/workflows/deploy-dev.yml` (push to `main-dev`) and `deploy-prod.yml` (push to `main`) call the reusable
+  `.github/workflows/deploy.yml` with `secrets: inherit`. It resolves the app ID by name (`xstockstrat-staging` /
+  `xstockstrat-production`), renders the spec with `scripts/do-render-app-spec.py` (SOPS first, legacy fallback), then:
   ```bash
-  doctl apps update $DO_DEV_APP_ID --spec .do/app.dev.yaml
+  doctl apps update "$APP_ID" --spec "$RUNNER_TEMP/app.yaml" --update-sources
   # polls until ACTIVE or ERROR (15-minute timeout)
   ```
-- `.github/workflows/deploy-prod.yml` — triggers on push to `main`:
-  ```bash
-  doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
-  ```
+  The `production` environment's required reviewers gate every prod deploy.
 
 ---
 
@@ -599,7 +580,7 @@ Check public URLs for each service in: **DO console → App → service componen
 ### WatchConfig subscribers disconnect immediately
 The xstockstrat-config instance size is too small. It must be a `*-s` size (`basic-s`) so the App Platform proxy's idle timeout is raised above 60s; an `*-xs` size will sever long-lived `WatchConfig` streams. See `.do/app.yaml` for the correct size.
 
-### `${db.DATABASE_URL}` not resolving
+### `${xstockstrat.DATABASE_URL}` not resolving
 The managed database is not attached to the app. See Step 8 — attach the DB cluster and redeploy.
 
 ### `${xstockstrat-config.PRIVATE_URL}` not resolving

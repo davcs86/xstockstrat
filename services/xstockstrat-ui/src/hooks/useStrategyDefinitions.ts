@@ -31,9 +31,10 @@ export function useGetStrategy(strategyId?: string) {
 }
 
 /** Register / update / deactivate a strategy (admin-gated server-side in the insights BFF). */
-export function useManageStrategy() {
+export function useManageStrategy(options?: { meta?: Record<string, unknown> }) {
   const qc = useQueryClient();
   return useMutation({
+    meta: options?.meta,
     mutationFn: ({
       operation,
       definition,

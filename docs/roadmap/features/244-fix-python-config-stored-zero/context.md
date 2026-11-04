@@ -1,316 +1,82 @@
-# Context Log: fix-python-config-stored-zero
+# Context: fix-python-config-stored-zero  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-20 (/sdd-triage)
+**What**: Python `ConfigWatcher.get_int/get_float/get_str` in analysis, indicators and ingest now return a stored `0`/`0.0`/`""` (via `HasField`, the `get_bool` body); `get_int_present`/`get_float_present`/`get_str_present` survive as one-line class aliases (`get_int_present = get_int`). The 34 analysis + 6 ingest + 3 indicators keys where a stored 0 is unsafe read through module-level `int_positive`/`float_positive`/`str_nonempty` (`app/config/watcher.py`, e.g. analysis `:142-155`), so they still resolve to the coded default. The report's keys (`default_commission_pct`, `default_slippage_pct`, `signal_rank_weight`, `alert_throttle_seconds`) now honour 0. Per-service AST guard `tests/test_config_read_classification.py` freezes the classification (analysis 34 `FR3_KEYS` / 36 `HONOUR_KEYS` / 8 `ZERO_IS_LEGIT`; ingest 6/2/2; indicators 3/1/0). Config got comment-only bounds edits, a wire-zero test and a description-only migration `032_analysis_zero_trap_descriptions`. Launched 2026-10-30 (PR #1368, df521ff5).
 
-- Bug recorded as defect report `docs/reports/2026-10-19-python-config-zero-trap-defect.md` (Issues disabled):
-  Python config getters collapse a stored 0 / "" to the coded default (CF-N10).
-- Severity: SEV-2. Environment: dev (main-dev) @ 1302e6d. Config-only fix: no. Routed to SDD path (Track C).
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1 getters, AC-2 zero-cost backtest,
-  AC-3 zero signal-rank weight, AC-4 unset → default, AC-5 ingest semaphore clamp kept), context.md.
-- Affected services (from report): xstockstrat-analysis, xstockstrat-indicators, xstockstrat-ingest.
-- Root cause hypothesis: truthiness `or default` conflates unset with zero; fixed only per key via `*_present`.
-- Confirmation evidence (report, confidence high, static; triage re-grep 2026-10-20): `or default` at
-  analysis `watcher.py:97,105,134`, indicators `:96,114,130`, ingest `:110,118,144`; `get_bool` uses `HasField`
-  in all three; indicators lacks `get_int_present`/`get_float_present`. Call sites `servicer.py:787-788,4615`,
-  `live_loop.py:351` confirmed.
-- Design risks found at triage (for recon):
-  - Deliberate trap call sites besides ingest `watcher.py:185,208`: analysis `servicer.py:790` (0 and absent both
-    mean legacy), `:1152`, `:2913` (stored 0 → default 20). A blanket `HasField` switch changes these; each needs an
-    explicit clamp or a kept trap.
-  - Seeded zero/empty rows change effective value under `HasField` wherever the coded default differs from the
-    seed, e.g. `analysis.fundsignal.explicit_symbols` / `scoring_formula_id` (`''`), `fundsignal.min_conviction_to_emit`
-    (`0.0`), `opportunity.refresh_hour_utc` / `readiness_materializer.refresh_hour_utc` (`0`). Recon must audit every
-    seeded 0/`""` row against its call-site default before switching.
-  - Config bounds (`configServiceImpl.ts:115-117`) set `minValue: 1` on keys "where 0 already collapses to the code
-    default"; with the trap gone, a stored 0 could become reachable via those keys' existing rows — recheck.
-- Overlap: 243-fix-sandbox-seed-keys touches the same indicators `watcher.py` (sandbox getters use `get_int`);
-  soft ordering, whichever lands second reconciles.
-- Recommended design depth: full → `/sdd-design fix-python-config-zero-trap` (rationale: SEV-2; 3 affected
-  services; per-key behaviour change across every Python config read needs a debated clamp policy).
-- Development branch: feature/fix-python-config-zero-trap
+**Why (irrecoverable rationale)**:
+- The blanket `HasField` switch was an explicit operator decision, overriding feature 173's targeted per-key approach (insights.md:2903-2919: "A blanket swap silently un-clamps those and widens the blast radius"). It was made safe by clamping every trap-dependent site rather than keeping those sites on the trapping accessor. Recorded verbatim (2026-10-20):
+  > OPERATOR DECISIONS (binding, recorded 2026-10-20):
+  > - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
+  > - Fix the getters + audit: get_int/get_float/get_str honour a stored 0 / '' via HasField in all three Python watchers; every call site that relies on the trap gets an explicit floor clamp (e.g. ingest semaphore keys, analysis servicer.py ~790/1152/2913); seeded 0/'' rows and config SCALAR_BOUNDS minValue bounds are re-checked in the same feature.
+- Floor is `> 0`, not `== 0`: design.md §2 names `sleep(-n)`, `Semaphore(-1)` and a negative `memory_bytes` (`sandbox.py` `RLIMIT_DATA` guard is `if memory_bytes > 0`) as hazards a `== 0` floor would leave.
+- The clamp is a module-level function taking `cfg` and calling `cfg.get_*` (not a watcher method) so per-test `MagicMock` `side_effect` overrides still reach the read (design.md §2; the feature-186 @AC-8 test at `test_analysis_servicer.py:762-768` depends on it).
+- Indicators clamp sits inside the three `sandbox_*` accessors, not at call sites, because `servicer.py` passes `sandbox_max_concurrent()` unclamped into `RLIMIT_NPROC` (`max_concurrent * 16`, `sandbox.py`) next to a separately clamped semaphore; this also avoids a third copy of the 5000/128 MiB/4 defaults (they already exist in `sandbox.py`).
+- `retry_seconds` present-aware `max(1, …)` wrappers were deliberately NOT converted: a stored 0 must stay 1 s (feature-156 @AC-4, feature-158 @AC-9, and the 028:64,67 description); converting would change 1 s to 300 s.
+- Throttle 0 cannot double the feature-215 once-per-state-entry alert: it is state-gated before the throttle check (`live_loop.py:716-729` vs `:813-821`, design.md §3). `readiness_valid_until` floors at 1 h (`services/readiness.py:35`), so `valid_window_hours` 0 never expires immediately on the `:4873` path (design correction to recon).
+- SetConfig bounds stay: `minValue: 1` rows still reject 0 (`OPP_CONC` 0 -> INVALID_ARGUMENT `[1, 5]`), `minValue: 0` rows kept; bounds are write-path only (`configServiceImpl.ts:99`), so read clamps, not bounds, protect already-stored rows. insights.md:3105-3122 (184) premise "a get_int trap makes minValue 1 correct" is gone; `minValue 1` is correct now because the reader clamps.
 
-## Session 2026-10-20 — sdd-review product-spec
+**Rejected alternatives**:
+- Watcher-method clamp (`get_int_positive`) — lost: un-spec'd `MagicMock` doubles swallow the new attribute and cut off per-test overrides.
+- Per-site `if v <= 0: v = _DEFAULT` blocks — lost: ~40 sites each needing a constant or repeated literal (DRY guard); the 2 existing inline blocks (`read_db_budget_ms`, `live_enrich_timeout_ms`) were converted for the same reason.
+- Deleting the `*_present` aliases and repointing 32 reads — lost: churn, no behaviour gain once the guard scans the aliases. Deleting would also have forced rewording the two 173 suites.
+- `MagicMock(spec=ConfigWatcher)` for every cfg double — lost: touches ~20 test files, overrides still need retargeting.
+- `SCALAR_BOUNDS minValue: 1` instead of read clamps — lost: bounds apply on write only; FR-6 and feature-184 @AC-4/@AC-8 forbid changing them.
+- `== 0`-only floor; keeping read-site `max(1, …)` with a constraint comment (negative handling would differ site to site); `max(1, int_positive(...))` (outer max is dead code) — all lost.
+- No corrective migration — lost: `/config-ui` would keep telling operators 0 is ignored (028:46) or collapses (027:50).
+- Hard 243 -> 244 merge order — lost: couples independent features; "re-list `origin/main-dev` and number `max+1` before merge" gives the same C-07 safety.
+- `default_cooldown_days` in `app/services/cooldown.py` — lost: that module promises no DB/gRPC/proto imports (`cooldown.py:3`).
+- One shared guard under `scripts/` — lost: moves the check out of each service's CI job (jscpd ignores `**/tests/**`, `.jscpd.json:27`).
+- Whole-snapshot runtime sweep instead of the AST guard — lost: analysis fixtures too heavy; guard rule 6 (every FR-3 key appears as a test literal) ties the guard to runtime rows. Guard is "a tripwire, not proof" (design.md §7).
 
-- Product spec approved. Status: draft → spec-ready. Criteria verdict PASS WITH WARNINGS (0 fails, 0 Floor breaches,
-  8 warnings, 2 notes); overlap level WARN.
-- Branch note: `feature/fix-python-config-zero-trap` was gone from origin at this session (a prune dry-run lists it
-  deleted; the last push was 123c977e). The likely cause is launched-branch cleanup keyed on 173's shared slug. This
-  session built on 123c977e (the reviewed revision, kept in the stale local tracking ref) and re-pushed, which
-  recreated the branch. Slug rename is still open (NOTE 1 below).
-- Warnings (criteria):
-  1. FR-3 inventory incomplete (C-15, C-18). Fixed: added rows for `analysis.engine.eval_interval_seconds`,
-     `analysis.strategy.max_concurrent_entry_backfill`, `analysis.fundsignal.run_interval_hours`,
-     `analysis.engine.fundamentals_blend_strategy_id` and `analysis.fundsignal.source_slug` (string keys included).
-     Added a "recon classifies" list: fundsignal budget/max_symbols/valid_days, screener universe/rank_limit,
-     snapshot timeouts, backtest.max_range_days, patterns.*.
-  2. Scenario shape (C-15). Fixed: AC-6 Given now gives type and stored value. Added rows for chunk keys,
-     sandbox.max_concurrent, eval_interval, max_strategies_per_cycle, blend id, default_cooldown_days and
-     shrinkage_days. The default_fill_model row now asserts FILL_MODEL_SAME_BAR_CLOSE. AC-5 is restated as the job
-     semaphore capacity. AC-8 has a Given for the ADMIN caller and the existing int row (028:87,90).
-  3. AC-7/FR-5 vacuous. Fixed: FR-5 restated as an audited fact plus a no-floor-on-zero-default rule. AC-7 is
-     reframed as an over-clamping guard (refresh_hour_utc seeded 0 in 027/028). The 008 rows are bare-keyed and not
-     healed by 029:28. The AC paragraph now says AC-7 fails when clamping is too broad.
-  4. Rollout risk: rows already stored as 0/'' take effect on deploy. Fixed: added a pre-deploy audit bullet to
-     Fix Scope (dev, then prod; result recorded here).
-  5. Consumer surface (C-14). Fixed: dropped the `/insights` opportunities queue (it always sends an explicit sort),
-     added the alert surfaces (`/trader` AlertStream, `/accounts/notifications` inbox and push), and recorded the
-     `create_key=true` need for the unseeded FR-4 keys.
-  6. Doc-update list incomplete. Fixed: added config-governance.md:252-259,458-461,705,713,721, the extra analysis
-     CLAUDE.md rows and ingest CLAUDE.md:127,131. Added a bullet saying the durable 173 suites and config
-     opportunity-config-operability @AC-8 are preserved.
-  7. Migration NNN collision with 243 (claims 031). Fixed: Fix Scope says to pre-assign the NNN through a
-     merge-order.md row if design adds a migration. merge-order.md is not edited (outside feature dir).
-  8. Operator sign-off not visible in context.md. Fixed: recorded verbatim below. The spec Root Cause cites it.
-  - NOTE 1 (slug shared with launched 173): open; operator rename pending. The branch deletion above is evidence of
-    the risk.
-  - NOTE 2 (precision): fixed. 027:50,53 is described as mechanism-only, FR-3 states the no-clamp case for
-    zero-default keys, and the ingest watcher comment lines were already scheduled.
-- Overlap findings (WARN):
-  - Config migration 031 is claimed by 243. It becomes a conditional collision only if design adds a migration
-    (see warning 7).
-  - `indicators.sandbox.max_concurrent` ownership gap. Resolved in FR-6: 244 owns the read clamp for all three
-    `indicators.sandbox.*` int keys. 243 owns the timeout_ms/memory_bytes bounds decision. max_concurrent gets no
-    bounds row.
-  - `services/xstockstrat-indicators/CLAUDE.md:100-103` is rewritten by both 243 and 244; the second to land
-    rebases (noted in Fix Scope).
-  - File-level rebase only, no field/key/migration collision: `live_loop.py` (242), `screener.py` (245),
-    `configServiceImpl.ts` (241).
-  - Low-risk: 243 bounds split; the 245 screener deadline; the 246 min_conviction read; agent tools (241, 247).
-  - merge-order.md: no row needed now. Add one with a pre-assigned NNN if design adds a config migration.
-- Operator decisions:
+**Scars & gotchas**:
+- RED for clamp tests exists only against the getter-switched tree (under the trap the default already comes back), so each service orders getter step -> clamp step. Where a paired test step lands after its service step, RED was shown by `git checkout <prior-step-sha> -- <app files>` (restored before GREEN), or an uncommitted scratch test (Steps 1,3,5,7,9,11). Analysis Step 12: 43 failed / 19 passed on the Step-10 tree.
+- Between a getter step and its clamp step a stored 0 reaches `Semaphore(0)`/`sleep(0)`; safe only because step PRs target the never-deployed `feature/fix-python-config-stored-zero` (F-03) and the integration PR opens after Step 12.
+- Spec inventories were wrong twice: product-spec FR-3 was incomplete in both reviews (8 then 6 warnings; each review moved further keys into FR-3, context.md:45-50 and 97-104 at 1ed63958), and recon also found unclassified honour reads that no digest listed (`scoring.sharpe_weight`/`drawdown_weight`/`win_rate_weight`, recon.md:120 "Not in any digest; found by recon re-grep"). Final classification was 34 FR-3 + 36 honour in analysis alone. The AST scan, not hand lists, closed it. Dry run in a scratch copy (ingest 328 / indicators 290 / analysis 1274 passed + exactly the 2 designed rewrites failing) answered the "bare-MagicMock cfg raises TypeError at `v > 0`" risk: none did (the only unstubbed `get_str` double, `test_live_loop.py:36-50`, returns a truthy MagicMock that `str_nonempty` passes through).
+- Slug collision: the original slug `fix-python-config-zero-trap` equalled launched 173's, so `ci-validate-feature-status.yml:167` (`find ... | sort | head -1`) resolved to 173's `status.md` and `:183` deleted the live branch (2026-10-20T23:30:22Z, 2026-10-21T06:37:16Z, each ~9 s after a push-to-main run). Recovered from the stale local tracking ref (df3206f7, 123c977e); fixed by renaming to `fix-python-config-stored-zero` on 2026-10-21. Already in fails.md:3023.
+- Guard rule 5 regex (`max_concurrent|timeout|interval|budget|max_universe|_per_cycle|_ms$|_seconds$`) forces a `ZERO_IS_LEGIT` reason for honour keys; a hazard key with a single reader whose name misses it can still be pinned in `HONOUR_KEYS` by mistake (design Open Risk 2). The impl-spec review raised no objection to the table.
+- Why @AC-10 exists: if the ts-proto encoder dropped a zero-valued oneof member, `HasField` would read "unset" and FR-4 would stay broken while every Python unit test passed (design.md:210, recon.md:302-307). Recon deliberately did not read the generated encoder (codegen output), so the `watchConfigWireZero.test.ts` round-trip plus dev smoke 1 are the only proof; the only earlier evidence was `get_bool` honouring explicit `false` (insights.md:3152).
+- The analysis `ConfigWatcher` class also serves the `marketdata`-namespace watcher (`app/main.py:48`); its only read (`fundsignal_loop.py:97`, default `""`) behaves the same either way (implementation-spec.md:1354-1355 at 1ed63958).
+- Guard rule 4 checks only that each key has ONE default across readers, not what the value is; defaults are pinned by the analysis @AC-6 table test, which resolves each default via `collect()` and `eval`s it in its module (context.md:600-602 at 1ed63958; implementation-spec.md:1327-1328).
+- Indicators test doubles set `cfg.sandbox_timeout_ms` directly, bypassing the accessor clamp (recon.md:324-325; the main-dev override-clamp test's `_cfg()` double, old context.md@1ed63958:314-317). `_clamp_override` stays covered only because its `configured` argument comes from the accessor (`services/xstockstrat-indicators/app/handlers/servicer.py:282-285`).
+- Test-double traps: `HasField` on a `MagicMock` is truthy (insights.md:1060), so new tests use real `config_pb2` messages via `snapshot_watcher(**values)` (single definition per service `tests/conftest.py`, bool arm before int). AC-5 must construct `IngestServicer(w, ...)` with the real watcher because `_backfill_sem` is built in `__init__`; assigning `svc._cfg = w` afterwards cannot observe it.
+- @AC-3's order proof needs `_SORT_ORDER_BY[0].replace("$3", "$1::float8")` (one bound arg) under `real_pg` via `local_pg`; @AC-8/@AC-10/@AC-7 are characterization tests that pass before and after (tdd-gate escape, stated in the PR body). @AC-10 `watchConfigWireZero.test.ts` needs `impl: any` casts for private `reloadNamespace`/`broadcastToSubscribers` and a 20 ms wait because the subscriber registers in an async `.then`; mutants on compiled `dist/` (truthiness arms in `toProtoSnapPayload`; `OPP_CONC minValue: 0`) failed the new tests.
+- Husky pre-commit did not run in several steps (no root `node_modules`, `core.hooksPath` pointing at a missing `.husky/_`); never `--no-verify`. Steps 14 and 16 ran Node 22.22.0 locally (CI pins 24).
+- Unseeded FR-4 keys (`default_commission_pct`, `default_slippage_pct`, `alert_throttle_seconds`) need `create_key=true` with matching `value_type` (`configServiceImpl.ts`, `createKey` gate at design time `:466-469`, now `:571-601`); a type-mismatched row still falls back to the default under FR-2 (design Open Risk 5). A malformed int row becomes `parseInt` -> `NaN` -> a present member (`parseInt` in `buildConfigValue`, design time `:582`, now `:714`).
+- Rollout side effect: the agent has no key deletion, so the 3 keys created during the 2026-10-29 staging smoke remain as rows holding exactly the code defaults (`0.001`, `0.0005`, `300`); deleting needs SQL (P-03). Effective behaviour is unchanged.
+- Findings were also not fully closed at Step 17: `services/xstockstrat-indicators/docs/context-constitution-findings.md:15` still cited `Semaphore(max(1, config_watcher.sandbox_max_concurrent()))` (Step 7 removed that `max(1, …)`); `docs/patterns/config-governance.md:405-407` still described a live `sparkline_bars` read at Step 17; since then `config-governance.md:228` says `sparkline_bars` is "inert (no reader)", though rows at `:333` and `:466` still list it. As of 2026-11-04 the indicators findings `:15` cite is still unchanged.
 
-  OPERATOR DECISIONS (binding, recorded 2026-10-20):
-  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
-  - Fix the getters + audit: get_int/get_float/get_str honour a stored 0 / '' via HasField in all three Python watchers; every call site that relies on the trap gets an explicit floor clamp (e.g. ingest semaphore keys, analysis servicer.py ~790/1152/2913); seeded 0/'' rows and config SCALAR_BOUNDS minValue bounds are re-checked in the same feature.
-- Next: `/sdd-design fix-python-config-zero-trap` (full).
+**Permanent deviations**:
+- product-spec FR-3 said read-site `max(1, …)` floors are kept -> shipped: they are subsumed by `int_positive`, so a stored NEGATIVE now resolves to the coded default, not 1 (C-18, amended 2026-10-21; `test_retention_clamped_to_at_least_one` -5 -> 1 became `test_retention_non_positive_reads_as_default` -5/0 -> 20). No @AC pins negatives.
+- design said migration "numbered `max(origin/main-dev)+1` at merge" -> shipped pinned `032_analysis_zero_trap_descriptions` (trunk tip 030, 243 claims 031; merge-order.md rows 99-100: 248 took 033, expected order 243 -> 244 is soft). The AC-11 test globs `*_analysis_zero_trap_descriptions`, so a renumber needs no test edit.
+- product-spec/recon said dead `sandbox_*` helpers in analysis and ingest "follow FR-3 or are removed" -> shipped: removed with their 3+3 tests (only tests referenced them).
+- recon proposed EXTEND of feature-151 @AC-1/@AC-2 with a stored-slippage-0 case -> shipped as 244 @AC-2 in the analysis suite; the 151 suite was not edited.
+- design §13 said run the pre-deploy audit and smoke on dev then prod -> shipped: dev audit via staging agent MCP `get_config` (global scope + the single user `80880990-…`; operator has no SQL, P-03), operator decision 2026-10-29 "Record audit, merge, I smoke"; smoke ran post-deploy (main-dev `9b20cb66`); the prod audit was waived by the operator 2026-10-30 (own words): "Prod is not running. Staging is enough". Rollout results (kept here, nowhere else):
+  - Audit: zero/empty rows per scope = 3 (`analysis.opportunity.refresh_hour_utc = 0`, `analysis.readiness_materializer.refresh_hour_utc = 0`, `analysis.fundsignal.explicit_symbols = ""`), all honour keys; FR-3 clamped rows 0; malformed int rows 0; indicators sandbox keys stored full-dotted after 243's heal. Pre-existing, not a 244 regression: per-user `analysis.fundsignal.min_conviction_to_emit = "0.6"` is `value_type=string` while analysis reads global float `0.2`, a string row resolves to the default both before and after. Latent mismatch of the same class (findings candidate, not fixed): the 008 fundsignal seed rows are stored namespace-relative (`fundsignal.*`) and 029 heals only `platform`/`trading`/`portfolio`/`marketdata` (`029_heal_config_keys_full_dotted.up.sql:28`), so they never reach the `analysis.fundsignal.*` reads (product-spec.md:116-118, context.md:55-56 at 1ed63958).
+  - Smoke 1 `signal_rank_weight = 0` (was `0.3`): PASS. Page-1 (50 rows) adjacent-pair conviction-order violations 15 -> 0 (ties at 1.0 fall back to symbol ASC). Restored `0.3`.
+  - Smoke 2 `default_commission_pct = 0`, `default_slippage_pct = 0` (float, `create_key`; were absent, code defaults `0.001`/`0.0005`): PASS. `fundamentals_macd_blend` on MSFT, backtest `2d443ce1-…`, 7 trades, all 14 fills = bar close, pnl = (exit-entry) x qty (residual 0), return -13.16 %; contrast run `a134f1f3-…` with defaults fills at exactly 1.0005 x close and returns -14.89 %. Restored to code defaults.
+  - Smoke 3 `alert_throttle_seconds = 0` (int, `create_key`; absent, default 300): PARTIAL. Key created as int and read back 0; a repeat delivery was not observable (Tempo: one `EmitAlert` span in 7 days, from the agent `emit_alert` tool, none from the live loop). The 0 = no-throttle behaviour is covered by the Step 10 live-loop test (alert emitted at throttle 0, context.md:539 at 1ed63958). Restored `300`.
+  - Smoke 4: `list_config_keys analysis` shows all four 032 descriptions live; no row has the old zero-trap wording. UI-only checks (`/insights` backtest view, `/trader` AlertStream, `/accounts/notifications`, `/config-ui`) were verified through the backing API and traces, not visually.
 
-## Session 2026-10-20 — sdd-review product-spec (re-review)
+**Cross-feature signal**:
+- Supersedes the 173 rule at insights.md:2903-2919 ("targeted per-key switch, not a blanket accessor swap") and the 022 rule at insights.md:1556 ("use `get_float_present`, never `get_float`" for zero-meaningful keys): both accessors are now identical (aliases). Those ledger entries are append-only; a human may want a supersession pointer (see summary).
+- Same hazard class as 176 (`Semaphore(0)` deadlock), 182/184 (bounds are write-only; a bound's lower edge follows getter semantics, insights.md:3087-3122), 151 (`default_fill_model` 0 = legacy whether stored or absent, fails.md:1877; comment rewritten, not deleted).
+- Promotion overlap, not conflict: 173 suites (`fix-python-config-zero-trap.feature` in ingest and indicators) assert different keys/outcomes from the new platform @AC-1; consolidation candidate only. Config suites `opportunity-config-operability.feature` @AC-8 (184) and `readiness-materializer-config-keys.feature` stay consistent with 244 @AC-8.
+- Shared-file rebases recorded in merge-order.md: 243 (indicators `watcher.py`, `test_config_watcher.py` helper, CLAUDE.md:100-103, migration 031/032), 248 (033), 261 (`mcp_client_loop.py`), 262 (`entry_backfill.py:56-58`), 269.
+- C-16 blind spot recorded at recon: `xstockstrat-ui` and `xstockstrat-agent` suites were not read; consumer surfaces were verified as pass-through (agent `run_backtest`/`list_opportunities`/`set_config`, `/insights`, `/trader`, `/accounts/notifications`, `/config-ui`).
 
-- Product spec approved again. Status stays `spec-ready` (it was already `spec-ready` from the prior session, so no
-  draft → spec-ready flip; a re-review row was added to feature.md). Criteria verdict PASS WITH WARNINGS (0 fails,
-  0 Floor breaches, 6 warnings); overlap level WARN.
-- Warnings (criteria):
-  1. FR-3 inventory incomplete (C-18, P-03). Fixed: moved `analysis.backtest.max_range_days` (`servicer.py:874-875`),
-     `analysis.snapshot.indicator_timeout_ms`/`signal_timeout_ms` (`pnl_pattern_consumer.py:364-365`),
-     `analysis.screener.max_universe_size` (`screener.py:92-93`), `analysis.opportunity.max_universe_size`
-     (`servicer.py:5470`) and `analysis.fundsignal.daily_call_budget`/`max_symbols_per_run`
-     (`fundsignal_loop.py:222,181`) into FR-3. `eval_interval_seconds` and `run_interval_hours` were already rows.
-     Recon must now write every get_int/get_float/get_str site into recon.md as FR-3 or honour. Each key recon adds
-     to FR-3 gets an @AC-6 row. Six @AC-6 rows were added. Still to classify (0 may be legitimate):
-     `fundsignal.valid_days`, `screener.default_rank_limit` (0 = uncapped), `patterns.*`.
-  2. AC-7 vacuous (FR-5). Already reframed as an over-clamping guard in the prior session. The AC-7 rows include
-     `readiness_materializer.refresh_hour_utc`. Added `analysis.fundsignal.explicit_symbols` ("" default,
-     `fundsignal_loop.py:308`).
-  3. No ingest get_float row (FR-1). Fixed: added `ingest.test.zero_float` to @AC-1 and `ingest.test.unset_float` to
-     @AC-4 (ingest `watcher.py:138-144`).
-  4. Conditional DB gate had no migration strategy (C-07, F-01). Fixed: Fix Scope now requires a new
-     `NNN_*.up.sql` + `.down.sql` in `services/xstockstrat-config/migrations/` (next after 030, verified then). The
-     applied 027/028 are never edited. The NNN is pre-assigned with 243 via merge-order.md and recorded in design.md.
-  5. Operator sign-off and the durable 173 suites (P-04, P-05, C-16). Already resolved: the sign-off is recorded in
-     the prior session's "Operator decisions". Fix Scope lists both 173 suites plus config
-     opportunity-config-operability @AC-8 as preserved.
-  6. AC well-formedness (advisory). Fixed: the Acceptance Criteria paragraph now says each @AC-1/4/5/6 Example
-     `Then` maps to a concrete test assertion at /sdd-spec.
-- Overlap findings (WARN):
-  - [migration] 031 claimed by 243 (`243-fix-sandbox-seed-keys/product-spec.md:44`). This is a collision only if
-    244 design adds a config migration. Trunk tip is `030_marketdata_edgar_snapshot_keys`. Mitigation: pre-assign
-    the NNN via merge-order.md (Fix Scope).
-  - [file] `services/xstockstrat-indicators/app/config/watcher.py:133-148` (sandbox getters) is shared with 243
-    (`:134,138,142-143`). Ownership split recorded in FR-6.
-  - [file] `services/xstockstrat-indicators/CLAUDE.md:100-103` is rewritten by both 243 and 244. The second to land
-    rebases.
-  - [file] `sandbox.py:282,345-346` (memory_bytes guard, max_concurrent) may overlap with 243's RLIMIT_NPROC work.
-    Confirm at Mode B.
-  - [file] `services/xstockstrat-analysis/app/services/screener.py` has disjoint lines vs 245 (`:115`).
-    Rebase only.
-  - [file] `services/xstockstrat-analysis/app/engine/live_loop.py:351,815` vs 242 (`:834`), on the same
-    alert-emission path. Expect a manual merge.
-  - [file] `services/xstockstrat-config/src/grpc/configServiceImpl.ts:100-146` vs 241 (`:388,405-407`). The lines
-    are disjoint. Rebase only.
-  - No identical config key is declared by two features.
-- Operator decisions:
+**Deferred follow-ons**:
+- Prod audit of stored 0/`""` rows and malformed int rows was waived (prod not running); run it before the first prod deployment that carries this change.
+- Smoke 3 (repeat live-loop alert at throttle 0) was never observed end to end.
+- The 3 smoke-created staging rows (`default_commission_pct`, `default_slippage_pct`, `alert_throttle_seconds`) remain until someone deletes them via SQL.
+- Steps 10, 11, 17 exceeded 5 files and were left unsplit (impl-spec review advisory, standing authorization).
+- Out of scope: Go and Node config getters ("not reported as trapped", product-spec.md:206 at 1ed63958). The indicators request-override `or` read became `_clamp_override` (services/xstockstrat-indicators/app/handlers/servicer.py:282-285, covered via the accessor); any other request-field `or` fallbacks, if they exist, were not audited. Related: CONFIG-11 / Node `getInt` gotcha (`services/xstockstrat-config/docs/context-constitution.md:32`).
+- Defect report `docs/reports/2026-10-19-python-config-zero-trap-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-python-config-zero-trap-defect.md) has sidecar `triaged` (`ref: feature:244-fix-python-config-stored-zero`); candidate for `/sdd-archiver reports`.
+- The `sparkline_bars` drift (028 description + bounds `[1,500]`, no analysis reader) is logged in `services/xstockstrat-config/docs/context-constitution-findings.md`, not fixed.
 
-  OPERATOR DECISIONS (binding, recorded 2026-10-20):
-  - Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
-  - Fix the getters + audit: get_int/get_float/get_str honour a stored 0 / '' via HasField in all three Python watchers; every call site that relies on the trap gets an explicit floor clamp (e.g. ingest semaphore keys, analysis servicer.py ~790/1152/2913); seeded 0/'' rows and config SCALAR_BOUNDS minValue bounds are re-checked in the same feature.
-- Next: `/sdd-design fix-python-config-zero-trap` (full).
-
-## Session 2026-10-21 — sdd-design
-
-- Branch recovery: `feature/fix-python-config-zero-trap` was absent from origin again.
-  - GitHub branch activity records deletions at 2026-10-20T23:30:22Z and 2026-10-21T06:37:16Z.
-  - Each came about 9 s after a `ci-validate-feature-status` run on a push to `main` (runs 39515448201 and 39556526187).
-  - Cause: the orphan cleanup globs `docs/roadmap/features/*-${slug}/status.md | head -1` (`.github/workflows/ci-validate-feature-status.yml:167`). That glob resolves to launched `173-fix-python-config-zero-trap`, so `:183` deletes 244's live branch.
-  - The prior progress was intact at df3206f7 (Phase 0 recon, kept in the stale local tracking ref). This session built on df3206f7 and re-pushed, which recreated the branch.
-  - Until the slug is renamed, the branch will be deleted again on the next push to `main`.
-- Phase 0 Recon: recon.md written at df3206f7 (services: analysis, indicators, ingest, config). Key reuse patterns:
-  - the `get_bool` HasField body (analysis `watcher.py:126`, indicators `:122`, ingest `:136`)
-  - the `blend_strategy_id(cfg)` named reader (`servicer.py:353-355`)
-- Phase 1 Grilling: 3 rounds (full). Auto-approved under the operator standing authorization: rounds >= 2, no Floor breach, no blocking objection, and no CHANGE to an existing @AC.
-  - Chosen approach:
-    - The getters take the HasField body; the `*_present` names become aliases.
-    - A module-level `int_positive`/`float_positive`/`str_nonempty` clamp sits at every FR-3 read.
-    - The exhaustive list of `max(1, …)` read wrappers, plus the two inline `<=0` clamps, are converted to it.
-    - `default_cooldown_days(cfg)` and `fundsignal_source_slug(cfg)` become single named readers.
-    - Each service gets an AST guard test with these rules:
-      - it scans six read names
-      - `HONOUR_KEYS` and `FR3_KEYS` are disjoint
-      - every key is a literal
-      - each key has one default
-      - a `ZERO_IS_LEGIT` map
-      - every FR-3 key appears as a test literal
-    - One description-only config migration, numbered `max(origin/main-dev)+1` at merge.
-  - Rejected (full list in design.md § Rejected Alternatives):
-    - a watcher-method clamp (MagicMock doubles swallow it)
-    - per-site `<=0` blocks (DRY)
-    - `SCALAR_BOUNDS minValue` instead of read clamps (bounds apply on write only)
-    - an `== 0`-only floor (negatives)
-    - a hard 243→244 merge order
-    - converting the `retry_seconds` wrappers (156 AC-4 / 158 AC-9)
-    - a shared `scripts/` guard
-  - Round deltas:
-    - r1: module-level clamp and a single numbering rule.
-    - r2: the guard now covers the aliases.
-    - r3: argument binding; guard rules 5 and 6; the `retry_seconds` ruling; the inline-clamp conversion; the 027/028 mechanism rows folded into the migration.
-- Deviation (C-18): at the converted `max(1, …)` sites, a stored negative now resolves to the coded default instead of 1.
-  - `test_retention_clamped_to_at_least_one` flips from -5 → 1 to -5 → 20.
-  - No @AC pins negatives.
-  - product-spec.md FR-3 is amended to match, with a feature.md Status History row.
-- Constitution rules touched: C-01, C-02/P-05, C-07, C-08/P-06, C-11, C-14, C-15, C-16, C-18, P-02, P-03, F-01, F-04, F-07, and the DRY guard rail. Floor breaches: none.
-- Business rules: every durable @AC is PRESERVE. 244 @AC-6 is EXTEND. 244 @AC-10..AC-12 are new and covered by the operator decision "Fix the getters + audit". No CHANGE.
-- Open Threads:
-  - [ ] Wire-level zero is unproven at runtime. Target: the @AC-10 test via `ConfigServiceService` (spec config step), plus the dev `signal_rank_weight=0` smoke test (rollout).
-  - [ ] The guard's sets freeze a hand classification. Target: `/sdd-spec` emits the `HONOUR_KEYS`/`FR3_KEYS`/`ZERO_IS_LEGIT` table, and the impl-spec review audits it.
-  - [ ] Negatives change silently at the converted sites. Target: the analysis clamp step records the test flip.
-  - [ ] Stored 0/'' rows and malformed int rows change on deploy. Target: pre-deploy audit on dev, then prod, with the results recorded here.
-  - [ ] Type-mismatched unseeded FR-4 rows still fall back. Target: the rollout `value_type` check and the docs step.
-  - [ ] Migration renumbering. Target: `/sdd-execute` re-lists `origin/main-dev` before merge and adds the merge-order.md row.
-  - [ ] A bare-`MagicMock` cfg return raises `TypeError` at `v > 0`. Target: `/sdd-spec` runs the full suites and lists every double it fixes.
-  - [ ] The slug collision with 173 deletes the feature branch on each push to `main`. Target: operator slug rename before `/sdd-spec` pushes.
-  - [ ] The `sparkline_bars` description drift (028:100,103) is unlogged. Target: the docs step logs it in `services/xstockstrat-config/docs/context-constitution-findings.md`.
-- Status: spec-ready → design-approved.
-
-## Session 2026-10-21 — sdd-spec
-
-- Branch state: `origin/feature/fix-python-config-zero-trap` was present at 459f6531 (the design-approved commit), so
-  this session built on it with no recovery needed. The slug rename is still open, so the branch remains exposed
-  to the orphan cleanup on the next push to `main` (fails.md:2953).
-- Generated implementation-spec.md with 18 steps. Status: design-approved → implementation-ready.
-- Order: for each Python service, a getter step, then a clamp step, each with its paired test step (ingest 1-4,
-  indicators 5-8, analysis 9-12). Then config comments and tests (13-14), the description migration and its test
-  (15-16), docs and teardown (17), and rollout with consumer-surface verification (18).
-- acceptance.feature extended (C-15 append-only; design §10):
-  - 20 @AC-6 rows: design's 18, plus `read_db_budget_ms` 20000 and `live_enrich_timeout_ms` 3000
-    (`servicer.py:339-340`)
-  - new @AC-10 @FR-1 (wire zero, SNAPSHOT and DELTA)
-  - new @AC-11 @FR-6 (description-only migration)
-  - new @AC-12 @FR-1 (`default_rank_limit`, `min_sample_count` honour 0)
-- Key codebase findings:
-  - Dry run of the design, in a scratch copy outside the repo. The getters were switched and 48 FR-3 call sites
-    wrapped in module clamps.
-    - Results: ingest 328 passed, indicators 290 passed, analysis 1274 passed and 2 failed. The two failures are
-      exactly the design §9 rewrites (`test_analysis_servicer.py:586-594`, `:2527-2541`).
-    - No bare-`MagicMock` cfg double needs fixing; this closes the Open Thread "bare-MagicMock cfg return raises
-      TypeError".
-  - The AST scan of the same tree: 0 unbindable calls, one default per key, and disjoint read/clamp sets.
-    - ingest: 6 FR-3, 2 honour
-    - indicators: 3 FR-3, 1 honour
-    - analysis: 34 FR-3, 36 honour, plus 3 dead-helper reads removed in Step 11
-    - The `HONOUR_KEYS`/`FR3_KEYS`/`ZERO_IS_LEGIT` table is emitted in implementation-spec.md § Guard
-      classification table for impl-spec review. That addresses the Open Thread "the guard's sets freeze a hand
-      classification" (audit pending).
-  - The config migration tip on `origin/main-dev` is `030`, and 243 claims `031`. Step 15 numbers the pair
-    `max(origin/main-dev)+1` at authoring and re-verifies before merge. The AC-11 test globs by name suffix
-    (`*_analysis_zero_trap_descriptions`), so a renumber needs no test edit.
-  - RED for the clamp tests (Steps 4, 8, 12) exists only against the getter-switched tree. Under the original trap
-    the default already comes back. That is why each service's getter step precedes its clamp step.
-  - @AC-8, @AC-10 and @AC-7 are characterization tests: they pass before and after. They are recorded per the
-    tdd-gate escape.
-- Open Threads update:
-  - [x] A bare-`MagicMock` cfg return raises `TypeError` at `v > 0`. Resolved by the dry run: none does.
-  - [ ] The guard's sets freeze a hand classification. Target: `/sdd-review impl-spec` audits § Guard classification
-    table.
-  - [ ] The slug collision with 173 deletes the feature branch on each push to `main`. Target: operator rename,
-    still pending. /sdd-execute checks that the branch exists before each session.
-  - Unchanged: wire zero (Step 14 @AC-10 plus the Step 18 smoke), negatives (Step 12 retention flip), the stored
-    0/'' rows and the deploy audit (Step 18), type-mismatched FR-4 rows (Step 18 and the Step 17 docs), migration
-    renumbering (Step 15), and the `sparkline_bars` drift (Step 17).
-- Next: `/sdd-review fix-python-config-zero-trap impl-spec`.
-
-## Session 2026-10-21 — sdd-review impl-spec
-
-- MODE B (advisory): criteria verdict PASS WITH WARNINGS (0 FAIL, 10 WARN). Overlap verdict FAIL (243 collisions).
-  Lifecycle unchanged: `implementation-ready`.
-- Addressed (implementation-spec.md edited after re-verifying each claim):
-  - Overlap FAIL, migration `031` vs 243. 243 claims `031`
-    (`origin/feature/fix-sandbox-seed-keys:…/implementation-spec.md:168-169`), and the trunk tip is `030`.
-    - Step 15 Files are pinned to `032_analysis_zero_trap_descriptions.{up,down}.sql`.
-    - The pre-merge re-list sets the pair to `max+1`. That is `031` if 244 merges first, so no gap is left. Any
-      renumber is logged per F-09.
-    - The § Step Dependencies bullet and the Step 15 merge-order row text were updated.
-  - Overlap FAIL, `services/xstockstrat-indicators/tests/test_config_watcher.py` helper. 243 Step 3 (`:298-307,315`)
-    keeps `_watcher(key, field, val)` in that file.
-    - Step 6 now keeps whichever helper is on the base (name, signature and file) and only delegates its body to
-      conftest `snapshot_watcher`.
-    - The `ConfigValue` arm is added only for 243's `_watcher`. No hard order: design rejected one, and 243 records
-      the overlap as soft at `:56-57`.
-  - WARN C-18: the `ConfigValue` pass-through arm was dropped from Step 2, and with it Step 10, which reuses Step 2's
-    rules. It is kept only conditionally in Step 6.
-  - WARN C-07 `<NNN>` placeholder: fixed under the migration item above.
-  - WARN Step 10 AC-3 Order: now binds `_SORT_ORDER_BY[0].replace("$3", "$1::float8")` with one arg. Cited:
-    `opportunities.py:35-40,243-246`, `tests/test_opportunities_repo.py:149-164`, fails.md:190.
-  - WARN Step 14 mechanics:
-    - The `impl: any` cast for the private `reloadNamespace`/`snapshotForSubscriber`/`broadcastToSubscribers`
-      (`configServiceImpl.ts:203,245,260`).
-    - A 20 ms wait after `watchConfig`, because the subscriber registers in an async `.then`
-      (`configServiceImpl.ts:305-309`; `secretsAndScope.test.ts:250-251`).
-    - Assertions `writes.length` 1, then 2.
-  - WARN Steps 14 and 16 threshold: Verification now states that `test:coverage` enforces `c8 --lines 40`
-    (`package.json:13`).
-  - WARN Step 18 Verification: added grep commands that key on a `## Session <date> — rollout (dev|prod)` header,
-    which Instruction 1 now mandates.
-  - WARN Step 17 evidence:
-    - Added `config-governance.md:319,688`.
-    - Added the analysis and ingest findings preambles (`:5`).
-    - `services/xstockstrat-analysis/docs/context-constitution-findings.md` was added to Files.
-  - WARN branch hazard: confirmed at `ci-validate-feature-status.yml:160-167,181-183`. The `feature-steps/*` slug
-    derivation also maps to 173. § Step Dependencies now makes the slug rename a precondition of `/sdd-execute`.
-  - Overlap rebase-only items (240, 241, 242, 245, 246) are noted in § Step Dependencies. No spec change is needed.
-  - WARN C-15 (unverifiable append): verified, no edit.
-    - On the branch, `acceptance.feature` has @AC-10/@AC-11/@AC-12 (`:151,164,172`), and the @AC-6 Examples hold
-      43 rows.
-    - `design.md` is present.
-    - The design and spec sessions are logged above.
-- Still open:
-  - [ ] Step size (advisory): Steps 10 (7 files), 11 (8) and 17 (12) exceed 5 files. Splitting Step 11 by module
-    (servicer, then engine and services) was not done, because it renumbers steps and the C-15 trace. The operator
-    decides at the `/sdd-execute` checkpoint.
-  - [x] Slug rename (collision with 173; fails.md:2953). Done 2026-10-21. This is an operator action and is now a precondition of
-    `/sdd-execute`. It also covers `feature-steps/*` branches.
-  - [ ] merge-order.md row (243 → 244 soft, migration 031/032, test helper). It is written by Step 15 after operator
-    confirmation, because this review may edit only the feature dir.
-  - [ ] Guard classification table audit: the reviewer raised no objection to `FR3_KEYS`/`HONOUR_KEYS`/`ZERO_IS_LEGIT`.
-    The guard's rule 2 is the executable check at Steps 4, 8 and 12.
-- Next: operator slug rename, then `/sdd-execute fix-python-config-zero-trap` (rename done 2026-10-21; see the next session).
-
-## Session 2026-10-21 — slug rename
-
-- Operator action: renamed the slug `fix-python-config-zero-trap` → `fix-python-config-stored-zero` (dir `244-fix-python-config-stored-zero`, branch `feature/fix-python-config-stored-zero`).
-  The old slug collided with launched `173-fix-python-config-zero-trap`, so the orphan cleanup deleted the old branch on every push to `main`.
-- Updated live references: artifact titles, feature.md branch and Next Action, impl-spec paths, branch and merge-order row,
-  the source report `ref:`, and 242/243/245 cross-references on main-dev. Historical session entries above keep the old slug.
-- References to 173 (its dir and the `fix-python-config-zero-trap.feature` acceptance suites) are unchanged.
-- Next: `/sdd-execute fix-python-config-stored-zero`.
-
-## Session 2026-10-21 — post-hotfix reconciliation
-
-- Hotfix #1263 (ExecuteFormula override clamp) landed on main and was back-merged (b7e2aa94). Reconciled:
-  - Step 7 evidence anchors in indicators `servicer.py`: `:88/102/277-278/303` → `:93/107/282-285/310`.
-  - The request `or` fallback no longer exists: `_clamp_override(request.*_override, self._cfg.sandbox_*)` replaced it.
-    Step 7 leaves it unchanged; the accessor clamp guarantees its ceiling is ≥ 1, which closes the configured-≤0 hole #1263
-    leaves open. The out-of-scope example in product-spec.md is now generic.
-  - Step 17 must keep #1263's `_clamp_override` sentence in indicators `CLAUDE.md:100` and only append the FR-3 text.
+**Ledger entries written**: insights.md (3), fails.md (2) — see the 2026-11-04 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: none new; the HasField + clamp + AST-guard model is already in `docs/context-constitution.md:60`, analysis `docs/context-constitution.md:37`, CONFIG-11 and INGEST-9 (rewritten at Step 17).
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958.

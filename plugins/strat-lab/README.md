@@ -24,6 +24,10 @@ fix baked into the skill:
    preserved, and only `clear_fields` blanks one — so a mis-aimed `clear_fields` is the way you
    wipe components, not an omission.
 
+Two server failures are loud by design, and the skill reports them rather than retrying blindly
+(feature 272): `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` and
+`FAILED_PRECONDITION` `backtest bar series incomplete: …`.
+
 It also ensures **data coverage first** (`trigger_backfill` / `get_backfill_status`) so a data gap
 is never mistaken for a strategy problem.
 

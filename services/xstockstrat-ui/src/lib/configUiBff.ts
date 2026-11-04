@@ -26,6 +26,7 @@ import {
   forward,
   forwardAdmin,
 } from '@/lib/bffShared';
+import { LONG_RPC_TIMEOUT_MS } from '@/lib/deadlines';
 
 const router = createBffRouter();
 
@@ -66,7 +67,9 @@ router.service(IngestService, {
 // Only the admin-scoped producer trigger and template authoring are exposed — connect-node leaves
 // every other AnalysisService method unimplemented, so this doesn't widen the config-ui surface.
 router.service(AnalysisService, {
-  runFundamentalsScan: forwardAdmin((req, opts) => analysisClient.runFundamentalsScan(req, opts)),
+  runFundamentalsScan: forwardAdmin((req, opts) => analysisClient.runFundamentalsScan(req, opts), {
+    timeoutMs: LONG_RPC_TIMEOUT_MS,
+  }),
   listTemplates: forward((req, opts) => analysisClient.listTemplates(req, opts)),
   manageTemplate: forwardAdmin((req, opts) => analysisClient.manageTemplate(req, opts)),
 });

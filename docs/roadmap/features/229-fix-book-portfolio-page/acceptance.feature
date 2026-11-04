@@ -1,5 +1,5 @@
 Feature: fix-book-portfolio-page (bug fix)
-  Regression guard for docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md:
+  Regression guard for docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md):
   Book → Portfolio page stuck on "Loading portfolio…".
 
   @AC-1 @regression

@@ -4,6 +4,7 @@ GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve con
 """
 
 import contextvars
+import json
 import logging
 import math
 import os
@@ -15,6 +16,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app import mtls
+from app.scopes import _ADMIN
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +33,13 @@ MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketd
 # Fixed, not a config key: a config read cannot bound itself. Read at call time so tests can
 # monkeypatch it.
 _CONFIG_READ_TIMEOUT_S = 3.0
+# Fixed nesting invariants under the MCP client's 60 s request timeout (PLAT-13), not config keys.
+# Read at call time so tests can monkeypatch them.
+_RPC_TIMEOUT_S = 10.0
+_LONG_RPC_TIMEOUT_S = 45.0
+# Trailer analysis sets on a successful ScoreStrategy (JSON array of str); the literal is asserted
+# in both the agent and analysis suites, so renaming it on one side alone breaks the contract.
+_EXCLUDED_TRAILER_KEY = "x-score-excluded-symbols"
 
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
@@ -178,6 +187,7 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
         resp = await stub.ListSignalSources(
             ingest_pb2.ListSignalSourcesRequest(include_inactive=include_inactive),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return [
         {
@@ -246,6 +256,7 @@ async def ingest_signal(
         resp = await stub.IngestSignal(
             ingest_pb2.IngestSignalRequest(signal=signal),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"signal_id": resp.signal_id, "deduplicated": resp.deduplicated}
 
@@ -283,7 +294,7 @@ async def emit_alert(
 
     async with mtls.secure_channel(NOTIFY_ENDPOINT, "xstockstrat-notify") as channel:
         stub = notify_pb2_grpc.NotifyServiceStub(channel)
-        resp = await stub.EmitAlert(req, metadata=_metadata())
+        resp = await stub.EmitAlert(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return {"alert_id": resp.alert_id}
 
 
@@ -300,6 +311,7 @@ async def ensure_signal_watchlist(user_id: str) -> str:
         resp = await stub.EnsureSignalWatchlist(
             portfolio_pb2.EnsureSignalWatchlistRequest(),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return resp.watchlist.watchlist_id
 
@@ -318,6 +330,7 @@ async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> 
         await stub.AddWatchlistSymbols(
             portfolio_pb2.AddWatchlistSymbolsRequest(watchlist_id=watchlist_id, bindings=[binding]),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
 
 
@@ -365,7 +378,9 @@ async def list_watchlists(user_id: str, limit: int = 0, page_token: str = "") ->
     )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.ListWatchlists(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.ListWatchlists(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
+        )
     return {
         "watchlists": [_watchlist_to_dict(w) for w in resp.watchlists],
         "next_page_token": resp.page.next_page_token,
@@ -381,6 +396,7 @@ async def get_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
         resp = await stub.GetWatchlist(
             portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
@@ -410,7 +426,9 @@ async def create_watchlist(
     )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.CreateWatchlist(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.CreateWatchlist(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
+        )
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
 
@@ -465,7 +483,7 @@ async def update_watchlist(
         )
         async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
             stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-            resp = await stub.UpdateWatchlist(req, metadata=meta)
+            resp = await stub.UpdateWatchlist(req, metadata=meta, timeout=_RPC_TIMEOUT_S)
         return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
     replace = None
@@ -476,7 +494,9 @@ async def update_watchlist(
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         current = await stub.GetWatchlist(
-            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id), metadata=meta
+            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id),
+            metadata=meta,
+            timeout=_RPC_TIMEOUT_S,
         )
         wl = current.watchlist
         req = portfolio_pb2.UpdateWatchlistRequest(
@@ -485,7 +505,7 @@ async def update_watchlist(
             description=description if description is not None else wl.description,
             bindings=replace if replace is not None else list(wl.bindings),
         )
-        resp = await stub.UpdateWatchlist(req, metadata=meta)
+        resp = await stub.UpdateWatchlist(req, metadata=meta, timeout=_RPC_TIMEOUT_S)
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
 
@@ -501,6 +521,7 @@ async def delete_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
         await stub.DeleteWatchlist(
             portfolio_pb2.DeleteWatchlistRequest(watchlist_id=watchlist_id),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"deleted": True, "watchlist_id": watchlist_id}
 
@@ -522,7 +543,9 @@ async def add_watchlist_symbols(
     )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.AddWatchlistSymbols(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.AddWatchlistSymbols(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
+        )
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
 
@@ -535,7 +558,9 @@ async def remove_watchlist_symbols(
     req = portfolio_pb2.RemoveWatchlistSymbolsRequest(watchlist_id=watchlist_id, symbols=symbols)
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.RemoveWatchlistSymbols(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.RemoveWatchlistSymbols(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
+        )
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
 
@@ -555,9 +580,11 @@ async def update_watchlist_bindings(
     )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        await stub.UpdateWatchlistBindings(req, metadata=meta)
+        await stub.UpdateWatchlistBindings(req, metadata=meta, timeout=_RPC_TIMEOUT_S)
         current = await stub.GetWatchlist(
-            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id), metadata=meta
+            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id),
+            metadata=meta,
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"watchlist": _watchlist_to_dict(current.watchlist)}
 
@@ -635,7 +662,9 @@ async def run_backtest(
 
     async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
-        resp = await stub.RunBacktest(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.RunBacktest(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_LONG_RPC_TIMEOUT_S
+        )
     # preserving_proto_field_name keeps snake_case keys; always_print_fields_with_no_presence keeps
     # zero-valued metrics (total_return=0 — the "0 trades / 0% return" case) present, not omitted.
     return MessageToDict(
@@ -758,6 +787,7 @@ async def screen_symbols(
                 rank_limit=rank_limit,
             ),
             metadata=_metadata(),
+            timeout=_LONG_RPC_TIMEOUT_S,
         )
     return {
         "results": [
@@ -911,7 +941,8 @@ async def manage_strategy(
     }
     if operation not in op_map:
         raise ValueError(
-            f"unknown operation '{operation}' (expected register/update/deactivate/reactivate)"
+            f"unknown operation '{operation}' (expected register/update/deactivate/reactivate; "
+            "'score' is routed to ScoreStrategy)"
         )
 
     components = [_build_component(c) for c in definition.get("components", [])]
@@ -949,7 +980,7 @@ async def manage_strategy(
     meta = _metadata(("x-user-id", user_id), ("x-access-scope", str(access_scope)))
     async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
-        resp = await stub.ManageStrategy(req, metadata=meta)
+        resp = await stub.ManageStrategy(req, metadata=meta, timeout=_RPC_TIMEOUT_S)
     return MessageToDict(resp)
 
 
@@ -972,10 +1003,54 @@ async def get_strategy(user_id: str, strategy_id: str) -> dict[str, Any]:
         resp = await stub.GetStrategy(
             analysis_pb2.GetStrategyRequest(strategy_id=strategy_id),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return MessageToDict(
         resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
     )
+
+
+def _parse_excluded_trailer(md: Any) -> list[str] | None:
+    """`None` means analysis did not report the excluded symbols — never substitute `[]` (P-03)."""
+    raw = md.get(_EXCLUDED_TRAILER_KEY) if md is not None else None
+    if raw is None:
+        log.warning("ScoreStrategy reply carried no %s trailer", _EXCLUDED_TRAILER_KEY)
+        return None
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        log.warning("ScoreStrategy %s trailer is not valid JSON", _EXCLUDED_TRAILER_KEY)
+        return None
+    if not isinstance(parsed, list) or not all(isinstance(s, str) for s in parsed):
+        log.warning(
+            "ScoreStrategy %s trailer is not a JSON array of strings", _EXCLUDED_TRAILER_KEY
+        )
+        return None
+    return parsed
+
+
+async def score_strategy(user_id: str, strategy_id: str) -> dict[str, Any]:
+    """Recompute and persist the caller's strategy grade via gRPC ScoreStrategy (snake_case keys).
+
+    `excluded_symbols` comes from the `x-score-excluded-symbols` trailer; it is `None` when the
+    trailer is missing or malformed. The 45 s budget covers the server's fundamentals fan-out.
+    """
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+    async with mtls.secure_channel(ANALYSIS_ENDPOINT, "xstockstrat-analysis") as channel:
+        stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
+        call = stub.ScoreStrategy(
+            analysis_pb2.ScoreStrategyRequest(strategy_id=strategy_id),
+            metadata=_metadata(("x-user-id", user_id)),
+            timeout=_LONG_RPC_TIMEOUT_S,
+        )
+        resp = await call
+        md = await call.trailing_metadata()
+    result = MessageToDict(
+        resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
+    )
+    result["excluded_symbols"] = _parse_excluded_trailer(md)
+    return result
 
 
 async def list_strategy_definitions(
@@ -989,6 +1064,7 @@ async def list_strategy_definitions(
         resp = await stub.ListStrategyDefinitions(
             analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=include_inactive),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     # snake_case to match get_strategy (one casing across list→get→manage).
     return [MessageToDict(d, preserving_proto_field_name=True) for d in resp.definitions]
@@ -1024,7 +1100,7 @@ async def execute_formula(
 
     async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
-        resp = await stub.ExecuteFormula(req, metadata=_metadata())
+        resp = await stub.ExecuteFormula(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     _scrub_struct_nonfinite(resp.output)
     try:
         return MessageToDict(
@@ -1048,6 +1124,7 @@ async def cancel_backfill(job_id: str, access_scope: int = 0) -> dict[str, Any]:
         resp = await stub.CancelBackfill(
             ingest_pb2.CancelBackfillRequest(job_id=job_id),
             metadata=_metadata(("x-access-scope", str(access_scope))),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {
         "job": MessageToDict(
@@ -1115,6 +1192,7 @@ async def manage_formula(
                     fundamental_inputs=fundamental_inputs,
                 ),
                 metadata=_metadata(),
+                timeout=_RPC_TIMEOUT_S,
             )
             return {"formula_id": resp.formula_id}
         if operation == "update":
@@ -1136,7 +1214,7 @@ async def manage_formula(
             if update_mask:
                 req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
             resp = await stub.UpdateFormula(
-                req, metadata=_metadata(("x-user-id", formula["user_id"]))
+                req, metadata=_metadata(("x-user-id", formula["user_id"])), timeout=_RPC_TIMEOUT_S
             )
             return _formula_to_dict(resp.formula)
         resp = await stub.DeleteFormula(
@@ -1144,6 +1222,7 @@ async def manage_formula(
                 formula_id=formula["formula_id"],
             ),
             metadata=_metadata(("x-user-id", formula["user_id"])),
+            timeout=_RPC_TIMEOUT_S,
         )
         return {"success": resp.success}
 
@@ -1159,6 +1238,7 @@ async def list_formulas(author_filter: str = "") -> list[dict[str, Any]]:
         resp = await stub.ListFormulas(
             indicators_pb2.ListFormulasRequest(author_filter=author_filter),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return [_formula_to_dict(f) for f in resp.formulas]
 
@@ -1183,6 +1263,7 @@ async def get_formula(formula_id: str) -> dict[str, Any]:
         resp = await stub.GetFormula(
             indicators_pb2.GetFormulaRequest(formula_id=formula_id),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return _formula_to_dict(resp)
 
@@ -1199,6 +1280,7 @@ async def list_fundamental_metrics() -> list[dict[str, Any]]:
         resp = await stub.ListFundamentalMetrics(
             indicators_pb2.ListFundamentalMetricsRequest(),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return [MessageToDict(m) for m in resp.metrics]
 
@@ -1257,7 +1339,7 @@ async def manage_signal_source(
     meta = _metadata(("x-access-scope", str(access_scope)))
     async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
-        resp = await stub.ManageSignalSource(req, metadata=meta)
+        resp = await stub.ManageSignalSource(req, metadata=meta, timeout=_RPC_TIMEOUT_S)
     return _managed_source_to_dict(resp.source)
 
 
@@ -1321,7 +1403,7 @@ async def list_templates(kind: str) -> list[dict[str, Any]]:
     pb2, stub_cls, endpoint, authority = _template_target(kind)
     async with mtls.secure_channel(endpoint, authority) as channel:
         resp = await stub_cls(channel).ListTemplates(
-            pb2.ListTemplatesRequest(), metadata=_metadata()
+            pb2.ListTemplatesRequest(), metadata=_metadata(), timeout=_RPC_TIMEOUT_S
         )
     return [MessageToDict(t) for t in resp.templates]
 
@@ -1344,7 +1426,9 @@ async def instantiate_template(
     else:
         req = pb2.InstantiateTemplateRequest(template_id=template_id)
     async with mtls.secure_channel(endpoint, authority) as channel:
-        resp = await stub_cls(channel).InstantiateTemplate(req, metadata=_metadata())
+        resp = await stub_cls(channel).InstantiateTemplate(
+            req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S
+        )
     if kind == "formula":
         return _formula_to_dict(resp.formula)
     if kind == "signal_source":
@@ -1368,6 +1452,7 @@ async def register_oauth_client(redirect_uris: list[str], client_name: str) -> d
                 redirect_uris=redirect_uris, client_name=client_name
             ),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"client_id": resp.client_id, "redirect_uris": list(resp.redirect_uris)}
 
@@ -1379,7 +1464,9 @@ async def get_oauth_client(client_id: str) -> dict[str, Any]:
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.GetOAuthClient(
-            identity_pb2.GetOAuthClientRequest(client_id=client_id), metadata=_metadata()
+            identity_pb2.GetOAuthClientRequest(client_id=client_id),
+            metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"client_id": resp.client_id, "redirect_uris": list(resp.redirect_uris)}
 
@@ -1401,6 +1488,7 @@ async def issue_auth_code(
                 resource=resource,
             ),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return resp.code
 
@@ -1416,7 +1504,9 @@ async def validate_token(token: str) -> dict[str, Any]:
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         claims = await stub.ValidateToken(
-            identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
+            identity_pb2.ValidateTokenRequest(token=token),
+            metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {
         "user_id": claims.user_id,
@@ -1443,6 +1533,7 @@ async def exchange_auth_code(
                 resource=resource,
             ),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {
         "access_token": resp.access_token,
@@ -1461,6 +1552,7 @@ async def refresh_oauth_token(refresh_token: str, resource: str) -> dict[str, An
         resp = await stub.RefreshOAuthToken(
             identity_pb2.RefreshOAuthTokenRequest(refresh_token=refresh_token, resource=resource),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {
         "access_token": resp.access_token,
@@ -1479,6 +1571,7 @@ async def get_user_metadata(user_id: str) -> dict:
         resp = await stub.GetUserMetadata(
             identity_pb2.GetUserMetadataRequest(),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     m = resp.user_metadata
     return {
@@ -1518,6 +1611,7 @@ async def update_user_metadata(
         resp = await stub.UpdateUserMetadata(
             req,
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     m = resp.user_metadata
     return {
@@ -1573,7 +1667,7 @@ async def create_user(email: str, password: str, roles: list[str]) -> dict:
     )
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        resp = await stub.CreateUser(req, metadata=_metadata())
+        resp = await stub.CreateUser(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return _project_user(resp.user)
 
 
@@ -1583,7 +1677,9 @@ async def list_users() -> list[dict]:
 
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        resp = await stub.ListUsers(identity_pb2.ListUsersRequest(), metadata=_metadata())
+        resp = await stub.ListUsers(
+            identity_pb2.ListUsersRequest(), metadata=_metadata(), timeout=_RPC_TIMEOUT_S
+        )
     return [_project_user(u) for u in resp.users]
 
 
@@ -1594,7 +1690,9 @@ async def get_user(user_id: str) -> dict:
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.GetUser(
-            identity_pb2.GetUserRequest(user_id=user_id), metadata=_metadata()
+            identity_pb2.GetUserRequest(user_id=user_id),
+            metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return _project_user(resp.user)
 
@@ -1608,7 +1706,7 @@ async def set_user_roles(user_id: str, roles: list[str]) -> dict:
     )
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        resp = await stub.SetUserRoles(req, metadata=_metadata())
+        resp = await stub.SetUserRoles(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return _project_user(resp.user)
 
 
@@ -1619,7 +1717,7 @@ async def set_user_active(user_id: str, active: bool) -> dict:
     req = identity_pb2.SetUserActiveRequest(user_id=user_id, active=active)
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        resp = await stub.SetUserActive(req, metadata=_metadata())
+        resp = await stub.SetUserActive(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return _project_user(resp.user)
 
 
@@ -1630,7 +1728,7 @@ async def reset_password(user_id: str, new_password: str) -> dict:
     req = identity_pb2.UpdatePasswordRequest(user_id=user_id, new_password=new_password)
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        await stub.UpdatePassword(req, metadata=_metadata())
+        await stub.UpdatePassword(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return {"success": True, "userId": user_id}
 
 
@@ -1641,7 +1739,9 @@ async def admin_get_user_metadata(user_id: str) -> dict:
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.AdminGetUserMetadata(
-            identity_pb2.AdminGetUserMetadataRequest(user_id=user_id), metadata=_metadata()
+            identity_pb2.AdminGetUserMetadataRequest(user_id=user_id),
+            metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return _project_user_metadata(resp.user_metadata)
 
@@ -1667,7 +1767,7 @@ async def admin_update_user_metadata(
         req.metadata.CopyFrom(s)
     async with mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity") as channel:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
-        resp = await stub.AdminUpdateUserMetadata(req, metadata=_metadata())
+        resp = await stub.AdminUpdateUserMetadata(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return _project_user_metadata(resp.user_metadata)
 
 
@@ -1687,6 +1787,7 @@ async def set_strategy_live(
         resp = await stub.SetStrategyLive(
             analysis_pb2.SetStrategyLiveRequest(strategy_id=strategy_id, live_enabled=live_enabled),
             metadata=meta,
+            timeout=_RPC_TIMEOUT_S,
         )
     defn = resp.definition
     return {
@@ -1719,6 +1820,7 @@ async def run_fundamentals_scan(
                 force=force, dry_run=dry_run, symbols=list(symbols or [])
             ),
             metadata=meta,
+            timeout=_LONG_RPC_TIMEOUT_S,
         )
     return {
         "run_id": resp.run_id,
@@ -1814,7 +1916,7 @@ async def get_bars(
     )
     async with mtls.secure_channel(MARKETDATA_ENDPOINT, "xstockstrat-marketdata") as channel:
         stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
-        resp = await stub.GetBars(req, metadata=_metadata())
+        resp = await stub.GetBars(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return {
         "bars": [MessageToDict(b, preserving_proto_field_name=True) for b in resp.bars],
         "next_page_token": resp.page.next_page_token,
@@ -1831,6 +1933,7 @@ async def get_fundamentals(symbol: str) -> dict[str, Any]:
         resp = await stub.GetFundamentals(
             marketdata_pb2.GetFundamentalsRequest(symbol=symbol),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
     return MessageToDict(resp.fundamentals, preserving_proto_field_name=True)
 
@@ -1862,7 +1965,9 @@ async def get_historical_fundamentals(
         req.range_end.CopyFrom(_iso_to_timestamp(end))
     async with mtls.secure_channel(MARKETDATA_ENDPOINT, "xstockstrat-marketdata") as channel:
         stub = marketdata_pb2_grpc.MarketDataServiceStub(channel)
-        resp = await stub.GetHistoricalFundamentals(req, metadata=_metadata())
+        resp = await stub.GetHistoricalFundamentals(
+            req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S
+        )
     return {
         "periods": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.periods],
         "next_page_token": resp.pagination.next_page_token,
@@ -1952,7 +2057,7 @@ async def trigger_backfill(
     meta = _metadata(("x-access-scope", str(access_scope)))
     async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
-        resp = await stub.TriggerBackfill(req, metadata=meta)
+        resp = await stub.TriggerBackfill(req, metadata=meta, timeout=_LONG_RPC_TIMEOUT_S)
     return {"job_id": resp.job_id, "status": ingest_pb2.BackfillStatus.Name(resp.status)}
 
 
@@ -1977,7 +2082,9 @@ async def get_backfill_status(
         async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
             stub = ingest_pb2_grpc.IngestServiceStub(channel)
             resp = await stub.GetBackfillStatus(
-                ingest_pb2.GetBackfillStatusRequest(job_id=job_id), metadata=_metadata()
+                ingest_pb2.GetBackfillStatusRequest(job_id=job_id),
+                metadata=_metadata(),
+                timeout=_RPC_TIMEOUT_S,
             )
         # snake_case keys; zero-valued fields (bars_processed=0 while queued) stay visible during
         # polling.
@@ -2006,7 +2113,7 @@ async def get_backfill_status(
     )
     async with mtls.secure_channel(INGEST_ENDPOINT, "xstockstrat-ingest") as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
-        resp = await stub.ListBackfillJobs(req, metadata=_metadata())
+        resp = await stub.ListBackfillJobs(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
     return {
         "jobs": [
             MessageToDict(
@@ -2037,6 +2144,15 @@ def _config_env(environment: str) -> int:
     )
 
 
+def _effective_config_user_id(user_id: str) -> str:
+    # Mirrors config boundReadUserId (services/xstockstrat-config/src/grpc/authz.ts);
+    # the two must change together.
+    caller = _CALLER.get()
+    if caller and caller[0] and not (caller[1] & _ADMIN) and user_id and user_id != caller[0]:
+        return caller[0]
+    return user_id
+
+
 async def get_config(namespace: str, environment: str, user_id: str = "") -> dict:
     """One-shot ConfigService.GetConfig. Read path — no admin scope (AGENT-3).
     Feature 147: scoped by environment (production/staging) x optional user_id (empty = global).
@@ -2049,6 +2165,7 @@ async def get_config(namespace: str, environment: str, user_id: str = "") -> dic
         resp = await stub.GetConfig(
             config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
         values = {}
         for key, cv in resp.values.items():
@@ -2062,7 +2179,7 @@ async def get_config(namespace: str, environment: str, user_id: str = "") -> dic
             "namespace": resp.namespace,
             "version": resp.version,
             "environment": environment,
-            "user_id": user_id,
+            "user_id": _effective_config_user_id(user_id),
             "values": values,
         }
 
@@ -2079,11 +2196,12 @@ async def list_config_keys(namespace: str, environment: str, user_id: str = "") 
         resp = await stub.ListKeys(
             config_pb2.ListKeysRequest(namespace=namespace, environment=env, user_id=user_id),
             metadata=_metadata(),
+            timeout=_RPC_TIMEOUT_S,
         )
         return {
             "namespace": namespace,
             "environment": environment,
-            "user_id": user_id,
+            "user_id": _effective_config_user_id(user_id),
             "keys": [
                 {
                     "key": k.key,
@@ -2153,6 +2271,7 @@ async def set_config(
             ),
             # The caller's real derived scope — the server's gate decides.
             metadata=_metadata(("x-access-scope", str(access_scope))),
+            timeout=_RPC_TIMEOUT_S,
         )
         return {"version": resp.version, "updated_at": resp.updated_at.ToDatetime().isoformat()}
 
@@ -2205,6 +2324,7 @@ async def register_offline_account(user_id: str, display_name: str) -> dict[str,
                 credentials_json="",
             ),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"account": _account_to_dict(resp.account)}
 
@@ -2244,6 +2364,7 @@ async def record_offline_order(
                 client_order_id=client_order_id,
             ),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"order": _order_to_dict(resp)}
 
@@ -2279,7 +2400,9 @@ async def confirm_offline_order(
 
     async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
-        resp = await stub.ConfirmOrder(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.ConfirmOrder(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
+        )
     return {"order": _order_to_dict(resp)}
 
 
@@ -2329,7 +2452,9 @@ async def snapshot_offline_positions(
 
     async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
-        resp = await stub.SnapshotOfflinePositions(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.SnapshotOfflinePositions(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
+        )
     return MessageToDict(resp, preserving_proto_field_name=True)
 
 
@@ -2342,6 +2467,7 @@ async def get_order(user_id: str, order_id: str) -> dict[str, Any]:
         resp = await stub.GetOrder(
             trading_pb2.GetOrderRequest(order_id=order_id),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"order": _order_to_dict(resp)}
 
@@ -2355,6 +2481,7 @@ async def list_account_orders(user_id: str, account_id: str) -> dict[str, Any]:
         resp = await stub.ListOrders(
             trading_pb2.ListOrdersRequest(user_id=user_id, account_id=account_id),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"orders": [_order_to_dict(o) for o in resp.orders]}
 
@@ -2377,7 +2504,9 @@ async def list_positions(
     )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.ListPositions(req, metadata=_metadata(("x-user-id", user_id)))
+        resp = await stub.ListPositions(
+            req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
+        )
     return {
         # Zero-valued fields stay present (day_pnl 0, pct 0); unset optionals are omitted.
         "positions": [
@@ -2419,6 +2548,7 @@ async def register_broker_account(
                 credentials_json=credentials_json,
             ),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"account": _account_to_dict(resp.account)}
 
@@ -2442,6 +2572,7 @@ async def update_broker_account_credentials(
                 credentials_json=credentials_json,
             ),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"account": _account_to_dict(resp.account)}
 
@@ -2459,6 +2590,7 @@ async def deregister_broker_account(user_id: str, account_id: str) -> dict[str, 
         await stub.DeregisterBrokerAccount(
             trading_pb2.DeregisterBrokerAccountRequest(account_id=account_id),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"deregistered": True, "account_id": account_id}
 
@@ -2476,6 +2608,7 @@ async def resume_broker_account(user_id: str, account_id: str, reason: str = "")
         resp = await stub.ResumeAccount(
             trading_pb2.ResumeAccountRequest(account_id=account_id, reason=reason),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"account": _account_to_dict(resp.account)}
 
@@ -2494,5 +2627,6 @@ async def list_broker_accounts(user_id: str) -> dict[str, Any]:
         resp = await stub.ListBrokerAccounts(
             trading_pb2.ListBrokerAccountsRequest(),
             metadata=_metadata(("x-user-id", user_id)),
+            timeout=_RPC_TIMEOUT_S,
         )
     return {"accounts": [_account_to_dict(a) for a in resp.accounts]}

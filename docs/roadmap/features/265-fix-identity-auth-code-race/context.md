@@ -1,347 +1,58 @@
-# Context Log: fix-identity-auth-code-race
+# Context: fix-identity-auth-code-race  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-21 (/sdd-triage)
-
-- Bug recorded as defect report `docs/reports/2026-10-21-identity-auth-code-race-defect.md` (Issues disabled),
-  sidecar `triaged` / `ref: feature:265-fix-identity-auth-code-race`.
-- Source: repo-surveyor debt-radar scan (`docs/repo-surveyor/debt-radar-findings.md` @ 4535695), findings D-23
-  (auth-code single-use half only; flagged security) and D-21 (mint/refresh duplication).
-- Severity: SEV-2 (group; D-21 alone was rated lower by the surveyor). Impact type: auth-code-replay.
-  Environment: dev (main-dev) @ a053b0e. Config-only: no.
-- Operator decisions (2026-10-21): grouped by service+theme from the debt-radar scan; Track C for all SEV-2
-  (precedent #1264); batch launched via /sdd-batch with designGate halt.
-- Routed to SDD path (Track C).
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1..4), context.md.
-- Affected services: xstockstrat-identity.
-- Root cause hypothesis: `ExchangeAuthCode` is read-validate-write over independent autocommit queries; hotfix
-  `5bd271d` fixed the identical refresh race only.
-- **Re-verification against a053b0e (scan predates `5bd271d`, which is not an ancestor of 4535695):**
-  - D-23 refresh half — **excluded, no longer reproduces**: `refreshToken` (`:230-268`) and `refreshOAuthToken`
-    (`:524-543`) both call `rotateRefreshToken` (`:340-370`, conditional claim + same-txn insert). Report
-    `2026-10-19-identity-refresh-rotation-not-atomic-defect` is `resolved` (`ref: hotfix:hotfix/fix-refresh-token-rotation`).
-  - D-23 auth-code half — **reproduces**: SELECT `:481-488`, JS check `:491`, unconditional UPDATE `:503-506`,
-    separate refresh INSERT `:511` (scan cited `:461-482`; drift from `5bd271d` adding `issueRefreshToken`/`rotateRefreshToken`).
-  - D-21 — **partially reproduces, narrowed**: the duplicated refresh SELECT (scan `:234-238`, `:505-509`) is gone.
-    Residual: inline claim build + `jwt.sign` at `:166-176` and `:243-249` beside `mintOAuthAccessToken` `:295-315`
-    (3 sign sites total); inline refresh hash+INSERT at `:178-185` beside `issueRefreshToken` `:321-334` (2 INSERT
-    sites, was 3). The scan's "D-23's fix must land in both paths" no longer applies (one auth-code path); D-21 is
-    kept so the D-23 fix reuses a single issue helper that first-party login also uses. Operator may drop D-21
-    (AC-4) at design if it reads as an unrelated refactor.
-- **Overlaps:** `252-fix-identity-ledger-test-suites` (implementation-ready) — the identity unit suite
-  (`src/__tests__/identityServiceImpl.test.ts`) currently early-returns on a failed lazy import, so new
-  impl-level tests silently pass until 252 lands; sequence 252 first or prove the new tests execute (P-06). AC-1
-  needs a real-Postgres harness (the `5bd271d` hotfix used one). `242-fix-push-untargeted-broadcast` mentions
-  `identityServiceImpl` (admin directory) — textual merge risk only.
-- Design forks to settle: whether to consume the code before or after the redirect/client/PKCE checks (consume-first
-  burns a code on a bad verifier — RFC-permitted, but an attacker with only the code could then deny the legit
-  client); same-transaction consume + refresh INSERT (AC-3) vs consume-only.
-- Recommended design depth: quick → `/sdd-design fix-identity-auth-code-race quick` (rationale: SEV-2, single
-  service, no proto/migration/config, clear root cause with a proven sibling fix pattern).
-- Development branch: feature/fix-identity-auth-code-race
-
-## Session 2026-10-22 — sdd-review product-spec
-
-- Product spec approved. Status: draft → spec-ready. Criteria verdict: PASS WITH WARNINGS (no fails, no floor breaches).
-- Warnings:
-  - FR-1 vs FR-5 tension (validate-before-consume needs a read of the stored row). **Resolved**: FR-1 now allows a
-    validation read before the claim (or the predicates inside the claim); only the claim's row count decides redemption.
-  - FR-8 / AC-4 silent on an empty audience. **Resolved**: FR-8 now states an OAuth token with no resource keeps
-    today's `aud: ''`, first-party tokens carry no `aud`, so the shared helper's `aud` is optional.
-  - FR-6 site set. **Resolved**: FR-6 now names the four sites, including `refreshOAuthToken` (intentionally in the
-    shared-helper set; it already calls `mintOAuthAccessToken`).
-  - Test harness, fault-injection mechanism and the 252 early-return dependency are deferred to design. Partly
-    resolved: the spec now links `252-fix-identity-ledger-test-suites`; harness + mechanism remain for `/sdd-design`.
-  - FR-6/FR-7 structural halves are grep/code-review verified, not scenario verified. Open: the impl-spec must carry the grep step.
-  - AC-3's Given names a fault-injection detail. Accepted as written (Then steps are observable).
-  - The task prompt gave a doubled feature path. Noted; the review ran against `docs/roadmap/features/265-fix-identity-auth-code-race/`.
-- Overlap findings (WARN, no FAIL):
-  - [file] `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`: 265's real-Postgres race and
-    fault-injection tests vs 252's impl `before()` try/catch (`:28-40`, 252 Step 3) and rotation revoke assertion
-    (`:403-417`). 252 `implementation-spec.md:95` says whichever lands second merges the other's changes. Textual only.
-  - [file] `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`: 265 `exchangeAuthCode` `:474-518` and
-    helpers `mintOAuthAccessToken` `:295`, `issueRefreshToken` `:321`, `rotateRefreshToken` `:340` vs 252
-    `implementation-spec.md:220-254` (transient mutation and restore of the `refreshOAuthToken` revoke `:524-527` and
-    the #1262 `AND rt.revoked_at IS NULL` line in `rotateRefreshToken`). Adjacent, disjoint blocks; rebase-level risk.
-- OPERATOR DECISIONS (binding, recorded 2026-10-22):
-  - Grouped by service+theme from the 2026-10-20 debt-radar scan; Track C (precedent #1264).
-  - Scope is D-23 auth-code half and D-21; refresh rotation already fixed by hotfix 5bd271d.
-  - Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
-- Next: `/sdd-design fix-identity-auth-code-race`.
-
-## Session 2026-10-22 — sdd-batch design gate (round 2)
-
-`/sdd-design fix-identity-auth-code-race` (full debate) is halted at its approval gate after round 2 (gate policy:
-halt). design.md is not written and status.md is unchanged (`spec-ready`).
-
-### Open Threads
-
-- **Approach (round-2 synthesis):** two files only (`identityServiceImpl.ts`, `identityServiceImpl.test.ts`); no
-  proto/migration/config; hotfix 5bd271d `rotateRefreshToken` untouched.
-  - D-23: `exchangeAuthCode` keeps its validation lines (SELECT, JS consumed/expiry early-outs, redirect/client,
-    PKCE) as reject-only pre-filters. Then: compute audience → `mintAccessToken` (before the claim, so a mint throw
-    returns `13` with nothing consumed) → new private `redeemAuthCode` (BEGIN; conditional `UPDATE ... WHERE
-    consumed_at IS NULL AND expires_at > NOW() RETURNING`; 0 rows → ROLLBACK, `16`; `issueRefreshToken` in-tx →
-    COMMIT) → return tokens only after COMMIT. The claim predicates are load-bearing; never drop them as redundant.
-  - D-21: rename `mintOAuthAccessToken` → `mintAccessToken(userId, email, roles, audience?)` (`aud` only when given);
-    `authenticateUser` and `refreshToken` reuse it plus `issueRefreshToken` (first-party rows store `client_id NULL`).
-  - Tests: local `makeAuthCodeDb` fake with fidelity rules (a)-(e); additive params recording on `makeSpyPool`.
-    RED-then-GREEN: AC-1 (20-way race), AC-3 (failInsert and `JWT_SECRET` unset), claim-time expiry, AC-4
-    first-party half. Regression guards: AC-2, AC-5, AC-6, AC-4 shared half, existing exchange tests. Run guard
-    (fails.md:2223) goes into the impl-spec verification step. AC-1 real-Postgres proof is a manual local
-    20-caller repro (`DB_POOL_MAX=20` local only; never in `.do/app*.yaml`).
-- **Strongest open objection (blocking):** the proposer must confirm the mint-before-claim order. Proposal r2 minted
-  after COMMIT, but the `jwtSecret` getter (`identityServiceImpl.ts:112-116`) throws when `JWT_SECRET` is unset, so
-  a post-COMMIT throw would burn the code and leave an orphan refresh row (breaks FR-2/AC-3). Stays blocking until
-  the proposer confirms or the operator explicitly waives it. Six non-blocking refinements are in the state block.
-- **Floor status:** no Floor breaches.
-- **Uncovered @AC changes:** none. AC-1, AC-3, AC-4 are CHANGEs, all covered by the operator's D-23/D-21 scope;
-  AC-2, AC-5, AC-6 and the durable user-management-ui @AC-2..@AC-6 are PRESERVE.
-- **Resume:** the next `/sdd-batch` run resumes the debate from the state block below (round 3).
-
-```sdd-batch-design-state
-{
-  "round": 2,
-  "synth": {
-    "approach": "Round-2 synthesis. It starts from proposal r2, which confirmed every round-1 synthesis point, and folds in the adversary's r2 fixes. I checked the key claim against the code: the `jwtSecret` getter at `identityServiceImpl.ts:112-116` reads `process.env.JWT_SECRET` and throws when it is unset, so minting can fail. Two files change: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` and `src/__tests__/identityServiceImpl.test.ts`. There are no proto, migration or config changes. `rotateRefreshToken` (hotfix 5bd271d, `:340-374`) is not touched.\n\n**1. D-23: `exchangeAuthCode` (`:474-518`) in two phases**\n\n**Phase A: the existing validation lines stay as they are**\n- Kept: the pool SELECT (`:481-488`), the not-found exit (`:489`), the JS `consumed_at`/expiry early-outs (`:491-494`), the redirect/client check (`:495-497`) and the PKCE base64url compare (`:499-502`).\n- The early-outs can only reject. A grant comes only from the claim's row count.\n- `context.md` records this reading of FR-1. It also states that the claim's `consumed_at IS NULL` and `expires_at > NOW()` predicates are load-bearing and must not be removed as \"redundant with the JS checks\". The JS checks are best-effort pre-filters on a stale read.\n\n**Phase B: replaces only `:503-511`, in this order (changed this round)**\n1. Compute `audience = resource || row.resource || ''`. This is today's `:507`, unchanged.\n2. Call `mintAccessToken(row.user_id, row.email, row.roles ?? [], audience)` BEFORE the claim transaction. Minting is CPU-only. If it throws (for example `JWT_SECRET` is unset), the existing catch returns `13`, nothing is consumed and no row is written. That honours FR-2/AC-3 for mint failures too. The 19 losing racers each sign one token and throw it away; it is never returned.\n3. Call a new private `redeemAuthCode(codeHash, userId, clientId): Promise<string | null>`. It copies `rotateRefreshToken`'s structure line for line:\n   - `pool.connect()`, then `BEGIN`.\n   - `UPDATE identity.oauth_auth_codes SET consumed_at = NOW() WHERE code = $1 AND consumed_at IS NULL AND expires_at > NOW() RETURNING code`.\n   - Zero rows: `ROLLBACK`, then return null. The handler maps null to `16 invalid_grant`.\n   - `issueRefreshToken(userId, clientId, client)` (`:321-334`, unchanged), then `COMMIT`, then return the refresh token.\n   - On a throw: `ROLLBACK().catch(() => undefined)`, then rethrow. The handler maps it to `13`.\n   - `release()` runs in `finally`.\n4. The handler returns `{accessToken, tokenType: 'Bearer', expiresIn, refreshToken}` only after `redeemAuthCode` returns non-null. That is after COMMIT, so no token reaches a caller before the claim is durable.\n- The raw numeric codes 16 and 13 stay (IDENTITY-3).\n\n**2. D-21: one mint helper and one refresh-issue helper**\n- Rename `mintOAuthAccessToken` (`:295-315`) to `mintAccessToken(userId, email, roles, audience?)`.\n  - It writes `aud` only when `audience !== undefined`.\n  - It keeps `roles ?? []` and the same `{ expiresIn: this.accessTtlSeconds }` sign option.\n  - It returns `{ accessToken, expiresIn, issuedAt, expiresAt }`, with `issuedAt`/`expiresAt` in epoch seconds.\n  - The OAuth call sites keep passing their `''` fallbacks (`:507`, `:535`).\n- `authenticateUser`: replace only `:163-185` with `mintAccessToken(user.user_id, email, user.roles)` (no audience) plus `issueRefreshToken(user.user_id)`.\n  - Mint-then-insert order is unchanged from today.\n  - `secondsToDate` and `claims` read the returned values.\n- `refreshToken`: replace only `:243-249` the same way.\n- The `is_active` SELECT, `isBlockedDefaultAdmin`, bcrypt and `rotateRefreshToken(tokenHash, false)` (`:236`) are not touched.\n- First-party refresh rows now store `client_id = NULL` explicitly. Migration 004 (`:8-10`) declares the column nullable.\n- A structural grep in the impl-spec confirms no inline `jwt.sign` remains outside the helper.\n\n**3. Test harness, option (a)**\n\n**`makeAuthCodeDb(row, {failInsert?, expireAtClaim?})`**\n- Local to the test file, next to `makeTokenDb` (`test.ts:407-442`), and it records params.\n- Fidelity rules (a)-(e), as in proposal r2, are written into design.md:\n  - (a) The SELECT never returns `[]` after consumption.\n  - (b) The claim is conditional only if both predicates are present.\n  - (c) Autocommit `pool.query` UPDATE and INSERT apply immediately, which models the legacy path.\n  - (d) In-transaction INSERTs become visible only on COMMIT, and ROLLBACK discards them.\n  - (e) `expireAtClaim` makes the code expired at claim time even though the validation read sees it as live.\n\n**`makeSpyPool` (`test.ts:260-272`)**\n- Additive change: it also pushes `params`. Existing tests are unaffected.\n- It is used for the AC-4 login/refresh param checks, so no third fake is needed (C-18).\n\n**RED-then-GREEN (P-06): the RED run is captured on today's code**\n- **AC-1:** a 20-way `Promise.all` gives exactly 1 success, 19 calls return `16`, `committedInserts.length === 1`, and that insert's `client_id === 'oauthc_1'`. On today's code: 20 successes and 20 inserts.\n- **AC-3:** `failInsert` gives `13`, no tokens, `consumedAt === null` and 0 committed inserts.\n  - Also new: with `JWT_SECRET` unset (save it, delete it, restore it in `finally`), the call returns `13`, `consumedAt === null` and 0 inserts. On today's code the UPDATE has already autocommitted, so `consumedAt` is set and the test is RED.\n- **Claim-time expiry:** returns `16` with 0 inserts.\n- **AC-4 first-party half:** `aud` is absent and the `client_id` param (`params[3]`) is `null` for login and refresh. Today's 3-param INSERT at `:181-185` makes this RED.\n\n**Regression guards: green before and after**\n- **AC-2:** a sequential second call returns `16`.\n- **AC-5:** for each of the 3 mismatches, `consumedAt` stays null, and a correct call afterwards succeeds.\n- **AC-6:** an expired code returns `16` with 0 inserts.\n- **AC-4 shared half, across all three tokens:**\n  - the claim keys `user_id`, `email`, `roles`, `issued_at`, `expires_at`;\n  - `expires_at - issued_at === 900`;\n  - the OAuth token has `aud === 'https://agent.example/mcp'`;\n  - the OAuth `client_id` param equals the client id.\n- **Existing exchange tests (`test.ts:339-402`):** unchanged and green. Verified: `makeSpyPool.connect()` returns a client that closes over the same `queries`/`rows`, so the claim returns 1 row and the INSERT still matches the `:354` regex.\n\n**Run guard (fails.md:2223)**\n- Node 24 (`ci.yml:185`), `typeof IdentityServiceImpl === 'function'`, and a non-zero executed-test count.\n- These go into the impl-spec verification step itself, not only into design.md.\n- Merge with feature 252, whichever lands second.\n\n**Real-Postgres proof of AC-1**\n- design.md names the manual 20-caller repro as \"the harness the 5bd271d hotfix used\".\n- `context.md` holds the script verbatim and a single local command, with the `DB_POOL_MAX=20` env override on a local process or compose run.\n- It carries an explicit line: \"local only; never set DB_POOL_MAX for identity in .do/app*.yaml (direct :25060, budget 2)\".\n- It records the before and after counts.\n- The operator confirms in `context.md` that this recorded repro counts as the harness.\n\n**Other notes for design.md**\n- **jscpd** (`minTokens` 100): if the `redeemAuthCode`/`rotateRefreshToken` tail trips the check, stop and ask the user. There is no silent `withTransaction` extraction. The basis is CLAUDE.md \"touch only what the task requires\" plus C-18. If a change is forced during execute, it is logged per F-09 in the Deviation Log.\n- **Accepted residual, now narrowed:** only a lost COMMIT acknowledgement leaves the code consumed and a refresh row written while the caller sees `13`. That is the same residual `rotateRefreshToken` has (`:366`).\n- **Trace:** these paths make no outbound calls or emits, so the C-03 directive has nothing to apply to and no context is minted.",
-    "open_objections": [
-      {
-        "text": "[FR-2 / C-15] The next proposer must confirm the synthesis's mint-before-claim order. Proposal r2 minted after COMMIT, but `mintAccessToken` can throw (`jwtSecret` getter, `identityServiceImpl.ts:112-116`). That throw would land after the code was consumed and an orphan refresh row was committed, which breaks FR-2 and AC-3. The synthesis order is: compute audience, then mint, then `redeemAuthCode` (claim, INSERT, COMMIT), then return the tokens. Its added RED test runs with `JWT_SECRET` unset and checks for 13, `consumedAt` null and 0 inserts. Proposal r2 did not answer this point, so it stays blocking until confirmed or explicitly waived by the operator.",
-        "blocking": true
-      },
-      {
-        "text": "[P-06] Move AC-4's first-party assertions (`aud` absent, `client_id` param `params[3] === null`) to RED-then-GREEN and capture the RED run. Today's first-party INSERT (`:181-185`) has only 3 params, so these assertions fail before the fix. The proposal had labelled them green before and after.",
-        "blocking": false
-      },
-      {
-        "text": "[C-18 / DRY] Make `makeSpyPool` (`test.ts:260-272`) record params alongside the SQL. This is an additive change. It is the source for the AC-4 login and refresh param checks, which avoids a third ad-hoc fake.",
-        "blocking": false
-      },
-      {
-        "text": "[F-06 hygiene] Write the context.md repro as a single local command with `DB_POOL_MAX=20` set as an env override. Add an explicit line that the override must never be set in `.do/app*.yaml` (identity is direct `:25060` with a budget of 2).",
-        "blocking": false
-      },
-      {
-        "text": "[Citation] Re-cite the jscpd stop-and-ask rule. Its basis is CLAUDE.md 'touch only what the task requires' plus C-18. F-09 governs only how a forced divergence is logged during execute (Deviation Log); it does not set refactoring scope.",
-        "blocking": false
-      },
-      {
-        "text": "[FR-1 record] context.md must say explicitly that the claim predicates `consumed_at IS NULL` and `expires_at > NOW()` are load-bearing and cannot be dropped as redundant with the JS early-outs. AC-2 and AC-6 pass through the early-outs. Only AC-1's losing callers and the `expireAtClaim` test exercise the claim predicates.",
-        "blocking": false
-      },
-      {
-        "text": "[Ledger] Put the fails.md:2223 run guard (Node 24, `typeof IdentityServiceImpl === 'function'`, a non-zero executed-test count) into the impl-spec verification step itself, not only into design.md.",
-        "blocking": false
-      }
-    ],
-    "floor_breaches": [],
-    "business_rule_changes": [
-      {
-        "ac_id": "265:@AC-1",
-        "kind": "CHANGE",
-        "covered_by_operator_decision": true
-      },
-      {
-        "ac_id": "265:@AC-2",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "265:@AC-3",
-        "kind": "CHANGE",
-        "covered_by_operator_decision": true
-      },
-      {
-        "ac_id": "265:@AC-4",
-        "kind": "CHANGE",
-        "covered_by_operator_decision": true
-      },
-      {
-        "ac_id": "265:@AC-5",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "265:@AC-6",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "user-management-ui:@AC-2..@AC-6 (authenticateUser is_active / default-admin guard / roles passthrough)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      }
-    ],
-    "rejected_alternatives": [
-      "Mint after COMMIT (proposal r2). Lost because minting can throw (the `JWT_SECRET` getter, `:112-116`). A throw after COMMIT burns the code and leaves an orphan refresh row, which violates FR-2/AC-3. Minting first costs only discarded HMAC signs on the losing callers.",
-      "Mint inside `redeemAuthCode` before COMMIT, via a callback or by returning the pair. Lost because it couples the transaction helper to JWT minting (C-18). Minting first in the handler closes FR-2 just as well and is simpler.",
-      "Delete the JS consumed/expiry early-outs. Lost because it means rework, breaks existing tests (`:339-355`, `:371-391`), and lets stale codes tie up identity's 2-connection pool.",
-      "Shared `withTransaction` helper. Lost because it edits hotfix 5bd271d code and widens the diff. It is used only if jscpd forces it, and only after asking the user.",
-      "Single-statement CTE claim plus INSERT. Lost because it departs from the `rotateRefreshToken` pattern, makes reusing `issueRefreshToken` awkward, and is harder to fault-inject.",
-      "SELECT ... FOR UPDATE, then validation, then UPDATE. Lost because probes and failed validations would hold a row lock and a pool connection.",
-      "Validation predicates in the claim WHERE clause. Lost because PKCE cannot be checked in SQL, a mismatch would look the same as 'consumed' (weakening FR-5 tests), and it is a larger rewrite.",
-      "A committed opt-in real-Postgres test (option b). Lost because it is a one-off per-feature DB rig (fails.md:2255).",
-      "A separate first-party mint helper. Lost to making `aud` optional on the existing helper (FR-6/FR-8, IDENTITY-4).",
-      "A third ad-hoc fake for the login/refresh param checks. Lost to an additive params-recording change on `makeSpyPool` (C-18)."
-    ],
-    "open_risks": [
-      "The fake proves ordering and transaction structure, not that Postgres serialises the conditional UPDATE. The AC-1 guarantee rests on a manual repro that CI cannot re-run. Its value depends on the script in context.md being run with `DB_POOL_MAX` above 2.",
-      "Overlap with feature 252 on `identityServiceImpl.test.ts`: whichever lands second merges the other. Until then the run guard is the only P-06 protection against a vacuously green suite.",
-      "Lost COMMIT acknowledgement: the code is consumed and a refresh row exists, but the caller sees 13. `rotateRefreshToken` has the same residual. Accepted.",
-      "The `JWT_SECRET`-unset test mutates `process.env`. It must restore the value in `finally`, or later tests in the file may fail or leak.",
-      "jscpd may trip on the duplicated transaction tail. The fallback touches hotfix code and needs a user gate.",
-      "Out of scope and flagged only: no `is_active` check on exchange, the different audience fallbacks (`:507` vs `:535`), and the hard-coded 60 s auth-code TTL (`:459`, F-07).",
-      "Teardown must re-anchor the IDENTITY-2 and IDENTITY-4 line hints and re-check the 'single-use' wording in identity's CLAUDE.md."
-    ],
-    "constitution_rules_touched": [
-      "C-03",
-      "C-11",
-      "C-13",
-      "C-15",
-      "C-16",
-      "C-18",
-      "F-06",
-      "F-07",
-      "F-09",
-      "P-02",
-      "P-03",
-      "P-04",
-      "P-06",
-      "IDENTITY-1",
-      "IDENTITY-2",
-      "IDENTITY-3",
-      "IDENTITY-4"
-    ],
-    "rationale": "Proposal r2 concretely answered both round-1 blocking objections, so both are closed:\n- **Fake fidelity:** rules (a)-(e) are spelled out, and each test is labelled RED-then-GREEN or regression guard.\n- **Keep the early-outs:** confirmed, with the FR-1 reading recorded in `context.md`.\n\nThe adversary found no Floor breach.\n\n**The new blocking issue is real.** I checked it against the code: the `jwtSecret` getter at `:112-116` throws when `JWT_SECRET` is unset. Minting after COMMIT would therefore let a failure land after the claim is durable, which breaks FR-2's \"anything after the claim fails → rollback\" and AC-3's guarantee. The synthesis adopts the cheapest fix that adds no new abstraction: mint before the claim transaction, and still return tokens only after COMMIT. This narrows the accepted residual to a lost COMMIT acknowledgement, which matches `rotateRefreshToken`. It stays blocking only because the proposer has not yet confirmed it.\n\n**The smaller fixes follow the user's binding \"preserve as much as you can while having low rework\":**\n- AC-4's first-party checks become RED-then-GREEN, which is more honest evidence.\n- `makeSpyPool` gains params recording instead of a third fake.\n- The `DB_POOL_MAX` override is limited to a local run.\n- The jscpd rule is re-cited.\n\nHotfix code, the validation lines and the existing tests all stay untouched.\n\n**Business-rule impact:**\n- AC-1 (concurrency) and AC-3 (rollback) are CHANGEs covered by the operator's D-23 scope.\n- AC-4 is now marked CHANGE, covered by the D-21 scope. First-party refresh rows now carry an explicit NULL `client_id` through the shared INSERT, and tokens drop the `aud` key. Its observable claims (keys, TTL) are preserved.\n- Everything else is PRESERVE, including the durable user-management-ui scenarios.\n\nC-03 does not apply, because these paths make no outbound calls or emits."
-  },
-  "floor_breaches": []
-}
-```
-
-## Session 2026-10-22 — sdd-design
-
-- Phase 0 Recon: wrote recon.md (services: xstockstrat-identity; key reuse patterns: `rotateRefreshToken`
-  conditional claim + same-txn `issueRefreshToken`; generalise `mintOAuthAccessToken`).
-- Phase 1 Grilling: 2 rounds (full); termination: approved. Chosen approach: keep `exchangeAuthCode`'s validation
-  as reject-only pre-filters, then compute audience → `mintAccessToken` → new private `redeemAuthCode` (BEGIN;
-  conditional `UPDATE … WHERE consumed_at IS NULL AND expires_at > NOW() RETURNING`; `issueRefreshToken` in-txn;
-  COMMIT) → return tokens after COMMIT; D-21 renames the mint helper to `mintAccessToken(…, audience?)` and routes
-  `authenticateUser`/`refreshToken` through it and `issueRefreshToken`. Rejected: mint after COMMIT, mint inside the
-  txn helper, deleting the JS early-outs, `withTransaction`, CTE claim, `FOR UPDATE`, predicates-in-WHERE, committed
-  real-PG test, separate first-party mint helper, a third test fake.
-- Operator decision 2026-10-22 (design gate r2): APPROVED as synthesized, including the mint-before-claim order with
-  the RED test that runs with `JWT_SECRET` unset and asserts code 13, `consumedAt` null and 0 inserts. This closes
-  the round-2 blocking objection.
-- FR-1 reading (recorded per design): the JS consumed/expiry early-outs are best-effort pre-filters on a stale read
-  and can only reject; only the claim's row count grants. The claim predicates `consumed_at IS NULL` and
-  `expires_at > NOW()` are load-bearing — never drop them as "redundant with the JS checks".
-- AC-1 real-Postgres proof: the harness is the manual 20-caller local repro (the one hotfix `5bd271d` used). At
-  execute, record here the script verbatim, a single local command with the `DB_POOL_MAX=20` env override, and the
-  before/after grant counts. Local only; never set DB_POOL_MAX for identity in .do/app*.yaml (direct :25060,
-  budget 2). The operator confirms here that the recorded repro counts as the harness.
-- Constitution rules touched: C-03, C-11, C-13, C-15, C-16, C-18, F-06, F-07, F-09, P-02, P-03, P-04, P-06,
-  IDENTITY-1..4. Floor breaches: none.
-- Business rules: CHANGE 265:@AC-1, @AC-3 (D-23 scope + r2 approval), @AC-4 (D-21 scope); PRESERVE 265:@AC-2,
-  @AC-5, @AC-6 and durable `user-management-ui.feature` @AC-2..@AC-6.
-- Status: spec-ready → design-approved.
-
-### Open Threads
-
-- Fake proves ordering/txn structure, not Postgres serialisation; AC-1 rests on the manual repro run with
-  `DB_POOL_MAX` > 2 — target: impl-spec exchangeAuthCode step (repro + counts recorded here).
-- Overlap with 252 on `identityServiceImpl.test.ts` (whichever lands second merges); until then the run guard
-  (Node 24, `typeof IdentityServiceImpl === 'function'`, non-zero executed-test count) is the only P-06 protection —
-  target: every test step's verification + final integration PR.
-- Lost COMMIT acknowledgement residual (code consumed, refresh row written, caller sees 13) — same as
-  `rotateRefreshToken`; accepted, no step.
-- `JWT_SECRET`-unset test mutates `process.env`; must restore in `finally` — target: AC-3 test step.
-- jscpd may trip on the duplicated transaction tail; fallback touches hotfix code — stop and ask the user —
-  target: exchangeAuthCode step pre-commit.
-- Out of scope, flagged only: no `is_active` check on exchange; audience fallbacks `:507` vs `:535`; hard-coded
-  60 s auth-code TTL `:459` (F-07) — target: none here; operator to decide on follow-ups.
-- Teardown: re-anchor IDENTITY-2/IDENTITY-4 line hints and re-check the "single-use" wording in
-  `services/xstockstrat-identity/CLAUDE.md:38` — target: teardown / context-constitution refresh step.
-
-## Session 2026-10-22 — sdd-spec
-
-- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
-  - Step 1 [service] D-23 `exchangeAuthCode` Phase B plus the new `redeemAuthCode`.
-  - Step 2 [test] AC-1/2/3/5/6.
-  - Step 3 [service] D-21 `mintAccessToken` plus first-party routing.
-  - Step 4 [test] AC-4 plus the FR-6/FR-7 structural grep.
-  - Step 5 [test] the manual real-PG AC-1 repro.
-  - Step 6 [docs] teardown refresh of IDENTITY-1/2/4.
-- Key codebase findings:
-  - Recon's line map re-verified on `origin/feature/fix-identity-auth-code-race` @ 481d4742:
-    - `exchangeAuthCode` `:474-518`, unconditional UPDATE `:503-506`, pool-level `issueRefreshToken` `:511`;
-    - `mintOAuthAccessToken` `:295-315`, `issueRefreshToken` `:321-334`, `rotateRefreshToken` `:340-374`;
-    - `jwtSecret` getter `:112-119`;
-    - `jwt.sign` sites `:174`, `:247`, `:311`; refresh INSERT sites `:182`, `:329`.
-  - **Evidence-route finding (beyond design.md).** Design's run guard assumed Node 24 strip-types loads the impl
-    (fails.md:2223). Feature 252's product spec (`252 product-spec.md:12-22`) says the `../grpc/*.js` import fails on
-    Node 24 too (`ERR_MODULE_NOT_FOUND`). 252 has not landed: `package.json` `test` is unchanged on
-    `origin/main-dev` and on `origin/feature/fix-identity-ledger-test-suites`.
-    - The spec therefore takes RED/GREEN evidence from the compiled run that fails.md:2223's own rule prescribes:
-      `tsc` src plus tests into the git-ignored `.verify/dist/`, then `node --test --test-reporter=tap`, with the TAP
-      reporter pinned per fails.md:2991.
-    - The design's run guard (Node 24, `typeof IdentityServiceImpl === 'function'`, non-zero test count) sits
-      inside that run.
-    - `pnpm run test:coverage` stays as CI parity only.
-    - No `package.json`/`tsconfig.json` change, because that is 252's scope.
-  - AC-4's RED discriminator is first-party **login** only: today's 3-param INSERT leaves `params[3]` undefined.
-    First-party refresh already writes `client_id` NULL via `issueRefreshToken`, and no first-party token carries
-    `aud` today, so those assertions are guards. The claim-time-expiry test is also RED on today's code, because
-    the unconditional UPDATE succeeds.
-  - Login fixture: reuse the exported `SEED_ADMIN_PASSWORD_HASH` (password `'admin'`, accepted when `APPLICATION_ENV`
-    is not production), so no new bcrypt dependency is needed. The new D-23 tests reuse `storedRow`/`exchangeCall`
-    inside `describe('exchangeAuthCode')` (C-13 single consumer). No `src/__tests__/fixtures/` home exists.
-  - The jscpd guard rail is report-only outside `xstockstrat-ui` (`.husky/pre-commit` step 3), so the
-    `redeemAuthCode`/`rotateRefreshToken` stop-and-ask is a manual inspection of the
-    `DUP_REPORT_ONLY=1 scripts/check-duplication.sh` report in Step 1.
-  - Step 6 is not only line drift. IDENTITY-4 names `#mintOAuthAccessToken`, which Step 3 renames to
-    `mintAccessToken`.
-- Open-risk coverage:
-  - Fake versus Postgres serialisation → Step 5.
-  - 252 overlap → Step Dependencies plus every test step's compiled-run guard.
-  - `JWT_SECRET` restore → Step 2.
-  - jscpd → Step 1.
-  - Stale context hints → Step 6.
-  - Lost COMMIT acknowledgement → accepted, no step.
-  - Out-of-scope asymmetries (`is_active` on exchange, `:507` vs `:535` fallbacks, 60 s TTL) → not stepped. The
-    operator decides whether follow-ups are needed.
-- Next: `/sdd-review fix-identity-auth-code-race impl-spec`.
-
-## Session 2026-10-22 — sdd-review impl-spec
-
-- Result: 0 failures, 6 warnings, overlap WARN (3 file collisions). This review is advisory, so lifecycle stays
-  `implementation-ready`.
-- Addressed:
-  - Step 4 Verification now states the coverage threshold (`c8 --lines 40`, line coverage >= 40%). Re-verified
-    against `services/xstockstrat-identity/package.json:13`.
-- Accepted as is (verified, no edit needed):
-  - Steps 1 and 3 have no test command of their own. GREEN comes from the paired Steps 2 and 4 (C-08 pairing in
-    Step Dependencies), and each step still runs `pnpm run lint`.
-  - The line hints in `identityServiceImpl.ts` and the test file resolve. The stale Step 6 hints are already
-    flagged in the spec.
-  - C-18: `redeemAuthCode` mirrors `rotateRefreshToken` under the jscpd stop-and-ask guard, with no speculative
-    `withTransaction` extraction.
-
-### Open Threads
-
-- Step 5 (P-03): the AC-1 real-Postgres 20-caller repro is manual and cannot be machine-asserted. At the
-  `/sdd-execute` checkpoint, the operator must confirm that this recorded repro counts as the AC-1 harness, and the
-  before/after counts must be logged here. — [ ] unaddressed
-- Step 2: RED/GREEN depends on the scratch `tsc` compile until feature 252 lands, and `tsc` emits even when there
-  are type errors. Log the diagnostics in this file on each run. — [ ] unaddressed
-- Overlap with `252-fix-identity-ledger-test-suites` Step 3 on `src/__tests__/identityServiceImpl.test.ts`: 252
-  removes the `before()` guard (:28-40, lazy import :30) that 265 relies on as its skip guard. Whichever feature
-  lands second merges the other's changes and re-checks the guard semantics. — [ ] unaddressed
-- Overlap with `242-fix-push-untargeted-broadcast` on `src/grpc/identityServiceImpl.ts`: 242 adds an import at :9
-  and a method after `setUserActive`. The blocks don't overlap, so the only risk is a textual rebase conflict.
-  — [ ] unaddressed
-- `#1262 hotfix/fix-refresh-token-rotation` also touches both identity files. Before Step 1, check whether
-  `rotateRefreshToken` (:340-374, hotfix 5bd271d) is on `main-dev`, and re-anchor the line hints if it is not.
-  — [ ] unaddressed
+**What**: SEV-2 bug fix (debt-radar D-23 auth-code half + D-21 residual) in `xstockstrat-identity` only. `exchangeAuthCode` no longer consumes a code with an unconditional UPDATE followed by an out-of-transaction refresh INSERT; it keeps its validation as reject-only pre-filters, mints the access token, then calls a new private `redeemAuthCode` (BEGIN; conditional claim `consumed_at IS NULL AND expires_at > NOW() RETURNING`; `issueRefreshToken` in the same txn; COMMIT) and returns tokens only after COMMIT. D-21: `mintOAuthAccessToken` became `mintAccessToken(userId, email, roles, audience?)` and first-party login/refresh now share it and `issueRefreshToken`. Launched 2026-10-30 (PR #1368, df521ff51091a86e813950b34afff09ac4e8821b). No proto, migration or config change. 6 steps, 89 tests green at the last step.
+**Why (irrecoverable rationale)**:
+- Pattern copied from hotfix `5bd271d` `rotateRefreshToken` (conditional claim decided by row count + same-txn successor insert). The hotfix fixed the refresh race only; the identical auth-code race stayed open until this feature (triage session 2026-10-21).
+- Mint happens BEFORE the claim because the `jwtSecret` getter throws when `JWT_SECRET` is unset (IDENTITY-1): a post-COMMIT throw would burn the code and leave an orphan refresh row. Proposal r2 minted after COMMIT; the round-2 synthesis reversed it and the operator approved it 2026-10-22 (design gate r2). Cost: each losing racer signs one token and discards it. Recon fork 2 had said "the mint is pure CPU, so either order works" (recon.md@1ed63958:121); that was wrong because the `jwtSecret` getter can throw (found in round 2).
+- D-21 was folded into the security fix "so the D-23 fix reuses a single issue helper that first-party login also uses"; the operator could drop it (AC-4) at design if it read as an unrelated refactor (old context.md@1ed63958:31-33). Step 1 therefore kept calling the old `mintOAuthAccessToken` "so the security fix lands without the refactor" (implementation-spec.md@1ed63958:17-18).
+- Explicit NULL `client_id`: design §2 accepted first-party refresh rows storing `client_id = NULL` explicitly as a signed-off side effect (design.md@1ed63958:84-86; AC-4 marked CHANGE under C-16, design.md@1ed63958:261-265). /sdd-spec refined it: refresh already wrote NULL via `issueRefreshToken`, so only login was RED (old context.md@1ed63958:294-297).
+- Validation stays ahead of the claim (FR-5: a bad verifier/redirect/client must not burn the code, otherwise an attacker holding only the code could deny the legitimate client). The JS consumed/expiry early-outs are best-effort pre-filters on a stale read and can only reject; only the claim's row count grants. The claim predicates `consumed_at IS NULL` and `expires_at > NOW()` are load-bearing: AC-2/AC-6 exit through the JS early-outs, so only the 20-way race and the `expireAtClaim` test exercise the predicates. Never drop them as "redundant with the JS checks".
+- Accepted residual: a lost COMMIT acknowledgement leaves the code consumed and a refresh row written while the caller sees `13` (same as `rotateRefreshToken`).
+**Rejected alternatives**:
+- Reuse `routePool` for the AC-4 param checks — lost: it records params but has no `connect()`, so it cannot drive `rotateRefreshToken`/`redeemAuthCode`'s transaction; `makeSpyPool` was extended instead (`implementation-spec.md@1ed63958:376-377`, `old context.md@1ed63958:360-361`).
+- Mint after COMMIT — lost: mint can throw (IDENTITY-1), burning the code (design.md §1, context 2026-10-22).
+- Mint inside `redeemAuthCode` via callback/returned pair — lost: couples the txn helper to JWT minting (C-18); "minting first in the handler closes FR-2 just as well and is simpler" (design.md@1ed63958:169-170).
+- Delete the JS early-outs — lost: rework, breaks existing exchange tests, lets stale codes tie up identity's 2-connection pool.
+- Shared `withTransaction` helper — lost: edits hotfix code, widens diff; only if jscpd forced it and only after asking the user (never forced: jscpd found no clone between `redeemAuthCode` and `rotateRefreshToken`).
+- Single-statement CTE claim+INSERT — lost: departs from the rotateRefreshToken pattern, awkward with `issueRefreshToken`, harder to fault-inject.
+- `SELECT ... FOR UPDATE` then validate then UPDATE — lost: probes and failed validations would hold a row lock and a pool connection.
+- Validation predicates inside the claim WHERE — lost: PKCE cannot be checked in SQL, and a mismatch would be indistinguishable from "consumed", weakening the FR-5 tests; also a larger rewrite (design.md@1ed63958:179-181).
+- Committed opt-in real-Postgres test — lost: one-off per-feature DB rig (fails.md:2255, C-18).
+- Separate first-party mint helper — lost to making `aud` optional on the existing helper (FR-6/FR-8, IDENTITY-4).
+- Third ad-hoc fake for login/refresh param checks — lost to an additive params-recording change on `makeSpyPool` (C-18).
+**Scars & gotchas**:
+- The debt-radar scan (`docs/repo-surveyor/debt-radar-findings.md` @ 4535695) predated `5bd271d` (not an ancestor), so D-23's refresh half was already fixed and D-21's duplicated refresh SELECT was gone; triage re-verified against a053b0e and narrowed scope to the auth-code half + the residual 3 `jwt.sign` / 2 refresh-INSERT sites (context 2026-10-21).
+- The test fake must be conditional on the SQL text. Fidelity rules (a)-(e) of the `makeAuthCodeDb` fake: (a) validation SELECT never returns `[]` after consumption; (b) the claim UPDATE is conditional only when SQL contains BOTH predicates, else unconditional; (c) autocommit `pool.query` writes apply immediately (models the legacy path so RED is honest); (d) in-txn INSERTs are visible only on COMMIT, ROLLBACK discards them; (e) `expireAtClaim` makes the code expired at claim time though the validation read saw it live. The fake proves ordering and txn structure, NOT Postgres serialisation (design.md@1ed63958:191-193).
+- Test-design gotchas (recon.md@1ed63958:115-118): `makeSpyPool` returns the same rows for every query, so it cannot model a conditional claim's row count (hence the stateful fake). Once login goes through `issueRefreshToken`, the happy-path regex `INSERT INTO identity\.refresh_tokens[^)]*client_id` also matches first-party inserts, so tell first-party from OAuth by the `client_id` param (NULL vs id), not the SQL text.
+- RED/GREEN evidence at the execute phase: Step 1/2 RED = 86 tests, 82 pass, 4 fail (AC-1 20-way race `20 !== 1`, claim-time expiry `undefined !== 16`, AC-3 failInsert and AC-3 `JWT_SECRET` unset with `consumedAt` set); GREEN 86/86. Step 4 RED = refresh INSERT `client_id` `undefined !== null`. Step 1's RED was test-first: Step 2's tests were drafted uncommitted on the pre-Step-1 tree, then reverted (old context.md@1ed63958:388-391). Only Step 2's and Step 4's RED used a temporary uncommitted pre-step source swap (`d6cd9f3c`, `d98f682f~1`; old context.md@1ed63958:404-406, 454), because the fixing step was already committed. Step 3's AC-4 RED used a temporary uncommitted probe test.
+- Feature 252 landed mid-flight and rewrote `identityServiceImpl.test.ts`; the design's run-guard premise was wrong. design.md@1ed63958:135-139 and fails.md:2223-2225 assumed Node 24 strip-types loads the impl, but /sdd-spec found (252's product-spec:12-22) the `../grpc/*.js` import fails on Node 24 too (`ERR_MODULE_NOT_FOUND`), so /sdd-spec planned RED/GREEN via a scratch `tsc`→`.verify` compile with TAP output (old context.md@1ed63958:283-293, :287-289; implementation-spec.md@1ed63958:32-44; it required logging `tsc` diagnostics per run because `tsc` emits on type errors, old context.md@1ed63958:337-338). Feature 252 landed first, and the 2026-10-29 re-spec switched every test step to `pnpm test` (`tsc && node --test dist/__tests__/*.test.js`) before Step 1 executed (old context.md@1ed63958:359-360, 367-368), so the `.verify` route was never run. The impl-loaded check moved to 252's `describe('test harness')` (implementation-spec.md@1ed63958:217-218); the Node 24 and non-zero-test-count checks remain in Step 2/4 Verification (implementation-spec.md@1ed63958:277-284). Output is the node spec reporter (`ℹ` lines), not TAP `# ` lines, so spec verification greps for `^# ` matched nothing.
+- The `JWT_SECRET`-unset test mutates `process.env`; it saves and restores in `finally`.
+- Lint warning counts moved 194 -> 192 (two `jwt as any` sites removed) -> 206 (14 `any` warnings in new test code, matching the file's untyped-mock style); 0 errors throughout.
+- Manual 20-caller real-Postgres repro (Step 5) was never run locally (no Postgres on :5432; the execute loop may not start one). AC-1 therefore shipped on mocked-DB tests only (implementation-spec.md@1ed63958:599), although the product spec required real Postgres for FR-1..FR-3 (product-spec.md@1ed63958:67-68); the operator never confirmed any repro as the harness. Script `repro-265.cjs` was never committed but is verbatim in old context.md@1ed63958:491-538; the spec described it as: seed user + OAuth client, `issueAuthCode`, 20 concurrent `exchangeAuthCode`, count successes and `identity.refresh_tokens` rows, cleanup by deleting client and user (cascade). Command shape: `DB_POOL_MAX=20 JWT_SECRET=repro DATABASE_URL=... node repro-265.cjs`; local only, never set `DB_POOL_MAX` for identity in `.do/app*.yaml` (direct :25060, budget 2; F-06 grep over both app specs: 0 hits). Expected AFTER line `repro-265 successes=1/20 refresh_rows=1`. The hotfix's pre-fix BEFORE baseline was 19/20 and 20/20 double-mints (recon.md@1ed63958:103).
+- Teardown was manual: `/context-forge:context-constitution refresh` was unavailable; `services/xstockstrat-identity/docs/context-constitution.md` (IDENTITY-1/2/4 re-grounded to `mintAccessToken`, every `~L` hint re-stamped, `last_used_at` gotcha re-anchored to `rotateRefreshToken`'s `touchLastUsed` branch) and `services/xstockstrat-identity/CLAUDE.md:37-38` re-read against the code at `0e4fc22d`; "single-use" wording is now true under concurrency.
+**Permanent deviations**:
+- design said Step 5 = manual local BEFORE/AFTER 20-caller Postgres repro, operator confirms it counts as the AC-1 harness -> shipped: Step 5 marked `done` without any run; replaced by an AFTER-only run on the deployed dev stack -> because the operator chose "Run it after deploy." (2026-10-29) and no Postgres was available to the executor. BEFORE leg dropped since the pre-fix race is evidenced by the RED unit tests and hotfix `5bd271d`'s identical refresh repro (`implementation-spec.md@1ed63958:589-599`; `old context.md@1ed63958:646-655`). Options offered to the operator: run the local repro / waive Step 5 / run on dev after deploy; waive was not chosen (`old context.md@1ed63958:648-649`).
+- Post-deploy dev repro procedure (operator-run, never recorded as performed): DCR at `/agent/oauth/register` is open (`oauth.registration_enabled` unset) and `oauth.allowed_redirect_uris` is unset, so any `https://` redirect registers; `issueAuthCode` sets `expires_at = NOW() + 60 s`; `/oauth/callback` needs a logged-in UI session cookie, so the browser leg is the operator's. Then fire 20 concurrent `POST /agent/oauth/token` (`authorization_code`) within the TTL; expect exactly 1 HTTP 200 + 19 `invalid_grant`, 20 `ExchangeAuthCode` spans in Tempo. The code is a live credential and never passes through the session. Result was to be recorded in context.md under a `rollout (dev)` session; none was recorded.
+- Step 4: the OAuth-exchange AC-4 case is nested inside `describe('exchangeAuthCode')` (reuses `storedRow`/`exchangeCall`); login and first-party refresh cases live in `describe('token claim-shape parity (AC-4)')`; shared assertions are module-level helpers `assertSharedClaims`, `refreshInsertClientId`, `withAppEnvUnset`.
+- Step 3: the `authenticateUser` inline comment "JWT payload uses snake_case claim names" moved into `mintAccessToken`'s 2-line doc comment rather than being dropped.
+**Cross-feature signal**:
+- Same claim-then-issue pattern as hotfix `5bd271d` (refresh-token rotation, report `2026-10-19-identity-refresh-rotation-not-atomic-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md)); IDENTITY-8 holds the atomic-guard family.
+- Overlaps resolved by merge: `252-fix-identity-ledger-test-suites` (test file rewrite; removed the silent-skip `before()` guard 265 originally relied on); `242-fix-push-untargeted-broadcast` (disjoint block in `identityServiceImpl.ts`, textual only).
+- Test-environment trap fails.md:2223 (Node 22 strip-types makes the identity suite a vacuous green) shaped the design's run guard, but its "Node 24 is safe" premise did not hold for identity (the import also fails on Node 24; see Scars); the premise is already corrected in the ledger at fails.md:3099-3104 (feature 242), so do not re-file it.
+**Deferred follow-ons** (operator to decide; none stepped):
+- Run and record the post-deploy 20-caller dev repro (see above); feature.md "Next Action" still points at it.
+- No `is_active` check on `ExchangeAuthCode`.
+- Different audience fallbacks: `exchangeAuthCode` (`resource || row.resource || ''`) vs `refreshOAuthToken` (`resource || ''`).
+- Hard-coded 60 s auth-code TTL in `issueAuthCode` (F-07).
+- `is_active` gap impact: "a code issued just before deactivation is still redeemable within its 60 s TTL; scope creep unless operator opts in" (recon.md@1ed63958:124).
+- A shared real-DB test fixture is a platform follow-up (recon.md@1ed63958:109).
+- Any later audit emit on these paths must forward inbound metadata via `ledgerAudit.ts` `PROPAGATED_HEADERS` (design.md@1ed63958:160-161).
+- `RevokeToken` unverified-decode defect is out of scope (product-spec.md@1ed63958:119; has its own report `2026-10-19-identity-revoketoken-unverified-decode-defect`).
+**Ledger entries written**: insights.md (1), fails.md (1, narrowed to stale-scan/ancestor check; the sibling-sweep half is DUP:fails.md:1330,1571,1821 and insights.md:1110) — see the 2026-11-04 entries. (The mint-before-claim ordering insight was already recorded at insights.md "2026-10-22 — fix-identity-auth-code-race — ordering".)
+**Runtime-invariant recommendations (→ /context-constitution)**: none new (no new IDENTITY-* rule; IDENTITY-1/2/4 already re-grounded in Step 6). Candidate wording for IDENTITY-8 family: "single-use credential redemption (auth code, refresh token) = conditional claim decided by row count, same-txn successor insert, risky no-write steps (mint) before the claim".
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958.

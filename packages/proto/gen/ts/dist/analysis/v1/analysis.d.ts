@@ -73,10 +73,12 @@ export declare enum NoTradeReason {
     NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
     /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
     NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
-    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal) */
     NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
     /** NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE - strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215) */
     NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
+    /** NO_TRADE_REASON_EVALUATION_FAILED - not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275) */
+    NO_TRADE_REASON_EVALUATION_FAILED = "NO_TRADE_REASON_EVALUATION_FAILED",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function noTradeReasonFromJSON(object: any): NoTradeReason;
@@ -756,7 +758,7 @@ export interface FundamentalsScanSummary {
     signalsEmitted: number;
     callsSpent: number;
     deferredCount: number;
-    /** "completed" | "budget_deferred" | "failed" */
+    /** "completed" | "budget_deferred" | "partial" | "failed" */
     status: string;
     finishedAt?: Date | undefined;
 }

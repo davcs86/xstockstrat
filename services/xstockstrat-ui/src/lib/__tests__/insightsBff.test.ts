@@ -19,9 +19,11 @@ vi.mock('@/lib/auth', () => ({
   hasAdminScope: vi.fn(() => false),
 }));
 
-import { forward } from '@/lib/bffShared';
+import { forward, forwardAdmin } from '@/lib/bffShared';
+import { hasAdminScope } from '@/lib/auth';
+import { LONG_RPC_TIMEOUT_MS } from '@/lib/deadlines';
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
-import type { HandlerContext } from '@connectrpc/connect';
+import { Code, ConnectError, type HandlerContext } from '@connectrpc/connect';
 
 /** Minimal HandlerContext stub — enough for `requireSession` + `backendHeaders`. */
 function fakeCtx(): HandlerContext {
@@ -82,5 +84,34 @@ describe('forward() — timeoutMs threading (feature 183, AC-1)', () => {
     expect(capturedOpts!.headers.get(HEADER_ACCESS_SCOPE)).toBe('7');
     expect(capturedOpts!.headers.get(HEADER_TRACE_ID)).toBeTruthy();
     expect(capturedOpts!.timeoutMs).toBe(30_000);
+  });
+});
+
+describe('forwardAdmin() — timeoutMs threading (feature 271)', () => {
+  it('passes options.timeoutMs alongside the headers for an admin session', async () => {
+    vi.mocked(hasAdminScope).mockReturnValueOnce(true);
+    const mockCall = vi.fn<
+      (req: unknown, opts: { headers: Headers; timeoutMs?: number }) => Promise<object>
+    >(async () => ({}));
+
+    await forwardAdmin(mockCall, { timeoutMs: LONG_RPC_TIMEOUT_MS })({} as never, fakeCtx());
+
+    expect(mockCall).toHaveBeenCalledOnce();
+    expect(mockCall.mock.calls[0][1].timeoutMs).toBe(LONG_RPC_TIMEOUT_MS);
+    expect(mockCall.mock.calls[0][1].headers).toBeInstanceOf(Headers);
+  });
+
+  it('rejects a non-admin session with PermissionDenied and never calls the backend', async () => {
+    vi.mocked(hasAdminScope).mockReturnValueOnce(false);
+    const mockCall = vi.fn(async () => ({}));
+
+    const err = await forwardAdmin(mockCall, { timeoutMs: LONG_RPC_TIMEOUT_MS })(
+      {} as never,
+      fakeCtx(),
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ConnectError);
+    expect((err as ConnectError).code).toBe(Code.PermissionDenied);
+    expect(mockCall).not.toHaveBeenCalled();
   });
 });

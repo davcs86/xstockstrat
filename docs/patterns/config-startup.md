@@ -84,7 +84,7 @@ Reference implementations: `services/xstockstrat-trading/internal/config/config.
 
 ### Python (asyncio)
 
-The `ConfigWatcher` runs a background `_watch_loop` task that retries the WatchConfig stream every 2 s on `AioRpcError`. `wait_for_snapshot` uses `asyncio.wait_for` to enforce the timeout:
+The `ConfigWatcher` runs a background `_watch` task that retries the WatchConfig stream every 2 s on any exception (feature 259; `CancelledError` still propagates). The task is retained as `_watch_task`, and its `_on_watch_done` callback logs ERROR on any unexpected exit. `wait_for_snapshot` uses `asyncio.wait_for` to enforce the timeout:
 
 ```python
 async def wait_for_snapshot(self, timeout_seconds: float = 90.0):

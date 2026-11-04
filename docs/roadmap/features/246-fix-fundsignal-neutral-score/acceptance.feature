@@ -1,5 +1,5 @@
 Feature: fix-fundsignal-neutral-score (bug fix)
-  Regression guard for docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md:
+  Regression guard for docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md):
   the fundamentals producer emits fabricated 0.5 scores for symbols with no data.
 
   Background:

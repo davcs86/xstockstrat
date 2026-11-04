@@ -1,304 +1,97 @@
-# Context Log: fix-push-untargeted-broadcast
+# Context: fix-push-untargeted-broadcast  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-20 (/sdd-triage)
+**What**: SEV-2 bug fix. An alert with empty `target_user_id` was Web-Pushed to every row of `notify.push_subscriptions`
+(feature 165 FR-3 copied StreamAlerts' "empty = everyone" rule into the per-device channel), so per-user content
+(portfolio risk breaches, owner-scoped live-loop alerts) reached every user's devices. Shipped: untargeted pushes go only
+to admin-role users, resolved per alert through a new identity RPC `ListAdminUserIds` (live, uncached, gated on the
+mTLS peer SAN `xstockstrat-notify` only, header-blind); portfolio `emitRiskAlert` and the analysis live-loop strategy and
+fundamentals-unavailable alerts now set `target_user_id` to the owner. 16 steps, 5 services touched (identity, notify,
+portfolio, analysis, agent wording). Launched 2026-10-30 via PR #1368 (`df521ff5`).
 
-- Bug recorded as defect report `docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md`
-  (Issues disabled): untargeted alert sends a Web Push to every user's devices.
-- Severity: SEV-2. Environment: dev (main-dev) @ 1302e6d. Config-only fix: no. Routed to SDD path (Track C).
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1..AC-4), context.md.
-- Affected services (from report): xstockstrat-notify, xstockstrat-portfolio, xstockstrat-analysis.
-- Root cause hypothesis: feature 165 FR-3 copied StreamAlerts' empty-target-means-everyone rule into Web Push
-  (`webPush.ts:88-101`); per-user producers (portfolio `emitRiskAlert` `portfolio_service.go:934`, analysis
-  `live_loop.py:834,850`) never set `target_user_id`.
-- Confirmation evidence (report, confidence high): a unit-level scratch test made 4 `sendNotification` calls across
-  3 users for one untargeted WARNING alert; a targeted control reached only its own user. Triage re-grep
-  2026-10-20 confirmed `webPush.ts:88,99`, `webPush.test.ts:147`, `portfolio_service.go:894,934-943`
-  (`checkRiskLimits` has `userID`; `EmitAlertRequest` built without `TargetUserId`).
-- **Changes feature 165 FR-3 behaviour.** The pinned unit test `services/xstockstrat-notify/src/__tests__/webPush.test.ts:147`
-  ("AC-4: broadcast (empty targetUserId) queries all subscriptions") asserts the bug and must be rewritten
-  deliberately as this feature's red test, not "fixed to pass".
-- C-16 check: grep of `services/xstockstrat-notify/acceptance/` for `broadcast|target_user_id|untargeted`.
-  `pwa-notifications.feature` (promoted from 165) carries **no** broadcast scenario; its `@AC-4 @FR-3 @feature-165`
-  is the targeted case and stays valid. So this is **not** a C-16 CHANGE; this feature's scenarios are a C-16 ADD at
-  launch. `alert-read-unread-persistence.feature:14` has a broadcast scenario for read state (StreamAlerts/history),
-  not push, so it is unaffected.
-- Design forks for /sdd-design: (a) skip untargeted push vs opt-in/admin audience (latter may need a column and/or
-  config key); (b) whether producer targeting (FR-3, AC-3/AC-4) is in this feature or split; (c) other untargeted
-  producers (agent `emit_alert`, ingest backfill auto-alert, Go services) audited for per-user content.
-- Recommended design depth: full → `/sdd-design fix-push-untargeted-broadcast` (rationale: SEV-2; 3 affected
-  services; reverses a launched feature's FR; possible migration/config if an opt-in audience is chosen).
-- Development branch: feature/fix-push-untargeted-broadcast
+**Why (irrecoverable rationale)**:
+- "Admin-only" audience is an operator decision (context.md 2026-10-20, "Operator decisions"); no reason for choosing admins
+  over skip-entirely is written in any source. The decision also carried the C-16 sign-off reversing 165 FR-3, whose
+  broadcast was pinned only by the unit test `webPush.test.ts:147` ("AC-4 ... queries all subscriptions"), never by a
+  durable `@AC` — so it was rewritten deliberately, not "fixed to pass".
+- Live identity lookup (fork b) beat a register-time admin bit (fork a) because the bit goes stale on demotion or
+  deactivation and would break the freshness rules of `@AC-4/5/11 @feature-043` (design.md Rejected Alternatives;
+  recon.md Risks (a): the bit is captured only on the explicit Enable click, `enable` handler `PushToggle.tsx:64`, register call `:80`).
+- Option (a) also lost on secondary grounds: pre-004 rows would need a fail-closed non-admin default, forcing admins to re-enable push; the role is per user not per device, so a column copies it onto every device row (recon.md:394-400; insights.md:3536-3539).- Config-only fix rejected: raising `notify.push.min_severity` reduces frequency, not scoping (product-spec.md:25; triage "Config-only fix: no", context.md:11).
+- No `user_id` normalization was needed: design.md:261 left the canonical-form risk open; /sdd-spec closed it by tracing JWT `user_id` (`identityServiceImpl.ts:164` at HEAD; spec-time cite was `:167`) -> `x-user-id` (`bffShared.ts:39`) -> register (`notifyServiceImpl.ts:232`), which matches identity's `user_id::text` (`adminDirectory.ts:43`).
+- The r5 persistence objection was rejected as BLOCKING (it would deadlock the gate whose output resolves it) and made a hard precondition on the status flip (design.md:248); see fails.md:2967-2968.
+- No TTL cache, but single-flight: a cache keeps pushing to a demoted admin for the whole TTL; dropping single-flight would
+  mean N lookups per untargeted burst against identity's 2-connection direct pool, shared with login/refresh.
+- Failure mode is fail-closed by design: any lookup failure of any gRPC code skips the push (never widens to all rows) and
+  logs ERROR rate-limited to once per 60 s. Codes 14/4 were deliberately included because they are the likeliest drift
+  modes (design.md rejected "ERROR only on 7/12/13"). Codified as NOTIFY-8 / IDENTITY-12 (below).
+- The RPC is SAN-only and header-blind because notify relays the inbound header trio (C-03 as written) and `EmitAlert` is an
+  unauthenticated contract (`notifyServiceImpl.test.ts:219-224`): a relayed `x-access-scope` is safe only because the
+  receiver ignores it. Pinned by test cases (vi)/(vi-b) (elevated scope on notify SAN gives an identical response).
+- Producers that own per-user content were fixed at the source (FR-3) rather than offsetting with a second untargeted copy,
+  which would break "exactly"/"only" in `@AC-3/@AC-9 @feature-231`, `@AC-6 @feature-215`, `@AC-2 @feature-203`.
 
-## Session 2026-10-20 — sdd-review product-spec
+**Rejected alternatives** (full list was design.md § Rejected Alternatives):
+- Register-time admin bit / `notify 004` migration — stale on demotion or deactivation.
+- 30-60 s TTL cache — demoted admin keeps receiving pushes for the TTL; single-flight gives burst relief without staleness.
+- Admin set built from identity role-change ledger events — events are best-effort (auditSafe), eventually consistent, new consumer (YAGNI).
+- `FilterAdminUserIds(candidate_ids)` — extra query and larger payload, no real exposure reduction.
+- Notify reading `identity.users` directly — breaks schema ownership; `user_id` is UUID there vs TEXT in notify; grants unknown.
+- Config-held admin list — second source of truth that drifts from identity roles.
+- Loosen `adminGate`, or notify mints an admin `x-access-scope` — first is a CHANGE to `@AC-7 @feature-043`; second is the fails.md:531-534 trap.
+- Reuse `ListUsers` with a header+SAN grant — over-discloses (emails, every user) and changes `@AC-7 @feature-043`.
+- SAN plus `x-internal-caller` gate (config `authz.ts:149-162` shape) — any mTLS peer can forge the header, adds nothing over a verified SAN.
+- Forward only the trace header with a C-03 exception, or forward the trio minus `x-access-scope` — both violate C-03 as written; unnecessary because the RPC ignores headers.
+- Justify the relay as "trusted mTLS-authenticated producer values" — withdrawn as a reason (see Ledger fails entry, header).
+- Drop single-flight; ERROR only on codes 7/12/13; N-consecutive-failure counter; `md?.get(h)[0]` read (throws on get-less metadata, swallowed by the catch-all).
+- Revive `src/middleware/propagation.ts` / AsyncLocalStorage in notify — reverses `@AC-2 @feature-175`.
+- Handler in `authz.ts`, or as an `IdentityServiceImpl` method behind the guarded lazy import — `before()` guard can pass with zero assertions.
+- `typeof`-only identity test; real-socket case on the passthrough descriptor (`mtls.test.ts:73-81`, fails with INTERNAL) or none.
+- Seed a config key for the lookup deadline (`ADMIN_LOOKUP_DEADLINE_MS = 2000` kept a mechanism constant, F-07); shared Node `peerDnsSans` package at runtime copy #2 (YAGNI).
+- Bare `xstockstrat-identity:50058` in `.do/app*.yaml` — silent fail-closed outage; `${xstockstrat-identity.PRIVATE_DOMAIN}:50058` used.
+- Extend FR-3 to trading per-account alerts in this feature — deferred (C-14 follow-up, below).
+- Mint new scenarios as @AC-5..8 — the feature branch already held @AC-5..7; minted @AC-8..11 from the branch only.
 
-- Product spec approved (PASS WITH WARNINGS; overlap WARN, no FAIL, no floor breach). Status: draft → spec-ready.
-- Warnings (spec-reviewer):
-  1. C-01 stale portfolio lines. Corrected in product-spec.md: `emitRiskAlert` `portfolio_service.go:1004-1018`
-     (`EmitAlertRequest` `:1008-1014`), `checkRiskLimits` `:964` (invoked `:375`), concentration emit `:991`,
-     drawdown emit `:999`. Supersedes the triage entry's `:894,934-943` (lines from 1302e6d, pre-feature-240).
-  2. C-15 @AC-1 left the audience fork open. Shared givens now state neither user-42 nor user-77 is admin and add
-     admin user-99 (`https://push.example/admin`); @AC-1 retitled to non-admin devices; new @AC-5 pins the admin
-     push; @AC-2 also asserts no push to the admin endpoint.
-  3. C-15 FR-3 partly covered. Added @AC-6 (drawdown path, `:999`, body from `evaluateDrawdowns`
-     `portfolio_service.go:956-958`) and @AC-7 (`_emit_fundamentals_unavailable_alert` `live_loop.py:847-861`,
-     called `:727`). FR-3 now names both portfolio paths and both analysis emitters.
-  4. C-14/C-10 Consumer Surface understated. Now states untargeted push stops on every non-admin device, the
-     owner's included. Trading's untargeted per-account CRITICAL alerts (`trading.go:1938-1944` reconciliation,
-     `:2751-2757` halt) named in Problem Statement, Consumer Surface and Out of Scope; systemic REDUCE_ONLY alert
-     (`trading.go:2183-2189`) reaches admin devices under the operator's admin audience. Open for /sdd-design:
-     extend FR-3 to trading (owner from `accountID`) or name a follow-up feature.
-  5. C-07 conditional migration. Fix Scope now commits to notify `004_<desc>.up.sql` + `.down.sql` (max
-     `003_alert_reads`) if design persists the admin audience on `notify.push_subscriptions`.
-  - Not evaluable by reviewer: feature-165 FR-3 quote via `git show 519e730:...` (product-spec.md pruned from tree).
-- Overlap findings (feature-overlap, WARN):
-  1. `services/xstockstrat-portfolio/internal/service/portfolio_service.go` shared with 251-fix-getpnl-source-service
-     (GetPnL `:753`, `:798`); ~250 lines apart; 251 excludes emitRiskAlert. Rebase-only, no hard order.
-  2. `services/xstockstrat-analysis/app/engine/live_loop.py` shared conditionally with 244-fix-python-config-stored-zero
-     (`:351`; 244's primary site is `app/config/watcher.py:97,105,134`). Disjoint regions, rebase-only.
-  3. Conditional config migration: 243-fix-sandbox-seed-keys claims config `031`; 241 may add one. A seeded
-     `notify.push.*` key takes the next free NNN after both, checked across remote branches at /sdd-spec
-     (recorded in product-spec.md Fix Scope). Notify migrations dir untouched by any other feature.
-- C-16 note: triage classed this a C-16 ADD (no durable broadcast scenario in
-  `services/xstockstrat-notify/acceptance/pwa-notifications.feature`); the operator decision below treats the
-  feature-165 FR-3 reversal as a signed-off C-16 CHANGE. Either reading is covered.
-- Product spec FR-1 / Expected rewritten to the operator's admin-only audience; FR-3 scope fixed per operator
-  decision ("scope confirmed at design" removed). Admin-role resolution mechanism in notify left to /sdd-design.
-- Next: `/sdd-design fix-push-untargeted-broadcast` (full — operator: no quick designs).
+**Scars & gotchas**:
+- Design rounds r1-r4 were carried in-band only; an r4 claim of a checkpoint `seeds/242/state-r3.json` was false (never existed). No decision lost, but nothing durable until r5 (context.md 2026-10-21). Ledger: DUP (fails.md:2963).
+- Two design rounds justified relaying `x-access-scope` as "mTLS-authenticated producers"; wrong (EmitAlert is unauthenticated). Corrected in r5. Ledger: DUP (fails.md:2952).
+- Step 4 P-06 load check: on Node 24.20.0 the guarded `identityServiceImpl.test.ts` is vacuous (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on the parameter property; `.js` specifier gives `ERR_MODULE_NOT_FOUND`; `before()` try/catch swallows it; "70 pass" with none of the impl/authz cases executing). Consequence: the Step 3 `listAdminUserIds` delegate in `identityServiceImpl.ts` has no executing test; the handler itself is covered directly via `adminDirectory.test.ts` (static `.ts` import, no skip guard) and a real-socket `mtls.test.ts` case. Corrects fails.md 2026-09-06 claim. Ledger: DUP (fails.md:3099).
+- Steps 7 and 8 could not land separately: the required 3rd `AdminDirectory` constructor arg breaks `tsc` (notify `tsconfig.json` includes tests) on every `new StubbedDispatcher(...)`/`ExposedDispatcher` site until Step 8. The /sdd-spec session had already noted this (context.md 2026-10-21 sdd-spec) yet kept two steps; operator chose Option B (one commit, one red->green on Step 8's tests). RED was `TS2554` x17, then `tests 61, pass 53, fail 8`; GREEN `88 pass`. Ledger: NEW.
+- `buf breaking` form `--against "<git-common-dir>#branch=main-dev,subdir=packages/proto"` is refused by the worktree-isolation guard; used `git archive main-dev packages/proto` extracts (local main-dev 0fc13c41 and origin fa40c8a4, both exit 0).
+- Codegen toolchain parity: provisioned Go plugins built with go1.24.7 reflowed an unrelated comment in `analysis.pb.go`; rebuilt all three at CI pins with `GOTOOLCHAIN=go1.27.0`. A global TypeScript 6.0.2 (TS5107) shadowed the lockfile's 5.9.3 until `pnpm install --frozen-lockfile`. Provisioned golangci-lint v2.14.0 was go1.26-built and refused the module's `go 1.27.0`; rebuilt with `GOTOOLCHAIN=go1.27.0`. Result: identity-only gen drift, second `buf-gen.sh` empty diff.
+- Step 15: the discovery digest's "not found" items for Steps 3/5/7 came from a stale main-worktree checkout; they were on `origin/feature/...` (`345195fe`, `918eb5e7`, `ea99d6e0`). Same class as fails.md:3037 (stale read-only checkout in debate rounds).
+- Step 14: spec said "two SAN-gated grants"; the tree has a third (feature 224 ingest/indicators `system` grants, peer SAN `xstockstrat-analysis`). `inter-service-mtls.md` "Peer-SAN authorization" lists all three. A discovery note claiming a second marketdata `peerSan` was wrong (config has exactly one `peerSan` grant, `authz.ts:124`, ingest).
+- Step 15: after this feature changed `webPush.ts`, the notify constitution's `~L` hints had drifted 7-185 lines and were re-stamped; Teardown was done by hand because the context-forge `context-constitution` skill was unavailable (plugin-unavailable plus manual reconciliation had to go in the PR body).
+- Branch setup used `git merge -X ours origin/main-dev` (merge commit `90ad4051`, 2026-10-28). Later found unsafe for shared append-only ledger docs; Ledger: DUP (fails.md:3086, sdd-batch-execute).
+- Portfolio test: `expectDrawdowns` hard-codes `"u1"` (`portfolio_quote_deadline_test.go:367-373`); the `@AC-6` test inlines its own `account_balances` expectation for `user-42` rather than changing the shared helper.
 
-### Operator decisions
+**Permanent deviations**:
+- Not a deviation but a design-accepted consequence a reader may take for a bug: trading's per-account CRITICAL halt/reconciliation alerts (`trading.go:1938-1944`, `:2751-2757`) reach admins only, so the owner loses them, because FR-3 was deliberately not extended to trading (design.md:212; C-14 follow-up below). The systemic escalation alert (`trading.go:2183-2189`) is system-wide, so admin-only is intended.
+- impl-spec said Step 7 and Step 8 separate -> shipped as one commit -> because of the `tsc`-includes-tests compile break (see Scars). Deviation Log row "Steps 7 + 8" (implementation-spec.md:828-840).
+- impl-spec said a `buf breaking` against `<git-common-dir>#branch=main-dev` -> shipped via `git archive` extracts -> guard refusal (Scars).
+- Behavioural design vs shipped otherwise: none; every other Deviation Log row (Steps 1-6, 9-16) is mechanics/tooling/line-cite only.
 
-OPERATOR DECISIONS (binding, recorded 2026-10-20):
-- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
-- Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
-- Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.
+**Cross-feature signal**:
+- In-app change accepted: targeted FR-3 alerts leave every non-owner's `ListAlerts` (`notifyServiceImpl.ts:202`,`:210`) and `StreamAlerts` (`matchesSubscriber` `:273-276`), admins included.
+- Narrowing the empty-target default silently reassigns every other untargeted producer to admin-only (trading systemic/per-account, marketdata `marketdata_service.go:1567`, ingest `servicer.py:473`, fundsignal `fundsignal_loop.py:618`, agent `emit_alert broadcast=true`). Surfaced only by review warnings, not by the original triage. Ledger: NEW (insight).
+- Merge-order coupling named at review: 215 (`_emit_fundamentals_unavailable_alert`, same function), 252 (identity runner / `mtls.test.ts`), 251/240 (`portfolio_service.go`, disjoint). Soft `merge-order.md` rows were recommended but not written (outside session write scope); the operator's decision is not recorded.
+- Same-helper collision: open defect `docs/reports/2026-10-19-portfolio-concentration-logged-as-drawdown-defect.md` (sidecar `open` as of 2026-11-04) touches `emitRiskAlert`'s ledger event, the helper FR-3 changed (recon.md:443-445); whichever merges second rebases and carries `target_user_id` (design.md:263).
+- "Marketdata/ingest/fundsignal/agent are admin-only" above is an assumption that their content is system-wide, not an audit result: producers other than FR-3's were not audited for per-user content (product-spec.md:86, out of scope).
+- Header-propagation: this feature made notify a second Node outbound per-request caller (after identity `ledgerAudit.ts`); PLAT-4, `header-propagation.md` and root CLAUDE.md corrected ("none currently does" was already false). Drift family of the 224 recorded exception.
 
-## Session 2026-10-20 — sdd-review product-spec (re-review)
+**Deferred follow-ons**:
+- C-14 follow-up: defect report `docs/reports/2026-10-21-trading-untargeted-per-account-alerts-defect.md`, sidecar `open` as of 2026-11-04; provisional slug `fix-trading-account-alert-targeting` (NNN not yet assigned; no such feature dir exists). feature.md Next Action required `/sdd-triage --from-report ...` before merge; no triage is recorded in context.md.
+- Vacuous `identityServiceImpl.test.ts` on Node 24 (pre-existing): context.md Step 4 said "hand this to /sdd-qa defect"; no matching report found in `docs/reports/` by filename. Unrecorded whether filed.
+- Empty-owner producers degrade silently to an admin-only push (no empty-owner guard in portfolio, design.md:262 / Step 9; analysis guard holds only when `portfolio_stub` is wired, `live_loop.py:520-522`, `:549-551`).
+- Non-waivable dev launch gate (admin device receives an untargeted WARNING push; non-admin device does not): no execution evidence recorded in context.md.
+- Watch identity's direct pool (max 2) under untargeted bursts; single-flight joiners lose trace correlation (accepted). No post-launch result recorded.
+- Feature-020 Slack/SendGrid fanout still posts qualifying alerts to one shared operator channel regardless of `target_user_id` (product-spec.md:87); deliberately unchanged (design.md:299 PRESERVEs @feature-020, `fanout.ts` untouched), so now-targeted per-owner content still reaches that shared channel. Flagged for /sdd-design, no follow-up recorded.
+- Remaining doc drift left to open defects: `2026-10-19-notify-claude-md-drift-defect`, `2026-10-19-identity-claude-md-drift-defect` (banner drift, stale identity method list); the notify findings row for the broadcast defect stays until its sidecar (`triaged`) is `resolved`.
 
-- Re-review: PASS WITH WARNINGS (6 WARN, 4 NOTE; no FAIL, no Floor breach); overlap WARN, no FAIL. Status stays
-  `spec-ready` (already advanced by the prior entry). Status History records `spec-ready` (unchanged), per the
-  127/200 re-review rows, not a second `draft` → `spec-ready`.
-- Both reviewers cited the pre-review triage text (`portfolio_service.go:894`, `:934-943`; no @AC-5..@AC-7), present
-  only in `origin/ccr-f537be2d-6mwmqf`'s product-spec.md (`:18-19`). Several warnings were already fixed by the prior
-  entry.
-- Warnings (spec-reviewer) and disposition:
-  1. C-15 coverage. (a) drawdown and (b) fundamentals-unavailable already covered by @AC-6 / @AC-7. (c) Shared givens
-     were Feature-description prose; now explicit `Given` steps in @AC-1, @AC-2, @AC-5. No `Background:`: @AC-3/4/6/7
-     are portfolio/analysis producer scenarios promoted to other service suites at launch (C-16).
-  2. C-14 consumer surface. (1) Agent `emit_alert` `broadcast=true` (`services/xstockstrat-agent/app/tools.py:690-692`,
-     `:699`; `docs/runbooks/mcp-tools.md:256`) now named in Consumer Surface; wording update in-feature (adds
-     xstockstrat-agent) vs named follow-up left to /sdd-design. (2) "In-app ... unchanged" replaced: FR-3-targeted
-     alerts leave non-owners' `ListAlerts` (`services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:202`, `:210`)
-     and `StreamAlerts` (`:274`), admins included; accepted under the operator decision (matches recon.md § Risks).
-  3. FR-1 consequence for untargeted operator alerts: settled by the operator's admin audience. Consumer Surface now
-     lists them as admin-only: trading systemic `trading.go:2183-2189`, marketdata `marketdata_service.go:1567`,
-     ingest `servicer.py:473`, fundsignal `fundsignal_loop.py:618`. Trading per-account `:1938-1944`, `:2751-2757`
-     stay open for /sdd-design (extend FR-3 or name a follow-up).
-  4. Criterion 2 forks in FR text: already resolved by the prior entry (FR-1 admin-only, FR-3 scope fixed). Only the
-     admin-role resolution mechanism in notify remains for design.
-  5. Criteria 6/7/9: Fix Scope notify `004_*` line now cites F-01; config line now requires `notify.push.<key>` (C-05)
-     registered in `docs/patterns/config-governance.md` (beside `:528`) and the notify `CLAUDE.md` table.
-  6. C-01 stale lines: already corrected by the prior entry. FR-3 now states `emitRiskAlert(ctx, msg)` takes no
-     owner (signature change).
-  - NOTE criterion 1: Problem Statement now names the harmed persona (content owner).
-  - NOTE C-16 / doc drift: Fix Scope names the notify `CLAUDE.md` Web Push paragraph and
-    `services/xstockstrat-notify/docs/context-constitution-findings.md:38` as docs that change with the fix. Slack /
-    SendGrid fanout (`src/fanout/fanout.ts`, no target filter) added to Out of Scope, flagged for design. design.md
-    records the feature-165 FR-3 preserve/extend/change analysis and the operator sign-off.
-  - NOTE trading-domain C-1..C-5 not triggered; remaining criteria pass.
-- Overlap findings (feature-overlap, WARN):
-  1. New: `215-block-fundamentals-strategy-on-etf` (in-progress), same function `_emit_fundamentals_unavailable_alert`
-     (`services/xstockstrat-analysis/app/engine/live_loop.py:847-861`, already on trunk; 215 impl-spec `:1057`,
-     `:1088` stale). Whichever merges second carries `target_user_id=definition.user_id` on that alert, or the
-     broadcast returns. Re-scan at /sdd-spec.
-  2. `244-fix-python-config-stored-zero` (draft): `live_loop.py:351`, disjoint; rebase-only.
-  3. `240-offline-account-full-pnl`: already on main-dev; disjoint functions in `portfolio_service.go`; rebase-only.
-  4. `251-fix-getpnl-source-service`: same-function on `emitRiskAlert` only if 251's design touches it (251 cites
-     stale `:943`/`:958`). Re-scan at /sdd-spec.
-  - Clean: config keys (243 claims config `031`, trunk tip `030`), notify migrations (`000`-`003`, next `004`), proto.
-    No merge-order.md row required (no FAIL).
-- Next: `/sdd-design fix-push-untargeted-broadcast` (full — operator: no quick designs). recon.md (Phase 0) is on
-  the branch; Phase 1 debate next.
-
-### Operator decisions
-
-OPERATOR DECISIONS (binding, recorded 2026-10-20):
-- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
-- Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
-- Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.
-
-## Session 2026-10-21 — sdd-design
-
-- Phase 0 Recon: recon.md was already on the branch (services: notify, portfolio, analysis). Key reuse: the
-  injected-pool audience query inside the `webPush.ts:116-118` catch-all; trading's `TargetUserId` precedent
-  (`trading.go:3348`). Added the `@AC-10 @FR-10 @feature-183` PRESERVE row this session.
-- Persistence (P-04/P-05), stated plainly: rounds r1-r4 were carried in-band only, in each round's synthesis, with
-  no on-disk checkpoint. An r4 claim of an intact checkpoint at `seeds/242/state-r3.json` was false; that file never
-  existed. No decision was lost, because each synthesis carried the full prior state forward, but none was durable
-  until r5. This entry and design.md are the first durable record.
-- Phase 1 Grilling: 5 rounds (full). Auto-approved under the operator standing authorization (`:75`, `:129`):
-  rounds 5 >= 2, no Floor breach, no blocking objection, and the only CHANGE is operator-covered.
-  - Chosen approach: a live, uncached identity `ListAdminUserIds` RPC. It is SAN-gated (`xstockstrat-notify`)
-    and header-blind. Notify's single-flight `AdminDirectory` relays the trio. The untargeted branch selects
-    `WHERE user_id = ANY($1::text[])`. Portfolio and live-loop producers set `target_user_id` to the owner.
-  - Rejected: a register-time admin bit (stale on demotion), a TTL cache, ledger-event sets, a cross-schema
-    read, a config list, loosening `adminGate` or minting scope, reusing `ListUsers`, a SAN+`x-internal-caller`
-    gate, trace-only forwarding with a C-03 exception, and ERROR only on codes 7/12/13. The full list is in
-    design.md § Rejected Alternatives.
-  - Per-round decisions:
-    - r1-r2: fork (b), a new narrow SAN-gated RPC.
-    - r3-r4: the module shape with no relative imports; test matrix (i)-(vii); real-socket case on the
-      generated descriptor; `PRIVATE_DOMAIN` env; @AC-8..11 numbering.
-    - r5: C-03 closed by trio forwarding; trio-safety rationale corrected to "the RPC is header-blind"
-      (EmitAlert is unauthenticated, `notifyServiceImpl.test.ts:219-224`), with case (vi-b) added; escalation
-      widened to any lookup failure, rate-limited to once per 60s; the `md?.get?.(h)?.[0]` idiom
-      (`notifyServiceImpl.ts:232`); `header-propagation.md` added to the same-PR docs.
-- Pre-gate amendments made this session, all in-feature:
-  - product-spec: FR-4 added; Affected Services gain identity and agent; the proto box reflects the additive RPC
-    (P-03).
-  - recon.md: the `@AC-10 @feature-183` PRESERVE row.
-  - acceptance.feature: @AC-8..@AC-11 minted from the feature branch (which held @AC-1..7).
-- Constitution rules touched: C-03, C-16, C-15, C-09, C-08, P-06, P-02/P-04/P-05, C-10, C-01/P-03, C-11, C-14,
-  C-18, F-04, F-06, F-07. Floor breaches: none.
-- Status: spec-ready → design-approved.
-
-### Decisions
-
-- The admin audience is a live identity lookup through `ListAdminUserIds`, gated on the mTLS SAN only. There is
-  no migration and no config key.
-- The C-03 trio is relayed in full. The relay is safe only because the receiving RPC ignores all headers.
-- Trading's per-account CRITICAL alerts (`trading.go:1938-1944`, `:2751-2757`) are not targeted in this
-  feature. They go to a C-14 follow-up.
-- The agent `emit_alert` wording is updated in-feature (`tools.py:690-699`, `mcp-tools.md:256`).
-
-### Open Threads
-
-- [ ] Silent fail-closed admin-push outage (SAN, endpoint or identity drift). Mitigations: rate-limited ERROR,
-  a startup ERROR, the real-socket test, `PRIVATE_DOMAIN`, and a NON-WAIVABLE dev launch gate (an admin device
-  receives an untargeted WARNING push; a non-admin device does not). Target: the notify and env steps, plus
-  the launch smoke test.
-- [ ] Header-blindness is the only guard on the relayed trio. Target: the identity step (cases vi/vi-b and the
-  constraint comment).
-- [ ] Load on identity's direct pool (max 2) from untargeted bursts. Target: the notify step (single-flight),
-  then watch in dev.
-- [ ] Single-flight joiners lose trace correlation (accepted). Target: the notify step, noted in the PR body.
-- [ ] Acceptance-ID collision from a stale checkout. Target: /sdd-spec, minting only from the feature branch.
-- [ ] Strip-types load evidence for the guarded `identityServiceImpl.test.ts` on Node 24. Target: the identity
-  test step (P-06).
-- [ ] Canonical `user_id` form match between `push_subscriptions` and `identity.users`. Target: the notify step.
-- [ ] Empty-owner producers degrade silently to an admin-only push. Target: the portfolio and analysis steps.
-- [ ] Merge-order coupling with 215 and the open `emitRiskAlert` concentration defect. Target: the /sdd-spec
-  overlap re-scan.
-- [ ] Trading halt and reconciliation alerts are admin-only until the follow-up ships. Target: before merge,
-  file the defect report with a `.status` sidecar and record a follow-up slug or operator sign-off (C-14).
-- [ ] Scope growth: 5 services plus agent wording, a proto RPC, a new edge, 3 env specs and 4+ docs. Target:
-  /sdd-spec step sizing, plus identity-owner proto approval.
-- [ ] Two Node test runners (`fails.md:2239-2241`). Target: the identity and notify test steps (both suites,
-  both `tsc` builds).
-
-### Operator decisions
-
-OPERATOR DECISIONS (binding, recorded 2026-10-21):
-- Standing authorization: designs run in FULL mode only (no quick designs for automated fixes); the orchestrator auto-approves the design gate once rounds >= 2, no unresolved Floor (F-*) breach remains, no blocking objection remains, and every CHANGE to an existing @AC business rule is covered by an operator decision below.
-- Untargeted alerts (empty target_user_id) Web-Push ONLY to users holding the admin role — operator sign-off for the C-16 CHANGE reversing feature 165 FR-3 broadcast; the pinned test webPush.test.ts AC-4 broadcast case is rewritten deliberately.
-- Per-user producers (portfolio emitRiskAlert, analysis live_loop strategy/fundamentals alerts) set target_user_id to the owning user.
-
-## Session 2026-10-21 — sdd-spec
-
-- Generated implementation-spec.md with 15 steps. Status → implementation-ready.
-- Governance reads: root `CLAUDE.md`, `docs/sdd/constitution.md`, ledger (fails.md:116-125, :531-534,
-  :2224-2245; insights.md:459-473, :2144-2151), `docs/runbooks/reviewer-registry.md`,
-  `docs/runbooks/proto-versioning.md`, phase3/4/6 deviation notes (no relevant deviation).
-- Design consumed as mandatory: Chosen Approach build order (`design.md:22-23`); Rejected Alternatives
-  excluded; recon.md Patterns to REUSE cited per step. No migration, no config key.
-- Key codebase findings (beyond recon.md):
-  - Identity: `IdentityServiceImpl` is registered via the generated `IdentityServiceService`
-    (`services/xstockstrat-identity/src/index.ts:50-53`), so a delegate method suffices; `index.ts` unchanged.
-    Admin predicate at `identityServiceImpl.ts:851` (also `:893`). Identity tests run strip-types and are
-    excluded from `tsc` (`tsconfig.json` exclude); generated-stub test import precedent `identityServiceImpl.test.ts:229`.
-  - Notify: `tsconfig.json` includes tests, so a required 3rd `AdminDirectory` constructor arg forces every
-    existing `new StubbedDispatcher(...)` in `webPush.test.ts` (`:110`..`:201`) to pass a stub (Step 8). No
-    log-capture precedent in notify tests; the rate-limited ERROR is verified through a `protected
-    logAdminLookupError` seam, same rationale as `deliver` (`webPush.ts:121-122`).
-  - Env: `IDENTITY_ENDPOINT` absent from notify blocks; insert after `LEDGER_ENDPOINT`
-    (`docker-compose.yml:231`, `.do/app.yaml:521`, `.do/app.dev.yaml:518`); DO form
-    `${xstockstrat-identity.PRIVATE_DOMAIN}:50058` (`.do/app.yaml:264-265`).
-  - Canonical `user_id`: JWT `user_id` (`identityServiceImpl.ts:167`) → `x-user-id`
-    (`services/xstockstrat-ui/src/lib/bffShared.ts:39`) → register (`notifyServiceImpl.ts:232`); matches
-    `user_id::text`. No normalization needed.
-  - Portfolio: `expectDrawdowns` hard-codes `"u1"` (`portfolio_quote_deadline_test.go:367-373`); the AC-6 test
-    inlines its own `account_balances` expectation for `user-42` instead of changing the shared helper.
-  - Overlap re-scan: only 215 (`_emit_fundamentals_unavailable_alert`) among non-terminal features; the branch
-    has no diff vs `origin/main-dev` on any touched file.
-- C-14 follow-up slug named for Step 15: `fix-trading-account-alert-targeting`.
-- Non-waivable dev launch gate carried into the spec (§ Launch gate).
-
-### Decisions
-
-- Notify is split into AdminDirectory client + env (Steps 5-6) and dispatcher audience (Steps 7-8).
-- `createAdminDirectory(endpoint = process.env.IDENTITY_ENDPOINT, client?)`: optional client injection for the
-  single-flight/deadline unit tests. The on-the-wire trio test lives in notify `mtls.test.ts` to reuse its PKI
-  helpers (no duplicate `mintPki`).
-- Agent wording is a `docs` step (docstring only, `design.md:218`); reviewers none per the matrix.
-
-### Open Threads
-
-- [x] Canonical `user_id` form match: closed at spec level (evidence above).
-- [x] Merge-order coupling re-scan: done; 215 only (spec § Step Dependencies).
-- [ ] Remaining design Open Threads carry to /sdd-execute at the steps named in the spec.
-
-## Session 2026-10-21 — sdd-review impl-spec (advisory)
-
-- Result: 0 failures, 12 warnings, 0 floor breaches; overlap WARN, no FAIL (advisory — did not block).
-  Status stays `implementation-ready`. Every claim re-verified against the tree before editing.
-- Addressed in implementation-spec.md (Total Steps 15 → 16):
-  - [x] Step 2 **Files** names exact generated files (go `identity.pb.go`/`identity_grpc.pb.go`; python
-    `identity_pb2.py`/`identity_pb2_grpc.py`/`__init__.py`; ts `identity.ts`/`identity_pb.ts`/`identity_connect.ts`;
-    `gen/ts/dist/identity/v1/identity{,_pb}.{js,d.ts}`, `.gitignore:27`). Evidence lines fixed to
-    `scripts/buf-gen.sh:41` (breaking, gated by `:38`) and `:48` (generate) (C-01/F-08).
-  - [x] Steps 4, 6, 8 Verification state `≥ 40% lines (c8 --lines 40, package.json:13)` (C-08).
-  - [x] Step 13 adds `docs/runbooks/mcp-tools.md:246` (emit_alert intro "system-wide broadcast") to evidence and
-    instructions (C-01).
-  - [x] Step 6 missing-endpoint case calls `createAdminDirectory('')`; `undefined` would hit the
-    `process.env.IDENTITY_ENDPOINT` default.
-  - [x] Steps 5, 10, 13 Verification: service commands in subshells, greps repo-root-relative; Step 5 env check
-    scoped to the notify block via awk (prints 1 per file); Step 10 uses `export GOWORK=off` (ci.yml:256-257 form).
-  - [x] Step 14 split (7 files → Step 14 platform docs, 4 files; Step 15 service docs, 5 files). Step 15 adds
-    `services/xstockstrat-notify/docs/context-constitution.md` (`:37` pointer, new audience rule) and
-    `services/xstockstrat-identity/docs/context-constitution.md` (SAN-only RPC vs IDENTITY-5 `:22`; IDENTITY-3 `:20`
-    exception). Identity CLAUDE.md "eleven methods" replaced by an uncounted phrase (proto has 21 RPCs; rest stays
-    with `docs/reports/2026-10-19-identity-claude-md-drift-defect.md`). Teardown runs once in Step 15 for both steps.
-  - [x] C-14: no-UI-step note mirrored in ## Step Dependencies (`PushToggle.tsx:80`; no stale copy in
-    `PushToggle.tsx`/`AlertInbox.tsx`). Follow-up slug `fix-trading-account-alert-targeting` marked provisional
-    (NNN from /sdd-triage); old Step 15 → Step 16.
-  - [x] F-07: `ADMIN_LOOKUP_ERROR_INTERVAL_MS` step text now carries the F-07 rationale; not a Floor breach, so the
-    `design.md:284` config-key fallback is not taken.
-  - [x] Step 4 evidence: `identityServiceImpl.test.ts:229` `.js` specifier marked do-not-copy (exports
-    `"./*": "./dist/*.js"`, `packages/proto/gen/ts/package.json:5-6` → `identity.js.js`).
-  - [x] Step 8 evidence: constructor sites `webPush.test.ts:113,123,132,150,160,171,184`; `ExposedDispatcher` `:203`
-    also needs the 3rd arg (instruction added).
-  - [x] Step 1 buf breaking now against `$(git rev-parse --path-format=absolute --git-common-dir)#branch=main-dev,subdir=packages/proto`
-    (worktree-safe; matches `scripts/buf-gen.sh:37-41`).
-  - [x] Overlap 252 (identity runner / `mtls.test.ts`) and the notify/identity CLAUDE.md drift defects recorded
-    in ## Step Dependencies.
-- Open Threads (still open; announce at every /sdd-execute checkpoint, P-03):
-  - [ ] Step 1: buf breaking needs a local `refs/heads/main-dev`. A detached worktree may lack it; create it
-    only where no other worktree holds `main-dev`.
-  - [ ] Step 11 vs `215-block-fundamentals-strategy-on-etf` (in-progress): same function
-    `_emit_fundamentals_unavailable_alert` (`live_loop.py:847-861`). Second to merge keeps
-    `target_user_id=definition.user_id`. Soft merge-order row (Resolved=No) recommended; not written
-    (`merge-order.md` is outside this session's write scope). Operator to decide.
-  - [ ] Step 4 vs `252-fix-identity-ledger-test-suites` (draft): may change the identity runner and
-    `mtls.test.ts`. Second to land re-verifies the strip-types static-import posture. Soft merge-order row
-    recommended, not written.
-  - [ ] Step 5 vs `084-droplet-compose-deploy` (spec-ready): `docker-compose.yml` / `.do/app.dev.yaml` edits.
-    Product-level only; rebase-only.
-  - [ ] Steps 9-10 vs 240 (on main-dev) and `251-fix-getpnl-source-service` (draft) in `portfolio_service.go`:
-    disjoint hunks, rebase-only.
-  - [ ] Step 13 vs 215/240 in `app/tools.py` and `docs/runbooks/mcp-tools.md`: docstring/section-disjoint,
-    rebase-only.
-  - [ ] Re-run Mode B overlap once 241/243-252 reach `implementation-ready` (this scan saw them only at
-    product-spec/context depth).
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-11-04 entries. Three further 242 lessons already existed (fails.md:2952, :2963, :3099) and were not duplicated.
+**Runtime-invariant recommendations (→ /context-constitution)**: NOTIFY-8 and IDENTITY-12 already written (Step 15); PLAT-4 already updated. Candidate not yet captured: in `.do/app.yaml` / `.do/app.dev.yaml` the notify `IDENTITY_ENDPOINT` must be `${xstockstrat-identity.PRIVATE_DOMAIN}:50058`; a bare `xstockstrat-identity:50058` causes a silent fail-closed admin-push outage (design.md:246; not found in notify `CLAUDE.md` or `context-constitution.md`).
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958.

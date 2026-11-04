@@ -103,12 +103,14 @@ class FormulaExecutionError(Exception):
     """A custom-formula component failed to execute or returned an out-of-contract
     series (feature 067). Carries the ``formula_id`` and the indicators ``resp.error``
     so the RunBacktest loop can stamp a distinct ``NO_TRADE_REASON_FORMULA_ERROR``
-    diagnostic. Mirrors the failure-carrying shape of ``servicer._InsufficientData``."""
+    diagnostic. Mirrors the failure-carrying shape of ``servicer._InsufficientData``.
+    ``code`` (a gRPC status name) is set only for an owner-unreadable refusal."""
 
-    def __init__(self, formula_id: str, error: str):
+    def __init__(self, formula_id: str, error: str, code: str = ""):
         super().__init__(f"formula {formula_id} failed: {error}")
         self.formula_id = formula_id
         self.error = error
+        self.code = code
 
 
 def _finite_or_none(v) -> float | None:
@@ -257,10 +259,16 @@ class StrategyEvaluator:
         try:
             return await self._indicators.ExecuteFormula(request, metadata=self._meta)
         except grpc.aio.AioRpcError as e:
+            if self._raise_unreadable and e.code() in (
+                grpc.StatusCode.NOT_FOUND,
+                grpc.StatusCode.PERMISSION_DENIED,
+            ):
+                # Never e.details(): the PERMISSION_DENIED detail names the foreign author.
+                raise FormulaExecutionError(
+                    comp.formula_id, "not readable by owner", e.code().name
+                ) from e
             if e.code() != grpc.StatusCode.NOT_FOUND:
                 raise
-            if self._raise_unreadable:
-                raise FormulaExecutionError(comp.formula_id, "not readable by owner") from e
             if comp.formula_id not in self.unreadable_formulas:
                 self.unreadable_formulas.add(comp.formula_id)
                 log.warning("formula %s not readable by owner", comp.formula_id)

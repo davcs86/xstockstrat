@@ -72,6 +72,22 @@ export const PORTFOLIO_OFFLINE_FULL_PNL = {
   positions: [{ symbol: 'AAPL', unrealizedPnl: 1300.0 }],
 };
 
+/**
+ * Feature 256 AC-3: the offline book's state was unreadable, so the backend sets the marker, zeroes
+ * Day/Total and omits realized/fees/totalPnlPct; equity and positions stay. Specs inject it via page.route().
+ */
+export const PORTFOLIO_OFFLINE_DEGRADED = {
+  portfolioId: PORTFOLIO_OFFLINE_FULL_PNL.portfolioId,
+  accountId: PORTFOLIO_OFFLINE_FULL_PNL.accountId,
+  equity: PORTFOLIO_OFFLINE_FULL_PNL.equity,
+  cash: 0.0,
+  dayPnl: 0.0,
+  dayPnlPct: 0.0,
+  totalPnl: 0.0,
+  offlineStateUnavailable: true,
+  positions: PORTFOLIO_OFFLINE_FULL_PNL.positions,
+};
+
 /** Broker leg of the AC-30 combined view: Day P&L 120, Total P&L 500, no realized/fee fields. */
 export const PORTFOLIO_ALPACA_AC30 = {
   ...PORTFOLIO_ALPACA,

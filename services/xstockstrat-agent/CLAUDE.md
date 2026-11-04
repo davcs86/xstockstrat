@@ -27,16 +27,13 @@ builders in `app/client.py` **no longer set a request-body `user_id`** (deprecat
 (trading `PlaceOrder`/`ConfirmOrder`), and `manage_formula` update/delete (indicators
 `UpdateFormula`/`DeleteFormula`) forward the caller only as `x-user-id`. Body `user_id` is still sent
 where it is a **target/scope selector, not the caller** — `list_account_orders` (`ListOrders`
-filter), the config tools (per-user scope), `emit_alert` (`target_user_id`), and `IssueAuthCode`
-(token subject). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
+filter), the config tools (per-user scope; on `get_config`/`list_config_keys` it is
+**bound to the caller for non-admins** by config `boundReadUserId`, feature 263), `emit_alert`
+(`target_user_id`), and `IssueAuthCode` (token subject). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
 generalized this from the feature-073 `set_config`-only case; the old hardcoded admin scope was
 removed). The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
 Management-tool authorization.
-
-## Language
-
-Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
@@ -57,7 +54,7 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `emit_alert` | Emit an alert via xstockstrat-notify |
 | `run_backtest` | Trigger a backtest via xstockstrat-analysis (optional `start`/`end` evaluation window — feature 071; optional `sizing_mode="portfolio"` for a shared-capital portfolio model — feature 150; optional `fill_model="next_bar_open"` for bias-free next-bar-open fills — feature 151); returns a compact summary block (incl. `sizing_mode`, `fill_model`, + a `capital_skips` count) plus the full result as an attached `application/json` resource (feature 072) |
 | `screen_symbols` | Scan a symbol universe via xstockstrat-analysis and return ranked candidates (read-only) |
-| `manage_strategy` | Register/update/deactivate stored strategies (`update` is a **partial merge** — feature 070) |
+| `manage_strategy` | Register/update/deactivate/reactivate stored strategies (`update` is a **partial merge** — feature 070); `operation='score'` refreshes the headline grade (owner-scoped, feature 283) |
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
 | `manage_formula` | Register/update/delete custom formulas; `fundamental_inputs` (FundamentalMetric enum NAME-strings) declares a fundamentals-only formula (feature 205) |
 | `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
@@ -71,8 +68,8 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
 | `list_strategies` | List stored strategy definitions (read-only, feature 087) |
 | `list_opportunities` | List the caller's ranked Decide-queue opportunities with live-market enrichment (read-only, feature 095) |
-| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id` — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
-| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); environment is the agent's own deployment env (no caller override, PR #994) |
+| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id`, **bound to the caller for non-admins** (a non-admin asking for another user's id reads their own; admins may read any user's), and the echoed `user_id` is the scope actually read (feature 263) — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
+| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); optional per-user `user_id` **bound to the caller for non-admins**, echoed as the scope actually read (feature 263); environment is the agent's own deployment env (no caller override, PR #994) |
 | `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override, secrets included — feature 224) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091); no `author` parameter — the write is attributed to the caller's `x-user-id` (feature 241) |
 | `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
@@ -129,6 +126,13 @@ and a non-owner is rejected `PERMISSION_DENIED`. Both tools (and the read tools 
 `_caller_user_id(ctx, tool)` — so analysis resolves ownership from the header (never the request
 body). They still also forward `x-access-scope` for defence-in-depth, but it is no longer the gate.
 
+**`manage_strategy operation='score'` depends on a gRPC trailer contract (feature 283).** It reads
+trailer `x-score-excluded-symbols` (a compact JSON array of strings) from analysis's `ScoreStrategy`
+via the call-object form (`call = stub.ScoreStrategy(...)`, then `await call.trailing_metadata()`);
+a missing or unparseable trailer yields `excluded_symbols: null` plus a WARN. Both services' suites
+assert the key literal (`tests/test_score_trailer_loopback.py`). A second trailer contract would
+justify a `PLAT-*` row in `docs/context-constitution.md`; one does not.
+
 **The watchlist tools are ownership-gated too (feature 148).** `list_watchlists`, `get_watchlist`,
 `manage_watchlist`, and `manage_watchlist_symbols` forward **only** the caller's own `x-user-id` (via
 `_caller_user_id` + `_metadata(("x-user-id", …))`) and never an admin `x-access-scope` —
@@ -151,13 +155,6 @@ OAuth edge — every caller (the agent, plus analysis/ingest/trading loops) is i
 admin scope, so a per-call role gate would break them all. Documented as an explicit contract, not an
 oversight.
 
-That plumbing is also why these tools refuse when no verified claims are present. Feature 079
-**removed** the legacy SSE transport whose `POST /messages` returned before `_authorized` ran, so
-every tool call now passes the gate and the check is **defence in depth** rather than the live
-transport guard. It must keep its current shape: back when both transports existed, a check based
-on the request object would *not* have told them apart — both handed a tool a Starlette `Request`
-carrying an `Authorization` header, so only the absence of verified claims distinguished them.
-
 `set_config` **can write `is_secret` keys** (PR #994 lifted the earlier client-side refusal). The
 value is encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on
 write**), so an admin may rotate a secret through the MCP just like any other key — the plaintext is
@@ -168,14 +165,6 @@ internal callers can decrypt it via the config service's `GetSecret` RPC. Secret
 opaque `ingest.mcp_credential.<uuid>` key, and redaction holds on every read/broadcast edge. The
 backend gate is what authorizes the write. The `secret.*` name prefix is retired — `is_secret`
 is the sole signal.
-
-**Key-creation gate (feature 091).** `set_config` forwards a `create_key` flag
-(`SetConfigRequest.create_key`, default false). `xstockstrat-config` refuses a write to a
-not-yet-registered `(namespace, key, environment, user_id)` scope with `NOT_FOUND` unless
-`create_key=true`, so a mistyped key can no longer silently mint an orphan row. The refusal is
-enforced **server-side** (the agent is a pure passthrough — no client-side existence check), and
-key creation is audited. This is purely additive to the secret-refusal and real-scope-forwarding
-behavior above.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 

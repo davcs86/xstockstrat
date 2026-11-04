@@ -39,6 +39,46 @@ describe('sumPortfolioTotals', () => {
       realizedLifetime: 900,
       feesSince: 3,
       feesLifetime: 4.5,
+      incomplete: false,
+    });
+  });
+
+  it("excludes a degraded account's Day/Total/realized/fees but keeps its equity (AC-3)", () => {
+    const totals = sumPortfolioTotals(
+      [
+        {
+          accountId: 'acc-1',
+          equity: 16300,
+          cash: 0,
+          buyingPower: 0,
+          dayPnl: 0,
+          totalPnl: 0,
+          realizedPnl: 600,
+          feesLifetime: 4.5,
+          offlineStateUnavailable: true,
+        },
+        {
+          accountId: 'alp-1',
+          equity: 10120,
+          cash: 5000,
+          buyingPower: 10000,
+          dayPnl: 120,
+          totalPnl: 500,
+        },
+      ],
+      (id) => id === 'acc-1',
+    );
+    expect(totals).toEqual({
+      equity: 26420,
+      cash: 5000,
+      buyingPower: 10000,
+      dayPnl: 120,
+      totalPnl: 500,
+      realizedSince: 0,
+      realizedLifetime: 0,
+      feesSince: 0,
+      feesLifetime: 0,
+      incomplete: true,
     });
   });
 

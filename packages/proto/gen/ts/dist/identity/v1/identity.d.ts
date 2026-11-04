@@ -204,6 +204,11 @@ export interface SetUserActiveRequest {
 export interface SetUserActiveResponse {
     user?: User | undefined;
 }
+export interface ListAdminUserIdsRequest {
+}
+export interface ListAdminUserIdsResponse {
+    userIds: string[];
+}
 export declare const AuthenticateUserRequest: MessageFns<AuthenticateUserRequest>;
 export declare const AuthTokenResponse: MessageFns<AuthTokenResponse>;
 export declare const TokenClaims: MessageFns<TokenClaims>;
@@ -244,6 +249,8 @@ export declare const SetUserRolesRequest: MessageFns<SetUserRolesRequest>;
 export declare const SetUserRolesResponse: MessageFns<SetUserRolesResponse>;
 export declare const SetUserActiveRequest: MessageFns<SetUserActiveRequest>;
 export declare const SetUserActiveResponse: MessageFns<SetUserActiveResponse>;
+export declare const ListAdminUserIdsRequest: MessageFns<ListAdminUserIdsRequest>;
+export declare const ListAdminUserIdsResponse: MessageFns<ListAdminUserIdsResponse>;
 export type IdentityServiceService = typeof IdentityServiceService;
 export declare const IdentityServiceService: {
     readonly authenticateUser: {
@@ -452,6 +459,19 @@ export declare const IdentityServiceService: {
         readonly responseSerialize: (value: SetUserActiveResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => SetUserActiveResponse;
     };
+    /**
+     * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+     * xstockstrat-notify only; every request header is ignored.
+     */
+    readonly listAdminUserIds: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListAdminUserIdsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListAdminUserIdsRequest;
+        readonly responseSerialize: (value: ListAdminUserIdsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListAdminUserIdsResponse;
+    };
 };
 export interface IdentityServiceServer extends UntypedServiceImplementation {
     authenticateUser: handleUnaryCall<AuthenticateUserRequest, AuthTokenResponse>;
@@ -492,6 +512,11 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
     updatePassword: handleUnaryCall<UpdatePasswordRequest, UpdatePasswordResponse>;
     setUserRoles: handleUnaryCall<SetUserRolesRequest, SetUserRolesResponse>;
     setUserActive: handleUnaryCall<SetUserActiveRequest, SetUserActiveResponse>;
+    /**
+     * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+     * xstockstrat-notify only; every request header is ignored.
+     */
+    listAdminUserIds: handleUnaryCall<ListAdminUserIdsRequest, ListAdminUserIdsResponse>;
 }
 export interface IdentityServiceClient extends Client {
     authenticateUser(request: AuthenticateUserRequest, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
@@ -574,6 +599,13 @@ export interface IdentityServiceClient extends Client {
     setUserActive(request: SetUserActiveRequest, callback: (error: ServiceError | null, response: SetUserActiveResponse) => void): ClientUnaryCall;
     setUserActive(request: SetUserActiveRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetUserActiveResponse) => void): ClientUnaryCall;
     setUserActive(request: SetUserActiveRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetUserActiveResponse) => void): ClientUnaryCall;
+    /**
+     * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+     * xstockstrat-notify only; every request header is ignored.
+     */
+    listAdminUserIds(request: ListAdminUserIdsRequest, callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void): ClientUnaryCall;
+    listAdminUserIds(request: ListAdminUserIdsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void): ClientUnaryCall;
+    listAdminUserIds(request: ListAdminUserIdsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAdminUserIdsResponse) => void): ClientUnaryCall;
 }
 export declare const IdentityServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IdentityServiceClient;

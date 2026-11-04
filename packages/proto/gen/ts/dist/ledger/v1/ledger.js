@@ -737,7 +737,15 @@ exports.AppendEventResponse = {
     },
 };
 function createBaseQueryEventsRequest() {
-    return { streamKey: "", eventType: "", sourceService: "", timeRange: undefined, page: undefined, fromSequence: 0 };
+    return {
+        streamKey: "",
+        eventType: "",
+        sourceService: "",
+        timeRange: undefined,
+        page: undefined,
+        fromSequence: 0,
+        ownerOnly: false,
+    };
 }
 exports.QueryEventsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -758,6 +766,9 @@ exports.QueryEventsRequest = {
         }
         if (message.fromSequence !== 0) {
             writer.uint32(48).int64(message.fromSequence);
+        }
+        if (message.ownerOnly !== false) {
+            writer.uint32(56).bool(message.ownerOnly);
         }
         return writer;
     },
@@ -810,6 +821,13 @@ exports.QueryEventsRequest = {
                     message.fromSequence = longToNumber(reader.int64());
                     continue;
                 }
+                case 7: {
+                    if (tag !== 56) {
+                        break;
+                    }
+                    message.ownerOnly = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -846,6 +864,11 @@ exports.QueryEventsRequest = {
                 : isSet(object.from_sequence)
                     ? globalThis.Number(object.from_sequence)
                     : 0,
+            ownerOnly: isSet(object.ownerOnly)
+                ? globalThis.Boolean(object.ownerOnly)
+                : isSet(object.owner_only)
+                    ? globalThis.Boolean(object.owner_only)
+                    : false,
         };
     },
     toJSON(message) {
@@ -868,6 +891,9 @@ exports.QueryEventsRequest = {
         if (message.fromSequence !== 0) {
             obj.fromSequence = Math.round(message.fromSequence);
         }
+        if (message.ownerOnly !== false) {
+            obj.ownerOnly = message.ownerOnly;
+        }
         return obj;
     },
     create(base) {
@@ -885,6 +911,7 @@ exports.QueryEventsRequest = {
             ? common_1.PageRequest.fromPartial(object.page)
             : undefined;
         message.fromSequence = object.fromSequence ?? 0;
+        message.ownerOnly = object.ownerOnly ?? false;
         return message;
     },
 };

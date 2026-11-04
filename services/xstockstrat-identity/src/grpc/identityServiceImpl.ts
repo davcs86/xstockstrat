@@ -7,6 +7,7 @@ import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
 import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
+import { listAdminUserIds } from './adminDirectory';
 
 const log = getLogger('identity:impl');
 
@@ -150,7 +151,7 @@ export class IdentityServiceImpl {
       if (isBlockedDefaultAdmin(user.password_hash, process.env.APPLICATION_ENV)) {
         log.warn(
           'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
-          { email }
+          { user_id: user.user_id }
         );
         return callback({ code: 16, message: 'invalid credentials' });
       }
@@ -160,29 +161,8 @@ export class IdentityServiceImpl {
         return callback({ code: 16, message: 'invalid credentials' });
       }
 
-      const now = Math.floor(Date.now() / 1000);
-      const expiresAt = now + this.accessTtlSeconds;
-      // JWT payload uses snake_case claim names — these are internal JWT fields, not proto fields
-      const claimsPayload = {
-        user_id: user.user_id,
-        email,
-        roles: user.roles ?? [],
-        issued_at: now,
-        expires_at: expiresAt,
-      };
-
-      const accessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
-        expiresIn: this.accessTtlSeconds,
-      });
-
-      const refreshToken = uuidv4();
-      const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-
-      await this.pool.query(
-        `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at)
-         VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval)`,
-        [user.user_id, refreshTokenHash, this.refreshTtlSeconds]
-      );
+      const { accessToken, issuedAt, expiresAt } = this.mintAccessToken(user.user_id, email, user.roles);
+      const refreshToken = await this.issueRefreshToken(user.user_id);
 
       log.info('User authenticated', { userId: user.user_id });
       callback(null, {
@@ -193,7 +173,7 @@ export class IdentityServiceImpl {
           userId: user.user_id,
           email,
           roles: user.roles ?? [],
-          issuedAt: secondsToDate(now),
+          issuedAt: secondsToDate(issuedAt),
           expiresAt: secondsToDate(expiresAt),
         },
       });
@@ -240,13 +220,7 @@ export class IdentityServiceImpl {
       const { user_id, email, roles } = rotated.row;
       const newRefreshToken = rotated.refreshToken;
 
-      const now = Math.floor(Date.now() / 1000);
-      const expiresAt = now + this.accessTtlSeconds;
-      const claimsPayload = { user_id, email, roles: roles ?? [], issued_at: now, expires_at: expiresAt };
-
-      const newAccessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
-        expiresIn: this.accessTtlSeconds,
-      });
+      const { accessToken: newAccessToken, issuedAt, expiresAt } = this.mintAccessToken(user_id, email, roles);
 
       log.info('Token refreshed', { userId: user_id });
       callback(null, {
@@ -257,7 +231,7 @@ export class IdentityServiceImpl {
           userId: user_id,
           email,
           roles: roles ?? [],
-          issuedAt: secondsToDate(now),
+          issuedAt: secondsToDate(issuedAt),
           expiresAt: secondsToDate(expiresAt),
         },
       });
@@ -291,27 +265,30 @@ export class IdentityServiceImpl {
 
   // ── OAuth 2.1 authorization-server backend ───────────
 
-  /** Mint an audience-bound access JWT for the OAuth flow. */
-  private mintOAuthAccessToken(
+  /**
+   * `aud` is written only when an OAuth caller passes an audience, so first-party tokens carry none
+   * (IDENTITY-4). JWT claim names are snake_case internal fields, not proto fields.
+   */
+  private mintAccessToken(
     userId: string,
     email: string,
     roles: string[],
-    audience: string,
-  ): { accessToken: string; expiresIn: number } {
+    audience?: string,
+  ): { accessToken: string; expiresIn: number; issuedAt: number; expiresAt: number } {
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = now + this.accessTtlSeconds;
-    const claimsPayload = {
+    const claimsPayload: Record<string, unknown> = {
       user_id: userId,
       email,
       roles: roles ?? [],
       issued_at: now,
       expires_at: expiresAt,
-      aud: audience,
     };
+    if (audience !== undefined) claimsPayload.aud = audience;
     const accessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
       expiresIn: this.accessTtlSeconds,
     });
-    return { accessToken, expiresIn: this.accessTtlSeconds };
+    return { accessToken, expiresIn: this.accessTtlSeconds, issuedAt: now, expiresAt };
   }
 
   /**
@@ -365,6 +342,35 @@ export class IdentityServiceImpl {
       const refreshToken = await this.issueRefreshToken(row.user_id, row.client_id ?? undefined, client);
       await client.query('COMMIT');
       return { row, refreshToken };
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Single-use auth-code redemption: the conditional claim lets exactly one concurrent caller win,
+   * and the refresh token is inserted in the same transaction so a failure consumes nothing.
+   */
+  private async redeemAuthCode(codeHash: string, userId: string, clientId: string): Promise<string | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const claim = await client.query(
+        `UPDATE identity.oauth_auth_codes SET consumed_at = NOW()
+         WHERE code = $1 AND consumed_at IS NULL AND expires_at > NOW()
+         RETURNING code`,
+        [codeHash]
+      );
+      if (claim.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const refreshToken = await this.issueRefreshToken(userId, clientId, client);
+      await client.query('COMMIT');
+      return refreshToken;
     } catch (err) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw err;
@@ -500,15 +506,12 @@ export class IdentityServiceImpl {
       if (challenge !== row.code_challenge) {
         return callback({ code: 16, message: 'invalid_grant' });
       }
-      await this.pool.query(
-        'UPDATE identity.oauth_auth_codes SET consumed_at = NOW() WHERE code = $1',
-        [codeHash]
-      );
       const audience = resource || row.resource || '';
-      const { accessToken, expiresIn } = this.mintOAuthAccessToken(
+      const { accessToken, expiresIn } = this.mintAccessToken(
         row.user_id, row.email, row.roles ?? [], audience,
       );
-      const refreshToken = await this.issueRefreshToken(row.user_id, clientId);
+      const refreshToken = await this.redeemAuthCode(codeHash, row.user_id, clientId);
+      if (refreshToken === null) return callback({ code: 16, message: 'invalid_grant' });
       log.info('OAuth code exchanged', { clientId, userId: row.user_id });
       callback(null, { accessToken, tokenType: 'Bearer', expiresIn, refreshToken });
     } catch (err: any) {
@@ -531,7 +534,7 @@ export class IdentityServiceImpl {
       if (!rotated) return callback({ code: 16, message: 'invalid_grant' });
       const { user_id, email, roles } = rotated.row;
       const newRefreshToken = rotated.refreshToken;
-      const { accessToken, expiresIn } = this.mintOAuthAccessToken(
+      const { accessToken, expiresIn } = this.mintAccessToken(
         user_id, email, roles ?? [], resource || '',
       );
       log.info('OAuth token refreshed', { userId: user_id });
@@ -931,5 +934,9 @@ export class IdentityServiceImpl {
       log.error('setUserActive failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
+  }
+
+  async listAdminUserIds(call: any, callback: any) {
+    return listAdminUserIds(this.pool, call, callback);
   }
 }

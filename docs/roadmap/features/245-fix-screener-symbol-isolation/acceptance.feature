@@ -1,5 +1,5 @@
 Feature: fix-screener-symbol-isolation (bug fix)
-  Regression guard for docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md:
+  Regression guard for docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md):
   ScreenSymbols fails entirely when one symbol raises a non-RpcError.
 
   @AC-1 @FR-1 @regression

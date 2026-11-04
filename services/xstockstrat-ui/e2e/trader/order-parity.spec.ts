@@ -115,7 +115,7 @@ test.describe('FR-20 order parity', () => {
         }),
       });
     });
-    // Live stream fails fast so useOrderUpdates stops silently (mirrors orders.spec).
+    // Live stream fails fast; useOrderUpdates retries with backoff behind the disconnected indicator (mirrors orders.spec).
     await page.route(
       '**/xstockstrat.trading.v1.TradingService/StreamOrderUpdates',
       async (route) => {

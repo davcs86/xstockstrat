@@ -1,0 +1,231 @@
+{
+  "decrypt": {
+    "ciphertext_b64": "SJJIyE+nWDRwDUE7UCi+B74YIn7iIMrjYAdyKpE8i6dNBsoqaJ8b3x5X961OSpTPR+16fZekUXGcYU0gGk1ODpxa2UKif2e1rIiCJi7lxs7DpDQlsGCEMjMxc1UNccpP6sfCayeCNBNr2lPFUkm/VyN4mr7IY4iqi4AVmvf0h38i5rdWl0AAhnfynhet5+p8/gmoV4SIymGYRj/CFmlehgUo0bUT6ay1wSgERuh+5JGYVWoyZm2YTcha8lyHxhJhRdwJJNZk+8hMCY9Waw40U2moPyRYWgnzLCjrNOCL4LnQQMnNd7QRPG0ZOD0u5NFN5nsZ9GjRJ7IQKFZQI3YCGw==",
+    "plaintext_hex": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+    "wrong_key_ciphertext_b64": "c7cwJOUI/vwtTNHGhEY48rS1bTNHzRc6SIrlOPhcDoJpMkyrw5wAFtHBeEosXszYIwMiJaKEZEyXXsn+sRA1shxSDy4dB82WMlKaA7D3WUsAeIA8scHjZEakYQWsAr2hIDTSn0LeGjXKHTvFekKoId6iyNh2LnrElBvhEpAkxD1/2BoDUworA+j2uA8VWSAYOOYdgUm2Kj/eeWWB0en5mOFUF2lJzHB25jMWM8/NOAZ453T1SHtgwYUlwV+10YmwwwEFK4uvSa8OGSyPt9Lqra+agvtE9uaTg0GZg2EqAylNSss0KVSAZ1H4lqzuZ5Uc6WhKcjxRTUCBjsGZPqqDWw=="
+  },
+  "dh_cases": [
+    {
+      "dh_server_b_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "diffie_hellman_response": "444ceb5c1f41a443507569df25d7737d527f9a046ff51d72a90f8d27e57cbdec8c7ea57668e3e1e98ca63bb828af313c2d26960ea3617ec9e02123bc80c350b81aed28e825d1d3ca274f211dffa3f363aafdac8a8c05e556b7b9741766409c9ab1ccba209586d17d4407120820534ff25766fbc49e51d67959bf88a839aea7de4ba3f378d578a88b5d9d2ed116a17299e6401d680b18a7e15a7b666f960d2d1a4f5abf0d8bebe41691ee5fc5c1e5b9f922d3ef7048ec943a84992d5c766c40b7d6568dfa295f0a61916e451d8e084089ee4f7d907ba13f240c2b40a6bd394ad0fac5cc7653f048bd36b5cd20a3472542bc924524d50829b975441b08b8f351ad",
+      "k_bitlen": 2048,
+      "live_session_token": "wm6/uoy840KIYPXBQ3N4i6uZ0CY=",
+      "name": "k_bitlen_mod8_zero"
+    },
+    {
+      "dh_server_b_hex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5c",
+      "diffie_hellman_response": "1133ad707d06910d78c5ccda75f50bc0853805863ef858f97b3be6970b8b2b3e2feed733687bec83e14ee6671488c012c5053e86c04bb80c5059848410ae2ea91bd36e3329f58ce2b8b6cf019c314ec7b7aa6f4089dfa7efd2e673a6a4fbba7cd8fa7c86fb91a64f617d240f05021fe3147388c08c62fea7a4fda5e84556e07395b585ad398cce930d5e7b9b5d60fb08159b187c4fbef1ef4d8aa66837af61ad9e95d32ebf18f9ece0ad49c8bcda4fdf99db51b8599a2f6ddfd4572bab7a34a375bbc0bc8d6da382aa9190d34c195f98037898517f38a9c6528136a45f8d142bb181e85c652bb80fc5050e69f4228ffadcd68638c973fc7cd5106c22e3cd46b5",
+      "k_bitlen": 2047,
+      "live_session_token": "/1ZhjC+mhkY7d8uqSVdovzVi8nY=",
+      "name": "k_bitlen_mod8_nonzero"
+    }
+  ],
+  "inputs": {
+    "access_token": "testaccesstoken0123456789",
+    "access_token_secret": "SJJIyE+nWDRwDUE7UCi+B74YIn7iIMrjYAdyKpE8i6dNBsoqaJ8b3x5X961OSpTPR+16fZekUXGcYU0gGk1ODpxa2UKif2e1rIiCJi7lxs7DpDQlsGCEMjMxc1UNccpP6sfCayeCNBNr2lPFUkm/VyN4mr7IY4iqi4AVmvf0h38i5rdWl0AAhnfynhet5+p8/gmoV4SIymGYRj/CFmlehgUo0bUT6ay1wSgERuh+5JGYVWoyZm2YTcha8lyHxhJhRdwJJNZk+8hMCY9Waw40U2moPyRYWgnzLCjrNOCL4LnQQMnNd7QRPG0ZOD0u5NFN5nsZ9GjRJ7IQKFZQI3YCGw==",
+    "base_url": "https://api.ibkr.com/v1/api",
+    "consumer_key": "TESTCONS1",
+    "dh_generator": 2,
+    "dh_prime_hex": "ffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28fb5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aacaa68ffffffffffffffff",
+    "dh_random_hex": "3f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "nonces": [
+      "nonceAAAAAAAAAAA",
+      "nonceBBBBBBBBBBB"
+    ],
+    "realm": "limited_poa",
+    "timestamp": "1700000000"
+  },
+  "lst_reply": {
+    "bad_live_session_token_signature": "0000000000000000000000000000000000000000",
+    "diffie_hellman_response": "444ceb5c1f41a443507569df25d7737d527f9a046ff51d72a90f8d27e57cbdec8c7ea57668e3e1e98ca63bb828af313c2d26960ea3617ec9e02123bc80c350b81aed28e825d1d3ca274f211dffa3f363aafdac8a8c05e556b7b9741766409c9ab1ccba209586d17d4407120820534ff25766fbc49e51d67959bf88a839aea7de4ba3f378d578a88b5d9d2ed116a17299e6401d680b18a7e15a7b666f960d2d1a4f5abf0d8bebe41691ee5fc5c1e5b9f922d3ef7048ec943a84992d5c766c40b7d6568dfa295f0a61916e451d8e084089ee4f7d907ba13f240c2b40a6bd394ad0fac5cc7653f048bd36b5cd20a3472542bc924524d50829b975441b08b8f351ad",
+    "live_session_token": "wm6/uoy840KIYPXBQ3N4i6uZ0CY=",
+    "live_session_token_expiration": 1700086400000,
+    "live_session_token_signature": "c4b8ad0671ec304633c50951cc8d60c04639e5bc"
+  },
+  "lst_request": {
+    "authorization": "OAuth realm=\"limited_poa\", diffie_hellman_challenge=\"83234adae18b4482e85011ffd32ab874e911486428681c1bea7a7d19a07d3245c54c19cf7f75197df6c48b0e9ae3252a8da833d28d98adeedf10652cd88ab055a5c6db837ae209df335737617d6a5323c708998a2d9831f9845872bcd08bac73253cdc3e26a21966711abc8e120a30222858d91d6c0fdc4b7133e7da96e1c6dbe93b9a2176279e32e2829cd2e60e1ebcc8357ca498c352838930779b162d0e9e01fa08cc2d8cccb347b3cc9b5dfee6e42129ce2c56d23c5aa1989331c17ef843f77bc94e5ab076957d9aa84184984c9d48d2b5a4f3ec7e7a773ffb187708441ccafb4a98abc1baed077da6329069273fd1780fc52dd364f4f0f9976801b85c85\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"PKd3WnTHRxuXT%2FXJIWd75U8zTYAuAesHXuHNJMtzYy6jdafmlkf66KQsiPr%2FotrPqdH2RjG%2BkP6KpMNp1mAoqjKlevmJlWJ7r2wgnsq4ebgt3BvsYLzsUTePyUyEbzM9o0thjF12xX4C%2BMrn6bH0g2IHhWZN9oXkqJ19M8X%2BHQeTLyuvgAXQhWmUWt%2BQ%2B3r5UdIlwtlqlkjuKKQX7L4MIINjax%2FRhOIWkOzFVOQRAq1uxkO557JsN5EIk8OWpbJcXoynBskSSVb79stL%2B2teJUZz%2FmVgr9dCuL0LMvWskwnwcoh3CZo%2B7xNC%2F14ldBCcO0C2cM0Ge5t7DD7opBOtSw%3D%3D\", oauth_signature_method=\"RSA-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+    "base_string": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2fPOST&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Foauth%2Flive_session_token&diffie_hellman_challenge%3D83234adae18b4482e85011ffd32ab874e911486428681c1bea7a7d19a07d3245c54c19cf7f75197df6c48b0e9ae3252a8da833d28d98adeedf10652cd88ab055a5c6db837ae209df335737617d6a5323c708998a2d9831f9845872bcd08bac73253cdc3e26a21966711abc8e120a30222858d91d6c0fdc4b7133e7da96e1c6dbe93b9a2176279e32e2829cd2e60e1ebcc8357ca498c352838930779b162d0e9e01fa08cc2d8cccb347b3cc9b5dfee6e42129ce2c56d23c5aa1989331c17ef843f77bc94e5ab076957d9aa84184984c9d48d2b5a4f3ec7e7a773ffb187708441ccafb4a98abc1baed077da6329069273fd1780fc52dd364f4f0f9976801b85c85%26oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DRSA-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+    "diffie_hellman_challenge": "83234adae18b4482e85011ffd32ab874e911486428681c1bea7a7d19a07d3245c54c19cf7f75197df6c48b0e9ae3252a8da833d28d98adeedf10652cd88ab055a5c6db837ae209df335737617d6a5323c708998a2d9831f9845872bcd08bac73253cdc3e26a21966711abc8e120a30222858d91d6c0fdc4b7133e7da96e1c6dbe93b9a2176279e32e2829cd2e60e1ebcc8357ca498c352838930779b162d0e9e01fa08cc2d8cccb347b3cc9b5dfee6e42129ce2c56d23c5aa1989331c17ef843f77bc94e5ab076957d9aa84184984c9d48d2b5a4f3ec7e7a773ffb187708441ccafb4a98abc1baed077da6329069273fd1780fc52dd364f4f0f9976801b85c85",
+    "method": "POST",
+    "nonce": "nonceAAAAAAAAAAA",
+    "oauth_signature": "PKd3WnTHRxuXT%2FXJIWd75U8zTYAuAesHXuHNJMtzYy6jdafmlkf66KQsiPr%2FotrPqdH2RjG%2BkP6KpMNp1mAoqjKlevmJlWJ7r2wgnsq4ebgt3BvsYLzsUTePyUyEbzM9o0thjF12xX4C%2BMrn6bH0g2IHhWZN9oXkqJ19M8X%2BHQeTLyuvgAXQhWmUWt%2BQ%2B3r5UdIlwtlqlkjuKKQX7L4MIINjax%2FRhOIWkOzFVOQRAq1uxkO557JsN5EIk8OWpbJcXoynBskSSVb79stL%2B2teJUZz%2FmVgr9dCuL0LMvWskwnwcoh3CZo%2B7xNC%2F14ldBCcO0C2cM0Ge5t7DD7opBOtSw%3D%3D",
+    "prepend": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+    "url": "https://api.ibkr.com/v1/api/oauth/live_session_token"
+  },
+  "meta": {
+    "generator": "internal/testdata/ibkr/gen_vectors.py",
+    "ibind_sha": "759ec3a127accfb03e76bcd54856d1421d986e6a"
+  },
+  "requests": [
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"CRK%2BJVfB6Hez6EARjCtxzH6yWwXLrLjZzCmv%2B%2B9C4fY%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "POST&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Fauth%2Fssodh%2Finit&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "Sy8zt+wm7A/65LttbC3YgPY0YVK/tMmeiT+VU8uoCk8=",
+      "method": "POST",
+      "name": "ssodh_init",
+      "nonce": "nonceAAAAAAAAAAA",
+      "oauth_signature": "CRK%2BJVfB6Hez6EARjCtxzH6yWwXLrLjZzCmv%2B%2B9C4fY%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/iserver/auth/ssodh/init"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceBBBBBBBBBBB\", oauth_signature=\"aAnHxC2owjl32qM%2F%2BTE99Pxe8RNWwxR%2FFlOt%2FTIWOyo%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "POST&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Fauth%2Fssodh%2Finit&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceBBBBBBBBBBB%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "R6VJ08xw8X7fcjsFFOdCee1lTN3PIOkQPqheMiGFAME=",
+      "method": "POST",
+      "name": "ssodh_init",
+      "nonce": "nonceBBBBBBBBBBB",
+      "oauth_signature": "aAnHxC2owjl32qM%2F%2BTE99Pxe8RNWwxR%2FFlOt%2FTIWOyo%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/iserver/auth/ssodh/init"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"tMOdjgiD09kmrwtQEPcYzB5j0f8ORKKC4CmJU6bgi1M%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fportfolio%2Faccounts&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "T4KwaoG7KnvJrJJdqL3uCPPrSs+WOqVhiNOSJHeYi+U=",
+      "method": "GET",
+      "name": "portfolio_accounts",
+      "nonce": "nonceAAAAAAAAAAA",
+      "oauth_signature": "tMOdjgiD09kmrwtQEPcYzB5j0f8ORKKC4CmJU6bgi1M%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/portfolio/accounts"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceBBBBBBBBBBB\", oauth_signature=\"cBpcwuYMKEE4zPSifuxfaGZ4GjOfModnWxo%2BDHQOk4Q%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fportfolio%2Faccounts&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceBBBBBBBBBBB%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "PXAvOLl89LR6jKpZ9qXOOqAb86kZ6brd1fh1RoHLuxo=",
+      "method": "GET",
+      "name": "portfolio_accounts",
+      "nonce": "nonceBBBBBBBBBBB",
+      "oauth_signature": "cBpcwuYMKEE4zPSifuxfaGZ4GjOfModnWxo%2BDHQOk4Q%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/portfolio/accounts"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"RjdA92WK%2FPGrIOampynJGeyD9ax8KvemKzriqIwB84I%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Faccount%2Forders&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789%26orderId%3D42",
+      "legacy_signature_b64": "n78GBEGya1BGNr/UlXYofi+TPNILeNp6Zgdr5WiDpYc=",
+      "method": "GET",
+      "name": "get_order",
+      "nonce": "nonceAAAAAAAAAAA",
+      "oauth_signature": "RjdA92WK%2FPGrIOampynJGeyD9ax8KvemKzriqIwB84I%3D",
+      "params": {
+        "orderId": "42"
+      },
+      "url": "https://api.ibkr.com/v1/api/iserver/account/orders"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceBBBBBBBBBBB\", oauth_signature=\"eTU%2B5tEQpI%2B%2FWz2oneD%2FSTlssc0kh6SpTkuKQFgYi%2F4%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Faccount%2Forders&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceBBBBBBBBBBB%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789%26orderId%3D42",
+      "legacy_signature_b64": "qnqXgw8GPnfWPn9Lza5uX+eUtvKsPnEWjK52Aqa1I0Y=",
+      "method": "GET",
+      "name": "get_order",
+      "nonce": "nonceBBBBBBBBBBB",
+      "oauth_signature": "eTU%2B5tEQpI%2B%2FWz2oneD%2FSTlssc0kh6SpTkuKQFgYi%2F4%3D",
+      "params": {
+        "orderId": "42"
+      },
+      "url": "https://api.ibkr.com/v1/api/iserver/account/orders"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"BIVrOWiUzWucCgfVcD0AUKnWMmoKxYHtyRQoWhRvh%2Bg%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Fsecdef%2Fsearch&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789%26symbol%3DAAPL%26types%3DSTK",
+      "legacy_signature_b64": "w6Vv1THUx3e+8SSG76Q9swtVTco19hG8Ys2393TdaNc=",
+      "method": "GET",
+      "name": "secdef_search_aapl",
+      "nonce": "nonceAAAAAAAAAAA",
+      "oauth_signature": "BIVrOWiUzWucCgfVcD0AUKnWMmoKxYHtyRQoWhRvh%2Bg%3D",
+      "params": {
+        "symbol": "AAPL",
+        "types": "STK"
+      },
+      "url": "https://api.ibkr.com/v1/api/iserver/secdef/search"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceBBBBBBBBBBB\", oauth_signature=\"fPOaIqmuHLp16lLhCvwMZJwyQb8iSO349um6rN%2FxwvE%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Fsecdef%2Fsearch&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceBBBBBBBBBBB%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789%26symbol%3DAAPL%26types%3DSTK",
+      "legacy_signature_b64": "gGTMYiyuEGsBpapByIOc0Kg7zm7mBqgAgy1Aeq6Og80=",
+      "method": "GET",
+      "name": "secdef_search_aapl",
+      "nonce": "nonceBBBBBBBBBBB",
+      "oauth_signature": "fPOaIqmuHLp16lLhCvwMZJwyQb8iSO349um6rN%2FxwvE%3D",
+      "params": {
+        "symbol": "AAPL",
+        "types": "STK"
+      },
+      "url": "https://api.ibkr.com/v1/api/iserver/secdef/search"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"Bqhk1n1og6lCHpQ%2FdZBEPYPRFrgXjMc6gCUCSH8LwZg%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Fsecdef%2Fsearch&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789%26symbol%3DBRK+B%26types%3DSTK",
+      "legacy_signature_b64": "7Tt8D9yNHxNJ8zAfcbe4gYvo7WMcUtu425Veva3iVBc=",
+      "method": "GET",
+      "name": "secdef_search_brk_b",
+      "nonce": "nonceAAAAAAAAAAA",
+      "oauth_signature": "Bqhk1n1og6lCHpQ%2FdZBEPYPRFrgXjMc6gCUCSH8LwZg%3D",
+      "params": {
+        "symbol": "BRK B",
+        "types": "STK"
+      },
+      "url": "https://api.ibkr.com/v1/api/iserver/secdef/search"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceBBBBBBBBBBB\", oauth_signature=\"Azm4GB45KbgixIWipmhHYWzMx%2BFmcZBujpOY3nGS%2FTw%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "GET&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Fsecdef%2Fsearch&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceBBBBBBBBBBB%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789%26symbol%3DBRK+B%26types%3DSTK",
+      "legacy_signature_b64": "JNCHks649UvCbM7/cgk4d6HL6SK0KIkG9TqA6cFYdGA=",
+      "method": "GET",
+      "name": "secdef_search_brk_b",
+      "nonce": "nonceBBBBBBBBBBB",
+      "oauth_signature": "Azm4GB45KbgixIWipmhHYWzMx%2BFmcZBujpOY3nGS%2FTw%3D",
+      "params": {
+        "symbol": "BRK B",
+        "types": "STK"
+      },
+      "url": "https://api.ibkr.com/v1/api/iserver/secdef/search"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"qQJCwP5%2Fixk0Ud34P8Sl%2F8GgRPbx6fVqrP%2B8n%2BhGqUk%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "POST&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Faccount%2FU123%2Forders&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "wVtePu1NF38L3fynJw9QBmKyOZyKaZrafHMCB4MeFX8=",
+      "method": "POST",
+      "name": "place_order",
+      "nonce": "nonceAAAAAAAAAAA",
+      "oauth_signature": "qQJCwP5%2Fixk0Ud34P8Sl%2F8GgRPbx6fVqrP%2B8n%2BhGqUk%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/iserver/account/U123/orders"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceBBBBBBBBBBB\", oauth_signature=\"N52VEnQ%2BO2lSKcH%2BHvwkW9RnZDlYxWjoPXyAQcAhn0E%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "POST&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Faccount%2FU123%2Forders&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceBBBBBBBBBBB%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "S5qIRK0T7bq1le8NUQ+IXgp9jtXa8wfP6u+LJY7ED00=",
+      "method": "POST",
+      "name": "place_order",
+      "nonce": "nonceBBBBBBBBBBB",
+      "oauth_signature": "N52VEnQ%2BO2lSKcH%2BHvwkW9RnZDlYxWjoPXyAQcAhn0E%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/iserver/account/U123/orders"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceAAAAAAAAAAA\", oauth_signature=\"9GKJw5Ge2g6svSwsFW88IopbCfxFwflmsq%2BOXwEmbvY%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "DELETE&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Faccount%2FU123%2Forder%2F42&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceAAAAAAAAAAA%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "887BP/ENe2QorlX6gTRGb+gMZX7nq5B4n7SiaDvLzuo=",
+      "method": "DELETE",
+      "name": "cancel_order",
+      "nonce": "nonceAAAAAAAAAAA",
+      "oauth_signature": "9GKJw5Ge2g6svSwsFW88IopbCfxFwflmsq%2BOXwEmbvY%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/iserver/account/U123/order/42"
+    },
+    {
+      "authorization": "OAuth realm=\"limited_poa\", oauth_consumer_key=\"TESTCONS1\", oauth_nonce=\"nonceBBBBBBBBBBB\", oauth_signature=\"Lo36suWePqDBRlaFe4uKfjZqrVOI6U9FF8rMxZddvEM%3D\", oauth_signature_method=\"HMAC-SHA256\", oauth_timestamp=\"1700000000\", oauth_token=\"testaccesstoken0123456789\"",
+      "base_string": "DELETE&https%3A%2F%2Fapi.ibkr.com%2Fv1%2Fapi%2Fiserver%2Faccount%2FU123%2Forder%2F42&oauth_consumer_key%3DTESTCONS1%26oauth_nonce%3DnonceBBBBBBBBBBB%26oauth_signature_method%3DHMAC-SHA256%26oauth_timestamp%3D1700000000%26oauth_token%3Dtestaccesstoken0123456789",
+      "legacy_signature_b64": "a8aFLSewzMeSVYj0l2Ixo73r9fpvK855k1QDiTpTOiM=",
+      "method": "DELETE",
+      "name": "cancel_order",
+      "nonce": "nonceBBBBBBBBBBB",
+      "oauth_signature": "Lo36suWePqDBRlaFe4uKfjZqrVOI6U9FF8rMxZddvEM%3D",
+      "params": {},
+      "url": "https://api.ibkr.com/v1/api/iserver/account/U123/order/42"
+    }
+  ]
+}

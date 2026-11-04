@@ -307,3 +307,74 @@ class TestPendingAndCache:
             indicators_pb2.GetFormulaRequest(formula_id="f-a"), ctx_with([("x-user-id", "alice")])
         )
         assert resp.is_public is False
+
+
+_PENDING = "0e1c2d3f-0000-0000-0000-01"
+
+
+def _mutation(method, formula_id):
+    if method == "UpdateFormula":
+        return indicators_pb2.UpdateFormulaRequest(formula_id=formula_id, name="n")
+    return indicators_pb2.DeleteFormulaRequest(formula_id=formula_id)
+
+
+class TestPendingHiddenMutation:
+    """Guard branches covered elsewhere and not duplicated here: system row → PERMISSION_DENIED
+    (test_formulas.py TestSystemFormulaReadOnly; test_ac23 above); foreign row by ADMIN →
+    PERMISSION_DENIED (test_ac28_admin_mutation_and_execute_denied above); deleted row on Update →
+    FAILED_PRECONDITION (test_formulas.py test_update_soft_deleted_formula_rejected)."""
+
+    async def test_ac6_update_of_own_pending_row_is_not_found(self):
+        """AC-6: UpdateFormula refuses a pending-hidden row with NOT_FOUND, row unchanged."""
+        row = _row("f-1", "u-1", pending_intent_id=_PENDING)
+        before = dict(row)
+        svc, repo = _servicer([row])
+        ctx = ctx_with([("x-user-id", "u-1")])
+        with pytest.raises(grpc.RpcError):
+            await svc.UpdateFormula(_mutation("UpdateFormula", "f-1"), ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        repo.update.assert_not_awaited()
+        assert row == before
+
+    async def test_ac7_delete_of_own_pending_row_is_not_found(self):
+        """AC-7: DeleteFormula refuses a pending-hidden row with NOT_FOUND, never soft-deletes."""
+        row = _row("f-1", "u-1", pending_intent_id=_PENDING)
+        svc, repo = _servicer([row])
+        ctx = ctx_with([("x-user-id", "u-1")])
+        with pytest.raises(grpc.RpcError):
+            await svc.DeleteFormula(_mutation("DeleteFormula", "f-1"), ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        repo.delete.assert_not_awaited()
+        assert row["deleted_at"] is None
+
+    @pytest.mark.parametrize("method", ["UpdateFormula", "DeleteFormula"])
+    async def test_ac6_ac7_pending_system_row_is_not_found_before_system_check(self, method):
+        """AC-6/AC-7: the pending check runs before the system-author check."""
+        svc, repo = _servicer([_row(SYSTEM_ID, SYSTEM_AUTHOR, pending_intent_id=_PENDING)])
+        ctx = _admin()
+        with pytest.raises(grpc.RpcError):
+            await getattr(svc, method)(_mutation(method, SYSTEM_ID), ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        repo.update.assert_not_awaited()
+        repo.delete.assert_not_awaited()
+
+    @pytest.mark.parametrize("method", ["UpdateFormula", "DeleteFormula"])
+    async def test_ac6_ac7_pending_foreign_row_by_admin_is_not_found(self, method):
+        """AC-6/AC-7: a pending foreign row is NOT_FOUND to ADMIN, not PERMISSION_DENIED."""
+        svc, repo = _servicer([_row("f-a", "alice", pending_intent_id=_PENDING)])
+        ctx = _admin()
+        with pytest.raises(grpc.RpcError):
+            await getattr(svc, method)(_mutation(method, "f-a"), ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        repo.update.assert_not_awaited()
+        repo.delete.assert_not_awaited()
+
+    @pytest.mark.parametrize("method", ["UpdateFormula", "DeleteFormula"])
+    async def test_missing_id_is_not_found(self, method):
+        svc, repo = _servicer()
+        ctx = ctx_with([("x-user-id", "u-1")])
+        with pytest.raises(grpc.RpcError):
+            await getattr(svc, method)(_mutation(method, "nope"), ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        repo.update.assert_not_awaited()
+        repo.delete.assert_not_awaited()

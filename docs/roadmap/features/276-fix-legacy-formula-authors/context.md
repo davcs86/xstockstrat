@@ -1,246 +1,84 @@
-# Context Log: fix-legacy-formula-authors
+# Context: fix-legacy-formula-authors  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-22 (/sdd-triage)
+**What**: Bug fix (SEV-2, Track C) for six staging `indicators.formulas` rows (`31bb8ea6-…`, `67139be6-…`, `7f595658-…`, `60c5b411-…`, `127e7b0d-…`, `4a82bce9-…`) whose `author` was the legacy username `davcs86` instead of user id `80880990-2b79-4d85-8761-d8d9102c2efb`, so the owner got NOT_FOUND on Get/Execute. Shipped as an operator-run maintenance CLI, `services/xstockstrat-indicators/app/maintenance/legacy_authors.py` (report mode, then a digest-confirmed apply), plus `scripts/manage-users.py list-users --json`, runbook `docs/runbooks/legacy-formula-authors.md` and invariant `INDICATORS-12`. No migration, RPC, proto, config key or startup hook. The read guard `_can_read_formula` was deliberately not touched. No data change ran during the feature: the staging/prod apply stayed an operator-only DB step (old context.md@1ed63958:261, :492), and the prod row count was never observed (unknown at launch).
 
-- Bug reported via defect report `docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md` (Issues disabled)
-- Severity: SEV-2, environment dev (staging) → Track C
-- Created: feature.md, product-spec.md, acceptance.feature (regression scenarios), context.md
-- Affected services: xstockstrat-indicators
-- Root cause hypothesis: pre-migration rows never backfilled from username to user id
-- Recommended design depth: full → `/sdd-design fix-legacy-formula-authors` (rationale: a data rewrite on ownership rows is mentioned, and production has not been checked)
-- Development branch: feature/fix-legacy-formula-authors
-- Scope boundary with 275: 275 reports the failure instead of hiding it; this feature removes the cause.
-- Open questions for design: are there production rows and other legacy-username authors; how the username maps to a user id (identity lookup vs a fixed mapping); delivery shape (migration vs script vs admin RPC) and rollback; whether the read guard should reject non-user-id authors at write time.
+**Why (irrecoverable rationale)**:
+- CLI over migration/RPC/hook: FR-5 needs a zero-write report mode (a migration cannot give one); a `-- requires-env` migration blocks the whole migrator job when the var is unset (fails.md 2026-08-19); an admin RPC adds a write surface next to indicators `@AC-28` ("no admin override for writes") plus proto churn and evicts the formula cache on one instance only (design.md@1ed63958:16, :36-38).
+- Identity has no username field (`identity.proto:174-180`), so the username to user-id map can only be a heuristic or operator-supplied. Design choice: email-local-part match against ACTIVE users, case-folded, as `suggested` only; never auto-applied (P-03/FR-3). `old_author` stays byte-exact for the CAS (design.md@1ed63958:22).
+- Plan files are hand-edited, so a digest proves only that the file did not change after hashing, not that its contents are safe. The write path therefore re-derives targets (confirmed entries ∩ live detection) and carries the system/UUID guard inside the `UPDATE`'s own WHERE (design.md@1ed63958:24; adversary blocking objections, old context.md@1ed63958:61, :77-83).
+- AC-9 was narrowed with explicit operator sign-off 2026-10-22: code can only prove integrity (digest, full confirmation, no system/UUID rows); authority is the DB credential holder plus the DBA change record, process not code. Required order is edit, hash, record, apply. The digest is integrity, not authority; docs must not claim otherwise (old context.md@1ed63958:186).
+- Pooled `:25061` URL with `DB_PGBOUNCER=true` was chosen so the CLI stays off the direct `:25060` budget of 8 (F-06). This deliberately deviates from `docs/runbooks/operator-db-access.md` "admin SQL uses direct"; justified because the CLI holds no session state: no transaction and no advisory lock (PgBouncer transaction pooling rules out advisory locks/session state), each target is its own autocommit statement (old context.md@1ed63958:252; implementation-spec.md@1ed63958:322, :225; recon.md@1ed63958:39, :80).
+- `DATABASE_URL` is required with no `.env`/localhost fallback: the CLI deliberately does not copy `manage-users.py:62-78`, as mitigation for an operator targeting the wrong DB (design.md@1ed63958:18, :51).
+- C-03: the CLI has no originating request, so no `x-trace-id`; it stamps a `run_id` on logs and artifacts, the minted-context case the operator's standing decision of 2026-10-21 allows (design.md@1ed63958:32, :59; implementation-spec.md@1ed63958:37; old context.md@1ed63958:45). The runbook shows `run_id` on every log line (`docs/runbooks/legacy-formula-authors.md:115`) and in the result file (`:221`).
 
----
+**Rejected alternatives**:
+- Migration 008 with `-- requires-env` mapping (ingest 013 precedent) — lost: unset var blocks migrator, no report-only mode, PII in deploy env vars, prod username set unknown (design.md@1ed63958:36).
+- Additive admin RPC `RepairFormulaAuthors` — lost: proto churn, write surface beside `@AC-28`, single-instance cache eviction, permanent code for a one-off. Was the fallback only if the operator refused the narrowed AC-9; operator signed off, so closed (design.md@1ed63958:37). Its one upside was that it "makes AC-9 fully testable" (old context.md@1ed63958:142); it was the fallback if the operator refused the narrowed AC-9 (old context.md@1ed63958:73).
+- Startup hook applying a committed plan — lost: plan (PII) committed to git, detection reruns every boot, reports only to logs (design.md@1ed63958:38).
+- Running from a DO console session — lost at design time: no file upload, stdout lost, artifacts not durable (design.md@1ed63958:39); the fallback of a plan pasted via heredoc was rejected for losing file durability (old context.md@1ed63958:85). Later overturned in practice, see Cross-feature signal.
+- Cross-schema read of `identity.users` from indicators — lost: schema ownership (C-18); replaced by operator-supplied users file (design.md@1ed63958:40).
+- Additive identity username field/RPC to resolve OQ-1 (recon.md@1ed63958:68, :76) — not chosen. Recon leaned operator-supplied "because identity has no username" (recon.md@1ed63958:93). Design took the operator-supplied file and kept identity data out of indicators except as an operator file (design.md@1ed63958:20); no further reason is recorded.
+- Ledger audit client for ownership moves — lost as "overbuilt for a one-off"; the plan and result files are the audit trail (design.md@1ed63958:26, :63 C-18).
+- Extracting a pool from `main.py` — lost: unneeded for a single-shot CLI; one `asyncpg.connect` plus the PgBouncer cache rule (design.md@1ed63958:41).
+- Auto-apply of unique heuristic matches — lost: violates FR-3/P-03 (design.md@1ed63958:42).
+- Trusting plan values with only an `author=$old` CAS — lost: hand-edited plan could rewrite system or user-owned rows (design.md@1ed63958:43).
+- Reusing analysis's real-Postgres `local_pg` harness (`ci.yml:400-404`) for the tests — lost: would add a CI install step and a cross-service fixture copy outside a bug fix's scope; indicators keeps `FakeFormulasTable` + a SQL-text guard test (old context.md@1ed63958:250).
+- Exporting roles in `list-users --json` — lost: C-18 / PII minimisation; only `user_id`, email local part, `is_active` (design.md@1ed63958:20).
 
-## Session 2026-10-22 — sdd-review product-spec
+**Scars & gotchas**:
+- Real-Postgres behaviour of the guarded WHERE and single-statement atomicity are assumed, not tested; accepted because `FakeFormulasTable` evaluates every predicate and a SQL-text test pins both guards (design.md@1ed63958:30, :53; old context.md@1ed63958:64, :89).
+- Indicators formula cache has NO TTL and admin `GetFormula` caches foreign rows (`servicer.py:100,153,448-452`): after apply EVERY indicators instance must restart, and verification must go through owner `GetFormula`/`ExecuteFormula`/`test_formula`, not `ListFormulas` (DB-backed, `servicer.py:472-474`, would pass on a stale cache). Locked by `test_stale_cache_requires_restart` (old context.md@1ed63958:346). Analysis caches are per-request, so no analysis restart.
+- Apply refuses a UUID `old_author` (the guard), so apply cannot undo itself. Undo = DBA-reviewed manual `UPDATE ... SET author=<old> WHERE formula_id=<id> AND author=<new>` built from the result file. The plan/result files are the only audit/undo record and hold email local parts (PII); ownership moves are not ledger-audited (old context.md@1ed63958:210; implementation-spec.md@1ed63958:328).
+- `UpdateFormula` cannot run on a legacy row (`servicer.py:502-506`), so the AC-8 "owner updates concurrently" leg is modelled as a direct row mutation in tests, not an RPC (design.md@1ed63958:30).
+- `_UPDATE_SQL` is a content stamp that never sets `author`, so owner updates cannot clobber an author; the rewrite deliberately leaves `updated_at` untouched and never references `is_public` (indicators `@AC-11`) (recon.md@1ed63958:27; design.md@1ed63958:24).
+- Detection must not reuse the list queries (`deleted_at IS NULL`); `get_by_id` has no `deleted_at` filter, so soft-deleted rows are visible to a raw UPDATE and are in scope (FR-2/AC-2) (recon.md@1ed63958:26, :79).
+- Apply does not compare the plan's recorded `target` host/db with the connected database; the runbook tells the operator to check the printed `target host=… db=…` line instead (old context.md@1ed63958:322; implementation-spec.md@1ed63958:377).
+- `scripts/manage-users.py` has pre-existing ruff findings and no CI job lints `scripts/` (`ci.yml` ruff job runs per Python service only; spec's cited `ci.yml:324-327` was stale, real `:331-335`). Gate narrowed to "clean on added lines"; cleanup filed as `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md` (status `open` at archive time) (old context.md@1ed63958:278; implementation-spec.md@1ed63958:372).
+- `/context-forge:context-constitution` was unavailable in the execute session; the teardown was done by hand and had to be recorded in the integration PR body (old context.md@1ed63958:381).
+- `test_stale_cache_requires_restart` fills the warm cache through an admin `GetFormula`, which appends `audit.admin_read`; ledger `AppendEvent` must be mocked or the fill fails closed (implementation-spec.md@1ed63958:376).
+- Step 7 RED was not "module does not exist": Steps 3-5 had already landed, so RED was taken by reverting `legacy_authors.py` to its Step 4 version `67360c3f` (3 failed on missing `run_apply`) (implementation-spec.md@1ed63958:376).
+- C-14 check: the `strat-lab` backtest skill (`plugins/strat-lab/skills/backtest/SKILL.md`; the specced `:78` has drifted, the privacy note is now at `:88`) mentions only formula privacy, so no skill edit; no UI change (old context.md@1ed63958:211; implementation-spec.md@1ed63958:17).
 
-- Product spec approved. Status: draft → spec-ready.
-- Criteria verdict: PASS WITH WARNINGS (no fails, no floor breaches).
-- Warnings:
-  - Criterion 9: OQ-1 to OQ-4 are plain bullets and still unresolved. OQ-1 (username-to-user-id mapping source) gates FR-1, FR-3, AC-1 to AC-3 and AC-7. They must be resolved at `/sdd-design` (C-11), before `/sdd-spec`. Kept as plain bullets deliberately (open checkboxes would fail criterion 9).
-  - Criterion 7: DB strategy (migration, script or admin RPC), run order and down-migration meaning are unresolved; next migration number is 008 (tip 007), re-derive at spec time. A migration cannot call identity (OQ-1).
-  - Criterion 8: AC-8 was non-deterministic. Resolved: rewritten as a concrete interleaving with concrete ids.
-  - Criterion 8: FR-7 had no scenario for who-may-run or system-author rows. Resolved: added AC-9; the who-may-run mechanism is still a design decision.
-  - Criterion 8: non-UUID ids (`f-orphan`, `f-ambiguous`, `f-live`, `f-gone`, `f-system`, `f-owned`) in AC-2 to AC-5 and AC-7, and AC-5 gives counts but no concrete rows. Left as-is; make concrete at `/sdd-spec`.
-  - Criterion 8: AC-1 packs three outcomes in one `Then`; AC-5 presupposes a report-only mode (FR-5 allows dry-run or read-only report). Mechanism-agnostic by intent.
-  - Cosmetic: FR-7 listed before FR-6. Resolved: reordered.
-  - C-10(c): design must make FR-7 concrete (operator authority, concurrency protection, reserved system author never touched).
-  - C-14: deferred checks to carry into `/sdd-spec`: confirm no UI code change, and check the `strat-lab` plugin `backtest` skill for any documented quirk this changes.
-  - Code-grounded check: the read guard matches the spec (`_can_read_formula` at services/xstockstrat-indicators/app/handlers/servicer.py:141-148; `GetFormula` NOT_FOUND for a non-reader non-admin). The `list_formulas` author_filter behaviour and the 268/275 overlap content were not verified by the reviewer.
-- Overlap findings (WARN, no FAIL):
-  - File: services/xstockstrat-indicators/app/handlers/servicer.py read path and `_can_read_formula` vs `268-fix-indicators-formula-correctness` (product-spec.md:77-78, D-54). Rebase-level risk; 276 must not edit the read guard (FR-6).
-  - File: servicer.py vs `269-fix-template-update-metadata` (implementation-spec.md:65, :77, ManageTemplate, disjoint handler). Rebase-only.
-  - File: servicer.py vs `244-fix-python-config-stored-zero`. Rebase-only.
-  - Handoff, not a collision: `275-fix-backtest-silent-symbol-skip` (product-spec.md:61-63, :159) defers the legacy-username author rewrite to this feature; 275 is read-only on indicators and expects this fix to remove the cause of the PERMISSION_DENIED/NOT_FOUND it reports.
+**Permanent deviations** (design/spec said X → shipped Y → because Z):
+- Design modelled the CLI on `manage-users.py` (Typer) → shipped stdlib argparse → because indicators has no typer dependency and none was added (design.md@1ed63958:16; old context.md@1ed63958:208).
+- Design: undo is a "reverse CAS from the same plan" (design.md@1ed63958:24) → shipped: apply cannot undo; undo is a DBA-reviewed manual UPDATE from the result file → because apply refuses a UUID `old_author` (old context.md@1ed63958:210).
+- Spec/design: AC-8 interleaving between plan and apply → shipped: test-local `_InterleavedTable` mutates the row after apply's own live re-derivation and before the rewrite → because a row changed before apply starts is dropped as `skipped_not_detected` and never exercises the CAS (`skipped_concurrent`) (implementation-spec.md@1ed63958:375).
+- Design's file list (design.md@1ed63958:14) named only `tests/test_legacy_authors.py`; spec Step 7 added `tests/test_legacy_authors_read_path.py`. Shipped vs spec: test-local `_FakePool(FakeFormulasTable)`, a stubbed sandbox and a stronger assertion (owner `ExecuteFormula` returns `success`) (implementation-spec.md@1ed63958:376).
+- Design: `list-users --json` changes the query at `manage-users.py:283` → shipped: a separate `SELECT user_id, email, is_active` path → because the existing 4-tuple table query is pinned by `TestListUsersCmd` (`scripts/tests/test_manage_users.py:371-411`) (old context.md@1ed63958:209, :265).
+- Design signatures: shipped added keyword-only `run_id`/`target` (and `clean` on `classify`) so plan and log lines share a run id; default result path `<plan stem>.result.json` with no `--result` flag; log lines on stdout prefixed `[run_id=…]`; refusals exit 2 (`ApplyRefused.exit_code`), missing `DATABASE_URL` exits 1 (implementation-spec.md@1ed63958:373-374).
+- Spec Step 2 ruff gate over `scripts/` → shipped "clean on added lines" per operator decision Option C (old context.md@1ed63958:278).
+- Spec left open → runbook filled in (Step 8): pooled URL derived from the direct `doctl databases connection` URI (port `25061`, path = pool name); PII stored only in the DBA change record attachments (never git/docs/channel/agent prompt), retention = change-record lifetime and at least until owner access is verified in both envs; restart example `doctl apps create-deployment <app-id>` (no repo precedent); the repo documents no change-record system, so none is named (implementation-spec.md@1ed63958:377; old context.md@1ed63958:375).
 
-### OPERATOR DECISIONS (binding, recorded 2026-10-22)
+Spec-review / triage corrections (NOT design deviations; the shipped design never differed):
+- Product-spec reviews 1-2 failed on PERMISSION_DENIED vs NOT_FOUND. Truth: indicators gives a non-admin NOT_FOUND (`servicer.py:251-253`) and only an admin PERMISSION_DENIED (`:245-250`); FR-1/AC-6 text was corrected before approval (old context.md@1ed63958:48).
+- AC-8 was rewritten to a concrete interleaving, AC-9 added for FR-7 (who-may-run), FR-7/FR-6 reordered (old context.md@1ed63958:28-29, :32).
+- Design left `FakeFormulasTable`'s home unstated; spec placed it (with `USERS`, `make_formula_row`) in `tests/conftest.py` for three consumers (C-13) (old context.md@1ed63958:210, :299).
+- The impl-spec review FAIL "implementation-spec.md unreadable / status draft" was a stale main-dev checkout, not a spec defect (old context.md@1ed63958:227).
+- 2026-10-28 re-spec: line drift fixes (Steps 1, 2, 4, 9) and the stale "no real-Postgres harness" claim corrected (old context.md@1ed63958:247-253).
 
-- Triaged 2026-10-22 from docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md; Track C; same triage-to-spec workflow as the debt-radar batch (254-275). The feature dir lives on the base branch ccr-fac38b1f-6m24q2 (PR #1322, not yet merged to main-dev).
-- Operator 2026-10-21 (standing, all features): x-trace-id must be propagated as much as possible; no C-03 waiver — request-derived emits/writes use context.WithoutCancel(ctx) (Go) / the inbound metadata (Python/Node), never a fresh background context; only work with no originating request (background sweepers/loops) may mint its own context, and it should still carry a trace id when one is available.
-- Scope boundary with feature 275-fix-backtest-silent-symbol-skip: 275 makes the failure visible (EVALUATION_FAILED rows, INSUFFICIENT_DATA, and maps an admin's PERMISSION_DENIED to FORMULA_ERROR); this feature removes the cause by correcting the stored authors. Do not re-do 275's reporting changes.
-- Operator instruction 2026-10-22: run the full speccing (review, recon, full design debate, spec, impl-spec review). Production has NOT been checked for legacy-username authors; the design must treat the prod row count as unknown and must not assume the six staging ids are the only ones. Do not run any production or staging data change during speccing.
-- Review note 2026-10-22: the first two product-spec reviews failed on PERMISSION_DENIED vs NOT_FOUND. Indicators returns NOT_FOUND to a non-admin caller (servicer.py:251-253) and PERMISSION_DENIED only to an admin (servicer.py:245-250); the branch already carries the corrected FR-1 and AC-6 text, so review the CURRENT branch text.
+**Cross-feature signal**:
+- Feature 275 (`275-fix-backtest-silent-symbol-skip`): this fix removes the cause; 275 owns the failure reporting (EVALUATION_FAILED, INSUFFICIENT_DATA, admin PERMISSION_DENIED to FORMULA_ERROR). Scope boundary held: no 275 surfaces touched (old context.md@1ed63958:46).
+- Feature 284 (`legacy-authors-confirm-resolve`, launched, created 2026-11-02) is the direct follow-up: `legacy_authors_ops confirm` resolves `unmappable`/`ambiguous` rows via `--map` and an interactive picker. Its product-spec states the console wrapper exists for the DO console, "whose filesystem is ephemeral and has no editor workflow", so hand-editing `plan.json` (276's only OQ-3 disposition) was unworkable there. Commit `bead11de` (2026-10-31, "…console-runnable formula-author repair workflow (#1386)"; per `git show --stat`) added `app/maintenance/legacy_authors_ops.py` and its tests after 276 launched. Its commit body gives the reason (a console filesystem is lost on the restart the runbook requires after apply), as does 284's spec; neither is in 276's artifacts. The design had rejected the DO console because artifacts are not durable (design.md@1ed63958:39); the runbook now documents console limits (`docs/runbooks/legacy-formula-authors.md`, "filesystem is lost on the restart that §8 requires"). Signal: an operator-edited-file workflow needs a console-native path when operators run from the console.
+- Feature 224 (`private-by-default-templates`): AC-6 (non-owner NOT_FOUND after repair) OVERLAPs 224 `@AC-1` and was not promoted (see promotion note). `@AC-4`/`@AC-28`/`@AC-11`/`@AC-22` and platform `@AC-6`/`@AC-18`/`@AC-19` were PRESERVEd by design (design.md@1ed63958:71-81).
+- Rebase-only overlaps on `servicer.py`/`tests/conftest.py`/indicators `CLAUDE.md` with 244, 268, 269, 243, 275 (old context.md@1ed63958:37-39, :230).
+- Ingest feature 013 (`013_signal_ownership_templates.up.sql`, `-- requires-env`) was the rejected migration precedent.
 
----
+**Deferred follow-ons**:
+- Prod legacy-author row count and username set were never observed; first prod run is report-only, staging first, record the observed prod count in the DBA change record (runbook step 10).
+- Step 7 never tested the DB-backed `ListFormulas`/`list_visible` path; FR-1 "ListFormulas includes it" is covered only by the in-memory branch plus the runbook verify. The impl-spec review left it "decide at the /sdd-execute checkpoint"; the execute log records no such decision and no `list_visible` test (reason not recorded) (old context.md@1ed63958:234, :343-346).
+- `docs/reports/2026-10-29-scripts-ruff-lint-gap-defect.md`: cleanup of pre-existing ruff findings and a CI ruff job for `scripts/` (status `open`).
+- OQ-4 (write-time guard so new rows cannot carry a non-user-id author) was out of scope; no live non-user-id write path was found (recon.md@1ed63958:84). `x-user-id` is not UUID-validated in `_reader` (`servicer.py:120-131`; not verified further).
+- The email-local-part heuristic is unverified on prod (OQ-2); the picker/`--map` resolution of unmappable/ambiguous became feature 284.
 
-## Session 2026-10-22 — sdd-batch design gate (round 2)
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-11-04 entries.
 
-Status unchanged (spec-ready); design.md NOT written (gate policy: halt, grilling protocol).
+**Runtime-invariant recommendations (→ /context-constitution)**: `INDICATORS-12` already added by Step 9 (author is a user id or `SYSTEM_AUTHOR`; repair only through `app.maintenance.legacy_authors`). Candidate for a platform-level note: in-memory read caches with no TTL (indicators `self._formulas`) make out-of-band DB repairs invisible until every instance restarts; verify via the owning read RPC, not a DB-backed list RPC (see INDICATORS-* cache rules; not re-verified against the current constitution).
 
-### Open Threads
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958.
 
-- **Approach.** Operator-run maintenance CLI in indicators (`python -m app.maintenance.legacy_authors`), no migration, RPC, proto, startup hook or config. Two modes: REPORT (default, zero writes; detects non-system, non-UUID authors, classifies each against an operator-supplied users file as suggested / unmappable / ambiguous, writes a plan) and APPLY (requires a digest-matched, fully-confirmed plan). Users file comes from an additive `manage-users.py list-users --json` (user_id, email local part, is_active; no roles). Order is edit plan, hash, record in the DBA change record, apply.
-- **Write safety.** Every write is one autocommit CAS `UPDATE ... WHERE formula_id AND author=$old AND author <> SYSTEM_AUTHOR AND author !~* uuid-re`; apply re-derives targets from the DB (plan intersect live detection), refuses SYSTEM/UUID old_author and non-UUID, unknown or inactive new_author, and leaves updated_at untouched. The result file is the undo/audit record. Required DATABASE_URL, no fallback, pooled :25061 with DB_PGBOUNCER.
-- **Restart and verify.** The formula cache has no TTL, so every indicators instance must be restarted after apply; verify AC-1 via GetFormula/ExecuteFormula/test_formula as the owner, not ListFormulas.
-- **Strongest open objection (blocking).** AC-9 narrowing: the code can only enforce integrity (digest, confirmation, no system/UUID rows); authority is the DB credential plus the DBA change record. This needs explicit operator sign-off recorded here, or an AC-9 reword at /sdd-spec. Fallback if refused: an admin-gated additive RPC, which reopens proto churn and the indicators @AC-28 conflict. Two further blocking items are answered only if r3 carries them: SQL-level system/UUID guard plus DB re-derivation, and the edit-hash-record ordering with "digest is integrity, not authority" wording.
-- **Floor status.** No Floor breaches.
-- **@AC changes not covered by an operator decision.** EXTEND AC-1, AC-6; CHANGE AC-9; PRESERVE feature FR-4/AC-4, platform @AC-6, indicators @AC-28, indicators @AC-4, platform @AC-18/@AC-19.
-- **Non-blocking.** Operator workstation must reach the managed DB; FakeFormulasTable is not a real-Postgres harness (mitigated by full-predicate fake plus a SQL-text guard test); the email-local-part heuristic is unverified on prod (OQ-2).
-
-```sdd-batch-design-state
-{
-  "round": 2,
-  "synth": {
-    "approach": "Operator-run maintenance CLI in indicators, no migration/RPC/proto/startup hook/config. New: services/xstockstrat-indicators/app/maintenance/__init__.py, app/maintenance/legacy_authors.py (run as `uv run python -m app.maintenance.legacy_authors` from the workstation), tests/test_legacy_authors.py, docs/runbooks/legacy-formula-authors.md. Edit: scripts/manage-users.py (additive `list-users --json`), services/xstockstrat-indicators/CLAUDE.md (Maintenance section), indicators docs/context-constitution.md (invariant: author is a user id or SYSTEM_AUTHOR).\n\nConnection: one asyncpg.connect (no pool, main.py untouched); statement_cache_size=0 when DB_PGBOUNCER is set (rule at app/main.py:55-57). DATABASE_URL is REQUIRED with no .env/localhost fallback (deliberately NOT copying manage-users.py:62-78 fallback); both modes print target host+db and the result file records them. Runbook pins the pooled :25061 URL + DB_PGBOUNCER=true (F-06: stays off the direct :25060 budget of 8). Every write is one autocommit statement so transaction pooling is safe.\n\nStep 1 users export: `manage-users.py list-users --json` emits only user_id, email local part (not the full email), is_active. No roles (C-18/PII minimisation). The SELECT at scripts/manage-users.py:283 omits user_id today; add it. Indicators never reads identity.users; identity data enters only as an operator file.\n\nStep 2 REPORT (default, zero writes; FR-2/FR-5/AC-5): `--users users.json --out plan.json`. Detect with SELECT formula_id, author, deleted_at, updated_at FROM indicators.formulas WHERE author <> $SYSTEM_AUTHOR (app/formulas/__init__.py:5) AND author !~* '<uuid-re>', no deleted_at filter. Separate COUNT(*) with the complementary predicate for the clean bucket (soft-deleted included). Classify per distinct legacy author using ACTIVE users only, matching lower(author) == lower(email_local_part), while old_author is stored byte-exact for the CAS: 1 candidate = suggested (never applied as-is), 0 = unmappable (AC-3), 2+ = ambiguous (AC-7). The plan holds per row formula_id, old_author, new_author|null, status, source (heuristic|override) plus counts and a run_id. The operator edits the plan (suggested -> confirmed; may set an explicit override user id on unmappable/ambiguous and confirm = OQ-3 disposition).\n\nStep 3 APPLY: `--apply --plan plan.json --users users.json --confirm-digest <sha256>`. Order is edit -> hash -> record: the operator finishes editing the plan, THEN computes sha256, THEN records it in the DBA change record, THEN applies. Pre-flight refusals, each with zero UPDATEs: digest mismatch or missing; any entry not in {confirmed, unmappable, ambiguous} (leftover suggested aborts the run); any confirmed entry whose old_author equals SYSTEM_AUTHOR or matches the UUID regex; any new_author that is not a UUID, missing from the users file, or inactive. Targets are re-derived from the DB: apply re-runs the detection SELECT and writes only the intersection of {(formula_id, old_author) from confirmed plan entries} with the live detected set, so a hand edit can never widen the write set. Each write is `UPDATE indicators.formulas SET author=$new WHERE formula_id=$id::uuid AND author=$old AND author <> $system AND author !~* '<uuid-re>' RETURNING formula_id` (resolve_intent CAS pattern, formulas_repository.py:137-150); the predicate guard is in the SQL itself (C-10(c) / platform @AC-6). Zero rows = skipped_concurrent (AC-8). updated_at is untouched (content stamp, formulas_repository.py:74-80). The result file records run_id, target host/db, old and new author for every rewritten row, and counts of rewritten/skipped/unmappable/ambiguous; it is the undo record (reverse CAS from the same plan).\n\nRestart and verify (required design steps): `_load_formula` reads self._formulas first with no TTL (servicer.py:100,153), and admin GetFormula caches foreign rows (servicer.py:448-452; also filled at :255,:688). The runbook requires a redeploy/restart of EVERY indicators instance after apply (new process has an empty cache); then re-run report mode (0 rewritable for confirmed authors) and verify AC-1 as the owner through GetFormula/ExecuteFormula/test_formula on one rewritten id, NOT ListFormulas alone (it reads the DB, servicer.py:472-474, and would pass on a stale cache). Analysis formula caches are per-request (analysis servicer.py:912-914), so no analysis restart; the runbook says so. Runbook also requires plan + result files attached to the DBA change record before the redeploy (no ledger client: overbuild; files are the audit trail), names a storage location, and flags the PII.\n\nAC-9 wording: authority = the DB credential holder (infra) plus the DBA change record (process, not code). The code enforces only integrity: apply refuses without a digest-matched, fully-confirmed plan and never touches system or UUID rows. The digest is integrity, not authority; docs must not claim otherwise.\n\nTests (pytest, no real-Postgres harness exists; CI's only Postgres is migration-rerun, ci.yml:636-656): FakeFormulasTable evaluates EVERY predicate in the real SQL (formula_id, author=$old, system guard, UUID guard); one test parses the SQL text asserting the system and UUID guards are present. Tests: classify/plan-builder (AC-3/4/5/7, lower-case folding, inactive exclusion, upper-case UUID not legacy); test_apply_refused_* (missing digest, mismatched digest, leftover suggested, inactive target) plus test_apply_refuses_system_old_author and test_apply_refuses_uuid_old_author, all asserting zero UPDATEs and system rows keeping author and updated_at; hand-widened plan cannot extend the write set (intersection test); interleaving test that mutates the row between plan and apply (AC-8, owner-update leg modeled as a direct row change because UpdateFormula cannot run on a legacy row, servicer.py:502-506); AC-1/AC-6 through the servicer read path with a cold cache via ctx_with (tests/conftest.py:21, shape of tests/test_formula_read_authz.py) plus a stale-cache negative test documenting the restart requirement. Single-statement UPDATE atomicity in Postgres is taken as given. Trace: no originating request, so no x-trace-id; a run_id is stamped on logs and artifacts (minted-context case the operator decision allows). _can_read_formula (servicer.py:141-148) is not edited (FR-6); 275's reporting is not touched. No data change runs during speccing; prod row count is unknown.",
-    "open_objections": [
-      {
-        "text": "AC-9 narrowing needs explicit operator sign-off recorded in context.md (or AC-9 is reworded at /sdd-spec to 'apply refuses without a digest-matched, fully-confirmed plan and never touches system/UUID rows; authority is the DB credential plus the DBA change record'). If the operator refuses the narrower meaning, the fallback is an admin-gated additive RPC, which reopens proto churn and the @AC-28 'no admin override for writes' conflict. Cannot be self-resolved by the design.",
-        "blocking": true
-      },
-      {
-        "text": "Adversary blocking #1 (hand-edited plan could rewrite a system row or move a user-owned formula) is answered only by the amendments in this synthesis: system/UUID predicate inside the apply UPDATE, pre-flight refusal for SYSTEM_AUTHOR/UUID old_author and non-UUID new_author, and re-deriving targets from the DB (plan x live detection intersection). r3 must carry all three; if it drops any, this stays open and blocking.",
-        "blocking": true
-      },
-      {
-        "text": "Adversary blocking #2 (digest is integrity not authority; step order must be edit -> hash -> record) is answered by the AC-9 rewording and the explicit ordering. The spec must make AC-9 text and the runbook say so; the 'DBA approved' check is process, not code.",
-        "blocking": true
-      },
-      {
-        "text": "Operator workstation must reach the managed DB (trusted-sources, same need as manage-users.py). Fallback (DO console with plan pasted via heredoc) loses file durability; the runbook must state which is used.",
-        "blocking": false
-      },
-      {
-        "text": "FakeFormulasTable stands in for a real-Postgres harness; atomicity of the single-statement UPDATE is assumed. Acceptable only if the fake applies the full WHERE and a SQL-text test pins the guards.",
-        "blocking": false
-      },
-      {
-        "text": "The email-local-part heuristic is unverified on prod (OQ-2); mitigated by suggested-only status, explicit override, and unmappable/ambiguous follow-ups, not by guessing.",
-        "blocking": false
-      }
-    ],
-    "floor_breaches": [],
-    "business_rule_changes": [
-      {
-        "ac_id": "AC-1",
-        "kind": "EXTEND",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "AC-6",
-        "kind": "EXTEND",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "AC-9",
-        "kind": "CHANGE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "feature FR-4 / AC-4 (user-id and system rows never modified)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "platform @AC-6 (system rows never touched)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "indicators @AC-28 (no admin override for writes)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "indicators @AC-4 (RegisterFormula stamps x-user-id)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      },
-      {
-        "ac_id": "platform @AC-18/@AC-19 (pending-intent and template-saga rows)",
-        "kind": "PRESERVE",
-        "covered_by_operator_decision": false
-      }
-    ],
-    "rejected_alternatives": [
-      "Migration 008 with -- requires-env: mapping (ingest 013 precedent): an unset var blocks the whole migrator (fails.md 2026-08-19), no report-only mode for FR-5, would put PII in deploy env vars, and the prod username set is unknown.",
-      "Additive admin RPC RepairFormulaAuthors: makes AC-9 fully testable but needs proto churn, adds a write surface next to @AC-28, only evicts the cache on one instance, and is permanent code for a one-off repair. Kept as fallback only if the operator rejects the narrowed AC-9.",
-      "Startup hook applying a committed plan at boot: needs the plan (PII) committed to git, re-runs detection every boot, reports only to logs.",
-      "Running from a DO console session: no file upload and stdout lost, so plan/result artifacts are not durable.",
-      "Cross-schema read of identity.users from indicators code: violates schema ownership; replaced by an operator-supplied users file.",
-      "Pool via main.py extraction: unnecessary for a single-shot CLI; one asyncpg.connect plus the PgBouncer cache rule.",
-      "Auto-applying unique heuristic matches without a confirmed plan: violates FR-3 / P-03.",
-      "Trusting plan values with only a CAS on author=$old: lets a hand-edited plan rewrite system or user-owned rows; replaced by SQL guard plus DB re-derivation."
-    ],
-    "open_risks": [
-      "Prod legacy-author set and count unknown; a wrong unique heuristic match misassigns formulas unless the human confirm step is honoured.",
-      "Forgetting to restart every indicators instance after apply leaves AC-1 failing from the stale cache; verify must use GetFormula/ExecuteFormula, not ListFormulas.",
-      "Plan and result files hold email local parts (PII) and are the only undo/audit record; loss removes rollback and ownership moves are not ledger-audited.",
-      "Rows can change between plan and apply; skipped_concurrent rows need a re-run.",
-      "An operator without DATABASE_URL discipline could target the wrong DB; mitigated by required URL, no fallback, and printed target in both modes.",
-      "AC-9 narrowing without recorded sign-off leaves the AC unmet.",
-      "Fake-table tests do not prove real Postgres behaviour of the WHERE clause.",
-      "Scope creep into feature 275 reporting changes."
-    ],
-    "constitution_rules_touched": [
-      "C-03 (no originating request; run_id only, minted-context case allowed)",
-      "C-10(c) (system-sentinel rows must not be mutated by an unguarded path)",
-      "C-11 (design gate)",
-      "C-15 (AC-1..AC-9 testable as written; AC-9 reword)",
-      "C-18 (YAGNI: no roles export, no ledger client, single plan format; schema ownership)",
-      "P-03 (never assign to an unidentified user)",
-      "F-04 (no false reuse claims; main.py pool is inline)",
-      "F-06 (connection budget: pooled :25061 URL)",
-      "PLAT-N1 (best-effort/verify norms)",
-      "platform @AC-6 and @AC-18/@AC-19",
-      "Approval flow: DB data change needs DBA and service owner sign-off"
-    ],
-    "rationale": "r2 survives the adversary with no Floor breach. The CLI-over-migration/RPC choice holds because of FR-5 report-only mode, the unknown prod set and the migrator trap (fails.md 2026-08-19). The adversary's two blocking objections are real and are adopted wholesale: the plan is hand-edited, so the digest proves only that the file did not change after hashing, not that its contents are safe. The write path must therefore carry the system/UUID guard in the SQL itself and re-derive targets from live detection, which removes the hole structurally and honours C-10(c) and platform @AC-6. The remaining blocker is process, not design: AC-9 can only be proven in pytest as tool-side integrity (digest, confirmation, no system/UUID rows), while authority is the DB credential plus the DBA change record. That narrowing needs the operator's explicit sign-off or a reword at /sdd-spec; it stays open and blocking. The non-blocking items are folded in: required DATABASE_URL with no fallback, pooled URL, restart-every-instance with a GetFormula verify, no roles in the export, case-folding spec, edit-then-hash-then-record ordering, a result file carrying old values as the audit trail, and a full-predicate fake table plus a SQL-text guard test."
-  },
-  "floor_breaches": []
-}
-```
-
----
-
-## Session 2026-10-22 — sdd-design
-
-- Phase 0 Recon: recon.md written earlier (service: xstockstrat-indicators; key reuse patterns: `resolve_intent` compare-and-set UPDATE, `manage-users.py` operator-CLI shape).
-- Phase 1 Grilling: 2 rounds (full), approved at the operator gate. Chosen approach: operator-run maintenance CLI in indicators (report then digest-confirmed apply; no migration/RPC/proto/startup hook/config). Rejected: migration 008 with requires-env, admin RPC, startup hook, DO-console run, cross-schema identity read, trusting plan values with only an author CAS.
-- Constitution rules touched: C-03, C-10(c), C-11, C-15, C-18, P-03, F-04, F-06, PLAT-N1. Floor breaches: none.
-- OPERATOR SIGN-OFF 2026-10-22 (round-2 design gate): APPROVED the maintenance-CLI design and SIGNED OFF the narrowed AC-9 (authority = DB credential holder plus the DBA change record, process not code; code enforces only integrity: apply refuses without a digest-matched, fully-confirmed plan and never touches system or UUID rows). The admin-gated RPC alternative is rejected. Spec must reword AC-9 to this meaning and state edit -> hash -> record -> apply in the AC-9 text and the runbook. Binding amendments: system/UUID predicate inside the apply UPDATE; pre-flight refusal for SYSTEM_AUTHOR/UUID old_author and non-UUID new_author; targets re-derived from the DB (plan x live detection intersection).
-- Status: spec-ready -> design-approved.
-
-### Open Threads
-
-- Prod legacy-author set and count unknown; heuristic match is suggested-only (runbook + first prod report run).
-- Restart EVERY indicators instance after apply; verify via GetFormula/ExecuteFormula, not ListFormulas (runbook + stale-cache test).
-- Plan/result files hold PII and are the only undo/audit record (runbook storage/retention step).
-- skipped_concurrent rows need a re-run (runbook + AC-8 test).
-- Wrong-DB targeting: required DATABASE_URL, no fallback, printed target (CLI step).
-- Operator workstation must reach the managed DB; runbook states which route is used.
-- Fake-table tests do not prove real Postgres WHERE behavior (full-predicate fake + SQL-text guard test).
-- Email local-part heuristic unverified on prod (OQ-2).
-- Do not touch feature 275 reporting surfaces or `_can_read_formula` (FR-6).
-
----
-
-## Session 2026-10-22 — sdd-spec
-
-- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
-- AC-9 reworded in acceptance.feature to the operator-signed-off integrity meaning (edit -> hash -> record -> apply; authority = DB credential plus DBA change record; digest is integrity, not authority).
-- Key codebase findings:
-  - No migration: indicators tip stays `007`; no proto, config or env var. New code is `app/maintenance/legacy_authors.py` (stdlib argparse; indicators has no typer dependency) plus tests; `main.py` and `servicer.py` untouched.
-  - `scripts/manage-users.py` `list-users` (`:270-289`) is covered by 4-tuple tests (`scripts/tests/test_manage_users.py:371-411`), so `--json` uses its own `SELECT user_id, email, is_active` query rather than changing the table query.
-  - `FakeFormulasTable` has three consumers (Steps 4, 6, 7), so it lives in `tests/conftest.py` (C-13). Apply refuses a UUID `old_author`, so undo is a DBA-reviewed manual UPDATE from the result file, not an apply run.
-  - C-14 deferred checks resolved: no UI change; `strat-lab` backtest skill only mentions formula privacy (`SKILL.md:78`), unchanged.
-  - Teardown: Step 9 changes context files; run the context-forge refresh (or the manual reconciliation) before the execute PR.
-
-### Open Threads
-
-- Execute: Steps 1-9 pending; run `/sdd-review fix-legacy-formula-authors impl-spec` first.
-- Prod legacy-author set unknown; first prod run is report-only. Restart EVERY indicators instance after apply; verify via GetFormula/ExecuteFormula, not ListFormulas.
-
----
-
-## Session 2026-10-22 — sdd-review impl-spec
-
-Advisory (MODE B); lifecycle unchanged (`implementation-ready`).
-
-### Addressed
-
-- Reviewer FAIL "implementation-spec.md unreadable / status draft": a stale main-dev checkout, not a spec defect. On `origin/feature/fix-legacy-formula-authors` the spec exists (9 steps) and `status.md` reads `implementation-ready`. No edit.
-- AC-9 vs `acceptance.feature` (C-15): the feature-branch AC-9 already carries the operator-signed-off integrity wording; spec Steps 5, 6, 8 agree. No edit.
-- C-18 DRY on `list-users --json`: the separate `SELECT user_id, email, is_active` query is deliberate (the existing 4-tuple query is pinned by `TestListUsersCmd`); confirmed in Step 1. No edit.
-- Overlap WARN (conftest.py with 244; indicators CLAUDE.md with 268/243/244): recorded in implementation-spec.md Step Dependencies as an append-only, rebase-only overlap.
-
-### Still open
-
-- Step 7 does not simulate the DB-backed `ListFormulas` (`list_visible`) path; FR-1 "ListFormulas includes it" is covered only by the in-memory branch plus the runbook verify step. Decide at the /sdd-execute checkpoint whether to add a fake-pool `list_visible` test.
-- Reviewer could not run `git show` against the spec; the criteria checks (paths, symbols, thresholds) were not independently re-run by a second reviewer. Spot-checked here: `list-users` at `scripts/manage-users.py:270-289` and `_can_read_formula` at `servicer.py:141`.
-
-### Open Threads
-
-- Step 7 `ListFormulas` DB-path test gap (see above).
-- Merge-order with 244/268/243 for `tests/conftest.py` and indicators `CLAUDE.md`.
-
-## Session 2026-10-23 — no production (operator)
-
-- **Fact from the operator:** there is no production deployment. The `Prod legacy-author set and count unknown` risk, OQ-2 and the first-prod-run wording earlier in this log therefore apply to staging: the only database in scope is staging, and its legacy-author set beyond the six known ids is still unknown (the six came from one admin selector, `author_filter="davcs86"`).
-- **Spec edits (wording only, no design change):** product-spec Root cause and OQ-2, and the runbook outline items 1 and 10 in implementation-spec. The CLI, plan/digest flow, restart requirement and the narrowed AC-9 are unchanged. If a production environment is created, the runbook is run there report-first after staging.
-- **Next:** the first staging report run (read-only) answers OQ-2; it is part of verification, not speccing.
+**Promotion (C-16)**: 8 of 9 scenarios were already promoted to `services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature` (`@feature-276`). `@AC-6` was deliberately not promoted: OVERLAP with feature 224 `@AC-1` in `private-by-default-templates.feature` (old context.md@1ed63958:397, :478-480, :490). Human option left open: consolidate, or promote AC-6 as a repair-specific guard.

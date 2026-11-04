@@ -2,10 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-identity-ledger-test-suites`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
+**Launched date**: 2026-10-30
+**Archived**: 2026-11-04
 
 ---
 
@@ -13,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 3 notes; overlap WARN) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
@@ -27,6 +30,8 @@
 | 2026-10-28 | (no status change) | /sdd-execute step 6 | Teardown: Node-leaf "40% enforced" claims narrowed (`lang-node.md`, `ci-overview.md`, `spec-template.md`, root `CLAUDE.md`); follow-up defect `2026-10-28-node-leaf-c8-check-coverage-unenforced-defect` filed (SEV-3, `open`) and logged in the four Node-leaf findings logs; merge-order rebase-only note added; manual context audit (plugin unavailable) |
 | 2026-10-28 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute, ALL-DONE) | All 6 steps done; C-16 promotion applied (AC-1, AC-2 to the identity/ledger suites; AC-3..AC-6 to `platform.feature`); integration PR opened to `main-dev` |
 
+| 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -42,11 +47,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-20
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — Phase 0 codebase dossier (reuse patterns, business rules, risks)
-- [Design](design.md) — approved design (chosen approach, rejected alternatives, open risks, requirement amendment)
-- [Implementation Spec](implementation-spec.md) — 6 numbered steps with codebase evidence and per-step reviewers
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to services/xstockstrat-{identity,ledger}/acceptance/fix-identity-ledger-test-suites.feature and docs/sdd/business-rules/platform.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

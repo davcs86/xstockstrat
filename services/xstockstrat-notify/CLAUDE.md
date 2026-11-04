@@ -64,6 +64,7 @@ zero-assertion trap).
 | Dependency | Type | Reason |
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
+| xstockstrat-identity | gRPC ListAdminUserIds | Untargeted Web Push audience (feature 242) |
 | PostgreSQL | DB (schema: `notify`) | Persist alert history |
 
 ## Config Keys Consumed
@@ -87,9 +88,13 @@ best-effort fanout channel** — it delivers OS notifications to installed-PWA d
 protocol (`web-push` lib, VAPID-signed). Dispatched from `emitAlert` via a **second `queueMicrotask`**
 beside the `FanoutDispatcher` one, *after* the success callback, so it never blocks/delays the primary
 `StreamAlerts` delivery or the RPC result. It gates on **severity only** (`notify.push.min_severity`,
-read live) + `target_user_id` (empty ⇒ broadcast to all subscriptions) — never a `context` key. VAPID
-creds are read once at construction; if `VAPID_SUBJECT` is present but not a `mailto:`/`https:` URL the
-channel logs ERROR once and **disables** itself (avoids a silent per-send throw). A push whose endpoint
+read live) + `target_user_id` — never a `context` key. An empty `target_user_id` is pushed to
+**admin-role users' subscriptions only** (feature 242): `src/services/adminDirectory.ts` resolves them
+by a live, uncached identity `ListAdminUserIds` call per untargeted push (single-flight, 2s deadline,
+header trio relayed). If that lookup fails, the push is skipped and an ERROR is logged at most once
+per 60s. The `EmitAlert` result and `StreamAlerts` delivery are unaffected (in-app broadcast still
+reaches everyone). VAPID creds are read once at construction; if `VAPID_SUBJECT` is present but not a
+`mailto:`/`https:` URL the channel logs ERROR once and **disables** itself (avoids a silent per-send throw). A push whose endpoint
 returns **404/410** prunes that `notify.push_subscriptions` row. Subscriptions are stored via the
 additive `RegisterPushSubscription` (upsert by `endpoint`) / `UnregisterPushSubscription` (delete by
 `endpoint`) RPCs; `push_subscriptions` is created by notify migration `002` (schema `notify`).
@@ -109,8 +114,10 @@ at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is se
 ```text
 GRPC_PORT=50059
 CONFIG_ENDPOINT=xstockstrat-config:50060
+IDENTITY_ENDPOINT=xstockstrat-identity:50058  # feature 242; unset ⇒ startup ERROR, untargeted push disabled
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
+DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed; the service now needs the DB to boot (SELECT 1 probe)
 SLACK_WEBHOOK_URL=                  # type: SECRET (feature 020) — Slack incoming webhook; empty ⇒ Slack fanout disabled; rotation requires redeploy, not a live config push
 SENDGRID_API_KEY=                   # type: SECRET (feature 020) — SendGrid v3 API key; empty ⇒ email fanout disabled; rotation requires redeploy
 VAPID_PRIVATE_KEY=                  # type: SECRET (feature 165) — Web Push VAPID private key; empty ⇒ push disabled
@@ -120,7 +127,7 @@ VAPID_SUBJECT=                      # feature 165 — VAPID contact URL (mailto:
 
 > `SLACK_WEBHOOK_URL` / `SENDGRID_API_KEY` / `VAPID_PRIVATE_KEY` are credentials delivered as DO App
 > Platform `type: SECRET` env vars through the full deploy pipeline (docker-compose, both
-> `.do/app*.yaml`, the deploy workflows, and `scripts/do-inject-prod-secrets.py`) — **never**
+> `.do/app*.yaml`, `common.*` in `secrets/<env>.enc.yaml` rendered by `scripts/do-render-app-spec.py`; see `docs/runbooks/sops-secrets.md`) — **never**
 > config-service rows (config governance / feature 076). `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` are
 > non-secret and wired the same way for convenience. All are optional; an unset value simply disables
 > that channel. Web Push needs **all three** VAPID values (feature 165).

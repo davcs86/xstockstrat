@@ -43,6 +43,24 @@ export async function signTestJwt(
     .sign(new TextEncoder().encode(TEST_JWT_SECRET));
 }
 
+/** Refresh token the identity mock never answers until the caller's deadline aborts (feature 271). */
+export const REFRESH_STALL_TOKEN = 'refresh-stall-token';
+
+/** Signs an already-expired test JWT, so middleware takes the refresh-before-redirect path. */
+export async function signExpiredTestJwt(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({
+    user_id: TEST_USER_ID,
+    email: TEST_USER_EMAIL,
+    roles: [],
+    issued_at: now - 1800,
+    expires_at: now - 900,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime(now - 900)
+    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
+}
+
 /**
  * Signs a test JWT carrying the given roles and injects it as the
  * `access_token` cookie so the Next.js middleware treats the page as

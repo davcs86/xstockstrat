@@ -8,7 +8,7 @@ import { Stat } from '../shared/Stat';
 import { CardNotice } from '../shared/CardNotice';
 import { brokerLabel } from '@/lib/brokers';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
-import { sumPortfolioTotals } from '@/lib/portfolioTotals';
+import { PNL_UNAVAILABLE_LABEL, sumPortfolioTotals } from '@/lib/portfolioTotals';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import type { Portfolio } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 
@@ -19,6 +19,7 @@ function grossNet(gross: number, fees: number | undefined): string {
 
 /** Offline-only P&L rows (feature 240); each optional row renders only when the backend set it. */
 function OfflinePnlStats({ portfolio }: { portfolio: Portfolio }) {
+  if (portfolio.offlineStateUnavailable) return <DegradedPnlStats />;
   return (
     <>
       <Stat
@@ -55,6 +56,19 @@ function OfflinePnlStats({ portfolio }: { portfolio: Portfolio }) {
       {portfolio.feesLifetime !== undefined && (
         <Stat label="Fees (lifetime)" value={fmtUsd(portfolio.feesLifetime)} />
       )}
+    </>
+  );
+}
+
+/** Feature 256: the backend zeroed this offline account's P&L because its state could not be read. */
+function DegradedPnlStats({ showTotal = true }: { showTotal?: boolean }) {
+  return (
+    <>
+      <Stat label="Day P&L" value={PNL_UNAVAILABLE_LABEL} valueClass="text-muted-foreground" />
+      {showTotal && (
+        <Stat label="Total P&L" value={PNL_UNAVAILABLE_LABEL} valueClass="text-muted-foreground" />
+      )}
+      <CardNotice variant="muted">Offline P&L temporarily unavailable</CardNotice>
     </>
   );
 }
@@ -164,13 +178,13 @@ export function PortfolioPanel() {
         <CardContent className="space-y-1.5">
           <Stat
             label="Day P&L"
-            value={fmtSignedUsd(totals.dayPnl)}
-            valueClass={pnlClass(totals.dayPnl)}
+            value={totals.incomplete ? PNL_UNAVAILABLE_LABEL : fmtSignedUsd(totals.dayPnl)}
+            valueClass={totals.incomplete ? 'text-muted-foreground' : pnlClass(totals.dayPnl)}
           />
           <Stat
             label="Total P&L"
-            value={fmtSignedUsd(totals.totalPnl)}
-            valueClass={pnlClass(totals.totalPnl)}
+            value={totals.incomplete ? PNL_UNAVAILABLE_LABEL : fmtSignedUsd(totals.totalPnl)}
+            valueClass={totals.incomplete ? 'text-muted-foreground' : pnlClass(totals.totalPnl)}
           />
           {anyOffline && (
             <>
@@ -207,11 +221,15 @@ export function PortfolioPanel() {
             </CardHeader>
             <CardContent className="space-y-1.5">
               <Stat label="Equity" value={fmtUsd(portfolio.equity)} />
-              <Stat
-                label="Day P&L"
-                value={fmtSignedUsd(portfolio.dayPnl)}
-                valueClass={pnlClass(portfolio.dayPnl)}
-              />
+              {portfolio.offlineStateUnavailable ? (
+                <DegradedPnlStats showTotal={false} />
+              ) : (
+                <Stat
+                  label="Day P&L"
+                  value={fmtSignedUsd(portfolio.dayPnl)}
+                  valueClass={pnlClass(portfolio.dayPnl)}
+                />
+              )}
               {portfolio.positions?.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   {portfolio.positions.length} position{portfolio.positions.length > 1 ? 's' : ''}

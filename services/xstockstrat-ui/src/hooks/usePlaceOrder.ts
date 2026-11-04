@@ -8,5 +8,6 @@ export function usePlaceOrder() {
   return useInvalidatingMutation<PlaceOrderInput, Order>(
     (req) => tradingClient.placeOrder(req),
     [['orders']],
+    { meta: { errorHandled: true } },
   );
 }

@@ -2,10 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-backtest-silent-symbol-skip`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-22
-**Last Updated**: 2026-10-22
+**Last Updated**: 2026-11-01
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -13,11 +16,16 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (recorded during feature 215 staging verification) |
+| 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md) (recorded during feature 215 staging verification) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN: 272, 215, 273, 270) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator at the r3 gate: option (a) (PERMISSION_DENIED → FORMULA_ERROR, FR-8/AC-7 added) and sign-off on the @AC-5 @feature-150 correction |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps (Step 1 is a hard re-anchor gate on the merged 272/273/215 tree) |
+| 2026-11-01 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Directive re-spec of steps 1, 5, 6, 7, 8 and 9 onto the merged tree (272/273 launched; 215 gate + value 5 present); line anchors only, no scope change |
+| 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator gave the up-front sequential confirmation; execution starts at Step 1 on `feature/fix-backtest-silent-symbol-skip` |
+| 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 11 steps done on `feature/fix-backtest-silent-symbol-skip`; Step 11 closed the analysis `CLAUDE.md` null-score drift and the manual root Teardown audit |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -41,11 +49,11 @@ Canonical snapshot from `/sdd-spec` (2026-10-22), collected from the per-step `*
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -59,4 +67,4 @@ diagnostics and is scored and persisted as a success. On staging this hid a PERM
 
 ## Next Action
 
-`/sdd-review fix-backtest-silent-symbol-skip impl-spec` — validate implementation spec, then `/sdd-execute fix-backtest-silent-symbol-skip`. Execution starts only after 272, 273 and 215 have landed (Step 1 gate).
+`/sdd-execute fix-backtest-silent-symbol-skip sequential` — Steps 1–10 are done (2026-11-01: re-anchor gate; `NO_TRADE_REASON_EVALUATION_FAILED = 6` in `analysis.proto`; stubs regenerated and the UI `NO_TRADE_MESSAGE[EVALUATION_FAILED]` key added; the backtest-path `ExecuteFormula` NOT_FOUND/PERMISSION_DENIED refusal maps to `FormulaExecutionError` with `.code`; unit tests for that mapping plus the shared `aio_rpc_error` conftest builder; `RunBacktest` has one surfacing `except Exception` arm (`EVALUATION_FAILED` row, `eval_failures` gate term, `EVAL_FAILED_WARNING` warnings); `TestEvaluationFailureSurfacing` pins AC-1…AC-7 and design tests (a)–(g); the `strat-eval-failed-001` Playwright spec proves the `/insights` view renders the EVALUATION_FAILED reason and the warning; the agent `run_backtest` docstring and `docs/runbooks/mcp-tools.md` document the EVALUATION_FAILED/FORMULA_ERROR rows, the `not evaluated: <CODE>` warning and the backfill/rerun/report discriminator; the strat-lab `backtest` skill teaches the same reason, warning and discriminator in `SKILL.md`, `output-handling.md`, `self-grill.md`, `verification.md` and `backfill.md`). Continue with Step 11.

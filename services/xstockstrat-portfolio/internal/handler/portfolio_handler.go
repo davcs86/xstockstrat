@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	portfoliov1connect "github.com/xstockstrat/contracts/gen/go/portfolio/v1/portfoliov1connect"
 	"github.com/xstockstrat/portfolio/internal/middleware"
@@ -39,15 +40,45 @@ func streamUserID(ctx context.Context) string {
 
 var _ portfoliov1connect.PortfolioServiceHandler = (*PortfolioHandler)(nil)
 
+type snapshotHub interface {
+	Subscribe(id, userID string) chan *portfoliov1.PortfolioSnapshot
+	Unsubscribe(id string)
+}
+
+var _ snapshotHub = (*service.PortfolioService)(nil)
+
 // PortfolioHandler implements the Connect-RPC PortfolioServiceHandler interface.
 type PortfolioHandler struct {
 	portfoliov1connect.UnimplementedPortfolioServiceHandler
 	svc *service.PortfolioService
+	hub snapshotHub
 }
 
 // NewPortfolioHandler constructs the handler.
 func NewPortfolioHandler(svc *service.PortfolioService) *PortfolioHandler {
-	return &PortfolioHandler{svc: svc}
+	return &PortfolioHandler{svc: svc, hub: svc}
+}
+
+// streamSnapshots never checks userID: both callers must reject an empty caller before calling it.
+func streamSnapshots(ctx context.Context, hub snapshotHub, userID, subID string, mode commonv1.TradingMode, send func(*portfoliov1.PortfolioSnapshot) error) error {
+	ch := hub.Subscribe(subID, userID)
+	defer hub.Unsubscribe(subID)
+	for {
+		select {
+		case snap, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if mode != 0 && snap.TradingMode != mode {
+				continue
+			}
+			if err := send(snap); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // GetPortfolio returns the full portfolio with positions and live prices.
@@ -93,7 +124,7 @@ func (h *PortfolioHandler) GetPnL(ctx context.Context, req *connect.Request[port
 	}
 	resp, err := h.svc.GetPnL(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(classifyGetPnLError(err), err)
+		return nil, connect.NewError(classifyGetPnLError(ctx, err), err)
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -117,25 +148,7 @@ func (h *PortfolioHandler) StreamPortfolioUpdates(ctx context.Context, req *conn
 		return connect.NewError(connect.CodeInvalidArgument, errorf("user_id required"))
 	}
 	subID := fmt.Sprintf("portfolio-%s-%p", userID, stream)
-	ch := h.svc.Subscribe(subID)
-	defer h.svc.Unsubscribe(subID)
-
-	for {
-		select {
-		case snap, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			if req.Msg.TradingMode != 0 && snap.TradingMode != req.Msg.TradingMode {
-				continue
-			}
-			if err := stream.Send(snap); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return streamSnapshots(ctx, h.hub, userID, subID, req.Msg.TradingMode, stream.Send)
 }
 
 // ListPortfolios returns portfolios grouped by broker account.
@@ -290,25 +303,13 @@ func (a *grpcPortfolioAdapter) GetSnapshot(ctx context.Context, req *portfoliov1
 }
 
 func (a *grpcPortfolioAdapter) StreamPortfolioUpdates(req *portfoliov1.StreamPortfolioUpdatesRequest, grpcStream portfoliov1.PortfolioService_StreamPortfolioUpdatesServer) error {
-	subID := fmt.Sprintf("portfolio-%s-%p", streamUserID(grpcStream.Context()), grpcStream)
-	ch := a.h.svc.Subscribe(subID)
-	defer a.h.svc.Unsubscribe(subID)
-	for {
-		select {
-		case snap, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			if req.TradingMode != 0 && snap.TradingMode != req.TradingMode {
-				continue
-			}
-			if err := grpcStream.Send(snap); err != nil {
-				return err
-			}
-		case <-grpcStream.Context().Done():
-			return grpcStream.Context().Err()
-		}
+	ctx := grpcStream.Context()
+	userID := streamUserID(ctx)
+	if userID == "" {
+		return status.Error(codes.InvalidArgument, "user_id required")
 	}
+	subID := fmt.Sprintf("portfolio-%s-%p", userID, grpcStream)
+	return streamSnapshots(ctx, a.h.hub, userID, subID, req.TradingMode, grpcStream.Send)
 }
 
 func (a *grpcPortfolioAdapter) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
@@ -420,11 +421,21 @@ func classifyGetPositionError(err error) connect.Code {
 	return connect.CodeInternal
 }
 
-// classifyGetPnLError maps GetPnL errors: Unavailable only for service.ErrQuotesUnavailable (a transient quote
-// gap, retryable), else Internal.
-func classifyGetPnLError(err error) connect.Code {
-	if errors.Is(err, service.ErrQuotesUnavailable) {
+// classifyGetPnLError maps GetPnL errors; the caller's ctx wins so its own deadline or cancel is not
+// misreported as a dependency gap. Then Unavailable for ErrQuotesUnavailable/ErrLedgerUnavailable
+// (retryable), FailedPrecondition for ErrFillUnattributable, else Internal.
+func classifyGetPnLError(ctx context.Context, err error) connect.Code {
+	switch ctx.Err() {
+	case context.DeadlineExceeded:
+		return connect.CodeDeadlineExceeded
+	case context.Canceled:
+		return connect.CodeCanceled
+	}
+	switch {
+	case errors.Is(err, service.ErrQuotesUnavailable), errors.Is(err, service.ErrLedgerUnavailable):
 		return connect.CodeUnavailable
+	case errors.Is(err, service.ErrFillUnattributable):
+		return connect.CodeFailedPrecondition
 	}
 	return connect.CodeInternal
 }
@@ -441,6 +452,12 @@ func toGRPCError(err error) error {
 			return status.Error(codes.PermissionDenied, connectErr.Message())
 		case connect.CodeUnavailable:
 			return status.Error(codes.Unavailable, connectErr.Message())
+		case connect.CodeFailedPrecondition:
+			return status.Error(codes.FailedPrecondition, connectErr.Message())
+		case connect.CodeDeadlineExceeded:
+			return status.Error(codes.DeadlineExceeded, connectErr.Message())
+		case connect.CodeCanceled:
+			return status.Error(codes.Canceled, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())

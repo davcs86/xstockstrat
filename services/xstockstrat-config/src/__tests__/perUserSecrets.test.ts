@@ -23,6 +23,7 @@ const TOK_A = 'tok-a';
 const TOK_B = 'tok-b';
 const ENV_PROD = 2;
 const INGEST_SAN = 'DNS:xstockstrat-ingest';
+const MARKETDATA_SAN = 'DNS:xstockstrat-marketdata';
 
 interface Row {
   namespace: string;
@@ -233,7 +234,7 @@ describe('per-user secrets (feature 224 FR-14)', () => {
     });
   });
 
-  it('marketdata exact-key GetSecret is unchanged: no SAN required, global scope resolves', async () => {
+  it('marketdata GetSecret requires the xstockstrat-marketdata peer SAN (254: AC-3/AC-4/AC-6)', async () => {
     const write = await invoke(impl.setConfig.bind(impl), {
       request: {
         namespace: 'marketdata', key: 'alpaca.api_key', value: { stringVal: 'alpaca-xyz', isSecret: true },
@@ -242,8 +243,18 @@ describe('per-user secrets (feature 224 FR-14)', () => {
       metadata: md({ [HEADER_ACCESS_SCOPE]: '4', [HEADER_USER_ID]: 'tester' }),
     });
     assert.equal(write.err, null);
-    const r = await getSecret({ namespace: 'marketdata', key: 'alpaca.api_key' }, 'marketdata', () => ({}));
+    const req = { namespace: 'marketdata', key: 'alpaca.api_key' };
+    const r = await getSecret(req, 'marketdata', () => ({ sslPeerCertificate: { subjectaltname: MARKETDATA_SAN } }));
     assert.equal(r.err, null);
     assert.deepEqual([r.res.found, r.res.value], [true, 'alpaca-xyz']);
+    const wrongSan = await getSecret(req, 'marketdata', () => ({ sslPeerCertificate: { subjectaltname: INGEST_SAN } }));
+    assert.equal(wrongSan.err?.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(wrongSan.res, undefined);
+    const noPeer = await getSecret(req, 'marketdata', () => ({}));
+    assert.equal(noPeer.err?.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(noPeer.res, undefined);
+    const noAuthContext = await getSecret(req, 'marketdata', undefined);
+    assert.equal(noAuthContext.err?.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(noAuthContext.res, undefined);
   });
 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { identityClient } from '@/lib/connectClients';
+import { serverLog } from '@/lib/serverLog';
 import { setSessionCookies, REMEMBER_ME_MAX_AGE_SECONDS } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       }
     }
     // Service unavailable — don't leak internal error detail to the browser.
-    console.error('[login] identity service error:', (err as Error)?.stack ?? err);
+    serverLog.error('[login] identity service error:', (err as Error)?.stack ?? err);
     return NextResponse.json(
       { error: 'Authentication service unavailable. Please try again.' },
       { status: 503 },

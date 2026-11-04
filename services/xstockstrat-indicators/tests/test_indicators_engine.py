@@ -5,11 +5,14 @@ Run with: pytest tests/
 """
 
 import inspect
+from unittest.mock import MagicMock
 
 import pytest
 
+from app.handlers.servicer import IndicatorsServicer
 from app.services import indicators_engine
 from app.services.indicators_engine import compute
+from tests.conftest import ctx_with
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -207,3 +210,75 @@ class TestIndicatorDefaultsPinning:
                 f"{indicator} now emits a None head; the declared-warm-up rationale in "
                 f"{self.CONSUMER} needs revisiting."
             )
+
+
+class TestAtrVwapHonestDescriptions:
+    """D-18 Option A: ATR/VWAP keep their keys and numbers but describe the approximations they
+    actually compute (AC-4 ATR, AC-5 VWAP), at the engine registry and through the servicer."""
+
+    ATR_VALUES = [10, 12, 11, 13]
+    VWAP_VALUES = [10, 20, 30]
+
+    @staticmethod
+    def _assert_atr_description(description):
+        assert "Average True Range" not in description
+        assert "close-to-close approximation" in description
+
+    @staticmethod
+    def _assert_vwap_description(description):
+        assert "Volume Weighted Average Price" not in description
+        assert "running mean" in description
+
+    @staticmethod
+    def _servicer():
+        # __init__ sizes the sandbox semaphore from this accessor, so it must answer a real int.
+        cfg = MagicMock()
+        cfg.sandbox_max_concurrent.return_value = 4
+        return IndicatorsServicer(config_watcher=cfg)
+
+    def test_atr_engine_description_and_values(self):
+        """AC-4 engine level."""
+        assert "ATR" in indicators_engine.INDICATOR_REGISTRY
+        self._assert_atr_description(indicators_engine.INDICATOR_REGISTRY["ATR"]["description"])
+        values = [r["value"] for r in compute("ATR", self.ATR_VALUES, {"period": 2})]
+        assert values == [None, None, 1.5, 1.5]
+
+    def test_vwap_engine_description_and_values(self):
+        """AC-5 engine level."""
+        assert "VWAP" in indicators_engine.INDICATOR_REGISTRY
+        self._assert_vwap_description(indicators_engine.INDICATOR_REGISTRY["VWAP"]["description"])
+        values = [r["value"] for r in compute("VWAP", self.VWAP_VALUES, {})]
+        assert values == [10.0, 15.0, 20.0]
+
+    async def test_list_indicators_serves_honest_descriptions(self):
+        """AC-4/AC-5 servicer level: ListIndicators surfaces the registry text."""
+        from gen.indicators.v1 import indicators_pb2
+
+        resp = await self._servicer().ListIndicators(
+            indicators_pb2.ListIndicatorsRequest(), ctx_with([])
+        )
+        by_name = {m.name: m.description for m in resp.indicators}
+        self._assert_atr_description(by_name["ATR"])
+        self._assert_vwap_description(by_name["VWAP"])
+
+    async def test_compute_indicator_atr_values_unchanged(self):
+        """AC-4 servicer level: the 2 warm-up positions are omitted, the values are unchanged."""
+        from gen.indicators.v1 import indicators_pb2
+
+        resp = await self._servicer().ComputeIndicator(
+            indicators_pb2.ComputeIndicatorRequest(
+                indicator="ATR", values=self.ATR_VALUES, params={"period": 2}
+            ),
+            ctx_with([]),
+        )
+        assert [p.value for p in resp.result] == [1.5, 1.5]
+
+    async def test_compute_indicator_vwap_values_unchanged(self):
+        """AC-5 servicer level."""
+        from gen.indicators.v1 import indicators_pb2
+
+        resp = await self._servicer().ComputeIndicator(
+            indicators_pb2.ComputeIndicatorRequest(indicator="VWAP", values=self.VWAP_VALUES),
+            ctx_with([]),
+        )
+        assert [p.value for p in resp.result] == [10.0, 15.0, 20.0]

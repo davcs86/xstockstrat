@@ -18,16 +18,15 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 ## Ports
 
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50058` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing all
-eleven methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
+This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing every
+`IdentityService` method, including: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
 the OAuth 2.1 backend RPCs (feature 049 Part B)
 `RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`,
 and the per-user authorized-app RPCs (feature 051) `ListAuthorizedApps`, `RevokeAuthorizedApp`).
 The frontends validate tokens over gRPC `50058`.
+`ListAdminUserIds` (feature 242, `src/grpc/adminDirectory.ts`) returns active admin user IDs for
+notify's untargeted Web Push audience. It is authorized by the exact mTLS peer SAN
+`xstockstrat-notify` only and is header-blind (IDENTITY-12).
 The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect router) was removed.
 
 ### OAuth 2.1 backend (feature 049 Part B)
@@ -88,11 +87,12 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 JWT_SECRET=<secret>                    # .env — generate: openssl rand -hex 32
 APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper                     # paper | live
+DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed; the service now needs the DB to boot (SELECT 1 probe)
 ```
 
 ## Operations
 
-User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`DEV_JWT_SECRET`/`PROD_JWT_SECRET` → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
+User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`common.JWT_SECRET` in `secrets/<env>.enc.yaml`, legacy `DEV_JWT_SECRET`/`PROD_JWT_SECRET` fallback → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
 
 ## Running Locally
 

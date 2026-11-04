@@ -23,7 +23,7 @@ from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IndicatorsServicer
 from app.services.seed_formulas import seed_default_formulas
-from app.telemetry import init_telemetry
+from app.telemetry import init_telemetry, server_interceptors
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,7 +71,7 @@ async def serve():
     )
 
     # ── gRPC server (internal, port 50054) ────────────────────────────────
-    grpc_server = grpc.aio.server()
+    grpc_server = grpc.aio.server(interceptors=server_interceptors())
     indicators_pb2_grpc.add_IndicatorsServiceServicer_to_server(servicer, grpc_server)
 
     service_names = (

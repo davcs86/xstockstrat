@@ -66,6 +66,7 @@ export function useSetOpportunityAction() {
   return useInvalidatingMutation<SetOpportunityActionInput, unknown>(
     (input) => analysisClient.setOpportunityAction(input),
     [['opportunities']],
+    { meta: { errorHandled: true } },
   );
 }
 

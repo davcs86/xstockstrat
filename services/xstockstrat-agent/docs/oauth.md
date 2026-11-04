@@ -30,7 +30,9 @@ Registered in `app/main.py` `build_http_app`:
 
 The MCP endpoint (root Streamable HTTP) requires an **`aud`-bound JWT** (`aud` ==
 `AGENT_PUBLIC_URL`); unauthenticated requests get `401` with a
-`WWW-Authenticate: Bearer resource_metadata=…` discovery pointer.
+`WWW-Authenticate: Bearer resource_metadata=…` discovery pointer. If identity cannot be reached in
+time during token validation, the endpoint returns `503` **without** `WWW-Authenticate`, so the
+client retries instead of re-authorizing; an invalid token still returns `401` with the pointer.
 
 **RFC 8414/9728 path insertion quirk**: because `AGENT_PUBLIC_URL` has a path (`/agent`),
 spec-compliant clients fetch the AS/PR metadata at

@@ -5,18 +5,11 @@ Loaded by the router when the triage flow routes to **Track C**. Follow it end t
 ### C-0. Recommend design depth
 
 A Track C bug is a lightweight feature, so the `/sdd-design` phase (recon + adversarial debate) is
-optional — but the recommendation should scale with scope, not be all-or-nothing. Derive a depth from
-signals already in hand: severity (T-2) and the **issue body** (its *Affected services* field and any
-mention of proto/schema/migration/config — the `## Fix Scope` checkboxes in C-4 start unchecked, so
-read the issue text, not those placeholders):
-
-- **full** → `/sdd-design <slug>` — **proto** changes mentioned, OR a **DB migration/schema** change
-  mentioned, OR **affected services ≥ 2** (architectural / cross-service fix worth a full debate).
-- **quick** → `/sdd-design <slug> quick` — otherwise, when severity is **SEV-2**, OR a **config** change
-  is mentioned, OR the **root cause is "under investigation"** / non-trivial. One adversarial round:
-  too small to debate, too risky to skip.
-- **skip** → straight to `/sdd-spec <slug>` — **SEV-3**, single service, no proto/migration/config, and
-  a clear root cause. (`/sdd-spec` notes the absent design and proceeds.)
+optional — but the recommendation should scale with scope, not be all-or-nothing. Apply the **Bugs**
+section of `docs/sdd/design-depth-rubric.md` (full / quick / skip) to the signals already in hand:
+severity (T-2) and the **issue body** (its *Affected services* field and any mention of
+proto/schema/migration/config — the `## Fix Scope` checkboxes in C-4 start unchecked, so read the
+issue text, not those placeholders).
 
 Store the chosen depth + its command as `<design-rec>` (used in C-3's Next Action and C-6). This is a
 **recommendation only** — never auto-invoke `/sdd-design`; the human triggers it (phase-gate, P-04).
@@ -29,11 +22,21 @@ find docs/roadmap/features -maxdepth 1 -type d -name "*-<slug>"
 ```
 If a directory is found: ask the user to confirm overwrite or stop.
 
-### C-2. Compute NNN and create feature directory
+### C-2. Reserve NNN and create feature directory
+
+The number is **reserved on `origin`, never computed from the local tree** — same allocator and contract
+as `/sdd-story` step 3. If the script exits non-zero (origin unreachable, push refused, cursor
+unparseable), **stop and report its stderr — never fall back to a local `max+1`**. Never write to
+`sdd/feature-cursor` by hand or rewrite its history (force-push, amend, reset, delete). See
+`docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ```bash
-NEXT_NNN=$(printf "%03d" $(( $(find docs/roadmap/features -maxdepth 1 -type d -name '[0-9][0-9][0-9]-*' | wc -l) + 1 )))
+NEXT_NNN=$(bash scripts/sdd-allocate-feature-number.sh "<slug>") || exit 1
 FEATURE_DIRNAME="${NEXT_NNN}-<slug>"
+if find docs/roadmap/features -maxdepth 1 -type d -name "${NEXT_NNN}-*" | grep -q .; then
+  echo "ERROR: ${NEXT_NNN} already taken (pre-cursor or hand-made directory)." >&2
+  exit 1
+fi
 mkdir -p docs/roadmap/features/${FEATURE_DIRNAME}
 ```
 

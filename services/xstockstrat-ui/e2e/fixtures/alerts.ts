@@ -1,3 +1,5 @@
+import { DEFAULT_UNARY_TIMEOUT_MS } from '../../src/lib/deadlines';
+
 /**
  * Alert fixtures (feature 203) — centralized from mock-backend.ts once the notifications inbox
  * and alert-stream specs became a second consumer (C-12). `read` is per-user state populated on
@@ -31,6 +33,16 @@ export const ALERT_STREAM_003 = {
   sourceService: 'trading',
 };
 export const ALERT_STREAM_ALL = [ALERT_STREAM_001, ALERT_STREAM_002, ALERT_STREAM_003];
+
+// feature 271 @AC-5 — a request carrying this x-trace-id makes the StreamAlerts mock hold the stream
+// open past the unary default before yielding ALERT_STREAM_HELD (distinct title: proves stream delivery).
+export const ALERT_STREAM_HOLD_TRACE_ID = 'trace-alert-stream-hold';
+export const ALERT_STREAM_HOLD_MS = DEFAULT_UNARY_TIMEOUT_MS + 5_000;
+export const ALERT_STREAM_HELD = {
+  ...ALERT_STREAM_001,
+  alertId: 'alert-stream-held',
+  title: 'Held stream alert',
+};
 
 // The three historical ListAlerts alerts (extracted from mock-backend.ts).
 export const ALERT_LIST_001 = {

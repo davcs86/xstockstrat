@@ -1,171 +1,97 @@
-# Context: otel-metrics-logs-export
+# Context: otel-metrics-logs-export  (archived 2026-11-04)
 
-**Feature**: `docs/roadmap/features/274-otel-metrics-logs-export/feature.md`
-**Product Spec**: `docs/roadmap/features/274-otel-metrics-logs-export/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/274-otel-metrics-logs-export/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-21 — sdd-story
+**What**: All 12 runtimes (Go x3, Python x4, Node x4, Next.js UI) now export OTel metrics and logs over env-only OTLP/HTTP next to traces. The 10 gRPC backends emit `rpc.server.duration` (Go native `otelgrpc`; Python/Node derive it from SERVER spans); agent emits `mcp.tool.duration`; UI emits BFF `http.server.duration`. PR-A (#1379, + follow-ups #1380/#1382) shipped runtime export, the G1 dev-proof gate was run on dev Grafana, then PR-B (#1383) shipped the registry-allowlist guard, restored alerts/mute timing/dashboards, and docs. Promoted to main via #1387 on 2026-10-31. Prod stays `OTEL_ENABLED="false"`; the prod flip is a separate operator step (see Deferred follow-ons).
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- Source: root `docs/context-constitution-findings.md` row "metrics and logs" (Remedy: "New capability →
-  `/sdd-story` to add metrics/logs export") and report
-  `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md`.
-- Operator decisions (binding, recorded 2026-10-21, answered in-session):
-  - **NNN = 274, operator-specified.** max+1 was 254 (highest on main-dev and all `feature/*` branches: 253). This
-    deviates from `feature-workflow.md` § Feature Numbering by explicit operator instruction; 254–273 are unused.
-  - **Ordering vs feature 250: "250 lands first, 274 after".** 250 (`fix-otel-metrics-logs-gap`,
-    implementation-ready, operator decision "Narrow to traces") ships as specced and removes the metric/log-backed
-    alerts and panels; 274 then adds export and restores them (FR-6). Recorded as a hard row in `merge-order.md`.
-    The design must build on 250's landed state, including its produced-signals guard.
-  - **This feature reverses feature 226 Operator Decision 3 (traces only)** for metrics/logs. The operator
-    requested it explicitly (C-11 sign-off for a new capability).
-  - **Logs path: in-process OTLP log bridge** (Go slog, Python logging, Node winston → LoggerProvider → OTLP/HTTP
-    `/v1/logs`); DO `log_destinations` / collector filelog rejected.
-  - **`platform.otel.enabled` live switch: not implemented; fix the docs.** Out of 274's scope. The phantom claim
-    in `docs/patterns/observability.md` was removed and its root findings row marked resolved in the same docs-only
-    change that filed this story (outside SDD, per root CLAUDE.md: docs-only edits are out of the entry-point rule).
-- Open forks deferred to `/sdd-design` (see product-spec Open Questions): FR-2 series-name parity across
-  languages, cardinality budget, and whether 250's `trace-derived-alerting` follow-up should cite 274 instead.
+**Why (irrecoverable rationale)**:
+- Reverses feature 226 Operator Decision 3 ("traces only") for metrics/logs and supersedes 250's "narrow to traces"; explicit operator request recorded as the C-11 sign-off (old context.md@1ed63958:22-23, design.md@1ed63958:263-264). Reason it was worth reversing: error-rate, p99 and scoring-stall alerts were otherwise undetectable (design.md@1ed63958:263).
+- NNN 274 is operator-specified, not max+1 (254 was max+1; 254-273 left unused) — deliberate deviation from feature-workflow.md numbering (old context.md@1ed63958:16-17).
+- Ordering vs 250: "250 lands first, 274 after"; 274 builds on 250's landed end state (old context.md@1ed63958:18-21, 56). P-0 (amend 250's follow-up citation) was already done before /sdd-spec (guard `FOLLOWUP` literal pointed at 274, merge-order.md row) (implementation-spec.md@1ed63958:77).
+- Logs path = in-process OTLP log bridge; `platform.otel.enabled` live switch NOT implemented, the phantom docs claim was removed instead (old context.md@1ed63958:24-28).
+- Binding operator decisions made at the design gates (verbatim answers, 2026-10-21), kept because they exist nowhere else:
+  - R1 gate (old context.md@1ed63958:82-92): AC-10 agent/UI = "Agent should have metrics, UI should have metrics in the nextjs backend layer". Go trace correlation = "Retrofit all slog calls" (every slog call with a context in scope -> `*Context`). G1 location = "Two PRs via dev". 250 = "Amend 250 before it runs", with C-16 CHANGE sign-off that 274 retires 250's guard Part 2 ("docs list only exported signals").
+  - R2 gate (old context.md@1ed63958:117-124): streams = "Exclude in alert/panel queries" (recorders still record; FR-2 unchanged). UI metric = "BFF route histogram" (`http.server.duration` per segment+service+HTTP status; no per-method client histogram). Identity email = "Replace with user_id everywhere" (`identityServiceImpl.ts:151-154` now logs user id).
+  - R3 gate (old context.md@1ed63958:145-153): "Approve". Python deadlines = "Small interceptor" (grpc.aio server interceptor stamps 4 for deadline-expired, 1 for cancelled on CancelledError, parity with Go). Doc drift = "Waive the drift" (PR-A -> PR-B docs under-statement window waived; PR-A body must record waiver + manual reconciliation per fails.md:670). UI coverage = "Wrap REST routes too" (`/accounts/api/*`, `/trader/api/ledger/export`).
+  - Spec-time (old context.md@1ed63958:182-186): D8, Python log handler = `opentelemetry.instrumentation.logging.handler.LoggingHandler` (dep `opentelemetry-instrumentation-logging>=0.66b1`), because the SDK `LoggingHandler` is deprecated (constructor warns, probed at SDK 1.45.1). Reason for choosing over keeping the SDK handler beyond the deprecation: reason not recorded.
+  - Prod flip: default chosen by the spec reviewer (dev "true", prod "false", compose off); operator may override (old context.md@1ed63958:44-45). No operator override is recorded.
+  - Run mode: "sequential mode, no check points" (old context.md@1ed63958:266).
+  - G1 follow-up: operator chose to rename the UI's exported service to `ui` (old context.md@1ed63958:443).
 
-## Session 2026-10-21 — sdd-review product-spec
+**Rejected alternatives** (design.md@1ed63958:261-294):
+- Narrow to traces / do nothing at runtime — leaves error-rate/p99/stall undetected; operator reversed it (:263).
+- Per-language gRPC server interceptors as the Python/Node RPC metric — two mechanisms, touches server wiring in 7 services; the span-derived recorder reuses the status the instrumentation already computed. The one interceptor kept (Python cancel/deadline) covers only what the instrumentation cannot see (:265).
+- Upgrading `instrumentation-grpc` for native metrics — neither pinned line emits RPC metrics; speculative; risks semconv rename to `rpc.server.call.duration` in seconds (FR-2 series-name contract) (:269).
+- Excluding streams at the recorders (otelgrpc Filter + py/node predicate) — operator rejected at R2: FR-2 says streaming calls are recorded; visibility lost (:272).
+- UI per-method `rpc.client.duration` client histogram — ~5k series mostly duplicating server side; operator chose BFF route histogram (:274).
+- Recording UI server-streaming calls — connect `untilFirst` makes duration = time-to-first-message, poisoning p99 (R3 B1) (:276).
+- Monkey-patching `console` in UI — captures OTel diag output (recursion) and has global side effects; explicit `serverLog` module is bounded (:278).
+- DO `log_destinations` / collector `filelog` for logs — no trace correlation, dual app-spec config, divergent local behaviour; rejected at story time (:280).
+- Running G1 locally or deferring to rollout — local needs workstation credentials and does not prove the DO path; deferral risks dead alerts (the failure 250 exists to remove) (:282).
+- Leaving 250 as-is and superseding its follow-up later — creates a story only to cancel it, churns 4 citations (:285).
+- Retiring 250's Part 2 in P-0 — would reopen 250's reviewed AC-3 before 250 runs; operator waived PR-A doc drift instead (:287).
+- Accepting the Python cancel/deadline divergence — Python timeouts invisible to error-rate alert (:289).
+- Hand-maintained stream list / registry row for the matcher — second list that drifts; guard derives it from protos (:291).
+- Shared cross-service telemetry package — none exists; per-service `telemetry` convention stands, recorder duplication across 3 Python + 4 Node modules accepted (C-18), bounded by shared golden vectors (:293, :309). A shared Node helper was impossible anyway (OTel 0.52 vs 0.218 majors; see Scars).
 
-- Product spec approved. Status: draft → spec-ready.
-- Pass 1: FAIL on criterion 9 (7 unchecked Open Questions), plus warnings: FR-2/AC-2 series-name conflict (C-15),
-  thin AC coverage of FR-1/3/4/5/6 (C-15), AC-3 log text not in code, deployment env parity (C-1).
-  Fixed: series name is the contract (a rename needs operator sign-off and a superseding AC); design forks moved to
-  "Deferred to /sdd-design", ledger traps to "Known Traps"; AC-3 rebased on the real line
-  `servicer.py:799-800` ("running backtest id=…"); added AC-10..AC-14; env parity stated in FR-1.
-- Finding carried to design: the pre-250 scoring-stall regex `ScoreStrategy|RunBacktest` matches no line analysis
-  emits, so FR-6 must re-derive that rule (recorded in FR-3).
-- Pass 2: PASS WITH WARNINGS (5), all fixed: stale Out-of-Scope pointer; AC-6 made concrete (≤1 s startup delta);
-  AC-9 extended to PLAT-3, OTEL-1/OTEL-2, packages/otel docs + findings; AC-1/AC-10 marked representative;
-  `OTEL_ENABLED` per target stated (dev "true", prod "false", compose off) and the prod flip scoped out as a separate
-  operator rollout step after the cost budget (default chosen by reviewer-fix; operator may override).
-- Warnings remaining: none.
-- Overlap findings (no FAIL): file-level with 250 on `packages/otel/alerts/*`, dashboards, the produced-signals
-  guard and the FR-7 docs (covered by the existing `merge-order.md` row); rebase-only WARN with 252 on identity
-  `src/__tests__/telemetry*.test.ts`; soft env-file overlap with 084/242; semantic coupling with 245 (relies on
-  `xstk-error-rate-high`); 250's `trace-derived-alerting` placeholder is a possible duplicate (deferred to design).
-- Tooling drift noticed (not fixed here, out of scope): `.claude/skills/sdd-review/reference/overlap-check.md:12-13`
-  greps `feature.md` for status, but status lives only in `status.md`.
+**Scars & gotchas** (build-time):
+- Go `ForceFlush` returns export errors; only background/shutdown paths report via `otel.Handle`. `StopServer`'s `_ = forceFlush(ctx)` silently dropped a failed final flush (FR-4 breach) until the failure tests exposed it (impl-spec Deviation 3, implementation-spec.md@1ed63958:2073; old context.md@1ed63958:310).
+- grpc-go delivers the server stats `End` event from a deferred call after reply+trailers are written, so a client can see the response before `rpc.server.duration` is recorded; the status-code test must poll (flaked once under full parallel `-race`, passed 300 loaded repeats after the fix) (implementation-spec.md@1ed63958:2083; old context.md@1ed63958:345).
+- sdk-metrics 1.25.1 `PeriodicExportingMetricReader.onShutdown()` exports nothing, and an explicitly built reader ignores `OTEL_METRIC_EXPORT_INTERVAL`; `shutdownTelemetry()` therefore awaits `MeterProvider.forceFlush()` first and passes the interval env itself. Residual: while resource async attributes are pending (first ms after start) the reader exports without awaiting, so a flush that early can return before delivery (implementation-spec.md@1ed63958:2098). The UI (sdk-metrics 2.7 / sdk-logs 0.218) had the same problem for reader and log processor; `metricIntervalOptions`/`logBatchOptions` pass the env vars explicitly (implementation-spec.md@1ed63958:2113).
+- winston dev format `colorize()` rewrites `info.level` to an ANSI string before any transport runs, so the OTLP transport lost severity (`severityText` came out as `\u001b[33mwarn\u001b[39m`); the transport carries its own `format` restoring `info[Symbol.for('level')]` (found by identity AC-11 test) (implementation-spec.md@1ed63958:2103).
+- Egress audit (step 3) found notify `webPush.ts:176,178,182` logging `endpoint: row.endpoint` (a push URL embedding a capability token) and identity logging the seed-admin email; both would now leave the process via OTLP. Notify fix was outside step 35's Files list (spec defect) and applied under expand-scope with a RED/GREEN regression test (old context.md@1ed63958:288-289; implementation-spec.md@1ed63958:2108).
+- sloglint (`context: scope`) flagged far fewer calls than the spec's grep counts: 96 trading, 32 portfolio, 47 marketdata (spec said 120/73 "call sites" counting every `slog.X(`); the linter report is the authoritative inventory. Enabling it also flagged `slog.NewTextHandler(io.Discard, nil)` in the new test file (use `slog.DiscardHandler`) (old context.md@1ed63958:315, 339, 364; implementation-spec.md@1ed63958:2078).
+- Behaviour-neutral proof for the retrofit: normalise `slog.XContext(ctx, ` back to `slog.X(` in the diff and every deleted line pairs with an identical added line (old context.md@1ed63958:315, 340, 365).
+- Analysis `tests/test_owner_header_guard.py::test_main_wires_no_channel_interceptor` (`@AC-5`) asserted `"interceptors=" not in source`, which also matched the new server-interceptor call; guard narrowed to strip that one call so client/channel interceptors still fail (implementation-spec.md@1ed63958:2088).
+- Node steps' lockfile is the repo-root `pnpm-lock.yaml`; the per-service `pnpm-lock.yaml` is a stale leftover nothing reads and was deliberately left untouched (implementation-spec.md@1ed63958:2093).
+- Agent: `CallToolResult` must be imported from `mcp_types` (the path `mcp/server/_otel.py` matches on), not `mcp.types` as the spec said (old context.md@1ed63958:394). sdk-metrics 2.x has no `InMemoryMetricReader`; UI tests use a bare `MetricReader` subclass (old context.md@1ed63958:434).
+- Guard test harness: `read` with a tab IFS collapses an empty `noDataState` field; the awk-to-read delimiter is a pipe (old context.md@1ed63958:460).
+- Docs `otel-guard:removed-assets` fences in `docs/setup/grafana-cloud.md` become Part 3 hits once assets are restored, so steps 53/55 had to rewrite those paragraphs (outside their Files) for the guard to exit 0 (implementation-spec.md@1ed63958:2118).
+- Tooling: `go install golangci-lint` auto-switched to go1.26.10 and refused the Go 1.27 module; rebuilt with the 1.27 toolchain. The preinstalled v2.5.0 is older than CI's v2.14.0 (old context.md@1ed63958:267, 301). Node here was v22 vs pinned 24 (implementation-spec.md@1ed63958:2069).
+- Go log-module pins: `otel/log`, `sdk/log`, `otlploghttp` at v0.21.0 and `otelslog` at v0.20.0 so `otel` stays at v1.45.0, because "the latest log modules require otel v1.47.0" (design.md@1ed63958:60-64; old context.md@1ed63958:133-135). `go.mod` carries no comment, so do not bump one of these alone.
+- Shutdown bounds: the 3 s `GracefulStop` fallback exists because the adversary's AC-18 12 s bound exceeded compose's 10 s default stop grace (old context.md@1ed63958:141). DO SIGKILL grace verified 2026-10-30: `termination.grace_period_seconds` default 120 s (max 600 s), `drain_seconds` 15 s; no `termination` block in `.do/app*.yaml`. Forward rule: if a `termination.grace_period_seconds` below 10 is ever added, STOP and raise it (P-03), because 2 s flush + 3 s fallback + 5 s deferred = 10 s (old context.md@1ed63958:198-200, 274).
+- `alert-rules.yaml`: `deleteRules`/`deleteMuteTimes` were removed because they "would delete the restored uids" (old context.md@1ed63958:458).
+- Why the slog retrofit was in scope: only 14 of about 233 Go slog calls carried a ctx, so FR-3 trace correlation held only for `*Context` calls (recon.md@1ed63958:218-219). Prettier reflowed unrelated `index.ts` lines in ledger/notify/config (steps 29/35/38); the reflow was reverted, keeping only the shutdown edits (old context.md@1ed63958:420).
+- No shared Node telemetry helper was possible: Node services are on OTel 0.52 / resources 1.x, the UI on 0.218 / resources 2.x (recon.md@1ed63958:225-227); this strengthens the rejected "shared package" alternative.
+- Process scar: impl-spec review passes 1-3 on 2026-10-30/31 found 14 -> 2 -> 3 FAILs in the spec text (never reached code), e.g. step 43 `createDispatch` third param without callers, `Init` three-value return breaking existing test callers, steps 5/9/13 using `serverMetricViews()` that steps 4/8/12 never created (a defect already in the original spec text that passes 1 and 2 missed), step 46 stale call, step 57 grep that could never be empty. Fixed in commits `9190d2be` and `8437aede` plus a third batch that was NOT re-reviewed (old context.md@1ed63958:205-262). Reviewers had no shell, so no Verification command was ever run by a reviewer.
+- impl-spec Deviation Log 1-12, all resolved fix-now; see Scars above (notably 3, 5, 6, 8, 9, 10, 11, 12) and Deviation 1 under Permanent deviations (implementation-spec.md@1ed63958:2064-2118).
+- The context-forge `/context-constitution refresh` command was unavailable in both PR-A and PR-B sessions; manual re-read teardown was recorded instead (old context.md@1ed63958:436, 470).
+- G1 findings that changed PR-B (old context.md@1ed63958:441-448): UI exported as `service_name="xstockstrat-ui"` (spec assumed `ui`) and dev as `deployment_environment="development"` until PR #1380 set `SERVICE_NAME=ui` and dev `APPLICATION_ENV=staging`. Loki stream labels are only `service_name`, `deployment_environment` and (Python) `service_instance_id`; `platform`, `detected_level`, `severity_*`, `trace_id`, `span_id` are structured metadata, so LogQL must use metadata filters (`| detected_level="error"`) and match severity case-insensitively (`INFO` Python vs `info` Node). Active series per service (dev): marketdata 270, ui 198, identity 126, analysis 126, agent 90, ingest 90, portfolio 90, indicators 72, trading 54, ledger 36, config 36, notify 18 (~1,200 total). No `Stream*`/`Watch*` series existed yet because streams never complete (they end on every deploy, which is why the stream matcher exists). Config had no fresh sample in the 150 s verification window.
 
-## Session 2026-10-21 — sdd-design (Phase 0 checkpoint)
+**Permanent deviations** (shipped contradicts design):
+- design said keep the SDK `LoggingHandler`, pin Python SDK `<1.43` and instrumentation-grpc `==0.63b1` -> shipped: no version change at all (locks were already 1.45.1/0.66b1 in all four services) plus new dependency `opentelemetry-instrumentation-logging>=0.66b1` -> because recon was stale (D1) and the SDK handler is deprecated (D8, operator decision 2026-10-30) (design.md@1ed63958:92-96; implementation-spec.md@1ed63958:86; old context.md@1ed63958:179-186).
+- design said add the cancel/deadline interceptor to the "existing `interceptors=` list" -> shipped a new `interceptors=server_interceptors()` argument on `grpc.aio.server()` in the 3 Python backends (none existed), inner to the OTel interceptor (inserted first by GrpcAioInstrumentorServer; old context.md@1ed63958:188) -> because the servers were built with no interceptors (D2, implementation-spec.md@1ed63958:631; old context.md@1ed63958:187-188).
+- design said guard Node ESM `createRequire` -> shipped plain `require` -> because all four Node services are CommonJS/tsc-first (D3, old context.md@1ed63958:189).
+- design/recon had the slog bridge and bounded stop inline in `cmd/` -> shipped in `internal/telemetry` (`WrapLogHandler`, `StopServer`) -> because `cmd/` is excluded from CI coverage (D4, old context.md@1ed63958:190).
+- spec-time claim "no deployment-file edit is needed" (implementation-spec.md@1ed63958:78) -> shipped PR #1380 changing UI `SERVICE_NAME` to `ui` and dev `APPLICATION_ENV` to `staging` -> because G1 showed `xstockstrat-ui` / `development` labels (old context.md@1ed63958:440, 443, 448).
+- design said PR-B dashboards: keep rpc panels, rewrite `{platform=...}`/`| json | level=~` per G1 q5, drop `infrastructure.json:105` (the one drop it named) (design.md@1ed63958:218-260 (PR-B section)) -> shipped additional drops and one added panel (table below) -> because no runtime emits their series or log literals (signal.ingested, scheduler run.*, DB connection-error, order.filled) and OTLP export failures are stdout-only under FR-4 (dashboards/README.md:55-57; old context.md@1ed63958:462). `packages/otel/dashboards/README.md:58-59` points here for this table. Per-panel decision table (old context.md@1ed63958:462):
+  - KEEP + stream matcher on every `rpc_server_duration_milliseconds_*` selector: service-health request rate, error rate, P99 latency; signal-pipeline analysis scoring P99 by `rpc_method`; infrastructure transport errors (status 4|8|14) and services reporting; trading PlaceOrder rate and P50/P99.
+  - REWRITE: service-health log error volume and trading error logs, from `{platform="xstockstrat"} | json | level=~"error|ERROR"` to `{service_name=...} | detected_level="error"` (G1 q5: platform, level and trace_id are structured metadata).
+  - ADD: signal-pipeline "Analysis live-loop cycles (10m)" (registered literal `live_loop: cycle complete`).
+  - KEEP unchanged: the three Tempo panels (drill-downs).
+  - DROP: signals ingested per hour and total (`signal.ingested`, nothing produces it); agent scheduler run.completed/run.failed; infrastructure database connection-error regex and OTLP export errors (FR-4 makes those stdout-only); trading order.filled count.
+  - Result: service-health 7 panels, signal-pipeline 2, infrastructure 2, trading 3. service-health regains `DS_PROMETHEUS`/`DS_LOKI` inputs and the `$service` variable over `rpc_server_duration_milliseconds_count`, which is exempt from the matcher.
+- design said guard Part 2 is implemented per 250 and retired in PR-B -> shipped: retired in step 49 (guard rewritten as registry allowlist, SANCTIONED/FOLLOWUP/DEFECT handling removed, Part 3 kept) -> C-16 CHANGE, operator-signed at R1 gate; platform.feature carries a comment that 250 `@AC-3` is superseded by 274 `@AC-9` (old context.md@1ed63958:450; docs/sdd/business-rules/platform.feature:676-681).
+- design said work on `feature/otel-metrics-logs-export`, merging origin/main-dev back into it between PR-A and PR-B (design.md@1ed63958:213-216) -> shipped: harness-assigned session branch `ccr-4f43fb65-lagupv` (pushes to other branches were not permitted), PR-A was the retitled spec PR #1379 (implementation-spec.md@1ed63958:2064-2068); re-sync skipped as "not needed: this work continues on the session branch restarted from main-dev after each merge" (old context.md@1ed63958:472).
 
-- Mode: full debate. Operator steer: "using 250 as base design" — design builds on 250's landed end state.
-- Phase 0 Recon written (`recon.md`). Pinned-SDK probe: Go otelgrpc v0.52 emits `rpc.server.duration` (ms);
-  Python instrumentation-grpc 0.63b1 and Node instrumentation-grpc 0.52.1 emit **no** RPC metric (R1).
-- Top risks carried into grilling: R1 (7/10 backends need a custom recorder), R2 (Grafana `service_name` label
-  promotion unproven), R3 (scoring-stall rule must be re-derived), R10 (250 guard has no produced-path mechanism),
-  R11 (250's `trace-derived-alerting` follow-up).
+**Cross-feature signal**:
+- Feature 250 (`fix-otel-metrics-logs-gap`): 274 retired its guard Part 2 and restored the assets 250 deleted; the guard moved from denylist to registry allowlist (`packages/otel/produced-signals.tsv`). Feature 226: `@AC-1 @feature-226` trace-export regression is the proof for sdk-node's `spanProcessors` dropping the implicit trace exporter. Feature 210: mTLS credentials untouched (PRESERVE `@AC-4/@AC-5 @feature-210`). Feature 252: rebase-only overlap on identity `telemetry*.test.ts`.
+- Recorded WARN-level shared-file overlaps with 215, 230, 249, 251, 255, 256, 257, 275, 278, 084, 242 (rebase-only; no merge-order rows added), and semantic coupling with 245 (relies on the restored `xstk-error-rate-high`) (old context.md@1ed63958:47-50, 235-239, 261-262).
+- Spec reviewer tooling drift noticed and not fixed: `.claude/skills/sdd-review/reference/overlap-check.md:12-13` greps `feature.md` for status, but status lives only in `status.md` (old context.md@1ed63958:51-52).
 
-## Session 2026-10-21 — sdd-design (Round 1 checkpoint)
+**Deferred follow-ons**:
+- Production flip of `OTEL_ENABLED` in `.do/app.yaml` is an operator decision using G1 cost figures; Loki bytes/day was never measured (broad regex selector rejected by the cost guardrail) (old context.md@1ed63958:447; feature.md Next Action).
+- G1 q2 showed marketdata `GetBars`/`BatchGetBars`/`GetLatestQuotes` returning status 13 (INTERNAL) on dev, "out of scope here"; not triaged by this feature. Once metrics flow in prod the restored error-rate alert will see them (old context.md@1ed63958:442).
+- Accepted asymmetries (documented in OTEL constitution per context): span-derived recorders miss calls with an unsampled inbound `traceparent`; Node client-cancelled server streams never end their span (`serverUtils.js:28-67`); Go `os.Exit(1)` startup paths skip the flush; UI flush is best-effort; unwrapped UI routes (health, auth, OAuth, `config-ui/api/audit`) are not measured (design.md@1ed63958:303-315; old context.md@1ed63958:168-170).
+- Not implemented by design: `platform.otel.enabled` live switch, config keys for export interval/batch, client-side browser telemetry, application/business metrics (product-spec.md@1ed63958:81-98).
+- Open question: recon R12 (analysis `live_loop` counter created before `init_telemetry()`, `live_loop.py:75-78`; whether the API proxy meter re-binds after `set_meter_provider`) was never recorded as resolved (recon.md@1ed63958:247-249). Verify before relying on a `live_loop` counter series.
+- Stale per-service `pnpm-lock.yaml` files left in the Node services (Deviation 7) — removal out of scope (implementation-spec.md@1ed63958:2093).
 
-- Proposer R1: span-derived `rpc.server.duration` SpanProcessor for py/node (Go native otelgrpc), env-only meter+
-  logger providers, log bridges (otelslog MultiHandler / root LoggingHandler with filter / winston-transport /
-  UI serverLog.ts), dev gate G1 before assets, 250 guard Part 1 → produced-signals registry, live-loop heartbeat
-  line as stall signal, drop 4 extra otelgrpc instruments via View.
-- Orchestrator probes: Go 1.27 has `slog.NewMultiHandler`; `@opentelemetry/winston-transport@0.5.0` deps
-  `api-logs ^0.52.0` (compatible with Node 0.52 line).
-- Adversary R1: NEEDS WORK, no Floor breach. Folded technical fixes: (1) sdk-node `spanProcessors` drops the
-  implicit traceExporter → list BatchSpanProcessor explicitly (C-16 @AC-1 @feature-226); (2) JS api 1.9.1 has no
-  proxy MeterProvider → bind histogram lazily after start; (3) Node flush must start in shutdown(), not in
-  tryShutdown (long-lived streams block it); (5) pre-250 panels use `{platform=…}` / `| json` / OTLP-failure-in-Loki
-  selectors that won't be produced → per-panel decision; (6) stall rule needs `noDataState: Alerting`;
-  (11) Python `LoggingHandler` deprecated in sdk 1.42.1; (12–13) status fix-up gaps (span ERROR status, cancel→1,
-  non-integer node codes→2); (14) shared golden status vectors; (15) guard fails if a sampler env is set;
-  (16) broader metric-identifier extraction; (17) createRequire under ESM; (18) Python atexit double-shutdown;
-  (19) stall uid meaning change recorded.
-- Open operator forks (R1 gate): AC-10 agent/ui empty-export; Go trace correlation; where G1 runs; 250 story +
-  guard Part 2 CHANGE.
-- Operator decisions at R1 gate (binding, 2026-10-21), verbatim answers:
-  - AC-10 agent/UI: "Agent should have metrics, UI should have metrics in the nextjs backend layer" — agent and the
-    UI's Next.js server (BFF/route-handler) layer each emit a real metric; AC-10 rows stay valid.
-  - Go trace correlation: "Retrofit all slog calls" — every Go slog call with a context in scope moves to its
-    `*Context` variant (trading, portfolio, marketdata).
-  - G1 location: "Two PRs via dev" — PR-A runtime export → main-dev → dev; G1 evidence on dev Grafana recorded here;
-    PR-B assets/guard/docs against proven names.
-  - Feature 250: "Amend 250 before it runs" — 250's spec is amended pre-execution so its follow-up citation points
-    at feature 274 (no `trace-derived-alerting` story) and Part 2 is noted for retirement by 274.
-    **C-16 CHANGE sign-off**: operator approves 274 retiring 250's guard Part 2 ("docs list only exported signals")
-    — record mirrored into 250's context.md when amended.
+**Ledger entries written**: insights.md (3 new — see 2026-11-04 entries; plus the pre-existing 2026-10-21 entry at insights.md:3706-3709), fails.md (1 new — see 2026-11-04 entry; plus the pre-existing 2026-10-21 entry at fails.md:3044-3048). Pre-existing ledger cites to design.md/recon.md and the Round 1-3 checkpoints (fails.md:3046, insights.md:3708) resolve at 1ed63958.
 
-## Session 2026-10-21 — sdd-design (Round 2 checkpoint)
+**Runtime-invariant recommendations (→ /context-constitution)**: PLAT-3, OTEL-1 and OTEL-2 were already updated by PR-B (old context.md@1ed63958:468). Candidates to verify against OTEL-2/per-module constitutions rather than assume covered: (1) Node explicit `PeriodicExportingMetricReader`/`BatchLogRecordProcessor` ignore `OTEL_*` interval env and reader shutdown does not export — flush `MeterProvider` before `sdk.shutdown()`; (2) winston OTLP transport must restore the un-colorized level; (3) Go shutdown order is ForceFlush -> bounded GracefulStop (3 s) -> Stop, flush errors routed through `otel.Handle`; (4) never log push-subscription endpoints or emails (notify `webPush.ts`, identity seed-admin) now that logs egress via OTLP; (5) Python cancel/deadline interceptor must sit inner to the OTel interceptor.
 
-- Proposer R2: P-0 (amend 250) → PR-A (runtime, all 12 + Go *Context retrofit via sloglint `context: scope` +
-  agent `mcp.tool.duration` ServerMiddleware + UI Connect-interceptor `rpc.client.duration` + `serverLog` +
-  analysis heartbeat + golden status vectors + egress audit; no docs/ or packages/otel/ edits) → G1 (7 fixed
-  queries on dev Grafana) → PR-B (registry/guard, alerts w/ noDataState, mute timing, per-panel dashboards, docs,
-  C-16 CHANGE). Node: explicit BatchSpanProcessor, lazy meter, transport attached after start, awaited+bounded
-  shutdown, createRequire. Python: SDK LoggingHandler pinned <1.43, atexit flush, ingest pins raised.
-- Orchestrator verification: mcp 2.3.0 `ServerMiddleware` exposes `ctx.method` + raw `ctx.params` (tool name)
-  before validation; request failures raise `MCPError` (`mcp/server/context.py:146-160`).
-- Adversary R2: NEEDS WORK, approvable once folded; no Floor breach (F-09 conditional: re-check 250 untouched
-  right before P-0). Strongest proposer risk refuted: py `context.abort` and grpc-js `callback({code})` set
-  `rpc.grpc.status_code` (`_aio_server.py:29-37`, `serverUtils.js:75-83`).
-  Blocking (folded): (1) py unhandled exception → attr 0 + exception event → record 2 (CancelledError 1);
-  (2) streaming RPCs (WatchConfig/StreamEvents/StreamOrderUpdates/StreamQuotes) end on every deploy → would fire
-  restored p99/error alerts; (3) Go SIGTERM flush blocked by open streams in GracefulStop → ForceFlush before
-  GracefulStop / bounded Stop fallback.
-  Non-blocking (folded): /otlp prefix tests for metrics+logs; agent tool set derived at runtime (no "45");
-  agent outcome=error for raise and isError; PR-A doc-drift window needs operator waiver + service-docs teardown;
-  P-0 wording "implement now; retire in 274 PR-B", re-run /sdd-review 250 impl-spec, merge-order 250→274 PR-B;
-  feature branch re-sync between PRs, status stays in-progress; sloglint no-mixed-args=false; shared bucket
-  boundaries; unsampled-traceparent asymmetry accepted; UI meter lazy; UI flush best-effort; Go otelslog/sdk-log
-  API verification at spec step 0; identity email PII decision before PR-A merges.
-- Operator decisions at R2 gate (binding, 2026-10-21), verbatim answers:
-  - Gate: "Run round 3" (not yet approved; PR-A doc-drift waiver + Part 2 timing still pending the R3 gate).
-  - Streams: "Exclude in alert/panel queries" — recorders keep recording streaming calls (FR-2 unchanged);
-    restored rules and p99/error panels exclude streaming methods via an `rpc_method` filter pinned by a guard test.
-  - UI metric: "BFF route histogram" — `http.server.duration` per Next.js BFF route (segment + service) and HTTP
-    status; no per-method gRPC client histogram. (Supersedes the R2 `rpc.client.duration` proposal.)
-  - Identity email: "Replace with user_id everywhere" — `identityServiceImpl.ts:151-154` logs the user id instead
-    of the email on stdout and OTLP (small identity behaviour change; PII removed at source).
-
-## Session 2026-10-21 — sdd-design (Round 3 checkpoint)
-
-- Proposer R3: final consolidated design (P-0 → PR-A → G1 → re-sync → PR-B) with R2 findings + R2-gate decisions;
-  py/node status rule (non-zero attr → error evidence → ERROR status → 0) + golden vectors; stream exclusion via
-  proto-derived guard Part 4; UI `http.server.duration` in `createDispatch` (`bffShared.ts:115-152`); agent
-  `ToolMetricsMiddleware` (`mcp.tool.duration`, `gen_ai.tool.name`, tool set from `list_tools()`); identity
-  `{ email }` → `{ user_id }`; Go ForceFlush → bounded GracefulStop/Stop; AC-15..AC-21 appended.
-- Orchestrator verification: Go SDK default buckets == py/node (`sdk/metric@v1.45.0/reader.go:206`); consistent Go
-  set at otel v1.45.0 = sdk/metric + otlpmetrichttp v1.45.0, log/sdk-log/otlploghttp v0.21.0, otelslog v0.20.0
-  (latest log modules need otel v1.47.0); golangci-lint v2.14.0 bundles sloglint v0.12.0 with `context` and
-  `no-mixed-args` (default true) options.
-- Adversary R3: NOT APPROVABLE as written, APPROVABLE once B1/B2 folded; no Floor breach; R2 blockers (1),(3)
-  verified resolved. B1: connect `untilFirst` (`handler-factory.js:277-280`) makes UI server-stream duration =
-  time-to-first-message (StreamAlerts idle for hours) → record unary only (`methodKind`), try/finally.
-  B2: guard Part 4 must match `(count|bucket|sum)` and exempt only templating `label_values`.
-  Non-blocking: AC-18 12 s bound > compose 10 s default → 3 s fallback; py CancelledError also covers deadline
-  (records 0 vs Go 4) → interceptor or documented divergence; proto regex tolerate `rpc Name (` + comments, fail on
-  stream/unary name collision; agent outcome=error for any exception; UI `/accounts` + ledger export unwrapped;
-  recorder duplication accepted (C-18); doc-drift waiver must be recorded in PR body with manual reconciliation.
-- Operator decisions at R3 gate (binding, 2026-10-21), verbatim answers:
-  - Gate: "Approve" — design approved with B1/B2 + folded non-blocking fixes (3 s GracefulStop fallback, agent any
-    exception → error, robust proto parser, G1 requires one real non-zero py + node status emission).
-  - Python deadlines: "Small interceptor" — grpc.aio server interceptor in the 3 py backends stamps 4 (deadline
-    expired) / 1 (cancelled) on CancelledError before re-raise; parity with Go.
-  - Doc drift: "Waive the drift" — operator waives the PR-A→PR-B docs under-statement window; PR-A teardown covers
-    services/*/docs + service CLAUDE.md; PR-A body records the waiver + manual reconciliation (fails.md:670).
-  - UI coverage: "Wrap REST routes too" — `/accounts/api/*` and `/trader/api/ledger/export` route handlers are
-    wrapped with the same recorder; every segment reports.
-
-## Session 2026-10-21 — sdd-design
-
-- Phase 0 Recon: wrote recon.md (12 runtimes + packages/otel; reuse: per-runtime resource builders + env-only
-  exporters, fake-receiver /otlp tests, 250's guard/fence/otel-signals job).
-- Phase 1 Grilling: 3 rounds (full). Chosen approach: P-0 amend 250 → PR-A runtime export (span-derived
-  rpc.server.duration for py/node, otelgrpc for Go, otelslog/LoggingHandler/winston-transport/serverLog bridges,
-  agent mcp.tool.duration, UI BFF http.server.duration, py cancel/deadline interceptor, Go *Context retrofit) →
-  G1 dev proof → re-sync → PR-B registry + proto-derived stream-exclusion guard + restored alerts/dashboards/docs.
-  Rejected: narrow-to-traces, per-language interceptors as primary recorder, instrumentation upgrade,
-  recorder-side stream exclusion, UI per-method client histogram, console monkey-patch, log_destinations.
-- Constitution rules touched: C-02, C-08, C-10, C-11, C-13, C-14, C-15, C-16, C-18, P-01..P-04, F-04, F-06, F-07,
-  F-09. Floor breaches: none.
-- Acceptance: appended AC-15..AC-22 (append-only; AC-1..AC-14 unchanged).
-- Open Threads (target): G1 label/series proof (G1); real cross-language status parity (G1 q2); DO SIGKILL grace
-  (PR-A spec step 0); UI Next.js span correlation (PR-A AC-11 ui row); unwrapped UI health/auth/oauth/audit routes
-  (accepted); cost budget (G1 q7, prod flip out of scope); P-0 F-09 re-check (P-0).
-- Status: spec-ready → design-approved.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958. (acceptance.feature, feature.md, status.md kept; all 22 `@AC-*` already promoted per C-16.)

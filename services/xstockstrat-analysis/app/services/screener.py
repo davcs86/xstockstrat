@@ -33,6 +33,7 @@ from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 from opentelemetry import trace
 
+from app.config.watcher import int_positive
 from app.services import scoring
 
 log = logging.getLogger(__name__)
@@ -83,14 +84,14 @@ class ScreenerEngine:
         self._cfg = cfg
         self._source_weights = source_weights or {}
         self._sem = asyncio.Semaphore(
-            max(1, cfg.get_int("analysis.screener.max_concurrent_formula_evals", 4))
+            int_positive(cfg, "analysis.screener.max_concurrent_formula_evals", 4)
         )
         # feature 176 FR-4: the shared analysis compute pool for the pure-CPU rank tail. None (e.g.
         # in unit tests) falls back to asyncio.to_thread — still off-loop, just not the single pool.
         self._compute_executor = compute_executor
 
     async def screen(self, request, propagation_meta=()) -> analysis_pb2.ScreenSymbolsResponse:
-        max_universe = self._cfg.get_int("analysis.screener.max_universe_size", 100)
+        max_universe = int_positive(self._cfg, "analysis.screener.max_universe_size", 100)
         symbols = list(request.symbols)[:max_universe]
 
         criteria = list(request.criteria)

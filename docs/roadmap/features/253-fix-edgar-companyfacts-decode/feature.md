@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-edgar-companyfacts-decode`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-21
 **Committed to main**: 38e2e104129f16dd339f9375901334a274109511
 **Launched date**: 2026-10-22
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,19 +16,20 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md` |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edgar-companyfacts-string-cik-defect.md) |
 | 2026-10-21 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 2 steps (design skipped per triage; `/sdd-review product-spec` not run) |
 | 2026-10-21 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; test-first (Step 2 RED) then Step 1 |
 | 2026-10-21 | `in-progress` → `code-completed` | /sdd-execute | Both steps done; integration PR #1274 → `main-dev` |
 
 | 2026-10-22 | `code-completed` → `launched` | CI workflow | Promoted via PR #1295; committed 38e2e104129f16dd339f9375901334a274109511 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 2 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios promoted at launch (marketdata suite)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

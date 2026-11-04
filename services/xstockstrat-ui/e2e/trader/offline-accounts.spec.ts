@@ -166,6 +166,58 @@ test.describe('Offline account portfolios (feature 157)', () => {
     await expect(page.getByText('FILLED', { exact: true })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('190.25').first()).toBeVisible();
   });
+
+  // Feature 256 FR-5 / FR-6: a rejected or unpublished confirm keeps the dialog open with the
+  // server's message. Error payloads are scenario one-offs (inline, C-12 exempt).
+  const confirmError = async (
+    page: import('@playwright/test').Page,
+    status: number,
+    code: string,
+    message: string,
+  ) => {
+    await page.route(GET_ORDER, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(OFFLINE_ORDER_NEW),
+      });
+    });
+    await page.route(CONFIRM_ORDER, async (route) => {
+      await route.fulfill({
+        status,
+        contentType: 'application/json',
+        body: JSON.stringify({ code, message }),
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto(`/trader/orders/${OFFLINE_ORDER_NEW.orderId}`);
+    const confirmBtn = page.getByRole('button', { name: 'Confirm fill' });
+    await expect(confirmBtn).toBeVisible({ timeout: 10000 });
+    await confirmBtn.click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByPlaceholder('Filled quantity').fill('10');
+    await dialog.getByPlaceholder('Average fill price').fill('190.25');
+    await dialog.getByRole('button', { name: 'Confirm fill' }).click();
+    return dialog;
+  };
+
+  test('@AC-4 a rejected fill price keeps the dialog open with the server message', async ({
+    page,
+  }) => {
+    const message = 'filled_avg_price must be a finite number >= 0 when filling';
+    const dialog = await confirmError(page, 400, 'invalid_argument', message);
+    await expect(dialog.getByText(message)).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByPlaceholder('Filled quantity')).toBeVisible();
+  });
+
+  test('@AC-5 an unpublished recompute shows the error and the order is not shown as FILLED', async ({
+    page,
+  }) => {
+    const message = 'positions not published; re-confirm to retry';
+    const dialog = await confirmError(page, 503, 'unavailable', message);
+    await expect(dialog.getByText(message)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('FILLED', { exact: true })).toHaveCount(0);
+  });
 });
 
 /**

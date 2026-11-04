@@ -12,7 +12,7 @@ from gen.analysis.v1 import analysis_pb2
 
 from app.handlers.servicer import bucket_pnl_factors
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
-from tests.conftest import OWNER_HEADERS, ctx_with
+from tests.conftest import OWNER_HEADERS, ctx_with, snapshot_watcher
 from tests.test_analysis_servicer import make_servicer
 
 
@@ -174,3 +174,21 @@ async def test_ac15_headerless_query_pnl_patterns_unauthenticated():
         await servicer.QueryPnLPatterns(analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL"), ctx)
     assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
     assert servicer._pnl_samples_repo.calls == []
+
+
+async def test_stored_zero_min_sample_count_reaches_bucketing(monkeypatch):
+    """Feature 244 @AC-12: a stored min_sample_count of 0 reaches the bucketing (was: 5)."""
+    seen = []
+
+    def _recorder(samples, *, min_sample, bucket_count):
+        seen.append(min_sample)
+        return []
+
+    monkeypatch.setattr("app.handlers.servicer.bucket_pnl_factors", _recorder)
+    servicer = make_servicer()
+    servicer._pnl_samples_repo = _FakeSamplesRepo([])
+    servicer._cfg = snapshot_watcher(**{"analysis.patterns.min_sample_count": 0})
+    await servicer.QueryPnLPatterns(
+        analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL", limit=10), ctx_with(OWNER_HEADERS)
+    )
+    assert seen == [0]

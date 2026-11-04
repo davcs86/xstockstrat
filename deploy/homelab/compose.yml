@@ -274,7 +274,7 @@ services:
       AGENT_PUBLIC_URL: ${APP_URL}/agent
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      SERVICE_NAME: xstockstrat-ui
+      SERVICE_NAME: ui
       DB_POOL_MAX: "1"
       # Next binds $HOSTNAME, which Docker sets to the container id; the 127.0.0.1 healthcheck needs 0.0.0.0.
       HOSTNAME: "0.0.0.0"

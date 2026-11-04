@@ -347,6 +347,7 @@ function createBasePortfolio() {
         realizedPnlLifetime: undefined,
         feesSinceSnapshot: undefined,
         feesLifetime: undefined,
+        offlineStateUnavailable: false,
     };
 }
 exports.Portfolio = {
@@ -398,6 +399,9 @@ exports.Portfolio = {
         }
         if (message.feesLifetime !== undefined) {
             writer.uint32(129).double(message.feesLifetime);
+        }
+        if (message.offlineStateUnavailable !== false) {
+            writer.uint32(136).bool(message.offlineStateUnavailable);
         }
         return writer;
     },
@@ -520,6 +524,13 @@ exports.Portfolio = {
                     message.feesLifetime = reader.double();
                     continue;
                 }
+                case 17: {
+                    if (tag !== 136) {
+                        break;
+                    }
+                    message.offlineStateUnavailable = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -600,6 +611,11 @@ exports.Portfolio = {
                 : isSet(object.fees_lifetime)
                     ? globalThis.Number(object.fees_lifetime)
                     : undefined,
+            offlineStateUnavailable: isSet(object.offlineStateUnavailable)
+                ? globalThis.Boolean(object.offlineStateUnavailable)
+                : isSet(object.offline_state_unavailable)
+                    ? globalThis.Boolean(object.offline_state_unavailable)
+                    : false,
         };
     },
     toJSON(message) {
@@ -652,6 +668,9 @@ exports.Portfolio = {
         if (message.feesLifetime !== undefined) {
             obj.feesLifetime = message.feesLifetime;
         }
+        if (message.offlineStateUnavailable !== false) {
+            obj.offlineStateUnavailable = message.offlineStateUnavailable;
+        }
         return obj;
     },
     create(base) {
@@ -675,6 +694,7 @@ exports.Portfolio = {
         message.realizedPnlLifetime = object.realizedPnlLifetime ?? undefined;
         message.feesSinceSnapshot = object.feesSinceSnapshot ?? undefined;
         message.feesLifetime = object.feesLifetime ?? undefined;
+        message.offlineStateUnavailable = object.offlineStateUnavailable ?? false;
         return message;
     },
 };
@@ -705,6 +725,7 @@ function createBasePosition() {
         source: PositionSource.POSITION_SOURCE_UNSPECIFIED,
         markSource: MarkSource.MARK_SOURCE_UNSPECIFIED,
         markAsOf: undefined,
+        offlineStateUnavailable: false,
     };
 }
 exports.Position = {
@@ -783,6 +804,9 @@ exports.Position = {
         }
         if (message.markAsOf !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.markAsOf), writer.uint32(202).fork()).join();
+        }
+        if (message.offlineStateUnavailable !== false) {
+            writer.uint32(208).bool(message.offlineStateUnavailable);
         }
         return writer;
     },
@@ -968,6 +992,13 @@ exports.Position = {
                     message.markAsOf = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 26: {
+                    if (tag !== 208) {
+                        break;
+                    }
+                    message.offlineStateUnavailable = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1085,6 +1116,11 @@ exports.Position = {
                 : isSet(object.mark_as_of)
                     ? fromJsonTimestamp(object.mark_as_of)
                     : undefined,
+            offlineStateUnavailable: isSet(object.offlineStateUnavailable)
+                ? globalThis.Boolean(object.offlineStateUnavailable)
+                : isSet(object.offline_state_unavailable)
+                    ? globalThis.Boolean(object.offline_state_unavailable)
+                    : false,
         };
     },
     toJSON(message) {
@@ -1164,6 +1200,9 @@ exports.Position = {
         if (message.markAsOf !== undefined) {
             obj.markAsOf = message.markAsOf.toISOString();
         }
+        if (message.offlineStateUnavailable !== false) {
+            obj.offlineStateUnavailable = message.offlineStateUnavailable;
+        }
         return obj;
     },
     create(base) {
@@ -1196,6 +1235,7 @@ exports.Position = {
         message.source = object.source ?? PositionSource.POSITION_SOURCE_UNSPECIFIED;
         message.markSource = object.markSource ?? MarkSource.MARK_SOURCE_UNSPECIFIED;
         message.markAsOf = object.markAsOf ?? undefined;
+        message.offlineStateUnavailable = object.offlineStateUnavailable ?? false;
         return message;
     },
 };

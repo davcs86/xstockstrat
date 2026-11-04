@@ -96,6 +96,11 @@ export interface Portfolio {
     feesSinceSnapshot?: number | undefined;
     /** offline accounts only */
     feesLifetime?: number | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+     * day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+     */
+    offlineStateUnavailable: boolean;
 }
 export interface Position {
     symbol: string;
@@ -159,6 +164,11 @@ export interface Position {
     markSource: MarkSource;
     /** LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE. */
     markAsOf?: Date | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+     * day_pnl_pct are then zero — not a real $0.
+     */
+    offlineStateUnavailable: boolean;
 }
 export interface PortfolioSnapshot {
     portfolioId: string;

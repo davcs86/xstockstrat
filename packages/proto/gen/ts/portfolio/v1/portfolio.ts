@@ -383,7 +383,14 @@ export interface Portfolio {
     | number
     | undefined;
   /** offline accounts only */
-  feesLifetime?: number | undefined;
+  feesLifetime?:
+    | number
+    | undefined;
+  /**
+   * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+   * day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+   */
+  offlineStateUnavailable: boolean;
 }
 
 export interface Position {
@@ -449,7 +456,14 @@ export interface Position {
   source: PositionSource;
   markSource: MarkSource;
   /** LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE. */
-  markAsOf?: Date | undefined;
+  markAsOf?:
+    | Date
+    | undefined;
+  /**
+   * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+   * day_pnl_pct are then zero — not a real $0.
+   */
+  offlineStateUnavailable: boolean;
 }
 
 export interface PortfolioSnapshot {
@@ -765,6 +779,7 @@ function createBasePortfolio(): Portfolio {
     realizedPnlLifetime: undefined,
     feesSinceSnapshot: undefined,
     feesLifetime: undefined,
+    offlineStateUnavailable: false,
   };
 }
 
@@ -817,6 +832,9 @@ export const Portfolio: MessageFns<Portfolio> = {
     }
     if (message.feesLifetime !== undefined) {
       writer.uint32(129).double(message.feesLifetime);
+    }
+    if (message.offlineStateUnavailable !== false) {
+      writer.uint32(136).bool(message.offlineStateUnavailable);
     }
     return writer;
   },
@@ -956,6 +974,14 @@ export const Portfolio: MessageFns<Portfolio> = {
           message.feesLifetime = reader.double();
           continue;
         }
+        case 17: {
+          if (tag !== 136) {
+            break;
+          }
+
+          message.offlineStateUnavailable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1037,6 +1063,11 @@ export const Portfolio: MessageFns<Portfolio> = {
         : isSet(object.fees_lifetime)
         ? globalThis.Number(object.fees_lifetime)
         : undefined,
+      offlineStateUnavailable: isSet(object.offlineStateUnavailable)
+        ? globalThis.Boolean(object.offlineStateUnavailable)
+        : isSet(object.offline_state_unavailable)
+        ? globalThis.Boolean(object.offline_state_unavailable)
+        : false,
     };
   },
 
@@ -1090,6 +1121,9 @@ export const Portfolio: MessageFns<Portfolio> = {
     if (message.feesLifetime !== undefined) {
       obj.feesLifetime = message.feesLifetime;
     }
+    if (message.offlineStateUnavailable !== false) {
+      obj.offlineStateUnavailable = message.offlineStateUnavailable;
+    }
     return obj;
   },
 
@@ -1114,6 +1148,7 @@ export const Portfolio: MessageFns<Portfolio> = {
     message.realizedPnlLifetime = object.realizedPnlLifetime ?? undefined;
     message.feesSinceSnapshot = object.feesSinceSnapshot ?? undefined;
     message.feesLifetime = object.feesLifetime ?? undefined;
+    message.offlineStateUnavailable = object.offlineStateUnavailable ?? false;
     return message;
   },
 };
@@ -1145,6 +1180,7 @@ function createBasePosition(): Position {
     source: PositionSource.POSITION_SOURCE_UNSPECIFIED,
     markSource: MarkSource.MARK_SOURCE_UNSPECIFIED,
     markAsOf: undefined,
+    offlineStateUnavailable: false,
   };
 }
 
@@ -1224,6 +1260,9 @@ export const Position: MessageFns<Position> = {
     }
     if (message.markAsOf !== undefined) {
       Timestamp.encode(toTimestamp(message.markAsOf), writer.uint32(202).fork()).join();
+    }
+    if (message.offlineStateUnavailable !== false) {
+      writer.uint32(208).bool(message.offlineStateUnavailable);
     }
     return writer;
   },
@@ -1435,6 +1474,14 @@ export const Position: MessageFns<Position> = {
           message.markAsOf = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 26: {
+          if (tag !== 208) {
+            break;
+          }
+
+          message.offlineStateUnavailable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1553,6 +1600,11 @@ export const Position: MessageFns<Position> = {
         : isSet(object.mark_as_of)
         ? fromJsonTimestamp(object.mark_as_of)
         : undefined,
+      offlineStateUnavailable: isSet(object.offlineStateUnavailable)
+        ? globalThis.Boolean(object.offlineStateUnavailable)
+        : isSet(object.offline_state_unavailable)
+        ? globalThis.Boolean(object.offline_state_unavailable)
+        : false,
     };
   },
 
@@ -1633,6 +1685,9 @@ export const Position: MessageFns<Position> = {
     if (message.markAsOf !== undefined) {
       obj.markAsOf = message.markAsOf.toISOString();
     }
+    if (message.offlineStateUnavailable !== false) {
+      obj.offlineStateUnavailable = message.offlineStateUnavailable;
+    }
     return obj;
   },
 
@@ -1666,6 +1721,7 @@ export const Position: MessageFns<Position> = {
     message.source = object.source ?? PositionSource.POSITION_SOURCE_UNSPECIFIED;
     message.markSource = object.markSource ?? MarkSource.MARK_SOURCE_UNSPECIFIED;
     message.markAsOf = object.markAsOf ?? undefined;
+    message.offlineStateUnavailable = object.offlineStateUnavailable ?? false;
     return message;
   },
 };

@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `ccr-9f55a8ac-dtw4iv` (harness-assigned; see context.md)
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-16
 **Last Updated**: 2026-10-18
 **Committed to main**: 65bbc3cbf93a03f5359b60228398a25e6f297f05
 **Launched date**: 2026-10-20
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` |
+| 2026-10-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md) |
 | 2026-10-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved on round 2 (7 warnings carried to design) |
 | 2026-10-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, quick extended by operator) and approved; recon.md + design.md written |
 | 2026-10-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
@@ -23,15 +24,16 @@
 | 2026-10-18 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; staging gates G1–G4 pending (operator) before merge |
 
 | 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1258; committed 65bbc3cbf93a03f5359b60228398a25e6f297f05 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — codebase dossier, existing business rules (C-16)
-- [Design](design.md) — approved design (4 rounds), rejected alternatives, open risks, staging gates G1–G4
-- [Implementation Spec](implementation-spec.md) — 11 steps (config bounds, marketdata repo/quote path/retention, portfolio deadline + GetPnL, docs)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to the portfolio and marketdata suites (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -131,4 +131,36 @@ test.describe('ledger event export (feature 021)', () => {
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('ledger-events.ndjson');
   });
+
+  test('@AC-7 a failed export shows an error with no unhandled rejection', async ({ page }) => {
+    const pageErrors: Error[] = [];
+    page.on('pageerror', (err) => pageErrors.push(err));
+    await addAuthCookie(page);
+    await page.route('**/trader/api/ledger/export**', (route) =>
+      route.fulfill({ status: 500, body: 'boom' }),
+    );
+    await page.goto('/trader/portfolio');
+
+    await page.getByRole('button', { name: 'Export events' }).click();
+
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Export failed (HTTP 500)' }),
+    ).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('@AC-11 a rejected export request shows an error with no unhandled rejection', async ({
+    page,
+  }) => {
+    const pageErrors: Error[] = [];
+    page.on('pageerror', (err) => pageErrors.push(err));
+    await addAuthCookie(page);
+    await page.route('**/trader/api/ledger/export**', (route) => route.abort('failed'));
+    await page.goto('/trader/portfolio');
+
+    await page.getByRole('button', { name: 'Export events' }).click();
+
+    await expect(page.getByRole('alert').filter({ hasText: 'Export failed' })).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
 });

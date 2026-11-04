@@ -1,0 +1,134 @@
+name: SOPS bootstrap
+
+# One-shot seed of secrets/<env>.enc.yaml (common + digitalocean) from the DEV_*/PROD_* repo secrets, opened
+# as a PR to main-dev. Refuses an env whose file already exists on main-dev unless force=true (docs/runbooks/sops-secrets.md).
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Overwrite an existing secrets/<env>.enc.yaml on main-dev (re-seed from the legacy secrets)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - environment: staging
+            prefix: DEV
+          - environment: production
+            prefix: PROD
+    environment: ${{ matrix.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: ./.github/actions/setup-sops
+
+      - name: Build secrets/${{ matrix.environment }}.enc.yaml (ciphertext only, self-verified)
+        env:
+          FORCE: ${{ inputs.force }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          SOPS_OPERATOR_AGE_RECIPIENT: ${{ vars.SOPS_OPERATOR_AGE_RECIPIENT }}
+          LEGACY_JWT_SECRET: ${{ secrets[format('{0}_JWT_SECRET', matrix.prefix)] }}
+          LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets[format('{0}_BROKER_ACCOUNTS_ENCRYPTION_KEY', matrix.prefix)] }}
+          LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets[format('{0}_CONFIG_SECRETS_ENCRYPTION_KEY', matrix.prefix)] }}
+          LEGACY_MTLS_CA: ${{ secrets[format('{0}_MTLS_CA', matrix.prefix)] }}
+          LEGACY_SLACK_WEBHOOK_URL: ${{ secrets[format('{0}_SLACK_WEBHOOK_URL', matrix.prefix)] }}
+          LEGACY_SENDGRID_API_KEY: ${{ secrets[format('{0}_SENDGRID_API_KEY', matrix.prefix)] }}
+          LEGACY_VAPID_PRIVATE_KEY: ${{ secrets[format('{0}_VAPID_PRIVATE_KEY', matrix.prefix)] }}
+          LEGACY_VAPID_PUBLIC_KEY: ${{ secrets[format('{0}_VAPID_PUBLIC_KEY', matrix.prefix)] }}
+          LEGACY_VAPID_SUBJECT: ${{ secrets[format('{0}_VAPID_SUBJECT', matrix.prefix)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_ENDPOINT', matrix.prefix)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_HEADERS', matrix.prefix)] }}
+          LEGACY_PROJECT_ID: ${{ secrets[format('DO_{0}_PROJECT_ID', matrix.prefix)] }}
+          TARGET: ${{ matrix.environment }}
+        run: |
+          force_flag=""
+          [ "$FORCE" = true ] && force_flag=--force
+          python3 scripts/sops_secrets.py build --env "$TARGET" --out "$RUNNER_TEMP/out" $force_flag
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: sops-${{ matrix.environment }}
+          path: ${{ runner.temp }}/out
+          retention-days: 1
+
+  pr:
+    needs: seed
+    runs-on: ubuntu-24.04
+    steps:
+      - name: GH_PAT must be set
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          [ -n "$GH_PAT" ] || { echo "::error::GH_PAT is required: a GITHUB_TOKEN PR runs no CI"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main-dev
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        with:
+          pattern: sops-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/out
+
+      - name: Write .sops.yaml and secrets/
+        env:
+          SOPS_OPERATOR_AGE_RECIPIENT: ${{ vars.SOPS_OPERATOR_AGE_RECIPIENT }}
+        run: |
+          mkdir -p secrets
+          cp "$RUNNER_TEMP/out/"*.enc.yaml secrets/
+          python3 scripts/sops_secrets.py sops-config "$RUNNER_TEMP/out" >.sops.yaml
+
+      - name: Commit and push chore/sops-bootstrap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin '+refs/heads/chore/sops-bootstrap:refs/remotes/origin/chore/sops-bootstrap' || true
+          git checkout -B chore/sops-bootstrap
+          git add .sops.yaml secrets/
+          git commit -m "chore(secrets): bootstrap SOPS files from the legacy secrets"
+          for attempt in 1 2 3 4; do
+            if git push --force-with-lease origin chore/sops-bootstrap; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              backoff=$((2 ** attempt))
+              echo "::warning::Push failed (attempt $attempt/4). Retrying in ${backoff}s..."
+              sleep "$backoff"
+              git fetch origin '+refs/heads/chore/sops-bootstrap:refs/remotes/origin/chore/sops-bootstrap' || true
+            fi
+          done
+          echo "::error::Push of chore/sops-bootstrap failed after 4 attempts."
+          exit 1
+
+      - name: Open or update the PR to main-dev
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          body="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "Seeds \`secrets/<env>.enc.yaml\` and \`.sops.yaml\` from the legacy GitHub secrets (feature 286)."
+            echo
+            if ls "$RUNNER_TEMP/out/"*.changes.md >/dev/null 2>&1; then
+              cat "$RUNNER_TEMP/out/"*.changes.md
+            else
+              echo "Initial seed: no existing file was overwritten."
+            fi
+          } >"$body"
+          existing=$(gh pr list --head chore/sops-bootstrap --base main-dev --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --body-file "$body"
+          else
+            gh pr create --base main-dev --head chore/sops-bootstrap \
+              --title "chore(secrets): bootstrap SOPS files" --body-file "$body"
+          fi

@@ -201,7 +201,12 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   // Which of Step 1's 4 sub-screens is showing. Persists across outer-step transitions so Back
   // from outer Step 2 lands on sub-screen 4, the one that handed off to Step 2.
   const [identitySubStep, setIdentitySubStep] = useState<1 | 2 | 3 | 4>(1);
-  const { mutate, isPending, error: errorObj } = useManageStrategy();
+  // serverError renders inline below, so the global mutation fallback is skipped.
+  const {
+    mutate,
+    isPending,
+    error: errorObj,
+  } = useManageStrategy({ meta: { errorHandled: true } });
   const { data: formulasData } = useFormulas({ pageSize: 50 });
 
   const [strategyId, setStrategyId] = useState(initial?.strategyId ?? '');

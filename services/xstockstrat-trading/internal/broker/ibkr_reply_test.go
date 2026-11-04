@@ -10,13 +10,14 @@ import (
 	"testing"
 
 	"github.com/xstockstrat/trading/internal/broker"
+	"github.com/xstockstrat/trading/internal/testdata"
 )
 
 // Regression suite for docs/reports/2026-10-03-ibkr-confirmation-prompt-unplaced-order-defect.md.
 
 func ibkrOrdersServer(t *testing.T, ordersReply interface{}, capture *map[string]interface{}) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/iserver/secdef/search":
@@ -31,7 +32,7 @@ func ibkrOrdersServer(t *testing.T, ordersReply interface{}, capture *map[string
 		default:
 			http.NotFound(w, r)
 		}
-	}))
+	})})
 }
 
 func promptReply(id string) []map[string]interface{} {
@@ -50,7 +51,7 @@ type promptServer struct {
 func newPromptServer(t *testing.T, replies ...interface{}) *promptServer {
 	t.Helper()
 	ps := &promptServer{replies: replies}
-	ps.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ps.Server = httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/iserver/secdef/search":
@@ -70,14 +71,14 @@ func newPromptServer(t *testing.T, replies ...interface{}) *promptServer {
 		default:
 			http.NotFound(w, r)
 		}
-	}))
+	})})
 	return ps
 }
 
 func TestIBKRSubmitOrder_ConfirmationPrompt_AutoConfirmedAndPlaced(t *testing.T) {
 	srv := newPromptServer(t, promptReply("p-1"), []map[string]interface{}{{"order_id": "ibkr-77", "order_status": "PreSubmitted"}})
 	defer srv.Close()
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1"))
 
 	o, err := c.SubmitOrder(context.Background(), broker.OrderRequest{Symbol: "AAPL", Side: "buy", OrderType: "market", Qty: 10, TimeInForce: "day"})
 	if err != nil {
@@ -99,7 +100,7 @@ func TestIBKRSubmitOrder_ConfirmationPrompt_AutoConfirmedAndPlaced(t *testing.T)
 func TestIBKRSubmitOrder_EndlessPrompts_FailClosed(t *testing.T) {
 	srv := newPromptServer(t, promptReply("p-n"))
 	defer srv.Close()
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1"))
 
 	_, err := c.SubmitOrder(context.Background(), broker.OrderRequest{Symbol: "AAPL", Side: "buy", OrderType: "market", Qty: 10, TimeInForce: "day"})
 	if !errors.Is(err, broker.ErrIBKRConfirmationRequired) {
@@ -113,7 +114,7 @@ func TestIBKRSubmitOrder_EndlessPrompts_FailClosed(t *testing.T) {
 func TestIBKRSubmitOrder_EmptyOrderID_IsError(t *testing.T) {
 	srv := ibkrOrdersServer(t, []map[string]interface{}{{"order_status": "PreSubmitted"}}, nil)
 	defer srv.Close()
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1"))
 
 	if o, err := c.SubmitOrder(context.Background(), broker.OrderRequest{Symbol: "AAPL", Side: "buy", OrderType: "market", Qty: 10, TimeInForce: "day"}); err == nil {
 		t.Fatalf("got success with order %+v, want an error for an empty order_id", o)
@@ -123,7 +124,7 @@ func TestIBKRSubmitOrder_EmptyOrderID_IsError(t *testing.T) {
 func TestIBKRReplaceOrder_ConfirmationPrompt_AutoConfirmed(t *testing.T) {
 	srv := newPromptServer(t, []map[string]interface{}{{"order_id": "ord-1", "order_status": "Submitted"}})
 	defer srv.Close()
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1"))
 
 	if _, err := c.ReplaceOrder(context.Background(), "ord-1", broker.OrderRequest{Qty: 5}); err != nil {
 		t.Fatalf("ReplaceOrder: %v", err)
@@ -136,7 +137,7 @@ func TestIBKRReplaceOrder_ConfirmationPrompt_AutoConfirmed(t *testing.T) {
 func TestIBKRSubmitBracketLegs_ConfirmationPrompt_AutoConfirmed(t *testing.T) {
 	srv := newPromptServer(t, []map[string]interface{}{{"order_id": "leg-stop"}, {"order_id": "leg-tp"}})
 	defer srv.Close()
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1"))
 
 	resp, err := c.SubmitBracketLegs(context.Background(), "parent-bo", "parent-coid", broker.BracketLegsRequest{
 		Symbol: "AAPL", Side: "sell", Qty: 10, TimeInForce: "gtc", StopPrice: 95, TakeProfitPrice: 120,
@@ -160,7 +161,7 @@ func TestIBKRSubmitOrder_TrailingStop_SendsTrailingFields(t *testing.T) {
 			var got map[string]interface{}
 			srv := ibkrOrdersServer(t, []map[string]interface{}{{"order_id": "o-1", "order_status": "PreSubmitted"}}, &got)
 			defer srv.Close()
-			c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1"})
+			c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1"))
 
 			req := tc.req
 			req.Symbol, req.Side, req.OrderType, req.Qty, req.TimeInForce = "AAPL", "sell", "trailing_stop", 10, "gtc"

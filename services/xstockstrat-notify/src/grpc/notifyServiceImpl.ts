@@ -106,7 +106,7 @@ export class NotifyServiceImpl {
       // Best-effort Web Push (feature 165): second disjoint queueMicrotask, also after the success
       // callback so a slow/failed push can never turn a succeeded emit into an RPC error.
       queueMicrotask(() =>
-        void this.webPush.dispatch(alert).catch((e: any) =>
+        void this.webPush.dispatch(alert, call.metadata).catch((e: any) =>
           log.warn('push dispatch rejected', { alertId, error: e?.message ?? String(e) }),
         ),
       );
