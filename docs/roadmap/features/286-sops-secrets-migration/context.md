@@ -233,3 +233,12 @@
   - [x] Step 12 `[absent]` markers are now the explicit `if: steps.check.outputs.app_id == ''` guard.
   - [x] Threshold note added to Steps 1, 11 and 13. The Step 18 filter now includes `secrets/**`. Step 21 teardown scope is Steps 19–21.
   - [x] Spec-time findings renumbered 1–6.
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory), iteration 3 → fixes
+
+- Result: iteration-2 items all RESOLVED; 2 ✗ + 2 ⚠ new. Fixed:
+  - [x] The `render` group's MCP_AGENT_SECRET assert would stay RED until Step 17, because the renderer keeps `.do/` comments. It is removed from
+        `render`, since `ac24` already covers `.do/app*.yaml`.
+  - [x] Step 8 parity verification was vacuous. The step now writes a distinct `- PARITY RECORD (286 step 8):` line and greps for it.
+  - [x] `ac24`'s read of `secrets/*.enc.yaml` is kept, with an explicit carve-out (a read-only grep of ciphertext key names, never decrypting).
+  - [x] The test skeleton does `cd "$(git rev-parse --show-toplevel)"`.

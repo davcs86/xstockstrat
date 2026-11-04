@@ -155,7 +155,7 @@ with the exact command in context.md:
 9. Confirm `yq --version` reports mikefarah v4 locally, and record it. The runner image ships it (spec-time finding 5).
 
 **Test skeleton.** Create `scripts/sops-secrets.test.sh`, executable and shellcheck/shfmt clean (`-i 2`). It has:
-- `#!/usr/bin/env bash`, a 2-line header naming what it tests, and `set -uo pipefail`;
+- `#!/usr/bin/env bash`, a 2-line header naming what it tests, `set -uo pipefail`, and `cd "$(git rev-parse --show-toplevel)"`, so relative paths such as `sys.path.insert(0,"scripts")` and `.github/workflows/…` resolve from the repo root;
 - `fail()` and a `work` mktemp with an EXIT trap;
 - a per-group tool check: `yq` for every group, plus `sops age age-keygen docker jq python3 openssl git` for the groups that run them. A missing tool fails with an install hint;
 - group dispatch: `groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"`. Each group is a function, and an unknown name fails. The later test steps add the remaining functions.
@@ -435,7 +435,6 @@ and `.do/app.yaml` with `--env production --app-name xstockstrat-production`):
    - OTEL prefix in both cases (`Basic x` becomes `Authorization=Basic x`; `Authorization=Basic x` is unchanged).
    - An absent optional renders `''`.
    - `${xstockstrat.CA_CERT}` count is unchanged.
-   - `MCP_AGENT_SECRET` is absent from the output.
    - `--app-name` mismatching the spec's `name:` fails.
    - Every `yaml_pem` string (CA, leaf cert, leaf key) and every value is preceded by its `::add-mask::` on stdout.
    - `GITHUB_OUTPUT` receives `app_name=` and `project_id=` only.
@@ -489,14 +488,14 @@ Never write the spec to stdout.
 **Parity record (design Risk 2):** once green, run the old inline python (`git show HEAD:.github/workflows/deploy.yml`,
 extract the `:130-198` block) and the new renderer on `.do/app.dev.yaml`, using the same sentinel `LEGACY_*`
 values and the same fixture CA tree (point both at one pre-minted `MTLS_CERTS_DIR` by reusing the minted
-dir). Diff the outputs after normalising the leaf `yaml_pem` blocks, then record "identical" (or the exact
-differences) in context.md.
+dir). Diff the outputs after normalising the leaf `yaml_pem` blocks. Record the result in context.md as a line
+starting `PARITY RECORD (286 step 8):`, followed by "identical" or the exact differences.
 
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh resolve render
 ruff check scripts/do-render-app-spec.py scripts/sops_secrets.py && ruff format --check scripts/do-render-app-spec.py scripts/sops_secrets.py
-grep -n "normalised old-vs-new" docs/roadmap/features/286-sops-secrets-migration/context.md
+grep -n "^- PARITY RECORD (286 step 8):" docs/roadmap/features/286-sops-secrets-migration/context.md
 ```
 
 ---
@@ -820,7 +819,9 @@ Add group `bootstrap`. Assert on `.github/workflows/sops-bootstrap.yml`, after i
 Add group `ac24` (AC-24):
 - `grep -n MCP_AGENT_SECRET` over `scripts/do-render-app-spec.py`, `scripts/sops_secrets.py`,
   `.github/workflows/sops-bootstrap.yml`, `.github/workflows/deploy*.yml`, `.github/workflows/prod-up.yml`, `.do/app.yaml`,
-  `.do/app.dev.yaml` and any existing `secrets/*.enc.yaml` returns nothing;
+  `.do/app.dev.yaml` and any existing `secrets/*.enc.yaml` returns nothing. This is the one deliberate read of the
+  repo's real `secrets/`. It is a read-only grep of committed ciphertext files (SOPS keeps key names in plaintext), and it never
+  decrypts, so it is hermetic in effect;
 - `scripts/do-inject-prod-secrets.py` is absent.
 
 It is RED today (`.do/app.yaml:381`, `.do/app.dev.yaml:383`) and GREEN after Step 17.
