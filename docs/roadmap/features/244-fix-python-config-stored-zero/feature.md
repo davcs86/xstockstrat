@@ -8,6 +8,7 @@
 **Last Updated**: 2026-10-28
 **Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
 **Launched date**: 2026-10-30
+**Archived**: 2026-11-04
 
 ---
 
@@ -44,6 +45,7 @@
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute (operator session) | Step 18 dev audit recorded (staging MCP, no FR-3 zero rows); post-deploy smoke and prod audit deferred per operator decision "Record audit, merge, I smoke" |
 
 | 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -62,11 +64,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-21
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (call-site classification, reuse patterns, business rules)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to docs/sdd/business-rules/platform.feature and services/xstockstrat-{analysis,config,ingest}/acceptance/fix-python-config-stored-zero.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
