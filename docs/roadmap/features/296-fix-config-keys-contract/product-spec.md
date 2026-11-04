@@ -44,6 +44,12 @@ class cannot recur.
 - **FR-6: config-ui and agent display the FQN** `<namespace>.<key>` and write relative keys.
 - **FR-7: Final documentation.** C-05, CONFIG-9, `config-governance.md` and the service CLAUDE.md
   tables state the relative convention, and the 295 transition note is removed.
+- **FR-9: Dead-row deletion, gated on evidence (295 decision 15).**
+  - A non-secret row with no reader in any spelling is deleted only when (a) the extended gate finds
+    no static reader **and** (b) at least one full production release of 295's runtime read-key logs
+    shows no read of that `(namespace, key)` in any service.
+  - Each row is also in the operator-signed allowlist, gets a snapshot row and its own audit row
+    first, and the migration is replay-safe.
 - **FR-8: Named follow-up.** Create the feature that removes the alias, the write tolerance and the
   internal-caller exception at least one release after this one.
 

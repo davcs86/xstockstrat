@@ -40,3 +40,11 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     Given a fixture reader of namespace "ledger" calling getInt("ledger.export.max_window_days")
     When the config-wiring gate runs with --final
     Then it reports a prefixed-read finding and exits non-zero
+
+  @AC-7 @FR-9 @regression
+  Scenario: A dead row is deleted only with static and runtime evidence
+    Given "ledger" / "stream.notify_enabled" has no static reader
+    And a full production release of read-key logs shows no read of it
+    And it is in the signed allowlist
+    When the dead-row migration runs
+    Then the row is removed and preserved in the snapshot table

@@ -19,3 +19,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   sequencing), and the round-1 adversary objection M5 (the 037/038 race leaves PRE_DEPLOY dirty) and
   minor m9 (contract-of proves the file, not the deployed alias code).
 - Development branch: feature/fix-config-keys-contract.
+
+## Session 2026-11-04 (from 295 design round 2)
+
+- Inherits **295 decision 15**: dead-row deletion (formerly 295 FR-6/AC-15) moves here, gated on
+  static and runtime evidence: FR-9 / AC-7.
+- The rename migration's `-- contract-of:` anchors on **295's 036 marker DDL** (round 2 MAJOR-7).
