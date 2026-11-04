@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-db-tls-fail-closed`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-db-tls-fail-closed-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-db-tls-fail-closed-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-db-tls-fail-closed-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
 **Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
 **Launched date**: 2026-10-30
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-db-tls-fail-closed-defect.md` (debt-radar D-32) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-db-tls-fail-closed-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-db-tls-fail-closed-defect.md) (debt-radar D-32) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 242/248/241) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
@@ -34,6 +35,7 @@
 | 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute sequential | Step 17 canary: static half passed (CA + URL bindings); live TLS verify moved post-merge on dev by operator decision |
 
 | 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(1); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -53,11 +55,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md`, written by /sdd-spec on 2026
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

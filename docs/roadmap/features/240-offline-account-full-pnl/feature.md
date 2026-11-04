@@ -5,6 +5,7 @@
 **Last Updated**: 2026-10-20
 **Committed to main**: 107761265fb1232a02ccbdca0126a6aceb4462f0
 **Launched date**: 2026-10-20
+**Archived**: 2026-11-04
 
 ---
 
@@ -21,15 +22,16 @@
 | 2026-10-20 | `code-completed` (renumber) | user request | Renumbered 230 → 240: `230-fix-etf-flag-fill` (2026-10-15) holds 230; max NNN across branches was 239 |
 
 | 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1271; committed 107761265fb1232a02ccbdca0126a6aceb4462f0 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios already promoted to per-service suites + platform.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

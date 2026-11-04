@@ -1,5 +1,5 @@
 Feature: fix-template-update-metadata (bug fix)
-  Regression guard for docs/reports/2026-10-21-template-update-metadata-defect.md:
+  Regression guard for docs/reports/2026-10-21-template-update-metadata-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-template-update-metadata-defect.md):
   ManageTemplate UPDATE drops name/description (indicators, analysis), and RETIRE / empty-id CREATE diverge (D-41).
 
   @AC-1 @FR-1 @FR-2 @regression

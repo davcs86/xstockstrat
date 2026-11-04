@@ -132,8 +132,6 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 - `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
 - `trading.offline_snapshot_headers` — one header per offline snapshot `(account_id, client_snapshot_id, as_of, realized_carried, fees_carried)` (feature 240, migration `011`). The carry is computed atomically with the snapshot write and frozen: a re-submit with the same id and `as_of` keeps it, an `as_of` change on a non-latest snapshot is `FAILED_PRECONDITION`, and an all-rejected re-submit commits nothing. Migration `011` also adds `trading.orders.fees` (`NUMERIC`, NULL for broker orders).
 - `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163, migration `009`). Each row is `(account_id, symbol, qty, avg_cost_per_share, as_of, client_snapshot_id, created_at)`. The effective baseline for an account is the rows of its latest snapshot header (greatest `as_of`, then `created_at`; a header with no rows is a full flatten); a re-submitted snapshot replaces its own rows atomically (DELETE + INSERT in the same tx as its header). Only offline accounts may have baselines.
-- Migration tool: `golang-migrate`
-- Run: `migrate -path ./migrations -database $DATABASE_URL up`
 
 ## Approval Flow
 

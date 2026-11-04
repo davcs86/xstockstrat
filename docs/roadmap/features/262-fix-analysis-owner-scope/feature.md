@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-analysis-owner-scope`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-analysis-owner-scope-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-analysis-owner-scope-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
 **Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
 **Launched date**: 2026-10-30
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (debt-radar D-44, D-55, D-60) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-analysis-owner-scope-defect.md) (debt-radar D-44, D-55, D-60) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; 3 resolved in-spec: AC-3 ids, new AC-8, FR-1 per-pair isolation). Overlap WARN (file-level: 244, 259, 215/244/245) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (Step 1 @AC-9 append done at spec time) |
@@ -31,6 +32,7 @@
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 8 steps done; C-16 promotion applied (9 NEW scenarios → `services/xstockstrat-analysis/acceptance/fix-analysis-owner-scope.feature`, auto-confirmed by operator standing authorization); integration PR opened to `main-dev` |
 
 | 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -47,11 +49,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — Phase 0 grounded codebase dossier
-- [Design](design.md) — approved design (chosen approach, rejected alternatives, open risks)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

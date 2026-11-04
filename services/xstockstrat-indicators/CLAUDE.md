@@ -39,25 +39,11 @@ the column keeps `DEFAULT FALSE` and is dropped by a later contract.
   require the dedicated `analysis-template-saga` grant; its copies stay hidden
   (`pending_intent_id` set) until the intent commits, and are hard-deleted on abort.
 
-## Language
-
-Python 3.13 (asyncio, grpc.aio)
-
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 The image installs `libseccomp2` (runtime, kept) plus `libseccomp-dev`+`gcc` (build-only, purged after `uv sync`) so the `pyseccomp` binding compiles and loads — the formula sandbox loads a seccomp-BPF filter in each child (feature 209). No `USER` directive: the container runs as **root** so the sandbox child can `setuid` down to nobody. The single-stage `uv` pattern is otherwise unchanged.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50054` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). All callers —
-internal services, the frontends, and the MCP agent — connect over gRPC `50054`. The former
-HTTP/Connect-RPC server on `8054` was removed.
 
 ## Dependencies
 
@@ -231,7 +217,7 @@ uv run python -m app.main
 
 ## Maintenance
 
-`app.maintenance.legacy_authors` reports and repairs `indicators.formulas` rows whose `author` is a legacy username instead of a user id. The owner cannot read those rows, because `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`. An operator runs it by hand. It is not part of the service process. It opens one `asyncpg` connection from a required `DATABASE_URL`, with no fallback, and does not use the `main.py` pool. Report mode writes nothing. Apply mode needs a confirmed plan whose sha256 digest matches. `app.maintenance.legacy_authors_ops` wraps it as `report` → `confirm` → `apply` (asyncpg + stdlib only, so it also runs in the DO console and echoes the result before the restart). Follow `docs/runbooks/legacy-formula-authors.md` for the full procedure, including DBA sign-off, the pooled `:25061` URL with `DB_PGBOUNCER=true`, and restarting every instance afterwards.
+`app.maintenance.legacy_authors` reports and repairs `indicators.formulas` rows whose `author` is a legacy username instead of a user id. The owner cannot read those rows, because `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`. An operator runs it by hand. It is not part of the service process. It opens one `asyncpg` connection from a required `DATABASE_URL`, with no fallback, and does not use the `main.py` pool. Report mode writes nothing. Apply mode needs a confirmed plan whose sha256 digest matches. `app.maintenance.legacy_authors_ops` wraps it as `report` → `confirm` → `apply` (asyncpg + stdlib only, so it also runs in the DO console and echoes the result before the restart). `confirm` also resolves `unmappable`/`ambiguous` rows through repeatable `--map LEGACY=USER_ID` or a numbered picker: targets must be active users in `users.json`, an ambiguous author accepts only its candidates, and an invalid `--map` exits 2 with `plan.json` untouched. The candidate rule is enforced at `confirm` only, not at `apply`. Follow `docs/runbooks/legacy-formula-authors.md` for the full procedure, including DBA sign-off, the pooled `:25061` URL with `DB_PGBOUNCER=true`, and restarting every instance afterwards.
 
 ```bash
 uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json   # report

@@ -11,7 +11,7 @@
 ## Observed
 
 Feature 246 stops the producer from emitting a fabricated 0.5 score for a data-less symbol
-(`docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md`). It does not touch the
+(`docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md)). It does not touch the
 signals already stored. Each one was written to `ingest.newsletter_signals` with conviction 0.5,
 `user_id='system'`, and `valid_until` set to emit time + `analysis.fundsignal.valid_days` (default 90).
 Until that date it stays active and keeps feeding three readers:

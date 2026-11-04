@@ -8,7 +8,7 @@ each one so that the prune can.
 **Tool**: the operator subcommand `backfill-signal-expiry` of the portfolio binary
 (`services/xstockstrat-portfolio/cmd/server`). It has two modes. REPORT (the default) reads only.
 APPLY inserts rows into `portfolio.watchlist_signal_expiry`. **The CLI never deletes a binding.** The
-in-service prune (`PruneExpiredSignalEntries`, portfolio constitution `PORTFOLIO-17`) is the only
+in-service prune (`PruneExpiredSignalEntries`, portfolio constitution `PORTFOLIO-18`) is the only
 deleter, and it acts on the rows APPLY writes.
 
 ---

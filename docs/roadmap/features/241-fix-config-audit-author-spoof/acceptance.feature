@@ -1,5 +1,5 @@
 Feature: fix-config-audit-author-spoof (bug fix)
-  Regression guard for docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md:
+  Regression guard for docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md):
   SetConfig audit author is caller-supplied free text, not the propagated identity.
   "Identity" means the platform-propagated x-user-id or an allowlist-authorized x-internal-caller:
   propagated, not authenticated (design.md; the missing SetConfig-grant peerSan binding is a follow-up defect).

@@ -1,5 +1,5 @@
 Feature: fix-otel-trace-export (bug fix)
-  Regression guard for defect report docs/reports/2026-10-14-otel-trace-export-broken-defect.md:
+  Regression guard for defect report docs/reports/2026-10-14-otel-trace-export-broken-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-otel-trace-export-broken-defect.md):
   OTel trace export fails for every service against the Grafana Cloud OTLP/HTTP gateway.
 
   @AC-1 @FR-1 @regression

@@ -5,6 +5,7 @@
 **Last Updated**: 2026-10-11
 **Committed to main**: 9def6259da8da135ffb66846af06201ce4690304
 **Launched date**: 2026-10-14
+**Archived**: 2026-11-04
 
 ---
 
@@ -20,13 +21,14 @@
 | 2026-10-11 | `in-progress` → `code-completed` | /sdd-execute | All 19 steps done; Step 19 docs + C-16 promotion (AC-17 held out — Deviation Log) + manual teardown (context-forge unavailable) |
 
 | 2026-10-14 | `code-completed` → `launched` | CI workflow | Promoted via PR #1242; committed 9def6259da8da135ffb66846af06201ce4690304 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(3); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios already promoted to per-service suites (C-16)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -18,10 +18,6 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 ## Ports
 
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50058` | Internal service-to-service (protobuf) |
-
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing every
 `IdentityService` method, including: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
 the OAuth 2.1 backend RPCs (feature 049 Part B)
@@ -96,7 +92,7 @@ DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABAS
 
 ## Operations
 
-User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`DEV_JWT_SECRET`/`PROD_JWT_SECRET` → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
+User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`common.JWT_SECRET` in `secrets/<env>.enc.yaml`, legacy `DEV_JWT_SECRET`/`PROD_JWT_SECRET` fallback → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
 
 ## Running Locally
 

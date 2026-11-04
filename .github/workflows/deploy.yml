@@ -1,8 +1,14 @@
 name: Deploy (reusable)
 
+# Secrets come from secrets/<env>.enc.yaml (SOPS), falling back per key to the DEV_*/PROD_* repo secrets.
+# Fallbacks are read only by their DEV_/PROD_ names, so an environment secret can never shadow them.
 on:
   workflow_call:
     inputs:
+      environment:
+        description: 'staging or production (the GitHub environment holding SOPS_AGE_KEY)'
+        required: true
+        type: string
       app_spec:
         description: 'Path to the DO app spec file'
         required: true
@@ -11,213 +17,104 @@ on:
         description: 'Short SHA to inject as YOUR_IMAGE_TAG in the app spec'
         required: true
         type: string
-    secrets:
-      DIGITALOCEAN_ACCESS_TOKEN:
-        required: true
-      DO_APP_ID:
-        required: true
-      DO_PROJECT_ID:
-        required: false  # Set DO_DEV_PROJECT_ID / DO_PROD_PROJECT_ID in GitHub Secrets.
-                         # Find your project ID: doctl projects list
-                         # Without this the app lands in the account's default project.
-      BROKER_ACCOUNTS_ENCRYPTION_KEY:
-        required: true
-        # Callers pass DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY or PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY
-        # from GitHub Secrets into this unified parameter.
-      JWT_SECRET:
-        required: true
-        # Callers pass DEV_JWT_SECRET or PROD_JWT_SECRET from GitHub Secrets. Also injected into the
-        # agent block (feature 147: it HMAC-signs the OAuth txn blob).
-      CONFIG_SECRETS_ENCRYPTION_KEY:
-        required: true
-        # Feature 147: AES-256 master key for encrypting config secrets at rest. Callers pass
-        # DEV_CONFIG_SECRETS_ENCRYPTION_KEY or PROD_CONFIG_SECRETS_ENCRYPTION_KEY from GitHub Secrets.
-        # The vendor credentials (Alpaca/FMP/Finnhub) are no longer deploy secrets — they live in
-        # encrypted config and are set post-deploy through the config write path.
-      SLACK_WEBHOOK_URL:
-        required: false
-        # Callers pass DEV_SLACK_WEBHOOK_URL or PROD_SLACK_WEBHOOK_URL from GitHub Secrets. Optional —
-        # notify external fanout is off until set (feature 020). App-level notify secret delivered as
-        # a type: SECRET env var (like JWT_SECRET), not a data-source vendor credential.
-      SENDGRID_API_KEY:
-        required: false
-        # Callers pass DEV_SENDGRID_API_KEY or PROD_SENDGRID_API_KEY from GitHub Secrets. Optional —
-        # email fanout is off until the key AND both addresses are set (feature 020).
-      VAPID_PRIVATE_KEY:
-        required: false
-        # Callers pass DEV_VAPID_PRIVATE_KEY or PROD_VAPID_PRIVATE_KEY from GitHub Secrets. Optional —
-        # Web Push is off until all three VAPID values are set (feature 165). App-level notify secret.
-      VAPID_PUBLIC_KEY:
-        required: false
-        # Non-secret VAPID public key (also consumed by the UI). Passed as a secret input only so the
-        # same substitution path fills the YOUR_*_VAPID_PUBLIC_KEY placeholders (feature 165).
-      VAPID_SUBJECT:
-        required: false
-        # Non-secret VAPID subject (a mailto:/https: URL). Same substitution path (feature 165).
-      OTEL_EXPORTER_OTLP_ENDPOINT:
-        required: false
-        # Callers pass DEV_OTEL_EXPORTER_OTLP_ENDPOINT or PROD_OTEL_EXPORTER_OTLP_ENDPOINT from
-        # GitHub Secrets. Optional — OTel is off until OTEL_ENABLED=true and the endpoint is set.
-        # Grafana Cloud OTLP gateway URL, e.g. https://otlp-gateway-<region>.grafana.net/otlp
-      OTEL_EXPORTER_OTLP_HEADERS:
-        required: false
-        # Callers pass DEV_OTEL_EXPORTER_OTLP_HEADERS or PROD_OTEL_EXPORTER_OTLP_HEADERS from
-        # GitHub Secrets. Optional — OTel auth header value, e.g. Basic <base64(instanceId:apiKey)>.
-        # Stored as type: SECRET in the DO app spec; set as encrypted env var.
-      MTLS_CA:
-        required: false
-        # Feature 210 inter-service mTLS. Callers pass DEV_MTLS_CA or PROD_MTLS_CA from GitHub Secrets:
-        # a base64(JSON {ca_cert, ca_key}) of the platform CA, produced by scripts/mtls-provision.sh.
-        # The "Mint mTLS leaves" step mints the 12 per-service leaves off this CA on every deploy
-        # (stable CA → no rolling-deploy handshake mismatch; leaves auto-rotate), and the substitution
-        # step fills the per-service MTLS_* placeholders. Declared optional here, but FAIL-CLOSED at
-        # substitution time: if the spec carries MTLS_* placeholders and no CA was provided, the deploy
-        # aborts (never pushes a placeholder, which would crash-loop every service on boot).
 
 jobs:
-  deploy:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Environment must be staging or production
+        env:
+          E: ${{ inputs.environment }}
+        run: |
+          case "$E" in staging|production) ;; *) echo "::error::environment must be staging or production"; exit 1;; esac
 
-      - uses: digitalocean/action-doctl@v2
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      P: ${{ inputs.environment == 'production' && 'PROD' || 'DEV' }}
+      APP_NAME: xstockstrat-${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f  # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      - name: Mint inter-service mTLS leaves from the CA secret (feature 210)
-        # Writes the CA (from the MTLS_CA secret) to a temp dir, then reuses scripts/gen-dev-certs.sh
-        # to mint the 12 per-service leaves off it. gen-dev-certs.sh reuses an existing CA (its ensure_ca
-        # only generates when _ca/ca.pem is absent), so the CA stays stable across deploys. Exposes
-        # MTLS_CERTS_DIR to the substitution step. No-op when MTLS_CA is empty — substitution fail-closes.
-        env:
-          MTLS_CA: ${{ secrets.MTLS_CA }}
+      - name: Resolve app ID by spec name
+        id: resolve-app-id
         run: |
-          if [ -z "${MTLS_CA:-}" ]; then
-            echo "MTLS_CA secret empty — no leaves minted; substitution will fail-closed if the spec needs them."
-            exit 0
+          ids=$(doctl apps list --format ID,Spec.Name --no-header | awk -v n="$APP_NAME" '$2==n{print $1}')
+          n=$(printf '%s' "$ids" | grep -c . || true)
+          if [ "$n" != 1 ]; then
+            echo "::error::expected exactly 1 app named $APP_NAME, found $n"
+            echo "expected exactly 1 app named $APP_NAME, found $n" >&2
+            exit 1
           fi
-          certs_dir="$RUNNER_TEMP/mtls"
-          bash scripts/mtls-provision.sh decode-ca "$certs_dir"
-          CERTS_DIR="$certs_dir" bash scripts/gen-dev-certs.sh >/dev/null
-          echo "MTLS_CERTS_DIR=$certs_dir" >> "$GITHUB_ENV"
-          echo "Minted 12 mTLS leaves off the provided CA into $certs_dir"
+          echo "APP_ID=$ids" >> "$GITHUB_ENV"
+          echo "app: $APP_NAME → $ids" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Substitute app spec placeholders
+      - uses: ./.github/actions/setup-sops
+
+      - name: Look up the database cluster (VPC + cluster ID)
+        id: db
         env:
-          BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.BROKER_ACCOUNTS_ENCRYPTION_KEY }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.CONFIG_SECRETS_ENCRYPTION_KEY }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
-          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
-          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
-          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
-          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
-        run: |
-          sed \
-            -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
-            -e "s|YOUR_IMAGE_TAG|${{ inputs.image_tag }}|g" \
-            ${{ inputs.app_spec }} \
-          | BROKER_ACCOUNTS_ENCRYPTION_KEY="$BROKER_ACCOUNTS_ENCRYPTION_KEY" \
-            JWT_SECRET="$JWT_SECRET" \
-            CONFIG_SECRETS_ENCRYPTION_KEY="$CONFIG_SECRETS_ENCRYPTION_KEY" \
-            SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
-            SENDGRID_API_KEY="$SENDGRID_API_KEY" \
-            VAPID_PRIVATE_KEY="$VAPID_PRIVATE_KEY" \
-            VAPID_PUBLIC_KEY="$VAPID_PUBLIC_KEY" \
-            VAPID_SUBJECT="$VAPID_SUBJECT" \
-            python3 -c "
-          import os, sys
-          content = sys.stdin.read()
-          key = os.environ['BROKER_ACCOUNTS_ENCRYPTION_KEY']
-          content = content.replace('YOUR_DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY', key)
-          content = content.replace('YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY', key)
-          jwt = os.environ['JWT_SECRET']
-          content = content.replace('YOUR_DEV_JWT_SECRET', jwt)
-          content = content.replace('YOUR_PROD_JWT_SECRET', jwt)
-          cfg_key = os.environ['CONFIG_SECRETS_ENCRYPTION_KEY']
-          content = content.replace('YOUR_DEV_CONFIG_SECRETS_ENCRYPTION_KEY', cfg_key)
-          content = content.replace('YOUR_PROD_CONFIG_SECRETS_ENCRYPTION_KEY', cfg_key)
-          slack_url = os.environ.get('SLACK_WEBHOOK_URL', '')
-          content = content.replace('YOUR_DEV_SLACK_WEBHOOK_URL', slack_url)
-          content = content.replace('YOUR_PROD_SLACK_WEBHOOK_URL', slack_url)
-          sendgrid_key = os.environ.get('SENDGRID_API_KEY', '')
-          content = content.replace('YOUR_DEV_SENDGRID_API_KEY', sendgrid_key)
-          content = content.replace('YOUR_PROD_SENDGRID_API_KEY', sendgrid_key)
-          vapid_priv = os.environ.get('VAPID_PRIVATE_KEY', '')
-          content = content.replace('YOUR_DEV_VAPID_PRIVATE_KEY', vapid_priv)
-          content = content.replace('YOUR_PROD_VAPID_PRIVATE_KEY', vapid_priv)
-          vapid_pub = os.environ.get('VAPID_PUBLIC_KEY', '')
-          content = content.replace('YOUR_DEV_VAPID_PUBLIC_KEY', vapid_pub)
-          content = content.replace('YOUR_PROD_VAPID_PUBLIC_KEY', vapid_pub)
-          vapid_subject = os.environ.get('VAPID_SUBJECT', '')
-          content = content.replace('YOUR_DEV_VAPID_SUBJECT', vapid_subject)
-          content = content.replace('YOUR_PROD_VAPID_SUBJECT', vapid_subject)
-          otel_endpoint = os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', '')
-          content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_ENDPOINT', otel_endpoint)
-          content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_ENDPOINT', otel_endpoint)
-          otel_headers = os.environ.get('OTEL_EXPORTER_OTLP_HEADERS', '')
-          if otel_headers and not otel_headers.startswith('Authorization='):
-              otel_headers = 'Authorization=' + otel_headers
-          content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
-          content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
-          # Feature 210 inter-service mTLS: the CA + 12 leaves were minted by the prior step into
-          # MTLS_CERTS_DIR. Fill the CA + every per-service leaf placeholder. Fail-closed — if the spec
-          # carries MTLS_* placeholders but no CA was provided, abort before pushing (a placeholder value
-          # would crash-loop every service on boot).
-          import re, glob
-          if re.search(r'YOUR_(?:DEV|PROD)_MTLS_', content):
-              certs_dir = os.environ.get('MTLS_CERTS_DIR', '')
-              ca_path = os.path.join(certs_dir, '_ca', 'ca.pem') if certs_dir else ''
-              if not ca_path or not os.path.isfile(ca_path):
-                  sys.stderr.write('ERROR: app spec has MTLS_* placeholders but no CA was provided '
-                                   '(MTLS_CA empty). Provision it: scripts/mtls-provision.sh set-secret <dev|prod>.\n')
-                  sys.exit(1)
-              def yaml_pem(pem):
-                  # PEM is multi-line; the placeholders are bare single-token YAML values, so replace
-                  # each with a double-quoted scalar carrying escaped newlines (YAML un-escapes to real
-                  # PEM). chr() avoids literal quote/backslash inside this shell-double-quoted python -c.
-                  q, bs = chr(34), chr(92)
-                  body = pem.replace(bs, bs + bs).replace(q, bs + q).replace(chr(10), bs + 'n')
-                  return q + body + q
-              ca_q = yaml_pem(open(ca_path).read())
-              content = content.replace('YOUR_DEV_MTLS_CA_CERT', ca_q).replace('YOUR_PROD_MTLS_CA_CERT', ca_q)
-              for svc_dir in glob.glob(os.path.join(certs_dir, 'xstockstrat-*')):
-                  sfx = os.path.basename(svc_dir).replace('xstockstrat-', '').upper()
-                  cert_q = yaml_pem(open(os.path.join(svc_dir, 'cert.pem')).read())
-                  key_q = yaml_pem(open(os.path.join(svc_dir, 'key.pem')).read())
-                  for e in ('DEV', 'PROD'):
-                      content = content.replace('YOUR_%s_MTLS_CERT_%s' % (e, sfx), cert_q)
-                      content = content.replace('YOUR_%s_MTLS_KEY_%s' % (e, sfx), key_q)
-              leftover = sorted(set(re.findall(r'YOUR_(?:DEV|PROD)_MTLS_[A-Z_]+', content)))
-              if leftover:
-                  sys.stderr.write('ERROR: unfilled MTLS placeholders remain (CA minted too few leaves): %s\n' % leftover)
-                  sys.exit(1)
-          sys.stdout.write(content)
-          " > /tmp/app_spec_substituted.yaml
+          SPEC: ${{ inputs.app_spec }}
+        run: bash scripts/do-db-cluster.sh lookup
+
+      - name: Render app spec (SOPS first, DEV_/PROD_ fallback)
+        id: render
+        env:
+          VPC_ID: ${{ steps.db.outputs.vpc_id }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          LEGACY_JWT_SECRET: ${{ secrets[format('{0}_JWT_SECRET', env.P)] }}
+          LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets[format('{0}_BROKER_ACCOUNTS_ENCRYPTION_KEY', env.P)] }}
+          LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets[format('{0}_CONFIG_SECRETS_ENCRYPTION_KEY', env.P)] }}
+          LEGACY_MTLS_CA: ${{ secrets[format('{0}_MTLS_CA', env.P)] }}
+          LEGACY_SLACK_WEBHOOK_URL: ${{ secrets[format('{0}_SLACK_WEBHOOK_URL', env.P)] }}
+          LEGACY_SENDGRID_API_KEY: ${{ secrets[format('{0}_SENDGRID_API_KEY', env.P)] }}
+          LEGACY_VAPID_PRIVATE_KEY: ${{ secrets[format('{0}_VAPID_PRIVATE_KEY', env.P)] }}
+          LEGACY_VAPID_PUBLIC_KEY: ${{ secrets[format('{0}_VAPID_PUBLIC_KEY', env.P)] }}
+          LEGACY_VAPID_SUBJECT: ${{ secrets[format('{0}_VAPID_SUBJECT', env.P)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_ENDPOINT', env.P)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_HEADERS', env.P)] }}
+          LEGACY_PROJECT_ID: ${{ secrets[format('DO_{0}_PROJECT_ID', env.P)] }}
+        run: >-
+          python3 scripts/do-render-app-spec.py
+          --env "${{ inputs.environment }}"
+          --spec "${{ inputs.app_spec }}"
+          --app-name "$APP_NAME"
+          --image-tag "${{ inputs.image_tag }}"
+          --org "${{ github.repository_owner }}"
+          --vpc-id "$VPC_ID"
+          --out "$RUNNER_TEMP/app.yaml"
 
       - name: Deploy to DigitalOcean App Platform
         # --update-sources forces DO to re-evaluate the branch and build from the
         # current HEAD instead of the pinned commit stored from the last deploy.
-        run: doctl apps update ${{ secrets.DO_APP_ID }} --spec /tmp/app_spec_substituted.yaml --update-sources
+        run: doctl apps update "$APP_ID" --spec "$RUNNER_TEMP/app.yaml" --update-sources
 
       - name: Assign app to DO project
         continue-on-error: true
         env:
-          DO_PROJECT_ID: ${{ secrets.DO_PROJECT_ID }}
+          DO_PROJECT_ID: ${{ steps.render.outputs.project_id }}
         run: |
           if [ -n "$DO_PROJECT_ID" ]; then
             echo "Assigning app to project $DO_PROJECT_ID ..."
             doctl projects resources assign "$DO_PROJECT_ID" \
-              --resource "do:app:${{ secrets.DO_APP_ID }}"
+              --resource "do:app:$APP_ID"
           else
-            echo "DO_PROJECT_ID not set — app stays in default project."
+            echo "digitalocean.PROJECT_ID not set — app stays in default project."
           fi
 
       - name: Wait for deployment
         run: |
-          APP_ID="${{ secrets.DO_APP_ID }}"
           DEPLOY_ID=$(doctl apps list-deployments "$APP_ID" --format ID --no-header | head -1)
           echo "Waiting for deployment $DEPLOY_ID ..."
           for i in $(seq 1 60); do
@@ -225,6 +122,9 @@ jobs:
             echo "  [$i/60] Phase: $PHASE"
             if [ "$PHASE" = "ACTIVE" ]; then
               echo "Deployment succeeded."
+              exit 0
+            elif [ "$PHASE" = "SUPERSEDED" ]; then
+              echo "::warning::Deployment $DEPLOY_ID was superseded by a newer deployment; that deployment's run reports its outcome."
               exit 0
             elif [ "$PHASE" = "ERROR" ] || [ "$PHASE" = "CANCELED" ]; then
               echo "Deployment failed with phase: $PHASE"
@@ -234,3 +134,7 @@ jobs:
           done
           echo "Timeout: deployment did not complete within 15 minutes."
           exit 1
+
+      - name: Remove the rendered spec
+        if: always()
+        run: rm -f "$RUNNER_TEMP/app.yaml"

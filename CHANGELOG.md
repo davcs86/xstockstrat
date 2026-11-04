@@ -3,6 +3,60 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-04
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- block-fundamentals-strategy-on-etf: Add a guardrail so a strategy that requires fundamentals (a `fundamental` operand — the seeded `fscore` custom formula or any component declaring `fundamental_inputs`) is refused or skipped with an explicit, auditable reason when run against an ETF, instead of silently producing empty/misleading results.
+
+### Summary
+25 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- fix-app-specs-omit: A production app created by `prod-up` is not attached to the managed cluster's VPC and is not a cluster trusted source, so the PRE_DEPLOY `db-migrator` times out.
+- fix-deploy-wait-loop: The "Wait for deployment" step in `deploy.yml` times out (red run) when a newer push supersedes its DO deployment, because `SUPERSEDED` is not a terminal phase in the loop and no concurrency group serialises deploys to one app.
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- fix-etf-flag-fill: The background ETF-flag fill in xstockstrat-marketdata never labels SCHD on staging, so feature 215's `fundamentals_gap` stays `FUNDAMENTALS_GAP_UNSPECIFIED`.
+- fix-marketdata-fundamentals-cache: Five marketdata defects in the fundamentals path:
+- fix-backtest-silent-symbol-skip: `RunBacktest` drops a symbol that fails with a `grpc.RpcError` or an unexpected exception without a diagnostics row, warning or gate counter, so a run in which no symbol was evaluated reports `BACKTEST_STATUS_OK` with empty diagnostics and is scored and persisted as a success.
+- enforce-config-key-wiring: A deterministic check, wired into the execution/validation loop and CI, that proves every config key a feature seeds is read by code under the exact stored key (and every key code reads is seeded), so a config key can no longer ship as a silent no-op.
+- expose-score-strategy-mcp: The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance fields (`evidence_symbols`, `evidence_days`, `provisional`) have no MCP tool, so an agent or operator cannot trigger or verify a grade recompute.
+- legacy-authors-confirm-resolve: Let `python -m app.maintenance.legacy_authors_ops confirm` resolve `unmappable` and `ambiguous` plan rows (via `--map LEGACY=USER_ID` flags and an interactive picker) so the feature-276 repair no longer needs a hand-edit of `plan.json` in an ephemeral DO console.
+- sops-secrets-migration: Move deploy-time secrets (DigitalOcean App Platform runtime secrets and homelab deploy secrets) out of GitHub secrets / 1Password into per-environment SOPS (age) files committed to the repo.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+25 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-31
 
 ### Features
