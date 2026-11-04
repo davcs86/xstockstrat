@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-edge-owner-scope`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-edge-owner-scope-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-edge-owner-scope-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edge-owner-scope-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-edge-owner-scope-defect.md` (debt-radar D-25, D-31) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-edge-owner-scope-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edge-owner-scope-defect.md) (debt-radar D-25, D-31) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |

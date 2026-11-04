@@ -56,7 +56,7 @@
 - Pooled-client `keepAlive: true` in `services/xstockstrat-config/src/index.ts` — deferred to avoid 266's overlap; closes the half-open-socket gap if the pooled client does not emit `error`/`end`.
 - Known limitations recorded in `services/xstockstrat-config/CLAUDE.md:103-107` (stale snapshot for a namespace whose rows were all deleted during an outage; propagation lag up to ~30 s after a long outage; listener competes for 2 pool slots and pg-pool `connect()` wait is unbounded).
 - Python client D-08 (client-side ConfigWatcher) was out of scope (product-spec out-of-scope list).
-- Defect report `docs/reports/2026-10-21-config-stream-resilience-defect.md` still has sidecar status `triaged` (`ref: feature:258-fix-config-stream-resilience`), not `resolved`; prune/flip is the orchestrator's call.
+- Defect report `docs/reports/2026-10-21-config-stream-resilience-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-config-stream-resilience-defect.md) still has sidecar status `triaged` (`ref: feature:258-fix-config-stream-resilience`), not `resolved`; prune/flip is the orchestrator's call.
 - `feature.md` § Next Action is stale (still says "Merge integration PR #1357, then run the post-deploy dev check"; both done 2026-10-29).
 
 **Ledger entries written**: insights.md (2), fails.md (2) — see the 2026-11-04 entries.

@@ -1,5 +1,5 @@
 Feature: fix-analysis-backtest-bounds (bug fix)
-  Regression guard for docs/reports/2026-10-21-analysis-backtest-bounds-defect.md:
+  Regression guard for docs/reports/2026-10-21-analysis-backtest-bounds-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-analysis-backtest-bounds-defect.md):
   bar pagination returns a partial series on a re-served page; the backtest wall-clock key is never enforced.
 
   @AC-1 @FR-1 @regression

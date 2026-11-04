@@ -179,7 +179,7 @@ proto comment. Launched 2026-10-31 via PR #1387 (0cfaa489). Never exercised agai
   `INVALID_ARGUMENT` (incomplete IBKR blob not mentioned).
 - `compete=false` self-competition (DO rolling-deploy overlap, ~24h LST refresh re-running init) can read INVALID for
   up to one health interval (default 300000 ms); heals via the next poll (AC-4 `competing:true` row, AC-10).
-- Defect report `docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.status` is still `triaged`
+- Defect report `docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.status` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md) is still `triaged`
   (`ref: feature:249-fix-ibkr-request-signing`); it is not resolved yet, so `/sdd-archiver reports` will not prune it.
 - Unverified residual, no source addresses it: register/update swaps in a fresh client (recon.md:287-288), discarding
   the cached LST while the old client may be mid-request. Each credential update then forces a new handshake +

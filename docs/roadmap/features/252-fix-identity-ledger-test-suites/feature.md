@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-identity-ledger-test-suites`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 3 notes; overlap WARN) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |

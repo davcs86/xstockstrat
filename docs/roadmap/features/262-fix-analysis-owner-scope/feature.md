@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-analysis-owner-scope`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-analysis-owner-scope-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-analysis-owner-scope-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (debt-radar D-44, D-55, D-60) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-analysis-owner-scope-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-analysis-owner-scope-defect.md) (debt-radar D-44, D-55, D-60) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings; 3 resolved in-spec: AC-3 ids, new AC-8, FR-1 per-pair isolation). Overlap WARN (file-level: 244, 259, 215/244/245) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (Step 1 @AC-9 append done at spec time) |

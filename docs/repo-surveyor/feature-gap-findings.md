@@ -380,7 +380,7 @@ None of R-01…R-06 has been built since `aa84f8b`. Each keeps its 2026-10-01 ra
 ### R-03 Portfolio history (equity curve) — P-med · leverage M÷M  *(carried; prerequisites shifted)*
 - **Motivated by:** `GetPnL`/`GetSnapshot` have no external caller (`portfolio_handler.go:94`, `:106`).
 - **Blocked by:**
-  - `2026-10-20-portfolio-getpnl-source-service-mismatch-defect` (realized always 0).
+  - `2026-10-20-portfolio-getpnl-source-service-mismatch-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md) (realized always 0).
   - debt-radar **D-46** (paging inflates realized once that is fixed).
   - **D-12** (the dead snapshot writer).
 - **Trade-off:**
