@@ -31,9 +31,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Open Threads
 
-- [ ] Timeout for the detached cache insert: config key vs justified invariant (F-07) — decide in round 2.
+- [x] Timeout for the detached cache insert: config key vs justified invariant (F-07) — decide in round 2. — resolved 2026-11-04: fixed invariant, operator-approved
 - [ ] Partial application (k of N upserts, no transaction) accepted risk; repaired by boot replay.
-- [ ] Follow-up defect report for warm-poller/ingest cancel WARNs only if Loki shows a flood there.
+- [x] Follow-up defect report for warm-poller/ingest cancel WARNs only if Loki shows a flood there. — resolved 2026-11-04: follow-up report created (docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md)
 
 ---
 
@@ -52,7 +52,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - [ ] Size `grace` from a measured `InsertBars` p99 — marketdata spec step; record the measurement here.
 - [ ] Teardown (Step): marketdata `CLAUDE.md` GetBars bullet + MARKETDATA-3 prose + the stale comment at `:354-355`; portfolio doc comment `:1379-1380`.
-- [ ] RED tests need two new inline fakes (bar-returning source that cancels; recording `barsBatchStore`) and an inline portfolio DB variant whose `Exec` cancels — list them in the step's Files (fails.md:2708-2711).
+- [x] RED tests need two new inline fakes (bar-returning source that cancels; recording `barsBatchStore`) and an inline portfolio DB variant whose `Exec` cancels — list them in the step's Files (fails.md:2708-2711). (addressed 2026-11-04: fakes listed in the implementation-spec Step 4 Files)
 - [ ] Partial application on portfolio cancel — accepted (boot replay); no transaction.
 
 ## Session 2026-11-04 — sdd-spec
@@ -72,10 +72,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Result: 0 failures, 5 warnings, 0 Floor risks (advisory — did not block). Criteria pass: PASS WITH WARNINGS; overlap scan: no migration / proto / config-key collisions, no FAIL-level overlap.
 - Unresolved ⚠ carried into execution:
-  - Step 1/2: a canceled **broker** sync now returns `ctx.Err()` (Instruction 5) but no test asserts it — AC-1..3 use offline payloads, AC-4 is a live-ctx broker case, AC-5 hits the skip branch (C-15/P-06) — [ ] unaddressed. Add a broker-payload, ctx-done case when executing Step 2.
-  - Step 4: the pre-Step-3 "RED" is a **compile failure** (`barsCacheWriteGrace` undefined), not the claimed nil-`s.repo` panic, so every test in `internal/service` goes red (P-06) — [ ] unaddressed. Either stub the constant for the red run or record the compile failure as the red capture; re-confirm AC-7 and AC-8(i) fail by assertion/panic.
-  - Step 4 / acceptance.feature: AC-8 subcase (ii) (departed ctx + failing detached write still WARNs, spec decision 3) and the mid-write-departure test have no `@AC-*` (C-15) — [ ] unaddressed. Append a scenario (append-only IDs) or tag them as spec-level characterization.
-  - Step 3: the one-writer slot caps only writers that START departed; a request live at write start that leaves mid-write takes the `WithCancel`+`AfterFunc` branch with no slot, so a burst of those can still hold up to N×`grace` pooled conns (F-06/C-18 — not a breach: live writes behave the same today, no pool maximum changes) — [ ] unaddressed. Record as an accepted residual in design.md Open Risks; `design.md`'s "bounds the pool cost of a cancel burst" is only partly true.
+  - Step 1/2: a canceled **broker** sync now returns `ctx.Err()` (Instruction 5) but no test asserts it — AC-1..3 use offline payloads, AC-4 is a live-ctx broker case, AC-5 hits the skip branch (C-15/P-06) — [x] addressed 2026-11-04: AC-10 + Step 2 test. Add a broker-payload, ctx-done case when executing Step 2.
+  - Step 4: the pre-Step-3 "RED" is a **compile failure** (`barsCacheWriteGrace` undefined), not the claimed nil-`s.repo` panic, so every test in `internal/service` goes red (P-06) — [x] addressed 2026-11-04: Step 4 red-first note. Either stub the constant for the red run or record the compile failure as the red capture; re-confirm AC-7 and AC-8(i) fail by assertion/panic.
+  - Step 4 / acceptance.feature: AC-8 subcase (ii) (departed ctx + failing detached write still WARNs, spec decision 3) and the mid-write-departure test have no `@AC-*` (C-15) — [x] addressed 2026-11-04: AC-11 and AC-12 added. Append a scenario (append-only IDs) or tag them as spec-level characterization.
+  - Step 3: the one-writer slot caps only writers that START departed; a request live at write start that leaves mid-write takes the `WithCancel`+`AfterFunc` branch with no slot, so a burst of those can still hold up to N×`grace` pooled conns (F-06/C-18 — not a breach: live writes behave the same today, no pool maximum changes) — [x] addressed 2026-11-04: recorded in design.md Open Risks. Record as an accepted residual in design.md Open Risks; `design.md`'s "bounds the pool cost of a cancel burst" is only partly true.
   - Step 3: `grace` is sized from whole-request `GetBars` Tempo latency (p99 195 ms, 2.70 s ceiling) because `InsertBars` has no span — a substitute for the measured `InsertBars` p99 that design.md required (C-01). Keep the **staging `InsertBars` timing as a mandatory pre-PR gate** — [ ] unaddressed.
-  - Step 4 (note): AC-9's shared source bars get `Timeframe` mutated by `truncateBars`; build fresh bars per call if a timeframe assertion is ever added on the third call — [ ] unaddressed.
+  - Step 4 (note): AC-9's shared source bars get `Timeframe` mutated by `truncateBars`; build fresh bars per call if a timeframe assertion is ever added on the third call — [x] addressed 2026-11-04: fresh-bars note in Step 4.
 - Overlap findings (file-level, WARN, rebase-only): `marketdata_service.go:109` `barsStore` comment (290 Step 3 rewrites it; 291 adds a one-line constraint — whichever merges second re-reads it and states both consumers); `fetchAndCacheBars` hunk vs 282's adjacent GetBars gate (`:312-332`); `marketdata_service_test.go` end-of-file appends vs 215/282 inserts (highest textual-conflict risk); marketdata/portfolio `CLAUDE.md` and `context-constitution.md` edits in different sections/rule IDs vs 215/281/282/291. No `merge-order.md` row required (optional soft row 290 ↔ 291 for the `:109` comment).
+
+---
+
+## Session 2026-11-04 — sdd-review product-spec (advisory; status NOT changed)
+
+- Verdict: PASS WITH WARNINGS (no blockers, no Floor). Status stays `implementation-ready` — this advisory run does not write status.md / feature.md history.
+- Warnings addressed in this session: product-spec FR-1/FR-2 amended (broker cancel returns the cancellation; "departed-client write" = a write that starts after the client left; 5 s grace stated; a failed detached write still WARNs whatever the client's state; the untested live-ctx re-read WARN recorded as an accepted residual); persona named; "not persisted" instead of "discarded"; BrokerType-agnostic sentence; `:370` anchor reworded; grace provenance reworded to the Tempo-based sizing with the staging `InsertBars` timing kept as a mandatory pre-PR gate; acceptance: AC-1..AC-9 given concrete values and the missing tags (AC-3/AC-9 regression, AC-7 characterization, AC-1 title "after the first upsert"), AC-10 (broker cancel returns the cancellation), AC-11 (departed client + failing write still WARNs) and AC-12 (client leaves mid-write) appended; implementation-spec coverage table, `Covers` lines and test instructions updated (AC-10 test in Step 2; AC-11/AC-12 tests and a compile-failure red note in Step 4); mid-write residual added to design.md Open Risks.
+- Overlap (warn-level): `barsStore` comment line shared with 291; 294 `boundedRetry` instrumentation; merge-order rows added (291, 294).

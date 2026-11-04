@@ -4,30 +4,33 @@
 **Defect report**: `docs/reports/2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-11-04
-**Revised**: 2026-11-04 (design gate — FRs, config key, scope)
+**Revised**: 2026-11-04 (design gate; product-spec review fixes)
 
 ---
 
 ## Problem Statement
 
-The always-on bar ingester re-requests every warm symbol each 5-minute cycle, including a handful (AXIA, EVTV, LRHC,
-LXP, PSKY, RAMP) that never return bars, and WARNs `bar ingest: symbols returned no bars` on essentially every cycle
-(206–287 lines/day, 1,173 in 7 days). The warm set is add-only and `GetBars` re-warms a symbol on every call, so the
-state has to live in the ingester. On the production multi-symbol path a held symbol saves no vendor call (see
-`design.md` § Honest value); the benefit is removing the per-cycle noise and, on the per-symbol fallback path, the
-wasted calls.
+The platform operator reading marketdata logs — and the downstream readers of the warm set (the analysis live loop and
+the screener) — see the always-on bar ingester re-request every warm symbol each 5-minute cycle, including a handful
+(AXIA, EVTV, LRHC, LXP, PSKY, RAMP) that never return bars, and WARN `bar ingest: symbols returned no bars` on
+essentially every cycle (206–287 lines/day, 1,173 in 7 days). The warm set is add-only and `GetBars` re-warms a symbol
+on every call, so the state has to live in the ingester. On the production multi-symbol path a held symbol saves no
+vendor call (see `design.md` § Honest value); the benefit is removing the per-cycle noise and, on the per-symbol
+fallback path, the wasted calls.
 
 ## Functional Requirements
 
-- **FR-1:** A warm symbol that has returned no bars for at least the back-off period (counted only across informative
-  cycles) is left out of the ingester's vendor request, except for one probe per back-off period.
+- **FR-1:** A warm symbol that has returned no bars for at least the back-off period — the value of
+  `marketdata.stream.bar_ingest_backoff_ms`, default 6 h (`21600000`), counted only across informative cycles — is left
+  out of the ingester's vendor request symbol list, except for one probe per back-off period.
 - **FR-2:** A held symbol is cleared, requested every cycle and its bars stored as soon as a probe returns bars, or when
   it leaves the cycle's symbol list.
 - **FR-3:** Holding and recovery are each reported once per state change; held symbols are not reported per cycle; the
   per-cycle heartbeat stays.
-- **FR-4:** Non-informative cycles (a strict majority of the non-held requested symbols did not return bars — weekend,
-  holiday, partial outage, a lone symbol, a probes-only request) and per-symbol fetch errors never create or advance
-  hold state.
+- **FR-4:** A cycle is **informative** only if a strict majority of the non-held, non-probe, non-errored requested
+  symbols returned bars; otherwise it is non-informative — a weekend, a holiday, a partial outage with **half or fewer**
+  of those symbols returning bars, a lone symbol, or a probes-only request. Non-informative cycles, and per-symbol
+  fetch errors, never create or advance hold state.
 - **FR-5:** The change is ingester-only and tunable: the warm set, the quote/price paths and the
   `GetBars`/`BatchGetBars` responses are unchanged, and `marketdata.stream.bar_ingest_backoff_ms <= 0` restores
   today's behaviour.
@@ -47,23 +50,30 @@ feature is that follow-up.
 
 ## Affected Services
 
-xstockstrat-marketdata (ingester, key registration); xstockstrat-config (seed migration and `SetConfig` bounds for the
-new key). Observed (no code change): xstockstrat-analysis live loop.
+xstockstrat-marketdata (ingester, key reader); xstockstrat-config (seed migration and `SetConfig` bounds for the new
+key). Observed (no code change): xstockstrat-analysis live loop.
 
 ## Consumer Surface(s)
 
-None — internal/platform-only (ingester behaviour and log volume; no UI, agent or MCP behaviour changes; C-14).
+None — internal/platform-only (ingester behaviour and log volume). No UI, agent or MCP change. Downstream readers of a
+symbol that was held on a false positive (analysis live loop, screener, `BatchGetBars` consumers, portfolio offline
+marks) can see its stored daily bar lag by up to the key's value (max 24 h; `0` disables); no consumer-side change is
+needed (C-14).
 
 ## Fix Scope
 
-- [x] No proto changes anticipated
-- [ ] Config service migration: seeds `marketdata.stream.bar_ingest_backoff_ms` (default `21600000`, `<=0` disables)
-  without overwriting an existing runtime value; approvals DBA + service owner + config team
-- [ ] Config key registered: `marketdata.stream.bar_ingest_backoff_ms` — `SetConfig` bounds `[0, 86400000]` +
-  test, `scripts/config-wiring.json` entry, snapshot-built reader test, marketdata `CLAUDE.md` row,
-  config-governance log entry
-- Fixed invariants (operator-approved, documented in marketdata `CLAUDE.md`): strict-majority informative-cycle rule;
-  streak-continuity gap = the cycle's window width
+- Proto: none.
+- Database: a **config-service data seed migration** (`035_…`, last+1 on `services/xstockstrat-config/migrations/`
+  whose last is `034`; up + down pair; `ON CONFLICT … DO NOTHING` so an existing runtime value is never overwritten).
+  Approvals: DB migration — DBA + service owner. Re-check `035` against `origin/main-dev` and the draft 293 plan
+  immediately before merge.
+- Config key: `marketdata.stream.bar_ingest_backoff_ms` (int, default `21600000`, `<=0` disables) with `SetConfig`
+  bounds `[0, 86400000]` and a test; new config key — owner + config team approval. Registered via the seed migration and
+  the snapshot-built reader test; **no `scripts/config-wiring.json` entry** (the file is a shrink-only baseline of
+  findings; a seeded-and-read key produces none, and an entry would fail as `STALE`) — verified by
+  `scripts/check-config-wiring.mjs` passing.
+- Fixed invariants (operator-approved, documented in marketdata `CLAUDE.md`, classifiers not data-age windows): the
+  strict-majority informative-cycle rule; the streak-continuity gap = the cycle's window width.
 
 ## Acceptance Criteria
 

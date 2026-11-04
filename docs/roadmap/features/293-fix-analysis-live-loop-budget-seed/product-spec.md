@@ -4,42 +4,107 @@
 **Defect report**: `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md`
 **Severity**: SEV-3
 **Created**: 2026-11-04
+**Revised**: 2026-11-04 (product-spec review: FRs, migration strategy, consumer surface)
 
 ---
 
 ## Problem Statement
 
-The live loop reads `analysis.engine.max_strategies_per_cycle` (`live_loop.py:359`, code default 50) but the key is not registered in any environment's config registry. Raising it required a runtime `SetConfig create_key=true` (done on staging 2026-11-04, value 200), which is invisible to migrations (`docs/patterns/config-governance.md:90`): production and fresh environments still run the unregistered default, and the key has no description or default in `list_config_keys`. Separately, a fleet that stays above the budget logs the same WARN on every cycle (~5.6k lines/7 days at budget 50) for a steady-state condition.
+A platform operator tuning the analysis live-evaluation budget cannot discover or safely set the key
+`analysis.engine.max_strategies_per_cycle`: the live loop reads it (`services/xstockstrat-analysis/app/engine/live_loop.py:359`,
+`int_positive`, code default `50`) but it is not registered in any environment's config registry, so `list_config_keys`
+omits it and a plain `SetConfig` is refused `NOT_FOUND` (feature 091 existence gate). The only way to change it is
+`SetConfig create_key=true` — done on staging on 2026-11-04 (value `200`, **chosen by the assistant, not the operator**) —
+which is invisible to migrations (`docs/patterns/config-governance.md:90`): production and any freshly migrated
+environment keep running the unregistered default of 50, and the staging row has no description or default.
+
+Separately, a fleet that stays above the budget logs the same overflow WARN on every ~68 s cycle for a steady-state
+condition (~5.6k WARN lines in 7 days at budget 50: 670–696 live pairs vs 50), burying real warnings.
+
+## Functional Requirements
+
+- **FR-1:** A config-service migration registers `analysis.engine.max_strategies_per_cycle` as `value_type='int'`,
+  `value_data='50'`, `default_value='50'`, a non-empty description and `consuming_service='xstockstrat-analysis'`, for
+  `staging` and `production` (global scope, `user_id` NULL), with `namespace='analysis'` and the full-dotted `key` (the
+  `key` column must equal the string the reader looks up — migration 033's rationale). On production this is a
+  no-behaviour-change (50 is what runs today).
+- **FR-2:** Applying the migration never changes the `value_data` (or `value_type`) of an existing row — including the
+  staging runtime-created value `200` — and backfills that row's empty description / `default_value` /
+  `consuming_service`. The migration is idempotent (applying it twice leaves exactly one row per environment).
+- **FR-3:** `SetConfig` write-edge bounds for the key: minimum `1` (a stored `0` or negative otherwise silently reads
+  as `50` through `int_positive`); the maximum is chosen in `/sdd-design` from cycle duration versus the 60 s evaluation
+  interval (measured: 200 pairs ≈ 23.6 s on staging; a cycle that outlasts the interval is skipped with "previous
+  cycle still running"). `SetConfig` without `create_key` succeeds for the key once registered.
+- **FR-4:** The `scripts/config-wiring.json` baseline entry for the key (`read-unseeded`, owner feature 278,
+  `:84-89`) is removed in the same change (baseline entries may only shrink; a stale entry fails CI), and
+  `node scripts/check-config-wiring.mjs --declared-migration <migration>` passes.
+- **FR-5:** While the live fleet stays over budget, the overflow WARN is emitted once per **state change** — the state
+  is the tuple (live pair count, budget) — not on every cycle. The per-cycle INFO summary
+  `live_loop: evaluated N/M pairs …` is unchanged and the `_TRUNCATION_COUNTER` metric keeps incrementing every cycle.
+- **FR-6 (rollback):** The down migration removes only rows whose `value_data` still equals the seeded `50`, so an
+  operator-set value (e.g. staging `200`) survives a rollback; it never deletes an operator-owned value.
 
 ## Reproduction Steps
 
 1. `list_config_keys(namespace="analysis")` on any environment: the key is absent.
-2. `SetConfig` without `create_key` is refused NOT_FOUND (feature 091 existence gate).
-3. With 670+ live pairs, observe one overflow WARN per live-loop cycle.
+2. `SetConfig` without `create_key` is refused `NOT_FOUND`.
+3. With 670+ live pairs and budget 50, observe one overflow WARN per live-loop cycle.
 
 ## Root Cause Hypothesis
 
-The key was introduced consumed-with-default (no seed), the pattern feature 227 waived for tuning keys, but this one is operationally necessary once the fleet outgrows 50. Whether the repeated WARN should be throttled or lowered is a design question for `/sdd-design`.
+The key was introduced consumed-with-default (unseeded, the pattern feature 227 waived for tuning keys) but is
+operationally necessary once the fleet outgrows 50. `SetConfig create_key=true` inserts only `namespace, key,
+value_type, value_data, …` (`configServiceImpl.ts:633-646`), so the runtime row has NULL description/default/consumer;
+a bare `ON CONFLICT DO NOTHING` seed would leave staging without them (hence FR-2's metadata backfill). The overflow
+WARN is a steady-state condition logged at WARN per cycle; FR-5 fixes the volume, the level stays WARN on a state change.
 
 ## Affected Services
 
-xstockstrat-analysis, xstockstrat-config (seed migration)
+xstockstrat-analysis (live-loop WARN throttling; `CLAUDE.md` row), xstockstrat-config (seed migration and
+`SCALAR_BOUNDS_REGISTRY` entry in `src/grpc/configServiceImpl.ts` with its test).
+
+## Consumer Surface(s)
+
+- [x] `/config-ui` (generic config table) and the Agent MCP tools `list_config_keys` / `set_config`: pick up the new
+  registry row (description, default `50`, no `create_key` needed) with **no UI or agent code change** — verified: no
+  hard-coded reference to the key in UI/agent paths. The overflow-WARN throttling is an internal log-volume change
+  observable only in Loki/Grafana. No UI or agent implementation step is required (C-14).
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated
-- [ ] A config seed migration is anticipated (registers the key in every environment; must not clobber the runtime-created staging value 200)
-- [ ] Config key registered: `analysis.engine.max_strategies_per_cycle` (int)
-
-(Update after investigation — remove or replace each item as needed)
+- Proto: none.
+- Database: **config-service migration** — up + down pair in `services/xstockstrat-config/migrations/`, seeding with
+  `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO UPDATE SET description, default_value,
+  consuming_service` only (never `value_data`/`value_type`); the audit trigger / `pg_notify` path must not log a spurious
+  value-change for the metadata-only update (verify at spec time). **NNN is the next free number at `/sdd-spec` time,
+  re-verified against `origin/main-dev` and open feature branches, and must be higher than every claimed number —
+  `035` is held by feature 291 and `037` by feature 281's branch — so it is not hard-coded here.** golang-migrate skips
+  a lower version that lands after a higher one on an already-migrated database, so `merge-order.md` records 293 after
+  291 and 281.
+- Staging row check before applying: the runtime-created row's stored `namespace` / `key` must equal the seed's
+  (`analysis`, `analysis.engine.max_strategies_per_cycle`), otherwise the conflict target does not fire and a second row
+  is created.
+- Config key registered: `analysis.engine.max_strategies_per_cycle` (int, default 50), bounds per FR-3.
+- Docs: "Seeded by migration NNN" note on the analysis `CLAUDE.md` Config Keys row (`:529`); entry in the Per-Feature
+  Registered Keys log in `docs/patterns/config-governance.md`.
+- Governance gates (root `CLAUDE.md` § Approval Flow): DB migration — config-service owner + DBA; new config key —
+  analysis owner + config team.
+- Live-loop code: throttle the overflow WARN (FR-5) and update the existing tests that assert a WARN on every
+  over-budget cycle (`tests/test_live_loop.py:759-780` `test_truncation_warns_only_when_over_budget`, `:783-808`
+  `test_rotation_logs_window_cursor_and_cycle_summary`) — an intended CHANGE of those assertions, not a regression.
+- The two parts (FR-1..4/6 seed + bounds; FR-5 throttle) may land as separate steps/PRs so one does not block the other.
 
 ## Acceptance Criteria
 
-See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
-after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on
-dev.
+See `acceptance.feature` (Constitution **C-15**). PRESERVE (C-16): `docs/sdd/business-rules/platform.feature:496`
+(`@AC-6 @FR-3 @feature-244`: a stored `0` for the key reads as `50`) — the reader's `int_positive` semantics and the code
+default `50` are unchanged; with a `min 1` bound this stays a read-side guarantee for legacy stored zeros. Plus: existing
+tests pass (except the two intended assertion changes above); analysis and config smoke-tested on dev.
 
 ## Out of Scope
 
-- Choosing a production budget value (operator decision)
-- Raising the staging value further
+- Choosing a production budget value (operator decision); raising the staging value further. The staging `200` was
+  set by the assistant — the operator should confirm or re-set it (a staging environment rebuilt from migrations returns
+  to 50).
+- Changing the code default `50`, the `int_positive` reader, or the rotation algorithm.
+- Verifying indicators/marketdata capacity at larger batches (unverified; informs the FR-3 maximum only).

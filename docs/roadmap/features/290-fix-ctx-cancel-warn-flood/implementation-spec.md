@@ -26,15 +26,18 @@ touched — "broker/order/fill handling unaffected by this step".
 
 | Scenario | Tags | Covered by |
 |---|---|---|
-| `@AC-1` canceled ctx stops the position-sync loop after one error | FR-1 regression | Step 2 |
+| `@AC-1` canceled ctx stops the position-sync loop after the first upsert | FR-1 regression | Step 2 |
 | `@AC-2` a write that discovers the cancellation stops without a WARN | FR-1 regression | Step 2 |
-| `@AC-3` canceled offline sync through `boundedRetry` is never parked | FR-1 | Step 2 |
+| `@AC-3` canceled offline sync through `boundedRetry` is never parked | FR-1 regression | Step 2 |
 | `@AC-4` genuine write failure with a live ctx still warns | FR-1 characterization | Step 2 |
 | `@AC-5` empty-broker-snapshot skip path unchanged by a done ctx | FR-1 characterization | Step 2 |
 | `@AC-6` fetched bars persisted after the client cancels, no WARN | FR-2 regression | Step 4 |
-| `@AC-7` live client's cache write gets no new deadline | FR-2 regression | Step 4 |
+| `@AC-7` live client's cache write gets no new deadline | FR-2 characterization | Step 4 |
 | `@AC-8` genuine cache-insert failure with a live client still warns, live page returned | FR-2 characterization | Step 4 |
-| `@AC-9` only one departed-client cache write at a time | FR-2 | Step 4 |
+| `@AC-9` only one departed-client cache write at a time | FR-2 regression | Step 4 |
+| `@AC-10` a canceled broker sync with positions stops without writing and returns the cancellation | FR-1 regression | Step 2 |
+| `@AC-11` a genuine cache-insert failure after the client left still warns, live page returned | FR-2 characterization | Step 4 |
+| `@AC-12` a client leaving mid-write does not cancel the persist | FR-2 regression | Step 4 |
 
 ### Spec-time decisions that refine `design.md` (flag for `/sdd-review impl-spec`)
 
@@ -142,7 +145,7 @@ Confirm the `else` branch for the feature-206 skip contains no `ctx.Err()` refer
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5` — `AC-1`, `AC-2`, `AC-3` are the RED regression assertions; `AC-4` and `AC-5` are **characterization guards** (they pass before and after; labelled as such in the test names/comments, per the design).
+**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-10` — `AC-1`, `AC-2`, `AC-3`, `AC-10` are the RED regression assertions; `AC-4` and `AC-5` are **characterization guards** (they pass before and after; labelled as such in the test names/comments, per the design).
 
 **Instructions**:
 1. New file, package `service`. Declare one inline fake:
@@ -161,7 +164,8 @@ Confirm the `else` branch for the feature-206 skip contains no `ctx.Err()` refer
 5. `AC-3` (RED): `ctx` already canceled; `db := &syncRecorderDB{}`; `handle := svc.boundedRetry("position sync", svc.processPositionSync)`; call `handle(ctx, offlineSyncEvent)`. Assert `err != nil` (and `errors.Is(err, context.Canceled)`), `db.find("offline_account_realized") == nil`, `len(db.execs) == 0`, `parkedCount(rec) == 0`.
 6. `AC-4` (characterization): live ctx; use `pgxmock` via `newFillSvc(t)`: `mock.ExpectExec("INSERT INTO portfolio.positions").WithArgs(anyArgs(15)...).WillReturnError(context.Canceled)` for a **broker** payload (no `realized_pnl`, one position, `"account_id":"brk-1"`) and `mock.ExpectExec("DELETE FROM portfolio.positions").WithArgs(anyArgs(3)...).WillReturnResult(pgxmock.NewResult("DELETE", 0))`. Assert `rec.find("upsert position from sync failed") != nil` and `processPositionSync` returns nil (broker stays warn-and-continue) — the negative control that pins "key on ctx state, not error text".
 7. `AC-5` (characterization): broker payload with `"positions": []interface{}{}` and no `realized_pnl`, ctx already canceled, `db := &syncRecorderDB{}`. Assert `len(db.execs) == 0` and `err == nil` (the feature-206 skip path returns before any check).
-8. Red-first note for `/sdd-execute`: on the pre-Step-1 tree `AC-1`/`AC-2`/`AC-3` fail by assertion (the loop keeps writing and WARNing); `AC-4`/`AC-5` pass. Cite the `@AC-*` ID in each RED assertion message.
+8. `AC-10` (RED, review warning: the headline broker change had no asserting test): **broker** payload (no `realized_pnl`) for `"account_id":"brk-1"` with ONE position `AAPL` qty 10, `ctx` already canceled, `db := &syncRecorderDB{}`. Assert `errors.Is(err, context.Canceled)`, `len(db.execs) == 0`, `len(rec.recs) == 0` (no WARN). Contrast with `AC-5` (empty broker snapshot, still `err == nil`). On the pre-Step-1 tree this fails because the broker branch attempts the write, WARNs and returns nil (`:1443-1445`). Name: `TestProcessPositionSync_AC10_CanceledBrokerSyncReturnsCancellation`.
+9. Red-first note for `/sdd-execute`: on the pre-Step-1 tree `AC-1`/`AC-2`/`AC-3`/`AC-10` fail by assertion (the loop keeps writing and WARNing; the broker sync returns nil); `AC-4`/`AC-5` pass. Cite the `@AC-*` ID in each RED assertion message.
 
 **Verification**:
 ```bash
@@ -253,17 +257,19 @@ Confirm `s.repo.InsertBars(ctx, live)` no longer appears inside `fetchAndCacheBa
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-6, AC-7, AC-8, AC-9` — `AC-6`, `AC-7` regression; `AC-8` characterization (live-ctx failing write still WARNs and returns the live page; plus the Spec-time-decision-3 subcase); `AC-9` one-writer slot. An additional mid-write-departure case is filed under `AC-6` (same FR-2 guarantee: the write survives the client leaving).
+**Covers**: `AC-6, AC-7, AC-8, AC-9, AC-11, AC-12` — `AC-6`, `AC-9`, `AC-12` regression; `AC-7` and `AC-8` characterization (`AC-7`: a live no-deadline client's write gets no new deadline, guarding against a naive `WithTimeout`; `AC-8`: a live-ctx failing write still WARNs and returns the live page); `AC-11` characterization (the Spec-time-decision-3 subcase: a departed client plus a failing detached write still WARNs); `AC-9` one-writer slot (it caps writers that START after the client left — a client that leaves mid-write is covered by `AC-12`, not slotted; an accepted residual, see Open Risks in `design.md`).
 
 **Instructions**:
 1. Append two inline fakes:
    - `barsCancelSource` — `struct { *fakeBackfillSource; bars []*marketdatav1.Bar; cancel context.CancelFunc }`; `GetBars(...)` calls `f.cancel()` when non-nil (client leaves **after** the live fetch begins and before the write), then returns `f.bars`. Test bars: two `*marketdatav1.Bar{Symbol: "AAPL", Timeframe: "1d", Time: timestamppb.New(...)}` (the Alpaca client writes the canonical string back before `InsertBars`, MARKETDATA-1).
    - `recordingBarsStore` — implements `barsBatchStore` (`QueryBarsBatch` returns `nil, nil`); `InsertBars(ctx, bars)` records, under a mutex: call count, `ctx.Err()`, `ctx.Deadline()` (value, ok), a snapshot of each stored bar's `Timeframe`, and the captured ctx; then optionally `entered <- struct{}{}` and `<-release` (block gates), then returns `err`.
 2. `TestFetchAndCacheBars_AC6_DepartedClientBarsStillPersisted`: `ctx, cancel := context.WithCancel(context.Background())`; source cancels in `GetBars`; store ok. Call `svc.fetchAndCacheBars(ctx, "AAPL", "1d", start, end, 500, true)` and assert: store called exactly once; its `ctx.Err() == nil` at call time; `hasDeadline && deadline <= callTime.Add(barsCacheWriteGrace)`; stored `Timeframe == "1d"` for every bar; `installWarnRecorder(t).count("GetBars: cache insert failed") == 0` and no `"re-read after cache failed"`; returned bars have length 2 and next token `""`. (No `s.repo` → a re-read would panic.)
-3. `TestFetchAndCacheBars_AC6_ClientLeavesMidWriteStillPersists`: live ctx; store with `entered`/`release` gates; run `fetchAndCacheBars` in a goroutine; after `<-entered` call `cancel()`; assert the store's captured ctx is **not** done after a short wait (e.g. `select { case <-wctx.Done(): t.Fatal; case <-time.After(50 * time.Millisecond): }`); then `close(release)`; assert the call returns the live page, 0 WARN, and no re-read panic (client gone after write).
+3. `TestFetchAndCacheBars_AC12_ClientLeavesMidWriteStillPersists`: live ctx; store with `entered`/`release` gates; run `fetchAndCacheBars` in a goroutine; after `<-entered` call `cancel()`; assert the store's captured ctx is **not** done after a short wait (e.g. `select { case <-wctx.Done(): t.Fatal; case <-time.After(50 * time.Millisecond): }`); then `close(release)`; assert the call returns the live page, 0 WARN, and no re-read panic (client gone after write).
 4. `TestFetchAndCacheBars_AC7_LiveClientWriteHasNoDeadline`: live `context.Background()`-derived ctx; the store returns `errors.New("stop")` so the call returns at the write error and never reaches the concrete re-read; assert recorded `hasDeadline == false` and `ctx.Err() == nil`. (Equivalent to today's behavior for a live client: no new truncation trigger.)
-5. `TestFetchAndCacheBars_AC8_GenuineInsertFailureStillWarns` (characterization), table of two subtests: (i) live ctx + failing store → `count("GetBars: cache insert failed") == 1` at WARN, returned slice is the live page (`len == len(src.bars)`), token `""`; (ii) departed ctx (already canceled) + failing store → the WARN **also** fires (Spec-time decision 3) and the live page is returned.
-6. `TestFetchAndCacheBars_AC9_OnlyOneDepartedWriteAtATime`: one `svc`, one blocking store; call 1 with an already-canceled ctx in a goroutine, wait `<-entered`; call 2 with another already-canceled ctx runs synchronously (guard with a goroutine + `time.After(2 * time.Second)` so a bug fails instead of hanging) and must return the live page; assert store call count is still 1 while call 1 is blocked, 0 WARN; then `close(release)` and join call 1; assert call 1 persisted (count == 1 total) and a third departed call after release **does** write (slot freed → count == 2).
+5. `TestFetchAndCacheBars_AC8_GenuineInsertFailureStillWarns` (characterization): live ctx + failing store → `count("GetBars: cache insert failed") == 1` at WARN, returned slice is the live page (`len == len(src.bars)`), token `""`, nil error.
+5b. `TestFetchAndCacheBars_AC11_DepartedClientFailingWriteStillWarns` (characterization; the Spec-time decision 3 case, previously a subcase of AC-8): ctx already canceled + failing store → the WARN `GetBars: cache insert failed` fires exactly once (the write is detached, so a failure is a genuine DB error or the grace expiring, never the client's cancel) and the live page (2 bars, `AAPL` `1d`) is returned with a nil error.
+6. `TestFetchAndCacheBars_AC9_OnlyOneDepartedWriteAtATime`: one `svc`, one blocking store; call 1 with an already-canceled ctx in a goroutine, wait `<-entered`; call 2 with another already-canceled ctx runs synchronously (guard with a goroutine + `time.After(2 * time.Second)` so a bug fails instead of hanging) and must return the live page; assert store call count is still 1 while call 1 is blocked, 0 WARN; then `close(release)` and join call 1; assert call 1 persisted (count == 1 total) and a third departed call after release **does** write (slot freed → count == 2). **Build fresh `[]*Bar` per call** — `truncateBars` clears `Timeframe` in place on the shared slice, so reusing one slice would make the third call store an empty timeframe (matters only if a timeframe assertion is ever added on that call).
+7. Red-first note for `/sdd-execute` (review warning): Instruction 2 references the constant `barsCacheWriteGrace`, which does not exist until Step 3, so on the pre-Step-3 tree the test package **fails to compile** (every test in `internal/service` goes red). That compile failure IS the red capture — record it as such, or declare a stub `const barsCacheWriteGrace = 5 * time.Second` in the test file for the red run and delete it in Step 3. Once the package compiles, `AC-6`/`AC-9`/`AC-12` go red by the nil-`s.repo` panic at `:370` (not a failed assertion); `AC-7`/`AC-8`/`AC-11` are characterization guards.
 7. Red-first note: on the pre-Step-3 tree these tests fail at `s.repo.InsertBars` (nil receiver panic, `:370`); the `/sdd-execute` red capture records that, and the green run shows all five passing. Cite the `@AC-*` ID in each assertion message.
 
 **Verification**:

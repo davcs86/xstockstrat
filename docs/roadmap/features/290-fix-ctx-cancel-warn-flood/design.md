@@ -65,6 +65,7 @@ Marketdata (`internal/service/marketdata_service_test.go`): new inline `DataSour
 - [ ] Dropped departed-client writes (slot busy) leave bars uncached in a burst — equals today's behaviour; accepted.
 - [ ] A detached write in flight at process exit dies with the process (`cmd/server/main.go:204-211`; `GracefulStop` capped at 3 s by `StopServer`); rollback + idempotent upsert make this safe.
 - [ ] A client leaving during the re-read can still log one WARN — accepted residual.
+- [ ] The one-writer slot caps only writers that START after the client left; a request live at write start that leaves mid-write takes the `AfterFunc` branch with no slot, so a burst of those can still hold up to N×`grace` pooled conns (live writes behave the same today; no pool maximum changes) — accepted residual (impl-spec review F-06/C-18); `AC-12` covers the single-request behaviour only.
 - [ ] Partial application on portfolio cancel is non-atomic (readers may see a mix) — identical to today; repaired by boot replay.
 
 ## Constitution Rules Touched
