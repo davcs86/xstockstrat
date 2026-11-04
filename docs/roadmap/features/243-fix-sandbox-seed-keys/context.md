@@ -535,3 +535,11 @@ Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
   - Spec header Status `pending` is stale vs 4 done steps; Step 3 anchors/_str_watcher check overtaken by feature 244; Step 1/4 line drift; Step 2 `tail -4` expectation stale. — [ ] unaddressed (done steps are F-09-locked; record only)
 - Overlap findings: no cross-feature collision; spec drift only.
 - C-16: acceptance suites for config and indicators already exist on main-dev (previous "awaiting confirm" note is superseded) — verify the promotion record, then close.
+
+## Session 2026-11-04T22:14Z — operator check module (Step 5)
+
+- Added `app/maintenance/sandbox_keys_check.py` + tests (10 pass, ruff clean). Operator runs
+  `python -m app.maintenance.sandbox_keys_check` once per app and pastes the output below under `G1 staging` /
+  production read-back. Deviation recorded in implementation-spec.md.
+- G1 staging: [ ] awaiting operator output
+- Production read-back: [ ] awaiting operator output
