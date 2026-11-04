@@ -47,6 +47,11 @@ low
 Track B (config-only) per the config-only field. No config key changed; status remains `open` until the
 operator applies the value and confirms (B-3).
 
+Applied (2026-11-04, operator asked for both): `set_config analysis.engine.max_strategies_per_cycle = 200`
+(int, `create_key=true`) on staging; propagation verified in Loki (`max_strategies_per_cycle=200`, 200/690 pairs in
+23.6s, rotation ~4 cycles). The value was chosen by the assistant, not the operator. The overflow WARN still fires
+(690 > 200). Durable fix tracked as feature 293 (`fix-analysis-live-loop-budget-seed`); sidecar `triaged`.
+
 Triage findings (2026-11-04): `analysis.engine.max_strategies_per_cycle` is **not registered** in the staging
 config (absent from `get_config` / `list_config_keys` for `analysis`), so the service runs on its code default
 of 50 and a plain `SetConfig` is refused `NOT_FOUND` by the feature 091 existence gate. Applying the fix therefore
