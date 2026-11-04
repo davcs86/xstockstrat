@@ -4,7 +4,7 @@
 # from a reviewed feature acceptance.feature, never by hand-authoring.
 
 Feature: xstockstrat-marketdata — quote mark_price from the two-sided mid or a bounded stored close
-  Regression guard for docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md:
+  Regression guard for docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-after-hours-one-sided-quote-half-price-defect.md):
   after-hours positions priced at about half value from a one-sided quote.
   Shared givens: LYFT lone side 16.05; stored LYFT 1d close 16.98; mark_close_max_age_hours 168.
 

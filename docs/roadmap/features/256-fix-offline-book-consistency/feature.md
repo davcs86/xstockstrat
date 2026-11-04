@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-offline-book-consistency`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-offline-book-consistency-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-offline-book-consistency-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-offline-book-consistency-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-30
 **Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
 **Launched date**: 2026-10-31
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-offline-book-consistency-defect.md` (debt-radar D-47, D-48, D-49, D-63) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-offline-book-consistency-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-offline-book-consistency-defect.md) (debt-radar D-47, D-48, D-49, D-63) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps |
@@ -37,6 +38,7 @@
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 16 steps done; C-16 acceptance scenarios promoted to portfolio and trading durable suites. |
 
 | 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -55,11 +57,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-22
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios promoted at launch (portfolio + trading suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

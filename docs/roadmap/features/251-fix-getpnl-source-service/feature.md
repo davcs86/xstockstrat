@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-getpnl-source-service`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-30
 **Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
 **Launched date**: 2026-10-31
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings, 4 notes; overlap WARN, 10 same-file collisions, no FAIL) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (9 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps; AC-4..AC-22 + FR-4/FR-5 appended per design.md §6F |
@@ -32,6 +33,7 @@
 | 2026-10-30 | `in-progress` → `code-completed` | sdd-execute sequential (sdd-batch-execute) | All steps done; acceptance scenarios promoted to per-service suites (C-16); PG-1 remains an operator gate |
 
 | 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -51,11 +53,11 @@ per-step assignment and stays stable unless `/sdd-spec` re-runs.
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — debated, approved architecture (9 rounds, full)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to services/xstockstrat-{ledger,portfolio,trading,ui}/acceptance/fix-getpnl-source-service.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

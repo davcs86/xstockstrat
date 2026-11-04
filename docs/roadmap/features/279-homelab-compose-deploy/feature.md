@@ -5,6 +5,7 @@
 **Last Updated**: 2026-10-27
 **Committed to main**: 497eaa01296f7d8df1e3203e5bdd8534e3cc9eb9
 **Launched date**: 2026-10-27
+**Archived**: 2026-11-04
 
 ---
 
@@ -19,15 +20,16 @@
 | 2026-10-27 | `code-completed` (unchanged) | /sdd-spec | Retroactive implementation spec, 16 steps, all `done`; status not reset to `implementation-ready` (spec D-1) |
 
 | 2026-10-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1328; committed 497eaa01296f7d8df1e3203e5bdd8534e3cc9eb9 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier (incl. homelab-edge addendum)
-- [Design](design.md) — approved design, rejected alternatives, open risks
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — retroactive, 16 steps, all `done`
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios promoted at archive (C-16): 32 to platform.feature, @AC-17 to xstockstrat-trading/acceptance/homelab-compose-deploy.feature; 10 not promoted (see this context.md)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

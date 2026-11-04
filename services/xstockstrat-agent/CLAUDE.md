@@ -35,10 +35,6 @@ removed). The strategy tools (`manage_strategy`/`set_strategy_live`) are the exc
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
 Management-tool authorization.
 
-## Language
-
-Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
-
 ## MCP Tools
 
 The agent registers forty-five tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
@@ -159,13 +155,6 @@ OAuth edge — every caller (the agent, plus analysis/ingest/trading loops) is i
 admin scope, so a per-call role gate would break them all. Documented as an explicit contract, not an
 oversight.
 
-That plumbing is also why these tools refuse when no verified claims are present. Feature 079
-**removed** the legacy SSE transport whose `POST /messages` returned before `_authorized` ran, so
-every tool call now passes the gate and the check is **defence in depth** rather than the live
-transport guard. It must keep its current shape: back when both transports existed, a check based
-on the request object would *not* have told them apart — both handed a tool a Starlette `Request`
-carrying an `Authorization` header, so only the absence of verified claims distinguished them.
-
 `set_config` **can write `is_secret` keys** (PR #994 lifted the earlier client-side refusal). The
 value is encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on
 write**), so an admin may rotate a secret through the MCP just like any other key — the plaintext is
@@ -176,14 +165,6 @@ internal callers can decrypt it via the config service's `GetSecret` RPC. Secret
 opaque `ingest.mcp_credential.<uuid>` key, and redaction holds on every read/broadcast edge. The
 backend gate is what authorizes the write. The `secret.*` name prefix is retired — `is_secret`
 is the sole signal.
-
-**Key-creation gate (feature 091).** `set_config` forwards a `create_key` flag
-(`SetConfigRequest.create_key`, default false). `xstockstrat-config` refuses a write to a
-not-yet-registered `(namespace, key, environment, user_id)` scope with `NOT_FOUND` unless
-`create_key=true`, so a mistyped key can no longer silently mint an orphan row. The refusal is
-enforced **server-side** (the agent is a pure passthrough — no client-side existence check), and
-key creation is audited. This is purely additive to the secret-refusal and real-scope-forwarding
-behavior above.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 

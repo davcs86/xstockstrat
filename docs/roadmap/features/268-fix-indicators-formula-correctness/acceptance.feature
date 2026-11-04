@@ -1,5 +1,5 @@
 Feature: fix-indicators-formula-correctness (bug fix)
-  Regression guard for docs/reports/2026-10-21-indicators-formula-correctness-defect.md:
+  Regression guard for docs/reports/2026-10-21-indicators-formula-correctness-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-indicators-formula-correctness-defect.md):
   silent empty formula success (D-10), misnamed ATR/VWAP (D-18), and mutation of hidden saga copies (D-54).
   D-18 resolved as Option A at /sdd-design (2026-10-22, OQ-1 = A): AC-4/AC-5 kept; the @option-B pair
   (AC-8, AC-9) was deleted as the losing option.

@@ -1,5 +1,5 @@
 Feature: fix-marketdata-secret-exposure (bug fix)
-  Regression guard for docs/reports/2026-10-21-marketdata-secret-exposure-defect.md:
+  Regression guard for docs/reports/2026-10-21-marketdata-secret-exposure-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-marketdata-secret-exposure-defect.md):
   vendor API keys leak through transport errors (D-39) and through a header-only GetSecret grant (D-40).
 
   @AC-1 @FR-1 @regression

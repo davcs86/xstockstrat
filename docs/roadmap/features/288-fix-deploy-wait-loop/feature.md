@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-deploy-wait-loop`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04
 **Committed to main**: 0ef77aa123c69b59d022e2edcac45009599595a7
 **Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -21,13 +22,14 @@
 | 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (sequential); config-wiring `--final` exit 0 |
 
 | 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1422; committed 0ef77aa123c69b59d022e2edcac45009599595a7 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 2 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — 5 steps: RED/GREEN pairs for the SUPERSEDED branch and the `deploy-<environment>` concurrency group, then one docs line
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to platform.feature (@feature-288)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

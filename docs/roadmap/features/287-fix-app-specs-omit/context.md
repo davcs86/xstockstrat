@@ -1,246 +1,74 @@
-# Context Log: fix-app-specs-omit
+# Context: fix-app-specs-omit  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-11-04 (/sdd-triage)
+**What**: Bug fix (SEV-2, Track C) for the DO App Platform deploy pipeline. Both `.do/app.yaml` and `.do/app.dev.yaml` now carry `vpc: id: YOUR_VPC_ID`, filled by a required, UUID-validated `--vpc-id` in `scripts/do-render-app-spec.py` from a doctl lookup in the new `scripts/do-db-cluster.sh lookup|trust|untrust`. `prod-up.yml` appends the new app as a cluster trusted source (plus one gated redeploy) and `prod-down.yml` deletes the app, then removes that one rule best-effort. Before the fix, `prod-up` run 41783551259 created the app but its PRE_DEPLOY `db-migrator` timed out on `:25060` (no VPC, not a trusted source), and every staging `deploy.yml` update risked detaching staging because DO treats a spec without `vpc` as a detach. Shipped 2026-11-04 via promotion PR #1422 (commit 0ef77aa1); the operator's live verification (run prod-up, confirm `db-migrator` connects, run prod-down) and a DO token database read+update scope check were open at archive time.
 
-- Bug reported via defect report `docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md`: App specs omit
-  DB VPC attachment and trusted source.
-- Severity: SEV-2. Environment: production.
-- Routed to Track C by **operator override** of T-4, which would pick Track A. The operator's rationale:
-  - production is torn down by design, so nothing live is degraded;
-  - the gap also threatens staging's `main-dev` deploy path;
-  - verification can dispatch `prod-up` from `main-dev`.
-- Created feature.md, product-spec.md, acceptance.feature (AC-1..AC-4), and context.md.
-- Affected: deploy pipeline (specs, renderer, deploy/prod-up/prod-down workflows, DO docs and skill).
-- Operator decisions, recorded verbatim in intent:
-  - VPC ID comes from a doctl lookup, with SOPS only as a fallback.
-  - Keep the public DB host.
-  - prod-up and prod-down manage the trusted-source rule for the app.
-- Facts gathered:
-  - DO docs: the app-spec `vpc: {id: <uuid>}` field exists, and removing it detaches the app.
-  - The console auto-adds trusted sources when you attach an existing cluster. `doctl apps create`
-    evidently does not: the prod app was absent from the firewall list.
-  - The `doctl databases list --format` columns do not include the private network UUID. The JSON
-    output (`-o json`) carries the API's `private_network_uuid`.
-- Recommended design depth: quick, `/sdd-design fix-app-specs-omit quick` (rationale: SEV-2, multi-file
-  deploy pipeline, operator decisions already settle the main forks).
-- Development branch: feature/fix-app-specs-omit
+**Why (irrecoverable rationale)**:
+- Routed to Track C by **operator override** of T-4 (which would pick Track A hotfix): prod is torn down by design so nothing live was degraded, the same gap threatened staging's `main-dev` deploy path, and verification could dispatch `prod-up` from `main-dev` (context.md@d5cdb712:9-15).
+- Operator decisions fixed the main forks (context.md@d5cdb712:18-21; product-spec.md@d5cdb712:39-44): VPC ID from a doctl lookup (SOPS key only as a fallback, never built); keep the public DB host (no `DATABASE_URL` change); prod-up/prod-down own the app's trusted-source rule.
+- Root cause was a **two-part gap**: no `vpc:` block, and `doctl apps create` does not auto-add trusted sources the way the console does when you attach an existing cluster (the prod app was absent from the firewall list) (context.md@d5cdb712:22-25). Removing `vpc` from a spec on update detaches the app (DO docs).
+- doctl `databases list --format` columns omit the private network UUID; only `-o json` carries `private_network_uuid` (context.md@d5cdb712:26-27), hence jq on JSON output. `firewalls remove --uuid` is required; firewalls list JSON is `{uuid, cluster_uuid, type, value, created_at}` (context.md@d5cdb712:58).
+- Operator confirmed proceeding although the Track C product spec skipped `/sdd-review` (status stayed `draft`) (context.md@d5cdb712:47).
+- VPC and cluster IDs are deliberately not config keys (F-07): they are deploy-pipeline values from the DO API, not service config; the cluster name comes from the spec (design.md@d5cdb712:218).
+- prod-up's wait loop deliberately **warns and exits 0** on its 60x15 s timeout, unlike deploy.yml's exit 1: prod-up is attended and Report must still print the URL (design.md@d5cdb712:82, 194).
 
-## Session 2026-11-04 (sdd-design)
+**Rejected alternatives**:
+- Literal VPC UUID in both specs — drifts if the cluster is recreated, and decision 1 asked for a lookup (design.md@d5cdb712:185).
+- SOPS `digitalocean.VPC_ID` key — YAGNI since doctl returns `private_network_uuid`; it is the follow-up if a lookup ever comes back empty (design.md@d5cdb712:186).
+- Private DB hostname — out of scope per decision 2 (design.md@d5cdb712:187).
+- Composite action for the lookup — would break `group_produp`'s exact `uses:` pin and is less stub-testable than a script (design.md@d5cdb712:188).
+- Renderer calling doctl itself — couples the hermetic `env -i` renderer tests to the DO API, and prod-down needs only `cluster_id` and never renders (design.md@d5cdb712:189).
+- Untrust before delete in prod-down — if delete then failed a live app is left with no DB access; delete first, and the rule is still findable by app ID afterwards (design.md@d5cdb712:190).
+- Hard-fail untrust — a red teardown invites a re-run, which finds "already down" and cannot clean up; instead best-effort untrust plus a step-summary naming the stale rule UUID (design.md@d5cdb712:191).
+- Manual remediation for the PRE_DEPLOY race — a re-run of prod-up skips everything ("already running"), so one automatic gated redeploy instead (design.md@d5cdb712:192).
+- Trust in deploy.yml on every deploy — self-healing but gives every staging/prod deploy firewall write rights; rejected on blast radius (design.md@d5cdb712:193).
+- Shared wait-loop script for deploy.yml and prod-up — differing timeout semantics (exit 1 vs warn) would change one workflow's behaviour (design.md@d5cdb712:194).
 
-- **Phase 0 Recon.** Wrote recon.md.
-  - Scope: deploy pipeline only.
-  - Reuse: the `db-connect.sh` firewall verbs, the `deploy.yml` exactly-one-by-name pattern, the renderer literal-placeholder fill, and stub-doctl run extraction in `sops-secrets.test.sh`.
-- **Phase 1 Grilling.** 5 rounds. It was invoked `quick`, and the operator chose "Run another round" at each gate up to the cap.
-- **Chosen approach.**
-  - `vpc: {id: YOUR_VPC_ID}` in both specs, filled by a required, UUID-validated `--vpc-id`.
-  - A new `scripts/do-db-cluster.sh lookup|trust|untrust`.
-  - deploy.yml: lookup only.
-  - prod-up: lookup, then idempotent trust, then one gated redeploy.
-  - prod-down: delete, then best-effort untrust that never empties the list, with a step-summary remediation on failure.
-  - The four manual render sites and the P6 render site in the docs/skill are updated or pointed at the workflows.
-- **Rejected:** a literal UUID, the SOPS key (YAGNI), a composite action, doctl calls inside the renderer, untrust before delete, manual race remediation, trust in deploy.yml.
-- **Constitution rules touched:** F-02/03/04/05, C-15/16/18, P-01/02/06. No Floor breaches.
-- **Operator confirmed** proceeding although the Track C product spec skipped /sdd-review (status was `draft`).
-- **Status:** draft → design-approved.
-- **Open threads:**
-  - Operator pre-merge check: DO token has database read+update scope.
-  - The first staging deploy after merge is the `vpc:` canary.
-  - Operator verification: run prod-up, confirm `db-migrator` connects, then run prod-down.
+**Scars & gotchas**:
+- The firewall race is mitigated, not eliminated: the rule can only be appended after `apps create` starts the first deployment; `db-migrator` builds from source (`scripts/Dockerfile.migrate`, minutes), so the rule normally lands first, and one gated redeploy on ERROR covers the rest (recon.md@d5cdb712:81; design.md@d5cdb712:202).
+- doctl `firewalls append/remove` re-read and rewrite the whole rule list: a concurrent `scripts/db-connect.sh` session or console edit can be lost. An empty rules list means "open to all", so `trust` warns and does not append, and `untrust` refuses to remove the last rule (design.md@d5cdb712:52-62, 203).
+- The renderer's leftover-placeholder guard must never echo rendered text: it reports pre-substitution `YOUR_*` names, else only a count ("values withheld"); the leak test uses sentinel `YOUR_PROD_LEAKED` and checks only `^::error::` lines plus stderr, since `::add-mask::` legitimately carries the sentinel (design.md@d5cdb712:34-35, 170).
+- Extracted workflow `run:` blocks must contain no `${{` (values only via step `env:`); the tests assert this for db/wait/report/trust/untrust, so extracted scripts execute identically under `env -i … bash -e` with stub doctl/sleep (design.md@d5cdb712:161-162, 176-180).
+- Under the default `bash -e`, a failing `create-deployment` exits with doctl's own rc (3), so the test expects 3 not "1"; `get-deployment app1 <id> --format Phase` is matched as a prefix because argv carries trailing flags (D2; implementation-spec.md@d5cdb712:772-777).
+- Tests that select steps by `id` need the service step to add the ids: prod-up's `assign`/`wait`/`report` and prod-down's `summary` had none and the spec did not say so; the impl-spec review flagged it (context.md@d5cdb712:68-69, 133, 173).
+- REVMAP in `scripts/sops-secrets.test.sh` allows only `value: YOUR_(DEV|PROD)_X` lines to differ and takes the VPC as a 6th argv slot; the uppercase-UUID case uses a literal rather than `${x^^}` for bash 3.2 (context.md@d5cdb712:85, 97; design.md@d5cdb712:171).
+- This host lacked mikefarah yq, sops, shellcheck and shfmt (suite fails at `need`); installed yq 4.44.3, sops 3.13.3, shellcheck 0.10.0, shfmt 3.10.0 before the baseline. Local shellcheck 0.10.0 prints an SC2015 info on untouched `scripts/homelab-render.test.sh:126,170`; CI uses the apt build (context.md@d5cdb712:80, 201).
+- The merge of main-dev into PR #1411 (feature 288, fix-deploy-wait-loop, #1409) conflicted in deploy.yml, `sops-secrets.test.sh` and `platform.feature`; both sides were kept: `group_deploy` has 287's order asserts then 288's wait-loop stub run, and platform.feature lists 288's AC-1/AC-2 before 287's AC-1..AC-4. No semantic clash: 288 changes deploy.yml's wait loop (ends on SUPERSEDED); prod-up follows the newest deployment on SUPERSEDED (context.md@d5cdb712:224-228).
+- prod-up against an EXISTING app now always runs lookup + trust, so a token-scope or DO API failure fails a run that used to be a silent no-op (behaviour change on the already-running path) (design.md@d5cdb712:207).
+- The widened leftover-placeholder guard fails a render (value withheld) if any secret value contains `YOUR_`; judged negligible and accepted because it fails closed (design.md@d5cdb712:210).
+- The staging `vpc:` canary matters because the app region is `nyc` but the cluster is `nyc1`; if App Platform rejects `vpc:` on update every deploy fails closed until reverted. Staging's VPC state was unknown at design time (`apps-get-info` showed no `vpc`); the first staging deploy after merge attaches it and triggers a normal redeploy (design.md@d5cdb712:204; recon.md@d5cdb712:83).
+- godo `private_network_uuid` is `omitempty`: an absent key reads as `null` in jq and must fail the UUID check, which is why `dbnet` has empty/absent-VPC stub cases (implementation-spec.md@d5cdb712:42-43).
+- Post-execute scope additions (operator-requested after code-completed, beyond the design's `db` -> `xstockstrat` rename): the skill's cluster name `xstockstrat-db` -> `xstockstrat` (4 places) and PG `--version 15` -> `18` (skill P2; `docs/setup/digitalocean.md:29,129,141,152`) (context.md@d5cdb712:231-239).
+- Doc/skill drift surfaced only because this feature touched them: `docs/setup/digitalocean.md` and `digitalocean-setup/SKILL.md` called the app component `db` / `${db.DATABASE_URL}` (specs bind `xstockstrat` / `${xstockstrat.DATABASE_URL}`), said doctl cannot attach a DB (`SKILL.md:557-567`), created cluster `xstockstrat-db` (specs: `cluster_name: xstockstrat`), and created PG `--version 15` (specs: `databases[].version: "18"`, live cluster reports "18"). The new lookup fails closed on a name mismatch, so the skill's own cluster would not have resolved (recon.md@d5cdb712:84-86; context.md@d5cdb712:61, 194, 232-239).
 
-## Session 2026-11-04 (sdd-spec)
+**Permanent deviations**:
+- spec (impl-spec Step 9) said the manual render sites do an inline `vpc_id=$(doctl databases list -o json | jq …)` then `doctl databases firewalls append` -> shipped: docs and skill call `scripts/do-db-cluster.sh lookup`/`trust` -> because one validated implementation (exactly-one cluster by the spec's `cluster_name`, UUID checks, idempotent trust with the empty-list guard) beats a second copy (DRY, C-18); cost is operators need mikefarah `yq` locally (`brew install yq jq`) (D3; implementation-spec.md@d5cdb712:690-693,779-782).
+- spec said Step 6 adds only `id: trust` -> shipped also adds `id: assign`, `id: wait`, `id: report` -> Step 5's order/wiring asserts select by id (D1; approved in the operator's up-front plan) (implementation-spec.md@d5cdb712:767-770).
+- spec said Step 6 Files = `prod-up.yml` only -> shipped also edits two test-precision lines in `sops-secrets.test.sh` (rc 3 and prefix match) -> approved by the operator at an F-08 blocker, Option A (D2; implementation-spec.md@d5cdb712:772-777).
 
-- Generated implementation-spec.md with 10 steps: test/service pairs 1–2 (`do-db-cluster.sh` + `dbnet`), 3–4 (atomic VPC placeholder: specs + renderer + deploy.yml/prod-up.yml render wiring), 5–6 (prod-up check/trust/wait/report), 7–8 (prod-down + `proddown`), 9 docs + context teardown, 10 full-suite gate. Status → implementation-ready.
-- Key codebase findings:
-  - Upstream doctl/godo verified: `databases list -o json` → godo `Database` (`id`, `name`, `private_network_uuid` omitempty); `firewalls list -o json` → `{uuid, cluster_uuid, type, value, created_at}`; `firewalls remove --uuid` is required; `apps create-deployment` exists; phases include SUPERSEDED; app spec `vpc: {id}`.
-  - `prod-down.yml:24` uses unpinned `action-doctl@v2` and has no checkout; Step 8 pins both (`CHECKOUT_PIN`/`DOCTL_PIN`, `sops-secrets.test.sh:682-683`).
-  - `shell-lint` already covers `scripts/*.sh` (`ci.yml:664-668`); only the `sops` filter (`ci.yml:86-96`) needs `scripts/do-db-cluster.sh` and `prod-down.yml`.
-  - Extra doc drift: `docs/setup/digitalocean.md:594` and `SKILL.md:232,566,568` still say `db` / `${db.DATABASE_URL}`; both specs bind `${xstockstrat.DATABASE_URL}`.
-  - This host lacks mikefarah yq, sops, shellcheck and shfmt (the suite fails at `need`); the executor must install them before Step 1's RED run. CI is authoritative.
+**Cross-feature signal**:
+- Directly applies the lesson of inter-service-mtls (fails.md 2026-10-07, "YOUR_* placeholder added to a spec without editing every render site"): the placeholder, renderer arg and both render sites (`deploy.yml`, `prod-up.yml`; the only two callers of `do-render-app-spec.py`) landed in one atomic step, verified by running the renderer. Recon also applied fails.md 2026-08-13 (deploy dispersion: grep every render call site; only `deploy.yml:79` and `prod-up.yml:66` invoke `do-render-app-spec.py`) (recon.md@d5cdb712:87-88). No new ledger entry (DUP).
+- Extends feature 286 (sops-secrets-migration): its `sops-secrets.test.sh` harness (stub doctl extraction, REVMAP, `rnd`) gained `dbnet`/`proddown` groups and prod-up lifecycle stubs; @feature-286 `@AC-16` (no placeholder remains) now covers `YOUR_VPC_ID`, and `@AC-8` carries a new precondition that the DO token can read databases.
+- Collided with feature 288 (fix-deploy-wait-loop) in deploy.yml/test/platform.feature; merged cleanly (see Scars). `ci.yml` `sops` path filter also overlaps 281-signal-watchlist-expiry-pruning in disjoint regions (textual-merge risk only).
 
-## Session 2026-11-04 (sdd-review impl-spec, advisory)
+**Deferred follow-ons**:
+- Operator pre-merge check: `DIGITALOCEAN_ACCESS_TOKEN` has database read (deploy.yml lookup) and read+update (prod-up/prod-down firewalls); a custom-scoped token fails closed on every deploy. Status unconfirmed at archive time.
+- Operator live verification: run prod-up, confirm `db-migrator` connects, run prod-down. The first staging deploy after merge is the `vpc:` canary (if DO rejects `vpc:` on update, deploys fail closed until reverted).
+- If a lookup ever returns an empty VPC, build the SOPS `digitalocean.VPC_ID` fallback (not built, design.md@d5cdb712:186).
+- An existing prod app picks up `vpc:` only on its next deploy-prod (render stays gated in prod-up) (design.md@d5cdb712:206).
+- Unconfirmed: whether VPC attachment plus the public host changes the network path; the trusted-source rule is what definitely gates public-host traffic (recon.md@d5cdb712:82; design.md@d5cdb712:205).
+- If DO removes the app's rule itself on app delete, `untrust` can 404 and print a false stale-rule summary (job outcome unaffected) (design.md@d5cdb712:209).
+- Unaddressed cosmetic review warnings: approximate cited line ranges in Step 2 (`cluster_name` at `.do/app.yaml:692`, `.do/app.dev.yaml:694`); Step 9 is a large prose step. No coverage gate applies to `scripts/` (context.md@d5cdb712:68-72).
+- Defect report `docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md) is still sidecar status `triaged` (ref `feature:287-fix-app-specs-omit`); not pruned by this archive.
 
-- Result: 0 failures, 7 warnings. Advisory; did not block.
-- Unresolved ✗ / ⚠ carried into execution:
-  - Steps 5/6: prod-up `wait`/`report` (and assign) have no `id:` today, and Step 6 does not say to add one. Step 5's asserts and the `steps.*` references need them (C-01). [x] resolved in Step 6 (D1)
-  - Steps 7/8: the prod-down summary step needs an explicit `id:` for the order assert (C-01). [x] resolved in Step 8 (`id: summary`)
-  - Step 2: the cited spec line ranges are approximate. `cluster_name` is at `.do/app.yaml:692` and `.do/app.dev.yaml:694`. Cosmetic. [ ] unaddressed
-  - Step 1: no coverage threshold is stated. `scripts/` has no CI coverage gate, so N/A (C-08). [ ] unaddressed
-  - Step 9: large prose step. Consider splitting it. Advisory. [ ] unaddressed
-- Overlap findings:
-  - `.github/workflows/ci.yml` overlaps with 281-signal-watchlist-expiry-pruning in disjoint regions (the `sops` filter at 86-96 vs ci-gate at 899-937). Textual-merge risk only; no merge-order row required.
-  - No migration, proto or config-key collisions.
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-11-04 entries.
 
-## Session 2026-11-04 (sdd-execute sequential)
+**Runtime-invariant recommendations (→ /context-constitution)**:
+- DEPLOY-pipeline candidate: `doctl apps create` does not add the app to the DB cluster's trusted sources (console attach does); every create path must call `scripts/do-db-cluster.sh trust`, and removing `vpc:` from a spec on `apps update` detaches the app, so both `.do/app*.yaml` must keep `vpc.id: YOUR_VPC_ID` filled by `--vpc-id` at every render site.
+- `doctl databases firewalls append/remove` is a whole-list read-modify-write; never run concurrently with `scripts/db-connect.sh` sessions; an empty rules list means open-to-all and must not be "trusted into" restriction.
 
-- Mode entry and the feature plan were confirmed by the operator. There was no re-spec. main-dev was merged in (one unrelated docs change); ledger-guard reported clean.
-- Tooling installed on this host: mikefarah yq v4.44.3, sops 3.13.3 (sha256 verified), shellcheck 0.10.0, shfmt 3.10.0. The baseline suite was green (10 groups).
-
-### Step 1 — test: `dbnet` group [done]
-- Added `group_dbnet` (stub doctl, `dbx` runner, `no_doctl_write`), `FIXTURE_VPC`, and the `DB_*` UUID fixtures, and registered `dbnet`.
-- RED: `ASSERT FAIL: dbnet: lookup 1 cluster exited 127 (bash: …/scripts/do-db-cluster.sh: No such file or directory)`.
-- The uppercase-id case uses a literal rather than `${x^^}`, for bash 3.2 compatibility.
-- Files modified: `scripts/sops-secrets.test.sh`
-- Deviations: none
-
-### Step 2 — service: `scripts/do-db-cluster.sh` + CI filter [done]
-- Created the `lookup|trust|untrust` script, implemented per the design. `untrust` validates every rule UUID before the first remove.
-- Added `scripts/do-db-cluster.sh` to the CI `sops` path filter.
-- GREEN: `dbnet: ok`. shellcheck and shfmt are clean.
-- Files modified: `scripts/do-db-cluster.sh` (new), `.github/workflows/ci.yml`
-- Deviations: none
-
-### Step 3 — test: render VPC cases + deploy/prod-up wiring [done]
-- `rnd` now passes `--vpc-id "${RND_VPC-$FIXTURE_VPC}"`. REVMAP takes a 6th argv value (the VPC).
-- New render cases:
-  - AC-1: `yq '.vpc.id'` on both rendered specs.
-  - Case 7, AC-2: empty, non-UUID, uppercase, block deleted and block doubled. Each asserts rc 1, `YOUR_VPC_ID` in stderr and in `::error::`, no `--out`, and no `::add-mask::`.
-  - Case 8: leak count-only.
-- New `db_wiring` helper, plus order asserts in `group_deploy` (db < render < update) and `group_produp` (check < db < setup-sops < render).
-- RED:
-  - `render`: `do-render-app-spec.py: error: unrecognized arguments: --vpc-id d7afff57-…`
-  - `deploy`: `ASSERT FAIL: deploy: db / render / update step missing`
-  - `produp`: `ASSERT FAIL: produp: no db step`
-- Files modified: `scripts/sops-secrets.test.sh`
-- Deviations: none
-
-### Step 4 — service: atomic VPC placeholder [done]
-- **Specs**: both now carry `vpc: id: YOUR_VPC_ID` after `region: nyc`.
-- **Renderer**:
-  - new required `--vpc-id`;
-  - before `resolve`, it checks for a lowercase UUID and for `YOUR_VPC_ID` occurring exactly once;
-  - literal fill;
-  - the leftover guard reports pre-substitution names, otherwise only a count ("values withheld").
-- **Workflows**: `deploy.yml` and `prod-up.yml` each have a hard-failing `db` lookup step, and render takes `VPC_ID` as env plus `--vpc-id "$VPC_ID"`. The prod-up `db` step is ungated.
-- **GREEN**:
-  - full default suite: 11 groups ok;
-  - ruff check and format clean;
-  - `grep -c YOUR_VPC_ID` is 1 in each spec;
-  - other spec readers still pass: agent `test_deployment_env_vars.py` (3 passed) and `check-otel-produced-signals.test.sh` (57 cases, 0 failed).
-- Files modified: `.do/app.yaml`, `.do/app.dev.yaml`, `scripts/do-render-app-spec.py`, `.github/workflows/deploy.yml`, `.github/workflows/prod-up.yml`
-- Deviations: none
-
-### Step 5 — test: prod-up check / trust / wait / report [done]
-- Added `step_idx`, `wait_stub` (a stateful doctl plus a no-op `sleep`), `wrun` (`env -i … bash -e`) and `produp_lifecycle`. Coverage:
-  - full step order;
-  - trust/wait/report env wiring, the `if` gate, no `${{` in runs, and no `shell:`;
-  - check with 0/1/2 apps;
-  - 11 wait cases, plus follow-the-redeploy, follow-newest-after-SUPERSEDED, and a 60-poll timeout that warns with rc 0.
-- RED: `ASSERT FAIL: produp: step order broken at .value.id == "assign"`.
-- Selecting by step `id` needs `id: assign`, `id: wait` and `id: report`, which Step 6 adds; this is the impl-spec review's warning.
-- Files modified: `scripts/sops-secrets.test.sh`
-- Deviations: Step 6 adds `id: assign`, which no step named (see Deviation Log D1).
-
-### Step 6 — service: prod-up check / trust / wait / report [done]
-- **check**: fails when more than 1 app exists, and prints the A9 message.
-- **trust**: new step after assign. Its `APP_ID` is created || existing.
-- **wait**:
-  - gated on created || appended, with env `APP_ID`, `CREATED` and `APPENDED`;
-  - tolerates 4 empty polls;
-  - on ERROR, redeploys once when gated, pinning the new deployment;
-  - on SUPERSEDED, follows the newest deployment;
-  - a timeout warns and exits 0 (one constraint comment records this).
-- **report**: same gate as wait, with env `APP_ID` (A1).
-- **Header**: 2 lines added.
-- GREEN: `produp: ok`, `render: ok`, `dbnet: ok`. YAML parses.
-- Files modified: `.github/workflows/prod-up.yml`, `scripts/sops-secrets.test.sh` (D2)
-- Deviations: D1 (step ids), D2 (test precision). Both are in the Deviation Log; D2 was approved at the F-08 blocker.
-
-### Step 7 — test: `proddown` group [done]
-- Added `group_proddown` and registered it. It checks:
-  - pins and permissions, and the confirm gate;
-  - step order (find < delete < db < untrust < summary), and that no step's `run` contains `${{`;
-  - the delete, db and untrust `if`/env/continue-on-error settings, and the summary `if`;
-  - the forbidden-verbs regex;
-  - the "cluster data untouched" wording;
-  - a stub-run of `find` with 0/1/2 apps;
-  - a stub-run of the summary with the lookup succeeding and failing (it never prints an empty cluster id).
-- RED: `ASSERT FAIL: proddown: action pins`.
-- Files modified: `scripts/sops-secrets.test.sh`
-- Deviations: none
-
-### Step 8 — service: prod-down delete → best-effort untrust + CI filter [done]
-- Rewrote the `down` job:
-  - `permissions: contents: read`, pinned checkout and doctl (replacing the unpinned `@v2`);
-  - find (fails above 1 app) → delete (hard) → db lookup (best-effort) → untrust (best-effort) → summary (only when the delete succeeded and the untrust did not; "cluster lookup failed" branch);
-  - header and echo text: "cluster data untouched".
-- Added `prod-down.yml` to the CI `sops` filter.
-- GREEN: `proddown: ok`, `dbnet: ok`. YAML parses.
-- Files modified: `.github/workflows/prod-down.yml`, `.github/workflows/ci.yml`
-- Deviations: none. The summary step carries `id: summary`, as Step 7 required (impl-spec review warning, Steps 7/8).
-
-### Step 9 — docs + context teardown [done]
-- **`docs/setup/digitalocean.md`**:
-  - Steps 5 and 6: lookup via `do-db-cluster.sh`, `-e "s|YOUR_VPC_ID|$VPC_ID|g"`, create with `--format ID --no-header`, then `trust`.
-  - Step 8: explains `vpc:` and trusted sources, plus the read-modify-write caveat. The raw `doctl apps update --spec` is replaced by a pointer to the workflows.
-  - `db` → `xstockstrat` (console fallback and the Step 5 table).
-  - Troubleshooting heading `${xstockstrat.DATABASE_URL}`.
-  - Token row: database read/update scope.
-- **`digitalocean-setup` SKILL.md**:
-  - P0b/P7 component name.
-  - P4/P5: lookup, VPC fill and `trust`.
-  - P6: the Python render-and-update is replaced by a pointer to the SOPS runbook and the workflows.
-  - P7: attach is spec-based, with the console kept only as a fallback.
-- **`infra-cost-reduction.md`**: lifecycle rows, data safety ("cluster data untouched"), the validation caveat (VPC, trusted source, `db-migrator`), the existing-app `vpc:` caveat, and the token-scope caveat.
-- **Context teardown**: the `/context-forge:context-constitution` skill is **not available** in this session (only `context-forge:context-scrubber` is listed). I reconciled by hand instead.
-  - I re-read every context or doc file that describes the changed behaviour (grep for do-render-app-spec, prod-up, prod-down, sops-secrets.test, trusted source and vpc across root `CLAUDE.md`, `docs/context-constitution*.md`, `docs/patterns/{ci-overview,database}.md`, `docs/runbooks/sops-secrets.md`, `README.md` and `.github`).
-  - Drift found and fixed: `docs/patterns/ci-overview.md:23` (D4).
-  - Checked and still accurate: `docs/context-constitution.md:83` (OTEL prefix) and `docs/runbooks/sops-secrets.md:10,13,136`.
-  - No `CLAUDE.md` or constitution file was touched.
-- **Verification greps**: `YOUR_VPC_ID` is filled at every manual site (11 hits). The checks for `name: db`, `${db.`, "cannot attach" and raw `apps update --spec .do/` return no output. `trusted` appears 6 times in the runbook.
-- **Out-of-scope finding, not changed**: `.claude/skills/digitalocean-setup/SKILL.md` P2 creates a cluster named `xstockstrat-db`, but the specs bind `cluster_name: xstockstrat`. This drift predates the feature, and the new lookup fails closed with a clear message if they differ. It is recorded as a follow-up in the PR.
-- Files modified: `docs/setup/digitalocean.md`, `.claude/skills/digitalocean-setup/SKILL.md`, `docs/runbooks/infra-cost-reduction.md`, `docs/patterns/ci-overview.md` (D4)
-- Deviations: D3, D4
-
-### Step 10 — test: full-suite regression gate [done]
-- `bash scripts/sops-secrets.test.sh` printed 12 `: ok` lines (action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown).
-- ruff check and format are clean on both Python scripts.
-- shellcheck and shfmt are clean on every touched file. Pre-existing: an SC2015 info note in untouched `scripts/homelab-render.test.sh:126,170` under local shellcheck 0.10.0. CI uses the apt build.
-- jscpd on this feature's files: 0 clones. Its default `services/ packages/` baseline is pre-existing and advisory.
-- `node scripts/check-config-wiring.mjs --final`: rc 0. The only output is unrelated `REPORTED` lines.
-- Merge-order: no entry for 287.
-- C-16: promoted AC-1..AC-4 into `docs/sdd/business-rules/platform.feature` with `@feature-287` (operator confirmed).
-- Status: in-progress → code-completed.
-
-## Session 2026-11-04 — sdd-execute (summary)
-**Steps this session**: 1–10
-**Progress**: 10 done / 10 total
-**Stopped at**: all complete; integration PR next
-**Accountability**:
-- Out-of-scope changes: none. D2 (test precision) was approved at an F-08 blocker; D4 was sanctioned by Step 9 Instruction 4.
-- Open items:
-  - Operator pre-merge check of the DO token's database read+update scope.
-  - Operator live verification: run prod-up, confirm `db-migrator` connects, run prod-down.
-  - Follow-up: the digitalocean-setup skill's P2 cluster name `xstockstrat-db` vs the spec's `cluster_name: xstockstrat`.
-- Unaddressed review warnings, cosmetic only:
-  - approximate line ranges in Step 2;
-  - no coverage threshold, which is N/A for `scripts/`;
-  - Step 9 size.
-
-## Session 2026-11-04 (PR #1411: merge main-dev)
-- The PR was `dirty` because feature 288 (fix-deploy-wait-loop, #1409) landed on main-dev. It touched `deploy.yml` (deploy concurrency, wait loop ends on SUPERSEDED), `scripts/sops-secrets.test.sh` and `platform.feature`.
-- Merged main-dev and kept both sides:
-  - `group_deploy` now has 287's db/render/update order asserts followed by 288's wait-loop stub run.
-  - `platform.feature` lists 288's AC-1/AC-2 before 287's AC-1..AC-4.
-- No semantic clash. 288 changes deploy.yml's wait loop only. prod-up keeps 287's design: on SUPERSEDED it follows the newest deployment, with one gated redeploy.
-- Full suite after the merge: 12/12 groups ok. shellcheck and shfmt clean.
-
-## Session 2026-11-04 (operator request: skill cluster name)
-- At the operator's request, fixed the follow-up flagged in Step 9: `.claude/skills/digitalocean-setup/SKILL.md` used the cluster name `xstockstrat-db` in four places (P2 checklist line, P2 `doctl databases create`, P2 console path, final summary). All four now say `xstockstrat`, matching the specs' `cluster_name: xstockstrat` and `docs/setup/digitalocean.md` Step 3. The `lookup` the skill's P4/P5 call now resolves on a cluster the skill created.
-- Unrelated `xstockstrat-db` hits were left alone: the local compose container, the `xstockstrat-db-migrator` image, and the setup guide's temp-file name.
-- Also noticed, not changed (operator scoped this to the name): the skill's P2 and the setup guide's Step 3 both create PG `--version 15`, while both specs declare `databases[].version: "18"`.
-
-## Session 2026-11-04 (operator request: PG version)
-- At the operator's request, aligned the PostgreSQL version with the specs' `databases[].version: "18"` and the live cluster, which `db-cluster-get` reports as `"version":"18"`:
-  - `.claude/skills/digitalocean-setup/SKILL.md` P2: `doctl databases create … --version 18`.
-  - `docs/setup/digitalocean.md`: the overview table (`:29`), the Step 3 prose (`:129`), the summary (`:141`) and `--version 18` (`:152`).
-
-## Session 2026-11-04 (CI: feature status automation)
-
-- Promotion PR #1422 merged to main
-- Feature promoted and committed: 0ef77aa123c69b59d022e2edcac45009599595a7
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-04
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at d5cdb712.

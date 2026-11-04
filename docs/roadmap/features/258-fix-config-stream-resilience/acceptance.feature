@@ -1,5 +1,5 @@
 Feature: fix-config-stream-resilience (bug fix)
-  Regression guard for docs/reports/2026-10-21-config-stream-resilience-defect.md:
+  Regression guard for docs/reports/2026-10-21-config-stream-resilience-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-config-stream-resilience-defect.md):
   config change propagation and config/ledger handlers fail silently on DB errors (debt-radar D-05, D-06, D-35, D-58).
 
   @AC-1 @FR-1 @regression

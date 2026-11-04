@@ -1,5 +1,5 @@
 Feature: fix-ui-transport-hardening (bug fix)
-  Regression guard for docs/reports/2026-10-21-ui-transport-hardening-defect.md:
+  Regression guard for docs/reports/2026-10-21-ui-transport-hardening-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ui-transport-hardening-defect.md):
   no default gRPC deadline in the UI transport (D-37), and segment health routes gated by auth (D-38).
   Deadline values fixed by /sdd-design (2026-10-22): 30s unary transport default (DEFAULT_UNARY_TIMEOUT_MS),
   10s session refresh (REFRESH_TIMEOUT_MS). AC-3's agent-health row expects that handler's own 401 (operator

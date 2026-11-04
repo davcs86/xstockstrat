@@ -1,6 +1,6 @@
 # Promoted from docs/roadmap/features/249-fix-ibkr-request-signing/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
 Feature: fix-ibkr-request-signing (bug fix)
-  Regression guard for docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md:
+  Regression guard for docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md):
   IBKR request signing omits query params and never uses a Live Session Token.
   Expected signatures are known-answer vectors from an independent RFC 5849 / ibind reference signer over
   fixed inputs (Live Session Token, nonce, timestamp). The client code under test never recomputes them.

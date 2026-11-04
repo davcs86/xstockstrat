@@ -96,6 +96,7 @@ jobs:
       - name: Assign to project
         id: assign
         if: steps.create.outputs.app_id != ''
+        continue-on-error: true
         env:
           DO_PROJECT_ID: ${{ steps.render.outputs.project_id }}
         run: |

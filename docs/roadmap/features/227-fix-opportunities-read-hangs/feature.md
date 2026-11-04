@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-opportunities-read-hangs`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-14-opportunities-read-hangs-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-opportunities-read-hangs-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-14
 **Last Updated**: 2026-10-14
 **Committed to main**: 65bbc3cbf93a03f5359b60228398a25e6f297f05
 **Launched date**: 2026-10-20
+**Archived**: 2026-11-04
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` |
+| 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-opportunities-read-hangs-defect.md) |
 | 2026-10-14 | `draft` → `design-approved` | /sdd-design | Full mode, 6 rounds (round 6 by operator cap override); operator approved round-6 design |
 | 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-10-15 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done |
@@ -23,15 +24,16 @@
 | 2026-10-15 | `code-completed` (renumbered) | /sdd-execute | Renumbered 226 → 227 (226 taken on main-dev by fix-otel-trace-export) |
 
 | 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1258; committed 65bbc3cbf93a03f5359b60228398a25e6f297f05 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — codebase dossier, existing business rules (C-16)
-- [Design](design.md) — approved design (6 rounds), rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to per-service suites (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

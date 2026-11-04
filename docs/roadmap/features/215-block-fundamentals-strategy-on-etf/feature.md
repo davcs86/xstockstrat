@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/block-fundamentals-strategy-on-etf`
 **Created**: 2026-09-27
-**Last Updated**: 2026-10-11
+**Last Updated**: 2026-11-04
 
 ---
 
@@ -15,6 +15,7 @@
 | 2026-10-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds — quick mode extended by the operator at each gate) and approved; recon.md + design.md written. Hybrid guard (enforce on unavailable fundamentals, FMP `isEtf` label), deny-entry live, opportunity skip row, derivation-time evidence exclusion, PIT pagination, marketdata absence encoding. No migration; additive proto. |
 | 2026-10-10 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 26 steps |
 | 2026-10-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (proto contract) done — sequential autonomous run, Steps 1–6 |
+| 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | Step 26 done: staging proof (a)-(e) recorded after the FMP key update; all 26 steps complete. `launched` is flipped by CI on promotion to `main` |
 
 ---
 
@@ -52,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review block-fundamentals-strategy-on-etf impl-spec` — validate implementation spec, then `/sdd-execute block-fundamentals-strategy-on-etf`
+Promote `main-dev` to `main` (`/promote`); CI flips this feature to `launched`. The 215 ↔ 283 launch gate (`merge-order.md`) is met.

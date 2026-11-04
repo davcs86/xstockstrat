@@ -217,8 +217,6 @@ pool + existing gRPC stubs (**no new pool, no new edge, no new env var** — F-0
   `correlation_id` as the request field and `x-trace-id` (empty when the source event has none —
   never minted).
 
-New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSignalSource`, gRPC not DB) and **analysis → portfolio read** (watchlist universe; requires `PORTFOLIO_ENDPOINT`). The loop reuses the existing asyncpg pool (no new pool — budget stays 2).
-
 ### Decide-surface RPCs (feature 083, materialized by feature 097)
 
 Three read RPCs back the opportunities-first UI, all over the existing evaluator (`app/services/evaluator.py`) — no new pool:
@@ -252,15 +250,6 @@ Design-level detail — fingerprint eligibility, empirical-Bayes aggregation wit
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50056` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). The MCP agent
-triggers backtests via the `RunBacktest` gRPC RPC.
 
 ## Dependencies
 

@@ -4,7 +4,7 @@
 # from a reviewed feature acceptance.feature, never by hand-authoring.
 # Source: @AC-1, @AC-2, @AC-3, @AC-4, @AC-5, @AC-7, @AC-8, @AC-9 (@AC-6 omitted: OVERLAP with feature 224 @AC-1).
 Feature: fix-legacy-formula-authors (indicators)
-  Regression guard for the defect report docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md:
+  Regression guard for the defect report docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md):
   formulas stored under a legacy username author are unreadable by their owner.
 
   @AC-1 @FR-1 @regression @feature-276

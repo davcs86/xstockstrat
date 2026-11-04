@@ -1,5 +1,5 @@
 Feature: fix-deploy-wait-loop (bug fix)
-  Regression guard for defect docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md:
+  Regression guard for defect docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md):
   the DO deploy wait loop must not spin to its timeout on a superseded deployment.
 
   @AC-1 @regression

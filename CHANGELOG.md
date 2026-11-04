@@ -6,6 +6,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-11-04
 
 ### Features
+- block-fundamentals-strategy-on-etf: Add a guardrail so a strategy that requires fundamentals (a `fundamental` operand — the seeded `fscore` custom formula or any component declaring `fundamental_inputs`) is refused or skipped with an explicit, auditable reason when run against an ETF, instead of silently producing empty/misleading results.
+
+### Summary
+25 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
 - fix-app-specs-omit: A production app created by `prod-up` is not attached to the managed cluster's VPC and is not a cluster trusted source, so the PRE_DEPLOY `db-migrator` times out.
 - fix-deploy-wait-loop: The "Wait for deployment" step in `deploy.yml` times out (red run) when a newer push supersedes its DO deployment, because `SUPERSEDED` is not a terminal phase in the loop and no concurrency group serialises deploys to one app.
 

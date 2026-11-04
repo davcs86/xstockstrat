@@ -1,275 +1,65 @@
-# Context Log: fix-indicators-sandbox-matrix
+# Context: fix-indicators-sandbox-matrix  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-15 (/sdd-triage)
+**What**: SEV-3 bug (defect report `docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md)): the 800x800 numpy matmul sandbox test passed or failed by host (4 of 6 executed CI runs on 2026-10-15 failed; separately, one identical tree, b5a7ca59, both passed and failed). Shipped: `indicators.sandbox.memory_bytes` no longer means the total `RLIMIT_DATA` but formula headroom above the child's runtime-measured pre-lockdown `VmData` baseline (`_VMDATA_PROBE`, fail-closed; cap = `min(baseline + memory_bytes, 2**63 - 1)`), the input `json.loads` moved after the rlimits, and the OpenBLAS allocation abort is classified `memory_exceeded` (`_MEMORY_EXHAUSTED_MARKERS`). Default stays 128 MiB (new meaning). One runtime file (`services/xstockstrat-indicators/app/services/sandbox.py:61,201,283-288,366,421`), the UI Memory-row copy (`formulaReference.ts`, C-14), docs. Commits 651fefea, 97b5f02e, 830f8915, 4b554485; promoted by PR #1258 (65bbc3cb), launched 2026-10-20.
 
-- Bug recorded as `docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md` (Issues disabled). Found while driving PR #1247, whose indicators job went red on code it
-  does not touch.
-- Severity: SEV-3. Routed to SDD path (Track C).
-- Created: feature.md, product-spec.md, acceptance.feature (regression scenarios), context.md.
-- Affected services: xstockstrat-indicators.
-- Root cause hypothesis: the sandbox child sits at its 128 MiB `RLIMIT_DATA` cap, and headroom is host-dependent
-  (likely OpenBLAS's runtime kernel/buffer selection). Not a #1246 regression: identical tree b5a7ca59 both
-  passed and failed. #1246's "attempt 2 pass" was a copied job that never executed.
-- Production exposure: latent. User formulas run under the same 128 MiB default.
-- Feature number: 228. 226 is on main-dev; 227 is held by open PR #1247 (`fix-opportunities-read-hangs`).
-- Recommended design depth: quick → `/sdd-design fix-indicators-sandbox-matrix quick`. Rationale: SEV-3 and a single service, but the root
-  cause is not yet confirmed and a config-default change is a candidate fix.
-- Development branch: feature/fix-indicators-sandbox-matrix.
+**Why (irrecoverable rationale)**:
+- Root cause was measured, not the defect report's hypothesis. `RLIMIT_DATA` covers the whole data segment; `VmData` right after `import numpy, pandas` is about 75-88 MiB and varies by host, Python build and wheel (CI runs system Python 3.12.3, prod image is `python:3.13-slim`), leaving about 12 MiB of real formula budget at 128 MiB. The report's suspected `OPENBLAS_CORETYPE` kernel selection was refuted: the 800x800 matmul needs 116 MiB under every coretype (auto, Haswell, SkylakeX, Zen, Cooperlake, SapphireRapids, Prescott) and every CPU affinity (1/2/4); `MALLOC_ARENA_MAX=1` changes nothing; unpinned threads need 237 MiB; the matmul needs 42 MiB of headroom on any host.
+- At an absolute 64 MiB cap any Series of 20k+ points raised `MemoryError` (1 000 ok), so if production's effective value were 64 MiB absolute (unknown: recon.md:129-131 assumed production could still be at the 64 MiB seed or overridden via SetConfig, operator check needed; but the inert-seed finding, design.md:44-48, means production's effective value is the 128 MiB code default unless someone created a full-dotted row), formulas with arrays >= ~160 KB would fail; headroom semantics remove the dependence on the import footprint.
+- The `min(..., 2**63 - 1)` clamp exists because `memory_bytes_override` was unclamped when this was designed (D-33, `servicer.py:278` — pre-hotfix line number): a huge override plus the baseline could overflow `setrlimit`. The override has since been clamped (`servicer.py:66,282-283` `_clamp_override`, overrides can only lower the config value; hotfix/fix-sandbox-overrides-unclamped, report status resolved), so the override path that motivated the clamp is closed, but the `min(...)` (`sandbox.py:283-288`) is still load-bearing, do not remove: `_clamp_override` (`servicer.py:66-68`) only stops an override exceeding the configured value, and the configured `indicators.sandbox.memory_bytes` is bounded only below (`config/watcher.py:142,155-158` `int_positive` rejects <= 0 only), so an operator-set value near 2**63 (plus baseline) or a direct `execute_formula` caller would still overflow `setrlimit`. It is a type bound, not a tunable, hence not an F-07 magic number (design.md:30-32,143-144; implementation-spec.md:174-175). `sandbox.py:287` carries no comment on it, so a future agent might remove or "configure" it.
+- The probe is placed immediately before the `setrlimit` so the fixed jail overhead (eager imports, tempfile, UID drop, NO_NEW_PRIVS, pyseccomp import) lands in the baseline, not the formula's budget. `VmData` is exactly what `RLIMIT_DATA` is checked against on Linux >= 4.7 (`mm->data_vm`); headroom was measured exact (64 MiB: 62 MiB alloc ok, 66 MiB fails).
+- Probe placement relative to seccomp: it sits after the pyseccomp import and before seccomp `_flt.load()` because `open('/proc/self/status')` needs `openat`; reading before the filter loads means the allowlist did not need widening, preserving `@AC-1 @feature-209` (design.md:27, implementation-spec.md:172-173). It is also immediately before the `setrlimit` so jail overhead lands in the baseline.
+- `_VMDATA_PROBE` is a module constant, not inline template text, as the single seam so T5 can `exec` the identical probe standalone and inject a failure by monkeypatch (follows the `_SECCOMP_ALLOW` pattern; C-18, no new abstraction). It must contain no `{` or `}` so it survives `_SANDBOX_WRAPPER.format`, a trap for anyone editing the probe (implementation-spec.md:154-157; old context.md 2026-10-15 sdd-spec).
+- Why the unverified production row is "safe either way": if an operator created a full-dotted `indicators.sandbox.memory_bytes` row, its value now means headroom, which is more permissive than before, so the semantics change cannot newly break production formulas (design.md:128-130).
+- T2b runs at 64 MiB (half the default) because the 800x800 matmul needs 42 MiB, proving >= 22 MiB margin (design.md:77-78).
+- Not a #1246 regression: an identical tree both passed and failed, and #1246's "attempt 2 pass" was a copied job that never executed (a green re-run is not evidence).
+- Operator chose a 128 MiB default over 64 MiB (2026-10-15), explicitly accepting a larger container envelope for more formula room.
 
-## Session 2026-10-15 — sdd-design (quick)
+**Rejected alternatives**:
+- Raise the absolute cap only (e.g. 256 MiB) — budget stays `cap - baseline`, so the flake moves rather than disappears across 3.12.3/3.13 builds.
+- Shrink the test matrix — hides the flake and loses the `mbind` coverage only 800x800 reaches (feature 209 context.md:11).
+- Pin `OPENBLAS_CORETYPE` — refuted by measurement (above).
+- `RLIMIT_AS` — counts numpy/pandas virtual reservations at import (INDICATORS-2).
+- Per-child cgroup `memory.max` — needs a writable cgroup (CAP_SYS_ADMIN), unavailable on DO App Platform.
+- Hybrid `min(baseline + headroom, absolute ceiling)` — needs a new constant or key (YAGNI; feature 209 rejected new `sandbox.*` leaves).
+- 64 MiB headroom default — closer to today's envelope, lost to the operator's 128 MiB choice.
+- Add corrective config migration 031 for the 64 MiB production seed (recon.md:83,120,148) — not done because the seeds are inert (CONFIG-9); a corrective full-dotted seed was deferred to a separate feature (implementation-spec.md:440-441; design.md:44-50). Migrations 001/002 were also left alone per F-01.
 
-- Operator said "go" for the quick design. The `draft` status was accepted for a Track C bug.
-- **Phase 0 Recon** wrote recon.md (service: indicators, plus config seeds checked). Orchestrator measurements
-  (numpy 2.4.3, pandas 3.0.1, Py 3.12.3):
-  - the post-import `VmData` baseline is about 75–88 MiB;
-  - the 800×800 matmul needs 116 MiB total, the same for every `OPENBLAS_CORETYPE` and CPU affinity, so the
-    coretype hypothesis is refuted;
-  - with threads unpinned it needs 237 MiB;
-  - at a 64 MiB absolute cap, any Series ≥ 20k points raises `MemoryError`;
-  - with headroom semantics the headroom is exact (64 MiB: 62 MiB alloc ok, 66 MiB fails), and 800×800 needs
-    42 MiB of headroom.
-  - Staging config shows bare `sandbox.*` keys (128 MiB), so the indicators seeds are inert (CONFIG-9).
-- **Phase 1** ran 1 round (quick). The adversary returned APPROVE WITH FIXES (11 objections, all folded in), with
-  no Floor breach and no C-16 regression.
-  - **Chosen:** `memory_bytes` becomes headroom above the child's pre-lockdown `VmData` baseline, probed right before
-    `setrlimit`, fail-closed, with the cap clamped to int64. `json.loads` moves after the rlimits. The OpenBLAS abort
-    is classified as `memory_exceeded`.
-  - **Rejected:** raising the cap only; shrinking the test; `OPENBLAS_CORETYPE`; `RLIMIT_AS`; cgroups; a hybrid
-    ceiling; a 64 MiB default.
-- **Operator decision (2026-10-15):** default headroom **128 MiB**, chosen over 64 MiB. The larger container
-  envelope is accepted as a risk: about 812–864 MiB worst case at `max_concurrent=4`, with basic-s RAM unconfirmed.
-- Also: `@FR-1`/`@FR-2` were added to product-spec.md and acceptance.feature (C-15). Migrations 001/002 are not
-  edited (F-01).
-- **Open Threads:**
-  - container envelope on basic-s (verify at the dev smoke);
-  - the production `indicators.sandbox.memory_bytes` row is unverified;
-  - the dev smoke (400 MiB → `memory_exceeded`; 32 MiB at a 64 MiB override → ok) is owed at post-deploy.
-- Status: draft → design-approved.
+**Scars & gotchas**:
+- Running the sandbox suite as root under a `0700` dir (`/tmp/claude-0`) fails every real-subprocess sandbox test with `ModuleNotFoundError: pyseccomp`: the uid-65534 child cannot traverse to the venv. `/tmp/claude-0` is reset to `0700` between shell calls, so each real-sandbox run needed `chmod 711 /tmp/claude-0` in the same command. The main-checkout venv works for sandbox files but has a stale OpenTelemetry set (3 `test_telemetry.py` failures, `ProxyTracerProvider.force_flush`), so the full suite used the worktree venv (290 passed, coverage 85.61%).
+- The indicators seed rows are bare (`sandbox.memory_bytes`) while the watcher reads full-dotted `indicators.sandbox.memory_bytes`, so the seeds are inert (CONFIG-9) and staging `get_config('indicators')` shows only bare `sandbox.*` keys (128 MiB) with the code default doing the work. The 029 rename did not cover indicators. Recorded as an open finding here; routed to feature 243 (`fix-sandbox-seed-keys`; sidecar of `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` status triaged as of 2026-11-04).
+- Probe failure is a service-wide outage by design (every formula returns `runtime_error`): no try/except around the `VmData` parse, so an unparseable line raises before `exec`.
+- Baseline-padding residual: source/JSON literals are compiled before the probe; bounded by the 4 MiB gRPC receive limit (hence `json.loads` was moved after the rlimits).
+- `exit_reason` can be spoofed by a formula that writes to fd 2; only affects its own result (candidate rule at indicators `context-constitution.md:36`).
+- Step 3 UI file was already non-prettier at base; lint-staged reformats any staged UI `.ts`, so a note-only diff was impossible (3 extra whitespace-only blocks). 2 `tsc --noEmit` errors in `e2e/insights/backfills.spec.ts:135-136` (feature 198) are pre-existing and not run by CI.
+- Steps 1 and 2 ran as one red-green cycle: tests written first and unstaged, RED against the pre-Step-1 `sandbox.py` (6 failed / 33 passed; AC-2/T3 was green before as a preservation guard), GREEN 39 passed, flake guard 5/5 runs.
+- The 400 MiB bomb tests (`test_sandbox_isolation.py:157-169`, `test_sandbox.py:144-162`) stay valid only while 400 MiB > baseline + headroom (about 216 MiB at the 128 MiB default; design.md:91-92, implementation-spec.md:308); raising the default headroom above about 310 MiB (derived here as 400 MiB minus the ~88 MiB baseline, not a sourced figure) would silently stop them proving anything.
+- T5 imports `_VMDATA_PROBE` inside the test body (`from app.services import sandbox`) so its RED is a per-test `AttributeError`, not a collection error hiding other REDs (implementation-spec.md:299-301).
+- Kernel-semantics risk: the design assumes `VmData` == `mm->data_vm` enforcement (Linux >= 4.7, not a gVisor-like runtime); on such a runtime the cap could silently stop applying. The owed 400 MiB dev smoke exists to prove the cap still holds on the DO kernel (design.md:131-132, implementation-spec.md:85-86).
+- No test proves cross-host behavior directly: T2 proves only that headroom is independent of the baseline; host-independence is inferred from that plus recon's coretype/affinity measurements (design.md:74-76).
+- TDD ordering rule: capture the green environment baseline (33 passed) BEFORE capturing RED, so a venv-permission-trap RED (`ModuleNotFoundError: pyseccomp`) is not mistaken for a behavioral RED (implementation-spec.md:82).
+- Teardown: `/context-forge:context-constitution refresh` was not installed; done by hand (re-grounded every `sandbox.py:<n>` anchor in indicators `docs/context-constitution.md`, marked the feature-209-superseded temp-file security finding resolved, fixed `CLAUDE.md:4` pointer).
 
-## Session 2026-10-15 — sdd-review product-spec (re-run at operator request)
+**Permanent deviations**:
+- design said the production smoke would be "32 MiB alloc at `memory_bytes_override=64 MiB` succeeds" → spec/shipped substitute is a 96 MiB alloc at the default headroom → because the MCP `test_formula` exposes no memory override (`agent/app/tools.py:1459-1465`); 96 MiB fails today (measured, `memory_exceeded`) and passes only under headroom semantics. Operator was told of the substitute (P-03).
+- recon.md floated config migration 031 (correct the 64 MiB production seed; design decision) → design chose no migration and shipped none → because the seeds are inert (CONFIG-9), so a corrective full-dotted seed was deferred as a separate feature; 001/002 were also left alone per F-01.
+- design.md listed the findings (inert seeds, D-33, address-space drift) without naming a file → sdd-spec routed them to the indicators findings file `services/xstockstrat-indicators/docs/context-constitution-findings.md`, not the root `docs/context-constitution-findings.md` → removes an adjacent-row text conflict with open PR #1247 (feature 227).
+- design.md/spec scoped the doc edits to INDICATORS-1/-2 wording and the candidate row → shipped a full re-grounding of all `sandbox.py` anchors plus marking the feature-209 ⚠ finding resolved → root CLAUDE.md Teardown forbids waving through grounded drift in touched context files.
+- C-16 concession: `@AC-5 @feature-176` (concurrent executions/timeouts, `analysis-concurrency-offload.feature:9`) was marked PRESERVE with a weakened envelope: the per-child memory ceiling rises (about 812-864 MiB worst case at `max_concurrent=4` vs about 512 MiB) and the operator accepted it, so a durable business rule was knowingly weakened (design.md:161-162, recon.md:112-113).
 
-- **First pass: FAIL.**
-  - Blockers: C-14 (no Consumer Surface(s) section) and C-15 (@AC-1/@AC-2 not concrete; the OpenBLAS half of FR-2
-    was uncovered).
-  - Warnings:
-    - stale coretype root cause;
-    - unresolved Fix Scope;
-    - xstockstrat-ui missing from Affected Services;
-    - no FR for the fail-closed probe;
-    - personas, Out of Scope and Open Questions.
-- **Fixed:**
-  - Consumer Surface(s): UI `formulaReference.ts:171`; agent `test_formula` `exit_reason`.
-  - `acceptance.feature` rewritten as @AC-1..5 with concrete values; FR-3 added (probe fail-closed).
-  - Root Cause, Fix Scope, Affected Services (+ui), personas, Out of Scope, and Open Questions / Owed Verification
-    refreshed.
-  - design.md test mapping updated (T2b→1, T3→2, T2→3, T4→4, T5→5).
-- **Second pass: PASS WITH WARNINGS.** The one warning (relabel the owed post-deploy checks) has been addressed.
-- **Overlap: CLEAN.** PR #1247 (227) also edits `docs/context-constitution-findings.md`, which may cause an
-  adjacent-row text conflict only (WARN). No merge-order entry is needed.
-- Status unchanged: design-approved. The lifecycle is already past spec-ready.
-- Ledger candidate: the Track C product-spec template (`.claude/skills/sdd-triage/reference/track-c-sdd.md`) has no
-  `## Consumer Surface(s)` section, so every Track C spec fails C-14 at review.
+**Cross-feature signal**: Feature 209 (`indicators-sandbox-os-isolation`) shipped the RLIMIT_DATA cap and its 800x800 `mbind` test; this feature changes the cap's meaning, so the durable 209 suite wording drift ("address-space" at `acceptance/indicators-sandbox-os-isolation.feature:29` vs the code's `RLIMIT_DATA`) was recorded, not edited (C-16, never hand-authored). The CONFIG-9 bare-vs-full-dotted key class recurred again here (indicators seeds inert), already in the ledger (`fails.md` 2026-10-05 trading-config-namespace-key-mismatch entry). Related sandbox defect reports filed afterwards: 2026-10-19 `sandbox-exit-reason-stderr-substring`, `sandbox-memory-used-bytes-always-zero`, `indicators-sandbox-overrides-unclamped` (D-33), `indicators-sandbox-seed-keys-unprefixed`.
 
-## Session 2026-10-15 — sdd-spec
+**Deferred follow-ons**:
+- Owed post-deploy (O-3), outcome not recorded in context.md: a 400 MiB resize gives `memory_exceeded`; a 96 MiB alloc at default headroom succeeds; container memory envelope on DO basic-s (worst case about 812-864 MiB at `max_concurrent=4` vs about 512 MiB before; `.do/app*.yaml` set no container limit); whether production holds a full-dotted `indicators.sandbox.memory_bytes` row. Mitigations if the envelope is unsafe: lower the live config value or `max_concurrent`.
+- `docs/runbooks/config-rollout.md`: § Step 3 `RolloutConfig` curl uses removed Connect-RPC port 8060; § Step 5 names a nonexistent `indicators.sandbox.memory_exceeded` alert. Recorded, not fixed (needs a design call).
+- CI runs system Python 3.12.3 not the pinned 3.13 (separate fix).
+- `.claude/skills/sdd-triage/reference/track-c-sdd.md` product-spec template has no `## Consumer Surface(s)` section (still true at 1ed63958), so every Track C spec fails C-14 at review.
+- D-33 unclamped `memory_bytes_override`: resolved later by hotfix/fix-sandbox-overrides-unclamped (report status resolved; `servicer.py:66,282-283`). `memory_used_bytes` always 0 remains open (report `2026-10-19-sandbox-memory-used-bytes-always-zero-defect.status` is open).
 
-- Generated implementation-spec.md with 4 steps. Status → implementation-ready.
-  - Steps 1–2: the `sandbox.py` service step and its paired test step (T1–T5).
-  - Step 3: the UI `formulaReference.ts:171` copy.
-  - Step 4: docs plus the context-forge teardown.
-- Key codebase findings:
-  - All runtime change is in `services/xstockstrat-indicators/app/services/sandbox.py`:
-    - the wrapper input parse is at `:246-250`;
-    - the `RLIMIT_DATA` block is at `:274-278`;
-    - the single `.format` call site is at `:338-350`;
-    - the classification is at `:391-396`.
-    The probe becomes a module constant `_VMDATA_PROBE`, interpolated like `_SECCOMP_ALLOW`, so T5 can `exec` it
-    standalone and inject a probe failure via monkeypatch.
-  - Agent `test_formula` needs **no code step**. It forwards `exit_reason` verbatim (`agent/app/client.py:1023-1025`)
-    and exposes no memory override (`tools.py:1459-1465`).
-  - RED was measured on the current tree. A 32 MiB alloc at `memory_bytes=64 MiB` gives `memory_exceeded`, and so
-    does a 96 MiB alloc at the default 128 MiB.
-  - **Environment trap.** Running as root under a `0700` dir (`/tmp/claude-0`) fails every real-subprocess sandbox
-    test with `ModuleNotFoundError: pyseccomp`, because the uid-65534 child cannot traverse to the venv. Using a
-    world-traversable venv gives a baseline of 33 passed. This is recorded in the spec's § Step Dependencies.
-- **P-03 escalation for /sdd-review.** design.md's dev smoke "32 MiB at `memory_bytes_override=64 MiB`" cannot run
-  via the MCP, which has no override parameter. The spec substitutes a 96 MiB alloc at the default headroom, which
-  fails today and passes only under headroom semantics. The operator confirms or replaces this.
-- The findings go to the indicators findings file, not the root `docs/context-constitution-findings.md`. This removes
-  the #1247 adjacent-row overlap noted at review.
-- The runbook examples' bare `sandbox.*` keys switch to full-dotted keys for all indicators keys in those blocks
-  (C-10), not only `memory_bytes`.
-
-## Session 2026-10-15 — sdd-review impl-spec (advisory)
-
-- **Result:** 0 failures, 5 warnings, no Floor breach (advisory). All findings were resolved before execution by
-  editing the spec, since no step had started:
-  - [x] Step 1: E501. The dictated comment/docstring text is rewrapped to ≤ 100 cols. Verification uses
-    `uv run --no-sync ruff`.
-  - [x] Steps 1–4: grep "expect none" checks became `! grep`, so they exit 0 when the text is absent.
-  - [x] Step 3: a note that existing `/insights` E2E coverage still applies (B3).
-  - [x] Step 4: re-anchor the findings rows at `:10`, `:20` and `:22`. Teardown fixes are limited to the step's
-    Files, and other drift goes to the Deviation Log (F-08). The migration check is
-    `git diff origin/main-dev...HEAD` (F-01).
-  - [x] Dev smoke #2: the substitution (96 MiB at the default headroom) is accepted by the orchestrator.
-    Operator confirmation is surfaced in the session summary (P-03).
-- **Overlap:** CLEAN. This feature no longer edits the root findings file, so there is no overlap with #1247.
-
-## Session 2026-10-15 — sdd-execute sequential (Steps 1–2)
-
-- Mode: sequential, at operator request (counts as the up-front confirmation). Steps 1↔2 run as one red-green cycle:
-  Step 2's tests were authored first, unstaged, and run RED against the pre-Step-1 `sandbox.py`.
-- **Environment.** As root, the uid-65534 child must traverse to the venv. `/tmp/claude-0` is reset to `0700`
-  between shell calls, so every real-sandbox run did `chmod 711 /tmp/claude-0` in the same command. The
-  main-checkout venv (`/home/user/xstockstrat/...`) works for the sandbox files but has a stale OpenTelemetry set
-  (3 `test_telemetry.py` failures: `ProxyTracerProvider.force_flush`), so the full suite used the worktree venv.
-
-### Step 1 — service: indicators sandbox — `VmData` baseline + headroom cap, input parse after rlimits, OpenBLAS OOM marker [done]
-- Files: `services/xstockstrat-indicators/app/services/sandbox.py`.
-- Added `_VMDATA_PROBE` (after `_SANDBOX_GID`) and `_MEMORY_EXHAUSTED_MARKERS` (after `SandboxResult`). The wrapper
-  now runs `{vmdata_probe}` → `RLIMIT_DATA = min(_baseline + memory_bytes, 2**63 - 1)` → CPU/NPROC/FSIZE/NOFILE →
-  `json.loads` of `data`/`params` → seccomp `.load()` → `exec`. `.format` gained `vmdata_probe=_VMDATA_PROBE`.
-  Module docstring rewrapped as dictated.
-- Verification: grep anchors present (`:61`, `:201`, `:281`, `:283-284`, `:360`, `:406`); the old literal
-  `RLIMIT_DATA, ({memory_bytes}, {memory_bytes})` is absent; "wrapper order OK"; `ruff check` and
-  `ruff format --check` clean.
-- Deviations: none.
-- TDD (paired with Step 2; per-test lines in the Step 2 entry): red: 6 failed / 33 passed on
-  `test_sandbox_isolation.py` + `test_sandbox.py` (T1, T2, T2b, T4, T5×2 red; T3 green as the preservation
-  guard) → green: 39 passed.
-
-### Step 2 — test: indicators sandbox — @AC-1..5 headroom, fail-closed, classification and probe [done]
-- Files: `services/xstockstrat-indicators/tests/test_sandbox_isolation.py`.
-- Added in-file helpers `_MIB`, `_LINALG_800_SRC` (now also used by `test_large_array_linalg_hits_mbind`),
-  `_ALLOC_32MIB_SRC` and `_fake_popen` (lifted from T1's inline `_FakeProc`). C-13: single-file consumers, no
-  `conftest.py` entry.
-- Tests: T1 rewritten (`TestLimitsConfigured::test_rlimits_derive_from_config_in_wrapper`); T2b
-  `TestNumericParityGolden::test_large_array_linalg_at_half_default_headroom`; `TestMemoryHeadroom` (T2, T3);
-  `TestExitReasonClassification` (T4); `TestBaselineProbe` (T5 ×2).
-- TDD red (pre-Step-1 `sandbox.py`):
-  - AC-1 red: T2b `assert False is True` (`Unable to allocate 4.88 MiB` at 64 MiB absolute cap);
-  - AC-3 red: T2 `_ArrayMemoryError: Unable to allocate 32.0 MiB` at 64 MiB;
-  - AC-4 red: T4 `'runtime_error' == 'memory_exceeded'`;
-  - AC-5 red: T5 ×2 `AttributeError: module 'app.services.sandbox' has no attribute '_VMDATA_PROBE'`;
-  - T1 red: `assert 'VmData:' in wrapped`;
-  - AC-2: T3 green before (`memory_exceeded`), the preservation guard.
-- TDD green: `test_sandbox_isolation.py` + `test_sandbox.py` 39 passed; flake guard
-  (`TestNumericParityGolden` + `TestMemoryHeadroom`) 5/5 runs × 9 passed; full suite 290 passed, coverage 85.61%
-  (≥ 50%); `ruff check` / `ruff format --check` clean; `! grep conftest` OK.
-- Deviations: none.
-
-## Session 2026-10-15 — sdd-execute sequential (Steps 3–4)
-
-- Operator confirmed the checkpoint after Step 2. Steps 3–4 run without per-step prompts.
-- Tooling: `pnpm install --frozen-lockfile --filter xstockstrat-ui...` in the worktree (no lockfile change).
-
-### Step 3 — service: xstockstrat-ui — `/insights` formula reference Memory row describes headroom [done]
-- Files: `services/xstockstrat-ui/src/components/insights/formulaReference.ts`. The Memory `note` is now
-  `'Headroom above the interpreter/library baseline (indicators.sandbox.memory_bytes).'`; label and value unchanged.
-- Verification:
-  - the grep finds the new note (now at `:174` inside the prettier-wrapped row);
-  - `! grep -rn "Hard cap" src` passes;
-  - `pnpm run lint` passes (warnings only, all pre-existing);
-  - `prettier --check` passes after `prettier --write`;
-  - `tsc --noEmit` has 2 pre-existing errors in `e2e/insights/backfills.spec.ts:135-136`, identical at base and not
-    run by CI.
-- TDD: N/A (copy only, per the spec).
-- Deviations: the file was already non-prettier at base, so the reformat touched 3 extra blocks (whitespace-only).
-  The tsc baseline errors are out of scope. See the Deviation Log.
-
-### Step 4 — docs: headroom semantics in indicators docs and runbooks; findings; teardown [done]
-- Files:
-  - `services/xstockstrat-indicators/CLAUDE.md`
-  - `services/xstockstrat-indicators/docs/context-constitution.md`
-  - `services/xstockstrat-indicators/docs/context-constitution-findings.md`
-  - `docs/runbooks/indicator-builder.md`
-  - `docs/runbooks/config-rollout.md`
-- Instructions 1–5 applied:
-  - the headroom wording in the config table, the lockdown order and the rlimits bullet;
-  - INDICATORS-1/-2 and the candidate row (OpenBLAS marker);
-  - the findings re-anchors (`:10`, `:20`, `:21`, `:22`) and three new open bullets (inert seeds, D-33 unclamped
-    override, `address-space` wording drift);
-  - runbook headroom wording and full-dotted `indicators.sandbox.*` keys.
-- Verification:
-  - every grep found its target;
-  - `! grep "\"key\": \"sandbox\."` passes in both runbooks;
-  - every `sandbox.py:<n>` anchor in the two indicators docs resolves to the cited code (checked line by line);
-  - `git diff origin/main-dev...HEAD -- services/xstockstrat-config/migrations` is empty (F-01).
-- TDD: N/A (docs).
-- Deviations: teardown re-grounded all stale anchors in the constitution, marked the feature-209-superseded ⚠
-  security finding resolved, and fixed the CLAUDE.md:4 pointer. `config-rollout.md` drift that is not about
-  sandbox memory (port-8060 `RolloutConfig` curl; the nonexistent `indicators.sandbox.memory_exceeded` alert) is
-  recorded and not fixed. See the Deviation Log.
-
-### Teardown (manual)
-- **Plugin unavailable.** `/context-forge:context-constitution refresh` is not installed in this session (only
-  `context-forge:context-scrubber` exists). The equivalent was done by hand, scoped to Step 4's Files plus
-  `services/xstockstrat-indicators/app/services/sandbox.py`.
-- **Re-read against the current code** (post-Step-1 `sandbox.py`, `app/handlers/servicer.py`,
-  `app/services/parameters.py`, `app/services/seed_formulas.py`, `app/main.py`, `app/config/watcher.py`, the config
-  migrations `001`/`002`, the durable suite `acceptance/indicators-sandbox-os-isolation.feature`):
-  `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-indicators/docs/context-constitution.md`,
-  `services/xstockstrat-indicators/docs/context-constitution-findings.md`, `docs/runbooks/indicator-builder.md`,
-  `docs/runbooks/config-rollout.md`. The `scrubberExtraTargets` (`README.md`, `docs/patterns/ui-ux-governance.md`)
-  were grepped: no sandbox, `memory_bytes` or `RLIMIT` reference, so there was nothing to reconcile.
-- **Reconciled:**
-  1. `context-constitution.md`: re-grounded every `path:line` anchor. sandbox.py:
-     - INDICATORS-1 `:45-53` / `:125-141`;
-     - INDICATORS-2 `:61-64` / `:283-284` / `:279`;
-     - INDICATORS-4 `:239-255` / `:246`;
-     - INDICATORS-6 `:268-271`;
-     - INDICATORS-7 `:71` / `:296-302`;
-     - INDICATORS-8 `:274`;
-     - INDICATORS-9 `:316-325` / `:373`;
-     - candidate `:402-407` + `:201`.
-
-     servicer.py:
-     - INDICATORS-3 `:283`, `parameters.py:50,153`;
-     - INDICATORS-5 `:105`, `_reader` `:115-125`;
-     - gotchas `:489,592`, `:314-319`, `seed_formulas.py:35`.
-
-     Pointers: `CLAUDE.md:179,190,214`, `main.py:48`, `watcher.py:81-83`. Added a header line for the hand
-     refresh.
-  2. `context-constitution-findings.md`:
-     - re-anchored `:10` (`sandbox.py:22-25,279-280`), the stderr-classification question (`:201,402-407`, both
-       memory markers) and `memory_used_bytes` (`sandbox.py:387,414,425`, `servicer.py:325,341`);
-     - marked the ⚠ temp-file / no-OS-isolation question **resolved (feature 209)**, because the
-       `NamedTemporaryFile` is gone (stdin at `sandbox.py:363-374`) and seccomp, the distinct UID and the rlimits
-       shipped;
-     - added the three new open bullets with verified anchors.
-  3. `services/xstockstrat-indicators/CLAUDE.md:4`: the stale "⚠ sandbox env inheritance" (resolved 2026-09-16)
-     now reads "defects and open questions".
-- **Recorded, not fixed:** `docs/runbooks/config-rollout.md`:
-  - the § Step 3 `RolloutConfig` curl uses the removed Connect-RPC port `8060`;
-  - § Step 5 names a nonexistent `indicators.sandbox.memory_exceeded` alert.
-
-  Both are pre-existing, unrelated to sandbox memory, and need a design call (Deviation Log).
-- **Untouched:** the root `docs/context-constitution-findings.md`, the applied migrations (F-01) and the durable
-  acceptance suite (C-16).
-
-## Session 2026-10-15 — sdd-execute (sequential) summary
-
-- Steps 1–4 are done: 651fefea, 97b5f02e, 830f8915, 4b554485. The operator confirmed both checkpoints.
-- C-16 promotion (operator-confirmed): @AC-1..5 → `services/xstockstrat-indicators/acceptance/fix-indicators-sandbox-matrix.feature`,
-  tagged `@feature-228`. No dedup skips.
-- Owed post-deploy (O-3):
-  - a 400 MiB resize gives `memory_exceeded`;
-  - a 96 MiB alloc at the default headroom succeeds (the operator was told of this substitute, since `test_formula`
-    cannot set an override);
-  - the basic-s memory envelope;
-  - whether production has a full-dotted row.
-- Follow-ups recorded, not done:
-  - `config-rollout.md` port-8060 curl and nonexistent alert;
-  - UI tsc errors in `e2e/insights/backfills.spec.ts:135-136` (pre-existing, feature 198);
-  - CI runs Python 3.12.3 instead of 3.13;
-  - Track C template lacks a Consumer Surface(s) section.
-
-## Session 2026-10-20 (CI: feature status automation)
-
-- Promotion PR #1258 merged to main
-- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-10-20
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-11-04 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: none new; INDICATORS-1/-2 and the findings file were already updated in-feature (headroom = runtime-measured baseline + `memory_bytes`; `allowed_imports` now costs container memory, not formula budget).
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958.

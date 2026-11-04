@@ -507,7 +507,7 @@ Display all three generated values so the user can record them externally. Dev a
 - `DEV_ALPACA_SECRET` — matching paper trading secret
 - `PROD_ALPACA_KEY` — live trading API key
 - `PROD_ALPACA_SECRET` — matching live trading secret
-- `DO_TOKEN` — DigitalOcean Personal Access Token (same one used in P1, or a new one with Read + Write scopes)
+- `DO_TOKEN` — a **dedicated custom-scoped** DigitalOcean Personal Access Token for CI (not the P1 operator token), with exactly: `app` create/read/update/delete, `database` read/update, `project` read/assign_resource, `vpc` read, and `actions`/`regions`/`sizes` read. Rationale per scope: `docs/setup/digitalocean.md` § CI token scopes
 
 **Optional — OTEL (Grafana Cloud):**
 

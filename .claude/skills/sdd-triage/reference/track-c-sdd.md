@@ -24,13 +24,19 @@ If a directory is found: ask the user to confirm overwrite or stop.
 
 ### C-2. Reserve NNN and create feature directory
 
-The number is reserved atomically on `origin` (same allocator as `/sdd-story`); on a non-zero exit stop
-and report stderr — never compute a number locally, write to `sdd/feature-cursor` by hand, or rewrite its
-history. See `docs/runbooks/feature-workflow.md` § Feature Numbering.
+The number is **reserved on `origin`, never computed from the local tree** — same allocator and contract
+as `/sdd-story` step 3. If the script exits non-zero (origin unreachable, push refused, cursor
+unparseable), **stop and report its stderr — never fall back to a local `max+1`**. Never write to
+`sdd/feature-cursor` by hand or rewrite its history (force-push, amend, reset, delete). See
+`docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ```bash
 NEXT_NNN=$(bash scripts/sdd-allocate-feature-number.sh "<slug>") || exit 1
 FEATURE_DIRNAME="${NEXT_NNN}-<slug>"
+if find docs/roadmap/features -maxdepth 1 -type d -name "${NEXT_NNN}-*" | grep -q .; then
+  echo "ERROR: ${NEXT_NNN} already taken (pre-cursor or hand-made directory)." >&2
+  exit 1
+fi
 mkdir -p docs/roadmap/features/${FEATURE_DIRNAME}
 ```
 
