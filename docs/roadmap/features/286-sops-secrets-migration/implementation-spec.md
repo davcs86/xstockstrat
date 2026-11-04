@@ -557,7 +557,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 10 — service: Rewrite `deploy.yml`; switch `deploy-dev.yml` / `deploy-prod.yml` to `secrets: inherit`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `.github/workflows/deploy.yml` — modify (rewrite)

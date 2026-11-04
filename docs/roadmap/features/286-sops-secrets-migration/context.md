@@ -362,3 +362,15 @@
 - TDD RED: `ASSERT FAIL: deploy: LEGACY_ lines in .github/workflows/deploy.yml differ from KEYS` (none exist today). shellcheck + shfmt clean.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 10 — Rewrite `deploy.yml`; callers to `secrets: inherit` [done]
+- `deploy.yml`:
+  - the `workflow_call.secrets` block (incl. DO_APP_ID) is gone; there is an `environment` input and a `validate` job with no environment;
+  - `deploy` is bound to `environment: ${{ inputs.environment }}`, with `contents: read`;
+  - job env has `P` and `APP_NAME`; checkout and doctl are SHA-pinned;
+  - `resolve-app-id` runs before any decrypt, then setup-sops, then the render (12 pinned LEGACY_ lines + SOPS_AGE_KEY), then update/assign/wait via
+    `$APP_ID`, and finally an always-run spec removal.
+- `deploy-dev.yml` and `deploy-prod.yml`: job `deploy` now uses `secrets: inherit` plus `with.environment`. The homelab jobs and gates are untouched.
+- TDD GREEN: `deploy: ok` (incl. AC-17/AC-21 stub-doctl cases) and `render: ok`. yq parses all 3 files.
+- Files modified: `.github/workflows/deploy.yml`, `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml`
+- Deviations: none
