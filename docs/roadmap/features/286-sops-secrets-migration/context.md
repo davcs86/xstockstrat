@@ -265,3 +265,23 @@
   hermeticity, non-vacuous verifications, @AC coverage (AC-3/4/19 retired), and design/context consistency.
 - Loop summary: 6 iterations (13 → 8 → 4 → 3 → 1 → 0 findings). No unaddressed items carried into execution.
 - Status unchanged: implementation-ready (Mode B is advisory). Next: `/sdd-execute sops-secrets-migration`.
+
+## Session 2026-11-04 — sdd-execute (sequential)
+
+- Mode entry + plan confirmed by operator (sequential, no re-spec; merged origin/main-dev — unrelated 284 commit).
+- Tooling setup (steps 1–21): sops ⬇ 3.13.3 (sha ✓) · age/age-keygen ⬇ v1.3.2 (sha ✓; system 1.1.1 shadowed) · yq ⬇ mikefarah v4.53.6 (sha ✓; system yq 0.0.0 was a different implementation) · shellcheck ⬇ 0.9.0 · shfmt ⬇ 3.8.0 · ruff ✓ 0.16.9 · docker compose ✓ v5.6.1 · jq ✓ · python3 ✓ 3.13 · openssl ✓ · gitleaks ✗ (optional per Step 16 "when available locally"; CI's secret-scan job runs it)
+
+### Step 1 — Gating smoke test of the pinned sops/age/compose behaviour [done]
+- Pinned sops 3.13.3 / age v1.3.2 (sha-verified) run in the scratchpad, never the repo. Results:
+  1. PASS. `printf json | sops encrypt --input-type json --output-type yaml --filename-override secrets/staging.enc.yaml --age p1,p2 /dev/stdin` works with no .sops.yaml present; 2 recipients; leaves `ENC[AES256_GCM,`.
+  2. PASS. cwd in a scratch dir with a sibling repo `.sops.yaml` (3rd recipient) still gives 2 recipients. Also found: explicit `--age` overrides a repo `.sops.yaml` even with cwd inside the repo.
+  3. PASS (decrypt + wrong-key refusal; no stdout). The wrong-key stderr text is **`identity did not match any of the recipients`**, NOT "no matching keys". Step 5 asserts this recorded substring (see Deviation Log D-1).
+  4. PASS. `printf '%s\n' "$K" | age-keygen -y` prints the matching recipient.
+  5. PASS. A relative `path_regex: secrets/staging\.enc\.yaml$` is picked up by `sops encrypt -i secrets/staging.enc.yaml` from the repo root.
+  6. PASS, with a caveat. Single quotes keep `p$w #1 "x"`, `j$t` and `tr ail ` literal. `docker compose config --format json` **re-escapes `$` as `$$`** in its output (`'a$$b'` shows as `a$$$$b`, so it is literal too). The AC-5 assertion decodes `$$`→`$` before comparing.
+  7. PASS. `"trail-v \n"` round-trips byte-equal through encrypt → decrypt json.
+  8. DEFERRED. `secrets[format()]` under inherit is checked at the first deploy-dev (rollout step 3).
+  9. PASS. Local yq = mikefarah v4.53.6.
+- Created `scripts/sops-secrets.test.sh` (skeleton + group `action`). TDD RED: `ASSERT FAIL: action: .github/actions/setup-sops/action.yml does not exist` (exit 1). Lint: shellcheck + shfmt -i 2 clean.
+- Files modified: `scripts/sops-secrets.test.sh`, `context.md`
+- Deviations: D-1 (AC-1 stderr wording)

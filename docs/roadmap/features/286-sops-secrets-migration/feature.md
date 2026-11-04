@@ -14,6 +14,7 @@
 | 2026-11-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-11-03 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 20 steps |
+| 2026-11-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Step 1 done |
 
 ---
 

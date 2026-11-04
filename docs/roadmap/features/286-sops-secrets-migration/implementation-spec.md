@@ -1,6 +1,6 @@
 # Implementation Spec: sops-secrets-migration
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/286-sops-secrets-migration/feature.md`
 **Total Steps**: 21
@@ -121,7 +121,7 @@ covers them.
 
 ### Step 1 — test: Gating smoke test of the pinned sops/age/compose behaviour
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (tooling spike + test skeleton)
 **Files**:
 - `docs/roadmap/features/286-sops-secrets-migration/context.md` — modify (record each check's result)
@@ -1127,3 +1127,8 @@ shellcheck scripts/setup-env.sh && shfmt -d -i 2 scripts/setup-env.sh
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### D-1 — Step 1/5: AC-1 wrong-key stderr wording
+- **Spec said**: decrypting with the other env's key fails with stderr containing `no matching keys` (AC-1, Step 1 item 3, Step 5 case 2).
+- **Actual**: sops 3.13.3 prints `Failed to get the data key required to decrypt the SOPS file … identity did not match any of the recipients`.
+- **Disposition**: Step 1 item 3 pre-authorised asserting the recorded text. Step 5 asserts `identity did not match any of the recipients`. The intent of AC-1's Then (refused, no value printed) is unchanged. The acceptance.feature wording is reconciled at C-16 promotion (ALL-DONE 2.5) to the real sops text.
