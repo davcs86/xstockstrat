@@ -117,7 +117,7 @@ Requires mikefarah yq, python3, jq (see host caveat).
 
 ### Step 2 — service: end the wait loop on SUPERSEDED (AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/deploy.yml` (reusable deploy workflow)
 **Files**:
 - `.github/workflows/deploy.yml` — modify (the "Wait for deployment" step only)

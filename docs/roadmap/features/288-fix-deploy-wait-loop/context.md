@@ -41,3 +41,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD AC-1 red: `bash scripts/sops-secrets.test.sh deploy` → `ASSERT FAIL: AC-1: SUPERSEDED exited 1 after 60 polls (Timeout: deployment did not complete within 15 minutes.)` (exit 1) — the reported defect, against unmodified `deploy.yml`. Green follows Step 2.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 2 — service: end the wait loop on SUPERSEDED (AC-1) [done]
+- Added `elif [ "$PHASE" = "SUPERSEDED" ]` (`::warning::` + `exit 0`) between the ACTIVE and ERROR/CANCELED branches of "Wait for deployment" in `deploy.yml`; nothing else in the step or file touched (diff = 3 added lines; SOPS steps untouched).
+- TDD AC-1 green: `bash scripts/sops-secrets.test.sh deploy` → `deploy: ok` / `all assertions passed (deploy)` (exit 0; was red in Step 1). `yq e 'true'` parses; `actionlint .github/workflows/deploy.yml` exit 0 (without shellcheck).
+- Files modified: `.github/workflows/deploy.yml`
+- Deviations: none
