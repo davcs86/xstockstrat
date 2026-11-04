@@ -9,6 +9,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/xstockstrat/portfolio/internal/repository"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 )
 
 func int64p(v int64) *int64 { return &v }
@@ -161,5 +165,32 @@ func TestSignalPrune_IntervalReadsConfig(t *testing.T) {
 		if got := s.pruneInterval(); got != c.want {
 			t.Errorf("pruneInterval() with %d = %v, want %v", c.v, got, c.want)
 		}
+	}
+}
+
+// The reader's key and the migration's seeded row are the same contract: if the seeded key, type or
+// value drifts from what GetInt reads, GetInt silently returns the code default.
+func TestSignalPrune_IntervalReadsSeededRow(t *testing.T) {
+	sql, err := os.ReadFile(filepath.Join("..", "..", "..", "xstockstrat-config", "migrations",
+		"037_portfolio_signal_prune_interval.up.sql"))
+	if err != nil {
+		t.Fatalf("read 037 seed: %v", err)
+	}
+	m := regexp.MustCompile(`\(\s*'portfolio',\s*'([^']+)',\s*'(\w+)',\s*'(\d+)'`).FindSubmatch(sql)
+	if m == nil {
+		t.Fatal("037 has no ('portfolio', key, type, value) seed row")
+	}
+	key, typ, val := string(m[1]), string(m[2]), string(m[3])
+	if key != signalPruneIntervalKey || typ != "int" {
+		t.Fatalf("seed row is (%q, %q), want (%q, \"int\")", key, typ, signalPruneIntervalKey)
+	}
+	seeded, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		t.Fatalf("seed value %q: %v", val, err)
+	}
+	cfg := &fakeConfig{vals: map[string]int64{key: seeded}}
+	s := pruneSvc(repository.PruneResult{}, cfg, &fakeLedger{})
+	if got, want := s.pruneInterval(), time.Duration(seeded)*time.Second; got != want {
+		t.Fatalf("pruneInterval() with the seeded %d = %v, want %v (seed outside the clamp?)", seeded, got, want)
 	}
 }

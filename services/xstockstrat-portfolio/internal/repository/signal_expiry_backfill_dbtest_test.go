@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -342,9 +343,104 @@ func TestBackfill_Idempotent(t *testing.T) {
 	assertExpiry(t, pool, wlID, "PLTR", marked.ValidUntil, nil)
 }
 
-// Design T4: a live signal + renewal committed while APPLY runs never leaves the entry removable.
-// Whichever side wins, the entry ends untracked, seeded live, or rescued, and the tick keeps it.
+// Design T4, deterministic: a renewal (live ingest row + expiry row) is still uncommitted when APPLY's
+// mark statement runs. The statement blocks on the expiry primary key, the renewal then commits, and
+// APPLY must count the entry as changed since REPORT and never overwrite the live expiry.
 func TestBackfill_IngestInterleavingSkipsChanged(t *testing.T) {
+	pool := testPool(t)
+	// APPLY's pool has no lock_timeout: its statement is expected to wait on the open renewal.
+	applyPool, err := pgxpool.New(context.Background(), os.Getenv("PORTFOLIO_DB_TEST_URL"))
+	if err != nil {
+		t.Fatalf("apply pool: %v", err)
+	}
+	t.Cleanup(applyPool.Close)
+
+	ctx := context.Background()
+	userID := testUserID(t)
+	cleanupIngest(t, pool, userID)
+	wlID := seedWatchlist(t, pool, userID, true)
+	seedBinding(t, pool, wlID, "META", "", int16(srcSignal))
+	_, tot := backfillReport(t, pool, "SEED")
+
+	renewal, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin renewal tx: %v", err)
+	}
+	defer renewal.Rollback(ctx) //nolint:errcheck // no-op after Commit
+	var (
+		sigID int64
+		until time.Time
+	)
+	if err := renewal.QueryRow(ctx,
+		`INSERT INTO ingest.newsletter_signals (user_id, source, symbol, direction, valid_from, valid_until)
+		 VALUES ($1, 'mcp_client', 'META', 'watchlist', now(), now() + interval '30 days')
+		 RETURNING id, valid_until`, userID).Scan(&sigID, &until); err != nil {
+		t.Fatalf("renewal signal: %v", err)
+	}
+	if _, err := renewal.Exec(ctx,
+		`INSERT INTO portfolio.watchlist_signal_expiry (watchlist_id, symbol, valid_until, signal_id)
+		 VALUES ($1, 'META', $2, $3)`, wlID, until, sigID); err != nil {
+		t.Fatalf("renewal expiry: %v", err)
+	}
+
+	type outcome struct {
+		res BackfillResult
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		res, err := backfillApply(applyPool, "SEED", tot.untracked, tot.seedExpired)
+		done <- outcome{res, err}
+	}()
+
+	// Wait until APPLY's mark insert is parked on the renewal's uncommitted row, then commit it.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM pg_stat_activity
+			 WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO portfolio.watchlist_signal_expiry%'
+			   AND pid <> pg_backend_pid()`).Scan(&waiting); err != nil {
+			t.Fatalf("poll pg_stat_activity: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		select {
+		case o := <-done:
+			t.Fatalf("APPLY finished without waiting on the open renewal: res=%+v err=%v", o.res, o.err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("APPLY never blocked on the open renewal within 10s")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := renewal.Commit(ctx); err != nil {
+		t.Fatalf("commit renewal: %v", err)
+	}
+
+	o := <-done
+	if o.err != nil {
+		t.Fatalf("apply err = %v (code %s); want none", o.err, pgCode(o.err))
+	}
+	// SkippedChanged is global across the table; this test's row must be among the skipped ones.
+	if o.res.SkippedChanged != 1 || !strings.Contains(o.res.Report, wlID+"\tMETA\tchanged since REPORT") {
+		t.Fatalf("want META reported 'changed since REPORT' (SkippedChanged=1), got %+v\n%s", o.res, o.res.Report)
+	}
+	rec, ok := expiryRow(t, pool, wlID, "META")
+	if !ok || rec.SignalID == nil || *rec.SignalID != sigID || !rec.ValidUntil.After(dbNow(t, pool)) {
+		t.Fatalf("renewal's live expiry overwritten: ok=%v rec=%+v want signal_id=%d live", ok, rec, sigID)
+	}
+	if got := mustPrune(t, NewWatchlistRepo(pool), wlID); len(got) != 0 {
+		t.Fatalf("tick removed %+v despite the renewal", got)
+	}
+	assertSource(t, pool, wlID, "META", srcSignal)
+}
+
+// Real-concurrency invariant: whichever side wins, the entry ends untracked, seeded live or rescued
+// (never left due while a live signal exists) and neither side errors.
+func TestBackfill_IngestRaceNeverLeavesEntryRemovable(t *testing.T) {
 	pool := testPool(t)
 	repo := NewWatchlistRepo(pool)
 	baseUser := testUserID(t)

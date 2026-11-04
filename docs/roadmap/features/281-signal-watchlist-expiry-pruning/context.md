@@ -721,7 +721,7 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
 - Unresolved ✗ / ⚠ carried into execution:
   - Step 11: ~~config 037 depends on feature 280 migrations 035/036 (PR #1359)~~ — [x] superseded by operator ruling 2026-11-04: 280 now depends on 281 and renumbers above 037 (merge-order.md); the 280 clauses of block 2 are waived (see Deviation Log). Block 2's `037 free` check still runs before merge.
   - Steps 4/6/10/16: real-DB tests never run locally; first green is CI portfolio-db-test. Do not merge until green. — [ ] unaddressed
-  - Step 16: ingest-interleaving test is a probabilistic race, not deterministic. — [ ] unaddressed
+  - Step 16: ingest-interleaving test is a probabilistic race, not deterministic. — [x] fixed 2026-11-04 (deterministic lock-wait test; race kept as a separate invariant test)
   - Step 21 / PR body: record BOTH context-forge plugin unavailability AND the manual teardown reconciliation (fails.md:670). — [ ] unaddressed
   - C-16: AC-1 must not be promoted as a runtime guarantee. — [ ] unaddressed
 - Overlap findings: WARN, no FAIL. Same-function/file overlap with 282 (portfolio_service.go AddWatchlistSymbols, agent client.py/tools.py, configServiceImpl.ts SCALAR_BOUNDS_REGISTRY); covered by merge-order row 92 (281 first, 282 rebases).
@@ -730,3 +730,9 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
 
 - 281 no longer waits for feature 280 (PR #1359). merge-order.md row rewritten: 280 depends on 281 and must renumber its seeds `035`/`036` above the highest config migration on `main-dev` at its merge time. Deviation Log entry added to implementation-spec.md.
 - Not touched here: PR #1359 / its branch (feature 280's own spec still holds 035/036 and needs the renumber before it merges).
+
+## Session 2026-11-04 — review-warning follow-ups (operator-approved)
+
+- Step 16 interleaving test made deterministic; Step 11/12 interval test now reads the seeded 037 row (details in implementation-spec.md Deviation Log).
+- First real-Postgres run of the dbtest suite (local PG16 + hypertable stand-in): `go test -tags dbtest -race ./internal/repository/...` passes, `-count=5` on the two interleaving tests passes. Unit suite `go test ./...` passes. CI `portfolio-db-test` on real TimescaleDB is still the authoritative run.
+- Still open (external, not clearable by edits): CI `portfolio-db-test` green on #1401; the PR body must record the context-forge plugin unavailability plus the manual teardown reconciliation; AC-1 must not be promoted as a runtime guarantee at C-16.
