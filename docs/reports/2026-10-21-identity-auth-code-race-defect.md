@@ -21,7 +21,7 @@ redeemable exactly once; an intercepted code (with its verifier) replayed in par
 yields a second, independently refreshable grant that revoking the first token family does not cover.
 
 The refresh-rotation half of the scan's D-23 is **not** part of this report: it was fixed by hotfix `5bd271d`
-(report `2026-10-19-identity-refresh-rotation-not-atomic-defect`, now `resolved`). Both refresh handlers now go
+(report `2026-10-19-identity-refresh-rotation-not-atomic-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md), now `resolved`). Both refresh handlers now go
 through `rotateRefreshToken`, a single transaction with a conditional `UPDATE … WHERE revoked_at IS NULL …
 RETURNING`. The auth-code path was not changed by that hotfix.
 

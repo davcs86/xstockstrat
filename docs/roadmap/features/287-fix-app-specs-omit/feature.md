@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-app-specs-omit`
-**GitHub Issue**: none (Issues disabled), report `docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md`
+**GitHub Issue**: none (Issues disabled), report `docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04

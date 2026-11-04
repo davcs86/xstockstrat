@@ -305,8 +305,8 @@
 
 ### I-07 ⚠ Authorization asymmetries at the edges — SEV-2 · leverage M÷S  *(carried, partially resolved)*
 - **Still present:**
-  - MCP `set_config` takes a free-text `author` (`tools.py:1648`). Covered by `2026-10-19-config-audit-author-caller-spoofable-defect`.
-  - `ingest_signal` broadcasts with `target_user_id=""` (`:652`). The push side is covered by `2026-10-19-notify-untargeted-push-broadcasts-all-users-defect`.
+  - MCP `set_config` takes a free-text `author` (`tools.py:1648`). Covered by `2026-10-19-config-audit-author-caller-spoofable-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-config-audit-author-caller-spoofable-defect.md).
+  - `ingest_signal` broadcasts with `target_user_id=""` (`:652`). The push side is covered by `2026-10-19-notify-untargeted-push-broadcasts-all-users-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md).
   - The "Audit log" and "Fundamentals Scan" nav items still lack `adminOnly` (`navGroups.tsx:102-103`).
 - **Resolved part:** the new admin nav items (Templates, Signal sources (admin)) shipped with `adminOnly` (`a988b1d`).
 
