@@ -1,5 +1,5 @@
 Feature: fix-ledger-trimmed-notify-payload (bug fix)
-  Regression guard for docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md:
+  Regression guard for docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md):
   live StreamEvents delivers a payload-less stub for events over ~7000 chars.
 
   @AC-1 @FR-1 @regression
