@@ -18,6 +18,7 @@
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 
 | 2026-11-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started (Step 1 done) |
+| 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done (sequential). Suite 12/12 groups; AC-1..AC-4 promoted to platform.feature |
 ---
 
 ## Artifacts

@@ -1,6 +1,6 @@
 # Implementation Spec: fix-app-specs-omit
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/287-fix-app-specs-omit/feature.md`
 **Total Steps**: 10
@@ -730,7 +730,7 @@ grep -n 'trusted' docs/runbooks/infra-cost-reduction.md
 
 ### Step 10 — test: full-suite regression gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` + `.github/workflows` (deploy pipeline)
 **Files**:
 - none (verification only; any fix it forces is a deviation against the step that owns the file)

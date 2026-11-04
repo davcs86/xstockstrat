@@ -194,3 +194,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Out-of-scope finding, not changed**: `.claude/skills/digitalocean-setup/SKILL.md` P2 creates a cluster named `xstockstrat-db`, but the specs bind `cluster_name: xstockstrat`. This drift predates the feature, and the new lookup fails closed with a clear message if they differ. It is recorded as a follow-up in the PR.
 - Files modified: `docs/setup/digitalocean.md`, `.claude/skills/digitalocean-setup/SKILL.md`, `docs/runbooks/infra-cost-reduction.md`, `docs/patterns/ci-overview.md` (D4)
 - Deviations: D3, D4
+
+### Step 10 — test: full-suite regression gate [done]
+- `bash scripts/sops-secrets.test.sh` printed 12 `: ok` lines (action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown).
+- ruff check and format are clean on both Python scripts.
+- shellcheck and shfmt are clean on every touched file. Pre-existing: an SC2015 info note in untouched `scripts/homelab-render.test.sh:126,170` under local shellcheck 0.10.0. CI uses the apt build.
+- jscpd on this feature's files: 0 clones. Its default `services/ packages/` baseline is pre-existing and advisory.
+- `node scripts/check-config-wiring.mjs --final`: rc 0. The only output is unrelated `REPORTED` lines.
+- Merge-order: no entry for 287.
+- C-16: promoted AC-1..AC-4 into `docs/sdd/business-rules/platform.feature` with `@feature-287` (operator confirmed).
+- Status: in-progress → code-completed.
+
+## Session 2026-11-04 — sdd-execute (summary)
+**Steps this session**: 1–10
+**Progress**: 10 done / 10 total
+**Stopped at**: all complete; integration PR next
+**Accountability**:
+- Out-of-scope changes: none. D2 (test precision) was approved at an F-08 blocker; D4 was sanctioned by Step 9 Instruction 4.
+- Open items:
+  - Operator pre-merge check of the DO token's database read+update scope.
+  - Operator live verification: run prod-up, confirm `db-migrator` connects, run prod-down.
+  - Follow-up: the digitalocean-setup skill's P2 cluster name `xstockstrat-db` vs the spec's `cluster_name: xstockstrat`.
+- Unaddressed review warnings, cosmetic only:
+  - approximate line ranges in Step 2;
+  - no coverage threshold, which is N/A for `scripts/`;
+  - Step 9 size.
