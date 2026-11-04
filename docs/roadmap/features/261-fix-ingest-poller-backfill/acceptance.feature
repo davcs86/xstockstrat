@@ -1,5 +1,5 @@
 Feature: fix-ingest-poller-backfill (bug fix)
-  Regression guard for docs/reports/2026-10-21-ingest-poller-backfill-defect.md:
+  Regression guard for docs/reports/2026-10-21-ingest-poller-backfill-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ingest-poller-backfill-defect.md):
   the ingest mcp_client poller drops or stalls signals, and canceled backfills are revived.
 
   @AC-1 @FR-1 @regression

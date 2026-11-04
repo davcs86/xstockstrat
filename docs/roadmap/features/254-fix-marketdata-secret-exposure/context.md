@@ -211,7 +211,7 @@ proto/migration/config-key/env change. Landed on main-dev as integration PR #134
   archiver while `open`.
 - `docs/reports/2026-10-20-config-setconfig-internal-caller-no-peersan-defect.md` (sidecar `open`): the SetConfig
   `peerSan` gap (241's follow-up).
-- Original defect report `docs/reports/2026-10-21-marketdata-secret-exposure-defect.md` had sidecar `triaged`
+- Original defect report `docs/reports/2026-10-21-marketdata-secret-exposure-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-marketdata-secret-exposure-defect.md) had sidecar `triaged`
   (`ref: feature:254-fix-marketdata-secret-exposure`) when drafted; prunable by the reports pass only if the sidecar
   still reads `triaged` with that `feature:` ref and 254 is `launched` (sdd-archiver `reference/report-pruning.md` R-1).
 - A `GetSecret` audit by caller SAN (debt-radar signal-map cross-reference) was listed Out of Scope and remains unbuilt

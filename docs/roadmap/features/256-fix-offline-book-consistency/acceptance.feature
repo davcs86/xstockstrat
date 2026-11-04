@@ -1,5 +1,5 @@
 Feature: fix-offline-book-consistency (bug fix)
-  Regression guard for docs/reports/2026-10-21-offline-book-consistency-defect.md:
+  Regression guard for docs/reports/2026-10-21-offline-book-consistency-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-offline-book-consistency-defect.md):
   offline-account books (feature 240) must not drift or misreport P&L on a failed write, a failed
   state read, or a non-finite confirm.
 

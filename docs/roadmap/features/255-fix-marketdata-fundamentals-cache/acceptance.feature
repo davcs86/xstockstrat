@@ -1,5 +1,5 @@
 Feature: fix-marketdata-fundamentals-cache (bug fix)
-  Regression guard for docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md:
+  Regression guard for docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-marketdata-fundamentals-cache-defect.md):
   cap-0 comments contradicting the enforced zero budget (D-50), quota counts ignore source (D-51), vendor cache ignores source (D-52),
   silent decode/enrichment drops (D-53), and a lifetime-cumulative Alpaca reconnect budget (D-19).
 

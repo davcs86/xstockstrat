@@ -1,5 +1,5 @@
 Feature: fix-python-loop-supervision (bug fix)
-  Regression guard for docs/reports/2026-10-21-python-loop-supervision-defect.md:
+  Regression guard for docs/reports/2026-10-21-python-loop-supervision-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-python-loop-supervision-defect.md):
   Python background loops and config watchers die on one exception; the P&L-pattern consumer skips failed events.
 
   @AC-1 @FR-1 @regression
