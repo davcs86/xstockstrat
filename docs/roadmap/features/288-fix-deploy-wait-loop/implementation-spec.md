@@ -203,7 +203,7 @@ bash scripts/sops-secrets.test.sh deploy   # RED here: ASSERT FAIL: AC-2 ...; GR
 
 ### Step 4 — service: serialise deploys to one DO app with a job-level concurrency group (AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/deploy.yml` (reusable deploy workflow)
 **Files**:
 - `.github/workflows/deploy.yml` — modify (the `deploy` job header only)

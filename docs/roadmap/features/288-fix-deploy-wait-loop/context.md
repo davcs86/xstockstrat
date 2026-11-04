@@ -53,3 +53,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD AC-2 red: `bash scripts/sops-secrets.test.sh deploy` → `ASSERT FAIL: AC-2: deploy job concurrency group` (exit 1) on the tree after Step 2; the Step 1 AC-1 assertions run first and pass. Green follows Step 4.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 4 — service: serialise deploys to one DO app with a job-level concurrency group (AC-2) [done]
+- Added `concurrency: {group: deploy-${{ inputs.environment }}, cancel-in-progress: false}` to the `deploy` job header of `deploy.yml` (after `environment:`). Callers `deploy-dev.yml` / `deploy-prod.yml` unchanged; they inherit it through `uses:`. Total `deploy.yml` diff vs `main-dev` after Steps 2+4: 6 added lines.
+- TDD AC-2 green: `bash scripts/sops-secrets.test.sh deploy` → `deploy: ok` (exit 0; was `ASSERT FAIL: AC-2: deploy job concurrency group` in Step 3). Full script, all groups (action resolve build render deploy produp homelab bootstrap ac24 cleanup) → `all assertions passed` (exit 0) with mikefarah yq v4.44.3 and sops v3.13.3 built locally. `actionlint` on `deploy.yml`, `deploy-dev.yml`, `deploy-prod.yml` → exit 0 (no shellcheck integration).
+- Not verifiable here (post-merge, operator): push two commits to `main-dev` within ~1 min and confirm the second run's "Deploy to dev" shows *Waiting for a concurrent run*, no run ends red, and a third push in the window cancels the middle run's pending deploy job.
+- Files modified: `.github/workflows/deploy.yml`
+- Deviations: none

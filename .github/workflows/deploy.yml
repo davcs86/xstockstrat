@@ -32,6 +32,9 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
     permissions:
       contents: read
     env:
