@@ -12,12 +12,15 @@
 |---|---|---|---|
 | 2026-11-04 | `idea` → `draft` | /sdd-story | Product spec generated from `docs/repo-surveyor/signal-map-findings.md` (PR #1427, surveyed at `9892b61`) |
 | 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 advisory warnings, all fixed; first pass FAILED on unticked open questions, re-review PASS WITH WARNINGS) |
+| 2026-11-04 | `spec-ready` → `design-approved` | /sdd-design | Full design, 6 rounds (operator overrode the 5-round cap); round-6 adversary APPROVE WITH LISTED FIXES, all applied; 59 acceptance scenarios (AC-57..AC-59 new) |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules
+- [Design](design.md) — debated architecture, rejected alternatives, open risks
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec signal-map-instrumentation`_
 - [Context Log](context.md) — session history, decisions, deviations
@@ -53,4 +56,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design signal-map-instrumentation` — **full** design recommended (12 affected services, and the overlap scan found file-level warnings with 215-block-fundamentals-strategy-on-etf, 281-signal-watchlist-expiry-pruning and 243-fix-sandbox-seed-keys)
+`/sdd-spec signal-map-instrumentation` — step ordering must keep the analysis steps clear of feature 215's regions (live_loop.py:733-760, :876-891) and coordinate 243/281 through merge-order.md
