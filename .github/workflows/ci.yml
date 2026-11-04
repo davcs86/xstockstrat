@@ -86,6 +86,7 @@ jobs:
             sops:
               - 'scripts/sops_secrets.py'
               - 'scripts/do-render-app-spec.py'
+              - 'scripts/do-db-cluster.sh'
               - 'scripts/sops-secrets.test.sh'
               - '.github/actions/setup-sops/**'
               - '.github/workflows/deploy*.yml'

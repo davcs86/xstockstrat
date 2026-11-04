@@ -185,7 +185,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 2 — service: `scripts/do-db-cluster.sh` (lookup / trust / untrust) + CI filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (deploy pipeline)
 **Files**:
 - `scripts/do-db-cluster.sh` — create

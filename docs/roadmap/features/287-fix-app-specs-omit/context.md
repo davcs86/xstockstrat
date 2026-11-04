@@ -85,3 +85,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - The uppercase-id case uses a literal rather than `${x^^}`, for bash 3.2 compatibility.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 2 — service: `scripts/do-db-cluster.sh` + CI filter [done]
+- Created the `lookup|trust|untrust` script, implemented per the design. `untrust` validates every rule UUID before the first remove.
+- Added `scripts/do-db-cluster.sh` to the CI `sops` path filter.
+- GREEN: `dbnet: ok`. shellcheck and shfmt are clean.
+- Files modified: `scripts/do-db-cluster.sh` (new), `.github/workflows/ci.yml`
+- Deviations: none
