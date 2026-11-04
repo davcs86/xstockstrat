@@ -414,3 +414,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - FR-12 (45 s);
   - AC-15 rewritten; AC-23 `@preserve`; new AC-28 (replay-safe) and AC-29 (disagreeing defaults
     not seeded).
+
+## Session 2026-11-04 — sdd-design Phase 1, round 3 (in progress)
+
+- **R3 proposal, integrated design.**
+  - **Heal.** 035 = one latched DO block: snapshot → report disagree/secret → seed (agreeing,
+    non-secret, global) → twin ∩ signed allowlist DELETE with audit → report → guarded retype →
+    metadata fill → bounds report → `pg_notify` → latch row. Outside the block are only
+    `CREATE … IF NOT EXISTS`. No contract-of on 035.
+  - **Marker.** 036 = marker DDL.
+  - **Allowlist.** Global-only `(ns, key, env, value_sha256)`, generated through
+    G1 hash inventory → A2 triage → G2 `--reveal` → exact scratch-PG dry-run of the real 035 →
+    `heal/signoff.md`. CI re-verifies the hashes.
+  - **Gate.** The stored set comes from a scratch Postgres (`scripts/config-wiring-stored.sh`), and
+    the tokenizer stored-set model is removed.
+  - **Liveness.**
+    - LISTEN self-heartbeat on the listener socket (10 s / 30 s);
+    - `keepAliveInitialDelayMillis`;
+    - a content-hash `version` with skip-on-unchanged;
+    - 10 s re-send;
+    - a 5-min backstop that includes per-user subscribers.
+  - **FR-6.** A `config.read_key ns=… key=…` INFO literal per first read, aggregated in Loki.
+  - **FR-12.** Deadline min(45 s, t+g+2 s); indicators clamps to `time_remaining()`.
+  - **Compute.** ComputePool with a private executor, used by the screener too.
+  - **Steps.** A0–A12 with operator gates G1/G2/G3.
+- **Orchestrator ruling (P-01, consistent with AC-5):** in 295, per-user twins are reported and never
+  deleted, and the allowlist is global-only. A per-user unread twin cannot change the effective value,
+  and hashed user_ids cannot be matched exactly in the dry-run.
+- The adversary pass is running.
