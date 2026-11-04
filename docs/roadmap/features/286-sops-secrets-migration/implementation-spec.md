@@ -275,7 +275,7 @@ hermetic suite is the verification.
 
 ### Step 4 — service: `scripts/sops_secrets.py` — KEYS, `resolve`, homelab `resolve` CLI
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/sops_secrets.py` — create

@@ -302,3 +302,13 @@
   value to the runner, which consumes those lines.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 4 — `scripts/sops_secrets.py` — KEYS, `resolve`, homelab CLI [done]
+- Stdlib-only module: the KEYS table (11 common + digitalocean.PROJECT_ID + 5 homelab), `resolve()`, and the homelab `resolve` CLI (APP_ENV body + DO tail;
+  6 heredocs).
+- TDD GREEN: `resolve: ok`. Mutation check: five mutants (mask floor, legacy strip, tail order, AC-23, differs) were each killed by the expected case.
+  ruff check + format clean.
+- Hardening beyond the step text, within its intent: `::add-mask::` data is escaped (`%`→`%25`, `\r`, `\n`) because GitHub unescapes
+  command data. Without that, a value containing `%` (e.g. percent-encoded OTEL headers) would register the wrong mask and stay visible.
+- Files modified: `scripts/sops_secrets.py`
+- Deviations: none
