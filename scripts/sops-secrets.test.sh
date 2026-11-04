@@ -130,8 +130,9 @@ do_legacy() {
 group_resolve() {
   need sops age age-keygen docker jq python3 openssl git
   fixture_ca
-  local leg absent="$work/none/staging.enc.yaml" f rc
-  mapfile -t leg < <(do_legacy)
+  local leg line absent="$work/none/staging.enc.yaml" f rc
+  leg=()
+  while IFS= read -r line; do leg+=("$line"); done < <(do_legacy)
 
   # 1. file absent: every do-target key is read from its LEGACY_ fallback
   lib staging "do" "$absent" "${leg[@]}" LEGACY_SLACK_WEBHOOK_URL=sl-gh LEGACY_SENDGRID_API_KEY=sg-gh \
@@ -278,6 +279,135 @@ group_resolve() {
   if grep -qx '::add-mask::ab' "$work/out" || grep -qx '::add-mask::xy' "$work/out"; then fail "13: short value masked"; fi
   only_masked "$probe" 13
   echo "resolve: ok"
+}
+
+# mkrepo: a scratch clone at $work/repo (copy of the module) whose origin is a local bare repo with main-dev.
+mkrepo() {
+  rm -rf "$work/origin.git" "$work/repo"
+  git init -q --bare -b main-dev "$work/origin.git"
+  git init -q -b main-dev "$work/repo"
+  mkdir -p "$work/repo/scripts"
+  cp scripts/sops_secrets.py "$work/repo/scripts/"
+  git -C "$work/repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+  git -C "$work/repo" remote add origin "$work/origin.git"
+  git -C "$work/repo" push -q origin main-dev
+}
+
+# bld <env> [flags...]: bootstrap build from the scratch clone, with BENV as the only environment.
+bld() {
+  local e="$1"
+  shift
+  rm -rf "$work/out"
+  mkdir -p "$work/rt"
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" RUNNER_TEMP="$work/rt" \
+    SOPS_AGE_KEY="$(cat "$work/keys/$e.key")" SOPS_OPERATOR_AGE_RECIPIENT="$(cat "$work/keys/operator.pub")" \
+    "${BENV[@]}" python3 "$work/repo/scripts/sops_secrets.py" build --env "$e" --out "$work/out" "$@" \
+    >"$work/bout" 2>"$work/berr"
+}
+dec() { SOPS_AGE_KEY="$(cat "$work/keys/$1.key")" sops decrypt --output-type json "$2"; }
+no_probe_build() {
+  if grep -rqF -- "$probe" "$work/berr" "$work/out" 2>/dev/null; then fail "$1: probe in stderr or out dir"; fi
+  if grep -F -- "$probe" "$work/bout" | grep -qv '^::add-mask::'; then fail "$1: probe in stdout outside a mask"; fi
+}
+
+group_build() {
+  need sops age age-keygen jq python3 git
+  setup_keys
+  fixture_ca
+  local rc base=(LEGACY_JWT_SECRET=jwt-do LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY="$probe-brk"
+    LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY=cfg-do "LEGACY_MTLS_CA=$(cat "$work/ca_b64")" LEGACY_PROJECT_ID=proj-9)
+
+  # 1. AC-2/AC-20: only common + digitalocean are seeded; homelab and platform credentials never are
+  mkrepo
+  BENV=("${base[@]}" TS_AUTHKEY=tskey-x APP_ENV=APP_URL=tskey-x DIGITALOCEAN_ACCESS_TOKEN=dotok GH_PAT=ghpat BUF_TOKEN=buftok)
+  bld staging || fail "1: build failed ($(cat "$work/berr"))"
+  dec staging "$work/out/staging.enc.yaml" >"$work/plain.json" || fail "1: own key cannot decrypt"
+  [ "$(jq -c 'keys' "$work/plain.json")" = '["common","digitalocean"]' ] || fail "1: top-level keys $(jq -c keys "$work/plain.json")"
+  [ "$(jq -r .common.JWT_SECRET "$work/plain.json")" = jwt-do ] || fail "1: JWT_SECRET"
+  [ "$(jq -r .digitalocean.PROJECT_ID "$work/plain.json")" = proj-9 ] || fail "1: PROJECT_ID"
+  if grep -qE 'tskey-x|dotok|ghpat|buftok|APP_ID|DIGITALOCEAN_ACCESS_TOKEN|GH_PAT|BUF_TOKEN' "$work/plain.json"; then
+    fail "1: a homelab value or platform credential was seeded"
+  fi
+  if grep -rqF tskey-x "$work/out" "$work/bout" "$work/berr"; then fail "1: tskey-x leaked"; fi
+  cp "$work/out/staging.enc.yaml" "$work/seeded-staging.enc.yaml"
+  cp "$work/out/staging.recipient" "$work/seeded-staging.recipient"
+  no_probe_build 1
+
+  # 3. AC-7: every leaf is ciphertext; the recipient file is the env public key
+  python3 -I -c 'import sys,re
+t=open(sys.argv[1]).read().split("\nsops:")[0]
+leaves=[l for l in t.splitlines() if re.match(r"^\s+\w+: ", l)]
+assert leaves and all("ENC[AES256_GCM," in l for l in leaves), "plain leaf"' "$work/out/staging.enc.yaml" ||
+    fail "3: a leaf is not ENC[AES256_GCM,"
+  [ "$(cat "$work/out/staging.recipient")" = "$(cat "$work/keys/staging.pub")" ] || fail "3: recipient file"
+
+  # 2. AC-1: the staging key cannot decrypt production; exactly 2 recipients (env + operator)
+  bld production || fail "2: production build failed ($(cat "$work/berr"))"
+  rc=0
+  dec staging "$work/out/production.enc.yaml" >"$work/x.out" 2>"$work/x.err" || rc=$?
+  [ "$rc" != 0 ] || fail "2: staging key decrypted production"
+  grep -qF 'identity did not match any of the recipients' "$work/x.err" || fail "2: refusal text (D-1)"
+  [ ! -s "$work/x.out" ] || fail "2: a value was printed"
+  dec production "$work/out/production.enc.yaml" >/dev/null || fail "2: own key failed"
+  [ "$(yq e '.sops.age | length' "$work/out/production.enc.yaml")" = 2 ] || fail "2: recipient count"
+  [ "$(yq e '[.sops.age[].recipient] | sort | join(",")' "$work/out/production.enc.yaml")" = \
+    "$(sort <(cat "$work/keys/production.pub") <(cat "$work/keys/operator.pub") | paste -sd, -)" ] || fail "2: recipients"
+
+  # 4. AC-6: a missing required key fails before anything is written, and leaks nothing
+  BENV=(LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY="$probe-brk" LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY=cfg-do
+    "LEGACY_MTLS_CA=$(cat "$work/ca_b64")")
+  rc=0
+  bld production || rc=$?
+  [ "$rc" = 1 ] || fail "4: exit $rc"
+  grep -qF 'JWT_SECRET is required but missing' "$work/berr" || fail "4: message"
+  [ -z "$(ls -A "$work/out" 2>/dev/null)" ] || fail "4: --out was written"
+  no_probe_build 4
+
+  # 7 + 8. absent optional is omitted (never ""); a trailing space/newline survives build -> verify -> decrypt
+  BENV=("${base[@]}" $'LEGACY_SENDGRID_API_KEY=trail-v \n')
+  bld staging || fail "7: build failed ($(cat "$work/berr"))"
+  dec staging "$work/out/staging.enc.yaml" >"$work/plain.json"
+  [ "$(jq '.common | has("SLACK_WEBHOOK_URL")' "$work/plain.json")" = false ] || fail "7: absent optional written"
+  [ "$(jq -c '.common.SENDGRID_API_KEY' "$work/plain.json")" = '"trail-v \n"' ] || fail "8: value normalised"
+
+  # 5. AC-15: an existing file on main-dev refuses without --force; --force writes a names-only change list
+  mkdir -p "$work/repo/secrets"
+  cp "$work/seeded-staging.enc.yaml" "$work/repo/secrets/staging.enc.yaml"
+  git -C "$work/repo" add secrets/staging.enc.yaml
+  git -C "$work/repo" -c user.name=t -c user.email=t@t commit -q -m seed
+  git -C "$work/repo" push -q origin main-dev
+  BENV=("${base[@]}" LEGACY_JWT_SECRET=jwt-rotated)
+  rc=0
+  bld staging || rc=$?
+  [ "$rc" = 1 ] || fail "5: overwrite allowed without --force"
+  grep -qF 'secrets/staging.enc.yaml already exists; re-run with force=true to overwrite' "$work/berr" || fail "5: message"
+  [ -z "$(ls -A "$work/out" 2>/dev/null)" ] || fail "5: --out was written"
+  bld staging --force || fail "5: --force failed ($(cat "$work/berr"))"
+  [ -f "$work/out/staging.changes.md" ] || fail "5: no changes file"
+  grep -q 'JWT_SECRET' "$work/out/staging.changes.md" || fail "5: JWT_SECRET not listed"
+  if grep -qE 'jwt-rotated|jwt-do|cfg-do' "$work/out/staging.changes.md"; then fail "5: a value in the changes file"; fi
+  no_probe_build 5
+
+  # 6. a fetch failure is an error, never "absent"
+  git -C "$work/repo" remote set-url origin "$work/missing.git"
+  rc=0
+  bld staging || rc=$?
+  [ "$rc" = 1 ] && grep -qF 'cannot fetch main-dev' "$work/berr" || fail "6: fetch failure not reported"
+
+  # 9. sops-config: two creation rules, each env key + operator, picked up from the clone root
+  mkdir -p "$work/cfg"
+  cp "$work/seeded-staging.recipient" "$work/cfg/staging.recipient"
+  cat "$work/keys/production.pub" >"$work/cfg/production.recipient"
+  env -i PATH="$PATH" HOME="$HOME" SOPS_OPERATOR_AGE_RECIPIENT="$(cat "$work/keys/operator.pub")" \
+    python3 scripts/sops_secrets.py sops-config "$work/cfg" >"$work/repo/.sops.yaml" || fail "9: sops-config failed"
+  [ "$(yq e '.creation_rules | length' "$work/repo/.sops.yaml")" = 2 ] || fail "9: rule count"
+  [ "$(yq e '.creation_rules[0].path_regex' "$work/repo/.sops.yaml")" = 'secrets/staging\.enc\.yaml$' ] || fail "9: staging regex"
+  [ "$(yq e '.creation_rules[1].path_regex' "$work/repo/.sops.yaml")" = 'secrets/production\.enc\.yaml$' ] || fail "9: production regex"
+  printf 'A: x\n' >"$work/repo/secrets/staging.enc.yaml"
+  (cd "$work/repo" && sops encrypt -i secrets/staging.enc.yaml) || fail "9: encrypt via .sops.yaml failed"
+  [ "$(yq e '[.sops.age[].recipient] | sort | join(",")' "$work/repo/secrets/staging.enc.yaml")" = \
+    "$(sort <(cat "$work/keys/staging.pub") <(cat "$work/keys/operator.pub") | paste -sd, -)" ] || fail "9: recipients"
+  echo "build: ok"
 }
 
 groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"

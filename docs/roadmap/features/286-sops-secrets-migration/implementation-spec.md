@@ -323,7 +323,7 @@ ruff check scripts/sops_secrets.py && ruff format --check scripts/sops_secrets.p
 
 ### Step 5 — test: Bootstrap `build` + `sops-config` cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (group `build`)

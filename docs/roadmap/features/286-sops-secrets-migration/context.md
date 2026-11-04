@@ -312,3 +312,11 @@
   command data. Without that, a value containing `%` (e.g. percent-encoded OTEL headers) would register the wrong mask and stay visible.
 - Files modified: `scripts/sops_secrets.py`
 - Deviations: none
+
+### Step 5 — Bootstrap `build` + `sops-config` cases (group `build`) [done]
+- Added mkrepo (a scratch clone whose origin is a local bare repo), the bld/dec helpers, and cases 1–9 (AC-1/2/6/7/15/20, absent optional, no-normalisation, fetch
+  failure, sops-config). Case 2 asserts the recorded D-1 text `identity did not match any of the recipients`.
+- Made the file bash 3.2-portable (root CLAUDE.md macOS rule): no `mapfile` and no negative array index.
+- TDD RED: `ASSERT FAIL: 1: build failed (… invalid choice: 'build')`. shellcheck + shfmt clean.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none
