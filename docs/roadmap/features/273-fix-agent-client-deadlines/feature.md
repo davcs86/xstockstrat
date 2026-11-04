@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-agent-client-deadlines`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-agent-client-deadlines-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-agent-client-deadlines-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-agent-client-deadlines-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-agent-client-deadlines-defect.md` (debt-radar D-16, minus the `get_config_value` call covered by feature 247) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-agent-client-deadlines-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-agent-client-deadlines-defect.md) (debt-radar D-16, minus the `get_config_value` call covered by feature 247) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN: same-file with 247, 215, 241, 249) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator r3 additions: FR-6/@AC-11 (ValidateToken deadline), 503 without WWW-Authenticate on identity stall, widened 272 pass-through |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |

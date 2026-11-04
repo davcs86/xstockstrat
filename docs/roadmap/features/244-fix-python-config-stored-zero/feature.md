@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-python-config-stored-zero`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-python-config-zero-trap-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-python-config-zero-trap-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-python-config-zero-trap-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-python-config-zero-trap-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-python-config-zero-trap-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-python-config-zero-trap-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (8 warnings, 2 notes; overlap WARN) |
 | 2026-10-20 | `spec-ready` (re-review) | /sdd-review | Product spec re-reviewed and approved (6 warnings; overlap WARN) |
 | 2026-10-21 | `spec-ready` (amended) | /sdd-design | product-spec.md FR-3 amended per design: read-site `max(1, …)` guards subsumed by the `>0` clamp; negatives resolve to the default; present-aware `retry_seconds` guards stay |

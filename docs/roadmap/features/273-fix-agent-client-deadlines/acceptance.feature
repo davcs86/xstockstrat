@@ -1,5 +1,5 @@
 Feature: fix-agent-client-deadlines (bug fix)
-  Regression guard for docs/reports/2026-10-21-agent-client-deadlines-defect.md:
+  Regression guard for docs/reports/2026-10-21-agent-client-deadlines-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-agent-client-deadlines-defect.md):
   agent backend gRPC calls carry no deadline, so a stalled backend hangs MCP tool calls indefinitely (debt-radar D-16;
   the get_config_value call is covered by feature 247 and excluded). Budgets: 10 s default (FR-1), 45 s for
   long-running RPCs (FR-2), every tool at least 3 s under the MCP client's 60 s request timeout (FR-3).

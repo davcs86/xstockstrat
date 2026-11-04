@@ -1,5 +1,5 @@
 Feature: fix-db-tls-fail-closed (bug fix)
-  Regression guard for docs/reports/2026-10-21-db-tls-fail-closed-defect.md:
+  Regression guard for docs/reports/2026-10-21-db-tls-fail-closed-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-db-tls-fail-closed-defect.md):
   Node services and the UI audit route silently disable DB TLS verification when DATABASE_CA_CERT is unset (debt-radar D-32).
 
   @AC-1 @FR-1 @regression

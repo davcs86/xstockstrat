@@ -3,7 +3,7 @@
 # Durable business rule xstockstrat-ui guarantees: the trader BFF LedgerService.QueryEvents never returns
 # another user's (or an unowned) event, while a trader still reads their own streams. A rule enters only by promotion.
 Feature: fix-edge-owner-scope (bug fix)
-  Regression guard for docs/reports/2026-10-21-edge-owner-scope-defect.md:
+  Regression guard for docs/reports/2026-10-21-edge-owner-scope-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-edge-owner-scope-defect.md):
   trader BFF ledger queryEvents and agent get_config / list_config_keys read other users' data (debt-radar D-25, D-31).
 
   Background:

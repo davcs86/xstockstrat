@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-agent-getconfig-deadline`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-29
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings, 4 notes; low-cost ones resolved in-place) |
 | 2026-10-20 | re-review (status retained at `spec-ready`) | /sdd-review | Product-spec re-run: PASS WITH WARNINGS (8 warnings, 3 notes). 7 already resolved by the prior pass; persona added to the Problem Statement. Overlap WARN (file-level only) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-ledger-query-pagination`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ledger-query-pagination-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-21-ledger-query-pagination-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ledger-query-pagination-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-21
 **Last Updated**: 2026-10-29
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ledger-query-pagination-defect.md` (debt-radar D-13, D-27, D-46) |
+| 2026-10-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-21-ledger-query-pagination-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ledger-query-pagination-defect.md) (debt-radar D-13, D-27, D-46) |
 | 2026-10-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap WARN with 248, 251, 263) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Operator signed off FR-1/FR-7/AC-5 late-commit wording and FR-5 max-cumulative pass 2; 263 merges first |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec FR-1/FR-4/FR-5/FR-6/FR-7 and acceptance AC-1/AC-5 restated per operator sign-off (a)/(b) |

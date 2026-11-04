@@ -1,5 +1,5 @@
 Feature: fix-python-config-stored-zero (bug fix)
-  Regression guard for docs/reports/2026-10-19-python-config-zero-trap-defect.md:
+  Regression guard for docs/reports/2026-10-19-python-config-zero-trap-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-python-config-zero-trap-defect.md):
   Python config getters collapse a stored 0 / "" to the coded default.
 
   # Rows keyed "<service>.test.*" are getter-level fixture keys (the report names no indicators/ingest

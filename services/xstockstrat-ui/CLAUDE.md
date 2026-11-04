@@ -20,10 +20,6 @@ segment's BFF, which holds the typed gRPC clients.
 Consolidated from three separate frontends by feature 045 (`ui-consolidation-nextjs`); the nginx reverse
 proxy was removed in the same feature.
 
-## Language
-
-Node.js 24, Next.js 15 (App Router, React 18), TypeScript. Package manager: pnpm 9.15.9.
-
 ## Styling
 
 Tailwind v4 (CSS-first config — no `tailwind.config.js`; theme tokens live in `src/app/globals.css`'s
@@ -62,10 +58,6 @@ theme values come entirely from the preset).
   (`components/trader/ChartPanel.tsx`, `components/insights/{ComponentEditor,RuleEditor}.tsx`)
   for the controlled-`value`/`onValueChange` (strict) and controlled-`inputValue`/
   `onInputValueChange` (free-text) usage patterns.
-- `vitest.config.ts` sets `resolve.alias: { '@': './src' }` — required because Vite/Vitest does
-  not read `tsconfig.json`'s `paths` automatically the way Next's own bundler does, and the
-  shadcn-CLI-regenerated `components/ui/*` files use `@/...` alias imports (the old hand-rolled
-  files used relative imports, which never needed this).
 - **Charting on `lightweight-charts` v5 (feature 146 superseded the old `recharts`-panels split).**
   The trader symbol page (`trader/positions/[symbol]/page.tsx`) and the trader dashboard
   (`ChartPanel.tsx`) both render on **`lightweight-charts` v5** (pinned exact in `package.json`) via
@@ -102,14 +94,6 @@ build (`base` → `deps` → `builder` → `runner`); production emits `output: 
 non-standalone Next.js build, and the in-process mock gRPC backend. Run locally via
 `scripts/run-e2e.sh`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
 See `docs/patterns/docker-build.md` § E2E Test Container.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| HTTP | `3000` | Next.js server (`next dev` / `next start`) |
-
-No gRPC server — this is a frontend. It is a gRPC *client* of the backend services (below).
 
 ## Segments
 

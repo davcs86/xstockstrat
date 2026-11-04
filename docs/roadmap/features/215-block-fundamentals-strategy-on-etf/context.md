@@ -599,7 +599,7 @@ Runs without `start`/`end` use the rolling default window. All runs were `SIZING
   - None of the three is observable at Info level, and the gate drop is silent.
 - **Logs:** reading the run logs would tell these apart. The DO log URL carries an access token, and fetching it was denied in this session (credential materialization). DO Insights log search returned no App Platform lines.
 - Staging config is consistent with the code. `get_config("marketdata")` shows `marketdata.fmp.enabled=true` and `marketdata.fmp.daily_request_cap=250`. The secret rows `fmp.api_key`/`finnhub.api_key`/`alpaca.api_key` match `cmd/server/main.go` `resolveSecret` key strings, so this is not a CONFIG-9 mismatch.
-- **Defect filed:** `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, triaged to feature `230-fix-etf-flag-fill`.
+- **Defect filed:** `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md), triaged to feature `230-fix-etf-flag-fill`.
 
 **(b) `run_backtest(fundamentals_macd_blend, ["AAPL"])`: guard PASS, "trades" MISMATCH**
 - `backtest_id` `922516e2-8aa8-448c-bb30-6785820c733f`
@@ -645,7 +645,7 @@ Runs without `start`/`end` use the rolling default window. All runs were `SIZING
 
 - `query_bars("SCHD")` returns 3 bars (2026-10-13..15) and an empty `next_page_token`.
 - Both custom formulas succeed standalone via `test_formula`; the squeeze percentile returned `SANDBOX_EXIT_REASON_SUCCESS` in 2495 ms.
-- **Conclusion:** the empty diagnostics are a strategy-wide analysis defect, not a 215 guard issue. `servicer.py:1127-1132` drops symbols on any RPC error or exception, and the status gate reports `OK` regardless. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (SEV-2, open).
+- **Conclusion:** the empty diagnostics are a strategy-wide analysis defect, not a 215 guard issue. `servicer.py:1127-1132` drops symbols on any RPC error or exception, and the status gate reports `OK` regardless. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md) (SEV-2, open).
 
 **(e) investigation:**
 - `StrategyScore.evidence_symbols` is an `int32` count (`packages/proto/analysis/v1/analysis.proto:255`), not a symbol list. The step's wording ("excludes SCHD from `evidence_symbols`") cannot be checked as written.
@@ -704,3 +704,53 @@ All three returned `bars_total` 0, `warnings` `[]` and `coverage_gaps` `[]`.
 - **The fill gate's config inputs are open.** `get_config("marketdata")` (staging) shows `marketdata.fmp.enabled=true`, `marketdata.fmp.daily_request_cap=250`, `marketdata.fundamentals.provider=finnhub` and `marketdata.fundamentals.snapshot_source=edgar`. 255 (merged) counts only `source='fmp'` rows toward the FMP quota.
 - **The remaining causes are only visible in 230's new Info records.** They are an FMP profile fetch failure (`etf flag fill failed`, class), an empty profile (`etf flag fill unlabelled`, negative-cached), or a skip reason (`etf flag fill skipped`). `apps-get-logs` returns only a token-bearing live URL, which this session does not fetch (credential use).
 - **Open (operator):** search the `xstockstrat-marketdata` RUN logs for `etf flag fill` (deployment `0de48de3`, around 03:15–03:33Z) and report the record, reason and class. Step 26 stays `blocked`.
+
+## Session 2026-11-04 — staging verification (re-run after the FMP key update)
+
+Step 26 re-run after the operator updated the FMP API keys on staging ("I updated the api keys", 2026-11-04). Staging app `xstockstrat-staging`, deployment `4efb8522-6a8d-4f46-950d-ab18a0332af2` (ACTIVE 2026-11-04T19:51:43Z, cause "restarting app"; `xstockstrat-marketdata` HEALTHY). Calls went through the `xstockstrat_staging` MCP tools. The non-read calls were five `run_backtest` runs, which add backtest rows on staging.
+
+**Root cause of the unset ETF label (closes the 2026-11-02 "Open (operator)" item).** Grafana Cloud Loki (`grafanacloud-logs`, `{service_name="marketdata"} |= "etf flag fill"`, 7 days) held exactly four records, all `deployment_environment="staging"`, all `etf flag fill failed`, symbol `SCHD`, and none `skipped` or `unlabelled`:
+- 2026-11-02T01:18:39Z, DEBUG, `exception_message: "fmp: /stable/profile returned HTTP 401"`, `exception_type: *fmp.statusError`
+- 2026-11-02T03:15:01Z, INFO, `class: http_401`
+- 2026-11-02T03:32:55Z, INFO, `class: http_401`
+- 2026-11-04T19:54:33.734Z, INFO, `class: http_401`, `trace_id 0bfcc287dc464907a73700c2c80894d0` (the run `091a2578-07c0-4df6-9648-e1090d3c446c`, `completed_at` 2026-11-04T19:54:33.681093Z, `fundamentals_gap` `FUNDAMENTALS_GAP_UNSPECIFIED`)
+
+Each record falls within a second of a Step 26 `run_backtest`, so the fill gate passed and the fill fired every time; the FMP `/stable/profile` call returned HTTP 401 (the key was rejected). No code defect in 215 or 230. The same live log tail (DO `RUN`, deployment `4efb8522`) showed the 19:54:33 record. Marketdata then restarted (`FMP client constructed`, 2026-11-04T20:22:04Z) on the new key, and no `etf flag fill` record followed through 20:24Z (a successful fill logs nothing at Info).
+
+**(a) `run_backtest(fundamentals_macd_blend, ["SCHD"])` window 2026-01-01 – 2026-09-30: PASS**
+- First call `16accad3-218e-4670-af45-88a6f8fb63b5`, `completed_at` 2026-11-04T20:23:51.282995Z: `BACKTEST_STATUS_INSUFFICIENT_DATA`, `no_trade_reason: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE`, `fundamentals_gap: FUNDAMENTALS_GAP_UNSPECIFIED`. This is the cache miss that queues the background fill (`GetEtfFlags` is cache-only).
+- Second call `57cbc4d3-eb28-4828-af5f-7c69fa4fe13b`, `completed_at` 2026-11-04T20:24:20.333114Z: `BACKTEST_STATUS_INSUFFICIENT_DATA`, `no_trade_reason: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE`, `bars_total: 0`, `warmup_bars: 0`, **`fundamentals_gap: FUNDAMENTALS_GAP_ETF`**, `warnings: []`, `coverage_gaps: []`.
+
+**(b) `run_backtest(fundamentals_macd_blend, ["AAPL"])`: guard PASS, "trades" MISMATCH unchanged**
+- `{B_ID}`, `completed_at` {B_AT}: `BACKTEST_STATUS_OK`, `no_trade_reason: NO_TRADE_REASON_ENTRY_NEVER_TRUE`, `bars_total: 186`, `warmup_bars: 0`, `total_trades: 0`, `fundamentals_gap: FUNDAMENTALS_GAP_UNSPECIFIED`. The guard did not refuse AAPL (no reason 5). Same outcome as 2026-10-15, which the operator accepted as environmental.
+
+**(c) `run_backtest(squeeze_breakout_trend, ["SCHD"])`: PASS**
+- `{C_ID}`, `completed_at` {C_AT}: `BACKTEST_STATUS_OK`, `total_trades: 2`, `total_return: {C_RET}`, `no_trade_reason: NO_TRADE_REASON_UNSPECIFIED`, `bars_total: 186`, `warnings: []`, `coverage_gaps: []`. The guard does not refuse a technical-only strategy on SCHD and the strategy evaluates normally. The 2026-11-02 `PERMISSION_DENIED` on the strategy's custom formulas no longer reproduces; this session did not investigate why.
+
+**(d) `list_opportunities` (`page_size` 200, two pages, 379 rows): unchanged, accepted as environmental**
+- SCHD's only row is on page 2: `action: OPPORTUNITY_ACTION_TAG_ADD`, `conviction: 0.0`, `strategy_id: ""`, `provenance: ["position"]`, `fundamentals_unavailable: false`, `fundamentals_gap: FUNDAMENTALS_GAP_UNSPECIFIED`, `live_price: 36.11`. No row has `fundamentals_unavailable: true`; `computing: false`, `compute_failed: false`. No fundamentals strategy produces a SCHD row, so no skip row is expected (the 2026-10-15 operator acceptance stands; the skip-row behavior is covered by the Step 22 tests and the Step 24 e2e).
+
+**(e) `ScoreStrategy` manual refresh: not re-run.** It passed on 2026-11-02 through `manage_strategy(operation='score', strategy_id='fundamentals_macd_blend')` (two identical results, `evidence_symbols: 8`, `excluded_symbols: []`) and does not depend on the ETF label. The 215 ↔ 283 launch gate (`merge-order.md` § "Launch gate: 215 ↔ 283") is met: 283 is `launched` and (e) has run.
+
+### Outcome
+- (a) fixed by the operator's FMP key update (environment, not code); (c) no longer reproduces; (b) and (d) stay accepted as environmental; (e) passed 2026-11-02. No mismatch remains open under Instruction 3.
+- Config-key wiring gate `node scripts/check-config-wiring.mjs --final`: exit 0. Its one `REPORTED:` line is `services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`, a pre-existing baseline outside this feature.
+
+### Step 26 — Staging measurement (pre-merge) + real-ETF proof (post-deploy) [done]
+- Pre-merge count recorded 2026-10-15 (`>50 periods: 0 ()`); post-deploy proof (a)-(e) recorded above. TDD: N/A (environment verification; the red/green lives in Steps 16/18/22/24).
+- Files modified: `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md`
+- Deviations: none new; the (a), (c) and (e) entries in the Deviation Log carry resolution notes.
+
+## Session 2026-11-04 — sdd-execute
+**Steps this session**: 26
+**Progress**: 26 done / 26 total
+**Stopped at**: all complete (feature moved to `code-completed`; `launched` is flipped by CI on promotion to `main`)
+**Next**: promote `main-dev` to `main` (`/promote`)
+**Accountability**: out-of-scope changes: none. Open items: none; a pre-existing `docs/patterns/ui-ux-governance.md` §8 drift is tracked in the Deviation Log (deferred to a follow-up re-audit). Unaddressed review warnings: none. The development branch `feature/block-fundamentals-strategy-on-etf` was stale (its PR #1243 had merged), so this record landed from `main-dev` on `claude/215-step-26-staging-verification`.
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1438 merged to main
+- Feature promoted and committed: bf93985d9f4b2159e20343c81a0e8ecfdb6add2b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

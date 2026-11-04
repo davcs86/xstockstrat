@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-backtest-silent-symbol-skip`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-22
 **Last Updated**: 2026-11-01
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (recorded during feature 215 staging verification) |
+| 2026-10-22 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md) (recorded during feature 215 staging verification) |
 | 2026-10-22 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings; overlap WARN: 272, 215, 273, 270) |
 | 2026-10-22 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator at the r3 gate: option (a) (PERMISSION_DENIED → FORMULA_ERROR, FR-8/AC-7 added) and sign-off on the @AC-5 @feature-150 correction |
 | 2026-10-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps (Step 1 is a hard re-anchor gate on the merged 272/273/215 tree) |

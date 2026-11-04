@@ -1,5 +1,5 @@
 Feature: fix-fundsignal-emit-accounting (bug fix)
-  Regression guard for docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md:
+  Regression guard for docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-fundsignal-emit-accounting-defect.md):
   a failed fundamentals emit burns the day's claim; a failed fetch chunk vanishes from a "completed" run.
 
   @AC-1 @FR-1 @regression
