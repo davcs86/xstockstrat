@@ -219,3 +219,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
     The underlying guarantees (values, types, encryption, redaction, bounds) are PRESERVE. The
     promoted suites are updated at launch (C-16 promotion).
+
+## Session 2026-11-04 — sdd-design Phase 1, round 1 (in progress)
+
+- **R1 proposal (design-proposer), summary.**
+  - **Two production releases inside 295.**
+    - **A (expand):**
+      - config server emits a bidirectional alias (relative ↔ `<ns>.`, exact stored name wins) at
+        the single point `resolveOverlayValues` (after the per-user overlay);
+      - form-tolerant SetConfig, with authz and bounds compared on canonical `(ns, rel)`;
+      - a 10 s server full-namespace DELTA re-send as the liveness signal (no proto change);
+      - migrations `035` (delete dead/twin/orphan rows, snapshot + own audit) and `036` (seed
+        parity in each reader's current spelling);
+      - hardened watchers in all languages (keepalive, 30 s liveness, 1→30 s jittered backoff that
+        resets only after 30 s up, typed FR-11 getters, `OnChange` on version change);
+      - `ResizableLimiter` (Python, in place) plus a fixed 32-thread pool behind a limiter;
+      - marketdata `func() Cfg` closures, a provider map, and secret cells re-resolved on `OnChange`;
+      - trading per-namespace maps and a per-request broker timeout;
+      - agent watcher (AGENT-1 scoped amendment), FR-12 derived deadline + bounds
+        `sandbox.timeout_ms [1,49000]`;
+      - UI explicit BFF getConfig handlers;
+      - gate extended (namespace attribution registry, type/metadata/default kinds, empty baseline,
+        no growth).
+    - **B (contract), integration PR #2, gated by `-- contract-of: 036`:**
+      - `037` rename to relative; `038` CHECK;
+      - every getter literal rewritten;
+      - prefixed keys rejected, with an internal-caller canonicalising exception.
+    - **Follow-up feature:** `remove-config-key-legacy-alias`.
+  - Per-service byte-identical watcher copies plus a hash guard (266 precedent), not a shared
+    package.
+  - Step A0 is the gate triage table, which **freezes scope**.
+- The adversary pass is running.
