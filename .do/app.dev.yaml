@@ -4,6 +4,8 @@
 # Deploys find this app by its name: below, so no app ID is stored anywhere.
 name: xstockstrat-staging
 region: nyc
+vpc:
+  id: YOUR_VPC_ID
 
 # Route all public traffic through the nginx reverse proxy.
 # All backend services use internal_ports for TCP (any protocol, including gRPC H2C).
