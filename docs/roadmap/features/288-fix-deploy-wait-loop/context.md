@@ -77,3 +77,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open follow-up: `DEPLOY_ID` is taken from `list-deployments | head -1`, which can pick another run's deployment; not made race-free here.
 **Next**: integration PR to `main-dev`
 - C-16 promotion (operator-approved): `@AC-1` and `@AC-2` appended to `docs/sdd/business-rules/platform.feature` tagged `@feature-288` (CI-workflow guarantees, no owning service). No merge-order entry for 288.
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1422 merged to main
+- Feature promoted and committed: 0ef77aa123c69b59d022e2edcac45009599595a7
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

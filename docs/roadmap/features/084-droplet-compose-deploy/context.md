@@ -1,70 +1,27 @@
-# Context: droplet-compose-deploy
+# Context: droplet-compose-deploy  (archived 2026-11-04)
 
-**Feature**: `docs/roadmap/features/084-droplet-compose-deploy/feature.md`
-**Product Spec**: `docs/roadmap/features/084-droplet-compose-deploy/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/084-droplet-compose-deploy/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: demoted/canceled — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
-> **Renumbered 083 → 084 on 2026-07-31** — `083` collided with `083-ui-revamp-opportunities-first`
-> (both allocated the same number while unmerged; the numbering scan missed it — ledger `fails.md`
-> 2026-07-29 081). Renumbered per the user's decision; branch name is slug-only so unaffected.
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
----
-
-## Session 2026-07-31 — sdd-story
-
-- Preceded by an ad hoc pros/tradeoffs analysis of DO App Platform vs. a DO Droplet + Docker
-  Compose, done in plan mode before this feature was formalized. That analysis (not itself an SDD
-  artifact) grounded the following user decisions, carried into this feature's scope:
-  - **Database**: keep DO Managed Postgres — do not self-host TimescaleDB on the droplet.
-  - **Scope**: dev/staging only for now — production stays on DO App Platform.
-  - **Downtime tolerance**: near-zero-downtime deploys must be preserved, which is why the design
-    direction (Caddy blue/green, not a bare `docker compose up -d`) was carried into FR-2 rather
-    than left as an open question.
-- Created feature.md (status: `draft`), product-spec.md, context.md from the user story above.
-- Reviewers snapshotted from `docs/runbooks/reviewer-registry.md`: Platform Lead (cross-service
-  architecture — closest match for a deployment-topology change) and Security (secrets handling,
-  since FR-5 introduces a new droplet-side secrets story with no registry-listed owner service).
-- Checked `docs/roadmap/ledger/fails.md` and `insights.md` for a directly relevant known trap —
-  none found specifically about CI/CD or deploy-topology changes. Flagged the general C-10
-  "shared surface must move together" pattern as the closest applicable lesson in the product
-  spec's Open Questions, since this feature touches several documentation surfaces that must all
-  update in step.
-- Next step: `/sdd-review droplet-compose-deploy product-spec`, then `/sdd-design
-  droplet-compose-deploy` (full mode recommended given the cross-cutting infra scope, not `quick`).
-
-## Session 2026-07-31 — sdd-review product-spec
-
-- Criteria pass (`spec-reviewer`): **PASS WITH WARNINGS**. No Floor (`F-*`) breach, no blocker.
-  Two findings were factual errors in the spec and were corrected in this session:
-  - FR-1/Affected Services/AC-1 claimed **13** application services; root `CLAUDE.md` § Service
-    Registry, `docker-compose.yml`, and `.do/app.dev.yaml` all list **12**. Fixed throughout
-    `product-spec.md`.
-  - FR-5 named the secret env var `ALPACA_SECRET`; the actual key in `.do/app.dev.yaml:129-132`
-    is `ALPACA_API_SECRET`. Fixed.
-  - Also added a one-line provider-agnostic clarification to FR-5 (C-2 trading-domain check):
-    the secrets-provisioning mechanism change affects only how broker credentials reach the
-    runtime, not order-execution/broker-integration logic, and isn't Alpaca-specific.
-  - Remaining warnings left as-is (correctly scoped `/sdd-design` deferrals, not spec defects):
-    AC-2's downtime threshold is intentionally unquantified pending design; the 5 Open Questions
-    items are legitimate design-phase decisions; FR-8's doc-update list may be incomplete
-    (`docs/patterns/observability.md` flagged as a possible missed surface) — carried forward as
-    an explicit item for `/sdd-design` to close, not assumed resolved by this spec.
-- Overlap pass (`feature-overlap`): **CLEAN**. No FAIL-level collision (config key / proto field /
-  migration number) with any in-flight feature. `docker-compose.yml` and `.do/app.dev.yaml` touches
-  from features 033 (observability) and 076 (FMP secret env) are already merged to trunk — 084
-  builds on top of them, not racing them. One design tension flagged for `/sdd-design` (not a
-  merge-order collision): feature 033 wires per-service OTel env vars into `.do/app.dev.yaml`,
-  which 084 retires as the dev deploy target — dev-side OTel env provisioning needs to move to the
-  droplet's `docker-compose.yml`/secrets mechanism.
-- Outcome: **PASS**. Status: `draft` → `spec-ready`.
-- Next step: `/sdd-design droplet-compose-deploy` (full mode).
-
-## Session 2026-10-24 — demoted (superseded by 279)
-
-- The operator demoted this feature when `/sdd-review 279-homelab-compose-deploy product-spec`'s overlap scan found both
-  claimed the dev/staging compose deploy path (`deploy-dev.yml`). 279 deploys through homelab-edge (tailnet + Caddy edge +
-  forced-command gate on app VMs) instead of a DO droplet with its own Caddy; it keeps the DO deploys and the root
-  `docker-compose.yml` unchanged.
-- Open questions answered there: Go readiness → `grpc.health.v1` + exec-form `/app/service healthcheck` (279 FR-5);
-  secrets → GitHub environment secrets or 1Password into a 0600 `.env`; migration gate → one-shot `db-migrator` with
-  `service_completed_successfully`; rollback → the gate's automatic switch back to the previous release.
+**What**: Proposal to move dev/staging compute off DO App Platform onto a single DO Droplet running the root `docker-compose.yml`, with Caddy doing TLS and blue/green swaps, DO Managed Postgres unchanged. Reached `spec-ready` (2026-07-31), never designed. Demoted 2026-10-24 in favour of `279-homelab-compose-deploy` after 279's product-spec overlap scan found both claimed the dev compose deploy path (`deploy-dev.yml`). 279 deploys via homelab-edge (tailnet, Caddy edge, forced-command gate on app VMs), keeps the DO deploys, leaves the root `docker-compose.yml` unchanged.
+**Why (irrecoverable rationale)**: Motivation was the dev/staging topology being hand-synced across `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`; make the already-maintained compose file the single source of truth. Scope came from a plan-mode pros/tradeoffs analysis that was never an SDD artifact: keep DO Managed Postgres (no self-hosted TimescaleDB), dev/staging only (prod stays on App Platform), near-zero-downtime deploys a hard requirement (hence Caddy blue/green over bare `docker compose up -d`). Security was a reviewer because the move needs a new droplet-side secrets story with no registry-listed owner service.
+**Rejected alternatives**:
+- Docker Swarm (`docker stack deploy`) — compose-syntax quirks: `depends_on: condition:` and `deploy:` behave differently and would break the `db-migrator` → `service_completed_successfully` migration gate. Revisit only if Caddy hit a concrete blocker.
+- Bare `docker compose up -d` — loses the near-zero-downtime behaviour App Platform gives for free.
+- Self-hosted TimescaleDB on the droplet — rejected by user decision; no further reason recorded.
+- Multi-droplet HA with a DO Load Balancer — deferred, single droplet only; a single-host SPOF was acceptable only as an explicit, consciously owned decision.
+**Scars & gotchas**: No execute phase; spec-time traps only.
+- The root `docker-compose.yml` publishes every service port (50051-50060, 5432, OTel 4317/4318/13133) on `0.0.0.0`; reusing it on a public host exposes the whole gRPC/DB surface unless ports bind to `127.0.0.1` or a firewall is added.
+- Go services are distroless with no shell and had no compose healthcheck, so readiness gates cannot `curl`/`sh` them; 279 FR-5 resolved it with `grpc.health.v1` plus exec-form `/app/service healthcheck`.
+- Retiring `.do/app.dev.yaml` strands feature 033's per-service OTel env vars; any move off it must carry dev OTel env provisioning.
+**Permanent deviations**: none — nothing designed or shipped.
+**Process gap exposed**: `docs/runbooks/approval-flow.md` has no category for infra-topology changes; Platform Lead was picked only as the closest documented category to "new service", and the confirmation was deferred to design and never done. Any future deploy-topology feature will hit this again.
+**Reusable rule**: AC-2 required downtime to be *measured* — prove the blue/green swap actually achieves near-zero downtime rather than trusting the Caddy config. Review also flagged `docs/patterns/observability.md` (otel-collector dev-vs-prod split) as a likely-missed doc surface beyond the FR-8 list and told design to enumerate surfaces rather than trust the spec; the ledger has no deploy-topology entry (nearest lesson: C-10, shared surface moves together).
+**Spec review corrections (minor)**: spec claimed 13 services (actual 12) and named the secret `ALPACA_SECRET` (actual `ALPACA_API_SECRET`).
+**Cross-feature signal**: Successor 279 answered four of the open questions — Go readiness (`grpc.health.v1` + exec-form healthcheck); secrets via GitHub environment secrets or 1Password into a 0600 `.env`; one-shot `db-migrator` with `service_completed_successfully`; automatic rollback to the previous release. Renumbered 083 → 084 after colliding with `083-ui-revamp-opportunities-first` (already-recorded numbering-scan failure, fails.md:212).
+**Deferred follow-ons**: unresolved by 279 (verify before relying): no resource budget was ever set for running all 12 services plus Caddy plus `otel-collector` on one host (the spec wanted a budget table like the DB connection-pool budget), and no number was ever set for the downtime budget. Otherwise moot: prod migration off App Platform and OS-hardening automation were deferred and are moot; any future attempt starts from 279.
+**Ledger entries written**: insights.md (0), fails.md (0) — numbering-scan failure already recorded (fails.md:212); no new durable lesson.
+**Runtime-invariant recommendations (→ /context-constitution)**: candidate — root `docker-compose.yml` is local-dev only and binds all ports to `0.0.0.0`; must not run unmodified on a reachable host. Verify against 279's state before filing.
+**Pruned artifacts**: product-spec.md — last present at 1ed63958.
