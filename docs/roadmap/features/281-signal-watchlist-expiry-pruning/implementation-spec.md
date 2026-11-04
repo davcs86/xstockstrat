@@ -1234,3 +1234,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Done instead**: as specified. Both verification commands pass (heading at `recon.md:9`; 10 matching lines, threshold 4). The drift is recorded in `context.md` § Step 22. Agent `tools.py` lines had already moved on `origin/main-dev` before this feature; the portfolio lines moved because of Steps 5-11.
 - **Disposition**: in scope. `recon.md` is unchanged.
 - **Severity**: n/a
+
+### Step 11 — dependency on feature 280 reversed (operator, 2026-11-04)
+- **Expected**: Step 11 Codebase Evidence and Verification block 2 (Instruction 9) hold the 281 integration PR until 280's PR #1359 (config `035`/`036`) is on `main-dev`, and `MERGE_TIME=1` STOPs otherwise.
+- **Actual**: operator ruling 2026-11-04: 281 keeps `037_portfolio_signal_prune_interval` and does not wait for 280. 280 depends on 281 and renumbers its seeds above 037 (merge-order.md). The block-2 280 checks (`has280`, `R280`, the `MERGE_TIME` STOP) are waived; `037 free on every origin ref` and `origin/main-dev tops out below 037` still apply.
+- **Impact**: none on 281's files. Step bodies are unchanged (F-09); this entry supersedes the 280 clauses.

@@ -719,9 +719,14 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
 
 - Result: 0 failures, ~15 warnings (advisory — did not block). All 22 steps done. Branch merged with main-dev; PORTFOLIO-17 -> PORTFOLIO-18 renumbered (main-dev claimed 17), references consistent.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 11: config 037 depends on feature 280 migrations 035/036 (PR #1359), absent on main-dev. Re-run Verification block 2 with MERGE_TIME=1 after 280 lands and after the final merge; a later 035/036 is silently skipped once 037 applied. — [ ] unaddressed
+  - Step 11: ~~config 037 depends on feature 280 migrations 035/036 (PR #1359)~~ — [x] superseded by operator ruling 2026-11-04: 280 now depends on 281 and renumbers above 037 (merge-order.md); the 280 clauses of block 2 are waived (see Deviation Log). Block 2's `037 free` check still runs before merge.
   - Steps 4/6/10/16: real-DB tests never run locally; first green is CI portfolio-db-test. Do not merge until green. — [ ] unaddressed
   - Step 16: ingest-interleaving test is a probabilistic race, not deterministic. — [ ] unaddressed
   - Step 21 / PR body: record BOTH context-forge plugin unavailability AND the manual teardown reconciliation (fails.md:670). — [ ] unaddressed
   - C-16: AC-1 must not be promoted as a runtime guarantee. — [ ] unaddressed
 - Overlap findings: WARN, no FAIL. Same-function/file overlap with 282 (portfolio_service.go AddWatchlistSymbols, agent client.py/tools.py, configServiceImpl.ts SCALAR_BOUNDS_REGISTRY); covered by merge-order row 92 (281 first, 282 rebases).
+
+## Session 2026-11-04 — merge-order ruling: 280 depends on 281 (operator)
+
+- 281 no longer waits for feature 280 (PR #1359). merge-order.md row rewritten: 280 depends on 281 and must renumber its seeds `035`/`036` above the highest config migration on `main-dev` at its merge time. Deviation Log entry added to implementation-spec.md.
+- Not touched here: PR #1359 / its branch (feature 280's own spec still holds 035/036 and needs the renumber before it merges).
