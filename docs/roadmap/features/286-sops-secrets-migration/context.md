@@ -374,3 +374,13 @@
 - TDD GREEN: `deploy: ok` (incl. AC-17/AC-21 stub-doctl cases) and `render: ok`. yq parses all 3 files.
 - Files modified: `.github/workflows/deploy.yml`, `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml`
 - Deviations: none
+
+### Step 11 — Static rules for `prod-up.yml` (group `produp`) [done]
+- Checks:
+  - 12 literal-PROD LEGACY_ pins and the production binding + `contents: read`;
+  - exact `uses:` sequence (pinned checkout, pinned doctl, setup-sops);
+  - the renderer args, create from `$RUNNER_TEMP/app.yaml`, and the always-run removal;
+  - no do-inject-prod-secrets / DO_PROD_APP_ID / MCP_AGENT_SECRET / unprefixed common secret, and the script deleted.
+- TDD RED: `ASSERT FAIL: produp: LEGACY_ lines in .github/workflows/prod-up.yml differ from KEYS`. shellcheck + shfmt clean.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none

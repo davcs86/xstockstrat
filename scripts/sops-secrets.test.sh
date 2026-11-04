@@ -679,6 +679,31 @@ group_deploy() {
   echo "deploy: ok"
 }
 
+CHECKOUT_PIN='actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+DOCTL_PIN='digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f'
+
+group_produp() {
+  need yq python3
+  local wf=.github/workflows/prod-up.yml
+  yq e 'true' "$wf" >/dev/null || fail "produp: $wf does not parse"
+  check_legacy "$wf" prod produp
+  [ "$(yq e '.jobs.up.environment' "$wf")" = production ] || fail "produp: job up must bind environment production"
+  [ "$(yq e '.jobs.up.permissions.contents' "$wf")" = read ] || fail "produp: permissions contents: read"
+  [ "$(yq e '[.jobs.up.steps[].uses | select(. != null)] | join(" ")' "$wf")" = \
+    "$CHECKOUT_PIN $DOCTL_PIN ./.github/actions/setup-sops" ] || fail "produp: action pins / setup-sops"
+  grep -qF 'python3 scripts/do-render-app-spec.py' "$wf" || fail "produp: renderer not called"
+  for a in '--env production' '--spec .do/app.yaml' '--app-name xstockstrat-production' '--out "$RUNNER_TEMP/app.yaml"'; do
+    grep -qF -- "$a" "$wf" || fail "produp: render argument $a"
+  done
+  grep -qF 'doctl apps create --spec "$RUNNER_TEMP/app.yaml"' "$wf" || fail "produp: create from \$RUNNER_TEMP/app.yaml"
+  [ "$(yq e '[.jobs.up.steps[] | select(.if == "always()") | .run] | join("")' "$wf")" = 'rm -f "$RUNNER_TEMP/app.yaml"' ] ||
+    fail "produp: always-run spec removal"
+  if grep -nE 'do-inject-prod-secrets|DO_PROD_APP_ID|MCP_AGENT_SECRET' "$wf"; then fail "produp: a retired name remains"; fi
+  no_unprefixed "$wf" produp
+  [ ! -e scripts/do-inject-prod-secrets.py ] || fail "produp: scripts/do-inject-prod-secrets.py still exists"
+  echo "produp: ok"
+}
+
 groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"

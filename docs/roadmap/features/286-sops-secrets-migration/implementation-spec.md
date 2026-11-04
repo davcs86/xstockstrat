@@ -618,7 +618,7 @@ yq e 'true' .github/workflows/deploy.yml .github/workflows/deploy-dev.yml .githu
 
 ### Step 11 — test: Static rules for `prod-up.yml`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (group `produp`)
