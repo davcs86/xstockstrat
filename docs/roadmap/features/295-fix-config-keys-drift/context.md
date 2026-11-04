@@ -76,3 +76,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 4. **Scope additions:** the UI env bug, watcher resilience, Go getter type-safety, deleting orphan
    rows (with snapshot).
 5. **Skills/guard rails** (from the original request): fix the SDD skills that allowed the drift.
+
+## Session 2026-11-04 (operator follow-up — indicators symptom)
+
+- **Key the operator changed:** `indicators.sandbox.timeout_ms`. Staging stores `15000` (`int`) under
+  the correct full-dotted key, and `IndicatorsServicer.ExecuteFormula` reads it on every call
+  (`services/xstockstrat-indicators/app/handlers/servicer.py:282`). So naming is NOT the cause for
+  this key in staging.
+- **New cause (d): a caller-side gRPC deadline below the configurable server budget.**
+  - The agent `test_formula` → `client.execute_formula` uses a fixed `timeout=_RPC_TIMEOUT_S` = 10 s
+    (`services/xstockstrat-agent/app/client.py:38`, `:1102`).
+  - The sandbox runs up to `timeout_ms + SANDBOX_STARTUP_GRACE_MS(5000)`
+    (`services/xstockstrat-indicators/app/services/sandbox.py:205`, `:350`), i.e. 20 s at 15000.
+  - Any formula running past 10 s fails `DEADLINE_EXCEEDED` at the agent regardless of the config.
+  - The analysis callers (`evaluator.py:518`, `fundamentals_scoring.py:52`) set no deadline.
+  - Design must cover this: a config value must not be silently capped by a hardcoded deadline in
+    another service.
+- Distinguishing the causes by symptom (asked of the operator): "deadline exceeded" at ~10 s → (d);
+  "Formula execution timed out after 5000ms" → (c), a stale stream.
+- `_clamp_override` (`servicer.py:66`) only tightens; the agent sends 0 unless the caller passes
+  `timeout_ms`, so it is not a cap here.
