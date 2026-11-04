@@ -224,7 +224,7 @@ sops --version | grep -q '3.13.3' && age --version | grep -q 'v1.3.2'
 
 ### Step 3 — test: Resolver cases (`resolve` library + homelab CLI)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (group `resolve`)

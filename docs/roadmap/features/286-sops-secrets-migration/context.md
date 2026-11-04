@@ -291,3 +291,14 @@
   GREEN `action: ok`. The real install block, run in the ephemeral sandbox, verified both checksums, and sops 3.13.3 / age v1.3.2 were installed.
 - Files modified: `.github/actions/setup-sops/action.yml`
 - Deviations: none
+
+### Step 3 — Resolver cases (group `resolve`) [done]
+- Added the shared helpers (throwaway age keys, enc_json, fixture CA, an env -i library driver, the homelab CLI driver, a heredoc parser,
+  only_masked/masks_first) plus 13 cases covering AC-5/9/10/13/18/22/23, no-normalisation and the leak canary.
+- TDD RED: `ASSERT FAIL: 1: resolve failed (… ModuleNotFoundError: No module named 'sops_secrets')`. Lint: shellcheck + shfmt clean.
+  A file-level `shellcheck disable=SC2015,SC2016` carries its reason: the `A && B || fail` idiom, and literal `$` is test data.
+- Interpretations (within the design): an optional absent key reports `absent (optional)`, since the design names only `sops|github|MISSING`
+  and MISSING is reserved for required keys. "Value never appears" means a value appears only on `::add-mask::` lines; masking must echo the
+  value to the runner, which consumes those lines.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none
