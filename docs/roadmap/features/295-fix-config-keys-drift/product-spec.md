@@ -63,33 +63,49 @@ Adjacent defects, in scope:
   - A periodic full reload is a backstop, and broadcasts only on a content change.
   - The snapshot `version` is content-derived, so re-sends and no-op reloads are distinguishable from
     real changes.
-- **FR-3 — Data-driven heal that preserves effective behavior.**
-  - The heal works from the live inventory (FR-4) joined with the gate's reader catalog (FR-13), in
-    both environments, global and per-user rows alike.
-  - A row in a spelling no reader uses is deleted when its read spelling exists (the read twin
-    wins), or when it is dead (no reader in any spelling). It is snapshotted first, and the
-    migration writes its own `config_audit` row.
-  - Secret rows are never deleted. A row not covered by the model is reported via `NOTICE`, never
-    silently changed.
-  - Every discarded stored value that differs from the effective value is listed, for the PR and the
-    operator.
+- **FR-3 — Signed, replay-safe heal that preserves effective behavior.**
+  - The heal deletes **only twin rows**: a non-secret row in a spelling no reader uses, whose read
+    spelling exists in the same `(namespace, environment, COALESCE(user_id,''))` scope after seeding.
+    The effective value therefore cannot change.
+  - A row is deleted only if it matches the predicate **and** appears in a literal allowlist of
+    `(namespace, key, environment, user_id, sha256(value_data))` tuples. The allowlist comes from the
+    operator-signed dry-runs of both inventories (FR-4).
+  - A row that is new or has changed since the inventory survives, and gets a report row.
+  - Every delete writes a snapshot row and its own `config_audit` row first. The heal is replay-safe:
+    a run-once latch, plus guarded casts, so it cannot abort into the dirty-recovery replay
+    (`scripts/db-migrate.sh` `force 0`).
+  - Secret rows are never deleted. Rows outside the model, keys read by several readers with
+    different code defaults, and every discarded stored value that differs from the effective value
+    are written to a persistent **heal report table**, which is the operator channel, and listed for
+    sign-off.
+  - Deleting **dead** rows (no reader in any spelling) is out of scope here. It belongs to feature
+    296, gated on runtime evidence (FR-6).
 - **FR-4 — Live inventory tool.**
-  - A read-only, stdlib-only Python operator tool, runnable from a Python component's DO console in
-    `/app` (the `legacy_authors_ops` precedent).
-  - It prints every `config.config_values` row's `(namespace, key, environment, user_id, value_type,
-    is_secret, has-description, consuming_service, updated_at)`.
-  - Non-secret rows also show `value_data`. It **never** selects `value_encrypted`.
-  - It also outputs a digest, so a committed inventory can be verified against a re-run.
+  - A read-only Python operator tool runnable from a Python component's DO console in `/app` (the
+    `legacy_authors_ops` precedent: stdlib plus the image's existing DB driver).
+  - It **never** selects `value_encrypted`.
+  - The committed output is the metadata of every `config.config_values` row (namespace, key,
+    environment, `sha256(user_id)`, value_type, is_secret, metadata presence, updated_at) plus
+    `sha256(value_data)`. Plaintext `value_data` is committed only for non-secret rows that appear on
+    the sign-off list.
+  - It prints a digest of its output and a sha256 of its own source, so the operator can prove that
+    the console paste matches the reviewed file.
 - **FR-5 — Seed parity, no waiver.**
   - Every key read by any service has a global seed row per environment, in the **spelling its
     current reader uses**, with the reader's `value_type`, `value_data` = `default_value` = the code
     default, and non-empty `description` / `consuming_service`.
+  - A key is never seeded when it is read as a secret (`GetSecret` readers) or when its readers
+    disagree on the code default. Both cases are listed for sign-off.
   - The heal never UPDATEs an existing `value_data`.
   - An existing row is retyped only where its stored value equals the code default. Every other type
     or default divergence is listed for operator sign-off.
   - The feature-227 waiver is retired.
-- **FR-6 — Orphan deletion.** Non-secret rows with no reader in any spelling are deleted after a
-  snapshot (FR-3).
+- **FR-6 — Runtime read-key evidence, used to gate dead-row deletion in 296.**
+  - Every watcher records each distinct `(namespace, key)` its process actually reads, logging each
+    once per key per process at INFO.
+  - This lets feature 296 delete a dead row only when static analysis **and** a release of runtime
+    read logs both show no reader.
+  - 295 deletes no dead rows.
 - **FR-7 — Every config value is live.** A change takes effect within one `WatchConfig` delivery,
   with no restart:
   - concurrency primitives resized in place: shrinking lets in-flight work finish, and a timed-out
@@ -124,8 +140,12 @@ Adjacent defects, in scope:
 - **FR-12 — Derived deadline, no hidden cap.**
   - The agent `test_formula` deadline is derived from indicators' configured
     `sandbox.timeout_ms` + `sandbox.startup_grace_ms` (the grace becomes a seeded config key,
-    replacing the private constant) + slack, clamped to the feature-273 tool ceiling.
-  - The write bounds and a migration assertion keep stored values under the ceiling.
+    replacing the private constant) + slack, clamped to the agent's **45 s long-RPC budget**. That
+    budget leaves room inside the feature-273 57 s whole-tool ceiling.
+  - Write bounds keep timeout + grace + slack ≤ 45 s. The heal report lists any stored value outside
+    the bounds.
+  - Indicators clamps the sandbox timeout to the request's remaining deadline, so time spent queued
+    cannot hide a cap.
   - Clamping logs a WARN. Deadline errors surface their message.
 - **FR-13 — Extend feature 278's gate, drain its baseline.** `scripts/check-config-wiring.mjs`
   joins readers to rows by `(namespace, key)` in the exact current spelling, and adds:
@@ -174,7 +194,7 @@ xstockstrat-identity, xstockstrat-notify, xstockstrat-agent, xstockstrat-ui. Als
 
 - **`/config-ui`.**
   - About 100 previously invisible keys appear with type, default and description.
-  - Orphan rows disappear.
+  - Twin rows in a spelling nobody reads disappear.
   - Edits update the row the service actually reads.
 - **`/trader`.** The `platform.trading_state` banner on `/trader/positions` reflects the
   deployment's own environment.
@@ -196,8 +216,8 @@ xstockstrat-identity, xstockstrat-notify, xstockstrat-agent, xstockstrat-ui. Als
 
 ## Config Key Changes
 
-- Every key in every namespace is affected: seeded (FR-5), heal-deleted (FR-3/FR-6) or retyped
-  where stored == default (FR-5).
+- Every key in every namespace is affected: seeded (FR-5), twin-deleted (FR-3) or retyped where
+  stored == default (FR-5).
 - **No key's spelling changes in this feature.** That is feature 296.
 - New seeded keys: `indicators.sandbox.startup_grace_ms` (FR-12).
 - New write bounds: `indicators.sandbox.timeout_ms`, `analysis.compute.max_worker_threads`.
@@ -214,7 +234,8 @@ xstockstrat-identity, xstockstrat-notify, xstockstrat-agent, xstockstrat-ui. Als
   - snapshot table first;
   - own `config_audit` rows;
   - twin predicates scoped by `COALESCE(user_id,'')`;
-  - `NOTICE`, never `RAISE EXCEPTION`, for out-of-model rows;
+  - a heal report table, never `RAISE EXCEPTION`, for out-of-model rows;
+  - a run-once latch and guarded casts, so the heal is replay-safe;
   - downs restore with `ON CONFLICT DO NOTHING`;
   - assertions in `scripts/migration-assertions/` (031 harness shape) plus a dedicated config `goto`
     pass;
@@ -252,7 +273,7 @@ smoke-tested on dev.
 ## Out of Scope
 
 - Any key-spelling change, the DB CHECK, relative getter literals, prefixed-key rejection, alias
-  activation, FQN display in config-ui. These are feature **296**.
+  activation, FQN display in config-ui, and dead-row deletion. These are feature **296**.
 - Removing the alias / form tolerance. That is the follow-up after 296.
 - Changing any key's *effective* runtime value. The exceptions are restart→live semantics, the
   defects above, and items the operator signs off.

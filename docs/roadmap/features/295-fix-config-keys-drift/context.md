@@ -360,3 +360,57 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     (digest + dry-run + staging read-back); G3 before promotion.
   - **Steps:** A0–A12.
 - The adversary pass is running.
+
+## Session 2026-11-04 — sdd-design round 2 synthesis + operator decisions 15–18
+
+- **R2 adversary verdict: NEEDS WORK, no Floor breach.**
+  - Blockers:
+    - **BLOCKER-1:** the 035 catalog DELETE is not replay-safe under config's dirty-recovery
+      `force 0` replay (no contract floor: `migration-dirty-guard.sh:42`, `db-migrate.sh:77-80`).
+      It would delete later features' rows unrecoverably.
+    - **BLOCKER-2:** the delete set is bounded only by hand-written gate registry entries
+      (`config-wiring.json` 19 `dynamic: []`), and production cannot veto it once 035 is immutable.
+  - Majors:
+    - MAJOR-1: dual-read keys with different code defaults (`platform.trading_state` HALTED in
+      trading vs none in the UI) would fail open.
+    - MAJOR-2: the catalog lacks `is_secret`, so a secret-read key could be seeded plaintext-capable.
+    - MAJOR-3: the heartbeat on the shared pool slot drops a healthy LISTEN under load; uncaught
+      timer rejection; keepAlive initial delay.
+    - MAJOR-4: 57 s has zero margin vs feature 273, and sandbox queueing remains a hidden cap.
+    - MAJOR-5: the screener bypasses ComputePool; AC-23 is green on today's code.
+    - MAJOR-6: the inventory would commit production values and user_ids to git.
+    - MAJOR-7: the marker contract misses the per-user overlay SELECT; contract-of should anchor
+      on 036.
+    - MAJOR-8: `applyCatalogHeal` re-implements the heal in JS.
+    - MAJOR-9: A0 "real defect" category is open-ended (scope creep).
+  - Minors: all adopted.
+- **Adopted without operator input** (round 3 state):
+  - signed literal allowlist ∩ predicate for deletes;
+  - a run-once latch and guarded casts;
+  - per-reader defaults (seed only when all agree);
+  - an `is_secret` catalog column (never seed secret-read keys);
+  - the heartbeat on the listener's own socket (alternative A4);
+  - the screener uses the pool; AC-23 `@preserve`;
+  - the marker read inside the overlay statement; 296 contract-of anchored on 036;
+  - the gate stored set built by applying migrations to a scratch Postgres in CI (alternative A3)
+    instead of a JS emulation;
+  - a closed A0 taxonomy.
+- **Operator decisions (explicit sign-off, 2026-11-04, continued):**
+  15. **Dead rows deferred to 296, gated on runtime evidence.** 295 deletes only signed twin rows.
+      295's watchers log each distinct key read (once per key per process). 296 deletes a dead row
+      only when static analysis **and** a release of runtime read logs both show no reader.
+      FR-6/AC-15 re-scoped accordingly.
+  16. **Inventory commits hashes, plus plaintext only for sign-off rows:** metadata +
+      sha256(value_data) + sha256(user_id). The tool prints its own source hash for paste
+      verification.
+  17. **FR-12 cap = the 45 s long-RPC budget.** Bounds timeout ≤ 33000, grace ≤ 10000; indicators
+      clamps to the request's remaining time.
+  18. **Run round 3** before the approval gate.
+- Spec updated:
+  - FR-3 (signed, replay-safe, twin-only, report table);
+  - FR-4 (hash commit);
+  - FR-5 (no secret/disagreeing-default seeds);
+  - FR-6 (runtime read evidence);
+  - FR-12 (45 s);
+  - AC-15 rewritten; AC-23 `@preserve`; new AC-28 (replay-safe) and AC-29 (disagreeing defaults
+    not seeded).

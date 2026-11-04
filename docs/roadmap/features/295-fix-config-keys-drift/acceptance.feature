@@ -117,11 +117,11 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     Then each environment returns value_type "int", default_value "900", a non-empty description and consuming_service "xstockstrat-identity"
 
   @AC-15 @FR-6 @regression
-  Scenario: Orphan rows are removed and snapshotted
+  Scenario: A dead row is kept and its key's runtime reads are recorded
     Given "ledger" / "stream.notify_enabled" has no reader in any spelling
-    When the migrations run
-    Then ListKeys for namespace "ledger" does not return "stream.notify_enabled"
-    And the row is present in the premigration snapshot table
+    When the migrations run and ledger reads "ledger.export.enabled" twice
+    Then "ledger" / "stream.notify_enabled" still exists
+    And ledger logs exactly one read-key record for "ledger" / "ledger.export.enabled"
 
   @AC-16 @FR-7 @regression
   Scenario: A rotated vendor secret is used without a restart
@@ -140,6 +140,22 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     Given staging "indicators.sandbox.timeout_ms" = 15000 and "indicators.sandbox.startup_grace_ms" = 5000
     When test_formula runs a formula that takes 12 seconds
     Then it returns success, not DEADLINE_EXCEEDED
+
+  @AC-28 @FR-3 @regression
+  Scenario: Replaying the heal after a later key was created never deletes that key
+    Given the heal migration has already run
+    And an operator then created "analysis" / "backtest.extra_knob" in a spelling no reader uses
+    When the heal migration is replayed by the dirty-recovery path
+    Then "analysis" / "backtest.extra_knob" still exists
+    And no row is deleted twice and no report row is duplicated
+
+  @AC-29 @FR-5 @regression
+  Scenario: A key whose readers disagree on the default is not seeded
+    Given production has no "platform" / "platform.trading_state" row
+    And trading's code default is "HALTED" while the UI's is no restriction
+    When the seed-parity migration runs
+    Then no "platform.trading_state" row is created in production
+    And the heal report lists "platform platform.trading_state: readers disagree on default"
 
   @AC-19 @FR-13 @regression
   Scenario: The config-wiring gate has no baseline and rejects new drift
@@ -171,7 +187,8 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     Then the output lists that row's namespace, key, environment, value_type and is_secret
     And the output contains no value_encrypted bytes and no plaintext secret value
 
-  @AC-23 @FR-7 @regression
+  @AC-23 @FR-7 @preserve
+  # Preserve-guard (C-15): today's fixed 4-thread pool already holds the bound; it must hold once the limit is live.
   Scenario: A timed-out backtest does not let compute threads exceed the limit
     Given the analysis compute limit is 4
     And 4 backtests occupy all compute slots
