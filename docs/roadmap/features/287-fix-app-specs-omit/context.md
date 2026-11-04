@@ -106,3 +106,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `produp`: `ASSERT FAIL: produp: no db step`
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 4 — service: atomic VPC placeholder [done]
+- **Specs**: both now carry `vpc: id: YOUR_VPC_ID` after `region: nyc`.
+- **Renderer**:
+  - new required `--vpc-id`;
+  - before `resolve`, it checks for a lowercase UUID and for `YOUR_VPC_ID` occurring exactly once;
+  - literal fill;
+  - the leftover guard reports pre-substitution names, otherwise only a count ("values withheld").
+- **Workflows**: `deploy.yml` and `prod-up.yml` each have a hard-failing `db` lookup step, and render takes `VPC_ID` as env plus `--vpc-id "$VPC_ID"`. The prod-up `db` step is ungated.
+- **GREEN**:
+  - full default suite: 11 groups ok;
+  - ruff check and format clean;
+  - `grep -c YOUR_VPC_ID` is 1 in each spec;
+  - other spec readers still pass: agent `test_deployment_env_vars.py` (3 passed) and `check-otel-produced-signals.test.sh` (57 cases, 0 failed).
+- Files modified: `.do/app.yaml`, `.do/app.dev.yaml`, `scripts/do-render-app-spec.py`, `.github/workflows/deploy.yml`, `.github/workflows/prod-up.yml`
+- Deviations: none

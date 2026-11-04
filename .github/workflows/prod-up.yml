@@ -41,6 +41,12 @@ jobs:
           fi
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
 
+      - name: Look up the database cluster (VPC + cluster ID)
+        id: db
+        env:
+          SPEC: .do/app.yaml
+        run: bash scripts/do-db-cluster.sh lookup
+
       - uses: ./.github/actions/setup-sops
         if: steps.check.outputs.app_id == ''
 
@@ -48,6 +54,7 @@ jobs:
         id: render
         if: steps.check.outputs.app_id == ''
         env:
+          VPC_ID: ${{ steps.db.outputs.vpc_id }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
           LEGACY_JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
           LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
@@ -68,6 +75,7 @@ jobs:
           --app-name xstockstrat-production
           --image-tag "${{ inputs.image_tag }}"
           --org "${{ github.repository_owner }}"
+          --vpc-id "$VPC_ID"
           --out "$RUNNER_TEMP/app.yaml"
 
       - name: Create prod app

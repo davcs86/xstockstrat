@@ -59,9 +59,16 @@ jobs:
 
       - uses: ./.github/actions/setup-sops
 
+      - name: Look up the database cluster (VPC + cluster ID)
+        id: db
+        env:
+          SPEC: ${{ inputs.app_spec }}
+        run: bash scripts/do-db-cluster.sh lookup
+
       - name: Render app spec (SOPS first, DEV_/PROD_ fallback)
         id: render
         env:
+          VPC_ID: ${{ steps.db.outputs.vpc_id }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
           LEGACY_JWT_SECRET: ${{ secrets[format('{0}_JWT_SECRET', env.P)] }}
           LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets[format('{0}_BROKER_ACCOUNTS_ENCRYPTION_KEY', env.P)] }}
@@ -82,6 +89,7 @@ jobs:
           --app-name "$APP_NAME"
           --image-tag "${{ inputs.image_tag }}"
           --org "${{ github.repository_owner }}"
+          --vpc-id "$VPC_ID"
           --out "$RUNNER_TEMP/app.yaml"
 
       - name: Deploy to DigitalOcean App Platform

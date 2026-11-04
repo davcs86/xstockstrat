@@ -330,7 +330,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 4 — service: atomic VPC placeholder — specs + renderer + deploy.yml/prod-up.yml render wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` + `.do/` + `.github/workflows` (deploy pipeline)
 **Files**:
 - `.do/app.yaml` — modify (after `region: nyc`, `:6`)
