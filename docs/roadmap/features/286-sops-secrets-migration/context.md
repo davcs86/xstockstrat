@@ -406,3 +406,12 @@
 - TDD RED: `ASSERT FAIL: homelab: AC-12 op/OP_ reference remains`. shellcheck + shfmt clean.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 14 — `deploy-homelab.yml` drops 1Password and resolves via SOPS [done]
+- Header rewritten; OP_CLI_* pins and the 1Password src/opcli/op/report steps deleted. New `validate` job, and `deploy` needs it; job env P.
+- The image-tag validation step keeps its guards and exports, but no longer detaches.
+- Then setup-sops and resolve (14 pinned LEGACY_ lines; writes the 6 values to GITHUB_ENV, per the operator waiver), then a separate detach step plus the predates check.
+- The expiry gate, release env, join and SSH steps lose their `env:` blocks and read GITHUB_ENV.
+- TDD GREEN: `homelab: ok`, `resolve: ok`; `homelab-render.test.sh` (279 contract) still passes; yq parses.
+- Files modified: `.github/workflows/deploy-homelab.yml`
+- Deviations: none

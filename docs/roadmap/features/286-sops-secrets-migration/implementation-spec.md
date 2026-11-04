@@ -741,7 +741,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 14 — service: `deploy-homelab.yml` drops 1Password and resolves via SOPS
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `.github/workflows/deploy-homelab.yml` — modify
