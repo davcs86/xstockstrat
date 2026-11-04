@@ -65,8 +65,13 @@ and readiness paths use the default evaluator, whose `_execute_formula` (`evalua
 `PERMISSION_DENIED`, plus a broad `except grpc.RpcError` that folds it into "outage". Simply passing
 `raise_unreadable=True` would raise `FormulaExecutionError`, which is documented to propagate and would abort
 `EvaluateReadiness` instead of fixing it — the target behaviour is per-symbol degradation; the mechanism is a design
-decision. **Unconfirmed:** which caller identity / scheduled compute triggered the 2026-10-31 and 2026-11-02 bursts —
-a recon question for `/sdd-design`. Another design input: the unreadable verdict is persisted in `readiness_cache`
+decision. **Unconfirmed:** which caller identity / compute triggered the 2026-10-31 and 2026-11-02 bursts — a recon question for
+`/sdd-design`. Narrowed by code reading: the daily opportunity refresh (`servicer.py:5982`) and the readiness
+materializer (`:6031`) build their metadata with `owner_metadata()` (`app/identity.py:10`), which carries only `x-user-id`
+and drops `x-access-scope`; indicators returns `PERMISSION_DENIED` only when it sees the admin bit (`indicators
+servicer.py:245`), otherwise `NOT_FOUND` (skipped). So the refusal can only arise on the paths that propagate the
+inbound scope — `EvaluateReadiness`, `_kick_readiness_refresh`, the heal, and the `ListOpportunities`-triggered
+recompute (`:4894`) — not the scheduled passes (to be confirmed in recon). Another design input: the unreadable verdict is persisted in `readiness_cache`
 (FAST-served within `stale_after_seconds`) — recon decides how the marker is persisted and how it heals when the
 formula's visibility changes.
 
@@ -77,8 +82,8 @@ xstockstrat-ui (consumer surface), xstockstrat-agent (consumer surface).
 
 ## Consumer Surface(s)
 
-- [x] `xstockstrat-ui` `/insights/opportunities`, `/insights/watchlists` (readiness panel), the Signal-detail "Why this
-  fired" panel (an `EvaluateReadiness` consumer) and the mobile sections (`components/mobile/SectionRenderer.tsx`,
+- [x] `xstockstrat-ui` `/insights/opportunities`, `/insights/watchlists` (readiness panel), `/trader/positions/[symbol]`
+  (the "Why this fired" panel, `SignalReadiness.tsx` — an `EvaluateReadiness` consumer) and the mobile sections (`components/mobile/SectionRenderer.tsx`,
   `sections.ts`, which also consume `dataUnavailable`): show a distinct "formula not readable by you" state (not the
   data-unavailable state, not a `0/N` quiet row), using the canonical state primitives (C-17). Own implementation step.
 - [x] `xstockstrat-agent` MCP tool `list_opportunities` (the agent has no readiness tool): exposes the unreadable-formula

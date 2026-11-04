@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` -> `draft` | /sdd-triage | Product spec pre-populated from defect report |
+| 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved after revision (pass 1 FAIL: 4 blockers; pass 2 FAIL: 1 blocker; pass 3 PASS WITH WARNINGS, all warnings addressed) |
 
 ---
 
@@ -32,4 +33,4 @@ Analysis folds indicators' deliberate PERMISSION_DENIED (admin may not execute a
 
 ## Next Action
 
-`/sdd-design fix-analysis-admin-formula-refusal` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-analysis-admin-formula-refusal` — full design recommended (additive proto field is an escalate signal; analysis + ui + agent consumer surfaces = 3 services; recon must settle the burst-source question)
