@@ -5,6 +5,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-11-04
 
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
 ### Features
 - block-fundamentals-strategy-on-etf: Add a guardrail so a strategy that requires fundamentals (a `fundamental` operand — the seeded `fscore` custom formula or any component declaring `fundamental_inputs`) is refused or skipped with an explicit, auditable reason when run against an ETF, instead of silently producing empty/misleading results.
 
