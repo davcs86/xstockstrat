@@ -20,7 +20,7 @@ PR #1406 (`86132e77`); code landed in #1396 (`708a8fea`; source: `git log`).
 - Triggered by feature 215's Step 26 staging verification; the real cause was six formulas with legacy username
   `author = "davcs86"`, which made indicators return PERMISSION_DENIED to the admin-scoped caller (old
   context.md@1ed63958:30-34). The catch-all hid that trigger; 275 fixes the hiding, not the data. The trigger was
-  split to `docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md`, now tracked by feature
+  split to `docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md), now tracked by feature
   276 (`launched`).
 - New enum value 6 instead of reusing 4: FORMULA_ERROR means "the formula or its contract failed"; a `GetBars` /
   `ComputeIndicator` RPC failure or a generic exception is not that, and reusing 4 would blur the strat-lab skill's
