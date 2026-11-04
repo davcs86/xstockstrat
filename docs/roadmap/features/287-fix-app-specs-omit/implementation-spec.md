@@ -539,7 +539,7 @@ yq e 'true' .github/workflows/prod-up.yml >/dev/null
 
 ### Step 7 — test: `proddown` group (pins, step order, continue-on-error, forbidden verbs)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows` (deploy pipeline)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (new `group_proddown`; register `proddown` in the default list at `:787`)

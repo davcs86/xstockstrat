@@ -980,6 +980,78 @@ group_cleanup() {
   echo "cleanup: ok"
 }
 
+# group_proddown: AC-4 — teardown deletes the app first, then best-effort removes only its trusted-source rule.
+group_proddown() {
+  need yq python3
+  local wf=.github/workflows/prod-down.yml j=down prev=-1 i sel id n k
+  local app_expr='${{ steps.find.outputs.app_id }}' has_app="steps.find.outputs.app_id != ''"
+  yq e 'true' "$wf" >/dev/null || fail "proddown: $wf does not parse"
+  [ "$(yq e '[.jobs.down.steps[].uses | select(. != null)] | join(" ")' "$wf")" = "$CHECKOUT_PIN $DOCTL_PIN" ] ||
+    fail "proddown: action pins"
+  [ "$(yq e '.jobs.down.permissions.contents' "$wf")" = read ] || fail "proddown: permissions contents: read"
+  [ "$(yq e '.jobs.down.if' "$wf")" = "\${{ inputs.confirm == 'destroy-prod' }}" ] || fail "proddown: confirm gate"
+  for id in find delete db untrust summary; do
+    i="$(step_idx "$wf" "$j" ".value.id == \"$id\"")"
+    [ -n "$i" ] && [ "$i" -gt "$prev" ] || fail "proddown: step order broken at $id"
+    prev="$i"
+    ! yq e ".jobs.down.steps[] | select(.id == \"$id\") | .run" "$wf" | grep -qF '${{' ||
+      fail "proddown: $id run inlines an expression"
+  done
+  sel='.jobs.down.steps[] | select(.id == "delete")'
+  [ "$(yq e "$sel | .if" "$wf")" = "$has_app" ] || fail "proddown: delete if"
+  [ "$(yq e "$sel | has(\"continue-on-error\")" "$wf")" = false ] || fail "proddown: delete must fail hard"
+  [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "proddown: delete env.APP_ID"
+  yq e "$sel | .run" "$wf" | grep -qF 'doctl apps delete "$APP_ID" --force' || fail "proddown: delete run"
+  sel='.jobs.down.steps[] | select(.id == "db")'
+  [ "$(yq e "$sel | .continue-on-error" "$wf")" = true ] || fail "proddown: db must be best-effort"
+  [ "$(yq e "$sel | .if" "$wf")" = "$has_app" ] || fail "proddown: db if"
+  [ "$(yq e "$sel | .env.SPEC" "$wf")" = .do/app.yaml ] || fail "proddown: db env.SPEC"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh lookup' || fail "proddown: db run"
+  sel='.jobs.down.steps[] | select(.id == "untrust")'
+  [ "$(yq e "$sel | .continue-on-error" "$wf")" = true ] || fail "proddown: untrust must be best-effort"
+  [ "$(yq e "$sel | .if" "$wf")" = "$has_app && steps.db.outputs.cluster_id != ''" ] || fail "proddown: untrust if"
+  [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "proddown: untrust env.APP_ID"
+  [ "$(yq e "$sel | .env.CLUSTER_ID" "$wf")" = '${{ steps.db.outputs.cluster_id }}' ] || fail "proddown: untrust env.CLUSTER_ID"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh untrust "$CLUSTER_ID" "$APP_ID"' || fail "proddown: untrust run"
+  sel='.jobs.down.steps[] | select(.id == "summary")'
+  [ "$(yq e "$sel | .if" "$wf")" = "always() && $has_app && steps.delete.outcome == 'success' && steps.untrust.outcome != 'success'" ] ||
+    fail "proddown: summary if"
+  [ "$(yq e "$sel | .env.DB_OUTCOME" "$wf")" = '${{ steps.db.outcome }}' ] || fail "proddown: summary env.DB_OUTCOME"
+  if grep -nE 'doctl databases (delete|resize|migrate|db delete|pool delete|user delete)|firewalls (append|replace)' "$wf"; then
+    fail "proddown: a cluster-mutating doctl verb"
+  fi
+  grep -qF 'cluster data untouched' <(sed -n '1,12p' "$wf") || fail "proddown: header must say cluster data untouched"
+  yq e '.jobs.down.steps[] | select(.id == "delete") | .run' "$wf" | grep -qiF 'cluster data untouched' ||
+    fail "proddown: delete echo must say cluster data untouched"
+
+  wait_stub
+  # find: 0 / 1 / 2 production apps
+  yq e '.jobs.down.steps[] | select(.id == "find") | .run' "$wf" >"$work/find.sh"
+  for n in 0 1 2; do
+    : >"$work/apps.txt"
+    for k in $(seq 1 "$n"); do echo "app$k xstockstrat-production" >>"$work/apps.txt"; done
+    echo "x9 xstockstrat-staging" >>"$work/apps.txt"
+    wrun "$work/find.sh"
+    case "$n" in
+    0) [ "$rc" = 0 ] && grep -qx 'app_id=' "$work/wout" && grep -qF 'already down' "$work/wso" || fail "proddown: find with no app" ;;
+    1) [ "$rc" = 0 ] && grep -qx 'app_id=app1' "$work/wout" || fail "proddown: find with one app" ;;
+    2) [ "$rc" != 0 ] && grep -qF 'expected at most 1 app named xstockstrat-production, found 2' "$work/wso" ||
+      fail "proddown: find accepted two apps" ;;
+    esac
+  done
+  # summary: names the remediation; never prints an empty cluster id
+  yq e '.jobs.down.steps[] | select(.id == "summary") | .run' "$wf" >"$work/summary.sh"
+  rm -f "$work/wsum"
+  wrun "$work/summary.sh" APP_ID=app1 CLUSTER_ID=c1 DB_OUTCOME=success
+  [ "$rc" = 0 ] && grep -qF 'app:app1' "$work/wsum" && grep -qF 'c1' "$work/wsum" || fail "proddown: summary (lookup ok)"
+  rm -f "$work/wsum"
+  wrun "$work/summary.sh" APP_ID=app1 CLUSTER_ID= DB_OUTCOME=failure
+  [ "$rc" = 0 ] && grep -qF 'cluster lookup failed' "$work/wsum" && grep -qF 'app:app1' "$work/wsum" ||
+    fail "proddown: summary (lookup failed)"
+  ! grep -qE 'remove +--uuid|firewalls (list|remove) +(--|$)' "$work/wsum" || fail "proddown: summary printed an empty cluster id"
+  echo "proddown: ok"
+}
+
 DB_CID=11111111-2222-4333-8444-555555555555
 DB_APP=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee
 DB_OTHER=99999999-8888-4777-8666-555555555555
@@ -1145,7 +1217,7 @@ EOF
   echo "dbnet: ok"
 }
 
-groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet}"
+groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"
   "group_$g"

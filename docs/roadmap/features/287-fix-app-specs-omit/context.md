@@ -148,3 +148,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: `produp: ok`, `render: ok`, `dbnet: ok`. YAML parses.
 - Files modified: `.github/workflows/prod-up.yml`, `scripts/sops-secrets.test.sh` (D2)
 - Deviations: D1 (step ids), D2 (test precision). Both are in the Deviation Log; D2 was approved at the F-08 blocker.
+
+### Step 7 — test: `proddown` group [done]
+- Added `group_proddown` and registered it. It checks:
+  - pins and permissions, and the confirm gate;
+  - step order (find < delete < db < untrust < summary), and that no step's `run` contains `${{`;
+  - the delete, db and untrust `if`/env/continue-on-error settings, and the summary `if`;
+  - the forbidden-verbs regex;
+  - the "cluster data untouched" wording;
+  - a stub-run of `find` with 0/1/2 apps;
+  - a stub-run of the summary with the lookup succeeding and failing (it never prints an empty cluster id).
+- RED: `ASSERT FAIL: proddown: action pins`.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none
