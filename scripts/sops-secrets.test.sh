@@ -429,7 +429,7 @@ rnd() {
   rm -f "$out" "$work/sum" "$work/ghout"
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" GITHUB_STEP_SUMMARY="$work/sum" GITHUB_OUTPUT="$work/ghout" "$@" \
     python3 "$work/repo/scripts/do-render-app-spec.py" --env "$e" --spec "$spec" --app-name "$name" \
-    --image-tag abc1234 --org testorg --out "$out" >"$work/out" 2>"$work/err"
+    --image-tag abc1234 --org testorg --vpc-id "${RND_VPC-$FIXTURE_VPC}" --out "$out" >"$work/out" 2>"$work/err"
 }
 
 render_repo() {
@@ -440,8 +440,8 @@ render_repo() {
 }
 
 REVMAP='import json, re, subprocess, sys
-spec, rendered, sentinels, ca_pem, tmp = sys.argv[1:6]
-base = open(spec).read().replace("YOUR_GITHUB_ORG", "testorg").replace("YOUR_IMAGE_TAG", "abc1234")
+spec, rendered, sentinels, ca_pem, tmp, vpc = sys.argv[1:7]
+base = open(spec).read().replace("YOUR_GITHUB_ORG", "testorg").replace("YOUR_IMAGE_TAG", "abc1234").replace("YOUR_VPC_ID", vpc)
 got = open(rendered).read()
 sent = dict(l.split("=", 1) for l in open(sentinels).read().split())
 sent = {k.removeprefix("LEGACY_"): v for k, v in sent.items()}
@@ -492,7 +492,7 @@ for sfx in certs:
 print("revmap ok")'
 
 group_render() {
-  need sops age age-keygen jq python3 openssl
+  need sops age age-keygen jq python3 openssl yq
   setup_keys
   fixture_ca
   render_repo
@@ -506,8 +506,9 @@ group_render() {
     read -r e spec name <<<"$s"
     rnd "$e" "$PWD/$spec" "$name" "$work/r.yaml" "${sents[@]}" "LEGACY_MTLS_CA=$(cat "$work/ca_b64")" ||
       fail "1: render $spec failed ($(cat "$work/err"))"
-    python3 -I -c "$REVMAP" "$spec" "$work/r.yaml" "$work/sentinels" "$work/ca/_ca/ca.pem" "$work/rev" >/dev/null ||
+    python3 -I -c "$REVMAP" "$spec" "$work/r.yaml" "$work/sentinels" "$work/ca/_ca/ca.pem" "$work/rev" "$FIXTURE_VPC" >/dev/null ||
       fail "1: reverse substitution of $spec"
+    [ "$(yq e '.vpc.id' "$work/r.yaml")" = "$FIXTURE_VPC" ] || fail "AC-1: $spec rendered no top-level vpc.id"
     for k in $DO_PLAIN MTLS_CA; do
       [ "$(src "$k")" = github ] || fail "2: $spec $k source '$(src "$k")'"
     done
@@ -572,6 +573,35 @@ for l in open(sys.argv[1]):
   rc=0
   rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-production "$work/r.yaml" "${req[@]}" || rc=$?
   [ "$rc" = 1 ] && [ ! -e "$work/r.yaml" ] || fail "6: --app-name mismatch accepted"
+
+  # 7. AC-2: an unfillable YOUR_VPC_ID fails before any secret is resolved or --out exists
+  grep -v -e '^vpc:$' -e '^  id: YOUR_VPC_ID$' .do/app.dev.yaml >"$work/novpc.yaml"
+  sed 's/^  id: YOUR_VPC_ID$/  id: YOUR_VPC_ID # YOUR_VPC_ID/' .do/app.dev.yaml >"$work/twovpc.yaml"
+  for s in "empty|$PWD/.do/app.dev.yaml|" "bad|$PWD/.do/app.dev.yaml|not-a-uuid" \
+    "upper|$PWD/.do/app.dev.yaml|D7AFFF57-F807-4893-9FBF-20FFF8BB82DD" \
+    "deleted|$work/novpc.yaml|$FIXTURE_VPC" "doubled|$work/twovpc.yaml|$FIXTURE_VPC"; do
+    IFS='|' read -r e spec line <<<"$s"
+    rc=0
+    RND_VPC="$line" rnd staging "$spec" xstockstrat-staging "$work/r.yaml" "${req[@]}" || rc=$?
+    [ "$rc" = 1 ] || fail "AC-2 $e: exited $rc ($(cat "$work/err"))"
+    grep -qF YOUR_VPC_ID "$work/err" || fail "AC-2 $e: stderr does not name YOUR_VPC_ID"
+    grep '^::error::' "$work/out" | grep -qF YOUR_VPC_ID || fail "AC-2 $e: ::error:: does not name YOUR_VPC_ID"
+    [ ! -e "$work/r.yaml" ] || fail "AC-2 $e: --out was written"
+    ! grep -q '^::add-mask::' "$work/out" || fail "AC-2 $e: secrets were resolved before the VPC check"
+  done
+
+  # 8. a leftover-looking value is reported by count only, never echoed
+  rc=0
+  rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-staging "$work/r.yaml" "${req[@]}" \
+    LEGACY_SLACK_WEBHOOK_URL=YOUR_PROD_LEAKED || rc=$?
+  [ "$rc" = 1 ] && [ ! -e "$work/r.yaml" ] || fail "8: a leftover-looking value rendered (rc $rc)"
+  {
+    grep '^::error::' "$work/out"
+    cat "$work/err"
+  } >"$work/leak"
+  grep -qF 'placeholder-like token(s) remain' "$work/leak" && grep -qF 'values withheld' "$work/leak" ||
+    fail "8: leftover count message ($(cat "$work/leak"))"
+  ! grep -qF YOUR_PROD_LEAKED "$work/leak" || fail "8: the leftover value was echoed"
   echo "render: ok"
 }
 
@@ -662,6 +692,14 @@ group_deploy() {
       ;;
     esac
   done
+  # AC-2: the VPC lookup feeds the render, which precedes the update; nothing soft-fails
+  local db_i render_i upd_i
+  db_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.id == "db") | .key' "$wf")"
+  render_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.id == "render") | .key' "$wf")"
+  upd_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.run // "" | test("doctl apps update")) | .key' "$wf")"
+  [ -n "$db_i" ] && [ -n "$render_i" ] && [ -n "$upd_i" ] || fail "deploy: db / render / update step missing"
+  [ "$db_i" -lt "$render_i" ] && [ "$render_i" -lt "$upd_i" ] || fail "deploy: order must be db < render < update"
+  db_wiring "$wf" deploy deploy '${{ inputs.app_spec }}'
   # callers: secrets inherit + environment; homelab caller jobs and their gates intact
   for e in staging production; do
     f=.github/workflows/deploy-dev.yml
@@ -678,6 +716,21 @@ group_deploy() {
   [ "$(yq e '.jobs.deploy-homelab.if' .github/workflows/deploy-prod.yml)" = "vars.HOMELAB_PRODUCTION_ENABLED == 'true'" ] ||
     fail "deploy: deploy-prod homelab gate"
   echo "deploy: ok"
+}
+
+# db_wiring <wf> <job> <label> <SPEC>: a hard-failing lookup step feeds --vpc-id to the render step.
+db_wiring() {
+  local wf="$1" j="$2" l="$3" sel
+  sel=".jobs.$j.steps[] | select(.id == \"db\")"
+  [ "$(yq e "$sel | has(\"continue-on-error\")" "$wf")" = false ] || fail "$l: db step must not continue-on-error"
+  [ "$(yq e "$sel | has(\"if\")" "$wf")" = false ] || fail "$l: db step must not be gated"
+  [ "$(yq e "$sel | .env.SPEC" "$wf")" = "$4" ] || fail "$l: db env.SPEC"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh lookup' || fail "$l: db step must run do-db-cluster.sh lookup"
+  ! yq e "$sel | .run" "$wf" | grep -qF '${{' || fail "$l: db run inlines an expression"
+  [ "$(yq e ".jobs.$j.steps[] | select(.id == \"render\") | .env.VPC_ID" "$wf")" = '${{ steps.db.outputs.vpc_id }}' ] ||
+    fail "$l: render env.VPC_ID"
+  yq e ".jobs.$j.steps[] | select(.id == \"render\") | .run" "$wf" | grep -qF -- '--vpc-id "$VPC_ID"' ||
+    fail "$l: render must pass --vpc-id \"\$VPC_ID\""
 }
 
 CHECKOUT_PIN='actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
@@ -702,6 +755,16 @@ group_produp() {
   if grep -nE 'do-inject-prod-secrets|DO_PROD_APP_ID|MCP_AGENT_SECRET' "$wf"; then fail "produp: a retired name remains"; fi
   no_unprefixed "$wf" produp
   [ ! -e scripts/do-inject-prod-secrets.py ] || fail "produp: scripts/do-inject-prod-secrets.py still exists"
+  # AC-2: prod-up looks up the VPC before setup-sops and the render
+  local check_i db_i sops_i render_i
+  check_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.id == "check") | .key' "$wf")"
+  db_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.id == "db") | .key' "$wf")"
+  sops_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.uses == "./.github/actions/setup-sops") | .key' "$wf")"
+  render_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.id == "render") | .key' "$wf")"
+  [ -n "$db_i" ] || fail "produp: no db step"
+  [ "$check_i" -lt "$db_i" ] && [ "$db_i" -lt "$sops_i" ] && [ "$sops_i" -lt "$render_i" ] ||
+    fail "produp: order must be check < db < setup-sops < render"
+  db_wiring "$wf" up produp .do/app.yaml
   echo "produp: ok"
 }
 

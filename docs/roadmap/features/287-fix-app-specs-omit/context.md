@@ -92,3 +92,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: `dbnet: ok`. shellcheck and shfmt are clean.
 - Files modified: `scripts/do-db-cluster.sh` (new), `.github/workflows/ci.yml`
 - Deviations: none
+
+### Step 3 — test: render VPC cases + deploy/prod-up wiring [done]
+- `rnd` now passes `--vpc-id "${RND_VPC-$FIXTURE_VPC}"`. REVMAP takes a 6th argv value (the VPC).
+- New render cases:
+  - AC-1: `yq '.vpc.id'` on both rendered specs.
+  - Case 7, AC-2: empty, non-UUID, uppercase, block deleted and block doubled. Each asserts rc 1, `YOUR_VPC_ID` in stderr and in `::error::`, no `--out`, and no `::add-mask::`.
+  - Case 8: leak count-only.
+- New `db_wiring` helper, plus order asserts in `group_deploy` (db < render < update) and `group_produp` (check < db < setup-sops < render).
+- RED:
+  - `render`: `do-render-app-spec.py: error: unrecognized arguments: --vpc-id d7afff57-…`
+  - `deploy`: `ASSERT FAIL: deploy: db / render / update step missing`
+  - `produp`: `ASSERT FAIL: produp: no db step`
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none

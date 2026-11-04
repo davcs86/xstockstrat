@@ -258,7 +258,7 @@ grep -n "scripts/do-db-cluster.sh" .github/workflows/ci.yml
 
 ### Step 3 — test: render VPC cases (AC-1/AC-2, leak guard) + deploy/prod-up render wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` + `.github/workflows` (deploy pipeline)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (`rnd`, `REVMAP`, `group_render`, `group_deploy`, `group_produp`)
