@@ -2,6 +2,10 @@ package service
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"testing"
 	"time"
 
@@ -9,10 +13,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/xstockstrat/portfolio/internal/repository"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strconv"
 )
 
 func int64p(v int64) *int64 { return &v }
@@ -171,14 +171,18 @@ func TestSignalPrune_IntervalReadsConfig(t *testing.T) {
 // The reader's key and the migration's seeded row are the same contract: if the seeded key, type or
 // value drifts from what GetInt reads, GetInt silently returns the code default.
 func TestSignalPrune_IntervalReadsSeededRow(t *testing.T) {
-	sql, err := os.ReadFile(filepath.Join("..", "..", "..", "xstockstrat-config", "migrations",
-		"037_portfolio_signal_prune_interval.up.sql"))
+	seeds, err := filepath.Glob(filepath.Join("..", "..", "..", "xstockstrat-config", "migrations",
+		"*_portfolio_signal_prune_interval.up.sql"))
+	if err != nil || len(seeds) != 1 {
+		t.Fatalf("want exactly one *_portfolio_signal_prune_interval.up.sql seed, got %v (err %v)", seeds, err)
+	}
+	sql, err := os.ReadFile(seeds[0])
 	if err != nil {
-		t.Fatalf("read 037 seed: %v", err)
+		t.Fatalf("read seed: %v", err)
 	}
 	m := regexp.MustCompile(`\(\s*'portfolio',\s*'([^']+)',\s*'(\w+)',\s*'(\d+)'`).FindSubmatch(sql)
 	if m == nil {
-		t.Fatal("037 has no ('portfolio', key, type, value) seed row")
+		t.Fatal("seed has no ('portfolio', key, type, value) seed row")
 	}
 	key, typ, val := string(m[1]), string(m[2]), string(m[3])
 	if key != signalPruneIntervalKey || typ != "int" {

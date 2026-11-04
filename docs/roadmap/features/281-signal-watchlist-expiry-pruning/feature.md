@@ -49,7 +49,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier; **Premise Verdict** (FR-1)
 - [Design](design.md) — debated, user-approved architecture, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 21 numbered steps with codebase evidence and AC coverage map
+- [Implementation Spec](implementation-spec.md) — 22 numbered steps with codebase evidence and AC coverage map
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -73,4 +73,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-22 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); next is the final integration PR. 281's integration PR merges only after feature 280 (#1359), re-running Step 11 block 2 with `MERGE_TIME=1` at merge time.
+`/sdd-execute signal-watchlist-expiry-pruning sequential` — Steps 1-22 done (seed migration `037_portfolio_signal_prune_interval` landed with its reader, operator ruling 2026-11-02); next is the final integration PR. 281 no longer waits for feature 280 (operator ruling 2026-11-04: 280 depends on 281 and renumbers above 037); re-run Step 11 block 2's `037 free` check immediately before merge.

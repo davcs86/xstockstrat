@@ -318,7 +318,7 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
   - Block 3: rc 0.
   - Block 4: `key hits 0, introduced 0, pre-existing 0` (stored 182 vs base 180 = the two new rows), so there are no ESCALATE lines. Negative control: with `signal_prune.go` moved aside, `--final` reports `037…:portfolio/portfolio.watchlist.signal_prune_interval_seconds:seeded-unread`. The file was then restored.
   - GO-LINT: `0 issues`. Full `go test ./...` passes. No database was started.
-- Collision-check record (Instruction 9): pre-write and post-write runs above. Still owed: a re-run before opening the integration PR, and a `MERGE_TIME=1` run after the final rebase, immediately before merge. The second requires PR #1359 (280) on `main-dev`.
+- Collision-check record (Instruction 9): pre-write and post-write runs above. Still owed: a re-run before opening the integration PR, and a `MERGE_TIME=1` run after the final rebase, immediately before merge. The second requires PR #1359 (280) on `main-dev`. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
 - Deviations: RED probe, and blocks 2 and 4 run as split plain commands (sandbox) (Deviation Log).
 - Next: Step 12 (prune loop service unit tests).
 
@@ -492,7 +492,7 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
   - On the feature branch, Step 17 changed that: `tools.py:710-712` now passes `result.get("signal_id")` and `valid_until` to `add_watchlist_symbol`. This is the by-design end of the "structurally unprunable" premise.
   - Portfolio lines moved with Steps 5-11. `DeleteWatchlist` is now `portfolio_service.go:2184` and `RemoveWatchlistSymbols` is `:2242`. The `RemoveSymbols` DELETE is now `watchlist_repo.go:337`, and there is a new expiry-row delete at `:577`. The `Delete` (`:268`) and replace-all (`:210`) lines are unchanged.
 - TDD: N/A (evidence check). No service code changed.
-- Next: all 22 steps are done. The integration PR is next, and it must not merge before feature 280 / #1359 (Step 11 block 2 with `MERGE_TIME=1` at merge time).
+- Next: all 22 steps are done. The integration PR is next, and it must not merge before feature 280 / #1359 (Step 11 block 2 with `MERGE_TIME=1` at merge time). [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
 
 ## Session 2026-11-02 — sdd-batch-execute promotion plan (awaiting operator confirm)
 
@@ -704,9 +704,9 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
   - AC-2..AC-18 → `services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature` (CREATE, the plan's block exactly). AC-14 goes whole to portfolio.
   - **Correction:** `@AC-19` (the 037 seed guarantee) → NEW `services/xstockstrat-config/acceptance/signal-watchlist-expiry-pruning.feature`, verbatim plus `@feature-281`, with the same header convention as the portfolio suite. Feature 282's spec expects it there.
   - AC-1 is not promoted (pre-feature premise check, confirmed skip). Coverage: 18 promoted + 1 skipped = 19.
-- **Merge-order override (operator, 2026-11-02).** The `merge-order.md` 281 ← 278 row on `main-dev` is stale: 278 merged as `631028eb` and the row is resolved on this branch. **BINDING:** the integration PR must NOT merge before feature 280's PR #1359. Config migrations 035/036 must apply before 281's 037, and golang-migrate has no out-of-order guard. The PR body carries a top-of-body DO NOT MERGE note.
+- **Merge-order override (operator, 2026-11-02).** The `merge-order.md` 281 ← 278 row on `main-dev` is stale: 278 merged as `631028eb` and the row is resolved on this branch. **BINDING (SUPERSEDED):** the integration PR must NOT merge before feature 280's PR #1359. Config migrations 035/036 must apply before 281's 037, and golang-migrate has no out-of-order guard. The PR body carries a top-of-body DO NOT MERGE note. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
 - **Config-wiring gate (F-09)**, `node scripts/check-config-wiring.mjs --final`: rc 0. Only line: `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`, a pre-existing baseline. No finding for this feature's key.
-- **Step 11 block 2, pre-PR re-run** (after `git fetch --prune` of all heads): `037 free; 280 seeds on main-dev: 0/2; on origin/claude/smoke-test-deployment-0f1z5j: 2/2`. No WARN. Still owed: the `MERGE_TIME=1` run after the final rebase, immediately before merge.
+- **Step 11 block 2, pre-PR re-run** (after `git fetch --prune` of all heads): `037 free; 280 seeds on main-dev: 0/2; on origin/claude/smoke-test-deployment-0f1z5j: 2/2`. No WARN. Still owed: the `MERGE_TIME=1` run after the final rebase, immediately before merge. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
 - **Open items carried into the PR:**
   - Step 16 backfill dbtests (and all `portfolio-db-test` tests) first run in CI `portfolio-db-test`.
   - Runbook preflight: the portfolio DB role's `SELECT` on `ingest.newsletter_signals` is unverified.
@@ -720,7 +720,7 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
 - Result: 0 failures, ~15 warnings (advisory — did not block). All 22 steps done. Branch merged with main-dev; PORTFOLIO-17 -> PORTFOLIO-18 renumbered (main-dev claimed 17), references consistent.
 - Unresolved ✗ / ⚠ carried into execution:
   - Step 11: ~~config 037 depends on feature 280 migrations 035/036 (PR #1359)~~ — [x] superseded by operator ruling 2026-11-04: 280 now depends on 281 and renumbers above 037 (merge-order.md); the 280 clauses of block 2 are waived (see Deviation Log). Block 2's `037 free` check still runs before merge.
-  - Steps 4/6/10/16: real-DB tests never run locally; first green is CI portfolio-db-test. Do not merge until green. — [ ] unaddressed
+  - Steps 4/6/10/16: real-DB tests. Run locally 2026-11-04 on Postgres 16 with a `create_hypertable` stand-in (pass); first green on real TimescaleDB is CI portfolio-db-test. Do not merge until green. — [ ] unaddressed (CI half only)
   - Step 16: ingest-interleaving test is a probabilistic race, not deterministic. — [x] fixed 2026-11-04 (deterministic lock-wait test; race kept as a separate invariant test)
   - Step 21 / PR body: record BOTH context-forge plugin unavailability AND the manual teardown reconciliation (fails.md:670). — [ ] unaddressed
   - C-16: AC-1 must not be promoted as a runtime guarantee. — [ ] unaddressed

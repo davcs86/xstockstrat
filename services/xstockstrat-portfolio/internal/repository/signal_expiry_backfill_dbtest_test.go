@@ -424,7 +424,7 @@ func TestBackfill_IngestInterleavingSkipsChanged(t *testing.T) {
 	if o.err != nil {
 		t.Fatalf("apply err = %v (code %s); want none", o.err, pgCode(o.err))
 	}
-	// SkippedChanged is global across the table; this test's row must be among the skipped ones.
+	// SkippedChanged counts every changed row; other tests clean up, so exactly this entry is skipped.
 	if o.res.SkippedChanged != 1 || !strings.Contains(o.res.Report, wlID+"\tMETA\tchanged since REPORT") {
 		t.Fatalf("want META reported 'changed since REPORT' (SkippedChanged=1), got %+v\n%s", o.res, o.res.Report)
 	}
