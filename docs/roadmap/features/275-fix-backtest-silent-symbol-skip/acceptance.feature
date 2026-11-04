@@ -1,5 +1,5 @@
 Feature: fix-backtest-silent-symbol-skip (bug fix)
-  Regression guard for docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md:
+  Regression guard for docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md):
   a backtest whose symbols all fail with an RPC error or exception reports OK with no diagnostics.
 
   @AC-1 @FR-3 @FR-4 @FR-7 @FR-8 @regression

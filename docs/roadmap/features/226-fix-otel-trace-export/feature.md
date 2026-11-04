@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `ccr-3c062b89-cl8ixo` (session-pinned branch; operator-approved deviation from `feature/fix-otel-trace-export` — see context.md)
-**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-10-14-otel-trace-export-broken-defect.md`
+**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-10-14-otel-trace-export-broken-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-otel-trace-export-broken-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-14
 **Last Updated**: 2026-10-14
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-14-otel-trace-export-broken-defect.md` |
+| 2026-10-14 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-14-otel-trace-export-broken-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-otel-trace-export-broken-defect.md) |
 | 2026-10-14 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, quick + 2 operator-requested) and approved; recon.md + design.md written |
 | 2026-10-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 | 2026-10-15 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Step 1 done |

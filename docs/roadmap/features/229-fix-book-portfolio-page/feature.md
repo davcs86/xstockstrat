@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `ccr-9f55a8ac-dtw4iv` (harness-assigned; see context.md)
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-16
 **Last Updated**: 2026-10-18
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` |
+| 2026-10-16 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-16-portfolio-page-stuck-loading-defect.md) |
 | 2026-10-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved on round 2 (7 warnings carried to design) |
 | 2026-10-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, quick extended by operator) and approved; recon.md + design.md written |
 | 2026-10-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |

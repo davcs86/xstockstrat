@@ -64,7 +64,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-agent-get-config-value-no-deadline-defect`](reports/2026-10-19-agent-get-config-value-no-deadline-defect.md) | Agent get_config_value issues GetConfig with no deadline |
+| `2026-10-19-agent-get-config-value-no-deadline-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md) | Agent get_config_value issues GetConfig with no deadline |
 | [`2026-10-19-cross-hop-deadline-bounds-unenforced-defect`](reports/2026-10-19-cross-hop-deadline-bounds-unenforced-defect.md) | Cross-hop read deadline ordering is not enforced by config bounds |
 | [`2026-10-19-dead-config-keys-defect`](reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
 | [`2026-10-19-live-enrich-ttl-seed-below-poll-defect`](reports/2026-10-19-live-enrich-ttl-seed-below-poll-defect.md) | Seeded live-enrich memo TTL (10s) is below the UI poll (15s), so the memo never hits |

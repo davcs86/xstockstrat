@@ -298,7 +298,7 @@
 
 ### I-05 MCP error contract is split — SEV-3 · leverage M÷XS  *(carried, open — covered)*
 - **Surface:** `tools.py:486`, `:581`, `:672`, `:812`. `operation` is still a bare `str`.
-- **Covered by:** `2026-10-19-agent-tools-missing-grpc-error-mapping-defect`.
+- **Covered by:** `2026-10-19-agent-tools-missing-grpc-error-mapping-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.md).
 
 ### I-06 MCP response casing is mixed — SEV-3 · leverage L÷S  *(carried, open — new instance in I-14)*
 - **Surface:** `client.py:1480-1540`; `tools.py:981`, `:1147`.
