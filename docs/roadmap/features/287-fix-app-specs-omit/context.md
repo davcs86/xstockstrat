@@ -66,7 +66,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Result: 0 failures, 7 warnings. Advisory; did not block.
 - Unresolved ✗ / ⚠ carried into execution:
   - Steps 5/6: prod-up `wait`/`report` (and assign) have no `id:` today, and Step 6 does not say to add one. Step 5's asserts and the `steps.*` references need them (C-01). [x] resolved in Step 6 (D1)
-  - Steps 7/8: the prod-down summary step needs an explicit `id:` for the order assert (C-01). [ ] unaddressed
+  - Steps 7/8: the prod-down summary step needs an explicit `id:` for the order assert (C-01). [x] resolved in Step 8 (`id: summary`)
   - Step 2: the cited spec line ranges are approximate. `cluster_name` is at `.do/app.yaml:692` and `.do/app.dev.yaml:694`. Cosmetic. [ ] unaddressed
   - Step 1: no coverage threshold is stated. `scripts/` has no CI coverage gate, so N/A (C-08). [ ] unaddressed
   - Step 9: large prose step. Consider splitting it. Advisory. [ ] unaddressed
@@ -161,3 +161,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED: `ASSERT FAIL: proddown: action pins`.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 8 — service: prod-down delete → best-effort untrust + CI filter [done]
+- Rewrote the `down` job:
+  - `permissions: contents: read`, pinned checkout and doctl (replacing the unpinned `@v2`);
+  - find (fails above 1 app) → delete (hard) → db lookup (best-effort) → untrust (best-effort) → summary (only when the delete succeeded and the untrust did not; "cluster lookup failed" branch);
+  - header and echo text: "cluster data untouched".
+- Added `prod-down.yml` to the CI `sops` filter.
+- GREEN: `proddown: ok`, `dbnet: ok`. YAML parses.
+- Files modified: `.github/workflows/prod-down.yml`, `.github/workflows/ci.yml`
+- Deviations: none. The summary step carries `id: summary`, as Step 7 required (impl-spec review warning, Steps 7/8).

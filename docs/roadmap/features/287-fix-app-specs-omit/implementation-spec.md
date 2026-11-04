@@ -594,7 +594,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 8 — service: prod-down delete → best-effort untrust + CI filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows` (deploy pipeline)
 **Files**:
 - `.github/workflows/prod-down.yml` — modify (rewrite the `down` job)
