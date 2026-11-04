@@ -10,7 +10,8 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     Then the row "marketdata.backfill.batch_size" holds 500
     And no row "backfill.batch_size" exists in namespace "marketdata"
 
-  @AC-2 @FR-1 @regression
+  @AC-2 @FR-1 @preserve
+  # Preserve-guard (C-15): green on today's code by design; it must stay green once the dormant alias ships.
   Scenario: Without the rename marker the snapshot carries only stored spellings
     Given no key-rename marker exists in the config database
     When a subscriber receives the WatchConfig snapshot for namespace "indicators"
@@ -183,3 +184,29 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     When the seed-parity migration runs
     Then that row's value_type and value_data are unchanged
     And the sign-off report lists "trading trading.order.max_retries: stored string 7, reader int default 3"
+
+  @AC-25 @FR-1 @regression
+  Scenario: Internal-caller grants and write bounds match on the canonical key
+    Given the grant for "trading-reconciliation-poller" on "platform" / "platform.trading_state"
+    When that caller sends SetConfig "platform" / "trading_state" = "REDUCE_ONLY"
+    Then the stored "platform.trading_state" row holds "REDUCE_ONLY"
+    And SetConfig "analysis" / "opportunity.max_universe_size" = 0 by an admin returns INVALID_ARGUMENT from the [1,1000] bound
+
+  @AC-26 @FR-2 @regression
+  Scenario: A no-op reload or re-send does not report a config change
+    Given a subscriber of namespace "ledger" that counts distinct snapshot versions
+    When the server runs its periodic full reload and its liveness re-send with no row changed
+    Then the subscriber observes no new snapshot version
+    And when an operator then sets "ledger" / "ledger.export.max_window_days" to 180 it observes exactly one new version
+
+  @AC-27 @FR-11 @regression
+  Scenario Outline: Every language's getters follow the uniform rule
+    Given <service> stores "<key>" as int 7
+    When it is read with the float getter and default 1.5
+    Then the result is 7.0 with no WARN
+
+    Examples:
+      | service    | key                                   |
+      | analysis   | analysis.opportunity.signal_rank_weight |
+      | notify     | notify.fanout.min_confidence_threshold |
+      | portfolio  | portfolio.risk.max_drawdown_pct        |

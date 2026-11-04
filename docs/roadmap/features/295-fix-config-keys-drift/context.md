@@ -304,3 +304,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
         `min(cap, timeout + grace + slack)`.
       - Bounds plus a migration assertion keep stored values under the cap.
       - When the derived value would exceed the cap: clamp + WARN, never silent.
+
+## Session 2026-11-04 — sdd-review product-spec (re-scope re-review)
+
+- 295 re-scoped to Release A. Feature 296 `fix-config-keys-contract` was created on its own branch
+  and integration PR (davcs86/xstockstrat#1441), with a merge-order row (296 waits for 295 launched).
+- Re-review: FAIL on one blocker. FR-10 said the backoff resets after "less time than the liveness
+  deadline". Fixed: it now resets after **at least half the deadline** (15 s of 30 s); a threshold
+  equal to the deadline may never reset (R1 adversary m5).
+- Third pass: **PASS WITH WARNINGS.**
+  - AC-2 re-tagged `@preserve` (green by design), and the C-15 sentence amended.
+  - Added AC-25 (canonical grant/bounds), AC-26 (content-derived version, no-op reload),
+    AC-27 (uniform getter rule in Python/Node/Go).
+  - Remaining warnings carried into spec time:
+    - the full key contract for `indicators.sandbox.startup_grace_ms` and the new bounds;
+    - re-check migration NNN against 296;
+    - FR-14 must amend C-05 in `docs/sdd/constitution.md` in the same PR;
+    - FR-11 coverage is per-language, not per-service.
+- Status stays spec-ready. Next: design round 2 with the R1 synthesis + decisions 11–14 as state.

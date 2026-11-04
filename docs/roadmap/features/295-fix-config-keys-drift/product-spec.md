@@ -109,8 +109,9 @@ Adjacent defects, in scope:
   `environment`.
 - **FR-10 — Watcher resilience (Go, Python, Node, agent).**
   - Keepalive compatible with the servers' enforcement policy.
-  - Exponential backoff with jitter. It resets only after a stream has been healthy for less time
-    than the liveness deadline, and it also applies after a clean EOF.
+  - Exponential backoff with jitter. It resets only after a stream has stayed healthy for **at
+    least half the liveness deadline** (15 s of a 30 s deadline), so a snapshot-then-EOF server never
+    resets it. The backoff also applies after a clean EOF.
   - A client liveness deadline, satisfied by the server's periodic re-send of the current payload.
   - The last snapshot keeps serving reads while reconnecting.
   - trading keeps a separate map per namespace.
@@ -199,7 +200,7 @@ xstockstrat-identity, xstockstrat-notify, xstockstrat-agent, xstockstrat-ui. Als
   where stored == default (FR-5).
 - **No key's spelling changes in this feature.** That is feature 296.
 - New seeded keys: `indicators.sandbox.startup_grace_ms` (FR-12).
-- New write bounds: `sandbox.timeout_ms`, the analysis compute pool limit.
+- New write bounds: `indicators.sandbox.timeout_ms`, `analysis.compute.max_worker_threads`.
 - The per-key contract table is generated from the extended gate and lands in
   `implementation-spec.md` and `docs/patterns/config-governance.md`.
 
@@ -243,8 +244,9 @@ xstockstrat-identity, xstockstrat-notify, xstockstrat-agent, xstockstrat-ui. Als
 
 ## Acceptance Criteria
 
-See `acceptance.feature`. Every scenario must fail on the current code (red) and pass after the fix
-(Constitution **C-15**). In addition, existing tests pass and the affected services are
+See `acceptance.feature`. Every scenario except `@preserve` ones must fail on the current code (red)
+and pass after the fix (Constitution **C-15**). `@preserve` scenarios are green by design and must
+stay green. In addition, existing tests pass and the affected services are
 smoke-tested on dev.
 
 ## Out of Scope

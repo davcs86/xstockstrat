@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report 2026-11-04-config-key-drift-and-subscription-gaps |
 | 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved on second pass (FR-1..15, AC-1..21; 5 advisory warnings) |
+| 2026-11-04 | `spec-ready` (unchanged) | /sdd-review | Re-scoped to Release A (operator decision 13; Release B → feature 296); re-reviewed FAIL (FR-10 wording) → fixed → PASS WITH WARNINGS (FR-1..15, AC-1..27) |
 
 ---
 
@@ -23,7 +24,9 @@
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-config-keys-drift`_
+- [Recon](recon.md) — Phase 0 dossier
 - [Context Log](context.md) — session history, decisions, deviations
+- Companion: feature 296 `fix-config-keys-contract` (Release B, branch `feature/fix-config-keys-contract`)
 
 ---
 
