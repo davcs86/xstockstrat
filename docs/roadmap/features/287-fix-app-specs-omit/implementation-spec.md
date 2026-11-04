@@ -651,7 +651,7 @@ grep -n "prod-down.yml" .github/workflows/ci.yml
 
 ### Step 9 — docs: DO setup guide, digitalocean-setup skill, prod-lifecycle runbook + context teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/setup/`, `docs/runbooks/`, `.claude/skills/digitalocean-setup/`
 **Files**:
 - `docs/setup/digitalocean.md` — modify
@@ -775,3 +775,13 @@ shellcheck scripts/*.sh .claude/hooks/*.sh && shfmt -d -i 2 scripts/*.sh .claude
   - Under the default `bash -e`, a failing `create-deployment` exits with doctl's own rc (3), so the case expects 3. The spec says rc≠0.
   - The follow-the-redeploy checks match `get-deployment app1 <id> --format Phase` as a prefix rather than an exact line, because the argv carries trailing flags.
 - **Disposition**: operator chose Option A (fold into Step 6) at the F-08 blocker.
+
+### D3 — Step 9's manual render sites call `scripts/do-db-cluster.sh lookup`/`trust` instead of an inline `jq` lookup
+- **Expected**: Step 9 Instructions: `vpc_id=$(doctl databases list -o json | jq -r '.[] | select(.name=="xstockstrat") | .private_network_uuid')`, then `doctl databases firewalls append`.
+- **Actual**: the docs and skill call the shipped script, which validates UUIDs, resolves exactly one cluster by the spec's `cluster_name`, and makes trust idempotent with the empty-list guard. There is one implementation and no second copy of the lookup (DRY, C-18). The cost is that operators need mikefarah `yq` locally (documented: `brew install yq jq`).
+- **Disposition**: in-scope improvement on the step's own files. Announced at the feature-end checkpoint.
+
+### D4 — Step 9's context teardown edits `docs/patterns/ci-overview.md:23`
+- **Expected**: Step 9 Files list only the three docs. Instruction 4 names `ci-overview.md:23` as the likely drift for the teardown to fix.
+- **Actual**: the `sops-secrets` row now also mentions the `do-db-cluster.sh` coverage.
+- **Disposition**: sanctioned by Step 9 Instruction 4 (teardown fixes grounded drift).

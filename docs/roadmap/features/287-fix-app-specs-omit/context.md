@@ -171,3 +171,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - GREEN: `proddown: ok`, `dbnet: ok`. YAML parses.
 - Files modified: `.github/workflows/prod-down.yml`, `.github/workflows/ci.yml`
 - Deviations: none. The summary step carries `id: summary`, as Step 7 required (impl-spec review warning, Steps 7/8).
+
+### Step 9 — docs + context teardown [done]
+- **`docs/setup/digitalocean.md`**:
+  - Steps 5 and 6: lookup via `do-db-cluster.sh`, `-e "s|YOUR_VPC_ID|$VPC_ID|g"`, create with `--format ID --no-header`, then `trust`.
+  - Step 8: explains `vpc:` and trusted sources, plus the read-modify-write caveat. The raw `doctl apps update --spec` is replaced by a pointer to the workflows.
+  - `db` → `xstockstrat` (console fallback and the Step 5 table).
+  - Troubleshooting heading `${xstockstrat.DATABASE_URL}`.
+  - Token row: database read/update scope.
+- **`digitalocean-setup` SKILL.md**:
+  - P0b/P7 component name.
+  - P4/P5: lookup, VPC fill and `trust`.
+  - P6: the Python render-and-update is replaced by a pointer to the SOPS runbook and the workflows.
+  - P7: attach is spec-based, with the console kept only as a fallback.
+- **`infra-cost-reduction.md`**: lifecycle rows, data safety ("cluster data untouched"), the validation caveat (VPC, trusted source, `db-migrator`), the existing-app `vpc:` caveat, and the token-scope caveat.
+- **Context teardown**: the `/context-forge:context-constitution` skill is **not available** in this session (only `context-forge:context-scrubber` is listed). I reconciled by hand instead.
+  - I re-read every context or doc file that describes the changed behaviour (grep for do-render-app-spec, prod-up, prod-down, sops-secrets.test, trusted source and vpc across root `CLAUDE.md`, `docs/context-constitution*.md`, `docs/patterns/{ci-overview,database}.md`, `docs/runbooks/sops-secrets.md`, `README.md` and `.github`).
+  - Drift found and fixed: `docs/patterns/ci-overview.md:23` (D4).
+  - Checked and still accurate: `docs/context-constitution.md:83` (OTEL prefix) and `docs/runbooks/sops-secrets.md:10,13,136`.
+  - No `CLAUDE.md` or constitution file was touched.
+- **Verification greps**: `YOUR_VPC_ID` is filled at every manual site (11 hits). The checks for `name: db`, `${db.`, "cannot attach" and raw `apps update --spec .do/` return no output. `trusted` appears 6 times in the runbook.
+- **Out-of-scope finding, not changed**: `.claude/skills/digitalocean-setup/SKILL.md` P2 creates a cluster named `xstockstrat-db`, but the specs bind `cluster_name: xstockstrat`. This drift predates the feature, and the new lookup fails closed with a clear message if they differ. It is recorded as a follow-up in the PR.
+- Files modified: `docs/setup/digitalocean.md`, `.claude/skills/digitalocean-setup/SKILL.md`, `docs/runbooks/infra-cost-reduction.md`, `docs/patterns/ci-overview.md` (D4)
+- Deviations: D3, D4
