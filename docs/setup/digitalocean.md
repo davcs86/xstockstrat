@@ -110,7 +110,7 @@ sudo mv doctl /usr/local/bin
 Authenticate with a Personal Access Token (PAT):
 
 1. DigitalOcean console → **API → Tokens → Generate New Token**
-2. Name: `xstockstrat-deploy`; Scopes: **Read + Write** (required for App Platform and database management)
+2. Name: `xstockstrat-operator`; Scopes: **Read + Write**. This is your own `doctl` login for the one-time setup below (it creates the cluster, apps and projects). The CI deploy token is a separate, custom-scoped token — see Step 9.
 3. Copy the token immediately — it is only shown once
 4. Run:
    ```bash
@@ -461,7 +461,7 @@ platform credentials, the decryption keys and (until the follow-up removal) the 
 
 | Secret / variable | Where | Value | Used by |
 |---|---|---|---|
-| `DIGITALOCEAN_ACCESS_TOKEN` | repo secret | The PAT created in Step 2. It needs database **read** (every deploy looks up the cluster's VPC) and database **update** (prod-up/prod-down edit the cluster's trusted sources) | deploy-dev, deploy-prod, prod-up, prod-down (`doctl`) |
+| `DIGITALOCEAN_ACCESS_TOKEN` | repo secret | A dedicated **custom-scoped** PAT (not the Step 2 operator token) — see [CI token scopes](#ci-token-scopes) | deploy-dev, deploy-prod, prod-up, prod-down (`doctl`) |
 | `BUF_TOKEN` | repo secret | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
 | `GH_PAT` | repo secret | PAT with repo write access | sops-bootstrap (opens its PR), promote, sync-main-to-maindev |
 | `SOPS_AGE_KEY` | **environment** secret (`staging`, `production`) | That environment's age private key | deploy, prod-up, deploy-homelab, sops-bootstrap |
@@ -471,6 +471,20 @@ platform credentials, the decryption keys and (until the follow-up removal) the 
 
 The DO app IDs are **not** secrets: the deploy resolves the app by its spec `name:`. The vendor credentials (Alpaca, FMP, Finnhub)
 are encrypted config rows, not deploy secrets (feature 147).
+
+### CI token scopes
+
+Create `DIGITALOCEAN_ACCESS_TOKEN` under **API → Tokens → Generate New Token → Custom Scopes**, with an expiry that matches your rotation policy and exactly these scopes (everything the deploy workflows' `doctl` calls need, nothing more):
+
+| Scope | Why |
+|---|---|
+| `app`: create, read, update, delete | prod-up `apps create`, deploy `apps update`, prod-down `apps delete`, the deployment waits and the one redeploy |
+| `database`: read, update | `do-db-cluster.sh lookup` (`databases list`), and `trust`/`untrust` editing the cluster's trusted sources (`firewalls list/append/remove`) |
+| `project`: read, assign_resource | `projects resources assign` (put a newly created app in its DO project) |
+| `vpc`: read | `apps create` with the spec's `vpc:` block |
+| `actions`, `regions`, `sizes`: read | read-only lookups `doctl` makes alongside app operations |
+
+Not needed: `registry` (images come from GHCR, not DOCR), `vpc_peering`, and the create/update/delete verbs of `project`, `vpc` and `database` (and `database: view_credentials`). Each missing scope fails the step that needs it with `403 Forbidden` (e.g. `missing vpc read permission` on `apps create`); a missing `project: assign_resource` only leaves a new prod app in the default project, since prod-up's assign step is best-effort.
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 
