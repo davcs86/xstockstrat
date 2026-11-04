@@ -320,3 +320,13 @@
 - TDD RED: `ASSERT FAIL: 1: build failed (… invalid choice: 'build')`. shellcheck + shfmt clean.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 6 — `scripts/sops_secrets.py` — `build` and `sops-config` CLIs [done]
+- `build`: masks first; the force guard (`git fetch --depth=1 origin main-dev`, where a fetch failure is an error and never "absent"); the required check; the env
+  recipient via `age-keygen -y`; JSON → `sops encrypt` with cwd=$RUNNER_TEMP; an in-memory self-verify before any file is written; a names-only
+  `changes.md` on force. `sops-config` prints the two `creation_rules`.
+- TDD GREEN: `resolve: ok`, `build: ok`. The first green attempt failed self-verify. The cause was sops 3.13 listing `enc:` before `recipient:` in each age entry,
+  so the recipient regex now allows an optional `- `. The test's AC-1 recipient check caught it. Mutation check: guard, fetch-failure,
+  required-check and normalisation mutants were each killed. ruff check + format clean.
+- Files modified: `scripts/sops_secrets.py`
+- Deviations: none

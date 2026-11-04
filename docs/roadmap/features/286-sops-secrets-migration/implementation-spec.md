@@ -364,7 +364,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 6 — service: `scripts/sops_secrets.py` — `build` and `sops-config` CLIs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/sops_secrets.py` — modify

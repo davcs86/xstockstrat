@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import uuid
 
 ENVS = ("staging", "production")
@@ -239,6 +240,179 @@ def cmd_resolve(args):
     write_github_env(args.github_env, exports)
 
 
+SEEDED = ("common", "digitalocean")
+RECIPIENT_LINE = re.compile(
+    r"^\s*(?:-\s+)?recipient:\s+(age1[0-9a-z]+)\s*$", re.MULTILINE
+)
+
+
+def _run(cmd, cwd=None, stdin=None):
+    return subprocess.run(
+        cmd, cwd=cwd, input=stdin, capture_output=True, text=True, check=False
+    )
+
+
+def _repo_root():
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _existing_on_main_dev(env):
+    """The FETCH_HEAD copy of secrets/<env>.enc.yaml, or None; a fetch failure is never 'absent'."""
+    root = _repo_root()
+    if _run(["git", "fetch", "--depth=1", "origin", "main-dev"], cwd=root).returncode:
+        raise SecretError("cannot fetch main-dev")
+    rel = f"secrets/{env}.enc.yaml"
+    listed = _run(["git", "ls-tree", "--name-only", "FETCH_HEAD", "--", rel], cwd=root)
+    if listed.returncode:
+        raise SecretError("cannot list FETCH_HEAD")
+    if listed.stdout.strip() != rel:
+        return None
+    shown = _run(["git", "show", f"FETCH_HEAD:{rel}"], cwd=root)
+    if shown.returncode:
+        raise SecretError(f"cannot read {rel} from FETCH_HEAD")
+    return shown.stdout
+
+
+def _decrypt_text(env, text):
+    proc = _run(
+        [
+            "sops",
+            "decrypt",
+            "--input-type",
+            "yaml",
+            "--output-type",
+            "json",
+            "/dev/stdin",
+        ],
+        stdin=text,
+    )
+    if proc.returncode:
+        raise SecretError(
+            f"cannot decrypt secrets/{env}.enc.yaml (sops exit {proc.returncode})"
+        )
+    return json.loads(proc.stdout)
+
+
+def _verify(env, ciphertext, payload, recipients):
+    plain = _decrypt_text(env, ciphertext)
+    if sorted(plain) != sorted(SEEDED):
+        raise SecretError(
+            "self-verify: top-level keys are not exactly common, digitalocean"
+        )
+    for ns in SEEDED:
+        got, want = plain[ns], payload[ns]
+        if sorted(got) != sorted(want):
+            raise SecretError(f"self-verify: {ns} key set differs from the sources")
+        for k, v in got.items():
+            if not isinstance(v, str) or _sha(v) != _sha(want[k]):
+                raise SecretError(f"self-verify: {ns}.{k} differs from its source")
+    body = ciphertext.split("\nsops:", 1)[0]
+    leaves = [ln for ln in body.splitlines() if re.match(r"^\s+[A-Za-z_]\w*: ", ln)]
+    if any("ENC[AES256_GCM," not in ln for ln in leaves):
+        raise SecretError("self-verify: a value is not encrypted")
+    if sorted(RECIPIENT_LINE.findall(ciphertext)) != sorted(recipients):
+        raise SecretError(
+            "self-verify: recipients are not exactly the env key + operator"
+        )
+
+
+def _changes(old, new):
+    lines = []
+    for ns in SEEDED:
+        before, after = old.get(ns, {}), new.get(ns, {})
+        for k in sorted(set(before) | set(after)):
+            if k not in before:
+                state = "added"
+            elif k not in after:
+                state = "removed"
+            elif _sha(before[k]) != _sha(after[k]):
+                state = "changed"
+            else:
+                state = "unchanged"
+            lines.append(f"- `{ns}.{k}`: {state}")
+    return "\n".join(lines) + "\n"
+
+
+def cmd_build(args):
+    env = args.env
+    seeded = [(ns, n, req) for ns, n, req, _ in KEYS if ns in SEEDED]
+    for _, name, _ in seeded:
+        mask(os.environ.get(legacy_name(name), ""))
+    operator = os.environ.get("SOPS_OPERATOR_AGE_RECIPIENT", "").strip()
+    if not operator:
+        raise SecretError("SOPS_OPERATOR_AGE_RECIPIENT is empty")
+    existing = _existing_on_main_dev(env)
+    if existing is not None and not args.force:
+        raise SecretError(
+            f"secrets/{env}.enc.yaml already exists; re-run with force=true to overwrite"
+        )
+    payload = {ns: {} for ns in SEEDED}
+    missing = []
+    for ns, name, required in seeded:
+        value = os.environ.get(legacy_name(name), "")
+        if value != "":
+            payload[ns][name] = value
+        elif required:
+            missing.append(name)
+    if missing:
+        raise SecretError("; ".join(f"{n} is required but missing" for n in missing))
+    key = os.environ.get("SOPS_AGE_KEY", "")
+    pub = _run(["age-keygen", "-y"], stdin=key)
+    if not key or pub.returncode:
+        raise SecretError("SOPS_AGE_KEY is not a valid age identity")
+    env_recipient = pub.stdout.strip()
+    recipients = [env_recipient, operator]
+    cwd = os.environ.get("RUNNER_TEMP") or tempfile.mkdtemp()
+    enc = _run(
+        [
+            "sops",
+            "encrypt",
+            "--input-type",
+            "json",
+            "--output-type",
+            "yaml",
+            "--filename-override",
+            f"secrets/{env}.enc.yaml",
+            "--age",
+            ",".join(recipients),
+            "/dev/stdin",
+        ],
+        cwd=cwd,
+        stdin=json.dumps(payload),
+    )
+    if enc.returncode:
+        raise SecretError(
+            f"cannot encrypt secrets/{env}.enc.yaml (sops exit {enc.returncode})"
+        )
+    _verify(env, enc.stdout, payload, recipients)
+    changes = None
+    if existing is not None:
+        changes = _changes(_decrypt_text(env, existing), payload)
+    os.makedirs(args.out, exist_ok=True)
+    with open(os.path.join(args.out, f"{env}.enc.yaml"), "w") as f:
+        f.write(enc.stdout)
+    with open(os.path.join(args.out, f"{env}.recipient"), "w") as f:
+        f.write(env_recipient + "\n")
+    if changes is not None:
+        with open(os.path.join(args.out, f"{env}.changes.md"), "w") as f:
+            f.write(f"### `secrets/{env}.enc.yaml` (forced re-seed)\n\n{changes}")
+
+
+def cmd_sops_config(args):
+    operator = os.environ.get("SOPS_OPERATOR_AGE_RECIPIENT", "").strip()
+    if not operator:
+        raise SecretError("SOPS_OPERATOR_AGE_RECIPIENT is empty")
+    out = ["creation_rules:"]
+    for env in ENVS:
+        with open(os.path.join(args.dir, f"{env}.recipient")) as f:
+            recipient = f.read().strip()
+        out += [
+            f"  - path_regex: secrets/{env}\\.enc\\.yaml$",
+            f"    age: {recipient},{operator}",
+        ]
+    print("\n".join(out))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -250,6 +424,18 @@ def main(argv=None):
     r.add_argument("--github-env", required=True)
     r.add_argument("--file")
     r.set_defaults(func=cmd_resolve)
+    b = sub.add_parser(
+        "build", help="seed secrets/<env>.enc.yaml from the LEGACY_* values"
+    )
+    b.add_argument("--env", required=True, choices=ENVS)
+    b.add_argument("--out", required=True)
+    b.add_argument("--force", action="store_true")
+    b.set_defaults(func=cmd_build)
+    c = sub.add_parser(
+        "sops-config", help="print .sops.yaml from <dir>/<env>.recipient"
+    )
+    c.add_argument("dir")
+    c.set_defaults(func=cmd_sops_config)
     args = parser.parse_args(argv)
     try:
         args.func(args)
