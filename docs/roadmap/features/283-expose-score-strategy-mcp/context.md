@@ -572,3 +572,10 @@ Feature: expose-score-strategy-mcp
 ### Coverage check
 - Source scenarios: 11 (AC-1 to AC-11). Planned: 11 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT. That is 9 scenarios in the agent file and 2 in platform.feature. Nothing was skipped, so the counts match.
 ```
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1406 merged to main
+- Feature promoted and committed: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

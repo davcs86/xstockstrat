@@ -3,6 +3,8 @@
 **Development Branch**: `feature/enforce-config-key-wiring`
 **Created**: 2026-10-23
 **Last Updated**: 2026-11-02
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
 
 ---
 
@@ -35,6 +37,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 19 done: `config-governance.md` gains `## Wiring check (config key must be read under its stored key)` (verbatim stored-key rule, four finding kinds plus fail-closed `unmodelled-rewrite`, step-time vs `--final`, owner-required shrink-only baseline, runtime-created keys, secrets excluded) and a registering-list pointer; `merge-order.md` gains the Soft 243-after/before-278 ratchet-coupling row; context map unchanged and `check-context-map.sh` passes; teardown done by hand (plugin skill not loadable). TDD: N/A (docs) |
 | 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute sequential | All 19 steps done; `check-config-wiring.mjs --final` exit 0 (one non-blocking `REPORTED:` line); C-16 promotion applied as approved: 11 scenarios appended to `docs/sdd/business-rules/platform.feature` with `@feature-278` |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
 ---
 
 ## Artifacts

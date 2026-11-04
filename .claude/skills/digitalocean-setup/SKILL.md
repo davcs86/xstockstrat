@@ -230,7 +230,7 @@ Parse its output to build a per-phase skip map:
 | P5 (create prod app) | An app sourced from `main` branch exists in `doctl apps list` |
 | P6 (set DO secrets) | Ask the user: "Have you already set Alpaca/JWT secrets on both DO apps? (y/n)" |
 | P7 (attach DB) | `doctl apps get $DEV_APP_ID` output contains a `db` component |
-| P8 (GitHub secrets) | `gh secret list` shows all six: `DIGITALOCEAN_ACCESS_TOKEN`, `DO_DEV_APP_ID`, `DO_PROD_APP_ID`, `DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`, `BUF_TOKEN` |
+| P8 (GitHub secrets) | `gh secret list` shows `DIGITALOCEAN_ACCESS_TOKEN`, `DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`, `BUF_TOKEN`, and `gh secret list --env staging` / `--env production` each show `SOPS_AGE_KEY` (the deploy finds each app by its spec name, so no app-ID secret exists) |
 | P9 (verify) | Never skipped — always run |
 
 Print a checklist before starting any phase:
@@ -593,8 +593,6 @@ Apply all secrets:
 
 ```bash
 gh secret set DIGITALOCEAN_ACCESS_TOKEN          --body "$DO_TOKEN"
-gh secret set DO_DEV_APP_ID                      --body "$DEV_APP_ID"
-gh secret set DO_PROD_APP_ID                     --body "$PROD_APP_ID"
 gh secret set DO_DEV_PROJECT_ID                  --body "$DEV_PROJECT_ID"
 gh secret set DO_PROD_PROJECT_ID                 --body "$PROD_PROJECT_ID"
 gh secret set BUF_TOKEN                          --body "$BUF_TOKEN"
@@ -602,13 +600,18 @@ gh secret set DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY  --body "$DEV_BROKER_ACCOUNTS_E
 gh secret set PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY --body "$PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY"
 ```
 
+The `DEV_*` / `PROD_*` values above are the **legacy fallback** for the SOPS files (feature 286). Follow
+`docs/runbooks/sops-secrets.md` § Key generation and § Environment setup to create the age keys, set the
+`SOPS_AGE_KEY` environment secrets and the `SOPS_OPERATOR_AGE_RECIPIENT` variable, then run its § Bootstrap.
+
 Inter-service mTLS CA (feature 210) — **required** for every component, or the deploy aborts
-fail-closed (a placeholder cert would crash-loop all services on boot). The script mints the CA and
-sets the CA secret; `deploy.yml` mints the per-service leaves off it on each deploy:
+fail-closed (a placeholder cert would crash-loop all services on boot). The script mints the CA, and its
+bundle becomes `common.MTLS_CA` in `secrets/<env>.enc.yaml`, shared by DO and homelab. `scripts/do-render-app-spec.py` mints the
+per-service leaves off it on each deploy. `set-secret` sets the legacy fallback the bootstrap seeds from:
 
 ```bash
-scripts/mtls-provision.sh set-secret dev    # sets DEV_MTLS_CA  (mints ./certs, dev CA)
-scripts/mtls-provision.sh set-secret prod   # sets PROD_MTLS_CA (mints ./certs-prod, prod CA)
+scripts/mtls-provision.sh set-secret dev    # sets the DEV_MTLS_CA fallback  (mints ./certs, dev CA)
+scripts/mtls-provision.sh set-secret prod   # sets the PROD_MTLS_CA fallback (mints ./certs-prod, prod CA)
 ```
 
 If `GH_PAT_SCAN` was provided:
@@ -660,7 +663,7 @@ Setup complete!
   ✓ Prod app created (App ID: <PROD_APP_ID>, Project ID: <PROD_PROJECT_ID>)
   ✓ Secrets applied to both apps
   ✓ Database attached to both apps
-  ✓ GitHub Actions secrets configured (6 required: DIGITALOCEAN_ACCESS_TOKEN, DO_DEV_APP_ID, DO_PROD_APP_ID, DO_DEV_PROJECT_ID, DO_PROD_PROJECT_ID, BUF_TOKEN)
+  ✓ GitHub Actions secrets configured (DIGITALOCEAN_ACCESS_TOKEN, DO_DEV_PROJECT_ID, DO_PROD_PROJECT_ID, BUF_TOKEN; SOPS_AGE_KEY per environment)
   ✓ First deployment verified
 
 Next steps:

@@ -93,14 +93,14 @@ source scripts/mtls-dev-env.sh    # export the PEMs into this shell
 docker compose up -d              # compose interpolates ${<SVC>_MTLS_*} from the env
 ```
 
-For the DO deploy (dev/prod), only the **CA** (cert + key) is stored — one GitHub secret per env
-(`DEV_MTLS_CA` / `PROD_MTLS_CA`, a `base64(JSON {ca_cert, ca_key})` produced by
-`scripts/mtls-provision.sh`). `.github/workflows/deploy.yml` mints the 12 per-service leaves off that
+For the DO deploy (dev/prod), only the **CA** (cert + key) is stored: `common.MTLS_CA` in `secrets/<env>.enc.yaml`
+(a `base64(JSON {ca_cert, ca_key})` produced by `scripts/mtls-provision.sh`; legacy fallback `DEV_MTLS_CA` / `PROD_MTLS_CA`,
+see `docs/runbooks/sops-secrets.md`). `scripts/do-render-app-spec.py` mints the 12 per-service leaves off that
 CA on every deploy (stable CA, auto-rotating leaves) and fills the `MTLS_*` placeholders in
 `.do/app*.yaml` (fail-closed — a missing CA aborts the deploy). The CA signing key therefore lives in
 CI; see the runbook §0.1 for that trade-off. Rollout, rotation, rollback, and the deploy-secret
 provisioning steps → `docs/runbooks/inter-service-mtls-rollout.md`.
 
-The homelab deploy (`.github/workflows/deploy-homelab.yml`) does the same from its own per-environment `MTLS_CA`
-(GitHub environment secret or 1Password `mtls-ca`; a separate CA from DO's) and writes the leaves into the release `.env`
-via `scripts/homelab-mtls-env.py`.
+The homelab deploy (`.github/workflows/deploy-homelab.yml`) mints from the **same** per-environment `common.MTLS_CA`. Feature 286
+reversed the earlier "separate CA from DO's" rule, so one CA per environment is shared by DO and homelab, while staging and production
+keep distinct CAs. It writes the leaves into the release `.env` via `scripts/homelab-mtls-env.py`.

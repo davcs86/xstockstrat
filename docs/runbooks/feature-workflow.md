@@ -201,7 +201,7 @@ On merge, the **Deploy dev** workflow (`.github/workflows/deploy-dev.yml`) fires
 
 ```
 push to main-dev
-  → doctl apps update $DO_DEV_APP_ID --spec .do/app.dev.yaml
+  → doctl apps update <xstockstrat-staging app, resolved by name> --spec <rendered .do/app.dev.yaml>
     → DigitalOcean redeploys all affected services
       TRADING_MODE=paper, ALPACA_PAPER=true, ALPACA_BASE_URL=https://paper-api.alpaca.markets
 ```
@@ -236,7 +236,7 @@ On merge, the **Deploy prod** workflow (`.github/workflows/deploy-prod.yml`) fir
 
 ```
 push to main
-  → doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
+  → doctl apps update <xstockstrat-production app, resolved by name> --spec <rendered .do/app.yaml>
     → DigitalOcean redeploys all affected services
       TRADING_MODE=live, ALPACA_PAPER=false, ALPACA_BASE_URL=https://api.alpaca.markets
 ```

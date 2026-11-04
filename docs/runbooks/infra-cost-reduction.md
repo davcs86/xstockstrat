@@ -46,28 +46,22 @@ concurrency group so they can't race):
 **Data safety:** teardown deletes only the App Platform app. The managed
 Postgres cluster `xstockstrat` is a separate resource and is never touched.
 
-**Required GitHub Secrets.** Bring-up injects these because a fresh
+**Required secrets.** Bring-up injects the full deploy key set, because a fresh
 `doctl apps create` does *not* inherit dashboard-set SECRET values the way
-`doctl apps update` does:
-
-`PROD_JWT_SECRET`, `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`,
-`PROD_CONFIG_SECRETS_ENCRYPTION_KEY`, plus `DIGITALOCEAN_ACCESS_TOKEN` and
-(optional) `DO_PROD_PROJECT_ID`. The vendor credentials (Alpaca/FMP/Finnhub) are
-not deploy secrets — they are encrypted config rows set post-deploy — and
-`MCP_AGENT_SECRET` is retired (the agent signs with `JWT_SECRET`), both per feature 147. Injection is handled by
-`scripts/do-inject-prod-secrets.py`; a missing required secret logs a warning
-and the component comes up with an unset value.
+`doctl apps update` does. The values come from `secrets/production.enc.yaml` (`common.*`,
+`digitalocean.PROJECT_ID`), with a per-key fallback to the legacy `PROD_*` / `DO_PROD_PROJECT_ID` repo secrets.
+`DIGITALOCEAN_ACCESS_TOKEN` and the `production` environment's `SOPS_AGE_KEY` are also needed (see
+`docs/runbooks/sops-secrets.md`). `scripts/do-render-app-spec.py` renders the spec. A required key that is in
+neither store fails the run before `doctl apps create`, and the step summary lists each key's source.
 
 **Caveats:**
 
 - **New app id / URL each bring-up.** Recreating assigns a fresh app id and,
-  without a custom domain, a new `*.ondigitalocean.app` URL. The bring-up job
-  prints both and warns you to update the `DO_PROD_APP_ID` secret. Pin a custom
-  domain if you need a stable address.
-- **Stale `DO_PROD_APP_ID` breaks push-to-main deploys.** While prod is down
-  (or after a bring-up before you refresh the secret), `deploy-prod.yml` targets
-  a non-existent/old app id and fails. Refresh `DO_PROD_APP_ID` after each
-  bring-up.
+  without a custom domain, a new `*.ondigitalocean.app` URL. Deploys resolve the
+  app by its spec name (`xstockstrat-production`), so nothing needs updating. Pin a
+  custom domain if you need a stable address.
+- **The `production` reviewer gate applies.** Bring-up binds the `production`
+  environment, so it waits for that environment's required reviewers.
 - **First bring-up needs validation.** Confirm `doctl apps create` *attaches*
   the existing `xstockstrat` cluster (via the spec `databases:` block) rather
   than provisioning a new one, and that all secrets landed (check the running

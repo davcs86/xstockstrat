@@ -80,7 +80,7 @@ already say or CI already enforces (see `## Pointers`). Refresh by re-running `/
 | Branch/merge strategy (branch from `main-dev`; hotfix/promotion = merge-commit, feature = squash) | root `CLAUDE.md` §Branch Strategy; SDD `C-06`/`F-02`/`F-03` |
 | DRY guard rail (jscpd + ESLint literal bans + `dry-reviewer`) | `docs/patterns/dry-guard-rail.md`, `.husky/pre-commit`, `.jscpd.json` |
 | Contract migrations (`-- contract-of:`), expand/contract idempotency, dirty-state recovery | `docs/patterns/database.md` § Contract migration recovery; CI `migration-rerun`, `migration-contract-gate` |
-| `OTEL_EXPORTER_OTLP_HEADERS` meaning depends on the consumer — the collector injects it bare as `Authorization: "Basic …"`; `deploy.yml` prepends `Authorization=` for the services' SDKs | `docs/patterns/observability.md` env table; `.env.example` (`OTEL_EXPORTER_OTLP_HEADERS`); `.github/workflows/deploy.yml#Authorization=` |
+| `OTEL_EXPORTER_OTLP_HEADERS` meaning depends on the consumer — the collector injects it bare as `Authorization: "Basic …"`; `scripts/do-render-app-spec.py` (deploy + prod-up) prepends `Authorization=` for the services' SDKs | `docs/patterns/observability.md` env table; `.env.example` (`OTEL_EXPORTER_OTLP_HEADERS`); `scripts/do-render-app-spec.py#Authorization=` |
 | analysis `real_pg` tests need a local PostgreSQL in CI | `.github/workflows/ci.yml` step "install postgresql (analysis real_pg tests)" |
 | OTel init gated on `OTEL_ENABLED=true`, never blocks startup | `docs/patterns/observability.md`; e.g. `internal/telemetry/otel.go#Init` (~L18-20) |
 

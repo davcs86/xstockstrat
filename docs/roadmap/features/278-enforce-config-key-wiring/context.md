@@ -727,3 +727,10 @@ All 11 scenarios go to /home/user/xstockstrat/docs/sdd/business-rules/platform.f
 - **Merge-order gate:** `enforce-config-key-wiring` does not appear in the Feature column of `merge-order.md`. Rows 101 and 102 list it only as the counterpart feature, so the gate passes.
 - **Status:** `status.md` changed from `in-progress` to `code-completed`, and a matching history row was added to `feature.md`. No ledger insight was added because nothing new generalizes beyond the entries already recorded.
 - **Teardown (root CLAUDE.md):** the context-forge plugin skill `context-constitution` was unavailable. The integration PR body records this and the manual reconciliation from the Step 19 session above.
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1406 merged to main
+- Feature promoted and committed: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

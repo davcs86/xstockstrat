@@ -960,3 +960,10 @@ Feature: xstockstrat-marketdata - ETF-flag background fill labels ETFs and expla
 - **Post-deploy follow-up:** re-run feature 215 Step 26(a) on staging — SCHD should reach `FUNDAMENTALS_GAP_ETF`
   after a first miss.
 - **Deviations:** none. Severity SEV-3 (unchanged).
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1406 merged to main
+- Feature promoted and committed: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

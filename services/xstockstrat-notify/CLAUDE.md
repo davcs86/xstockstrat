@@ -127,7 +127,7 @@ VAPID_SUBJECT=                      # feature 165 — VAPID contact URL (mailto:
 
 > `SLACK_WEBHOOK_URL` / `SENDGRID_API_KEY` / `VAPID_PRIVATE_KEY` are credentials delivered as DO App
 > Platform `type: SECRET` env vars through the full deploy pipeline (docker-compose, both
-> `.do/app*.yaml`, the deploy workflows, and `scripts/do-inject-prod-secrets.py`) — **never**
+> `.do/app*.yaml`, `common.*` in `secrets/<env>.enc.yaml` rendered by `scripts/do-render-app-spec.py`; see `docs/runbooks/sops-secrets.md`) — **never**
 > config-service rows (config governance / feature 076). `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` are
 > non-secret and wired the same way for convenience. All are optional; an unset value simply disables
 > that channel. Web Push needs **all three** VAPID values (feature 165).

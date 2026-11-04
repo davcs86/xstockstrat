@@ -45,8 +45,8 @@ Two separate IDs are needed for each environment. They serve different purposes 
 
 | Identifier | What it is | How it's created | Where it's used |
 |---|---|---|---|
-| **App ID** (`DO_DEV_APP_ID`, `DO_PROD_APP_ID`) | Identifies a specific App Platform application — the deployed unit containing all services, workers, and jobs defined in the app spec | Returned by `doctl apps create` | `doctl apps update`, `doctl apps list-deployments`, `doctl apps logs` — everything that interacts with the running app |
-| **Project ID** (`DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`) | Identifies a DO Project — an organizational folder that groups resources across any DO product (apps, databases, droplets, etc.) for billing and console grouping | Returned by `doctl projects create` | `doctl projects resources assign` — to place the app into a project; has no effect on how the app runs |
+| **App ID** (`$DO_DEV_APP_ID`, `$DO_PROD_APP_ID` shell variables) | Identifies a specific App Platform application — the deployed unit containing all services, workers, and jobs defined in the app spec | Returned by `doctl apps create` | Manual `doctl apps update` / `list-deployments` / `logs`. The deploy workflows **look the app up by its spec `name:`**, so the app ID is not a GitHub secret (feature 286) |
+| **Project ID** (`digitalocean.PROJECT_ID` in `secrets/<env>.enc.yaml`; legacy `DO_DEV_PROJECT_ID` / `DO_PROD_PROJECT_ID`) | Identifies a DO Project — an organizational folder that groups resources across any DO product (apps, databases, droplets, etc.) for billing and console grouping | Returned by `doctl projects create` | `doctl projects resources assign` — to place the app into a project; has no effect on how the app runs |
 
 The relationship looks like this:
 
@@ -360,14 +360,17 @@ channel (no `.enabled`-style guard, same as the fundamentals credentials above).
 Set on: **every** component (all 12 services require `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT`, fail-closed)
 
 Backends run **mutual TLS** on every inter-service gRPC hop. The deploy stores **only the CA**
-(cert + key) as **one secret per environment**; `.github/workflows/deploy.yml` mints the 12 per-service
-leaves off it on every deploy. Generate and install the CA with the provisioning script — this is
-**required**, or the deploy aborts fail-closed (a placeholder would crash-loop every service):
+(cert + key) per environment, as `common.MTLS_CA` in `secrets/<env>.enc.yaml`. One CA per environment is shared by DO and homelab.
+`scripts/do-render-app-spec.py` mints the 12 per-service leaves off it on every deploy. Generate the CA with the
+provisioning script and store it with `sops set` (see [`docs/runbooks/sops-secrets.md`](../runbooks/sops-secrets.md)). This is **required**, or the deploy aborts
+fail-closed (a placeholder would crash-loop every service):
 
 ```bash
-scripts/mtls-provision.sh set-secret dev    # mints ./certs (dev CA) → sets DEV_MTLS_CA
-scripts/mtls-provision.sh set-secret prod   # mints ./certs-prod (prod CA) → sets PROD_MTLS_CA
+scripts/mtls-provision.sh ca dev    # mints ./certs (dev CA) → print the bundle for common.MTLS_CA (staging)
+scripts/mtls-provision.sh ca prod   # mints ./certs-prod (prod CA) → print the bundle for common.MTLS_CA (production)
 ```
+
+`set-secret dev|prod` still writes the legacy `DEV_MTLS_CA` / `PROD_MTLS_CA` repo secret. The deploy reads it only as a per-key fallback.
 
 The CA (byte-stable across deploys) backs the `YOUR_{DEV,PROD}_MTLS_{CA_CERT,CERT_<SVC>,KEY_<SVC>}`
 placeholders in `.do/app*.yaml` (each `MTLS_KEY` stays `type: SECRET`). This keeps the CA **signing
@@ -382,7 +385,7 @@ Set on: `xstockstrat-identity`
 openssl rand -base64 48
 ```
 
-Injected at deploy time via GitHub Actions secrets (same reasoning as the broker key and Alpaca credentials above). Add `DEV_JWT_SECRET` and `PROD_JWT_SECRET` as GitHub Actions secrets (see Step 9) — they substitute into the `YOUR_DEV_JWT_SECRET` / `YOUR_PROD_JWT_SECRET` placeholders. You may use the same value for both or separate ones per environment.
+Injected at deploy time from `common.JWT_SECRET` in `secrets/<env>.enc.yaml` (legacy fallback: the `DEV_JWT_SECRET` / `PROD_JWT_SECRET` repo secrets, see Step 9). It substitutes into the `YOUR_DEV_JWT_SECRET` / `YOUR_PROD_JWT_SECRET` placeholders. You may use the same value for both or separate ones per environment.
 
 The same `JWT_SECRET` is also injected into `xstockstrat-agent` (same placeholders), which HMAC-signs its OAuth 2.1 `txn` blob with it (`app/oauth_server.py`). There is no separate agent secret — `MCP_AGENT_SECRET` was retired by feature 147; do not set it.
 
@@ -458,33 +461,23 @@ Via console (if the spec-based attach fails):
 
 ## Step 9 — Configure GitHub Actions Secrets
 
-The CI/CD workflows need the following repository secrets. Go to:
-**GitHub → repository → Settings → Secrets and variables → Actions → New repository secret**
+Deploy-time secrets live in the SOPS files `secrets/staging.enc.yaml` / `secrets/production.enc.yaml` (feature 286). Setup, the
+one-shot bootstrap from the legacy secrets, rotation and adding a key are in [`docs/runbooks/sops-secrets.md`](../runbooks/sops-secrets.md). GitHub only holds the
+platform credentials, the decryption keys and (until the follow-up removal) the legacy fallbacks:
+**GitHub → repository → Settings → Secrets and variables → Actions** (and **Environments** for the per-environment rows).
 
-| Secret Name | Value | Used by |
-|---|---|---|
-| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | deploy-dev, deploy-prod (`doctl apps update`) |
-| `DO_DEV_APP_ID` | App ID of the staging app (from Step 5) | deploy-dev |
-| `DO_PROD_APP_ID` | App ID of the production app (from Step 6) | deploy-prod |
-| `DO_DEV_PROJECT_ID` | Project ID of the staging DO project (from Step 5) | deploy-dev — assigns app to project on every deploy |
-| `DO_PROD_PROJECT_ID` | Project ID of the production DO project (from Step 6) | deploy-prod — assigns app to project on every deploy |
-| `BUF_TOKEN` | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
-| `DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_JWT_SECRET` | JWT signing secret for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_JWT_SECRET` | JWT signing secret for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_ALPACA_API_KEY` | Alpaca **paper** API key (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `DEV_ALPACA_API_SECRET` | Alpaca **paper** API secret (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_ALPACA_API_KEY` | Alpaca **live** API key (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `PROD_ALPACA_API_SECRET` | Alpaca **live** API secret (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_FMP_API_KEY` | FMP API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_FMP_API_KEY` | FMP API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_FINNHUB_API_KEY` | Finnhub API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_FINNHUB_API_KEY` | Finnhub API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_SLACK_WEBHOOK_URL` | Slack incoming webhook for staging alert fanout, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_SLACK_WEBHOOK_URL` | Slack incoming webhook for production alert fanout, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
-| `DEV_SENDGRID_API_KEY` | SendGrid API key for staging email fanout, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
-| `PROD_SENDGRID_API_KEY` | SendGrid API key for production email fanout, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| Secret / variable | Where | Value | Used by |
+|---|---|---|---|
+| `DIGITALOCEAN_ACCESS_TOKEN` | repo secret | The PAT created in Step 2 | deploy-dev, deploy-prod, prod-up, prod-down (`doctl`) |
+| `BUF_TOKEN` | repo secret | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
+| `GH_PAT` | repo secret | PAT with repo write access | sops-bootstrap (opens its PR), promote, sync-main-to-maindev |
+| `SOPS_AGE_KEY` | **environment** secret (`staging`, `production`) | That environment's age private key | deploy, prod-up, deploy-homelab, sops-bootstrap |
+| `SOPS_OPERATOR_AGE_RECIPIENT` | repo variable | The operator's age public key (second recipient of every file) | sops-bootstrap |
+| `DEV_*` / `PROD_*` for `JWT_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `CONFIG_SECRETS_ENCRYPTION_KEY`, `MTLS_CA`, `SLACK_WEBHOOK_URL`, `SENDGRID_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` | repo secrets | **Legacy fallback only.** Seeds the bootstrap; read per key only when `secrets/<env>.enc.yaml` lacks the key | deploy, prod-up, sops-bootstrap |
+| `DO_DEV_PROJECT_ID` / `DO_PROD_PROJECT_ID` | repo secrets | **Legacy fallback only** for `digitalocean.PROJECT_ID` | deploy, prod-up, sops-bootstrap |
+
+The DO app IDs are **not** secrets: the deploy resolves the app by its spec `name:`. The vendor credentials (Alpaca, FMP, Finnhub)
+are encrypted config rows, not deploy secrets (feature 147).
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 
@@ -503,15 +496,14 @@ The deploy workflows push proto definitions to the Buf Schema Registry on every 
 
 **How the deployment secrets are used:**
 
-- `.github/workflows/deploy-dev.yml` — triggers on push to `main-dev`:
+- `.github/workflows/deploy-dev.yml` (push to `main-dev`) and `deploy-prod.yml` (push to `main`) call the reusable
+  `.github/workflows/deploy.yml` with `secrets: inherit`. It resolves the app ID by name (`xstockstrat-staging` /
+  `xstockstrat-production`), renders the spec with `scripts/do-render-app-spec.py` (SOPS first, legacy fallback), then:
   ```bash
-  doctl apps update $DO_DEV_APP_ID --spec .do/app.dev.yaml
+  doctl apps update "$APP_ID" --spec "$RUNNER_TEMP/app.yaml" --update-sources
   # polls until ACTIVE or ERROR (15-minute timeout)
   ```
-- `.github/workflows/deploy-prod.yml` — triggers on push to `main`:
-  ```bash
-  doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
-  ```
+  The `production` environment's required reviewers gate every prod deploy.
 
 ---
 
