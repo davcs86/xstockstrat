@@ -1,6 +1,6 @@
 # Implementation Spec: block-fundamentals-strategy-on-etf
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-10-10
 **Feature**: `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/feature.md`
 **Total Steps**: 26
@@ -1466,7 +1466,7 @@ grep -n "RESOURCE_EXHAUSTED" services/xstockstrat-analysis/CLAUDE.md
 
 ### Step 26 — test: Staging measurement (pre-merge) + real-ETF proof (post-deploy)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md` — modify (record measurements and results)
@@ -1678,3 +1678,9 @@ The cause is unverified: run logs were not readable from the session.
 **Actual**: Not performed. No MCP tool exposes `ScoreStrategy` or `evidence_symbols`.
 **Reason**: Tooling gap.
 **Disposition**: BLOCKS `launched` pending operator choice: verify via the UI or gRPC, or accept on the Step 18 tests.
+
+### Resolution (2026-11-04): Step 26 (a), (c), (e)
+- **(a) CLEARED.** The label stayed unset because FMP returned HTTP 401 on `/stable/profile` (Grafana: four `etf flag fill failed … http_401` records, 2026-11-02 to 2026-11-04). After the operator updated the FMP keys and marketdata restarted, `fundamentals_gap` is `FUNDAMENTALS_GAP_ETF` (`57cbc4d3-eb28-4828-af5f-7c69fa4fe13b`). An environment credential problem, not a code defect. The defect tracked as `230-fix-etf-flag-fill` made the failure visible (Info-level records).
+- **(c) CLEARED.** The strategy now evaluates normally on SCHD (2 trades, `BACKTEST_STATUS_OK`); the `PERMISSION_DENIED` no longer reproduces.
+- **(e) CLEARED.** Run through `manage_strategy(operation='score')` on 2026-11-02 (`evidence_symbols: 8`, `excluded_symbols: []`); the 215 ↔ 283 launch gate is met.
+- (b) and (d) remain accepted as environmental (operator, 2026-10-15). Full results: `context.md` § "Session 2026-11-04 — staging verification".
