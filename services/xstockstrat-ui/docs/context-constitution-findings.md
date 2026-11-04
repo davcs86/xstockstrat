@@ -1,7 +1,7 @@
 # xstockstrat-ui — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — `insights/market/[symbol]` row resolved; added the `WatchlistDetail#inQueue` latent bug and the `OTEL_EXPORTER_OTLP_ENDPOINT` doc gap; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 doc-lie rows (mTLS "refuses to start", omitted REST routes), +2 latent rows (`ledger/export` inline headers, unwrapped audit route), duplicate-test row reframed as misnamed, +2 open questions). For triage/fixing, not governance.
+`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — `insights/market/[symbol]` row resolved; added the `WatchlistDetail#inQueue` latent bug and the `OTEL_EXPORTER_OTLP_ENDPOINT` doc gap; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 doc-lie rows (mTLS "refuses to start", omitted REST routes), +2 latent rows (`ledger/export` inline headers, unwrapped audit route), duplicate-test row reframed as misnamed, +2 open questions); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `0a3d508` — 1 closed open-question moved to Resolved). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
@@ -35,7 +35,6 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- `config-ui/api/audit/route.ts` returns `{ entries: [] }` (200) silently when `DATABASE_URL` is unset — is a silent empty audit log the intended dev-mode behavior, or should it signal misconfiguration? `src/app/config-ui/api/audit/route.ts:52-54` — status: **closed — unreachable in deployed envs (2026-10-20)**: `DATABASE_URL` is bound for xstockstrat-ui in `.do/app.yaml` and `.do/app.dev.yaml` (`${xstockstrat.DATABASE_URL}`), and compose injects it via the `*db-url` anchor (fails fast on a missing `POSTGRES_PASSWORD`); only a bare local `pnpm dev` reaches the branch (note: the bigger SSL-missing bug that caused "always empty" in DO was fixed; this item is about the deliberate graceful-degradation path for unset `DATABASE_URL` only)
 - Is the `>= 400` header/encoding normalization (UI gotcha) still required with `@connectrpc` 2.x, or a workaround droppable on upgrade? `src/lib/bffShared.ts#createDispatch` (~L140-145) — status: **open**
 - `insightsBff.ts#listOpportunities` hardcodes `timeoutMs: 30_000` while other deadlines use the named `FUNDAMENTALS_TIMEOUT_MS` — a deliberate separate budget, or should it be a shared named constant? — status: **open**
 - `src/lib/scoreDisplay.ts` duplicates `TRADING_DAYS_PER_YEAR = 252` from analysis's `_compute_metrics` (comment: deliberate) and encodes the composite's neutral band (`COMPOSITE_NEUTRAL_BAND = 0.08`, `COMPOSITE_NEUTRAL = 0.5`, tied to analysis's k=1 shrinkage range ≈0.25–0.83, feature 221) — is there a parity test, and should this be a documented cross-module contract with analysis? — status: **open**
@@ -47,6 +46,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 | What the docs said | What the code does | Evidence | Resolution |
 |---|---|---|---|
 | Module CLAUDE.md cites `insights/market/[symbol]` as a live route in TWO places (§ "Opportunities-first shell → Decide screens": "the Signal-detail page `insights/market/[symbol]`"; § Styling charting bullet: "`insights/market/[symbol]/page.tsx` renders **no** chart") | The page was retired by feature 125 and its logic relocated onto `/trader/positions/[symbol]` — `Glob src/app/insights/market/**` returns zero files | `src/components/insights/MuteForStrategy.tsx` (documents the relocation) vs CLAUDE.md § Decide screens + § Styling; note this contradicts the *newer* "Sanctioned exception" block in the same file, which correctly names `/trader/positions/[symbol]` | **Resolved 2026-10-19** — `08d6301` rewrote both references to `trader/positions/[symbol]`; `rg insights/market services/xstockstrat-ui/CLAUDE.md` = 0 (CLAUDE.md ~L137) |
+| (open question) `config-ui/api/audit/route.ts` returns `{ entries: [] }` (200) silently when `DATABASE_URL` is unset | Unreachable in deployed envs: `DATABASE_URL` is bound for `xstockstrat-ui` in `.do/app.yaml` (re-checked 2026-11-04) | `.do/app.yaml` (ui block), `src/app/config-ui/api/audit/route.ts` | Closed 2026-10-20; moved here 2026-11-04 |
 
 
 ## Filed as defect reports (2026-10-19)

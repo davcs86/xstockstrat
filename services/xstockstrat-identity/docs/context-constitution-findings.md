@@ -1,7 +1,7 @@
 # xstockstrat-identity — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped; all findings re-checked still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — refresh-rotation row resolved (hotfix #1262), +2 latent bugs (no `is_active` check on the auth-code path, empty `aud` on refresh), `eleven methods` row narrowed, impl-test report's identity half closed). For triage/fixing, not
+`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped; all findings re-checked still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — refresh-rotation row resolved (hotfix #1262), +2 latent bugs (no `is_active` check on the auth-code path, empty `aud` on refresh), `eleven methods` row narrowed, impl-test report's identity half closed); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `0a3d508` — +1 doc-lie (JWT secret attributed to config), 1 row resolved). For triage/fixing, not
 governance. Repeated defects (dead `middleware/propagation.ts`, Node-20 drift) live in the root
 findings log.
 
@@ -11,11 +11,11 @@ findings log.
 |---|---|---|---|
 | Config key `identity.jwt.secret` listed as consumed ("resolved from secret store") | Secret comes from `process.env.JWT_SECRET` only; code comments that secrets are NOT in config | `CLAUDE.md` § Config Keys Consumed vs `identityServiceImpl.ts#jwtSecret` (~L112-119) | ✓ **RESOLVED** (2026-08-02 refresh) — CLAUDE.md § Config Keys Consumed (~L77) now states the JWT signing key is read from `JWT_SECRET` env, not a config key (IDENTITY-1) |
 | CLAUDE.md Dependencies table lists only config + PostgreSQL — no ledger | identity now has a **REAL** outbound gRPC dependency on `xstockstrat-ledger` for admin-mutation audit (feature 043) with a `LEDGER_ENDPOINT` env var. (This is the same dep whose *fictional* prior form was "resolved" by deletion; it is now genuine and must be re-added.) | `src/grpc/ledgerAudit.ts#createLedgerAudit` (~L32-35), wired `src/index.ts#createLedgerAudit` (~L45), `LEDGER_ENDPOINT` | Add the ledger audit dep + `LEDGER_ENDPOINT` back to CLAUDE.md Dependencies + Env Vars (root §Header Propagation also corrected — see root findings) |
-| CLAUDE.md Ports section: server "exposes all **eleven** methods" and lists 11 | The server now also serves 10 more (`GetUserMetadata`, `UpdateUserMetadata`, `AdminGetUserMetadata`, `AdminUpdateUserMetadata`, `CreateUser`, `ListUsers`, `GetUser`, `UpdatePassword`, `SetUserRoles`, `SetUserActive`) — 21 total (re-counted 2026-10-14) | `src/grpc/identityServiceImpl.ts#adminGetUserMetadata`, `#adminUpdateUserMetadata`, `#createUser`, `#setUserActive` | Partly resolved (2026-11-04): CLAUDE.md now says "including: …", so the count is gone, but the 10 user-management and metadata RPCs are still not listed |
 | CLAUDE.md Database/Migrations stops at `005_drop_api_keys` | `006_user_metadata.up.sql` (adds `phone`/`display_name`/`metadata` JSONB/`metadata_updated_at`) is undocumented | `migrations/006_user_metadata.up.sql` | Add the 006 migration row |
 | `package.json` description "Auth, JWT, and **API key** management" | API-key feature fully removed (migration `005_drop_api_keys`, all `*ApiKey` RPCs gone). The stale "mirrors revokeApiKey" comment is gone (2026-10-14: grep zero hits); only the description remains | `services/xstockstrat-identity/package.json` `description` | Update the description |
 | `src/grpc/authz.ts` header comment: request-body `user_id` is ignored except by `ListAuthorizedApps`/`RevokeAuthorizedApp` | The admin RPCs (`adminGetUserMetadata`, `adminUpdateUserMetadata`, `getUser`, `updatePassword`, `setUserRoles`, `setUserActive`) read the body `user_id` by design (IDENTITY-10) | `src/grpc/authz.ts` header vs `src/grpc/identityServiceImpl.ts#adminGetUserMetadata` | Amend the comment |
 | `CLAUDE.md` Constitution banner lists "fictional ledger audit"; Environment Variables lists `TRADING_MODE` and omits `LEDGER_ENDPOINT` / `DB_POOL_MAX` | The ledger audit is real (`ledgerAudit.ts`); `TRADING_MODE` is part of the repo-wide docs-vs-code disagreement logged in the root findings | `src/grpc/ledgerAudit.ts`; root findings log | Fix the banner and env block |
+| ⚠ `CLAUDE.md` Dependencies: `xstockstrat-config` supplies "Live config (JWT secrets, token TTLs)" (found 2026-11-04) | The JWT secret is env-only (`process.env.JWT_SECRET`, IDENTITY-1); config supplies only the TTLs — a secret-boundary misstatement | `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts#JWT_SECRET`, `services/xstockstrat-identity/CLAUDE.md#Dependencies` | Reword to "token TTLs" |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
@@ -44,6 +44,7 @@ findings log.
   admin can log in. Dev/staging keep the convenience login. Covered by
   `src/__tests__/identityServiceImpl.test.ts` ("default seed-admin lockout"). `identityServiceImpl.ts`
   (`SEED_ADMIN_PASSWORD_HASH` / `isBlockedDefaultAdmin` + the `authenticateUser` guard).
+- **RESOLVED 2026-11-04 — `CLAUDE.md` Ports "exposes all **eleven** methods" and lists 11.** The claim is gone: `CLAUDE.md` now says the server exposes "every `IdentityService` method, including …" (`grep -c eleven` = 0 in the file now and at both prior commits).
 
 
 ## Filed as defect reports (2026-10-19)

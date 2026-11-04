@@ -13,6 +13,8 @@ As of Phase 3, ingest owns a database schema (`ingest`) and is no longer statele
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
+## Ports
+
 **Authorization.** `TriggerBackfill` (the provider-quota-spending op) and `CancelBackfill` are
 **admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")
 unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`), via the shared

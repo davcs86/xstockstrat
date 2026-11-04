@@ -16,6 +16,8 @@ Node.js 24 + TypeScript
 
 Backend pattern — see `docs/patterns/docker-build.md` for the base stage, proto stub timing, and `pnpm deploy` approach.
 
+## Ports
+
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing every
 `IdentityService` method, including: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
 the OAuth 2.1 backend RPCs (feature 049 Part B)

@@ -1,7 +1,7 @@
 # xstockstrat-config — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (DELTA carries the full namespace + wholesale replace, defaults from call-site not DB `default_value`, enum→scope-string maps, pg_notify env+mode requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ camelCase/snake_case trading-mode scoping collapse, audit-on-UPDATE-only) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (DELTA carries the full namespace + wholesale replace, defaults from call-site not DB `default_value`, enum→scope-string maps, pg_notify env+user_id scope requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (cross-key deadline bounds unenforced, `SCALAR_BOUNDS_REGISTRY` guarding unread values, unvalidated `onNotification` env cast, migration `031` overwrite) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
