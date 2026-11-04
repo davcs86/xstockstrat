@@ -160,3 +160,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
    code default + a rate-limited WARN naming the FQN. All languages.
 8. **Merge order: 295 waits for 243.** Row added to `docs/roadmap/features/merge-order.md`.
    281/282 get no row (rebase work only).
+
+## Session 2026-11-04 — sdd-review product-spec (second pass)
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings (advisory, carried into design):
+  - FR-14 must amend C-05 in `docs/sdd/constitution.md` in the same PR.
+  - AC-20 should be gate-assertable, not docs-reading only.
+  - AC-13 is a process outcome.
+  - Re-check migration NNN 035 at spec time (281/282/243 may take it).
+  - Confirm AC-19's `--final` flag against `check-config-wiring.mjs`.
+  - A rollback scenario for FR-4 was missing; **added as AC-21**.
+- Overlap findings: 243 (merge-order row added, decision 8); 281/282 (waiver retired, rebase only,
+  decision 6). No other live collision.
+- Recommended design depth: **full**. Rationale: 12 services, config migrations, a possible
+  additive proto change, and the cross-service config contract.

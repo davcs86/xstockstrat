@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report 2026-11-04-config-key-drift-and-subscription-gaps |
+| 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved on second pass (FR-1..15, AC-1..21; 5 advisory warnings) |
 
 ---
 
@@ -36,4 +37,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-design fix-config-keys-drift` — full design depth (12 services, migrations, cross-service config contract); see context.md
+`/sdd-design fix-config-keys-drift` — full design recommended (12 services, config migrations, possible additive proto, cross-service config contract, FAIL-level overlaps resolved by operator decisions 6–8)

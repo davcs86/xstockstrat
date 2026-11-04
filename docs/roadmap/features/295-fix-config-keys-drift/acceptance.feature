@@ -143,3 +143,9 @@ Feature: fix-config-keys-drift (bug fix)
     When they are read after the change
     Then each states that the stored key is namespace-relative and the FQN is "<namespace>.<key>"
     And none permits unseeded read keys
+
+  @AC-21 @FR-4 @regression
+  Scenario: Rolling back to the previous image after the heal keeps stored values
+    Given the heal migration has run and "trading" / "risk.bracket_orders_enabled" is stored as false
+    When the deployment is rolled back to the previous images without running the down migration
+    Then the previous trading image reads "trading.risk.bracket_orders_enabled" as false, not its code default true
