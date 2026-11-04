@@ -123,3 +123,40 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     does not check `value_type` vs getter arm, live-vs-restart, or caller-deadline coupling.
   - **295 must extend 278's checker and drain its baseline to zero — not build a second gate**
     (DRY, C-18).
+
+## Session 2026-11-04 — sdd-review product-spec
+
+- **First pass: FAIL** (spec-reviewer). Blockers:
+  - no enumerated FR-N (C-15);
+  - no migration strategy;
+  - no `## Consumer Surface(s)` (C-14);
+  - AC-12 `Then` not concrete.
+
+  Warnings:
+  - prior art (278 checker, 277 lessons) missing from the spec, and the "nothing gates parity"
+    claim inaccurate;
+  - the proto approval gate not stated;
+  - AC coverage gaps;
+  - AC-10/AC-11 not numeric;
+  - BrokerType/paper-safety not stated.
+- Spec revised: FR-1..FR-15, Consumer Surface(s), Proto (additive-only else stop), Database Changes
+  (035+, F-01, 277 lessons), Trading-Domain Notes. acceptance.feature AC-1..AC-20, every FR covered;
+  AC-12 is a Scenario Outline; AC-10 (30 s deadline) and AC-11 (≤5 streams/10 s) are numeric.
+- **Overlap (feature-overlap, re-verified with git):**
+  - 243 `fix-sandbox-seed-keys` (in-progress): migration `031` is already on main-dev and its code
+    steps are done; only the operator Step 5 staging gate is pending. The "031 collision" is not
+    live: 295 uses 035+.
+  - 281/282 (implementation-ready) add keys unseeded under the 227 waiver, with full-dotted
+    `SCALAR_BOUNDS_REGISTRY` entries.
+  - `fix-sandbox-memory-cap` and `agent-log-query` are docs-only drafts; `agent-grpc-migration` is
+    stale. No collision with any of them.
+
+### Operator decisions (explicit sign-off, 2026-11-04, continued)
+
+6. **feature-227 unseeded waiver: retired.** No exceptions; every read key is seeded. 281/282
+   seed their keys in relative form. Whichever lands second reconciles: 295 drains their keys if
+   they land first; they rebase onto the convention if 295 lands first.
+7. **Getter type rule: lossless widening.** int→float accepted; every other mismatch returns the
+   code default + a rate-limited WARN naming the FQN. All languages.
+8. **Merge order: 295 waits for 243.** Row added to `docs/roadmap/features/merge-order.md`.
+   281/282 get no row (rebase work only).
