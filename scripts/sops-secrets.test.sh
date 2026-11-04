@@ -733,6 +733,137 @@ db_wiring() {
     fail "$l: render must pass --vpc-id \"\$VPC_ID\""
 }
 
+# step_idx <wf> <job> <yq-predicate on .value>: the index of the one step matching it.
+step_idx() {
+  yq e ".jobs.$2.steps | to_entries | .[] | select($3) | .key" "$1"
+}
+
+# wait_stub: a stateful doctl for prod-up's check/wait runs (LIST_SEQ / PHASES advance per call; "-" = empty).
+wait_stub() {
+  mkdir -p "$work/stub"
+  cat >"$work/stub/doctl" <<'EOF2'
+#!/bin/sh
+echo "$*" >>"$W/wlog"
+nth() {
+  n=$(($(cat "$W/$1.n" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$W/$1.n"
+  echo "$2" | awk -v n="$n" '{ print (n <= NF) ? $n : $NF }'
+}
+case "$1 $2" in
+"apps list")
+  cat "$W/apps.txt"
+  ;;
+"apps list-deployments")
+  v=$(nth list "$LIST_SEQ")
+  [ "$v" = - ] || echo "$v"
+  ;;
+"apps get-deployment")
+  nth phase "$PHASES"
+  ;;
+"apps create-deployment")
+  [ "${CREATE_RC:-0}" = 0 ] || exit "$CREATE_RC"
+  [ -z "${CREATE_OUT-new1}" ] || echo "${CREATE_OUT-new1}"
+  ;;
+*)
+  echo "stub doctl: unexpected $*" >&2
+  exit 99
+  ;;
+esac
+EOF2
+  chmod +x "$work/stub/doctl"
+  printf '#!/bin/sh\n' >"$work/stub/sleep"
+  chmod +x "$work/stub/sleep"
+}
+
+# wrun <script> [VAR=value ...]: run an extracted prod-up/prod-down step the way Actions does (bash -e).
+wrun() {
+  local sh="$1"
+  shift
+  rm -f "$work/wlog" "$work/list.n" "$work/phase.n" "$work/wout"
+  : >"$work/wlog"
+  rc=0
+  env -i PATH="$work/stub:$PATH" HOME="$HOME" W="$work" GITHUB_OUTPUT="$work/wout" \
+    GITHUB_STEP_SUMMARY="$work/wsum" "$@" bash -e "$sh" >"$work/wso" 2>&1 || rc=$?
+}
+
+# produp_lifecycle <wf>: AC-3 — trust the app, then wait with at most one gated redeploy.
+produp_lifecycle() {
+  local wf="$1" j=up i prev n id k sel c
+  local app_expr='${{ steps.create.outputs.app_id || steps.check.outputs.app_id }}'
+  local gate="steps.create.outputs.app_id != '' || steps.trust.outputs.appended == 'true'"
+  prev=-1
+  for sel in '.value.id == "check"' '.value.id == "db"' '.value.uses == "./.github/actions/setup-sops"' \
+    '.value.id == "render"' '.value.id == "create"' '.value.id == "assign"' '.value.id == "trust"' \
+    '.value.id == "wait"' '.value.id == "report"' '.value.if == "always()"'; do
+    i="$(step_idx "$wf" "$j" "$sel")"
+    [ -n "$i" ] && [ "$i" -gt "$prev" ] || fail "produp: step order broken at $sel"
+    prev="$i"
+  done
+  sel='.jobs.up.steps[] | select(.id == "trust")'
+  [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "produp: trust env.APP_ID"
+  [ "$(yq e "$sel | .env.CLUSTER_ID" "$wf")" = '${{ steps.db.outputs.cluster_id }}' ] || fail "produp: trust env.CLUSTER_ID"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh trust "$CLUSTER_ID" "$APP_ID"' || fail "produp: trust run"
+  [ "$(yq e "$sel | has(\"continue-on-error\") or has(\"if\")" "$wf")" = false ] || fail "produp: trust must be ungated and hard"
+  for id in wait report; do
+    sel=".jobs.up.steps[] | select(.id == \"$id\")"
+    [ "$(yq e "$sel | .if" "$wf")" = "$gate" ] || fail "produp: $id if"
+    [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "produp: $id env.APP_ID"
+    ! yq e "$sel | .run" "$wf" | grep -qF '${{' || fail "produp: $id run inlines an expression"
+  done
+  sel='.jobs.up.steps[] | select(.id == "wait")'
+  [ "$(yq e "$sel | .env.CREATED" "$wf")" = '${{ steps.create.outputs.app_id }}' ] || fail "produp: wait env.CREATED"
+  [ "$(yq e "$sel | .env.APPENDED" "$wf")" = '${{ steps.trust.outputs.appended }}' ] || fail "produp: wait env.APPENDED"
+  [ "$(yq e "$sel | has(\"shell\")" "$wf")" = false ] || fail "produp: wait must use the default bash -e shell"
+
+  wait_stub
+  # check: 0 / 1 / 2 existing apps
+  yq e '.jobs.up.steps[] | select(.id == "check") | .run' "$wf" >"$work/check.sh"
+  for n in 0 1 2; do
+    : >"$work/apps.txt"
+    for k in $(seq 1 "$n"); do echo "app$k xstockstrat-production" >>"$work/apps.txt"; done
+    echo "x9 xstockstrat-staging" >>"$work/apps.txt"
+    wrun "$work/check.sh"
+    case "$n" in
+    0) [ "$rc" = 0 ] && grep -qx 'app_id=' "$work/wout" || fail "produp: check with no app ($(cat "$work/wso"))" ;;
+    1)
+      [ "$rc" = 0 ] && grep -qx 'app_id=app1' "$work/wout" || fail "produp: check with one app"
+      grep -qF 'already exists — ensuring it is a trusted source; redeploys only if the rule was just added and the latest deployment failed' \
+        "$work/wso" || fail "produp: check existing-app message"
+      ;;
+    2) [ "$rc" != 0 ] && grep -qF 'expected at most 1 app named xstockstrat-production, found 2' "$work/wso" ||
+      fail "produp: check accepted two apps" ;;
+    esac
+  done
+  # wait: <label> <rc> <creates> LIST_SEQ PHASES [VAR=value ...]
+  yq e '.jobs.up.steps[] | select(.id == "wait") | .run' "$wf" >"$work/wait.sh"
+  while IFS='|' read -r c k n i id extra; do
+    [ -n "$c" ] || continue
+    # shellcheck disable=SC2086 # extra is a list of VAR=value words
+    wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ="$i" PHASES="$id" $extra
+    [ "$rc" = "$k" ] || fail "produp: wait $c exited $rc, want $k ($(cat "$work/wso"))"
+    [ "$(grep -c '^apps create-deployment' "$work/wlog")" = "$n" ] || fail "produp: wait $c made $(grep -c '^apps create-deployment' "$work/wlog") redeploys, want $n"
+  done <<'CASES'
+active|0|0|d1|ACTIVE|CREATED=app1
+error-created|0|1|d1|ERROR ACTIVE|CREATED=app1
+error-appended|0|1|d1|ERROR ACTIVE|APPENDED=true
+error-unchanged|1|0|d1|ERROR|APPENDED=false
+error-twice|1|1|d1|ERROR ERROR|CREATED=app1
+superseded|0|0|d1 d2|SUPERSEDED ACTIVE|CREATED=app1
+canceled|1|0|d1|CANCELED|CREATED=app1
+create-fails|1|1|d1|ERROR|CREATED=app1 CREATE_RC=3
+create-empty|1|1|d1|ERROR|CREATED=app1 CREATE_OUT=
+late-list|0|0|- - d1|ACTIVE|CREATED=app1
+never-listed|1|0|-|ACTIVE|CREATED=app1
+CASES
+  wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ=d1 PHASES="ERROR ACTIVE" CREATED=app1
+  grep -qx 'apps get-deployment app1 new1' "$work/wlog" || fail "produp: wait must follow the redeployment it created"
+  wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ="d1 d2" PHASES="SUPERSEDED ACTIVE" CREATED=app1
+  grep -qx 'apps get-deployment app1 d2' "$work/wlog" || fail "produp: wait must follow the newest deployment after SUPERSEDED"
+  wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ=d1 PHASES=PENDING_DEPLOY CREATED=app1
+  [ "$rc" = 0 ] && grep -q '^::warning::' "$work/wso" || fail "produp: wait timeout must warn and exit 0"
+  [ "$(grep -c '^apps get-deployment' "$work/wlog")" = 60 ] || fail "produp: wait must poll 60 times"
+}
+
 CHECKOUT_PIN='actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
 DOCTL_PIN='digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f'
 
@@ -765,6 +896,7 @@ group_produp() {
   [ "$check_i" -lt "$db_i" ] && [ "$db_i" -lt "$sops_i" ] && [ "$sops_i" -lt "$render_i" ] ||
     fail "produp: order must be check < db < setup-sops < render"
   db_wiring "$wf" up produp .do/app.yaml
+  produp_lifecycle "$wf"
   echo "produp: ok"
 }
 

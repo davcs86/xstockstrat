@@ -122,3 +122,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - other spec readers still pass: agent `test_deployment_env_vars.py` (3 passed) and `check-otel-produced-signals.test.sh` (57 cases, 0 failed).
 - Files modified: `.do/app.yaml`, `.do/app.dev.yaml`, `scripts/do-render-app-spec.py`, `.github/workflows/deploy.yml`, `.github/workflows/prod-up.yml`
 - Deviations: none
+
+### Step 5 — test: prod-up check / trust / wait / report [done]
+- Added `step_idx`, `wait_stub` (a stateful doctl plus a no-op `sleep`), `wrun` (`env -i … bash -e`) and `produp_lifecycle`. Coverage:
+  - full step order;
+  - trust/wait/report env wiring, the `if` gate, no `${{` in runs, and no `shell:`;
+  - check with 0/1/2 apps;
+  - 11 wait cases, plus follow-the-redeploy, follow-newest-after-SUPERSEDED, and a 60-poll timeout that warns with rc 0.
+- RED: `ASSERT FAIL: produp: step order broken at .value.id == "assign"`.
+- Selecting by step `id` needs `id: assign`, `id: wait` and `id: report`, which Step 6 adds; this is the impl-spec review's warning.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: Step 6 adds `id: assign`, which no step named (see Deviation Log D1).

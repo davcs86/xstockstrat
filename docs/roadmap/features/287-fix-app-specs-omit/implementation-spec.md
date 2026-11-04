@@ -406,7 +406,7 @@ grep -c 'YOUR_VPC_ID' .do/app.yaml .do/app.dev.yaml   # 1 each
 
 ### Step 5 — test: prod-up check / trust / wait / report (wiring + stub-run wait loop)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows` (deploy pipeline)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (`group_produp`)
