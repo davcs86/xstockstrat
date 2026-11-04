@@ -200,3 +200,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - New minor defect: agent deadline errors on `test_formula` surface without a message
     (AGENT-5 `_grpc_error_message` is apparently not applied on this path). Folded into FR-12's
     scope at spec time.
+
+### Operator decisions (explicit sign-off, 2026-11-04, continued)
+
+9. **Indicators symptom timing:** the error was seen **after** `indicators.sandbox.timeout_ms=15000`
+   was set (post-031). This confirms a **live watcher stall**: the indicators process kept serving
+   5000 from a stale snapshot. FR-10 is the root fix, and AC-10 must include an indicators-specific
+   stall case. Suggested mitigation, not performed: restart staging indicators to resync.
+10. **C-16 CHANGE sign-off: all approved.**
+    - C1: 243 @AC-1/4/5.
+    - C2: 182 @AC-1.
+    - C3: 184 @AC-1.
+    - C4: platform 278 @AC-1 (the form-mismatch definition inverts).
+    - C5: 147 secret scenarios (key literal becomes ns + relative).
+    - C6: platform 182 @AC-6 (its "no seed migration" clause is retired).
+    - N2: 247 @AC-1..5 (agent policy reads move to the watcher snapshot; the `get_config` tool stays
+      a bounded GetConfig).
+
+    The underlying guarantees (values, types, encryption, redaction, bounds) are PRESERVE. The
+    promoted suites are updated at launch (C-16 promotion).
