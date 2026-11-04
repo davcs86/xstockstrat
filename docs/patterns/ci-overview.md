@@ -2,6 +2,10 @@
 
 CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 
+Exception: the `main-dev` → `main` promotion PR skips the `pull_request` run (the `changes` job is
+guarded), because its head is the `main-dev` tip that the push run already covered. `CI Gate` still
+reports (green, upstream skipped), so the required check is satisfied. Hotfix PRs into `main` run full CI.
+
 ## CI Jobs
 
 | Job | What it checks | Coverage threshold |
