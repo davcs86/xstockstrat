@@ -975,7 +975,7 @@ bash scripts/sops-secrets.test.sh ac24 cleanup render   # GREEN
 **Verification**:
 ```bash
 bash scripts/sops-secrets.test.sh            # all groups green 
-git check-ignore -q --no-index keys.txt x.agekey && ! git check-ignore -q --no-index secrets/staging.enc.yaml
+git check-ignore -q --no-index keys.txt && git check-ignore -q --no-index x.agekey && ! git check-ignore -q --no-index secrets/staging.enc.yaml && ! git check-ignore -q --no-index .sops.yaml
 grep -n "sops-secrets" .github/workflows/ci.yml   # filter key, job, gate needs, gate echo
 ```
 Then the PR's CI run shows `sops-secrets` passing and `CI Gate` green.

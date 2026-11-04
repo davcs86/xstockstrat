@@ -250,3 +250,9 @@
   - [x] W2: the `cleanup` mtls-provision header assertion is now two concrete greps over lines 1–20.
   - [x] W3: the Step 2 real install is host-mutating. It is proven by the Step 18 CI job on an ephemeral runner, or optionally
         run in an ephemeral execute sandbox, never on a developer host.
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory), iteration 5 → fix
+
+- Result: 0 failures, 1 ⚠; iteration-4 items 3/3 RESOLVED; no design or coverage gap.
+  - [x] The Step 18 `git check-ignore -q` with several paths passes if any one is ignored (confirmed locally). The check is now
+        per path, and also asserts `.sops.yaml` is not ignored.
