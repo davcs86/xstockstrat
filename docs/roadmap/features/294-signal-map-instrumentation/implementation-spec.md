@@ -10,21 +10,22 @@
 
 ## Execution Summary
 
-Signals only: bounded counters, gauges, histograms and log fixes across all 12 services, with no behavior change, no proto, config-key or database change, and no `packages/otel/` edit (AC-43). Consumer surface (C-14): **None, internal/platform-only** (product-spec.md `## Consumer Surface(s)`); operators read the new series in Grafana Cloud, and the later feature that registers and alerts on them is the consumer. No UI-page, `PLATFORM_SUBNAV` or MCP-tool step is required, and that is a decision, not an omission.
+Signals only: bounded counters, gauges, histograms and log fixes across all 12 services, with no behavior change, no proto, config-key or database change, and no edit to any file under `packages/otel/` (AC-43; Step 29 asserts the whole directory). Consumer surface (C-14): **None, internal/platform-only** (product-spec.md `## Consumer Surface(s)`); operators read the new series in Grafana Cloud, and the later feature that registers and alerts on them is the consumer. No UI-page, `PLATFORM_SUBNAV` or MCP-tool step is required, and that is a decision, not an omission.
 
-Order: one library pair per runtime first (Steps 1-6: Go, Python, Node rebinding accessors plus the `loop tick ok` helpers), then the services SEV-2 first as design.md 1.11 orders them (trading, portfolio, marketdata, analysis, agent, identity, config + ledger, notify, ui), then the SEV-3 tail (ingest, indicators), then a final allowlist/guard pass (Step 29) and the docs + teardown step (Step 30). Every `service` step is followed by its paired `test` step (C-08); each test is authored to fail against the pre-implementation tree (P-06), and the Go RED is demonstrated locally against a temporary, uncommitted no-op accessor stub so it is an assertion failure, not a compile error (Step 1 commits the real accessors).
+Order: one library pair per runtime first (Steps 1-6: Go, Python, Node rebinding accessors plus the `loop tick ok` helpers), then the services SEV-2 first as design.md 1.11 orders them (trading, portfolio, marketdata, analysis, agent, identity, config + ledger, notify, ui), then the SEV-3 tail (ingest, indicators), then a final allowlist/guard pass (Step 29) and the docs + teardown step (Step 30). Every `service` step is followed by its paired `test` step (C-08); each test is authored to fail against the pre-implementation tree (P-06). **One RED protocol for all four library pairs (Steps 1-6):** the real accessor is committed in the service/library step; in the paired test step the author temporarily no-ops the accessor locally, records RED (an assertion failure, not a compile error), restores it, records GREEN, and never commits the stub.
 
 Clarifications the spec fixes (design.md leaves them open or ambiguous):
 - **UI accessor home.** design.md 1.1 lists `src/telemetry.ts` for the UI, but that file exports only `initTelemetry` (`grep -n export services/xstockstrat-ui/src/telemetry.ts` shows one export). The UI's metrics module with the rebinding pattern is `src/lib/bffMetrics.ts:13-23`, so the UI counters live there (Step 23) and the UI is not part of the Node library step (Step 5).
 - **Instrument definitions live with their service step.** The library steps add only the generic rebinding accessors and the tick helpers; each service step adds that service's instruments and label-key constants to its telemetry module, so each commit is self-contained.
 - **Line numbers.** Sites cited below were re-grepped against HEAD `e1cf809` (the tree is unchanged from the design's grounding). Sites cited "design.md 1.x" were not re-opened here; `/sdd-execute` discovery re-greps every symbol before editing (design.md header; F-09 drift goes to the Deviation Log).
-- **Staged-diff hunk guards (Steps 7, 13, 15, 19).** Every "no hunk inside X" check runs BEFORE the step's commit, against the staged diff (`git diff --cached`), so it asserts something while the change is still uncommitted (F-05). Helpers, pasted into the step's shell (a guard fails the step when a staged hunk's pre-image overlaps the forbidden range; ranges are taken from `HEAD`, so re-derive them after any rebase):
+- **Staged-diff hunk guards (`hunk_guard` is used by Steps 7, 13, 15 and 19).** Every "no hunk inside X" check runs BEFORE the step's commit, against the staged diff (`git diff --cached`), so it asserts something while the change is still uncommitted (F-05). Helpers, pasted into the step's shell. A guard fails the step when a staged hunk's pre-image overlaps the forbidden range (a pure insertion overlaps only when it lands strictly inside the range, so adding a function right after a guarded one is allowed); ranges are taken from `HEAD`, so re-derive them after any rebase. `fn_range FILE START_RE [END_RE]` prints `START END` from the first line matching `START_RE` to the first later line matching `END_RE` (default `^}`); `fn_range_py FILE NAME` prints a Python function's `lineno end_lineno`. Both print a message to stderr and return non-zero when nothing matches, and `hunk_guard` returns 2 with a message when either bound is empty, so a failed derivation (`set -- $(fn_range ...)` leaves `$1 $2` empty) can never false-pass. Patterns avoid backslashes (`[(]`, `[.]`) because `awk -v` processes them. Steps 11 and 17 do NOT use these helpers: they run plain staged-diff greps (`git diff --cached -U0 | grep`) before their commits.
   ```
-  hunk_guard() { git diff --cached -U0 -- "$1" | awk -v lo="$2" -v hi="$3" '/^@@/{split(substr($2,2),o,","); a=o[1]+0; n=(o[2]==""?1:o[2]+0); e=(n==0?a:a+n-1); if (a<=hi && e>=lo) bad=1} END{exit bad}'; }
-  fn_range() { git show "HEAD:$1" | awk -v re="$2" '$0~re{s=NR} s&&/^}/{print s, NR; exit}'; }
-  fn_range_py() { git show "HEAD:$1" | python3 -c 'import ast,sys; t=ast.parse(sys.stdin.read()); n=next(x for x in ast.walk(t) if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef)) and x.name==sys.argv[1]); print(n.lineno, n.end_lineno)' "$2"; }
+  hunk_guard() { [ -n "$2" ] && [ -n "$3" ] || { echo "hunk_guard: empty range bound for $1" >&2; return 2; }; git diff --cached -U0 -- "$1" | awk -v lo="$2" -v hi="$3" '/^@@/{split(substr($2,2),o,","); a=o[1]+0; n=(o[2]==""?1:o[2]+0); if (n==0) {if (a>=lo && a<hi) bad=1} else if (a<=hi && a+n-1>=lo) bad=1} END{exit bad}'; }
+  fn_range() { local e="${3-}"; [ -n "$e" ] || e='^}'; local r; r=$(git show "HEAD:$1" | awk -v re="$2" -v en="$e" '$0~re&&!s{s=NR} s&&$0~en{print s, NR; exit}'); [ -n "$r" ] || { echo "fn_range: no match for $2 in $1" >&2; return 1; }; echo "$r"; }
+  fn_range_py() { git show "HEAD:$1" | python3 -c 'import ast,sys; t=ast.parse(sys.stdin.read()); n=next((x for x in ast.walk(t) if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef)) and x.name==sys.argv[1]), None); n or sys.exit("fn_range_py: no def " + sys.argv[1]); print(n.lineno, n.end_lineno)' "$2"; }
   ```
-- **Go coverage.** In trading and portfolio all new logic is in the `service` and `telemetry` packages, which the CI `COVERPKGS` filter excludes; the test steps say so, still run the full suite with `-race`, and assert the 40% threshold on the packages that ARE measured with `go tool cover -func=coverage.out | awk '/^total:/{gsub("%","",$3); exit ($3<40)}'` (non-zero exit below 40).
+- **Go coverage.** In trading and portfolio all new logic is in the `service` and `telemetry` packages, which the CI `COVERPKGS` filter excludes; the test steps say so, still run the full suite with `-race`, and assert the 40% threshold on the packages that ARE measured with `go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3<40) bad=1} END{exit (!seen || bad)}'` (non-zero exit below 40, and also non-zero when `coverage.out` has no `total:` line, so a missing profile cannot pass).
+- **Python commands.** Every Python verification runs inside the service directory through `uv run` (`uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`), the root `CLAUDE.md` uv convention, so the locked environment is the one that is tested.
 
 ### Scenario Coverage (C-15)
 
@@ -56,7 +57,7 @@ Clarifications the spec fixes (design.md leaves them open or ambiguous):
 - Step 2 [test] covers Step 1 [service]; Step 4 covers Step 3; Step 6 covers Step 5; each later even-numbered step 8-28 covers the odd-numbered `service` step immediately before it.
 - Steps 7, 9, 11 require Step 1 (Go accessors, `LogTickOK`, `TickThrottle`); Steps 13, 15, 25, 27 require Step 3 (Python accessors; `log_tick_ok` for analysis and ingest); Steps 17, 19, 21 require Step 5 (Node accessors); Step 23 requires only `bffMetrics.ts` (no library step).
 - Step 7 (trading) before Step 9 (portfolio) and Step 11 (marketdata): SEV-2 order from design.md 1.11; the Go modules do not depend on each other.
-- Step 13 (analysis) must land clear of feature **215-block-fundamentals-strategy-on-etf** (in-progress): do not touch `live_loop.py` ~733-760 and ~876-891, nor `servicer.py` RunBacktest refusal/derivation paths or `evaluator.py` shared helpers beyond the single `fundamentals formula=` log level. Ordering is informal: `merge-order.md` has no 294 row. The operator should add advisory rows (294 vs 215: analysis `live_loop.py`/`servicer.py`/`evaluator.py` and marketdata `etf_flags.go`/`fmp_client.go`/`cmd/server/main.go`; 294 vs 281/282: portfolio `portfolio_service.go`, agent `tools.py`, config `configServiceImpl.ts`). 294 should merge after 215; if it has not, rebase before editing `servicer.py` and re-grep.
+- Step 13 (analysis) must land clear of feature **215-block-fundamentals-strategy-on-etf**. 215 is code-completed on `origin/main-dev` (its integration PR is merged; `merge-order.md` row for `expose-score-strategy-mcp` records this), but its `status.md` may still read `in-progress` locally because it flips to `launched` only after 283 ships. 294 therefore merges after 215's code is on `main-dev`, and the local checkout may lag `origin/main-dev`: rebase first and re-derive every range. Step 13's guards derive the forbidden ranges from `HEAD` by anchor (no hard-coded line numbers): in `live_loop.py` the `Feature 215 (FR-4)` deny-entry block in `_eval_pair` (through `_fund_unavailable.discard(key)`) and `_emit_fundamentals_unavailable_alert` (about 733-760 and 876-891 at the time of writing, for orientation only); in `servicer.py` the `RunBacktest` and `_run_backtest` bodies; in `evaluator.py` everything except the single `fundamentals formula=` log level inside `_fundamentals_formula_series`. Ordering is informal: `merge-order.md` has no 294 row. The operator should add advisory rows (294 vs 215: analysis `live_loop.py`/`servicer.py`/`evaluator.py` and marketdata `etf_flags.go`/`fmp_client.go`/`cmd/server/main.go`; 294 vs 281/282: portfolio `portfolio_service.go`, agent `tools.py`, config `configServiceImpl.ts`). Because 215's code is already on `main-dev` there is no merge wait; the rebase and re-grep before editing `servicer.py` is the only action.
 - **282-filter-otc-symbols** (implementation-ready) is an additional soft overlap: `marketdata_service.go` (Step 11), `cmd/server/main.go` (Step 11), `configServiceImpl.ts` (Step 19), `portfolio_service.go` (Step 9) and agent `tools.py` (Step 15). Textual rebase only; re-grep by symbol after it lands.
 - Step 9 (portfolio) soft-overlaps **281-signal-watchlist-expiry-pruning** (implementation-ready; adds portfolio `emitEvent`/`cmd/server/main.go:77` prune loop, which logs `"signal watchlist prune tick"`). Step 15 (agent `tools.py`) and Step 19 (config `configServiceImpl.ts`) also overlap 281. Textual rebase only; if 281 lands first, add its prune loop name to portfolio's `Loops` slice (design.md 1.3: portfolio has 5 names plus 281's, still at most 8) and keep its record shape `loop tick ok`.
 - Step 27 (indicators `servicer.py`) soft-overlaps **243-fix-sandbox-seed-keys** (in-progress, `_clamp_override` just above the FR-12 sites). Re-grep after the rebase. 243 also shares indicators `tests/test_config_watcher.py` (Step 28) and `services/xstockstrat-indicators/CLAUDE.md` (Step 30) with this feature; textual rebase only.
@@ -89,7 +90,7 @@ Clarifications the spec fixes (design.md leaves them open or ambiguous):
 
 **Instructions**:
 In each of the three `internal/telemetry/otel.go` files add (design.md 1.1, 1.2). Per-service duplication is deliberate: a shared cross-language library is out of scope (product-spec.md Out of Scope) and the jscpd pass over Go is report-only (`.husky/pre-commit` step 3).
-1. **Rebinding accessors** for counter, histogram and observable gauge. Each caches the instrument keyed on `otel.GetMeterProvider()` identity and re-creates it when the provider changes (so a `sdkmetric.NewManualReader()` provider installed after package init still sees the instrument), with a package generation counter bumped in `Init` after `otel.SetMeterProvider(mp)` as the fallback. Record calls never panic; a nil/no-op provider is a no-op (FR-15(e)). Step 1 commits the REAL rebinding accessors. The RED is demonstrated locally, before the real implementation is written, against a temporary no-op stub (not committed) so it is an assertion failure rather than a compile error; Step 2 therefore never has to change production code to go green.
+1. **Rebinding accessors** for counter, histogram and observable gauge. Each caches the instrument keyed on `otel.GetMeterProvider()` identity and re-creates it when the provider changes (so a `sdkmetric.NewManualReader()` provider installed after package init still sees the instrument), with a package generation counter bumped in `Init` after `otel.SetMeterProvider(mp)` as the fallback. Record calls never panic; a nil/no-op provider is a no-op (FR-15(e)). Step 1 commits the REAL rebinding accessors and Step 2 never changes production code; RED protocol: Execution Summary (the no-op stub exists only in the Step 2 author's working tree and is never committed).
 2. **Tick helper**: `type Loop string` with a closed constant block and an exported `Loops` slice, `const LoopTickOKMsg = "loop tick ok"`, and `func LogTickOK(ctx context.Context, loop Loop, d time.Duration, state string)` writing one `slog.InfoContext(ctx, LoopTickOKMsg, "loop", string(loop), "duration_ms", d.Milliseconds())` plus `"state"` only when non-empty. It takes a duration (not a start time) so the caller's clock seam controls `duration_ms`. State is one of idle, disabled, paused, budget, skipped.
 3. `type TickThrottle struct{ last time.Time }` with `Allow(now time.Time) bool` implementing a 60 s leading edge (the first call and any call at least 60 s after the last allowed one return true). The 60 s is a named constant (`tickThrottleInterval`), a fixed invariant (design.md 1.13), not a config key.
 4. Do not add an `rpc.client.*` instrument and do not edit `serverMetricViews` (AC-56). Loop-name constants are declared by each service's own step (Steps 7, 9, 11) because the sets differ per service.
@@ -123,7 +124,7 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=
 
 **Instructions**:
 Per module, one new test file (no `t.Parallel()`: provider swaps are process-global; each test installs its own `sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))`, calls `otel.SetMeterProvider`, and restores the previous provider in `t.Cleanup`):
-- **Rebind**: create the accessor, install provider A, record 1; install provider B and record 1; each reader sees exactly its own sample (fails against the Step 1 no-op stub).
+- **Rebind**: create the accessor, install provider A, record 1; install provider B and record 1; each reader sees exactly its own sample (RED while the accessor is temporarily no-op'd locally, per the Execution Summary RED protocol).
 - **No-op when disabled (AC-42)**: with `OTEL_ENABLED` unset and the global no-op provider, every accessor call and `LogTickOK` returns without panic.
 - **LogTickOK**: capture slog with a JSON `bytes.Buffer` handler at INFO (the existing `warnRecorder` drops below WARN, so use the inline JSON handler pattern, recon R12); assert one record, message `loop tick ok`, attrs `loop`, `duration_ms` (int), no `state` when empty.
 - **TickThrottle**: `Allow` true at t0, false at t0+59s, true at t0+60s.
@@ -131,7 +132,7 @@ Per module, one new test file (no `t.Parallel()`: provider swaps are process-glo
 
 **Verification**:
 ```
-for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=off go test ./internal/telemetry/... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{gsub("%","",$3); exit ($3<40)}') || exit 1; done
+for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=off go test ./internal/telemetry/... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3<40) bad=1} END{exit (!seen || bad)}') || exit 1; done
 ```
 `internal/telemetry` is an excluded package in the CI `COVERPKGS` filter, so the `-race` run is its gate; the final `awk` asserts the packages that ARE measured stay at or above the 40% CI threshold (it exits non-zero below 40).
 
@@ -164,12 +165,12 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=
 In each `app/telemetry.py` add (design.md 1.1, 1.2):
 1. **Rebinding accessors** for counter, histogram and observable gauge. Each rebinds when `metrics.get_meter_provider()` identity changes (so `metric_reader` installed after import sees the instrument and there is no duplicate-instrument warning). Every record helper wraps its body in `try/except Exception: pass` so a metrics fault can never change control flow.
 2. **analysis and ingest only**: `LOOP_TICK_OK = "loop tick ok"`, `class Loop(StrEnum)` (closed set; names per Steps 13 and 25), and `log_tick_ok(logger, loop, duration_ms, state=None)` writing `logger.info(LOOP_TICK_OK, extra={"loop": str(loop), "duration_ms": int(duration_ms), ...})` with `state` in `extra` only when set. `extra` keys are what the OTel `LoggingHandler` (attached at each module's `init_telemetry`) turns into log attributes.
-3. Decision: `analysis/app/engine/live_loop.py:78-81` (`_TRUNCATION_COUNTER`, `analysis.live_loop.truncated_pairs`) stays as-is. It is out of scope and is NOT routed through the accessor (here or in Step 13); Step 4's characterization of it is informational only.
+3. Decision: `analysis/app/engine/live_loop.py:78-81` (`_TRUNCATION_COUNTER`, `analysis.live_loop.truncated_pairs`) stays as-is. It is out of scope and is NOT routed through the accessor (here or in Step 13); Step 4 pins its current behavior with one fixed assertion, for the record only.
 4. Do not change `tool_metrics.py` or any existing instrument name/attribute (FR-15(b)).
 
 **Verification**:
 ```
-for s in agent analysis indicators ingest; do (cd services/xstockstrat-$s && ruff check . && ruff format --check .) || exit 1; done
+for s in agent analysis indicators ingest; do (cd services/xstockstrat-$s && uv run ruff check . && uv run ruff format --check .) || exit 1; done
 ```
 
 ---
@@ -197,16 +198,16 @@ for s in agent analysis indicators ingest; do (cd services/xstockstrat-$s && ruf
 
 **Instructions**:
 Per service, a new test file reusing `metric_reader` + `otel_reset`:
-- Accessor creates no duplicate-instrument warning (`caplog`), and rebinds after `otel_reset` + a fresh `metric_reader` (fails against a stub that returns a no-op).
+- Accessor creates no duplicate-instrument warning (`caplog`), and rebinds after `otel_reset` + a fresh `metric_reader` (RED while the accessor is temporarily no-op'd locally, per the Execution Summary RED protocol).
 - A raising instrument (monkeypatch the underlying `add` to raise) does not propagate out of the helper.
 - With `OTEL_ENABLED` unset every helper is a no-op and `init_telemetry()` returns without creating an exporter (AC-42).
 - analysis and ingest: `log_tick_ok` emits one INFO record `loop tick ok` whose `LogRecord` carries `loop` and `duration_ms` as attributes (assert on the `LogRecord.__dict__`, and via a `LoggingHandler` over an in-memory log exporter to prove `extra` reaches OTel attributes), and `state` only when passed.
-- analysis: characterize `_TRUNCATION_COUNTER` (`live_loop.py:78-81`): record, then `otel_reset` + new reader, record again, and assert whether the second sample is visible. Record the result in the test docstring (design.md Open Risk "Python LoggingHandler mapping / rebinding", recon R12 says this was unverified). This is informational: Step 3 decided the counter stays as-is and is not rerouted through the accessor.
+- analysis: pin `_TRUNCATION_COUNTER` (`live_loop.py:78-81`, recorded at `:462`) with a fixed assertion. Grounding: the counter is created at import through `metrics.get_meter`; `app/main.py` first imports `app.engine.live_loop` at `:146`, after `init_telemetry()` at `:41`, so in production it binds to the single real provider. Under pytest the module is imported at collection (`tests/test_live_loop.py:20`), before any provider is set, so it is an OTel API 1.45 proxy instrument whose real instrument `_ProxyMeter.on_set_meter_provider` re-creates on every successful `set_meter_provider`. Assertions: precondition `type(_TRUNCATION_COUNTER).__name__ == "_ProxyCounter"` (failure message: import order changed, see Step 4); with `metric_reader` installed, `add(2)` leaves reader A holding exactly one `analysis.live_loop.truncated_pairs` point of value 2; re-arm the set-once exactly as `otel_reset` does (`monkeypatch` `metrics_internal._METER_PROVIDER_SET_ONCE = Once()` and `_METER_PROVIDER = None`), install reader B, `add(3)`, and assert reader B holds one point of value 3. This is why the counter stays as-is: it is out of scope and is not routed through the accessor (Step 3 decision).
 
 **Verification**:
 ```
-for s in analysis ingest agent; do (cd services/xstockstrat-$s && pytest --cov=app --cov-fail-under=40 -q && ruff check . && ruff format --check .) || exit 1; done
-(cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50 -q && ruff check . && ruff format --check .)
+for s in analysis ingest agent; do (cd services/xstockstrat-$s && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .) || exit 1; done
+(cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=50 -q && uv run ruff check . && uv run ruff format --check .)
 ```
 
 ---
@@ -233,7 +234,7 @@ for s in analysis ingest agent; do (cd services/xstockstrat-$s && pytest --cov=a
 **Covers**: —
 
 **Instructions**:
-In each `src/telemetry.ts` add rebinding accessors for counter, histogram and observable gauge following the `bffMetrics.ts:13-23` shape (cache keyed on `metrics.getMeterProvider()` identity; re-create when it changes; `try/catch {}` around every record so a metrics fault never changes control flow). No tick helper in Node (design.md 1.2: the ledger notifier, config listener and indicators watcher are reconnect loops, not tick loops). Do not touch `rpc.server.duration` (`:82-85`) or `rpcDurationViews` (FR-15(b)). Stub the accessor to a no-op first for Step 6's RED.
+In each `src/telemetry.ts` add rebinding accessors for counter, histogram and observable gauge following the `bffMetrics.ts:13-23` shape (cache keyed on `metrics.getMeterProvider()` identity; re-create when it changes; `try/catch {}` around every record so a metrics fault never changes control flow). No tick helper in Node (design.md 1.2: the ledger notifier, config listener and indicators watcher are reconnect loops, not tick loops). Do not touch `rpc.server.duration` (`:82-85`) or `rpcDurationViews` (FR-15(b)). The real accessors are committed here; Step 6's author follows the Execution Summary RED protocol (temporarily no-op the accessor locally, record RED then GREEN, never commit the stub).
 
 **Verification**:
 ```
@@ -263,7 +264,7 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 **Covers**: `AC-42`
 
 **Instructions**:
-Per service: (a) rebind test: install a `MeterProvider` with a `CollectingReader` after module import, record via the accessor, assert the sample is collected; install a second provider and assert rebinding; (b) a throwing instrument does not escape the record helper; (c) with the global no-op provider and `OTEL_ENABLED` unset every accessor call returns without throwing (AC-42); (d) an active span survives `queueMicrotask` (design.md Open Risk "Node AsyncLocalStorage"): start a span, `await new Promise(r => queueMicrotask(r))`, assert `trace.getActiveSpan()` is still the span (record the result; Step 22 depends on it for notify).
+Per service: (a) rebind test: install a `MeterProvider` with a `CollectingReader` after module import, record via the accessor, assert the sample is collected; install a second provider and assert rebinding; (b) a throwing instrument does not escape the record helper; (c) with the global no-op provider and `OTEL_ENABLED` unset every accessor call returns without throwing (AC-42); (d) an active span survives `queueMicrotask` (design.md Open Risk "Node AsyncLocalStorage"): start a span, `await new Promise(r => queueMicrotask(r))`, assert `trace.getActiveSpan()` is still the span (record the result; Step 22 depends on it for notify). RED protocol for (a)-(c): Execution Summary (temporary local no-op of the accessor; the stub is never committed).
 
 **Verification**:
 ```
@@ -302,7 +303,7 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 **Instructions**:
 Signals only (product-spec.md Operator decision 2). No new halt, page or status change; order placement, fill detection and the `PARTIALLY_FILLED` / `FILLED` handling at `:1812` are untouched (fill handling unaffected by this step). Order types MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP: order-type handling unaffected. Broker coverage: `broker_type` label covers ALPACA, IBKR and OFFLINE (where the path exists) on equal terms. Trading mode gate: no order is placed or submitted by anything added here; paper and live behave identically (no `trading_mode` label anywhere, AC-41 / `@AC-1 @feature-171`).
-0. **Characterize first.** Before changing any production code, write the characterization tests in `trading_telemetry_test.go` (listed in this step's **Files**) for `checkCredentialHealth`, `sweepOrderIntents`, `checkBracketProtection` and the ListOrders `polled` path (they have no test today, design.md 1.11 step 2), and run them green against the unmodified code. Then make the production changes below. Both land in this step's single commit; Step 8 keeps only the new-behavior cases and does not re-claim the characterization tests.
+0. **Characterize first.** Before changing any production code, write the characterization tests in `trading_telemetry_test.go` (listed in this step's **Files**) for `checkCredentialHealth`, `sweepOrderIntents`, `checkBracketProtection` and the ListOrders `polled` path (they have no test today, design.md 1.11 step 2), and run them green against the unmodified code (`cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/... -race -count=1 -run 'Characterization'`). Then make the production changes below. Both land in this step's single commit; Step 8 keeps only the new-behavior cases and does not re-claim the characterization tests.
 1. **Instruments + keys** in `otel.go` using Step 1's accessors, names per design.md 1.4: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome}`, `trading.ledger_emit{event_type, outcome}`, `trading.alert_emit{alert_kind, outcome}`, `trading.escalation.systemic` (unlabelled). Key constants: `outcome`, `broker_type`, `event_type`, `alert_kind`. Add the closed `Loop` constants for trading: `fill_poller`, `reconciliation`, `position_sync` (KEPT, never logged through `LogTickOK`), `credential_health`, `bracket_watchdog`, `order_intent_sweeper`, and the `Loops` slice. `event_type` is clamped to the design.md 1.4 allowlist (unknown -> `other`); `alert_kind` is a `type alertKind string` with constants reconciliation, halt, account, bracket, approval, trade and no `other` branch.
 2. **Clock seam**: add `now func() time.Time` to `TradingService` and a nil-safe `clock()` mirroring portfolio's. Tick durations and `TickThrottle` use `s.clock()` so a test controls `duration_ms`.
 3. **flattenAndHalt** (`:2854`): count `no_broker`, `offline`, `order_not_found`, `hash_error`, `flattened`, `halted` at the exits design.md 1.4 lists. Split `:2885`: `lookup_error` when `err != nil && grpcstatus.Code(err) != codes.NotFound` (new ERROR `"flattenAndHalt: position lookup failed"` with `account_id`, `symbol`, `error`, then return); `flat` when `err == nil && (position == nil || position.Qty == 0)` or `grpcstatus.Code(err) == codes.NotFound` (keep the text `"flattenAndHalt: no open position to flatten"`, level WARN -> INFO, then return). Both branches still return exactly where the old combined branch did (AC-1, AC-2, AC-57).
@@ -317,9 +318,9 @@ cd /home/user/xstockstrat && git add -A services/xstockstrat-trading
 # (define hunk_guard / fn_range from Execution Summary, "Staged-diff hunk guards")
 f=services/xstockstrat-trading/internal/service/trading.go
 set -- $(fn_range "$f" '^func [(]s [*]TradingService[)] StartFillPoller[(]'); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside StartFillPoller"; exit 1; }
-cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go test ./internal/service/... -race -count=1 -run 'Characterization' && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go test ./internal/service/... -race -count=1 -run 'Characterization' -v && GOWORK=off go test ./internal/service/... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
-(Run BEFORE the step's commit. The guard fails if any staged hunk's pre-image overlaps `StartFillPoller`, AC-6; the characterization tests (name them `...Characterization`) must pass against the staged production changes.)
+(Run BEFORE the step's commit. The guard fails if any staged hunk's pre-image overlaps `StartFillPoller`, AC-6; the characterization tests (name them `...Characterization`) must pass against the staged production changes, and the full `internal/service` run proves no existing test regressed.)
 
 ---
 
@@ -357,7 +358,7 @@ Extend `trading_telemetry_test.go` (created in Step 7); each test installs a `sd
 
 **Verification**:
 ```
-cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{gsub("%","",$3); exit ($3<40)}' && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-trading && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3<40) bad=1} END{exit (!seen || bad)}' && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 New logic is in the excluded `service` and `telemetry` packages, so the `-race` run over the new tests is its gate; the `awk` assertion fails the step if the packages CI does measure fall below 40%. Partial-fill parity (AC-45) is exercised in the test.
 
@@ -401,9 +402,9 @@ Signals only; valuation behavior and the park/ack semantics are unchanged (C-10(
 
 **Verification**:
 ```
-cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go vet ./internal/service/... && GOWORK=off golangci-lint run --modules-download-mode=mod && ! grep -n 'slog.Warn("latest quote has no usable price"' internal/service/portfolio_service.go
+cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go test ./internal/service/... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod && ! grep -n 'slog.Warn("latest quote has no usable price"' internal/service/portfolio_service.go
 ```
-(The last grep must find nothing: the per-position Warn is gone.)
+(The `go test` run executes the two edited test files against the changed consumer, not just a compile; the last grep must find nothing: the per-position Warn is gone.)
 
 ---
 
@@ -438,7 +439,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 
 **Verification**:
 ```
-cd services/xstockstrat-portfolio && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{gsub("%","",$3); exit ($3<40)}' && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-portfolio && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3<40) bad=1} END{exit (!seen || bad)}' && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 New logic is in the excluded `service` and `telemetry` packages, so the `-race` run is its gate; the `awk` assertion fails the step if the packages CI does measure fall below 40%.
 
@@ -457,7 +458,7 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
 - `services/xstockstrat-marketdata/internal/service/etf_flags.go` — modify
-- `services/xstockstrat-marketdata/cmd/server/main.go` — modify (register the stream-age gauge callback)
+- `services/xstockstrat-marketdata/cmd/server/main.go` — modify (one call to `telemetry.RegisterStreamLastMessageAge`)
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify (warm-poller characterization tests only, Instruction 0; Step 12 adds the new-behavior cases)
 
 **Reviewers**: Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity, Alpaca feed idempotency; vendor-call instrumentation must not leak the FMP apikey or Finnhub token; Platform Lead — loop-liveness record shape
@@ -478,19 +479,21 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 No read deadline and no change to reconnect, backfill return or poller semantics.
 - **Scope note (accepted Files-count warning, not split):** the vendor clients, stream, backfill, warm poller and retention/ETF-filler ticks share the `cmd/server/main.go` wiring and the one `marketdata` telemetry module, so splitting would leave an intermediate commit with registered-but-unwired instruments.
 - **Broker symmetry:** order-submission broker symmetry (Alpaca and IBKR) is covered in Step 7 (`trading.order_submit{broker_type}`). Marketdata has no IBKR path: its vendors are Alpaca, FMP, Finnhub and EDGAR only.
-0. **Characterize first (warm poller).** Before extracting `warmQuotesOnce` or touching any production code, write the characterization tests in `marketdata_service_test.go` (listed in this step's **Files**) pinning the existing warm-poller cycle: per-symbol cache-insert failures are logged and the cycle continues, the pause `continue` and `ticker.Reset` behavior, and the `registry.Get` error path. Run them green against the unmodified code, then make the production changes below. Both land in this step's single commit; Step 12 keeps only the new-behavior cases (AC-46 aggregate WARN, DEBUG demotion) and does not re-claim the characterization.
-1. **Instruments + keys** in `otel.go`: `marketdata.vendor.requests{vendor, op, outcome}`, `marketdata.vendor.request.duration{vendor, op}`, `marketdata.stream.reconnects{result}`, observable gauge `marketdata.stream.last_message_age`, `marketdata.backfill.symbols{kind, outcome}`; keys `vendor`, `op`, `outcome`, `result`, `kind`. `Loop` constants: `warm_quote`, `bar_ingest` (KEPT), `classification_refresh` (KEPT), `etf_flag_filler`, `quote_retention`.
+0. **Characterize first (warm poller), limited to what has a seam.** `StartWarmQuotePoller` cannot be driven from a unit test: `s.cfg` is the concrete `*config.Watcher` (no test constructs one) and the ticker defaults to 30 s. So the pause `continue` and `ticker.Reset` are NOT characterized; they stay verbatim in the outer loop and the staged-diff check in Verification protects them. Characterization covers only the two paths in the per-cycle body: (a) a per-symbol `cacheQuote` failure is logged (`"warm poller: cache insert failed"`) and the cycle continues with the remaining symbols, on both the multi-symbol and the per-symbol fallback path; (b) a `registry.Get` error ends the cycle without calling any source or the cache. Sequence: first run `cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... ./internal/alpaca/... -race -count=1` on the untouched tree to record the baseline; then make the one purely mechanical edit that creates the seam (move the body from `since := s.quoteSince()` to the end of the `case <-ticker.C:` block verbatim into `warmQuotesOnce(ctx, symbols)`, each cycle-ending `continue` becoming `return`, no log, metric or control-flow change); write the two characterization tests against `warmQuotesOnce` in `marketdata_service_test.go`; run the same command green on that verbatim move; only then add signal code. Everything lands in this step's single commit; Step 12 keeps only the new-behavior cases (AC-46 aggregate WARN, DEBUG demotion) and does not re-claim the characterization.
+1. **Instruments + keys** in `otel.go`: `marketdata.vendor.requests{vendor, op, outcome}`, `marketdata.vendor.request.duration{vendor, op}`, `marketdata.stream.reconnects{result}`, observable gauge `marketdata.stream.last_message_age`, `marketdata.backfill.symbols{kind, outcome}`; keys `vendor`, `op`, `outcome`, `result`, `kind`. The vendor, stream and backfill instruments are recorded from the alpaca, fmp, finnhub, edgar and service packages, so `otel.go` also exports their record helpers, and `func RegisterStreamLastMessageAge(read func() (time.Time, bool), now func() time.Time)`, which registers the gauge once (idempotent) and observes `now().Sub(t)` in seconds only when `ok`. `Loop` constants: `warm_quote`, `bar_ingest` (KEPT), `classification_refresh` (KEPT), `etf_flag_filler`, `quote_retention`.
 2. **Vendor chokepoints** (design.md 1.4 vocabulary: ok, http_429, http_4xx, http_5xx, transport, read, decode, ctx, cap, throttle, build, other): record manually at FMP `getJSON`, Finnhub `getJSON`, EDGAR `get`, Alpaca `do()`. `ctx` wins whenever the request context errored. A duration sample is recorded only when a request was actually sent (throttle/cap/build record the counter only). `op` sets are closed: FMP {quote, ratios, profile}, Finnhub {metric, quote, profile}, EDGAR {tickers, companyfacts}, Alpaca {bars, quotes_latest, trades_latest, assets, dividends} derived from the request path. Alpaca duration = time to headers; Alpaca read/decode failures are not counted (they happen in the 8 callers; declared Open Risk). No attribute, span attribute or log may contain the URL, apikey, token or symbol (AC-13).
-3. **Stream** (design.md 1.7): new `streamManager` fields `lastFrame atomic.Int64` (unix nanos) and `now func() time.Time` (nil means `time.Now`; the same `now` is used where `lastFrame` is stored and where the gauge computes the age). Store right after the `conn.Read` error check (`:264-267`) and before `json.Unmarshal` (`:269`); `m.lastFrame.Store(0)` at `run()` entry (`:166`); `func (c *Client) StreamLastFrame() (time.Time, bool)` reads through `c.streamMgr()` (never `c.stream` outside the Once), returns `ok = running && lastFrame != 0` with `running` read under `m.mu`, so after the give-up (`running = false` at `:201`) the gauge reports no sample. `marketdata.stream.reconnects{reconnected}` after the reconnect succeeds when `attempts < max`; `{gave_up}` beside the give-up ERROR at `:198`. Register the gauge callback once in `cmd/server/main.go`, observing only when `ok`.
+3. **Stream** (design.md 1.7): new `streamManager` fields `lastFrame atomic.Int64` (unix nanos) and `now func() time.Time` (nil means `time.Now`; the same `now` is used where `lastFrame` is stored and where the gauge computes the age). Store right after the `conn.Read` error check (`:264-267`) and before `json.Unmarshal` (`:269`); `m.lastFrame.Store(0)` at `run()` entry (`:166`); `func (c *Client) StreamLastFrame() (time.Time, bool)` reads through `c.streamMgr()` (never `c.stream` outside the Once), returns `ok = running && lastFrame != 0` with `running` read under `m.mu`, so after the give-up (`running = false` at `:201`) the gauge reports no sample. `marketdata.stream.reconnects{reconnected}` after the reconnect succeeds when `attempts < max`; `{gave_up}` beside the give-up ERROR at `:198`. `cmd/server/main.go` makes one call, `telemetry.RegisterStreamLastMessageAge(alpacaClient.StreamLastFrame, time.Now)` (`alpacaClient` is built at `main.go:93`), so the registration is a testable function in `internal/telemetry`, not logic in `main`.
 4. **BackfillBars / BackfillFundamentals**: `marketdata.backfill.symbols{kind=bars|fundamentals, outcome=written|empty|failed}` per symbol; the response (`FailedSymbols`) and the nil error are unchanged.
 5. **Warm poller**: extract the per-cycle body from `StartWarmQuotePoller` (`marketdata_service.go:1112`-`1181`) into `warmQuotesOnce(ctx, symbols)` keeping the outer loop's pause `continue` and `ticker.Reset`; aggregate the cache-insert failures into ONE `slog.WarnContext(ctx, "warm poller: cache insert failures", "count", n, "sample_symbols", <=5)` per cycle; the per-symbol `"warm poller: cache insert failed"` lines (`:1152`, `:1173`) drop to DEBUG with their text unchanged; the cycle still continues. The `LogTickOK` record: `warm_quote`; no record when `registry.Get` errored or the per-symbol fallback ran with `fetched == 0`; `idle` for 0 symbols; `paused` written in the outer loop's pause branch.
 6. **Tick records**: `etf_flag_filler` throttled (60 s leading edge) once per dequeued item in `fillEtfFlag`; no record on `FetchIsEtf` error; `disabled` (fmp disabled / no cap) and `budget` states; `quote_retention` at the end of `runQuoteRetentionStep`, no record when `DropQuoteChunksBefore` errored, `skipped` for the safety skip (its WARN stays), `disabled` when `s.retention == nil`. `bar ingest: cycle complete` and `classification refresh cycle complete` are KEPT, no second record.
 
 **Verification**:
 ```
-cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod && ! grep -rn "otelhttp" --include=*.go .
+cd /home/user/xstockstrat && git add -A services/xstockstrat-marketdata
+! git diff --cached -U0 -- services/xstockstrat-marketdata/internal/service/marketdata_service.go | grep -E '^-.*(time[.]NewTicker|ticker[.]Reset|paused via config)'
+cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go test ./internal/service/... ./internal/alpaca/... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod && ! grep -rn "otelhttp" --include=*.go .
 ```
-(The final grep must find nothing: no `otelhttp` wrapper.)
+(Run BEFORE the step's commit. The staged-diff grep fails if any removed line is the outer loop's `NewTicker`, `ticker.Reset` or `paused via config` line, i.e. the un-characterized pause/Reset code moved or changed; the `go test` run re-executes the Instruction 0 characterization tests against the final code; the last grep must find nothing: no `otelhttp` wrapper.)
 
 ---
 
@@ -519,7 +522,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 **Covers**: `AC-7, AC-12, AC-13, AC-14, AC-46`
 
 **Instructions**:
-- AC-12 (`stream_metrics_test.go`): stream manager with injected `now` and max reconnects 5; the first session reads a frame at T then drops, the next 4 drop before the subscription ack. Collect at T+30 s while reconnecting -> `marketdata.stream.last_message_age` is 30 s; `reconnects{reconnected}` +4 and `{gave_up}` +1; after the give-up the gauge reports no sample. Also a lazy manager with no subscribers reports nothing, and `go test -race` passes (StreamLastFrame reads through `streamMgr()`).
+- AC-12 (`stream_metrics_test.go`): stream manager with injected `now` and max reconnects 5; the first session reads a frame at T then drops, the next 4 drop before the subscription ack. The test registers the gauge through `telemetry.RegisterStreamLastMessageAge` with the manager's `StreamLastFrame` and the same injected `now` (nothing goes through `cmd/server`). Collect at T+30 s while reconnecting -> `marketdata.stream.last_message_age` is 30 s; `reconnects{reconnected}` +4 and `{gave_up}` +1; after the give-up the gauge reports no sample. Also a lazy manager with no subscribers reports nothing, and `go test -race` passes (StreamLastFrame reads through `streamMgr()`).
 - AC-13 (`fmp_client_test.go`): FMP `getJSON` against an `httptest` server returning 429 for `.../stable/profile?symbol=AAPL&apikey=SECRET123` -> `vendor.requests{fmp, profile, http_429}` +1, `vendor.request.duration{fmp, profile}` records 1 sample; no metric attribute, span attribute or log line contains `SECRET123` and no attribute contains `AAPL`; a throttle or cap exit counts `throttle` / `cap` with no duration sample. Add equivalent minimal cases for Finnhub (token, in `finnhub_client_test.go`), EDGAR (`edgar_client_test.go`) and Alpaca `do()` (ok and ctx, `alpaca/client_test.go`).
 - AC-14 (`marketdata_service_test.go`): `BackfillBars` timeframe `1d` for 5 symbols (2 fail, 1 empty) -> `backfill.symbols{bars}` written +2, empty +1, failed +2; `FailedSymbols` length 2 and nil error.
 - AC-46: a warm-poller cycle over 25 symbols where `cacheQuote` fails for 8 (the existing behavior was characterized in Step 11 Instruction 0; this step asserts only the new behavior) -> exactly one WARN `"warm poller: cache insert failures"` with count 8 and at most 5 sample symbols; the per-symbol lines at DEBUG; the cycle continues.
@@ -528,7 +531,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 **Verification**:
 ```
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{gsub("%","",$3); exit ($3<40)}' && GOWORK=off golangci-lint run --modules-download-mode=mod
+cd services/xstockstrat-marketdata && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3<40) bad=1} END{exit (!seen || bad)}' && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 The `awk` assertion exits non-zero when total coverage of the measured packages is below 40%.
 
@@ -557,7 +560,7 @@ The `awk` assertion exits non-zero when total coverage of the measured packages 
 - Confirmed via: `supervision.py`: `spawn :16`, `_on_done :23` (only call that passes `exc_info`, `:32`), `retry_until_ok :40` (seed error, no exc_info), `run_supervised :49` (tick error, no exc_info).
 - Confirmed via: `evaluator.py:614` `"fundamentals formula=%s ref=%s bars=%d ..."` at INFO.
 - Confirmed via: `pnl_pattern_consumer.py:180-206` stream loop with `_process_with_retry(event)` and the outer `except Exception` reconnect.
-- Overlap: 215 owns `live_loop.py:733-760` and `:876-891` and `servicer.py` RunBacktest paths; every site above is disjoint (recon R15).
+- Overlap: 215's code is on `main-dev` and owns the `Feature 215 (FR-4)` block in `_eval_pair` and `_emit_fundamentals_unavailable_alert` in `live_loop.py` (`:733-760` and `:876-891` at the time of writing, derived by anchor in Verification) and the `servicer.py` RunBacktest paths; every site above is disjoint (recon R15).
 
 **TDD**: red-green required
 
@@ -569,18 +572,25 @@ Signals only; the fundsignal run status (`:311`), release-on-failed-emit (`:298-
 2. **Fundsignal sink** (design.md 1.5): `run_once(..., *, _emit_counts: list[int] | None = None)`; at the top `counts = _emit_counts if _emit_counts is not None else [0, 0]` ([attempted, emit_failed]); `counts[0] += 1` right after `confirmed = False` (`:274`, after the `row is None` continue); a new `else:` on `if signal_id is not None:` (`:285`) increments `counts[1]` and `analysis.fundsignal.signals{failed}`, and the success path records `{emitted}` beside `:297`; pass `counts` to every `_finish`. `_finish` gains keyword args `universe=None, scored=None, attempted=0, emitted=None, emit_failed=0` and writes ONE INFO `"fundsignal run summary"` (omitting `None` fields); the main return passes `universe=len(universe), scored=len(scores), attempted=counts[0], emitted=emitted, emit_failed=counts[1]`. Only `_tick` passes a sink and reads it after `run_once` returns; the `RunFundamentalsScan` path passes none and still gets a correct summary.
 3. **Fundsignal tick**: in `_tick`, `summary = await self.run_once(..., _emit_counts=counts)` replaces the discarding call; after `_advance_schedule` (`:159`) write `loop tick ok` (`fundsignal`) unless the except path (`:160-163`), `summary.status == "failed"`, `status == "partial" and symbols_processed == 0`, or `counts[0] > 0 and counts[1] == counts[0]`; `idle` for 0 processed; `disabled` at the early return `:144-146`; no record when not due or when the lock is held. `log.error("fundsignal: cycle error: %s", e)` gains `exc_info=True`.
 4. **servicer.py ticks**: `loop tick ok` for `opportunity_refresh`, `readiness_materializer`, `template_intent_sweep` at the success point of each tick per design.md 1.3 (no record when enumeration failed, or when every user/owner/intent failed; `idle` for 0 items; `disabled` for the materializer's disabled branch; template sweep uses a new local `enum_failed` flag set where the enumeration exception is swallowed, swallow-and-advance unchanged). `analysis.opportunity.recompute{kind full|retry, outcome ok|failed}` around the two `_run()` bodies at `:4891-4906` and `:4923-4930` (the failure log at `:4904` gains `exc_info=True`). `pnl_consumer` throttled `loop tick ok` after `_process_with_retry` returns (`pnl_pattern_consumer.py:189`), none on the outer exception.
-5. **supervision.py**: `exc_info=True` on the seed error (`retry_until_ok`, `:45` region) and the tick error (`run_supervised`, `:54` region); no other change. **evaluator.py**: the `"fundamentals formula=..."` INFO at `:614` moves to DEBUG with text unchanged; the per-symbol INFO near `servicer.py:1894` also moves to DEBUG (N-06). Do not demote any named-WARN rule (S/analysis `@feature-262`, watchlist universe, opportunities-read, screener isolation).
+5. **supervision.py**: `exc_info=True` on the seed error (`retry_until_ok`, `:45` region) and the tick error (`run_supervised`, `:54` region); no other change. **evaluator.py**: the `"fundamentals formula=..."` INFO at `:614` moves to DEBUG with text unchanged; the per-symbol `"PIT fundamentals loaded"` INFO in `servicer.py` `_load_fundamentals` (`:1837`, the log call near `:1894`; outside `RunBacktest`/`_run_backtest`) also moves to DEBUG with its text unchanged (N-06). Do not demote any named-WARN rule (S/analysis `@feature-262`, watchlist universe, opportunities-read, screener isolation).
 6. **template.instantiate{service="analysis", outcome}** in `InstantiateTemplate` (`:3729`): `ok`, or the lower-cased gRPC code name (unavailable, not_found, already_exists, internal, aborted) at each abort site, else `other`. Add the `Loop` members `fundsignal`, `opportunity_refresh`, `readiness_materializer`, `template_intent_sweep`, `pnl_consumer`.
 
 **Verification**:
 ```
 cd /home/user/xstockstrat && git add -A services/xstockstrat-analysis
-# (define hunk_guard from Execution Summary, "Staged-diff hunk guards"; ranges are HEAD pre-image lines, re-derive after rebasing onto 215)
+# (define hunk_guard / fn_range / fn_range_py from Execution Summary, "Staged-diff hunk guards"; every range is derived from HEAD by anchor, so re-run after rebasing onto 215)
 f=services/xstockstrat-analysis/app/engine/live_loop.py
-hunk_guard "$f" 733 760 && hunk_guard "$f" 876 891 || { echo "staged hunk inside 215's live_loop.py regions"; exit 1; }
-cd services/xstockstrat-analysis && ruff check . && ruff format --check . && grep -c "live_loop: cycle complete" app/engine/live_loop.py
+set -- $(fn_range "$f" 'Feature 215 [(]FR-4[)]' '_fund_unavailable[.]discard[(]key[)]'); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside 215's FR-4 deny-entry block"; exit 1; }
+set -- $(fn_range_py "$f" _emit_fundamentals_unavailable_alert); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside _emit_fundamentals_unavailable_alert"; exit 1; }
+sv=services/xstockstrat-analysis/app/handlers/servicer.py
+for fn in RunBacktest _run_backtest; do set -- $(fn_range_py "$sv" $fn); hunk_guard "$sv" "$1" "$2" || { echo "staged hunk inside servicer.py $fn"; exit 1; }; done
+ev=services/xstockstrat-analysis/app/services/evaluator.py
+set -- $(fn_range_py "$ev" _fundamentals_formula_series); [ -n "$2" ] || { echo "evaluator range not found"; exit 1; }
+hunk_guard "$ev" 1 $(($1-1)) && hunk_guard "$ev" $(($2+1)) 999999 || { echo "staged evaluator.py hunk outside _fundamentals_formula_series"; exit 1; }
+[ "$(git diff --cached -U0 -- "$ev" | grep -E '^[-+][^-+]')" = "$(printf -- '-        log.info(\n+        log.debug(')" ] || { echo "evaluator.py change is not exactly the fundamentals-formula INFO->DEBUG"; exit 1; }
+cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --check . && grep -c "live_loop: cycle complete" app/engine/live_loop.py
 ```
-(Run BEFORE the step's commit. `hunk_guard` exits non-zero if any staged hunk's pre-image overlaps 215's regions 733-760 or 876-891; the `grep -c` count must be at least 1, and `grep -c` exits non-zero on 0.)
+(Run BEFORE the step's commit. `hunk_guard` exits non-zero if any staged hunk's pre-image overlaps 215's `FR-4` block or `_emit_fundamentals_unavailable_alert` in `live_loop.py`, or the `RunBacktest` / `_run_backtest` bodies in `servicer.py`. For `evaluator.py` the check is exact: no staged hunk lies outside `_fundamentals_formula_series` (the shared helpers are untouched), and the only staged change in the file is the one `log.info(` to `log.debug(` line of the `fundamentals formula=` call. The `grep -c` count must be at least 1, and `grep -c` exits non-zero on 0.)
 
 ---
 
@@ -615,7 +625,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . && gre
 
 **Verification**:
 ```
-cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40 -q && ruff check . && ruff format --check .
+cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
 ```
 
 ---
@@ -655,7 +665,7 @@ Signals only: no tool is added, removed or re-shaped (mcp-tools.md and the tool-
 2. **mtls wrapper** (design.md 1.9): `secure_channel` still calls `channel_credentials()` eagerly (so `test_mtls.py` still sees the `RuntimeError`) and returns `_CountingChannel(inner, backend)`: `__aenter__` returns `await inner.__aenter__()`; `__aexit__`: if `exc` is a `grpc.aio.AioRpcError`, `try: tool_metrics.record_backend_rpc_error(backend, exc.code()) except Exception: pass`, then `await inner.__aexit__(...)` and `return False` (never suppress or replace the exception); `__getattr__` delegates. Errors caught inside the block are not counted; the identity-call double view (`oauth.requests` and `backend.rpc_errors`) is declared.
 3. **auth.py**: `mcp.auth.rejected` reasons `wrong_audience` (`:83-84`), `identity_unavailable` (`:92-94`), `invalid_token` (`:95-96`), `internal_error` (`:97-99`, inside the existing except, still returns None); the `:98` ERROR becomes `log.error("Unexpected error validating JWT claims: %s: %s", type(e).__name__, e)`; the token is never logged. **main.py**: `missing_bearer` at the missing-token 401 path (`_authorized`, ~`:157-158`); status codes unchanged.
 4. **oauth_server.py**: `oauth.txn.rejected{malformed | bad_sig | decode | state_mismatch}` at `:61-62`, `:64-65`, `:68-69`, `:203` (design.md); `oauth.requests` `outcome` `upstream_error` (AioRpcError UNAVAILABLE/DEADLINE_EXCEEDED), `invalid_grant` (other AioRpcError), `error` (non-gRPC), `unsupported_grant_type` (`:272`); the two bare excepts (`:259`, `:268`) gain a `log.warning` carrying the gRPC code name or exception class only, never the code, token or state; the 400 `invalid_grant` response is unchanged. Do not catch the `_txn_key` raise (NC-4).
-5. **tools.py**: `agent.degraded{kind}` at the swallowed post-commit sites: `alert_threshold_default`, `auto_alert`, `watchlist_add`, `policy_default`; unchanged return values. **Onboarding**: log `OAuth` token-exchange success is identity's existing `"OAuth code exchanged"` INFO (carries `userId`); the agent adds one INFO `"first successful tool call"` with `user_id` as a log FIELD (never a label), guarded by an in-memory seen-set capped at 10000 entries (named invariant, design.md 1.13).
+5. **tools.py**: `agent.degraded{kind}` at the swallowed post-commit sites: `alert_threshold_default`, `auto_alert`, `watchlist_add`, `policy_default`; unchanged return values. **Onboarding**: the token-exchange-success half already exists in identity as `log.info('OAuth code exchanged', { clientId, userId })` (`identityServiceImpl.ts:515`; Step 17 leaves it unchanged), so the agent adds no exchange log. The agent's half is one INFO `"first successful tool call"` with `user_id` as a log FIELD (never a label), written from `ToolMetricsMiddleware.__call__` in `app/tool_metrics.py`, the one place that already classifies each `tools/call` result as ok or error: when `outcome == "ok"` and the tool name is registered, it reads `user_id` from the verified claims on the request scope (`ctx.request.scope["state"][MCP_CLAIMS_SCOPE_KEY]`, key defined at `app/scopes.py:18`, the same source `_claims_from_scope_state` in `tools.py` uses) and logs only if the id is not yet in a module-level in-memory seen-set. The set is capped at 10000 entries (named invariant, design.md 1.13): at the cap nothing is added, nothing is evicted and nothing is logged for a user first seen after it, so memory and log volume stay bounded and no id is logged twice per process. The set is per-process, so a restart or another instance may log a user's first call again (declared; the agent stays stateless).
 
 **Verification**:
 ```
@@ -663,7 +673,7 @@ cd /home/user/xstockstrat && git add -A services/xstockstrat-agent
 # (define hunk_guard / fn_range_py from Execution Summary, "Staged-diff hunk guards")
 f=services/xstockstrat-agent/app/tools.py
 set -- $(fn_range_py "$f" _grpc_error_message); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside _grpc_error_message"; exit 1; }
-cd services/xstockstrat-agent && ruff check . && ruff format --check .
+cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --check .
 ```
 (Run BEFORE the step's commit. The guard fails if any staged hunk's pre-image overlaps the `_grpc_error_message` body, so its messages stay byte-identical.)
 
@@ -697,11 +707,11 @@ Not planned: `tests/conftest.py` changes. If a second consumer forces a shared f
 - `test_mtls_backend_errors.py` (design.md 1.9 a-d): (a) an `AioRpcError(DEADLINE_EXCEEDED)` raised inside `async with mtls.secure_channel(...)` gives `agent.backend.rpc_errors` +1 and `pytest.raises` receives the SAME exception object; (b) AC-21 end to end: a loopback analysis fake with `lambda ep, _creds, options=None: grpc.aio.insecure_channel(ep)` patched onto `grpc.aio.secure_channel`, tool `list_opportunities` receives DEADLINE_EXCEEDED -> `{backend=analysis, grpc_code=DEADLINE_EXCEEDED}` +1 and `mcp.tool.duration` gains no new attribute key; (c) a non-RPC exception gives no count, with a positive control in the same reader; (d) a raising accessor still lets the original exception propagate. `test_mtls.py:122` (eager `RuntimeError`) must still pass.
 - AC-19: `MTLS_CERT` unset, request with a bearer token -> `mcp.auth.rejected{internal_error}` +1, HTTP status still 401, the ERROR log names `RuntimeError` and does not contain the token.
 - AC-20: identity `RefreshOAuthToken` fails UNAVAILABLE for refresh token `rt-secret-1`, `POST /oauth/token` with `grant_type=refresh_token` -> `oauth.requests{refresh_token, upstream_error}` +1, a warning contains `UNAVAILABLE`, no log line or label contains `rt-secret-1`, response still 400 `invalid_grant`.
-- AC-47: a callback with a well-formed txn blob whose HMAC mismatches -> `oauth.txn.rejected{bad_sig}` +1; a non-deduplicated `ingest_signal` with conviction 0.9 whose auto-alert `EmitAlert` fails after commit -> `agent.degraded{auto_alert}` +1 and the ingest result unchanged; a successful exchange for `u-9` then that user's first successful tool call -> exactly 1 INFO `"first successful tool call"` with `user_id=u-9` as a field, a second call writes none, and no metric attribute contains `u-9`.
+- AC-47: a callback with a well-formed txn blob whose HMAC mismatches -> `oauth.txn.rejected{bad_sig}` +1; a non-deduplicated `ingest_signal` with conviction 0.9 whose auto-alert `EmitAlert` fails after commit -> `agent.degraded{auto_alert}` +1 and the ingest result unchanged; a successful exchange for `u-9` then that user's first successful tool call (driven through `ToolMetricsMiddleware` with a stub `call_next` and claims on the request scope) -> exactly 1 INFO `"first successful tool call"` with `user_id=u-9` as a field, a second call writes none, and no metric attribute contains `u-9`.
 
 **Verification**:
 ```
-cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40 -q && ruff check . && ruff format --check .
+cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
 ```
 
 ---
@@ -811,9 +821,14 @@ Signals only; the GetSecret gate stays driven by the boolean `hasSecretCallerAut
 
 **Verification**:
 ```
-for s in config ledger; do (cd services/xstockstrat-$s && pnpm run lint && pnpm exec tsc --noEmit) || exit 1; done; cd /home/user/xstockstrat && git add -A services/xstockstrat-config && ! git diff --cached -U0 -- services/xstockstrat-config/src/grpc/authz.ts | grep -qE "^-.*(SECRET_CALLER_ALLOWLIST|hasSecretCallerAuthority)"
+for s in config ledger; do (cd services/xstockstrat-$s && pnpm run lint && pnpm exec tsc --noEmit) || exit 1; done
+cd /home/user/xstockstrat && git add -A services/xstockstrat-config
+# (define hunk_guard / fn_range from Execution Summary, "Staged-diff hunk guards")
+f=services/xstockstrat-config/src/grpc/authz.ts
+set -- $(fn_range "$f" '^export function hasSecretCallerAuthority[(]'); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside hasSecretCallerAuthority"; exit 1; }
+set -- $(fn_range "$f" '^const SECRET_CALLER_ALLOWLIST' '^];'); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside SECRET_CALLER_ALLOWLIST"; exit 1; }
 ```
-(Run BEFORE the step's commit, against the staged diff. No removed line in `authz.ts` may touch the gate.)
+(Run BEFORE the step's commit, against the staged diff. Both ranges are derived from `HEAD` by anchor (`hasSecretCallerAuthority` is the `export function` through its closing `}`, 168-183 at the time of writing; `SECRET_CALLER_ALLOWLIST` is the `const` through its `^];`, 132-145). A staged hunk whose pre-image overlaps either fails the step, so the gate and the grants are provably untouched; adding `secretDenialReason` immediately after `hasSecretCallerAuthority` is a pure insertion outside both ranges and passes.)
 
 ---
 
@@ -1042,7 +1057,7 @@ Source-health derivation and task supervision are unchanged; `_resume_job` still
 
 **Verification**:
 ```
-cd services/xstockstrat-ingest && ruff check . && ruff format --check . && pytest -q tests/test_mcp_client_loop.py
+cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --check . && uv run pytest -q tests/test_mcp_client_loop.py
 ```
 (The existing `:192` spy on `_ingest_external_signal` must still pass: it proves no `path` kwarg was added.)
 
@@ -1076,7 +1091,7 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check . && pytes
 
 **Verification**:
 ```
-cd services/xstockstrat-ingest && pytest --cov=app --cov-fail-under=40 -q && ruff check . && ruff format --check .
+cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .
 ```
 
 ---
@@ -1112,7 +1127,7 @@ Signals only; the watcher's sleep behavior and the RPC status are unchanged; the
 
 **Verification**:
 ```
-cd services/xstockstrat-indicators && ruff check . && ruff format --check . && pytest -q tests/test_config_watcher.py tests/test_execute_formula_concurrency.py
+cd services/xstockstrat-indicators && uv run ruff check . && uv run ruff format --check . && uv run pytest -q tests/test_config_watcher.py tests/test_execute_formula_concurrency.py
 ```
 (The existing watcher and concurrency tests must still pass, which pins the unchanged `asyncio.sleep(2)` reconnect behavior and RPC status.)
 
@@ -1147,7 +1162,7 @@ cd services/xstockstrat-indicators && ruff check . && ruff format --check . && p
 
 **Verification**:
 ```
-cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50 -q && ruff check . && ruff format --check .
+cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=50 -q && uv run ruff check . && uv run ruff format --check .
 ```
 
 ---
@@ -1157,9 +1172,9 @@ cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50 -q &&
 **Status**: `pending`
 **Service**: all 12 services; `scripts/`, `packages/otel/` (read-only checks)
 **Files**:
-- `services/xstockstrat-trading/internal/telemetry/allowlist_test.go` — create (new)
-- `services/xstockstrat-portfolio/internal/telemetry/allowlist_test.go` — create (new)
-- `services/xstockstrat-marketdata/internal/telemetry/allowlist_test.go` — create (new)
+- `services/xstockstrat-trading/internal/service/telemetry_allowlist_test.go` — create (new)
+- `services/xstockstrat-portfolio/internal/service/telemetry_allowlist_test.go` — create (new)
+- `services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go` — create (new)
 - `services/xstockstrat-analysis/tests/test_telemetry_allowlist.py` — create (new)
 - `services/xstockstrat-ingest/tests/test_telemetry_allowlist.py` — create (new)
 - `services/xstockstrat-indicators/tests/test_telemetry_allowlist.py` — create (new)
@@ -1184,22 +1199,23 @@ cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50 -q &&
 **Covers**: `AC-7, AC-41, AC-42, AC-43, AC-44, AC-56`
 
 **Instructions**:
+- **Go placement (chosen: the existing step-test harness, not an external `telemetry_test` package).** Each Go allowlist test sits in its service's `internal/service` test package, beside the manual-reader and captured-JSON-slog helpers of `trading_telemetry_test.go`, `portfolio_telemetry_test.go` and `marketdata_service_test.go`; a separate `telemetry_test` package could not reuse them (test files are not importable) and cannot reach `cmd/server`. It reads the key constants and `Loops` from the exported `telemetry` API. marketdata's vendor, stream and backfill instruments are recorded from the alpaca, fmp, finnhub and edgar packages, so its test records them through the exported `telemetry` record helpers those packages call, and registers the stream-age gauge through `telemetry.RegisterStreamLastMessageAge` (both defined in Step 11), never through `cmd/server/main.go`.
 - **Allowlist tests (AC-41)**: per service, drive the instruments through the existing step harness (or a minimal register-then-collect for gauges), collect every attribute key, assert the set is a subset of the module's key constants and that no key is any of `user_id`, `email`, `client_id`, `account_id`, `order_id`, `intent_id`, `symbol`, `strategy_id`, `stream_key`, `slug`, `category`, a secret key name or `internal_caller` (trading's alert key is `alert_kind`, not `category`); assert the MIN instrument-name set for that service is present; assert `rpc.server.duration`, `mcp.tool.duration`, `http.server.duration` keep their names and attribute keys; assert the literal `live_loop: cycle complete` appears in `live_loop.py`.
 - **AC-42**: with `OTEL_ENABLED` false every new call site executes without exception and no exporter is created; a failing OTel init still lets the service start. These cases live in the new per-service `*allowlist*` test files listed in **Files** (new); do NOT extend the existing `telemetry.test.ts` / `otel_test.go`.
 - **AC-7**: aggregate check that every `loop` value written by any service belongs to that service's closed set of at most 8 names.
-- **AC-56**: each Go module's `serverMetricViews()` output equals the pre-feature four drop views and no `rpc.client.*` instrument is registered.
-- **AC-43 (diff path check)**: from the repo root, this shell assertion must output nothing (any output is a failure): `git diff --name-only origin/main-dev...HEAD | grep -E '^(packages/otel/(alerts|dashboards)/|packages/otel/produced-signals.tsv|.*\.proto$|.*/migrations/)'`; then run the guard script (Verification below runs both).
+- **AC-56**: the `serverMetricViews()` equality (unexported, package `telemetry`) is asserted in Step 2's `instruments_test.go`; Step 29 adds the aggregate: after every instrument of a Go module has been driven, no collected instrument name starts with `rpc.client.`.
+- **AC-43 (diff path check)**: from the repo root, this shell assertion must output nothing (any output is a failure): `git diff --name-only origin/main-dev...HEAD | grep -E '^(packages/otel/|.*\.proto$|.*/migrations/)'`; then run the guard script (Verification below runs both). The `packages/otel/` prefix covers the whole directory (alerts, dashboards, `produced-signals.tsv` and everything else), a deliberate superset of AC-43's listed paths that matches the Execution Summary's no-`packages/otel/`-edit claim.
 - **AC-44**: the Verification block runs a `grep -c` loop asserting each of the 14 deferred IDs (S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02, N-04) appears exactly once as a row of the Deferred table in `context.md` § "Deferred behavior follow-ups"; it exits non-zero otherwise.
 
 **Verification**:
 ```
 cd /home/user/xstockstrat && bash scripts/check-otel-produced-signals.sh
-cd /home/user/xstockstrat && ! git diff --name-only origin/main-dev...HEAD | grep -E '^(packages/otel/(alerts|dashboards)/|packages/otel/produced-signals.tsv|.*\.proto$|.*/migrations/)'
+cd /home/user/xstockstrat && ! git diff --name-only origin/main-dev...HEAD | grep -E '^(packages/otel/|.*\.proto$|.*/migrations/)'
 cd /home/user/xstockstrat && for id in S-01 S-02 S-03 S-08 S-09 S-13 S-14 S-15 S-16 S-22 S-25 S-26 N-02 N-04; do n=$(awk '/^## Deferred behavior follow-ups/{f=1;next} /^## /{f=0} f' docs/roadmap/features/294-signal-map-instrumentation/context.md | grep -cE "^\| *$id *\|"); [ "$n" = 1 ] || { echo "AC-44: $id appears $n times"; exit 1; }; done
 for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=off go test ./... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod) || exit 1; done
-(cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{gsub("%","",$3); exit ($3<40)}')
-for s in ingest analysis agent; do (cd services/xstockstrat-$s && pytest --cov=app --cov-fail-under=40 -q && ruff check . && ruff format --check .) || exit 1; done
-(cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50 -q && ruff check . && ruff format --check .)
+(cd services/xstockstrat-marketdata && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3<40) bad=1} END{exit (!seen || bad)}')
+for s in ingest analysis agent; do (cd services/xstockstrat-$s && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .) || exit 1; done
+(cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=50 -q && uv run ruff check . && uv run ruff format --check .)
 for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint) || exit 1; done
 (cd services/xstockstrat-ui && pnpm run test:unit && pnpm run test:coverage && pnpm run lint) && bash scripts/check-duplication.sh services/xstockstrat-ui/src
 ```
