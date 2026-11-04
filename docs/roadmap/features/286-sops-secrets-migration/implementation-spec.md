@@ -179,7 +179,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 2 — service: Composite action `setup-sops` (pinned sops + age)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/actions/setup-sops`
 **Files**:
 - `.github/actions/setup-sops/action.yml` — create

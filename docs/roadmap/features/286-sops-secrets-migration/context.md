@@ -285,3 +285,9 @@
 - Created `scripts/sops-secrets.test.sh` (skeleton + group `action`). TDD RED: `ASSERT FAIL: action: .github/actions/setup-sops/action.yml does not exist` (exit 1). Lint: shellcheck + shfmt -i 2 clean.
 - Files modified: `scripts/sops-secrets.test.sh`, `context.md`
 - Deviations: D-1 (AC-1 stderr wording)
+
+### Step 2 — Composite action `setup-sops` [done]
+- Created `.github/actions/setup-sops/action.yml` (composite, one step, pins in env, no `uses:`). TDD: RED was Step 1's `action` group (action.yml absent).
+  GREEN `action: ok`. The real install block, run in the ephemeral sandbox, verified both checksums, and sops 3.13.3 / age v1.3.2 were installed.
+- Files modified: `.github/actions/setup-sops/action.yml`
+- Deviations: none
