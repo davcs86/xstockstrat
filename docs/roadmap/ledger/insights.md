@@ -3781,6 +3781,33 @@ reusing.
 - **Evidence**: `docs/roadmap/features/286-sops-secrets-migration/design.md` (C4, AC-22 static rules, Rejected Alternatives); round-1 adversary blocker O1 and round-3 major (RHS pinning) in its `context.md`.
 - **Rule it implies**: before adding `environment:` to a job that receives caller-passed secrets, list the environment's secret names and never read a caller value under a name an environment secret could hold; pin secret-mapping lines with a static test whenever a migration snapshots their values.
 
+### 2026-11-04 — fix-opportunity-composite-score — design
+- **Pattern**: When a score's colour bands are a judgement call, put the band edges to the operator as one explicit question with concrete numbers (±0.05 / ±0.08 / 5-tier), calibrated to the metric's reachable range and a named reference point ("one maxed axis must read positive"), instead of an open-ended adversarial round.
+- **Evidence**: `git show 1ed63958:docs/roadmap/features/221-fix-opportunity-composite-score/design.md` lines 3-4, 16-19; `services/xstockstrat-ui/src/lib/scoreDisplay.test.ts:78`
+- **Rule it implies**: Threshold or band choices for a derived score must be justified against that score's reachable range and at least one named reference value, not inherited from another metric.
+
+### 2026-11-04 — fix-stored-edgar-periods — design
+- **Pattern**: For tables that keep only the first write (`ON CONFLICT DO NOTHING`), stamp each row with a derivation version; upgrade only the derived columns with a `version < $new` guard in SQL (idempotent, race-safe), leave as-reported/identity columns alone; pin a golden hash of the builder's output over a fixture per version so changing semantics without a bump fails CI.
+- **Evidence**: `services/xstockstrat-marketdata/internal/edgar/derivation_version_test.go`; `services/xstockstrat-marketdata/docs/context-constitution.md:29` (MARKETDATA-13); `git show 1ed63958:docs/roadmap/features/223-fix-stored-edgar-periods/design.md` lines 17-25
+- **Rule it implies**: Any change to how a pinned/idempotent row's value is computed ships with a version bump and an upgrade path; never rely on a manual purge.
+### 2026-11-04 — fix-stored-edgar-periods — ordering
+- **Pattern**: When stacked bug fixes share one derivation version, ship them together and run one combined re-derivation (one purge/re-backfill, not two).
+- **Evidence**: `docs/roadmap/features/223-fix-stored-edgar-periods/feature.md` Next Action; `docs/roadmap/features/merge-order.md:75`
+- **Rule it implies**: Coordinate data re-derivation across stacked fixes before execute, not after deploy.
+### 2026-11-04 — fix-edgar-quarterly-roe — design
+- **Pattern**: Group defects that need the same stored-data repair so one shared mechanism (`derivation_version` + conditional upsert) and one re-backfill heal them all; ship the semantics fix first, then the re-derivation.
+- **Evidence**: `git show 1ed63958:docs/roadmap/features/222-fix-edgar-quarterly-roe/design.md` lines 5-6; `git show 1ed63958:docs/roadmap/features/222-fix-edgar-quarterly-roe/implementation-spec.md` lines 33-34
+- **Rule it implies**: When a fix changes the semantics of persisted derived data, find sibling defects on the same table and share one re-derivation pass.
+### 2026-11-04 — fix-edgar-quarterly-roe — design
+- **Pattern**: Key XBRL flow facts by the fact's own period (start/end), never the filing's fy/fp — a 10-Q's comparative column carries the same fy/fp as the current period.
+- **Evidence**: `services/xstockstrat-marketdata/internal/edgar/edgar_client.go:354-356`; `services/xstockstrat-marketdata/internal/edgar/ttm_roe_test.go:13,28`
+- **Rule it implies**: Any new EDGAR flow-metric derivation keys on fact period and includes a comparative-column trap test (possible MARKETDATA-* candidate).
+
+### 2026-11-04 — edgar-fundamentals-enrichment — perf
+- **Pattern**: To serve "latest row as-of T" from an append-only history whose list RPC pages oldest-first, add a dedicated single-row `ORDER BY … DESC LIMIT 1 WHERE filed_date < asOf` read. Do not reuse the paged list (full scan) or a bounded lookback (misses slow filers); the no-look-ahead guard moves into SQL.
+- **Evidence**: `services/xstockstrat-marketdata/internal/repo/marketdata_repo.go:773-780`; `git show 1ed63958:docs/roadmap/features/211-edgar-fundamentals-enrichment/implementation-spec.md` lines 658-660
+- **Rule it implies**: A "latest-as-of" read gets its own indexed DESC LIMIT 1 query; when history mixes period granularities (annual and quarterly) decide the period-type preference explicitly.
+
 ### 2026-11-04 — private-by-default-templates — ordering
 - **Pattern**: A change that both threads a new identity through many callers and then enforces it was split into two releases. Release N (224) accepts and honors the owner headers but still tolerates headerless calls, with expand-only schema. Enforcement and contract (fail-closed, bypass removal, NOT NULL, trigger and old-table drops) became a separately numbered follow-up feature (225), gated by a `merge-order.md` row and a CI `migration-contract-gate` (`-- contract-of:` header; the expand file must already be on `origin/main`, never in the same PR). A rolling deploy or an analysis-only rollback otherwise sends headerless calls that darken the fundamentals blend and reject fundsignal.
 - **Evidence**: `git show 1ed63958:docs/roadmap/features/224-private-by-default-templates/design.md` lines 208-209 (rejected big-bang), 258-260 (follow-up); `scripts/check-migration-contract.sh`; `docs/roadmap/features/merge-order.md:73`.

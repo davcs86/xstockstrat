@@ -3121,6 +3121,33 @@ ambiguity is logged here).
   carrying; a test that asserts an OK/success outcome must also prove the work was actually done (e.g. at least one
   symbol evaluated).
 
+### 2026-11-04 — fix-opportunity-composite-score — assumption
+- **Mistake**: Feature 199 reused the strategy-grade `scoreColor` (0.6/0.8 thresholds) for the composite, a 0.5-centred shrunk ordinal bounded ~0.25–0.83; neutral read bearish and green was unreachable. Its own @AC-8 locked the mismatch in, so tests passed while the display was wrong.
+- **Evidence**: `git show 1ed63958:docs/roadmap/features/221-fix-opportunity-composite-score/product-spec.md` lines 12-15, 30-31; `docs/roadmap/features/199-opportunity-composite-score/acceptance.feature:70`
+- **Rule it implies**: Before reusing a display helper that has semantic thresholds, check the new metric has the same centre and range; an acceptance clause saying "uses the existing X scale" names an implementation, not a behaviour — reject at review (candidate C-15 guidance).
+
+### 2026-11-04 — fix-stored-edgar-periods — assumption
+- **Mistake**: Feature 211 changed a stored derived metric and assumed it would reach existing rows, but an idempotency pin (198) and a price-only recovery path (216) meant stored rows never changed; recorded purge + re-backfill only for amendments. Surfaced as a SEV-2 on staging (AXP D/E 8.8 vs 1.73).
+- **Evidence**: `git show 1ed63958:docs/roadmap/features/223-fix-stored-edgar-periods/product-spec.md` lines 12-15, 31-32; `.../design.md` lines 9-12
+- **Rule it implies**: A design that changes how a persisted column is derived must say how already-stored rows get re-derived (proposed gate: a C-* "stored-derivation reachability" check in /sdd-design).
+### 2026-11-04 — fix-stored-edgar-periods — migration
+- **Mistake**: Parallel features on the same service (217 vs 223) each claimed the same next migration number and constitution ID, forcing a MARKETDATA-12 → -13 renumber and a late renumber of 217's migration from 007 to 009.
+- **Evidence**: `git show 1ed63958:docs/roadmap/features/223-fix-stored-edgar-periods/implementation-spec.md` lines 43-44; `services/xstockstrat-marketdata/migrations/009_symbol_classification.up.sql`
+- **Rule it implies**: Check merge-order.md and open sibling PRs before reserving a migration number or `<MODULE>-N` ID.
+### 2026-11-04 — fix-edgar-quarterly-roe — assumption
+- **Mistake**: A ratio was computed without checking it shared a basis with its siblings on the same row (single-quarter ROE beside TTM P/E); the bias propagated silently into scores and PIT backtests and flipped strategy gate decisions.
+- **Evidence**: `git show 1ed63958:docs/roadmap/features/222-fix-edgar-quarterly-roe/product-spec.md` lines 12-18
+- **Rule it implies**: Every ratio on a fundamentals row states its period basis (TTM vs single-period); quarterly rows must be commensurable with annual rows and the vendor TTM equivalent.
+### 2026-11-04 — fix-edgar-quarterly-roe — assumption
+- **Mistake**: An acceptance scenario shipped with placeholder figures flagged "replace during /sdd-spec"; never replaced because the source data was unreachable, so the regression test checks synthetic rather than real values.
+- **Evidence**: `git show 1ed63958:docs/roadmap/features/222-fix-edgar-quarterly-roe/implementation-spec.md` lines 30-32; `services/xstockstrat-marketdata/internal/edgar/ttm_roe_test.go`
+- **Rule it implies**: A "placeholder — replace later" in `acceptance.feature` must be resolved before code-completed or carried as an explicit deferred follow-on, not only a deviation-log note.
+
+### 2026-11-04 — edgar-fundamentals-enrichment — assumption
+- **Mistake**: Two producers fed one ratio with mismatched price bases: adjusted closes (`CloseAt`, `adjustment=all`) divided against as-filed shares/EPS and raw Alpaca dividend rates, so older periods are biased after a later split or dividend. A pre-existing primitive was reused without checking its basis.
+- **Evidence**: `services/xstockstrat-marketdata/internal/repo/marketdata_repo.go:822-823`
+- **Rule it implies**: When reusing a price primitive in a ratio, state the price basis (adjusted vs raw) and require numerator and denominator to share it.
+
 ### 2026-11-04 — private-by-default-templates — migration
 - **Mistake**: The CI design (`migration-rerun`) assumed `db-migrate.sh` dirty recovery could replay the whole migration chain from 001, and required every new file to be idempotent against that. When built, about 14 already-applied up-files were not idempotent (for example `indicators/001_formulas.up.sql:3`, `ingest/001_newsletter_signals.up.sql:8`), so the full replay failed before any feature assertion ran, and F-01 forbids editing applied files. The recovery path production relies on had never been exercised against the existing chain. The scope fell back to replaying only the three new files, and the defect was filed as `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md` (status `open`).
 - **Evidence**: `git show 1ed63958:docs/roadmap/features/224-private-by-default-templates/implementation-spec.md` lines 3048-3057 (D-29), 2889-2892 (D-3).
