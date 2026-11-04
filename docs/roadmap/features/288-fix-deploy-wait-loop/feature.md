@@ -14,6 +14,8 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (`--from-report`) |
+| 2026-11-04 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps (design phase skipped per triage `skip`; product-spec not yet AI-reviewed) |
+| 2026-11-04 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (RED harness for AC-1) committed; sequential mode |
 
 ---
 
@@ -21,7 +23,7 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-deploy-wait-loop`_
+- [Implementation Spec](implementation-spec.md) — 5 steps: RED/GREEN pairs for the SUPERSEDED branch and the `deploy-<environment>` concurrency group, then one docs line
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -32,6 +34,12 @@ The "Wait for deployment" step in `deploy.yml` times out (red run) when a newer 
 deployment, because `SUPERSEDED` is not a terminal phase in the loop and no concurrency group serialises
 deploys to one app.
 
+## Reviewers
+
+| Role | Review Focus |
+|---|---|
+| Platform Lead | Cross-workflow deploy topology (DO + homelab): concurrency group collisions, SUPERSEDED-as-success decision (D-1), CI gate completeness (Steps 1-4) |
+
 ## Next Action
 
-`/sdd-spec fix-deploy-wait-loop` — recommended design depth: skip (SEV-3, CI workflows only, no proto/migration/config, root cause confirmed from job log); see context.md
+`/sdd-review fix-deploy-wait-loop impl-spec` — validate implementation spec, then `/sdd-execute fix-deploy-wait-loop`

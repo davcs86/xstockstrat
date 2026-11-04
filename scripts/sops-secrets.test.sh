@@ -618,7 +618,7 @@ no_unprefixed() {
 
 group_deploy() {
   need yq python3
-  local wf=.github/workflows/deploy.yml f run rows rc e
+  local wf=.github/workflows/deploy.yml f run rows rc e wait phase polls
   for f in "$wf" .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml; do
     yq e 'true' "$f" >/dev/null || fail "deploy: $f does not parse"
   done
@@ -658,6 +658,46 @@ group_deploy() {
     *)
       [ "$rc" != 0 ] || fail "AC-21: $rows matches accepted"
       grep -qF "expected exactly 1 app named xstockstrat-staging, found $rows" "$work/aout" || fail "AC-21: message for $rows"
+      ;;
+    esac
+  done
+  # AC-1: the real "Wait for deployment" step against stub doctl/sleep, one run per DO phase
+  wait="$(yq e '.jobs.deploy.steps[] | select(.name == "Wait for deployment") | .run' "$wf")"
+  [ -n "$wait" ] && [ "$wait" != null ] || fail "deploy: no Wait for deployment step"
+  printf '%s\n' "$wait" >"$work/wait.sh"
+  {
+    echo '#!/bin/sh'
+    echo 'case "$2" in'
+    echo '  list-deployments) echo dep-1 ;;'
+    echo "  get-deployment) echo x >>\"$work/polls\"; echo \"\$STUB_PHASE\" ;;"
+    echo 'esac'
+  } >"$work/stub/doctl"
+  printf '#!/bin/sh\necho x >>"%s/sleeps"\n' "$work" >"$work/stub/sleep"
+  chmod +x "$work/stub/doctl" "$work/stub/sleep"
+  for phase in SUPERSEDED ACTIVE ERROR CANCELED BUILDING; do
+    : >"$work/polls"
+    : >"$work/sleeps"
+    rc=0
+    env -i PATH="$work/stub:$PATH" HOME="$HOME" APP_ID=app-1 STUB_PHASE="$phase" \
+      bash -eo pipefail "$work/wait.sh" >"$work/wout" 2>&1 || rc=$?
+    polls="$(wc -l <"$work/polls" | tr -d ' ')"
+    case "$phase" in
+    SUPERSEDED)
+      [ "$rc" = 0 ] || fail "AC-1: SUPERSEDED exited $rc after $polls polls ($(tail -1 "$work/wout"))"
+      [ "$polls" = 1 ] && [ ! -s "$work/sleeps" ] || fail "AC-1: SUPERSEDED did not end the loop on its first poll ($polls polls)"
+      if grep -qF 'Timeout:' "$work/wout"; then fail "AC-1: SUPERSEDED reached the timeout"; fi
+      grep -qF '::warning::' "$work/wout" || fail "AC-1: SUPERSEDED must emit a ::warning::"
+      ;;
+    ACTIVE)
+      [ "$rc" = 0 ] && [ "$polls" = 1 ] || fail "AC-1: ACTIVE exited $rc after $polls polls"
+      ;;
+    ERROR | CANCELED)
+      [ "$rc" = 1 ] && [ "$polls" = 1 ] || fail "AC-1: $phase exited $rc after $polls polls"
+      grep -qF "Deployment failed with phase: $phase" "$work/wout" || fail "AC-1: $phase failure message"
+      ;;
+    BUILDING)
+      [ "$rc" = 1 ] && [ "$polls" = 60 ] || fail "AC-1: BUILDING exited $rc after $polls polls"
+      grep -qF 'Timeout: deployment did not complete within 15 minutes.' "$work/wout" || fail "AC-1: BUILDING timeout message"
       ;;
     esac
   done
