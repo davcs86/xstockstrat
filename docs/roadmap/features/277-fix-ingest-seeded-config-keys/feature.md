@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-ingest-seeded-config-keys`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-22
 **Last Updated**: 2026-10-23

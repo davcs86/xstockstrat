@@ -3,7 +3,7 @@
 # Durable business rules xstockstrat-ingest guarantees for ManageTemplate UPDATE / RETIRE / CREATE on its SIGNAL_SOURCE templates.
 
 Feature: xstockstrat-ingest - template UPDATE persists metadata, RETIRE is first-wins, empty-id CREATE is rejected
-  Regression guard for docs/reports/2026-10-21-template-update-metadata-defect.md as it applies to
+  Regression guard for docs/reports/2026-10-21-template-update-metadata-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-template-update-metadata-defect.md) as it applies to
   xstockstrat-ingest's SIGNAL_SOURCE templates.
 
   @AC-1 @FR-1 @FR-2 @regression @feature-269

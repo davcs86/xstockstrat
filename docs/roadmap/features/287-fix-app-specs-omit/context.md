@@ -63,7 +63,7 @@
 - Unconfirmed: whether VPC attachment plus the public host changes the network path; the trusted-source rule is what definitely gates public-host traffic (recon.md@d5cdb712:82; design.md@d5cdb712:205).
 - If DO removes the app's rule itself on app delete, `untrust` can 404 and print a false stale-rule summary (job outcome unaffected) (design.md@d5cdb712:209).
 - Unaddressed cosmetic review warnings: approximate cited line ranges in Step 2 (`cluster_name` at `.do/app.yaml:692`, `.do/app.dev.yaml:694`); Step 9 is a large prose step. No coverage gate applies to `scripts/` (context.md@d5cdb712:68-72).
-- Defect report `docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md` is still sidecar status `triaged` (ref `feature:287-fix-app-specs-omit`); not pruned by this archive.
+- Defect report `docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md) is still sidecar status `triaged` (ref `feature:287-fix-app-specs-omit`); not pruned by this archive.
 
 **Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-11-04 entries.
 

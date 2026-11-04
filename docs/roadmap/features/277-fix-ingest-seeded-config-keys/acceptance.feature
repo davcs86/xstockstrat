@@ -1,5 +1,5 @@
 Feature: fix-ingest-seeded-config-keys (bug fix)
-  Regression guard for the defect report docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md:
+  Regression guard for the defect report docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-22-ingest-seeded-config-keys-never-read-defect.md):
   seeded ingest config keys are never read by ingest.
 
   @AC-1 @FR-1 @FR-3 @regression
