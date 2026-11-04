@@ -238,7 +238,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
   - `declaredFromSpec` declares every backticked dotted token under `## Config Key Changes` (`:651-662`). `declaredFromMigration` parses the INSERT (`:664-673`).
   - Step-time mode prints `PENDING` for missing-side findings (`:706`).
   - `--json` writes `{findings, results, counts}` (`:743`); each finding is `{kind, namespace, key, file}` plus `readKey` on a `form-mismatch` (`join`, `:607-643`). Baseline entries in `scripts/config-wiring.json` carry no `file` (`sameId`, `:679`), so a reader-file identity is checked against the raw `--final --json` base findings, never against the baseline file. A `read-unseeded` finding is attributed to the lexicographically smallest runtime reader file (`:609`, `:637`); a `dynamic-read` finding's identity is per enclosing symbol (`:641-642`).
-- Config migrations on `main-dev` end at `034_retire_portfolio_snapshot_interval`. Feature 280 (PR #1359) holds config `035_smoke_rpc_user_id` / `036_smoke_writes_enabled` and feature 281's seed is `037_portfolio_signal_prune_interval`; both are on `main-dev` before this run starts (merge-order row 92, Variant L), so 282 takes `038`/`039`.
+- Config migrations on `main-dev` end at `034_retire_portfolio_snapshot_interval`. Feature 281's seed is `037_portfolio_signal_prune_interval` and is on `main-dev` before this run starts (merge-order row 92, Variant L), so 282 takes `038`/`039`. Feature 280 (PR #1359) no longer holds 035/036 ahead of us: it depends on 281 and renumbers above the highest config migration at its merge time (merge-order.md, operator 2026-11-04); if it lands first with 038+, block 2 below STOPs and 282 re-specs its numbers.
 
 **TDD**: `red-green required`
 
@@ -290,8 +290,8 @@ OURS='^(038_marketdata_asset_refresh_interval|039_portfolio_servability_timeout)
 P037='^037_portfolio_signal_prune_interval\.up\.sql$'
 git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' || exit 1
 ls_mig() { git ls-tree --name-only "$1" "$D/" 2>/dev/null | sed 's#.*/##'; }
-for p in '^035_smoke_rpc_user_id\.up\.sql$' '^036_smoke_writes_enabled\.up\.sql$' "$P037"; do
-  ls_mig origin/main-dev | grep -qE "$p" || { echo "STOP: $p is not on origin/main-dev - features 280 and 281 must merge first"; exit 1; }
+for p in "$P037"; do
+  ls_mig origin/main-dev | grep -qE "$p" || { echo "STOP: $p is not on origin/main-dev - feature 281 must merge first"; exit 1; }
   ls "$D" | grep -qE "$p" || { echo "STOP: $p absent from this branch - merge origin/main-dev"; exit 1; }
 done
 MAIN=$(ls_mig origin/main-dev | grep -E '^[0-9]{3}_' | grep -Ev "$OURS" | awk -F_ '$1+0 >= 38')
@@ -299,7 +299,7 @@ OTHER=$(git for-each-ref --format='%(refname)' refs/remotes/origin/ | grep -v '/
   ls_mig "$ref" | grep -E '^03[89]_' | grep -Ev "$OURS" | sed "s#^#${ref#refs/remotes/}: #"
 done)
 [ -z "$MAIN$OTHER" ] || { printf 'FAIL: config migration 038/039 not free\n%s\n%s\n' "$MAIN" "$OTHER"; exit 1; }
-echo "038/039 free; 035/036/037 present"
+echo "038/039 free; 037 present"
 )
 
 # 3. step-time guard (pair present + parse + form-mismatch)

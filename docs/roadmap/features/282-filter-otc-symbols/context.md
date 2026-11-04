@@ -212,3 +212,7 @@
   - Steps 9, 10, 16: depend on feature 281 symbols (expiryIntentFor, ExpiryIntent, fakeWatchlistStore.lastIntent, migrationSql.ts) not in this tree. 281 must land on main-dev first; re-verify anchors, raise a blocker rather than adapt. — [ ] unaddressed
   - Step 7: line citations ~1 line stale; re-anchor at execution. — [ ] unaddressed
 - Overlap findings: WARN, no FAIL. No migration/proto/config-key collision (038/039 free; 037 is 281). Hard ordering 281 -> 282 per merge-order row 92 (optionally extend it to name the migrationSql.ts / signalPruneIntervalSeedMigration.test.ts test dependency).
+
+## Session 2026-11-04 — merge-order ruling: 280 depends on 281 (operator)
+
+- 282's block 2 no longer requires feature 280's 035/036 on main-dev; it requires 281's 037 only. Feature 280 now renumbers above the highest config migration at its merge time (merge-order.md row in the 281 branch/PR #1401). If 280 merges before 282 with numbers >= 038, block 2 STOPs and 282 re-specs its numbers.
