@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report (Track C by operator override) |
+| 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds; invoked quick, operator extended it to the cap) and approved. recon.md and design.md written. The operator confirmed proceeding without /sdd-review |
 
 ---
 
@@ -21,6 +22,8 @@
 
 - [Product Spec](product-spec.md): bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature): regression scenarios (`@AC-*`, C-15)
+- [Recon](recon.md): codebase dossier
+- [Design](design.md): approved design
 - [Implementation Spec](implementation-spec.md): _not yet generated. Run `/sdd-spec fix-app-specs-omit`_
 - [Context Log](context.md): session history, decisions, deviations
 
@@ -34,4 +37,4 @@ staging from the VPC.
 
 ## Next Action
 
-`/sdd-design fix-app-specs-omit quick` is the recommended design depth from triage. See context.md.
+`/sdd-spec fix-app-specs-omit`: generate the implementation spec from the approved design.
