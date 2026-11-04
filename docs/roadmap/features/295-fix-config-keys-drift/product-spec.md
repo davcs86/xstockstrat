@@ -140,9 +140,10 @@ Adjacent defects, in scope:
 - **FR-12 — Derived deadline, no hidden cap.**
   - The agent `test_formula` deadline is derived from indicators' configured
     `sandbox.timeout_ms` + `sandbox.startup_grace_ms` (the grace becomes a seeded config key,
-    replacing the private constant) + slack, clamped to the agent's **45 s long-RPC budget**. That
+    replacing the private constant) + 2 s slack, clamped to the agent's **45 s long-RPC budget**. That
     budget leaves room inside the feature-273 57 s whole-tool ceiling.
-  - Write bounds keep timeout + grace + slack ≤ 45 s. The heal report lists any stored value outside
+  - Write bounds `indicators.sandbox.timeout_ms` [100, 33000] and `indicators.sandbox.startup_grace_ms`
+    [1000, 10000] keep timeout + grace + slack ≤ 45 s. The heal report lists any stored value outside
     the bounds.
   - Indicators clamps the sandbox timeout to the request's remaining deadline, so time spent queued
     cannot hide a cap.
@@ -151,6 +152,7 @@ Adjacent defects, in scope:
   joins readers to rows by `(namespace, key)` in the exact current spelling, and adds:
   - reader→namespace attribution with no default (an unattributable read blocks);
   - `value_type`↔getter-arm, metadata-missing and `default_value`↔code-default checks;
+  - a doc check asserting that C-05, CONFIG-9 and `config-governance.md` state the FR-14 rule;
   - an **empty** baseline, where adding an entry fails CI.
 
   No second gate is built.
@@ -250,12 +252,13 @@ xstockstrat-identity, xstockstrat-notify, xstockstrat-agent, xstockstrat-ui. Als
 - **Paper-safe.** Testable on staging. FR-3/FR-5 guarantee no effective value changes at deploy,
   except items listed for operator sign-off.
 
-## Fix Scope (operator decisions, 2026-11-04 — see `context.md` decisions 1–14)
+## Fix Scope (operator decisions, 2026-11-04 — see `context.md` decisions 1–18)
 
 - The relative canonical key is the **target**, delivered by 296.
 - Keep effective behavior.
 - Everything live.
-- UI env, watcher resilience, Go getter types, orphan deletion.
+- UI env, watcher resilience, Go getter types.
+- Twin-only signed heal; dead-row deletion deferred to 296, gated on runtime read evidence.
 - feature-227 waiver retired.
 - Lossless int→float widening.
 - Live inventory via a DO-console Python tool.

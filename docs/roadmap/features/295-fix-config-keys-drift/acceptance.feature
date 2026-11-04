@@ -18,17 +18,19 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     Then the snapshot keys are exactly the stored keys of namespace "indicators"
 
   @AC-3 @FR-3 @regression
-  Scenario: A dead bare row is removed and its intent is reported, not applied
+  Scenario: An unread twin created by seeding is removed and its intent is reported, not applied
     Given a staging "analysis" row "fundsignal.enabled" = true that no reader consumes
     And the reader consumes "analysis.fundsignal.enabled", which has no row
+    And the row's sha256 tuple is in the signed allowlist
     When the heal migrations run
     Then "analysis" / "analysis.fundsignal.enabled" exists with value false, the reader's code default
     And "analysis" / "fundsignal.enabled" no longer exists and is preserved in the premigration snapshot table
-    And the discarded-values report lists "analysis fundsignal.enabled: stored true, effective false"
+    And the heal report lists "analysis fundsignal.enabled: stored true, effective false"
 
   @AC-4 @FR-3 @regression
   Scenario: When both spellings exist, the row the code reads wins
     Given staging "analysis" rows "backtest.max_duration_seconds" = 300 and "analysis.backtest.max_duration_seconds" = 60
+    And the unread row's sha256 tuple is in the signed allowlist
     When the heal migrations run
     Then exactly one row remains for that key, "analysis.backtest.max_duration_seconds" = 60
     And a config_audit row records the deletion of "backtest.max_duration_seconds"
@@ -37,8 +39,9 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
   Scenario: A per-user row in an unread spelling is snapshotted and reported, not silently applied
     Given user "u-295" has a staging "analysis" row "fundsignal.enabled" = true
     When the heal migrations run
-    Then that per-user row is preserved in the premigration snapshot table
-    And the discarded-values report lists it with user "u-295"
+    And its sha256 tuple is not in the signed allowlist
+    Then that per-user row survives unchanged
+    And the heal report lists it with user "u-295"
     And user "u-295"'s effective "analysis.fundsignal.enabled" is unchanged
 
   @AC-6 @FR-7 @regression
@@ -227,3 +230,30 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
       | analysis   | analysis.opportunity.signal_rank_weight |
       | notify     | notify.fanout.min_confidence_threshold |
       | portfolio  | portfolio.risk.max_drawdown_pct        |
+
+  @AC-30 @FR-4 @regression
+  Scenario: The inventory commits hashes, with plaintext only for sign-off rows
+    Given non-secret production row "analysis" / "analysis.opportunity.max_universe_size" = 100 that is not on the sign-off list
+    And non-secret row "analysis" / "fundsignal.enabled" = true that is on the sign-off list
+    When the operator runs the inventory tool
+    Then the output for the first row carries sha256 of its value_data and not "100"
+    And the output for the second row carries plaintext "true"
+    And the output ends with an output digest and the sha256 of the tool's own source
+
+  @AC-31 @FR-12 @regression
+  Scenario: The derived deadline never exceeds the long-RPC budget
+    Given an admin sets "indicators" / "indicators.sandbox.timeout_ms" to 40000
+    Then SetConfig returns INVALID_ARGUMENT from the [100,33000] bound
+    And with timeout 33000 and grace 10000 the agent derives a test_formula deadline of 45 seconds
+
+  @AC-32 @FR-7 @regression
+  Scenario Outline: Marketdata vendor-client settings and analysis's provider read change without a restart
+    Given <service> is running with "<key>" = <old>
+    When an operator sets it to <new>
+    Then the next <call> uses <new>
+
+    Examples:
+      | service    | key                                | old       | new       | call                        |
+      | marketdata | marketdata.backfill.rate_limit_rps | 200       | 50        | Alpaca bars request         |
+      | marketdata | marketdata.edgar.user_agent        | "a/1"     | "b/2"     | EDGAR request User-Agent    |
+      | analysis   | marketdata.fundamentals.provider   | "finnhub" | "fmp"     | fundamentals signal cycle   |
