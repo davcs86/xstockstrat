@@ -109,11 +109,6 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 | `portfolio.marketdata.last_close_lookback_days` | int | `21` | Feature 240 — how many calendar days back the offline-valuation `BatchGetBars` (`allow_partial`) searches for a daily close to mark an offline position that has no live quote (`MARK_SOURCE_LAST_CLOSE`), and the window for Day P&L's previous close. Read live per read; nil/`≤ 0` → `21`. Unseeded (227 D2 waiver); SetConfig-bounded `[5,60]`. |
 | `portfolio.marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. Must exceed max(`marketdata.quotes.batch_timeout_ms` (2500), `marketdata.quotes.mark_timeout_ms` (500)) plus the warm read so a cold timeout still returns the warm subset. Read live; nil/`≤ 0` → `4000`. Unseeded; SetConfig-bounded `[500,8000]`. |
 
-> `platform.ledger_endpoint` was removed from this table by the 2026-08-07 config audit — no code
-> in this service reads it via the config watcher. The ledger address is the `LEDGER_ENDPOINT` env
-> var (see Environment Variables below), matching `xstockstrat-trading`'s own findings log
-> (`docs/context-constitution-findings.md:14`), which flagged the same stale row.
-
 ## Ledger Events Consumed
 
 | Event Type | Consumer | Effect |
@@ -132,7 +127,6 @@ full-dotted — **no watcher code change in this service**, the fix is entirely 
 - Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`. **Offline accounts have no row here** (feature 157) — their equity derives from position market value and cash/buying-power/day-P&L are `0`.
 - Table: `portfolio.offline_account_realized` — the offline-exclusive account marker + account-grain realized P&L (feature 157, migration `012`); migration `017` (feature 240) adds `realized_carried`, `fees_since_snapshot`, `fees_carried` and `recent_fills` (JSONB), written from the offline `account.positions.synced` payload — lifetime realized = `realized_carried + realized_pnl`, read user-scoped via `GetOfflineStates` (`user_id` + `account_id`); broker accounts never get a row. `ListPortfolios`' **all-accounts** view enumerates `account_balances` ∪ this offline set (`ListOfflineAccountIdsByUser`, feature 159), so an offline account is **shown** in the combined view with meaningful-only fields (excluded from the summed cash/buying-power aggregates, since it contributes `0`) — closing the `ListPositions`↔`ListPortfolios` read-path parity gap (C-10(b)).
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
-- Migration tool: `golang-migrate`
 
 ## Ledger Events Emitted
 

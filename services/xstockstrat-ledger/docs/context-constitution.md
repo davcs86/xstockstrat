@@ -27,7 +27,6 @@ restate documented/CI-enforced rules (see `## Pointers`).
 
 ## Gotchas & scars
 
-- **RESOLVED (feature 248) — the DB trigger still NOTIFYs a *trimmed* row when the payload exceeds ~7000 chars** (`event_id,event_type,stream_key,sequence,recorded_at` only), but `EventNotifier` now resolves it by PK `(event_id, recorded_at)` on the LISTEN connection before fan-out, so live rows are full. A resolve failure ends the matching streams with 13 (not found) or 14 (error or timeout) and the client replays from its last sequence. Evidence: `migrations/001_…up.sql#notify_event_inserted` trim branch (~L71-80), `src/services/eventNotifier.ts#drain (~L176-246)`, `ledgerServiceImpl.ts#streamEvents` `onGap` (~L285).
 - **Immutability is enforced by `deny_mutation` triggers, NOT PostgreSQL rules** (rules aren't supported on hypertables) — the CLAUDE.md wording "PostgreSQL rules" is wrong (findings). Evidence: `migrations/001_…up.sql#deny_mutation (~L47-60)`.
 
 ## Pointers (already documented or CI-enforced — not restated here)

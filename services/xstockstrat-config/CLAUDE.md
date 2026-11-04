@@ -110,18 +110,6 @@ reconnect path runs; a client cancel or transport error only unregisters the sub
 
 See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.
 
-## Webhooks
-
-_No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060 — which requires the ADMIN scope bit (or an authorized internal caller) and a propagated identity (see Critical Invariants #5)._
-
-## Config Governance
-
-All config changes must comply with the governance rules in the root `CLAUDE.md`. Key rules:
-
-- New keys are seeded by a config migration and registered in `docs/patterns/config-governance.md` § Per-Feature Registered Keys. A `packages/proto/` PR is needed only for a new RPC or field.
-- Sensitive keys (`is_secret=true`) are stored as AES-256-GCM ciphertext in `value_encrypted` (never plaintext), redacted at every read edge, and readable only via `GetSecret` under the `SECRET_CALLER_ALLOWLIST` (feature 147)
-- All changes are written to `config.config_audit` automatically
-
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

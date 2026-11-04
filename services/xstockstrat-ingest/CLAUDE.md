@@ -9,24 +9,9 @@
 Python gRPC service that orchestrates historical data backfills, normalises raw data payloads, and **persists newsletter/external signals** to TimescaleDB. Does **not** call Alpaca directly — delegates all market data fetching to xstockstrat-marketdata. Publishes job lifecycle events to xstockstrat-ledger.
 
 As of Phase 3, ingest owns a database schema (`ingest`) and is no longer stateless — it persists newsletter signals to the `ingest.newsletter_signals` hypertable for consumption by analysis (`QuerySignals`; indicators makes no ingest calls).
-
-## Language
-
-Python 3.13 (asyncio, grpc.aio)
-
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50055` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). The MCP agent
-ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC server on `8055`
-(and its `/webhooks/{trigger-backfill,backfill-status,ingest-signal}` handlers) was removed.
 
 **Authorization.** `TriggerBackfill` (the provider-quota-spending op) and `CancelBackfill` are
 **admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")

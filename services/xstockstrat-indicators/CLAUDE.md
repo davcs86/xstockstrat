@@ -39,25 +39,11 @@ the column keeps `DEFAULT FALSE` and is dropped by a later contract.
   require the dedicated `analysis-template-saga` grant; its copies stay hidden
   (`pending_intent_id` set) until the intent commits, and are hard-deleted on abort.
 
-## Language
-
-Python 3.13 (asyncio, grpc.aio)
-
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 The image installs `libseccomp2` (runtime, kept) plus `libseccomp-dev`+`gcc` (build-only, purged after `uv sync`) so the `pyseccomp` binding compiles and loads — the formula sandbox loads a seccomp-BPF filter in each child (feature 209). No `USER` directive: the container runs as **root** so the sandbox child can `setuid` down to nobody. The single-stage `uv` pattern is otherwise unchanged.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50054` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). All callers —
-internal services, the frontends, and the MCP agent — connect over gRPC `50054`. The former
-HTTP/Connect-RPC server on `8054` was removed.
 
 ## Dependencies
 
