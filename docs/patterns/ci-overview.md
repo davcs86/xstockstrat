@@ -2,6 +2,10 @@
 
 CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 
+Exception: the `main-dev` → `main` promotion PR skips the `pull_request` run (the `changes` job is
+guarded), because its head is the `main-dev` tip that the push run already covered. `CI Gate` still
+reports (green, upstream skipped), so the required check is satisfied. Hotfix PRs into `main` run full CI.
+
 ## CI Jobs
 
 | Job | What it checks | Coverage threshold |
@@ -20,6 +24,7 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 | `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
+| `sops-secrets` | `scripts/sops-secrets.test.sh` (hermetic, throwaway age keys) plus ruff on `scripts/sops_secrets.py` / `scripts/do-render-app-spec.py`: SOPS resolve/build/render (incl. the AC-8 reverse-substitution parity test on both real `.do/app*.yaml`), the static rules pinning every `LEGACY_*` fallback line in the deploy workflows, and the DB-cluster helper `scripts/do-db-cluster.sh` (VPC lookup, prod-up trust/redeploy and prod-down untrust, run against a stub `doctl`) (on the `sops` filter, `homelab`, `ci`) | — |
 | `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
 | `otel-signals` | `scripts/check-otel-produced-signals.sh` + its `.test.sh`: alert/dashboard queries and observability docs name only exported signals | — |
 
@@ -48,12 +53,15 @@ Some guard rails run **locally** (git hooks / Claude subagent), deliberately **n
 
 | Branch | Trigger | Target |
 |---|---|---|
-| `main-dev` | push | DigitalOcean App Platform **dev** (`DO_DEV_APP_ID` / `.do/app.dev.yaml`) |
-| `main` | push | DigitalOcean App Platform **prod** (`DO_APP_ID` / `.do/app.yaml`) |
+| `main-dev` | push | DigitalOcean App Platform **dev** (app `xstockstrat-staging`, resolved by name / `.do/app.dev.yaml`; secrets from `secrets/staging.enc.yaml`) |
+| `main` | push | DigitalOcean App Platform **prod** (app `xstockstrat-production`, resolved by name / `.do/app.yaml`; secrets from `secrets/production.enc.yaml`; `production` reviewer gate) |
 | `main-dev` | push | Homelab **staging** VM (`deploy-homelab.yml`, GitHub environment `staging`) |
 | `main` | push | Homelab **production** VM (`deploy-homelab.yml`, GitHub environment `production`, required reviewers, deployment branches `main` only) |
 
-DO deployment waits up to 15 minutes for the App Platform phase to reach `ACTIVE`.
+DO deployment waits up to 15 minutes for the App Platform phase to reach `ACTIVE`; a `SUPERSEDED` phase (a newer
+deployment of the same app took over) ends the wait as success with a `::warning::`. Deploys to one app serialise on the
+`deploy-<environment>` concurrency group in `deploy.yml`, and a deploy overtaken by a newer push while still queued ends
+cancelled, not failed.
 
 The homelab jobs run beside the DO deploy from the same `docker-build.yml` images: staging while the repository variable
 `HOMELAB_STAGING_ENABLED` is `true`, production while `HOMELAB_PRODUCTION_ENABLED` is `true` (each switch also builds

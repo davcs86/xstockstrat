@@ -1,0 +1,57 @@
+# Feature: legacy-authors-confirm-resolve
+
+**Development Branch**: `feature/legacy-authors-confirm-resolve`
+**Created**: 2026-11-02
+**Last Updated**: 2026-11-02
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
+**Archived**: 2026-11-04
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-11-02 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, all addressed) |
+| 2026-11-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick extended) and approved; recon.md + design.md written |
+| 2026-11-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-11-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode, feature branch `feature/legacy-authors-confirm-resolve`) |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 2 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 3 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 4 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 5 done |
+| 2026-11-03 | `in-progress` | /sdd-execute | Step 6 done; all steps complete |
+| 2026-11-03 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done; 21 scenarios promoted to the indicators business-rule suite; integration PR next |
+
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 4 specs |
+---
+
+## Artifacts
+
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios already promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+Let `python -m app.maintenance.legacy_authors_ops confirm` resolve `unmappable` and `ambiguous` plan rows (via `--map LEGACY=USER_ID` flags and an interactive picker) so the feature-276 repair no longer needs a hand-edit of `plan.json` in an ephemeral DO console.
+
+## Reviewers
+
+| Role | Review Focus |
+|---|---|
+| Service owner `xstockstrat-indicators` | Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution |
+
+_No proto, migration or config change, so no Proto Reviewer, DBA or Platform Lead. The DBA change record (runbook §2) still governs any real run._
+
+## Next Action
+
+Merge the integration PR into `main-dev` (squash), then `/sdd-sync` / `/promote` as usual

@@ -1,5 +1,5 @@
 Feature: fix-ledger-query-pagination (bug fix)
-  Regression guard for docs/reports/2026-10-21-ledger-query-pagination-defect.md:
+  Regression guard for docs/reports/2026-10-21-ledger-query-pagination-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ledger-query-pagination-defect.md):
   QueryEvents ignores pageToken (D-13), GetPnL loops into an inflated P&L (D-46), and StreamEvents
   replay is one unbounded query on the single-connection pool (D-27).
 

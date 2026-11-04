@@ -1,9 +1,11 @@
 # App name:   xstockstrat-staging
-# DO project: set DO_DEV_PROJECT_ID in GitHub Secrets → Actions
+# DO project: digitalocean.PROJECT_ID in secrets/staging.enc.yaml (legacy DO_DEV_PROJECT_ID fallback)
 #             doctl projects list   ← find your project UUID
-#             doctl apps list       ← find DO_DEV_APP_ID after first deploy
+# Deploys find this app by its name: below, so no app ID is stored anywhere.
 name: xstockstrat-staging
 region: nyc
+vpc:
+  id: YOUR_VPC_ID
 
 # Route all public traffic through the nginx reverse proxy.
 # All backend services use internal_ports for TCP (any protocol, including gRPC H2C).
@@ -380,8 +382,8 @@ services:
         value: http
       - key: MCP_HTTP_PORT
         value: "9000"
-      # Feature 147: the agent HMAC-signs its OAuth txn blob with JWT_SECRET (MCP_AGENT_SECRET
-      # retired). Same shared platform JWT secret as identity/ui.
+      # Feature 147: the agent HMAC-signs its OAuth txn blob with JWT_SECRET; same shared platform
+      # JWT secret as identity/ui.
       - key: JWT_SECRET
         scope: RUN_TIME
         value: YOUR_DEV_JWT_SECRET

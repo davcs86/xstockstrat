@@ -3,6 +3,7 @@
 **Development Branch**: `feature/droplet-compose-deploy`
 **Created**: 2026-07-31
 **Last Updated**: 2026-07-31
+**Archived**: 2026-11-04
 
 ---
 
@@ -13,13 +14,14 @@
 | 2026-07-31 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, 2 factually corrected) |
 | 2026-10-24 | `spec-ready` → `demoted/canceled` | /sdd-review (279 overlap) | Superseded by `279-homelab-compose-deploy` (operator decision) |
+| 2026-11-04 | `demoted/canceled` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(0); pruned 1 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec droplet-compose-deploy`_
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

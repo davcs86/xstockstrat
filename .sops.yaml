@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: secrets/staging\.enc\.yaml$
+    age: age1h03udrzrj26fplds8c98mhrl08zsme93wg84yqj0krhf5q08aczqyseg78,age12qqyytjv55krjjkjcs7d206qm2naz4q6jzheenhmwjdmkd2pv44qrd74rj
+  - path_regex: secrets/production\.enc\.yaml$
+    age: age1z44g598d963d9qtyj4n2ahv9k52h9jry0tg3us4p9tvpu84djy2sddlclk,age12qqyytjv55krjjkjcs7d206qm2naz4q6jzheenhmwjdmkd2pv44qrd74rj

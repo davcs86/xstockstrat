@@ -3,6 +3,9 @@
 **Development Branch**: `feature/expose-score-strategy-mcp`
 **Created**: 2026-11-01
 **Last Updated**: 2026-11-01
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -18,15 +21,17 @@
 | 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (sdd-batch-execute); operator's up-front confirmation recorded in context.md |
 | 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done; Step 10 teardown reconciled by hand (context-constitution refresh not invocable) and fixed one runbook drift; agent + analysis suites green |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated, user-approved architecture
-- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios already promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

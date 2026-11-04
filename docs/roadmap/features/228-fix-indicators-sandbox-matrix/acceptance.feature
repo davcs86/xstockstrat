@@ -1,5 +1,5 @@
 Feature: fix-indicators-sandbox-matrix (bug fix)
-  Regression guard for docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md:
+  Regression guard for docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md):
   The indicators sandbox matrix test fails on some hosts because the child runs at its 128 MiB memory cap.
 
   @AC-1 @FR-1 @regression

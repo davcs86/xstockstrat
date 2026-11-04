@@ -1,5 +1,5 @@
 Feature: fix-getpnl-source-service (bug fix)
-  Regression guard for docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md:
+  Regression guard for docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md):
   GetPnL queries ledger fills with source_service "trading", but trading writes "xstockstrat-trading";
   and trading's fill payloads carry unsigned qty/filled_qty with no side key, so a sell folds as a buy.
   The /trader/positions fill lineage (services/xstockstrat-ui/src/hooks/usePositionLineage.ts:16-20) has the same filter bug.

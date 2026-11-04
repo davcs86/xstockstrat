@@ -1,232 +1,94 @@
-# Context Log: fix-opportunities-read-hangs
+# Context: fix-opportunities-read-hangs  (archived 2026-11-04)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
 
-## Session 2026-10-14 (/sdd-triage)
+**What**: SEV-2 bug (Track C, Type bug). The Decide-queue read (`ListOpportunities`, via the agent `list_opportunities` tool and the UI BFF) hung past the 60s MCP limit on staging with no log line anywhere. It shipped as an inside-out stack of nested bounds: config write-bounds registry entries, a detached-budget + fully-logged `BatchGetLatestPrice` in marketdata, a request-scoped server-enforced DB budget in analysis (`app/repositories/read_budget.py`, `budgeted_read`) with kicks after release, a deadlined enrichment that degrades to unenriched rows, and an agent gRPC deadline with an explicit "deadline exceeded" message. 13 steps, no proto, no migration, 4 new unseeded config keys. Launched 2026-10-20 via promotion PR #1258 (integration PR #1247).
 
-- Bug recorded as `docs/reports/2026-10-14-opportunities-read-hangs-defect.md` (Issues disabled), found while
-  attempting feature 215 Step 26's staging measurement.
-- Severity: SEV-2 (dev observed). Routed to SDD path (Track C).
-- Created: feature.md, product-spec.md, acceptance.feature (AC-1..4 regression scenarios), context.md.
-- Affected services: xstockstrat-agent, xstockstrat-analysis, xstockstrat-marketdata.
-- Root cause hypothesis: no deadline at any hop and marketdata discards its errors (confirmed in code). The stalling
-  dependency is unconfirmed: either the saturated shared DB (load 7–9 on 1 vCPU) or marketdata/Alpaca.
-- Operator decision (2026-10-14): fix = deadlines + degrade-to-unenriched + log dropped errors + bounded pool acquires
-  ("option 3"). DB resize and the OTel export failure are out of scope.
-- **Production exposure:** `main` carries the same code (2026-10-14 promotion), and production shares the same
-  saturated cluster. Not observed in production, so not escalated to Track A; noted for the operator.
-- Recommended design depth: full → `/sdd-design fix-opportunities-read-hangs` (rationale: 3 affected services).
-- Development branch: feature/fix-opportunities-read-hangs.
+**Why (irrecoverable rationale)**:
+- Root-cause trigger was never confirmed (saturated shared DB, load 7-9 on 1 vCPU, vs marketdata/Alpaca stall) because marketdata discarded every error (`trades, _ =`) and OTel export was down. Operator decision 2026-10-14 ("option 3"): bound BOTH candidates and ship the missing logs so the next staging run says which one stalls; DB resize and the OTel export failure are out of scope. Confirmation of the trigger was left as a post-deploy action (see Deferred).
+- Every bound is nested inside the caller's bound, with the arithmetic fixed in config bounds rather than trust: analysis total <= B+3.05+E (26.05s at defaults, 27.05s at bound ceilings) < BFF 30s (`@AC-1 @feature-191`); agent floor 30 > 27.05 so the agent never pre-empts analysis's own answer; agent end to end <= 3+55 = 58s < MCP 60s. If E <= M a marketdata stall that runs to its own budget always yields unenriched rows because analysis gives up first.
+- Operator decisions (design round gates, 2026-10-14), kept verbatim because design.md is deleted:
+  - **D1** (round 1): one request-scoped DB budget, with `pool.acquire(timeout=remaining)`, a short read transaction carrying `SET LOCAL statement_timeout = <remaining ms>`, and a bounded `pool.release`. Only transient DB errors become UNAVAILABLE; type and message always logged.
+  - **D2** (round 1): **seeding waiver.** The four new keys are unseeded, a conscious deviation from feature 184's `analysis.opportunity.*` seeding convention.
+  - **D3** (round 1): the AC-4 proof runs against a real local Postgres binary, test-scoped, no long-running container.
+  - **D4** (round 2): SQLSTATE 57P01/57P02/57P03 are transient (UNAVAILABLE).
+- Operator override (2026-10-14, round-5 approval gate): chose "Do another round, override cap", i.e. explicit sign-off to exceed the 5-round full-mode cap. Round 6 was a whole-document adversarial re-review; it returned APPROVE WITH FIXES, no Floor breach, no C-16 regression, 12 text fixes applied; design approved 2026-10-14.
+- Key semantics a future reader must know: the analysis keys are `value_type` int and `get_int` treats 0 as unset and passes negatives through (`watcher.py:99-105`); a float-typed stored value reads `int_val=0` and silently falls back to the default (documented per-key in each `CLAUDE.md`, test O8). Registry strings are the FULL-dotted key; lookup tries the bare key then `${namespace}.${key}`, so a namespace-stripped key column still resolves (H7); bounds apply even to `create_key=true` writes (checked before the existence gate).
+- Why marketdata needs its OWN bound: its `BatchGetLatestPrice` singleflight ran on the first caller's ctx, so a per-caller analysis deadline never cancels the shared closure; only a bound inside marketdata stops a chain of up to 5 x 30s calls (Alpaca `http.Client{Timeout: 30s}`, the rate limiter waits on the request ctx) (recon.md:155-156, 71-72). Hence the `WithoutCancel` + own-budget invariant below: it also detaches coalesced waiters from the first caller's cancel.
+- Why `budgeted_read` cleanup is shaped as it is (H4/G7 stage invariant; design.md:80, 86-95): (a) after a failed BEGIN or COMMIT the transaction is left FAILED and `rollback()` raises `InterfaceError`, so those stages terminate, never roll back; (b) after `pool.terminate()` or a lost connection the proxy is detached and EVERY wrapped method (`is_closed`, `terminate`, `rollback`) raises `InterfaceError`, which would mask the original error, hence `except Exception` around cleanup plus a bare `raise` of the original; (c) `backstop.expired()` is what tells the backstop's cancel apart from our own budget-exhausted or acquire `TimeoutError`, which must NOT terminate (G1: the connection is healthy); (d) the backstop deliberately never wraps cleanup, so a late expiry cannot replace the original exception (G7).
+- Why `_NOT_TRANSIENT` carve-outs exist (design.md:100-109; implementation-spec.md:378-379,484-486): transient = `PostgresConnectionError` (08000/08003/08006/08P01), 53300, 57014, 57P01/57P02/57P03 (D4), 57P05, and the `_TRANSIENT` tuple includes `apg.InterfaceError`. `ClientConfigurationError` and the interface-level `DataError` are `ValueError` mixins (`_base.py:225,229`) and `Unsupported{Client,Server}FeatureError` sit at `_base.py:233,237`; without the carve-out they would match `_TRANSIENT` and map to `UNAVAILABLE`, so they are deliberately forced to propagate as `UNKNOWN`. The exported `asyncpg.DataError` is a different class (the 22000 Postgres error, not transient anyway). Shipped `read_budget.py:28-32` carries no comment on this, so the `ValueError` entry in `_NOT_TRANSIENT` looks arbitrary and could be removed in a cleanup by mistake. (The sources give the mechanism only; no stated reason beyond it.) The asyncpg internals this design leans on (a failed BEGIN/COMMIT leaves the transaction FAILED so `rollback()` raises `InterfaceError`; a detached proxy raises on every method; release runs a reset) were verified against asyncpg 0.31.0 (`uv.lock:44-45`; implementation-spec.md:366-367): re-check them on any asyncpg upgrade.
+- Agent policy-read wrapper: the shared `client.get_config_value` (one-shot `GetConfig`) has no deadline and was deliberately left untouched (design.md:214, flagged as a finding at :295); `_POLICY_READ_TIMEOUT_S = 3.0` around `_agent_policy` is the local mitigation for exactly that cause, so a stalled config read cannot eat the tool's own deadline.
+- Production exposure noted 2026-10-14: `main` carried the same code and shares the same saturated cluster; not observed in production so not escalated to Track A.
 
-## Session 2026-10-14 (/sdd-design — round-cap override)
+**Rejected alternatives**:
+- Service-wide asyncpg `command_timeout` / pool `timeout` — lost because it aborts legitimate long background, materializer and backtest queries (recon "Pool bounds are service-wide").
+- `asyncio.wait_for` around each DB await (round 1) — soft bound: cancelling a query triggers a shielded, unbounded release/reset plus a CancelRequest against the already-saturated DB; also a fixed 4s per await fails slow-but-completing reads.
+- Managed `async with con.transaction()` — on cancel `__aexit__`'s ROLLBACK waits unbounded on the protocol's `cancel_waiter` and masks the original error type; hence the unmanaged `tr.start()/tr.commit()`.
+- Parameterized `set_config(...)` — 2 round trips under `statement_cache_size=0` vs 1 for simple-query `SET LOCAL`.
+- Skipping rollback and just releasing (round 3) — asyncpg logs an asyncio ERROR ("Resetting connection with an active transaction") on every statement_timeout.
+- Terminating on every error — turns a saturation incident into a reconnect storm. Rule kept: rollback only at stage `open`; every other stage, backstop expiry and external cancel terminate.
+- Letting `pool.release` handle cancels — brings back CancelRequest churn through PgBouncer (rejected by D1).
+- Threading `con=` through the repository signatures — churns the fakes and `assert_awaited_with` calls; per-request repository factories (`_opps_repo_factory` / `_state_repo_factory`) were used instead.
+- A ScreenSymbols-style outer `DEADLINE_EXCEEDED` — second mechanism, no guarantee beyond the budget.
+- Bounded concurrency in the marketdata per-symbol fallback (errgroup limit 4) — YAGNI for a path that only runs when the multi-fetch fails; at ~200ms/symbol it covers ~12 of 50 symbols in 2.5s, the rest are omitted (never fabricated); the rate limiter does not serialize calls (burst = rps = 200), so throttling does not explain the delay (design.md:197).
+- Native stub `timeout=` for the enrichment RPC — untestable with an `AsyncMock` fake, and propagating `grpc-timeout` buys nothing because the marketdata closure is detached.
+- A shared default deadline across all ~69 agent call sites (each opens its own channel, `app/mtls.py:9,37-43`) — out of scope ("touch only what the task requires"); this later became features 247 and 273 (see Cross-feature signal).
+- A tolerant int-or-float reader for the `*_ms` keys — documenting `value_type` plus default-fallback tests was the minimal fix.
+- Seeding the new keys — waived by D2.
 
-- Rounds 1–5 ran in full mode. Round 5 returned APPROVE WITH FIXES and the fixes were applied (ef54e88a, de432f0d).
-- **Operator override (2026-10-14):** at the round-5 approval gate, the operator chose "Do another round, override cap".
-  That is explicit sign-off to exceed the 5-round full-mode cap, recorded here per the Commandment override rule.
-  Round 6 is a whole-document adversarial re-review of the post-fix design.md.
+**Scars & gotchas**:
+- Evidence baseline drift: design.md/recon.md line numbers predated feature 215 (merged to main-dev @ `08d63011`, +647 lines in analysis `servicer.py`), so `ListOpportunities` had moved `:4178` -> `:4490-4635`, `_enrich_opportunities_live` `:4637-4703`, `BatchGetLatestPrice` `marketdata_service.go:730-807`, agent tool `tools.py:1509-1546`. /sdd-spec re-baselined on main-dev and execute merged main-dev (5b7943ea) before Step 1. Feature 215 also added a `symbol=req_symbol` kwarg to both `opportunities_repo.read` calls that `_read_opportunity_queue` must forward.
+- Hang guards are mandatory in RED runs: pytest-timeout is not a dev dependency and pre-fix code has no bound, so each stall-injection test (AC-1, AC-2, AC-4, G5) wraps its call in `asyncio.wait_for(..., 10)` and Go AC-3/G10 use goroutine + `select` on `time.After(5s)` -> `t.Fatal`. Observed reds tripped exactly these guards (Step 3, 7, 11, 10).
+- Existing-test collateral: marketdata tests build `&MarketDataService{...}` literals with nil cfg and getters have no nil-receiver guard, so the new `budgetCfg intGetter` is set only when `cfgWatcher != nil` (typed-nil trap, precedent `fundamentalsConfig` :99-104); `intGetter` did not exist and was created in Step 3.
+- Shared `FakePool/FakeConn/FakeTx/bc_routed` fakes belong in `tests/conftest.py` (C-13, 2 consumer files; F-08 risk if left out of Step 8 Files). `bc_routed(None)` yields a factory returning `None` (state repo may be None in pool mode). `bc_routed(repo)` IS the factory (`bc -> wrapper`).
+- G4 parametrization (direct vs pool `read_path`) touched every `ListOpportunities`-reaching test: 19 call sites (not the design's 18) in `test_analysis_servicer.py` (52 tests, two call sites in the shared `_list_opps` helper) and 3 in `test_opportunity_compute_state.py` (2 tests). Class-level marks double-run one non-calling test, harmlessly. Per-request release is asserted via a ContextVar, never a global `in_use==0` (an existing test runs 6 requests concurrently).
+- The AC-2 test needed the first in-process `grpc.aio.server` harness in agent tests (none existed): it monkeypatches `client.ANALYSIS_ENDPOINT` and `client.mtls.secure_channel` to an insecure channel (conftest's dummy PEM and the `analysis-test` host otherwise fail before reaching the server) and asserts the handler-entered event is set, so the test cannot pass vacuously. New test file must not import `_rpc_error` from `test_tools.py` (C-13); the mapper tests live in `test_tools.py`.
+- `local_pg` fixture specifics: `initdb -U postgres` so the DSN `user=postgres` holds on the non-root CI runner (default superuser would be `runner`); `mkdtemp(dir="/tmp")`; `runuser -u postgres --` under root; skip locally, fail under `CI=true`; guarded CI apt-install step; `XSTOCKSTRAT_PG_BIN` documented in analysis CLAUDE.md. Pools in the real-PG tests use `statement_cache_size=0`. F2 (no leak of `SET LOCAL statement_timeout` across the pool reset) is green on the pre-fix stub by construction; its `SET statement_timeout = 1234` negative control is what proves the test can detect a leak. Real PG cannot simulate a PgBouncer BEGIN/COMMIT stall; only unit stage-stall tests (G5) cover it.
+- Sandbox toolchain: `/usr/local/bin/golangci-lint` was v2.5.0 and cannot read Go 1.27 export data; used CI-version v2.14.0 (logged as a Deviation, CI-equivalent fallback). Local node was v22 (CI 24).
+- Teardown record: `/context-forge:context-constitution refresh` was unavailable (plugin exposed only `context-scrubber`); the manual equivalent re-read every touched context file against code (analysis/marketdata/agent `CLAUDE.md`, `config-governance.md`, findings, `mcp-tools.md`) and fixed drift: analysis `CLAUDE.md` said the memo skips "`GetLatestPrice`/`GetBars`" (now only `BatchGetLatestPrice`), memo-row said "live-quote/sparkline" and default `10` (code default is `20`, seeded `10` by config migration 028), `sparkline_bars` row claimed a reader (inert). Config-governance feature-177 row fixed in place; the two stale append-only feature-184 rows are superseded by a line in the feature-227 entry rather than edited.
+- Renumber 226 -> 227 (2026-10-15): 226 was taken on main-dev by `226-fix-otel-trace-export` (#1246) while this branch was in flight; at operator instruction the directory and every reference in touched files were renamed, main-dev @ 3ea5b75b merged (30f6e99d); the only conflict was analysis `tests/conftest.py` (kept both: this feature's fakes + `local_pg`, and main-dev's `otel_reset`). Main-dev's own feature-226 references untouched. A Deviation Log quote keeps the old `read_budget.py` docstring text ("feature 226"). Full suites after merge: analysis 1276, agent 510, marketdata `-race` ok. (Final counts at Step 12: agent 507, analysis 1273 pre-merge.)
+- Docs addition beyond design section 7, operator-approved in Step 13 flag: `docs/runbooks/mcp-tools.md` (sparkline bullet removed; `list_opportunities` Errors line names the deadline and "opportunities store unavailable; retry"), for parity with the tool docstring.
 
-### Operator decisions recorded during the design debate (2026-10-14)
+- Step ordering rationale (implementation-spec.md:69-70, 76-77; kept in context only, not a ledger lesson): config-bounds step first because every new key must be write-bounded before any reader exists, otherwise an operator write could break `B+3.05+E < 30` or the agent's `[30,55]` floor; the agent step last because AC-2's bound (agent floor 30 > analysis 27.05) is only meaningful once analysis is bounded.
+- Behavioural-red technique when the code step precedes its test step: (a) skeleton-first structural red per P-06 (seams/fields plus a stub such as `resolveBatchPriceBudget` returning 2500ms, unused; observed at Step 3, context.md:108; the instruction came from the impl-review at context.md:76); (b) a temporary naive unbudgeted stand-in `read_budget.py` (plain `acquire()`, no SET LOCAL/backstop, rollback+release on any error, `is_transient_db_error -> False`) and the pre-fix `servicer.py` from c8cb05d5 were put in place, run red (`28 failed, 8 passed`; `3 failed, 1 passed`), then restored via `git checkout`, never committed (context.md:129, 157); (c) for Steps 11/12 the new tests were run on the pre-Step-11 tree with the `_agent_policy` / `_POLICY_READ_TIMEOUT_S` monkeypatches temporarily set `raising=False`, never committed, giving `9 failed` (context.md:164).
+- `return None` after `context.abort(UNAVAILABLE, ...)` in `ListOpportunities` is intentional, not dead code: test contexts' `abort` does not raise (precedent `servicer.py:425`; design.md:159).
+- G3 (kicks after release keep behaviour): a kick is a synchronous set-add plus `create_task` and the failure counter is written only inside the task body, so the `compute_state.get`-time counter read, and therefore `compute_failed` / `computing`, is unchanged; the retry scan has no await before it on the fresh path (design.md:165,169-175).
+- G4 parametrization scope gap: the `owner_scoped_completeness` / `unreadable_formula` callers of `ListOpportunities` fell outside Step 8's Files and stay unparametrized, so the pool path is not exercised through them (context.md:142).
+- The `read_budget.py` line-1 docstring ("feature 226, design.md section 1") was edited outside Step 13's Files to satisfy root CLAUDE.md rule 5; operator-approved at the Step-10 checkpoint (implementation-spec.md:1139-1143).
 
-- **D1** (round-1 gate): one request-scoped DB budget, with `pool.acquire(timeout=remaining)`, a short read transaction carrying `SET LOCAL statement_timeout = <remaining ms>`, and a bounded `pool.release`. Only transient DB errors become UNAVAILABLE; the type and message are always logged.
-- **D2** (round-1 gate): **seeding waiver.** The new keys are unseeded, which consciously deviates from feature 184's `analysis.opportunity.*` seeding convention.
-- **D3** (round-1 gate): the AC-4 proof runs against a real local Postgres binary, test-scoped, with no long-running container.
-- **D4** (round-2 gate): 57P01/57P02/57P03 are transient (UNAVAILABLE).
-- **Round 6 (operator cap override):** APPROVE WITH FIXES, with no Floor breach and no C-16 regression. All 12 text fixes were applied:
-  - AC-2 reachability (the test uses an insecure in-process channel and asserts the handler was entered);
-  - red-step hang guards;
-  - AC-1/AC-4 Gherkin wording aligned to the design;
-  - the D1–D4 record;
-  - the worst case is now B+3.05+E;
-  - G4/G7/G10 test placement.
-- **Design approved (2026-10-14):** the operator approved the round-6 design, and the status moved draft → design-approved. Open risks accepted as documented in design.md § Open Risks:
-  - a PgBouncer BEGIN/COMMIT stall is bounded only by the B+2 backstop, at the cost of a reconnect.
-  Next: `/sdd-spec`.
+**Permanent deviations**:
+- Defaults/literals as named constants (not a design divergence): the impl-review warning (context.md:74) made the defaults and the rollback-window literals named — shipped `_DEFAULT_OPP_READ_DB_BUDGET_MS = 20000` / `_DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS = 3000`, each used twice (config default + <=0 fallback), and `_rollback_then_release` uses a separate named `_ROLLBACK_WINDOW_S = 1.0` and `_RELEASE_FLOOR_S = 0.05` (`read_budget.py:14-15,120-135`; F-07 / C-18); recorded as Deviations: none (context.md:135).
+- G4 helper placement (not a design divergence): design.md:245 already put the shared fakes in `tests/conftest.py`; the impl-review F-08 risk was only that Step 8's Files list omitted `tests/conftest.py` (2 consumer files, C-13); the spec was patched pre-execution and `FakePool`, `bc_routed`, `assert_budgeted_read_order` shipped there.
+- design said G4 covers "18 call sites" -> shipped marks on 19 + 3 (see Scars).
+- Agent policy/message: design.md:209-215 already specified the `_extract_policy` -> `_agent_policy` rename, the awaited `wait_for(..., _POLICY_READ_TIMEOUT_S)` read, the timed-out warning, the 40.0 default and the non-finite/<=0 -> 40.0 fallback, so those are not divergences. The only extra: `_grpc_error_message(e, deadline_s=timeout_s)` omits the "within ...s" clause when `deadline_s` is None. (The "`_agent_policy` must be async" note at context.md:76 concerned the test monkeypatch, not the shipped code.)
+- design said prevClose seam runs concurrently, joined through a `done` channel -> shipped joins `<-done` ONLY when the prevClose goroutine was started (impl-review fix), else a nil-repo path would block.
+- Gherkin: AC-1/AC-4 wording was aligned to the design in round 6 (AC-4 states "at the pool-acquire timeout (within that timeout + 0.5s)"; AC-1 "shortly after the enrichment deadline elapses"). The promoted suites carry that text verbatim.
 
-## Session 2026-10-14 — sdd-spec
+- UNEXPLAINED DECISION (memo after timeout): recon.md:148-149 named the fork (memoize a timeout as "fresh, no price" => prices stay blank for the TTL after recovery; do not memoize => every poll pays the full deadline again). design.md:185 chose "the memo write stays success-only", so while marketdata stalls EVERY poll pays the full enrichment deadline E (default 3s, up to 4s). No reason for the choice is written down anywhere in recon, design or context; treat it as an unexplained decision, not a settled tradeoff. (Seeded TTL 10 < 15s poll also means the memo never hits anyway; see Deferred.)
+- Durable rule NARROWED, not preserved verbatim — `@AC-6 @feature-185` ("a cold read returns an empty page with `computing`, never a synchronous wait"): recon.md:153-154 raised that the cold-check query (`count_for_user` / `compute_state.get`) can fail to get a connection; design.md:357 settled it: an undeterminable cold read returns `UNAVAILABLE`, and `@AC-6` is preserved only wherever the state IS determinable; design.md:273: a `compute_state.get` `TimeoutError` yields exactly one recompute kick, then `UNAVAILABLE`. This will read as a regression against `@AC-6` once design is deleted; it is deliberate.
 
-- Generated `implementation-spec.md` with 13 steps (6 service/test pairs, plus the `local_pg` infra step and the docs/teardown step). Status `design-approved` → `implementation-ready`.
-- Coverage: AC-1 → Step 8, AC-2 → Step 12, AC-3 → Step 4, AC-4 → Step 10.
-- Key codebase findings:
-  - **Evidence baseline is `origin/main-dev` @ `08d63011`, not this branch.** The branch is one commit behind main-dev. That commit (feature 215) rewrote `servicer.py` (+647 lines) and touched `opportunities.py`, analysis `tests/conftest.py`, `test_analysis_servicer.py`, agent `client.py`/`tools.py`, and marketdata `marketdata_service.go`. design.md line numbers are therefore stale:
-    - `ListOpportunities` is now `servicer.py:4490-4635`, not `:4178`.
-    - `_enrich_opportunities_live` is `:4637-4703`.
-    - `owner_scoped` is `:462-475`.
-    - `BatchGetLatestPrice` is `marketdata_service.go:730-807`.
-    - The agent tool is `tools.py:1509-1546`; `_extract_policy` is `:2338`.
+**Cross-feature signal**:
+- This is the first of a deadline/bounds family on the same hops: 227 flagged "agent `get_config_value` GetConfig has no deadline (`client.py:1751`)" in `docs/context-constitution-findings.md` -> `247-fix-agent-getconfig-deadline`; the rejected "default deadline across ~69 agent call sites" -> `273-fix-agent-client-deadlines`. Same bug class (no deadline on an outbound await in a request path + `except Exception` fallback) three times in ~10 days.
+- Durable acceptance text rots when code is removed: feature-191 `@AC-8` still says enrichment calls `BatchGetBars` (sparkline) after the bars fetch was removed; logged in findings, not edited (promoted suites are additive).
+- Pool budget is shared: `budgeted_read` acquires from the same 2-slot analysis pool (root CLAUDE.md Connection Pool Budget unchanged); a request holds at most one connection (F-06), and kicks fire after release so none competes for the held slot.
 
-    `/sdd-execute` BRANCH SYNC must merge main-dev before Step 1.
-  - Feature 215 added a `symbol=req_symbol` kwarg to both `opportunities_repo.read` calls in the handler. `_read_opportunity_queue` must forward it.
-  - There are 19 (not 18) `ListOpportunities` call sites in `test_analysis_servicer.py`, plus 3 in `test_opportunity_compute_state.py`, for the G4 parametrization.
-  - `intGetter` does not exist in marketdata. Step 3 creates it beside `fundamentalsConfig` (`:101-106`). Existing tests build `&MarketDataService{…}` literals with a nil cfg, so the nil fallback is load-bearing.
-  - There is no in-process `grpc.aio.server` harness in agent tests. Step 12 creates the first one.
-  - The local sandbox has PostgreSQL 16 binaries (`/usr/lib/postgresql/16/bin`) and a `postgres` user, so `local_pg` can run here via `runuser`.
-- One addition beyond design §7, flagged in Step 13: `docs/runbooks/mcp-tools.md` (`:1026` sparkline bullet, `:1045` Errors line), for parity with the `list_opportunities` docstring change. The agent reviewer focus and C-10 require it.
+**Deferred follow-ons**:
+- Confirm on staging which dependency stalls (DB vs marketdata/Alpaca) from the new warnings, then run feature 215 Step 26's measurement (the original blocker); this was the stated Next at code-completion and is not recorded as done.
+- Suspected cost driver left OUT OF SCOPE: the full-queue LATERAL reads are not bounded by `page_size` (product-spec.md:36); query-plan optimisation was explicitly excluded unless design found it necessary for the bound (product-spec.md:66) and design did not. If the staging confirmation points at the DB, this is the first thing to examine (it cannot simply be limited to page_size: `@AC-1/@AC-11/@AC-13 @feature-190` require filters, `available_sources` and pagination over the whole queue).
+- Findings rows (in `docs/context-constitution-findings.md`): seeded `analysis.opportunity.live_enrich_ttl_seconds` 10 (migration 028 :111) < the UI's 15s poll (`useOpportunities.ts:49`) so the live-enrich memo never hits; G6 residual — orphaned backend after `budgeted_read` terminate: asyncpg's CancelRequest task is cancelled so the backend runs until `statement_timeout` (<= remaining budget) and counts against `max_connections`; agent `GetConfig` no deadline (fixed later by 247); feature-191 `@AC-8` BatchGetBars doc-lie.
+- Accepted open risks (design Open Risks): PgBouncer BEGIN/COMMIT stall bounded only by the B+2 backstop (costs a reconnect); a COMMIT stall after rows were read returns UNAVAILABLE instead of rows; full-kick dedup is checked after release so one extra kick is possible (serialized by the per-user lock `servicer.py` ~:4431 on the pre-215 baseline); UI `retry:1` doubles read rate per tab on a fast UNAVAILABLE (acquire timeouts put no load on the DB); success-path `pool.release` runs asyncpg's default reset (an implicit second transaction needing a PgBouncer slot) and under saturation the 1.0s release timeout terminates the connection after a good read (H5: error logged, rows still returned); repository SQL is not run against real PG under `BudgetedConn` (only the connection object changes); two warning lines per DB failure (context manager + handler) are deliberate (G7); ubuntu-latest PostgreSQL binaries were unverified (guarded apt step).
+- The four new keys remain unseeded (D2); seed them only if an operator wants to tune without a `set_config create_key=true`.
 
-## Session 2026-10-14 — sdd-review impl-spec (advisory)
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-11-04 entries.
 
-- Result: 1 advisory failure and 4 warnings (advisory, did not block). Floor: an F-08 risk in Step 8, not a breach.
-- Evidence baseline was verified against the feature-215 tree (post-215 lines match the spec).
-- Unresolved ✗ / ⚠ carried into execution:
-  - Step 8: the shared G4 pool-mode helper (FakePool, factories, per-FakeConn order/release assertion) has 2 consumer files. C-13 puts it in `tests/conftest.py`, which is not in Step 8 Files (F-08 risk). — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
-  - Step 8: in pool mode, `_state_repo_factory(bc)` must return None when the test's `_opportunity_compute_state_repo` is None. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
-  - Step 5: bare `1.0` / `0.05` literals in `_rollback_then_release` (C-18, F-07-adjacent). Name them, or reuse `_RELEASE_TIMEOUT_S`. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
-  - Step 9: Verification has no coverage threshold and no full-suite run after the conftest edit. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
-  - Step 3: join `<-done` only when the prevClose goroutine was started. Step 4 and Step 12: RED is structural before the paired code step; use the skeleton-first approach (P-06). The patched `_agent_policy` must be async. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
-  - Step 10: build the real servicer via `from tests.test_analysis_servicer import make_servicer` (precedent: test_opportunity_refresh.py:15). Step 9: document `XSTOCKSTRAT_PG_BIN` in analysis CLAUDE.md § Running Tests. — [x] resolved pre-execution (spec patched, operator choice 2026-10-14)
-- Overlap findings: none (CLEAN). 215 is merged; its only open item is the Step 26 measurement, which changes no code.
+**Runtime-invariant recommendations (→ /context-constitution)**:
+- analysis: the `ListOpportunities` DB phase runs strictly sequentially on one `BudgetedConn` (single-task; never `asyncio.gather` statements on it); rollback only at stage `open`, all other stages and external cancel terminate; kicks fire after release; enrichment runs only after release (already stated in analysis `CLAUDE.md`, candidate to promote to an ANALYSIS-* invariant).
+- platform: nested-deadline ordering (UI BFF 30s > analysis B+3.05+E > marketdata M and agent floor 30 > 27.05; agent <= 58s < 60s MCP) is enforced only through the `SCALAR_BOUNDS_REGISTRY` bounds; widening any bound without re-doing the arithmetic breaks it (candidate PLAT-*).
+- analysis (ANALYSIS-* candidate): `_NOT_TRANSIENT` in `read_budget.py` (`ValueError` mixins `ClientConfigurationError` / interface `DataError`, `Unsupported{Client,Server}FeatureError`) must stay: without it those errors match `_TRANSIENT` (it includes `apg.InterfaceError`) and map to retryable `UNAVAILABLE` instead of `UNKNOWN`; every other error is logged with type and message and surfaces as `UNKNOWN`.
+- marketdata: `BatchGetLatestPrice` singleflight closure runs on `context.WithoutCancel(ctx)` + its own budget, so one caller's cancel/deadline never cancels coalesced waiters; omitted symbols are never fabricated.
+- config: watcher `get_int` returns the default for a float-typed stored value (`int_val=0`) — new `*_ms` keys must be `value_type` int.
 
-## Session 2026-10-15 — sdd-execute sequential (entry)
-
-- The operator agreed to sequential mode and approved the 13-step plan. No re-spec: origin/main-dev @ 08d63011 was merged
-  into the branch (5b7943ea), and the spec's anchors match it.
-- Tooling setup (steps 1–13): go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (the CI version, /tmp/claude-0/gl-v2.14.0; the
-  /usr/local/bin v2.5.0 cannot read Go 1.27 export data) · uv ✓ (analysis and agent synced) · ruff/pytest ✓ (uv) ·
-  pnpm 9.15.9 ✓ with config deps installed · node v22.22.0 (pinned 24; CI runs 24) · PostgreSQL 16 binaries ✓
-  (test-scoped, D3).
-
-### Step 1 — Write-bound the four new timeout keys in `SCALAR_BOUNDS_REGISTRY` [done]
-
-Appended the four full-dotted timeout keys with their design §5 bounds and a 2-line constraint comment; unseeded (D2), `lookupScalarBounds` unchanged.
-- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
-- Deviations: none
-- TDD red: `pnpm test` with Step 2's cases before the registry entries → 9 fail (e.g. "999 must be rejected" for `opportunity.read_db_budget_ms`). Green: `pnpm run test:coverage` → 150/150 pass, lines 84.21%; `pnpm run lint` 0 errors. Node v22 locally (CI 24).
-
-### Step 2 — Bounds tests for the four keys (G8) [done]
-
-Added a feature-227 table over both key-column forms of every key (min/max accepted reach INSERT; min−1/max+1 rejected `INVALID_ARGUMENT` with the `[min, max]` message and no INSERT), plus an `intVal` case for the float agent key; `setConfig` gained an optional `namespace` arg defaulting to `NS`. Full-dotted marketdata form added alongside the specced stripped one.
-- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
-- Deviations: none
-- TDD red (before Step 1): 9 fail — every out-of-range case accepted. Green: `pnpm run test:coverage && pnpm run lint` → 150/150, c8 lines 84.21% (≥40), lint 0 errors.
-
-### Step 3 — marketdata `BatchGetLatestPrice`, a detached budget plus logs for every dropped error [done]
-
-The singleflight closure now runs on `context.WithTimeout(context.WithoutCancel(ctx), resolveBatchPriceBudget(s.budgetCfg))`, starts prevClose concurrently (joined only when started), and logs every formerly dropped error (source lookup, multi-fetch, budget-exhausted skip, aggregate per-symbol-incomplete, previous-close); new `intGetter`/`prevCloseReader` seams are set in the constructor only when non-nil.
-- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
-- Deviations: golangci-lint v2.14.0 binary substituted for the sandbox's v2.5.0 (Deviation Log, CI-equivalent fallback)
-- TDD red (skeleton-first per Step 4 instr. 0: seams/fields + a `resolveBatchPriceBudget` stub returning 2500ms, unused): `go test ./internal/service/ -race -run 'BatchGetLatestPrice|ResolveBatchPriceBudget'` → 8 FAIL (AC-3 "expected the multi-symbol fetch failure WARN, got []"; hang and G10 tripped the 5s guard; resolver "2.5s, want 50ms"). Green: same run → all 11 PASS; `go build` ok; golangci-lint 0 issues.
-
-### Step 4 — marketdata AC-3, hang/budget, prevClose concurrency (G10), resolver [done]
-
-Extended `fakeBatchPriceSource` (ctx-honouring, injectable multi-fetch error/block/gate, `GetLatestTrade`), added `recordingWarnHandler`, `fakeIntGetter`, `fakePrevCloseReader` and a 5s goroutine/select guard, plus AC-3, hang, incomplete-record, source-lookup, prevClose, G10, detached-cancel and resolver tests. Fakes stay inline (C-13, one consumer).
-- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
-- Deviations: none (golangci-lint substitution as Step 3)
-- TDD: AC-3 red: "expected the multi-symbol fetch failure WARN, got []" → green: PASS (red/green detail in Step 3 entry). Verification: `go test ./... -race -count=1 -coverpkg=…` all ok, total 71.0% (≥40); golangci-lint 0 issues.
-
-### Step 5 — analysis `read_budget.py`, the request-scoped DB budget primitive [done]
-
-Created the module per design §1: the four named constants, D4 `_TRANSIENT`/`_NOT_TRANSIENT` + `is_transient_db_error`, `BudgetedConn` (`_arm` re-arms `SET LOCAL statement_timeout` or raises `TimeoutError` with no statement), `budgeted_read` (backstop over acquire→BEGIN→yield→COMMIT only, log-before-await, guarded rollback-or-terminate, bare re-raise, bounded success release) and `_rollback_then_release` (shared 1.0s window, 0.05s release floor). No servicer wiring.
-- Files modified: `services/xstockstrat-analysis/app/repositories/read_budget.py` (new)
-- Deviations: none
-- TDD: the paired behavioral test is Step 6 (later agent). Red here is the throwaway Verification import with the module absent → `ModuleNotFoundError: No module named 'app.repositories.read_budget'`; green: import ok, `ruff check` all passed, `ruff format --check` 110 files formatted. A throwaway (uncommitted) fake-driven smoke also showed: success → BEGIN/SET LOCAL/COMMIT + 1 release; stalls at BEGIN/fetch/COMMIT → `TimeoutError` (transient) + terminate=1; body `QueryCanceledError` → ROLLBACK + release, terminate=0.
-
-### Step 6 — `test_read_budget.py` (G1, G2 unit, G5, G7, classification) and the shared fakes [done]
-
-Added the shared `FakeTx`/`FakeConn`/`FakePool`/`bc_routed` fakes to `tests/conftest.py` (per-conn `log` incl. "release", stall/raise injection per stage, detached mode; `bc_routed(None)` yields a factory returning `None`) and 36 unit tests over success order, G1, G2, G5 (4 stall stages), external cancel, G7 (identity, log-before-rollback, detached, terminate/rollback raising, defensive closed branch), H5 and classification.
-- Files modified: `services/xstockstrat-analysis/tests/conftest.py`, `services/xstockstrat-analysis/tests/test_read_budget.py` (new)
-- Deviations: none. `bc_routed(repo)` is the factory itself (`bc -> wrapper`), so Step 8 assigns `svc._opps_repo_factory = bc_routed(repo)`.
-- TDD red (Step 5 code exists, so behavioral red against a stub): temporarily replaced `read_budget.py` with a naive unbudgeted stand-in exposing the same names (plain `acquire()`, no SET LOCAL/backstop, rollback+release on any error, `is_transient_db_error → False`), ran `uv run pytest tests/test_read_budget.py -q` → `28 failed, 8 passed` (G5 stalls tripped the 10s hang guard; e.g. "cleanup after begin skipped/failed (InterfaceError" absent), then restored via `git checkout` (never committed). Green: `36 passed`; full `pytest --cov=app --cov-fail-under=40` → 1181 passed, 87.88%; ruff check/format clean.
-
-### Step 7 — `ListOpportunities` DB phase under the budget, kicks after release, enrichment deadline [done]
-
-The DB phase moved into `_read_opportunity_queue` (sequential statements, `symbol=req_symbol` forwarded to both reads, G3 counter read at the `compute_state.get` instant) filling a new `_OpportunityQueueRead` dataclass; the pool path runs it under `budgeted_read` via the new `_opps_repo_factory`/`_state_repo_factory`, kicks fire in the `finally` after release, transient errors abort `UNAVAILABLE` (outside the try) and others re-raise with an error log; the enrichment is wrapped in `asyncio.wait_for(…, enrich_ms/1000)` with the typed log. `@owner_scoped` and the no-DB early return are unchanged.
-- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
-- Deviations: none. Defaults are named module constants `_DEFAULT_OPP_READ_DB_BUDGET_MS = 20000` / `_DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS = 3000` (each used twice: config default + ≤0 fallback).
-- TDD red (Step 8 tests written first, run on the pre-Step-7 tree): `uv run pytest tests/test_list_opportunities_deadlines.py tests/test_analysis_servicer.py tests/test_opportunity_compute_state.py -q` → `81 failed, 342 passed` (57× "expected one budgeted read connection, got 0" in pool mode; AC-1 tripped the 10s hang guard; G5/G7/classification "abort not awaited"). Green: same command → `423 passed`; Verification greps all hit; ruff clean.
-
-### Step 8 — handler tests (AC-1, G3, G4, G5, G6 unit, G7, H5, O8, classification) [done]
-
-New `test_list_opportunities_deadlines.py` (AC-1, G3 on both paths, G5 ×4 stages, G6 cancel, G7 lost connection, H5, transient ×10 / non-transient ×3 classification, compute_state `TimeoutError` → one kick + UNAVAILABLE, O8 float/negative, identity gate before any acquire). G4: a parametrized `read_path` fixture plus `assert_budgeted_read_order` in conftest; pool mode installs a shared request-tracking `FakePool`, routes the test's own repos through `bc_routed` (state factory → `None` when the state repo is `None`), asserts per request exactly one acquired conn with the BEGIN→(SET LOCAL→stmt)+→COMMIT→release order (nᵢ ≤ budget, non-increasing), and asserts that conn is released at enrichment and at each kick (per-request via a ContextVar, not a global `in_use==0`).
-- Files modified: `services/xstockstrat-analysis/tests/test_list_opportunities_deadlines.py` (new), `tests/test_analysis_servicer.py`, `tests/test_opportunity_compute_state.py`, `tests/conftest.py`
-- Deviations: none. G4 marks every test that reaches `ListOpportunities` (found by instrumenting a full run: 52 tests in `test_analysis_servicer.py` covering all 19 call sites, two of which sit in the shared `_list_opps` helper, plus the 2 tests holding the 3 call sites in `test_opportunity_compute_state.py`); class-level marks on 4 classes (one non-calling test, `test_drain_source_weights_maps_and_is_best_effort`, is thereby also run twice, harmlessly), method-level on 7. The `owner_scoped_completeness`/`unreadable_formula` callers are outside the step's Files and stay unparametrized.
-- TDD red/green: see Step 7 (`81 failed, 342 passed` → `423 passed`). Verification: the three files → 423 passed; full `pytest --cov=app --cov-fail-under=40` → 1269 passed, 88.06%; ruff clean; the conftest grep hits `FakeConn, FakePool, bc_routed`.
-
-### Step 9 — the `local_pg` fixture, the `real_pg` marker, and the CI PostgreSQL step (D3) [done]
-
-Added the session-scoped `local_pg` fixture (binary discovery `$XSTOCKSTRAT_PG_BIN` → `pg_ctl` on PATH → newest `/usr/lib/postgresql/*/bin` → Homebrew; `mkdtemp(dir="/tmp")`; `runuser -u postgres --` when root; `initdb -U postgres -A trust --no-sync`; Unix-socket-only `pg_ctl -w start` with `fsync=off`; finalizer `-m immediate stop` + `rmtree`; skip locally / fail under `CI=true`), the `real_pg` marker, and the guarded `install postgresql (analysis real_pg tests)` CI step.
-- Files modified: `services/xstockstrat-analysis/tests/conftest.py`, `services/xstockstrat-analysis/pyproject.toml`, `.github/workflows/ci.yml`
-- Deviations: none. `initdb -U postgres` added so the DSN's `user=postgres` also holds on the non-root CI runner (whose default superuser would be `runner`).
-- TDD: N/A (infrastructure; exercised by Step 10). A throwaway, uncommitted smoke test (`SELECT 1` via `local_pg`) passed in 1.1s, leaving no `/tmp/xss-pg-*` dir or postgres process. Verification: `pytest --markers` lists `real_pg`; ci.yml grep hits `:392`; full `pytest --cov=app --cov-fail-under=40` → 1269 passed, 88.06%; ruff clean.
-
-### Step 10 — real-Postgres proofs (AC-4, G2, F2, G6) [done]
-
-New `test_read_budget_real_pg.py` (module-level `real_pg` mark, `local_pg` DSN, pools with `statement_cache_size=0`, every call hang-guarded, pools closed in `finally`): AC-4 drives the real servicer (`make_servicer`, `svc._db_pool = pool`, real repos, `read_db_budget_ms=300` via a `_StubWatcher` snapshot) against a held min=max=2 pool → UNAVAILABLE in <0.8s, "failed at acquire (TimeoutError", terminate spy untouched, held conns open, headerless → UNAUTHENTICATED; G2 `pg_sleep(5)` under 300ms → `QueryCanceledError`, no asyncpg "Resetting connection…" record, same pid, `statement_timeout` '0'; F2 no-reset `connection_class` → '0' on the same pid plus the `SET statement_timeout = 1234` negative control → '1234ms'; G6 outer `asyncio.timeout(0.3)` over the whole block → `TimeoutError` <1s, new pid, '0'.
-- Files modified: `services/xstockstrat-analysis/tests/test_read_budget_real_pg.py` (new)
-- Deviations: none
-- TDD red (pre-fix tree, temporarily restored and never committed: `servicer.py` from c8cb05d5 and the naive unbudgeted `read_budget` stand-in from Step 6, with commit-before-release corrected in the stub): `uv run pytest -m real_pg -q tests/test_read_budget_real_pg.py` → `3 failed, 1 passed` (AC-4 hit the 10s hang guard, `TimeoutError`; G2 "DID NOT RAISE QueryCanceledError"; G6 "assert (3749 != 3749)", same pid reused). F2 stays green on the stub by construction (no SET LOCAL is sent, so nothing can leak); its negative control is what proves it can detect a leak. Restored via `git checkout`. Green: `4 passed` (not skipped) in 2.0s; full `pytest --cov=app --cov-fail-under=40` → 1273 passed, 88.08%; ruff clean.
-
-### Step 11 — agent `list_opportunities` deadline and explicit error (consumer surface) [done]
-
-`client.list_opportunities` gained `timeout: float | None = None` passed to `stub.ListOpportunities` (header trio unchanged); `_extract_policy` → `_agent_policy` (definition + 4 call sites, generalized docstring and log line); `_POLICY_READ_TIMEOUT_S = 3.0`; the tool reads `opportunities.read_timeout_seconds` under `asyncio.wait_for(…, _POLICY_READ_TIMEOUT_S)` (timeout → warning + 40.0; non-finite or ≤ 0 → 40.0) and maps errors with `_grpc_error_message(e, deadline_s=timeout_s)`, whose new `DEADLINE_EXCEEDED` branch names the deadline (no "within …" clause when `deadline_s` is None); the sparkline phrase was dropped from the tool docstring (one-line edit, the rest of the paragraph's wrap kept).
-- Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`
-- Deviations: none
-- TDD (Step 12 tests written first, run on the pre-Step-11 tree with the `_agent_policy` / `_POLICY_READ_TIMEOUT_S` patches temporarily set `raising=False`, never committed): `uv run pytest tests/test_list_opportunities_deadline.py tests/test_tools.py -q -k "deadline or policy"` → `9 failed` — AC-2 red: the 10s hang guard fired (`TimeoutError`) with the in-process handler-entered event **set** (probe printed `entered.is_set() = True`); policy fallbacks `KeyError: 'timeout'`; mapper `TypeError: unexpected keyword argument 'deadline_s'` and `'deadline exceeded' not in 'Deadline Exceeded'`. Green: same files (unmodified test, `raising=True`) → `119 passed` (AC-2 0.28s). Verification: `ruff check`/`format --check` clean; `_extract_policy` grep empty; `_agent_policy`/`_POLICY_READ_TIMEOUT_S`/`DEADLINE_EXCEEDED`/`timeout=timeout` greps hit; `metadata=_metadata(("x-user-id", user_id))` still on the `ListOpportunities` call (`client.py:871`).
-
-### Step 12 — agent AC-2, policy fallbacks, and the DEADLINE_EXCEEDED mapper [done]
-
-New `test_list_opportunities_deadline.py`: AC-2 starts a `grpc.aio.server()` on `127.0.0.1:0` with a `ListOpportunities` handler that sets an `asyncio.Event` and awaits forever, monkeypatches `client.ANALYSIS_ENDPOINT` and `client.mtls.secure_channel` (insecure channel) and `tools._agent_policy` (async → 0.2), invokes the registered tool under a 10s `wait_for` guard, and asserts `RuntimeError` matching "deadline" (and "within 0.2s") in < 1.5s with the handler-entered event set, then `server.stop(0)`; policy fallbacks capture the `timeout=` kwarg of a patched `client.list_opportunities` (hung policy with `_POLICY_READ_TIMEOUT_S`=0.1 → 40.0 plus the timed-out warning; 0/-1/nan/inf → 40.0; a valid 35.0 passes through and the key read is `opportunities.read_timeout_seconds`). Two mapper tests in `test_tools.py` use the existing `_rpc_error`; the new file builds no RPC error helper and imports none (C-13: servicer stub and event stay inline, one consumer).
-- Files modified: `services/xstockstrat-agent/tests/test_list_opportunities_deadline.py` (new), `services/xstockstrat-agent/tests/test_tools.py`
-- Deviations: none. The two pre-existing `list_opportunities` tool tests needed no change: their positional-args assertion still holds with `timeout=` as a kwarg, and their unpatched policy read fails fast (≈0.2s) to the default.
-- TDD red/green: see Step 11 (`9 failed` → `119 passed`). Verification: the two files → 119 passed; full `pytest --cov=app --cov-fail-under=40` → 507 passed, 80.74%; ruff check/format clean.
-
-### Step 13 — docs: key rows, doc-drift fixes, findings, and the context-forge teardown [done]
-
-analysis `CLAUDE.md`: the Decide-surface memo sentence now says live quote only / skips `BatchGetLatestPrice`; a new `ListOpportunities` sub-bullet states the constraint (read DB phase strictly sequential on one budgeted connection, kicks after release, transient → `UNAVAILABLE`, enrichment after release) plus the fixed-invariants note naming all four `read_budget` constants; `sparkline_bars` row marked inert; `live_enrich_ttl_seconds` default `20` (seeded `10` by 028); two new key rows (`value_type` int — a float reads as the default; unseeded D2; ≤ 0 → default); § Running Tests documents `-m real_pg`, `local_pg` and the test-only `XSTOCKSTRAT_PG_BIN`. marketdata and agent `CLAUDE.md` each gained their key row (agent: exact key-column string, stored ns/key, `_POLICY_READ_TIMEOUT_S` = 3s). `config-governance.md`: the feature-177 TTL row fixed, and a feature-227 entry (4 keys, D2 waiver, plus a supersede line for the two stale feature-184 rows — `sparkline_bars` inert, TTL code default `20` — since that log is append-only). Findings: one doc-lie row (feature-191 `@AC-8` still names `BatchGetBars`) and three latent-bug rows (agent `GetConfig` no deadline at `client.py:1751`, seeded TTL 10 < the 15s poll, G6 orphaned backend). `mcp-tools.md`: `sparkline` bullet removed; the `list_opportunities` Errors line now names the deadline message and the `UNAVAILABLE` "opportunities store unavailable; retry" message.
-- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-agent/CLAUDE.md`, `docs/patterns/config-governance.md`, `docs/context-constitution-findings.md`, `docs/runbooks/mcp-tools.md`; plus `services/xstockstrat-analysis/app/repositories/read_budget.py` (pre-authorized docstring fix)
-- Deviations: the `read_budget.py` line-1 docstring (rule 5), logged in the Deviation Log — approved by the operator at the Step-10 checkpoint. The findings G6 row was included because Step 13's instruction 5 lists it.
-- TDD: N/A (docs). Verification: all five greps hit as specified; `grep -c sparkline docs/runbooks/mcp-tools.md` → `0`. After the docstring edit: analysis `ruff check` all passed, `ruff format --check` 113 files formatted, `tests/test_read_budget.py` 36 passed.
-
-#### Teardown (manual)
-
-`/context-forge:context-constitution refresh` was **unavailable** in this session: the context-forge plugin exposes only `context-forge:context-scrubber`, which is a token audit and not the constitution refresh. The equivalent was done by hand. Each touched context file was re-read against the current code:
-- **`services/xstockstrat-analysis/CLAUDE.md`**
-  - Decide-surface memo sentence and new bounded-read bullet: checked against `servicer.py` `ListOpportunities` / `_enrich_opportunities_live` (only `BatchGetLatestPrice`, under `asyncio.wait_for(…, enrich_ms/1000)`; kicks in the `finally` after `budgeted_read` exits) and against `read_budget.py` (`_arm` re-arms `SET LOCAL statement_timeout` per statement; the four constants and their roles).
-  - Key rows: checked against `watcher.py` `get_int` (`int_val or default`, so a float reads as the default) and the `≤ 0` fallbacks.
-  - Running Tests: checked against `tests/conftest.py` `_pg_bin_dir` / `local_pg` (skip locally, fail under `CI=true`; Homebrew `postgresql@*` globs) and the `pyproject.toml` `real_pg` marker.
-  - Reconciled drift: the memo text said "quote+sparkline … skips `GetLatestPrice`/`GetBars`"; the memo-row text said "live-quote/sparkline memo" and default `10`; the `sparkline_bars` row claimed a reader.
-- **`services/xstockstrat-marketdata/CLAUDE.md`**: the new row was checked against `resolveBatchPriceBudget` (nil cfg or `≤ 0` → 2500; Go `GetInt` returns the default for a non-int value), the `WithoutCancel` closure (read per call), and the `slog.Warn` sites. No other drift.
-- **`services/xstockstrat-agent/CLAUDE.md`**: the new row was checked against `tools.py` (`_agent_policy` + `wait_for(_POLICY_READ_TIMEOUT_S)`, the 40.0 fallbacks, the `DEADLINE_EXCEEDED` message) and the config registry (`configServiceImpl.ts:133`, `[30,55]`). The tool-table row and the correlation paragraph are still accurate. No `_extract_policy` or log-text references remain in docs.
-- **`docs/patterns/config-governance.md`**: the feature-227 entry was checked against `SCALAR_BOUNDS_REGISTRY` (`configServiceImpl.ts:130-133`). The feature-177 row was fixed in place as instructed. The two feature-184 rows that are also stale (`sparkline_bars`, the TTL) were left unedited because the log is append-only, and are superseded by a line in the feature-227 entry.
-- **`docs/context-constitution-findings.md`**: each new row's evidence was re-grepped:
-  - `client.py:1751` `GetConfig`, with no `timeout=`;
-  - no `wait_for`/`asyncio.timeout` around the other `get_config_value` callers (`oauth_server.py:84,104`, `tools.py:627`);
-  - `opportunities-latency-fix.feature:24`;
-  - migration 028 `:111` seeds `10`;
-  - `useOpportunities.ts:49` polls every `15_000`.
-- **`docs/runbooks/mcp-tools.md`**: the section was checked against the tool docstring and `_grpc_error_message`, and against the analysis `UNAVAILABLE` message (`servicer.py`, "opportunities store unavailable; retry"). The agent projection still emits `sparkline` only if the server fills it, and it never does now; the bullet was removed as specified.
-- **Also scanned, no drift found (not edited)**:
-  - `services/xstockstrat-analysis/docs/context-constitution.md`: the pool budget is unchanged at 2, and `budgeted_read` acquires from the same pool;
-  - `services/xstockstrat-ui/CLAUDE.md`: its `ListOpportunities` mentions are unaffected;
-  - root `CLAUDE.md`: the Connection Pool Budget is unchanged.
-- **`.agents/context-forge.json` `scrubberExtraTargets`** (`README.md`, `docs/patterns/ui-ux-governance.md`): neither was touched, and neither describes the changed behavior.
-
-## Session 2026-10-15 — renumber 226 → 227 (numbering collision)
-
-- Feature number `226` was taken on `main-dev` by `226-fix-otel-trace-export` (#1246, merged while this branch was in
-  flight). At the operator's instruction, this feature was renumbered to the next free number, **227** (root CLAUDE.md
-  § Feature Roadmap numbering rule). origin/main-dev @ 3ea5b75b was merged into the branch (30f6e99d). Its only
-  conflict was `services/xstockstrat-analysis/tests/conftest.py`: both sides were kept (this feature's fakes and
-  `local_pg`, plus main-dev's `otel_reset`). Full suites then passed: analysis 1276, agent 510, marketdata `-race` ok.
-- Renamed the directory and rewrote every `feature 226` / `feature-226` / `226-fix-opportunities-read-hangs` reference
-  in the files this feature touches, including the defect `.status` ref. Main-dev's own feature-226 (otel) references
-  are untouched (verified: no line from main-dev that mentions 226 was changed). The Deviation Log quote of the old
-  `read_budget.py` docstring keeps its original text.
-- C-16 promotion (operator-confirmed): @AC-1 and @AC-4 → `services/xstockstrat-analysis/acceptance/fix-opportunities-read-hangs.feature`;
-  @AC-2 → `services/xstockstrat-agent/acceptance/fix-opportunities-read-hangs.feature`; @AC-3 →
-  `services/xstockstrat-marketdata/acceptance/fix-opportunities-read-hangs.feature`. All are tagged `@feature-227`.
-  No dedup skips.
-
-## Session 2026-10-15 — sdd-execute (sequential) summary
-**Steps this session**: 1–13
-**Progress**: 13 done / 13 total
-**Stopped at**: all complete. Integration PR https://github.com/davcs86/xstockstrat/pull/1247 is open to main-dev, with CI watched.
-**Next**: merge #1247; then, after the dev deploy, confirm staging `list_opportunities` and which dependency stalls
-(from the new warnings), then run feature 215 Step 26.
-
-## Session 2026-10-20 (CI: feature status automation)
-
-- Promotion PR #1258 merged to main
-- Feature promoted and committed: 65bbc3cbf93a03f5359b60228398a25e6f297f05
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-10-20
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958.
