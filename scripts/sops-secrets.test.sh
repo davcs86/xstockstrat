@@ -847,6 +847,9 @@ produp_lifecycle() {
     [ -n "$i" ] && [ "$i" -gt "$prev" ] || fail "produp: step order broken at $sel"
     prev="$i"
   done
+  # a project-assign failure must not skip the trust step (it would strand the app without DB access)
+  [ "$(yq e '.jobs.up.steps[] | select(.id == "assign") | .continue-on-error' "$wf")" = true ] ||
+    fail "produp: assign must be best-effort (continue-on-error: true)"
   sel='.jobs.up.steps[] | select(.id == "trust")'
   [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "produp: trust env.APP_ID"
   [ "$(yq e "$sel | .env.CLUSTER_ID" "$wf")" = '${{ steps.db.outputs.cluster_id }}' ] || fail "produp: trust env.CLUSTER_ID"
