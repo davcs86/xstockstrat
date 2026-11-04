@@ -350,3 +350,54 @@ Feature: signal-map-instrumentation
     Given the Deferred behavior follow-ups table in context.md
     When it is compared with the report IDs S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02 and N-04
     Then each of those 14 IDs has exactly one row naming the deferred behavior
+
+  @AC-45 @FR-1
+  Scenario: Repeated systemic escalation is countable and the broker label covers IBKR
+    Given 3 consecutive reconciliation ticks where 2 of 4 accounts error
+    And an IBKR account whose SubmitOrder returns an uncertain-outcome timeout
+    When escalateSystemic runs on each of the 3 ticks and the IBKR order is submitted
+    Then "trading.escalation.systemic" increases by 3
+    And "trading.order_submit" with broker_type "IBKR" and outcome "uncertain" increases by 1
+    And fill handling for a PARTIALLY_FILLED then FILLED order is unchanged
+
+  @AC-46 @FR-4
+  Scenario: Warm-poller cache-insert failures are aggregated per cycle
+    Given a warm-poller cycle over 25 symbols where cacheQuote fails for 8
+    When the cycle completes
+    Then exactly 1 WARN is written for the cache-insert failures with count 8 and at most 5 sample symbols
+    And the cycle still continues with the remaining symbols
+
+  @AC-47 @FR-6
+  Scenario: OAuth transaction rejects, degraded post-commit steps and onboarding lines are recorded
+    Given a callback with a txn blob whose HMAC does not match, and an ingest_signal whose auto-alert fails after commit
+    And a successful token exchange for user "u-9" followed by that user's first successful tool call
+    When these requests complete
+    Then "oauth.txn.rejected" with reason "bad_sig" increases by 1
+    And "agent.degraded" with kind "auto_alert" increases by 1
+    And 1 INFO onboarding line is written at token-exchange success and 1 at the first successful tool call, each with user_id "u-9" as a log field
+    And no metric attribute contains "u-9"
+
+  @AC-48 @FR-8
+  Scenario: Config listener health and WatchConfig termination are exposed
+    Given the config LISTEN connection drops and reconnects, and a WatchConfig subscriber call errors
+    When both events happen
+    Then "config.listener_up" is 0 while disconnected and 1 after reconnect
+    And "config.listener_reconnects" increases by 1
+    And "config.last_reload_timestamp" reports the time of the last namespace reload
+    And "config.watch.terminated" with reason "client_error" increases by 1
+    And the previously silent error handler writes a log line with the error message and no config value
+
+  @AC-49 @FR-10
+  Scenario: Notify logs its enabled delivery channels once at startup
+    Given notify starts with SLACK_WEBHOOK_URL set, SENDGRID_API_KEY unset and VAPID configured
+    When startup completes
+    Then exactly 1 INFO line lists channels "slack,push" as enabled and "sendgrid" as disabled
+    And no key or webhook value appears in the line
+
+  @AC-50 @FR-14
+  Scenario: Reconnect-log reduction applies to the indicators watcher and portfolio consumers too
+    Given the indicators config stream fails 20 times in a row and a portfolio consumer reconnects after 10 graceful GOAWAY closes
+    When the failures occur
+    Then fewer than 20 warn lines are written for the indicators watcher and its first failure is among them
+    And the 10 graceful portfolio reconnects are logged at DEBUG, not ERROR
+    And the retry interval of both stays 2 seconds
