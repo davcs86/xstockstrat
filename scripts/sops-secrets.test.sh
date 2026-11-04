@@ -410,6 +410,170 @@ assert leaves and all("ENC[AES256_GCM," in l for l in leaves), "plain leaf"' "$w
   echo "build: ok"
 }
 
+# The 11 do-target non-MTLS keys, each mapped to a fixed-width, delimited sentinel (none is a substring of another).
+DO_PLAIN="JWT_SECRET BROKER_ACCOUNTS_ENCRYPTION_KEY CONFIG_SECRETS_ENCRYPTION_KEY SLACK_WEBHOOK_URL SENDGRID_API_KEY
+VAPID_PRIVATE_KEY VAPID_PUBLIC_KEY VAPID_SUBJECT OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_HEADERS PROJECT_ID"
+sentinel_env() {
+  local i=0 k
+  for k in $DO_PLAIN; do
+    printf 'LEGACY_%s=__S286_%02d__\n' "$k" "$i"
+    i=$((i + 1))
+  done
+}
+
+# rnd <env> <spec> <app-name> <out> [VAR=value ...]: run the copied renderer under env -i.
+rnd() {
+  local e="$1" spec="$2" name="$3" out="$4"
+  shift 4
+  rm -f "$out" "$work/sum" "$work/ghout"
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" GITHUB_STEP_SUMMARY="$work/sum" GITHUB_OUTPUT="$work/ghout" "$@" \
+    python3 "$work/repo/scripts/do-render-app-spec.py" --env "$e" --spec "$spec" --app-name "$name" \
+    --image-tag abc1234 --org testorg --out "$out" >"$work/out" 2>"$work/err"
+}
+
+render_repo() {
+  rm -rf "$work/repo"
+  mkdir -p "$work/repo/scripts"
+  cp scripts/do-render-app-spec.py scripts/sops_secrets.py scripts/mtls-provision.sh scripts/gen-dev-certs.sh "$work/repo/scripts/" ||
+    fail "render: copy scripts"
+}
+
+REVMAP='import json, re, subprocess, sys
+spec, rendered, sentinels, ca_pem, tmp = sys.argv[1:6]
+base = open(spec).read().replace("YOUR_GITHUB_ORG", "testorg").replace("YOUR_IMAGE_TAG", "abc1234")
+got = open(rendered).read()
+sent = dict(l.split("=", 1) for l in open(sentinels).read().split())
+sent = {k.removeprefix("LEGACY_"): v for k, v in sent.items()}
+for v in sent.values():
+    assert v not in base, f"sentinel {v} occurs in the baseline"
+def pem_q(p):
+    q, bs = chr(34), chr(92)
+    return q + p.replace(bs, bs + bs).replace(q, bs + q).replace(chr(10), bs + "n") + q
+ca_q = pem_q(open(ca_pem).read())
+bl, gl = base.split("\n"), got.split("\n")
+if len(bl) != len(gl):
+    sys.exit(f"line count differs: {len(bl)} vs {len(gl)}")
+ph = re.compile(r"^(\s+value: )(YOUR_(?:DEV|PROD)_([A-Z0-9_]+))\s*$")
+certs, keys = {}, {}
+for i, (b, g) in enumerate(zip(bl, gl), 1):
+    if b == g:
+        continue
+    m = ph.match(b)
+    if not m or not g.startswith(m.group(1)):
+        sys.exit(f"line {i}: a non-placeholder line changed")
+    name, val = m.group(3), g[len(m.group(1)):]
+    if name == "MTLS_CA_CERT":
+        ok = val == ca_q
+    elif name.startswith(("MTLS_CERT_", "MTLS_KEY_")):
+        pem = json.loads(val)
+        ok = re.fullmatch(r"-----BEGIN [A-Z ]+-----\n[A-Za-z0-9+/=\n]+-----END [A-Z ]+-----\n?", pem) is not None
+        kind, sfx = name.split("_")[1], name.split("_", 2)[2]
+        (certs if kind == "CERT" else keys)[sfx] = pem
+    elif name == "OTEL_EXPORTER_OTLP_HEADERS":
+        ok = val == "Authorization=" + sent[name]
+    else:
+        ok = val == sent.get(name)
+    if not ok:
+        sys.exit(f"line {i}: {name} does not carry its own value")
+def ossl(*a, data=None):
+    return subprocess.run(["openssl", *a], input=data, capture_output=True, text=True, check=False)
+if sorted(certs) != sorted(keys) or len(certs) != 12:
+    sys.exit(f"leaf set mismatch: {sorted(certs)} / {sorted(keys)}")
+for sfx in certs:
+    cp = f"{tmp}/{sfx}.pem"
+    open(cp, "w").write(certs[sfx])
+    if f"DNS:xstockstrat-{sfx.lower()}" not in ossl("x509", "-in", cp, "-noout", "-text").stdout:
+        sys.exit(f"MTLS_CERT_{sfx}: SAN is not xstockstrat-{sfx.lower()}")
+    if ossl("verify", "-CAfile", ca_pem, cp).returncode:
+        sys.exit(f"MTLS_CERT_{sfx}: does not verify against the fixture CA")
+    if ossl("x509", "-in", cp, "-noout", "-pubkey").stdout != ossl("pkey", "-pubout", data=keys[sfx]).stdout:
+        sys.exit(f"MTLS_KEY_{sfx}: does not match MTLS_CERT_{sfx}")
+print("revmap ok")'
+
+group_render() {
+  need sops age age-keygen jq python3 openssl
+  setup_keys
+  fixture_ca
+  render_repo
+  local rc spec name e s sents=() line
+  while IFS= read -r line; do sents+=("$line"); done < <(sentinel_env)
+  sentinel_env >"$work/sentinels"
+  mkdir -p "$work/rev"
+
+  # 1 + 2. AC-8: reverse substitution on both real specs (file absent), every key reported github
+  for s in "staging .do/app.dev.yaml xstockstrat-staging" "production .do/app.yaml xstockstrat-production"; do
+    read -r e spec name <<<"$s"
+    rnd "$e" "$PWD/$spec" "$name" "$work/r.yaml" "${sents[@]}" "LEGACY_MTLS_CA=$(cat "$work/ca_b64")" ||
+      fail "1: render $spec failed ($(cat "$work/err"))"
+    python3 -I -c "$REVMAP" "$spec" "$work/r.yaml" "$work/sentinels" "$work/ca/_ca/ca.pem" "$work/rev" >/dev/null ||
+      fail "1: reverse substitution of $spec"
+    for k in $DO_PLAIN MTLS_CA; do
+      [ "$(src "$k")" = github ] || fail "2: $spec $k source '$(src "$k")'"
+    done
+    [ "$(grep -o 'YOUR_[A-Z0-9_]*' "$work/r.yaml" | sort -u | tr '\n' ' ')" = "" ] || fail "6: $spec left a placeholder"
+    [ "$(grep -c 'xstockstrat.CA_CERT' "$work/r.yaml")" = "$(grep -c 'xstockstrat.CA_CERT' "$spec")" ] ||
+      fail "6: \${xstockstrat.CA_CERT} bindings changed in $spec"
+    # shellcheck disable=SC2012 # the permission string is the assertion
+    [ "$(ls -l "$work/r.yaml" | cut -c1-10)" = "-rw-------" ] || fail "5: $spec output is not owner-only"
+    [ "$(sort "$work/ghout" | cut -d= -f1 | tr '\n' ' ')" = "app_name project_id " ] || fail "6: GITHUB_OUTPUT keys"
+    grep -qx "app_name=$name" "$work/ghout" && grep -qx 'project_id=__S286_10__' "$work/ghout" || fail "6: GITHUB_OUTPUT values"
+    while IFS='=' read -r _ v; do
+      grep -qx "::add-mask::$v" "$work/out" || fail "6: $v not masked"
+    done <"$work/sentinels"
+    python3 -I -c 'import sys,re
+out=set(open(sys.argv[2]).read().splitlines())
+for l in open(sys.argv[1]):
+    m=re.match(r"^\s+value: (\x22-----BEGIN.*\x22)\s*$", l)
+    if m and "::add-mask::"+m.group(1) not in out: sys.exit("unmasked pem")' "$work/r.yaml" "$work/out" ||
+      fail "6: a yaml_pem string is not masked"
+    masks_first "6: $spec"
+  done
+
+  # 3. AC-9: SOPS value wins, a missing key falls back
+  enc_json staging '{"common":{"JWT_SECRET":"jwt-sops"}}' "$work/repo/secrets/staging.enc.yaml"
+  rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-staging "$work/r.yaml" SOPS_AGE_KEY="$(cat "$work/keys/staging.key")" \
+    LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY=brk-gh LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY=cfg-gh \
+    "LEGACY_MTLS_CA=$(cat "$work/ca_b64")" LEGACY_SENDGRID_API_KEY=sg-gh || fail "3: render failed ($(cat "$work/err"))"
+  grep -q 'value: jwt-sops$' "$work/r.yaml" && grep -q 'value: sg-gh$' "$work/r.yaml" || fail "3: values"
+  rm -f "$work/repo/secrets/staging.enc.yaml"
+
+  # 4. AC-10: a required key in neither store fails before --out exists
+  rc=0
+  rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-staging "$work/r.yaml" LEGACY_JWT_SECRET=jwt-gh \
+    LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY=brk-gh "LEGACY_MTLS_CA=$(cat "$work/ca_b64")" || rc=$?
+  [ "$rc" = 1 ] && grep -qF 'CONFIG_SECRETS_ENCRYPTION_KEY is in neither SOPS nor the GitHub secrets' "$work/err" ||
+    fail "4: AC-10"
+  [ ! -e "$work/r.yaml" ] || fail "4: --out was written"
+
+  # 5. AC-11/AC-16: prod-up's render carries the SOPS JWT, VAPID public key and every mTLS leaf
+  enc_json production "$(jq -n --arg ca "$(cat "$work/ca_b64")" '{common:{JWT_SECRET:"jwt-sops",VAPID_PUBLIC_KEY:"BPub",MTLS_CA:$ca}}')" \
+    "$work/repo/secrets/production.enc.yaml"
+  mkdir -p "$work/RUNNER_TEMP"
+  rnd production "$PWD/.do/app.yaml" xstockstrat-production "$work/RUNNER_TEMP/app.yaml" \
+    SOPS_AGE_KEY="$(cat "$work/keys/production.key")" LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY=brk-gh \
+    LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY=cfg-gh || fail "5: render failed ($(cat "$work/err"))"
+  grep -q 'value: jwt-sops$' "$work/RUNNER_TEMP/app.yaml" && grep -q 'value: BPub$' "$work/RUNNER_TEMP/app.yaml" || fail "5: values"
+  if grep -qE 'YOUR_(DEV|PROD)_' "$work/RUNNER_TEMP/app.yaml"; then fail "5: a placeholder is left"; fi
+  # shellcheck disable=SC2012
+  [ "$(ls -l "$work/RUNNER_TEMP/app.yaml" | cut -c1-10)" = "-rw-------" ] || fail "5: not owner-only"
+  rm -f "$work/repo/secrets/production.enc.yaml"
+
+  # 6. targeted: OTEL prefix both ways, absent optional renders empty, name mismatch fails
+  local req=(LEGACY_JWT_SECRET=jwt-gh LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY=brk-gh
+    LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY=cfg-gh "LEGACY_MTLS_CA=$(cat "$work/ca_b64")")
+  rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-staging "$work/r.yaml" "${req[@]}" \
+    "LEGACY_OTEL_EXPORTER_OTLP_HEADERS=Basic x" || fail "6: render failed"
+  grep -q 'value: Authorization=Basic x$' "$work/r.yaml" || fail "6: OTEL prefix not added"
+  grep -qE 'value: (""|)$' "$work/r.yaml" || fail "6: absent optional did not render empty"
+  rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-staging "$work/r.yaml" "${req[@]}" \
+    "LEGACY_OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic x" || fail "6: render failed"
+  grep -q 'value: Authorization=Basic x$' "$work/r.yaml" || fail "6: prefixed header changed"
+  rc=0
+  rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-production "$work/r.yaml" "${req[@]}" || rc=$?
+  [ "$rc" = 1 ] && [ ! -e "$work/r.yaml" ] || fail "6: --app-name mismatch accepted"
+  echo "render: ok"
+}
+
 groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"

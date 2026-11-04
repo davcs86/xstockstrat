@@ -406,7 +406,7 @@ ruff check scripts/sops_secrets.py && ruff format --check scripts/sops_secrets.p
 
 ### Step 7 — test: DO renderer cases (AC-8 reverse substitution, prod-up render)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (group `render`)

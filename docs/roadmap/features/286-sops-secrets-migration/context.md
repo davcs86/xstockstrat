@@ -330,3 +330,13 @@
   required-check and normalisation mutants were each killed. ruff check + format clean.
 - Files modified: `scripts/sops_secrets.py`
 - Deviations: none
+
+### Step 7 — DO renderer cases (group `render`) [done]
+- Hermetic copy under `$work/repo/scripts/`, plus fixed-width `__S286_NN__` sentinels. AC-8 reverse substitution runs as one `python3 -I` heredoc (REVMAP):
+  - same line count; every changed line must be a `value: YOUR_*` placeholder line carrying its own key's value;
+  - exact CA `yaml_pem`; for each of the 12 leaves, a PEM shape check, the SAN `xstockstrat-<sfx>`, `openssl verify` against the fixture CA, and a key/cert pubkey match.
+  Also covers the AC-9/10/11/16 cases, OTEL prefix both ways, absent optional → empty, the `${xstockstrat.CA_CERT}` count, 0600 mode, GITHUB_OUTPUT keys,
+  masks for every sentinel and yaml_pem string, and an app-name mismatch.
+- TDD RED: `cp: cannot stat 'scripts/do-render-app-spec.py'` → `ASSERT FAIL: render: copy scripts`. shellcheck + shfmt clean.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none
