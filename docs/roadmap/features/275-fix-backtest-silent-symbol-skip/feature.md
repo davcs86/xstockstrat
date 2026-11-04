@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-22
 **Last Updated**: 2026-11-01
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator gave the up-front sequential confirmation; execution starts at Step 1 on `feature/fix-backtest-silent-symbol-skip` |
 | 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 11 steps done on `feature/fix-backtest-silent-symbol-skip`; Step 11 closed the analysis `CLAUDE.md` null-score drift and the manual root Teardown audit |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
 ---
 
 ## Reviewers

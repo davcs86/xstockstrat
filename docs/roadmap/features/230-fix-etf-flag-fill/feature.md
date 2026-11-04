@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-10-15
 **Last Updated**: 2026-11-02
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
 
 ---
 
@@ -28,6 +30,7 @@
 | 2026-11-02 | `in-progress` (Step 7 done) | /sdd-execute | Step 7 — C-14 read-only consumer check: feature diff vs `origin/main-dev` touches no analysis/ui/agent/proto file; `_fundamentals_gap_labels` (`servicer.py:2042`) still maps `is_etf` true → `FUNDAMENTALS_GAP_ETF` (`:2057-2058`); analysis `ruff check`/`format --check` clean. TDD N/A (read-only). All 7 steps done |
 | 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute | ALL-DONE PATH: dependency 255 merged as `5bf18403` (PR #1394); C-16 promotion (operator pre-approved) wrote `@AC-2`–`@AC-7` to `services/xstockstrat-marketdata/acceptance/fix-etf-flag-fill.feature` with `@feature-230`; integration PR opened to `main-dev` |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
 ---
 
 ## Artifacts

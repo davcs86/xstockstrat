@@ -3,6 +3,8 @@
 **Development Branch**: `feature/expose-score-strategy-mcp`
 **Created**: 2026-11-01
 **Last Updated**: 2026-11-01
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (sdd-batch-execute); operator's up-front confirmation recorded in context.md |
 | 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done; Step 10 teardown reconciled by hand (context-constitution refresh not invocable) and fixed one runbook drift; agent + analysis suites green |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
 ---
 
 ## Artifacts

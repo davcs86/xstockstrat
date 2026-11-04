@@ -546,3 +546,10 @@
 - [ ] homelab enablement: trailing-newline hand-off and `sops set homelab.app_env` first (Risks 3/6)
 - [ ] follow-up feature: legacy-secret + 1Password removal
 **Next**: merge #1405 when CI passes → operator rollout per docs/runbooks/sops-secrets.md
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1406 merged to main
+- Feature promoted and committed: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

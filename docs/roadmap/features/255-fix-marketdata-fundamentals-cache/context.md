@@ -1439,3 +1439,10 @@ Feature: fix-marketdata-fundamentals-cache (bug fix)
   `.husky/pre-commit` was run by hand on each staged set.
 - Open thread carried into the PR test plan: the live-DB test (`internal/repository/fundamentals_livedb_test.go`, Step 14)
   has only SKIPped locally, so CI's database run is its first real proof.
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1406 merged to main
+- Feature promoted and committed: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

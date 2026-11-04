@@ -3,6 +3,8 @@
 **Development Branch**: `feature/sops-secrets-migration`
 **Created**: 2026-11-03
 **Last Updated**: 2026-11-04
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Step 1 done |
 | 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | All 21 steps done (sequential); deviations D-1..D-4 |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
 ---
 
 ## Artifacts

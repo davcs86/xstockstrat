@@ -3,6 +3,8 @@
 **Development Branch**: `feature/legacy-authors-confirm-resolve`
 **Created**: 2026-11-02
 **Last Updated**: 2026-11-02
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-11-03 | `in-progress` | /sdd-execute | Step 6 done; all steps complete |
 | 2026-11-03 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done; 21 scenarios promoted to the indicators business-rule suite; integration PR next |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
 ---
 
 ## Artifacts

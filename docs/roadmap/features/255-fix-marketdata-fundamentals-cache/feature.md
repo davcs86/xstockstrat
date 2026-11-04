@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-10-21
 **Last Updated**: 2026-11-01
+**Committed to main**: 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a
+**Launched date**: 2026-11-04
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-01 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (sdd-batch-execute); operator gave the up-front confirmation |
 | 2026-11-01 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–17 done; AC-1..AC-10 promoted to `services/xstockstrat-marketdata/acceptance/fix-marketdata-fundamentals-cache.feature` (C-16); integration PR opened (merge-order 215 gate waived by operator override, see context.md) |
 
+| 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1406; committed 86132e77a5e1a8da3e2b24f2fc58809cfc008d9a |
 ---
 
 ## Reviewers
