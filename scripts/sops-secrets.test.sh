@@ -27,6 +27,7 @@ SOPS_PIN_VERSION=3.13.3
 SOPS_PIN_SHA256=e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
 AGE_PIN_VERSION=1.3.2
 AGE_PIN_SHA256=cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+FIXTURE_VPC=d7afff57-f807-4893-9fbf-20fff8bb82dd
 
 group_action() {
   need yq
@@ -428,7 +429,7 @@ rnd() {
   rm -f "$out" "$work/sum" "$work/ghout"
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" GITHUB_STEP_SUMMARY="$work/sum" GITHUB_OUTPUT="$work/ghout" "$@" \
     python3 "$work/repo/scripts/do-render-app-spec.py" --env "$e" --spec "$spec" --app-name "$name" \
-    --image-tag abc1234 --org testorg --out "$out" >"$work/out" 2>"$work/err"
+    --image-tag abc1234 --org testorg --vpc-id "${RND_VPC-$FIXTURE_VPC}" --out "$out" >"$work/out" 2>"$work/err"
 }
 
 render_repo() {
@@ -439,8 +440,8 @@ render_repo() {
 }
 
 REVMAP='import json, re, subprocess, sys
-spec, rendered, sentinels, ca_pem, tmp = sys.argv[1:6]
-base = open(spec).read().replace("YOUR_GITHUB_ORG", "testorg").replace("YOUR_IMAGE_TAG", "abc1234")
+spec, rendered, sentinels, ca_pem, tmp, vpc = sys.argv[1:7]
+base = open(spec).read().replace("YOUR_GITHUB_ORG", "testorg").replace("YOUR_IMAGE_TAG", "abc1234").replace("YOUR_VPC_ID", vpc)
 got = open(rendered).read()
 sent = dict(l.split("=", 1) for l in open(sentinels).read().split())
 sent = {k.removeprefix("LEGACY_"): v for k, v in sent.items()}
@@ -491,7 +492,7 @@ for sfx in certs:
 print("revmap ok")'
 
 group_render() {
-  need sops age age-keygen jq python3 openssl
+  need sops age age-keygen jq python3 openssl yq
   setup_keys
   fixture_ca
   render_repo
@@ -505,8 +506,9 @@ group_render() {
     read -r e spec name <<<"$s"
     rnd "$e" "$PWD/$spec" "$name" "$work/r.yaml" "${sents[@]}" "LEGACY_MTLS_CA=$(cat "$work/ca_b64")" ||
       fail "1: render $spec failed ($(cat "$work/err"))"
-    python3 -I -c "$REVMAP" "$spec" "$work/r.yaml" "$work/sentinels" "$work/ca/_ca/ca.pem" "$work/rev" >/dev/null ||
+    python3 -I -c "$REVMAP" "$spec" "$work/r.yaml" "$work/sentinels" "$work/ca/_ca/ca.pem" "$work/rev" "$FIXTURE_VPC" >/dev/null ||
       fail "1: reverse substitution of $spec"
+    [ "$(yq e '.vpc.id' "$work/r.yaml")" = "$FIXTURE_VPC" ] || fail "AC-1: $spec rendered no top-level vpc.id"
     for k in $DO_PLAIN MTLS_CA; do
       [ "$(src "$k")" = github ] || fail "2: $spec $k source '$(src "$k")'"
     done
@@ -571,6 +573,35 @@ for l in open(sys.argv[1]):
   rc=0
   rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-production "$work/r.yaml" "${req[@]}" || rc=$?
   [ "$rc" = 1 ] && [ ! -e "$work/r.yaml" ] || fail "6: --app-name mismatch accepted"
+
+  # 7. AC-2: an unfillable YOUR_VPC_ID fails before any secret is resolved or --out exists
+  grep -v -e '^vpc:$' -e '^  id: YOUR_VPC_ID$' .do/app.dev.yaml >"$work/novpc.yaml"
+  sed 's/^  id: YOUR_VPC_ID$/  id: YOUR_VPC_ID # YOUR_VPC_ID/' .do/app.dev.yaml >"$work/twovpc.yaml"
+  for s in "empty|$PWD/.do/app.dev.yaml|" "bad|$PWD/.do/app.dev.yaml|not-a-uuid" \
+    "upper|$PWD/.do/app.dev.yaml|D7AFFF57-F807-4893-9FBF-20FFF8BB82DD" \
+    "deleted|$work/novpc.yaml|$FIXTURE_VPC" "doubled|$work/twovpc.yaml|$FIXTURE_VPC"; do
+    IFS='|' read -r e spec line <<<"$s"
+    rc=0
+    RND_VPC="$line" rnd staging "$spec" xstockstrat-staging "$work/r.yaml" "${req[@]}" || rc=$?
+    [ "$rc" = 1 ] || fail "AC-2 $e: exited $rc ($(cat "$work/err"))"
+    grep -qF YOUR_VPC_ID "$work/err" || fail "AC-2 $e: stderr does not name YOUR_VPC_ID"
+    grep '^::error::' "$work/out" | grep -qF YOUR_VPC_ID || fail "AC-2 $e: ::error:: does not name YOUR_VPC_ID"
+    [ ! -e "$work/r.yaml" ] || fail "AC-2 $e: --out was written"
+    ! grep -q '^::add-mask::' "$work/out" || fail "AC-2 $e: secrets were resolved before the VPC check"
+  done
+
+  # 8. a leftover-looking value is reported by count only, never echoed
+  rc=0
+  rnd staging "$PWD/.do/app.dev.yaml" xstockstrat-staging "$work/r.yaml" "${req[@]}" \
+    LEGACY_SLACK_WEBHOOK_URL=YOUR_PROD_LEAKED || rc=$?
+  [ "$rc" = 1 ] && [ ! -e "$work/r.yaml" ] || fail "8: a leftover-looking value rendered (rc $rc)"
+  {
+    grep '^::error::' "$work/out"
+    cat "$work/err"
+  } >"$work/leak"
+  grep -qF 'placeholder-like token(s) remain' "$work/leak" && grep -qF 'values withheld' "$work/leak" ||
+    fail "8: leftover count message ($(cat "$work/leak"))"
+  ! grep -qF YOUR_PROD_LEAKED "$work/leak" || fail "8: the leftover value was echoed"
   echo "render: ok"
 }
 
@@ -667,6 +698,14 @@ group_deploy() {
       ;;
     esac
   done
+  # AC-2: the VPC lookup feeds the render, which precedes the update; nothing soft-fails
+  local db_i render_i upd_i
+  db_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.id == "db") | .key' "$wf")"
+  render_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.id == "render") | .key' "$wf")"
+  upd_i="$(yq e '.jobs.deploy.steps | to_entries | .[] | select(.value.run // "" | test("doctl apps update")) | .key' "$wf")"
+  [ -n "$db_i" ] && [ -n "$render_i" ] && [ -n "$upd_i" ] || fail "deploy: db / render / update step missing"
+  [ "$db_i" -lt "$render_i" ] && [ "$render_i" -lt "$upd_i" ] || fail "deploy: order must be db < render < update"
+  db_wiring "$wf" deploy deploy '${{ inputs.app_spec }}'
   # AC-1: the real "Wait for deployment" step against stub doctl/sleep, one run per DO phase
   wait="$(yq e '.jobs.deploy.steps[] | select(.name == "Wait for deployment") | .run' "$wf")"
   [ -n "$wait" ] && [ "$wait" != null ] || fail "deploy: no Wait for deployment step"
@@ -727,6 +766,152 @@ group_deploy() {
   echo "deploy: ok"
 }
 
+# db_wiring <wf> <job> <label> <SPEC>: a hard-failing lookup step feeds --vpc-id to the render step.
+db_wiring() {
+  local wf="$1" j="$2" l="$3" sel
+  sel=".jobs.$j.steps[] | select(.id == \"db\")"
+  [ "$(yq e "$sel | has(\"continue-on-error\")" "$wf")" = false ] || fail "$l: db step must not continue-on-error"
+  [ "$(yq e "$sel | has(\"if\")" "$wf")" = false ] || fail "$l: db step must not be gated"
+  [ "$(yq e "$sel | .env.SPEC" "$wf")" = "$4" ] || fail "$l: db env.SPEC"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh lookup' || fail "$l: db step must run do-db-cluster.sh lookup"
+  ! yq e "$sel | .run" "$wf" | grep -qF '${{' || fail "$l: db run inlines an expression"
+  [ "$(yq e ".jobs.$j.steps[] | select(.id == \"render\") | .env.VPC_ID" "$wf")" = '${{ steps.db.outputs.vpc_id }}' ] ||
+    fail "$l: render env.VPC_ID"
+  yq e ".jobs.$j.steps[] | select(.id == \"render\") | .run" "$wf" | grep -qF -- '--vpc-id "$VPC_ID"' ||
+    fail "$l: render must pass --vpc-id \"\$VPC_ID\""
+}
+
+# step_idx <wf> <job> <yq-predicate on .value>: the index of the one step matching it.
+step_idx() {
+  yq e ".jobs.$2.steps | to_entries | .[] | select($3) | .key" "$1"
+}
+
+# wait_stub: a stateful doctl for prod-up's check/wait runs (LIST_SEQ / PHASES advance per call; "-" = empty).
+wait_stub() {
+  mkdir -p "$work/stub"
+  cat >"$work/stub/doctl" <<'EOF2'
+#!/bin/sh
+echo "$*" >>"$W/wlog"
+nth() {
+  n=$(($(cat "$W/$1.n" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$W/$1.n"
+  echo "$2" | awk -v n="$n" '{ print (n <= NF) ? $n : $NF }'
+}
+case "$1 $2" in
+"apps list")
+  cat "$W/apps.txt"
+  ;;
+"apps list-deployments")
+  v=$(nth list "$LIST_SEQ")
+  [ "$v" = - ] || echo "$v"
+  ;;
+"apps get-deployment")
+  nth phase "$PHASES"
+  ;;
+"apps create-deployment")
+  [ "${CREATE_RC:-0}" = 0 ] || exit "$CREATE_RC"
+  [ -z "${CREATE_OUT-new1}" ] || echo "${CREATE_OUT-new1}"
+  ;;
+*)
+  echo "stub doctl: unexpected $*" >&2
+  exit 99
+  ;;
+esac
+EOF2
+  chmod +x "$work/stub/doctl"
+  printf '#!/bin/sh\n' >"$work/stub/sleep"
+  chmod +x "$work/stub/sleep"
+}
+
+# wrun <script> [VAR=value ...]: run an extracted prod-up/prod-down step the way Actions does (bash -e).
+wrun() {
+  local sh="$1"
+  shift
+  rm -f "$work/wlog" "$work/list.n" "$work/phase.n" "$work/wout"
+  : >"$work/wlog"
+  rc=0
+  env -i PATH="$work/stub:$PATH" HOME="$HOME" W="$work" GITHUB_OUTPUT="$work/wout" \
+    GITHUB_STEP_SUMMARY="$work/wsum" "$@" bash -e "$sh" >"$work/wso" 2>&1 || rc=$?
+}
+
+# produp_lifecycle <wf>: AC-3 — trust the app, then wait with at most one gated redeploy.
+produp_lifecycle() {
+  local wf="$1" j=up i prev n id k sel c
+  local app_expr='${{ steps.create.outputs.app_id || steps.check.outputs.app_id }}'
+  local gate="steps.create.outputs.app_id != '' || steps.trust.outputs.appended == 'true'"
+  prev=-1
+  for sel in '.value.id == "check"' '.value.id == "db"' '.value.uses == "./.github/actions/setup-sops"' \
+    '.value.id == "render"' '.value.id == "create"' '.value.id == "assign"' '.value.id == "trust"' \
+    '.value.id == "wait"' '.value.id == "report"' '.value.if == "always()"'; do
+    i="$(step_idx "$wf" "$j" "$sel")"
+    [ -n "$i" ] && [ "$i" -gt "$prev" ] || fail "produp: step order broken at $sel"
+    prev="$i"
+  done
+  sel='.jobs.up.steps[] | select(.id == "trust")'
+  [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "produp: trust env.APP_ID"
+  [ "$(yq e "$sel | .env.CLUSTER_ID" "$wf")" = '${{ steps.db.outputs.cluster_id }}' ] || fail "produp: trust env.CLUSTER_ID"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh trust "$CLUSTER_ID" "$APP_ID"' || fail "produp: trust run"
+  [ "$(yq e "$sel | has(\"continue-on-error\") or has(\"if\")" "$wf")" = false ] || fail "produp: trust must be ungated and hard"
+  for id in wait report; do
+    sel=".jobs.up.steps[] | select(.id == \"$id\")"
+    [ "$(yq e "$sel | .if" "$wf")" = "$gate" ] || fail "produp: $id if"
+    [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "produp: $id env.APP_ID"
+    ! yq e "$sel | .run" "$wf" | grep -qF '${{' || fail "produp: $id run inlines an expression"
+  done
+  sel='.jobs.up.steps[] | select(.id == "wait")'
+  [ "$(yq e "$sel | .env.CREATED" "$wf")" = '${{ steps.create.outputs.app_id }}' ] || fail "produp: wait env.CREATED"
+  [ "$(yq e "$sel | .env.APPENDED" "$wf")" = '${{ steps.trust.outputs.appended }}' ] || fail "produp: wait env.APPENDED"
+  [ "$(yq e "$sel | has(\"shell\")" "$wf")" = false ] || fail "produp: wait must use the default bash -e shell"
+
+  wait_stub
+  # check: 0 / 1 / 2 existing apps
+  yq e '.jobs.up.steps[] | select(.id == "check") | .run' "$wf" >"$work/check.sh"
+  for n in 0 1 2; do
+    : >"$work/apps.txt"
+    for k in $(seq 1 "$n"); do echo "app$k xstockstrat-production" >>"$work/apps.txt"; done
+    echo "x9 xstockstrat-staging" >>"$work/apps.txt"
+    wrun "$work/check.sh"
+    case "$n" in
+    0) [ "$rc" = 0 ] && grep -qx 'app_id=' "$work/wout" || fail "produp: check with no app ($(cat "$work/wso"))" ;;
+    1)
+      [ "$rc" = 0 ] && grep -qx 'app_id=app1' "$work/wout" || fail "produp: check with one app"
+      grep -qF 'already exists — ensuring it is a trusted source; redeploys only if the rule was just added and the latest deployment failed' \
+        "$work/wso" || fail "produp: check existing-app message"
+      ;;
+    2) [ "$rc" != 0 ] && grep -qF 'expected at most 1 app named xstockstrat-production, found 2' "$work/wso" ||
+      fail "produp: check accepted two apps" ;;
+    esac
+  done
+  # wait: <label> <rc> <creates> LIST_SEQ PHASES [VAR=value ...]
+  yq e '.jobs.up.steps[] | select(.id == "wait") | .run' "$wf" >"$work/wait.sh"
+  while IFS='|' read -r c k n i id extra; do
+    [ -n "$c" ] || continue
+    # shellcheck disable=SC2086 # extra is a list of VAR=value words
+    wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ="$i" PHASES="$id" $extra
+    [ "$rc" = "$k" ] || fail "produp: wait $c exited $rc, want $k ($(cat "$work/wso"))"
+    [ "$(grep -c '^apps create-deployment' "$work/wlog")" = "$n" ] || fail "produp: wait $c made $(grep -c '^apps create-deployment' "$work/wlog") redeploys, want $n"
+  done <<'CASES'
+active|0|0|d1|ACTIVE|CREATED=app1
+error-created|0|1|d1|ERROR ACTIVE|CREATED=app1
+error-appended|0|1|d1|ERROR ACTIVE|APPENDED=true
+error-unchanged|1|0|d1|ERROR|APPENDED=false
+error-twice|1|1|d1|ERROR ERROR|CREATED=app1
+superseded|0|0|d1 d2|SUPERSEDED ACTIVE|CREATED=app1
+canceled|1|0|d1|CANCELED|CREATED=app1
+create-fails|3|1|d1|ERROR|CREATED=app1 CREATE_RC=3
+create-empty|1|1|d1|ERROR|CREATED=app1 CREATE_OUT=
+late-list|0|0|- - d1|ACTIVE|CREATED=app1
+never-listed|1|0|-|ACTIVE|CREATED=app1
+CASES
+  wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ=d1 PHASES="ERROR ACTIVE" CREATED=app1
+  grep -qF 'apps get-deployment app1 new1 --format Phase' "$work/wlog" || fail "produp: wait must follow the redeployment it created"
+  wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ="d1 d2" PHASES="SUPERSEDED ACTIVE" CREATED=app1
+  grep -qF 'apps get-deployment app1 d2 --format Phase' "$work/wlog" || fail "produp: wait must follow the newest deployment after SUPERSEDED"
+  wrun "$work/wait.sh" APP_ID=app1 LIST_SEQ=d1 PHASES=PENDING_DEPLOY CREATED=app1
+  [ "$rc" = 0 ] && grep -q '^::warning::' "$work/wso" || fail "produp: wait timeout must warn and exit 0"
+  [ "$(grep -c '^apps get-deployment' "$work/wlog")" = 60 ] || fail "produp: wait must poll 60 times"
+}
+
 CHECKOUT_PIN='actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
 DOCTL_PIN='digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f'
 
@@ -749,6 +934,17 @@ group_produp() {
   if grep -nE 'do-inject-prod-secrets|DO_PROD_APP_ID|MCP_AGENT_SECRET' "$wf"; then fail "produp: a retired name remains"; fi
   no_unprefixed "$wf" produp
   [ ! -e scripts/do-inject-prod-secrets.py ] || fail "produp: scripts/do-inject-prod-secrets.py still exists"
+  # AC-2: prod-up looks up the VPC before setup-sops and the render
+  local check_i db_i sops_i render_i
+  check_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.id == "check") | .key' "$wf")"
+  db_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.id == "db") | .key' "$wf")"
+  sops_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.uses == "./.github/actions/setup-sops") | .key' "$wf")"
+  render_i="$(yq e '.jobs.up.steps | to_entries | .[] | select(.value.id == "render") | .key' "$wf")"
+  [ -n "$db_i" ] || fail "produp: no db step"
+  [ "$check_i" -lt "$db_i" ] && [ "$db_i" -lt "$sops_i" ] && [ "$sops_i" -lt "$render_i" ] ||
+    fail "produp: order must be check < db < setup-sops < render"
+  db_wiring "$wf" up produp .do/app.yaml
+  produp_lifecycle "$wf"
   echo "produp: ok"
 }
 
@@ -832,7 +1028,244 @@ group_cleanup() {
   echo "cleanup: ok"
 }
 
-groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"
+# group_proddown: AC-4 — teardown deletes the app first, then best-effort removes only its trusted-source rule.
+group_proddown() {
+  need yq python3
+  local wf=.github/workflows/prod-down.yml j=down prev=-1 i sel id n k
+  local app_expr='${{ steps.find.outputs.app_id }}' has_app="steps.find.outputs.app_id != ''"
+  yq e 'true' "$wf" >/dev/null || fail "proddown: $wf does not parse"
+  [ "$(yq e '[.jobs.down.steps[].uses | select(. != null)] | join(" ")' "$wf")" = "$CHECKOUT_PIN $DOCTL_PIN" ] ||
+    fail "proddown: action pins"
+  [ "$(yq e '.jobs.down.permissions.contents' "$wf")" = read ] || fail "proddown: permissions contents: read"
+  [ "$(yq e '.jobs.down.if' "$wf")" = "\${{ inputs.confirm == 'destroy-prod' }}" ] || fail "proddown: confirm gate"
+  for id in find delete db untrust summary; do
+    i="$(step_idx "$wf" "$j" ".value.id == \"$id\"")"
+    [ -n "$i" ] && [ "$i" -gt "$prev" ] || fail "proddown: step order broken at $id"
+    prev="$i"
+    ! yq e ".jobs.down.steps[] | select(.id == \"$id\") | .run" "$wf" | grep -qF '${{' ||
+      fail "proddown: $id run inlines an expression"
+  done
+  sel='.jobs.down.steps[] | select(.id == "delete")'
+  [ "$(yq e "$sel | .if" "$wf")" = "$has_app" ] || fail "proddown: delete if"
+  [ "$(yq e "$sel | has(\"continue-on-error\")" "$wf")" = false ] || fail "proddown: delete must fail hard"
+  [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "proddown: delete env.APP_ID"
+  yq e "$sel | .run" "$wf" | grep -qF 'doctl apps delete "$APP_ID" --force' || fail "proddown: delete run"
+  sel='.jobs.down.steps[] | select(.id == "db")'
+  [ "$(yq e "$sel | .continue-on-error" "$wf")" = true ] || fail "proddown: db must be best-effort"
+  [ "$(yq e "$sel | .if" "$wf")" = "$has_app" ] || fail "proddown: db if"
+  [ "$(yq e "$sel | .env.SPEC" "$wf")" = .do/app.yaml ] || fail "proddown: db env.SPEC"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh lookup' || fail "proddown: db run"
+  sel='.jobs.down.steps[] | select(.id == "untrust")'
+  [ "$(yq e "$sel | .continue-on-error" "$wf")" = true ] || fail "proddown: untrust must be best-effort"
+  [ "$(yq e "$sel | .if" "$wf")" = "$has_app && steps.db.outputs.cluster_id != ''" ] || fail "proddown: untrust if"
+  [ "$(yq e "$sel | .env.APP_ID" "$wf")" = "$app_expr" ] || fail "proddown: untrust env.APP_ID"
+  [ "$(yq e "$sel | .env.CLUSTER_ID" "$wf")" = '${{ steps.db.outputs.cluster_id }}' ] || fail "proddown: untrust env.CLUSTER_ID"
+  yq e "$sel | .run" "$wf" | grep -qF 'do-db-cluster.sh untrust "$CLUSTER_ID" "$APP_ID"' || fail "proddown: untrust run"
+  sel='.jobs.down.steps[] | select(.id == "summary")'
+  [ "$(yq e "$sel | .if" "$wf")" = "always() && $has_app && steps.delete.outcome == 'success' && steps.untrust.outcome != 'success'" ] ||
+    fail "proddown: summary if"
+  [ "$(yq e "$sel | .env.DB_OUTCOME" "$wf")" = '${{ steps.db.outcome }}' ] || fail "proddown: summary env.DB_OUTCOME"
+  if grep -nE 'doctl databases (delete|resize|migrate|db delete|pool delete|user delete)|firewalls (append|replace)' "$wf"; then
+    fail "proddown: a cluster-mutating doctl verb"
+  fi
+  grep -qF 'cluster data untouched' <(sed -n '1,12p' "$wf") || fail "proddown: header must say cluster data untouched"
+  yq e '.jobs.down.steps[] | select(.id == "delete") | .run' "$wf" | grep -qiF 'cluster data untouched' ||
+    fail "proddown: delete echo must say cluster data untouched"
+
+  wait_stub
+  # find: 0 / 1 / 2 production apps
+  yq e '.jobs.down.steps[] | select(.id == "find") | .run' "$wf" >"$work/find.sh"
+  for n in 0 1 2; do
+    : >"$work/apps.txt"
+    for k in $(seq 1 "$n"); do echo "app$k xstockstrat-production" >>"$work/apps.txt"; done
+    echo "x9 xstockstrat-staging" >>"$work/apps.txt"
+    wrun "$work/find.sh"
+    case "$n" in
+    0) [ "$rc" = 0 ] && grep -qx 'app_id=' "$work/wout" && grep -qF 'already down' "$work/wso" || fail "proddown: find with no app" ;;
+    1) [ "$rc" = 0 ] && grep -qx 'app_id=app1' "$work/wout" || fail "proddown: find with one app" ;;
+    2) [ "$rc" != 0 ] && grep -qF 'expected at most 1 app named xstockstrat-production, found 2' "$work/wso" ||
+      fail "proddown: find accepted two apps" ;;
+    esac
+  done
+  # summary: names the remediation; never prints an empty cluster id
+  yq e '.jobs.down.steps[] | select(.id == "summary") | .run' "$wf" >"$work/summary.sh"
+  rm -f "$work/wsum"
+  wrun "$work/summary.sh" APP_ID=app1 CLUSTER_ID=c1 DB_OUTCOME=success
+  [ "$rc" = 0 ] && grep -qF 'app:app1' "$work/wsum" && grep -qF 'c1' "$work/wsum" || fail "proddown: summary (lookup ok)"
+  rm -f "$work/wsum"
+  wrun "$work/summary.sh" APP_ID=app1 CLUSTER_ID= DB_OUTCOME=failure
+  [ "$rc" = 0 ] && grep -qF 'cluster lookup failed' "$work/wsum" && grep -qF 'app:app1' "$work/wsum" ||
+    fail "proddown: summary (lookup failed)"
+  ! grep -qE 'remove +--uuid|firewalls (list|remove) +(--|$)' "$work/wsum" || fail "proddown: summary printed an empty cluster id"
+  echo "proddown: ok"
+}
+
+DB_CID=11111111-2222-4333-8444-555555555555
+DB_APP=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee
+DB_OTHER=99999999-8888-4777-8666-555555555555
+DB_RULE=12345678-1234-4234-8234-123456789abc
+
+# dbx [VAR=value ...] -- <subcommand args>: run the real do-db-cluster.sh against the stub doctl.
+dbx() {
+  local envs=()
+  while [ "$1" != -- ]; do
+    envs+=("$1")
+    shift
+  done
+  shift
+  : >"$work/doctl.log"
+  : >"$work/dout"
+  : >"$work/dsum"
+  rc=0
+  env -i PATH="$work/stub:$PATH" HOME="$HOME" W="$work" GITHUB_OUTPUT="$work/dout" \
+    GITHUB_STEP_SUMMARY="$work/dsum" ${envs[@]+"${envs[@]}"} \
+    bash "$PWD/scripts/do-db-cluster.sh" "$@" >"$work/dso" 2>"$work/dse" || rc=$?
+}
+
+no_doctl_write() {
+  if grep -vE '^databases (list -o json|firewalls (list|append|remove) .*)$' "$work/doctl.log" | grep -q .; then
+    fail "dbnet: $1: unexpected doctl call ($(cat "$work/doctl.log"))"
+  fi
+}
+
+group_dbnet() {
+  need yq jq
+  local fw
+  mkdir -p "$work/stub"
+  cat >"$work/stub/doctl" <<'EOF'
+#!/bin/sh
+echo "$*" >>"$W/doctl.log"
+case "$*" in
+"databases list -o json") cat "$W/dbs.json" ;;
+"databases firewalls list "*" -o json")
+  [ "${FW_LIST_RC:-0}" = 0 ] || exit "$FW_LIST_RC"
+  cat "$W/fw.json"
+  ;;
+"databases firewalls append "*) exit "${FW_APPEND_RC:-0}" ;;
+"databases firewalls remove "*) exit "${FW_REMOVE_RC:-0}" ;;
+*)
+  echo "stub doctl: unexpected $*" >&2
+  exit 99
+  ;;
+esac
+EOF
+  chmod +x "$work/stub/doctl"
+  printf 'databases:\n  - name: xstockstrat\n    cluster_name: xstockstrat\n' >"$work/spec.yaml"
+  local one="{\"id\":\"$DB_CID\",\"name\":\"xstockstrat\",\"private_network_uuid\":\"$FIXTURE_VPC\"}"
+  local decoy="{\"id\":\"$DB_OTHER\",\"name\":\"other\",\"private_network_uuid\":\"$FIXTURE_VPC\"}"
+
+  # lookup: exactly one cluster (a decoy is ignored) → cluster_id + vpc_id
+  echo "[$decoy,$one]" >"$work/dbs.json"
+  dbx SPEC="$work/spec.yaml" -- lookup
+  [ "$rc" = 0 ] || fail "dbnet: lookup 1 cluster exited $rc ($(cat "$work/dse"))"
+  grep -qx "cluster_id=$DB_CID" "$work/dout" || fail "dbnet: lookup cluster_id not in GITHUB_OUTPUT"
+  grep -qx "vpc_id=$FIXTURE_VPC" "$work/dout" || fail "dbnet: lookup vpc_id not in GITHUB_OUTPUT"
+  grep -qx "vpc_id=$FIXTURE_VPC" "$work/dso" || fail "dbnet: lookup vpc_id not on stdout"
+  no_doctl_write lookup
+  # lookup: 0 clusters ([] and null), 2 same-named
+  for fw in '[]' null "[$one,$one]"; do
+    echo "$fw" >"$work/dbs.json"
+    dbx SPEC="$work/spec.yaml" -- lookup
+    [ "$rc" != 0 ] || fail "dbnet: lookup accepted $fw"
+    local want=0
+    [ "$fw" = "[$one,$one]" ] && want=2
+    grep -qF "expected exactly 1 database cluster named xstockstrat, found $want" "$work/dse" ||
+      fail "dbnet: lookup message for $fw ($(cat "$work/dse"))"
+  done
+  # lookup: empty / absent private_network_uuid
+  for fw in "[{\"id\":\"$DB_CID\",\"name\":\"xstockstrat\",\"private_network_uuid\":\"\"}]" \
+    "[{\"id\":\"$DB_CID\",\"name\":\"xstockstrat\"}]"; do
+    echo "$fw" >"$work/dbs.json"
+    dbx SPEC="$work/spec.yaml" -- lookup
+    [ "$rc" != 0 ] || fail "dbnet: lookup accepted a cluster without a VPC"
+    grep -qF 'private_network_uuid' "$work/dse" || fail "dbnet: VPC failure must name private_network_uuid"
+    ! grep -q . "$work/dout" || fail "dbnet: VPC failure wrote GITHUB_OUTPUT"
+  done
+  # lookup: two databases entries on the same cluster → ok; on different clusters → fail
+  echo "[$one]" >"$work/dbs.json"
+  printf 'databases:\n  - name: a\n    cluster_name: xstockstrat\n  - name: b\n    cluster_name: xstockstrat\n' >"$work/spec2.yaml"
+  dbx SPEC="$work/spec2.yaml" -- lookup
+  [ "$rc" = 0 ] || fail "dbnet: lookup rejected two entries on one cluster"
+  printf 'databases:\n  - name: a\n    cluster_name: xstockstrat\n  - name: b\n    cluster_name: other\n' >"$work/spec2.yaml"
+  dbx SPEC="$work/spec2.yaml" -- lookup
+  [ "$rc" != 0 ] || fail "dbnet: lookup accepted two different clusters"
+  grep -qF 'cluster_name' "$work/dse" || fail "dbnet: two-cluster message must name cluster_name"
+
+  # trust: rule absent → one append, appended=true
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" >"$work/fw.json"
+  dbx -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" = 0 ] || fail "dbnet: trust exited $rc ($(cat "$work/dse"))"
+  [ "$(grep -c 'firewalls append' "$work/doctl.log")" = 1 ] || fail "dbnet: trust must append once"
+  grep -qx "databases firewalls append $DB_CID --rule app:$DB_APP" "$work/doctl.log" || fail "dbnet: trust append argv"
+  grep -qx 'appended=true' "$work/dout" || fail "dbnet: trust appended=true"
+  no_doctl_write trust
+  # trust: rule present → no append, appended=false
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_APP\"}]" >"$work/fw.json"
+  dbx -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" = 0 ] || fail "dbnet: trust (present) exited $rc"
+  ! grep -q 'firewalls append' "$work/doctl.log" || fail "dbnet: trust appended a present rule"
+  grep -qx 'appended=false' "$work/dout" || fail "dbnet: trust (present) appended=false"
+  # trust: empty list ([] / null) → warning, rc 0, no append
+  for fw in '[]' null; do
+    echo "$fw" >"$work/fw.json"
+    dbx -- trust "$DB_CID" "$DB_APP"
+    [ "$rc" = 0 ] || fail "dbnet: trust on an open cluster ($fw) exited $rc"
+    grep -q '^::warning::.*open to all' "$work/dso" || fail "dbnet: trust on an open cluster must warn"
+    ! grep -q 'firewalls append' "$work/doctl.log" || fail "dbnet: trust restricted an open cluster"
+    grep -qx 'appended=false' "$work/dout" || fail "dbnet: trust (open) appended=false"
+  done
+  # trust: list / append failure → rc≠0 with the re-run hint
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" >"$work/fw.json"
+  dbx FW_LIST_RC=1 -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: trust ignored a list failure"
+  ! grep -q 'firewalls append' "$work/doctl.log" || fail "dbnet: trust appended after a list failure"
+  grep -qF 're-run Prod — bring up' "$work/dse" || fail "dbnet: trust list failure hint"
+  dbx FW_APPEND_RC=1 -- trust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: trust ignored an append failure"
+  grep -qF 're-run Prod — bring up' "$work/dse" || fail "dbnet: trust append failure hint"
+  # trust/untrust: non-UUID ids → rc≠0 and no doctl call
+  for fw in trust untrust; do
+    dbx -- "$fw" not-a-uuid "$DB_APP"
+    [ "$rc" != 0 ] && ! grep -q . "$work/doctl.log" || fail "dbnet: $fw accepted a non-UUID cluster id"
+    dbx -- "$fw" "$DB_CID" AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE
+    [ "$rc" != 0 ] && ! grep -q . "$work/doctl.log" || fail "dbnet: $fw accepted an uppercase app id"
+  done
+
+  # untrust: a match among other rules → removed by uuid
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_APP\"},{\"uuid\":\"$DB_OTHER\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" >"$work/fw.json"
+  dbx -- untrust "$DB_CID" "$DB_APP"
+  [ "$rc" = 0 ] || fail "dbnet: untrust exited $rc ($(cat "$work/dse"))"
+  [ "$(grep -c 'firewalls remove' "$work/doctl.log")" = 1 ] || fail "dbnet: untrust must remove exactly once"
+  grep -qx "databases firewalls remove $DB_CID --uuid $DB_RULE" "$work/doctl.log" || fail "dbnet: untrust remove argv"
+  no_doctl_write untrust
+  # untrust: remove failure → rc≠0, summary names the rule
+  dbx FW_REMOVE_RC=1 -- untrust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: untrust ignored a remove failure"
+  grep -qF "$DB_RULE" "$work/dsum" || fail "dbnet: untrust remove failure must name the rule in the summary"
+  # untrust: no match, empty list → rc 0, no remove
+  for fw in "[{\"uuid\":\"$DB_OTHER\",\"type\":\"app\",\"value\":\"$DB_OTHER\"}]" '[]' null; do
+    echo "$fw" >"$work/fw.json"
+    dbx -- untrust "$DB_CID" "$DB_APP"
+    [ "$rc" = 0 ] || fail "dbnet: untrust with no match ($fw) exited $rc"
+    ! grep -q 'firewalls remove' "$work/doctl.log" || fail "dbnet: untrust removed a non-matching rule"
+  done
+  # untrust: the match is the only rule → refuse (would open the cluster), summary names it
+  echo "[{\"uuid\":\"$DB_RULE\",\"type\":\"app\",\"value\":\"$DB_APP\"}]" >"$work/fw.json"
+  dbx -- untrust "$DB_CID" "$DB_APP"
+  [ "$rc" != 0 ] || fail "dbnet: untrust emptied the trusted-source list"
+  ! grep -q 'firewalls remove' "$work/doctl.log" || fail "dbnet: untrust removed the last rule"
+  grep -qF "$DB_RULE" "$work/dsum" || fail "dbnet: last-rule refusal must name the rule in the summary"
+
+  # ::error:: only under GitHub Actions; stderr always
+  dbx GITHUB_ACTIONS=true -- untrust "$DB_CID" "$DB_APP"
+  grep -q '^::error::' "$work/dso" || fail "dbnet: no ::error:: under GITHUB_ACTIONS"
+  dbx -- untrust "$DB_CID" "$DB_APP"
+  ! grep -q '::error::' "$work/dso" || fail "dbnet: ::error:: outside GitHub Actions"
+  grep -q . "$work/dse" || fail "dbnet: failure must write stderr"
+  echo "dbnet: ok"
+}
+
+groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"
   "group_$g"

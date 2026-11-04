@@ -20,6 +20,9 @@ import sops_secrets
 
 PLACEHOLDER = re.compile(r"YOUR_(?:DEV|PROD)_([A-Z0-9_]+)")
 OTEL_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS"
+VPC_PLACEHOLDER = "YOUR_VPC_ID"
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+LEFTOVER = re.compile(r"YOUR_[A-Z0-9_]+")
 
 
 def yaml_pem(pem):
@@ -78,8 +81,19 @@ def render(args):
         raise sops_secrets.SecretError(
             f"{args.spec}: top-level name is {found!r}, expected {args.app_name!r}"
         )
-    text = text.replace("YOUR_GITHUB_ORG", args.org).replace(
-        "YOUR_IMAGE_TAG", args.image_tag
+    if not UUID.fullmatch(args.vpc_id):
+        raise sops_secrets.SecretError(
+            f"{VPC_PLACEHOLDER}: --vpc-id is not a lowercase VPC UUID"
+        )
+    if text.count(VPC_PLACEHOLDER) != 1:
+        raise sops_secrets.SecretError(
+            f"{args.spec}: {VPC_PLACEHOLDER} must occur exactly once (found {text.count(VPC_PLACEHOLDER)})"
+        )
+    names = set(LEFTOVER.findall(text))
+    text = (
+        text.replace("YOUR_GITHUB_ORG", args.org)
+        .replace("YOUR_IMAGE_TAG", args.image_tag)
+        .replace(VPC_PLACEHOLDER, args.vpc_id)
     )
     values, _ = sops_secrets.resolve(args.env, sops_secrets.DO)
     fill = {
@@ -97,9 +111,14 @@ def render(args):
         sops_secrets.mask(pem)
         fill[name] = quoted
     text = PLACEHOLDER.sub(lambda m: fill.get(m.group(1), m.group(0)), text)
-    leftover = sorted({m.group(0) for m in PLACEHOLDER.finditer(text)})
+    leftover = sorted(n for n in names if n in text)
     if leftover:
         raise sops_secrets.SecretError(f"unfilled placeholders remain: {leftover}")
+    count = len(LEFTOVER.findall(text))
+    if count:
+        raise sops_secrets.SecretError(
+            f"{count} placeholder-like token(s) remain (values withheld)"
+        )
     fd = os.open(args.out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(text)
@@ -118,6 +137,7 @@ def main(argv=None):
     p.add_argument("--app-name", required=True)
     p.add_argument("--image-tag", required=True)
     p.add_argument("--org", required=True)
+    p.add_argument("--vpc-id", required=True)
     p.add_argument("--out", required=True)
     args = p.parse_args(argv)
     try:
