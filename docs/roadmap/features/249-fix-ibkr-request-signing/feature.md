@@ -8,6 +8,7 @@
 **Last Updated**: 2026-10-29
 **Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
 **Launched date**: 2026-10-31
+**Archived**: 2026-11-04
 
 ---
 
@@ -35,6 +36,7 @@
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential | All 17 steps done; 10 acceptance scenarios promoted to `services/xstockstrat-trading/acceptance/fix-ibkr-request-signing.feature` (C-16) |
 
 | 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -55,11 +57,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-21
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — Phase 0 codebase dossier
-- [Design](design.md) — approved design (3 rounds, full)
-- [Implementation Spec](implementation-spec.md) — 17 steps
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to services/xstockstrat-trading/acceptance/fix-ibkr-request-signing.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
