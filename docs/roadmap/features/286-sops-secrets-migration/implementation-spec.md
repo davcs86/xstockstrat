@@ -660,7 +660,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 12 — service: `prod-up.yml` on the unified renderer; delete `do-inject-prod-secrets.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `.github/workflows/prod-up.yml` — modify

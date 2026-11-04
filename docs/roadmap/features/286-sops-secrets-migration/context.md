@@ -384,3 +384,15 @@
 - TDD RED: `ASSERT FAIL: produp: LEGACY_ lines in .github/workflows/prod-up.yml differ from KEYS`. shellcheck + shfmt clean.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 12 — `prod-up.yml` on the unified renderer; delete `do-inject-prod-secrets.py` [done]
+- prod-up changes:
+  - job `up`: `environment: production` + `contents: read`, with pinned checkout and doctl;
+  - setup-sops and the render step (12 literal PROD_ LEGACY_ lines, the full key set incl. VAPID + MTLS) run only when the app is absent;
+  - create from `$RUNNER_TEMP/app.yaml`, with assign using the render output project_id;
+  - the DO_PROD_APP_ID warning and the MCP_AGENT_SECRET comment are dropped, the header is rewritten, and an always-run spec removal is added.
+- `git rm scripts/do-inject-prod-secrets.py` (its only caller was prod-up.yml:60).
+- TDD GREEN: `produp: ok`, `render: ok`. yq parses. No repo references remain outside the test file.
+- Deliberate behaviour changes (design C5): a missing required key now fails instead of warning; MTLS is required and minted; an absent optional key renders ''.
+- Files modified: `.github/workflows/prod-up.yml`, `scripts/do-inject-prod-secrets.py` (deleted)
+- Deviations: none
