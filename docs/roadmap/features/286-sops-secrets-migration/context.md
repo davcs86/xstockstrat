@@ -505,3 +505,22 @@
   It is not part of this feature's surfaces; queued as a separate task.
 - Files modified: the 9 `docs/` files listed in Step 20
 - Deviations: none
+
+### Step 21 — Remaining surfaces + CLAUDE.md teardown [done]
+- `.env.example` and `setup-env.sh` comment tables: DO_*_APP_ID replaced by SOPS_AGE_KEY. The digitalocean-setup skill:
+  - P8 detection and the summary no longer list app-ID secrets;
+  - the `gh secret set DO_*_APP_ID` lines are removed;
+  - the mTLS CA becomes `common.MTLS_CA`, with set-secret as the legacy fallback, plus a pointer to the runbook's key/env/bootstrap sections.
+  The identity CLAUDE.md + operations.md use `common.JWT_SECRET` with the legacy fallback. The notify CLAUDE.md names the renderer and the runbook.
+- **Teardown (manual).** The context-forge plugin offers only `context-scrubber` in this session; `/context-forge:context-constitution refresh` is unavailable.
+  Manual reconciliation:
+  - re-read the touched context files (`docs/runbooks/CLAUDE.md`, `services/xstockstrat-identity/CLAUDE.md`, `services/xstockstrat-notify/CLAUDE.md`) and
+    the root `CLAUDE.md` against the current code;
+  - grepped every `CLAUDE.md`, `docs/context-constitution.md`, all 14 per-module `context-constitution*.md`, `README.md` and the scrubber extra targets for the
+    retired names and for `#anchor` citations into every file this feature changed.
+  Exactly one grounded drift was found and fixed: the dead anchor `docs/context-constitution.md:83` (D-4). No other drift.
+- Verification: the grep leaves only explicit legacy-fallback lines; setup-env.sh shellcheck + shfmt clean; markdownlint 0 issues on the touched CLAUDE.md files.
+- Files modified: `.env.example`, `scripts/setup-env.sh`, `.claude/skills/digitalocean-setup/SKILL.md`, `services/xstockstrat-identity/CLAUDE.md`,
+  `services/xstockstrat-identity/docs/operations.md`, `services/xstockstrat-notify/CLAUDE.md`, `docs/context-constitution.md` (teardown, D-4)
+- Deviations: D-4
+- Config-key wiring gate `node scripts/check-config-wiring.mjs --final`: exit 0. Its only line is a pre-existing baseline report (`trading.fill_poller.interval_ms:read-unseeded:production`), unrelated; this feature declares no config keys.

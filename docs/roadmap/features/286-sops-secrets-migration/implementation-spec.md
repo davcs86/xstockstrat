@@ -1,6 +1,6 @@
 # Implementation Spec: sops-secrets-migration
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/286-sops-secrets-migration/feature.md`
 **Total Steps**: 21
@@ -1084,7 +1084,7 @@ npx --yes markdownlint-cli2 docs/runbooks/sops-secrets.md docs/setup/digitalocea
 
 ### Step 21 — docs: Remaining surfaces (env example, setup script comments, skill, service docs) + CLAUDE.md teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo root, `scripts/`, `.claude/skills/`, service docs
 **Files**:
 - `.env.example` — modify (comments `:99-100`)
@@ -1145,4 +1145,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: on ubuntu-24.04, a pip install into the system Python is refused (PEP 668 externally-managed environment). The repo's own python-lint job
   (`ci.yml:343-350`) uses `actions/setup-python@v7` (3.13) followed by `pip install ruff`.
 - **Disposition**: CI-equivalent fallback (sequential-mode sanctioned). The job mirrors the existing pattern. ruff runs the same checks on the same two files.
+
+### D-4 — Step 21 teardown: `docs/context-constitution.md` anchor fixed (file outside Step 21's **Files**)
+- **Found**: `docs/context-constitution.md:83` cited `.github/workflows/deploy.yml#Authorization=`. Step 10 moved that logic to
+  `scripts/do-render-app-spec.py`, so the anchor no longer resolved.
+- **Disposition**: root `CLAUDE.md` § Teardown mandates fixing grounded drift in context files whose described behaviour changed. The row and its anchor
+  now name `scripts/do-render-app-spec.py#Authorization=`. Disclosed here because the file is outside the step's **Files** (F-08 transparency).
 

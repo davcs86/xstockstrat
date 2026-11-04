@@ -96,7 +96,7 @@ DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABAS
 
 ## Operations
 
-User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`DEV_JWT_SECRET`/`PROD_JWT_SECRET` → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
+User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`common.JWT_SECRET` in `secrets/<env>.enc.yaml`, legacy `DEV_JWT_SECRET`/`PROD_JWT_SECRET` fallback → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
 
 ## Running Locally
 
