@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` -> `draft` | /sdd-triage | Product spec pre-populated from defect report |
 | 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick extended by operator) and approved; recon.md + design.md written; full back-off on both paths, key seeded via config migration (/sdd-review skipped on operator instruction) |
+| 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 
 ---
 
@@ -24,8 +25,18 @@
 - [Design](design.md) — debated, approved architecture
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-marketdata-dead-symbol-ingest`_
+- [Implementation Spec](implementation-spec.md) — 8 numbered steps, evidence-cited
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+| Role | Focus |
+|---|---|
+| DBA | Migration NNN numbering (035), up+down pair, run-order compliance |
+| xstockstrat-config owner | Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability |
+| xstockstrat-marketdata owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
 
 ---
 
@@ -35,4 +46,4 @@ The always-on bar ingester re-requests the same ~6 symbols (AXIA, EVTV, LRHC, LX
 
 ## Next Action
 
-`/sdd-spec fix-marketdata-dead-symbol-ingest` — generate implementation spec from the approved design
+`/sdd-review fix-marketdata-dead-symbol-ingest impl-spec` — validate implementation spec, then `/sdd-execute fix-marketdata-dead-symbol-ingest`

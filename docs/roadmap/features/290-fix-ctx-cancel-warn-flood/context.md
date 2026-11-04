@@ -54,3 +54,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Teardown (Step): marketdata `CLAUDE.md` GetBars bullet + MARKETDATA-3 prose + the stale comment at `:354-355`; portfolio doc comment `:1379-1380`.
 - [ ] RED tests need two new inline fakes (bar-returning source that cancels; recording `barsBatchStore`) and an inline portfolio DB variant whose `Exec` cancels — list them in the step's Files (fails.md:2708-2711).
 - [ ] Partial application on portfolio cancel — accepted (boot replay); no transaction.
+
+## Session 2026-11-04 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps (portfolio service+test, marketdata service+test, docs teardown). Status -> implementation-ready.
+- Key codebase findings:
+  - Portfolio fix sites confirmed at `portfolio_service.go`: fn `:1381`, loop `:1409`, upsert WARN `:1421`, delete branch `:1426-1428`, 206 skip `else` `:1431-1433`, realized `:1437-1439`. Test harness reusable as-is: `syncRecorderDB` (`portfolio_offline_test.go:220`), `recordWarns`, `syncEvent`/`offlineSyncPayload`, `parkedCount`; one new inline `cancelingDB` embedding `syncRecorderDB`.
+  - Marketdata: `fetchAndCacheBars` `:356`, write `:370`, re-reads `:375/:382`; `barsBatchStore` seam `:127-130` wired `:239`; `sync/atomic` not imported yet. No existing test reaches `fetchAndCacheBars`; existing fakes return `nil, nil` and would pass vacuously.
+  - Feature 291 also edits `marketdata_service.go` (ingester inserts, `barsStore` field comment `:109`) and leaves `:370` untouched: textual rebase only, no merge-order entry.
+- Spec-time refinements to design.md (to confirm at `/sdd-review impl-spec`): (1) departed-at-start write uses `WithTimeout(WithoutCancel(ctx), grace)` so `@AC-6`'s "deadline <= grace" is literally assertable; the design's `AfterFunc` form (no `Deadline()`) is kept for the live-at-start branch; (2) one-writer slot is an `atomic.Bool` (zero-value safe for test literals) instead of a buffered channel; (3) a write error is WARNed regardless of ctx state (the write is detached, so it is never the client's cancel).
+- `grace` sizing (closes the Open Thread, with a caveat): `InsertBars` has no span (pgx untraced), so no direct p99. Tempo 24h: slowest whole-request `GetBars` (all 10 requests > 1 s) peaked at 2.70 s incl. Alpaca fetch + write + re-read; root-span p99 195 ms (10:00-10:15Z). 5 s = 1.85x that ceiling; worst case one pooled client conn for <= 5 s (PgBouncer), no pool max change (F-06). Operator may supply a direct staging InsertBars timing before the PR.
+- Open: `AC-6` mid-write-departure case is an extra test beyond the nine ACs (same FR-2 guarantee).

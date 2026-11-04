@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` -> `draft` | /sdd-triage | Product spec pre-populated from defect report |
 | 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written; marketdata variant: detach, post-departure bound + 1 writer (/sdd-review skipped on operator instruction) |
+| 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
@@ -24,8 +25,17 @@
 - [Design](design.md) — debated, approved architecture
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-ctx-cancel-warn-flood`_
+- [Implementation Spec](implementation-spec.md) — 5 numbered steps, evidence-cited
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+| Role | Focus | Steps |
+|---|---|---|
+| Service owner `xstockstrat-portfolio` | P&L calculation accuracy, position snapshot consistency, concurrent write safety | 1, 2 |
+| Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency | 3, 4 |
 
 ---
 
@@ -35,4 +45,4 @@ On a canceled context portfolio's `ConsumePositionSyncs` and marketdata's `GetBa
 
 ## Next Action
 
-`/sdd-spec fix-ctx-cancel-warn-flood` — generate implementation spec from the approved design
+`/sdd-review fix-ctx-cancel-warn-flood impl-spec` — validate implementation spec, then `/sdd-execute fix-ctx-cancel-warn-flood`
