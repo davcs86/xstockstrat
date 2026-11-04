@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-indicators-sandbox-matrix`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-10-15
 **Last Updated**: 2026-10-15
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md` |
+| 2026-10-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-indicators-sandbox-blas-memory-flake-defect.md) |
 | 2026-10-15 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 | 2026-10-15 | `design-approved` (unchanged) | /sdd-review | Product spec reviewed after design (Track C): FAIL → fixed → PASS WITH WARNINGS (1 warning addressed) |
 | 2026-10-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |

@@ -250,7 +250,7 @@ UNAVAILABLE "positions not published; re-confirm to retry" when the `account.pos
 - Transactional outbox for `account.positions.synced` (root fix for D-63); needs a migration and relay worker.
 - `useInvalidatingMutation` `onSettled` forwarding (orders list may be stale after an FR-6 UNAVAILABLE).
 - Unscoped `ListPositions` was the case no @AC covered when UNAVAILABLE was considered; moot after Position marker 26.
-- Defect report `docs/reports/2026-10-21-offline-book-consistency-defect.md` has sidecar `triaged`
+- Defect report `docs/reports/2026-10-21-offline-book-consistency-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-offline-book-consistency-defect.md) has sidecar `triaged`
   (`ref: feature:256-fix-offline-book-consistency`); the feature is now `launched`, so `/sdd-archiver reports` can prune
   it. Its source scan `docs/repo-surveyor/debt-radar-findings.md` still lists D-47/D-48/D-49/D-63 and the
   `256-fix-offline-book-consistency` row (lines 62, 74, 136, 290, 583); not edited here.

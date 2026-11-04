@@ -279,7 +279,7 @@
 
 ### D-16 Agent `client.py` repeats ephemeral-channel boilerplate with no default deadline — SEV-2 · leverage M÷M  *(carried, open — partly covered)*
 - **Evidence:** `services/xstockstrat-agent/app/client.py` has **69** `secure_channel(` calls. Its only `timeout=` is `:872`, the `list_opportunities` pass-through from `4fa2998`.
-- **Covered by:** `2026-10-19-agent-get-config-value-no-deadline-defect` covers one call only.
+- **Covered by:** `2026-10-19-agent-get-config-value-no-deadline-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md) covers one call only.
 - **LOE:** M (estimate). A cached channel per backend plus a default deadline.
 - **Trade-off:**
   - **Not fixing:** agent hangs.
@@ -497,7 +497,7 @@
 - **Evidence:**
   - `services/xstockstrat-ingest/app/config/watcher.py:155-163`: `await self._stub.GetSecret(…, metadata=…)` has no `timeout=`.
   - It is called from `app/engine/mcp_client_loop.py:116` inside the per-source loop (`:139-144`). The only timeout covers `mcp_client.fetch`.
-- **What it risks:** One hung config call blocks the single background task, so every user's `mcp_client` sources stop polling, with no error recorded on any source. This is the ingest sibling of the filed agent report `2026-10-19-agent-get-config-value-no-deadline-defect`, which does not cover ingest.
+- **What it risks:** One hung config call blocks the single background task, so every user's `mcp_client` sources stop polling, with no error recorded on any source. This is the ingest sibling of the filed agent report `2026-10-19-agent-get-config-value-no-deadline-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md), which does not cover ingest.
 - **LOE:** XS (estimate). `timeout=` from the existing request-timeout key.
 - **Trade-off:**
   - **Not fixing:** silent ingestion stall.

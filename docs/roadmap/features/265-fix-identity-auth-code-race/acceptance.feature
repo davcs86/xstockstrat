@@ -1,5 +1,5 @@
 Feature: fix-identity-auth-code-race (bug fix)
-  Regression guard for docs/reports/2026-10-21-identity-auth-code-race-defect.md:
+  Regression guard for docs/reports/2026-10-21-identity-auth-code-race-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-identity-auth-code-race-defect.md):
   ExchangeAuthCode is check-then-act, so one authorization code can be redeemed more than once (debt-radar D-23, D-21).
 
   Background:

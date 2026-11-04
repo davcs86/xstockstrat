@@ -1646,7 +1646,7 @@ The scenario's other Thens are fully covered (Steps 22/24).
 - an empty FMP profile.
 
 The cause is unverified: run logs were not readable from the session.
-**Disposition**: BLOCKS `launched`. Defect `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, triaged to feature `230-fix-etf-flag-fill` (operator, 2026-10-15). Re-run (a) after 230 deploys.
+**Disposition**: BLOCKS `launched`. Defect `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md), triaged to feature `230-fix-etf-flag-fill` (operator, 2026-10-15). Re-run (a) after 230 deploys.
 
 ### Deviation: Step 26 (b) — AAPL does not trade
 **Spec said**: AAPL trades and gets no reason 5.
@@ -1663,7 +1663,7 @@ The cause is unverified: run logs were not readable from the session.
 - **AAPL control.** `squeeze_breakout_trend` on AAPL (`df5d966f-f9cb-4e77-b095-6af56908f36a`) gives the same `OK` with `diagnostics: []`, even though AAPL has ≥ 501 bars. The symptom is strategy-wide, not SCHD-specific, and unrelated to 215's guard.
 - **Bars.** SCHD has only 3 stored daily bars (2026-10-13..15).
 - **Formulas.** Both custom formulas succeed standalone in the staging sandbox.
-- **Root contract defect.** `servicer.py:1127-1132` drops a symbol on any `grpc.RpcError`/`Exception` with no row, and the status gate (`:1235-1242`) cannot see it. Some upstream RPC failure is hidden behind a false `OK`. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (SEV-2, open).
+- **Root contract defect.** `servicer.py:1127-1132` drops a symbol on any `grpc.RpcError`/`Exception` with no row, and the status gate (`:1235-1242`) cannot see it. Some upstream RPC failure is hidden behind a false `OK`. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md) (SEV-2, open).
 
 **Disposition**: 215's guard side holds: SCHD is not refused by a technical-only strategy. The "evaluates normally" half cannot be shown until that defect is fixed. Proposed: accept (c) as not-215, with the defect tracked separately.
 
