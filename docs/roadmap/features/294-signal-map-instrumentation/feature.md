@@ -13,6 +13,7 @@
 | 2026-11-04 | `idea` → `draft` | /sdd-story | Product spec generated from `docs/repo-surveyor/signal-map-findings.md` (PR #1427, surveyed at `9892b61`) |
 | 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 advisory warnings, all fixed; first pass FAILED on unticked open questions, re-review PASS WITH WARNINGS) |
 | 2026-11-04 | `spec-ready` → `design-approved` | /sdd-design | Full design, 6 rounds (operator overrode the 5-round cap); round-6 adversary APPROVE WITH LISTED FIXES, all applied; 59 acceptance scenarios (AC-57..AC-59 new) |
+| 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 30 steps (14 service, 15 test, 1 docs); all 59 `@AC-*` scenarios covered |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules
 - [Design](design.md) — debated architecture, rejected alternatives, open risks
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec signal-map-instrumentation`_
+- [Implementation Spec](implementation-spec.md) — 30 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -33,9 +34,8 @@ Implements the whole signal-map survey as one effort: 26 instrumentation gaps (S
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by /sdd-spec 2026-11-04 from docs/runbooks/reviewer-registry.md and the distinct
+`**Reviewers**` of all 30 steps — stable unless /sdd-spec re-runs.)_
 
 | Role | Review Focus |
 |---|---|
@@ -56,4 +56,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec signal-map-instrumentation` — step ordering must keep the analysis steps clear of feature 215's regions (live_loop.py:733-760, :876-891) and coordinate 243/281 through merge-order.md
+`/sdd-review signal-map-instrumentation impl-spec` — validate the implementation spec (Mode B overlap scan against 215/243/281), then `/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby`
