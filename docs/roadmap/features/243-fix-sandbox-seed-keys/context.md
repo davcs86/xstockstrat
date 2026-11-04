@@ -524,3 +524,14 @@ Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
 ### Coverage check
 - Source scenarios: 5 (AC-1 to AC-5). Planned: 5 NEW, 0 DUP, 0 OVERLAP. Nothing was skipped.
 ```
+
+## Session 2026-11-04T22:07Z — sdd-review impl-spec (advisory)
+
+- Result: 2 failures, 8 warnings (advisory — did not block). Branch merged with main-dev; tree equals main-dev (migration 031, tests, acceptance suites already landed via #1334).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 5 (C-01/F-04): Codebase Evidence and Verification say migrations end at 030; main-dev also has 032–034 (031 landed 2026-10-28, 032–034 on 2026-10-29). Not a skip hazard unless an environment applied 032–034 before 031 — operator to confirm applied versions. — [ ] unaddressed
+  - Step 5: G1 staging gate was specified to precede the main-dev merge; 031 already merged (#1334). Operator to record staging state + production read-back, or record the deviation. — [ ] unaddressed
+  - Step 5: merge-order.md rows (97–99) still assume 243 merges first; reconcile. — [ ] unaddressed
+  - Spec header Status `pending` is stale vs 4 done steps; Step 3 anchors/_str_watcher check overtaken by feature 244; Step 1/4 line drift; Step 2 `tail -4` expectation stale. — [ ] unaddressed (done steps are F-09-locked; record only)
+- Overlap findings: no cross-feature collision; spec drift only.
+- C-16: acceptance suites for config and indicators already exist on main-dev (previous "awaiting confirm" note is superseded) — verify the promotion record, then close.
