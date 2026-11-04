@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-screener-symbol-isolation`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-screener-no-per-symbol-isolation-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, 4 notes; overlap PASS) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps; product-spec/acceptance amended per design (AC-1 reworded, FR-4, AC-4, AC-5) |

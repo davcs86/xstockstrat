@@ -63,7 +63,7 @@
 - Feature 229 (`quote_timeout_ms` 4s deadline, `@AC-5` GetPnL UNAVAILABLE, `@AC-8` omit missing symbols) is the budget and contract every 231 choice had to fit under; the quote-timeout invariant is now "must exceed max(batch, mark) + warm read".
 - Feature 178's `@AC-1` "batched equals serial" in `quote-fanout-batching.feature` was narrowed (signed C-16 CHANGE): it holds for two-sided quotes only, because serial `GetLatestQuote` and the stream compute no mark.
 - Feature 211 EDGAR price-join and 215/227 (`GetFundamentalsMulti` serial-loop hang class) were extended, not regressed.
-- Duplicate defect: #1257 filed `docs/reports/2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect.md` (SEV-2) mid-execution; it is a strict subset of Step 11, and its sidecar was stamped `triaged -> feature:231-fix-after-hours-positions-priced`.
+- Duplicate defect: #1257 filed `docs/reports/2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-portfolio-snapshot-risk-midquote-valuation-defect.md) (SEV-2) mid-execution; it is a strict subset of Step 11, and its sidecar was stamped `triaged -> feature:231-fix-after-hours-positions-priced`.
 - Overlap with `230-offline-account-full-pnl` (shipped as 240): same portfolio valuation functions; a soft WARN is recorded in `merge-order.md`. Feature number 230 was claimed by two in-flight branches, so this feature took 231.
 - The quote-timeout investigation was folded into feature 226 by the operator (2026-10-19).
 
