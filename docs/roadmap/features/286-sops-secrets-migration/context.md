@@ -482,3 +482,26 @@
 - Verification: all required sections present, `brew install sops age`, no GNU-only/bare-pip commands, markdownlint-cli2 0 issues (AC-14 inspection).
 - Files modified: `docs/runbooks/sops-secrets.md`, `docs/runbooks/CLAUDE.md`
 - Deviations: none
+
+### Step 20 — Docs sweep of the `docs/` tree [done]
+- `docs/setup/digitalocean.md`:
+  - the Key Identifiers note: the app is found by name, so the app ID is not a secret;
+  - the mTLS CA is `common.MTLS_CA`, shared by DO and homelab;
+  - JWT now comes from SOPS;
+  - the Step 9 secrets table is rebuilt: stale ALPACA/FMP/FINNHUB and DO_*_APP_ID rows dropped, SOPS_AGE_KEY / SOPS_OPERATOR_AGE_RECIPIENT / GH_PAT added, CONFIG/VAPID/OTEL/MTLS covered, DEV_/PROD_ rows marked legacy-fallback-only;
+  - the "how secrets are used" block now covers `secrets: inherit`, render and name resolution.
+  Operator shell-variable usages (`export DO_DEV_APP_ID=…` for manual doctl) are kept.
+- Other docs:
+  - `inter-service-mtls.md`: unified CA (reverses :105).
+  - `inter-service-mtls-rollout.md`: CA table.
+  - `ci-overview.md`: `sops-secrets` job row and deploy targets.
+  - `feature-workflow.md` and `launch-pdfs/infra-ci.md`: deploy diagrams.
+  - `add-data-source.md`: rows 5–8 are now the KEYS tuple + sops set + runbook row.
+  - `grafana-cloud.md`: the renderer and the OTEL prefix.
+  - `infra-cost-reduction.md`: bring-up secrets and caveats (stale ALPACA/MCP_AGENT_SECRET removed, app-ID caveat replaced by name resolution + reviewer gate).
+- Verification: the grep leaves only intended mentions (operator shell vars, runbook legacy-removal/preflight, the explicit reversal note). markdownlint
+  findings are unchanged or fewer per file versus main-dev.
+- Out of scope, noted: `docs/setup/digitalocean.md` § "MCP agent secret" still documents the removed `MCP_AGENT_SECRET` (stale since feature 147).
+  It is not part of this feature's surfaces; queued as a separate task.
+- Files modified: the 9 `docs/` files listed in Step 20
+- Deviations: none

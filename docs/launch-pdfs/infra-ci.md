@@ -185,7 +185,7 @@ push to main-dev
   └── .github/workflows/deploy-dev.yml
        ├── buf-push-dev    # publish proto as draft to BSR
        ├── build-images    # build all 15 service Docker images, push to GHCR
-       └── deploy          # doctl apps update $DO_DEV_APP_ID --spec .do/app.dev.yaml
+       └── deploy          # doctl apps update <xstockstrat-staging, by name> --spec <rendered .do/app.dev.yaml>
             └── DO redeploys components with TRADING_MODE=paper
 ```
 
@@ -196,12 +196,12 @@ push to main
   └── .github/workflows/deploy-prod.yml
        ├── buf-push        # publish proto (final) to BSR
        ├── build-images    # build all 15 service Docker images, push to GHCR
-       └── deploy          # doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
+       └── deploy          # doctl apps update <xstockstrat-production, by name> --spec <rendered .do/app.yaml>
             └── DO redeploys components with TRADING_MODE=live
 ```
 
 The deploy job is a reusable workflow (`.github/workflows/deploy.yml`) parameterized by:
-- `DO_APP_ID` — dev vs prod app
+- `environment` — `staging` vs `production` (the GitHub environment holding `SOPS_AGE_KEY`; the app is resolved by name)
 - `app_spec` — `.do/app.dev.yaml` vs `.do/app.yaml`
 - `image_tag` — short SHA of the commit being deployed
 - `BROKER_ACCOUNTS_ENCRYPTION_KEY` — separate dev / prod values pulled from GitHub secrets
@@ -321,7 +321,7 @@ Secret namespacing in config:
 
 GitHub Actions secrets injected at deploy time:
 - `DIGITALOCEAN_ACCESS_TOKEN` (deploy auth)
-- `DO_DEV_APP_ID` / `DO_PROD_APP_ID`
+- `SOPS_AGE_KEY` (environment secret) — decrypts `secrets/<env>.enc.yaml` (feature 286)
 - `DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` / `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`
 - `BUF_TOKEN` (BSR proto publishing)
 

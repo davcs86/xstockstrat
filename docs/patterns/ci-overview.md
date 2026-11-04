@@ -20,6 +20,7 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 | `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
+| `sops-secrets` | `scripts/sops-secrets.test.sh` (hermetic, throwaway age keys) plus ruff on `scripts/sops_secrets.py` / `scripts/do-render-app-spec.py`: SOPS resolve/build/render (incl. the AC-8 reverse-substitution parity test on both real `.do/app*.yaml`) and the static rules pinning every `LEGACY_*` fallback line in the deploy workflows (on the `sops` filter, `homelab`, `ci`) | — |
 | `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
 | `otel-signals` | `scripts/check-otel-produced-signals.sh` + its `.test.sh`: alert/dashboard queries and observability docs name only exported signals | — |
 
@@ -48,8 +49,8 @@ Some guard rails run **locally** (git hooks / Claude subagent), deliberately **n
 
 | Branch | Trigger | Target |
 |---|---|---|
-| `main-dev` | push | DigitalOcean App Platform **dev** (`DO_DEV_APP_ID` / `.do/app.dev.yaml`) |
-| `main` | push | DigitalOcean App Platform **prod** (`DO_APP_ID` / `.do/app.yaml`) |
+| `main-dev` | push | DigitalOcean App Platform **dev** (app `xstockstrat-staging`, resolved by name / `.do/app.dev.yaml`; secrets from `secrets/staging.enc.yaml`) |
+| `main` | push | DigitalOcean App Platform **prod** (app `xstockstrat-production`, resolved by name / `.do/app.yaml`; secrets from `secrets/production.enc.yaml`; `production` reviewer gate) |
 | `main-dev` | push | Homelab **staging** VM (`deploy-homelab.yml`, GitHub environment `staging`) |
 | `main` | push | Homelab **production** VM (`deploy-homelab.yml`, GitHub environment `production`, required reviewers, deployment branches `main` only) |
 

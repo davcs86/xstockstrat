@@ -1026,7 +1026,7 @@ grep -n "brew install sops age" docs/runbooks/sops-secrets.md && grep -n "sops-s
 
 ### Step 20 — docs: Docs sweep of the `docs/` tree (legacy secret names, CA location, deploy wiring)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/setup/digitalocean.md` — modify (`:48`, `:55`, `:238`, `:276`, `:368-369`, `:385`, `:400-403`, `:463-464`, `:477-509` secrets table, `:526-531`, `:564-579`)

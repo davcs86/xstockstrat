@@ -166,7 +166,7 @@ Commit and push — the next deploy will have OTel active.
 
 ### 4c. How the substitution works
 
-The deploy chain (`deploy-dev.yml` / `deploy-prod.yml` → `deploy.yml`) passes the environment-specific GitHub Secrets into the reusable workflow, which `sed`+Python-replaces the `YOUR_DEV_*` / `YOUR_PROD_*` placeholder tokens in the app spec before calling `doctl apps update`. The `prod-up.yml` (manual prod bring-up) uses `scripts/do-inject-prod-secrets.py` for the same substitution.
+The deploy chain (`deploy-dev.yml` / `deploy-prod.yml` → `deploy.yml`) and the manual prod bring-up (`prod-up.yml`) render the app spec with `scripts/do-render-app-spec.py`. It reads `common.OTEL_EXPORTER_OTLP_*` from `secrets/<env>.enc.yaml` (falling back to the `DEV_*` / `PROD_*` GitHub Secrets) and replaces the `YOUR_DEV_*` / `YOUR_PROD_*` placeholder tokens before `doctl apps update` / `create` (see `docs/runbooks/sops-secrets.md`).
 
 Each component inherits the global `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` and sets its own `SERVICE_NAME`.
 
@@ -174,7 +174,7 @@ Resource attributes (`service.name`, `deployment.environment`, `platform`) are s
 
 **All runtimes (Go, Python, Node.js, Next.js) use OTLP/HTTP**, configured only by these env vars: the SDK appends `/v1/traces` to the gateway URL (`…/otlp` → `…/otlp/v1/traces`), uses TLS for the `https://` scheme, and sends the `Authorization` header. Never pass an endpoint/url option to an exporter in code — it overrides all three (feature 226).
 
-> **GitHub Secret format: just `Basic <token>`** — the same format as the local-dev `.env`. The deploy workflow automatically prepends `Authorization=` before injecting the value into the DO app spec, so the OTel SDK (which expects `key=value` pairs) receives the correct `Authorization=Basic <token>` format. Both `deploy.yml` and `scripts/do-inject-prod-secrets.py` apply this transform; if the value already starts with `Authorization=` it is left as-is.
+> **Secret format: just `Basic <token>`** — the same format as the local-dev `.env`. `scripts/do-render-app-spec.py` automatically prepends `Authorization=` before injecting the value into the DO app spec, so the OTel SDK (which expects `key=value` pairs) receives the correct `Authorization=Basic <token>` format. If the value already starts with `Authorization=` it is left as-is.
 
 ---
 
