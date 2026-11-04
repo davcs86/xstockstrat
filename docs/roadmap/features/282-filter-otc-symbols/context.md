@@ -202,3 +202,13 @@
   - 037 pair names and content confirmed (one INSERT, fixed column order, staging-then-production rows of 8 literals + NULL, `ON CONFLICT … DO NOTHING`; down = one global-row DELETE). Recorded that 038/039 must keep that shape because `INSERT_RE` is exact.
   - Confirmed unchanged: five `it()` cases, `KEY` inline, `LIT`/`ROW`/`INSERT_RE` names, test glob `package.json:12-13`, `.jscpd.json:29`.
 - Noted, not edited (outside W1-W8 scope): Step 7 Codebase Evidence `markWarm` call-site lines are off by one against the current tree (`:263, :546, :576, :689, :750, :869`); Step 9/10 cite `newSvc` at `watchlist_service_test.go:275` (main-dev), `:293` on 281's branch.
+
+## Session 2026-11-04T22:07Z — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 4 warnings (advisory — did not block). 17 steps, all pending.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 2: Files lists wildcard generated dirs (marketdatav1connect/*, portfolio/v1/*, gen/ts/dist/); spec self-exempts as generated output — waive or enumerate. — [ ] unaddressed
+  - Step 5: 6 files / 15 instructions; consider splitting migration 038 + wiring proof from the Go code. — [ ] unaddressed
+  - Steps 9, 10, 16: depend on feature 281 symbols (expiryIntentFor, ExpiryIntent, fakeWatchlistStore.lastIntent, migrationSql.ts) not in this tree. 281 must land on main-dev first; re-verify anchors, raise a blocker rather than adapt. — [ ] unaddressed
+  - Step 7: line citations ~1 line stale; re-anchor at execution. — [ ] unaddressed
+- Overlap findings: WARN, no FAIL. No migration/proto/config-key collision (038/039 free; 037 is 281). Hard ordering 281 -> 282 per merge-order row 92 (optionally extend it to name the migrationSql.ts / signalPruneIntervalSeedMigration.test.ts test dependency).
