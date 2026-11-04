@@ -74,3 +74,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Teardown after Step 8: `/context-forge:context-constitution refresh` scoped to the three touched docs (or manual reconciliation recorded in the PR body).
 - [ ] Post-merge dev smoke of marketdata and config (operator).
 - [ ] Re-check Loki for the dead symbols after 282 lands; AC-1's "not re-requested" saves zero vendor calls on the multi-symbol path.
+
+---
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings, 0 Floor risks (advisory — did not block). Criteria pass: PASS WITH WARNINGS; overlap scan: no identical config key / proto field / migration number with any in-flight feature, no FAIL-level overlap.
+- Verified by the orchestrator (the overlap agent had no shell): config migration `035` is absent on `origin/main-dev` (last is `034`) and on every `origin/feature/*` branch; feature 281's branch carries config migration `037`, so numbers 035/036 may be claimed by others' plans — a gap is not a collision, but re-check immediately before merge.
+- Unresolved ⚠ carried into execution:
+  - Step 1 / F-01: re-verify `035` against `origin/main-dev` (and open feature branches) immediately before merge; renumber if taken — [ ] unaddressed. Migration needs DBA + service-owner + config-team approval (root Approval Flow).
+  - Step 1 verification: the line expects `check-config-wiring.mjs --declared-migration` to print "PENDING"; the flag exists but the wording was not confirmed — treat as "exit 0" — [ ] unaddressed.
+  - Steps 2/3 and 6/7 (C-08/P-06/B3): paired tests numbered after their service step; red-before-green is carried by prose, not by order — run the test step first (write it to fail) or execute each pair together — [ ] unaddressed.
+  - Step 6 verification: the `-run` regex targets `TestBarHold` / `TestResolveBarIngestBackoff`, which exist only after Step 7 — the step cannot go green alone; run Steps 6 and 7 together — [ ] unaddressed.
+  - Step 6 (accepted trade-off): `s.repo.InsertBars` → `s.barsStore.InsertBars` with no nil guard — a future `&MarketDataService{}` literal that returns bars will panic by design (existing tests `:1156`/`:1204` return no bars, so stay green) — [ ] acknowledged.
+  - Step 6 (C-18, minor): `applyBarCycle` takes 9 parameters and returns 5 values; consider a small result struct — [ ] unaddressed (waivable).
+- Overlap findings (WARN, rebase-only): `marketdata_service.go:109` `barsStore` comment — 291 Step 6 instr. 7 and 290 Step 3 item 3 rewrite the same line (certain textual conflict; whichever merges second re-reads and states both consumers); `configServiceImpl.ts` `SCALAR_BOUNDS_REGISTRY` insertion after `last_close_lookback_days` (`:148`) and `setConfigScalarBounds.test.ts:287-288` `TIMEOUT_KEY_FORMS` — same anchor as 281 (Steps 13/14) and 282 (Step 2), different keys; `config-governance.md` log and marketdata `CLAUDE.md`/`context-constitution.md` edits in different sections; latent migration-number race with draft feature 293 (seed migration for `analysis.engine.max_strategies_per_cycle`, no number yet). Existing merge-order row (291 ↔ 282) stands.
+- Proposed `merge-order.md` rows (NOT written — shared file, awaiting operator confirmation): (a) 290 ↔ 291 soft rebase-only for the `:109` comment; (b) 291 ↔ 293 migration-ordering: whichever merges second renumbers to max(origin/main-dev)+1 just before merge.
