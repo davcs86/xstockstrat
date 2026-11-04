@@ -50,12 +50,11 @@ Postgres cluster `xstockstrat` is a separate resource and is never touched.
 `doctl apps create` does *not* inherit dashboard-set SECRET values the way
 `doctl apps update` does:
 
-`PROD_JWT_SECRET`, `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`, `PROD_ALPACA_API_KEY`,
-`PROD_ALPACA_API_SECRET`, `MCP_AGENT_SECRET`, plus `DIGITALOCEAN_ACCESS_TOKEN` and
-(optional) `DO_PROD_PROJECT_ID`. `PROD_FMP_API_KEY` and `PROD_FINNHUB_API_KEY` are
-also optional — their fundamentals pipelines are off by default
-(`marketdata.fmp.enabled=false`, `marketdata.finnhub.enabled=false`, feature 129),
-so an unset key is a valid state. Injection is handled by
+`PROD_JWT_SECRET`, `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`,
+`PROD_CONFIG_SECRETS_ENCRYPTION_KEY`, plus `DIGITALOCEAN_ACCESS_TOKEN` and
+(optional) `DO_PROD_PROJECT_ID`. The vendor credentials (Alpaca/FMP/Finnhub) are
+not deploy secrets — they are encrypted config rows set post-deploy — and
+`MCP_AGENT_SECRET` is retired (the agent signs with `JWT_SECRET`), both per feature 147. Injection is handled by
 `scripts/do-inject-prod-secrets.py`; a missing required secret logs a warning
 and the component comes up with an unset value.
 
