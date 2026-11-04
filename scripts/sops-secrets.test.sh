@@ -574,6 +574,111 @@ for l in open(sys.argv[1]):
   echo "render: ok"
 }
 
+# expected_legacy <format|prod|homelab|bootstrap>: the exact LEGACY_* lines a workflow must carry, derived from KEYS.
+expected_legacy() {
+  python3 - "$1" <<'PY'
+import sys
+sys.path.insert(0, "scripts")
+import sops_secrets as s
+mode = sys.argv[1]
+target = s.HOMELAB if mode == "homelab" else s.DO
+ns_of = {n: ns for ns, n, _, _ in s.KEYS}
+prefix = "matrix.prefix" if mode == "bootstrap" else "env.P"
+for legacy in s.legacy_names(target):
+    k = legacy.removeprefix("LEGACY_")
+    k = "app_env" if k == "APP_ENV" and target == s.HOMELAB else k
+    if mode == "prod":
+        rhs = "secrets.DO_PROD_PROJECT_ID" if k == "PROJECT_ID" else f"secrets.PROD_{k}"
+    elif ns_of[k] == "homelab":
+        rhs = "vars.TS_AUTHKEY_EXPIRES" if k == "TS_AUTHKEY_EXPIRES" else f"secrets.{legacy.removeprefix('LEGACY_')}"
+    elif k == "PROJECT_ID":
+        rhs = f"secrets[format('DO_{{0}}_PROJECT_ID', {prefix})]"
+    else:
+        rhs = f"secrets[format('{{0}}_{k}', {prefix})]"
+    print(f"{legacy}: ${{{{ {rhs} }}}}")
+PY
+}
+# check_legacy <file> <mode> <case>: every LEGACY_ line exactly as expected, each name once.
+check_legacy() {
+  local want got
+  want="$(expected_legacy "$2" | sort)"
+  got="$(grep -E '^[[:space:]]*LEGACY_[A-Z0-9_]+:' "$1" | sed -E 's/^[[:space:]]+//' | sort)"
+  [ -n "$want" ] && [ "$got" = "$want" ] || fail "$3: LEGACY_ lines in $1 differ from KEYS:
+$(diff <(printf '%s\n' "$want") <(printf '%s\n' "$got"))"
+}
+COMMON_RE='JWT_SECRET|BROKER_ACCOUNTS_ENCRYPTION_KEY|CONFIG_SECRETS_ENCRYPTION_KEY|MTLS_CA|SLACK_WEBHOOK_URL|SENDGRID_API_KEY|VAPID_PRIVATE_KEY|VAPID_PUBLIC_KEY|VAPID_SUBJECT|OTEL_EXPORTER_OTLP_ENDPOINT|OTEL_EXPORTER_OTLP_HEADERS'
+P_EXPR="\${{ inputs.environment == 'production' && 'PROD' || 'DEV' }}"
+check_p() {
+  [ "$(grep -cE '^[[:space:]]*P:' "$1")" = 1 ] || fail "$2: expected exactly one P: line in $1"
+  [ "$(yq e ".jobs.$3.env.P" "$1")" = "$P_EXPR" ] || fail "$2: job $3 env P in $1"
+}
+no_unprefixed() {
+  if grep -nE "secrets\.($COMMON_RE)\b" "$1"; then fail "$2: unprefixed common secret in $1"; fi
+}
+
+group_deploy() {
+  need yq python3
+  local wf=.github/workflows/deploy.yml f run rows rc e
+  for f in "$wf" .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml; do
+    yq e 'true' "$f" >/dev/null || fail "deploy: $f does not parse"
+  done
+  check_legacy "$wf" format deploy
+  check_p "$wf" deploy deploy
+  no_unprefixed "$wf" deploy
+  if grep -nE 'DO_(DEV_|PROD_)?APP_ID' "$wf"; then fail "deploy: DO_*APP_ID still in $wf"; fi
+  [ "$(yq e '.on.workflow_call | has("secrets")' "$wf")" = false ] || fail "deploy: workflow_call still declares secrets"
+  [ "$(yq e '.on.workflow_call.inputs.environment.required' "$wf")" = true ] || fail "deploy: environment input"
+  # shellcheck disable=SC2016 # the literal expression is asserted
+  [ "$(yq e '.jobs.deploy.environment' "$wf")" = '${{ inputs.environment }}' ] || fail "deploy: job environment binding"
+  [ "$(yq e '.jobs.validate | has("environment")' "$wf")" = false ] || fail "deploy: validate must have no environment"
+  [ "$(yq e '.jobs.deploy.needs' "$wf")" = validate ] || fail "deploy: deploy must need validate"
+  # AC-17/AC-21: the real resolve-app-id step against a stub doctl
+  run="$(yq e '.jobs.deploy.steps[] | select(.id == "resolve-app-id") | .run' "$wf")"
+  [ -n "$run" ] && [ "$run" != null ] || fail "deploy: no resolve-app-id step"
+  printf '%s\n' "$run" >"$work/appid.sh"
+  mkdir -p "$work/stub"
+  for rows in 0 1 2; do
+    {
+      echo '#!/bin/sh'
+      echo 'echo "x9 xstockstrat-production"'
+      [ "$rows" -ge 1 ] && echo 'echo "app-new xstockstrat-staging"'
+      [ "$rows" -ge 2 ] && echo 'echo "app-two xstockstrat-staging"'
+    } >"$work/stub/doctl"
+    chmod +x "$work/stub/doctl"
+    rm -f "$work/genv" "$work/gsum"
+    rc=0
+    env -i PATH="$work/stub:$PATH" HOME="$HOME" APP_NAME=xstockstrat-staging GITHUB_ENV="$work/genv" \
+      GITHUB_STEP_SUMMARY="$work/gsum" bash -eo pipefail "$work/appid.sh" >"$work/aout" 2>&1 || rc=$?
+    case "$rows" in
+    1)
+      [ "$rc" = 0 ] || fail "AC-17: 1 match exited $rc ($(cat "$work/aout"))"
+      grep -qx 'APP_ID=app-new' "$work/genv" || fail "AC-17: APP_ID not exported"
+      grep -qF 'app: xstockstrat-staging → app-new' "$work/gsum" || fail "AC-17: summary line"
+      ;;
+    *)
+      [ "$rc" != 0 ] || fail "AC-21: $rows matches accepted"
+      grep -qF "expected exactly 1 app named xstockstrat-staging, found $rows" "$work/aout" || fail "AC-21: message for $rows"
+      ;;
+    esac
+  done
+  # callers: secrets inherit + environment; homelab caller jobs and their gates intact
+  for e in staging production; do
+    f=.github/workflows/deploy-dev.yml
+    [ "$e" = production ] && f=.github/workflows/deploy-prod.yml
+    [ "$(yq e '.jobs.deploy.secrets' "$f")" = inherit ] || fail "deploy: $f job deploy must use secrets: inherit"
+    [ "$(yq e '.jobs.deploy.with.environment' "$f")" = "$e" ] || fail "deploy: $f with.environment"
+    if grep -nE 'DO_(DEV|PROD)_APP_ID' "$f"; then fail "deploy: $f still passes the app ID"; fi
+    [ "$(yq e '.jobs.deploy-homelab.uses' "$f")" = ./.github/workflows/deploy-homelab.yml ] || fail "deploy: $f homelab uses"
+    [ "$(yq e '.jobs.deploy-homelab.secrets' "$f")" = inherit ] || fail "deploy: $f homelab secrets"
+    [ "$(yq e '.jobs.deploy-homelab.with.environment' "$f")" = "$e" ] || fail "deploy: $f homelab environment"
+  done
+  [ "$(yq e '.jobs.deploy-homelab.if' .github/workflows/deploy-dev.yml)" = "vars.HOMELAB_STAGING_ENABLED == 'true'" ] ||
+    fail "deploy: deploy-dev homelab gate"
+  [ "$(yq e '.jobs.deploy-homelab.if' .github/workflows/deploy-prod.yml)" = "vars.HOMELAB_PRODUCTION_ENABLED == 'true'" ] ||
+    fail "deploy: deploy-prod homelab gate"
+  echo "deploy: ok"
+}
+
 groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"

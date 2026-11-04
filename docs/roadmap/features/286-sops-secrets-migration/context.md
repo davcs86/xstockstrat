@@ -353,3 +353,12 @@
 - PARITY RECORD (286 step 8): identical
 - Files modified: `scripts/do-render-app-spec.py`
 - Deviations: none
+
+### Step 9 — Static rules for `deploy.yml` and its callers (group `deploy`) [done]
+- Shared helpers: `expected_legacy` (exact LEGACY_ line texts derived from KEYS, giving 12 for DO and 14 for homelab), `check_legacy`, `check_p`, `no_unprefixed`.
+  Group `deploy`: yq parse, LEGACY_ RHS pins, a single job-level P, no unprefixed common secrets, no DO_*APP_ID, no workflow_call secrets, the environment
+  input plus binding, a validate job, and AC-17/AC-21 run permanently through the extracted `resolve-app-id` step against a stub doctl (0/1/2 matches, `bash -eo pipefail`
+  like Actions). Callers use `secrets: inherit` and `with.environment`, with the homelab jobs and gates intact (content assertions).
+- TDD RED: `ASSERT FAIL: deploy: LEGACY_ lines in .github/workflows/deploy.yml differ from KEYS` (none exist today). shellcheck + shfmt clean.
+- Files modified: `scripts/sops-secrets.test.sh`
+- Deviations: none

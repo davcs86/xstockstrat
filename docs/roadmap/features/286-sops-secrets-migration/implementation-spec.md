@@ -506,7 +506,7 @@ grep -n "^- PARITY RECORD (286 step 8):" docs/roadmap/features/286-sops-secrets-
 
 ### Step 9 — test: Static rules for `deploy.yml` and its callers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows`
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify (group `deploy`)
