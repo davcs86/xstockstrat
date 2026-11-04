@@ -8,6 +8,7 @@
 **Last Updated**: 2026-11-04
 **Committed to main**: 0ef77aa123c69b59d022e2edcac45009599595a7
 **Launched date**: 2026-11-04
+**Archived**: 2026-11-04
 
 ---
 
@@ -22,15 +23,16 @@
 | 2026-11-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started (Step 1 done) |
 | 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done (sequential). Suite 12/12 groups; AC-1..AC-4 promoted to platform.feature |
 | 2026-11-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #1422; committed 0ef77aa123c69b59d022e2edcac45009599595a7 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md): bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature): regression scenarios (`@AC-*`, C-15)
-- [Recon](recon.md): codebase dossier
-- [Design](design.md): approved design
-- [Implementation Spec](implementation-spec.md): 10 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature): regression scenarios (`@AC-*`, C-15); scenarios already promoted to platform.feature (@feature-287)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md): session history, decisions, deviations
 
 ---
