@@ -35,6 +35,7 @@ no new port (so no `docker-compose.yml` / `.do/app*.yaml` change).
 | AC-9 | Step 7 (tests 1, 4) |
 | AC-10 | Step 7 (test 10, lone symbol) |
 | AC-11 | Step 3 (bounds half) + Step 5 and Step 7 (snapshot-built reader half) |
+| AC-12 | Step 7 (test 13) |
 
 ### Corrections to `design.md` found while grounding (recorded, not silently applied)
 
@@ -306,7 +307,7 @@ grep -n "barsStore.InsertBars" services/xstockstrat-marketdata/internal/service/
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11`
+**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12`
 
 **Instructions**: Create `bar_hold_test.go` (package `service`). Fixtures: `end0 = 2026-11-04 15:00 UTC` (a Wednesday session); cycle `k` runs at `end0 + k*5m` with window `[end-48h, end]`; service `&MarketDataService{budgetCfg: &fakeCfg{ints: {"marketdata.stream.bar_ingest_backoff_ms": 3600000}}, barsStore: &recordingBarsStore{}}` (D = 1 h = 12 cycles). Inline fakes: `recordingBarsSource` embeds `*fakeBatchBarsSource`, adds `requested [][]string`, `multiErr error` (forces the per-symbol path), `errs map[string]error`, and a per-symbol `GetBars` that returns the seeded bars; `recordingBarsStore` records inserted bars (implements `barsBatchStore`). Helper `runCycles(s, src, symbols, from, n)`. Symbols: `LIVE1..3` (return bars) and `DEAD` (never). **Every "no hold" test carries a positive control in the same test** (the same setup with an informative cycle must hold `DEAD`), so a never-holds implementation cannot pass. Tests:
 1. `TestBarHold_HoldsAfterWallClockSpan` — `DEAD` is in every request for cycles 0..12, absent 13..23, requested again at cycle 24 (probe at hold time + 1 h); an empty probe reschedules exactly `end + D` and the gap stays 1 h on the next period (no doubling). **@AC-1, @AC-9**
@@ -315,12 +316,13 @@ grep -n "barsStore.InsertBars" services/xstockstrat-marketdata/internal/service/
 4. `TestBarHold_WholeEmptyCyclesNeutral` — every symbol empty (weekend) for hours → no hold; positive control with a live majority holds `DEAD`; a held `DEAD` probed in a whole-empty cycle stays held with `nextProbe == end + D` (read `s.barHold` under `warmMu`). **@AC-2, @AC-9**
 5. `TestBarHold_PartialOutageNeverHolds` — four symbols, ≤ half return bars for hours → no hold; positive control (3 of 4 return) holds; the exactly-half case (2 of 4) is non-informative. **@AC-3**
 6. `TestBarHold_FetchErrorsNotCounted` — `multiErr` forces the per-symbol path; a symbol whose fetch errors for hours is never held and creates no entry (positive control: the same symbol empty-not-errored gets held); a held probe that errors is retried the next cycle and stays held. **@AC-5**
-7. `TestBarHold_ZeroValueServiceReachesHoldAndRecovery` — `&MarketDataService{}` (nil `budgetCfg`, default 6 h, nil maps, store set) run > 72 cycles with a live peer reaches hold, then recovery. Guards lazy init. **@AC-1, @AC-4**
+7. `TestBarHold_ZeroValueServiceReachesHoldAndRecovery` — `&MarketDataService{}` (nil `budgetCfg`, default 6 h, nil maps, store set) run **at least 150 cycles** with a live peer reaches hold (with the 6 h default, hold at cycle 72) and then recovery (first probe at cycle 144). A shorter run never reaches recovery and would pass vacuously. Guards lazy init. **@AC-1, @AC-4**
 8. `TestBarHold_HeldSymbolStaysWarm` — characterization (labelled, not RED): a held symbol is still in `warmSnapshot()` and `markWarm` is unchanged; no `GetBars`/`BatchGetBars` response contract is touched (existing `@AC-3 @feature-191` / `@AC-53 @feature-240` tests stay green unchanged). **@AC-6**
 9. `TestBarHold_EntryDroppedWhenSymbolLeavesList` — held `DEAD` absent from the `symbols` argument for one cycle loses its entry; re-adding it is requested the next cycle. **@AC-7**
 10. `TestBarHold_DisabledAndLoneSymbol` — key `0` (and `-5`): every symbol requested every cycle and `s.barHold` is nil/empty; a warm set containing only `DEAD` is requested every cycle and never held. **@AC-8, @AC-10**
 11. `TestBarHold_PositiveFeedbackLiftsRatio` — once `DEAD` is held it leaves `active`, lifting the informative ratio for the remaining symbols (documents the accepted behaviour). **@AC-1**
 12. `TestResolveBarIngestBackoff` — table: nil cfg → 6 h; stored `0` → 0 (disabled); negative → 0; stored `1800000` → 30 m (via `fakeCfg`). **Snapshot-built reader test (@AC-11):** `config.NewSnapshotWatcher` over `map[string]*configv1.ConfigValue{"marketdata.stream.bar_ingest_backoff_ms": {Value: &configv1.ConfigValue_IntVal{IntVal: 1800000}}}` → `resolveBarIngestBackoff(w) == 30*time.Minute`, and a stored `0` → `0` through the real `Watcher` (`fakeCfg` alone does not satisfy this). **@AC-11**
+13. `TestBarHold_ProbesOnlyRequestKeepsHold` — a held `DEAD` whose due probe is the ONLY requested symbol (peers left the list): the cycle is non-informative, creates no entry and does not wipe the held symbol; an empty probe reschedules `nextProbe = end + D`. Positive control: the same setup with live peers present behaves per `AC-9`. **@AC-12**
 13. Before Step 6 these fail (RED): `ingestRecentBarsForTimeframe` requests every symbol every cycle, so tests 1-6, 9 fail and `resolveBarIngestBackoff` is undefined (compile failure).
 
 Note: `internal/service` is an **excluded** package in the CI coverage filter (`ci.yml:298`), so this step adds no measured coverage; the threshold is still verified so nothing regresses ("New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient").

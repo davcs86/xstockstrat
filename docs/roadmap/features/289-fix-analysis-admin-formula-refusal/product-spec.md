@@ -28,15 +28,21 @@ About 4.2k matching log lines in 7 days, in two bursts (2026-10-31: 3,298; 2026-
 ## Functional Requirements
 
 - **FR-1:** When indicators answers a component `ExecuteFormula` with `PERMISSION_DENIED` while `_compute_opportunities`
-  evaluates a candidate, the candidate is **not** added to `fetch_failed` and its row is **not** data-unavailable; it is
-  marked as an **unreadable formula** (a state distinct from data-unavailable and from an evaluated `0/N` quiet row).
-  A `NOT_FOUND` on the same call keeps its existing skip behaviour (unchanged).
+  evaluates a candidate, the row is **not** data-unavailable; it is marked as an **unreadable formula** (a state distinct
+  from data-unavailable and from an evaluated `0/N` quiet row). Other strategies on the same symbol evaluate normally.
+  The row stays **visible** in `ListOpportunities` at the default `min_conviction` — like the `muted`, `unavailable` and
+  `fundamentals_unavailable` markers it is exempt from the conviction floor, and it sinks in the ranking rather than
+  being dropped. A `NOT_FOUND` on the same call keeps its existing skip behaviour (unchanged).
 - **FR-2:** The unreadable-formula state is a visible, distinct reason on the opportunity row, exposed to consumers
-  (UI and agent) — not only in logs.
+  (UI and agent) — not only in logs. The marker's field name and shape are decided in `/sdd-design` (a single boolean
+  like `data_unavailable`, or a closed-set `reason` enum — C-04 prefers an enum); the scenarios say "the
+  unreadable-formula marker".
 - **FR-3:** `EvaluateReadiness` returns OK for a symbol whose component formula is unreadable (it does not abort and does
   not log ERROR `Unexpected [AioRpcError]`); that symbol's result is `0/0` conditions with the unreadable-formula marker
-  and no fabricated PASS or FAIL. Every other caller of `compute_readiness_row` (`GetWatchlistReadiness`, the
-  readiness materializer) degrades the same way (C-10(b): no sibling path left stale).
+  and no fabricated PASS or FAIL. Every other caller of `compute_readiness_row` degrades the same way (C-10(b): no
+  sibling path left stale): `_kick_readiness_refresh` (which backs the cache-only `GetWatchlistReadiness`), the readiness
+  materializer, and the 300 s surgical heal `_retry_unavailable_symbols` (which must not re-stamp an unreadable row as
+  "unavailable" nor retry it endlessly).
 - **FR-4:** Genuine indicators outages (`UNAVAILABLE`, `DEADLINE_EXCEEDED`) keep the feature-185 data-unavailable
   behaviour exactly (including the 300 s surgical retry).
 - **FR-5:** Unchanged: indicators' AC-28 admin-execute refusal; the backtest `raise_unreadable=True` mapping
@@ -55,12 +61,14 @@ About 4.2k matching log lines in 7 days, in two bursts (2026-10-31: 3,298; 2026-
 ## Root Cause Hypothesis
 
 Feature 275 added `raise_unreadable` handling only on the backtest evaluator (`servicer.py:2116`); the opportunities
-and readiness paths use the default evaluator, whose `_execute_formula` (`evaluator.py:226-273`) re-raises
+and readiness paths use the default evaluator, whose `_execute_formula` (`evaluator.py:256-273`) re-raises
 `PERMISSION_DENIED`, plus a broad `except grpc.RpcError` that folds it into "outage". Simply passing
 `raise_unreadable=True` would raise `FormulaExecutionError`, which is documented to propagate and would abort
 `EvaluateReadiness` instead of fixing it — the target behaviour is per-symbol degradation; the mechanism is a design
 decision. **Unconfirmed:** which caller identity / scheduled compute triggered the 2026-10-31 and 2026-11-02 bursts —
-a recon question for `/sdd-design`.
+a recon question for `/sdd-design`. Another design input: the unreadable verdict is persisted in `readiness_cache`
+(FAST-served within `stale_after_seconds`) — recon decides how the marker is persisted and how it heals when the
+formula's visibility changes.
 
 ## Affected Services
 
@@ -69,11 +77,12 @@ xstockstrat-ui (consumer surface), xstockstrat-agent (consumer surface).
 
 ## Consumer Surface(s)
 
-- [ ] `xstockstrat-ui` `/insights`: the opportunities queue and the watchlist readiness panel show a distinct
-  "formula not readable by you" state (not the data-unavailable state, not a `0/N` quiet row), using the canonical state
-  primitives (C-17). Own implementation step.
-- [ ] `xstockstrat-agent` MCP tool `list_opportunities` (and the readiness reads that surface the same row): exposes the
-  unreadable-formula marker on each row. Own implementation step.
+- [x] `xstockstrat-ui` `/insights/opportunities`, `/insights/watchlists` (readiness panel), the Signal-detail "Why this
+  fired" panel (an `EvaluateReadiness` consumer) and the mobile sections (`components/mobile/SectionRenderer.tsx`,
+  `sections.ts`, which also consume `dataUnavailable`): show a distinct "formula not readable by you" state (not the
+  data-unavailable state, not a `0/N` quiet row), using the canonical state primitives (C-17). Own implementation step.
+- [x] `xstockstrat-agent` MCP tool `list_opportunities` (the agent has no readiness tool): exposes the unreadable-formula
+  marker on each row. Own implementation step.
 
 (Both are in scope; each earns its own step in the implementation spec — C-14.)
 

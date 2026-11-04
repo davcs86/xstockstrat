@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` -> `draft` | /sdd-triage | Durable follow-up to the Track B config write (operator asked for both) |
+| 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved after revision (first pass FAIL: 5 blockers; second pass PASS WITH WARNINGS, 7 warnings all addressed) |
 
 ---
 
@@ -32,4 +33,4 @@
 
 ## Next Action
 
-`/sdd-design fix-analysis-live-loop-budget-seed` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-analysis-live-loop-budget-seed` — full design recommended (a config-service DB migration is an escalate signal; analysis + config = 2 services)

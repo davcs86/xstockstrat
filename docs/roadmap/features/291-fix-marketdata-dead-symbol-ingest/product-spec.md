@@ -51,7 +51,7 @@ feature is that follow-up.
 ## Affected Services
 
 xstockstrat-marketdata (ingester, key reader); xstockstrat-config (seed migration and `SetConfig` bounds for the new
-key). Observed (no code change): xstockstrat-analysis live loop.
+key). Observed only (no code change): xstockstrat-analysis (live loop).
 
 ## Consumer Surface(s)
 

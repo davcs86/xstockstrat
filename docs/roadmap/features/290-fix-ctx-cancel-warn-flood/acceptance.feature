@@ -42,7 +42,7 @@ Feature: fix-ctx-cancel-warn-flood (bug fix)
     Given a cold GetBars request for "AAPL" timeframe "1d" whose live fetch returns 2 bars
     And the client cancels the request after the live fetch
     When fetchAndCacheBars runs
-    Then the bar store receives the 2 bars with timeframe "1d" on a context that is not canceled and whose deadline is no later than the grace
+    Then the bar store receives the 2 bars with timeframe "1d" on a context that is not canceled and whose deadline is no later than 5 seconds after the call
     And no "GetBars: cache insert failed" WARN is logged and no re-read is made
     And the 2-bar live page is returned with no error
 
@@ -86,5 +86,5 @@ Feature: fix-ctx-cancel-warn-flood (bug fix)
     Given a cold GetBars request for "AAPL" timeframe "1d" returning 2 bars with a live client
     And the cache write is in flight
     When the client cancels during the write
-    Then the write completes within the grace and the bars are persisted with timeframe "1d"
+    Then the write completes within 5 seconds and the bars are persisted with timeframe "1d"
     And no WARN is logged, no re-read is made and the 2-bar live page is returned
