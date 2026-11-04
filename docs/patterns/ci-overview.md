@@ -54,7 +54,10 @@ Some guard rails run **locally** (git hooks / Claude subagent), deliberately **n
 | `main-dev` | push | Homelab **staging** VM (`deploy-homelab.yml`, GitHub environment `staging`) |
 | `main` | push | Homelab **production** VM (`deploy-homelab.yml`, GitHub environment `production`, required reviewers, deployment branches `main` only) |
 
-DO deployment waits up to 15 minutes for the App Platform phase to reach `ACTIVE`.
+DO deployment waits up to 15 minutes for the App Platform phase to reach `ACTIVE`; a `SUPERSEDED` phase (a newer
+deployment of the same app took over) ends the wait as success with a `::warning::`. Deploys to one app serialise on the
+`deploy-<environment>` concurrency group in `deploy.yml`, and a deploy overtaken by a newer push while still queued ends
+cancelled, not failed.
 
 The homelab jobs run beside the DO deploy from the same `docker-build.yml` images: staging while the repository variable
 `HOMELAB_STAGING_ENABLED` is `true`, production while `HOMELAB_PRODUCTION_ENABLED` is `true` (each switch also builds
