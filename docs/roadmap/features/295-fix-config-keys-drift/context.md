@@ -322,3 +322,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     - FR-14 must amend C-05 in `docs/sdd/constitution.md` in the same PR;
     - FR-11 coverage is per-language, not per-service.
 - Status stays spec-ready. Next: design round 2 with the R1 synthesis + decisions 11–14 as state.
+
+## Session 2026-11-04 — sdd-design Phase 1, round 2 (in progress)
+
+- **R2 proposal, summary.**
+  - **Heal.** One catalog-driven heal migration, `035`. It embeds only the env-invariant reader
+    catalog emitted by the extended gate (`--emit-catalog`). Every action is a predicate over each
+    DB's actual rows, in the order:
+    1. snapshot (no `value_encrypted`);
+    2. delete non-secret rows in N (fully attributed namespaces) whose spelling is not in the
+       catalog: `twin-unread` / `dead`, with audit and report rows;
+    3. retype only where stored == default;
+    4. fill blank metadata;
+    5. seed with ON CONFLICT DO NOTHING;
+    6. NOTICE + report for everything else;
+    7. `pg_notify` per touched ns/env.
+  - **Marker.** `036` = `config.config_markers` DDL, created empty.
+  - **Marker contract for 296.** Row `relative_keys_v1`, written in the rename's transaction, plus
+    `pg_notify`. The server reads marker and rows in one statement, and the 5-min reload backstop
+    covers a lost NOTIFY.
+  - **Config server.**
+    - content-hash `version` (secret `updated_at` hashed, never emitted);
+    - 10 s re-send;
+    - LISTEN self-heartbeat every 10 s, 30 s deadline, on the existing pool slot (F-06);
+    - 5-min diff-only reload backstop;
+    - pg keepAlive;
+    - grpc-js server ping-policy options.
+  - **Clients.** keepalive 30/10; liveness 30 s; backoff 1→30 s, reset after ≥15 s.
+  - **Compute.**
+    - ComputePool: done-callback slot release, fixed 16 threads, bound `[1,16]`;
+    - NPROC = max(limit, in_use)×16.
+  - **FR-12.** `indicators.sandbox.startup_grace_ms` key; bounds timeout `[100,45000]`, grace
+    `[1000,10000]`; deadline min(57 s, t+g+2 s).
+  - **Inventory tool.** `services/xstockstrat-indicators/app/maintenance/config_inventory.py`,
+    reusing `legacy_authors.connect`.
+  - **Operator gates.** G1 inventory → A0 fixpoint/freeze; G2 before the main-dev merge
+    (digest + dry-run + staging read-back); G3 before promotion.
+  - **Steps:** A0–A12.
+- The adversary pass is running.
