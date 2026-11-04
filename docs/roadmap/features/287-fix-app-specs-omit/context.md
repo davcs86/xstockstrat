@@ -60,3 +60,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `shell-lint` already covers `scripts/*.sh` (`ci.yml:664-668`); only the `sops` filter (`ci.yml:86-96`) needs `scripts/do-db-cluster.sh` and `prod-down.yml`.
   - Extra doc drift: `docs/setup/digitalocean.md:594` and `SKILL.md:232,566,568` still say `db` / `${db.DATABASE_URL}`; both specs bind `${xstockstrat.DATABASE_URL}`.
   - This host lacks mikefarah yq, sops, shellcheck and shfmt (the suite fails at `need`); the executor must install them before Step 1's RED run. CI is authoritative.
+
+## Session 2026-11-04 (sdd-review impl-spec, advisory)
+
+- Result: 0 failures, 7 warnings. Advisory; did not block.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Steps 5/6: prod-up `wait`/`report` (and assign) have no `id:` today, and Step 6 does not say to add one. Step 5's asserts and the `steps.*` references need them (C-01). [ ] unaddressed
+  - Steps 7/8: the prod-down summary step needs an explicit `id:` for the order assert (C-01). [ ] unaddressed
+  - Step 2: the cited spec line ranges are approximate. `cluster_name` is at `.do/app.yaml:692` and `.do/app.dev.yaml:694`. Cosmetic. [ ] unaddressed
+  - Step 1: no coverage threshold is stated. `scripts/` has no CI coverage gate, so N/A (C-08). [ ] unaddressed
+  - Step 9: large prose step. Consider splitting it. Advisory. [ ] unaddressed
+- Overlap findings:
+  - `.github/workflows/ci.yml` overlaps with 281-signal-watchlist-expiry-pruning in disjoint regions (the `sops` filter at 86-96 vs ci-gate at 899-937). Textual-merge risk only; no merge-order row required.
+  - No migration, proto or config-key collisions.
