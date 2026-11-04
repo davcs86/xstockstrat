@@ -1,5 +1,5 @@
 Feature: fix-push-untargeted-broadcast (bug fix)
-  Regression guard for docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md:
+  Regression guard for docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-notify-untargeted-push-broadcasts-all-users-defect.md):
   an untargeted alert sends a Web Push to every user's devices.
 
   @AC-1 @FR-1 @regression

@@ -43,7 +43,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 | Report | Title |
 |---|---|
 | [`2026-10-19-indicators-acceptance-rlimit-wording-defect`](../../../docs/reports/2026-10-19-indicators-acceptance-rlimit-wording-defect.md) | Sandbox OS-isolation acceptance suite says "address-space" for the RLIMIT_DATA cap |
-| [`2026-10-19-indicators-sandbox-overrides-unclamped-defect`](../../../docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md) | ExecuteFormula timeout/memory overrides are unclamped (sandbox slot exhaustion) |
+| `2026-10-19-indicators-sandbox-overrides-unclamped-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md) | ExecuteFormula timeout/memory overrides are unclamped (sandbox slot exhaustion) |
 | [`2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect`](../../../docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md) | Indicators sandbox config seeds use bare keys and never apply |
 | [`2026-10-19-sandbox-exit-reason-stderr-substring-defect`](../../../docs/reports/2026-10-19-sandbox-exit-reason-stderr-substring-defect.md) | Sandbox exit reason is classified by stderr substring match |
 | [`2026-10-19-sandbox-memory-used-bytes-always-zero-defect`](../../../docs/reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md) | SandboxResult.memory_used_bytes is always zero |

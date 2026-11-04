@@ -1,6 +1,6 @@
 # Promoted from docs/roadmap/features/270-fix-ui-trader-feedback/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
 Feature: fix-ui-trader-feedback (bug fix)
-  Regression guard for docs/reports/2026-10-21-ui-trader-feedback-defect.md:
+  Regression guard for docs/reports/2026-10-21-ui-trader-feedback-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-ui-trader-feedback-defect.md):
   stale streamed order status (D-11), PAPER default while mode unknown (D-17),
   symbol-page backtest without strategyId (D-45), and silent action failures (D-64).
 

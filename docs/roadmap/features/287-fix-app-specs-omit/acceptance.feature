@@ -1,5 +1,5 @@
 Feature: fix-app-specs-omit (bug fix)
-  Regression guard for docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md:
+  Regression guard for docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-app-specs-omit-db-vpc-defect.md):
   app specs omit the DB VPC attachment and the trusted source.
 
   @AC-1 @regression

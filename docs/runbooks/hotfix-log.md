@@ -10,7 +10,7 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 ## 2026-10-20T02:59:43Z — hotfix/fix-sandbox-overrides-unclamped
 
-- **GitHub issue**: docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-1
 - **Affected service(s)**: xstockstrat-indicators (caller: xstockstrat-agent `test_formula`)
 - **Root cause**: ExecuteFormula used `timeout_ms_override` / `memory_bytes_override` verbatim (`or` fallback only on 0): any caller could hold a sandbox slot for up to int32 ms (4 calls exhaust `max_concurrent`), and a negative memory override skipped RLIMIT_DATA.
@@ -24,7 +24,7 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 ## 2026-10-20T02:40:18Z — hotfix/fix-refresh-token-rotation
 
-- **GitHub issue**: docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md (GitHub Issues disabled on this repo)
+- **GitHub issue**: docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md) (GitHub Issues disabled on this repo)
 - **Severity**: SEV-1
 - **Affected service(s)**: xstockstrat-identity, xstockstrat-ui, xstockstrat-agent
 - **Root cause**: refreshToken and refreshOAuthToken rotate with SELECT (no FOR UPDATE) → unconditional revoke UPDATE → INSERT as separate autocommit queries; concurrent refreshes both succeed and a failure between revoke and insert loses the session.

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-deploy-wait-loop`
-**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md`
+**GitHub Issue**: none (Issues disabled) — defect report `docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-11-04-deploy-wait-loop-superseded-defect.md)
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-04

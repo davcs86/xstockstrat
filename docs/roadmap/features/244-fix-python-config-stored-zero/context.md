@@ -74,7 +74,7 @@
 - The 3 smoke-created staging rows (`default_commission_pct`, `default_slippage_pct`, `alert_throttle_seconds`) remain until someone deletes them via SQL.
 - Steps 10, 11, 17 exceeded 5 files and were left unsplit (impl-spec review advisory, standing authorization).
 - Out of scope: Go and Node config getters ("not reported as trapped", product-spec.md:206 at 1ed63958). The indicators request-override `or` read became `_clamp_override` (services/xstockstrat-indicators/app/handlers/servicer.py:282-285, covered via the accessor); any other request-field `or` fallbacks, if they exist, were not audited. Related: CONFIG-11 / Node `getInt` gotcha (`services/xstockstrat-config/docs/context-constitution.md:32`).
-- Defect report `docs/reports/2026-10-19-python-config-zero-trap-defect.md` has sidecar `triaged` (`ref: feature:244-fix-python-config-stored-zero`); candidate for `/sdd-archiver reports`.
+- Defect report `docs/reports/2026-10-19-python-config-zero-trap-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-python-config-zero-trap-defect.md) has sidecar `triaged` (`ref: feature:244-fix-python-config-stored-zero`); candidate for `/sdd-archiver reports`.
 - The `sparkline_bars` drift (028 description + bounds `[1,500]`, no analysis reader) is logged in `services/xstockstrat-config/docs/context-constitution-findings.md`, not fixed.
 
 **Ledger entries written**: insights.md (3), fails.md (2) — see the 2026-11-04 entries.

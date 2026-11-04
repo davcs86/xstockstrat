@@ -1,5 +1,5 @@
 Feature: fix-otel-metrics-logs-gap (bug fix)
-  Regression guard for docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md:
+  Regression guard for docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md):
   no service exports OTel metrics or logs, so the Grafana alerts and dashboards read nothing.
   Scenarios state the invariant, not the mechanism; fix direction is narrow-to-traces (product-spec.md Expected).
 

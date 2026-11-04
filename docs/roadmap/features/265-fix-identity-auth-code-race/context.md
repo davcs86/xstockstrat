@@ -41,7 +41,7 @@
 - Step 4: the OAuth-exchange AC-4 case is nested inside `describe('exchangeAuthCode')` (reuses `storedRow`/`exchangeCall`); login and first-party refresh cases live in `describe('token claim-shape parity (AC-4)')`; shared assertions are module-level helpers `assertSharedClaims`, `refreshInsertClientId`, `withAppEnvUnset`.
 - Step 3: the `authenticateUser` inline comment "JWT payload uses snake_case claim names" moved into `mintAccessToken`'s 2-line doc comment rather than being dropped.
 **Cross-feature signal**:
-- Same claim-then-issue pattern as hotfix `5bd271d` (refresh-token rotation, report `2026-10-19-identity-refresh-rotation-not-atomic-defect`); IDENTITY-8 holds the atomic-guard family.
+- Same claim-then-issue pattern as hotfix `5bd271d` (refresh-token rotation, report `2026-10-19-identity-refresh-rotation-not-atomic-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md)); IDENTITY-8 holds the atomic-guard family.
 - Overlaps resolved by merge: `252-fix-identity-ledger-test-suites` (test file rewrite; removed the silent-skip `before()` guard 265 originally relied on); `242-fix-push-untargeted-broadcast` (disjoint block in `identityServiceImpl.ts`, textual only).
 - Test-environment trap fails.md:2223 (Node 22 strip-types makes the identity suite a vacuous green) shaped the design's run guard, but its "Node 24 is safe" premise did not hold for identity (the import also fails on Node 24; see Scars); the premise is already corrected in the ledger at fails.md:3099-3104 (feature 242), so do not re-file it.
 **Deferred follow-ons** (operator to decide; none stepped):
