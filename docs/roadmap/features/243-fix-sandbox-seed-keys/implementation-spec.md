@@ -493,3 +493,12 @@ _Populated by /sdd-execute as implementation proceeds._
   3. re-runs `git fetch origin && git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2`
      right before merging and confirms no `031`+/`032`+ config migration has reached `main-dev`.
   The production advisory read-back (instruction 3) follows the promotion deploy and does not gate `done`.
+
+### Step 5 — operator G1 check shipped as an indicators maintenance module (2026-11-04T22:14Z)
+- **Expected**: Step 5 Files is `context.md` only; the operator pastes a hand-run SQL query's output.
+- **Actual**: the read-only check is `services/xstockstrat-indicators/app/maintenance/sandbox_keys_check.py`
+  (+ `tests/test_sandbox_keys_check.py`), run as `python -m app.maintenance.sandbox_keys_check` in the DO console,
+  following `legacy_authors_ops`. It checks the POST-031 shape (3 full-dotted global rows at seed values, no bare or
+  secret rows) because 031 already merged (#1334); it also flags a skipped 031 (schema_migrations >= 032, no snapshot).
+- **Impact**: none on migrations or runtime; the module is reachable only from the console. Needs an indicators deploy
+  to be present in the image.
