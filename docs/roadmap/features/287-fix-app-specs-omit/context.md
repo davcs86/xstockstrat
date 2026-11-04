@@ -50,3 +50,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Operator pre-merge check: DO token has database read+update scope.
   - The first staging deploy after merge is the `vpc:` canary.
   - Operator verification: run prod-up, confirm `db-migrator` connects, then run prod-down.
+
+## Session 2026-11-04 (sdd-spec)
+
+- Generated implementation-spec.md with 10 steps: test/service pairs 1–2 (`do-db-cluster.sh` + `dbnet`), 3–4 (atomic VPC placeholder: specs + renderer + deploy.yml/prod-up.yml render wiring), 5–6 (prod-up check/trust/wait/report), 7–8 (prod-down + `proddown`), 9 docs + context teardown, 10 full-suite gate. Status → implementation-ready.
+- Key codebase findings:
+  - Upstream doctl/godo verified: `databases list -o json` → godo `Database` (`id`, `name`, `private_network_uuid` omitempty); `firewalls list -o json` → `{uuid, cluster_uuid, type, value, created_at}`; `firewalls remove --uuid` is required; `apps create-deployment` exists; phases include SUPERSEDED; app spec `vpc: {id}`.
+  - `prod-down.yml:24` uses unpinned `action-doctl@v2` and has no checkout; Step 8 pins both (`CHECKOUT_PIN`/`DOCTL_PIN`, `sops-secrets.test.sh:682-683`).
+  - `shell-lint` already covers `scripts/*.sh` (`ci.yml:664-668`); only the `sops` filter (`ci.yml:86-96`) needs `scripts/do-db-cluster.sh` and `prod-down.yml`.
+  - Extra doc drift: `docs/setup/digitalocean.md:594` and `SKILL.md:232,566,568` still say `db` / `${db.DATABASE_URL}`; both specs bind `${xstockstrat.DATABASE_URL}`.
+  - This host lacks mikefarah yq, sops, shellcheck and shfmt (the suite fails at `need`); the executor must install them before Step 1's RED run. CI is authoritative.

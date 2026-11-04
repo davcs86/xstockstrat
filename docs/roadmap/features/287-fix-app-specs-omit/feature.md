@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report (Track C by operator override) |
 | 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds; invoked quick, operator extended it to the cap) and approved. recon.md and design.md written. The operator confirmed proceeding without /sdd-review |
+| 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 
 ---
 
@@ -24,8 +25,19 @@
 - [Acceptance Scenarios](acceptance.feature): regression scenarios (`@AC-*`, C-15)
 - [Recon](recon.md): codebase dossier
 - [Design](design.md): approved design
-- [Implementation Spec](implementation-spec.md): _not yet generated. Run `/sdd-spec fix-app-specs-omit`_
+- [Implementation Spec](implementation-spec.md): 10 numbered steps with codebase evidence
 - [Context Log](context.md): session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` (2026-11-04). The deploy pipeline has no service owner row, so role reviewers apply.
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| Platform Lead | Deploy-pipeline correctness: exactly-one resolution, every render site fills `YOUR_VPC_ID`, prod-up/prod-down lifecycle order, full suite green | 1–8, 10 |
+| Security | Firewall trusted-source scope (only the app's own rule; never opens or empties the cluster), renderer fail-closed with no value echo | 1–8 |
 
 ---
 
@@ -37,4 +49,4 @@ staging from the VPC.
 
 ## Next Action
 
-`/sdd-spec fix-app-specs-omit`: generate the implementation spec from the approved design.
+`/sdd-review fix-app-specs-omit impl-spec` — validate implementation spec, then `/sdd-execute fix-app-specs-omit`
