@@ -340,3 +340,16 @@
 - TDD RED: `cp: cannot stat 'scripts/do-render-app-spec.py'` → `ASSERT FAIL: render: copy scripts`. shellcheck + shfmt clean.
 - Files modified: `scripts/sops-secrets.test.sh`
 - Deviations: none
+
+### Step 8 — `scripts/do-render-app-spec.py` (unified DO renderer) [done]
+- Replaces the deploy.yml inline python and `do-inject-prod-secrets.py` (deleted in Step 12). It checks the name, fills placeholders through one anchored regex
+  plus a lookup (no replace-order dependence), mints the CA plus 12 leaves in a temp dir (MTLS_CA only in the subprocess env), masks every yaml_pem string and
+  PEM line, runs a global leftover check, writes the spec 0600 to --out, and puts app_name/project_id in GITHUB_OUTPUT.
+- TDD GREEN: `resolve: ok`, `render: ok`. Mutation check: crossed JWT↔BROKER, swapped leaf keys, swapped leaf certs, OTEL prefix and the PEM mask were each
+  killed by the reverse-substitution/mask assertions. ruff check + format clean.
+- PARITY RECORD (one-time, design Risk 2): the `HEAD` deploy.yml inline python (67 lines, extracted verbatim) and the new renderer were run on both real specs
+  with the same values and the same CA. Two value sets were used: all 10 keys set, and only the required keys. Leaf PEMs were normalised; the CA was compared separately
+  (12/12 identical copies in every render).
+- PARITY RECORD (286 step 8): identical
+- Files modified: `scripts/do-render-app-spec.py`
+- Deviations: none

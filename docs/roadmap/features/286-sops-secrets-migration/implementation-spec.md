@@ -457,7 +457,7 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 
 ### Step 8 — service: `scripts/do-render-app-spec.py` (unified DO renderer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/do-render-app-spec.py` — create
