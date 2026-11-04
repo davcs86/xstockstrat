@@ -256,3 +256,12 @@
 - Result: 0 failures, 1 ⚠; iteration-4 items 3/3 RESOLVED; no design or coverage gap.
   - [x] The Step 18 `git check-ignore -q` with several paths passes if any one is ignored (confirmed locally). The check is now
         per path, and also asserts `.sops.yaml` is not ignored.
+  - Correction (orchestrator, local check): multi-path `git check-ignore -q` actually exits 128 ("--quiet is only valid with a
+    single pathname"). The old command was broken, not vacuous. The per-path fix is correct either way.
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory), iteration 6 — CONVERGED
+
+- Result: **CONVERGED: 0 failures, 0 warnings.** The iteration-5 item is RESOLVED. The fresh 21-step pass is clean: RED/GREEN sequencing per group,
+  hermeticity, non-vacuous verifications, @AC coverage (AC-3/4/19 retired), and design/context consistency.
+- Loop summary: 6 iterations (13 → 8 → 4 → 3 → 1 → 0 findings). No unaddressed items carried into execution.
+- Status unchanged: implementation-ready (Mode B is advisory). Next: `/sdd-execute sops-secrets-migration`.
