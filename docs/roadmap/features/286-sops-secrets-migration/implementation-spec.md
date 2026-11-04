@@ -62,15 +62,14 @@ returned nothing. This settles design Risk 1 for the current specs.
    (`action resolve build render deploy produp homelab bootstrap ac24 cleanup`; no argument runs all). Without that, each
    test/code pair could not show red-then-green on its own slice of the one test file. Step 1 creates the
    skeleton and the `action` group, so Step 2 also has a RED-first test.
+4. **The `sops` CI filter also includes `.do/**` and `secrets/**`.** The AC-8 reverse-substitution test renders the real
+   `.do/app*.yaml`, and `ac24` greps `secrets/*.enc.yaml`, so an edit to either must re-run the suite.
 5. **Workflow YAML is parsed with `yq` (mikefarah v4)**, which is preinstalled on GitHub's ubuntu-24.04 runner image
    (`brew install yq` locally). Every static group first asserts that its workflow parses (`yq e 'true' <file>`). That is the
    workflow lint, since the repo has no actionlint (recon § Not found). The tool check fails loudly with the install hint.
 6. **Merge-order (impl-spec overlap scan, WARN only).** 278 and 281 append to the same `ci.yml` ci-gate `needs`/echo
    lists, and 281 also appends to the `docs/runbooks/CLAUDE.md` index and the `docs/patterns/ci-overview.md` CI table. These are textual,
    non-blocking conflicts: whichever lands second rebases and keeps every entry. No `merge-order.md` row is required.
-4. **The `sops` CI filter also includes `.do/**`.** The AC-8 reverse-substitution test renders the real
-   `.do/app*.yaml`, so a spec edit must re-run it.
-
 ### Scenario Coverage (C-15)
 
 | AC | Covered by | Kind |
@@ -174,6 +173,7 @@ recorded as deferred.
 bash scripts/sops-secrets.test.sh action   # RED (action.yml absent) before Step 2
 shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
 ```
+`scripts/` has no CI coverage threshold (`docs/patterns/ci-overview.md`). The hermetic suite is the verification.
 
 ---
 
@@ -420,9 +420,13 @@ ruff check scripts/sops_secrets.py && ruff format --check scripts/sops_secrets.p
 **Covers**: `AC-8, AC-9, AC-10, AC-11, AC-16`
 
 **Instructions**:
-Add group `render`. For each real spec (`.do/app.dev.yaml` with `--env staging --app-name xstockstrat-staging`,
+Add group `render`. Like Step 5, run a **copy**: copy `scripts/do-render-app-spec.py`, `scripts/sops_secrets.py`,
+`scripts/mtls-provision.sh` and `scripts/gen-dev-certs.sh` into `$work/repo/scripts/` and invoke the copy. The
+resolver's `__file__`-relative default then reads `$work/repo/secrets/<env>.enc.yaml`. That file is absent for the
+file-absent cases and written by the Step 3 helper for the SOPS cases, so the group never reads the repo's real `secrets/` (which exists
+once the bootstrap PR merges). For each real spec (`.do/app.dev.yaml` with `--env staging --app-name xstockstrat-staging`,
 and `.do/app.yaml` with `--env production --app-name xstockstrat-production`):
-1. **AC-8 reverse substitution.** Run `python3 scripts/do-render-app-spec.py --env E --spec S --app-name N --image-tag abc1234 --org testorg --out $work/r.yaml` with the file absent. Set each `LEGACY_<K>` to a fixed-width sentinel `__S286_NN__` and `LEGACY_MTLS_CA` to the fixture CA. Build the sed-only baseline with `sed -e s/YOUR_GITHUB_ORG/testorg/g -e s/YOUR_IMAGE_TAG/abc1234/g S`, and assert no sentinel occurs in it. Diff line by line: every differing line must be a placeholder line. Map back sentinels, `Authorization=<sentinel>`, the exact CA `yaml_pem`, and leaf PEMs. A leaf PEM is mapped back only after these checks pass: it matches the PEM regex, its SAN is `xstockstrat-<sfx>`, it verifies against the fixture CA (`openssl verify -CAfile`), and its key pubkey equals the cert pubkey. The mapped-back text must be byte-equal to the baseline. Any failure names the line.
+1. **AC-8 reverse substitution.** Run `python3 $work/repo/scripts/do-render-app-spec.py --env E --spec S --app-name N --image-tag abc1234 --org testorg --out $work/r.yaml` with the file absent. Set each `LEGACY_<K>` to a fixed-width sentinel `__S286_NN__` and `LEGACY_MTLS_CA` to the fixture CA. Build the sed-only baseline with `sed -e s/YOUR_GITHUB_ORG/testorg/g -e s/YOUR_IMAGE_TAG/abc1234/g S`, and assert no sentinel occurs in it. Diff line by line: every differing line must be a placeholder line. Map back sentinels, `Authorization=<sentinel>`, the exact CA `yaml_pem`, and leaf PEMs. A leaf PEM is mapped back only after these checks pass: it matches the PEM regex, its SAN is `xstockstrat-<sfx>`, it verifies against the fixture CA (`openssl verify -CAfile`), and its key pubkey equals the cert pubkey. The mapped-back text must be byte-equal to the baseline. Any failure names the line.
 2. **Summary (AC-8).** The step summary lists `<K>: github` for every do-target KEYS entry.
 3. **AC-9 render.** With a SOPS file holding `common.JWT_SECRET=jwt-sops` and `LEGACY_SENDGRID_API_KEY=sg-gh`, the rendered spec carries `jwt-sops` and `sg-gh`.
 4. **AC-10.** CONFIG_SECRETS_ENCRYPTION_KEY is in neither store → exit 1 with the exact message, and `--out` does not exist afterwards.
@@ -647,6 +651,7 @@ Add group `produp`. Assert on `.github/workflows/prod-up.yml`, after it parses (
 bash scripts/sops-secrets.test.sh produp   # RED before Step 12; GREEN after
 shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
 ```
+`scripts/` has no CI coverage threshold (`docs/patterns/ci-overview.md`). The hermetic suite is the verification.
 
 ---
 
@@ -673,8 +678,8 @@ shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.te
 Per design C5 and § Per-workflow step order (design.md:123-135, :170):
 - Job `up` gets `environment: production` and `permissions: {contents: read}`. Pin checkout and doctl.
 - Keep the `check` step.
-- Add `[absent]` `uses: ./.github/actions/setup-sops`.
-- Replace `Render app spec with secrets` (`:42-60`) with `[absent]` render. Its `env` holds `SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}` plus the 12 literal-PROD `LEGACY_*` lines from Step 11. It runs `python3 scripts/do-render-app-spec.py --env production --spec .do/app.yaml --app-name xstockstrat-production --image-tag "${{ inputs.image_tag }}" --org "${{ github.repository_owner }}" --out "$RUNNER_TEMP/app.yaml"` with `id: render`.
+- Add `uses: ./.github/actions/setup-sops` with `if: steps.check.outputs.app_id == ''` (the same guard the existing create/assign/wait steps use).
+- Replace `Render app spec with secrets` (`:42-60`) with the render step, guarded by `if: steps.check.outputs.app_id == ''`. Its `env` holds `SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}` plus the 12 literal-PROD `LEGACY_*` lines from Step 11. It runs `python3 scripts/do-render-app-spec.py --env production --spec .do/app.yaml --app-name xstockstrat-production --image-tag "${{ inputs.image_tag }}" --org "${{ github.repository_owner }}" --out "$RUNNER_TEMP/app.yaml"` with `id: render`.
 - Create from `$RUNNER_TEMP/app.yaml`.
 - Assign reads `DO_PROJECT_ID: ${{ steps.render.outputs.project_id }}`.
 - Keep wait and report, but delete the `:106` `::warning::` line (the report still echoes the URL and app id).
@@ -687,7 +692,7 @@ Per design C5 and § Per-workflow step order (design.md:123-135, :170):
 ```bash
 bash scripts/sops-secrets.test.sh produp render
 yq e 'true' .github/workflows/prod-up.yml >/dev/null
-grep -rn "do-inject-prod-secrets" .github/ scripts/ ; test $? -eq 1
+grep -rn --exclude=sops-secrets.test.sh "do-inject-prod-secrets" .github/ scripts/ ; test $? -eq 1
 ```
 
 ---
@@ -727,6 +732,7 @@ Add group `homelab`. Assert on `.github/workflows/deploy-homelab.yml`, after it 
 bash scripts/sops-secrets.test.sh homelab   # RED before Step 14; GREEN after
 shellcheck scripts/sops-secrets.test.sh && shfmt -d -i 2 scripts/sops-secrets.test.sh
 ```
+`scripts/` has no CI coverage threshold (`docs/patterns/ci-overview.md`). The hermetic suite is the verification.
 
 ---
 
@@ -950,7 +956,7 @@ bash scripts/sops-secrets.test.sh ac24 cleanup render   # GREEN
 **Covers**: — (runs every group in CI, including Step 15's `ac24` for AC-24)
 
 **Instructions**:
-1. **Filter.** Add a filter key `sops:` with `'scripts/sops_secrets.py'`, `'scripts/do-render-app-spec.py'`, `'scripts/sops-secrets.test.sh'`, `'.github/actions/setup-sops/**'`, `'.github/workflows/deploy*.yml'`, `'.github/workflows/prod-up.yml'`, `'.github/workflows/sops-bootstrap.yml'`, `'.do/**'` and `'.sops.yaml'`.
+1. **Filter.** Add a filter key `sops:` with `'scripts/sops_secrets.py'`, `'scripts/do-render-app-spec.py'`, `'scripts/sops-secrets.test.sh'`, `'.github/actions/setup-sops/**'`, `'.github/workflows/deploy*.yml'`, `'.github/workflows/prod-up.yml'`, `'.github/workflows/sops-bootstrap.yml'`, `'.do/**'`, `'.sops.yaml'` and `'secrets/**'`.
 2. **Job `sops-secrets`.** Add a job (`needs: changes`; `if:` matches `sops` || `homelab` || `ci`; `runs-on: ubuntu-24.04`). Steps:
    - `actions/checkout@v7` (the file-wide convention);
    - `uses: ./.github/actions/setup-sops`;
@@ -1101,7 +1107,7 @@ Apply the Step 20 SOPS-model wording to each surface:
 
 Link the runbook from the identity and notify docs.
 
-Then run the CLAUDE.md teardown: `/context-forge:context-constitution refresh`, scoped to every context file touched in Steps 17–21. If the plugin is unavailable, do the manual reconciliation described in root `CLAUDE.md` § Teardown and record it in the PR body.
+Then run the CLAUDE.md teardown: `/context-forge:context-constitution refresh`, scoped to every context file touched in Steps 19–21. If the plugin is unavailable, do the manual reconciliation described in root `CLAUDE.md` § Teardown and record it in the PR body.
 
 **Verification**:
 ```bash

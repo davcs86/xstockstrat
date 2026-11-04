@@ -224,3 +224,12 @@
   - [x] Step 7: the reverse map runs as an inline python heredoc (C-18).
   - [x] Step 16: `.gitleaks.toml` declared as a conditional file.
   - [x] Step 20 split into Step 20 (`docs/`) and Step 21 (remaining surfaces + teardown). Total is now 21 steps; a grep, not line numbers, is authoritative.
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory), iteration 2 → fixes
+
+- Result: all 13 iteration-1 items RESOLVED; 2 ✗ + 6 ⚠ new (advisory), no Floor risk. Fixed:
+  - [x] Step 12 Verification grep self-matched the test file. Now uses `--exclude=sops-secrets.test.sh`.
+  - [x] Step 7 renderer was not hermetic after the bootstrap merges. The group now runs a copy under `$work/repo/scripts/` (like Step 5).
+  - [x] Step 12 `[absent]` markers are now the explicit `if: steps.check.outputs.app_id == ''` guard.
+  - [x] Threshold note added to Steps 1, 11 and 13. The Step 18 filter now includes `secrets/**`. Step 21 teardown scope is Steps 19–21.
+  - [x] Spec-time findings renumbered 1–6.
