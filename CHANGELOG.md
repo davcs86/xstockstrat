@@ -5,6 +5,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-11-04
 
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
 ### Features
 - fix-etf-flag-fill: The background ETF-flag fill in xstockstrat-marketdata never labels SCHD on staging, so feature 215's `fundamentals_gap` stays `FUNDAMENTALS_GAP_UNSPECIFIED`.
 - fix-marketdata-fundamentals-cache: Five marketdata defects in the fundamentals path:
