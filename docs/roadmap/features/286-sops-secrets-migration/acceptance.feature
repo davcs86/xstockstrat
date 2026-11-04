@@ -8,7 +8,7 @@ Feature: sops-secrets-migration
     Given secrets/staging.enc.yaml and secrets/production.enc.yaml produced by the bootstrap
     And the staging SOPS_AGE_KEY and the production SOPS_AGE_KEY
     When "sops -d secrets/production.enc.yaml" runs with only the staging key
-    Then it exits non-zero with "no matching keys" and no value is printed
+    Then it exits non-zero with stderr containing "identity did not match any of the recipients" and no value is printed
     And "sops -d secrets/staging.enc.yaml" with only the staging key exits 0
     And each file's sops.age metadata lists exactly 2 recipients: the env key and SOPS_OPERATOR_AGE_RECIPIENT
 

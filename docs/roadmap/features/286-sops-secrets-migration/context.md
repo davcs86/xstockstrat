@@ -524,3 +524,13 @@
   `services/xstockstrat-identity/docs/operations.md`, `services/xstockstrat-notify/CLAUDE.md`, `docs/context-constitution.md` (teardown, D-4)
 - Deviations: D-4
 - Config-key wiring gate `node scripts/check-config-wiring.mjs --final`: exit 0. Its only line is a pre-existing baseline report (`trading.fill_poller.interval_ms:read-unseeded:production`), unrelated; this feature declares no config keys.
+
+## Session 2026-11-04 — sdd-execute integration (C-16 promotion + pre-PR checks)
+
+- Merge-order gate: no `merge-order.md` entry for 286. The textual ci-gate overlap with 278/281 is recorded in the spec (finding 6).
+- C-16 promotion (operator-confirmed): 21 active scenarios (AC-1, 2, 5–18, 20–24) appended to `docs/sdd/business-rules/platform.feature`, tagged `@feature-286`.
+  @AC-24 extends platform @AC-8 @feature-147. AC-1's Then was reconciled to the real sops text in both copies (D-1). No duplicates.
+- Pre-PR CI-equivalent checks: sops-secrets suite (10 groups), otel-signals check + test (57/57), context-map, workflow-tests (4/4), CLAUDE.md
+  markdownlint and ledger-guard are all green.
+- otel-signals initially failed on my Step 20 wording `secrets/<env>.enc.yaml` in `docs/setup/grafana-cloud.md:169`. Its rule P3-file requires `.yaml` tokens in
+  observability docs to name real files. The wording is now "the environment's SOPS file under `secrets/`". It was a fix of the step's own change, re-verified.

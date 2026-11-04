@@ -166,7 +166,7 @@ Commit and push — the next deploy will have OTel active.
 
 ### 4c. How the substitution works
 
-The deploy chain (`deploy-dev.yml` / `deploy-prod.yml` → `deploy.yml`) and the manual prod bring-up (`prod-up.yml`) render the app spec with `scripts/do-render-app-spec.py`. It reads `common.OTEL_EXPORTER_OTLP_*` from `secrets/<env>.enc.yaml` (falling back to the `DEV_*` / `PROD_*` GitHub Secrets) and replaces the `YOUR_DEV_*` / `YOUR_PROD_*` placeholder tokens before `doctl apps update` / `create` (see `docs/runbooks/sops-secrets.md`).
+The deploy chain (`deploy-dev.yml` / `deploy-prod.yml` → `deploy.yml`) and the manual prod bring-up (`prod-up.yml`) render the app spec with `scripts/do-render-app-spec.py`. It reads `common.OTEL_EXPORTER_OTLP_*` from the environment's SOPS file under `secrets/` (falling back to the `DEV_*` / `PROD_*` GitHub Secrets) and replaces the `YOUR_DEV_*` / `YOUR_PROD_*` placeholder tokens before `doctl apps update` / `create` (see `docs/runbooks/sops-secrets.md`).
 
 Each component inherits the global `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` and sets its own `SERVICE_NAME`.
 
