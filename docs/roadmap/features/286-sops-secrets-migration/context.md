@@ -454,3 +454,19 @@
 - TDD GREEN: `ac24: ok`, `cleanup: ok`, `render: ok` (RED was Step 15). shellcheck + shfmt clean.
 - Files modified: `.do/app.yaml`, `.do/app.dev.yaml`, `scripts/do-setup-check.sh`, `scripts/mtls-provision.sh`
 - Deviations: none
+
+### Step 18 — CI job `sops-secrets`, `sops` filter, ci-gate; `.gitignore` [done]
+- ci.yml:
+  - filter key `sops` (the two scripts, the test, the setup-sops action, deploy*/prod-up/sops-bootstrap workflows, `.do/**`, `.sops.yaml`, `secrets/**`);
+  - job `sops-secrets` (ubuntu-24.04, gated `sops || homelab || ci`) runs setup-sops, then setup-python + ruff on the 2 scripts, then the whole test file;
+  - added to the ci-gate needs and echo.
+- .gitignore: `*.agekey`, `keys.txt`.
+- Verification:
+  - full suite green locally: all 10 groups, ~24 s;
+  - per-path check-ignore OK (keys.txt/x.agekey ignored; secrets/staging.enc.yaml and .sops.yaml are not);
+  - yq parses ci.yml.
+  The first real CI run happens on the integration PR.
+- Local shellcheck 0.9.0 flags two pre-existing SC2015 infos in `scripts/homelab-render.test.sh`, which is unchanged against main-dev. CI's shell-lint passed with that file on
+  #1327, so it's a local-version difference. Not touched (out of scope).
+- Files modified: `.github/workflows/ci.yml`, `.gitignore`
+- Deviations: D-3 (ruff install via setup-python)

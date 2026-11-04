@@ -940,7 +940,7 @@ bash scripts/sops-secrets.test.sh ac24 cleanup render   # GREEN
 
 ### Step 18 — config: CI job `sops-secrets`, `sops` filter, ci-gate; `.gitignore`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows` (CI harness)
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -1139,4 +1139,10 @@ _Populated by /sdd-execute as implementation proceeds._
   production keep distinct CAs. The literal assertion would force deleting a correct statement.
 - **Disposition** (operator, 2026-11-04, sequential blocker): the assertion now requires `common.MTLS_CA` plus an explicit "DO and homelab" sharing statement,
   and bans only the stale `DEV_MTLS_CA / PROD_MTLS_CA` primary-store wording. Step 17's header edit follows this.
+
+### D-3 — Step 18: ruff installed via `actions/setup-python`, not `python3 -m pip`
+- **Spec said**: the `sops-secrets` job runs `python3 -m pip install ruff`.
+- **Actual**: on ubuntu-24.04, a pip install into the system Python is refused (PEP 668 externally-managed environment). The repo's own python-lint job
+  (`ci.yml:343-350`) uses `actions/setup-python@v7` (3.13) followed by `pip install ruff`.
+- **Disposition**: CI-equivalent fallback (sequential-mode sanctioned). The job mirrors the existing pattern. ruff runs the same checks on the same two files.
 

@@ -60,6 +60,8 @@ secrets.*
 credentials.*
 service-account*.json
 *-service-account.json
+*.agekey
+keys.txt
 
 # OS
 .DS_Store
