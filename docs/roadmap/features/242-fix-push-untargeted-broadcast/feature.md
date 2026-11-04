@@ -8,6 +8,7 @@
 **Last Updated**: 2026-10-29
 **Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
 **Launched date**: 2026-10-30
+**Archived**: 2026-11-04
 
 ---
 
@@ -40,6 +41,7 @@
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | All 16 steps done; C-16 promotion plan applied (operator standing authorization, auto-confirm): 11 `@AC-*` scenarios promoted as NEW into `services/xstockstrat-{notify,portfolio,analysis,identity}/acceptance/fix-push-untargeted-broadcast.feature` (5/2/2/2); integration PR opened to `main-dev` |
 
 | 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -61,11 +63,11 @@ Docs steps 13-15: none (governance matrix).
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — Phase 0 grounded codebase dossier
-- [Design](design.md) — debated, approved design (live SAN-gated identity `ListAdminUserIds` lookup)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to services/xstockstrat-{analysis,identity,notify,portfolio}/acceptance/fix-push-untargeted-broadcast.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

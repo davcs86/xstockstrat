@@ -8,6 +8,7 @@
 **Last Updated**: 2026-10-29
 **Committed to main**: df521ff51091a86e813950b34afff09ac4e8821b
 **Launched date**: 2026-10-30
+**Archived**: 2026-11-04
 
 ---
 
@@ -25,15 +26,16 @@
 | 2026-10-29 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE PATH) | C-16 promotion applied (8 scenarios to `services/xstockstrat-indicators/acceptance/fix-legacy-formula-authors.feature`; @AC-6 skipped as OVERLAP with 224 @AC-1); integration PR opened |
 
 | 2026-10-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1368; committed df521ff51091a86e813950b34afff09ac4e8821b |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — approved design (operator-run maintenance CLI)
-- [Implementation Spec](implementation-spec.md) — Numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

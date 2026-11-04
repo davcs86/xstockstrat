@@ -8,6 +8,7 @@
 **Last Updated**: 2026-10-14
 **Committed to main**: 65bbc3cbf93a03f5359b60228398a25e6f297f05
 **Launched date**: 2026-10-20
+**Archived**: 2026-11-04
 
 ---
 
@@ -22,15 +23,16 @@
 | 2026-10-15 | `in-progress` → `code-completed` | /sdd-execute sequential | All 11 steps done; integration PR #1246 |
 
 | 2026-10-20 | `code-completed` → `launched` | CI workflow | Promoted via PR #1258; committed 65bbc3cbf93a03f5359b60228398a25e6f297f05 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to services/xstockstrat-ui/acceptance/fix-otel-trace-export.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
