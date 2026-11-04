@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-edgar-quarterly-roe`
-**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md`
+**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-06
 **Last Updated**: 2026-10-06
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md` |
+| 2026-10-06 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md) |
 | 2026-10-06 | `draft` → `implementation-ready` → `in-progress` → `code-completed` | /sdd-spec + /sdd-execute sequential | quarterly ROE on a TTM basis (annualize-available fallback) |
 
 | 2026-10-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1233; committed 595bd1d4effdc73153752d8dce5cee69d1a6f656 |

@@ -1,5 +1,5 @@
 Feature: fix-legacy-formula-authors (bug fix)
-  Regression guard for the defect report docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md:
+  Regression guard for the defect report docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-22-indicators-legacy-username-formula-authors-defect.md):
   formulas stored under a legacy username author are unreadable by their owner.
 
   @AC-1 @FR-1 @regression

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-otel-metrics-logs-gap`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-30
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, 3 notes; overlap WARN: 084 rebase-only) |
 | 2026-10-20 | `spec-ready` (re-review, no transition) | /sdd-review | Product spec re-approved (5 warnings, 2 notes; overlap PASS) |
 | 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved under operator standing authorization; recon.md + design.md written |

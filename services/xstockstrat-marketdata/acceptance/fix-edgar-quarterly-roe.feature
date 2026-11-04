@@ -4,7 +4,7 @@
 # from a reviewed feature acceptance.feature, never by hand-authoring.
 
 Feature: xstockstrat-marketdata — EDGAR quarterly ROE is trailing-twelve-month
-  Regression guard for defect report docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md:
+  Regression guard for defect report docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-06-edgar-quarterly-roe-not-annualized-defect.md):
   EDGAR quarterly ROE is a single-quarter ratio, not annualized, while P/E on the same row is TTM.
 
   @AC-1 @regression @feature-222
