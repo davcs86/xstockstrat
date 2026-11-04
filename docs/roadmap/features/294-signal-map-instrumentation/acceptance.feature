@@ -4,7 +4,7 @@ Feature: signal-map-instrumentation
   auth and data-integrity paths become diagnosable from metrics and logs instead of being invisible
   behind an OK RPC status.
 
-  # Instrument names are working names (product-spec Open Question 1). Tests read counters through an
+  # Instrument names are dotted OTel names (operator decision 5). Tests read counters through an
   # in-memory OTel metric reader and logs through the service's captured log handler.
 
   @AC-1 @FR-1
@@ -60,7 +60,7 @@ Feature: signal-map-instrumentation
   Scenario: Loop records use fixed loop names and loops with an existing cycle record do not double up
     Given trading, marketdata, ingest, analysis and portfolio with their background loops running
     When one successful tick of each loop completes
-    Then every "loop" attribute value belongs to a fixed set of at most 6 names per service
+    Then every "loop" attribute value belongs to a fixed set of at most 8 names per service
     And no record attribute contains an account, user, symbol or order identifier
     And the analysis live loop writes only "live_loop: cycle complete" for that tick
     And trading position sync writes only "position sync cycle complete" for that tick
@@ -296,7 +296,7 @@ Feature: signal-map-instrumentation
     And "indicators.sandbox.queue_wait" records 1 sample
     And a warning log carries exit_reason "timeout"
     And the RPC status is still OK
-    And no INFO line "executing formula" is written
+    And the "executing formula" line is written at DEBUG with its text unchanged and no INFO line is written
 
   @AC-38 @FR-12
   Scenario: A clean end of the config stream is logged and its age is exposed
@@ -401,3 +401,51 @@ Feature: signal-map-instrumentation
     Then fewer than 20 warn lines are written for the indicators watcher and its first failure is among them
     And the 10 graceful portfolio reconnects are logged at DEBUG, not ERROR
     And the retry interval of both stays 2 seconds
+
+  @AC-51 @FR-5
+  Scenario: Live-loop triggers, cycle duration and opportunity recompute are recorded
+    Given a live cycle of 60 seconds interval that sends 1 entry alert, throttles 1 exit alert and takes 1.4 seconds
+    And a background opportunity recompute that fails once
+    When the cycle ends and the recompute finishes
+    Then "analysis.live_loop.triggers" increases by 1 for trigger "entry" outcome "alerted" and by 1 for trigger "exit" outcome "throttled"
+    And the unlabelled cycle-duration histogram records 1 sample near 1400 ms
+    And "analysis.opportunity.recompute" with outcome "failed" increases by 1
+    And the fundsignal and supervised-tick error logs have exc_info set
+
+  @AC-52 @FR-7
+  Scenario: Identity counts code-exchange and refresh rejections by bounded reason
+    Given an authorization code already redeemed once and a refresh token that is expired
+    When ExchangeAuthCode and RefreshToken are called
+    Then "identity.oauth.exchange_failures" with reason "replay" increases by 1
+    And "identity.refresh.rejections" with kind "first_party" increases by 1
+    And both responses are unchanged
+
+  @AC-53 @FR-9
+  Scenario: Ingest times polls and counts dropped items with a truncated, slug-tagged log
+    Given source "my-feed" returns 5 items of which 2 have a bad direction and 1 has a 4000-character headline
+    When the poll runs
+    Then the poll-duration histogram records 1 sample
+    And "ingest.signal.dropped" with stage "extract" and reason "bad_symbol_direction" increases by 2
+    And each extractor warning names slug "my-feed" and shows at most 200 characters of the item
+
+  @AC-54 @FR-8
+  Scenario: Config denial of a global SetConfig write is attributed
+    Given caller "trading-reconciliation-poller" writes "platform.trading_state" to "ACTIVE", which its grant forbids
+    When SetConfig is denied
+    Then the log carries internalCaller "trading-reconciliation-poller" at level error
+    And the response is still PERMISSION_DENIED
+    And no config value other than the target state name is logged
+
+  @AC-55 @FR-11
+  Scenario: The config-ui audit route is measured
+    Given an admin session calls GET /config-ui/api/audit?limit=50 and the query takes 80 ms
+    When the route responds 200
+    Then an "http.server.duration" sample is recorded for route "/config-ui/api/audit" with status 200
+    And the response body is unchanged
+
+  @AC-56 @FR-15 @FR-2
+  Scenario: Go server metric drop views still cover new client instruments, and portfolio writes one record per batch
+    Given the portfolio telemetry module after this feature
+    When its metric views are listed and a consumer processes a batch of 4 events
+    Then every rpc.client.* size and count instrument is dropped like the rpc.server.* siblings
+    And exactly 1 "loop tick ok" record with loop "order_fill" is written for the batch, not 4

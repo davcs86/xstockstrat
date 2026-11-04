@@ -59,7 +59,7 @@ FR-10. **Notify** [S-19]. Add `notify.delivery{channel, outcome}`, `notify.strea
 
 FR-11. **UI BFF** [S-18, S-22, M-03]. Add `ui.auth.events{event}` (and `jwt_rejected` reasons), wrap the login and refresh routes and the config-ui audit route in the existing BFF metric, add `ui.bff.requests{rpc_service, rpc_method, outcome}` as a separate bucket-free counter, and add `serverLog` entries (Connect code, never the token) for login, refresh and the audit 401/403 and missing-`DATABASE_URL` cases. Response bodies and status codes are unchanged.
 
-FR-12. **Indicators** [S-21, S-25, N-05]. Add `indicators.sandbox.executions{exit_reason}`, `indicators.sandbox.duration{exit_reason}`, `indicators.sandbox.queue_wait` and a `warning` log on a non-success run; drop the pre-run `INFO` (`servicer.py:292-296`); log when the config `WatchConfig` stream ends cleanly and add `indicators.config.snapshot_age`. The watcher's sleep behavior is unchanged.
+FR-12. **Indicators** [S-21, S-25, N-05]. Add `indicators.sandbox.executions{exit_reason}`, `indicators.sandbox.duration{exit_reason}`, `indicators.sandbox.queue_wait` and a `warning` log on a non-success run; demote the pre-run `INFO` (`servicer.py:292-296`) to `DEBUG` with its text unchanged; log when the config `WatchConfig` stream ends cleanly and add `indicators.config.snapshot_age`. The watcher's sleep behavior is unchanged.
 
 FR-13. **Template catalog** [M-01]. Add `template.instantiate{service, outcome}` at the analysis, indicators and ingest `InstantiateTemplate` handlers.
 
@@ -88,7 +88,7 @@ FR-16. **Deferred follow-ups recorded.** The behavior halves are listed in `cont
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-trading` — FR-1, FR-2, FR-14 (flatten / bracket / emit / submit counters, six poller gauges)
+- `xstockstrat-trading` — FR-1, FR-2 (flatten / bracket / emit / submit counters, the systemic-escalation counter, per-tick loop records for six pollers)
 - `xstockstrat-portfolio` — FR-2, FR-3, FR-14
 - `xstockstrat-marketdata` — FR-2, FR-4
 - `xstockstrat-indicators` — FR-12, FR-13, FR-14
@@ -136,7 +136,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Known traps (Ledger, `fails.md`)
 
-- **Ungrounded premises ship.** `033-phase7-observability` (2026-08-19) shipped a spec whose FR asserted a wiring fact that was false. Every "no signal at X" in this spec is an *absence* claim: the implementation spec must re-grep each cited site against the current `main-dev` (the report's line numbers are from commit `da6ca69` and will drift) and record the live `path:line`.
+- **Ungrounded premises ship.** `033-phase7-observability` (2026-08-19) shipped a spec whose FR asserted a wiring fact that was false. Every "no signal at X" in this spec is an *absence* claim: the implementation spec must re-grep each cited site against the current `main-dev` (the report's line numbers are from commit `9892b61`, the code it surveyed, and will drift) and record the live `path:line`.
 - **Absence and scope-reduction claims need a consumer grep.** `143-daily-bars-only` (2026-08-16) shows a "just shrink it" claim that a grep of the consumers disproved. Before demoting or removing any log line (N-01…N-07), grep Loki-facing consumers in the repo (`packages/otel/alerts`, `packages/otel/dashboards`, `produced-signals.tsv`); Grafana-side rules outside the repo are Open Question 4.
 
 ## Open Questions

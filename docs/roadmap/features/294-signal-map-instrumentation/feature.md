@@ -10,7 +10,8 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-11-04 | `idea` → `draft` | /sdd-story | Product spec generated from `docs/repo-surveyor/signal-map-findings.md` (PR #1427, commit `da6ca69`) |
+| 2026-11-04 | `idea` → `draft` | /sdd-story | Product spec generated from `docs/repo-surveyor/signal-map-findings.md` (PR #1427, surveyed at `9892b61`) |
+| 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 advisory warnings, all fixed; first pass FAILED on unticked open questions, re-review PASS WITH WARNINGS) |
 
 ---
 
@@ -52,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review signal-map-instrumentation product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design signal-map-instrumentation` — **full** design recommended (12 affected services, and the overlap scan found file-level warnings with 215-block-fundamentals-strategy-on-etf, 281-signal-watchlist-expiry-pruning and 243-fix-sandbox-seed-keys)
