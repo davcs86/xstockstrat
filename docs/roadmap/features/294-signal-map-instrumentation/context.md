@@ -60,3 +60,54 @@ The "signals only" decision splits these findings; only the signal half is in th
   - No `merge-order.md` row was written (no FAIL-level overlap). The impl-spec step ordering must put the 215-touched analysis steps after 215 lands, or rebase; re-run `/sdd-review impl-spec` for the Mode B overlap scan.
 - Recommended design depth: **full** (12 affected services; overlap warnings).
 - Operator branch override (recorded per review note): execute runs `sequential` on `ccr-b4aace27-zvuaby`, not `feature/<slug>`; PR #1427 is the integration PR. `/sdd-execute` must log this as a deviation.
+
+## Session 2026-11-04 — sdd-design (in progress; checkpoint)
+
+- Phase 0 Recon: wrote recon.md (12 services; reuse patterns: per-provider rebinding accessors in each service's existing telemetry module, `bffMetrics.ts` lazy rebind, `CollectingReader`/`metric_reader`/`ManualReader` test readers; no CHANGE to any existing business rule).
+- Phase 1 Grilling: rounds 1-5 run (full mode). Floor status: clean in every round. Round 5 adversary verdict: APPROVE with fixes (no wrong citations among those checked; five acceptance scenarios still drifted from code: AC-4, AC-9, AC-12, AC-17, AC-19).
+- Operator decisions taken at the gates (binding for design.md):
+  - Tick rule = body ran to completion and was not a whole-tick failure, defined per loop (denominator = items that reached the fallible call); gated-off loops still write `loop tick ok` with `state`; event-driven consumers use a 60 s leading-edge throttle.
+  - Acceptance scenarios amended in place (same IDs) with a note per change; new scenarios appended (AC-57, AC-58).
+  - Agent backend label counted in the `mtls.secure_channel` wrapper `__aexit__`.
+  - Portfolio recovery: `onHealthy` callback acknowledged ("stream resumed", only when >= 2 closes of one kind preceded it); counters also reset after a 10-minute quiet window.
+  - Per-service `logTickOK` + loop-name constants (the earlier "no helper" applies to the gauge).
+  - Orchestrator rulings: trading label key `category` -> `alert_kind`; AC-36 uses the fully-qualified `xstockstrat.analysis.v1.AnalysisService`; `observeQuotePass(ctx, ...)` replaces the per-position `slog.Warn` at portfolio_service.go:484 (applyQuotes signature unchanged).
+- **Operator override (2026-11-04, explicit):** at the round-5 gate (the skill's hard cap of 5 rounds) the operator chose "override cap, run another round". The cap is a skill HARD CONSTRAINT, not a Floor (F-*) item, so it is overridable with sign-off recorded here. Round 6 is scoped narrowly: apply the nine round-5 fixes, produce the complete amended `acceptance.feature` and verify every scenario's labels/counts against the code. No further rounds beyond 6 without a new explicit sign-off.
+- Status remains `spec-ready` until the design is approved.
+
+## Session 2026-11-04 — sdd-design (approved)
+
+- **Design approved** by the operator at the final gate (round 6, the last authorised round; no round 7): "Approve, apply listed fixes". Status `spec-ready` → `design-approved`. Artifacts: `recon.md`, `design.md`, amended `acceptance.feature` (59 scenarios).
+- Round 6: the proposer re-verified every AC against code and fixed 13 mismatches; the round-6 adversary (APPROVE WITH LISTED FIXES, no Floor breach) found 7 more AC mismatches and 3 design-text gaps. All were applied in `design.md` and `acceptance.feature`:
+  - AC-4: syncPositions heartbeat clause moved to new **AC-59**; AC-6 diff check reworded; AC-11 runs inside a span with no offline accounts; AC-12 gets an injected clock (`now` on the stream manager) and no-sample-after-give-up; AC-18 and AC-51 Givens now trigger the asserted logs; AC-28 gets a new WARN literal in ingest; AC-58 Given adds "no event between closes".
+  - Design text: `_emit_counts` aliased to a local `counts` so the RPC path's summary is correct; ledger FR-14 uses one counter with the error handler counting only when `this.client === client`; step 5 Files now include `app/supervision.py` and `app/services/evaluator.py`; Node test files named in steps 7-10.
+- **Amended acceptance scenarios (C-15, IDs stable, same-ID in-place; each amendment recorded here):** AC-1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 17, 18, 19, 20, 21, 23, 25, 26, 28, 31, 34, 36, 40, 45, 46, 47, 50, 51, 52, 53, 54, 56 (labels, counts and Given preconditions aligned to the 1.4 vocabulary and the code). **New:** AC-57 (NotFound lookup counts as flat), AC-58 (portfolio quiet-window reset), AC-59 (position-sync heartbeat still counts a failed ledger emit).
+- Operator-acknowledged design choices: portfolio `onHealthy` callback ("stream resumed", written only when 2 or more closes of one kind preceded); counters also reset after a 10-minute quiet window; `observeQuotePass` carries two duties (mark-source rate + unusable-quote aggregate) as an accepted trade-off.
+- Branch deviation to log at `/sdd-execute`: sequential on `ccr-b4aace27-zvuaby`, integration PR #1427; its description must be rewritten before merge.
+- Next: `/sdd-spec signal-map-instrumentation`.
+
+## Session 2026-11-04 — sdd-spec
+
+- Generated implementation-spec.md with 30 steps (14 service, 15 test, 1 docs). Status: design-approved → implementation-ready. All 59 `@AC-*` scenarios are covered by a `**Covers**` line (checked by script).
+- Key codebase findings (re-grepped at HEAD `e1cf809`; the tree matches the design's grounding, no drift found at the sites opened):
+  - `observed(label, h)` in portfolio does **not** exist (`grep` empty); `ConsumeOrderFills` wires `s.processOrderFill` unwrapped (`portfolio_service.go:173-174`), so Step 9 creates the wrapper. Existing `consumeEventStream`/`streamEventsFrom` callers in `portfolio_sync_retry_test.go` and `portfolio_fill_errors_test.go` must pass the new `onHealthy` argument.
+  - Trading `TradingService` has no `now` field (`trading.go:127`); no invalid-credentials branch exists at `SubmitOrder` (`ErrInvalidCredentials` only at `:2039, :2128, :3043`), so `submitOutcome` derives it with `errors.Is` in the existing `:724` branch.
+  - UI `src/telemetry.ts` exports only `initTelemetry`; the UI's metrics module with the rebinding pattern is `src/lib/bffMetrics.ts`, so the UI counters live there (design.md 1.1 listed `src/telemetry.ts`). The UI is therefore not in the Node library step.
+  - Notify enabled-channel state is private (`FanoutDispatcher.slackWebhookUrl/sendgridApiKey`, `WebPushDispatcher.vapidConfigured`); Step 21 adds read-only accessors and a pure `describeDeliveryChannels` in a new `src/fanout/deliveryChannels.ts` so AC-49 is testable without booting the server.
+  - Go coverage: trading and portfolio new logic lives entirely in the CI-excluded `service` and `telemetry` packages (`COVERPKGS` filter), so no coverage threshold applies there; the `-race` run is the gate. Marketdata's alpaca/fmp/finnhub/edgar packages ARE measured.
+  - DRY guard: jscpd is ENFORCED (threshold 0) only for `services/xstockstrat-ui/src` (`.husky/pre-commit`); Go/Python/Node are report-only, so the per-service duplicated accessor modules do not block.
+  - Overlap states at spec time: 215 in-progress, 243 in-progress, 281 implementation-ready (statuses read from `status.md`); no `merge-order.md` row names 294 yet. Re-run `/sdd-review impl-spec` for the Mode B overlap scan before `/sdd-execute`.
+- Branch deviation to log at `/sdd-execute`: sequential on `ccr-b4aace27-zvuaby`, integration PR #1427 (spec header, Step Dependencies and Deviation Log record it).
+
+## Session 2026-11-04 — sdd-review impl-spec (advisory; looped to convergence)
+
+- Result: **CONVERGED, 0 failures, 0 warnings** after 5 rounds (R1: 4 ✗ / 15 ⚠; R2: 0 / 15; R3: 0 / 7; R4: 0 / 1; R5: 0 / 0). Advisory only; status stays `implementation-ready`. Fixes were spec-text edits (Files lists, asserting verification commands, fail-closed `hunk_guard`/`fn_range` helpers, one RED protocol, coverage assertions, characterization-first ordering for Steps 7 and 11, Step 13/15/19 guards, Step 29 allowlist-test placement).
+- Accepted trade-offs (recorded in the spec, not defects): Step 11 not split (shared `cmd/server/main.go` wiring); Step 21 testability-only `deliveryChannels.ts` surface (C-18, reviewer to confirm); per-service duplicated accessor modules (jscpd report-only outside the UI); >5 Files on Steps 13/15/23/29/30; duplicated scope-claims read in Step 15 (`tools.py` import-cycle risk); AC-43 check is deliberately stricter than the scenario (whole `packages/otel/`).
+- Informational: design.md 1.4 says `secretDenialReason` goes "beside" `hasSecretCallerAuthority`; the spec appends it at end of `authz.ts` (hunk-sliding guard safety). Refinement, not a divergence.
+- Overlap findings (WARN only, zero FAIL-level; no proto/config/migration collision):
+  - [ ] 215 (code-completed on origin/main-dev; local checkout lags): analysis `live_loop.py`, `servicer.py`, `evaluator.py`; marketdata `etf_flags.go`, `fmp_client.go`, `marketdata_service.go`, `cmd/server/main.go`. Step 13/11 ranges must be re-derived after rebasing onto current `main-dev`.
+  - [ ] 243 (in-progress): indicators `tests/test_config_watcher.py`, `services/xstockstrat-indicators/CLAUDE.md` (Steps 28, 30).
+  - [ ] 281 (implementation-ready): portfolio `portfolio_service.go`, agent `tools.py`, config `configServiceImpl.ts`; the prune loop name in portfolio `Loops`.
+  - [ ] 282 (implementation-ready): marketdata `marketdata_service.go`, `cmd/server/main.go`, config `configServiceImpl.ts`, portfolio `portfolio_service.go`, agent `tools.py`.
+  - [ ] `merge-order.md` has no 294 row (operator to add advisory rows: 294 vs 215; 294 vs 281/282). Not written by this review (shared file, needs operator confirmation).
+- Execution reminders: log the branch deviation (sequential on `ccr-b4aace27-zvuaby`, PR #1427) at `/sdd-execute`; merge `origin/main-dev` into the branch before Step 1 so cited lines and the 215 ranges match current code; rewrite PR #1427's description before merge.
