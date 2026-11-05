@@ -748,3 +748,8 @@ done
 ```
 - Output: (none). Highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`.
 - Result: PASS. Still owed: the re-run right before the merge.
+
+## Session 2026-11-05T05:01Z — 037-free re-run (git one-liner)
+
+- Same command as the previous entry, run against a fresh `git fetch --prune origin`. Output: (none). Highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`.
+- Result: PASS. Branch vs `origin/main-dev` (behind/ahead): 6/47. Re-run again if `main-dev` is merged into the branch before #1401 merges.
