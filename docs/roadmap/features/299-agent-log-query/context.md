@@ -1,8 +1,8 @@
 # Context: agent-log-query
 
-**Feature**: `docs/roadmap/features/229-agent-log-query/feature.md`
-**Product Spec**: `docs/roadmap/features/229-agent-log-query/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/229-agent-log-query/implementation-spec.md`
+**Feature**: `docs/roadmap/features/299-agent-log-query/feature.md`
+**Product Spec**: `docs/roadmap/features/299-agent-log-query/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/299-agent-log-query/implementation-spec.md`
 
 ---
 
