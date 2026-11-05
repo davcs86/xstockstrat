@@ -41,3 +41,10 @@ Feature: spec-hygiene-guards
     And the PR head allowlist adds "299" and docs/roadmap/features contains "299-alpha" and "299-beta"
     When the feature-number uniqueness check runs on the pull request
     Then it exits non-zero and its output says allowlist addition "299" is not permitted
+
+  @AC-7 @FR-5
+  Scenario: The PR that introduces the allowlist is not blocked by the addition rule
+    Given the base branch has no allowlist file
+    And the PR head allowlist is exactly 058, 064, 097, 111, 140, 149, 153 and 169
+    When the feature-number uniqueness check runs on the pull request
+    Then the allowlist-addition rule is skipped and the check exits 0

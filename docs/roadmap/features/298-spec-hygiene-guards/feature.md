@@ -40,4 +40,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review spec-hygiene-guards product-spec` — AI review of product spec before running /sdd-spec; resolve OQ-1 and OQ-2 first.
+`/sdd-review spec-hygiene-guards product-spec` — AI review of product spec before running /sdd-spec; no open questions remain.

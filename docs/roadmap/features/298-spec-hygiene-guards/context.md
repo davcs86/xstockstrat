@@ -52,3 +52,8 @@ Resolve OQ-1 and OQ-2, then `/sdd-review spec-hygiene-guards product-spec`. Note
 - Tree: main-dev@364a937 ≡ origin/main-dev. spec-reviewer: PASS WITH WARNINGS (no blockers, no Floor breach). feature-overlap: WARN only (shared files `ci.yml` and root `CLAUDE.md` with 295/297; no config, proto, migration or service overlap; no merge-order entry needed).
 - Warnings addressed in the spec: OQ-1 and OQ-2 resolved with the earlier recommendations; added FR-5 / AC-6 for the append-proof allowlist; FR-4 now says AC-5 is authoritative and design amends it if the code differs; FR-1..FR-3 must land in one PR; teardown carried to `/sdd-spec`; Known traps converted from a checkbox to plain bullets; shared-file overlap recorded in Feature Workflow Notes.
 - Decision flag: OQ-1/OQ-2 were closed under the operator's instruction to loop the review until warnings are addressed, using the recommendations already presented; FR-5 is the only scope addition. Reversible by deleting FR-5 / AC-6.
+
+## Session 2026-11-05 — sdd-review product-spec, round 2
+
+- spec-reviewer: PASS WITH WARNINGS, no blockers; all six round-1 warnings verified resolved.
+- New warnings fixed: FR-5 had no bootstrap case (the base branch has no allowlist when this PR introduces it, nor does a `main`-based hotfix) → FR-5 now skips the addition rule when the base has no allowlist file, AC-7 added, and FR-3's land-together sentence now includes FR-5; stale "resolve OQ-1 and OQ-2" pointer in `feature.md` replaced.

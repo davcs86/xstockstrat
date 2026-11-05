@@ -18,11 +18,11 @@ FR-1. A CI check fails when two or more directories under `docs/roadmap/features
 
 FR-2. The grandfather allowlist is shrink-only: the check fails when an allowlisted prefix no longer has two or more directories (a stale entry), so entries are removed as soon as they stop being needed. The initial allowlist is the eight prefixes whose every directory is `launched` (number immutable): `058`, `064`, `097`, `111`, `140`, `149`, `153`, `169`.
 
-FR-3. `065-second-market-data-vendor` (status `idea`, not launched) is renumbered to a fresh number from `scripts/sdd-allocate-feature-number.sh` using the collision procedure in `docs/runbooks/feature-workflow.md` § Feature Numbering (`git mv`, then fix the moved directory's own path lines and any self-referential `NNN`). `065-cross-stock-score-derivation` (launched) keeps `065`, so `065` is not allowlisted. FR-1..FR-3 land in one PR: the check would fail on the unrenumbered `065` pair if it merged first.
+FR-3. `065-second-market-data-vendor` (status `idea`, not launched) is renumbered to a fresh number from `scripts/sdd-allocate-feature-number.sh` using the collision procedure in `docs/runbooks/feature-workflow.md` § Feature Numbering (`git mv`, then fix the moved directory's own path lines and any self-referential `NNN`). `065-cross-stock-score-derivation` (launched) keeps `065`, so `065` is not allowlisted. FR-1..FR-3 and FR-5 land in one PR: the check would fail on the unrenumbered `065` pair if it merged first.
 
 FR-4. Root `CLAUDE.md` § Inter-Service Dependencies replaces "All services → xstockstrat-ledger (event writes)" and "All services → xstockstrat-notify (alert emissions)" with the services that actually call them. The lists in AC-5 are the authoritative target; design re-verifies them against the code and, if they differ, amends AC-5 before `/sdd-spec` (the doc must match the code, not the draft).
 
-FR-5. On pull requests, the check also fails when the allowlist on the PR head contains a prefix that the allowlist on its base branch does not, so a new collision cannot be "fixed" by allowlisting it. Removing a prefix is allowed.
+FR-5. On pull requests, the check also fails when the allowlist on the PR head contains a prefix that the allowlist on its base branch does not, so a new collision cannot be "fixed" by allowlisting it. Removing a prefix is allowed. When the base branch has no allowlist file (the PR that introduces it, or a hotfix PR based on `main` before the next promotion), there is nothing to compare against and the addition rule does not apply; FR-1 and FR-2 still do.
 
 ## Out of Scope
 
