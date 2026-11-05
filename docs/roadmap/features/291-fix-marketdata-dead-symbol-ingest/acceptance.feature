@@ -107,4 +107,4 @@ Feature: fix-marketdata-dead-symbol-ingest (bug fix)
     And cycles 0 to 5 run, then no cycle runs for 49 hours (the window width is 48 hours), then cycles resume
     When the resumed cycles run
     Then "DEAD" is not held on the stale streak and is held only 12 cycles after the first resumed cycle
-    And as the positive control, after a 30-hour pause (less than the window width) the original streak continues
+    And as the positive control, after a 30-hour pause (less than the window width) the original streak continues and "DEAD" is held at the first resumed cycle

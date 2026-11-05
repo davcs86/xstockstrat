@@ -1,4 +1,5 @@
 Feature: fix-analysis-admin-formula-refusal (bug fix)
+  # AC-8 and AC-11 are stub-level: the materializer and live loop use owner-only metadata (no admin scope).
   Regression guard for defect report 2026-11-04-analysis-admin-formula-refusal-misclassified-defect: analysis treats indicators' admin-formula refusal as an outage / unhandled error.
   "the unreadable-formula marker" stands for whatever field /sdd-design chooses (a boolean or a reason enum).
 
@@ -56,6 +57,12 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
     When "admin-1" computes opportunities
     Then the "s-1" row for "MYSZ" has data_unavailable true and no unreadable-formula marker
 
+  @AC-14 @FR-1 @characterization
+  Scenario: A NOT_FOUND on a component formula keeps its skip behaviour
+    Given indicators ExecuteFormula for "f-9" fails with NOT_FOUND
+    When "admin-1" computes opportunities
+    Then the "s-1" row for "MYSZ" is evaluated with that component skipped, is not data-unavailable, and carries no unreadable-formula marker
+
   @AC-5 @FR-5 @characterization
   Scenario: The backtest mapping is unchanged
     Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
@@ -64,9 +71,9 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
 
   @AC-10 @FR-5 @characterization
   Scenario: A formula execution timeout still fails the opportunities recompute
-    Given indicators ExecuteFormula for a component of "s-2" times out ("Formula execution timed out after 5000ms")
+    Given indicators ExecuteFormula for a component of "s-2" responds success=false with error "Formula execution timed out after 5000ms" (not an RPC deadline)
     When "admin-1" computes opportunities
-    Then the recompute fails and no opportunity rows are replaced, exactly as before feature 289
+    Then the recompute fails (warning "opportunity recompute failed"), and the previously stored rows are retained, exactly as before feature 289
 
   @AC-6 @FR-2
   Scenario: The agent exposes the unreadable-formula marker
@@ -102,6 +109,6 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
 
   @AC-13 @FR-5 @characterization
   Scenario: A formula execution timeout still aborts EvaluateReadiness
-    Given indicators ExecuteFormula for a component of "s-2" times out ("Formula execution timed out after 5000ms")
+    Given indicators ExecuteFormula for a component of "s-2" responds success=false with error "Formula execution timed out after 5000ms" (not an RPC deadline)
     When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-2"
-    Then the RPC aborts as before feature 289 and the timeout is not converted into a 0 of 0 unreadable-formula result
+    Then the RPC fails with an unhandled-error status and ERROR "Unexpected [FormulaExecutionError]" is logged, as before feature 289, and the timeout is not converted into a 0 of 0 unreadable-formula result

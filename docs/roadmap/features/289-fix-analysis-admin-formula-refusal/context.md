@@ -49,3 +49,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Session 2026-11-04/05 — loop round 1 (fixes)
 
 - Round-1 review: PASS WITH WARNINGS, 0 blockers; three warnings fixed: AC-7 is a Scenario Outline with a data-source column (opportunity row for `/insights/opportunities` and the mobile section; readiness entry/result for `/insights/watchlists` and `/trader/positions/[symbol]`) and is tagged `@FR-2 @FR-3`; AC-9's Given now places `MYSZ` on `admin-1`'s watchlist (the heal stages a readiness-cache entry only for a watchlist entry-rule pair, `servicer.py:5181-5187`); AC-10 split — AC-10 is the opportunities-recompute timeout (recompute fails, no rows replaced), **AC-13** appended for the `EvaluateReadiness` timeout (RPC aborts, not converted to a 0/0 unreadable result). Recon note: `app/main.py:157` (live-loop evaluator) is explicitly excluded.
+
+## Session 2026-11-05 — loop round 2 (product-spec review)
+- Added `@AC-14` (NOT_FOUND skip behaviour pinned, C-16; the realistic scheduled-pass path since `owner_metadata()` drops the admin bit). AC-10/AC-13 Givens reworded to `success=false` "timed out after 5000ms" (not an RPC `DEADLINE_EXCEEDED`, which FR-4 treats as data-unavailable). AC-8/AC-11 flagged stub-level.
