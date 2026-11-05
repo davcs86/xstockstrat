@@ -78,3 +78,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-11-05 — post-merge refresh (origin/main-dev advanced)
 - `origin/main-dev` advanced by two commits: feature 281 landed `037_portfolio_signal_prune_interval` (config migrations now end at 037) and a 282 amendment. Spec-time NNN stays `038` (max+1). 291 (planned `035`) must now renumber UP to max(`origin/main-dev`)+1 at its merge; 293 and 291 both want `038` — whichever merges second renumbers (soft rule, `merge-order.md`). `merge-order.md` 293↔281 row reworded (281 merged); the old 282↔281 row was superseded by main-dev's hardened row.
+
+## Session 2026-11-05 — sdd-execute sequential: re-spec gate (§5.3)
+- Branch sync: `git merge --no-edit origin/main-dev` into the detached `origin/feature/fix-analysis-live-loop-budget-seed` checkout → "Already up to date" (base `94908ce6` already contains main-dev), so no merge commit; `scripts/ledger-guard.py --own-slug fix-analysis-live-loop-budget-seed --base origin/main-dev --fix` → clean.
+- Directive: conditional. Steps 1-2 re-validated (every `live_loop.py` / `test_live_loop.py` / `conftest.py` / `watcher.py` anchor resolves at the cited line) → bodies unchanged.
+- Steps 3-7 re-spec'd (Codebase Evidence / Instructions / Verification only; no scope change):
+  - Step 3: NNN = `043` per the Deviation Log pin, with an explicit merge-time rule — re-derive max(`origin/main-dev`)+1; if it is not `043` (293 would merge before 282/295/291 and leave a `038`-`042` gap, breaking C-07), stop for an **operator decision at the PR-2 merge**. Re-verified: `origin/main-dev` ends at `037`; `origin/feature/filter-otc-symbols` (282) now carries `038_marketdata_asset_refresh_interval` (the batch directive said no predecessor branch carried one yet — that has changed); 295 and 291 branches carry nothing above `037`. configServiceImpl upsert drift `:~635-648`.
+  - Step 4: registry insertion folded in (after `analysis.opportunity.live_enrich_timeout_ms` `:134`); tail now 281's `signal_prune_interval_seconds` `:150`, `};` `:151`, `lookupScalarBounds` `:156-158`, bounds check `:~557-568`, existence gate `:~571-606`.
+  - Step 5: `TIMEOUT_KEY_FORMS` insertion after the `live_enrich_timeout_ms` pair `:269-270`; loop `:293`; hand-written cases go after 281's `signal_prune = 0` test `:313` and before `bounds the float agent…` `:321`.
+  - Step 6: `ci.yml` `migration-rerun` job `:676-714`, path filter `:77-78`; config-031 template anchors; audit triggers unchanged after `017`; rebase re-run list now 282/295/291.
+  - Step 7: config-governance first entry is now feature 281 (`:144`), so 293 goes above the newest entry at execution time, not "above feature 249"; merge-order 293 rows at `:100/:101/:103/:105`.
+- Open thread (not edited, out of re-spec scope): `merge-order.md:100` still says 291/293 "insert above the feature 249 entry" — stale since 281 landed; correct it when the row is next touched.
