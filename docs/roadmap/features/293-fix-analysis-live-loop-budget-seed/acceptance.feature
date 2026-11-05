@@ -32,6 +32,7 @@ Feature: fix-analysis-live-loop-budget-seed (bug fix)
     Then GetConfig for the key on staging returns 200
     And the key's description is non-empty and its default_value is 50
     And listing the analysis keys shows exactly one row for the key on staging
+    And its value_type is still int
 
   @AC-4 @FR-2
   Scenario: Applying the seed migration twice leaves one row per environment
@@ -67,3 +68,10 @@ Feature: fix-analysis-live-loop-budget-seed (bug fix)
     Given the seed migration is declared
     When node scripts/check-config-wiring.mjs --declared-migration <the new migration file> is run
     Then it exits 0 and scripts/config-wiring.json contains no entry for analysis.engine.max_strategies_per_cycle
+
+  @AC-9 @FR-2 @regression
+  Scenario: The seed never overwrites operator-written metadata
+    Given staging holds analysis.engine.max_strategies_per_cycle = 200 with description "Operator note" and default_value "75"
+    When the seed migration is applied
+    Then GetConfig for the key on staging returns 200
+    And its description is still "Operator note" and its default_value is still 75

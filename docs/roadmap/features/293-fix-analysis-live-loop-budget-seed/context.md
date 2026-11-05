@@ -36,3 +36,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Session 2026-11-04/05 — loop round 1 (fixes)
 
 - Round-1 review: PASS WITH WARNINGS, 0 blockers; 3 fixable warnings fixed. **Correction to my own earlier statement** (FR-3 rationale): a cycle that outlasts the interval is NOT skipped — `run_forever` awaits each cycle inline after `sleep(interval)` and the `_lock.locked()` skip is dead code (verified, `live_loop.py:336-345`), so the effective period is interval + cycle duration (≈ 84 s at 200 pairs, ≈ 108 s at 400). The candidate maximum 400 stays an assistant-chosen candidate for `/sdd-design`, now framed as a signal-freshness trade-off. AC-2 gains an explicit trigger ("and the next cycle runs") and a zero-live-pairs step (count 4); FR-5 clears the state on a zero-pair cycle (early returns at `:435-441`) and its volume wording is "one WARN per (episode, budget, process lifetime)"; AC-8 names the migration-file argument; the verification route for AC-3/4/7 is recorded as a design/spec decision.
+
+## Session 2026-11-05 — loop round 3 (product-spec)
+- Added @AC-9 (operator-written metadata never overwritten; C-15 coverage of the FR-2 sub-clause), value_type-unchanged assertion on AC-3, FR-3 timing flagged as extrapolated lower bounds, docs bullet carries bounds + test cases.

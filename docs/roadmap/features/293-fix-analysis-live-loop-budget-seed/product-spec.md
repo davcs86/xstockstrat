@@ -36,7 +36,7 @@ condition (~5.6k WARN lines in 7 days at budget 50: 670–696 live pairs vs 50),
   as `50` through `int_positive`) and a **candidate maximum of `400`** (measured ≈ 0.12 s per pair on staging — 200 pairs
   took 23.6 s). Each cycle is awaited inline after `sleep(interval)` (`live_loop.py:336-345`; the `_lock.locked()` skip at
   `:339-341` is effectively dead code because nothing else takes the lock), so cycles never overlap and the effective
-  period is `eval_interval_seconds` + cycle duration: ≈ 84 s at 200 pairs and ≈ 108 s at 400 (≈ 68 s observed at 50).
+  period is `eval_interval_seconds` + cycle duration: ≈ 84 s at 200 pairs and ≈ 108 s at 400 (≈ 68 s observed at 50). These are lower bounds: ≈ 5 s of per-cycle non-evaluation overhead is not modelled (68 s observed at 50 vs 62.5 s) and per-pair cost rose from ≈ 0.05 s at 50 pairs to ≈ 0.12 s at 200, so the 400 figure is an extrapolation.
   The maximum is therefore a signal-freshness trade-off, not a fit-inside-the-interval limit. The maximum is an assistant-chosen candidate for `/sdd-design` to confirm or
   revise against indicators/marketdata capacity; whatever value is final gets an `@AC` (AC-6). `SetConfig` without `create_key` succeeds for the key once registered.
 - **FR-4:** The `scripts/config-wiring.json` baseline entry for the key (`read-unseeded`, owner feature 278,
@@ -101,7 +101,7 @@ xstockstrat-analysis (live-loop WARN throttling; `CLAUDE.md` row), xstockstrat-c
   (`analysis`, `analysis.engine.max_strategies_per_cycle`), otherwise the conflict target does not fire and a second row
   is created.
 - Config key registered: `analysis.engine.max_strategies_per_cycle` (int, default 50), bounds per FR-3.
-- Docs: "Seeded by migration NNN" note on the analysis `CLAUDE.md` Config Keys row (`:529`); entry in the Per-Feature
+- Docs: "Seeded by migration NNN; bounds `[1, <final max>]`" note on the analysis `CLAUDE.md` Config Keys row (`:529`), plus the matching `setConfigScalarBounds.test.ts` cases; entry in the Per-Feature
   Registered Keys log in `docs/patterns/config-governance.md`.
 - Governance gates (root `CLAUDE.md` § Approval Flow): DB migration — config-service owner + DBA; new config key —
   analysis owner + config team.
