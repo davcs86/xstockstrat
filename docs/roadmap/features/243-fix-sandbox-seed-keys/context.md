@@ -541,5 +541,24 @@ Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
 - Added `app/maintenance/sandbox_keys_check.py` + tests (10 pass, ruff clean). Operator runs
   `python -m app.maintenance.sandbox_keys_check` once per app and pastes the output below under `G1 staging` /
   production read-back. Deviation recorded in implementation-spec.md.
-- G1 staging: [ ] awaiting operator output
-- Production read-back: [ ] awaiting operator output
+- G1 staging (2026-11-04T22:56Z, operator run of `python -m app.maintenance.sandbox_keys_check` in the dev indicators pod, db=staging):
+  - 3 full-dotted global rows per environment, no bare rows, no secret rows, no per-user rows; the `staging` and `production` environment rows both exist in this database (the `production` rows are inert here).
+  - `config_values_premigration_031` snapshot: staging pre-heal was 5000 / 134217728 / `numpy,pandas,math,statistics` (bare keys; never read by the watcher, so effective values were the code defaults).
+  - Values: all rows at seed (`5000` / `134217728` / imports, `updated_by=system:config-migration-031`) EXCEPT staging `indicators.sandbox.timeout_ms = 15000`, `updated_by=80880990-2b79-4d85-8761-d8d9102c2efb` (a user edit after 031, not the migration).
+  - The first script version reported FAIL for that row; it was a false positive (an edit by a non-migration author is a note). Fixed in the same PR.
+  - Verdict: PASS for the heal. Operator confirmed the staging 15000 override is intentional (operator chat, 2026-11-04).
+- Production read-back: [ ] pending: operator runs the module after the prod deploy (does not block Step 5 `done`)
+
+## Session 2026-11-04T22:59Z — sdd-execute (Step 5 closed)
+
+- Step 5 → `done` on the passing staging G1 + the operator's recorded decision on the 15000 override; all 5 steps done.
+- Status in-progress → code-completed. 031 and its tests/acceptance already merged (#1334); the operator-check module
+  merged in #1442; this PR carries the false-positive fix and the Step 5 close-out.
+- Open: production read-back (operator, after prod deploy).
+
+## Session 2026-11-05 (CI: feature status automation)
+
+- Promotion PR #1448 merged to main
+- Feature promoted and committed: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-05

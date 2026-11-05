@@ -841,6 +841,27 @@ export type DeleteWatchlistResponse = Message<"xstockstrat.portfolio.v1.DeleteWa
  */
 export declare const DeleteWatchlistResponseSchema: GenMessage<DeleteWatchlistResponse>;
 /**
+ * Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+ * and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+ *
+ * @generated from message xstockstrat.portfolio.v1.WatchlistSignalProvenance
+ */
+export type WatchlistSignalProvenance = Message<"xstockstrat.portfolio.v1.WatchlistSignalProvenance"> & {
+    /**
+     * @generated from field: int64 signal_id = 1;
+     */
+    signalId: bigint;
+    /**
+     * @generated from field: google.protobuf.Timestamp valid_until = 2;
+     */
+    validUntil?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.WatchlistSignalProvenance.
+ * Use `create(WatchlistSignalProvenanceSchema)` to create a new message.
+ */
+export declare const WatchlistSignalProvenanceSchema: GenMessage<WatchlistSignalProvenance>;
+/**
  * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
  */
 export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest"> & {
@@ -858,6 +879,12 @@ export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWa
      * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 3;
      */
     bindings: WatchlistBinding[];
+    /**
+     * System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument.
+     *
+     * @generated from field: xstockstrat.portfolio.v1.WatchlistSignalProvenance signal_provenance = 4;
+     */
+    signalProvenance?: WatchlistSignalProvenance | undefined;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.

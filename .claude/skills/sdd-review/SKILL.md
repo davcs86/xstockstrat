@@ -2,7 +2,7 @@
 name: sdd-review
 description: AI review gate for SDD product specs and implementation specs. Usage — /sdd-review <feature-slug> [product-spec|impl-spec]. Applies structured criteria via the spec-reviewer subagent and scans every other feature directory for collisions (config keys, proto field numbers, migration NNN prefixes, shared service dirs) via feature-overlap; product-spec gates draft → spec-ready, impl-spec is advisory. Use this whenever the user asks whether a spec is ready, complete, or approvable, to review / critique / find gaps in a product or implementation spec, to check acceptance criteria and governance gates, or to see whether a feature conflicts or overlaps with other in-flight work. This reviews specs, not code — pull-request and working-diff review belongs to /review or /code-review.
 argument-hint: <feature-slug> [product-spec|impl-spec]
-allowed-tools: Read Write Edit Bash(find *) Bash(grep *) Bash(egrep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Task
+allowed-tools: Read Write Edit Bash(find *) Bash(grep *) Bash(egrep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git status *) Bash(git pull *) Task
 effort: medium
 ---
 
@@ -40,6 +40,11 @@ files that the subagents read — do not load them here.
 3. Read `FEATURE_MD`. If absent: stop — "No feature found for this slug. Run /sdd-story first."
    Read `STATUS_MD` — its content is the current lifecycle status (a plain string, e.g.
    `spec-ready`).
+
+4. Verify the working tree is the latest commit of the target branch — **once**, here, before either
+   mode spawns a subagent — by running `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=switch`. A stop
+   result (dirty tree, merge conflict, fetch failure) halts the skill. `spec-reviewer` (code-checkable claims) and `feature-overlap` read the
+   working tree, so print the resulting `Tree:` stamp with the final verdict.
 
 ---
 

@@ -35,7 +35,7 @@ FR-7. A one-shot, DBA-reviewed operator backfill (`portfolio backfill-signal-exp
 
 - `xstockstrat-portfolio` — migration `018` (side table), add path, prune loop + events, `portfolio backfill-signal-expiry` subcommand, config key.
 - `xstockstrat-agent` — sends signal provenance on the `direction="watchlist"` auto-add; `ingest_signal`/`get_watchlist` docstrings and `docs/runbooks/mcp-tools.md`.
-- `xstockstrat-config` — `SCALAR_BOUNDS_REGISTRY` entry for the new key only.
+- `xstockstrat-config` — `SCALAR_BOUNDS_REGISTRY` entry and config migration `037_portfolio_signal_prune_interval` seeding the new key.
 - `xstockstrat-ui` — no code change; one e2e assertion that an emptied system list renders and cannot be deleted.
 - `xstockstrat-ingest` — no change (read by the operator backfill only). `xstockstrat-analysis` — no change (premise refuted).
 
@@ -53,7 +53,7 @@ FR-7. A one-shot, DBA-reviewed operator backfill (`portfolio backfill-signal-exp
 ## Config Key Changes
 
 - [ ] No new config keys
-- `portfolio.watchlist.signal_prune_interval_seconds` — int, default 300, write bounds `[60,86400]`; **unseeded** (227-D2 waiver, `docs/patterns/config-governance.md:144`) with a `SCALAR_BOUNDS_REGISTRY` entry (`configServiceImpl.ts:103`).
+- `portfolio.watchlist.signal_prune_interval_seconds` — int, default 300, write bounds `[60,86400]`; with a `SCALAR_BOUNDS_REGISTRY` entry (`configServiceImpl.ts:103`); **seeded** by config migration `037_portfolio_signal_prune_interval` (staging + production global rows, value 300 = the code default, insert-if-absent; the down deletes only the global rows of this key). Replaces the 227-D2 unseeded waiver: feature 278's shrink-only ratchet forbids a baseline entry (operator decision 2026-11-02).
 
 ## Database Changes
 
@@ -67,6 +67,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto or config change)
 - [ ] 2 service owners + platform lead (breaking proto change)
 - [x] DBA review + service owner (schema migration `018`; also reviews the backfill REPORT before any APPLY)
+- [x] Config team + `xstockstrat-config` owner (new global key seed) and DBA review (config migration `037`: numbering, up/down pair, down limited to global rows)
 
 ## Acceptance Criteria
 

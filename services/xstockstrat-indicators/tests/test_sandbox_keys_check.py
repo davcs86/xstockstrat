@@ -34,12 +34,20 @@ def test_bare_row_means_031_not_applied():
     assert any("bare global rows remain" in p for p in problems)
 
 
-def test_missing_and_wrong_value_fail():
+def test_missing_and_migration_written_wrong_value_fail():
     rows = [r for r in _healed() if r["key"] != "indicators.sandbox.timeout_ms"]
     rows[0]["value_data"] = "1"
     problems, _ = sk.evaluate(rows, [], MIGRATED)
     assert any("missing full-dotted" in p for p in problems)
     assert any("expected" in p for p in problems)
+
+
+def test_operator_override_after_031_is_a_note_not_a_failure():
+    rows = _healed()
+    rows[0].update(value_data="15000", updated_by="80880990-2b79-4d85-8761-d8d9102c2efb")
+    problems, notes = sk.evaluate(rows, [], MIGRATED)
+    assert problems == []
+    assert any("overridden after 031" in n and "15000" in n for n in notes)
 
 
 def test_secret_row_fails_and_value_edit_is_a_note():
@@ -48,7 +56,7 @@ def test_secret_row_fails_and_value_edit_is_a_note():
     rows[1]["updated_by"] = "someone"
     problems, notes = sk.evaluate(rows, [], MIGRATED)
     assert any("secret row" in p for p in problems)
-    assert any("edited after 031" in n for n in notes)
+    assert any("after 031" in n for n in notes)
 
 
 def test_per_user_row_is_only_a_note():

@@ -1,6 +1,6 @@
 # Implementation Spec: fix-sandbox-seed-keys
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-10-20
 **Feature**: `docs/roadmap/features/243-fix-sandbox-seed-keys/feature.md`
 **Total Steps**: 5
@@ -379,7 +379,7 @@ grep -n "system:config-migration-" docs/patterns/config-governance.md           
 
 ### Step 5 — config: G1 staging state gate before the `main-dev` merge; production advisory read-back
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (operational, read-only)
 **Files**:
 - `docs/roadmap/features/243-fix-sandbox-seed-keys/context.md` — modify (record results only)
@@ -502,3 +502,9 @@ _Populated by /sdd-execute as implementation proceeds._
   secret rows) because 031 already merged (#1334); it also flags a skipped 031 (schema_migrations >= 032, no snapshot).
 - **Impact**: none on migrations or runtime; the module is reachable only from the console. Needs an indicators deploy
   to be present in the image.
+
+### Step 5 — closed on the staging G1 result; NNN check superseded (2026-11-04T22:59Z)
+- **Expected**: Verification's NNN check prints `030_…` as the highest config migration on `main-dev`.
+- **Actual**: 031 merged first (#1334, 2026-10-28), then 032–034; the NNN gate is moot. Staging G1 passed (see context.md);
+  the operator confirmed the staging `timeout_ms = 15000` override is intentional. Production read-back is pending the
+  prod deploy and does not block `done` (Instruction 3).
