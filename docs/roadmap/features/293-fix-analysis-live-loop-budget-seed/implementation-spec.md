@@ -324,4 +324,12 @@ grep -n "bounds \[30,600\]\|bounds \[1,1000\]" services/xstockstrat-analysis/CLA
 
 ## Deviation Log
 
+### Deviation: Pre-execution — config migration number and registry anchors (2026-11-05)
+
+Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodies stay immutable (F-09), so the executor applies these overrides:
+
+- **`NNN` = `043`** (replaces the spec-time `038`). `043` = max(`origin/main-dev`)+1 once 282 (`038`/`039`), 295 (`040`/`041`) and 291 (`042`) have merged; if the base differs at merge time, take max+1 exactly (C-07) and log it here. Apply to all eleven embedded NNN sites listed in the placeholder note, and set Step 7's old-number check to `038`.
+- **`SCALAR_BOUNDS_REGISTRY` anchor.** Insert the two `analysis.engine.*` entries (and their comment) immediately after `'analysis.opportunity.live_enrich_timeout_ms'`, inside the analysis group, not "after `last_close_lookback_days`" (that tail now holds 281's entry and is 282's/295's insertion point).
+- **`TIMEOUT_KEY_FORMS` anchor.** Insert the four rows immediately after the `analysis.opportunity.live_enrich_timeout_ms` pair, not at the table tail.
+
 _Populated by /sdd-execute as implementation proceeds._

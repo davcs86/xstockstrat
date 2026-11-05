@@ -387,4 +387,12 @@ node scripts/check-config-wiring.mjs --final   # exit 0: no new finding, no STAL
 
 ## Deviation Log
 
+### Deviation: Pre-execution — config migration number and registry anchors (2026-11-05)
+
+Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodies stay immutable (F-09), so the executor applies these overrides:
+
+- **Migration `035` → `042`.** `origin/main-dev` already carries `037` (feature 281), and golang-migrate skips a lower version that lands after a higher one on an already-migrated database. `042` = max(`origin/main-dev`)+1 once 282 (`038`/`039`) and 295 (`040`/`041`) have merged; if the base is different at merge time, take max+1 exactly (C-07) and log it here. Every `035` / `035_marketdata_bar_ingest_backoff` site in Steps 1-2 and the CLAUDE.md / `config-governance.md` text becomes `042` / `042_marketdata_bar_ingest_backoff`; re-run `grep -rn 035` over the feature directory and the touched docs afterwards.
+- **`SCALAR_BOUNDS_REGISTRY` anchor.** Insert the `'marketdata.stream.bar_ingest_backoff_ms'` entry (and its comment) immediately after `'marketdata.quotes.mark_close_max_age_hours'`, inside the marketdata group, not at the registry tail (the tail is 282's/295's insertion point).
+- **`TIMEOUT_KEY_FORMS` anchor.** Insert the two rows immediately after the `marketdata.quotes.mark_close_max_age_hours` pair, not after the `last_close_lookback_days` pair.
+
 _Populated by /sdd-execute as implementation proceeds._
