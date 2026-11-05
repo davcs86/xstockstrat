@@ -41,7 +41,7 @@ PR 653 = 9 files, +346/−2, 3 commits, head `b2ec808`. Nothing from it is on `m
 - **G8 — _(split out, Q3)_ `mcp/grafana` is unpinned** (implicit `:latest`), against the repo's pin-everything convention; needs Docker, so it cannot start in web/remote sessions (this very session had no Docker). → moves with the split-out MCP feature.
 - **G9 — Credential home predates feature 286.** PR 653 assumes plain GitHub secrets. Since 286 (launched 2026-11-04) deploy-time secrets resolve from per-environment SOPS files, with platform credentials deliberately left as native GitHub secrets (`DIGITALOCEAN_ACCESS_TOKEN`). Decided 2026-11-05 (Q2): GitHub Environment secrets, not the SOPS KEYS table, since the token has no DO-runtime consumer. → Q2a for which environment.
 - **G10 — Hard failure when secrets are unset** (fork PRs, new clones): every dashboard push goes red. → Q4.
-- **G11 — _(out of scope, Q9)_ Alerts remain manual.** `packages/otel/alerts/alert-rules.yaml` (3 rules, `${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` placeholders) and `mute-timings.yaml` are imported by hand; the same CI path could apply them but PR 653 does not. → decided out of scope (Q7).
+- **G11 — _(out of scope, Q7)_ Alerts remain manual.** `packages/otel/alerts/alert-rules.yaml` (3 rules, `${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` placeholders) and `mute-timings.yaml` are imported by hand; the same CI path could apply them but PR 653 does not. → decided out of scope (Q7).
 - **G12 — No test.** Sibling scripts (`check-otel-produced-signals.sh` + `.test.sh`) ship an offline test; PR 653 verified only by hand against `service-health.json`. → FR-7.
 - **G13 — Process:** PR 653 is based on `main`, violating the `claude/*` → `main-dev` rule; close/supersede it once this feature lands.
 

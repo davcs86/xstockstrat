@@ -19,7 +19,6 @@ Feature: grafana-dashboards-ci-deploy
 
   @AC-2 @FR-2
   Scenario: The Tempo placeholder is resolved alongside Prometheus and Loki
-    Given the fake Grafana serves datasources by uid: "grafanacloud-prom", "grafanacloud-logs" and "grafanacloud-traces"
     When the script uploads service-health.json with no overrides
     Then the posted payload contains 0 occurrences of the substring "${DS_"
     And it contains 6 datasource references to "grafanacloud-traces"
@@ -72,7 +71,7 @@ Feature: grafana-dashboards-ci-deploy
 
   @AC-8 @FR-2 @FR-4
   Scenario: A missing datasource uid uploads nothing
-    Given the fake returns HTTP 404 for GET /api/datasources/uid/grafanacloud-logs
+    Given the fake instead returns HTTP 404 for GET /api/datasources/uid/grafanacloud-logs
     When the script runs without overrides
     Then stderr contains "datasource uid grafanacloud-logs not found"
     And the fake receives 0 POST /api/dashboards/db requests
@@ -117,6 +116,7 @@ Feature: grafana-dashboards-ci-deploy
     And both docs show the manual invocation "scripts/grafana-deploy-dashboards.sh"
     And .env.example names GRAFANA_URL and GRAFANA_SERVICE_ACCOUNT_TOKEN in its GitHub-secrets comment block
     And root CLAUDE.md Key File Paths lists ".github/workflows/grafana-dashboards.yml"
+    And docs/setup/CLAUDE.md's grafana-cloud.md row mentions the CI dashboard deploy
 
   @AC-14 @FR-10
   Scenario: Every query target in the four dashboards is environment-scoped

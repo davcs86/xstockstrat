@@ -71,3 +71,7 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 
 - Verdict PASS WITH WARNINGS, no blockers. Fixed W1 (Delta table G-references), W2 (CI path filter adds `packages/otel/dashboards/**`), W3 (Background serving the three default uids), W4 (AC-10 no `pull_request*` trigger, no secrets-skip guard), W5 (AC-7 now an outline over `GRAFANA_URL` and the token), W6 (FR-8 lists the CLAUDE.md, `.env.example` and README deliverables; AC-12 checks them), N1-N8 wording fixes (N5: environment creation added to the operator preconditions).
 - W7 (author-adopted defaults need operator confirmation) cannot be closed by the author: recorded as a `/sdd-design` gate checklist (Q2a, Q4, Q5, Q6) in the product-spec Feature Workflow Notes.
+
+## Session 2026-11-05 — sdd-review product-spec, iteration 3
+
+- Verdict PASS WITH WARNINGS, no blockers. Fixed W1 (AC-12 asserts the `docs/setup/CLAUDE.md` row), N1 (AC-8 Given says "instead returns 404"), N2 (AC-2 drops the Given the Background already states), N3 (G11 cites Q7). W7 stays carried as the `/sdd-design` operator-confirmation checklist.
