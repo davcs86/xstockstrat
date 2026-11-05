@@ -60,7 +60,7 @@ string). Check it:
 - `$FEATURE_DIR/context.md` — prior session decisions (Constitution **C-02**). Read before writing.
 
 **Step B3.5.** Verify the working tree is the latest commit of the target branch — once, before
-Phase 0 — by running `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=stop`. A stop result halts the
+Phase 0 — by running `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=switch`. A stop result (dirty tree, merge conflict, fetch failure) halts the
 skill. Keep the resulting `Tree:` stamp; every Phase 0 scout prompt carries it.
 
 **Step B4.** Resolve the debate mode from `$ARGUMENTS[1]` (`quick` → single mandated round; absent →

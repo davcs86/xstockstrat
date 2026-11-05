@@ -42,8 +42,8 @@ files that the subagents read — do not load them here.
    `spec-ready`).
 
 4. Verify the working tree is the latest commit of the target branch — **once**, here, before either
-   mode spawns a subagent — by running `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=stop`. A stop
-   result halts the skill. `spec-reviewer` (code-checkable claims) and `feature-overlap` read the
+   mode spawns a subagent — by running `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=switch`. A stop
+   result (dirty tree, merge conflict, fetch failure) halts the skill. `spec-reviewer` (code-checkable claims) and `feature-overlap` read the
    working tree, so print the resulting `Tree:` stamp with the final verdict.
 
 ---

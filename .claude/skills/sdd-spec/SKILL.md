@@ -31,7 +31,7 @@ Capture the result as `FEATURE_DIR`. Use `$FEATURE_DIR` for all file reads and w
 
 ### 0.5. Verify the working tree (once)
 
-Run `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=stop`; a stop result halts the skill. Pass the
+Run `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=switch`; a stop result (dirty tree, merge conflict, fetch failure) halts the skill. Pass the
 resulting `Tree:` stamp in every `codebase-discovery` prompt in Step 3 and discard any digest whose
 `Checkout:` line differs.
 
