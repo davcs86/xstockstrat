@@ -94,6 +94,8 @@ type MarketDataService struct {
 	class classificationState
 	// etf is the cache-only ETF-label state (feature 215); zero value = no source wired.
 	etf etfFlagState
+	// assets is the Alpaca us_equity asset-set snapshot (feature 282); zero value = not loaded (every symbol servable).
+	assets assetServabilityState
 	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
 	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex

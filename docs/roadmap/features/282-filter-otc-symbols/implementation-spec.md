@@ -211,7 +211,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 5 — service: marketdata asset set, GetSymbolServability RPC, refresher
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/asset_servability.go` — create
@@ -355,7 +355,7 @@ process.exit(hits.length||introduced.length?1:0);' "$T/head.json" "$T/base.json"
 
 ### Step 6 — test: marketdata asset set, servability RPC, refresher semantics
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/asset_servability_test.go` — create
@@ -944,3 +944,20 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: the same script run inside the version-pinned `xstockstrat-codegen` image (built from `Dockerfile.codegen` with the agent-proxy CA secret, as `scripts/localenv-setup.sh` does), with the worktree mounted at `/workspace`. The host had only `buf`, not the Go/TS/Python codegen plugins. The workspace `node_modules` that the script's `tsc` step needs was installed with `pnpm install --frozen-lockfile --ignore-scripts`. In the container, the script's own `buf breaking` block skips because there is no local `main-dev` ref. Step 1's Verification already ran `buf breaking` against `origin/main-dev` on the same `.proto` sources.
 - **Result**: the regenerated set is exactly this step's 28 **Files**. A second run after staging produced no diff and no untracked file. The marketdata `go build` and the `go vet` of the portfolio and trading `internal/service` packages (test stubs included) passed on the host.
 - **Disposition**: CI-equivalent fallback
+
+### Steps 5 + 6 — merged into one commit (2026-11-05)
+- **Specced**: Step 5 (service) and Step 6 (test) as two commits, Step 5 first.
+- **Actual**: one commit carries both steps' **Files**, and both Statuses go to `done` in it. Before Step 7 lands, `markWarmIfServable` and `liveFetchAllowed` have no non-test caller. A Step-5-only commit fails Step 5 Verification block 1 (`golangci-lint` `unused`), so Step 6's tests are their only callers until then. Both Verification blocks ran on the combined tree.
+- **Disposition**: operator decision (Option A on the Step 5 blocker, 2026-11-05). Step 6 is skipped in the loop because it is already done.
+
+### Step 5 — Verification blocks 2 and 4 run as split commands (2026-11-05)
+- **Specced**: blocks 2 and 4 as single compound subshells.
+- **Actual**: the worktree-isolation guard refused compound `git` constructs, so each block ran as separate plain commands with the same inputs.
+  - Block 2: `git fetch --prune origin`, then `git cat-file --batch` over every `origin/*` ref's `services/xstockstrat-config/migrations` tree. Result: no `038_`/`039_` on any ref, and `037_portfolio_signal_prune_interval` is present on `origin/main-dev` and on this branch. This is the "038/039 free; 037 present" outcome.
+  - Block 4: `--final --json` on HEAD, `git merge-base HEAD origin/main-dev` (`94908ce6`), and `git archive` of the base, extracted to a scratch directory. The spec's comparison script ran from a file, with `process.argv.slice(2)` in place of `-e`'s `slice(1)`. Result: `key hits 0, introduced 0, pre-existing 0` (exit 0).
+- **Disposition**: CI-equivalent fallback
+
+### Step 6 — extra fixture builder `testdata.SyntheticAssets(n)` (2026-11-05)
+- **Specced**: Instruction 1 lists the symbol constants and `ServableAssets()`.
+- **Actual**: also added `SyntheticAssets(n)` (n distinct NASDAQ assets) and the `ExchangeNasdaq`/`ExchangeOTC` constants to `internal/testdata/assets.go`. AC-11 needs a 10-asset set, and Instruction 1 bars declaring domain data inline in the test file. `Aapl` was absent from `marks.go`, so it was added. `Msft` is reused.
+- **Disposition**: in-scope fixture addition (C-13)

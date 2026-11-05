@@ -297,3 +297,45 @@
 - The new rows follow the table's one-row-per-line convention. 18 of the 24 existing rows already exceed prettier's width, and CI does not run prettier, so the new rows were not reformatted.
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: none
+
+## Session 2026-11-05 — sdd-execute sequential, Steps 5 + 6 (merged)
+
+- Operator decision (binding, 2026-11-05, Option A on the Step 5 blocker): fold Step 6's two test files into the Step 5 commit, so `liveFetchAllowed` and `markWarmIfServable` have callers and lint is clean. Run Step 6's Verification too, mark Steps 5 and 6 `done` in one commit, and skip Step 6 in the loop. Recorded in the Deviation Log.
+- Tooling setup (steps 5-6): go1.27.0 ✓ · golangci-lint 2.14.0 ✓ · node ✓ v24.22.1 (`/opt/node24/bin`, used for `check-config-wiring.mjs`). Nothing installed.
+- Hook note: no `node_modules` exists at this worktree root or in the main worktree, so there was nothing to symlink. The shared `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook runs. The commit was not made with `--no-verify`.
+
+### Step 5 — service: marketdata asset set, GetSymbolServability RPC, refresher [done]
+- New `internal/service/asset_servability.go` contains:
+  - the fixed-invariant `const (` block, including `assetRefreshHoursKey`
+  - immutable `assetSet` with nil-safe `classify`/`servable`, plus `liveFetchAllowed`
+  - `assetServabilityState` (an `atomic.Pointer` snapshot)
+  - `markWarmIfServable`, which loads the snapshot under `warmMu`
+  - `GetSymbolServability`: a request over 1000 symbols returns `InvalidArgument`; symbols are normalized; a nil snapshot gives `AssetSetLoaded=false` with every symbol servable
+  - `refreshAssets`: `us_equity` via the registry's default source; it rejects an empty list or one below 50% of the previous set; only the first load prunes the warm set, with one INFO `asset set loaded`
+  - `noteAssetRefreshFailure` (one unloaded WARN), `nextAssetRetryDelay` (1m doubling to a 30m cap), `resolveAssetRefreshInterval` (`<= 0` → paused, above 24 → 24h, nil/unset → 6h) and `StartAssetSetRefresher` (loads at boot, 1-minute ticker, re-reads the interval each tick, backs off on failure)
+- Other code changes:
+  - Field `assets assetServabilityState` added next to `etf` in `MarketDataService`.
+  - Connect handler and gRPC adapter `GetSymbolServability` added after `GetEtfFlags`.
+  - `go svc.StartAssetSetRefresher(ctx)` added after `StartEtfFlagFiller` in `main.go`.
+  - Config seed `038_marketdata_asset_refresh_interval.{up,down}.sql` copied verbatim from `design.md` § Amendment 2026-11-02.
+- Logging: once a set is loaded, a `ListAssets` error logs WARN `asset set refresh failed; keeping last good set`, and a rejected list logs WARN `asset set refresh rejected; keeping last good set` with `old_count`/`new_count`. While no set is loaded, `noteAssetRefreshFailure`'s single WARN covers every failure.
+- Instruction 4's comment was kept verbatim ("gate applies at warm-add sites only; warm-set readers are never filtered"), as the step body specifies. Open item (carried): reconcile it with the feature-291 wording when Step 17's constitution text lands. Raise it at the checkpoint.
+- Offline migration check: the 038 up inserts two global rows (staging and production, `user_id` NULL) with `ON CONFLICT … DO NOTHING`. The down deletes only that key's global rows (`user_id IS NULL`), so it reverses the up. No database was started.
+- Verification:
+  - Block 1: `go build` ok, `golangci-lint` 0 issues, and all three wiring greps match (`main.go:168`, `asset_servability.go:27`, `:173`).
+  - Block 2 (split commands, see the Deviation Log): 038/039 free on every `origin/*` ref, and 037 present.
+  - Block 3: step-time guard exit 0 with no findings.
+  - Block 4 (split, merge-base `94908ce6`): `key hits 0, introduced 0, pre-existing 0`, exit 0, and no ESCALATE lines.
+  - Sanity check: with the 038 up file moved aside, `--final` reports `asset_servability.go:marketdata.assets.refresh_interval_hours:read-unseeded`. The checker therefore sees the reader, and the seed wires it.
+
+### Step 6 — test: marketdata asset set, servability RPC, refresher semantics [done]
+- `internal/testdata/assets.go` holds `Aapl`, `Zzzz`, `Bossy`, `Crtd`, `Forl`, `Dnb`, `ExchangeNasdaq`/`ExchangeOTC`, `ServableAssets()` (DNB absent, `Msft` reused from `marks.go`) and `SyntheticAssets(n)` for the AC-11 10-asset set. That last builder was added in scope (Deviation Log).
+- `internal/service/asset_servability_test.go` adds one test per scenario: AC-1, AC-23, AC-4/AC-7 (`liveFetchAllowed`), AC-22, AC-9, AC-10, AC-11, AC-15, AC-24, and `TestResolveAssetRefreshInterval_ReadsSeededKey` (literal key, 12 → 12h). `fakeAssetSource` scripts `ListAssets` and asserts the class `us_equity`.
+- TDD: RED before implementation was a compile failure in `go test ./internal/service/ -run 'Servability|AssetSet|LiveFetch|ResolveAssetRefresh'`: `svc.refreshAssets undefined`, `svc.GetSymbolServability undefined`, `svc.assets undefined`, `undefined: liveFetchAllowed`. The behaviour was missing, not mistyped. GREEN with `-race`: all 10 new tests PASS. Scenarios: AC-1 red: GetSymbolServability undefined → green; AC-9/10/11/15/22/23/24 likewise.
+- Verification:
+  - `golangci-lint` 0 issues.
+  - `go test ./... -race -count=1` with the CI coverpkg set: all packages ok, total 81.9% (40% threshold).
+  - The C-13 grep shows `BOSSY` only inside assertion message strings. Every symbol value comes from `testdata`.
+  - The `ReadsSeededKey` count is 1.
+- Files modified (Steps 5 + 6): `services/xstockstrat-marketdata/internal/service/asset_servability.go`, `…/internal/service/marketdata_service.go`, `…/internal/handler/marketdata_handler.go`, `…/cmd/server/main.go`, `services/xstockstrat-config/migrations/038_marketdata_asset_refresh_interval.{up,down}.sql`, `…/internal/service/asset_servability_test.go`, `…/internal/testdata/assets.go`
+- Deviations: Steps 5 + 6 merged into one commit (operator), Step 5 blocks 2 and 4 run as split commands (CI-equivalent fallback), extra fixture builder (C-13). Details are in the Deviation Log.
