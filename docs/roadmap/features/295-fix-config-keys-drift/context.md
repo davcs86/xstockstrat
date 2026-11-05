@@ -655,3 +655,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Agent boot readiness depends on config → A8.
 - [ ] Unverified library behaviours (node-postgres timeouts, `time_remaining`, produced-signals
   multi-path) → the first step that uses each.
+
+## Session 2026-11-05 — sdd-review product-spec (post-design re-review)
+
+- **Result:** PASS WITH WARNINGS, no blockers. Spec, acceptance and design.md are consistent.
+- **Warnings resolved in the same session:**
+  - Config Key Changes now carries the full FR-15 contract table for
+    `indicators.sandbox.startup_grace_ms` (new), `indicators.sandbox.timeout_ms` (new bounds) and
+    `analysis.compute.max_worker_threads` (new bounds, live limiter). The reader `max_workers=int_positive(self._cfg,
+    "analysis.compute.max_worker_threads", 4)` was verified in the analysis servicer.
+  - AC-5 Given/When reordered.
+  - Added:
+    - AC-34 (FR-1 FAILED_PRECONDITION, both cases);
+    - AC-35 (constraint → INVALID_ARGUMENT);
+    - AC-36 (FR-4 reveal exit 2);
+    - AC-37 (FR-8 agent startup blocks);
+    - AC-38 (FR-12 remaining-deadline clamp: 8 s − 5000 − 500 = 2500 ms; < 100 ms → no spawn).
+- 295 is design-approved with AC-1..AC-38.
+- **Next:** `/sdd-spec fix-config-keys-drift`, which gates on operator approval.

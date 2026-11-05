@@ -39,8 +39,8 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
   @AC-5 @FR-3 @regression
   Scenario: A per-user row in an unread spelling is snapshotted and reported, not silently applied
     Given user "u-295" has a staging "analysis" row "fundsignal.enabled" = true
-    When the heal migrations run
     And its sha256 tuple is not in the signed allowlist
+    When the heal migrations run
     Then that per-user row survives unchanged
     And the heal report lists it with user "u-295"
     And user "u-295"'s effective "analysis.fundsignal.enabled" is unchanged
@@ -268,3 +268,40 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     When the inventory, the dry-run and the heal migration run
     Then the legacy row still exists and is reported "twin-secret-class"
     And its value appears in no inventory, reveal output, heal report column or snapshot value column
+
+  @AC-34 @FR-1 @regression
+  Scenario Outline: SetConfig refuses an ambiguous spelling instead of writing a row nobody reads
+    Given staging "analysis" holds <rows>
+    When <caller> calls SetConfig with namespace "analysis" and key "backtest.max_duration_seconds" and value 90
+    Then the call returns FAILED_PRECONDITION naming both "backtest.max_duration_seconds" and "analysis.backtest.max_duration_seconds"
+    And no row changes
+
+    Examples:
+      | rows                                                                                              | caller       |
+      | global rows "backtest.max_duration_seconds" = 300 and "analysis.backtest.max_duration_seconds" = 60 | an admin     |
+      | global "analysis.backtest.max_duration_seconds" = 60 and a per-user "backtest.max_duration_seconds" = 300 for "u-1" | user "u-1" |
+
+  @AC-35 @FR-1 @regression
+  Scenario: A constraint violation surfaces as INVALID_ARGUMENT
+    Given an insert into config.config_values violates a table constraint
+    When SetConfig performs it
+    Then the call returns INVALID_ARGUMENT, not INTERNAL
+
+  @AC-36 @FR-4 @regression
+  Scenario: The inventory tool refuses to reveal per-user, secret or secret-class rows
+    Given a reveal request naming the per-user row "analysis" / "fundsignal.enabled" of user "u-295"
+    When the operator runs the inventory tool with --reveal
+    Then it exits with status 2 and prints no value
+
+  @AC-37 @FR-8 @regression
+  Scenario: The agent does not serve tools before its config snapshots arrive
+    Given the config service does not answer WatchConfig for namespace "indicators"
+    When the agent starts
+    Then the agent does not report ready within 90 seconds and fails its startup
+
+  @AC-38 @FR-12 @regression
+  Scenario: The sandbox timeout is clamped to the request's remaining deadline
+    Given "indicators.sandbox.timeout_ms" = 15000 and "indicators.sandbox.startup_grace_ms" = 5000
+    When ExecuteFormula arrives with 8 seconds of deadline remaining
+    Then the formula runs with an effective timeout of at most 2500 ms
+    And when the remaining deadline leaves under 100 ms the call returns success=false naming the remaining time and spawns no sandbox

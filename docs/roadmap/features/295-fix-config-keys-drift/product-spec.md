@@ -246,7 +246,13 @@ xstockstrat-identity, xstockstrat-notify, xstockstrat-agent, xstockstrat-ui. Als
 - Every key in every namespace is affected: seeded (FR-5), twin-deleted (FR-3) or retyped where
   stored == default (FR-5).
 - **No key's spelling changes in this feature.** That is feature 296.
-- New seeded keys: `indicators.sandbox.startup_grace_ms` (FR-12).
+- New or changed keys, with the full FR-15 contract:
+
+  | Namespace | Key | value_type | Code default | Reader (`path:symbol`) | Seed | Live mechanism | Write bounds |
+  |---|---|---|---|---|---|---|---|
+  | `indicators` | `indicators.sandbox.startup_grace_ms` | int | 5000 | `services/xstockstrat-indicators/app/config/watcher.py` sandbox grace property (new; replaces `SANDBOX_STARTUP_GRACE_MS` `app/services/sandbox.py:205`) | `036` | read per `ExecuteFormula` call | [1000, 10000] |
+  | `indicators` | `indicators.sandbox.timeout_ms` (existing) | int | 5000 | `watcher.py` `sandbox_timeout_ms` | `031` (existing) | read per call | [100, 33000] (new) |
+  | `analysis` | `analysis.compute.max_worker_threads` (existing) | int | 4 | `services/xstockstrat-analysis/app/handlers/servicer.py` `ComputePool` limit (was `ThreadPoolExecutor` `:570-573`) | `036` | `ResizableLimiter` via `OnChange` | [1, 16] (new) |
 - New write bounds: `indicators.sandbox.timeout_ms`, `analysis.compute.max_worker_threads`.
 - The per-key contract table is generated from the extended gate and lands in
   `implementation-spec.md` and `docs/patterns/config-governance.md`.
