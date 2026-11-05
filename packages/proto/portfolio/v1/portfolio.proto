@@ -325,11 +325,20 @@ message DeleteWatchlistRequest {
 }
 message DeleteWatchlistResponse {}
 
+// Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+// and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+message WatchlistSignalProvenance {
+  int64 signal_id = 1;
+  google.protobuf.Timestamp valid_until = 2;
+}
+
 message AddWatchlistSymbolsRequest {
   string watchlist_id = 1;
   repeated string symbols = 2;
   // When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
   repeated WatchlistBinding bindings = 3;
+  // System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument.
+  WatchlistSignalProvenance signal_provenance = 4;
 }
 message AddWatchlistSymbolsResponse {
   Watchlist watchlist = 1;

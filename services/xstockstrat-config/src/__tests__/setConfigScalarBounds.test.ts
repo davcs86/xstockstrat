@@ -286,6 +286,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'marketdata', key: 'marketdata.quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
     { ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'portfolio.marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
+    { ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
+    { ns: 'portfolio', key: 'portfolio.watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
   ];
 
   for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {
@@ -307,6 +309,14 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
       }
     });
   }
+
+  it('rejects portfolio.watchlist.signal_prune_interval_seconds = 0 with INVALID_ARGUMENT and writes nothing', async () => {
+    queries = [];
+    const { err } = await setConfig({ intVal: 0 }, 'portfolio.watchlist.signal_prune_interval_seconds', 'portfolio');
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, '0 is below the 60s floor');
+    assert.match(err.details ?? err.message, /\[60, 86400\]/);
+    assert.equal(insertQuery(), undefined);
+  });
 
   it('bounds the float agent timeout key when written as an intVal too', async () => {
     queries = [];

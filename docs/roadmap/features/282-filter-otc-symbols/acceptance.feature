@@ -179,7 +179,7 @@ Feature: filter-otc-symbols
     When GetSymbolServability and GetBars are called with " bossy "
     Then the symbol is classified as BOSSY in both calls
 
-  @AC-24 @FR-5
+  @AC-24 @FR-1 @FR-5
   Scenario: The refresh interval is clamped on read
     Given marketdata.assets.refresh_interval_hours is 0, 48 or unset
     Then 0 pauses refreshes and keeps the current set
@@ -199,3 +199,12 @@ Feature: filter-otc-symbols
     When the first load succeeds
     Then FORL is removed from the warm set
     And the next GetLatestQuotes call for FORL adds it back
+
+  @AC-27 @FR-1 @FR-5
+  Scenario: Both new keys are seeded at their code defaults by config migrations
+    Given config migrations 038_marketdata_asset_refresh_interval and 039_portfolio_servability_timeout
+    When their up and down files are parsed
+    Then each up inserts exactly one global staging row and one global production row for its key, insert-if-absent
+    And marketdata.assets.refresh_interval_hours is seeded as int 6 for xstockstrat-marketdata, inside [1,24]
+    And portfolio.marketdata.servability_timeout_ms is seeded as int 2000 for xstockstrat-portfolio, inside [500,4000]
+    And each down deletes only the global rows of its key, leaving per-user overrides

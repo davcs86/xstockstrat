@@ -31,6 +31,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(healthcheck())
 	}
+	if len(os.Args) > 1 && os.Args[1] == "backfill-signal-expiry" {
+		os.Exit(runBackfillSignalExpiry(os.Args[2:]))
+	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
@@ -75,6 +78,7 @@ func main() {
 	go svc.ConsumeBracketUpdates(ctx)
 	go svc.ConsumeAccountDeregistrations(ctx)
 	go svc.HydrateStops(ctx)
+	go svc.PruneExpiredSignalEntries(ctx)
 
 	hdl := handler.NewPortfolioHandler(svc)
 
