@@ -442,3 +442,50 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   deleted, and the allowlist is global-only. A per-user unread twin cannot change the effective value,
   and hashed user_ids cannot be matched exactly in the dry-run.
 - The adversary pass is running.
+
+## Session 2026-11-05 — sdd-design round 3 synthesis + operator decisions 19–20
+
+- **R3 adversary verdict: NEEDS WORK, no Floor breach.** Round-2 BLOCKER-1/2 are verified resolved
+  in SQL/code:
+  - golang-migrate runs the file as one implicit transaction (`db-migrate.sh:41`, no
+    x-multi-statement);
+  - the latch is correct;
+  - self-NOTIFY works and the tick-based staleness check is independent of the hung promise;
+  - old clients only log `version`.
+- **New majors, fixes adopted:**
+  - **M1:** fresh/CI/dev DBs keep migration-seeded twins, so AC-19 "zero findings" is unreachable.
+    Fix: sign the fresh-migrations DB as a third inventory (its plaintext is public in the
+    migrations).
+  - **M3:** the 10 s re-send hides a wedged query slot. Fix: restore `query_timeout`, plus a
+    serial-chain watchdog that stops re-sends when the head task is older than 30 s.
+  - **M4:** a DB-backed gate is unrunnable in local SDD harnesses. Fix: commit a generated
+    `scripts/config-wiring-stored.json`, regenerated and diffed in CI only on migration PRs.
+  - **M5:** reveal only rows whose 035 decision depends on their content; never per-user plaintext.
+  - **M6:** a config `force 0` replay never reaches 035 (dies at `001:49-51`, existing defect
+    `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`). The real path is
+    `force 34` + `up`. AC-28 and the runbook are to be reworded.
+  - **M2:** see decision 19.
+- **Minors adopted:**
+  - m1: monotone-shrink re-sign.
+  - m2: no standing CI signoff branch; use an A10 verification command instead.
+  - m3: descriptions authored in the A2 catalog freeze, not parsed from CLAUDE.md.
+  - m4: indicators limiter released on thread completion.
+  - m5: agent deadline mirrors the `int_positive` zero-trap.
+  - m6: `updated_by='system:config-migration-035'`.
+  - m7: `IS DISTINCT FROM` guards, secrets skipped in metadata fill.
+  - m8: float retype by text equality.
+  - m9: SetConfig with both spellings present returns FAILED_PRECONDITION naming both.
+  - m10: normalise int∪float before the disagreement check.
+  - m11: a pre-stated fallback for the keepalive spike.
+  - m12: split A5 per language.
+  - Also: the fixed-invariant constants are documented (F-07).
+- **Operator decisions (explicit sign-off, 2026-11-05):**
+  19. **Production is not running.** Treat dead rows as staging-only. Verified: staging
+      `OTEL_ENABLED: "true"` (`.do/app.dev.yaml:32-33`); production `"false"` and undeployed (278's
+      2026-10-23 ruling).
+      - FR-6 evidence uses Loki in **staging**, plus a per-service coverage heartbeat so silence
+        counts as evidence only for services that were logging.
+      - **No production console inventory.** Production's first deploy starts from migration seeds,
+        so the fresh-migrations inventory (M1) covers it.
+      - G3 becomes the first-production-deploy read-back (informational).
+  20. **Run round 4**, then the approval gate.
