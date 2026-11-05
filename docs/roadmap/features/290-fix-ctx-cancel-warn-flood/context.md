@@ -108,3 +108,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Round 3 (product-spec): FR-2 lead now "best effort" and the one-writer slot is stated as new behaviour (skipped write = bars not cached, no WARN), consistent with AC-9.
 
 - Round 3 (impl-spec): lint nolint note, AC-1 no-WARN and AC-4 symbol assertions, anchors refreshed, B2b note on Steps 3/4; AC-7/8/11 relabelled post-change guards (they panic on the pre-Step-3 tree).
+
+- Round 4 (impl-spec): PORTFOLIO anchor list corrected (:28 ~L1078, :29 ~L1121; :33/:47 have none); barsCancelSource now builds fresh bars per call via newBars (AC-9); Verification lines wrapped in subshells.
