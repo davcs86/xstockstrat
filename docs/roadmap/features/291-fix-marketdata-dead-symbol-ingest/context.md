@@ -125,3 +125,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Round 4 (product-spec): FR-1 states the errored-probe retry rule; FR-4 states the streak-restart-on-gap rule (window width defined); AC-5 tagged @FR-1.
 
 - Round 4 (impl-spec): Step Dependencies bullets un-interleaved; Step 8 anchor L224; applyBarCycle disabled-path sentence fixed; tests 2/8 assertion notes; merge-order 291↔290 row reconciled to the sed|grep -c check.
+
+## Session 2026-11-05 — cross-feature pointer from 293 sdd-design
+- Feature 293 (`fix-analysis-live-loop-budget-seed`) is design-approved with a **soft, rebase-only config-migration ordering** (`merge-order.md` rows 293↔291 and 293↔281): at merge NNN = max(`origin/main-dev` config migration)+1 **exactly — renumbering down as well as up**; whichever of 281/291/293 merges later renumbers and logs a Deviation Log entry. This feature's `035_marketdata_bar_ingest_backoff` follows the same rule (the earlier "renumbered if a sibling landed a higher one" wording in the implementation spec is upward-only; golang-migrate silently skips a lower version landing after a higher one). If 291 executes first, its renumber needs no action; if 293 merges first at a higher number, 291 renumbers **down** to max(`origin/main-dev`)+1. Step bodies are immutable during execute (F-09) — record it in the Deviation Log.
