@@ -252,3 +252,18 @@
 - TDD: N/A (proto). Verification: `buf lint` clean; `buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto"` exit 0, no findings (the against input was confirmed to resolve with a separate `buf build`).
 - Files modified: `packages/proto/common/v1/common.proto`, `packages/proto/marketdata/v1/marketdata.proto`, `packages/proto/portfolio/v1/portfolio.proto`
 - Deviations: none
+
+## Session 2026-11-05 — sdd-execute sequential, Step 2
+
+- Tooling setup (step 2): docker ⬇ (daemon started) · `xstockstrat-codegen` image ⬇ (built from `Dockerfile.codegen`: buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0, ts-proto 2.11.8, protoc-gen-es 2.12.0, protoc-gen-connect-es 1.7.0) · workspace `node_modules` ⬇ (`pnpm install --frozen-lockfile --ignore-scripts`, needed by the script's `tsc` step) · go1.27.0 ✓.
+- Hook note: the shared `core.hooksPath` is `/home/user/xstockstrat/.husky/_`, which does not exist, so no pre-commit hook runs in this environment. This commit has no `services/xstockstrat-ui/` files, so the hook's lint-staged and UI checks would be no-ops anyway.
+
+### Step 2 — proto-gen: regenerate Go, Python and TypeScript stubs [done]
+- Ran `./scripts/buf-gen.sh` inside the pinned codegen image. The regenerated set is exactly the step's 28 **Files** (Go 5, Python 4, TS sources 7, TS dist 12). Portfolio `_grpc`/`connect` stubs are unchanged, as the spec expected. The `MarketDataServiceClient`/`Server` interfaces gained `GetSymbolServability`.
+- TDD: N/A (generated code). Verification:
+  - `UNSERVABLE_REASON_OTC` is present in the Go, Python and TS common stubs.
+  - The marketdata `GOWORK=off go build ./...` exits 0.
+  - Portfolio and trading `GOWORK=off go vet ./internal/service/` exit 0, so the `stubMarketData` and trading test stubs compile.
+  - Freshness: stage, then a second run; `git diff --exit-code packages/proto/gen` exits 0 and no untracked files remain.
+- Files modified: the 28 generated files under `packages/proto/gen/{go,python,ts}` listed in the step.
+- Deviations: codegen ran in the `Dockerfile.codegen` container instead of on the host (CI-equivalent fallback; see the Deviation Log).

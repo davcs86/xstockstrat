@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketDataServiceService = exports.GetEtfFlagsResponse = exports.EtfFlag = exports.GetEtfFlagsRequest = exports.GetSectorHistoryResponse = exports.GetSectorHistoryRequest = exports.SectorHistoryRow = exports.GetSectorAsOfResponse = exports.GetSectorAsOfRequest = exports.GetCurrentSectorResponse = exports.GetCurrentSectorRequest = exports.SymbolSector = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
-exports.MarketDataServiceClient = void 0;
+exports.GetSymbolServabilityRequest = exports.GetEtfFlagsResponse = exports.EtfFlag = exports.GetEtfFlagsRequest = exports.GetSectorHistoryResponse = exports.GetSectorHistoryRequest = exports.SectorHistoryRow = exports.GetSectorAsOfResponse = exports.GetSectorAsOfRequest = exports.GetCurrentSectorResponse = exports.GetCurrentSectorRequest = exports.SymbolSector = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.BackfillFundamentalsResponse = exports.BackfillFundamentalsRequest = exports.GetHistoricalFundamentalsResponse = exports.GetHistoricalFundamentalsRequest = exports.HistoricalFundamentalsPeriod_ExtraMetricsEntry = exports.HistoricalFundamentalsPeriod = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.GetSymbolServabilityResponse = exports.SymbolServability = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -4662,6 +4662,218 @@ exports.GetEtfFlagsResponse = {
         return message;
     },
 };
+function createBaseGetSymbolServabilityRequest() {
+    return { symbols: [] };
+}
+exports.GetSymbolServabilityRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSymbolServabilityRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSymbolServabilityRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSymbolServabilityRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseSymbolServability() {
+    return { symbol: "", servable: false, reason: common_1.UnservableReason.UNSERVABLE_REASON_UNSPECIFIED };
+}
+exports.SymbolServability = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.servable !== false) {
+            writer.uint32(16).bool(message.servable);
+        }
+        if (message.reason !== common_1.UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+            writer.uint32(24).int32((0, common_1.unservableReasonToNumber)(message.reason));
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSymbolServability();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.servable = reader.bool();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.reason = (0, common_1.unservableReasonFromJSON)(reader.int32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            servable: isSet(object.servable) ? globalThis.Boolean(object.servable) : false,
+            reason: isSet(object.reason)
+                ? (0, common_1.unservableReasonFromJSON)(object.reason)
+                : common_1.UnservableReason.UNSERVABLE_REASON_UNSPECIFIED,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.servable !== false) {
+            obj.servable = message.servable;
+        }
+        if (message.reason !== common_1.UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+            obj.reason = (0, common_1.unservableReasonToJSON)(message.reason);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SymbolServability.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSymbolServability();
+        message.symbol = object.symbol ?? "";
+        message.servable = object.servable ?? false;
+        message.reason = object.reason ?? common_1.UnservableReason.UNSERVABLE_REASON_UNSPECIFIED;
+        return message;
+    },
+};
+function createBaseGetSymbolServabilityResponse() {
+    return { symbols: [], assetSetLoaded: false };
+}
+exports.GetSymbolServabilityResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            exports.SymbolServability.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.assetSetLoaded !== false) {
+            writer.uint32(16).bool(message.assetSetLoaded);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSymbolServabilityResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(exports.SymbolServability.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.assetSetLoaded = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols)
+                ? object.symbols.map((e) => exports.SymbolServability.fromJSON(e))
+                : [],
+            assetSetLoaded: isSet(object.assetSetLoaded)
+                ? globalThis.Boolean(object.assetSetLoaded)
+                : isSet(object.asset_set_loaded)
+                    ? globalThis.Boolean(object.asset_set_loaded)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols.map((e) => exports.SymbolServability.toJSON(e));
+        }
+        if (message.assetSetLoaded !== false) {
+            obj.assetSetLoaded = message.assetSetLoaded;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSymbolServabilityResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSymbolServabilityResponse();
+        message.symbols = object.symbols?.map((e) => exports.SymbolServability.fromPartial(e)) || [];
+        message.assetSetLoaded = object.assetSetLoaded ?? false;
+        return message;
+    },
+};
 exports.MarketDataServiceService = {
     /** Stream live bar data for symbols */
     streamBars: {
@@ -4875,6 +5087,19 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.GetEtfFlagsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetEtfFlagsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetEtfFlagsResponse.decode(value),
+    },
+    /**
+     * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+     * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+     */
+    getSymbolServability: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetSymbolServabilityRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetSymbolServabilityRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetSymbolServabilityResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetSymbolServabilityResponse.decode(value),
     },
 };
 exports.MarketDataServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.MarketDataServiceService, "xstockstrat.marketdata.v1.MarketDataService");

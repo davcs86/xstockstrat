@@ -28,6 +28,10 @@ import {
   tradingModeFromJSON,
   tradingModeToJSON,
   tradingModeToNumber,
+  UnservableReason,
+  unservableReasonFromJSON,
+  unservableReasonToJSON,
+  unservableReasonToNumber,
 } from "../../common/v1/common";
 import { FieldMask } from "../../google/protobuf/field_mask";
 import { Timestamp } from "../../google/protobuf/timestamp";
@@ -588,6 +592,12 @@ export interface WatchlistBinding {
   source: WatchlistEntrySource;
 }
 
+/** A symbol refused by a watchlist write because marketdata reports it unservable (feature 282). */
+export interface RefusedSymbol {
+  symbol: string;
+  reason: UnservableReason;
+}
+
 /** Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols. */
 export interface Watchlist {
   watchlistId: string;
@@ -636,7 +646,11 @@ export interface CreateWatchlistRequest {
 }
 
 export interface CreateWatchlistResponse {
-  watchlist?: Watchlist | undefined;
+  watchlist?:
+    | Watchlist
+    | undefined;
+  /** Symbols not newly added because unservable (feature 282); the rest were stored. */
+  refusedSymbols: RefusedSymbol[];
 }
 
 export interface GetWatchlistRequest {
@@ -681,7 +695,11 @@ export interface UpdateWatchlistRequest {
 }
 
 export interface UpdateWatchlistResponse {
-  watchlist?: Watchlist | undefined;
+  watchlist?:
+    | Watchlist
+    | undefined;
+  /** Symbols not newly added because unservable (feature 282); the rest were stored. */
+  refusedSymbols: RefusedSymbol[];
 }
 
 export interface DeleteWatchlistRequest {
@@ -710,7 +728,11 @@ export interface AddWatchlistSymbolsRequest {
 }
 
 export interface AddWatchlistSymbolsResponse {
-  watchlist?: Watchlist | undefined;
+  watchlist?:
+    | Watchlist
+    | undefined;
+  /** Symbols not newly added because unservable (feature 282); the rest were stored. */
+  refusedSymbols: RefusedSymbol[];
 }
 
 export interface RemoveWatchlistSymbolsRequest {
@@ -3105,6 +3127,84 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
   },
 };
 
+function createBaseRefusedSymbol(): RefusedSymbol {
+  return { symbol: "", reason: UnservableReason.UNSERVABLE_REASON_UNSPECIFIED };
+}
+
+export const RefusedSymbol: MessageFns<RefusedSymbol> = {
+  encode(message: RefusedSymbol, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+      writer.uint32(16).int32(unservableReasonToNumber(message.reason));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RefusedSymbol {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRefusedSymbol();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.reason = unservableReasonFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RefusedSymbol {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      reason: isSet(object.reason)
+        ? unservableReasonFromJSON(object.reason)
+        : UnservableReason.UNSERVABLE_REASON_UNSPECIFIED,
+    };
+  },
+
+  toJSON(message: RefusedSymbol): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+      obj.reason = unservableReasonToJSON(message.reason);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RefusedSymbol>, I>>(base?: I): RefusedSymbol {
+    return RefusedSymbol.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RefusedSymbol>, I>>(object: I): RefusedSymbol {
+    const message = createBaseRefusedSymbol();
+    message.symbol = object.symbol ?? "";
+    message.reason = object.reason ?? UnservableReason.UNSERVABLE_REASON_UNSPECIFIED;
+    return message;
+  },
+};
+
 function createBaseWatchlist(): Watchlist {
   return {
     watchlistId: "",
@@ -3477,13 +3577,16 @@ export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
 };
 
 function createBaseCreateWatchlistResponse(): CreateWatchlistResponse {
-  return { watchlist: undefined };
+  return { watchlist: undefined, refusedSymbols: [] };
 }
 
 export const CreateWatchlistResponse: MessageFns<CreateWatchlistResponse> = {
   encode(message: CreateWatchlistResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.watchlist !== undefined) {
       Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.refusedSymbols) {
+      RefusedSymbol.encode(v!, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -3503,6 +3606,14 @@ export const CreateWatchlistResponse: MessageFns<CreateWatchlistResponse> = {
           message.watchlist = Watchlist.decode(reader, reader.uint32());
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.refusedSymbols.push(RefusedSymbol.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3513,13 +3624,23 @@ export const CreateWatchlistResponse: MessageFns<CreateWatchlistResponse> = {
   },
 
   fromJSON(object: any): CreateWatchlistResponse {
-    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+    return {
+      watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined,
+      refusedSymbols: globalThis.Array.isArray(object?.refusedSymbols)
+        ? object.refusedSymbols.map((e: any) => RefusedSymbol.fromJSON(e))
+        : globalThis.Array.isArray(object?.refused_symbols)
+        ? object.refused_symbols.map((e: any) => RefusedSymbol.fromJSON(e))
+        : [],
+    };
   },
 
   toJSON(message: CreateWatchlistResponse): unknown {
     const obj: any = {};
     if (message.watchlist !== undefined) {
       obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    if (message.refusedSymbols?.length) {
+      obj.refusedSymbols = message.refusedSymbols.map((e) => RefusedSymbol.toJSON(e));
     }
     return obj;
   },
@@ -3532,6 +3653,7 @@ export const CreateWatchlistResponse: MessageFns<CreateWatchlistResponse> = {
     message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
       ? Watchlist.fromPartial(object.watchlist)
       : undefined;
+    message.refusedSymbols = object.refusedSymbols?.map((e) => RefusedSymbol.fromPartial(e)) || [];
     return message;
   },
 };
@@ -3979,13 +4101,16 @@ export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
 };
 
 function createBaseUpdateWatchlistResponse(): UpdateWatchlistResponse {
-  return { watchlist: undefined };
+  return { watchlist: undefined, refusedSymbols: [] };
 }
 
 export const UpdateWatchlistResponse: MessageFns<UpdateWatchlistResponse> = {
   encode(message: UpdateWatchlistResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.watchlist !== undefined) {
       Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.refusedSymbols) {
+      RefusedSymbol.encode(v!, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -4005,6 +4130,14 @@ export const UpdateWatchlistResponse: MessageFns<UpdateWatchlistResponse> = {
           message.watchlist = Watchlist.decode(reader, reader.uint32());
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.refusedSymbols.push(RefusedSymbol.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4015,13 +4148,23 @@ export const UpdateWatchlistResponse: MessageFns<UpdateWatchlistResponse> = {
   },
 
   fromJSON(object: any): UpdateWatchlistResponse {
-    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+    return {
+      watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined,
+      refusedSymbols: globalThis.Array.isArray(object?.refusedSymbols)
+        ? object.refusedSymbols.map((e: any) => RefusedSymbol.fromJSON(e))
+        : globalThis.Array.isArray(object?.refused_symbols)
+        ? object.refused_symbols.map((e: any) => RefusedSymbol.fromJSON(e))
+        : [],
+    };
   },
 
   toJSON(message: UpdateWatchlistResponse): unknown {
     const obj: any = {};
     if (message.watchlist !== undefined) {
       obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    if (message.refusedSymbols?.length) {
+      obj.refusedSymbols = message.refusedSymbols.map((e) => RefusedSymbol.toJSON(e));
     }
     return obj;
   },
@@ -4034,6 +4177,7 @@ export const UpdateWatchlistResponse: MessageFns<UpdateWatchlistResponse> = {
     message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
       ? Watchlist.fromPartial(object.watchlist)
       : undefined;
+    message.refusedSymbols = object.refusedSymbols?.map((e) => RefusedSymbol.fromPartial(e)) || [];
     return message;
   },
 };
@@ -4350,13 +4494,16 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
 };
 
 function createBaseAddWatchlistSymbolsResponse(): AddWatchlistSymbolsResponse {
-  return { watchlist: undefined };
+  return { watchlist: undefined, refusedSymbols: [] };
 }
 
 export const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse> = {
   encode(message: AddWatchlistSymbolsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.watchlist !== undefined) {
       Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.refusedSymbols) {
+      RefusedSymbol.encode(v!, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -4376,6 +4523,14 @@ export const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse
           message.watchlist = Watchlist.decode(reader, reader.uint32());
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.refusedSymbols.push(RefusedSymbol.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4386,13 +4541,23 @@ export const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse
   },
 
   fromJSON(object: any): AddWatchlistSymbolsResponse {
-    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+    return {
+      watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined,
+      refusedSymbols: globalThis.Array.isArray(object?.refusedSymbols)
+        ? object.refusedSymbols.map((e: any) => RefusedSymbol.fromJSON(e))
+        : globalThis.Array.isArray(object?.refused_symbols)
+        ? object.refused_symbols.map((e: any) => RefusedSymbol.fromJSON(e))
+        : [],
+    };
   },
 
   toJSON(message: AddWatchlistSymbolsResponse): unknown {
     const obj: any = {};
     if (message.watchlist !== undefined) {
       obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    if (message.refusedSymbols?.length) {
+      obj.refusedSymbols = message.refusedSymbols.map((e) => RefusedSymbol.toJSON(e));
     }
     return obj;
   },
@@ -4405,6 +4570,7 @@ export const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse
     message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
       ? Watchlist.fromPartial(object.watchlist)
       : undefined;
+    message.refusedSymbols = object.refusedSymbols?.map((e) => RefusedSymbol.fromPartial(e)) || [];
     return message;
   },
 };

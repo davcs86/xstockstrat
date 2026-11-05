@@ -103,7 +103,7 @@ cd packages/proto && buf lint && buf breaking . --against "../../.git#branch=ori
 
 ### Step 2 — proto-gen: regenerate Go, Python and TypeScript stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/common.pb.go` — modify (generated)
@@ -938,3 +938,9 @@ git diff --name-only origin/main-dev -- '*CLAUDE.md' '*context-constitution.md' 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 2 — codegen run inside the pinned `Dockerfile.codegen` image (2026-11-05)
+- **Specced**: `./scripts/buf-gen.sh` from the repo root (both runs of the Verification block).
+- **Actual**: the same script run inside the version-pinned `xstockstrat-codegen` image (built from `Dockerfile.codegen` with the agent-proxy CA secret, as `scripts/localenv-setup.sh` does), with the worktree mounted at `/workspace`. The host had only `buf`, not the Go/TS/Python codegen plugins. The workspace `node_modules` that the script's `tsc` step needs was installed with `pnpm install --frozen-lockfile --ignore-scripts`. In the container, the script's own `buf breaking` block skips because there is no local `main-dev` ref. Step 1's Verification already ran `buf breaking` against `origin/main-dev` on the same `.proto` sources.
+- **Result**: the regenerated set is exactly this step's 28 **Files**. A second run after staging produced no diff and no untracked file. The marketdata `go build` and the `go vet` of the portfolio and trading `internal/service` packages (test stubs included) passed on the host.
+- **Disposition**: CI-equivalent fallback
