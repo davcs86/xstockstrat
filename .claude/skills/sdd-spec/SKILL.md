@@ -2,7 +2,7 @@
 name: sdd-spec
 description: Phase 2 of SDD — turn an approved, designed feature into a concrete numbered implementation spec by searching the codebase. Usage — /sdd-spec <feature-slug>. Consumes product-spec.md plus recon.md and design.md, searches every affected service for real file paths and symbol names, and writes implementation-spec.md where every step cites grep-found evidence — no invented paths, functions, or line numbers. Advances design-approved → implementation-ready. Use this whenever the user asks for an implementation plan, a step-by-step breakdown, how to sequence or split up the work, "what files do I need to change" for a feature, or to re-spec a feature whose design or scope changed.
 argument-hint: <feature-slug>
-allowed-tools: Read Write Bash(ls *) Bash(find *) Bash(grep *) Bash(cat *) Task
+allowed-tools: Read Write Bash(ls *) Bash(find *) Bash(grep *) Bash(cat *) Bash(git fetch *) Bash(git ls-remote *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git status *) Bash(git pull *) Task
 effort: high
 context: fork
 agent: general-purpose
@@ -28,6 +28,12 @@ find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
 ```
 If no directory is found: stop — "No feature directory found for slug `$ARGUMENTS[0]`. Run /sdd-story first."
 Capture the result as `FEATURE_DIR`. Use `$FEATURE_DIR` for all file reads and writes.
+
+### 0.5. Verify the working tree (once)
+
+Run `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=stop`; a stop result halts the skill. Pass the
+resulting `Tree:` stamp in every `codebase-discovery` prompt in Step 3 and discard any digest whose
+`Checkout:` line differs.
 
 ### 1. Read the product spec and lifecycle guard
 
