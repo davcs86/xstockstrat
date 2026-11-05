@@ -3,6 +3,9 @@ Feature: grafana-dashboards-ci-deploy
 
   # Scenarios run offline: curl is stubbed by a fake Grafana API recording every request.
 
+  Background:
+    Given the fake Grafana serves GET /api/datasources/uid/<uid> with HTTP 200 for "grafanacloud-prom", "grafanacloud-logs" and "grafanacloud-traces"
+
   @AC-1 @FR-1
   Scenario: Every checked-in dashboard is upserted into the managed folder
     Given packages/otel/dashboards/ holds service-health.json, service-detail.json, signal-pipeline-throughput.json, infrastructure.json and trading-service.json
@@ -26,7 +29,7 @@ Feature: grafana-dashboards-ci-deploy
   Scenario: Datasources are chosen by uid, never by type or list order
     Given the fake Grafana's list endpoint returns loki datasources "grafanacloud-alert-state-history" first, "grafanacloud-logs" second and "grafanacloud-usage-insights" third, none with isDefault true
     When the script runs without overrides
-    Then the fake receives 0 requests to GET /api/datasources
+    Then the fake receives 0 requests to the list endpoint GET /api/datasources (exact path, no /uid/ suffix)
     And every posted Loki datasource reference is "grafanacloud-logs"
     And no payload contains "grafanacloud-alert-state-history" or "grafanacloud-usage-insights"
 
@@ -55,14 +58,19 @@ Feature: grafana-dashboards-ci-deploy
     And the exit code is 1
 
   @AC-7 @FR-4
-  Scenario: A missing token fails before any HTTP call
-    Given GRAFANA_SERVICE_ACCOUNT_TOKEN is unset
+  Scenario Outline: A missing required variable fails before any HTTP call
+    Given <var> is unset and the other required variable is set
     When the script runs
-    Then stderr contains "GRAFANA_SERVICE_ACCOUNT_TOKEN is not set"
+    Then stderr contains "<var> is not set"
     And the fake receives 0 requests
     And the exit code is 1
 
-  @AC-8 @FR-4
+    Examples:
+      | var                           |
+      | GRAFANA_URL                   |
+      | GRAFANA_SERVICE_ACCOUNT_TOKEN |
+
+  @AC-8 @FR-2 @FR-4
   Scenario: A missing datasource uid uploads nothing
     Given the fake returns HTTP 404 for GET /api/datasources/uid/grafanacloud-logs
     When the script runs without overrides
@@ -84,6 +92,8 @@ Feature: grafana-dashboards-ci-deploy
     Given .github/workflows/grafana-dashboards.yml
     Then its push trigger lists branch main-dev only and paths "packages/otel/dashboards/**", "scripts/grafana-deploy-dashboards.sh" and ".github/workflows/grafana-dashboards.yml"
     And its triggers also include workflow_dispatch
+    And its triggers do not include pull_request or pull_request_target
+    And no job or step "if:" condition tests whether the Grafana secrets are set
     And its concurrency group is the constant "grafana-dashboards" (no "github.ref") with cancel-in-progress false
     And its job declares "environment: grafana" and permissions contents read
     And every "uses:" of actions/checkout in it is pinned to a 40-hex SHA
@@ -94,7 +104,7 @@ Feature: grafana-dashboards-ci-deploy
     Given scripts/grafana-deploy-dashboards.test.sh and the five real files under packages/otel/dashboards/
     When bash scripts/grafana-deploy-dashboards.test.sh runs
     Then it exits 0 and prints one PASS line per scenario AC-1 to AC-9
-    And .github/workflows/ci.yml runs it when scripts/grafana-deploy-dashboards*.sh changes
+    And .github/workflows/ci.yml runs it when scripts/grafana-deploy-dashboards*.sh or packages/otel/dashboards/** changes
 
   @AC-12 @FR-8
   Scenario: Docs describing the CI path name only real assets, state the policies and keep the guard green
@@ -104,6 +114,9 @@ Feature: grafana-dashboards-ci-deploy
     And both docs name ".github/workflows/grafana-dashboards.yml" and "scripts/grafana-deploy-dashboards.sh"
     And both docs state that UI edits are overwritten and that dashboards removed from the repo are not deleted
     And docs/setup/grafana-cloud.md states that the "grafana" environment restricts deployment branches to main-dev
+    And both docs show the manual invocation "scripts/grafana-deploy-dashboards.sh"
+    And .env.example names GRAFANA_URL and GRAFANA_SERVICE_ACCOUNT_TOKEN in its GitHub-secrets comment block
+    And root CLAUDE.md Key File Paths lists ".github/workflows/grafana-dashboards.yml"
 
   @AC-14 @FR-10
   Scenario: Every query target in the four dashboards is environment-scoped
@@ -114,7 +127,7 @@ Feature: grafana-dashboards-ci-deploy
     And all 3 TraceQL targets contain 'resource.deployment.environment =~ "$environment"'
     And each variable's current selection is All (value "$__all")
     And no expression in the 4 files contains "development" as an excluded value
-    And service-detail.json is byte-identical to main-dev
+    And service-detail.json has the same content hash as before this feature
 
   # Operator check on the staging stack after the first deploy; not run in CI.
   @AC-15 @FR-10 @manual

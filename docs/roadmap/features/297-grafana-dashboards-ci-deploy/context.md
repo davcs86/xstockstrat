@@ -66,3 +66,8 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 
 - No FAIL-level collision (no shared migration, proto field or config key). Three rebase-only WARNs recorded in product-spec § Feature Workflow Notes: `ci.yml` (295, 281), `produced-signals.tsv` (295, conditional), root `CLAUDE.md` (295). Environment `grafana`, secret name and workflow file name have no other claimant. `packages/otel/dashboards/*` and `alerts/*` are untouched by every live feature.
 - Sequencing: land this feature's integration PR after 295 and 281.
+
+## Session 2026-11-05 — sdd-review product-spec, iteration 2
+
+- Verdict PASS WITH WARNINGS, no blockers. Fixed W1 (Delta table G-references), W2 (CI path filter adds `packages/otel/dashboards/**`), W3 (Background serving the three default uids), W4 (AC-10 no `pull_request*` trigger, no secrets-skip guard), W5 (AC-7 now an outline over `GRAFANA_URL` and the token), W6 (FR-8 lists the CLAUDE.md, `.env.example` and README deliverables; AC-12 checks them), N1-N8 wording fixes (N5: environment creation added to the operator preconditions).
+- W7 (author-adopted defaults need operator confirmation) cannot be closed by the author: recorded as a `/sdd-design` gate checklist (Q2a, Q4, Q5, Q6) in the product-spec Feature Workflow Notes.

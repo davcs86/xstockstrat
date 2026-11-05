@@ -18,8 +18,8 @@ PR 653 = 9 files, +346/−2, 3 commits, head `b2ec808`. Nothing from it is on `m
 
 | PR 653 piece | State on `main-dev` | Verdict | What changes |
 |---|---|---|---|
-| `scripts/grafana-deploy-dashboards.sh` (uploader) | Absent | **Carry, with fixes** | Keep: HTTP-API upsert keyed by `uid`, `__inputs`/`__requires` stripped, `id:null`, `overwrite:true`, bash-3.2, env overrides, continue-then-fail on bad files. Fix the gaps G1–G4 below. |
-| `.github/workflows/grafana-dashboards.yml` | Absent | **Carry, with fixes** | Keep path filter + `workflow_dispatch`. Fix G5–G7. |
+| `scripts/grafana-deploy-dashboards.sh` (uploader) | Absent | **Carry, with fixes** | Keep: HTTP-API upsert keyed by `uid`, `__inputs`/`__requires` stripped, `id:null`, `overwrite:true`, bash-3.2, env overrides, continue-then-fail on bad files. Fix G1–G2 (FR-2); G3–G4 are accepted as documented policy (Q6). |
+| `.github/workflows/grafana-dashboards.yml` | Absent | **Carry, with fixes** | Keep path filter + `workflow_dispatch`. G5–G7 are closed via Q1, FR-5 and FR-6. |
 | `packages/otel/dashboards/README.md` "Via CI" para | README exists; now lists 5 dashboards, `DS_TEMPO`, guard rules | **Re-apply** | Paragraph rebased onto the post-274 README; must satisfy otel-signals guard Part 3 (named files must exist). |
 | `docs/setup/grafana-cloud.md` Step 6 "Deploy from CI" + secrets table | Step 6 is manual-import only | **Re-apply** | Same; the secrets table must name the GitHub Environment holding them (Q2, Q2a). |
 | `docs/setup/grafana-cloud.md` Step 9 (MCP) | Absent | **Split out** (Q3 decided 2026-11-05) | Not part of this feature. |
@@ -41,7 +41,7 @@ PR 653 = 9 files, +346/−2, 3 commits, head `b2ec808`. Nothing from it is on `m
 - **G8 — _(split out, Q3)_ `mcp/grafana` is unpinned** (implicit `:latest`), against the repo's pin-everything convention; needs Docker, so it cannot start in web/remote sessions (this very session had no Docker). → moves with the split-out MCP feature.
 - **G9 — Credential home predates feature 286.** PR 653 assumes plain GitHub secrets. Since 286 (launched 2026-11-04) deploy-time secrets resolve from per-environment SOPS files, with platform credentials deliberately left as native GitHub secrets (`DIGITALOCEAN_ACCESS_TOKEN`). Decided 2026-11-05 (Q2): GitHub Environment secrets, not the SOPS KEYS table, since the token has no DO-runtime consumer. → Q2a for which environment.
 - **G10 — Hard failure when secrets are unset** (fork PRs, new clones): every dashboard push goes red. → Q4.
-- **G11 — _(out of scope, Q9)_ Alerts remain manual.** `packages/otel/alerts/alert-rules.yaml` (3 rules, `${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` placeholders) and `mute-timings.yaml` are imported by hand; the same CI path could apply them but PR 653 does not. → Q7 (default: out of scope).
+- **G11 — _(out of scope, Q9)_ Alerts remain manual.** `packages/otel/alerts/alert-rules.yaml` (3 rules, `${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` placeholders) and `mute-timings.yaml` are imported by hand; the same CI path could apply them but PR 653 does not. → decided out of scope (Q7).
 - **G12 — No test.** Sibling scripts (`check-otel-produced-signals.sh` + `.test.sh`) ship an offline test; PR 653 verified only by hand against `service-health.json`. → FR-7.
 - **G13 — Process:** PR 653 is based on `main`, violating the `claude/*` → `main-dev` rule; close/supersede it once this feature lands.
 
@@ -57,11 +57,11 @@ FR-4. The script fails closed: a missing `GRAFANA_URL` or `GRAFANA_SERVICE_ACCOU
 
 FR-5. Deploys are serialized per target stack: one constant concurrency group (not keyed on the ref) with `cancel-in-progress: false`, so no two runs write the same Grafana folder concurrently.
 
-FR-6. The new workflow pins `actions/checkout` by SHA as the repo's deploy workflows do (`deploy.yml`), declares `permissions: contents: read`, runs in the `grafana` GitHub Environment (Q2a), and passes credentials only via `env:` of the deploy step, from GitHub Environment secrets (Q2); the token is never echoed. The added `ci.yml` job follows `ci.yml`'s existing checkout style.
+FR-6. The new workflow pins `actions/checkout` by SHA as `deploy.yml` does, declares `permissions: contents: read`, runs in the `grafana` GitHub Environment (Q2a), and passes credentials only via `env:` of the deploy step, from GitHub Environment secrets (Q2); the token is never echoed. The added `ci.yml` job follows `ci.yml`'s existing checkout style.
 
-FR-7. The script has an offline test (stubbed HTTP, no network) following the `*.test.sh` convention and wired into CI under a path filter, so the transform (placeholder substitution, key stripping, uid/folder envelope) is verified on every change.
+FR-7. The script has an offline test (stubbed HTTP, no network) following the `*.test.sh` convention and wired into CI under a path filter that covers the script and `packages/otel/dashboards/**`, so the transform (placeholder substitution, key stripping, uid/folder envelope) is verified on every change.
 
-FR-8. Operator docs describe the CI path and the manual invocation, state that the script overwrites UI edits and never deletes dashboards removed from the repo (Q6), and state that the `grafana` environment restricts deployment branches to `main-dev`; every file, workflow and secret name they cite exists, so `scripts/check-otel-produced-signals.sh` still exits 0.
+FR-8. Operator docs describe the CI path and the manual invocation, state that the script overwrites UI edits and never deletes dashboards removed from the repo (Q6), and state that the `grafana` environment restricts deployment branches to `main-dev`; every file, workflow and secret name they cite exists, so `scripts/check-otel-produced-signals.sh` still exits 0. The same change adds the Key File Paths row in root `CLAUDE.md`, the updated `grafana-cloud.md` row in `docs/setup/CLAUDE.md`, the two environment-secret rows in the `.env.example` GitHub-secrets comment block, and the "Via CI" paragraph in the dashboards README.
 
 FR-9. _Withdrawn 2026-11-05: the Grafana MCP part is split out (Q3). The number is not reused._
 
@@ -77,7 +77,7 @@ FR-11. _Withdrawn 2026-11-05: alert rules are out of scope (Q9). The number is n
 - Alert rules and the mute timing, both their deployment (G11, Q7) and any change to their expressions. They keep aggregating every environment: the residual risk is that `xstk-error-rate-high`, `xstk-p99-latency-high` and `xstk-analysis-no-scoring` cannot tell staging from production (or `development`), accepted by the operator 2026-11-05. A follow-up feature may add per-environment grouping.
 - New dashboards or new panels; the only dashboard change is environment scoping (FR-10).
 - Tempo/trace dashboards beyond what already exists.
-- Provisioning Grafana Cloud stacks, datasources or service accounts (operator step, documented only).
+- Provisioning Grafana Cloud stacks, datasources or service accounts (operator step, documented only), including creating the `grafana` GitHub Environment with its two secrets and its `main-dev` deployment-branch rule (not repo-checkable).
 
 ## Affected Services
 
@@ -116,6 +116,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [ ] 2 service owners + platform lead (breaking proto change) — n/a
 - [ ] DBA review + service owner (schema migration) — n/a
 - Platform Lead + Security review (new CI credential, new workflow) per `docs/runbooks/reviewer-registry.md`.
+- Operator confirmation at the `/sdd-design` gate for the adopted defaults and the Q2a reading: Q2a, Q4, Q5, Q6 (Q8 is a process action, not a spec decision).
 
 Overlap with live features (`/sdd-review` 2026-11-05; no FAIL-level collision, rebase-only):
 - `.github/workflows/ci.yml`: 295 (`config-wiring-stored` job) and 281 (`portfolio-db-test`) edit the `changes` filter and `ci-gate` `needs`. This feature adds its own filter key (e.g. `grafana-dashboards`) and its own job (e.g. `grafana-deploy-test`, not appended to the `otel-signals` run line), each with its own `ci-gate` line. Re-anchor by key/job name, not line number, and land after 295 and 281.
@@ -131,9 +132,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 ## Known Traps (Ledger)
 
 - `fails.md` 2026-08-05 `fix-grafana-otel-variables`: CI scripts parsing/transforming files must be tested against real input and use anchored edits, never blind whole-file `sed -i`. The PR 653 script runs `sed` over raw dashboard JSON; FR-7 must test against the real five files, not a fixture, and the design should prefer `jq` for substitution over `sed` on JSON.
-- Feature 286 context: workflow jobs bound to a GitHub Environment make env-level secrets shadow caller-passed ones silently; a deploy job bound to `staging`/`production` would also see that environment's other secrets (e.g. `SOPS_AGE_KEY`); Q2a recommends a dedicated environment instead.
+- Feature 286 context: workflow jobs bound to a GitHub Environment make env-level secrets shadow caller-passed ones silently; a deploy job bound to `staging`/`production` would also see that environment's other secrets (e.g. `SOPS_AGE_KEY`); Q2a therefore uses a dedicated `grafana` environment.
 - Feature 286 context (otel-signals P3-file): `.yaml`/file tokens in observability docs must name real files — a doc sentence like "the SOPS file under `secrets/`" passes, an invented path fails CI.
-- Editing panel queries re-triggers the guard's Part 1 and Part 4 (registered series, proto-derived stream-method exclusion): the stream exclusion must stay in every `rpc_server_duration_milliseconds_*` selector, and FR-7/AC-14 must run on the real files, not a fixture.
+- Editing panel queries re-triggers the guard's Part 1 and Part 4 (registered series, proto-derived stream-method exclusion): the stream exclusion must stay in every `rpc_server_duration_milliseconds_*` selector, and FR-7/AC-11/AC-16 must run on the real files, not a fixture.
 - Root Teardown: touching `CLAUDE.md`/`docs/setup/CLAUDE.md` requires a context-forge refresh (or a recorded manual reconciliation) before the PR.
 
 ## Open Questions
