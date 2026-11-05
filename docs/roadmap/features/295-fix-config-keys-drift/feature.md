@@ -16,6 +16,7 @@
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report 2026-11-04-config-key-drift-and-subscription-gaps |
 | 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved on second pass (FR-1..15, AC-1..21; 5 advisory warnings) |
 | 2026-11-04 | `spec-ready` (unchanged) | /sdd-review | Re-scoped to Release A (operator decision 13; Release B → feature 296); re-reviewed FAIL (FR-10 wording) → fixed → PASS WITH WARNINGS (FR-1..15, AC-1..27) |
+| 2026-11-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; operator decisions 1–25) and approved; recon.md + design.md written; Release B split to 296 |
 
 ---
 
@@ -25,6 +26,7 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-config-keys-drift`_
 - [Recon](recon.md) — Phase 0 dossier
+- [Design](design.md) — approved architecture, rejected alternatives, open risks
 - [Context Log](context.md) — session history, decisions, deviations
 - Companion: feature 296 `fix-config-keys-contract` (Release B, branch `feature/fix-config-keys-contract`)
 
@@ -40,4 +42,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-design fix-config-keys-drift` — full design recommended (12 services, config migrations, possible additive proto, cross-service config contract, FAIL-level overlaps resolved by operator decisions 6–8)
+`/sdd-spec fix-config-keys-drift` — generate implementation spec from the approved design (after the product-spec re-review of the round-5 wording edits passes)

@@ -9,6 +9,7 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     When an admin calls SetConfig with namespace "marketdata" and key "backfill.batch_size" and value 500
     Then the row "marketdata.backfill.batch_size" holds 500
     And no row "backfill.batch_size" exists in namespace "marketdata"
+    And when user "u-1" sets "marketdata" / "backfill.batch_size" = 700 for themselves, a per-user "marketdata.backfill.batch_size" row holds 700 and the global row still holds 500
 
   @AC-2 @FR-1 @preserve
   # Preserve-guard (C-15): green on today's code by design; it must stay green once the dormant alias ships.
@@ -124,7 +125,8 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
     Given "ledger" / "stream.notify_enabled" has no reader in any spelling
     When the migrations run and ledger reads "ledger.export.enabled" twice
     Then "ledger" / "stream.notify_enabled" still exists
-    And ledger logs exactly one read-key record for "ledger" / "ledger.export.enabled"
+    And ledger logs exactly one read-key record for "ledger" / "ledger.export.enabled" before its next coverage tick
+    And at that tick it logs one read-coverage record for "ledger" and re-emits that read-key record
 
   @AC-16 @FR-7 @regression
   Scenario: A rotated vendor secret is used without a restart
@@ -148,23 +150,25 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
   Scenario: Replaying the heal after a later key was created never deletes that key
     Given the heal migration has already run
     And an operator then created "analysis" / "backtest.extra_knob" in a spelling no reader uses
-    When the heal migration is replayed by the dirty-recovery path
+    When the heal is re-run by "migrate force 35" plus "scripts/db-migrate.sh up", with the latch present and with it removed
     Then "analysis" / "backtest.extra_knob" still exists
-    And no row is deleted twice and no report row is duplicated
+    And the latest run deletes no row, and with the latch present adds no report or audit row
+    And an automatic force 0 from a dirty 036 fails at migration 001 leaving row counts and audit functions unchanged, after which the probe-and-force runbook converges
 
   @AC-29 @FR-5 @regression
   Scenario: A key whose readers disagree on the default is not seeded
-    Given production has no "platform" / "platform.trading_state" row
+    Given a config database whose production "platform" / "platform.trading_state" row was deleted before the heal
     And trading's code default is "HALTED" while the UI's is no restriction
     When the seed-parity migration runs
     Then no "platform.trading_state" row is created in production
     And the heal report lists "platform platform.trading_state: readers disagree on default"
 
   @AC-19 @FR-13 @regression
-  Scenario: The config-wiring gate has no baseline and rejects new drift
+  Scenario: The config-wiring gate keeps only 296-owned dead rows and rejects new drift
     Given the extended scripts/check-config-wiring.mjs and scripts/config-wiring.json
     When the gate runs with --final on the feature branch
-    Then it reports zero findings and the baseline is empty
+    Then it reports no failing finding and every baseline entry is a "seeded-unread" owned by "feature 296"
+    And a fixture migration seeding a key no code reads fails the gate as seeded-unread
     And a fixture reader of "analysis" / "analysis.x.y" stored as "string" but read with get_int fails the gate as a type mismatch
     And a fixture getter on an unregistered receiver fails the gate as unattributed
 
@@ -233,7 +237,7 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
 
   @AC-30 @FR-4 @regression
   Scenario: The inventory commits hashes, with plaintext only for sign-off rows
-    Given non-secret production row "analysis" / "analysis.opportunity.max_universe_size" = 100 that is not on the sign-off list
+    Given non-secret staging row "analysis" / "analysis.opportunity.max_universe_size" = 100 that is not on the sign-off list
     And non-secret row "analysis" / "fundsignal.enabled" = true that is on the sign-off list
     When the operator runs the inventory tool
     Then the output for the first row carries sha256 of its value_data and not "100"
@@ -257,3 +261,10 @@ Feature: fix-config-keys-drift (bug fix, Release A — expand)
       | marketdata | marketdata.backfill.rate_limit_rps | 200       | 50        | Alpaca bars request         |
       | marketdata | marketdata.edgar.user_agent        | "a/1"     | "b/2"     | EDGAR request User-Agent    |
       | analysis   | marketdata.fundamentals.provider   | "finnhub" | "fmp"     | fundamentals signal cycle   |
+
+  @AC-33 @FR-3 @regression
+  Scenario: A plaintext twin of a secret key is never revealed, deleted or reported in plaintext
+    Given staging holds secret row "marketdata" / "fmp.api_key" and a non-secret legacy row "marketdata" / "marketdata.fmp.api_key"
+    When the inventory, the dry-run and the heal migration run
+    Then the legacy row still exists and is reported "twin-secret-class"
+    And its value appears in no inventory, reveal output, heal report column or snapshot value column

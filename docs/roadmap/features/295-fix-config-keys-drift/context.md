@@ -587,3 +587,71 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - **Exact wording edits** for product-spec, acceptance and 296 are listed in the proposal; they are
     applied once the design is approved.
 - The final adversary pass is running.
+
+## Session 2026-11-05 — sdd-design COMPLETE
+
+- **R5 adversary verdict: SOUND, APPROVABLE.**
+  - No Floor breach, no C-16 regression, no data-loss defect.
+  - Confirmed:
+    - the auto `force 0` → 001 failure rolls back fully, so `pg_get_functiondef` is unchanged
+      (single implicit transaction);
+    - the table-based probe still picks `force 35`;
+    - the ratchet preserves @feature-278 @AC-7.
+- **Binding spec-time amendments** (all written into design.md):
+  - **S-1:** classify secret-class first; report values are NULL for secret/secret-class/per-user
+    rows.
+  - **S-2:** the snapshot holds NULL `value_data` for secret-class twins.
+  - **M-1:** the baseline end state is a `--final` check, not schema narrowing; membership covers
+    dead rows; A2 proves the fresh twin residuals are empty.
+  - **M-2:** every readers-disagree key is seeded fresh (A2 assertion).
+  - **M-3:** secret and prefix catalog entries are excluded from `read-unseeded`.
+  - **M-4:** NULL-safe `cat_alt` predicate, plus a `__secret_class__` sentinel.
+  - **M-5:** a probed-scope spelling that differs from the global row's spelling →
+    FAILED_PRECONDITION.
+  - **M-6:** the runbook applies only while 036 is config's highest migration.
+  - **M-7:** no per-user plaintext in `--report`.
+  - **M-8:** `unread-no-partner` report rows for every dead row.
+  - **M-9:** a `metadata:` audit-reason prefix, plus a served-values-unchanged assertion.
+- **Operator decision 25 (2026-11-05):** design **APPROVED** at the round-5 gate, with the
+  amendments binding.
+- **Phase 0 Recon:** recon.md (services: all 12 plus repo tooling). Key reuse patterns:
+  - the 031 heal shape plus the `config-031.sql` harness;
+  - 278's gate ratchet/policy;
+  - the `ibkrTiming` closure and FMP `SetLimit`;
+  - `legacy_authors.connect`;
+  - the listener reconnect/resync path.
+- **Phase 1 Grilling:** 5 rounds (full).
+  - **Chosen approach:**
+    - a dormant marker-gated alias plus a form-tolerant server;
+    - a twin-only, signed, latched heal (036) with a marker table (035);
+    - staging and fresh inventories with a scratch-PG exact dry-run;
+    - a DB-free gate over a committed stored JSON;
+    - LISTEN self-heartbeat, a watchdog and content versions;
+    - hardened byte-identical watcher cores with read-key evidence;
+    - live limiters, ComputePool and vendor closures;
+    - an agent watcher with a derived 45 s-capped deadline.
+  - **Rejected** (full list in design.md): full-dotted canonical; always-on alias; Release B in 295;
+    catalog-predicate deletes; dead-row deletes in 295; a JS heal model; a pool-slot heartbeat;
+    `policy.seededUnread`; a shared watcher library.
+- **Constitution rules touched:** C-01, C-05 (amended), C-07, C-08, C-10, C-11, C-12, C-13, C-14,
+  C-15, C-16, C-18, F-01, F-04, F-06, F-07, P-01..P-06. Floor breaches: none in any round.
+- **Status:** spec-ready → design-approved.
+- The round-5 wording edits have been applied to product-spec.md/acceptance.feature (AC-1, AC-15,
+  AC-19, AC-28, AC-29, AC-30 edited; AC-33 added), and FR-1/3/4/5/6/8/13 and Database Changes have
+  been updated. **Product-spec re-review is pending** before `/sdd-spec` (fails.md:3440).
+
+## Open Threads (from design.md Open Risks)
+
+- [ ] Missed reader of an "unread" spelling → A2 / G2 / A12 tripwire.
+- [ ] Staging dry-run sentinel fidelity → A10.
+- [ ] Serial-chain wedge is visible but does not self-heal → A4.
+- [ ] grpc-js keepalive policy spike → A4.
+- [ ] An unsigned twin gives FAILED_PRECONDITION until 296 → A3/A10, with the PR listing the keys.
+- [ ] A dirty 036 needs manual recovery until 296's floor exists → A11 runbook.
+- [ ] Trading untyped→typed getter divergences → A5a/G2.
+- [ ] Migration NNN collision with 281/282/243 → spec time.
+- [ ] Byte-identical copies drift → A5 hash guard.
+- [ ] One PR editing both baseline files → review.
+- [ ] Agent boot readiness depends on config → A8.
+- [ ] Unverified library behaviours (node-postgres timeouts, `time_remaining`, produced-signals
+  multi-path) → the first step that uses each.
