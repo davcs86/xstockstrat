@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.UpdateWatchlistBindingsResponse = exports.UpdateWatchlistBindingsRequest = exports.UpdateWatchlistBindingResponse = exports.UpdateWatchlistBindingRequest = exports.ListAllWatchlistSymbolsResponse = exports.ListAllWatchlistSymbolsRequest = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.MarkSource = exports.PositionSource = exports.PositionRiskFlag = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.UpdateWatchlistBindingsResponse = exports.UpdateWatchlistBindingsRequest = exports.UpdateWatchlistBindingResponse = exports.UpdateWatchlistBindingRequest = exports.ListAllWatchlistSymbolsResponse = exports.ListAllWatchlistSymbolsRequest = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.WatchlistSignalProvenance = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.MarkSource = exports.PositionSource = exports.PositionRiskFlag = exports.protobufPackage = void 0;
 exports.positionRiskFlagFromJSON = positionRiskFlagFromJSON;
 exports.positionRiskFlagToJSON = positionRiskFlagToJSON;
 exports.positionRiskFlagToNumber = positionRiskFlagToNumber;
@@ -3434,8 +3434,84 @@ exports.DeleteWatchlistResponse = {
         return message;
     },
 };
+function createBaseWatchlistSignalProvenance() {
+    return { signalId: 0, validUntil: undefined };
+}
+exports.WatchlistSignalProvenance = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.signalId !== 0) {
+            writer.uint32(8).int64(message.signalId);
+        }
+        if (message.validUntil !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.validUntil), writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseWatchlistSignalProvenance();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.signalId = longToNumber(reader.int64());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.validUntil = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            signalId: isSet(object.signalId)
+                ? globalThis.Number(object.signalId)
+                : isSet(object.signal_id)
+                    ? globalThis.Number(object.signal_id)
+                    : 0,
+            validUntil: isSet(object.validUntil)
+                ? fromJsonTimestamp(object.validUntil)
+                : isSet(object.valid_until)
+                    ? fromJsonTimestamp(object.valid_until)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.signalId !== 0) {
+            obj.signalId = Math.round(message.signalId);
+        }
+        if (message.validUntil !== undefined) {
+            obj.validUntil = message.validUntil.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.WatchlistSignalProvenance.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseWatchlistSignalProvenance();
+        message.signalId = object.signalId ?? 0;
+        message.validUntil = object.validUntil ?? undefined;
+        return message;
+    },
+};
 function createBaseAddWatchlistSymbolsRequest() {
-    return { watchlistId: "", symbols: [], bindings: [] };
+    return { watchlistId: "", symbols: [], bindings: [], signalProvenance: undefined };
 }
 exports.AddWatchlistSymbolsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -3447,6 +3523,9 @@ exports.AddWatchlistSymbolsRequest = {
         }
         for (const v of message.bindings) {
             exports.WatchlistBinding.encode(v, writer.uint32(26).fork()).join();
+        }
+        if (message.signalProvenance !== undefined) {
+            exports.WatchlistSignalProvenance.encode(message.signalProvenance, writer.uint32(34).fork()).join();
         }
         return writer;
     },
@@ -3478,6 +3557,13 @@ exports.AddWatchlistSymbolsRequest = {
                     message.bindings.push(exports.WatchlistBinding.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.signalProvenance = exports.WatchlistSignalProvenance.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3497,6 +3583,11 @@ exports.AddWatchlistSymbolsRequest = {
             bindings: globalThis.Array.isArray(object?.bindings)
                 ? object.bindings.map((e) => exports.WatchlistBinding.fromJSON(e))
                 : [],
+            signalProvenance: isSet(object.signalProvenance)
+                ? exports.WatchlistSignalProvenance.fromJSON(object.signalProvenance)
+                : isSet(object.signal_provenance)
+                    ? exports.WatchlistSignalProvenance.fromJSON(object.signal_provenance)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -3510,6 +3601,9 @@ exports.AddWatchlistSymbolsRequest = {
         if (message.bindings?.length) {
             obj.bindings = message.bindings.map((e) => exports.WatchlistBinding.toJSON(e));
         }
+        if (message.signalProvenance !== undefined) {
+            obj.signalProvenance = exports.WatchlistSignalProvenance.toJSON(message.signalProvenance);
+        }
         return obj;
     },
     create(base) {
@@ -3520,6 +3614,9 @@ exports.AddWatchlistSymbolsRequest = {
         message.watchlistId = object.watchlistId ?? "";
         message.symbols = object.symbols?.map((e) => e) || [];
         message.bindings = object.bindings?.map((e) => exports.WatchlistBinding.fromPartial(e)) || [];
+        message.signalProvenance = (object.signalProvenance !== undefined && object.signalProvenance !== null)
+            ? exports.WatchlistSignalProvenance.fromPartial(object.signalProvenance)
+            : undefined;
         return message;
     },
 };
@@ -4421,6 +4518,16 @@ function fromJsonTimestamp(o) {
     else {
         return fromTimestamp(timestamp_1.Timestamp.fromJSON(o));
     }
+}
+function longToNumber(int64) {
+    const num = globalThis.Number(int64.toString());
+    if (num > globalThis.Number.MAX_SAFE_INTEGER) {
+        throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
+    }
+    if (num < globalThis.Number.MIN_SAFE_INTEGER) {
+        throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
+    }
+    return num;
 }
 function isSet(value) {
     return value !== null && value !== undefined;
