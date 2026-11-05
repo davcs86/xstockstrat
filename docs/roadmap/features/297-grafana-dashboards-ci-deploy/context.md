@@ -15,7 +15,7 @@
 - Verified by reading: dashboards' `__inputs`, `uid`s and `${DS_*}` counts; guard `scripts/check-otel-produced-signals.sh` scope (reads `dashboards/*.json`, doc Part 3); checkout pin convention (`actions/checkout@3d3c42e5…  # v7.0.1`); SOPS model (feature 286, launched 2026-11-04); `.mcp.json` now has 7 DigitalOcean http servers.
 - NOT verified (flagged in Open Questions): real Grafana Cloud `/api/datasources` composition (G2/Q5), whether an unresolved `${DS_TEMPO}` renders (G1), whether dev and prod share one stack (Q1), whether the Editor-role token can create folders in the target org.
 - Decisions deferred to the operator: Q1, Q2, Q3 (blocking); Q4–Q8 (non-blocking).
-- Not committed or pushed: artifacts are in the working tree on branch `feature/grafana-dashboards-ci-deploy`.
+- Committed on `feature/grafana-dashboards-ci-deploy` and opened as PR davcs86/xstockstrat#1447 into `main-dev`. The "NOT verified" items G2/Q1 above are superseded by the live-stack verification session below.
 
 ## Session 2026-11-05 — live-stack verification (read-only, Grafana Cloud connector)
 
