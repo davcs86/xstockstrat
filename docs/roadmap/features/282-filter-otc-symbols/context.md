@@ -392,3 +392,42 @@
   - The C-13 grep matches `FORL` only in assertion message strings and `"BOSSY"` nowhere, so no literal is declared in a test file.
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
 - Deviations: RED came from the pre-Step-7 service file; AC-16 for `GetLatestQuote`/`GetLatestPrice` is structural; Verification ran as split commands (CI-equivalent). All three are in the Deviation Log.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 9
+
+- Tooling setup (step 9): go1.27.0 ✓ · golangci-lint 2.14.0 ✓ (built with go1.27.0) · node ✓ v24.22.1 (`/opt/node24/bin`, for `check-config-wiring.mjs`). Nothing installed.
+- Hook note: `node_modules` at this worktree root is a symlink to the main worktree's, so the husky pre-commit hook can run. No `--no-verify` was used.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `03efd8de`): every Step 9 anchor matches the re-spec. Steps 1, 2 and 5 are present on this branch: `GetSymbolServability`, `RefusedSymbol`, `refused_symbols`, and migration 038. The digest's "not found" items came from the main worktree, which is not on this branch. 281's landed `expiryIntentFor` (`:1856`), `repository.ExpiryIntent` and `AddSymbols(…, intent)` match 281's spec. There is no drift, so the EREA order is unchanged.
+
+### Step 9 — service: portfolio servability filter on the three watchlist insert paths [done]
+- Added to `portfolio_service.go`:
+  - the reader-clamp consts `defaultServabilityTimeoutMs` (2000), `minServabilityTimeoutMs` (500) and `maxServabilityTimeoutMs` (4000);
+  - `servabilityTimeout()`: nil cfg → 2000ms, `<= 0` → 2000, then clamped to [500,4000], with a literal-key `GetInt` at one call site;
+  - `refuseUnservable(ctx, bindings)`. It fails open on an empty input, a nil client, an RPC error or timeout, or `AssetSetLoaded == false`, with one WARN `symbol servability unavailable; allowing write`. Otherwise it partitions in order and keeps each accepted binding as-is (`Source` and `StrategyId` preserved).
+- Wiring:
+  - `CreateWatchlist` and the replace-all `UpdateWatchlist` branch filter after `requestBindings` and before the cap check, and return `RefusedSymbols`.
+  - `AddWatchlistSymbols` runs EREA: `expiryIntentFor` on the unfiltered add; then `refuseUnservable`; then an early return of `existing` + refusals when everything was refused (no `AddSymbols`, no ledger event); then `expiryIntentFor` on the accepted add; then the cap; then `AddSymbols`.
+  - The masked update, rebind RPCs, `EnsureSignalWatchlist`, `RemoveWatchlistSymbols` and reads are untouched.
+- Config seed `039_portfolio_servability_timeout.{up,down}.sql` was written verbatim from `design.md` § Amendment 2026-11-02, and diffed byte-for-byte against the design blocks. Offline migration check: the up inserts two global rows (staging, production, `user_id` NULL) with `ON CONFLICT … DO NOTHING`, and the down deletes only that key's global rows. No database was started.
+- TDD (scratch test, deleted before commit; Deviation Log):
+  - RED had 9 assertion failures. The failing assertions:
+    - `create stored [CRTD MSFT], want [MSFT]`
+    - `create refused [], want [CRTD]`
+    - `add refused [], want [BOSSY OTC]`
+    - `all-refused add: addSymbolsCnt 1->2`
+    - `update stored [CRTD MSFT], want [MSFT]`
+    - `GetSymbolServability never called`
+  - GREEN: PASS, with the error case logging one WARN.
+  - Scenarios exercised ahead of Step 10: AC-3, AC-2, AC-19, AC-6, and the all-refused add. For each, "red: refusal absent → green: refused and reported".
+- Verification:
+  - Block 1: `go build` ok and `golangci-lint` 0 issues.
+  - The `refuseUnservable` grep shows 3 call sites (`:2015`, `:2166`, `:2285`), the definition (`:460`) and the three `UnaryClientInterceptor` dials (`:130/:138/:146`). The marketdata dial is `:138`.
+  - The literal-key `GetInt` grep matches `:446`, and the EREA check gives `SEQ=EREA`.
+  - Block 2: `038/039 free; 037 present` across every `origin/*` ref.
+  - Block 3: step-time guard with `--declared-migration …039….up.sql` exits 0 with no findings, and the `.down.sql` is present.
+  - Block 4 (merge-base `94908ce6`): `key hits 0, introduced 0, pre-existing 0`, exit 0, with no STOP-RD and no ESCALATE lines.
+  - Sanity: with the 039 up file moved aside, `--final` reports `portfolio_service.go:portfolio.marketdata.servability_timeout_ms:read-unseeded`, so the checker sees the reader.
+  - `go test ./... -race -count=1` passes for every package, which shows the existing nil-`marketdata` watchlist tests still pass.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-config/migrations/039_portfolio_servability_timeout.{up,down}.sql`
+- Deviations: TDD via an uncommitted scratch test; Verification blocks run as split commands and scratch scripts (CI-equivalent). Both are in the Deviation Log.
+- Merge-time re-check (Step 9 § Merge-time re-check) is still owed: run block 2 (a) before the integration PR opens and (b) before it merges.
