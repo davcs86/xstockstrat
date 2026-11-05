@@ -747,3 +747,10 @@ Each record falls within a second of a Step 26 `run_backtest`, so the fill gate 
 **Stopped at**: all complete (feature moved to `code-completed`; `launched` is flipped by CI on promotion to `main`)
 **Next**: promote `main-dev` to `main` (`/promote`)
 **Accountability**: out-of-scope changes: none. Open items: none; a pre-existing `docs/patterns/ui-ux-governance.md` §8 drift is tracked in the Deviation Log (deferred to a follow-up re-audit). Unaddressed review warnings: none. The development branch `feature/block-fundamentals-strategy-on-etf` was stale (its PR #1243 had merged), so this record landed from `main-dev` on `claude/215-step-26-staging-verification`.
+
+## Session 2026-11-04 (CI: feature status automation)
+
+- Promotion PR #1438 merged to main
+- Feature promoted and committed: bf93985d9f4b2159e20343c81a0e8ecfdb6add2b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-04

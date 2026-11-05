@@ -13,6 +13,12 @@ permissions:
 jobs:
   changes:
     name: Detect changed paths
+    # A main-dev -> main promotion PR's head is the main-dev tip, whose push run already ran this CI.
+    # Skipping here skips every downstream job; ci-gate treats skipped as passing.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.base_ref != 'main' ||
+      github.head_ref != 'main-dev'
     runs-on: ubuntu-latest
     # Scoped to this job only. A workflow-level `permissions:` block sets
     # every unlisted scope to `none` for ALL jobs, which silently strips

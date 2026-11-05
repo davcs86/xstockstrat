@@ -3,7 +3,7 @@
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); refreshed 2026-09-03 (branch
 `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — the double-`x-user-id` header bug was
-fixed, moved to Resolved; orphan-secret anchor re-grounded); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 latent bug (undeadlined `_fetch_url` policy reads), +1 dead code (`Opportunity.sparkline`); line hints re-stamped; all other findings still open). For triage/fixing, not
+fixed, moved to Resolved; orphan-secret anchor re-grounded); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 latent bug (undeadlined `_fetch_url` policy reads), +1 dead code (`Opportunity.sparkline`); line hints re-stamped; all other findings still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — tool error-mapping report resolved in code, +3 doc-lie rows, +3 dead-code rows, +3 open questions, two open 2026-10-29 reports added to the filed table); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `0a3d508` — +1 doc-lie (admin-gate sentence), 2 rows resolved). For triage/fixing, not
 governance. The internal admin-scope self-grant (`x-access-scope=7`) is a cross-cutting ⚠ security
 question tracked in the root findings log.
 
@@ -18,6 +18,9 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
 | `set_config` tool docstring: "Secret keys are global-scope only — a per-user write to a secret key is rejected INVALID_ARGUMENT by the backend" | Feature 224 allows per-user secrets; `_write_source_bearer` itself writes `user_id=<caller>, is_secret=True`. An LLM reading the tool description will avoid or misreport per-user secret writes | `app/tools.py#set_config` docstring vs `app/tools.py#_write_source_bearer` | Rewrite the docstring |
+| `app/auth.py#validate_bearer_claims` docstring: "rather than the hardcoded admin tuple every other management tool forwards" (found 2026-11-04) | That tuple was removed by feature 092 (`app/scopes.py` and `app/client.py` say so) | `app/auth.py#validate_bearer_claims` | Reword |
+| `app/tools.py#_caller_user_id` docstring cites `notify.proto:34` for the broadcast sentinel (found 2026-11-04) | The proto lines are ~L45 and ~L71 | `packages/proto/notify/v1/notify.proto#target_user_id` | Cite by symbol |
+| `CLAUDE.md` § Management-tool authorization: "One management **write** tool still hits a backend **admin** gate — `trigger_backfill`" (found 2026-11-04) | The file's own tool table marks `set_config`, `run_fundamentals_scan` and `cancel_backfill` "admin-scoped", and `app/tools.py` forwards `_caller_access_scope` for eight tools (`manage_strategy`, `manage_signal_source`, `set_strategy_live`, `trigger_backfill`, `run_fundamentals_scan`, `cancel_backfill`, `set_config`, `manage_account`) | `services/xstockstrat-agent/app/tools.py#_caller_access_scope` | Rewrite or remove the sentence |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
@@ -32,13 +35,18 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 |---|---|---|
 | `app/config/__init__.py` | empty, unused package; config access goes through `client.get_config_value` | `app/config/__init__.py` |
 | `app/prompts/signal_extraction.md` | still unreferenced — feature 197 wired the prompts surface (`register_prompts` reads `app/prompts/list_correlation.md` via `@server.prompt`), but `signal_extraction.md` specifically has no reader | `app/prompts/` (grep for `signal_extraction` = zero; the dir is no longer prompt-machinery-free) |
-| `Opportunity.sparkline` (field 17) projection — action: deprecate `analysis.proto` field 17 and fix the docstring (found 2026-10-19) | analysis never populates it (`rg sparkline services/xstockstrat-analysis/app` = zero), yet the agent projects it and the client docstring still describes a "sparkline gap" | `app/client.py#_opportunity_to_dict (~L782; sparkline ~L816-817)`; `packages/proto/analysis/v1/analysis.proto#repeated SparklinePoint sparkline = 17 (~L625)` |
+| `Opportunity.sparkline` (field 17) projection — action: deprecate `analysis.proto` field 17 and fix the docstring (found 2026-10-19) | analysis never populates it (`rg sparkline services/xstockstrat-analysis/app` = zero), yet the agent projects it and the client docstring still describes a "sparkline gap" | `app/client.py#_opportunity_to_dict (~L817; sparkline ~L851-852)`; `packages/proto/analysis/v1/analysis.proto#repeated SparklinePoint sparkline = 17 (~L625)` |
+| `app/auth.py#validate_bearer_jwt` (found 2026-11-04) | Zero call sites in `app/`; only `tests/test_auth.py` (10 refs) exercise it. It maps DEADLINE/UNAVAILABLE to `False` (a 401 and a pointless OAuth re-auth) — the behaviour `app/main.py#_send_identity_unavailable` exists to avoid, so a caller copying it reintroduces the bug | `app/auth.py#validate_bearer_jwt` vs `#validate_bearer_claims` |
+| `app/main.py#UI_BASE_URL` (~L73) (found 2026-11-04) | Read and never used in `main.py`; `app/oauth_server.py` keeps its own copy and is the only consumer | `app/main.py#UI_BASE_URL` |
+| Undeclared direct imports (found 2026-11-04, low) | `app/egress.py` imports `httpcore` and `app/tool_metrics.py` imports `mcp_types`; neither is in `pyproject.toml` `dependencies` (`httpcore` arrives transitively via `httpx`) | `app/egress.py`, `app/tool_metrics.py`, `pyproject.toml` |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
 - `snapshot_offline_positions` sets **both** a request-body `user_id` (`app/client.py#snapshot_offline_positions` ~L2310) **and** the `x-user-id` header (~L2321), while the CLAUDE.md caller-identity contract does not list snapshot among the body-`user_id` builders. Is the body `user_id` on `SnapshotOfflinePositionsRequest` a deliberate target selector, or leftover caller-identity duplication to drop (like the feature-164/133 builders)? — status: **open**
 - `manage_signal_source` bearer-token orchestration writes the encrypted secret **before** registering the source, with **no compensating cleanup** on a failed register (`app/tools.py#_write_source_bearer`, docstring "only orphans a redacted secret"). Confirm the orphan-secret-on-partial-failure is an accepted trade-off, not a reconciliation gap. — status: **open**
-- `set_config` takes a caller-supplied `author` (required tool parameter) that is recorded in `config.config_audit`; feature 111 derived `emit_alert` and `manage_formula` identities from verified claims for this exact reason. Intentional free-text audit label, or leftover from before the hardening? `app/tools.py#set_config` → `app/client.py#set_config` — status: **resolved (feature 241)**: the parameter is removed; attribution comes from verified claims via `x-user-id`
+- Is `app/auth.py#validate_bearer_jwt` kept only for tests, or can it be removed? `validate_bearer_claims` "deliberately duplicates the ValidateToken call" — status: **open** (found 2026-11-04)
+- `GET /api/tools` is unauthenticated (documented in `docs/oauth.md` and `app/main.py#list_tools_metadata`), exposing the full tool schema publicly — still wanted now that the UI has its own BFF? — status: **open** (found 2026-11-04)
+- `get_config_value` sends `_metadata()` (the caller trio) when called inside a tool (e.g. the alert threshold) but none during the OAuth handshake — is the config server expected to see the caller's `x-user-id` on those policy reads? — status: **open** (found 2026-11-04)
 
 ## MCP tool ↔ backend alignment audit (2026-08-01) — 13/13 resolved
 
@@ -54,6 +62,9 @@ return-shape contract tests over the `app/client.py` request builders + projecti
 - **RESOLVED 2026-10-14 — `telemetry.py` `trading_mode` resource attribute** (was an open question): `_build_resource` now sets only `service.name`, `deployment.environment` (from `APPLICATION_ENV`) and `platform`; grep for `trading_mode|TRADING_MODE` in `app/telemetry.py` → zero hits (remaining mentions are comments/docstrings).
 - **RESOLVED (feature 247) — `_fetch_url` / `get_config_value` config reads had no deadline.** `get_config_value` now passes the fixed `timeout=_CONFIG_READ_TIMEOUT_S` (3.0 s) on its `GetConfig` call (`app/client.py#_CONFIG_READ_TIMEOUT_S`), so the four serial `_agent_policy` reads in `_fetch_url`, the `ingest_signal` threshold read and the DCR reads all expire with `DEADLINE_EXCEEDED` and fall back to their defaults; the callers are unchanged. Confirmed by `tests/test_client.py#test_ac1_stalled_config_read_raises_deadline_exceeded_within_bound` and the stalled-config tests in `tests/test_tools.py` / `tests/test_oauth.py`.
 - **RESOLVED (feature 247, found-and-fixed) — `app/oauth_server.py` redirect-allowlist comment.** It claimed identity enforces the same allowlist server-side; identity enforces only `https://` (`services/xstockstrat-identity/src/grpc/identityServiceImpl.ts#redirect_uris must use https`), so the agent's allowlist is the only allowlist check. The comment now says so.
+- **RESOLVED (feature 273; verified 2026-11-04) — six agent tools leaked raw gRPC errors.** Every client-calling tool body in `app/tools.py` now has `except grpc.aio.AioRpcError` → `_grpc_error_message` (95 sites, enumerated against every `await client.*` site); report `2026-10-19-agent-tools-missing-grpc-error-mapping-defect` is `triaged`.
+- **RESOLVED 2026-11-04 — AGENT-2 "trips the linter" + `CLAUDE.md` "Language: Python 3.13".** AGENT-2 already says "convention, not a lint gate", and the `## Language` section was removed from `CLAUDE.md` (0 hits for `3.13`), so the `pyproject.toml` (`requires-python >=3.12`) mismatch no longer has a doc to contradict.
+- **RESOLVED 2026-11-04 — `set_config` caller-supplied `author` (was an open question; feature 241).** `app/tools.py#set_config` (L1815) no longer takes an `author` parameter; the audit identity is derived from verified claims.
 
 
 ## Filed as defect reports (2026-10-19)
@@ -65,7 +76,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 |---|---|
 | [`2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect`](../../../docs/reports/2026-10-19-agent-bearer-secret-orphan-on-failed-register-defect.md) | Signal-source bearer secret is orphaned when the source register fails |
 | [`2026-10-19-agent-mcp-transport-stdio-fallthrough-defect`](../../../docs/reports/2026-10-19-agent-mcp-transport-stdio-fallthrough-defect.md) | Agent silently starts stdio transport when MCP_TRANSPORT is unset or mistyped |
-| `2026-10-19-agent-tools-missing-grpc-error-mapping-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.md) | Six agent MCP tools leak raw gRPC errors (no `_grpc_error_message` mapping) |
+| `2026-10-19-agent-tools-missing-grpc-error-mapping-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-tools-missing-grpc-error-mapping-defect.md) | Six agent MCP tools leak raw gRPC errors (no `_grpc_error_message` mapping) — **triaged; fixed in code (feature 273, verified 2026-11-04)** |
 | [`2026-10-19-agent-ui-claude-md-drift-defect`](../../../docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md) | Agent and UI CLAUDE.md / tool docstring drift from current code |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 
@@ -77,6 +88,8 @@ Follow-ups from feature 247 `design.md` § Open Risks, recorded as `docs/reports
 |---|---|
 | [`2026-10-29-agent-config-snapshot-read-defect`](../../../docs/reports/2026-10-29-agent-config-snapshot-read-defect.md) | Agent `extract_email_content` exceeds the MCP 60 s budget during a config stall for five or more URLs |
 | [`2026-10-29-agent-dcr-fail-closed-defect`](../../../docs/reports/2026-10-29-agent-dcr-fail-closed-defect.md) | Agent OAuth dynamic client registration fails open on a config stall (SECURITY POSTURE) |
+| [`2026-10-29-agent-extract-tools-no-mcp-cap-defect`](../../../docs/reports/2026-10-29-agent-extract-tools-no-mcp-cap-defect.md) | (open report absent from this table until 2026-11-04; title not re-read) |
+| [`2026-10-29-agent-list-opportunities-over-mcp-timeout-defect`](../../../docs/reports/2026-10-29-agent-list-opportunities-over-mcp-timeout-defect.md) | (open report absent from this table until 2026-11-04; title not re-read) |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

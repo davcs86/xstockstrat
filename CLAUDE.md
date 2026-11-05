@@ -431,10 +431,6 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Generated Go stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/go/` |
 | Generated Python stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/python/` |
 | Generated TS stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/ts/` (compiled JS in `gen/ts/dist/`) |
-| Go services | `services/xstockstrat-{trading,portfolio,marketdata}/` |
-| Python services | `services/xstockstrat-{indicators,ingest,analysis}/` |
-| Node.js services | `services/xstockstrat-{ledger,identity,notify,config}/` |
-| Next.js UI | `services/xstockstrat-ui/` |
 | Docker Compose | `docker-compose.yml` |
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
 | DO prod app spec | `.do/app.yaml` |

@@ -2,7 +2,7 @@
 name: sdd-design
 description: Phase 1.75 of SDD — ground a debated design before implementation planning. Usage — /sdd-design <feature-slug> [quick]. Phase 0 (Recon) writes a grounded codebase dossier recon.md; Phase 1 (Grilling) runs a proposer-vs-adversary debate (full mode runs 2–5 rounds; `quick` mode runs one mandated round for small changes and bug fixes) and writes design.md, advancing spec-ready → design-approved against the Constitution and Ledger. Use this whenever a feature has a product spec and someone asks how to build it, which approach or architecture to take, to weigh tradeoffs between options, to stress-test / poke holes in / red-team a plan, or to explore how the existing code works before changing it. Mandatory together with sdd-story before any new capability is coded — see the SDD entry point in the root CLAUDE.md.
 argument-hint: <feature-slug> [quick]
-allowed-tools: Read Write Edit AskUserQuestion Task Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *)
+allowed-tools: Read Write Edit AskUserQuestion Task Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git status *) Bash(git pull *)
 effort: high
 ---
 
@@ -59,10 +59,15 @@ string). Check it:
   patterns to reuse. Carry the entries relevant to this feature's services into both phases.
 - `$FEATURE_DIR/context.md` — prior session decisions (Constitution **C-02**). Read before writing.
 
+**Step B3.5.** Verify the working tree is the latest commit of the target branch — once, before
+Phase 0 — by running `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=stop`. A stop result halts the
+skill. Keep the resulting `Tree:` stamp; every Phase 0 scout prompt carries it.
+
 **Step B4.** Resolve the debate mode from `$ARGUMENTS[1]` (`quick` → single mandated round; absent →
 full debate, 2–5 rounds) and announce context:
 ```
 Designing: <slug> (lifecycle: <status>)
+Tree: <stamp from B3.5>
 Mode: <quick — 1 round | full debate — 2–5 rounds>
 Affected services (from product-spec): <list>
 Consumer surface(s) (C-14, from product-spec): <UI segment(s) / Agent tool(s), or "None (internal)">
@@ -83,11 +88,13 @@ Read **`reference/recon-checklist.md`** and follow it. In short:
 
 1. For every service in the product spec's **Affected Services**, spawn a **`codebase-discovery`**
    subagent (one per service, in parallel via Task), handing it the checklist tailored to this
-   feature's symbols, config keys, env vars, and ports. Each returns a `path:line` digest (+ a
-   `## Not found` section). You never invent — an unfound thing stays in `## Not found` (**F-04**,
+   feature's symbols, config keys, env vars, and ports, plus the B3.5 `Tree:` stamp. Each returns a
+   `path:line` digest (+ a `## Not found` section) whose `Checkout:` line must equal the stamp — else
+   discard and re-spawn. You never invent — an unfound thing stays in `## Not found` (**F-04**,
    **P-03**).
 2. In the **same** parallel batch, spawn **one** **`scenario-recon`** subagent (the read-side mirror
-   of `scenario-promoter`), handing it the feature subject + the affected services. It reads the
+   of `scenario-promoter`), handing it the feature subject + the affected services + the same `Tree:`
+   stamp (its `Checkout:` line is checked identically). It reads the
    affected services' `acceptance/*.feature` suites **and** the cross-cutting
    `docs/sdd/business-rules/platform.feature`, filters to the existing `@AC-*` guarantees this feature
    could touch, and returns a ready-to-fold **Existing Business Rules** digest (each rule classified
