@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-05 | `idea` → `draft` | /sdd-story | Distilled from stale PR [davcs86/xstockstrat#653](https://github.com/davcs86/xstockstrat/pull/653) and re-based against `main-dev` @ b371a3e |
 | 2026-11-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 4 passes (0 warnings; W7 carried as a design-gate checklist) |
+
 ---
 
 ## Artifacts
