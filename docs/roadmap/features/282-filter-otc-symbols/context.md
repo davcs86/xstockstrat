@@ -242,3 +242,13 @@
   - Steps 2, 4, 6, 8, 13, 16: evidence matched; not edited.
 - Open, not edited (outside the re-spec scope): Step 5 Instruction 4's code comment "gate applies at warm-add sites only; warm-set readers are never filtered" predates the 291 wording; reconcile at Step 5 or raise it at the first checkpoint.
 - Session note: `pnpm install` in this worktree set `core.hooksPath=.husky/_` in the shared repo config (husky `prepare`); the main worktree has no `node_modules`, so other worktrees' commits run the hook only if their `node_modules` exist.
+
+## Session 2026-11-05 — sdd-execute sequential, Step 1
+
+- Tooling setup (step 1): buf ⬇ 1.72.0 (GitHub release binary, pinned per root `CLAUDE.md`, into `/root/go/bin`) · go1.27.0 ✓. No codegen plugins needed (Step 1 runs lint/breaking only).
+
+### Step 1 — proto: UnservableReason enum, GetSymbolServability RPC, RefusedSymbol [done]
+- Appended `common.v1.UnservableReason` (UNSPECIFIED/OTC/NOT_TRADABLE) after `TemplateOrigin`; added `rpc GetSymbolServability` after `GetEtfFlags` plus `GetSymbolServabilityRequest` / `SymbolServability` / `GetSymbolServabilityResponse` at the end of `marketdata.proto`; added `portfolio.v1.RefusedSymbol` after `WatchlistBinding` and `repeated RefusedSymbol refused_symbols = 2` on the Create/Update/AddWatchlistSymbols responses. All additive; `Asset` untouched.
+- TDD: N/A (proto). Verification: `buf lint` clean; `buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto"` exit 0, no findings (the against input was confirmed to resolve with a separate `buf build`).
+- Files modified: `packages/proto/common/v1/common.proto`, `packages/proto/marketdata/v1/marketdata.proto`, `packages/proto/portfolio/v1/portfolio.proto`
+- Deviations: none

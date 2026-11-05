@@ -64,7 +64,7 @@ C-16 business-rule changes (signed off in `context.md`, rounds 1 and 3) are prom
 
 ### Step 1 — proto: UnservableReason enum, GetSymbolServability RPC, RefusedSymbol
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify
