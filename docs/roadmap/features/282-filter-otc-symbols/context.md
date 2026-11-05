@@ -221,3 +221,11 @@
 
 - Iteration 3 result: PASS, 0 failures, 0 fixable warnings. Remaining: one external gate. Steps 9, 10 and 16 (and Step 5 block 2's `037` check) need 281's symbols and migration on main-dev (PR #1401) — [ ] unaddressed (external).
 - Optional wording tidy, not a warning: `design.md:113,177,178` still describe the old 035/036 check; the spec's block 2 is authoritative.
+
+---
+
+## Session 2026-11-04 — cross-feature sign-off from feature 291 (fix-marketdata-dead-symbol-ingest)
+
+- Operator decision (2026-11-04, recorded here and in 291's context.md): this feature's invariant "the gate applies at warm-add sites only; warm-set readers are never filtered" (`design.md:24`, `:42`) is narrowed to: *"No reader filters the warm set by servability. The bar ingester may leave a symbol out of a cycle's vendor request because of feature-291 no-bars hold state, and never removes it from the warm set. Quote/price readers are never filtered."* When 282's constitution text lands it must use this wording.
+- Feature 291 is the per-symbol negative cache that `design.md:48` put out of scope; it does not change 282's scope. 282 R6 (`design.md:59`, ingester no-bars noise from re-warmed held unservable symbols) is **addressed by 291**.
+- Shared region: `markWarm` (`marketdata_service.go:1089-1096`) and the GetBars/batch warm-add sites. 291 does not edit them; whichever lands second keeps any new-add hold-state delete inside `markWarmIfServable`. `merge-order.md` row added (independent, rebase-only).
