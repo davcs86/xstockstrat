@@ -16,3 +16,13 @@
 - NOT verified (flagged in Open Questions): real Grafana Cloud `/api/datasources` composition (G2/Q5), whether an unresolved `${DS_TEMPO}` renders (G1), whether dev and prod share one stack (Q1), whether the Editor-role token can create folders in the target org.
 - Decisions deferred to the operator: Q1, Q2, Q3 (blocking); Q4–Q8 (non-blocking).
 - Not committed or pushed: artifacts are in the working tree on branch `feature/grafana-dashboards-ci-deploy`.
+
+## Session 2026-11-05 — live-stack verification (read-only, Grafana Cloud connector)
+
+Read-only calls through the claude.ai Grafana Cloud connector (not the PR's docker server): `user_info`, `list_datasources`, `search_dashboards`, `list_prometheus_label_values`.
+
+- **Stack**: one org, `Main Org.` (id 1), identity role Admin, stack slug `davcs86`. `xstockstrat` telemetry is live there: `service_name` on `grafanacloud-prom` (7d) = agent, analysis, config, identity, indicators, ingest, ledger, marketdata, notify, portfolio, trading, ui, plus a stray long-name `xstockstrat-ui` (OTEL-1 keys on short names; not diagnosed here).
+- **Environments** on `rpc_server_duration_milliseconds_count` (7d): `development`, `staging`. No `production` series in 7d. So this stack is shared by local-dev and staging; whether production uses another stack or is silent is unknown (Q1).
+- **Datasources (13)**: prometheus `grafanacloud-prom` (id 8, **only isDefault=true**) and `grafanacloud-usage` (id 11); loki `grafanacloud-alert-state-history` (id 1), `grafanacloud-logs` (id 7), `grafanacloud-usage-insights` (id 12); tempo `grafanacloud-traces` (id 10, not default). Loki and Tempo have **no default**.
+- **Dashboards**: only `xstk-service-health` exists (tagged `xstockstrat`; title search for `xstockstrat` finds the same one). The other four (`xstk-service-detail`, `xstk-signal-pipeline`, `xstk-infrastructure`, `xstk-trading-service`) are not deployed. Its folder was not returned, so whether it sits in `xstockstrat` or General is unverified.
+- **Not verified**: the raw `/api/datasources` order the PR script would see (the connector's list is ordered as above, with alert-state-history first among loki); a service account token's ability to create the folder.

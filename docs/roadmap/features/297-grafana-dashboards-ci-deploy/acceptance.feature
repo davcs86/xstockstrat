@@ -23,10 +23,10 @@ Feature: grafana-dashboards-ci-deploy
 
   @AC-3 @FR-2
   Scenario: Discovery does not bind panels to a non-stack datasource of the same type
-    Given the fake Grafana lists prometheus datasources "grafanacloud-usage" (uid "usage-uid", isDefault false) listed first and "grafanacloud-xstk-prom" (uid "prom-uid-1", isDefault true) listed second
-    When the script runs without GRAFANA_PROMETHEUS_DS_UID
-    Then every posted Prometheus datasource reference is "prom-uid-1"
-    And no payload contains "usage-uid"
+    Given the fake Grafana lists loki datasources "grafanacloud-alert-state-history" (uid "alert-hist-uid") first, "grafanacloud-logs" (uid "loki-uid-1") second and "grafanacloud-usage-insights" (uid "usage-ins-uid") third, none with isDefault true
+    When the script runs without GRAFANA_LOKI_DS_UID
+    Then every posted Loki datasource reference is "loki-uid-1"
+    And no payload contains "alert-hist-uid" or "usage-ins-uid"
 
   @AC-4 @FR-2
   Scenario: Env overrides skip discovery for that type
