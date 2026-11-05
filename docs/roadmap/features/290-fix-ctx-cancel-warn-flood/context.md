@@ -134,3 +134,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Severity: SEV-3. Next: Step 1 (portfolio service), with Step 2's red run captured first (P-06).
 - Carried gate: Step 3 Instruction 8's staging `InsertBars` timing stays BLOCKING before the PR.
 - Tooling note: the main worktree has no `node_modules` and `core.hooksPath` (`.husky/_`) does not exist, so the husky pre-commit hook did not run for these docs-only commits (no `--no-verify` was used).
+
+---
+
+## Session 2026-11-05 — re-spec Step 5 (sdd-batch-execute §5.3)
+
+- Branch setup: `git merge --no-edit origin/main-dev` → already up to date (no conflicts); `scripts/ledger-guard.py --own-slug fix-ctx-cancel-warn-flood --base origin/main-dev --fix` → clean, no repair.
+- Status already `in-progress` (flipped in the prior session entry); no status change and no new up-front confirmation entry needed.
+- Step 5 re-spec (advisory, not an evidence mismatch): all prior Step 5 evidence re-verified (MARKETDATA-3 `:19` `fetchAndCacheBars (~L356)` = func `:356`; PORTFOLIO-3 `:22`; `processPositionSync` `:1387`). Added to Codebase Evidence, Instruction 4 and Verification: the PORTFOLIO-10 row (`:29`) also holds stale `#shouldReconcileSyncDeletions def ~L1074, doc ~L1067-1073` (now `:1381`, doc `:1374-1380`) and `processAccountDeregistered (~L1059)` (now `:1338`) — re-stamp optional in Step 5, else left to the Teardown refresh.
+- Not changed: `portfolio_repo.go#DeletePositionsNotInSync (~L350)` in the same row (func now `:351`) — off by one, outside the directive; Teardown may re-stamp.
