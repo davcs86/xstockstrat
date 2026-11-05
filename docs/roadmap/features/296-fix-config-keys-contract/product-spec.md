@@ -4,7 +4,7 @@
 **GitHub Issue**: n/a. Defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Depends on**: feature 295 `fix-config-keys-drift` (`launched`). See merge-order.md.
+**Depends on**: feature 295 `fix-config-keys-drift` merged to `main-dev`, plus one full staging release (295 decision 23). See merge-order.md.
 
 ---
 
@@ -28,12 +28,22 @@ class cannot recur.
 - **FR-2: Every consumer addresses keys relative to its subscribed namespace.** All getter literals
   are rewritten in all 11 consuming services, along with their tests and fixtures.
 - **FR-3: Rename migration.**
-  - The migration is data-driven from 295's inventory and gate catalog, and declares
-    `-- contract-of:` on 295's seed migration.
+  - The migration is data-driven from 295's inventory and gate catalog.
+  - It declares `-- contract-of: services/xstockstrat-config/migrations/035_config_markers.up.sql`
+    (config's first contract floor, 35).
   - It renames every prefixed row to relative in every scope, including per-user scopes. Where twins
     exist, the twin the code reads wins.
   - Order: snapshot first, write the migration's own audit rows, then `pg_notify` per
-    (namespace, environment). It writes the marker that activates 295's alias.
+    (namespace, environment).
+  - In the same transaction it inserts marker row `('relative_keys_v1', now(),
+    'system:config-migration-<NNN>')` into `config.config_markers` and sends
+    `pg_notify('config_changed','{"marker":"relative_keys_v1"}')`. This activates 295's dormant
+    alias, whose servers read the marker in the same statement as the rows (295 design.md §4).
+  - Inputs from 295:
+    - the 296-owned `seeded-unread` baseline entries in `scripts/config-wiring.json`;
+    - the `twin-secret-class`, `twin-kept-unsigned` and `per-user-unread` rows of
+      `config.config_heal_report_036`;
+    - heal rows identified by `updated_by='system:config-migration-036'`.
 - **FR-4: Zero-downtime rollout and rollback.**
   - During rollout, and after a rollback to 295's images without running the down migration, a
     previous-image consumer reading a prefixed key resolves the stored value through the activated
@@ -50,6 +60,11 @@ class cannot recur.
     shows no read of that `(namespace, key)` in any service.
   - Each row is also in the operator-signed allowlist, gets a snapshot row and its own audit row
     first, and the migration is replay-safe.
+  - **Evidence rule** (295 design.md §5): over the whole staging release window, there must be zero
+    `config.read_key` hits in either spelling, **and** every `(service, ns)` subscriber of that
+    namespace must have logged `config.read_coverage` in every 6 h window. Namespaces with a UI
+    reader are never proven dead.
+  - **Close-out:** each baseline entry is removed as its row is deleted, so the baseline ends empty.
 - **FR-8: Named follow-up.** Create the feature that removes the alias, the write tolerance and the
   internal-caller exception at least one release after this one.
 
