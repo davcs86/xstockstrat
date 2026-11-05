@@ -3,6 +3,20 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-05
+
+### Features
+- fix-sandbox-seed-keys: Config migrations 001/002 seed the indicators sandbox keys bare (`sandbox.*`) while the watcher reads `indicators.sandbox.*` (CONFIG-9), so the seeded limits never apply and every environment runs on code defaults.
+- signal-watchlist-expiry-pruning: Signals carry a `valid_until` expiry, but the entries that feature 127 auto-added to the per-user system-managed signal watchlist (`source = SIGNAL`) are never removed once the backing signal expires (**confirmed by recon**; an entry also has no link to its signals).
+
+### Proto Changes
+- portfolio/v1/portfolio.proto
+
+### Summary
+14 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-11-04
 
 ### Summary

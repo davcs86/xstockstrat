@@ -117,3 +117,658 @@ Round 3: proposer finalized the design (untrack restricted to SIGNAL-sourced add
 
 - Added `docs/roadmap/features/merge-order.md` row: `signal-watchlist-expiry-pruning` (281) must wait for `enforce-config-key-wiring` (278) (Resolved: No). Reason: 278's shrink-only `read-unseeded` ratchet vs this feature's deliberately unseeded key (Step 13 Instructions 3 escalates); shared `ci-gate` block and `config-governance.md` (rebase-only). Escape hatch recorded in the row: 281 may merge first only after the operator records an exemption ruling here.
 - Closes the overlap item "policy interaction with 278" as *tracked* (the operator decision still falls to Step 13 at execute time if 278 has landed).
+
+## Session 2026-11-02 — sdd-design amendment (quick), round 1 — operator decisions
+
+- **Trigger:** 278 merged (`631028eb`). Its shrink-only `config-wiring` baseline makes the 227-D2 unseeded waiver fail CI. **Operator decision: seed the key via a config migration; no baseline entry.** Recon amendment appended to `recon.md`.
+- **Round-1 synthesis:**
+  - Config migration `035_portfolio_signal_prune_interval` lands **inside Step 11** with the reader. Seeding in Step 13 or a separate step was rejected because it leaves `read-unseeded` commits.
+  - A Step 14 migration parse test guards `value_type 'int'`, 2 env rows, `user_id` NULL, value within `[60,86400]`, and the down scope. 278's check ignores `value_type`, and the seed equals the default (ledger fails.md:2333).
+  - Step 11 verifies with `--final --json` and zero findings for this key. The step-time run is a form-mismatch guard only (`PENDING` never fails, `check-config-wiring.mjs:706`).
+  - Idempotence holds by `ON CONFLICT … DO NOTHING`. CI never re-runs 035 (`migration-rerun.sh` replays only the 224/225 list).
+  - Governance: config team plus DBA review for 035. Advisory `/sdd-review impl-spec` re-run on the changed steps.
+  - New `@AC-19`; AC-14 unchanged.
+  - **Config migration number 035 is reserved here**, re-checked at Step 11 and at the integration-PR gate.
+- **Operator decision (2026-11-02):** the 035 down migration deletes **global rows only** (`user_id IS NULL`), never per-user overrides it did not create. This deviates from the 033 precedent on purpose. Then run another round.
+
+## Session 2026-11-02 — sdd-design amendment, round 2 — synthesis (operator: another round)
+
+- **Proposer refinements:**
+  - Exact 035 SQL: the down's header carries the constraint only (rule 5).
+  - Step 14 extracts zeroTrap's `findOne`/`splitStatements` into `src/__tests__/migrationSql.ts` (`mtlsTestPki.ts` precedent) and adds 5 anchored-regex parse cases in `signalPruneIntervalSeedMigration.test.ts`.
+  - Step 13 drops its 278 branching.
+  - Product-spec `:56` must not backtick `config.config_values` (it would match `DECLARED_KEY_RE`).
+- **Adversary (NEEDS WORK, no Floor breach), folded in:**
+  - `--final` exit code 2 (035 parse failure) is a Step 11 failure.
+  - A finding counts as a key hit if its `file` is the 035 file or the reader file (`unmodelled-rewrite` / `dynamic-read` don't name the key).
+  - Unrelated `STALE`/`STALE-IN-PART` lines are judged against a `--final` baseline taken at the merge-base.
+  - Go const: double quotes, no trailing comment on the line, `const (` blocks with `)` at column 0 (`goConsts` `:477`).
+  - The 035 collision check runs `git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'` first, excludes our own 035 file, and is bash 3.2 safe.
+  - One recorded RED for the parse cases (move the 035 pair aside), kept in context/PR only.
+  - `@AC-19` Then becomes static and precise: the down's only statement is limited to global rows of this key. The test full-matches the DELETE.
+  - "Reopen Step 11" means a Deviation Log entry plus a fix step, never a body edit (F-09).
+  - Step 14 Files list zeroTrap and `migrationSql.ts`; zeroTrap's 4 tests still pass.
+
+## Session 2026-11-02 — sdd-design amendment (COMPLETION)
+
+- **Approved** by the operator after 3 quick rounds. Round-3 adversary verdict: **SOUND**, no Floor breach (`F-01`: 035 is a new file, 034 is the highest on main-dev; `F-07`: the bounds constants only clamp).
+- **Round-3 fixes folded in (all approved):**
+  1. The 035 collision check (Step 11 Verification block 2) is re-run immediately before the 281 integration PR merges into `main-dev`, after the final rebase, with its output recorded here (Step 11 Instruction 9 + merge-time note); `merge-order.md` 282-after-281 row now states the hard migration ordering (282's 036/037 after 281's 035).
+  2. Step 11 block 4 extracts the merge-base tree with `git archive "$MB" | tar -x` (no registered worktree; trap is `rm -rf "$T"` only).
+  3. Step 11 Go const wording made consistent (Instruction 1 defers to Instruction 7's column-0 one-line or `const (` block forms; a trailing `//` comment is tolerated by the checker but rule 5 keeps none).
+  4. Step 14 pins `migrationSql.ts` to `services/xstockstrat-config/src/__tests__/migrationSql.ts`, outside the `*.test.ts` glob, a test-only helper importing `node:assert`.
+  5. Step 14 Verification runs exactly `pnpm run build && node --test --test-reporter=tap dist/__tests__/zeroTrapDescriptionMigration.test.js dist/__tests__/signalPruneIntervalSeedMigration.test.js` for `# pass 9` / `# fail 0`; the 5 new cases are plain `it()` (no skip/todo).
+- **Artifacts changed:** `implementation-spec.md` (Execution Summary, merge hazards, Scenario Coverage `AC-19 → 14`, Step Dependencies, Steps 11-14, Step 20), `product-spec.md` (Affected Services, Config Key Changes, governance checkbox), `design.md` (seed wording + `## Amendment 2026-11-02` section), `acceptance.feature` (`@AC-19`), `feature.md` (Status History), `recon.md` (Amendment), `context.md`, `docs/roadmap/features/merge-order.md` (282←281 row; 281←278 row Resolved: Yes).
+- **Config migration `035` is reserved** for `035_portfolio_signal_prune_interval`.
+- **Follow-up (not built, C-18):** a platform CI check that every new migration NNN is above the base branch's max.
+- **Next:** advisory `/sdd-review signal-watchlist-expiry-pruning impl-spec` on Steps 11-14 and 20, then `/sdd-execute signal-watchlist-expiry-pruning`. Step 11 must merge `origin/main-dev` ≥ `631028eb` first.
+
+## Session 2026-11-02 — sdd-review impl-spec (advisory, scoped to Steps 11-14, 20)
+
+- **Verdict: PASS WITH WARNINGS** (no blockers). All warnings were addressed by surgical text edits to `implementation-spec.md`, with no new steps and no renumbering.
+- **W1 (Step 12, AC-14 read half):** added `TestSignalPrune_IntervalReadsConfig`, which drives `pruneInterval()` through `fakeConfig{vals: {signalPruneIntervalKey: 0|30|90000}}` and expects 300s/60s/86400s, alongside the pure `TestClampPruneInterval` table. Updated Covers. The Verification guards are now `-ge 7` (test count and `--- PASS`) plus a named grep for the new test.
+- **W2 (Step 14 recorded RED):** the output is captured to `RED_OUT` and must contain `expected exactly one` and `^# fail 5$`; a non-zero rc alone no longer counts. Added a note that the trailing `git status --porcelain migrations/` check assumes the 035 pair is already committed (Step 11).
+- **W3 (Step 14 Verification):** replaced `^# pass 9$` with `# fail 0` plus an awk `# pass N` ≥ 9 check (bash 3.2 safe). Replaced the `grep -c … -ge 3` with fixed-string greps for both `TIMEOUT_KEY_FORMS` rows and an exact-count grep for the explicit 0-rejection case. Instruction 4 now pins that case's `it(...)` title so the grep has a stable target.
+- **W4 (Step 20 Verification):** one `&&` chain, so any miss fails the block. Added greps for:
+  - the `database.md` sentence (`portfolio.watchlist_signal_expiry`)
+  - `watchlist_signal_expiry` and `backfill-signal-expiry` in the portfolio `CLAUDE.md`
+  - `035_portfolio_signal_prune_interval` in the portfolio `CLAUDE.md` and in config-governance
+  - the feature-281 entry heading
+  - the amended `PORTFOLIO-7` row (`insertBindingTx` + `ExpiryIntent`)
+  - the feature-278 note
+
+  Instruction 4 now asks for the literal phrase `feature 278 interaction`. Instruction 4 does not write the table name into config-governance, so `watchlist_signal_expiry` is grepped in the portfolio `CLAUDE.md` only.
+- **W5 (Step 12):** `TestSignalPrune_LedgerErrorIsBestEffort` must force a non-`Unavailable` error (e.g. `codes.Internal`), because `emitEvent` retries `codes.Unavailable` 4× with backoff (`portfolio_service.go:1159-1175`). This is cited in Codebase Evidence and Instruction 2.
+- **W6 (noted, no edit):** Step 16 does **not** cover AC-13; it covers AC-15/16/17. AC-13 maps to Step 12 (Scenario Coverage), and its repo-level half (the pruned entry's `StrategyID == "strat-9"`) is fed by Step 10 Instruction 2. That mapping is sufficient, so this is left as a note.
+- **W7 (citation drift):** Step 12 now cites `fakeConfig` → `watchlist_service_test.go:244-251` and `wideCaps` → `:362`. Step 20 cites the feature-240 entry → `config-governance.md:141-150`, which is correct on this branch. On the feature-278 branch it sits at `:172-181`, a rebase-only shift.
+
+## Session 2026-11-02 — sdd-execute pre-execution re-spec (sdd-batch-execute)
+
+- Setup: merged `origin/main-dev` into the feature branch (`e82c2f0a`); `631028eb` (278) is now an ancestor. One conflict in `docs/roadmap/features/merge-order.md`, resolved by hand: the 281←278 row keeps the branch side; main-dev's new 243←278 soft row is kept. `ledger-guard --fix`: clean.
+- Re-spec (`implementation-spec.md`, commit `9ea2c6e3`). Step bodies Instructions/Evidence/Files/Verification only:
+  - Steps 4, 17, 18, 20, 21: line anchors re-aligned after the merge; content unchanged. `ci-gate` `needs:` now includes `config-wiring`.
+  - Step 10: verified that no ingest migration adds an FK on `ingest.newsletter_signals`, so no `signal_sources` fixture row is needed. Closes the spec-time unverified item for Steps 10/16.
+  - Step 11: all 278 checker anchors and service evidence still match. **BLOCKING:** Verification block 2 (035 collision) fails. `origin/claude/smoke-test-deployment-0f1z5j` carries config `035_smoke_rpc_user_id` and `036_smoke_writes_enabled`; `origin/main-dev` tops out at `034`. Per Instruction 9, **Step 11 waits for an operator ruling** (renumber 281's seed, or ignore that non-feature `claude/*` branch). Feature 282's planned 036/037 are affected too; 282 not touched.
+
+## Session 2026-11-02 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation:** the operator approved the sequential plan before the batch started (one commit per step on `feature/signal-watchlist-expiry-pruning`, no per-step PRs, one integration PR at the end). Status `implementation-ready` → `in-progress`.
+- Runs the operator-approved seed amendment (design.md `## Amendment 2026-11-02`, `e01736e2` + `be90c5a9`). Config migration 035 lands in Step 11 with its reader. No `scripts/config-wiring.json` entry.
+- **Open at the checkpoint:** the Step 11 035 collision ruling (previous session). The overlap items and Open Threads above carry forward.
+
+### Step 1 — proto (2026-11-02)
+
+- Added `message WatchlistSignalProvenance { int64 signal_id = 1; google.protobuf.Timestamp valid_until = 2; }` before `AddWatchlistSymbolsRequest`, and `signal_provenance = 4` on that request (`packages/proto/portfolio/v1/portfolio.proto`). `WatchlistBinding`, enums and existing field numbers untouched; no new import.
+- TDD: N/A (proto contract). Verification: `buf lint` OK and `buf breaking` vs `origin/main-dev` (`1ea1c19c`) rc=0, buf 1.72.0 in the `xstockstrat-codegen` image. The baseline was a `git archive` tarball, not the `.git` ref (Deviation Log, CI-equivalent fallback).
+- Spec citation drift (no effect): the comment-convention anchor is `:346`, not `:347`. The CI buf commands are at `ci.yml:146-166`, not `:139-155`.
+- Next: Step 2 (regenerate stubs via the Docker codegen image).
+
+### Step 2 — proto-gen (2026-11-02)
+
+- Ran `./scripts/buf-gen.sh` inside the pinned `xstockstrat-codegen` image (rebuilt from the current `Dockerfile.codegen`, cached). Changed: `gen/go/portfolio/v1/portfolio.pb.go`, `gen/python/portfolio/v1/portfolio_pb2.py`, `gen/ts/portfolio/v1/{portfolio.ts,portfolio_pb.ts}` and `gen/ts/dist/portfolio/v1/{portfolio,portfolio_pb}.{js,d.ts}` (8 files, +582/-199). Nothing outside `portfolio/v1`; no `_grpc`/`_connect` change (no RPC added).
+- TDD: N/A (generated code). Verification: the second run was a no-op (identical `git status --porcelain` + `git diff` cksum `3205474957`).
+- Worktree gotchas: the `tsc` stage needs the worktree's own `pnpm install --frozen-lockfile` (a symlinked root `node_modules` does not reach `gen/ts/node_modules` or the container mount). The script's built-in `buf breaking` skips silently in the container (the worktree `.git` pointer is outside the mount); Step 1's explicit `buf breaking` vs `origin/main-dev` is the gate.
+- Next: Step 3 (migration `018_watchlist_signal_expiry`).
+
+### Step 3 — migration (2026-11-02)
+
+- Created `services/xstockstrat-portfolio/migrations/018_watchlist_signal_expiry.{up,down}.sql`: the design § 1 DDL verbatim (`CREATE TABLE IF NOT EXISTS portfolio.watchlist_signal_expiry`, PK `(watchlist_id, symbol)`, FK to `portfolio.watchlists` `ON DELETE CASCADE`, `signal_id BIGINT` nullable = backfill "untracked" marker; `watchlist_signal_expiry_valid_until_idx`). Down is `DROP TABLE IF EXISTS` (index drops with it). No ALTER of any existing table; no applied migration touched (F-01).
+- `018` still free: no portfolio `018_*` in the tree, and `git log --remotes=origin -- 'services/xstockstrat-portfolio/migrations/018_*'` is empty.
+- TDD: N/A (migration). Verification: offline only (`ls` of both files + read-through; 0 `ALTER` lines). No database started. The real-DB apply is proven by Step 4's `portfolio-db-test` CI job.
+- Discovery note (no effect): `011_*` uses plain `ADD COLUMN`. The idempotent style the spec cites is in `017_*` (and `007_*`), and that is the style followed here.
+- Next: Step 4 (real-Postgres harness + `portfolio-db-test` CI job).
+
+### Step 4 — real-Postgres harness + CI job (2026-11-02)
+
+- Created `internal/repository/dbtest_helpers_test.go` (`//go:build dbtest`). `testPool` reads `PORTFOLIO_DB_TEST_URL`. When it is unset, the test skips, but `CI=true` makes it fail instead (analysis `real_pg` precedent, `tests/conftest.py:435-439`). The pool sets `lock_timeout=500ms`, and cleanup deletes `portfolio.watchlists` rows `LIKE 'it-281-%'` (cascade). Seed and read helpers: `seedWatchlist`, `seedBinding`, `seedExpiry`/`insertExpiry`, `bindingSource`, `expiryRow`, `testUserID`.
+- Created `signal_expiry_schema_dbtest_test.go`. `TestSignalExpirySchema` checks that a NULL `signal_id` is accepted, that a duplicate `(watchlist_id, symbol)` gives `23505`, and that deleting the watchlist cascades to both the expiry rows and the binding. Every helper is used, because `unused` lints the dbtest files once `build-tags: [dbtest]` is set.
+- `.golangci.yml`: `run.build-tags: [dbtest]`. `ci.yml`: new `portfolio-db-test` job after `ledger-db-test`. It uses the same TimescaleDB service and migrator image, `setup-go@v7` with Go 1.27, and runs `go test -tags dbtest -race -count=1 ./internal/repository/...` with `GOWORK=off`, `CI=true` and `PORTFOLIO_DB_TEST_URL`. The job is added to `ci-gate` `needs:` and to the summary echo. No pnpm/proto build step is needed: the Go stubs are checked in.
+- TDD: N/A (test infrastructure). Offline RED: `no tests to run` before the files existed. Offline GREEN: `go vet -tags dbtest` OK, GO-LINT `0 issues`, skip without the URL and fail under `CI=true`. The untagged `go test ./internal/repository/...` still passes. The real-DB run happens in CI (Deviation Log).
+- Next: Step 5 (repository add path).
+
+### Step 5 — repository add path [done] (2026-11-02)
+
+- `watchlist_repo.go` now has the repo-local `SignalProvenance` / `ExpiryIntent` and `const mergeSignalExpirySQL`. `insertBindingsTx` is split into a per-row `insertBindingTx` (`RowsAffected()==1`) and a loop that returns `map[string]bool` of fresh inserts. `Create` and `Update` discard the map; the SQL is unchanged.
+- `AddSymbols(ctx, id, bindings, intent)` runs touch (parent lock), then insert, then `applyExpiryIntentTx`, in one tx. A fresh insert plus provenance upserts the row (overwrite). An existing binding plus provenance reads `source`; SIGNAL runs the update-only merge, MANUAL or no row writes nothing. `UntrackSymbols` runs `DELETE … symbol = ANY($2)`. `WatchlistStore.AddSymbols` and the fake take the intent. The call site passes `repository.ExpiryIntent{}`, so the service is unchanged until Step 7.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: RED came from an uncommitted dbtest compile probe (`go vet -tags dbtest ./internal/repository/` → `undefined: ExpiryIntent`). GREEN: the same probe vets clean, and then the probe was deleted. The behavioral RED/GREEN for AC-3/8/9/11/17 is Step 6 in CI `portfolio-db-test`.
+- Verification: `go build ./...`, `go vet ./...` and `go vet -tags dbtest ./...` all pass. GO-LINT reports `0 issues`. The untagged `go test ./internal/repository/... ./internal/service/...` passes. No database was started.
+- Deviations: RED probe plus the `applyExpiryIntentTx` helper (Deviation Log).
+- Next: Step 6 (add-path DB tests).
+
+### Step 6 — add-path DB tests [done] (2026-11-02)
+
+- Created `internal/repository/watchlist_signal_expiry_add_dbtest_test.go` (`//go:build dbtest`) with 7 `TestAddPath_*` functions. `FreshInsertOverwrites`: fresh stamp, and an orphan row is overwritten to an earlier date, which proves it is not merged. `MergeTrackedSignal` (AC-3/AC-8, table-driven): a later renewal 102 advances the row, and an earlier signal keeps (2026-11-01, 101). `UntrackedStaysUntracked`. `RescueMarkedRow` (AC-17): live 110, and past 111 holds 2026-10-15. `ManualBindingNotTracked`. `Untrack` (AC-9/AC-11): a provenance-less SIGNAL add deletes the row; an UNSPECIFIED add keeps it; a MANUAL add of SIGNAL META leaves `source=2` and the row unchanged. `ReplaceAllKeepsExpiry` (T6): a rename keeps the rows, and a MANUAL re-stamp leaves an orphan row.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/watchlist_signal_expiry_add_dbtest_test.go`.
+- TDD: AC-3/8/9/11/17. RED: with `watchlist_repo.go` temporarily restored from `d088d1e2`, `go vet -tags dbtest ./internal/repository/` failed with `undefined: ExpiryIntent`; the file was then restored. GREEN (offline): `go vet -tags dbtest ./...` OK, GO-LINT `0 issues`, the `TestAddPath_` count is 7, and the tests skip locally and fail under `CI=true` without the URL. GO-COVER total is 68.6%. The behavioral run is CI `portfolio-db-test`, and no database was started.
+- Deviations: compile-RED approach and DB run deferred to CI (Deviation Log).
+- Next: Step 7 (`AddWatchlistSymbols` provenance validation and intent mapping).
+
+### Step 7 — `AddWatchlistSymbols` provenance validation and intent mapping [done] (2026-11-02)
+
+- Added the unexported pure helper `expiryIntentFor(req, existing, add)` beside `requestBindings` in `portfolio_service.go`. With provenance it requires a system-managed list, exactly one normalized binding that is SIGNAL, `signal_id > 0` and `valid_until.seconds > 0` (otherwise `InvalidArgument`), and returns `{Provenance{SignalID, ValidUntil.AsTime()}, Symbol: add[0].Symbol}`. Without provenance it returns `{UntrackSymbols: <SIGNAL symbols in add>}`, which is empty for MANUAL, UNSPECIFIED and flat adds. `AddWatchlistSymbols` calls it right after `requestBindings`, before the cap check and before any write (AC-18), and passes the intent to `s.watchlists.AddSymbols` instead of the zero value. `normalizeBindings`, `requestBindings` and `applyDefaultStrategy` are untouched.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`.
+- TDD: AC-18 red: an uncommitted probe (manual list + one SIGNAL binding + provenance `{101, 2026-11-01}`) failed with `err = <nil>, want InvalidArgument`. Green: the same probe passed after the change, and then it was deleted. The full AC-18 table and the intent assertions are Step 8.
+- Verification: `go build ./...` OK. `go test ./internal/service/ -run 'AddWatchlistSymbols|ExpiryIntent'` → `ok`. `go vet ./...` and `go vet -tags dbtest ./...` OK. The full `go test ./...` passes. GO-LINT reports `0 issues`. No database was started.
+- Deviations: RED came from an uncommitted probe because Step 8's test file is outside this step's Files (Deviation Log).
+- Next: Step 8 (service unit tests for provenance validation and intent mapping).
+
+### Step 8 — provenance validation and intent mapping tests [done] (2026-11-02)
+
+- `fakeWatchlistStore.AddSymbols` now records the last `ExpiryIntent` (`lastIntent`) and a call count (`addSymbolsCnt`). Dedupe is unchanged. Three new tests:
+  - `TestAddWatchlistSymbols_ProvenanceValidation` is a table of the five AC-18 rejections. Each row asserts `InvalidArgument`, zero `AddSymbols` calls and no stored binding.
+  - `TestAddWatchlistSymbols_ProvenanceTracksIntent`: the intent carries `Provenance{101, 2026-11-30}` and the normalized `Symbol` `AAPL`.
+  - `TestAddWatchlistSymbols_NoProvenanceIntent`: a SIGNAL add untracks `[AAPL]`; MANUAL and flat-symbols adds carry an empty intent.
+- Files modified: `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: AC-18 red: with `portfolio_service.go` temporarily restored to pre-Step-7 (`c625dd5b`), all five rejection rows failed with `err = <nil>, want InvalidArgument`. In the same run the tracking test failed with `Provenance = nil` and the SIGNAL untrack case failed with `UntrackSymbols = [], want [AAPL]`. Green: all passed after the file was restored from HEAD.
+- Verification: the step command passed with 4 top-level `--- PASS`. GO-LINT reports `0 issues`. GO-COVER total is 68.6%. No database was started.
+- Deviations: the RED method, and `SignalSourceSkipsDefault` needed no body change (Deviation Log).
+- Next: Step 9 (repository prune tick `PruneExpiredSignalEntries`).
+
+### Step 9 — repository prune tick `PruneExpiredSignalEntries` [done] (2026-11-02)
+
+- Created `internal/repository/signal_expiry_repo.go`: `PrunedEntry`, `PruneResult` and `(*WatchlistRepo).PruneExpiredSignalEntries`. It enumerates due lists with `SELECT DISTINCT watchlist_id … valid_until <= now()`, then runs one short tx per list. Parent `FOR NO KEY UPDATE SKIP LOCKED` (no row → `SkippedLists`). Due expiry rows D `FOR UPDATE SKIP LOCKED`. SIGNAL bindings in D `FOR UPDATE SKIP LOCKED` → L. `DELETE … ANY(L) RETURNING symbol, strategy_id` → R. Expiry rows of R plus expired orphans (no SIGNAL binding) are deleted. The parent is touched only when R is non-empty. The tx commits on every non-skipped list. `PrunedEntry` rows come only from R, joined to D (`SignalID` nil for an untracked mark). A per-list error is recorded and the loop continues; the first error is returned with the committed removals. DB `now()` is the only clock; no `lock_timeout` in the statements; no events from the repo.
+- `WatchlistStore` gains `PruneExpiredSignalEntries`; its comment states that committed removals come back even with `err != nil`, which Step 11 relies on. The fake returns the configurable `pruneResult`.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: RED came from uncommitted probes. `go vet -tags dbtest ./internal/repository/` → `r.PruneExpiredSignalEntries undefined (type *WatchlistRepo has no field or method PruneExpiredSignalEntries)`. The service probe build failed with `undefined: repository.PruneResult` / `WatchlistStore has no field or method PruneExpiredSignalEntries`. GREEN: the repo probe vets clean and the service probe passes (`--- PASS`); both probes were then deleted. The behavioral RED/GREEN is Step 10 in CI `portfolio-db-test`.
+- Verification: `go build ./...`, `go vet ./...` and `go vet -tags dbtest ./...` pass. GO-LINT reports `0 issues` after `gofmt` on the new file. The full untagged `go test ./...` passes. No database was started.
+- Deviations: RED probes, commit on every non-skipped list, the `Lists` meaning, and small helpers (Deviation Log).
+- Next: Step 10 (prune tick DB tests).
+
+### Step 10 — prune tick DB tests [done] (2026-11-02)
+
+- Created `internal/repository/signal_expiry_prune_dbtest_test.go` (`//go:build dbtest`) with 9 `TestPrune_*` functions: `ExpiredOnlySignalRemoves` (AC-2, list survives), `MergedRowRetainsThenRemoves` (AC-3, two `AddSymbols` merges then expire → `SignalID` 102), `UntrackedEntrySurvives` (AC-4, 3 ticks), `ManualOrphanSweptEntryKept` (AC-5), `SecondTickIsNoop` (AC-6), `RenewalEventNamesSignal102` (AC-8), `StrategyBoundRemovedLikeAny` (`strat-9`), `IngestSignalsDoNotKeepAlive` (AC-10, a live `buy` + an `mcp_client` `watchlist` row; no FK, `user_id` supplied), `ConcurrencyNeverWaits` (AC-12 a/b/c subtests). `valid_until` is set relative to DB `now()`; every `PrunedEntry` field is asserted against the pre-tick row. The `UpdateBinding` SQL-order dependency is a test comment.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_prune_dbtest_test.go`.
+- TDD: RED: the new file compiled against a `git archive` of `814956b8` (pre-Step-9) → `undefined: PrunedEntry`. GREEN (offline): `go vet -tags dbtest ./...` OK, GO-LINT `0 issues`, `TestPrune_` count 9, tests skip without the URL, GO-COVER total 68.6%. Behavioral run is CI `portfolio-db-test`; no database was started.
+- Deviations: RED method, per-list filtering of the global tick, deterministic AC-12(b) via `pg_stat_activity` polling (Deviation Log).
+- Next: Step 11 (prune loop, events, interval clamp, startup wiring, config migration 035).
+
+## Session 2026-11-02 — re-spec: seed migration 035 → 037 (operator)
+
+- **Collision:** feature 280 `smoke-check-runtime` (open PR #1359, branch `origin/claude/smoke-test-deployment-0f1z5j`) already holds config migrations `035_smoke_rpc_user_id` and `036_smoke_writes_enabled`. `origin/main-dev` still tops out at `034_retire_portfolio_snapshot_interval`. Step 11 Verification block 2 failed on it, so Step 11 halted before writing anything.
+- **Decision (operator, 2026-11-02):** 280 keeps 035/036. 281's seed becomes `037_portfolio_signal_prune_interval`, and feature 282's seeds become 038/039. golang-migrate has no out-of-order guard, so 281's integration PR merges only after 280's (#1359) is on `main-dev`. If 280 renumbers, 281 re-checks with the operator.
+- **Files changed (docs only, uncommitted):** `implementation-spec.md` (every 035 for this seed → 037; Step 11 Codebase Evidence collision bullet marked resolved; Instruction 9 adds the pre-merge assertion that #1359 is merged; Verification block 2 checks 037, flags any other NNN ≥ 37 on `main-dev`, greps `/037_` on every origin ref, and checks that 280's 035/036 seeds sort below ours: WARN when absent from both `origin/main-dev` and the 280 branch, STOP with `MERGE_TIME=1` unless they are on `origin/main-dev`; Steps 14 and 20 numbers/names only), `design.md`, `product-spec.md`, `acceptance.feature` (`@AC-19` Given renamed: a pre-implementation wording fix, ID kept), `recon.md` (appended note under the Amendment), `feature.md` (Status History row), `docs/roadmap/features/merge-order.md` (new 281 ← 280 row; 282 ← 281 row renumbered to 038/039 and 037).
+- **F-09:** Steps 1-10 are untouched. Step 11's body was edited because Step 11 had not executed (it halted at the blocker with nothing committed). This is the re-spec gate before relaunch, not a post-execution rewrite.
+
+## Session 2026-11-02 — sdd-execute sequential (resume at Step 11)
+
+### Step 11 — prune loop, owner-visible events, interval clamp, startup wiring [done] (2026-11-02)
+
+- Created `internal/service/signal_prune.go`:
+  - Constants: a column-0 `const signalPruneIntervalKey = "portfolio.watchlist.signal_prune_interval_seconds"` and a `const (` block holding default 300, min 60 and max 86400.
+  - `clampPruneInterval`: `<=0` → 300s, `1..59` → 60s, `>86400` → 86400s.
+  - `pruneInterval()` calls `s.wlCfg.GetInt(signalPruneIntervalKey, defaultPruneIntervalSec)` directly, with no wrapper, and re-reads it every iteration.
+  - `PruneExpiredSignalEntries(ctx)` runs one tick at startup, then a `select` on `ctx.Done()` / `time.After(s.pruneInterval())`.
+  - `pruneOnce(ctx)` builds a single `tickCtx` with a fresh outgoing `x-trace-id`. The repo call and every emit share it.
+  - On a repo error it WARNs and still emits for `res.Removed`, because the Step 9 contract returns committed removals even when `err != nil`.
+  - Each removal produces one `emitEventAs(tickCtx, e.UserID, …)` with stream key `watchlist:<id>`:
+    - `signal_entry_expired` carries `{user_id, watchlist_id, symbol, strategy_id, signal_id, valid_until RFC3339 UTC}`.
+    - `signal_entry_removed_untracked` carries `{user_id, watchlist_id, symbol, strategy_id}`.
+  - Each tick ends with one `InfoContext` line: `lists`, `skipped`, `removed`.
+- `portfolio_service.go`: `emitEvent` now delegates to the new `emitEventAs(ctx, ownerUserID, …)`, which keeps the retry and idempotency body unchanged and sets `AppendEventRequest.UserId = ownerUserID`. An empty owner keeps the old behavior, because the proto zero value lets ledger fall back to metadata. `cmd/server/main.go` gains `go svc.PruneExpiredSignalEntries(ctx)` right after `go svc.HydrateStops(ctx)`.
+- Config migration `037_portfolio_signal_prune_interval.{up,down}.sql`: design amendment A SQL verbatim. It is in the same commit as the reader, as Instruction 8 requires. No `scripts/config-wiring.json` edit.
+- Files modified: `services/xstockstrat-portfolio/internal/service/signal_prune.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/cmd/server/main.go`, `services/xstockstrat-config/migrations/037_portfolio_signal_prune_interval.up.sql`, `services/xstockstrat-config/migrations/037_portfolio_signal_prune_interval.down.sql`.
+- TDD:
+  - RED: an uncommitted probe failed with `undefined: clampPruneInterval` / `signalPruneIntervalKey`, `s.pruneInterval undefined` and `s.pruneOnce undefined`.
+  - GREEN: the probe passed (clamp rows, `pruneInterval()` 30 → 60s, one tick → 2 appends) and was then deleted.
+  - The full behavioral table is Step 12.
+- Verification:
+  - Block 1: build, vet and the three greps all pass, and `go vet -tags dbtest ./...` is OK.
+  - Block 2, pre-write (pair line left out): `037` is free on every origin ref, `origin/main-dev` tops out at `034`, and 280's 035/036 are 2/2 on `origin/claude/smoke-test-deployment-0f1z5j` and 0/2 on main-dev, so no WARN. Block 2, post-write: the pair is present and the result is unchanged.
+  - Block 3: rc 0.
+  - Block 4: `key hits 0, introduced 0, pre-existing 0` (stored 182 vs base 180 = the two new rows), so there are no ESCALATE lines. Negative control: with `signal_prune.go` moved aside, `--final` reports `037…:portfolio/portfolio.watchlist.signal_prune_interval_seconds:seeded-unread`. The file was then restored.
+  - GO-LINT: `0 issues`. Full `go test ./...` passes. No database was started.
+- Collision-check record (Instruction 9): pre-write and post-write runs above. Still owed: a re-run before opening the integration PR, and a `MERGE_TIME=1` run after the final rebase, immediately before merge. The second requires PR #1359 (280) on `main-dev`. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
+- Deviations: RED probe, and blocks 2 and 4 run as split plain commands (sandbox) (Deviation Log).
+- Next: Step 12 (prune loop service unit tests).
+
+### Step 12 — prune loop events, interval clamp and no-op tick (service unit tests) [done] (2026-11-02)
+
+- Created `internal/service/signal_prune_test.go` with 7 tests, each driving one tick via `s.pruneOnce(ctx)` (never the sleeping loop):
+  - `TestClampPruneInterval`: `0`/`-5` → 300s, `1`/`30`/`59`/`60` → 60s, `86400`/`90000` → 86400s (AC-14 read half).
+  - `TestSignalPrune_ExpiredEventPayload`: subtests `expired` (`signal_id 101`, AC-7/AC-13) and `renewed` (`signal_id 102`, AC-8). Each asserts exactly one `portfolio.watchlist.signal_entry_expired`, `UserId == "user-1"`, stream key `watchlist:wl-1`, a non-empty `x-trace-id` in outgoing metadata, and payload `user_id`/`watchlist_id`/`symbol`/`strategy_id "strat-9"`/`valid_until "2026-10-01T00:00:00Z"`.
+  - `TestSignalPrune_UntrackedEventPayload`: ORCL with nil `SignalID` → one `…signal_entry_removed_untracked`, same owner/stream/trace/payload checks, no `signal_id`/`valid_until` keys (AC-13).
+  - `TestSignalPrune_LedgerErrorIsBestEffort`: `codes.Internal` ledger error on every emit → still 2 `AppendEvent` calls for 2 removals.
+  - `TestSignalPrune_NoopTickEmitsNothing`: empty `PruneResult` → 0 calls (AC-6).
+  - `TestSignalPrune_IntervalDefaultsWhenUnset` (unset key → 300s) and `TestSignalPrune_IntervalReadsConfig` (`fakeConfig` `0`/`30`/`90000` → 300s/60s/86400s through `pruneInterval()`).
+- `watchlist_service_test.go`: `fakeLedger` gains `reqs []*ledgerv1.AppendEventRequest` and `outMD []metadata.MD`; `AppendEvent` records the request and `metadata.FromOutgoingContext(ctx)`. Existing behavior (`calls`, `err`) unchanged.
+- Files modified: `services/xstockstrat-portfolio/internal/service/signal_prune_test.go`, `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go`.
+- TDD: AC-13 red: build failed `ledger.reqs undefined` / `ledger.outMD undefined` → green: 7 `--- PASS`, `ok internal/service`.
+- Verification: the step one-liner → `VERIFY_RC=0`; GO-LINT `0 issues`; GO-COVER full `go test ./...` passes, total 68.6% (≥ 40%; new code in excluded `service/`). No database was started.
+- Deviations: RED source (Step 11 already landed) and the Verification run from a script file (Deviation Log).
+- Next: Step 13 (config `SCALAR_BOUNDS_REGISTRY` entry).
+
+### Step 13 — config: `SCALAR_BOUNDS_REGISTRY` entry for the prune interval [done] (2026-11-02)
+
+- `configServiceImpl.ts`: after the feature-240 row, a one-line constraint comment and `'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 }`. `lookupScalarBounds` resolves both key-column forms (bare full-dotted key, or `${namespace}.${key}`), so this one entry covers both. No migration, no env change, no `scripts/config-wiring.json` edit.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
+- TDD: N/A (config category). The write-side bounds behavior is proven by Step 14's `TIMEOUT_KEY_FORMS` rows.
+- Verification: grep hit at `:150`; `pnpm run lint` 0 errors (234 pre-existing warnings); `tsc --noEmit` clean. `check-config-wiring.mjs --declared-from …/product-spec.md` rc 0 with no findings. `--final` rc 0; its only `REPORTED` line is the pre-existing `trading.fill_poller.interval_ms` baseline, so Step 11 is not reopened.
+- Deviations: the Verification ran from a script file because of the sandbox (Deviation Log).
+- Next: Step 14 (config bounds rows + the 037 seed parse test, AC-14/AC-19).
+
+### Step 14 — config bounds rows for the prune interval and the 037 seed parse test (AC-14/AC-19) [done] (2026-11-02)
+
+- `setConfigScalarBounds.test.ts`: two `TIMEOUT_KEY_FORMS` rows (`watchlist.signal_prune_interval_seconds` and `portfolio.watchlist.signal_prune_interval_seconds`, `intVal`, `[60, 86400]`). The generated loop covers 60/86400 accepted and 59/86401 rejected. An explicit case covers the full-dotted form `= 0`: rejected `INVALID_ARGUMENT`, `[60, 86400]` text, no INSERT.
+- New `src/__tests__/migrationSql.ts` (test-only, outside the `*.test.js` glob) exports `MIGRATIONS_DIR`, `findOne(suffix, ext)` and `splitStatements`, moved verbatim from zeroTrap. Only change: `suffix` is now a parameter. `zeroTrapDescriptionMigration.test.ts` imports them and drops its local copies; its 4 tests are unchanged and pass.
+- New `signalPruneIntervalSeedMigration.test.ts` has 5 plain `it()` cases. They check: up is one statement that full-matches the two-row global `INSERT … ON CONFLICT … DO NOTHING`; namespace, key, `int` and `xstockstrat-portfolio`; environments `['production','staging']`; `value_data = default_value = '300'`, inside `[60,86400]`; and down deep-equals the single global-row DELETE.
+- Files modified: the four Step 14 **Files**.
+- TDD: AC-19 red (037 pair moved to the scratchpad): rc 1, `# fail 5`, `expected exactly one` (pair restored, `migrations/` clean). Bounds red (Step 13 registry line temporarily removed): 3 rejection cases failed (restored). Green: two-file run `# pass 9 / # fail 0`.
+- Verification: greps OK; lint 0 errors (234 pre-existing warnings); `test:coverage` 272 pass / 0 fail, 90.61% lines; `c8 check-coverage --lines 40` rc 0. `setConfigScalarBounds.test.ts` fails `prettier --check`, but so does the base file (pre-existing), so it was left alone (surgical diff). No database was started.
+- Deviations: split plain commands (sandbox); bounds RED by a temporary Step 13 revert (Deviation Log).
+- Next: Step 15 (`portfolio backfill-signal-expiry` operator subcommand).
+
+### Step 15 — `portfolio backfill-signal-expiry` operator subcommand (REPORT / APPLY) [done] (2026-11-02)
+
+- `cmd/server/main.go`: a `backfill-signal-expiry` dispatch right after the `healthcheck` branch, before telemetry, config and mTLS.
+- `cmd/server/backfill.go`, `runBackfillSignalExpiry(args) int`:
+  - Parses `--mode` (default `report`), `--legacy-owner`, `--expect-untracked` and `--expect-seed-expired`. An expect-* pointer is set only when that flag was given (`fs.Visit`), so an unset bound stays nil.
+  - Prints the spec's exact refusal on stderr and returns 2 when `DATABASE_URL` is empty. Otherwise it prints `target host=… db=…` from `pgxpool.ParseConfig` before anything else.
+  - Opens the pool via `NewPortfolioRepo` + `Pool()` (no new `NewPool`) and calls `RunBackfill`.
+  - Exit codes: 3 on `ErrBackfillRefused`, 1 on any other error, 2 on usage errors.
+- `internal/repository/signal_expiry_backfill.go`:
+  - Exports `BackfillOptions`, `BackfillResult` (with `Report` = everything written to `out`), `ErrBackfillRefused`, `RunBackfill`, and the `BackfillModeReport`/`BackfillModeApply` constants.
+  - Refuses before any DB access when the mode is unknown, the legacy owner is empty (both modes), or an APPLY bound is nil.
+  - Classification is one read-only `REPEATABLE READ` transaction over SIGNAL (`source = 2`) bindings on `system_managed` lists that have no expiry row. Each binding's own watchlist-direction rows are matched with `upper(btrim(n.symbol)) = s.symbol` and `lower(n.direction) = 'watchlist'`:
+    - any open-ended row → skipped;
+    - dated rows → seed, using `max(valid_until)` and that row's `id` (ties go to the higher `id`), with `seed_expired` meaning `<= now()`;
+    - no rows → untracked, which gets marked.
+  - `legacy_rows` and `legacy_live` come from rows under `--legacy-owner`. They are informational only.
+  - REPORT prints the header (legacy owner, read-only), SEED rows, UNTRACKED rows, `with_live_legacy_signal`, the PER-OWNER table (with the `NO_OWN_SIGNALS` flag), TOTALS, and the `NEXT:` APPLY command.
+  - APPLY prints its header and the live counts, then refuses (nothing written) if live untracked > N or seed_expired > M. Otherwise it runs one autocommit `INSERT … SELECT … ON CONFLICT DO NOTHING` per row in `(watchlist_id, symbol)` order:
+    - the seed recomputes the latest dated own row and requires that no open-ended row exists;
+    - the mark writes `(now(), NULL)` and requires that no own row exists;
+    - 0 rows affected counts as `changed since REPORT`.
+  - It never deletes a binding, takes no `FOR UPDATE`, and makes no ledger or gRPC call.
+- Files modified: `services/xstockstrat-portfolio/cmd/server/main.go`, `services/xstockstrat-portfolio/cmd/server/backfill.go`, `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill.go`.
+- TDD: RED came from uncommitted probes: `undefined: BackfillResult` (dbtest vet) and `undefined: runBackfillSignalExpiry` (cmd/server test build). GREEN: both probes passed (refused on an empty legacy owner; rc 2 plus the refusal text) and were deleted. The behavioral tests are Step 16.
+- Verification:
+  - `go build ./...`, `go vet ./...` and `go vet -tags dbtest ./...` all pass.
+  - The offline refusal check gives rc 1 (`go run` maps the child's exit status 2), and the output includes `DATABASE_URL is required`.
+  - GO-LINT: `0 issues`.
+  - Full `go test ./...` passes.
+  - The step-time `check-config-wiring.mjs` gate returns rc 0.
+  - No database was started.
+- Deviations: RED probes; exit-code/output-format choices (Deviation Log).
+- Next: Step 16 (backfill DB tests).
+
+### Step 16 — backfill DB tests [done] (2026-11-02)
+
+- Created `internal/repository/signal_expiry_backfill_dbtest_test.go` (`//go:build dbtest`), which drives `RunBackfill` directly and has 9 `TestBackfill_*` functions:
+  - `ReportIsReadOnly`: the expiry row count is unchanged and the result shows zero writes.
+  - `BoundsRefuseBeforeWrite`: untracked or seed_expired bound exceeded → `ErrBackfillRefused`, nothing written.
+  - `LegacyOwnerRequired`: an empty or blank owner is refused in both modes, and APPLY with a nil bound is refused.
+  - `SeedsFromOwnerRows` (AC-15): the `" aapl"` live row beats an older `"AAPL"` row. REPORT has the exact `SEED` line and APPLY writes `(valid_until, id)`.
+  - `StrictUntrackedRemoval` (AC-16): REPORT has the `UNTRACKED … strat-3 1 Y` and `NO_OWN_SIGNALS` lines. A `live - 1` bound refuses with zero writes. APPLY marks `(now, NULL)`, and the tick returns a `PrunedEntry` with nil `SignalID` and `strat-3`.
+  - `MarkedEntryRescued` (AC-17): a live 110 renewal keeps the entry, and a past 111 renewal is removed with `SignalID` 111.
+  - `OpenEndedStaysUntracked`: the entry is not listed and gets no row, and the tick keeps it.
+  - `Idempotent`: the second APPLY writes nothing.
+  - `IngestInterleavingSkipsChanged` (T4): 10 concurrent APPLY versus ingest+renewal races. The entry is never left due or removed.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go`.
+- TDD: RED compiled the file against a `git archive` of `5f5a755a` (pre-Step-15) → `undefined: BackfillResult`. GREEN (offline):
+  - `go vet -tags dbtest ./...` passes and GO-LINT reports `0 issues`.
+  - The `TestBackfill_` count is 9.
+  - The tests skip without `PORTFOLIO_DB_TEST_URL`.
+  - GO-COVER total is 68.6%.
+  - The behavioral run is CI `portfolio-db-test`. No database was started.
+- Deviations: bounds come from a live REPORT because the classifier is global; dates and ids are DB-relative; AC-16 uses a per-test legacy owner; AC-17 is split into two subtests; T4 runs as a race; the RED method (Deviation Log).
+- Next: Step 17 (agent sends signal provenance on the `direction="watchlist"` auto-add).
+
+### Step 17 — agent sends signal provenance on the `direction="watchlist"` auto-add [done] (2026-11-02)
+
+- `client.add_watchlist_symbol(user_id, watchlist_id, symbol, signal_id=None, valid_until=None)` builds `WatchlistSignalProvenance(signal_id, valid_until)` only when `signal_id` is truthy and `valid_until` parses (`_iso_to_timestamp`, `ValueError` caught) to seconds > 0; otherwise `signal_provenance` is unset, so portfolio untracks the entry. Binding, metadata and timeout are unchanged.
+- `tools.py` `ingest_signal` auto-add passes `result.get("signal_id")` and the tool's `valid_until`. The gate and the best-effort `except`/WARN are unchanged. The `ingest_signal` SIDE EFFECT docstring gains the expiry sentence, and `get_watchlist` gains the pruned-set sentence. No tool added; tool count stays forty-five.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`.
+- TDD: RED from an uncommitted probe → `TypeError: … unexpected keyword argument 'signal_id'`; GREEN probe passed, then deleted.
+- Verification: the tool-count grep passes (diffed against merge base `1ea1c19c`); `ruff check` and `ruff format --check` pass; `check-config-wiring.mjs` rc 0. PY-VERIFY coverage 84.22%, 641 passed / 1 failed. The failure is `test_watchlist_direction_adds_symbol` asserting the pre-feature call shape; Step 18 updates it in place.
+- Deviations: probe RED; PY-VERIFY fully green only after Step 18 (Deviation Log).
+- Next: Step 18 (agent provenance tests).
+
+### Step 18 — agent provenance tests (client request builder + tool path) [done] (2026-11-02)
+
+- `tests/test_watchlist_client.py`: `_send_signal_add` / `_assert_signal_binding` helpers, plus `test_add_watchlist_symbol_sends_provenance` (signal 102, `valid_until.seconds` = 2026-12-01T00:00:00Z), `test_add_watchlist_symbol_omits_provenance_when_undated` (parametrized: open-ended, no signal_id, empty string) and `test_add_watchlist_symbol_unparseable_valid_until_still_adds`. Each asserts the request is still sent with the SIGNAL binding and exactly one `x-user-id`.
+- `tests/test_ingest_signal_watchlist.py`: `test_watchlist_direction_adds_symbol` updated in place to `("u-2", "wl-sys", "NVDA", 1, None)`. New `_ingest_watchlist` helper, plus `test_ingest_signal_passes_signal_id_and_valid_until`, `test_ingest_signal_open_ended_passes_no_valid_until` and `test_add_invalid_argument_is_swallowed` (WARN logged, ingest result returned). The doc-parity test now also asserts the docstring mentions expiry. The gate tests are unchanged.
+- Files modified: `services/xstockstrat-agent/tests/test_watchlist_client.py`, `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py`.
+- TDD: RED against the pre-Step-17 app files (temporarily restored from `b889a6e8`) → 9 failed / 17 passed. GREEN → 26 passed.
+- Verification: ruff check/format pass; mandated test-name count >= 6; targeted pytest 26 passed; PY-VERIFY full suite 650 passed, coverage 84.49%.
+- Deviations: RED method; the swallow test is a regression guard and passes pre-Step-17 (Deviation Log).
+- Next: Step 19 (UI e2e — an emptied system-managed list renders and cannot be deleted).
+
+### Step 19 — UI e2e: an emptied system-managed list renders and cannot be deleted [done] (2026-11-02)
+
+- `e2e/insights/watchlists.spec.ts`: new test `system-managed watchlist emptied by expiry pruning: renders "No symbols", no delete affordance (AC-2)`, placed right after the feature-127 system-managed test.
+  - Seed: `wl-sys` (`systemManaged: true`, `bindings: []`, `symbols: []`) through the existing `mockWatchlists`.
+  - Assertions: `No symbols` is visible, `Delete Signals` has count 0, Rename is visible, and the add-symbols input is enabled.
+- No UI code change. No new fixture, so INVENTORY.md is unchanged.
+- Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.
+- TDD: N/A (frontend e2e regression guard over existing behavior).
+- Verification:
+  - The local `pnpm test:e2e … -g "emptied by expiry pruning"` run timed out twice in the dev-server warmup setup (10 s).
+  - Re-running with `CI=1` (production build) gave 2 passed.
+  - The grep finds the test at line 373.
+- Deviations: verification ran under `CI=1` (Deviation Log).
+- Next: Step 20 (docs: service, pattern and constitution documentation).
+
+### Step 20 — docs: service, pattern and constitution documentation [done] (2026-11-02)
+
+- `services/xstockstrat-portfolio/CLAUDE.md`:
+  - Key row `portfolio.watchlist.signal_prune_interval_seconds` (read clamp, `[60,86400]` write bounds, seeded by `037_portfolio_signal_prune_interval`, no pause switch).
+  - § Database row `portfolio.watchlist_signal_expiry` (migration `018`, FK to `watchlists` only).
+  - § Ledger Events Emitted rows `signal_entry_expired` and `signal_entry_removed_untracked`, plus a prune-loop paragraph that names `backfill-signal-expiry`. There is no runbook link yet; Step 21 adds it.
+- `services/xstockstrat-portfolio/docs/context-constitution.md`: new `PORTFOLIO-18` (single deleter, `SKIP LOCKED` locked-set delete, lock order versus `UpdateBinding(s)`, FK to `watchlists`) and an amended `PORTFOLIO-7` (`insertBindingTx` split, `ExpiryIntent` / `applyExpiryIntentTx`). The watchlist anchors in rows 7, 8, 12 and 13 were re-stamped, and the header changelog was amended.
+- `docs/patterns/database.md`: plain-table sentence plus the backfill's read-only read of `ingest.newsletter_signals`.
+- `docs/patterns/config-governance.md`: new top entry `feature 281 — signal-watchlist-expiry-pruning` with the `feature 278 interaction` note.
+- `services/xstockstrat-agent/CLAUDE.md`: no lifetime statement, so no edit.
+- TDD: N/A (documentation). The verification block was RED (exit 1) before the edits and GREEN (exit 0, `check-context-map.sh` OK) after.
+- Deviations: anchor re-stamp scope, citation drift and no agent edit (Deviation Log).
+- Next: Step 21 (backfill runbook, runbooks index, MCP tools reference and context teardown).
+
+### Step 21 — docs: backfill runbook, runbooks index, MCP tools reference and context teardown [done] (2026-11-02)
+
+- New `docs/runbooks/signal-watchlist-expiry-backfill.md`. It names the key `portfolio.watchlist.signal_prune_interval_seconds` ("raising the interval is not a pause") and both full event names, and covers:
+  - Scope: the three-class table and the known strictness for `legacy_live` entries.
+  - Authority: never APPLY without a REPORT.
+  - Prerequisites: workstation only (distroless image); pooled `:25061` with `DB_PGBOUNCER=true`; `DB_POOL_MAX` unset; `SEED_USER_ID` from the `db-migrator` job; the `has_table_privilege` preflight on `ingest.newsletter_signals`.
+  - REPORT/APPLY commands, and the output columns quoted from `signal_expiry_backfill.go`.
+  - No grace period; emergency stop (`DELETE … WHERE signal_id IS NULL` / `TRUNCATE`) within one interval; rollback as the second line.
+  - Accepted residuals, and deploy order proto → portfolio → agent → backfill.
+- `docs/runbooks/CLAUDE.md`: new index row, placed after `proto-versioning.md` (alphabetical).
+- `docs/runbooks/mcp-tools.md`:
+  - The `ingest_signal` intro and the `get_watchlist` entry each gain an expiry sentence ("expires"), matching the Step 17 docstrings.
+  - Error rows: a provenance `INVALID_ARGUMENT` drops the auto-add with a WARN, and `deduplicated: true` does not renew expiry. Tool count is unchanged (45).
+- Portfolio `CLAUDE.md`: the `backfill-signal-expiry` sentence now links to the runbook.
+- `docs/patterns/ci-overview.md`: new `portfolio-db-test` row after `ledger-db-test`.
+- TDD: N/A (documentation). Verification: every grep hits, both awk ranges contain `expires`, `check-context-map.sh` reports OK, and `markdownlint-cli2` with `.markdownlint.yaml` reports 0 errors on the touched CLAUDE.md files and the runbook.
+- **Teardown (root `CLAUDE.md`), for the PR body:** the context-forge plugin's `context-constitution` refresh is **unavailable** in this session (only `context-scrubber` is exposed). The manual reconciliation re-read the touched context files of Steps 20-21 against the code: the portfolio `CLAUDE.md`, the portfolio `docs/context-constitution.md`, `docs/runbooks/CLAUDE.md`, the new runbook, `docs/patterns/{database,config-governance,ci-overview}.md` and `mcp-tools.md`. Every `PORTFOLIO-7`/`PORTFOLIO-18` anchor resolves, and the key, clamp, events, payloads, table, CI job and backfill output names match the code. No drift was found (Deviation Log has the detail).
+- Discovery note: the pre-step digest was taken from a stale `main-dev` working tree and reported Steps 15 and 20 as pending. On `origin/feature/signal-watchlist-expiry-pruning` both are done, so there was no blocker.
+- Next: Step 22 (premise-evidence check, verify only).
+
+### Step 22 — test: premise evidence (FR-1 / AC-1) is recorded [done] (2026-11-02)
+
+- `recon.md` § Premise Verdict (`:9`) is present. It cites `watchlist_repo.go`, `portfolio_service.go`, `migrations/007_watchlists.up.sql:16-21`, `tools.py` and `client.py` with line numbers. Verification: the `grep` prints the heading, and 10 lines match against a threshold of 4. `recon.md` was not edited (immutable dossier).
+- The pre-feature citations hold on `origin/main-dev`: `DeleteWatchlist` `portfolio_service.go:2142`, `RemoveWatchlistSymbols` `:2195`, and the repo deletes at `watchlist_repo.go:268,312,210`. `WatchlistBinding` is unchanged at `portfolio.proto:243-249` (fields 1-3, with no signal link). `client.py:319` `add_watchlist_symbol` is unchanged.
+- Citation drift (record only):
+  - Agent `tools.py` had already drifted on `origin/main-dev` before this feature. `ingest_signal` is at `:620`, not `:604`. `valid_until` is passed to ingest at `:658`, not `:642`. The auto-add is at `:707-708`, not `:686-696`. The substance held: the add carried no `signal_id`/`valid_until`.
+  - On the feature branch, Step 17 changed that: `tools.py:710-712` now passes `result.get("signal_id")` and `valid_until` to `add_watchlist_symbol`. This is the by-design end of the "structurally unprunable" premise.
+  - Portfolio lines moved with Steps 5-11. `DeleteWatchlist` is now `portfolio_service.go:2184` and `RemoveWatchlistSymbols` is `:2242`. The `RemoveSymbols` DELETE is now `watchlist_repo.go:337`, and there is a new expiry-row delete at `:577`. The `Delete` (`:268`) and replace-all (`:210`) lines are unchanged.
+- TDD: N/A (evidence check). No service code changed.
+- Next: all 22 steps are done. The integration PR is next, and it must not merge before feature 280 / #1359 (Step 11 block 2 with `MERGE_TIME=1` at merge time). [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
+
+## Session 2026-11-02 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — signal-watchlist-expiry-pruning (feature 281)
+
+Source: docs/roadmap/features/281-signal-watchlist-expiry-pruning/acceptance.feature (18 scenarios). I read it from the working tree, not from origin/feature/signal-watchlist-expiry-pruning, so confirm the branch copy matches. My Globs timed out, so I deduped with targeted greps. Reviewers: Proto, DBA, portfolio, agent, config, UI.
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | none (no write) | n/a | CONFLICT | Asserts the pre-feature state ("no pruning feature exists", "still present"). That is a recon premise check, and after launch it contradicts AC-2/3/10. A human must confirm the skip. |
+| AC-2 | services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature | CREATE | NEW | |
+| AC-3 | same | CREATE | NEW | |
+| AC-4 | same | CREATE | NEW | |
+| AC-5 | same | CREATE | NEW | |
+| AC-6 | same | CREATE | NEW | |
+| AC-7 | same | CREATE | NEW | |
+| AC-8 | same | CREATE | NEW | |
+| AC-9 | same | CREATE | NEW | |
+| AC-10 | same | CREATE | NEW | |
+| AC-11 | same | CREATE | NEW | |
+| AC-12 | same | CREATE | NEW | |
+| AC-13 | same | CREATE | NEW | |
+| AC-14 | same | CREATE | NEW | Ambiguous attribution, see Notes. |
+| AC-15 | same | CREATE | NEW | |
+| AC-16 | same | CREATE | NEW | |
+| AC-17 | same | CREATE | NEW | |
+| AC-18 | same | CREATE | NEW | |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature (CREATE) ---
+# Promoted from docs/roadmap/features/281-signal-watchlist-expiry-pruning/acceptance.feature at launch
+# (Constitution C-16). Scenarios are verbatim; @AC-/@FR- tags are preserved and @feature-281 added.
+# Durable business rules xstockstrat-portfolio guarantees for expiry pruning of signal-sourced watchlist entries.
+
+Feature: xstockstrat-portfolio — signal watchlist expiry pruning
+  Entries on the system-managed signal watchlist whose backing signals have all expired are removed automatically.
+
+  @AC-2 @FR-2 @feature-281
+  Scenario: Entry is removed once its only agent-recorded signal expires
+    Given the signal watchlist contains "AAPL" with source SIGNAL
+    And the only agent-recorded watchlist signal (id 101) for ("user-1", "AAPL") since the entry was added has valid_until 2026-10-01T00:00:00Z
+    When the prune runs at 2026-10-31T00:00:00Z
+    Then "AAPL" is absent from the signal watchlist
+
+  @AC-3 @FR-2 @feature-281
+  Scenario: Entry is removed only after all of its agent-recorded signals expire
+    Given the signal watchlist contains "MSFT" with source SIGNAL
+    And ("user-1", "MSFT") has agent-recorded watchlist signals A (id 201, valid_until 2026-10-01T00:00:00Z) and B (id 202, valid_until 2026-11-15T00:00:00Z), each from a non-deduplicated ingest
+    When the prune runs at 2026-10-31T00:00:00Z
+    Then "MSFT" is still present on the signal watchlist
+    When the prune runs at 2026-11-16T00:00:00Z
+    Then "MSFT" is absent from the signal watchlist
+
+  @AC-4 @FR-3 @feature-281
+  Scenario: An entry recorded by an open-ended signal is never removed by the recurring prune
+    Given the signal watchlist contains "NVDA" with source SIGNAL
+    And the agent-recorded watchlist signal for ("user-1", "NVDA") was ingested with no valid_until
+    When the prune runs at 2027-10-31T00:00:00Z
+    Then "NVDA" is still present on the signal watchlist
+
+  @AC-5 @FR-4 @feature-281
+  Scenario: Manual entries are never pruned
+    Given the user's watchlist contains "TSLA" with source MANUAL
+    And a signal for "TSLA" with valid_until 2026-10-01T00:00:00Z has expired
+    When the prune runs at 2026-10-31T00:00:00Z
+    Then "TSLA" is still present on the watchlist
+
+  @AC-6 @FR-5 @feature-281
+  Scenario: Repeated pruning is idempotent
+    Given "AAPL" was already pruned from the signal watchlist at 2026-10-31T00:00:00Z
+    When the prune runs again at 2026-10-31T00:05:00Z
+    Then the tick completes with 0 entries removed, no error, and no ledger event
+
+  @AC-7 @FR-6 @feature-281
+  Scenario: An expiry removal is observable
+    Given the signal watchlist contains "AAPL" with source SIGNAL whose only tracked signal (id 101) expired at 2026-10-01T00:00:00Z
+    When the prune removes "AAPL" at 2026-10-31T00:00:00Z
+    Then a ledger event "portfolio.watchlist.signal_entry_expired" exists naming user "user-1", symbol "AAPL", and signal_id 101
+
+  @AC-8 @FR-2 @FR-3 @feature-281
+  Scenario: A renewed signal extends the entry's life
+    Given "AMD" is on user-1's signal watchlist tracked by signal 101 with valid_until 2026-11-01T00:00:00Z
+    When the agent records a non-deduplicated watchlist signal 102 for "AMD" with valid_until 2026-12-01T00:00:00Z
+    And the prune runs at 2026-11-15T00:00:00Z
+    Then "AMD" is still present
+    When the prune runs at 2026-12-02T00:00:00Z
+    Then "AMD" is absent and the expired event names signal_id 102
+
+  @AC-9 @FR-3 @feature-281
+  Scenario Outline: A SIGNAL add without dated provenance untracks the entry
+    Given "INTC" is on user-1's signal watchlist tracked with valid_until 2026-10-01T00:00:00Z
+    When a SIGNAL add for "INTC" arrives with <provenance>
+    And the prune runs at 2026-10-31T00:00:00Z
+    Then "INTC" is still present and has no expiry record
+    Examples:
+      | provenance                                                                  |
+      | no signal_provenance (an open-ended signal 103, or a pre-feature agent)     |
+
+  @AC-10 @FR-2 @FR-3 @feature-281
+  Scenario: Non-agent and non-watchlist signals do not keep an entry alive
+    Given "AAPL" is tracked on user-1's signal watchlist with valid_until 2026-10-01T00:00:00Z
+    And user-1 has a live "buy" signal and an mcp_client-ingested "watchlist" signal for "AAPL", both valid until 2027-01-01T00:00:00Z
+    When the prune runs at 2026-10-31T00:00:00Z
+    Then "AAPL" is absent from the signal watchlist
+
+  @AC-11 @FR-4 @feature-281
+  Scenario: A manual add does not pin a signal entry
+    Given "META" is on user-1's signal watchlist with source SIGNAL tracked with valid_until 2026-10-01T00:00:00Z
+    When user-1 adds "META" to that watchlist with source MANUAL
+    Then the "META" binding's source is still SIGNAL and its tracking is unchanged
+    When the prune runs at 2026-10-31T00:00:00Z
+    Then "META" is absent
+
+  @AC-12 @FR-5 @feature-281
+  Scenario: The prune never waits on a concurrent rebind
+    Given "AAPL" is due for pruning on user-1's signal watchlist
+    And an UpdateWatchlistBinding transaction holds the "AAPL" binding row
+    When a prune tick runs on a connection with lock_timeout 500ms
+    Then the tick completes without a lock-timeout or deadlock error and without removing "AAPL"
+    And after the rebind commits the next tick removes "AAPL"
+
+  @AC-13 @FR-6 @feature-281
+  Scenario Outline: Each removal emits one owner-visible event of the right kind
+    Given "<sym>" bound to strategy "strat-9" is on user-1's signal watchlist with <state>
+    When the prune removes "<sym>" at 2026-10-31T00:00:00Z
+    Then exactly one "<event>" ledger event is appended with request user_id "user-1" and a non-empty x-trace-id
+    And its payload holds user_id "user-1", the watchlist_id, symbol "<sym>", strategy_id "strat-9"<extra>
+    Examples:
+      | sym  | state                                   | event                                              | extra                                                  |
+      | AAPL | signal 101 expired 2026-10-01T00:00:00Z | portfolio.watchlist.signal_entry_expired           | , signal_id 101 and valid_until "2026-10-01T00:00:00Z" |
+      | ORCL | a backfill untracked mark               | portfolio.watchlist.signal_entry_removed_untracked |                                                        |
+
+  @AC-14 @FR-5 @feature-281
+  Scenario Outline: The prune interval is bounded on write and clamped on read
+    When portfolio.watchlist.signal_prune_interval_seconds is <value>
+    Then <layer> <outcome>
+    Examples:
+      | value | layer                | outcome                            |
+      | 0     | SetConfig            | rejects it (minimum 60)            |
+      | 59    | SetConfig            | rejects it (minimum 60)            |
+      | 60    | SetConfig            | accepts it                         |
+      | 86400 | SetConfig            | accepts it                         |
+      | 86401 | SetConfig            | rejects it (maximum 86400)         |
+      | 0     | the prune loop read  | sleeps 300 seconds                 |
+      | 30    | the prune loop read  | sleeps 60 seconds                  |
+      | 90000 | the prune loop read  | sleeps 86400 seconds               |
+
+  @AC-15 @FR-7 @feature-281
+  Scenario: Backfill seeds expiry for existing entries from the owner's signal rows
+    Given user-1's signal watchlist holds SIGNAL "AAPL" with no expiry record
+    And user-1 has watchlist signals for " aapl" (id 7, valid_until 2026-12-01T00:00:00Z) and "AAPL" (id 5, valid_until 2026-09-01T00:00:00Z)
+    When the DBA runs REPORT with --legacy-owner "SEED"
+    Then nothing is written and REPORT lists seed AAPL valid_until 2026-12-01T00:00:00Z signal_id 7 with seed_expired 0
+    When APPLY runs with --legacy-owner "SEED" --expect-seed-expired 0 --expect-untracked 0
+    Then "AAPL" has an expiry record valid_until 2026-12-01T00:00:00Z and signal_id 7
+
+  @AC-16 @FR-7 @feature-281
+  Scenario: Strict untracked removal, including the accepted pre-224 legacy-owner case
+    Given user-2's signal watchlist holds SIGNAL "PLTR" bound to "strat-3" with no expiry record
+    And user-2 has no signal rows, while legacy owner "SEED" holds a live watchlist signal for "PLTR"
+    When the DBA runs REPORT with --legacy-owner "SEED"
+    Then REPORT lists untracked (user-2, the watchlist_id, "PLTR", "strat-3") with legacy_live Y and flags user-2 NO_OWN_SIGNALS
+    When APPLY runs with --legacy-owner "SEED" --expect-untracked 0
+    Then APPLY refuses before writing anything
+    When APPLY runs with --legacy-owner "SEED" --expect-untracked 1 and the next prune tick runs
+    Then "PLTR" is absent from user-2's signal watchlist and one signal_entry_removed_untracked event names user-2, "PLTR", "strat-3"
+
+  @AC-17 @FR-7 @feature-281
+  Scenario: A marked entry is rescued by a live signal before the next tick
+    Given the backfill marked SIGNAL "ORCL" on user-1's signal watchlist as untracked
+    When the agent records a non-deduplicated watchlist signal 110 for "ORCL" with valid_until 2026-12-01T00:00:00Z
+    And the prune runs at 2026-11-01T00:00:00Z
+    Then "ORCL" is still present, tracked by signal 110 with valid_until 2026-12-01T00:00:00Z
+    When the agent instead records a watchlist signal 111 for "ORCL" whose valid_until 2026-10-15T00:00:00Z is already past
+    Then the entry is removed on the next tick with a signal_entry_expired event, not rescued
+
+  @AC-18 @FR-2 @feature-281
+  Scenario Outline: Invalid signal provenance is rejected
+    Given user-1 has a <list> list
+    When AddWatchlistSymbols arrives with signal_provenance (signal_id <signal_id>, valid_until <valid_until>) and <bindings>
+    Then the call fails with InvalidArgument and no binding or expiry record is written
+    Examples:
+      | list           | signal_id | valid_until           | bindings                         |
+      | manual         | 101       | 2026-10-01T00:00:00Z  | one SIGNAL binding "AAPL"        |
+      | system-managed | 101       | 2026-10-01T00:00:00Z  | two SIGNAL bindings              |
+      | system-managed | 101       | 2026-10-01T00:00:00Z  | one MANUAL binding "AAPL"        |
+      | system-managed | 0         | 2026-10-01T00:00:00Z  | one SIGNAL binding "AAPL"        |
+      | system-managed | 101       | unset                 | one SIGNAL binding "AAPL"        |
+
+### Notes / ambiguities / conflicts
+- AC-1 (CONFLICT, no write): it is a recon premise verdict that holds only before the feature. Promoting it would put a rule in the suite that contradicts AC-2, AC-3 and AC-10. Please confirm skipping it. The evidence already lives in recon.md.
+- AC-14 attribution: the outline spans two owners. The SetConfig bounds are enforced by xstockstrat-config, and the clamp is read in the portfolio prune loop. The key is `portfolio.watchlist.*`, so I routed the scenario whole to portfolio. I did not split it, because verbatim promotion is required. Alternative: a human splits it into config and portfolio suites.
+- AC-15 and AC-16 are DBA backfill tooling scenarios. I attributed them to portfolio, which owns the tables. The implementation spec says Step 16's backfill dbtests first run in CI portfolio-db-test, so these scenarios are not yet locally verified.
+- AC-10 and AC-11 and the agent-side stamping of signal_provenance have an agent half. The observable subject is portfolio (the entry's presence and the binding), so no agent suite entry is added.
+- Dedup against services/xstockstrat-portfolio/acceptance/ (consolidate-watchlist-signal.feature, watchlist-single-strategy-update.feature, watchlist-bulk-default-strategy.feature, fundsignal-watchlist-universe.feature) and docs/sdd/business-rules/platform.feature found no @feature-281 pair and no matching Then. There is no OVERLAP or DUP.
+- AC-12 and AC-11 interact with the rule in services/xstockstrat-portfolio/acceptance/watchlist-single-strategy-update.feature (UpdateWatchlistBinding rebind). They are complementary and not contradictory, and I did not edit that file.
+- Landing context for the orchestrator, outside the promotion itself. The PR must carry a DO NOT MERGE before #1359 note at the top, and the merge-order override goes in context.md. The Step 21 teardown record, the Step 16 CI open item and the ingest.newsletter_signals SELECT runbook preflight also go in the PR body. None of these touch the suites. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
+
+### Coverage check
+- Source scenarios: 18. Planned: 17 NEW, 0 DUP, 0 OVERLAP, plus 1 CONFLICT (AC-1) deliberately not written. 17 + 1 = 18, so every @AC-* is accounted for.
+- The target file is created lazily. The acceptance/ directory already exists for portfolio.
+```
+
+## Session 2026-11-02 — sdd-execute ALL-DONE path (landing, operator: "Open PR now, pre-approve plan")
+
+- **Promotion plan approved with one orchestrator correction.** The plan above was written from a stale 18-scenario copy and left out `@AC-19`. Re-read `acceptance.feature` from `origin/feature/signal-watchlist-expiry-pruning`: 19 scenarios. A script compared the plan's portfolio block line by line with that copy: AC-2..AC-18 match verbatim (158 lines, only the `@feature-281` tag added). Applied:
+  - AC-2..AC-18 → `services/xstockstrat-portfolio/acceptance/signal-watchlist-expiry-pruning.feature` (CREATE, the plan's block exactly). AC-14 goes whole to portfolio.
+  - **Correction:** `@AC-19` (the 037 seed guarantee) → NEW `services/xstockstrat-config/acceptance/signal-watchlist-expiry-pruning.feature`, verbatim plus `@feature-281`, with the same header convention as the portfolio suite. Feature 282's spec expects it there.
+  - AC-1 is not promoted (pre-feature premise check, confirmed skip). Coverage: 18 promoted + 1 skipped = 19.
+- **Merge-order override (operator, 2026-11-02).** The `merge-order.md` 281 ← 278 row on `main-dev` is stale: 278 merged as `631028eb` and the row is resolved on this branch. **BINDING (SUPERSEDED):** the integration PR must NOT merge before feature 280's PR #1359. Config migrations 035/036 must apply before 281's 037, and golang-migrate has no out-of-order guard. The PR body carries a top-of-body DO NOT MERGE note. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
+- **Config-wiring gate (F-09)**, `node scripts/check-config-wiring.mjs --final`: rc 0. Only line: `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`, a pre-existing baseline. No finding for this feature's key.
+- **Step 11 block 2, pre-PR re-run** (after `git fetch --prune` of all heads): `037 free; 280 seeds on main-dev: 0/2; on origin/claude/smoke-test-deployment-0f1z5j: 2/2`. No WARN. Still owed: the `MERGE_TIME=1` run after the final rebase, immediately before merge. [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
+- **Open items carried into the PR:**
+  - Step 16 backfill dbtests (and all `portfolio-db-test` tests) first run in CI `portfolio-db-test`.
+  - Runbook preflight: the portfolio DB role's `SELECT` on `ingest.newsletter_signals` is unverified.
+  - Step 21 teardown: the context-forge plugin was unavailable, so it was a manual reconciliation (no drift).
+  - Node v22 locally vs pinned 24: not a blocker.
+- Status `in-progress` → `code-completed`; `implementation-spec.md` header → `complete` (22/22 steps done).
+
+
+## Session 2026-11-04T22:07Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, ~15 warnings (advisory — did not block). All 22 steps done. Branch merged with main-dev; PORTFOLIO-17 -> PORTFOLIO-18 renumbered (main-dev claimed 17), references consistent.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 11: ~~config 037 depends on feature 280 migrations 035/036 (PR #1359)~~ — [x] superseded by operator ruling 2026-11-04: 280 now depends on 281 and renumbers above 037 (merge-order.md); the 280 clauses of block 2 are waived (see Deviation Log). Block 2's `037 free` check still runs before merge.
+  - Steps 4/6/10/16: real-DB tests. Run locally 2026-11-04 on Postgres 16 with a `create_hypertable` stand-in (pass); first green on real TimescaleDB is CI portfolio-db-test. Do not merge until green. — [ ] unaddressed (CI half only)
+  - Step 16: ingest-interleaving test is a probabilistic race, not deterministic. — [x] fixed 2026-11-04 (deterministic lock-wait test; race kept as a separate invariant test)
+  - Step 21 / PR body: record BOTH context-forge plugin unavailability AND the manual teardown reconciliation (fails.md:670). — [x] PR #1401 body records both (updated 2026-11-04, incl. the main-dev merge resolutions); the plugin is still unavailable
+  - C-16: AC-1 must not be promoted as a runtime guarantee. — [ ] unaddressed
+- Overlap findings: WARN, no FAIL. Same-function/file overlap with 282 (portfolio_service.go AddWatchlistSymbols, agent client.py/tools.py, configServiceImpl.ts SCALAR_BOUNDS_REGISTRY); covered by merge-order row 92 (281 first, 282 rebases).
+
+## Session 2026-11-04 — merge-order ruling: 280 depends on 281 (operator)
+
+- 281 no longer waits for feature 280 (PR #1359). merge-order.md row rewritten: 280 depends on 281 and must renumber its seeds `035`/`036` above the highest config migration on `main-dev` at its merge time. Deviation Log entry added to implementation-spec.md.
+- Not touched here: PR #1359 / its branch (feature 280's own spec still holds 035/036 and needs the renumber before it merges).
+
+## Session 2026-11-04 — review-warning follow-ups (operator-approved)
+
+- Step 16 interleaving test made deterministic; Step 11/12 interval test now reads the seeded 037 row (details in implementation-spec.md Deviation Log).
+- First real-Postgres run of the dbtest suite (local PG16 + hypertable stand-in): `go test -tags dbtest -race ./internal/repository/...` passes, `-count=5` on the two interleaving tests passes. Unit suite `go test ./...` passes. CI `portfolio-db-test` on real TimescaleDB is still the authoritative run.
+- Still open (external, not clearable by edits): CI `portfolio-db-test` green on #1401; the PR body must record the context-forge plugin unavailability plus the manual teardown reconciliation; AC-1 must not be promoted as a runtime guarantee at C-16.
+
+## Session 2026-11-05T05:00Z — 037-free check run (git, no script)
+
+- Point-in-time check; re-run immediately before merging and after any later main-dev merge. Prints nothing when no other branch claims 037-039:
+```bash
+git fetch --prune origin
+for r in origin/main-dev $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ | grep -v '/HEAD$'); do
+  git ls-tree --name-only "$r" services/xstockstrat-config/migrations/ | grep -E '/03[7-9]_' | grep -v portfolio_signal_prune_interval | sed "s#^#$r: #"
+done
+```
+- Output: (none). Highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`.
+- Result: PASS. Still owed: the re-run right before the merge.
+
+## Session 2026-11-05T05:01Z — 037-free re-run (git one-liner)
+
+- Same command as the previous entry, run against a fresh `git fetch --prune origin`. Output: (none). Highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`.
+- Result: PASS. Branch vs `origin/main-dev` (behind/ahead): 6/47. Re-run again if `main-dev` is merged into the branch before #1401 merges.
+
+## Session 2026-11-05T05:01Z — main-dev merged into the branch; 037-free re-run
+
+- Merged `origin/main-dev` (6 commits: 243's sandbox_keys_check #1442/#1446, 294/295/296 SDD docs, tree-freshness doc) with no conflicts; none touch portfolio, config migrations or this feature's files.
+- 037-free one-liner (same command as above), after the merge: output (none); highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`; this branch holds the `037_portfolio_signal_prune_interval` pair. Result: PASS.
+
+## Session 2026-11-05T05:20Z — pre-merge gates cleared (operator report + CI)
+
+- CI on PR #1401 (run started 2026-11-05T05:03Z, after the main-dev merge): CI Gate, Portfolio DB test (TimescaleDB), config key wiring, migration contract gate, Frontend E2E and the lint/test jobs listed completed `success` (30 of 42 check runs listed by the API; the CI Gate aggregates the rest). First green run of the dbtest suite on real TimescaleDB.
+- DBA review of portfolio `018` and config `037`: reported done by the operator (2026-11-05T05:20Z). Reviewer identity and notes are not recorded here; add them to the PR if the review needs an audit trail.
+- 037-free one-liner re-run just before this entry: output (none), `main-dev` highest config migration `034`; branch is level with `origin/main-dev`.
+- Remaining: squash-merge #1401 (operator); post-deploy runbook preflight and backfill REPORT/APPLY; feature 280 (#1359) renumbers above 037 before it merges.
+
+## Session 2026-11-05 (CI: feature status automation)
+
+- Promotion PR #1448 merged to main
+- Feature promoted and committed: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-05

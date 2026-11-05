@@ -369,6 +369,37 @@ test.describe('Watchlists (insights)', () => {
     ).toHaveCount(0);
   });
 
+  // feature 281 — expiry pruning may empty the system list; it must stay selectable and undeletable (AC-2).
+  test('system-managed watchlist emptied by expiry pruning: renders "No symbols", no delete affordance (AC-2)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      {
+        watchlistId: 'wl-sys',
+        userId: 'test-user-001',
+        name: 'Signals',
+        description: '',
+        symbols: [],
+        systemManaged: true,
+        bindings: [],
+      },
+    ]);
+    await page.goto('/insights/watchlists');
+    await expect(page.getByRole('heading', { name: 'Watchlists' })).toBeVisible({ timeout: 5000 });
+
+    await page
+      .getByTestId('watchlist-master')
+      .getByRole('button', { name: /Signals/ })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Signals' })).toBeVisible({ timeout: 5000 });
+
+    await expect(page.getByText('No symbols')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Delete Signals' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Rename /i })).toBeVisible();
+    await expect(page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)')).toBeEnabled();
+  });
+
   // feature 155 (FR-1/FR-2) — color + icon state cues, the in-queue cue, and the firing-row jump.
   test('readiness rows show icon + color + text state cues (AC-1/2/4)', async ({ page }) => {
     await addAuthCookie(page);

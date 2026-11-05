@@ -1138,6 +1138,11 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, msg string
 }
 
 func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey string, payload map[string]interface{}) {
+	s.emitEventAs(ctx, "", eventType, streamKey, payload)
+}
+
+// emitEventAs sets the ledger event owner explicitly; "" leaves ledger to fall back to x-user-id metadata.
+func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventType, streamKey string, payload map[string]interface{}) {
 	fields := make(map[string]*structpb.Value, len(payload))
 	for k, v := range payload {
 		val, _ := structpb.NewValue(v)
@@ -1152,6 +1157,7 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		// Stable per-emit dedup key, reused across the retries below so a retry after a committed-but-
 		// unacked append returns the stored event instead of writing a duplicate.
 		IdempotencyKey: uuid.NewString(),
+		UserId:         ownerUserID,
 	}
 
 	// Retry transient codes.Unavailable (a ledger GOAWAY) so a deploy-time ledger bounce doesn't drop
@@ -1763,7 +1769,7 @@ type WatchlistStore interface {
 	// when the row is absent.
 	UpdatePartial(ctx context.Context, watchlistID string, patch repository.WatchlistPatch) (*portfoliov1.Watchlist, error)
 	Delete(ctx context.Context, watchlistID string) error
-	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
+	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, intent repository.ExpiryIntent) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
 	// UpdateBinding rebinds one symbol's strategy_id, returning the updated binding and the parent list's
 	// bumped updated_at; ErrBindingNotFound when the (watchlist_id, symbol) row is absent.
@@ -1776,6 +1782,9 @@ type WatchlistStore interface {
 	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users — cross-user,
 	// not scoped to a caller.
 	ListAllSymbols(ctx context.Context) ([]string, error)
+	// PruneExpiredSignalEntries returns already-committed removals even when err != nil; the caller
+	// must still emit their events.
+	PruneExpiredSignalEntries(ctx context.Context) (repository.PruneResult, error)
 }
 
 // intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).
@@ -1840,6 +1849,39 @@ func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string,
 	}
 	// Single fill site — wraps BOTH branches so a flat-`symbols` add inherits the default too.
 	return applyDefaultStrategy(out, defaultStrategyID)
+}
+
+// expiryIntentFor: provenance needs a system-managed list, exactly one SIGNAL binding, signal_id > 0
+// and a set valid_until; a provenance-less add untracks its SIGNAL symbols (version-skew safety).
+func expiryIntentFor(req *portfoliov1.AddWatchlistSymbolsRequest, existing *portfoliov1.Watchlist, add []*portfoliov1.WatchlistBinding) (repository.ExpiryIntent, error) {
+	var signalSymbols []string
+	for _, b := range add {
+		if b.GetSource() == portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL {
+			signalSymbols = append(signalSymbols, b.GetSymbol())
+		}
+	}
+	prov := req.GetSignalProvenance()
+	if prov == nil {
+		return repository.ExpiryIntent{UntrackSymbols: signalSymbols}, nil
+	}
+	switch {
+	case !existing.GetSystemManaged():
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance is only accepted on a system-managed watchlist"))
+	case len(add) != 1 || len(signalSymbols) != 1:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance requires exactly one SIGNAL binding, got %d bindings (%d SIGNAL)", len(add), len(signalSymbols)))
+	case prov.GetSignalId() <= 0:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance.signal_id must be > 0"))
+	case prov.GetValidUntil() == nil || prov.GetValidUntil().GetSeconds() <= 0:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance.valid_until must be set"))
+	}
+	return repository.ExpiryIntent{
+		Provenance: &repository.SignalProvenance{SignalID: prov.GetSignalId(), ValidUntil: prov.GetValidUntil().AsTime()},
+		Symbol:     add[0].GetSymbol(),
+	}, nil
 }
 
 // applyDefaultStrategy stamps the default strategy onto add-time bindings only when the default is
@@ -2175,13 +2217,18 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	// Add-time default: a bare/MANUAL add inherits the watchlist's persisted default; SIGNAL-sourced
 	// adds are skipped inside applyDefaultStrategy.
 	add := requestBindings(req.GetBindings(), req.GetSymbols(), existing.GetDefaultStrategyId())
+	// Validated before the cap check and any write: a rejected provenance stores nothing (AC-18).
+	intent, err := expiryIntentFor(req, existing, add)
+	if err != nil {
+		return nil, err
+	}
 	// Resulting count = union of current symbols + newly-added symbols (both normalized).
 	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), bindingSymbols(add)...)) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	if len(resulting) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(resulting), s.maxSymbolsPerList()))
 	}
-	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add)
+	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add, intent)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

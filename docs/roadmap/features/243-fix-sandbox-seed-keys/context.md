@@ -555,3 +555,10 @@ Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
 - Status in-progress → code-completed. 031 and its tests/acceptance already merged (#1334); the operator-check module
   merged in #1442; this PR carries the false-positive fix and the Step 5 close-out.
 - Open: production read-back (operator, after prod deploy).
+
+## Session 2026-11-05 (CI: feature status automation)
+
+- Promotion PR #1448 merged to main
+- Feature promoted and committed: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-05

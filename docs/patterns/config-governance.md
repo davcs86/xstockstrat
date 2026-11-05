@@ -141,6 +141,17 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)
+
+Paces the portfolio signal-entry expiry prune loop. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeded** (staging + production, global, stored as `int` `300`) by
+config migration `037_portfolio_signal_prune_interval`; its down deletes only the global rows (per-user overrides
+survive rollback).
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `portfolio.watchlist.signal_prune_interval_seconds` | int | `300` | `[60,86400]`; read clamp `≤ 0` → `300`, `1..59` → `60`, `> 86400` → `86400` | Read live each prune iteration; no pause switch. **feature 278 interaction:** the key is seeded, not baselined (operator decision 2026-11-02), and is wired with zero `check-config-wiring.mjs --final` findings. |
+
 ### feature 249 — fix-ibkr-request-signing (`xstockstrat-trading`)
 
 Bounds the IBKR live-session-token (LST) lifecycle that now signs every IBKR call. All three keys follow feature
