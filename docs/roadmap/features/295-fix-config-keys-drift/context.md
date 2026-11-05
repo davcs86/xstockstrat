@@ -564,3 +564,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   24. **No production DB or deploy target exists anywhere** (neither DO production nor homelab
       production). Production's first deploy starts from fresh migrations, so the design assumption
       holds, and G3 = the first-deploy read-back against `dryrun-fresh.tsv`.
+
+## Session 2026-11-05 — sdd-design Phase 1, round 5 (FINAL, in progress)
+
+- **R5 proposal = round-4 design + the binding round-4 amendments only.**
+  - Verified: OWNER_RE already admits `feature 296` (`check-config-wiring.mjs:306,329`), so no regex
+    change is needed.
+  - Verified: 001 re-creates the audit function (`001:37-47`) before its failing CREATE TRIGGER
+    (`:49-51`). Only the single implicit transaction keeps an auto `force 0` replay harmless. The
+    rerun leg (c) asserts `pg_get_functiondef` is unchanged.
+- **Amendments integrated:**
+  - **Gate:** the baseline is 296-owned `seeded-unread` entries only. `validateState` checks owner
+    plus membership in the signed `heal/dryrun-fresh.tsv`, and `envReadUnseeded=blocking` at A10.
+  - **Heal:**
+    - `default_value` synced to the code default, with its own audit row;
+    - secret-class twins are never deleted or revealed;
+    - per-user FR-1 inserts never update the global row.
+  - **Watchers:** cumulative `read_key` re-emit every 6 h.
+  - **Agent:** boot blocks on both lifespan snapshots.
+  - **Recovery:** probe → `force 35` / `force 34` → up.
+  - **Pool:** `statement_timeout`.
+  - **Exact wording edits** for product-spec, acceptance and 296 are listed in the proposal; they are
+    applied once the design is approved.
+- The final adversary pass is running.
