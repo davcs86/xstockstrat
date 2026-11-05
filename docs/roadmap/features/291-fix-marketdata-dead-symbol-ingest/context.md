@@ -138,3 +138,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Steps 5/7: CI coverage filter cited at `ci.yml:301` (was `:306`); filter content unchanged.
   - Step 8: config-governance entry goes above feature 281 (L144, newest-first), not above 249; doc text `035` → `042`.
 - Left as-is (outside the directive's step-body scope): Execution Summary L13 and Corrections item 5 still say `035`, and the Step 6 Verification comment says "seeded by 035". The Deviation Log 2026-11-05 entry governs (`035` → `042` everywhere); the executor reads those sites as `042`.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation (§5.4): the operator approved the up-front plan for this feature (re-spec of Steps 1,2,3,5,7,8 + execution order 1 → 3 → 2 → 5 → 4 → 7 → 6 → 8); this single confirmation replaces the per-step Phase-2 prompt. Mode-entry confirmation given via sdd-batch-execute.
+- Status `implementation-ready` → `in-progress`.
+- Consumer surface (C-14): none (internal/platform-only); no UI/Agent checkpoint.
+- Carried forward: migration `042` is provisional (C-07 re-check at merge); the Deviation Log 2026-11-05 overrides still apply to the non-step text that says `035`.
