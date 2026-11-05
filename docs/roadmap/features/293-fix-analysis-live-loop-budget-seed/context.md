@@ -60,3 +60,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Corrections: recon's "291 docs only" was wrong (291 ships `035`); product-spec's "no real-Postgres harness" claim was wrong.
 - Open Threads: staging `200` + pre-apply `value_type` check (operator); re-verify anchors after 291/294 rebases at `/sdd-spec`; follow the NNN old-number grep after any renumber.
 - Status: spec-ready → design-approved.
+
+## Session 2026-11-05 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps (PR-1 = Steps 1-2 latch + test; PR-2 = Steps 3-7 migration+baseline, bounds + test, real-Postgres assertion, docs). Status design-approved → implementation-ready.
+- Tree: ccr-e5badadb-vrersi@6e607ec4, origin/main-dev +31 docs-only commits ahead (behind 0; `git diff --name-only origin/main-dev HEAD` outside `docs/` is empty). Same documented tree-freshness deviation as recon.md: the 289-293 spec artifacts exist only on this branch. No `codebase-discovery` subagents spawned (recon.md covers the map); anchors re-verified by direct grep/Read.
+- Key codebase findings:
+  - `origin/main-dev` config migrations end at `034`; only `037` (feature 281) exists on any remote feature branch; 291's `035` is spec-only. NNN stays a placeholder (spec-time `038`; renumber to max(origin/main-dev)+1 at merge, both directions).
+  - Anchors re-verified at HEAD: `live_loop.py` `__init__ :275`, `_logged_unresolved :314`, budget read `:359`, `if not records :435`, overflow block `:445-462`; `SCALAR_BOUNDS_REGISTRY :103-149`; `setConfigScalarBounds.test.ts` `TIMEOUT_KEY_FORMS :266`, loop `:291`; `config-wiring.json` entries `:78-89`; analysis `CLAUDE.md :528-529`; `test_live_loop.py` `warns[1]` at `:803-804`.
+  - Step 6 (SQL assertion) verification is offline by design (`ls`/`grep`); the real replay is the CI `migration-rerun` job (spec-template: no DB in step verification). AC-8 is mapped to Step 3 because its verification is the wiring checker itself.
+- Open for /sdd-execute first gate (P-03): how PR-1 reaches `main-dev` independently of the single development branch (separate integration PR after Step 2) — not guessed in the spec.
