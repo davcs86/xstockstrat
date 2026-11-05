@@ -280,3 +280,20 @@
 - The file's `prettier --check` drift is pre-existing (HEAD fails it too), and none of it is on the added lines. It was not reformatted, because that is out of scope.
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: none
+
+## Session 2026-11-05 — sdd-execute sequential, Step 4
+
+- Tooling setup (step 4): node ✓ v24.22.1 (`/opt/node24/bin`) · pnpm ✓ 9.15.9 · config deps ⬇ (`pnpm install --frozen-lockfile --ignore-scripts --filter xstockstrat-config...`; the main worktree still has no `node_modules` to symlink).
+- Hook note: the shared `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) still does not exist, so no pre-commit hook runs here. The commit was not made with `--no-verify`.
+
+### Step 4 — test: SetConfig bounds for the two new keys [done]
+- Appended the six specced rows to `TIMEOUT_KEY_FORMS`: the bare and full-dotted forms of `assets.refresh_interval_hours` [1,24], `marketdata.servability_timeout_ms` [500,4000] and `watchlist.max_symbols_per_list` [1,1000]. Added feature 282 to the comment above the table. C-13: no new fixture, because the rows extend the existing single-consumer table.
+- TDD (AC-22, AC-24): RED ran against the pre-Step-3 registry. `configServiceImpl.ts` was restored from `HEAD~1` temporarily, then put back to `HEAD`. `node --test dist/__tests__/setConfigScalarBounds.test.js` gave 76 tests, 6 failed. The failures were exactly the 6 new `rejects … just outside` cases (`0 must be rejected` / `499 must be rejected`). GREEN on the committed tree: 76/76 pass, and all 12 new accept/reject cases ran (TAP `ok 63`–`ok 74`).
+- Verification:
+  - `pnpm run lint` gives 0 errors and 234 warnings, the same count as Step 3, so none are new.
+  - `pnpm run test:coverage` gives 284/284 pass, with All files at 90.66% lines.
+  - `pnpm exec c8 check-coverage --lines 40` exits 0.
+  - The config-key wiring gate (`--declared-from …/product-spec.md`) exits 0 with no findings.
+- The new rows follow the table's one-row-per-line convention. 18 of the 24 existing rows already exceed prettier's width, and CI does not run prettier, so the new rows were not reformatted.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: none

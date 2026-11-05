@@ -176,7 +176,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 4 — test: SetConfig bounds for the two new keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
