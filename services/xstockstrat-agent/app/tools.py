@@ -646,7 +646,12 @@ def register_tools(server: MCPServer) -> None:
             failure is logged and never fails the ingest). The added entry expires once every
             agent-recorded direction='watchlist' signal for that symbol has passed its
             valid_until (entries from open-ended signals never expire; failed or deduplicated adds
-            do not renew).
+            do not renew). A symbol the platform cannot serve (OTC, or not an active tradable US
+            equity) is refused and NOT added; the refusal is non-fatal — the ingest still succeeds
+            and the result gains "watchlist_refused": [{"symbol": <ticker>, "reason":
+            "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}] (present only when
+            non-empty). A mistyped or newly listed ticker is refused until the next asset-set
+            refresh (default 6h, max 24h).
         Returns {"signal_id": <int>, "deduplicated": <bool>} on success — deduplicated=true means
             this submission matched an existing signal within the dedup window and no new row was
             inserted (both the auto-alert and the watchlist auto-add above are suppressed in that
@@ -708,9 +713,11 @@ def register_tools(server: MCPServer) -> None:
             try:
                 user_id = _caller_user_id(ctx, "ingest_signal")
                 wl_id = await client.ensure_signal_watchlist(user_id)
-                await client.add_watchlist_symbol(
+                refused = await client.add_watchlist_symbol(
                     user_id, wl_id, symbol, result.get("signal_id"), valid_until
                 )
+                if refused:
+                    result = {**result, "watchlist_refused": refused}
             except Exception as e:
                 log.warning(
                     "Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e
@@ -2151,7 +2158,14 @@ def register_tools(server: MCPServer) -> None:
         DELETE: removes the list. The one system-managed signals watchlist per user is
             delete-protected and its deletion is refused by the backend.
 
-        Returns {"watchlist": <watchlist>} for create/update (snake_case, as get_watchlist);
+        Returns {"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason":
+            "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]} for create and the
+            read-modify-write update ("refused" always present, possibly empty; a refused symbol
+            was NOT newly added — an OTC or not active-tradable US equity). A name-only update
+            resubmits the stored stocks, so a stored symbol that is now unservable is dropped and
+            reported in "refused". The default_strategy_id (field-mask) update never classifies
+            and returns {"watchlist": <watchlist>} only. A mistyped or newly listed ticker is
+            refused until the next asset-set refresh (default 6h, max 24h).
             {"deleted": true, "watchlist_id": <id>} for delete.
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist")
@@ -2220,7 +2234,11 @@ def register_tools(server: MCPServer) -> None:
             listed symbol in one transaction — all-or-nothing: if any symbol is not on the list the
             whole call is rejected NOT_FOUND with no partial write; "" unbinds the whole selection.
 
-        Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist).
+        Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist). ADD
+            also returns "refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" |
+            "UNSERVABLE_REASON_NOT_TRADABLE"}] (always present, possibly empty): refused symbols
+            (OTC, or not an active tradable US equity) were NOT newly added. A mistyped or newly
+            listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist_symbols")
         if not watchlist_id:

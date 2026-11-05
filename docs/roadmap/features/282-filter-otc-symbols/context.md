@@ -457,3 +457,31 @@
   - The `RefusedSymbolGetsNoExpiry` and `ReadsSeededKey` counts are 1 each.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go`, `…/watchlist_service_test.go`, `…/offline_valuation_test.go`
 - Deviations: RED from the pre-Step-9 file plus a shim; `DNB` literal for AC-7; Verification run as split commands (CI-equivalent). All three are in the Deviation Log.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 11
+
+- Tooling setup (step 11): ruff 0.16.9 ✓ · uv ✓ · Python 3.13.18 ✓. `uv sync --frozen --extra dev` built the locked agent env. Nothing else was installed.
+- Hook note: `node_modules` was symlinked from the main worktree into this worktree root so the husky pre-commit hook can run. No `--no-verify` was used.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `dc106448`): the digest's "proto has no `refused_symbols` / `RefusedSymbol` / `UnservableReason`" finding came from an unstamped tree and was discarded. On this checkout, `RefusedSymbol` is at `portfolio.proto:252` and `refused_symbols = 2` is on the Create, Update and Add responses (`:292/:330/:356`); `UnservableReason` is at `common.proto:147`. The agent anchors match the spec: `add_watchlist_symbol` `client.py:319-356` (returns `None`), `_watchlist_to_dict` `:364-366`, create return `:454`, replace-all update return `:531`, add return `:571`, and the `ingest_signal` add call at `tools.py:711-713`.
+
+### Step 11 — service: agent surfaces refusals (Agent consumer surface) [done]
+- `client.py`:
+  - New `_refused_to_list(resp)` with a lazy `common_pb2` import. It returns `[{"symbol", "reason": UnservableReason.Name(...)}]`.
+  - `create_watchlist`, the replace-all `update_watchlist` and `add_watchlist_symbols` always return a `refused` key. The masked update keeps `{"watchlist"}` only.
+  - `add_watchlist_symbol` keeps 281's five parameters and its provenance logic. It now returns `list[dict[str, str]]`, the refused list.
+- `tools.py`:
+  - `ingest_signal` binds `refused`. When it is non-empty, it sets `result = {**result, "watchlist_refused": refused}`, a copy, so the client's dict is not mutated. A refusal never raises.
+  - The docstrings for `ingest_signal`, `manage_watchlist` and `manage_watchlist_symbols` now cover the refusal shape, the reason NAMEs, "refused = not newly added", the replace-all drop of a now-unservable stored symbol, the masked path returning no `refused`, and the R7 refresh copy (default 6h, max 24h).
+- TDD (uncommitted scratch test, deleted before staging; see the Deviation Log):
+  - RED: 5 failed: `KeyError: 'refused'` ×3 (add, create, replace-all update), `assert None == [{… 'CRTD'}]` (`add_watchlist_symbol`), and the `ingest_signal` result missing `watchlist_refused`.
+  - GREEN: 5 passed.
+  - Scenarios exercised ahead of Step 12: AC-5, AC-18 and AC-19, each "red: no refusal surfaced → green: refusal surfaced".
+- Verification:
+  - `ruff check .`: all checks passed. `ruff format --check .`: 65 files already formatted.
+  - `pytest` on the four spec'd files: 67 passed.
+  - The `x-user-id` grep shows the return paths reuse the propagating call sites (`:313/:355/:416/:432/:464`). No new outbound call was added.
+  - Full suite: 650 passed, coverage 84.49% (≥ 40%).
+- Files modified: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`
+- Deviations: TDD via an uncommitted scratch test, and `pytest` run through `uv run --no-sync` (CI-equivalent). Both are in the Deviation Log.
+- Open item: `docs/runbooks/mcp-tools.md` must mirror the new docstring text. That is Step 15's **Files**, not this step's. The doc-parity test only checks headings, so it stays green until then.
+- `feature.md` is unchanged: this is neither the first nor the last completed step.

@@ -618,7 +618,7 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 
 ### Step 11 — service: agent surfaces refusals (Agent consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -1011,4 +1011,14 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 10 — Verification block run as split commands (2026-11-05)
 - **Specced**: one compound command with `COVERPKGS=$(go list …)` inline, then three greps.
 - **Actual**: as in Step 8, `go list ./... | grep -Ev …` ran on its own and its output was passed literally to `-coverpkg`; lint, test, the 40% `awk` gate and the greps ran as separate commands. Inputs, packages, flags and pass conditions are unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 11 — TDD red/green via an uncommitted scratch test (2026-11-05)
+- **Specced**: `TDD: red-green required`, with Step 12's tests as the paired RED. Step 12's **Files** (`test_watchlist_client.py`, `test_watchlist_tools.py`, `test_ingest_signal_watchlist.py`) are not in Step 11's **Files**.
+- **Actual**: RED and GREEN were captured with a temporary `tests/test_zz_step11_scratch.py`. It covers `add_watchlist_symbols`, `create_watchlist` (refused and empty), the replace-all and masked `update_watchlist`, `add_watchlist_symbol`'s return with `x-user-id`, and `ingest_signal`'s `watchlist_refused` without mutating the client's result. The file was deleted before commit, so F-08 staging holds. Step 12 still authors the durable tests.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Steps 7 and 9
+
+### Step 11 — Verification `pytest` run through the locked env (2026-11-05)
+- **Specced**: bare `pytest …` after `ruff check` / `ruff format --check`.
+- **Actual**: `uv sync --frozen --extra dev`, then `uv run --no-sync pytest …` with the same four test files. This is how CI's `python-test` job invokes pytest. The host `pytest` is not the service's locked environment. The ruff commands and the grep ran unchanged.
 - **Disposition**: CI-equivalent fallback
