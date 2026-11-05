@@ -123,11 +123,4 @@ Feature: grafana-dashboards-ci-deploy
     Then it exits 0
     And every rpc_server_duration_milliseconds_* selector in them still carries the proto-derived rpc_method!~ stream exclusion
 
-  @AC-17 @FR-11
-  Scenario: Error-rate and latency alerts fire per environment
-    Given packages/otel/alerts/alert-rules.yaml
-    Then the expressions of xstk-error-rate-high and xstk-p99-latency-high group by both service_name and deployment_environment
-    And their summary annotations reference "$labels.deployment_environment"
-    And bash scripts/check-otel-produced-signals.sh exits 0
-
-  # @AC-13 @FR-9 withdrawn 2026-11-05: the Grafana MCP part is split out (Q3). ID not reused.
+  # @AC-17 @FR-11 withdrawn 2026-11-05: alert rules are out of scope (Q9). ID not reused.

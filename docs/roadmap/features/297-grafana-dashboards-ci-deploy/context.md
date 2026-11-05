@@ -44,3 +44,9 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 - Grounding for FR-11: `xstk-error-rate-high` and `xstk-p99-latency-high` use `sum by (service_name)` (and `by (le, service_name)`); `xstk-analysis-no-scoring` sums `{service_name="analysis"}` lines over 30m across every environment, so one environment's cycles mask another's stall. Alert rules are applied manually (Q7), so edits do not reach Grafana until re-imported.
 - Opened Q9a (blocking for `/sdd-design`): default selection of the variable, group-versus-filter for alerts, stall-rule semantics, manual re-import.
 - Not run: `/sdd-review`. Status remains `draft`.
+
+## Session 2026-11-05 — alerts taken out of scope
+
+- Operator: keep alerts out of scope for Q9. FR-11 and AC-17 withdrawn (IDs not reused); `alerts/alert-rules.yaml` and `alerts/README.md` removed from Affected Services; Q7 closed as out of scope; Out of Scope now covers alert deployment and expression changes.
+- Accepted residual risk: the three alert rules still aggregate all environments (`sum by (service_name)`, stall rule unscoped), so once production emits alongside staging they cannot tell the two apart. Follow-up feature candidate, not allocated.
+- Q9a reduced to one question: default selection of the `environment` variable (recommendation: All).
