@@ -25,17 +25,17 @@
 
 ## Summary
 
-Automate the deploy of the checked-in Grafana dashboards (`packages/otel/dashboards/`) to Grafana Cloud from CI, and optionally wire a Grafana MCP server for developer sessions. Distilled from PR 653 (open since 2026-06-09, base `main`, `mergeable_state: dirty`); the PR's design is re-validated against the post-274 dashboards, the SOPS secrets model (286) and the produced-signals guard, and its gaps are captured as requirements and open questions.
+Automate the deploy of the checked-in Grafana dashboards (`packages/otel/dashboards/`) to Grafana Cloud from CI. The Grafana MCP part of PR 653 is split out (decided 2026-11-05). Distilled from PR 653 (open since 2026-06-09, base `main`, `mergeable_state: dirty`); the PR's design is re-validated against the post-274 dashboards, the SOPS secrets model (286) and the produced-signals guard, and its gaps are captured as requirements and open questions.
 
 ## Reviewers
 
 | Role | Review Focus |
 |---|---|
 | Platform Lead | New workflow + script under `.github/workflows/` and `scripts/`; CI path filters; concurrency across `main-dev` / `main`; docs/context-file consistency |
-| Security | New CI credential (`GRAFANA_SERVICE_ACCOUNT_TOKEN`, Editor role): where it lives (GitHub secret vs SOPS), scope, no echo in logs; MCP token scope (Viewer default); image pinning for `mcp/grafana` |
+| Security | New CI credential (`GRAFANA_SERVICE_ACCOUNT_TOKEN`, Editor role): GitHub Environment secret (decided), which environment (Q2a), scope, expiry and rotation, no echo in logs |
 
 No service owner applies: no `services/*` code, proto, config key or migration changes (`packages/otel` has no registry row).
 
 ## Next Action
 
-Resolve the blocking open questions in `product-spec.md` § Open Questions (Q1, Q2, Q4), then `/sdd-review grafana-dashboards-ci-deploy product-spec`.
+Resolve the blocking open questions in `product-spec.md` § Open Questions (Q1, Q2a), then `/sdd-review grafana-dashboards-ci-deploy product-spec`.

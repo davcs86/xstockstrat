@@ -26,3 +26,11 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 - **Datasources (13)**: prometheus `grafanacloud-prom` (id 8, **only isDefault=true**) and `grafanacloud-usage` (id 11); loki `grafanacloud-alert-state-history` (id 1), `grafanacloud-logs` (id 7), `grafanacloud-usage-insights` (id 12); tempo `grafanacloud-traces` (id 10, not default). Loki and Tempo have **no default**.
 - **Dashboards**: only `xstk-service-health` exists (tagged `xstockstrat`; title search for `xstockstrat` finds the same one). The other four (`xstk-service-detail`, `xstk-signal-pipeline`, `xstk-infrastructure`, `xstk-trading-service`) are not deployed. Its folder was not returned, so whether it sits in `xstockstrat` or General is unverified.
 - **Not verified**: the raw `/api/datasources` order the PR script would see (the connector's list is ordered as above, with alert-state-history first among loki); a service account token's ability to create the folder.
+
+## Session 2026-11-05 — operator decisions Q2, Q3; Q1 assessment
+
+- **Q2 decided**: GitHub Environment secrets (operator). Sub-question Q2a opened: which environment. Recommendation: a dedicated `grafana` environment, because a job bound to `staging`/`production` sees that environment's other secrets (feature 286 shadowing trap) and the token is stack-wide, not per-lane.
+- **Q3 decided**: Grafana MCP split out (operator). FR-9 and AC-13 withdrawn (IDs not reused); MCP rows in the delta table marked split out. No follow-up feature number allocated yet.
+- **Operator input for Q1**: OTLP headers are shared across environments. Consequence: one stack serves all environments, so per-environment Grafana tokens add no isolation. Recommendation recorded in product-spec Q1: deploy from `main-dev` only (option B).
+- **New finding (Q9)**: of 5 dashboards only `service-detail.json` filters on `deployment_environment`; the other 4 and all 3 alert rules (`alert-rules.yaml`, 0 refs) aggregate every environment, including `development` series from local stacks.
+- Unverified: GitHub Environment protection rules; the Grafana Cloud permissions an Editor token needs for `/api/datasources` (the script may avoid the call by defaulting to the stable uids and verifying each by `GET /api/datasources/uid/<uid>`); whether free-tier Cloud allows a second stack (matters only for option C).

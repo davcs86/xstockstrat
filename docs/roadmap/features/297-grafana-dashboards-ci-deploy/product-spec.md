@@ -6,7 +6,7 @@
 
 ## Problem Statement
 
-The five dashboards under `packages/otel/dashboards/` are the version-controlled source of truth (features 033, 274), but reaching Grafana Cloud still means a manual UI import per file (`docs/setup/grafana-cloud.md` Step 6, `packages/otel/dashboards/README.md` § Importing). Nothing re-applies a merged dashboard change, so the live stack drifts from the repo silently. Developers also cannot query the stack from a Claude Code session without copy-pasting results. PR 653 proposed both fixes in June 2026 but targets `main`, conflicts with the trunk, and predates the changes below.
+The five dashboards under `packages/otel/dashboards/` are the version-controlled source of truth (features 033, 274), but reaching Grafana Cloud still means a manual UI import per file (`docs/setup/grafana-cloud.md` Step 6, `packages/otel/dashboards/README.md` § Importing). Nothing re-applies a merged dashboard change, so the live stack drifts from the repo silently. PR 653 proposed this fix (plus a Grafana MCP server, now split out) in June 2026 but targets `main`, conflicts with the trunk, and predates the changes below.
 
 ## User Story
 
@@ -21,11 +21,11 @@ PR 653 = 9 files, +346/−2, 3 commits, head `b2ec808`. Nothing from it is on `m
 | `scripts/grafana-deploy-dashboards.sh` (uploader) | Absent | **Carry, with fixes** | Keep: HTTP-API upsert keyed by `uid`, `__inputs`/`__requires` stripped, `id:null`, `overwrite:true`, bash-3.2, env overrides, continue-then-fail on bad files. Fix the gaps G1–G4 below. |
 | `.github/workflows/grafana-dashboards.yml` | Absent | **Carry, with fixes** | Keep path filter + `workflow_dispatch`. Fix G5–G7. |
 | `packages/otel/dashboards/README.md` "Via CI" para | README exists; now lists 5 dashboards, `DS_TEMPO`, guard rules | **Re-apply** | Paragraph rebased onto the post-274 README; must satisfy otel-signals guard Part 3 (named files must exist). |
-| `docs/setup/grafana-cloud.md` Step 6 "Deploy from CI" + secrets table | Step 6 is manual-import only | **Re-apply** | Same; the secrets table must reflect Q2 (GitHub secret vs SOPS). |
-| `docs/setup/grafana-cloud.md` Step 9 (MCP) | Absent | **Conditional** on Q3 | |
-| `.mcp.json` `grafana` server (docker `mcp/grafana`) | `.mcp.json` now has 7 DigitalOcean HTTP servers; no docker/stdio entry | **Conditional** on Q3 | Image must be pinned (G8). |
-| `.claude/settings.json` enable `grafana` | `enabledMcpjsonServers` lists the 7 DO servers | **Conditional** on Q3 | |
-| `.env.example` `GRAFANA_URL` / token block + CI-secret table rows | No Grafana-API vars; OTLP vars only | **Conditional** on Q2/Q3 | |
+| `docs/setup/grafana-cloud.md` Step 6 "Deploy from CI" + secrets table | Step 6 is manual-import only | **Re-apply** | Same; the secrets table must name the GitHub Environment holding them (Q2, Q2a). |
+| `docs/setup/grafana-cloud.md` Step 9 (MCP) | Absent | **Split out** (Q3 decided 2026-11-05) | Not part of this feature. |
+| `.mcp.json` `grafana` server (docker `mcp/grafana`) | `.mcp.json` now has 7 DigitalOcean HTTP servers; no docker/stdio entry | **Split out** (Q3) | Image pinning (G8) moves with it. |
+| `.claude/settings.json` enable `grafana` | `enabledMcpjsonServers` lists the 7 DO servers | **Split out** (Q3) | |
+| `.env.example` `GRAFANA_URL` / token block + CI-secret table rows | No Grafana-API vars; OTLP vars only | **Re-apply, comment rows only** | List the two CI environment secrets in the existing GitHub-secrets comment block; the MCP env block is split out (Q3). |
 | Root `CLAUDE.md` Key File Paths row | No such row | **Re-apply** | Touching a `CLAUDE.md` triggers the root Teardown (context-forge refresh or manual reconciliation recorded in the PR body). |
 | `docs/setup/CLAUDE.md` row tweak | Row for `grafana-cloud.md` exists in older wording | **Re-apply** | Same Teardown. |
 
@@ -38,8 +38,8 @@ PR 653 = 9 files, +346/−2, 3 commits, head `b2ec808`. Nothing from it is on `m
 - **G5 — Concurrency is per-ref** (`grafana-dashboards-${{ github.ref }}`), so a `main-dev` push and a `main` push to the same stack/folder can run concurrently and race. → FR-5.
 - **G6 — `main-dev` and `main` both write the same folder uid `xstockstrat`.** If dev and prod share one Grafana stack (docs/setup/grafana-cloud.md allows it, separated only by `deployment.environment`), `main-dev` pushes overwrite what `main` deployed. If they use separate stacks, the workflow has no way to choose credentials per branch. → Q1.
 - **G7 — Stale/loose workflow hygiene:** `actions/checkout@v6` (repo pins `actions/checkout@3d3c42e5…  # v7.0.1`), no job-level `permissions: contents: read`, and the header comment cites a non-existent `grafana/dashboards/` path (the PR text itself says `packages/otel/dashboards/`). → FR-5, FR-6.
-- **G8 — `mcp/grafana` is unpinned** (implicit `:latest`), against the repo's pin-everything convention; needs Docker, so it cannot start in web/remote sessions (this very session had no Docker). → Q3.
-- **G9 — Credential home predates feature 286.** PR 653 assumes plain GitHub secrets. Since 286 (launched 2026-11-04) deploy-time secrets resolve from per-environment SOPS files, with platform credentials deliberately left as native GitHub secrets (`DIGITALOCEAN_ACCESS_TOKEN`). Whether a Grafana API token is "platform" or "deploy" class is undecided. → Q2.
+- **G8 — _(split out, Q3)_ `mcp/grafana` is unpinned** (implicit `:latest`), against the repo's pin-everything convention; needs Docker, so it cannot start in web/remote sessions (this very session had no Docker). → moves with the split-out MCP feature.
+- **G9 — Credential home predates feature 286.** PR 653 assumes plain GitHub secrets. Since 286 (launched 2026-11-04) deploy-time secrets resolve from per-environment SOPS files, with platform credentials deliberately left as native GitHub secrets (`DIGITALOCEAN_ACCESS_TOKEN`). Decided 2026-11-05 (Q2): GitHub Environment secrets, not the SOPS KEYS table, since the token has no DO-runtime consumer. → Q2a for which environment.
 - **G10 — Hard failure when secrets are unset** (fork PRs, new clones): every dashboard push goes red. → Q4.
 - **G11 — Alerts remain manual.** `packages/otel/alerts/alert-rules.yaml` (3 rules, `${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` placeholders) and `mute-timings.yaml` are imported by hand; the same CI path could apply them but PR 653 does not. → Q7 (default: out of scope).
 - **G12 — No test.** Sibling scripts (`check-otel-produced-signals.sh` + `.test.sh`) ship an offline test; PR 653 verified only by hand against `service-health.json`. → FR-7.
@@ -57,17 +57,18 @@ FR-4. The script fails closed: missing `GRAFANA_URL`/token, missing datasource o
 
 FR-5. Deploys are serialized per target stack: no two runs write the same Grafana folder concurrently, regardless of which branch triggered them.
 
-FR-6. The workflow pins actions as the repo does (`actions/checkout` by SHA), declares `permissions: contents: read`, and passes credentials only via `env:` of the deploy step; the token is never echoed.
+FR-6. The workflow pins actions as the repo does (`actions/checkout` by SHA), declares `permissions: contents: read`, and passes credentials only via `env:` of the deploy step, from GitHub Environment secrets (Q2); the token is never echoed.
 
 FR-7. The script has an offline test (stubbed HTTP, no network) following the `*.test.sh` convention and wired into CI under a path filter, so the transform (placeholder substitution, key stripping, uid/folder envelope) is verified on every change.
 
 FR-8. Operator docs describe the CI path and the manual invocation; every file, workflow and secret name they cite exists, so `scripts/check-otel-produced-signals.sh` still exits 0.
 
-FR-9. _(conditional on Q3)_ A `grafana` MCP server entry lets a local Claude Code session query the stack, with a pinned image reference and Viewer-scope token as the documented default.
+FR-9. _Withdrawn 2026-11-05: the Grafana MCP part is split out (Q3). The number is not reused._
 
 ## Out of Scope
 
 - Runtime OTLP export (`OTEL_*`, collector) — untouched, as in PR 653.
+- The Grafana MCP server (`.mcp.json`, `.claude/settings.json`, Step 9 docs, image pinning) — split out per Q3. No follow-up feature number allocated yet; a hosted Grafana connector already covers a single developer's need.
 - Alert rules / mute timing deploy (G11) unless Q7 flips.
 - New dashboards or panel changes; dashboards stay as authored by 274.
 - Tempo/trace dashboards beyond what already exists.
@@ -80,7 +81,7 @@ None of the 12 registry services change. Touched areas:
 - `scripts/` — new deploy script + test.
 - `.github/workflows/` — new workflow; `ci.yml` filter/job for the script test.
 - `docs/setup/grafana-cloud.md`, `docs/setup/CLAUDE.md`, root `CLAUDE.md` (context files → Teardown applies).
-- `.mcp.json`, `.claude/settings.json`, `.env.example` — only if Q3 = keep.
+- `.env.example` — comment rows only.
 
 ## Consumer Surface(s)
 
@@ -88,7 +89,7 @@ _Constitution **C-14**._ "Agent" in PR 653 means the **Claude Code developer age
 
 - [ ] **UI** — none.
 - [ ] **Agent** — no `xstockstrat-agent` tool added or changed.
-- [x] **None** — internal CI/dev tooling. The only consumers are the CI workflow, platform operators (via `workflow_dispatch` / manual script run) and, if Q3 is kept, local Claude Code sessions.
+- [x] **None** — internal CI/dev tooling. The only consumers are the CI workflow, platform operators (via `workflow_dispatch` / manual script run).
 
 ## Proto Contract Changes
 
@@ -114,20 +115,22 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 ## Acceptance Criteria
 
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
-**C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there (FR-9 only if Q3 keeps the MCP).
+**C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there (FR-9 withdrawn).
 
 ## Known Traps (Ledger)
 
 - `fails.md` 2026-08-05 `fix-grafana-otel-variables`: CI scripts parsing/transforming files must be tested against real input and use anchored edits, never blind whole-file `sed -i`. The PR 653 script runs `sed` over raw dashboard JSON; FR-7 must test against the real five files, not a fixture, and the design should prefer `jq` for substitution over `sed` on JSON.
-- Feature 286 context: workflow jobs bound to a GitHub Environment make env-level secrets shadow caller-passed ones silently; if Q2 binds the deploy job to `staging`/`production`, secret names must not collide.
+- Feature 286 context: workflow jobs bound to a GitHub Environment make env-level secrets shadow caller-passed ones silently; a deploy job bound to `staging`/`production` would also see that environment's other secrets (e.g. `SOPS_AGE_KEY`); Q2a recommends a dedicated environment instead.
 - Feature 286 context (otel-signals P3-file): `.yaml`/file tokens in observability docs must name real files — a doc sentence like "the SOPS file under `secrets/`" passes, an invented path fails CI.
 - Root Teardown: touching `CLAUDE.md`/`docs/setup/CLAUDE.md` requires a context-forge refresh (or a recorded manual reconciliation) before the PR.
 
 ## Open Questions
 
-- [ ] **Q1 (blocking) — Target stack(s).** Evidence: the connected stack carries `development` and `staging` series and no `production` in 7d, and holds only 1 of the 5 dashboards. Do dev (`main-dev`) and prod (`main`) share one Grafana Cloud stack (docs allow this) or use two, and where does production telemetry go? Options: (a) one stack, deploy **only on `main`**; `main-dev` is `workflow_dispatch`-only; (b) two stacks, per-branch credentials via GitHub Environments `staging`/`production` and a folder per env; (c) one stack, two folders (`xstockstrat-staging`/`xstockstrat-production`) with per-env uids (breaks the stable `xstk-*` uids). Recommendation: (b) if two stacks exist, else (a).
-- [ ] **Q2 (blocking) — Credential home.** Plain GitHub secrets (PR 653), GitHub Environment secrets, or the SOPS files from feature 286? Recommendation: GitHub Environment secrets, because the token is CI-only (no DO runtime consumer), so it does not belong in the `sops_secrets.py` KEYS table that drives `do-render-app-spec.py`.
-- [ ] **Q3 (blocking) — Keep the Grafana MCP part?** A hosted Grafana connector already exists at account level in claude.ai (it was available in this session), the docker server needs a local Docker daemon, and image/token handling adds surface. Options: drop it (docs-only mention of the hosted connector); keep the `.mcp.json` docker server with a pinned digest; or switch to Grafana's hosted MCP endpoint if one fits `.mcp.json`'s `http` form like the DO servers. Recommendation: split it out; ship dashboards deploy first.
+- [ ] **Q1 (blocking) — Target stack(s).** Evidence (context.md 2026-11-05): OTLP endpoint and headers are shared across environments (`docs/setup/grafana-cloud.md` § 4a), and the one connected stack holds `development` and `staging` series, no `production` in 7d. Options: (A) one stack, deploy from `main` only; (B) one stack, deploy from `main-dev` only (trunk), `main` pushes do not deploy; (C) two stacks with per-environment tokens; (D) one stack, two folders with env-suffixed uids. Recommendation: **B**. Per-environment tokens (C) add no isolation while the stack is shared, and would first need the OTLP headers split; D breaks the stable `xstk-*` uids. Under B the concurrency group is a single constant (closes G5/G6) and staging sees dashboard changes first. Cost: dashboards can query series production has not shipped yet, which only shows empty panels (the produced-signals guard keeps every queried series produced by code on trunk).
+- [ ] **Q9 — Mixed environments on a shared stack.** Only `service-detail.json` filters on `deployment_environment` (8 refs, `$environment` variable). The other four dashboards (0 refs) and all three alert rules (0 refs) aggregate `development`, `staging` and `production`, so a local-dev stack can move the error-rate panels and the critical `xstk-error-rate-high` alert. Pre-existing, not caused by this feature, but deploying makes it visible. Options: follow-up feature adding `$environment` to the four dashboards and a matcher to the alert rules (recommended); or do the dashboard half here.
+- [x] **Q2 — Credential home. DECIDED 2026-11-05: GitHub Environment secrets** (not repo secrets, not SOPS).
+- [ ] **Q2a (blocking) — Which environment?** Recommendation: a dedicated `grafana` environment holding only `GRAFANA_URL` and `GRAFANA_SERVICE_ACCOUNT_TOKEN`, deployment branches restricted to `main-dev`. Binding to `staging`/`production` instead would expose that environment's other secrets to this job and tie a stack-wide Editor token to one deploy lane. Needs an operator to create the environment; its protection rules are not visible from the repo and were not checked.
+- [x] **Q3 — Grafana MCP part. DECIDED 2026-11-05: split out of this feature.**
 - [ ] **Q4 — Behaviour when secrets are unset.** Fail (PR 653) or skip with a notice (forks, fresh clones)? Recommendation: skip with a `::notice::` on forks/PRs, fail on `main-dev`/`main`.
 - [ ] **Q5 — Datasource discovery rule.** "Default of the type" is ruled out (Loki/Tempo have no default). Remaining: match by uid/name pattern (`grafanacloud-prom` / `-logs` / `-traces`, verified on the live stack), or require explicit env overrides in CI and keep discovery for manual runs only. Recommendation: pattern match with env override, failing closed on 0 or >1 matches.
 - [ ] **Q6 — Drift and pruning policy.** Is `overwrite:true` (UI edits lost) acceptable? Should dashboards removed from the repo be deleted from the folder (managed-folder prune, scoped by a tag such as `xstockstrat`), or only reported?

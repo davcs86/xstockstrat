@@ -98,10 +98,4 @@ Feature: grafana-dashboards-ci-deploy
     Then it exits 0
     And both docs name ".github/workflows/grafana-dashboards.yml" and "scripts/grafana-deploy-dashboards.sh"
 
-  @AC-13 @FR-9
-  Scenario: The Grafana MCP entry is pinned and carries no secret literal (only if Q3 keeps it)
-    Given .mcp.json and .claude/settings.json
-    Then jq empty exits 0 on both files
-    And .mcp.json has a "grafana" server whose image reference contains "@sha256:" or a non-"latest" tag
-    And enabledMcpjsonServers includes "grafana"
-    And no value in .mcp.json matches the pattern "glsa_[A-Za-z0-9]{20,}"
+  # @AC-13 @FR-9 withdrawn 2026-11-05: the Grafana MCP part is split out (Q3). ID not reused.
