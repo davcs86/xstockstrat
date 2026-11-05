@@ -489,3 +489,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
         so the fresh-migrations inventory (M1) covers it.
       - G3 becomes the first-production-deploy read-back (informational).
   20. **Run round 4**, then the approval gate.
+
+## Session 2026-11-05 — sdd-design Phase 1, round 4 (in progress)
+
+- **R4 proposal: the FINAL integrated design.** All round-3 majors M1–M6 and minors m1–m12, plus
+  decisions 19–20, are folded in.
+  - **Renumbering:** 035 = config_markers DDL (A4), 036 = heal (A10).
+  - **Inventories:** staging (operator, G1 hashes / G2 reveal) plus fresh-migrations (scripted;
+    exact; covers CI, docker-compose and production's first deploy). No production inventory.
+  - **Gate:** reads a committed generated `scripts/config-wiring-stored.json`. A CI freshness job
+    runs only on migration PRs. `policy.seededUnread='reported'`, which 296 flips to blocking.
+  - **Pool:** `query_timeout` 15 s, plus a serial-chain watchdog (> 30 s head → ERROR + suspended
+    re-sends).
+  - **Evidence:** `config.read_key` plus a `config.read_coverage` heartbeat every 6 h (staging
+    Loki).
+  - **SetConfig:** FAILED_PRECONDITION when both spellings are present.
+  - **Agent deadline:** honours `int_positive`.
+  - **Steps:** A0–A12, with A5 split by language. G3 = first-production-deploy read-back.
+- **Orchestrator ruling (P-01): renumbering ACCEPTED.**
+  - golang-migrate never applies a version below the current one (`db-migrate.sh:104`), so a
+    dev/compose DB that migrated past a 036 marker would skip a 035 heal.
+  - A heal at 36 sits above 296's `contract-of: 035` floor and gets the `force 35` recovery hint
+    (`migration-dirty-guard.sh:42-49`).
+  - **The M6 recovery path is now `migrate force 35` + `scripts/db-migrate.sh up`.**
+  - Feature 296 must anchor `contract-of` on 035.
+- The adversary pass is running.
