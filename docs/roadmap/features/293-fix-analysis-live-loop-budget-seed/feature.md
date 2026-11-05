@@ -17,6 +17,7 @@
 | 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved after revision (first pass FAIL: 5 blockers; second pass PASS WITH WARNINGS, 7 warnings all addressed) |
 | 2026-11-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Scope additions (operator-approved): second key `eval_interval_seconds`, bounds `[1,1000]` / `[30,600]`, two-PR split, soft renumber-at-merge ordering; product-spec/acceptance amended (AC-10..12) |
 | 2026-11-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps (PR-1: steps 1-2; PR-2: steps 3-7) |
+| 2026-11-05 | `implementation-ready` (no change) | /sdd-execute sequential (re-spec gate §5.3) | Re-spec: steps 1-2 validated, no mismatch; steps 3-7 re-anchored to the current tree (NNN `043` pin + merge-time max+1 rule, registry/test-table anchors folded in from the Deviation Log, line drift) |
 
 ---
 
