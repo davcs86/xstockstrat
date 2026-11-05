@@ -31,7 +31,8 @@ xstockstrat-notify, xstockstrat-agent, xstockstrat-ui (config-ui segment). Also 
 - **FR-1: Canonical namespace-relative key, enforced.**
   - The stored `key` never begins with `<namespace>.`. A DB CHECK enforces it.
   - `SetConfig`, `create_key` and `GetSecret` reject a prefixed key with `INVALID_ARGUMENT`.
-  - Exception: an allow-listed internal-caller grant is canonicalised with a WARN, because the
+  - Exception (`SetConfig` only, grant `trading-reconciliation-poller` only; `create_key` and
+    `GetSecret` get no exception): the internal-caller grant is canonicalised with a WARN, because the
     previous image's reconciliation poller still sends `platform.trading_state` during rollout. The
     follow-up feature removes the exception.
 - **FR-2: Every consumer addresses keys relative to its subscribed namespace.** All getter literals

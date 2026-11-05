@@ -56,3 +56,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Dead-row evidence window is one full **staging** release (295 decisions 23/24), not production.
 - 296's own migrations are numbered max+1 after 295's chain at spec time.
 
+## Session 2026-11-05 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready (pass 3 of 3; passes 1–2 failed/warned on C-15 FR-3/6/7/8 coverage, then on evidence-window and placeholder items, all fixed).
+- Warnings: FR-1 internal-caller exception scope (fixed: `SetConfig` only, grant `trading-reconciliation-poller`); generated contract key table deferred to design.
+- Overlap findings: 296 vs 295 is a sequential expand/contract complement, no FAIL. Informational (not 296's): 291/295 on migration 035, 282/293 on 038, shared `scripts/config-wiring.json`. merge-order row 26 re-anchored to `040_config_markers`.
+- Recommended design depth: full (DB migrations, 12 services, overlap warnings).
+
