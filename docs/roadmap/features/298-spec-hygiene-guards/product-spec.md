@@ -41,7 +41,7 @@ None. Repo-level only: CI check + allowlist, the `docs/roadmap/features/` renumb
 
 - [ ] **UI** — none
 - [ ] **Agent** — none
-- [x] **None** — internal/platform-only. FR-1..FR-3 are CI and repo hygiene and FR-4 is documentation; no service behavior, field, control or MCP tool changes.
+- [x] **None** — internal/platform-only. FR-1..FR-3 and FR-5 are CI and repo hygiene and FR-4 is documentation; no service behavior, field, control or MCP tool changes.
 
 ## Proto Contract Changes
 
@@ -79,7 +79,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 None blocking. Decisions taken at product-spec review (2026-11-05), recorded in `context.md`:
 
 - [x] **Check location (was OQ-1).** A new `scripts/check-feature-numbers.sh` with a sibling `.test.sh`, a new job in `.github/workflows/ci.yml` added to the `ci-gate` needs list, following `check-migration-contract.sh` / `check-otel-produced-signals.sh`. It runs on `pull_request` and on `push` to `main-dev` / `main` (direct pushes to `main-dev` occur). Verified at review: the `changes` job (`ci.yml:13-21`) skips only a `main-dev` → `main` promotion PR, not docs-only PRs. Exact job wiring and path filter are `/sdd-spec` detail.
-- [x] **Append-proof allowlist (was OQ-2).** Yes — now FR-5 / AC-6. PR-only because `github.base_ref` is empty on push; precedent `migration-contract-gate` (`ci.yml` ~L722-739, `fetch-depth: 0`, diff against `origin/${{ github.base_ref }}`).
+- [x] **Append-proof allowlist (was OQ-2).** Yes — now FR-5 / AC-6 / AC-7. PR-only because `github.base_ref` is empty on push; precedent `migration-contract-gate` (`ci.yml` ~L722-739, `fetch-depth: 0`, diff against `origin/${{ github.base_ref }}`).
 
 Known traps (Ledger), for design and spec:
 

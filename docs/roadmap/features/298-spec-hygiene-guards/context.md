@@ -57,3 +57,13 @@ Resolve OQ-1 and OQ-2, then `/sdd-review spec-hygiene-guards product-spec`. Note
 
 - spec-reviewer: PASS WITH WARNINGS, no blockers; all six round-1 warnings verified resolved.
 - New warnings fixed: FR-5 had no bootstrap case (the base branch has no allowlist when this PR introduces it, nor does a `main`-based hotfix) → FR-5 now skips the addition rule when the base has no allowlist file, AC-7 added, and FR-3's land-together sentence now includes FR-5; stale "resolve OQ-1 and OQ-2" pointer in `feature.md` replaced.
+
+## Session 2026-11-05 — sdd-review product-spec, round 3 (approved)
+
+- Tree: main-dev@7f110d9 ≡ origin/main-dev plus the 298 edits. spec-reviewer round 3: **PASS**, 0 blockers, 0 warnings, no Floor breach. Overlap (round 1): WARN only, no merge-order entry needed.
+- Product spec approved. Status: draft → spec-ready. Warnings: none outstanding (round 1: 7 fixed; round 2: 2 fixed).
+- Cosmetic notes fixed: Consumer Surface now cites FR-5; the append-proof decision cites AC-7.
+- Carried to design/spec (reviewer notes, not warnings): script treats a missing head allowlist as empty/error, never "skip" (bootstrap exemption keys on the base only) and gets a `.test.sh` case; pin AC-7's directory-set fixture; re-verify AC-5 lists against code.
+- Overlap findings: shared files `ci.yml` and root `CLAUDE.md` with 295/297 (rebase-level).
+- Recommended design depth: full (warning-level overlap is an escalate signal in `docs/sdd/design-depth-rubric.md`).
+

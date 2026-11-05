@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-05 | `idea` → `draft` | /sdd-story | Product spec generated from the PR #657 delta reconciled against `main-dev` `b371a3e` |
+| 2026-11-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after 3 rounds; overlap WARN-only) |
 
 ---
 
@@ -40,4 +41,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review spec-hygiene-guards product-spec` — AI review of product spec before running /sdd-spec; no open questions remain.
+`/sdd-design spec-hygiene-guards` — full design recommended: the overlap pass found warning-level collisions on `.github/workflows/ci.yml` and root `CLAUDE.md` with features 295/297, which the rubric treats as an escalate signal (no proto, schema or service signal fires). Design must pin the FR-5 missing-head-allowlist behavior (treat as empty/error, never skip), re-verify the AC-5 service lists against code, and pin the AC-7 fixture shape.
