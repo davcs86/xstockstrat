@@ -3630,3 +3630,17 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/design.md` § Chosen Approach, § Fundamentals gate; `services/xstockstrat-analysis/app/handlers/servicer.py:1901-1934,3074-3086,5764-5832`.
 - **Rule it implies**: map every status code an RPC returns for one refusal across ALL caller scopes (admin, owner, scheduled/owner-only metadata) to one outcome (reinforces 2026-10-22), and when a fix changes how a helper classifies an owner-dependent read, enumerate every caller incl. gate-conditional ones and every cache keyed without the owner.
 
+### 2026-11-05 — fix-config-keys-drift — assumption
+- **Mistake**: Two design assumptions survived several rounds.
+  - "A periodic server re-send proves client liveness" (round 1). The re-send replays a cached
+    payload, so it masks a dead pg LISTEN feed or a wedged query slot. That makes the confirmed
+    staging indicators stall undetectable by construction.
+  - "A kind-wide REPORTED policy is a harmless way to tolerate known findings" (round 4). It
+    silently disabled a promoted rule (`@feature-278 @AC-7`) for every future finding of that kind.
+- **Evidence**: 295 context.md, round 1 B2, round 3 M3, round 4 MAJOR-1;
+  `docs/sdd/business-rules/platform.feature:840-845`.
+- **Rule it implies**:
+  - A liveness signal must exercise the component that can fail (the LISTEN socket, the query path),
+    not a cache in front of it.
+  - To tolerate known findings, enumerate them with an owner in the shrink-only baseline. Never
+    relax a whole finding kind.

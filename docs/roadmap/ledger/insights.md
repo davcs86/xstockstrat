@@ -4220,3 +4220,17 @@ reusing.
 - **Evidence**: `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/design.md` § Producer; `services/xstockstrat-analysis/app/services/evaluator.py:383,256,958-964`.
 - **Rule it implies**: prefer a per-call sink over an opt-in constructor flag when every traced caller wants the behaviour; put `sink.add` outside any log-dedupe block, and test two candidates sharing the refused component.
 
+
+### 2026-11-05 — fix-config-keys-drift — migration
+- **Pattern**: An env-dependent data heal shipped as one immutable migration. The migration embeds
+  only env-invariant inputs (a code-generated reader catalog, plus a signed allowlist of
+  `(ns, key, env, sha256(value))` tuples) and decides every row through SQL predicates over the
+  actual rows. Deletes require predicate ∩ signed tuple, so a row that is new or has changed since
+  the inventory survives (fail-safe). All mutations sit inside one latched `DO` block, which makes
+  replay a no-op. The operator signs an exact dry-run: the real migration SQL runs on a scratch
+  Postgres loaded from the committed hash inventory, and a sentinel guard fails if any decision
+  touches an unrevealed value.
+- **Evidence**: `docs/roadmap/features/295-fix-config-keys-drift/design.md` §1–2; rounds 2–3 in
+  context.md (BLOCKER-1/2 resolved).
+- **Reuse when**: a migration must clean up data whose live state differs per environment and
+  cannot be fully seen at authoring time.
