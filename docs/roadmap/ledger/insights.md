@@ -4215,3 +4215,8 @@ reusing.
 - **Evidence**: `docs/roadmap/features/293-fix-analysis-live-loop-budget-seed/design.md`; `scripts/migration-assertions/config-031.sql`; `services/xstockstrat-config/migrations/032_analysis_zero_trap_descriptions.up.sql`.
 - **Rule it implies**: when several in-flight features each add a config migration, fix the number at merge as max(`origin/main-dev`)+1 in BOTH directions (renumber down too) and grep the OLD number across all embedded sites; a hard merge-order dependency is the wrong remedy for the lower-version-skip hazard.
 
+### 2026-11-05 — fix-analysis-admin-formula-refusal — reuse
+- **Pattern**: To degrade ONE component of an evaluator instead of aborting, thread a private keyword-only per-call `sink: set | None = None` through the private helpers and make the traced entry point create it locally and intersect it with the rule's own references (`referenced_refs(parsed_rule) & sink`): no public signature change, no constructor flag, no instance state (an evaluator is shared across concurrently gathered candidates), real errors from other components still propagate, and callers that pass no sink are byte-identical.
+- **Evidence**: `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/design.md` § Producer; `services/xstockstrat-analysis/app/services/evaluator.py:383,256,958-964`.
+- **Rule it implies**: prefer a per-call sink over an opt-in constructor flag when every traced caller wants the behaviour; put `sink.add` outside any log-dedupe block, and test two candidates sharing the refused component.
+

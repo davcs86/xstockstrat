@@ -27,27 +27,43 @@ About 4.2k matching log lines in 7 days, in two bursts (2026-10-31: 3,298; 2026-
 
 ## Functional Requirements
 
-- **FR-1:** When indicators answers a component `ExecuteFormula` with `PERMISSION_DENIED` while `_compute_opportunities`
-  evaluates a candidate, the row is **not** data-unavailable; it is marked as an **unreadable formula** (a state distinct
-  from data-unavailable and from an evaluated `0/N` quiet row). Other strategies on the same symbol evaluate normally.
-  The row stays **visible** in `ListOpportunities` at the default `min_conviction` — like the `muted`, `unavailable` and
-  `fundamentals_unavailable` markers it is exempt from the conviction floor, and its rank position is decided in
-  `/sdd-design` rather than the row being dropped. A `NOT_FOUND` on the same call keeps its existing skip behaviour (unchanged).
-- **FR-2:** The unreadable-formula state is a visible, distinct reason on the opportunity row, exposed to consumers
-  (UI and agent) — not only in logs. The marker's field name and shape are decided in `/sdd-design` (a single boolean
-  like `data_unavailable`, or a closed-set `reason` enum — C-04 prefers an enum); the scenarios say "the
-  unreadable-formula marker".
-- **FR-3:** `EvaluateReadiness` returns OK for a symbol whose component formula is unreadable (it does not abort and does
-  not log ERROR `Unexpected [AioRpcError]`); that symbol's result is `0/0` conditions with the unreadable-formula marker
-  and no fabricated PASS or FAIL. Every other caller of `compute_readiness_row` degrades the same way (C-10(b): no
-  sibling path left stale): `_kick_readiness_refresh` (which backs the cache-only `GetWatchlistReadiness`), the readiness
-  materializer, and the 300 s surgical heal `_retry_unavailable_symbols` (which must not re-stamp an unreadable row as
-  "unavailable" nor retry it endlessly).
+- **FR-1:** When indicators refuses a component formula the caller cannot read — `NOT_FOUND` or `PERMISSION_DENIED` on `ExecuteFormula` — and the
+  rule being traced **references** that component (FR-6), the row/result is **not** data-unavailable; it is marked **unreadable formula** (a state
+  distinct from data-unavailable and from an evaluated `0/N` quiet row). This holds on **every path that traces readiness** — the
+  `ListOpportunities`-triggered recompute, the daily opportunity refresh and readiness materializer (owner-only metadata, which answers `NOT_FOUND`),
+  `EvaluateReadiness`, `_kick_readiness_refresh`, and the 300 s heal. Other strategies on the same symbol evaluate normally. The row stays **visible**
+  in `ListOpportunities` at the default `min_conviction` — like the `muted`, `unavailable` and `fundamentals_unavailable` markers it is exempt from the
+  conviction floor. (Operator decision 2026-11-05, replacing the earlier "`NOT_FOUND` keeps its skip": a scope-dependent marker is erased by the
+  scheduled passes and never shown to non-admin owners.)
+- **FR-2:** The state is exposed to consumers (UI and agent), not only in logs, as the additive proto field `bool formula_unreadable` —
+  `Opportunity` field 25 and `SymbolReadiness` field 6 (a bool, like `data_unavailable`/`muted`/`fundamentals_unavailable`; persisted as the
+  `"formula_unreadable"` provenance token and the `readiness_json` key, no migration). It is mutually exclusive with `data_unavailable` and
+  `fundamentals_unavailable` (precedence `fundamentals_unavailable` > `unavailable` > `formula_unreadable`), is never an `Opportunity.source` or
+  `available_sources` facet, and the UI copy is neutral ("formula not readable": the refusal also covers missing formulas and legacy-author rows).
+  Rank/action: a **non-held** unreadable row has action UNSPECIFIED, conviction and signal axis 0 and composite NULL; a **held** row keeps its
+  resolved action (REDUCE on a sell signal or firing exit; otherwise the existing monitored-holding fallback) and its signal axis, with conviction 0
+  and a signal-only composite (operator decision 2026-11-05; a C-16 CHANGE of the feature-083 two-axis ranking for non-held unreadable rows).
+- **FR-3:** `EvaluateReadiness` returns OK for a symbol whose referenced component formula is unreadable (it does not abort and does not log ERROR
+  `Unexpected [AioRpcError]`); the result is `0/0` conditions with the marker and no fabricated PASS or FAIL, a real `bar_epoch >= 0` (RESOLVED, never
+  the `-1` UNKNOWN sentinel). Every other caller of `compute_readiness_row` degrades the same way (C-10(b)): `_kick_readiness_refresh` (which backs the
+  cache-only `GetWatchlistReadiness`), the readiness materializer, and the 300 s surgical heal `_retry_unavailable_symbols` (which must not re-stamp an
+  unreadable row as "unavailable" nor retry it endlessly). The verdict is terminal until the next recompute / new bar / TTL / definition change.
 - **FR-4:** Genuine indicators outages (`UNAVAILABLE`, `DEADLINE_EXCEEDED`) keep the feature-185 data-unavailable
   behaviour exactly (including the 300 s surgical retry).
-- **FR-5:** Unchanged: indicators' AC-28 admin-execute refusal; the backtest `raise_unreadable=True` mapping
-  (`servicer.py:2116`, `@AC-5 @feature-224`, `@feature-275`); the live loop; and `FormulaExecutionError` timeouts still
-  propagate as today (feature 185 deliberately never catches them).
+- **FR-5:** Unchanged: indicators' AC-28 admin-execute refusal; the backtest `raise_unreadable=True` mapping (`servicer.py:2115`, `@AC-5
+  @feature-224`, `@feature-275`); the live loop (`app/main.py:157`); `GetIndicatorSeries`; write-time validation; and `FormulaExecutionError` timeouts
+  still propagate as today (feature 185 deliberately never catches them). **Changed with `analysis.backtest.fundamentals.enabled` ON (operator
+  sign-off 2026-11-05, a C-16 CHANGE; see FR-7):** a refused `GetFormula` is no longer a fundamentals outage in the backtest and ScoreStrategy.
+- **FR-6:** Marking is **referenced-only**: only an unreadable component the *traced rule* references (`referenced_refs`) produces the marker; an
+  unreferenced refused component is skipped exactly as today with one log line, so an entry-only foreign formula leaves a held position's firing exit
+  intact and an exit rule that references it yields `0/0` (no fabricated REDUCE). A genuine error in any other component (timeout, `UNAVAILABLE`) still
+  propagates.
+- **FR-7:** The fundamentals availability classification treats a refused `GetFormula` (`NOT_FOUND`/`PERMISSION_DENIED`) as "not a fundamentals
+  formula" (no failure recorded) for every caller of `_formula_fundamentals`, so with the gate ON the refusal reaches `ExecuteFormula` and produces
+  the same marker on the opportunity/heal paths as on the readiness paths. Real `GetFormula` outages still read UNKNOWN. With the gate OFF there is
+  zero change. Consequences with the gate ON: backtest (both start branches) reports the symbol as FORMULA_ERROR instead of "fundamentals fetch
+  failed — rerun"; ScoreStrategy / grade recompute no longer abort on it. The live loop's `declared_formula_fundamentals` is unchanged.
+
 
 ## Reproduction Steps
 
@@ -93,9 +109,9 @@ xstockstrat-ui (consumer surface), xstockstrat-agent (consumer surface).
 
 ## Fix Scope
 
-- Proto: an **additive** field on the opportunity/readiness messages is anticipated (the existing precedent is
-  `Opportunity.data_unavailable = 20` and `muted = 12`, `analysis.proto`); field shape and number are decided in
-  `/sdd-design`, additive-only, with `buf lint` + `buf breaking` and the proto approval gate (C-04, C-09).
+- Proto: **additive** `bool formula_unreadable = 25` on `Opportunity` and `bool formula_unreadable = 6` on `SymbolReadiness`
+  (`analysis.proto:603-654`, `:673-679`; decided in `design.md`; the precedent is `Opportunity.data_unavailable = 20` / `muted = 12`), with
+  `buf lint` + `buf breaking`, `./scripts/buf-gen.sh` and the proto approval gate (C-04, C-09).
 - Database: none anticipated — like `data_unavailable`, the state rides the existing provenance JSONB marker (no column).
 - Config keys: none.
 - Evaluator construction sites: the default-evaluator sites on the opportunities / readiness paths are in scope; the
@@ -112,7 +128,11 @@ analysis, UI and agent smoke-tested on dev.
 
 - Indicators' AC-28 refusal itself (`services/xstockstrat-indicators/app/handlers/servicer.py:244-249`) — unchanged.
 - The backtest path (`raise_unreadable=True`) and the live loop — unchanged; the fix must not leak into their
-  `PERMISSION_DENIED`→`FORMULA_ERROR` mapping (`@AC-5 @feature-224`, feature 275).
+  `PERMISSION_DENIED`→`FORMULA_ERROR` mapping (`@AC-5 @feature-224`, feature 275). The live loop therefore still skips a refused component and may
+  fire/alert on an OR-rule branch while the queue shows the row as "formula not readable" (accepted, `design.md` Open Risks).
+- The genuine-outage batch loss in the readiness kick/materializer/heal and the symbol-wide `fetch_failed` bleed — filed as
+  `docs/reports/2026-11-05-analysis-readiness-batch-loss-on-indicator-outage-defect.md`.
+- Measuring the blast radius of the unified refusal (an operator read-only SQL join + `app.maintenance.legacy_authors` report mode, in `design.md`).
 - Feature 215's `EvaluateReadiness` parity rule ("must not pass `failures`") — preserved.
 - `FormulaExecutionError` timeouts (a separate failure: formula execution timed out after 5000 ms).
 - Refactoring and performance work unrelated to the bug.
