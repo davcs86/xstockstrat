@@ -127,3 +127,97 @@
 
 - Merged `origin/main-dev` into the branch (add/add conflicts in the five 282 files resolved to our side; main-dev held only the original story, byte-identical to `4a185fd`).
 - Feature 281 (`signal-watchlist-expiry-pruning`, implementation-ready) overlaps 282 on `AddWatchlistSymbols`, the agent signal-add path and shared docs/tests (no proto field, config key or migration collision). Operator decision: 282 merges AFTER 281. Added a soft `merge-order.md` row; Step Dependencies note updated. Carry into execution: re-anchor Steps 9/11 after 281 lands; keep the servability filter ahead of 281's expiry write so a refused symbol gets no expiry row.
+
+## Session 2026-11-02 — sdd-design amendment (quick), round 1 — operator decisions and synthesis
+
+- **Trigger:** the up-front gate found both new keys unseeded under the 227 waiver: `marketdata.assets.refresh_interval_hours` (int 6, `[1,24]`, `<=0` pauses, reader in Step 5) and `portfolio.marketdata.servability_timeout_ms` (int 2000, `[500,4000]`, reader in Step 9). 278's shrink-only `config-wiring` ratchet (`631028eb`) fails CI on both.
+- **Operator decisions (2026-11-02):**
+  - Seed both via config migrations, following 281's approved pattern (no baseline entry; downs delete global rows only).
+  - Re-spec items: PORTFOLIO-18 / MARKETDATA-15 (15/16 taken, 281 claims 17); reuse `testdata.Msft`/`Aapl` and re-decide C-13 for the OTC tickers; Step 14 rewrites (not extends) the fails-080 rename e2e test and comment; re-anchor drift everywhere else.
+- **Round-1 synthesis** (adversary: NEEDS WORK, no Floor breach):
+  - `036_marketdata_asset_refresh_interval` lands in Step 5 with the marketdata reader. `037_portfolio_servability_timeout` lands in Step 9 with the portfolio reader (literal at the call site; no key-parameter wrapper).
+  - A new config test step holds the shared `globalIntSeedCases.ts` helper, the 036/037 parse tests and an **unconditional** conversion of 281's inline seed test. jscpd ignores test files, so a conditional conversion would never fire. The step requires 281 merged; it imports `migrationSql.ts` from main-dev, never copies it from 281's moving branch.
+  - Explicit ordering: 282 Step 5 requires 281 Step 11 committed. The pre-merge check asserts 281's 035 is on main-dev and numbered below 036. Renumbering goes through the Deviation Log, finding files by suffix. The step-time `--declared-migration` guard also runs for 036/037.
+  - The 036 description says pausing is reader-only (`SetConfig` rejects 0). Step 6's evidence notes that AC-24's "unset" case is a scope with no row.
+  - `@AC-27 @FR-5` is appended. `LIT` is exported from the helper.
+  - Open placement question: the new step at the end (Step 16, docs to 17) or right after Step 10. **Operator: another round.**
+
+## Session 2026-11-02 — sdd-design amendment, round 2 — synthesis (operator: another round)
+
+- **Proposer:**
+  - The new config test step goes at the end (Step 16; docs/teardown becomes 17). That is 3 renumber edits instead of 22, and only Steps 16-17 wait on 281.
+  - It keeps the shared `globalIntSeedCases.ts` helper and converts 281's seed test unconditionally.
+  - It supplies exact 036/037 SQL and full Step 5/9/16 text.
+  - It found a second e2e assertion (`watchlists.spec.ts:626-633`) that the masked rename breaks.
+  - It fixed 281's block-2 ordering bug: the pair-presence check moves to block 3.
+- **Adversary** (NEEDS WORK, no Floor breach; APPROVE-READY once these are fixed):
+  1. Step 16 Verification double `cd` always fails.
+  2. The §5.3 boot gate trips on Step 16's absent 281 files. Mark them "expected absent until 281 merges — do not re-spec".
+  3. "Renumber via Deviation Log" breaks F-08/F-09 because the shell blocks hard-code 036/037. Renumbering goes through stop → re-spec Steps 5, 9, 16. The same latent flaw exists in 281 Step 11 Instr 9, kept as a follow-up and not touched while 281 executes.
+  4. Relax Step 5's precondition to "281 spec names 035; 036/037 free on every branch". A missing 035 file is a WARN; `MODE=merge` (twice) stays binding.
+  5. After merging 281, re-run the Verification of Steps 9-14 and Step 5 block 4, and assert the servability filter runs before 281's expiry write (fails.md:1198).
+  6. Smaller items:
+     - block 4 escalates if the base has any finding on `RD`;
+     - Step 5 Instr 8 vs Instr 12 contradiction;
+     - the `:606` test title;
+     - `LIT` stays private;
+     - align `@AC-24`/`@AC-27` FR tags;
+     - merge-order row 92 becomes **Hard**;
+     - cite 281's durable `@AC-19` suite path.
+- **Open operator choice:** start 282's execution after 281 merges (adversary's alternative), or now in parallel. **Operator: another round.**
+
+## Session 2026-11-02 — sdd-design amendment (COMPLETION)
+
+- **Approved after 3 rounds** (round-3 adversary: no Floor breach; L APPROVE-READY once its fixes were folded; operator approved all round-3 fixes).
+- **Operator: Variant L.** 282's sequential run starts only after 281's integration PR is on `main-dev`. Step 9 implements the `EREA` order in `AddWatchlistSymbols` (281's `expiryIntentFor` on the unfiltered request → `refuseUnservable` → early return when all refused → `expiryIntentFor` on accepted bindings → cap on the post-filter union → `AddSymbols(…, intent)`) with an `awk` SEQ check; Step 10 adds `TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry`. Step 16 is config-only (helper, 038/039 parse tests, 281 037 test conversion); P-only text (step/merge modes, 0b/0c, boot-gate "no re-spec") dropped.
+- **Operator: renumber 036→038, 037→039.** Feature 280 (PR #1359) holds config `035_smoke_rpc_user_id` / `036_smoke_writes_enabled`; feature 281's seed is now `037_portfolio_signal_prune_interval`. Step 5 block 2 asserts all three are on `origin/main-dev` and on this branch (STOP otherwise) and that 038/039 are free on every branch.
+- **Round-3 fixes folded:**
+  - Step 5/9 block 4: a finding on the reader file `RD` is a hit only if new versus the merge-base (multiset on `kind, namespace, key, file`); STOP only for a base `dynamic-read` on `RD`. 281's "any finding on `RD`" rule would always fire in Step 9 (three baselined `read-unseeded` keys attribute to `portfolio_service.go`).
+  - Step 9 Verification: service-dir commands wrapped in a `( … )` subshell; blocks 2-4 run from the repo root.
+  - design.md Business Rules / Amendment name Step 9 (order + SEQ check) and Step 10 (guard test).
+  - Renumber path uses the documented directive `(re-spec Steps 5-16 first)` (`sequential-mode.md:18` parses one range or one step).
+  - Steps 9/10/16 Codebase Evidence: drift in 281's landed symbols is called out in the §5.4 summary; a re-spec never changes the `EREA` order.
+  - SEQ `awk` strips `//` comments before matching.
+  - `merge-order.md` row 92 (282 → 281): Hard, "Merge order only — 281 need not be `launched`", plus the Variant L sentence. This is a design-phase edit staged with this amendment's design commit (P-01), not by an execute step (F-08).
+- **Ledger:** one `fails.md` entry — config-wiring baseline entries are file-less, so a reader-file hit identity must be checked against raw `--final --json` base findings, not `scripts/config-wiring.json`.
+- **Next:** advisory `/sdd-review filter-otc-symbols impl-spec`, then launch `/sdd-execute filter-otc-symbols(re-spec if needed) sequential` after 280's and 281's integration PRs merge.
+
+## Session 2026-11-02 — sdd-review impl-spec (advisory, post-amendment)
+
+- Verdict: PASS WITH WARNINGS (no blockers). All eight warnings addressed by surgical `implementation-spec.md` edits; no step added or renumbered.
+  - W1 (Step 9 Instr. 3 step 3, Step 10 Instr. 5): the all-refused early return fires only on `len(refused) > 0 && len(add) == 0`; an originally empty add keeps 281's behaviour (`AddSymbols` once + `portfolio.watchlist.updated`). New Step 10 case (d) asserts `store.addSymbolsCnt == 1`, `servabilityCalls == 0` (green pre-Step 9 by design, like (c)).
+  - W2 (config-key wiring (b)): non-default seeded-key reader cases added. Step 6 `TestResolveAssetRefreshInterval_ReadsSeededKey` (`fakeIntGetter{"marketdata.assets.refresh_interval_hours": 12}` → 12h) and Step 10 `TestServabilityTimeout_ReadsSeededKey` (`fakeConfig` `"portfolio.marketdata.servability_timeout_ms": 3000` → 3000ms), each with a `grep -c … -eq 1` guard. AC-24's unset case kept, and Step 6's "no seeded-value case" note replaced.
+  - W3 (Step 2): marketdata `go build` wrapped in a subshell; executable freshness line `git add -A packages/proto/gen && ./scripts/buf-gen.sh && git diff --exit-code packages/proto/gen` + no untracked files; Files notes the wildcard entries are generated directories (exempt).
+  - W4 (Step 14): single `cd services/xstockstrat-ui`; the repeated cd that broke the Playwright line is removed.
+  - W5 (Step 5): "run from the repo root" stated before blocks 2-4 (heading and in-block comment).
+  - W6 (Step 16 recorded RED): `pnpm run build && { … }`; the restore `mv` is guarded by `[ -n "$R" ]` and always runs; build failure reported separately.
+  - W7 (Step 10): fake fields named `store.lastIntent` / `store.addSymbolsCnt` (281 `watchlist_service_test.go:37-38`, set `:171-173`); provenance helper `seedWatchlist(store, id, userID, systemManaged, binds)` (`:710`, used `:944-1063`); `expiryIntentFor` (`portfolio_service.go:1856-1885`, checks `:1867-1879`) requires a system-managed list, one SIGNAL binding, `signal_id > 0` and `valid_until` set; case (a) now sets them.
+  - W8 (re-anchors): Step 5 Instr. 10 `main.go:170` → `:166`; Step 5 `fakeBackfillSource :703` → `:900`. Steps 6/8 `marketdata_service_test.go` re-anchored to the current tree: `TestGetBarsMarksSymbolWarm :1111-1121`, `…WarnsWhenMiss… :1126-1135`, `funcBody :1231`, `fakeIntGetter :1921`, `budgetCfgMs :1944`, `fakeBackfillSource.ListAssets :911`, `newQuoteSvc :3357-3365`, `fakeQuoteStore :3330`, `fakeBatchPriceSource :1643`, `fakeLatestTradeOnlySource :1713`, `TestBatchGetLatestPrice_MultipleSymbols :1741`, `fakeBarsStore :4060-4074`, `scriptedBarsSource :4077`, `partialSvc :4090-4095`, `batchReq :4097`, `hangUntilDone :4105`, `assertOnlyWarmAAPL :4110`, AC53/54 tests `:4120-4146`. Step 7's informational grep became count assertions: `markWarmIfServable(` = 3, `markWarm(` = 4 (3 kept call sites + definition).
+- Step 16 config-side corrections from verifying 281's landed files (`origin/feature/signal-watchlist-expiry-pruning` `0657f082`, PR #1401):
+  - `migrationSql.ts` signatures confirmed exactly (`MIGRATIONS_DIR`, `findOne(suffix: string, ext: 'up' | 'down'): string`, `splitStatements(sql: string): string[]`); now written out in Codebase Evidence. 281's seed test imports only `findOne, splitStatements`; zeroTrap imports all three (4 cases).
+  - 281's seed test also has module-private `SUFFIX`, `interface SeedRow` and `parseUp()` (row offsets `[1, 9]`), which the spec omitted. They move into the helper (`parseUp` takes `suffix`) and are deleted from 281's file, and `SUFFIX` stays inline and is passed as `suffix: SUFFIX`.
+  - Converted 281 file imports shrink to `describe` + `globalIntSeedCases` (drop `it`, `assert`, `findOne`, `splitStatements`, else eslint unused-import). The `describe` title `signal prune interval seed migration (@AC-19)` is kept.
+  - Helper imports narrowed to `it`, `assert` (`node:assert/strict`), `findOne, splitStatements`.
+  - 281's case titles are not key-prefixed, so prefixing renames them. Assertions are unchanged: case 1 also asserts two rows, and case 4 asserts an integer in range.
+  - 037 pair names and content confirmed (one INSERT, fixed column order, staging-then-production rows of 8 literals + NULL, `ON CONFLICT … DO NOTHING`; down = one global-row DELETE). Recorded that 038/039 must keep that shape because `INSERT_RE` is exact.
+  - Confirmed unchanged: five `it()` cases, `KEY` inline, `LIT`/`ROW`/`INSERT_RE` names, test glob `package.json:12-13`, `.jscpd.json:29`.
+- Noted, not edited (outside W1-W8 scope): Step 7 Codebase Evidence `markWarm` call-site lines are off by one against the current tree (`:263, :546, :576, :689, :750, :869`); Step 9/10 cite `newSvc` at `watchlist_service_test.go:275` (main-dev), `:293` on 281's branch.
+
+## Session 2026-11-04T22:07Z — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 4 warnings (advisory — did not block). 17 steps, all pending.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 2: Files lists wildcard generated dirs (marketdatav1connect/*, portfolio/v1/*, gen/ts/dist/); spec self-exempts as generated output — waive or enumerate. — [x] enumerated 2026-11-04 (12 exact dist paths; unchanged portfolio grpc/connect stubs dropped)
+  - Step 5: 6 files / 15 instructions; consider splitting migration 038 + wiring proof from the Go code. — [x] kept as one step with a recorded rationale (seed and reader must land together for the config-wiring check)
+  - Steps 9, 10, 16: depend on feature 281 symbols (expiryIntentFor, ExpiryIntent, fakeWatchlistStore.lastIntent, migrationSql.ts) not in this tree. 281 must land on main-dev first; re-verify anchors, raise a blocker rather than adapt. — [ ] unaddressed
+  - Step 7: line citations ~1 line stale; re-anchor at execution. — [x] markWarm call-site anchors re-stamped 2026-11-04; other :NNN anchors are find-by-symbol and drift again when 215 lands
+- Overlap findings: WARN, no FAIL. No migration/proto/config-key collision (038/039 free; 037 is 281). Hard ordering 281 -> 282 per merge-order row 92 (optionally extend it to name the migrationSql.ts / signalPruneIntervalSeedMigration.test.ts test dependency).
+
+## Session 2026-11-04 — merge-order ruling: 280 depends on 281 (operator)
+
+- 282's block 2 no longer requires feature 280's 035/036 on main-dev; it requires 281's 037 only. Feature 280 now renumbers above the highest config migration at its merge time (merge-order.md row in the 281 branch/PR #1401). If 280 merges before 282 with numbers >= 038, block 2 STOPs and 282 re-specs its numbers.
+
+## Session 2026-11-04 — impl-spec review loop (3 iterations, advisory)
+
+- Iteration 3 result: PASS, 0 failures, 0 fixable warnings. Remaining: one external gate. Steps 9, 10 and 16 (and Step 5 block 2's `037` check) need 281's symbols and migration on main-dev (PR #1401) — [ ] unaddressed (external).
+- Optional wording tidy, not a warning: `design.md:113,177,178` still describe the old 035/036 check; the spec's block 2 is authoritative.
