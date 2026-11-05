@@ -400,7 +400,7 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 
 ### Step 7 — service: marketdata warm-add gate at GetBars, BatchGetBars, BatchGetLatestPrice
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -962,3 +962,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Specced**: Instruction 1 lists the symbol constants and `ServableAssets()`.
 - **Actual**: also added `SyntheticAssets(n)` (n distinct NASDAQ assets) and the `ExchangeNasdaq`/`ExchangeOTC` constants to `internal/testdata/assets.go`. AC-11 needs a 10-asset set, and Instruction 1 bars declaring domain data inline in the test file. `Aapl` was absent from `marks.go`, so it was added. `Msft` is reused.
 - **Disposition**: in-scope fixture addition (C-13)
+
+### Step 7 — TDD red/green via an uncommitted scratch test (2026-11-05)
+- **Specced**: Step 8's tests are the paired RED for Step 7 ("run before Step 7"), but Step 8's **Files** (`marketdata_service_test.go`) are not in Step 7's **Files**.
+- **Actual**: RED and GREEN were captured with a temporary `internal/service/zz_step7_scratch_test.go` (GetBars source scan, BatchGetBars with an unservable cold symbol, BatchGetLatestPrice prev-close-only and all-unservable cases). It was deleted before commit, so F-08 staging holds. Step 8 still authors the durable tests.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change)
+
+### Step 7 — per-symbol fallback `skipped` counts `tradeSyms` (2026-11-05)
+- **Specced**: Instruction 3 runs the per-symbol fallback over `tradeSyms` and keeps `n = len(req.Symbols)` in the log fields.
+- **Actual**: `n` stays `len(req.Symbols)` in every log field (`symbols`, `total`). The loop-relative `skipped = n - i` became `skipped = len(tradeSyms) - i`, because `i` now indexes `tradeSyms` and `n - i` would count unservable symbols as skipped.
+- **Disposition**: in-scope arithmetic consequence of Instruction 3

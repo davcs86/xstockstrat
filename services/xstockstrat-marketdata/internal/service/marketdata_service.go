@@ -262,7 +262,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	}
 
 	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
-	s.markWarm(req.Symbol)
+	snap := s.markWarmIfServable(req.Symbol)
 
 	pageSize := 500
 	pageToken := ""
@@ -322,7 +322,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 				}
 			}
 		}
-		if refetch {
+		if refetch && liveFetchAllowed(snap, req.Symbol) {
 			// Keep stale-but-present bars if the refetch yields nothing (e.g. a weekend) rather
 			// than blanking a chart that has data.
 			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, startImplicit); len(fresh) > 0 {
@@ -748,9 +748,7 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 		maxBars = 500
 	}
 
-	for _, sym := range req.Symbols {
-		s.markWarm(sym)
-	}
+	snap := s.markWarmIfServable(req.Symbols...)
 
 	// Warm path: batch LATERAL JOIN from DB.
 	warm := map[string][]*marketdatav1.Bar{}
@@ -765,7 +763,7 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 	// Cold path: symbols with no DB bars.
 	var cold []string
 	for _, sym := range req.Symbols {
-		if _, ok := warm[sym]; !ok {
+		if _, ok := warm[sym]; !ok && snap.servable(sym) {
 			cold = append(cold, sym)
 		}
 	}
@@ -867,9 +865,7 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 	if len(req.Symbols) == 0 {
 		return &marketdatav1.BatchGetLatestPriceResponse{}, nil
 	}
-	for _, sym := range req.Symbols {
-		s.markWarm(sym)
-	}
+	snap := s.markWarmIfServable(req.Symbols...)
 
 	// Singleflight keyed on sorted symbols.
 	sorted := append([]string(nil), req.Symbols...)
@@ -902,47 +898,56 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 			}()
 		}
 
-		var trades map[string]*source.Trade
-		src, sErr := s.registry.Get("")
-		if sErr != nil {
-			slog.WarnContext(ctx, "BatchGetLatestPrice: source lookup failed", "symbols", n, "error", sErr)
-		} else {
-			// Prefer multi-symbol trade fetch if the source supports it.
-			if ms, ok := src.(source.MultiSymbolSource); ok {
-				var mErr error
-				trades, mErr = ms.GetLatestTradesMulti(fctx, req.Symbols)
-				if mErr != nil {
-					slog.WarnContext(ctx, "BatchGetLatestPrice: multi-symbol fetch failed; falling back to per-symbol", "symbols", n, "error", mErr)
-				}
+		tradeSyms := make([]string, 0, n)
+		for _, sym := range req.Symbols {
+			if snap.servable(sym) {
+				tradeSyms = append(tradeSyms, sym)
 			}
-			// Fall back to per-symbol if multi is nil or the source doesn't support it.
-			if trades == nil {
-				trades = make(map[string]*source.Trade, n)
-				if fctx.Err() != nil {
-					slog.WarnContext(ctx, "BatchGetLatestPrice: budget exhausted by multi-symbol fetch; per-symbol fallback skipped",
-						"symbols", n, "budget_ms", budget.Milliseconds())
-				} else if lt, ok := src.(source.LatestTradeSource); ok {
-					failed, fetched, skipped := 0, 0, 0
-					var firstErr error
-					for i, sym := range req.Symbols {
-						if fctx.Err() != nil {
-							skipped = n - i
-							break
-						}
-						price, ts, tErr := lt.GetLatestTrade(fctx, sym)
-						if tErr != nil {
-							failed++
-							if firstErr == nil {
-								firstErr = tErr
-							}
-							continue
-						}
-						fetched++
-						trades[sym] = &source.Trade{Price: price, TradeTime: ts}
+		}
+
+		var trades map[string]*source.Trade
+		if len(tradeSyms) > 0 {
+			src, sErr := s.registry.Get("")
+			if sErr != nil {
+				slog.WarnContext(ctx, "BatchGetLatestPrice: source lookup failed", "symbols", n, "error", sErr)
+			} else {
+				// Prefer multi-symbol trade fetch if the source supports it.
+				if ms, ok := src.(source.MultiSymbolSource); ok {
+					var mErr error
+					trades, mErr = ms.GetLatestTradesMulti(fctx, tradeSyms)
+					if mErr != nil {
+						slog.WarnContext(ctx, "BatchGetLatestPrice: multi-symbol fetch failed; falling back to per-symbol", "symbols", n, "error", mErr)
 					}
-					if failed+skipped > 0 {
-						slog.WarnContext(ctx, "BatchGetLatestPrice: per-symbol fallback incomplete",
-							"failed", failed, "fetched", fetched, "skipped", skipped, "total", n, "sample_error", firstErr)
+				}
+				// Fall back to per-symbol if multi is nil or the source doesn't support it.
+				if trades == nil {
+					trades = make(map[string]*source.Trade, n)
+					if fctx.Err() != nil {
+						slog.WarnContext(ctx, "BatchGetLatestPrice: budget exhausted by multi-symbol fetch; per-symbol fallback skipped",
+							"symbols", n, "budget_ms", budget.Milliseconds())
+					} else if lt, ok := src.(source.LatestTradeSource); ok {
+						failed, fetched, skipped := 0, 0, 0
+						var firstErr error
+						for i, sym := range tradeSyms {
+							if fctx.Err() != nil {
+								skipped = len(tradeSyms) - i
+								break
+							}
+							price, ts, tErr := lt.GetLatestTrade(fctx, sym)
+							if tErr != nil {
+								failed++
+								if firstErr == nil {
+									firstErr = tErr
+								}
+								continue
+							}
+							fetched++
+							trades[sym] = &source.Trade{Price: price, TradeTime: ts}
+						}
+						if failed+skipped > 0 {
+							slog.WarnContext(ctx, "BatchGetLatestPrice: per-symbol fallback incomplete",
+								"failed", failed, "fetched", fetched, "skipped", skipped, "total", n, "sample_error", firstErr)
+						}
 					}
 				}
 			}

@@ -354,3 +354,13 @@
 - Not re-checked: the Step 9 cross-branch 038/039 collision loop (`for-each-ref`). The worktree sandbox refused it, so only `origin/main-dev` was checked (037 present, 039 absent).
 - Hook note: the main worktree has no `node_modules` and the shared `core.hooksPath` does not exist, so no pre-commit hook ran. The commits were not made with `--no-verify`.
 - Deviations: none
+
+### Step 7 — service: marketdata warm-add gate at GetBars, BatchGetBars, BatchGetLatestPrice [done]
+- `GetBars` warms via `snap := s.markWarmIfServable(req.Symbol)` and gates the live fetch as `if refetch && liveFetchAllowed(snap, req.Symbol)`; the WARN text is unchanged. `BatchGetBars` warms via `markWarmIfServable(req.Symbols...)` and drops `!snap.servable(sym)` from `cold` before `sortedCold`/the key. `BatchGetLatestPrice` warms the same way, keeps the flight key and the previous-close read on the full request, and runs the trade section only over `tradeSyms` (skipped entirely when empty). `GetLatestQuote(s)`/`GetLatestPrice` stay on `markWarm`.
+- TDD (scratch test, deleted before commit; Deviation Log): RED: 4 failing, `GetBars must warm via markWarmIfServable`, `BatchGetBars: alpaca: 503 upstream, want the warm subset`, `trade request contained unservable BOSSY: [AAPL BOSSY DNB]`, `BOSSY was warmed`, `trade fetch ran for an all-unservable request: [[BOSSY]]` → GREEN: all 4 PASS. Scenarios exercised ahead of Step 8: AC-4/AC-7 (GetBars wiring), AC-12 (strict, unservable cold), AC-13 (prev_close only, omit rule).
+- Verification: `go build` ok, `golangci-lint` 0 issues, `markWarmIfServable(` = 3, `markWarm(` = 4.
+- Open item (expected, closes in Step 8): `go test ./...` fails only `TestGetBarsMarksSymbolWarm` (`marketdata_service_test.go:1118`, still asserts `s.markWarm(req.Symbol)`). Step 8 Instruction 1 updates it, so the branch is red on that test between the Step 7 and Step 8 commits.
+- Hook note: the main worktree has no `node_modules`, so the husky pre-commit hook has nothing to run; no `--no-verify` was used.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: TDD via an uncommitted scratch test; `skipped` counts `tradeSyms` (both in the Deviation Log)
+
