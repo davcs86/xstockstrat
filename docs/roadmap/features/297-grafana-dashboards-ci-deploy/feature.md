@@ -38,4 +38,4 @@ No service owner applies: no `services/*` code, proto, config key or migration c
 
 ## Next Action
 
-`/sdd-review grafana-dashboards-ci-deploy product-spec`. Q9a is the only open item that blocks `/sdd-design`; Q4–Q8 are non-blocking.
+`/sdd-review grafana-dashboards-ci-deploy product-spec`. No open question blocks `/sdd-design`; Q2a needs the operator to confirm the dedicated `grafana` environment reading, and Q4, Q5, Q6, Q8 are non-blocking.

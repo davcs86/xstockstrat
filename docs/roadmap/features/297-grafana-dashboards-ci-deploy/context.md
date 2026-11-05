@@ -50,3 +50,7 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 - Operator: keep alerts out of scope for Q9. FR-11 and AC-17 withdrawn (IDs not reused); `alerts/alert-rules.yaml` and `alerts/README.md` removed from Affected Services; Q7 closed as out of scope; Out of Scope now covers alert deployment and expression changes.
 - Accepted residual risk: the three alert rules still aggregate all environments (`sum by (service_name)`, stall rule unscoped), so once production emits alongside staging they cannot tell the two apart. Follow-up feature candidate, not allocated.
 - Q9a reduced to one question: default selection of the `environment` variable (recommendation: All).
+
+## Session 2026-11-05 — Q9a decided
+
+- Operator: `environment` variable defaults to All. Pinned in FR-10 and AC-14. Not yet verified: that `deployment_environment` is an indexed Loki label on the live stack (the three LogQL panels depend on it).

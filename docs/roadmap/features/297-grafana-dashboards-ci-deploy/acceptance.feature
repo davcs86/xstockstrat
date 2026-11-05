@@ -105,6 +105,7 @@ Feature: grafana-dashboards-ci-deploy
     And all 9 PromQL targets contain 'deployment_environment=~"$environment"'
     And all 3 LogQL targets contain 'deployment_environment=~"$environment"' in the stream selector
     And all 3 TraceQL targets contain 'resource.deployment.environment =~ "$environment"'
+    And each variable's current selection is All (value "$__all")
     And no expression in the 4 files contains "development" as an excluded value
     And service-detail.json is byte-identical to main-dev
 
