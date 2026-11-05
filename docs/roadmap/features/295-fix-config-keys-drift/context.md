@@ -881,3 +881,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - **Step 11 keepalive-spike ordering:** an open question (see above).
 - **Next:** `/sdd-execute fix-config-keys-drift sequential`, resuming at Step 1 once those are ruled on.
   First run §5.4b tooling setup: pnpm deps are absent, so the husky hook cannot run.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute): second re-spec gate (§5.3)
+
+- **Up-front confirmation (§5.4):** the operator approved the up-front plan through the
+  `sdd-batch-execute` workflow. Status was already `in-progress`, so status.md was not changed.
+- **Branch setup:** `git merge --no-edit origin/main-dev` reported "Already up to date"
+  (`origin/main-dev` `94908ce6` is an ancestor of the branch), so there was no merge commit and no
+  conflicts. `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix`
+  reported `clean`.
+- **Tooling note (unchanged):** the main worktree has no `node_modules`, so there was nothing to
+  symlink. `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook
+  ran. lint-staged only targets `services/xstockstrat-ui/**`, so these doc commits would not have been
+  formatted anyway. `--no-verify` was not used.
+- **Re-spec (conditional directive; step bodies only):**
+  - **Step 1:** its own evidence holds. The decision-27 gate is still **not met**, and the gate bullet
+    now lists what is open: (a) no coverage line in test Steps 14, 16, 18, 22, 24, 26; (b) brace
+    shorthand in Steps 15/17 Files; (c) Step 23's B2b enumeration; (d) the Steps 4/13/19/29/38 split;
+    (e) AC-28 at `acceptance.feature:153` still says `force 35`.
+  - **Step 3:** cite corrected to `declaredFromMigration` `:664-673`, with the CLI option at `:720`/`:730`.
+  - **Step 9:** evidence holds (origin scan: config migrations ≥035 are 035/036 on PR #1359, 037 on
+    main-dev, and 038 on `origin/feature/filter-otc-symbols` only; there is no 039–041). A note was
+    added saying that `## Step Dependencies` and Execution Summary resolution 1 ("after 035–039",
+    "`--final` only at Step 36") are superseded by decision 28 and by `ci.yml:1019`. Those non-step
+    sections were not edited.
+  - **Step 11:** cites hold; `pg` `^8.11.5` was recorded. Instruction 8 (keepalive spike) is now
+    explicitly gated on the open operator ruling: (A) move it to the end of Step 13, or (B) use a
+    throwaway client in Step 11.
+  - **Step 30:** the `insightsBff.test.ts` `configClient` stub (`:17`) is only `{ setConfig }`.
+    Instruction 1 now extends it with a `getConfig` `vi.fn()`. A coverage line was added (vitest 40%
+    over `src/lib/**`; `*Bff.ts` is excluded). This closes item (a) for Step 30.
+  - **Step 36:** the precondition state was re-checked (highest on main-dev is 037; there is no 039
+    anywhere). It is not met yet, which is expected at Step 36.
+- **Step loop not started.** Before Step 1 the operator still needs to rule on: the decision-27 items
+  (a)–(e) (waive, or re-spec Steps 4/13–19/22–24/26/29/38 and reword AC-28), and the Step 11 spike
+  ordering.
