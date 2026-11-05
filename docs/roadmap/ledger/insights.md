@@ -4200,3 +4200,17 @@ reusing.
 - **Pattern**: To test the logic of a GitHub Actions step without a runner, extract the real step's `run:` script from the workflow with mikefarah `yq` (select by `.name` when the step has no `id:`), write it to a temp file and run it under `env -i` with stub `doctl` and `sleep` binaries first on `PATH`; iterate one run per external-state value (here SUPERSEDED/ACTIVE/ERROR/CANCELED/BUILDING) asserting rc, poll count and output. A stub `sleep` that records calls lets a 60 x 15 s timeout path run instantly and lets the test assert "exited on that poll, nothing slept".
 - **Evidence**: `scripts/sops-secrets.test.sh:709-` (`group_deploy` wait-step harness); precedent `resolve-app-id` stub-doctl harness in the same function.
 - **Rule it implies**: Pin workflow script behavior by executing the shipped step text against stubs in `scripts/*.test.sh` (already run by the CI `sops-secrets` job on any `deploy*.yml` change) rather than grepping the YAML; include a regression row for every pre-existing terminal state and for the timeout path.
+
+### 2026-11-05 — fix-config-keys-drift — migration
+- **Pattern**: An env-dependent data heal shipped as one immutable migration. The migration embeds
+  only env-invariant inputs (a code-generated reader catalog, plus a signed allowlist of
+  `(ns, key, env, sha256(value))` tuples) and decides every row through SQL predicates over the
+  actual rows. Deletes require predicate ∩ signed tuple, so a row that is new or has changed since
+  the inventory survives (fail-safe). All mutations sit inside one latched `DO` block, which makes
+  replay a no-op. The operator signs an exact dry-run: the real migration SQL runs on a scratch
+  Postgres loaded from the committed hash inventory, and a sentinel guard fails if any decision
+  touches an unrevealed value.
+- **Evidence**: `docs/roadmap/features/295-fix-config-keys-drift/design.md` §1–2; rounds 2–3 in
+  context.md (BLOCKER-1/2 resolved).
+- **Reuse when**: a migration must clean up data whose live state differs per environment and
+  cannot be fully seen at authoring time.
