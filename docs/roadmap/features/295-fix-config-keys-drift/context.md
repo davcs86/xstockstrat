@@ -514,3 +514,53 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - **The M6 recovery path is now `migrate force 35` + `scripts/db-migrate.sh up`.**
   - Feature 296 must anchor `contract-of` on 035.
 - The adversary pass is running.
+
+## Session 2026-11-05 — sdd-design round 4 synthesis + operator decisions 21–24
+
+- **R4 adversary verdict: APPROVABLE (no Floor breach).**
+  - Confirmed: the renumbering is sound; pg 8.11 `query_timeout` releases and destroys the client;
+    the committed stored-JSON gate works; M3/M4/M5 are closed.
+  - **Binding amendments for spec time:**
+    - **MAJOR-1:** drop `policy.seededUnread`. It regresses platform `@AC-7 @feature-278`
+      (`platform.feature:840-845`). Baseline each surviving dead row as `seeded-unread` with owner
+      feature 296; the shrink-only ratchet blocks any new entry.
+    - **MAJOR-2:** 036 overwrites a non-blank mismatching `default_value` (documentation-only per
+      CONFIG-2) with the agreed code default for non-secret catalog keys, with an audit row
+      (`011…:14-23` ACTIVE vs trading `HALTED` `trading.go:3589`). The gate exempts
+      readers-disagree keys from default-mismatch and scopes metadata/type checks to catalog-read
+      rows. A2 proves the fresh residual is empty.
+    - **MAJOR-3:** re-emit `config.read_key` at every 6 h coverage tick, so silence means unread.
+    - **MAJOR-4:** a twin whose partner or catalog entry `is_secret` is secret-class: never
+      revealed, never in a TSV/report plaintext column, not deleted in 295.
+    - **MAJOR-5:** the runbook probes `to_regclass('config.config_markers')` plus the latch before
+      forcing (35 vs 34). The migration-rerun leg reproduces the real auto `force 0` → 001 failure,
+      then probe → force → up converges, asserting no data/function change.
+  - **Security precision:** in FR-1 the found row only selects the spelling. Scope and `user_id`
+    always come from the request, so a first per-user override INSERTs per-user and never UPDATEs
+    the global row (PR #994 owner-only).
+  - **Minors m1–m11:**
+    - path filter additions;
+    - a patch artifact for the stored JSON;
+    - a synthesized non-default value for unrevealed bounded keys;
+    - AC-28 assertions scoped to the latest `run_at`;
+    - the merge-order row (decision 23);
+    - G3 non-fresh handling (decision 24 makes it moot);
+    - a `to_regclass` guard on the marker subquery, plus the marker resync through `serial()`;
+    - `statement_timeout=15000` on the config pool;
+    - the AGENT-1 amendment limited to the two lifespan WatchConfig channels, with agent boot now
+      blocking on the snapshot;
+    - the `time_remaining()` None branch;
+    - `--emit-heal-data` fails on a catalog key with no description.
+  - **Process:** re-run `/sdd-review product-spec` after the AC/FR wording changes, before
+    `/sdd-spec`.
+- **Operator decisions (explicit sign-off, 2026-11-05, continued):**
+  21. **Run round 5** (the final capped round) to integrate the round-4 amendments.
+  22. **AC-19 weakening accepted.** The end-state baseline holds only `seeded-unread` entries for the
+      staging dead rows, each owned by feature 296. Any other finding, and any new entry, fails CI.
+      `@feature-278 @AC-7` is preserved.
+  23. **296 gate = 295 merged to main-dev + one full staging release** (the evidence window), not
+      "295 launched". Production, when it first starts, deploys fresh with both features, so there
+      are no pre-295 images to roll back to. The merge-order row has been reworded.
+  24. **No production DB or deploy target exists anywhere** (neither DO production nor homelab
+      production). Production's first deploy starts from fresh migrations, so the design assumption
+      holds, and G3 = the first-deploy read-back against `dryrun-fresh.tsv`.
