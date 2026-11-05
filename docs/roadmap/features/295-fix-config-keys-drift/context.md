@@ -720,3 +720,60 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] `/sdd-review product-spec`: reword AC-28 `force 35` → `force 40`, and Database Changes `035`/`036`
   → `040`/`041`.
 - [ ] Feature 296 (`feature/fix-config-keys-contract`): re-anchor `-- contract-of:` on `040_config_markers`.
+
+## Session 2026-11-05 — sdd-review impl-spec (advisory)
+
+- **Result:** 0 hard failures, 0 Floor breaches, 9 warning themes (advisory; did not block). Every
+  AC-1..AC-38 is traced to a step. N→N+1 test-first pairing holds. S-1/S-2, the `--final`
+  membership check, FR-1 per-user precision and F-01/F-06 are honoured.
+- **Unresolved ✗ / ⚠ carried into execution:**
+  - Steps 9, 33, 34, 4: migration numbering. **Correction from verification:** config's migration
+    folder is claimed 035/036 by open PR #1359 (`035_smoke_rpc_user_id`,
+    `036_smoke_writes_enabled`) and 037 by feature 281 (`037_portfolio_signal_prune_interval`).
+    Feature 282 adds **no** config migration (its 038/039 premise in the spec was wrong). The next
+    free config numbers are therefore **038/039**, not 040/041. Pending operator ruling (C-07/F-01).
+    Steps 4/34 hardcode `goto 40`/041 without the gate. — [ ] unaddressed
+  - AC-28 text still reads `force 35`; sync it to the final marker number (C-15). — [ ] unaddressed
+  - Step 21 Files lists the directory `internal/finnhub/`; name the exact file (C-01/F-04). Steps
+    15/17/19 use brace shorthand in Files. — [ ] unaddressed
+  - Step 21: the `ResolveSecret` re-resolve is an outbound GetSecret. State that
+    `x-internal-caller` / `x-trace-id` are propagated (C-03). — [ ] unaddressed
+  - Steps 18/19: no test builds a snapshot from the seeded `analysis.compute.max_worker_threads` and
+    asserts the real ComputePool limit follows it (B2 config-key wiring (b)). — [ ] unaddressed
+  - Steps 26/27: no test reads the seeded `indicators.sandbox.startup_grace_ms` = 5000 through the
+    real reader (B2 (b)). — [ ] unaddressed
+  - Test steps 1, 3, 10, 14, 16, 18, 20, 22, 24, 26, 28, 30, 37 carry no coverage threshold in their
+    own Verification (the paired service steps do) (C-08). — [ ] unaddressed
+  - Steps 4, 13, 19, 29, 38 are oversized; consider splitting (C-18). — [ ] unaddressed
+  - Step 23: enumerate unaffected order types and fill states per B2b. — [ ] unaddressed
+  - Step 36: "re-sign may only remove tuples" is not machine-checked; add a check. — [ ] unaddressed
+  - Steps 9/33: add an explicit "041 must not merge or apply anywhere before Step 36" note
+    (F-01). — [ ] unaddressed
+- **Overlap findings** (no confirmed FAIL):
+  - WARN: shared-file edits with 282 (`configServiceImpl.ts` `SCALAR_BOUNDS_REGISTRY`; its
+    bare-spelling bound tests must be re-checked after 295's canonical re-key), with 281
+    (`ci.yml` ci-gate block), with 294 (indicators servicer/watcher, agent main/tools), and with
+    282 (agent client/tools).
+  - WARN: `indicators.sandbox.timeout_ms` rows were last written by 243's 031. 041 must not
+    re-INSERT them (ON CONFLICT DO NOTHING covers it); settle at Step 33.
+  - Note for 281/282 owners under decision 6: their deliberately unseeded keys (227 waiver) must
+    now be seeded.
+- **Docs sync:** PRs davcs86/xstockstrat#1436 (295 docs) and #1441 (296 docs) were squash-merged to
+  main-dev on the operator's instruction ("merge them if green"). The two feature branches were then
+  brought level with main-dev by a merge commit; a force-reset was denied by the auto-mode
+  classifier, so the non-destructive path was used. Implementation will go through new PRs.
+
+### Operator decisions (explicit sign-off, 2026-11-05, continued)
+
+26. **Config migration numbering is bound at execution time.**
+    - 295 takes the first free `xstockstrat-config` migration numbers when Steps 9/33 actually run
+      (currently 038/039, since 035/036 are PR #1359's and 037 is 281's).
+    - The numbers are re-checked before the integration PR.
+    - Recovery commands (`force <marker>` / `force <marker−1>`), the AC-28 text and 296's
+      `contract-of` anchor all follow the final marker number.
+    - 295 merges only after every lower-numbered config migration already on main-dev. No other
+      feature renumbers.
+    - Supersedes the spec's provisional 040/041.
+27. **Pause at implementation-ready.** Resume with `/sdd-execute fix-config-keys-drift`. Before
+    Step 1, fix the mechanical impl-spec warnings recorded above. G1 (Step 5) needs the operator
+    to run the staging inventory from the indicators DO console.
