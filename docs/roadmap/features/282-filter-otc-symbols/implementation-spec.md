@@ -439,7 +439,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 ### Step 8 — test: marketdata gate (GetBars, BatchGetBars, BatchGetLatestPrice, ungated paths)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -972,3 +972,18 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Specced**: Instruction 3 runs the per-symbol fallback over `tradeSyms` and keeps `n = len(req.Symbols)` in the log fields.
 - **Actual**: `n` stays `len(req.Symbols)` in every log field (`symbols`, `total`). The loop-relative `skipped = n - i` became `skipped = len(tradeSyms) - i`, because `i` now indexes `tradeSyms` and `n - i` would count unservable symbols as skipped.
 - **Disposition**: in-scope arithmetic consequence of Instruction 3
+
+### Step 8 — RED captured against the pre-Step-7 service file (2026-11-05)
+- **Specced**: TDD "run before Step 7". Step 7 was already committed (`65cd62ae`) when Step 8 ran.
+- **Actual**: RED came from swapping `marketdata_service.go` for its pre-Step-7 version (`git show 9865f0f0:…`) while the new tests were in the tree. The file was restored with `git checkout HEAD --` before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change)
+
+### Step 8 — AC-16 for `GetLatestQuote` / `GetLatestPrice` pinned structurally (2026-11-05)
+- **Specced**: Instruction 6 calls `GetLatestQuotes`, `GetLatestQuote`, and `GetLatestPrice` "where its fake allows", and checks that each warms BOSSY.
+- **Actual**: `GetLatestQuotes` is tested by behaviour (`TestGetLatestQuotes_AC16_UnservableStaysUngated`). `GetLatestQuote` and `GetLatestPrice` read `s.repo`, which is the concrete `*repository.MarketDataRepo`, and a nil pool panics. They are therefore pinned with a source scan (`TestQuoteAndPricePaths_AC16_StayOnUngatedMarkWarm`: each body has `s.markWarm(symbol)` and no `markWarmIfServable(`). This is the same structural approach Instruction 1 uses for `GetBars`.
+- **Disposition**: in-scope test mechanism (no fake exists for those two paths)
+
+### Step 8 — Verification block 1 run as split commands (2026-11-05)
+- **Specced**: one compound command with `COVERPKGS=$(go list …)` inline.
+- **Actual**: the worktree-isolation guard refused the inline command substitution. `go list ./... | grep -Ev …` was run on its own, and its output was passed literally to `-coverpkg`. The inputs, packages, flags and the 40% `awk` gate are unchanged.
+- **Disposition**: CI-equivalent fallback

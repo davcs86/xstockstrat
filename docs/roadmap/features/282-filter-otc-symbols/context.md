@@ -364,3 +364,31 @@
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
 - Deviations: TDD via an uncommitted scratch test; `skipped` counts `tradeSyms` (both in the Deviation Log)
 
+
+### Step 8 — test: marketdata gate (GetBars, BatchGetBars, BatchGetLatestPrice, ungated paths) [done]
+- `TestGetBarsMarksSymbolWarm` now checks three things in `GetBars`' body: it has `s.markWarmIfServable(req.Symbol)`, it has no bare `s.markWarm(`, and it has `refetch && liveFetchAllowed(snap, req.Symbol)`. `TestGetBarsWarnsWhenMissAndLiveFetchEmpty` is unchanged and passes, which closes the Step 7 open item.
+- New tests, appended to `marketdata_service_test.go` under the feature-282 banner:
+  - `TestMarkWarmIfServable_{LoadedSetWarmsOnlyServable,UnloadedWarmsAll}` covers AC-4, AC-7 (DNB) and AC-23 (`" bossy "`) for the warm half, plus fail-open.
+  - `TestBatchGetBars_AC12_{StrictSkipsUnservableCold,StrictServableColdStillErrors}` covers AC-12 and the R4 pin that keeps `@AC-53 @feature-240` meaningful.
+  - `TestBatchGetBars_AC14_PartialFetchesOnlyServableCold` uses the new `symbolRecordingBarsSource` wrapper (`scriptedBarsSource` is unchanged). It asserts the live fetch requested `[[ZZZZ]]`, and that the `partialColdFetch` WARN `cold` contains ZZZZ but not BOSSY.
+  - `TestBatchGetLatestPrice_AC13_{UnservableGetsPrevCloseOnly,FlightKeyCoversUnservable}`:
+    - AAPL gets a live price. BOSSY gets `prev_close` 9.9 only. CRTD has neither, so it is omitted.
+    - BOSSY and CRTD are not warm, and the trade fetch saw `[[AAPL]]` only.
+    - Two concurrent calls that differ only in an unservable member produce 2 previous-close reads, so no map is shared.
+  - `TestGetLatestQuotes_AC16_UnservableStaysUngated` (behaviour) and `TestQuoteAndPricePaths_AC16_StayOnUngatedMarkWarm` (structural, see the Deviation Log) cover AC-16.
+  - `TestGetLatestQuotes_AC17_OTCStaysWarmAcrossRefresh` and `TestGetLatestQuotes_AC26_PrunedSymbolRewarmed` cover AC-17 and AC-26 (FORL, `assetQuoteSource` = quotes + scripted asset list).
+  - Every symbol comes from `internal/testdata` (C-13). In the AC-12/13/14 sets BOSSY is listed as OTC rather than absent, and both readings are unservable.
+- TDD:
+  - RED (`go test ./internal/service/ -run …` against the pre-Step-7 `marketdata_service.go`) had 4 failures:
+    - `GetBars must call s.markWarmIfServable(req.Symbol)` plus the guard assertions.
+    - AC-12: `BatchGetBars: alpaca: 503 upstream, want the warm subset with no error`.
+    - AC-14: `live fetch requests = [[BOSSY ZZZZ]], want [[ZZZZ]]`.
+    - AC-13: `warm set = [AAPL BOSSY CRTD], want AAPL only` and `trade requests = [[AAPL BOSSY CRTD]], want [[AAPL]]`.
+  - The preservation cases (AC-16/17/26, the AC-12 pin, the flight key, `markWarmIfServable`) passed in RED as expected. They guard behaviour that Step 7 keeps, or that Step 5 already provides.
+  - GREEN (`-race`, Step 7 tree): all 16 selected tests PASS.
+- Verification:
+  - `golangci-lint` reported 0 issues.
+  - `go test ./... -race -count=1` with the CI coverpkg set passed for every package, total 81.9% (≥ 40%).
+  - The C-13 grep matches `FORL` only in assertion message strings and `"BOSSY"` nowhere, so no literal is declared in a test file.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: RED came from the pre-Step-7 service file; AC-16 for `GetLatestQuote`/`GetLatestPrice` is structural; Verification ran as split commands (CI-equivalent). All three are in the Deviation Log.
