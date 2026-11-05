@@ -316,8 +316,18 @@ async def ensure_signal_watchlist(user_id: str) -> str:
     return resp.watchlist.watchlist_id
 
 
-async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> None:
-    """Add ``symbol`` to ``watchlist_id`` as a SIGNAL-sourced, unbound binding (feature 127)."""
+async def add_watchlist_symbol(
+    user_id: str,
+    watchlist_id: str,
+    symbol: str,
+    signal_id: int | None = None,
+    valid_until: str | None = None,
+) -> None:
+    """Add ``symbol`` to ``watchlist_id`` as a SIGNAL-sourced, unbound binding (feature 127).
+
+    Sends ``signal_provenance`` only for a dated signal (feature 281); an open-ended, empty or
+    unparseable ``valid_until`` sends none, so portfolio leaves the entry untracked (never pruned).
+    """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
     binding = portfolio_pb2.WatchlistBinding(
@@ -325,10 +335,22 @@ async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> 
         strategy_id="",
         source=portfolio_pb2.WATCHLIST_ENTRY_SOURCE_SIGNAL,
     )
+    provenance = None
+    if signal_id and valid_until:
+        try:
+            until_ts = _iso_to_timestamp(valid_until)
+        except ValueError:
+            until_ts = None
+        if until_ts is not None and until_ts.seconds > 0:
+            provenance = portfolio_pb2.WatchlistSignalProvenance(
+                signal_id=signal_id, valid_until=until_ts
+            )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         await stub.AddWatchlistSymbols(
-            portfolio_pb2.AddWatchlistSymbolsRequest(watchlist_id=watchlist_id, bindings=[binding]),
+            portfolio_pb2.AddWatchlistSymbolsRequest(
+                watchlist_id=watchlist_id, bindings=[binding], signal_provenance=provenance
+            ),
             metadata=_metadata(("x-user-id", user_id)),
             timeout=_RPC_TIMEOUT_S,
         )

@@ -49,7 +49,7 @@ Inside the existing tx, after `touchWatchlistTx` has locked the parent (`:287`):
 
 ### 4. Prune loop — `go svc.PruneExpiredSignalEntries(ctx)` after `go svc.HydrateStops(ctx)` (`cmd/server/main.go:77`, root ctx, no `PropagationData`)
 
-One tick at startup, then sleep `interval()` re-read live each iteration via `s.wlCfg.GetInt` (pattern `portfolio_service.go:1869`; `config.go:126`). Key `portfolio.watchlist.signal_prune_interval_seconds` (int, default 300, write bounds `{60,86400}` in `SCALAR_BOUNDS_REGISTRY` `configServiceImpl.ts:103`, **unseeded** per the 227-D2 waiver `config-governance.md:144`); reader `clampPruneInterval`: `<=0`→300, `1..59`→60, `>86400`→86400. **No pause switch** (user sign-off). Tick enumerates `SELECT DISTINCT watchlist_id FROM watchlist_signal_expiry WHERE valid_until <= now()` (DB clock — no Go-clock/after-await trap, `fails.md` 2026-08-16), then **one short tx per watchlist that never waits**:
+One tick at startup, then sleep `interval()` re-read live each iteration via `s.wlCfg.GetInt` (pattern `portfolio_service.go:1869`; `config.go:126`). Key `portfolio.watchlist.signal_prune_interval_seconds` (int, default 300, write bounds `{60,86400}` in `SCALAR_BOUNDS_REGISTRY` `configServiceImpl.ts:103`, **seeded** by config migration `037_portfolio_signal_prune_interval` — staging + production, global, `int` 300 — landed with this reader; amendment 2026-11-02); reader `clampPruneInterval`: `<=0`→300, `1..59`→60, `>86400`→86400. **No pause switch** (user sign-off). Tick enumerates `SELECT DISTINCT watchlist_id FROM watchlist_signal_expiry WHERE valid_until <= now()` (DB clock — no Go-clock/after-await trap, `fails.md` 2026-08-16), then **one short tx per watchlist that never waits**:
 1. `SELECT user_id FROM watchlists WHERE watchlist_id=$1 FOR NO KEY UPDATE SKIP LOCKED` (none ⇒ skip, counted).
 2. `SELECT symbol, signal_id, valid_until FROM watchlist_signal_expiry WHERE watchlist_id=$1 AND valid_until<=now() FOR UPDATE SKIP LOCKED` ⇒ D.
 3. `SELECT symbol FROM watchlist_symbols WHERE watchlist_id=$1 AND symbol=ANY($D) AND source=2 FOR UPDATE SKIP LOCKED`; `DELETE … RETURNING symbol, strategy_id` ⇒ R.
@@ -120,16 +120,16 @@ Real-Postgres tests in `internal/repository/*_db_test.go` behind `-tags dbtest`,
 
 - `C-03` — honored by: owner on the ledger request (`user_id`) + fresh `x-trace-id` in metadata for background-origin events; `x-access-scope` is absent on background emits (recorded).
 - `C-04` — honored by: no new enum; `source` stays the existing enum; marker is a NULL discriminator, event types distinguish removal kinds.
-- `C-05` / `F-07` — honored by: key `portfolio.watchlist.signal_prune_interval_seconds` read live via `GetInt`; only two reader-safety constants fixed in code (default 300, floor 60); unseeded per the 227-D2 waiver.
-- `C-07` / `F-01` — honored by: new migration `018` (last is `017`); no applied migration edited; idempotent for `migration-rerun`.
+- `C-05` / `F-07` — honored by: key `portfolio.watchlist.signal_prune_interval_seconds` read live via `GetInt`; only two reader-safety constants fixed in code (default 300, floor 60); seeded by config migration `037` (global rows, both environments, value = the code default) because feature 278's ratchet forbids the 227-D2 waiver for a new key; 278's `--final` check reports zero findings for it.
+- `C-07` / `F-01` — honored by: new migration `018` (last is `017`); no applied migration edited; idempotent for `migration-rerun`. Config migration `037` (last on main-dev is `034`; `035`/`036` were held by feature 280, PR #1359 per the 2026-11-02 ruling, **superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log**) is idempotent by `ON CONFLICT … DO NOTHING` (never replayed: `migration-rerun` re-applies only the 224/225 list), and its down deletes only the global rows of the key.
 - `C-08` / `P-06` — honored by: every service step has a paired test step with RED-first; real-DB concurrency tests prove the `SKIP LOCKED` claims.
 - `C-09` — honored by: `buf lint` + `buf breaking` + `./scripts/buf-gen.sh` on the additive proto step.
 - `C-10` — honored by: both insert sites share the split `insertBindingTx`; `normalizeBindings` stays the single source site; portfolio read paths (`GetWatchlist`/`ListWatchlists`/`ListAllWatchlistSymbols`) shrink consistently because the delete is in the table they read.
 - `C-12` / `C-13` — honored by: UI test data via `e2e/fixtures/` (`watchlistMock.ts`, `INVENTORY.md` row 43); Go fixtures inline until a second consumer.
 - `C-14` — honored by: UI named (no code change, silent removal signed off) and Agent named (docstrings + runbook step); no surface deferred.
-- `C-15` — honored by: `acceptance.feature` AC-1..AC-18, each covered by a named test step; AC-1..AC-7 IDs unchanged (Given/Then reworded pre-implementation only — C-15 forbids renumbering).
+- `C-15` — honored by: `acceptance.feature` AC-1..AC-19 (AC-19 added by the 2026-11-02 amendment), each covered by a named test step; AC-1..AC-7 IDs unchanged (Given/Then reworded pre-implementation only — C-15 forbids renumbering).
 - `C-16` — honored by: see Business Rules Touched; no CHANGE.
-- `C-18` — honored by: one table, one additive proto field, one goroutine, one config key; cut: `reason` column, pause switch, plan digest, `NewPool` export, separate binary, seed migration, ingest index, prune/trigger RPC; kept with justification: side table (replace-all constraint), backfill (user-mandated backlog cleanup), `portfolio-db-test` job (lock behavior unprovable with fakes).
+- `C-18` — honored by: one table, one additive proto field, one goroutine, one config key; cut: `reason` column, pause switch, plan digest, `NewPool` export, separate binary, ingest index, prune/trigger RPC; kept with justification: side table (replace-all constraint), backfill (user-mandated backlog cleanup), `portfolio-db-test` job (lock behavior unprovable with fakes), seed migration `037` (278 ratchet forbids the unseeded waiver).
 - `F-02` — honored by: the subcommand is shipped via PR; no console exec path; no direct pushes.
 - `F-04` — honored by: every cite from recon.md/discovery; nothing invented (ungrounded items are listed as assumptions in the spec step).
 - `F-06` — honored by: portfolio stays on the pooled `:25061` route; the backfill is one transient pooled client; `DB_POOL_MAX` unset.
@@ -160,10 +160,65 @@ Real-Postgres tests in `internal/repository/*_db_test.go` behind `-tags dbtest`,
 | S3 | CI | `portfolio-db-test` job (+ ingest migrations), aggregate gate | CI | — |
 | S4/S5 | portfolio add path | split `insertBindingTx`, intent, validation, merge/overwrite/untrack | owner | T1, T2, T6 |
 | S6/S7 | portfolio prune | loop, statements, events (`emitEvent` owner), interval clamp | owner | T1, T3, T4, T5 |
-| S8/S9 | config | bounds registry entry + dual-form test rows; governance log | owner + config team | T9 |
+| S8/S9 | config | bounds registry entry + dual-form test rows; seed migration `037` (lands with the S6/S7 reader) + its parse test (AC-19); governance log | owner + config team + DBA | T9 |
 | S10/S11 | portfolio backfill | subcommand, REPORT/APPLY, `--legacy-owner` | DBA + owner | T4 (ingest interleaving), T7 |
 | S12/S13 | agent | provenance on auto-add, docstrings | agent owner | T8 |
 | S14 | docs | portfolio `CLAUDE.md` (key, 2 events, table, loop, subcommand), `docs/patterns/database.md`, `docs/patterns/config-governance.md`, new `docs/runbooks/signal-watchlist-expiry-backfill.md` + `docs/runbooks/CLAUDE.md` row, `mcp-tools.md` | — | — |
 | S15 | ui e2e | emptied system list renders `No symbols`, no delete affordance (fixture via `INVENTORY.md`) | — | — |
 
 Deploy order: proto → portfolio → agent → backfill.
+
+## Amendment 2026-11-02 — seed the prune-interval key (operator-approved, 3 rounds quick)
+
+Trigger: feature 278 merged (`631028eb`, #1398). Its shrink-only `config-wiring` ratchet forbids a baseline entry, so the 227-D2 unseeded waiver no longer holds for this key. Operator decision: seed the key with a config migration; no baseline entry.
+
+### Chosen approach
+
+- **037 lands in Step 11 with the reader.** Config migration `037_portfolio_signal_prune_interval` is committed together with the reader (`signal_prune.go`). It seeds two global rows (staging and production) with `int` 300, the code default, insert-if-absent (`ON CONFLICT … DO NOTHING`, the 033 shape).
+- **Down deletes global rows only.** The down migration deletes only the global rows of this key (`user_id IS NULL`); per-user overrides are operator data and survive rollback (operator decision).
+- **Step 14 parse test with a recorded RED.** zeroTrap's `findOne`/`splitStatements` move into the shared test-only helper `src/__tests__/migrationSql.ts`; `signalPruneIntervalSeedMigration.test.ts` adds 5 parse cases (`@AC-19`). RED is recorded once by moving the 037 pair aside.
+- **`--final` vs merge-base gate.** Step 11 Verification runs `check-config-wiring.mjs --final --json`: rc 2 fails; any finding naming the key or the 037/reader file fails; every other failing result line is compared with a `--final --json` baseline taken at the merge-base (extracted with `git archive`, no registered worktree). New lines fail; lines already failing on the base are escalated, not failed. The 037 collision check runs before writing the pair, before opening the integration PR, and again immediately before the integration PR merges into `main-dev` after the final rebase.
+
+**A. 037 SQL**
+
+`services/xstockstrat-config/migrations/037_portfolio_signal_prune_interval.up.sql`
+```sql
+-- key must equal the full-dotted string portfolio's Watcher.GetInt reads and value_type must be 'int',
+-- or GetInt silently returns the code default; value_data must stay inside the [60,86400] write bounds.
+INSERT INTO config.config_values
+  (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id)
+VALUES
+  ('portfolio', 'portfolio.watchlist.signal_prune_interval_seconds', 'int', '300',
+   'Portfolio signal-watchlist prune: seconds between expiry prune ticks, read live each iteration. A stored value <=0 reads as 300, 1-59 as 60, above 86400 as 86400. Raising it is not a pause.',
+   '300', 'xstockstrat-portfolio', 'staging', NULL),
+  ('portfolio', 'portfolio.watchlist.signal_prune_interval_seconds', 'int', '300',
+   'Portfolio signal-watchlist prune: seconds between expiry prune ticks, read live each iteration. A stored value <=0 reads as 300, 1-59 as 60, above 86400 as 86400. Raising it is not a pause.',
+   '300', 'xstockstrat-portfolio', 'production', NULL)
+ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;
+```
+`services/xstockstrat-config/migrations/037_portfolio_signal_prune_interval.down.sql`
+```sql
+-- Deletes only the global rows of this key; per-user overrides are operator data and must survive rollback.
+DELETE FROM config.config_values
+ WHERE namespace = 'portfolio'
+   AND key = 'portfolio.watchlist.signal_prune_interval_seconds'
+   AND user_id IS NULL;
+```
+
+### Rejected alternatives
+
+- **Seed in Step 13, or in a separate step** — leaves a window of commits where the key is read but unseeded (`read-unseeded`).
+- **Seed before the reader** — leaves commits where the key is seeded but unread (`seeded-unread`).
+- **Baseline entry in `scripts/config-wiring.json`** — forbidden by 278's shrink-only ratchet.
+- **033-style down that also deletes per-user rows** — the operator chose global-only.
+- **Inline-copied SQL helpers in the new test** — duplication (C-18 / DRY guard rail); the helpers are moved, not copied.
+- **DB-level rollback test** — scope creep; the down's scope is asserted statically by Step 14 case 5.
+
+### Open risks
+
+- **golang-migrate has no out-of-order guard.** A config migration 038+ applied in a deployed environment before 037 makes `up` silently skip 037, leaving the key unseeded there; 278's static check would still pass. The same hazard applies if 280's 035/036 land after 037 is applied. Mitigated by the pre-merge collision re-check (Step 11 Verification block 2, re-run after the final rebase), the `merge-order.md` row ordering 281 after 280 (#1359), and the row ordering 282 after 281 (282's 038/039 depend on 037). [superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log]
+- **Platform CI rule "new migration NNN > base max"** would close this for every feature; logged as a follow-up, not built (platform scope, C-18).
+
+### Constitution rules touched
+
+`C-05`, `F-07` (key read live; only clamp constants in code), `F-01` (037 is a new file; no applied migration edited), `C-08` (Step 11 ↔ Step 12/14 test pairing), `P-06` (recorded RED for the AC-19 cases), `C-13` (literals inline; shared helper moved, not copied), `C-15` (`@AC-19` added, covered by Step 14), `C-16` (EXTEND of the `@feature-182`/`@feature-184` seed rules at launch promotion), `C-18` (no CI rule, no DB rollback test), `F-09` (Step 11's body is never edited after execution; reopen via the Deviation Log).

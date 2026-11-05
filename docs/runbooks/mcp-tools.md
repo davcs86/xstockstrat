@@ -221,7 +221,7 @@ Fetches and returns raw text from a registered website source. The URL is read f
 
 ### `ingest_signal`
 
-Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case.
+Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). The added entry expires once every agent-recorded `direction="watchlist"` signal for that symbol has passed its `valid_until`; entries from open-ended signals (no `valid_until`) never expire, and failed or deduplicated adds do not renew the expiry. A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case.
 
 **Parameters**
 
@@ -251,8 +251,8 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `valid_from` missing | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | `conviction` out of range (`< 0.0` or `> 1.0`) or NaN | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | Auto-alert emission fails | Warning logged; signal is already ingested — not rolled back |
-| Watchlist auto-add fails (`direction="watchlist"`) | Warning logged; signal is already ingested — the add is best-effort and never rolled back |
-| `deduplicated: true` in the response | Not an error — both the auto-alert and the `direction="watchlist"` watchlist auto-add are intentionally suppressed for this submission |
+| Watchlist auto-add fails (`direction="watchlist"`), including a portfolio `INVALID_ARGUMENT` on the signal provenance | Warning logged; signal is already ingested — the add is best-effort and never rolled back; a provenance validation failure drops the whole auto-add |
+| `deduplicated: true` in the response | Not an error — both the auto-alert and the `direction="watchlist"` watchlist auto-add are intentionally suppressed for this submission, so it also does not renew the entry's expiry |
 
 ---
 
@@ -1308,6 +1308,10 @@ Wraps `PortfolioService.GetWatchlist`.
 
 Returns `{"watchlist": <watchlist>}` (snake_case, same shape as `list_watchlists` entries) with the
 full `bindings` array.
+
+The result reflects the pruned set: a `SIGNAL` entry expires once every agent-recorded
+`direction="watchlist"` signal for its symbol has passed `valid_until`, and the portfolio prune then
+removes it automatically; `MANUAL` entries never expire. An emptied system-managed list remains.
 
 **Errors:** `watchlist not found` → unknown id (`NOT_FOUND`); `permission denied` → the list is owned
 by another user (`PERMISSION_DENIED`); `RuntimeError` → no verified caller claims.

@@ -21,6 +21,7 @@ reports (green, upstream skipped), so the required check is satisfied. Hotfix PR
 | `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
 | `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% declared, not enforced (no `--check-coverage`; follow-up defect) |
 | `ledger-db-test` | Applies all migrations to TimescaleDB, runs ledger `pnpm run test:db` (trigger-stub resolve, replay recovery, resolve bound) | — |
+| `portfolio-db-test` | Applies all migrations to TimescaleDB, runs portfolio Go real-Postgres tests (build tag `dbtest`): `go test -tags dbtest -race ./internal/repository/...` (signal-expiry add path, prune tick, backfill); gated into `ci-gate` | — |
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 | `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |

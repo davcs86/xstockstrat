@@ -51,7 +51,7 @@ func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description, d
 	if err != nil {
 		return nil, fmt.Errorf("insert watchlist: %w", err)
 	}
-	if err := insertBindingsTx(ctx, tx, id, bindings); err != nil {
+	if _, err := insertBindingsTx(ctx, tx, id, bindings); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -210,7 +210,7 @@ func (r *WatchlistRepo) Update(ctx context.Context, watchlistID, name, descripti
 	if _, err := tx.Exec(ctx, `DELETE FROM portfolio.watchlist_symbols WHERE watchlist_id = $1`, watchlistID); err != nil {
 		return nil, fmt.Errorf("clear symbols: %w", err)
 	}
-	if err := insertBindingsTx(ctx, tx, watchlistID, bindings); err != nil {
+	if _, err := insertBindingsTx(ctx, tx, watchlistID, bindings); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -275,9 +275,30 @@ func (r *WatchlistRepo) Delete(ctx context.Context, watchlistID string) error {
 	return nil
 }
 
+// SignalProvenance is the dated signal behind a SIGNAL add.
+type SignalProvenance struct {
+	SignalID   int64
+	ValidUntil time.Time
+}
+
+// ExpiryIntent: Provenance != nil tracks the (single) SIGNAL binding Symbol; UntrackSymbols lists SIGNAL-request
+// symbols added WITHOUT provenance, whose expiry rows are deleted. Zero value = no expiry effect.
+type ExpiryIntent struct {
+	Provenance     *SignalProvenance
+	Symbol         string
+	UntrackSymbols []string
+}
+
+// mergeSignalExpirySQL is update-only: an untracked entry (no row) stays untracked, and a backfill-marked
+// row (signal_id NULL) is rescued. Add path only — the backfill never merges.
+const mergeSignalExpirySQL = `UPDATE portfolio.watchlist_signal_expiry
+	SET valid_until = CASE WHEN signal_id IS NULL THEN $3 ELSE GREATEST(valid_until, $3) END,
+	    signal_id   = CASE WHEN signal_id IS NULL OR $3 >= valid_until THEN $4 ELSE signal_id END
+	WHERE watchlist_id = $1 AND symbol = $2`
+
 // AddSymbols inserts the given (normalized) bindings, ignoring duplicates (ON CONFLICT DO NOTHING —
 // an existing symbol keeps its strategy_id, so a legacy flat add never clears a prior binding).
-func (r *WatchlistRepo) AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
+func (r *WatchlistRepo) AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, intent ExpiryIntent) (*portfoliov1.Watchlist, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
@@ -287,7 +308,11 @@ func (r *WatchlistRepo) AddSymbols(ctx context.Context, watchlistID string, bind
 	if _, err := touchWatchlistTx(ctx, tx, watchlistID); err != nil {
 		return nil, err
 	}
-	if err := insertBindingsTx(ctx, tx, watchlistID, bindings); err != nil {
+	inserted, err := insertBindingsTx(ctx, tx, watchlistID, bindings)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyExpiryIntentTx(ctx, tx, watchlistID, inserted, intent); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -489,15 +514,69 @@ func touchWatchlistTx(ctx context.Context, tx pgx.Tx, watchlistID string) (time.
 	return updatedAt, nil
 }
 
-// insertBindingsTx inserts (already normalized) bindings, ignoring duplicates. ON CONFLICT DO NOTHING
-// preserves an existing binding's strategy_id — a legacy flat add never clears a prior one (fails-080).
-func insertBindingsTx(ctx context.Context, tx pgx.Tx, watchlistID string, bindings []*portfoliov1.WatchlistBinding) error {
+// insertBindingsTx inserts (already normalized) bindings, ignoring duplicates, and returns the set of
+// symbols this call freshly inserted (an existing row is absent from the map).
+func insertBindingsTx(ctx context.Context, tx pgx.Tx, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (map[string]bool, error) {
+	inserted := make(map[string]bool, len(bindings))
 	for _, b := range bindings {
+		ok, err := insertBindingTx(ctx, tx, watchlistID, b)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			inserted[b.GetSymbol()] = true
+		}
+	}
+	return inserted, nil
+}
+
+// insertBindingTx inserts one binding. ON CONFLICT DO NOTHING preserves an existing binding's
+// strategy_id and source — a legacy flat add never clears a prior one (fails-080).
+func insertBindingTx(ctx context.Context, tx pgx.Tx, watchlistID string, b *portfoliov1.WatchlistBinding) (bool, error) {
+	ct, err := tx.Exec(ctx,
+		`INSERT INTO portfolio.watchlist_symbols (watchlist_id, symbol, strategy_id, source)
+		 VALUES ($1, $2, $3, $4) ON CONFLICT (watchlist_id, symbol) DO NOTHING`,
+		watchlistID, b.GetSymbol(), b.GetStrategyId(), int16(b.GetSource()))
+	if err != nil {
+		return false, fmt.Errorf("insert binding %q: %w", b.GetSymbol(), err)
+	}
+	return ct.RowsAffected() == 1, nil
+}
+
+// applyExpiryIntentTx writes the add path's expiry effect; the caller must already hold the parent
+// watchlist row lock (touchWatchlistTx), which every binding deleter also takes first.
+func applyExpiryIntentTx(ctx context.Context, tx pgx.Tx, watchlistID string, inserted map[string]bool, intent ExpiryIntent) error {
+	if p := intent.Provenance; p != nil {
+		if inserted[intent.Symbol] {
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO portfolio.watchlist_signal_expiry (watchlist_id, symbol, valid_until, signal_id)
+				 VALUES ($1, $2, $3, $4)
+				 ON CONFLICT (watchlist_id, symbol) DO UPDATE
+				 SET valid_until = EXCLUDED.valid_until, signal_id = EXCLUDED.signal_id`,
+				watchlistID, intent.Symbol, p.ValidUntil, p.SignalID); err != nil {
+				return fmt.Errorf("stamp signal expiry %q: %w", intent.Symbol, err)
+			}
+		} else {
+			var source int16
+			err := tx.QueryRow(ctx,
+				`SELECT source FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 AND symbol = $2`,
+				watchlistID, intent.Symbol).Scan(&source)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("read binding source %q: %w", intent.Symbol, err)
+			}
+			if err == nil && source == int16(portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL) {
+				if _, err := tx.Exec(ctx, mergeSignalExpirySQL,
+					watchlistID, intent.Symbol, p.ValidUntil, p.SignalID); err != nil {
+					return fmt.Errorf("merge signal expiry %q: %w", intent.Symbol, err)
+				}
+			}
+		}
+	}
+	if len(intent.UntrackSymbols) > 0 {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO portfolio.watchlist_symbols (watchlist_id, symbol, strategy_id, source)
-			 VALUES ($1, $2, $3, $4) ON CONFLICT (watchlist_id, symbol) DO NOTHING`,
-			watchlistID, b.GetSymbol(), b.GetStrategyId(), int16(b.GetSource())); err != nil {
-			return fmt.Errorf("insert binding %q: %w", b.GetSymbol(), err)
+			`DELETE FROM portfolio.watchlist_signal_expiry WHERE watchlist_id = $1 AND symbol = ANY($2)`,
+			watchlistID, intent.UntrackSymbols); err != nil {
+			return fmt.Errorf("untrack signal expiry: %w", err)
 		}
 	}
 	return nil
