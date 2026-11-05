@@ -18,6 +18,7 @@
 | 2026-11-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Scope additions (operator-approved): second key `eval_interval_seconds`, bounds `[1,1000]` / `[30,600]`, two-PR split, soft renumber-at-merge ordering; product-spec/acceptance amended (AC-10..12) |
 | 2026-11-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps (PR-1: steps 1-2; PR-2: steps 3-7) |
 | 2026-11-05 | `implementation-ready` (no change) | /sdd-execute sequential (re-spec gate §5.3) | Re-spec: steps 1-2 validated, no mismatch; steps 3-7 re-anchored to the current tree (NNN `043` pin + merge-time max+1 rule, registry/test-table anchors folded in from the Deviation Log, line drift) |
+| 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator approved the up-front plan (mode-entry + per-feature confirmation); step loop starts |
 
 ---
 
@@ -48,4 +49,4 @@
 
 ## Next Action
 
-`/sdd-review fix-analysis-live-loop-budget-seed impl-spec` — validate implementation spec, then `/sdd-execute fix-analysis-live-loop-budget-seed`
+`/sdd-execute fix-analysis-live-loop-budget-seed sequential` — step loop in progress (Step 1 next)
