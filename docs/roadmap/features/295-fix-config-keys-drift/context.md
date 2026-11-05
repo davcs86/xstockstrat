@@ -762,3 +762,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   main-dev on the operator's instruction ("merge them if green"). The two feature branches were then
   brought level with main-dev by a merge commit; a force-reset was denied by the auto-mode
   classifier, so the non-destructive path was used. Implementation will go through new PRs.
+
+### Operator decisions (explicit sign-off, 2026-11-05, continued)
+
+26. **Config migration numbering is bound at execution time.**
+    - 295 takes the first free `xstockstrat-config` migration numbers when Steps 9/33 actually run
+      (currently 038/039, since 035/036 are PR #1359's and 037 is 281's).
+    - The numbers are re-checked before the integration PR.
+    - Recovery commands (`force <marker>` / `force <marker−1>`), the AC-28 text and 296's
+      `contract-of` anchor all follow the final marker number.
+    - 295 merges only after every lower-numbered config migration already on main-dev. No other
+      feature renumbers.
+    - Supersedes the spec's provisional 040/041.
+27. **Pause at implementation-ready.** Resume with `/sdd-execute fix-config-keys-drift`. Before
+    Step 1, fix the mechanical impl-spec warnings recorded above. G1 (Step 5) needs the operator
+    to run the staging inventory from the indicators DO console.
