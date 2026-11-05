@@ -17,6 +17,7 @@
 | 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick extended by operator) and approved; recon.md + design.md written; full back-off on both paths, key seeded via config migration (/sdd-review skipped on operator instruction) |
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-11-05 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | §5.3 re-spec of Steps 1,2,3,5,7,8 to the current codebase: migration 035 → 042 (provisional, C-07 re-check at merge), registry/test anchors at `mark_close_max_age_hours`, ci.yml :306 → :301, config-governance entry above feature 281 |
+| 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; operator gave the up-front plan confirmation (§5.4) |
 
 ---
 
