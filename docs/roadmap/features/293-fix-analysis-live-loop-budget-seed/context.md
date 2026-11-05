@@ -39,3 +39,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-11-05 — loop round 3 (product-spec)
 - Added @AC-9 (operator-written metadata never overwritten; C-15 coverage of the FR-2 sub-clause), value_type-unchanged assertion on AC-3, FR-3 timing flagged as extrapolated lower bounds, docs bullet carries bounds + test cases.
+
+## Session 2026-11-05 — sdd-design round 1 (recon.md written; proposer + adversary run; user gate)
+- Recon: recon.md written (same documented tree-stamp deviation as 289). Correction recorded: a real-Postgres harness for config migrations exists (`scripts/migration-rerun.sh` + `scripts/migration-assertions/config-031.sql`), contrary to product-spec § Out of Scope.
+- Round-1 adversary verdict: NEEDS WORK, no Floor breach. Findings: the 400 maximum's pool rationale is wrong (pairs are evaluated serially, `live_loop.py:467-479`) and 400 < 690 live pairs, so the overflow state could never be cleared by config; the seeded description embeds drifting facts (ledger 2026-11-04 fix-python-config-stored-zero); sibling `analysis.engine.eval_interval_seconds` has the same read-unseeded defect (`scripts/config-wiring.json:78-83`); migration 038 is a C-07 deviation that serializes a SEV-3 fix behind 281/291; assertion fixtures should exercise per-column COALESCE and audit rows.
+- **USER DECISIONS (explicit, AskUserQuestion, 2026-11-05):**
+  1. SetConfig maximum = **typo-guard 1000** (`[1,1000]`, matching `analysis.opportunity.max_universe_size`), rationale = cycle duration vs the 30-min heartbeat alert, not the marketdata pool.
+  2. **Seed `analysis.engine.eval_interval_seconds` in the same migration** (widens 293's scope; its bounds/default/description and baseline-entry removal are decided in round 2 and the product-spec/acceptance are amended after design approval — operator-approved scope change).
+  3. **Split**: the live-loop WARN latch ships as an independent step/PR (no migration dependency); the seed/bounds step merges after 281 and 291.
