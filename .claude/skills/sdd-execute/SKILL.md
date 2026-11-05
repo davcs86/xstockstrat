@@ -2,7 +2,7 @@
 name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery, explicit user confirmation before any writes, a red-before-green TDD gate, and (in the default modes) a branch + PR per step. Usage — /sdd-execute <feature-slug> [step-number|next|all|sequential]. `sequential` runs a feature (or an ordered multi-feature sequence with per-feature re-spec) end-to-end as one commit per step on the feature branch — no per-step PRs — pausing at smart operator checkpoints (consumer-surface boundaries and a step cap) with one up-front confirmation per feature, and opens a single integration PR at the end. Use this whenever the user asks to implement, build, code, or land a feature that already has an implementation spec, to do the next step, to resume or continue a feature from an earlier session, to open the final integration PR, or to unblock a blocked step. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug | "feat-a (re-spec if needed) > feat-b ..."> [step-number|next|all|sequential]
-allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(npm *) Bash(corepack *) Bash(which *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(npm *) Bash(corepack *) Bash(which *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
 ---
 
@@ -94,9 +94,16 @@ Evaluate the current branch:
 - On `feature-steps/<slug>-step-<N>` matching this feature → note that step N was previously started; BRANCH SYNC will handle.
 - On any other branch → stop: "Current branch is `<branch>`, which is unrelated to feature `<slug>`. Check out `<dev-branch>` or `main-dev` before proceeding."
 
+Then verify the working tree — **once per session**, here — by running `docs/sdd/tree-freshness.md`
+with `OTHER_BRANCH=defer` (`TARGET` is the `<dev-branch>` resolved in B3, or `main-dev` when it is not
+on origin; B3 already fetched). A stop result halts the skill. This is the only freshness check:
+BRANCH SYNC does the per-step moving, so later `codebase-discovery` prompts in Phase 1 are stamped
+`Tree: <dev-branch>@<git rev-parse --short HEAD>` taken right after BRANCH SYNC, with no second preflight.
+
 **Step B5.** Announce context to user:
 ```
 Resuming: <slug> (lifecycle: <status>)
+Tree: <stamp from B4>   # a "deferred to BRANCH SYNC" stamp is printed as-is
 Prior sessions: <list ## Session headings from context.md>
 Open review warnings: <count of `[ ] unaddressed` items from any "sdd-review impl-spec (advisory)" context.md note, or "none">
 Consumer surface(s) (C-14): <surfaces the pending steps touch — a step with **Service** `xstockstrat-ui` → UI, `xstockstrat-agent` → Agent; "none/internal" if no step touches either>
@@ -231,7 +238,8 @@ Re-verify that the codebase matches what the spec documented at spec-generation 
 **Delegation (recommended when the step lists several files or greps):** hand the step's `**Files**`
 and `**Codebase Evidence**` commands to a **`codebase-discovery`** subagent via the Task tool. It reads
 and re-runs them in its own window and returns a confirmed/blocked digest (`path:line` for each symbol,
-plus a `## Not found` section). This keeps the verification reads out of this window — you read the
+plus a `## Not found` section). Put the post-BRANCH-SYNC `Tree:` stamp (see B4) in its prompt and
+discard a digest whose `Checkout:` line differs. This keeps the verification reads out of this window — you read the
 target files fresh in Phase 3 only if you proceed to edit. For a single-file step you may verify inline
 instead. Either way, apply the exact block/confirm logic below to the result.
 

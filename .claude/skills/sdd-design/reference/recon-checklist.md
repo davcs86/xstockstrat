@@ -9,7 +9,9 @@ Load this at the start of **Phase 0**. Recon owns discovery for the design phase
    `.claude/skills/sdd-spec/reference/discovery-checklist.md` (base survey, trading-domain survey,
    proto search). For every service in the product spec's **Affected Services**, spawn a
    **`codebase-discovery`** subagent (one per service, in parallel via Task) and hand it that
-   checklist, tailored with this feature's specific symbols / config keys / env vars / ports.
+   checklist, tailored with this feature's specific symbols / config keys / env vars / ports, plus the
+   `Tree:` stamp from boot step B3.5 (`docs/sdd/tree-freshness.md`). Reject any digest whose
+   `Checkout:` line differs from the stamp.
 2. **Collect the digests.** Each subagent returns `path:line` evidence + a `## Not found` section.
    Keep the `## Not found` items — they become explicit risks/unknowns in `recon.md`, never guesses
    (Constitution **F-04**, **P-03**).
