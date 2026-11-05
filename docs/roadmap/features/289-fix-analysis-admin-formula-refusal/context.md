@@ -177,3 +177,15 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 
 ## Session 2026-11-05 — sdd-review impl-spec loop round 7 (fixes)
 - Round 7 (impl-spec): Step 8a Instruction 3 used `_ctx(_HEADERS)` (not imported in test_unreadable_formula.py); replaced with `ctx_with(_BOB)` (already imported). Round-7 review otherwise found no defects across all 14 steps; the review loop is considered converged.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation.** The operator approved the up-front plan (§5.4). `status.md` was already `in-progress`: the earlier batch run made that flip (commit `f92fb728`, feature.md row) but wrote no context.md entry for it, so this entry records it. Neither run changed the status after that.
+- **§5.3 branch setup.** `git merge --no-edit origin/main-dev` → already up to date, with no conflicts. `scripts/ledger-guard.py --own-slug fix-analysis-admin-formula-refusal --base origin/main-dev --fix` → clean. Neither step produced a merge commit.
+- **Re-spec (conditional directive, Steps 2, 1, 6, 11, 12).** Only the step bodies changed.
+  - Step 2 (codegen toolchain). `scripts/buf-gen.sh` runs on the host and is not Docker-based. It needs host `grpc_tools`, which is missing (`ModuleNotFoundError`), plus the TS plugins and `tsc` from `node_modules`, which is not installed. Instruction 1 and Verification now run `pnpm install --frozen-lockfile` first, then use the cached pinned image with `localenv-setup.sh:87-92`'s invocation: `docker run --rm --platform linux/amd64 -v "<root>:/workspace" -w /workspace xstockstrat-codegen:latest ./scripts/buf-gen.sh`. A read-only `docker run` confirmed the image carries buf 1.72.0, the Go plugins in `/go/bin`, the global TS plugins and `grpc_tools`, but no `tsc`. Running `./scripts/localenv-setup.sh` itself is the fallback for a missing image, because it also rebuilds the image and writes `./certs/`; the host fallback is `docs/runbooks/codegen-toolchain-host-setup.md`. Files gain `gen/ts/analysis/v1/analysis.ts` (ts_proto). `analysis_connect.ts` is noted as checked in but expected to stay unchanged.
+  - Step 1: the `reserved` grep hits `:200` and `:422`, both comments, so the additive-is-safe conclusion holds.
+  - Step 6: `_not_found()` is at `test_unreadable_formula.py:34` (was `:36`).
+  - Step 11: the `readiness-cue-${cueState}` testid is at `WatchlistReadiness.tsx:317` (render `:316`). The long-open `LockSimple` question is now **verified**: the published `@phosphor-icons/react@2.1.10` tarball (the `pnpm-lock.yaml:1915` resolution) exports `LockSimple`. The step still re-greps `node_modules` after install.
+  - Step 12: `mockWatchlists` is `INVENTORY.md:44`; recon's `:71` is the `strat-notfound-readiness-01` row.
+- **Husky hook.** The main worktree has no `node_modules` to symlink, and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so git ran no pre-commit hook for these docs-only commits. `--no-verify` was not used. Step 2's `pnpm install` restores the hook for the code steps.
